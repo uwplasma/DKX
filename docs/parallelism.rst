@@ -1,1042 +1,142 @@
 Parallelism
 ===========
 
-This page explains how parallelism works in `sfincs_jax`, how it relates to more
-traditional MPI-distributed neoclassical solves, and how to use it on a laptop
-(multi-core CPU) or on clusters (multi-CPU / multi-GPU).
-
-Why parallelism matters
------------------------
-
-Neoclassical transport solves are dominated by large, coupled linear systems. Even
-with aggressive JIT and preconditioning, wall‑time scales roughly with the number
-of Krylov iterations times the cost of each matvec. Parallelism is the primary way
-to reduce time‑to‑solution once the single‑device kernels are efficient.
-
-Two distinct patterns matter:
-
-- **Embarrassingly parallel**: independent solves that can run concurrently
-  (multiple `whichRHS`, multiple scan points, multiple cases).
-- **Distributed linear algebra**: a single large linear system is split across
-  devices to reduce per‑solve time.
-
-Parallelism in JAX
-------------------
-
-JAX supports two broad modes of parallelism:
-
-- **Multi‑process**: Run independent problems in separate Python processes. This is
-  the simplest and most robust path on CPUs (and also works for GPUs if each
-  process is pinned to a device).
-- **SPMD / sharding**: Use `pjit` and sharded arrays to split a *single* linear
-  system across multiple devices. This gives true per‑solve scaling but requires
-  explicit sharding rules.
-
-Key tradeoffs for `sfincs_jax`:
-
-- Process parallelism is the easiest way to scale *independent* `whichRHS` solves
-  and scan points on CPUs.
-- Sharded matvec is the correct analogue to Fortran MPI for large single‑RHS
-  solves, but it requires multi‑device setups and careful sharding constraints.
-
-Parallelism in SFINCS (Fortran v3)
-----------------------------------
-
-SFINCS v3 uses **MPI + PETSc**:
-
-- **Domain decomposition**: In `createGrids.F90`, PETSc DMDA splits **either**
-  :math:`\theta` or :math:`\zeta` across MPI ranks (1‑D decomposition). Each rank
-  owns a slab of the matrix rows for its local :math:`(\theta,\zeta)` range.
-- **Distributed KSP**: In `solver.F90`, PETSc KSP solves the global linear system
-  using distributed `Mat`/`Vec` objects. Direct solvers (MUMPS / SuperLU_DIST)
-  handle the parallel factorization internally.
-
-This is a classic MPI‑distributed linear‑algebra design: local matrix assembly,
-parallel Krylov (or direct) solve.
-
-Parallelism in sfincs_jax
--------------------------
-
-`sfincs_jax` uses a layered approach that mirrors the Fortran design while
-preserving differentiability:
-
-1. **Parallel whichRHS (transport matrices)**
-
-   RHSMode=2/3 solves are independent per `whichRHS`. We can solve multiple RHS
-   in parallel across CPU processes or GPU devices.
-
-   Implementation: `solve_v3_transport_matrix_linear_gmres` in
-   `sfincs_jax.v3_driver`.
-
-2. **Parallel cases / scan points**
-
-   The reduced suite and scan workflows are embarrassingly parallel across
-   cases or scan points. The suite runner now supports `--jobs` to execute
-   multiple cases concurrently.
-
-   Implementation: `scripts/run_reduced_upstream_suite.py`.
-
-3. **Sharded matvec (SPMD)**
-
-   For very large cases, a single RHS solve can be sharded across multiple
-   devices by splitting the state vector along :math:`\theta` or :math:`\zeta`.
-
-   Implementation: `apply_v3_full_system_operator_cached` in
-   `sfincs_jax.v3_system` with `pjit` + `with_sharding_constraint`.
-
-   **Host‑device setup (CPU).** To emulate MPI‑style domain decomposition on a
-   multi‑core CPU, request multiple host devices *before importing JAX*. You can
-   do this from the CLI without environment variables:
-
-   .. code-block:: bash
-
-      sfincs_jax --cores 8 /path/to/input.namelist
-
-   The equivalent environment variable remains available:
-
-   .. code-block:: bash
-
-      export SFINCS_JAX_CORES=8
-
-   `sfincs_jax` will then shard the state vector along :math:`\\theta` or
-   :math:`\\zeta` (whichever is larger) once the :math:`N_\\theta N_\\zeta`
-   grid is large enough. This mirrors the Fortran DMDA split across angular
-   coordinates.
-
-   To disable sharding while keeping process parallelism, set:
-
-   .. code-block:: bash
-
-      export SFINCS_JAX_SHARD=0
-
-Design choices and parity
--------------------------
-
-- **Parity first**: parallel paths call the same matrix‑free operators as the
-  sequential path, so outputs remain bit‑compatible up to floating reduction
-  order.
-- **Deterministic merges**: results are merged by column index to avoid
-  nondeterministic ordering in parallel `whichRHS`.
-- **Differentiability**: each worker uses the same JAX operators, so the solve
-  itself remains differentiable. Cross‑process aggregation is performed in
-  Python, so end‑to‑end gradients across multiple processes are not automatic.
-  If you need gradients for transport matrices, compute each RHS gradient in the
-  worker and combine them explicitly.
-
-
-Step (1): Parallel `whichRHS`
------------------------------
-
-Enable process‑parallel `whichRHS` solves with:
-
-.. code-block:: bash
-
-   export SFINCS_JAX_TRANSPORT_PARALLEL=process
-   export SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS=4
-
-This parallelizes the RHSMode=2/3 transport matrix loop across CPU processes.
-Parity is preserved because each `whichRHS` solve is identical to the sequential
-path; outputs are merged deterministically by column.
-
-**Relevant code paths**
-
-- `sfincs_jax.v3_driver.solve_v3_transport_matrix_linear_gmres`
-- `sfincs_jax.v3_driver._transport_parallel_worker`
-
-**How it works**
-
-- The master process partitions `whichRHS` indices and launches workers with
-  `ProcessPoolExecutor`.
-- Each worker reads the same input file, solves its RHS subset, and returns
-  per‑RHS fluxes plus transport diagnostics.
-- The master merges columns deterministically and reconstructs the transport
-  matrix.
-- By default, the process pool is persistent across repeated transport solves
-  (`SFINCS_JAX_TRANSPORT_POOL_PERSIST=1`), which avoids worker re-spawn and
-  repeated worker-side JAX startup/JIT overhead for warm runs. Set
-  `SFINCS_JAX_TRANSPORT_POOL_PERSIST=0` to force one-shot pools.
-
-**Platform note (macOS)**
-
-macOS uses `spawn` for multiprocessing. Run from a file/module (not `python - <<EOF`)
-so worker processes can import the main module cleanly.
-
-**Measured CPU transport scaling (MacBook Pro M3 Max)**
-
-Benchmark case: `examples/performance/transport_parallel_2min.input.namelist`
-(RHSMode=2, geometryScheme=2, Ntheta=21, Nzeta=21, Nxi=6, NL=6, Nx=6).
-
-Benchmark preconditioner: `SFINCS_JAX_TRANSPORT_PRECOND=xmg`.
-
-Latest cache-warm sweep (1, 2, 4 workers):
-1 worker 252.5s, 2 workers 169.2s, 4 workers 93.7s.
-
-Process‑parallel workers automatically disable sharded matvec and cap
-XLA CPU threads per worker to avoid oversubscription when `SFINCS_JAX_CORES`
-is set.
-
-Reproduce:
-
-.. code-block:: bash
-
-   python examples/performance/benchmark_transport_parallel_scaling.py \
-     --input examples/performance/transport_parallel_2min.input.namelist \
-     --workers 1 2 4 \
-     --repeats 1 \
-     --warmup 0 \
-     --global-warmup 1
-
-The benchmark script uses the transport solve-only path
-(``collect_transport_output_fields=False``) so timings isolate linear-solve
-parallel behavior instead of full diagnostics/H5 field assembly.
-
-.. figure:: _static/figures/parallel/transport_parallel_scaling.png
-   :alt: Parallel whichRHS scaling on Macbook M3 Max
-   :width: 90%
-
-   Parallel whichRHS scaling (runtime + speedup vs workers).
-
-For this larger case, scaling reaches about ``2.69x`` at ``4`` workers.
-This is the current production CPU-parallel story in ``sfincs_jax``: use
-process-parallel transport and scan workloads first, and keep single-case
-multi-device sharding as an advanced path for very large RHSMode=1 solves.
-Note: RHSMode=2 has only **3** right-hand sides, so speedup naturally
-saturates once there are more workers than independent ``whichRHS`` solves.
-
-Earlier runs (smaller grids)
-----------------------------
-
-We also benchmarked smaller RHSMode=2 cases (7–45 s single‑worker time). These
-showed weaker scaling because process startup and JIT overheads dominate at
-small problem sizes. The longer 2min case above is required to observe clear
-speedup on laptop CPUs.
-
-Reduced‑suite parallel sanity checks
-------------------------------------
-
-We also timed a pair of reduced‑suite examples using `SFINCS_JAX_CORES` to see
-whether CPU parallelism helps at the ~1–3 s scale. Results (cache‑warm, second run):
-
-.. list-table::
-   :header-rows: 1
-   :widths: 40 12 12 12 12
-
-   * - Case
-     - 1 core
-     - 2 cores
-     - 4 cores
-     - 8 cores
-   * - HSX_PASCollisions_DKESTrajectories
-     - 2.825 s
-     - 2.747 s
-     - 2.787 s
-     - 3.043 s
-   * - transportMatrix_geometryScheme11
-     - 1.599 s
-     - 2.404 s
-     - 2.691 s
-     - 2.485 s
-
-At these tiny sizes, per‑process startup, JIT cache synchronization, and
-inter‑process overhead dominate the solve time, so additional cores do not help.
-This is expected; strong scaling appears only once per‑RHS work reaches tens of
-seconds.
-
-JIT/compilation notes
----------------------
-
-To avoid skew from compilation:
-
-- The results above were collected after a one‑off warm run (workers=1) to populate
-  the persistent JAX cache, with ``--warmup 0 --global-warmup 1`` for the timing run.
-- To reproduce, either run once with ``--workers 1`` before timing or set
-  ``--global-warmup 1`` and keep ``--warmup 0`` for the timed measurements.
-- A persistent `JAX_CACHE_DIR` is used so processes can reuse compiled kernels.
-
-
-Step (2): Parallel cases / scans
---------------------------------
-
-The reduced suite runner can now execute multiple cases in parallel:
-
-.. code-block:: bash
-
-   python scripts/run_reduced_upstream_suite.py --jobs 4 --reuse-fortran
-
-Each case runs in its own process, with independent Fortran and JAX runs.
-This is the highest‑ROI parallel mode for large test campaigns.
-
-**Scan parallelism (E_r scans)**
-
-For scans with many values, use `--jobs` to parallelize scan points:
-
-.. code-block:: bash
-
-   sfincs_jax scan-er \
-     --input input.namelist \
-     --out-dir scan_dir \
-     --min -2 --max 2 --n 41 \
-     --jobs 8
-
-Parallel scan mode disables Krylov recycle between points. Use this when you
-care more about throughput than per‑point warm‑start.
-
-Scaling to dozens/hundreds (job arrays)
-------------------------------------------------------------
-
-For large ensembles, use job arrays on clusters and slice the work with
-`--case-index`/`--case-stride` (suite) or `--index`/`--stride` (scan).
-
-**Suite array (N cases across M array tasks)**
-
-.. code-block:: bash
-
-   #SBATCH --array=0-63
-   python scripts/run_reduced_upstream_suite.py \
-     --case-index ${SLURM_ARRAY_TASK_ID} \
-     --case-stride 64 \
-     --reuse-fortran
-
-**Scan array (N scan points across M array tasks)**
-
-.. code-block:: bash
-
-   #SBATCH --array=0-63
-   sfincs_jax scan-er \
-     --input input.namelist \
-     --out-dir scan_dir \
-     --min -2 --max 2 --n 401 \
-     --index ${SLURM_ARRAY_TASK_ID} \
-     --stride 64
-
-This gives near‑linear scaling to dozens or hundreds of workers, since each
-task is independent.
-
-
-Step (3): Sharded matvec (SPMD)
--------------------------------
-
-Sharded matvec splits the *state vector* across devices for a **single solve**.
-This is the closest analogue to the MPI / DMDA strategy in Fortran.
-
-Enable sharding by selecting the axis (theta/zeta) or the full flat state vector:
-
-.. code-block:: bash
-
-   export SFINCS_JAX_MATVEC_SHARD_AXIS=zeta  # or theta
-   # Optional flat sharding for distributed GMRES:
-   # export SFINCS_JAX_MATVEC_SHARD_AXIS=flat
-
-On CPUs, you can create multiple host devices with:
-
-.. code-block:: bash
-
-   export XLA_FLAGS=--xla_force_host_platform_device_count=4
-
-On GPUs, JAX will automatically see all local devices.
-
-**Notes**
-
-- Sharding is currently **experimental** and only enabled when multiple devices
-  are visible.
-- When only one device is available, the code falls back to the standard JIT path
-  and skips sharding constraints (no functional change).
-- Sharded matvec requires the sharded dimension (``Ntheta`` or ``Nzeta``) to be
-  divisible by the device count. Because v3 forces **odd** ``Ntheta``/``Nzeta``,
-  only odd device counts activate theta/zeta sharding by default. Set
-  ``SFINCS_JAX_SHARD_PAD=1`` (default) to pad ghost planes so even device counts
-  can still shard without changing outputs in the cached/pjit matvec path.
-  (The current RHSMode=1 distributed-GMRES matvec path still requires
-  divisible theta/zeta partitions.)
-- ``x`` sharding is available as a fallback when odd ``Ntheta``/``Nzeta`` block
-  theta/zeta sharding. Use ``SFINCS_JAX_MATVEC_SHARD_AXIS=x`` or set
-  ``SFINCS_JAX_MATVEC_SHARD_PREFER_X=1`` with a large ``Nx``. With
-  ``SFINCS_JAX_SHARD_PAD=1`` (default), `sfincs_jax` pads ``Nx`` to the next
-  multiple of the device count so x‑sharding can still activate.
-- When sharding is active and no explicit RHSMode=1 preconditioner is requested,
-  `sfincs_jax` defaults to an angular-local preconditioner along the sharded
-  axis. For larger systems this can auto-upgrade to overlap-RAS
-  (``theta_schwarz`` / ``zeta_schwarz`` via
-  ``SFINCS_JAX_RHSMODE1_SCHWARZ_AUTO_MIN``), otherwise it uses theta/zeta line
-  blocks. This keeps the preconditioner apply local to each shard, mirroring
-  PETSc-style block-Jacobi/Schwarz behavior.
-- Collisionless, ExB, and magnetic-drift derivative kernels now use a
-  sparse-row gather apply when the differentiation matrices are banded/sparse
-  (common 3‑point/5‑point schemes). This keeps the operator matrix-free and
-  differentiable while reducing dense derivative apply cost. The periodic roll
-  kernel is enabled only on single-device runs by default; on multi-device
-  sharded runs it is disabled unless
-  ``SFINCS_JAX_PERIODIC_STENCIL_ON_SHARDED=1`` is set.
-- This mirrors Fortran DMDA splitting along :math:`\theta` or :math:`\zeta`,
-  with the same intent: distribute matvec and preconditioner cost.
-
-**Padding design (theta/zeta sharding).** When ``SFINCS_JAX_SHARD_PAD=1``,
-`sfincs_jax` pads odd ``Ntheta``/``Nzeta`` grids with **ghost planes** so that
-even device counts can shard. The padding is constructed to be
-mathematically neutral: weights and integration measures are padded with zeros,
-so the extra planes contribute nothing to residuals or diagnostics. We also
-pad ``BHat`` with 1 and derivatives with 0 to avoid division‑by‑zero in
-intermediate expressions. The final output is **un‑padded**, so the user‑visible
-solution and H5 outputs match the original grid exactly. This choice preserves
-parity while allowing SPMD sharding on otherwise incompatible grids.
-
-Sharded matvec scaling (single RHS)
------------------------------------
-
-We also benchmarked sharded matvec performance for a larger single‑RHS operator:
-`examples/performance/transport_parallel_sharded.input.namelist`.
-
-Latest run (cache warm, Macbook M3 Max, theta‑sharded with padding):
-1 device 1.74 ms, 2 devices 4.08 ms, 3 devices 6.26 ms, 4 devices 8.06 ms,
-5 devices 8.01 ms, 6 devices 11.24 ms, 7 devices 13.81 ms, 8 devices 15.53 ms.
-CPU sharding overhead dominates at this size; this mode is primarily intended
-for **very large grids** or multi‑GPU nodes.
-
-Single-device derivative-kernel speedup
----------------------------------------
-
-For the same operator (`transport_parallel_xxlarge`), enabling sparse derivative
-kernels reduced single-device matvec time from ``7.49e-4 s`` to ``5.87e-4 s``
-(about ``1.28x`` faster, cache-warm).
-
-Reproduce:
-
-.. code-block:: bash
-
-   SFINCS_JAX_PERIODIC_STENCIL=0 python examples/performance/benchmark_sharded_matvec_scaling.py \
-     --input examples/performance/transport_parallel_xxlarge.input.namelist \
-     --axis theta --devices 1 --nrep 100 --repeats 3 --global-warmup 1
-
-   SFINCS_JAX_PERIODIC_STENCIL=1 python examples/performance/benchmark_sharded_matvec_scaling.py \
-     --input examples/performance/transport_parallel_xxlarge.input.namelist \
-     --axis theta --devices 1 --nrep 100 --repeats 3 --global-warmup 1
-
-.. figure:: _static/figures/parallel/transport_sharded_matvec_scaling.png
-   :alt: Sharded matvec scaling on Macbook M3 Max
-   :width: 90%
-
-X‑sharded matvec scaling (single RHS)
--------------------------------------
-
-X‑sharding avoids the odd‑grid constraint. With ``SFINCS_JAX_SHARD_PAD=1``
-(default), `sfincs_jax` pads ``Nx`` to the next multiple of the device count,
-so all device counts can shard without falling back.
-
-Latest run (cache warm, Macbook M3 Max, x‑sharded with padding):
-1 device 1.70 ms, 2 devices 3.43 ms, 3 devices 4.98 ms, 4 devices 6.69 ms,
-5 devices 11.00 ms, 6 devices 9.57 ms, 7 devices 14.44 ms, 8 devices 18.36 ms.
-
-.. figure:: _static/figures/parallel/transport_sharded_matvec_x_scaling.png
-   :alt: X-sharded matvec scaling on Macbook M3 Max
-   :width: 90%
-
-Shard_map halo prototype (uneven partition evaluation)
-------------------------------------------------------
-
-We added an **experimental** `shard_map` prototype that emulates PETSc‑style
-uneven partitions by performing an explicit **all‑gather halo exchange** before
-computing the collisionless :math:`\partial/\partial\theta` term. This is not
-wired into production runs; it is a research benchmark to quantify the
-communication cost of explicit halos for dense derivative operators.
-
-Reproduce:
-
-.. code-block:: bash
-
-   python examples/performance/benchmark_shard_map_halo.py \
-     --input examples/performance/transport_parallel_sharded.input.namelist \
-     --devices 4 \
-     --axis theta \
-     --repeats 5
-
-Notes:
-
-- The prototype uses a **full gather halo** (all_gather) because the current
-  dense derivative matrices are not stencil‑sparse in every scheme. For compact
-  stencils, this can be replaced with neighbor halo exchange to reduce bandwidth.
-- Outputs match the baseline collisionless operator; the path is for evaluation
-  only and is not enabled by default.
-- Latest measurement (Macbook M3 Max, 4 devices, theta axis): 0.679 s per call.
-
-Reproduce:
-
-.. code-block:: bash
-
-   python examples/performance/benchmark_sharded_matvec_scaling.py \
-     --input examples/performance/transport_parallel_sharded.input.namelist \
-     --axis theta \
-     --pad \
-     --devices 1 2 3 4 5 6 7 8 \
-     --repeats 1 \
-     --nrep 2000 \
-     --global-warmup 1
-
-   python examples/performance/benchmark_sharded_matvec_scaling.py \
-     --input examples/performance/transport_parallel_sharded.input.namelist \
-     --axis x \
-     --pad \
-     --devices 1 2 3 4 5 6 7 8 \
-     --repeats 1 \
-     --nrep 2000 \
-     --global-warmup 1
-
-Sharded solve scaling (single RHSMode=1)
-----------------------------------------
-
-We also benchmarked a **single RHSMode=1 solve** with theta-sharded matvecs:
-
-.. code-block:: bash
-
-   python examples/performance/benchmark_sharded_solve_scaling.py \
-     --input examples/performance/rhsmode1_sharded_scaling.input.namelist \
-     --devices 1 2 3 4 \
-     --warmup 0 \
-     --repeats 1 \
-     --global-warmup 0 \
-     --nsolve 240 \
-     --inner-warmup-solves 1 \
-     --sample-timeout-s 300 \
-     --shard-axis theta \
-     --gmres-distributed 1 \
-     --distributed-krylov auto
-
-Input: `examples/performance/rhsmode1_sharded_scaling.input.namelist`
-(``Ntheta=30, Nzeta=10, Nxi=12, NL=8, Nx=12``).
-
-Historical long-run measurement (Macbook M3 Max, ``nsolve=240``, baseline >2 min):
-
-- 1 device: 136.25 s
-- 2 devices: 98.70 s (1.38x speedup)
-- 3 devices: 105.33 s (1.29x speedup)
-- 4 devices: 110.78 s (1.23x speedup)
-
-The benchmark now runs with implicit linear solves enabled
-(``SFINCS_JAX_IMPLICIT_SOLVE=1``) to match production defaults. Since the
-2026-04-24 benchmark audit, use ``--inner-warmup-solves`` for hot-solve scaling
-and ``--sample-timeout-s`` to keep cold XLA setup bounded. Pre-audit sharded
-timings are retained only as regression context and should be regenerated before
-publication claims.
-
-For A/B comparison against distributed GMRES on the same setup, run:
-
-.. code-block:: bash
-
-   python examples/performance/benchmark_sharded_solve_scaling.py \
-     --input examples/performance/rhsmode1_sharded_scaling.input.namelist \
-     --devices 1 2 3 4 \
-     --warmup 0 \
-     --repeats 1 \
-     --global-warmup 0 \
-     --nsolve 240 \
-     --inner-warmup-solves 1 \
-     --sample-timeout-s 300 \
-     --shard-axis theta \
-     --gmres-distributed 1 \
-     --distributed-krylov gmres
-
-In A/B runs, ``distributed_krylov=auto`` remains the best default on this host.
-
-This confirms parity-safe sharded execution, but not strong scaling yet.
-Single-RHS GMRES remains reduction-heavy, and the current implementation still
-pays substantial synchronization/compile overhead on >1 CPU device.
-
-On this host, long 8-device CPU runs still hit occasional XLA rendezvous timeouts,
-so published strong-scaling results are currently capped at 5 devices.
-
-Why scaling is still poor for single‑RHS GMRES
-----------------------------------------------
-
-For RHSMode=1, each GMRES iteration performs a **global reduction** (dot products
-and norms) plus one matvec and preconditioner apply. On CPUs, the per‑iteration
-work is relatively small compared to the **synchronization cost** of those global
-reductions, and sharded matvecs introduce additional data movement. As a result,
-strong scaling stalls or reverses until the per‑iteration workload is large
-enough to amortize communication and Python/JAX dispatch overhead.
-
-Next‑step plan
---------------
-
-To reach strong scaling on dozens of cores or multi‑node runs, we need to reduce
-global synchronization and keep most work local:
-
-- **Domain‑decomposition preconditioner** (additive Schwarz / block‑Jacobi with
-  overlap) so most Krylov progress happens in local subdomains.
-- **Communication‑avoiding Krylov** (pipelined or s‑step GMRES) to fuse multiple
-  dot‑products per iteration and reduce global barriers.
-- **Coarse grid / deflation** (local coarse solve for the nullspace‑like modes)
-  so the global coupling is handled by a small, cheap correction.
-
-These steps mirror PETSc‑style strong‑scaling strategies and are the path to
-meaningful speedups for single‑RHS runs on large CPU/GPU counts.
-
-Prototype status: **block‑diagonal theta/zeta preconditioners** are available
-for experimentation in both RHSMode=1 and transport (RHSMode=2/3):
-
-- RHSMode=1: ``SFINCS_JAX_RHSMODE1_PRECONDITIONER=theta_dd`` / ``zeta_dd``
-  (block sizes via ``SFINCS_JAX_RHSMODE1_DD_BLOCK_T`` /
-  ``SFINCS_JAX_RHSMODE1_DD_BLOCK_Z``).
-  A local-overlap Schwarz variant is available via
-  ``SFINCS_JAX_RHSMODE1_PRECONDITIONER=theta_schwarz`` / ``zeta_schwarz``
-  (overlap via ``SFINCS_JAX_RHSMODE1_DD_OVERLAP``). In auto mode, sharded runs
-  can pick Schwarz preconditioning above
-  ``SFINCS_JAX_RHSMODE1_SCHWARZ_AUTO_MIN``.
-- Transport: ``SFINCS_JAX_TRANSPORT_PRECOND=theta_dd`` / ``zeta_dd``
-  (block sizes via ``SFINCS_JAX_TRANSPORT_DD_BLOCK_T`` /
-  ``SFINCS_JAX_TRANSPORT_DD_BLOCK_Z``).
-  A local-overlap Schwarz variant is also available via
-  ``SFINCS_JAX_TRANSPORT_PRECOND=theta_schwarz`` / ``zeta_schwarz``
-  (overlap via ``SFINCS_JAX_TRANSPORT_DD_OVERLAP``).
-
-These are stepping stones toward true overlapping Schwarz and remain opt-in
-by default.
-
-.. figure:: _static/figures/parallel/transport_sharded_solve_scaling.png
-   :alt: Sharded RHSMode=1 solve scaling on Macbook M3 Max
-   :width: 90%
-
-Verification
-------------
-
-- `tests/test_transport_parallel.py` compares sequential vs. parallel `whichRHS`
-  outputs and confirms identical transport matrices.
-- `tests/test_sharded_matvec.py` confirms sharded matvec falls back to standard
-  JIT on single‑device hosts.
-
-
-Recommended workflows
----------------------
-
-**Macbook (multi‑core CPU)**
-
-1. Use process parallelism for transport matrices:
-
-   .. code-block:: bash
-
-      export SFINCS_JAX_CORES=4
-
-2. Use `--jobs` in the suite runner for concurrent cases.
-
-**Perlmutter (multi‑CPU / multi‑GPU)**
-
-- Multi‑CPU: set `SFINCS_JAX_CORES=<tasks-per-node>` and use `--jobs` for case‑level
-  concurrency.
-- Multi‑GPU: run a few `whichRHS` workers, one per GPU, or use
-  `SFINCS_JAX_MATVEC_SHARD_AXIS=zeta` for single‑RHS sharding.
-- Multi‑node: enable JAX distributed initialization so sharded matvecs can span
-  multiple hosts. Provide process count/id and coordinator address:
-
-  .. code-block:: bash
-
-     export SFINCS_JAX_DISTRIBUTED=1
-     export SFINCS_JAX_PROCESS_COUNT=$SLURM_NTASKS
-     export SFINCS_JAX_PROCESS_ID=$SLURM_PROCID
-     export SFINCS_JAX_COORDINATOR_ADDRESS=$SLURM_NODELIST
-     export SFINCS_JAX_COORDINATOR_PORT=1234
-
-
-Executable-first rollout
+`sfincs_jax` runs on a single node — a multi-core CPU or one GPU — and gets its
+throughput from three places: batched ``jax.vmap`` over independent solves,
+optional device sharding of a single large solve, and the structured ``solvax``
+solve tiers underneath. This covers the same physics that SFINCS Fortran v3
+spreads across many nodes with MPI, while keeping the whole path differentiable.
+
+The lever to reach for first is **batching independent solves**. Scanning the
+radial electric field, sweeping flux surfaces, or building a monoenergetic
+database are all embarrassingly parallel — each point is its own solve — and a
+single vmapped call amortizes dispatch on CPU and fills the device on GPU.
+
+Two kinds of parallelism
 ------------------------
 
-The near-term parallelization program is split into two explicit tracks:
+- **Across independent solves.** Many ``E_r`` values, many flux surfaces, many
+  ``whichRHS`` right-hand sides, or many optimizer/scan points. They share a
+  discretization and differ only in a few physics leaves, so one batched call
+  solves them together. This is where the throughput is.
+- **Within a single solve.** One large linear system split across host devices
+  or GPUs along ``theta``/``zeta``/``x``. Available for cases too large for a
+  single device, but secondary to batching for scan-shaped work.
 
-- **Executable / CLI path first**: prioritize throughput, memory, and scalable
-  deployment on one node and then many nodes. This path may use explicit
-  host-side solvers, process pools, or non-differentiable orchestration when
-  that materially improves practical HPC performance.
-- **Differentiable Python path second**: preserve JAX-native operator structure,
-  sharding, and implicit-diff compatibility for workflows that genuinely need
-  gradients.
+Batching independent solves
+---------------------------
 
-That split matters because the fastest cluster path and the cleanest
-end-to-end differentiable path are not always the same implementation.
+The batched API in ``sfincs_jax.batch`` productizes ``jax.vmap`` over solves
+that share a discretization:
 
-The current hardware targets are:
+.. code-block:: python
 
-- **Local MacBook Pro M3**: one visible JAX CPU device by default; host-device
-  parallelism is activated with ``--cores N`` or ``SFINCS_JAX_CORES=N``.
-- **Office workstation**: two visible CUDA devices, suitable for one-node
-  multi-GPU sharded benchmark and fallback validation.
+   from sfincs_jax.batch import batched_er_scan, batched_surface_scan
 
-The immediate executable-facing milestones are:
+   # Scan the radial electric field on one geometry.
+   result = batched_er_scan(problem, er_values)
+   radial_current = result.radial_current       # J_r for each E_r value
 
-1. make the CLI surface the actual parallel runtime controls directly,
-2. benchmark one-node multi-core CPU and one-node multi-GPU sharded solves from
-   the executable path,
-3. stabilize multi-host bootstrap and Slurm launch patterns,
-4. then push stronger domain decomposition and communication-avoiding Krylov for
-   strong scaling on large single-RHS solves.
+   # Sweep a set of flux surfaces (one KineticOperator each).
+   result = batched_surface_scan(operators)
 
-The corresponding differentiable-Python milestones are:
+Both return a ``BatchedSolveResult`` carrying the stacked moments, both accept
+``differentiable=True`` to keep the batch inside a ``jax.grad`` chain, and both
+take optional ``max_batch`` / ``memory_budget_gb`` overrides. Independent solves
+— a vector of ``E_r`` values, a set of surfaces, or the ``(nu*, E_r)`` grid of a
+monoenergetic database (``sfincs_jax.monoenergetic``) — are exactly the
+parallel-friendly shape.
 
-1. keep operator partitioning and residual evaluation JAX-native,
-2. validate sharded JAX solves on one node before widening to multi-host,
-3. then evaluate implicit-diff and gradient correctness across the distributed
-   path.
+**Automatic memory budgeting.** There are no sharding environment variables on
+this path. The batch runs in ``jax.lax.map`` chunks sized from the per-solve
+tier-1 memory footprint and the resolved device (or host) memory budget, so only
+one chunk's intermediates are ever live. ``memory_budget_gb`` overrides the
+resolved budget and ``max_batch`` caps the chunk size; the defaults need
+neither.
 
-The new CLI flags are the public entry point for that rollout:
+**Measured throughput.** Because ``vmap`` amortizes per-solve dispatch, batching
+beats a serial Python loop even on CPU — about ``9.5x`` for an ``E_r`` scan and
+``6.4x`` for a surface scan. The larger win is on the GPU, where a single solve
+sits at CPU parity but a batch fills the device. Reproduce both with
+``python tools/benchmarks/batched_scan.py``.
 
-.. code-block:: bash
-
-   sfincs_jax --cores 8 --shard-axis auto /path/to/input.namelist
-
-   sfincs_jax transport-matrix-v3 \
-     --input /path/to/input.namelist \
-     --transport-workers 4
-
-   CUDA_VISIBLE_DEVICES=0,1 \
-   sfincs_jax write-output \
-     --input /path/to/input.namelist \
-     --shard-axis theta \
-     --distributed-gmres auto
-
-High-collisionality transport scans
+Solve tiers and where the GPU helps
 -----------------------------------
 
-The FP/PAS high-``nu'`` LHD/W7-X campaign is dominated by independent
-transport-matrix RHS solves. Use process-level ``whichRHS`` parallelism first;
-it is simpler and more reliable than sharding one ill-conditioned RHS solve:
+Every solve routes through the three ``solvax``-backed tiers selected by the
+``auto`` policy (:doc:`numerics`):
 
-.. code-block:: bash
+- **Tier 1 — structured direct.** Block-tridiagonal elimination over the
+  Legendre index. For the DKES-trajectory / pitch-angle family the system splits
+  into independent block-tridiagonal systems (one per species and speed node)
+  solved with ``vmap``. This tier is GPU-viable and the one batching
+  accelerates.
+- **Tier 2 — preconditioned recycled Krylov.** Matrix-free FGMRES with subspace
+  recycling, right-preconditioned by an exact tier-1 solve of a simplified
+  coarse operator. It carries a recycle pair to warm-start neighbouring points
+  in an ``E_r`` scan or a Newton iteration.
+- **Tier 3 — host sparse-direct fallback.** A host sparse factorization for
+  cases the structured tier cannot admit; non-differentiable, used only on
+  ``method="direct"`` or when tier 2 breaches its iteration cap.
 
-   CUDA_VISIBLE_DEVICES=0,1 \
-   python examples/publication_figures/generate_sfincs_paper_figs.py \
-     --case lhd \
-     --collision-operators 0 \
-     --nuprime-min 17.78279101649707 \
-     --nuprime-max 17.78279101649707 \
-     --n-points 1 \
-     --transport-workers 2 \
-     --transport-parallel-backend gpu \
-     --transport-sparse-direct-max 30000 \
-     --require-residuals \
-     --max-transport-residual 1e-6 \
-     --max-transport-relative-residual 1e-6 \
-     --scan-only
+The honest headline, measured in :doc:`performance`: the GPU reaches CPU parity
+on the **direct** tier and runs the **iterative** and small-system paths 2-5x
+*slower*, because those are dominated by serial, dispatch-bound iterations. GPU
+wins therefore come from **batched** direct-tier work — multi-``E_r`` or
+multi-surface sweeps — not from single solves.
 
-The launcher passes ``SFINCS_JAX_IMPLICIT_SOLVE=0`` to scan subprocesses. This
-is intentional: the executable campaign prioritizes robust residuals and
-throughput, so high-``nu'`` transport may use host sparse-LU first attempts or
-rescue solves. The campaign command also writes solver diagnostics and rejects
-outputs whose absolute or relative transport residual exceeds the configured
-gate. It also wires those thresholds into fail-fast aborts: sequential runs stop
-after the first bad ``whichRHS`` and GPU-worker runs terminate still-pending
-workers as soon as a completed worker writes a bad residual artifact. If
-``differentiable=True`` or ``SFINCS_JAX_IMPLICIT_SOLVE=1`` is used instead,
-host-only direct rescues are disabled to preserve the implicit JAX
-differentiation contract.
-
-Current bounded ``office`` pilot for the first LHD FP high-``nu'`` point:
-
-- implicit one-GPU path: about ``569 s`` and residuals up to ``5e-1``;
-- explicit one-GPU sparse-LU path: about ``345 s`` and residuals below
-  ``5e-11``;
-- explicit two-GPU worker path: about ``262 s`` with the same clean residuals.
-
-This is useful task/RHS parallelism for the high-``nu'`` campaign. It should not
-be described as single-RHS strong scaling: one worker still owns two RHS solves,
-and host sparse materialization/factorization remains a visible cost.
-
-The W7-X FP high-``nu'`` point is no longer a correctness blocker, but it remains
-the expensive case that should be launched conservatively. The clean bounded
-route uses one GPU worker, float32 host sparse-LU factors with matrix-free true
-residual verification, and ``--transport-sparse-direct-max 40000``:
-
-.. code-block:: bash
-
-   CUDA_VISIBLE_DEVICES=0 \
-   SFINCS_JAX_TRANSPORT_SPARSE_FACTOR_DTYPE=float32 \
-   python examples/publication_figures/generate_sfincs_paper_figs.py \
-     --case w7x \
-     --collision-operators 0 \
-     --nuprime-min 17.78332923601508 \
-     --nuprime-max 17.78332923601508 \
-     --n-points 1 \
-     --transport-workers 1 \
-     --transport-parallel-backend gpu \
-     --transport-sparse-direct-max 40000 \
-     --transport-maxiter 800 \
-     --require-residuals \
-     --max-transport-residual 1e-6 \
-     --max-transport-relative-residual 1e-6 \
-     --scan-only
-
-On ``office`` this first W7-X FP high-``nu'`` point now takes about ``582 s``
-with sparse-helper factor reuse, down from about ``2028 s`` when the same CSR
-operator and sparse-LU factors were rebuilt separately for every RHS. It passed
-with residual/RHS/relative tuples
-``1.297471e-10 / 1.885192e-04 / 6.882435e-07``,
-``1.975724e-12 / 2.623896e-04 / 7.529734e-09``, and
-``4.841651e-09 / 6.589011e-01 / 7.348069e-09``. The measured per-RHS timings
-were about ``574.0 s``, ``2.47 s``, and ``2.38 s``; the later RHS solves reuse
-the explicit sparse helper. Peak RSS from ``/usr/bin/time -v`` was about
-``15.3 GB``. The previous bounded ``30000`` cap finished faster but failed with
-order-unity relative residuals, and the current Krylov preconditioners do not
-close the full point by themselves. Widened W7-X high-``nu'`` campaigns should
-therefore keep the strict residual gates enabled and use this sparse-LU lane
-until a cheaper preconditioner is demonstrated.
-
-.. figure:: _static/figures/paper/sfincs_jax_w7x_high_nu_performance.png
-   :alt: W7-X high-nu sparse-helper factor reuse performance
-   :width: 92%
-
-   Publication-ready W7-X high-``nu'`` preconditioning/performance artifact.
-   The residual-clean factor-reuse route has the same transport outputs as the
-   earlier no-reuse sparse-LU route, but performs one host sparse factorization
-   instead of three.
-
-A focused single-RHS harness is checked in so preconditioner candidates can be
-tested before launching the full high-``nu'`` figure workflow:
-
-.. code-block:: bash
-
-   CUDA_VISIBLE_DEVICES=0 \
-   python examples/performance/benchmark_w7x_high_nu_preconditioners.py \
-     --preconditioners auto,fp_tzfft,xmg \
-     --which-rhs 2 \
-     --sparse-direct-max 40000 \
-     --sparse-factor-dtype float32 \
-     --maxiter 800 \
-     --timeout-s 900
-
-The harness writes one generated W7-X high-``nu'`` input, runs each candidate in
-a fresh subprocess, and records residual norms, RHS norms, relative residuals,
-elapsed time, peak RSS, command environment, and logs. Use
-``--reduced-resolution`` for local smoke tests, and keep full-resolution W7-X
-runs on GPU nodes with explicit residual gates.
-
-For multi-host bootstrap, keep one process per host/rank and pass the shared
-coordinator address explicitly:
-
-.. code-block:: bash
-
-   sfincs_jax write-output \
-     --input /path/to/input.namelist \
-     --distributed \
-     --process-count 8 \
-     --process-id ${RANK} \
-     --coordinator-address node0 \
-     --coordinator-port 1234
-
-
-Parity and determinism
-----------------------
-
-- `whichRHS` parallelization preserves parity because each RHS is solved by the
-  same matrix‑free algorithm and merged by column in deterministic order.
-- Use `SFINCS_JAX_STRICT_SUM_ORDER=1` for stricter parity when combining
-  reductions across devices.
-
-
-Performance notes
------------------
-
-- Process parallelism helps most when `whichRHS` count is high (transport matrices)
-  or when running many scan points.
-- Sharded matvec helps most when a *single RHS* is large and dominates runtime.
-
-Measured large-case scaling snapshot
-------------------------------------
-
-The current executable-side scaling story is functional but not yet the final
-research-grade result. On the challenging geometryScheme=2 benchmark inputs used
-in this repository, the `main` branch has produced the following regression
-measurements. Treat single-case sharded entries as non-publication snapshots
-until they are regenerated with the audited child-option propagation,
-``--inner-warmup-solves``, and ``--sample-timeout-s`` controls:
-
-- Local CPU sharded RHSMode=1 benchmark on
-  ``examples/performance/rhsmode1_sharded_scaling.input.namelist``:
-
-  - `1` device: `3.99 s`
-  - `2` devices: `3.56 s`
-  - `4` devices: `3.97 s`
-  - `8` devices: `4.46 s`
-
-  These runs use the current bounded multilevel Schwarz correction path
-  (``--rhs1-precond theta_schwarz --schwarz-coarse-levels 2``).
-
-- Local Fortran v3 MPI benchmark on the same input:
-
-  - `mpirun -n 1`: `1.18 s`
-  - `mpirun -n 2`: `0.26 s`
-  - `mpirun -n 4`: `0.39 s`
-
-- Local CPU transport-worker benchmark on
-  ``examples/performance/transport_parallel_2min.input.namelist``:
-
-  - `1` worker: `252.5 s`
-  - `2` workers: `169.2 s`
-  - `4` workers: `93.7 s`
-
-- Office workstation GPU transport-worker benchmark on
-  ``examples/performance/transport_parallel_2min.input.namelist``:
-
-  - `1` GPU worker: `351.1 s`
-  - `2` GPU workers: `237.7 s`
-  - measured speedup: `1.48x`
-  - finite-task ideal for this 3-RHS case: `1.50x`
-
-- Office workstation GPU sharded RHSMode=1 benchmark on the medium-large input
-  ``examples/performance/rhsmode1_sharded_scaling.input.namelist``:
-
-  - older stable snapshot: `1` GPU `44.91 s`, `2` GPUs `67.48 s`
-  - fresh current-tip rerun with bounded multilevel Schwarz and distributed GMRES:
-    `1` GPU `56.70 s`, `2` GPUs `169.36 s`
-
-- Office workstation GPU sharded RHSMode=1 benchmark on the larger input
-  ``examples/performance/rhsmode1_sharded.input.namelist``:
-
-  - `1` GPU: `16.58 s`
-  - previous code path failed by trying to allocate a `pas_tz` block of about
-    `155 GiB`
-  - current `main` now guards that path and falls back to shard-local Schwarz /
-    lighter PAS alternatives instead of crashing
-
-These results support the current deployment recommendation:
-
-- CPU and GPU executable paths are parallel-capable and deterministic.
-- The robust production GPU-parallel path today is **transport-worker
-  parallelism**, with one worker per GPU for independent RHSMode=2/3 solves.
-- The robust production CPU-parallel path today is bounded **CPU host
-  sharding** for single-RHS solves and process-parallel transport workers for
-  RHSMode=2/3 solves.
-- Multi-GPU single-case sharding remains experimental until stronger local
-  domain decomposition and lower-synchronization Krylov are in place.
-
-Fresh two-GPU throughput rerun
-------------------------------
-
-We also reran the practical production-style GPU lane on office by comparing
-two sequential one-GPU runs against two concurrent one-GPU runs on the same
-2-GPU workstation, using:
-
-.. code-block:: bash
-
-   PYTHONPATH=. python examples/performance/benchmark_multi_gpu_case_throughput.py \
-     --input examples/performance/rhsmode1_sharded_scaling.input.namelist \
-     --nsolve 4 \
-     --rhs1-precond theta_schwarz \
-     --schwarz-coarse-levels 2
-
-The fresh measured result on current ``main`` was still below ideal:
-
-- sequential 1-GPU execution of two cases: ``107.65 s`` wall time
-- two concurrent 1-GPU runs on two GPUs: ``194.08 s`` wall time
-- measured throughput speedup: ``0.55x``
-
-This confirms the current technical state more clearly than the older snapshot:
-the code is correct and reproducible on multi-GPU launches, but the current
-single-node GPU parallel path is still not publication-grade from a scaling
-standpoint. That is why the release-facing recommendation stays conservative:
-use GPU acceleration per case today, and treat multi-GPU parallelism as an
-active research path rather than a proven default.
-
-Fresh two-GPU transport-worker rerun
-------------------------------------
-
-The stronger current multi-GPU result comes from independent transport workers,
-not from single-case sharding. On office we reran:
-
-.. code-block:: bash
-
-   PYTHONPATH=. python examples/performance/benchmark_transport_parallel_scaling.py \
-     --backend gpu \
-     --input examples/performance/transport_parallel_2min.input.namelist \
-     --workers 1 2 \
-     --repeats 1 \
-     --warmup 0 \
-     --global-warmup 1 \
-     --precond xmg
-
-Measured result on current ``main``:
-
-- `1` GPU worker: ``351.05 s``
-- `2` GPU workers: ``237.75 s``
-- measured speedup: ``1.48x``
-- finite-task ideal for `3` independent ``whichRHS`` solves on `2` workers:
-  ``1.50x``
-
-.. figure:: _static/figures/parallel/transport_parallel_scaling_gpu.png
-   :alt: Two-point GPU transport-worker scaling benchmark
-   :width: 88%
-
-   Fresh office rerun of the publication-facing GPU transport-worker lane.
-
-This is the release-quality GPU scaling result in ``sfincs_jax`` today:
-parallelize independent transport RHS solves across GPUs. It is deterministic,
-parity-preserving, and close to the finite-task ideal on the tested 2-GPU node.
-That is a materially stronger story than the current single-case sharded GPU
-lane, which remains experimental.
-
-Recent sharded-solve updates
+Host devices and CPU threads
 ----------------------------
 
-The current RHSMode=1 theta/zeta Schwarz auto path no longer clamps the local
-patch width to a single sharded slice. On the measured CPU benchmark
-``examples/performance/rhsmode1_sharded_scaling.input.namelist``, that old rule
-caused an 8-device collapse because the additive-Schwarz patches became too
-small to capture cross-shard angular coupling. The current auto rule grows each
-patch to roughly one local shard plus one DOF-target angular span, which keeps
-the preconditioner local but avoids that fragmentation failure mode.
-
-On the same benchmark, the older published multi-device timings were:
-
-- `1` device: `4.91 s`
-- `2` devices: `4.45 s`
-- `4` devices: `7.00 s`
-
-Current ``main`` with the wider auto patch rule and the bounded multilevel
-residual correction now measures:
-
-- `1` device: `3.99 s`
-- `2` devices: `3.56 s`
-- `4` devices: `3.97 s`
-- `8` devices: `4.46 s`
-
-This is still not ideal strong scaling, but it removes the old 4-device
-collapse and makes the 8-device CPU path usable for real benchmarking instead of
-pathological.
-
-Current ``main`` also adds a bounded multilevel correction on top of the
-theta/zeta Schwarz patches when the solve is actually sharded across many
-devices. The first coarse step reuses a wider theta/zeta block-diagonal
-preconditioner as a residual correction; on 8-device runs, a second still-wider
-correction level can be enabled automatically. This improves the worst
-high-device fragmentation cases without changing the operator or output parity.
-
-The sharded solve benchmark driver also now supports explicit backend
-selection, hot-solve timing, and bounded child-process samples:
+Multi-core CPU execution is requested **before JAX is imported**; the CLI
+``--cores`` flag sets the environment for you:
 
 .. code-block:: bash
 
-   # CPU host-sharded benchmark
-   python examples/performance/benchmark_sharded_solve_scaling.py \
-     --backend cpu \
-     --input examples/performance/rhsmode1_sharded_scaling.input.namelist \
-     --devices 1 2 4 8 \
-     --inner-warmup-solves 1 \
-     --sample-timeout-s 300 \
-     --rhs1-precond theta_schwarz \
-     --schwarz-coarse-levels 2
+   sfincs_jax --cores 8 input.namelist       # or: export SFINCS_JAX_CORES=8
 
-   # One-node GPU benchmark
-   PYTHONPATH=. python examples/performance/benchmark_sharded_solve_scaling.py \
-     --backend gpu \
-     --input examples/performance/rhsmode1_sharded_scaling.input.namelist \
-     --devices 1 2 \
-     --inner-warmup-solves 1 \
-     --sample-timeout-s 300 \
-     --rhs1-precond theta_schwarz \
-     --schwarz-coarse-levels 2
+``SFINCS_JAX_CORES`` requests that many host CPU devices and enables auto
+sharding, ``SFINCS_JAX_CPU_DEVICES`` sets the device count directly, and
+``SFINCS_JAX_XLA_THREADS`` opts into pinning the XLA CPU thread count. Full
+semantics and defaults are in the environment-variable reference (:doc:`usage`).
 
-For the GPU benchmark path, the runner now uses ``CUDA_VISIBLE_DEVICES`` and
-disables JAX preallocation by default in the subprocess. It also enables the
-``cuda_malloc_async`` allocator in the benchmark subprocess so multi-GPU
-benchmarking is less sensitive to fragmentation than the plain default allocator
-path.
+Single-solve sharding
+---------------------
 
-See also:
+When one solve is too large for a single device, the matvec can be sharded
+across the host devices or GPUs:
 
-- `docs/performance_techniques.rst`
-- `sfincs_jax.v3_driver`
-- `sfincs_jax.v3_system`
+- ``SFINCS_JAX_MATVEC_SHARD_AXIS`` — ``auto``/``off``/``theta``/``zeta``/``x``/``flat``.
+- ``SFINCS_JAX_AUTO_SHARD`` and ``SFINCS_JAX_SHARD`` — enable and master-disable
+  auto sharding.
+- ``SFINCS_JAX_SHARD_PAD`` — neutral padding when a sharded axis is not divisible
+  by the device count (does not change outputs).
+
+These mirror the angular domain decomposition an MPI code uses. Their full
+behaviour, together with the distributed-Krylov knobs, is documented in
+:doc:`usage`.
+
+Multi-host execution
+--------------------
+
+For multi-host device pools, JAX distributed initialization is opt-in via
+``SFINCS_JAX_DISTRIBUTED`` together with ``SFINCS_JAX_PROCESS_ID``,
+``SFINCS_JAX_PROCESS_COUNT``, ``SFINCS_JAX_COORDINATOR_ADDRESS``, and
+``SFINCS_JAX_COORDINATOR_PORT`` (or the matching ``--distributed``,
+``--process-id``, ``--process-count``, ``--coordinator-address``, and
+``--coordinator-port`` CLI flags). Independent transport right-hand sides can
+additionally be spread across worker processes with
+``SFINCS_JAX_TRANSPORT_PARALLEL`` / ``SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS``
+(CLI ``--transport-workers``). See :doc:`usage` for the full list.
+
+Relation to SFINCS Fortran v3
+-----------------------------
+
+SFINCS Fortran v3 scales one solve across many nodes with MPI domain
+decomposition. `sfincs_jax` targets a single node — a multi-core CPU or one GPU
+— and recovers scan-level throughput a different way: batched ``vmap`` over
+independent solves, subspace recycling across neighbouring points, and exact
+gradients that replace finite-difference scans in optimization. Parallel paths
+call the same matrix-free operators as the sequential path, so outputs stay
+bit-compatible up to floating-point reduction order and a parallel run is a
+referee for a serial one.

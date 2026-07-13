@@ -120,7 +120,6 @@ What this documentation covers
    parallelism
    research_lanes
    performance
-   performance_techniques
    development_roadmap
    adaptive_speed_grid
    testing
