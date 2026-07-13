@@ -246,7 +246,7 @@ the :mod:`sfincs_jax.collisions` Fokker--Planck blocks by the poloidal density
 factor when ``includePhi1InCollisionOperator = .true.``. It is parity-tested
 against a frozen v3 PETSc matrix for the fixture
 ``fp_1species_FPCollisions_noEr_tiny_withPhi1_inCollision``. For derivations and
-implementation details, see the vendored upstream note linked from
+implementation details, see the upstream SFINCS technical notes cited from
 :doc:`upstream_docs`.
 
 Why JAX?
