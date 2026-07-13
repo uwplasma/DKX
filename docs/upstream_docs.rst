@@ -1,47 +1,46 @@
-Bundled source literature
-=========================
+Upstream SFINCS sources and primary literature
+==============================================
 
-The repository includes a bundled archive of technical notes, papers, and LaTeX sources
-that document the physics models and numerical algorithms from the mature SFINCS
-literature.
+`sfincs_jax` reimplements the radially local, multi-species drift-kinetic model of
+the mature SFINCS code. Rather than vendoring copies of the upstream papers and
+internal technical notes, this documentation transcribes the physics and numerical
+content that `sfincs_jax` depends on into its own pages and cites the primary
+sources below.
 
-To make `sfincs_jax` self-contained on Read the Docs, selected source documents are
-vendored in ``docs/upstream/`` and linked here for convenient browsing and download.
-
-The most important physics and numerical content from these notes is transcribed into the
-main documentation set, especially:
+The most important derived physics and numerical content lives in:
 
 - :doc:`theory_from_upstream`
 - :doc:`physics_reference`
 - :doc:`system_equations`
 - :doc:`method`
 
-Papers
-------
+Published reference
+-------------------
 
-- :download:`LandremanSmithMollenHelander_2014_PoP_v21_p042503_SFINCS.pdf <upstream/LandremanSmithMollenHelander_2014_PoP_v21_p042503_SFINCS.pdf>`
-- :download:`sfincsPaper.pdf <upstream/sfincsPaper/sfincsPaper.pdf>`
-- :download:`sfincsPaper.tex <upstream/sfincsPaper/sfincsPaper.tex>`
-- :download:`sfincsPaper.bib <upstream/sfincsPaper/sfincsPaper.bib>`
+The peer-reviewed description of the SFINCS model — the radially local drift-kinetic
+equation, the ``Delta``/``alpha``/``nu_n`` normalization, and the full-vs-DKES
+trajectory comparison — is:
 
-Technical documentation / notes
--------------------------------
+- M. Landreman, H. M. Smith, A. Mollén, and P. Helander,
+  "Comparison of particle trajectories and collision operators for collisional
+  transport in nonaxisymmetric plasmas,"
+  *Physics of Plasmas* **21**, 042503 (2014),
+  `doi:10.1063/1.4870077 <https://doi.org/10.1063/1.4870077>`_.
 
-- :download:`Technical documentation for version 3 of SFINCS (PDF) <upstream/20150507-01 Technical documentation for version 3 of SFINCS.pdf>`
-- :download:`Technical documentation for SFINCS with a single species (PDF) <upstream/20131220-04 Technical documentation for SFINCS with a single species.pdf>`
-- :download:`Technical documentation for SFINCS with multiple species (PDF) <upstream/20131219-01 Technical documentation for SFINCS with multiple species.pdf>`
-- :download:`Implementation of the Fokker-Planck operator (PDF) <upstream/20150402-01 Implementation of the Fokker-Planck operator.pdf>`
-- :download:`Effects on fluxes of including Phi_1 (PDF) <upstream/20150325-01 Effects on fluxes of including Phi_1.pdf>`
-- :download:`Relating quantities in the 1-species and multi-species SFINCS (PDF) <upstream/20131003-02 Relating quantities in the 1-species and multi-species SFINCS.pdf>`
-- :download:`Relating sfincs transport matrix to Beidler matrix (PDF) <upstream/20131206-02 Relating sfincs transport matrix to Beidler matrix.pdf>`
-- :download:`Notes on DKES (PDF) <upstream/notes_dkes_sfincs.pdf>`
-- :download:`Classical radial fluxes (PDF) <upstream/classical_radial_fluxes_2019-01-17.pdf>`
-- :download:`Collision operator comparison for tokamak (PDF) <upstream/comparisonOfCollisionOperatorsForTokamak.pdf>`
+See :doc:`references` for the full literature list, including the Fokker--Planck
+operator, the orthogonal-polynomial speed grid, and the geometry/benchmark sources.
 
-Phi1 / collision-operator notes (LaTeX sources)
------------------------------------------------
+Upstream project (technical notes and manuals)
+----------------------------------------------
 
-- :download:`Phi1_implementation_2016-01.pdf <upstream/Phi1_implementation_2016-01.pdf>`
-- :download:`Phi1_implementation_2016-01.tex <upstream/Phi1_implementation_2016-01.tex>`
-- :download:`poloidal_variation_in_collision_operator_2017-09-08.tex <upstream/poloidal_variation_in_collision_operator_2017-09-08.tex>`
-- :download:`PoloidalVariationInCollisionOperator_code.tex <upstream/PoloidalVariationInCollisionOperator_code.tex>`
+The longer-form SFINCS technical documentation — the version-3 technical notes, the
+single- and multi-species derivations, the Fokker--Planck implementation note, the
+:math:`\Phi_1`/quasineutrality notes, the classical-fluxes and DKES-limit notes, and
+the SFINCS user manual — are **unpublished upstream project documents**. They are not
+redistributed here. Their archival home is the upstream SFINCS project repository:
+
+- `SFINCS project (github.com/landreman/sfincs) <https://github.com/landreman/sfincs>`_
+
+Readers who need the original derivations should consult that repository directly.
+The material that `sfincs_jax` actually relies on is reproduced, in original prose,
+on the derived-theory pages linked above.
