@@ -167,19 +167,26 @@ a differentiable bounce-averaged fast model. See
 
 ## Optimization showcase
 
-[`examples/optimize_QA_bootstrap.py`](examples/optimize_QA_bootstrap.py) runs a
-gradient-based optimization of a quasi-axisymmetric stellarator boundary for
-low bootstrap current, where `<j.B>` comes from the kinetic solve: boundary
-Fourier coefficients -> `vmec_jax` fixed-boundary equilibrium (implicit-adjoint
-VJP) -> differentiable Boozer transform (`booz_xform_jax`) -> `sfincs_jax`
-kinetic solve (tier-2 GCROT with implicit differentiation, warm-started and
-recycled across optimizer iterations) -> `FSABjHat`. One `jax.value_and_grad`
-call differentiates the whole physics chain; the end-to-end gradient is
-verified against central finite differences in the example and its CI test
-(the kinetic segment agrees to ~3e-6; the full chain to ~1.7e-3, limited by
-the host equilibrium solver's termination noise, not by autodiff).
+[`examples/optimize_QA_bootstrap.py`](examples/optimize_QA_bootstrap.py) designs a
+quasi-axisymmetric (QA) stellarator boundary in two adjoint-driven stages. Stage A
+shapes a circular torus into a precise QA equilibrium with
+`vmec_jax.optimize.least_squares` (implicit Jacobian): a `max_mode` 1->2 continuation
+drives the two-term quasisymmetry ratio residual from 1.9 to 2.7e-4 at aspect ratio
+6.00 and mean iota 0.42. Stage B lowers the bootstrap current of that QA field, where
+`<j.B>` comes from the `sfincs_jax` kinetic solve: one `jax.value_and_grad`
+differentiates the whole chain -- boundary coefficients -> `vmec_jax` fixed-boundary
+equilibrium (implicit-adjoint VJP) -> differentiable Boozer transform
+(`booz_xform_jax`) -> `sfincs_jax` kinetic solve (tier-2 GCROT with implicit
+differentiation, warm-started and recycled) -> `FSABjHat`. QA makes the guiding-centre
+drifts tokamak-like and the bootstrap current large, so lowering it at fixed shape is a
+genuine Pareto trade: Stage B halves `<j.B>/sqrt(<B^2>)` (6.4e-3 -> 3.1e-3) while
+holding quasisymmetry, aspect ratio 6, and mean iota above 0.41, in roughly ten
+minutes on a laptop CPU (mostly one-time XLA compilation). The end-to-end gradient is
+finite-difference verified (kinetic segment
+~3e-6; full chain ~5e-3, limited by the host solver's termination noise, not by
+autodiff).
 
-![QA low-bootstrap optimization: objective history, boundary cross-sections, |B| spectrum, and <j.B> profile](docs/_static/figures/readme/optimize_QA_bootstrap.png)
+![QA two-stage optimization: bootstrap-reduction objective and |<j.B>| versus iteration, plus a 3D render of |B| on the optimized boundary](docs/_static/figures/readme/optimize_QA_bootstrap.png)
 
 ## Examples
 
