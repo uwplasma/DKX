@@ -182,7 +182,7 @@ residuals ``4.33e-16``, ``5.33e-14``, and ``4.06e-11`` in about ``262 s``. The
 same explicit point on one GPU took about ``345 s``; the implicit-path
 comparison took about ``569 s`` and stalled at much larger residuals. The first
 full-resolution W7-X FP high-``nu'`` point has a residual-clean route: with one GPU worker,
-``SFINCS_JAX_TRANSPORT_SPARSE_FACTOR_DTYPE=float32``, and
+a float32 sparse-direct factorization, and
 ``--transport-sparse-direct-max 40000``, the three RHS residual/RHS/relative
 tuples were ``1.297471e-10 / 1.885192e-04 / 6.882435e-07``,
 ``1.975724e-12 / 2.623896e-04 / 7.529734e-09``, and
