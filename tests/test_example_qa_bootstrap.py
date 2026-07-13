@@ -42,6 +42,13 @@ pytest.importorskip("vmec_jax")
 pytest.importorskip("vmec_jax.core.boozer_tables")
 pytest.importorskip("booz_xform_jax")
 
+# The flagship optimization runs the full differentiable vmec_jax -> booz_xform_jax
+# -> sfincs_jax chain; even at toy resolution the one-time XLA compilation makes it
+# a multi-minute, memory-heavy integration test. Mark it slow so it stays out of the
+# fast, memory-bounded coverage shards (same policy as tests/test_examples_optimization.py);
+# it still runs in the full local suite.
+pytestmark = pytest.mark.slow
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE = REPO_ROOT / "examples" / "optimize_QA_bootstrap.py"
 
