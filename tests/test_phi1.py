@@ -155,6 +155,30 @@ def test_warm_start_uses_fewer_iterations_than_cold() -> None:
     assert (warm.inner_iterations_total or 0) < (cold.inner_iterations_total or 0)
 
 
+def test_preconditioner_reduces_inner_iterations_and_preserves_answer() -> None:
+    """The Phi1-aware coarse preconditioner cuts inner Krylov iterations exactly.
+
+    Enabling the bordered-Schur coarse preconditioner
+    (:func:`sfincs_jax.solve.build_coarse_preconditioner`, which
+    Schur-eliminates the Phi1 quasineutrality border in addition to the
+    constraint border) must take strictly fewer total inner Krylov iterations
+    than the unpreconditioned full-restart solve, and converge to the *same*
+    state -- both solve the same Newton residual to the same tolerance, so the
+    preconditioner only changes the Krylov path, never the answer.
+    """
+    op = _canonical_op()
+    unprec = solve_phi1(op, tol=1e-9, use_preconditioner=False)
+    prec = solve_phi1(op, tol=1e-9, use_preconditioner=True)
+    assert unprec.converged and prec.converged
+    assert unprec.inner_iterations_total and prec.inner_iterations_total
+    # Preconditioned inner solve converges in far fewer Krylov iterations.
+    assert prec.inner_iterations_total < unprec.inner_iterations_total
+    # ... to the identical converged state (both hit tol on the same residual).
+    np.testing.assert_allclose(np.asarray(prec.x), np.asarray(unprec.x), rtol=0.0, atol=1e-8)
+    # ... which is still the Fortran reference.
+    np.testing.assert_allclose(np.asarray(prec.x), _fortran_state(), rtol=0.0, atol=5e-8)
+
+
 # ---------------------------------------------------------------------------
 # 4. Differentiability (implicit function theorem) vs finite differences
 # ---------------------------------------------------------------------------
