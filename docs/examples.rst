@@ -517,14 +517,9 @@ reduced-grid convergence stress test rather than a production-resolution claim.
 
 For this benchmark script, ``--solve-method auto`` runs in the
 runtime/non-autodiff lane (the script sets ``SFINCS_JAX_IMPLICIT_SOLVE=0``).
-The former structured-CSR/sparse-PC host lanes referenced by earlier revisions
-of this benchmark (``structured_csr``/``host_structured_csr``,
-``fortran_reduced_pc_gmres``, and the ``SFINCS_JAX_RHS1_FULL_CSR_*``
-preconditioner candidates) were deleted with the legacy sparse solver
-families; the recorded finite-beta QA/QH figures below remain valid measured
-evidence of the archived runs, and new runs use the retained matrix-free
-``auto`` policy. The script refuses to write nonconverged production-sized
-diagnostics.
+The recorded finite-beta QA/QH figures below remain valid measured evidence,
+and reruns use the matrix-free ``auto`` policy. The script refuses to write
+nonconverged production-sized diagnostics.
 
 .. figure:: _static/figures/vmec_jax_finite_beta/qs_paper_qa_same_resolution_11surface.png
    :alt: Same-resolution SFINCS_JAX and SFINCS Fortran v3 QA bootstrap-current comparison against the Redl analytic formula.
