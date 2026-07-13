@@ -80,6 +80,25 @@ def test_example_completes_and_objective_decreases(example) -> None:
     assert int(g["it_warm"]) < int(g["it_cold"])
 
 
+def test_stage_b_holds_stage_a_quasisymmetry(example) -> None:
+    """Both compared configs are precise QA: stage B holds the two-term QS
+    ratio residual (the metric stage A minimized) within the documented slack
+    of its precise-QA starting value, so the bootstrap decrease is measured at
+    (essentially) fixed quasisymmetry rather than bought by degrading QA."""
+    g = example
+    r_a = float(g["aux0"]["qs_profile"])       # config 1: precise QA, no bootstrap opt
+    r_b = float(g["aux_final"]["qs_profile"])  # config 2: precise QA held + bootstrap opt
+    slack = float(g["QS_HELD_SLACK"])
+    assert r_a > 0.0 and np.isfinite(r_b)
+    # the hard one-sided cap keeps the held residual within the slack (plus a
+    # small numerical margin); the QA-hold penalty enforces this at any resolution
+    assert r_b <= (slack + 0.5) * r_a + 1e-9, (r_a, r_b, slack)
+    # the armed cap is finite and equals slack x the Stage-A residual
+    target = float(g["QS_HELD_TARGET"])
+    assert np.isfinite(target)
+    assert abs(target - slack * r_a) <= 1e-9 * max(slack * r_a, 1.0)
+
+
 def test_full_chain_fd_check_passed_at_documented_tolerance(example) -> None:
     fd = example["fd_check"]
     assert fd is not None

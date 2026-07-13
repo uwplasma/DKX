@@ -167,26 +167,28 @@ a differentiable bounce-averaged fast model. See
 
 ## Optimization showcase
 
-[`examples/optimize_QA_bootstrap.py`](examples/optimize_QA_bootstrap.py) designs a
-quasi-axisymmetric (QA) stellarator boundary in two adjoint-driven stages. Stage A
-shapes a circular torus into a precise QA equilibrium with
-`vmec_jax.optimize.least_squares` (implicit Jacobian): a `max_mode` 1->2 continuation
-drives the two-term quasisymmetry ratio residual from 1.9 to 2.7e-4 at aspect ratio
-6.00 and mean iota 0.42. Stage B lowers the bootstrap current of that QA field, where
-`<j.B>` comes from the `sfincs_jax` kinetic solve: one `jax.value_and_grad`
-differentiates the whole chain -- boundary coefficients -> `vmec_jax` fixed-boundary
-equilibrium (implicit-adjoint VJP) -> differentiable Boozer transform
-(`booz_xform_jax`) -> `sfincs_jax` kinetic solve (tier-2 GCROT with implicit
+[`examples/optimize_QA_bootstrap.py`](examples/optimize_QA_bootstrap.py) compares two
+*precise* quasi-axisymmetric (QA) stellarator boundaries: one shaped for QA alone, one
+whose bootstrap current is lowered while its QA is held fixed. Stage A shapes a circular
+torus into a precise QA equilibrium with `vmec_jax.optimize.least_squares` (implicit
+Jacobian): a `max_mode` 1->2 continuation drives the two-term quasisymmetry ratio
+residual down ~4 orders of magnitude at aspect ratio 6.00 and mean iota 0.42. That
+precise-QA boundary is config 1 (QS ratio residual 1.1e-4, `<j.B>/sqrt(<B^2>)` 6.4e-3).
+Stage B holds that residual under a hard one-sided cap while lowering the bootstrap
+current -- `<j.B>` from the `sfincs_jax` kinetic solve -- so config 2 is precise QA too.
+One `jax.value_and_grad` differentiates the whole chain: boundary coefficients ->
+`vmec_jax` fixed-boundary equilibrium (implicit-adjoint VJP) -> differentiable Boozer
+transform (`booz_xform_jax`) -> `sfincs_jax` kinetic solve (tier-2 GCROT with implicit
 differentiation, warm-started and recycled) -> `FSABjHat`. QA makes the guiding-centre
-drifts tokamak-like and the bootstrap current large, so lowering it at fixed shape is a
-genuine Pareto trade: Stage B halves `<j.B>/sqrt(<B^2>)` (6.4e-3 -> 3.1e-3) while
-holding quasisymmetry, aspect ratio 6, and mean iota above 0.41, in roughly ten
-minutes on a laptop CPU (mostly one-time XLA compilation). The end-to-end gradient is
-finite-difference verified (kinetic segment
-~3e-6; full chain ~5e-3, limited by the host solver's termination noise, not by
-autodiff).
+drifts tokamak-like and the bootstrap current large, so at held QA the reduction is a
+genuine, modest Pareto gain, not a free lunch: `<j.B>/sqrt(<B^2>)` drops to 5.7e-3
+(1.12x lower) with the QS ratio residual held at 1.1e-4 vs 2.6e-4 (both sub-3e-4
+precise QA), aspect ratio ~6 and mean iota above 0.41, in roughly thirteen minutes on a
+laptop CPU (mostly one-time XLA compilation). The end-to-end gradient is
+finite-difference verified (kinetic segment ~3e-6; full chain ~5e-3, limited by the
+host solver's termination noise, not by autodiff).
 
-![QA two-stage optimization: bootstrap-reduction objective and |<j.B>| versus iteration, plus a 3D render of |B| on the optimized boundary](docs/_static/figures/readme/optimize_QA_bootstrap.png)
+![Precise QA vs precise QA held + bootstrap: bootstrap current and two-term QS residual for both configs, plus a 3D render of |B| on the bootstrap-optimized boundary](docs/_static/figures/readme/optimize_QA_bootstrap.png)
 
 ## Examples
 
