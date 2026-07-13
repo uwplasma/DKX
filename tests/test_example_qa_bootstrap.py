@@ -9,11 +9,11 @@ Covered here:
      linear solve): d(objective)/d(spectrum scale) vs central finite
      differences at rtol 1e-4 (measured ~1e-6);
    - the full boundary-dof chain: the example's own in-script FD check on
-     the dominant dof must pass its 5e-3 gate.  The end-to-end FD comparison
-     is limited by the *finite-difference* noise of the iterative host
-     equilibrium solve (ftol-termination noise ~1e-3..1e-2 on small
-     gradient components), not by the autodiff path — the same floor the
-     vmec_jax implicit-adjoint tests document;
+     the dominant dof must pass its (resolution-dependent) gate.  The
+     end-to-end FD comparison is limited by the *finite-difference* noise of
+     the iterative host equilibrium solve (ftol-termination noise ~5e-3 on
+     small gradient components), not by the autodiff path — the same floor
+     the vmec_jax implicit-adjoint tests document;
 3. every entry of ``KINETIC_OBJECTIVES`` (the commented alternative
    objectives in the example) evaluates to a finite scalar on the solved
    moments and participates in a full traced objective evaluation, so
@@ -85,8 +85,8 @@ def test_full_chain_fd_check_passed_at_documented_tolerance(example) -> None:
     assert fd is not None
     assert np.isfinite(fd["fd"]) and np.isfinite(fd["ad"])
     # dominant-dof agreement at the example's resolution-dependent gate
-    # (5e-3 at default resolution, measured ~1e-4..8e-3; 5e-2 at CI's looser
-    # VMEC ftol — the FD noise of the host solver dominates, not autodiff)
+    # (1.5e-2 at default resolution, measured ~5e-3; 5e-2 at CI's looser VMEC
+    # ftol — the host solver's FD termination noise dominates, not autodiff)
     assert fd["rel"] < float(example["FD_GATE"])
 
 
@@ -158,9 +158,15 @@ def test_boozer_bridge_matches_host_wout_engine(example) -> None:
     from vmec_jax.core.wout import wout_from_state
 
     g = example
-    cfg, params0, inp0 = g["cfg"], g["params0"], g["inp0"]
+    params0, inp0 = g["params0"], g["inp0"]
     j = int(g["S_KINETIC_ROW"])
 
+    # The example's cfg hot-restarts every solve for optimizer speed; a parity
+    # check wants a *fresh cold* solve of this exact boundary, since a warm
+    # restart from the optimizer loop's last (far-away) boundary leaves the
+    # equilibrium a ftol-noise level (~1e-4..1e-3) off the reference host solve.
+    cfg = g["vmec_implicit"].make_config(
+        inp0, adjoint_tol=1e-6, adjoint_maxiter=40)
     state = g["vmec_implicit"].solve_implicit(params0, cfg)
     rt = g["vmec_implicit"].runtime_from_params(params0, cfg)
     tabs = g["boozer_input_tables"](state, rt, j)
