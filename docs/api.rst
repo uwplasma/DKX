@@ -77,9 +77,29 @@ Namelist parsing and reader helpers
 .. automodule:: sfincs_jax.namelist
    :members:
 
-Legacy pipeline modules
------------------------
+Reduced-model and analysis modules
+----------------------------------
 
-The retained legacy solver/operator/problem/geometry-subpackage internals are
-off the canonical solve path. They are catalogued, with their canonical
-replacements, in :doc:`source_map`.
+.. list-table::
+   :header-rows: 1
+   :widths: 30 45 25
+
+   * - Module
+     - Role
+     - Reference
+   * - ``sfincs_jax.monoenergetic``
+     - Monoenergetic-database mode: ``(nuPrime, EStar)`` scans and energy
+       convolution to thermal ``L_ij``
+     - :doc:`capabilities`
+   * - ``sfincs_jax.variational``
+     - Variational upper/lower bounds on the monoenergetic :math:`D_{11}`
+       (convergence certificate)
+     - :doc:`capabilities`
+   * - ``sfincs_jax.shaing_callen``
+     - Collisionless-limit bootstrap coefficient with an analytic axisymmetric
+       cross-check
+     - :doc:`capabilities`
+
+The differentiable solve, the implicit adjoint, and the
+``vmec_jax -> booz_xform_jax -> sfincs_jax`` chain are documented in
+:doc:`differentiability`; the full source catalogue is :doc:`source_map`.

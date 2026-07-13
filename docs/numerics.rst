@@ -130,13 +130,34 @@ elimination.
 
 The tridiagonal structure and its block elimination follow the Legendre
 analysis of `Escoto, PhD thesis (2025), arXiv:2510.27513
-<https://arxiv.org/abs/2510.27513>`_. The implementation adds a
+<https://arxiv.org/abs/2510.27513>`_, and rest on the classical block-tridiagonal
+and variational treatment of the monoenergetic drift-kinetic equation by
+`Hirshman, Shaing, van Rij, Beasley & Crume, Phys. Fluids 29, 2951 (1986)
+<https://doi.org/10.1063/1.865495>`_ (with monoenergetic normalizations as in
+`Beidler et al., Nucl. Fusion 51, 076001 (2011)
+<https://doi.org/10.1088/0029-5515/51/7/076001>`_). The implementation adds a
 **truncated-storage** back-substitution: the forward elimination visits all
 :math:`N_\xi` blocks, but only the lowest ``keep`` blocks — the ones the
 right-hand side and the physical moments actually touch — are retained, so peak
 memory is bounded by the truncation depth instead of the full Legendre chain.
-This is the origin of the tier-1 memory advantage over an assembled sparse
-factorization.
+
+Concretely, the tier-1 peak memory is
+
+.. math::
+
+   \mathcal{O}\!\left(K\,m^2\right),
+   \qquad m = N_\theta N_\zeta,\quad K = \texttt{tier1\_keep\_lowest},
+
+i.e. it scales with the retained keep-depth :math:`K` (default 3) times the
+square of the dense angular block dimension :math:`m`, and is **independent of**
+:math:`N_\xi` and :math:`N_x`. One :math:`2875^2` block at the 744k-unknown HSX
+resolution is about 66 MB, so the truncated route needs :math:`\sim 0.3` GB where
+a full-band factorization of the same operator would need :math:`\sim 91` GB
+(:doc:`performance`). This is the origin of the tier-1 memory advantage over an
+assembled sparse factorization. The same discrete operator also yields an
+a-posteriori convergence certificate: the variational transport-coefficient
+bounds (:doc:`capabilities`) bracket the monoenergetic :math:`D_{11}` from above
+and below.
 
 Tier 2 — preconditioned, recycled Krylov
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

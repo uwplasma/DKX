@@ -10,6 +10,7 @@ Parallelism
    ``SFINCS_JAX_CORES``/``SFINCS_JAX_CPU_DEVICES`` environment knobs and the
    ``solvax``-backed solve tiers. Measured baselines are retained for
    reference.
+
 This page explains how parallelism works in `sfincs_jax`, how it relates to more
 traditional MPI-distributed neoclassical solves, and how to use it on a laptop
 (multi-core CPU) or on clusters (multi-CPU / multi-GPU).
