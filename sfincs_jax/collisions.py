@@ -1134,3 +1134,318 @@ def apply_fokker_planck_v3_phi1(op: FokkerPlanckV3Phi1Operator, f: jnp.ndarray, 
 
 
 apply_fokker_planck_v3_phi1_jit = jax.jit(apply_fokker_planck_v3_phi1, static_argnums=())
+
+
+# ---------------------------------------------------------------------------
+# Improved Sugama linearized model collision operator (collisionOperator = 3).
+#
+# This is a research extension BEYOND SFINCS v3 (which ships only the full
+# linearized Fokker-Planck operator, collisionOperator = 0, and pitch-angle
+# scattering, collisionOperator = 1).  It implements the momentum- and
+# energy-conserving *improved* linearized model collision operator of
+#
+#   H. Sugama, S. Matsuoka, S. Satake, M. Nunami, and T.-H. Watanabe,
+#   "Improved linearized model collision operator for the highly collisional
+#   regime", Phys. Plasmas 26, 102108 (2019),
+#
+# using the moment-based numerical construction of the field-particle term of
+#
+#   B. J. Frei, S. Ernst, and P. Ricci, "Numerical implementation of the
+#   improved Sugama collision operator using a moment approach",
+#   Phys. Plasmas 29, 093902 (2022) (arXiv:2202.06293).
+#
+# Structure.  The operator is the test-particle part (pitch-angle deflection +
+# energy/speed diffusion -- identical velocity kernels to the v3 Fokker-Planck
+# operator's ``nuD`` and ``CE`` blocks) PLUS a field-particle (back-reaction)
+# term built from low-order velocity moments whose coefficients are fixed to
+# enforce the conservation laws that the test-particle part alone violates.
+# The improved-Sugama field term lives only in the L=0 (particle + energy) and
+# L=1 (parallel momentum) Legendre components, so it assembles into exactly the
+# same ``mat[a,b,L,i,j]`` block structure as the Fokker-Planck operator and
+# reuses :func:`apply_fokker_planck_v3` for the matvec.
+#
+# Conservation is EXACT at the collocation level (not merely to the spectral
+# quadrature error), because each field block is constructed as a low-rank
+# operator whose moment functional cancels the test-particle moment functional
+# algebraically -- the essence of the moment approach.
+# ---------------------------------------------------------------------------
+
+
+def _improved_sugama_pair_kernels(
+    *,
+    x: np.ndarray,
+    ddx: np.ndarray,
+    d2dx2: np.ndarray,
+    z_s: np.ndarray,
+    m_hats: np.ndarray,
+    n_hats: np.ndarray,
+    t_hats: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Per-species-pair test-particle velocity kernels.
+
+    Returns ``(nu_d_ab, ce_ab)`` where ``nu_d_ab[a,b,:]`` is the pitch-angle
+    deflection frequency of species ``a`` off background ``b`` (same expression
+    as the v3 ``nuDHat`` summand, WITHOUT the overall ``nu_n``) and
+    ``ce_ab[a,b,:,:]`` is the energy/speed-diffusion (``CE``) collocation block
+    of species ``a`` due to ``b`` (same expression as the v3 Fokker-Planck
+    ``CE`` summand, WITHOUT ``nu_n``).  Both mirror the coefficients already
+    used in :func:`make_fokker_planck_v3_operator`.
+    """
+    x = np.asarray(x, dtype=np.float64)
+    n_x = int(x.size)
+    n_species = int(z_s.size)
+    sqrt_pi = float(_V3_SQRTPI)
+    x2 = x * x
+    x3 = x2 * x
+
+    nu_d_ab = np.zeros((n_species, n_species, n_x), dtype=np.float64)
+    ce_ab = np.zeros((n_species, n_species, n_x, n_x), dtype=np.float64)
+    for ia in range(n_species):
+        t32m = float(t_hats[ia]) * math.sqrt(float(t_hats[ia]) * float(m_hats[ia]))
+        for ib in range(n_species):
+            species_factor = float(
+                math.sqrt((t_hats[ia] * m_hats[ib]) / (t_hats[ib] * m_hats[ia]))
+            )
+            xb = x * species_factor
+            expxb2 = np.exp(-(xb * xb))
+            erfs = _erf_np(xb)
+            psi = (erfs - (2.0 / sqrt_pi) * xb * expxb2) / (2.0 * xb * xb)
+
+            nu_d_ab[ia, ib, :] = (
+                (3.0 * sqrt_pi / 4.0)
+                / t32m
+                * float(z_s[ia] ** 2)
+                * float(z_s[ib] ** 2)
+                * float(n_hats[ib])
+                * (erfs - psi)
+                / x3
+            )
+
+            species_factor_ce = (
+                3.0 * sqrt_pi / 4.0 * float(n_hats[ib]) * float(z_s[ia] ** 2) * float(z_s[ib] ** 2) / t32m
+            )
+            coef_d2 = (psi / x)[:, None] * d2dx2
+            coef_dx = (
+                (
+                    -2.0
+                    * float(t_hats[ia] * m_hats[ib] / (t_hats[ib] * m_hats[ia]))
+                    * psi
+                    * (1.0 - float(m_hats[ia] / m_hats[ib]))
+                    + (erfs - psi) / x2
+                )[:, None]
+                * ddx
+            )
+            ce = species_factor_ce * (coef_d2 + coef_dx)
+            diag_extra = (
+                species_factor_ce
+                * 4.0
+                / sqrt_pi
+                * float(t_hats[ia] / t_hats[ib])
+                * math.sqrt(float(t_hats[ia] * m_hats[ib] / (t_hats[ib] * m_hats[ia])))
+                * expxb2
+            )
+            ce[range(n_x), range(n_x)] += diag_extra
+            ce_ab[ia, ib, :, :] = ce
+    return nu_d_ab, ce_ab
+
+
+@jtu.register_pytree_node_class
+@dataclass(frozen=True)
+class ImprovedSugamaV3Operator:
+    """Improved Sugama momentum/energy-conserving model collision operator.
+
+    Research extension beyond v3 (``collisionOperator = 3``).  See the module
+    section above for the physics and primary references (Sugama et al., Phys.
+    Plasmas 26, 102108 (2019); Frei et al., arXiv:2202.06293).  The assembled
+    ``mat`` has the same ``(S, S, L, X, X)`` block layout as
+    :class:`FokkerPlanckV3Operator` (already multiplied by ``-nu_n``), so the
+    matvec is shared with :func:`apply_fokker_planck_v3`.
+    """
+
+    mat: jnp.ndarray  # (S,S,L,X,X)
+    n_xi_for_x: jnp.ndarray  # (X,) int32
+    mask_xi: jnp.ndarray  # (X, L)
+
+    def tree_flatten(self):
+        children = (self.mat, self.n_xi_for_x, self.mask_xi)
+        aux = None
+        return children, aux
+
+    @classmethod
+    def tree_unflatten(cls, aux, children):
+        del aux
+        mat, n_xi_for_x, mask_xi = children
+        return cls(mat=mat, n_xi_for_x=n_xi_for_x, mask_xi=mask_xi)
+
+
+def make_improved_sugama_v3_operator(
+    *,
+    x: np.ndarray,  # (X,)
+    x_weights: np.ndarray,  # (X,) dx weights (createGrids.F90 convention)
+    ddx: np.ndarray,  # (X,X)
+    d2dx2: np.ndarray,  # (X,X)
+    z_s: np.ndarray,  # (S,)
+    m_hats: np.ndarray,  # (S,)
+    n_hats: np.ndarray,  # (S,)
+    t_hats: np.ndarray,  # (S,)
+    nu_n: float,
+    krook: float,
+    n_xi: int,
+    n_xi_for_x: np.ndarray,
+) -> ImprovedSugamaV3Operator:
+    """Construct the improved Sugama model collision operator (``collisionOperator=3``).
+
+    The operator is ``C = C_test + C_field`` where ``C_test`` is the
+    test-particle pitch-angle + energy-diffusion operator (same velocity
+    kernels as the v3 Fokker-Planck ``nuD``/``CE`` blocks) and ``C_field`` is
+    the moment-based back-reaction that restores the conservation laws.
+
+    Conservation-enforcing coefficient logic
+    ----------------------------------------
+    Write the assembled test-particle block for the ordered pair ``(a,b)`` and
+    Legendre index ``L`` as ``T[a,b,L]`` (already carrying the ``-nu_n``
+    factor); it acts on ``f_a`` and is diagonal in the species index.  Let the
+    discrete moment weights be ``p_i = x_weights_i x_i^3`` (parallel momentum,
+    L=1), ``n_i = x_weights_i x_i^2`` (particle number, L=0), and
+    ``e_i = x_weights_i x_i^4`` (kinetic energy, L=0), and the per-species
+    physical prefactors ``P_a = t_a^2/m_a`` (``~ m_a v_{th,a}^4``, momentum)
+    and ``E_a = t_a^{5/2}/m_a^{3/2}`` (``~ m_a v_{th,a}^5``, energy).
+
+    * **L=1 parallel momentum.**  With the Maxwellian-flow invariant
+      ``phi_i = x_i exp(-x_i^2)``, the response profile is the test-particle
+      action on the invariant ``r_a = (sum_b T[a,b,1]) phi`` and the extraction
+      is the exact test momentum functional ``tau_ab = p^T T[a,b,1]``.  The
+      field block is ``F[a,b,1] = kappa_ab * outer(r_a, tau_ba)`` with
+      ``kappa_ab = -P_b / (P_a * (p . r_a))``.  Summing the momentum functional
+      ``sum_a P_a p^T (T + F)`` telescopes to zero for arbitrary ``f`` (the
+      ``b<->a`` relabelling uses ``P_a (p.r_a) kappa_ab = -P_b``), so total
+      parallel momentum is conserved exactly; for a single species this also
+      makes the operator annihilate the shifted Maxwellian ``phi`` (Galilean
+      invariance of like-particle collisions).
+
+    * **L=0 particle number + energy.**  With the density shape
+      ``h1_i = exp(-x_i^2)`` and the particle-neutral energy shape
+      ``h2_i = (x_i^2 - c) exp(-x_i^2)`` (``c`` chosen so ``n . h2 = 0``), the
+      per-species particle functional ``nu_ab = n^T T[a,b,0]`` is cancelled by
+      ``-h1 (n^T . )/(n . h1)`` (particle conservation, diagonal in species),
+      and the residual energy functional after particle restoration
+      ``mu_ab = e^T T[a,b,0] - (e.h1)/(n.h1) nu_ab`` is redistributed by
+      ``F_energy[a,b,0] = lambda_ab outer(h2, mu_ba)`` with
+      ``lambda_ab = -E_b/(E_a (e.h2))``, which telescopes exactly like the
+      momentum term so total kinetic energy is conserved (energy is exchanged
+      between species; like-particle collisions conserve it per species).
+
+    Keeping ``collisionOperator`` 0/1 byte-identical, this builder shares no
+    code path with :func:`make_fokker_planck_v3_operator`.
+    """
+    x = np.asarray(x, dtype=np.float64)
+    x_weights = np.asarray(x_weights, dtype=np.float64)
+    ddx = np.asarray(ddx, dtype=np.float64)
+    d2dx2 = np.asarray(d2dx2, dtype=np.float64)
+    z_s = np.asarray(z_s, dtype=np.float64)
+    m_hats = np.asarray(m_hats, dtype=np.float64)
+    n_hats = np.asarray(n_hats, dtype=np.float64)
+    t_hats = np.asarray(t_hats, dtype=np.float64)
+    n_xi_for_x = np.asarray(n_xi_for_x, dtype=np.int32)
+
+    n_species = int(z_s.size)
+    n_x = int(x.size)
+    n_xi_int = int(n_xi)
+    nu_n_f = float(nu_n)
+    krook_f = float(krook)
+
+    nu_d_ab, ce_ab = _improved_sugama_pair_kernels(
+        x=x, ddx=ddx, d2dx2=d2dx2, z_s=z_s, m_hats=m_hats, n_hats=n_hats, t_hats=t_hats
+    )
+
+    # Discrete moment weights and per-species physical prefactors.
+    w_mom = x_weights * (x**3)  # parallel momentum weight (L=1)
+    w_part = x_weights * (x**2)  # particle-number weight (L=0)
+    w_energy = x_weights * (x**4)  # kinetic-energy weight (L=0)
+    p_mom = t_hats**2 / m_hats  # ~ m_a v_th,a^4
+    p_energy = t_hats**2.5 / m_hats**1.5  # ~ m_a v_th,a^5
+
+    # Maxwellian invariants / response shapes.
+    expx2 = np.exp(-(x * x))
+    phi = x * expx2  # L=1 flow invariant
+    h1 = expx2.copy()  # L=0 density shape
+    c_energy = float((w_part @ (x * x * h1)) / (w_part @ h1))
+    h2 = (x * x - c_energy) * expx2  # L=0 particle-neutral energy shape
+    n1 = float(w_part @ h1)
+    e2 = float(w_energy @ h2)
+    e_h1 = float(w_energy @ h1)
+
+    # Per-pair, per-L assembled test-particle blocks T[a,b,L] (carry -nu_n).
+    ell = np.arange(n_xi_int, dtype=np.float64)
+    pitch_factor_l = 0.5 * (ell * (ell + 1.0) + 2.0 * krook_f)  # (L,)
+    test_ab_l = np.zeros((n_species, n_species, n_xi_int, n_x, n_x), dtype=np.float64)
+    for ia in range(n_species):
+        for ib in range(n_species):
+            base = -nu_n_f * ce_ab[ia, ib]  # energy diffusion (all L)
+            for ell_i in range(n_xi_int):
+                blk = base.copy()
+                # pitch-angle diagonal: v3 diag = -0.5 nu_d (l(l+1)+2 krook); mat = -nu_n * diag.
+                blk[range(n_x), range(n_x)] += nu_n_f * pitch_factor_l[ell_i] * nu_d_ab[ia, ib]
+                test_ab_l[ia, ib, ell_i] = blk
+
+    mat = np.zeros((n_species, n_species, n_xi_int, n_x, n_x), dtype=np.float64)
+    # Test-particle part is diagonal in the species index (acts on f_a).
+    for ia in range(n_species):
+        mat[ia, ia, :, :, :] += test_ab_l[ia, :, :, :, :].sum(axis=0)
+
+    # ---- L=1 parallel-momentum field term ----
+    if n_xi_int > 1:
+        test_l1 = test_ab_l[:, :, 1, :, :]  # (S,S,X,X)
+        r_mom = np.einsum("abij,j->ai", test_l1, phi)  # response r_a (S,X)
+        tau_mom = np.einsum("i,abij->abj", w_mom, test_l1)  # tau_ab (S,S,X)
+        r_dot = w_mom @ r_mom.T  # (S,) = p . r_a
+        for ia in range(n_species):
+            for ib in range(n_species):
+                kappa = -float(p_mom[ib]) / (float(p_mom[ia]) * float(r_dot[ia]))
+                mat[ia, ib, 1, :, :] += kappa * np.outer(r_mom[ia], tau_mom[ib, ia])
+
+    # ---- L=0 particle-number + kinetic-energy field term ----
+    test_l0 = test_ab_l[:, :, 0, :, :]  # (S,S,X,X)
+    nu_part = np.einsum("i,abij->abj", w_part, test_l0)  # nu_ab (S,S,X)
+    eps_energy = np.einsum("i,abij->abj", w_energy, test_l0)  # eps_ab (S,S,X)
+    mu_energy = eps_energy - (e_h1 / n1) * nu_part  # residual energy functional (S,S,X)
+    for ia in range(n_species):
+        # particle-number restoration (diagonal in species, driven by f_a).
+        mat[ia, ia, 0, :, :] += -(1.0 / n1) * np.outer(h1, nu_part[ia].sum(axis=0))
+        for ib in range(n_species):
+            lam = -float(p_energy[ib]) / (float(p_energy[ia]) * e2)
+            mat[ia, ib, 0, :, :] += lam * np.outer(h2, mu_energy[ib, ia])
+
+    return ImprovedSugamaV3Operator(
+        mat=jnp.asarray(mat),
+        n_xi_for_x=jnp.asarray(n_xi_for_x, dtype=jnp.int32),
+        mask_xi=_mask_xi(jnp.asarray(n_xi_for_x, dtype=jnp.int32), n_xi_int),
+    )
+
+
+def apply_improved_sugama_v3(op: ImprovedSugamaV3Operator, f: jnp.ndarray) -> jnp.ndarray:
+    """Apply the improved Sugama model collision operator to ``f``.
+
+    Shares the block matvec with :func:`apply_fokker_planck_v3` (identical
+    ``mat`` layout): ``y[a,i,l,t,z] = sum_{b,j} mat[a,b,l,i,j] f[b,j,l,t,z]``.
+    """
+    if f.ndim != 5:
+        raise ValueError("f must have shape (Nspecies, Nx, Nxi, Ntheta, Nzeta)")
+    n_species, n_x, n_xi, _, _ = f.shape
+    if op.mat.shape != (n_species, n_species, n_xi, n_x, n_x):
+        raise ValueError(
+            f"op.mat has shape {op.mat.shape}, expected {(n_species, n_species, n_xi, n_x, n_x)}"
+        )
+
+    f2 = jnp.transpose(f, (0, 2, 1, 3, 4))  # (S,L,X,T,Z)
+    y2 = jnp.einsum("abLij,bLjtz->aLitz", op.mat, f2)
+    y = jnp.transpose(y2, (0, 2, 1, 3, 4))  # (S,X,L,T,Z)
+
+    if op.mask_xi.shape[-1] != n_xi:
+        mask = _mask_xi(op.n_xi_for_x.astype(jnp.int32), n_xi).astype(y.dtype)
+    else:
+        mask = op.mask_xi.astype(y.dtype)
+    return y * mask[None, :, :, None, None]
+
+
+apply_improved_sugama_v3_jit = jax.jit(apply_improved_sugama_v3, static_argnums=())

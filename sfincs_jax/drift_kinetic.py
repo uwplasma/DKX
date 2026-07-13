@@ -141,12 +141,15 @@ from sfincs_jax.paths import resolve_existing_path  # noqa: E402
 from sfincs_jax.collisions import (  # noqa: E402
     FokkerPlanckV3Operator,
     FokkerPlanckV3Phi1Operator,
+    ImprovedSugamaV3Operator,
     PitchAngleScatteringV3Operator,
     apply_fokker_planck_v3,
     apply_fokker_planck_v3_phi1,
+    apply_improved_sugama_v3,
     apply_pitch_angle_scattering_v3,
     make_fokker_planck_v3_operator,
     make_fokker_planck_v3_phi1_operator,
+    make_improved_sugama_v3_operator,
     make_pitch_angle_scattering_v3_operator,
 )
 from sfincs_jax.species import SpeciesSet, species_set_from_namelist  # noqa: E402
@@ -298,6 +301,11 @@ class KineticOperator:
     # ---- collisions (sfincs_jax.collisions) ----
     pas: PitchAngleScatteringV3Operator | None
     fp: FokkerPlanckV3Operator | None
+    # ``collisionOperator = 3``: the improved Sugama momentum/energy-conserving
+    # model operator (research extension beyond v3).  Mutually exclusive with
+    # ``pas``/``fp``; a collisionOperator=3 deck builds this one.  Same block
+    # layout as ``fp`` (dense in x, block in species, diagonal in Legendre L).
+    sugama: ImprovedSugamaV3Operator | None = None
     # ``includePhi1InCollisionOperator``: the poloidally varying Fokker-Planck
     # operator whose collisional densities are shifted by the Boltzmann factor
     # ``exp(-Z*alpha*Phi1Hat/THat)`` (``populateMatrix.F90`` Phi1-in-collision
@@ -430,6 +438,7 @@ class KineticOperator:
         "e_parallel_hat_spec",
         "pas",
         "fp",
+        "sugama",
         "fp_phi1",
         "adiabatic_z",
         "adiabatic_n_hat",
@@ -1014,6 +1023,8 @@ class KineticOperator:
             out = out + apply_pitch_angle_scattering_v3(self.pas, f)
         if self.fp is not None:
             out = out + apply_fokker_planck_v3(self.fp, f)
+        if self.sugama is not None:
+            out = out + apply_improved_sugama_v3(self.sugama, f)
         if self.fp_phi1 is not None:
             ph = phi1_hat if phi1_hat is not None else self.phi1_hat_base
             if ph is None:
@@ -2135,13 +2146,17 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
         # validateInput.F90 allows geometryScheme 5/6/11/12 for schemes 5 and 6;
         # the {5, 11, 12} gate above already enforces the consolidated subset.
     collision_operator = _get_int(phys, "collisionOperator", 0)
-    if collision_operator not in {0, 1}:
+    if collision_operator not in {0, 1, 3}:
         raise NotImplementedError(f"collisionOperator={collision_operator} is not supported.")
 
     rhs_mode = _get_int(general, "RHSMode", 1)
     constraint_scheme = _get_int(phys, "constraintScheme", -1)
     if constraint_scheme < 0:
-        constraint_scheme = 1 if collision_operator == 0 else 2
+        # collisionOperator=3 (improved Sugama) acts on the L=0 block through its
+        # energy-diffusion + energy/particle field terms, so its speed null space
+        # is {density, temperature} per species (2 sources) like the Fokker-Planck
+        # operator -- not the per-speed PAS null space (constraintScheme=2).
+        constraint_scheme = 1 if collision_operator in {0, 3} else 2
     if constraint_scheme not in {0, 1, 2, 3, 4}:
         raise NotImplementedError(f"constraintScheme={constraint_scheme} is not supported.")
 
@@ -2251,12 +2266,31 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
     pas = None
     fp = None
     fp_phi1 = None
+    sugama = None
     if include_phi1_in_collision and collision_operator != 0:
         raise NotImplementedError(
             "includePhi1InCollisionOperator=.true. requires collisionOperator=0 "
             "(the linearized Fokker-Planck operator carries the Phi1-shifted densities)."
         )
-    if collision_operator == 1:
+    if collision_operator == 3:
+        # Improved Sugama momentum/energy-conserving model operator (research
+        # extension beyond v3; Sugama et al. Phys. Plasmas 26, 102108 (2019);
+        # Frei et al. arXiv:2202.06293).  Same block layout as the FP operator.
+        sugama = make_improved_sugama_v3_operator(
+            x=np.asarray(grids.x, dtype=np.float64),
+            x_weights=np.asarray(grids.x_weights, dtype=np.float64),
+            ddx=np.asarray(grids.ddx, dtype=np.float64),
+            d2dx2=np.asarray(grids.d2dx2, dtype=np.float64),
+            z_s=np.asarray(species.z, dtype=np.float64),
+            m_hats=np.asarray(species.m_hat, dtype=np.float64),
+            n_hats=np.asarray(species.n_hat, dtype=np.float64),
+            t_hats=np.asarray(species.t_hat, dtype=np.float64),
+            nu_n=nu_n,
+            krook=krook,
+            n_xi=grids.n_xi,
+            n_xi_for_x=np.asarray(grids.n_xi_for_x, dtype=np.int32),
+        )
+    elif collision_operator == 1:
         nu_n_use = nu_n
         if rhs_mode == 3:
             nu_n_use = nu_n_from_nu_prime(
@@ -2412,6 +2446,7 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
         e_parallel_hat_spec=e_parallel_hat_spec,
         pas=pas,
         fp=fp,
+        sugama=sugama,
         fp_phi1=fp_phi1,
         include_phi1=bool(include_phi1),
         quasineutrality_option=int(quasineutrality_option),
