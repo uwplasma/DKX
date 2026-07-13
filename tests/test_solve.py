@@ -50,6 +50,20 @@ def _load_text(name: str) -> str:
     return (REF / f"{name}.input.namelist").read_text()
 
 
+def _load_sugama_op() -> KineticOperator:
+    """A ``collisionOperator=3`` (improved Sugama) deck from the FP fixture text.
+
+    Reuses the two-species Fokker-Planck namelist with ``collisionOperator``
+    switched to 3 (no new golden fixture): the improved Sugama operator has the
+    same dense ``(species, x)`` block layout as Fokker-Planck and defaults to
+    ``constraintScheme=1``.
+    """
+    txt = _load_text("quick_2species_FPCollisions_noEr").replace(
+        "collisionOperator = 0", "collisionOperator = 3"
+    )
+    return KineticOperator.from_namelist(parse_sfincs_input_text(txt))
+
+
 def _dense_solve(op: KineticOperator, rhs2d: np.ndarray) -> np.ndarray:
     return sla.solve(materialize_dense(op), rhs2d)
 
@@ -354,6 +368,62 @@ def test_tier2_coarse_preconditioner_reduces_iterations() -> None:
     # must converge in strictly fewer iterations than the cap it burned.
     assert not r_nopc.converged or r_pc.iterations < r_nopc.iterations
     assert r_pc.iterations < r_nopc.iterations
+
+
+# ---------------------------------------------------------------------------
+# Tier 2 on the improved Sugama fixture (collisionOperator=3): routing, parity,
+# and differentiability — the momentum/energy-restoring field coupling is
+# dropped from the coarse preconditioner but kept in the full operator.
+# ---------------------------------------------------------------------------
+
+
+def test_sugama_collisionop3_routes_tier2_matches_tier3_and_differentiates() -> None:
+    op = _load_sugama_op()
+    assert op.sugama is not None and op.fp is None  # collisionOperator=3 built
+    assert op.constraint_scheme == 1  # {density, temperature} speed null space
+    ok, _reason = tier1_available(op)
+    assert not ok  # dense (species, x) collisions + constraintScheme=1: tier 1 refuses
+
+    rhs = op.rhs()
+    tol = 1e-10
+    # The auto policy must pick the differentiable tier-2 GCROT, NOT the
+    # non-differentiable tier-3 host direct fallback.
+    r_auto = solve(op, rhs, method="auto", tol=tol)
+    assert r_auto.method == "gcrot"
+    assert r_auto.converged
+
+    # Tier 2 == tier 3 (host SuperLU) element-wise.
+    r_direct = solve(op, rhs, method="direct")
+    assert r_direct.method == "direct"
+    assert _rel_err(np.asarray(r_auto.x), np.asarray(r_direct.x)) < 1e-8
+
+    # Gradient flows through the differentiable tier-2 solve.  The Sugama mat is
+    # exactly proportional to nu_n, so a scalar multiplier on it models a nu_n
+    # scan; AD (implicit function theorem) must match a central finite
+    # difference on the differentiable segment.
+    base_mat = op.sugama.mat
+    g = jnp.asarray(np.random.default_rng(0).standard_normal(op.total_size))
+
+    def moment(s: float) -> jnp.ndarray:
+        op_s = replace(op, sugama=replace(op.sugama, mat=s * base_mat))
+        sol = solve(op_s, rhs, method="gmres", tol=1e-11, differentiable=True)
+        return jnp.dot(g, sol.x)
+
+    # auto + differentiable stays on tier 2 (the production path).
+    r_auto_diff = solve(
+        replace(op, sugama=replace(op.sugama, mat=1.0 * base_mat)),
+        rhs,
+        method="auto",
+        tol=1e-9,
+        differentiable=True,
+    )
+    assert r_auto_diff.method == "gcrot"
+
+    grad_ad = float(jax.grad(moment)(1.0))
+    eps = 1e-4
+    grad_fd = float((moment(1.0 + eps) - moment(1.0 - eps)) / (2 * eps))
+    assert np.isfinite(grad_ad)
+    assert abs(grad_ad - grad_fd) / max(1.0, abs(grad_fd)) < 1e-6
 
 
 # ---------------------------------------------------------------------------

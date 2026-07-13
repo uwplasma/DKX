@@ -524,15 +524,20 @@ def build_tier1_solver(op: KineticOperator) -> Tier1Solver:
 # =============================================================================
 
 
-def _fp_diagonal_coefficients(op: KineticOperator) -> jnp.ndarray:
-    """(S, X, L) self-species, x-diagonal Fokker-Planck coefficients.
+def _dense_collision_diagonal(mat: jnp.ndarray) -> jnp.ndarray:
+    """(S, X, L) self-species, x-diagonal reduction of a dense collision block.
 
-    This is the ``preconditioner_species=1`` + ``preconditioner_x=1``
-    simplification: keep only ``mat[s, s, l, x, x]`` of the dense
-    (species, x)-coupled collision blocks, which is PAS-like (diagonal in
-    everything but L).
+    ``mat`` is the ``(S, S, L, X, X)`` block layout shared by the Fokker-Planck
+    (``op.fp.mat``, ``collisionOperator=1``) and improved-Sugama
+    (``op.sugama.mat``, ``collisionOperator=3``) operators.  Keeping only
+    ``mat[s, s, l, x, x]`` is the Fortran ``preconditioner_species=1`` +
+    ``preconditioner_x=1`` simplification: it drops the cross-species and
+    off-x-diagonal coupling — for the improved Sugama operator this discards the
+    field-particle (momentum/energy-restoring) back-reaction entirely — leaving
+    a PAS-like coefficient (diagonal in everything but L).  The dropped terms
+    only degrade the *preconditioner*; the full operator GCROT solves keeps
+    them, so the recycled Krylov iteration corrects the approximation.
     """
-    mat = op.fp.mat  # (S, S, L, X, X)
     coef = jnp.diagonal(mat, axis1=0, axis2=1)  # (L, X, X, S)
     coef = jnp.diagonal(coef, axis1=1, axis2=2)  # (L, S, X)
     return jnp.transpose(coef, (1, 2, 0))  # (S, X, L)
@@ -559,8 +564,11 @@ def build_coarse_preconditioner(
     """Tier-1 exact solve of the SFINCS-simplified coarse operator, as a preconditioner.
 
     Mirrors the Fortran ``preconditionerOptions`` defaults: collisions become
-    self-species and x-diagonal (Fokker-Planck reduces to its PAS-like
-    diagonal), the Er L±2 xDot/xiDot terms and the tangential magnetic-drift
+    self-species and x-diagonal (the dense (species, x)-coupled Fokker-Planck
+    ``op.fp`` and improved-Sugama ``op.sugama`` operators reduce to their
+    PAS-like L-diagonal — for Sugama this drops the field-particle
+    momentum/energy-restoring coupling, kept only in the full operator GCROT
+    solves), the Er L±2 xDot/xiDot terms and the tangential magnetic-drift
     L±2 terms are dropped, and (optionally, the ``preconditioner_xi=1`` knob)
     the L±1 streaming coupling is dropped too.
     The result is block-tridiagonal over L and uncoupled over (species, x), so
@@ -578,7 +586,8 @@ def build_coarse_preconditioner(
     batch = n_s * n_x
 
     stripped = replace(
-        op, fp=None, with_er_xidot=False, with_er_xdot=False, with_magnetic_drifts=False,
+        op, fp=None, sugama=None, with_er_xidot=False, with_er_xdot=False,
+        with_magnetic_drifts=False,
         external_phi1_hat=None, include_phi1_in_kinetic=False,
     )
     blocks = stripped.to_block_tridiagonal()  # (L, S, X, TZ, TZ)
@@ -590,9 +599,16 @@ def build_coarse_preconditioner(
     # tracers (jit-over-leaves / vmap / the differentiable kernel).  The shape is
     # static; only the boolean pattern depends on the traced ``n_xi_for_x``.
     mask = op._mask()  # (X, L)
-    if op.fp is not None:
-        coef = _fp_diagonal_coefficients(op) * mask[None, :, :]  # (S, X, L)
-        diag = diag + coef[:, :, :, None, None] * eye[None, None, None, :, :]
+    # Add back the dense (species, x)-coupled collision operators — Fokker-Planck
+    # (collisionOperator=1) or the improved Sugama model (collisionOperator=3) —
+    # reduced to their PAS-like self-species x-diagonal.  For Sugama this drops
+    # the field-particle momentum/energy-restoring coupling from the coarse
+    # operator (kept only in the full operator GCROT solves); the two collision
+    # models are mutually exclusive, so at most one branch fires.
+    for coll in (op.fp, op.sugama):
+        if coll is not None:
+            coef = _dense_collision_diagonal(coll.mat) * mask[None, :, :]  # (S, X, L)
+            diag = diag + coef[:, :, :, None, None] * eye[None, None, None, :, :]
     if drop_l_coupling:
         lower = jnp.zeros_like(lower)
         upper = jnp.zeros_like(upper)
