@@ -484,7 +484,7 @@ def batched_surface_scan(
 ) -> Any:
     """Batched solve over a batch of flux surfaces (stable public facade).
 
-    Routes to :func:`sfincs_jax.batch.batched_surface_scan`: a ``jax.vmap``ped
+    Routes to :func:`sfincs_jax.batch.batched_surface_scan`: a ``jax.vmap``-based
     solve over a sequence of flux-surface operators that share discretization
     (grids/derivative matrices/layout) but differ in geometry, species,
     collision, and drive leaves.  Auto-chunked to a memory-budgeted batch size;
