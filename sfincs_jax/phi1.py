@@ -159,25 +159,34 @@ def operator_from_input(
     return op
 
 
-def _inner_restart(op: KineticOperator, restart: int | None) -> int:
+def _inner_restart(op: KineticOperator, restart: int | None, use_preconditioner: bool) -> int:
     """Krylov restart for the inner Newton solve.
 
     Phi1 breaks the block-tridiagonal-in-L structure (the quasineutrality rows
     couple all angles at L=0), so the inner solve is tier-2 GCROT on the
-    matrix-free Jacobian.  For the small Phi1 cases this slice targets, a full
-    restart (``>= total_size``) makes each cycle an exact solve; the value is
-    capped so a pathologically large deck fails loudly rather than allocating a
-    huge Krylov basis.
+    matrix-free Jacobian.
+
+    With the Phi1-aware coarse preconditioner
+    (:func:`sfincs_jax.solve.build_coarse_preconditioner`, which Schur-eliminates
+    the quasineutrality border) the preconditioned operator clusters tightly
+    around the identity, so a *modest* FGMRES cycle converges in a handful of
+    iterations at any resolution -- a full-restart basis would waste memory and
+    there is no size cap.  Without the preconditioner the inner solve falls back
+    to a full restart (``>= total_size``, an exact solve per cycle), which only
+    scales to the small Phi1 cases and is capped so a large deck fails loudly.
     """
     if restart is not None:
         return int(restart)
     n = int(op.total_size)
+    if use_preconditioner:
+        return min(n + 1, 60)
     cap = 6000
     if n > cap:
         raise NotImplementedError(
             f"solve_phi1's unpreconditioned inner Krylov solve targets small Phi1 "
-            f"cases (total_size<= {cap}); this deck has total_size={n}. A "
-            "Phi1-aware tier-2 preconditioner is a documented follow-up."
+            f"cases (total_size<= {cap}); this deck has total_size={n}. Enable the "
+            "Phi1-aware coarse preconditioner (use_preconditioner=True) for "
+            "production-scale decks."
         )
     return n + 1
 
@@ -200,6 +209,7 @@ def solve_phi1(
     warm_start: bool = True,
     line_search: bool = True,
     solve_method: str = "gmres",
+    use_preconditioner: bool = True,
     emit: Callable[[str], None] | None = None,
 ) -> Phi1Result:
     """Solve the nonlinear Phi1 / quasineutrality system with Newton-Krylov.
@@ -223,8 +233,13 @@ def solve_phi1(
             off the step (halving) until it does -- robustness for the strongly
             nonlinear early iterations.
         solve_method: :func:`sfincs_jax.solve.solve` method for the inner solve
-            (``"gmres"``; ``use_preconditioner`` is off because the coarse
-            tier-1 preconditioner is not Phi1-aware yet).
+            (``"gmres"``).
+        use_preconditioner: use the Phi1-aware coarse bordered-Schur
+            preconditioner (:func:`sfincs_jax.solve.build_coarse_preconditioner`)
+            for the inner linear solve.  On by default -- it Schur-eliminates the
+            quasineutrality border so the inner Krylov solve converges in far
+            fewer iterations at production resolution.  Set ``False`` for the
+            unpreconditioned full-restart fallback (small decks only).
         emit: optional per-line stdout sink (Fortran-style Newton trace).
 
     Returns:
@@ -242,6 +257,7 @@ def solve_phi1(
         warm_start=warm_start,
         line_search=line_search,
         solve_method=solve_method,
+        use_preconditioner=use_preconditioner,
         emit=emit,
         record_history=False,
     )
@@ -261,6 +277,7 @@ def solve_phi1_history(
     warm_start: bool = True,
     line_search: bool = True,
     solve_method: str = "gmres",
+    use_preconditioner: bool = True,
     emit: Callable[[str], None] | None = None,
 ) -> tuple[Phi1Result, list[jnp.ndarray]]:
     """:func:`solve_phi1` that also returns the accepted Newton-iterate history.
@@ -285,6 +302,7 @@ def solve_phi1_history(
         warm_start=warm_start,
         line_search=line_search,
         solve_method=solve_method,
+        use_preconditioner=use_preconditioner,
         emit=emit,
         record_history=True,
     )
@@ -303,11 +321,12 @@ def _newton_solve_phi1(
     warm_start: bool,
     line_search: bool,
     solve_method: str,
+    use_preconditioner: bool,
     emit: Callable[[str], None] | None,
     record_history: bool,
 ) -> tuple[Phi1Result, list[jnp.ndarray]]:
     """Newton-Krylov core shared by :func:`solve_phi1` / :func:`solve_phi1_history`."""
-    restart = _inner_restart(op, gmres_restart)
+    restart = _inner_restart(op, gmres_restart, use_preconditioner)
 
     if x0 is None:
         x = jnp.zeros((op.total_size,), dtype=jnp.float64)
@@ -339,7 +358,7 @@ def _newton_solve_phi1(
             -r,
             method=solve_method,
             tol=float(gmres_tol),
-            use_preconditioner=False,
+            use_preconditioner=use_preconditioner,
             restart=int(restart),
             recycle_dim=int(gmres_recycle_dim),
             max_restarts=int(gmres_max_restarts),

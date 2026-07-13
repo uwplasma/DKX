@@ -64,6 +64,7 @@ _jax_config.update("jax_enable_x64", True)
 import jax  # noqa: E402
 import jax.numpy as jnp  # noqa: E402
 import numpy as np  # noqa: E402
+from jax.scipy.linalg import lu_factor, lu_solve  # noqa: E402
 
 # solvax is optional until its PyPI release (CI installs it from git): keep
 # this module importable without it and raise a clear error on first use.
@@ -543,6 +544,39 @@ def _dense_collision_diagonal(mat: jnp.ndarray) -> jnp.ndarray:
     return jnp.transpose(coef, (1, 2, 0))  # (S, X, L)
 
 
+def _collision_phi1_diagonal(op: KineticOperator) -> jnp.ndarray:
+    """(S, X, L) self-species, x-diagonal of the Phi1-in-collision operator.
+
+    The ``includePhi1InCollisionOperator`` Fokker-Planck operator
+    (``op.fp_phi1``, ``collisionOperator=0`` with poloidally varying densities)
+    stores its coefficients as compact ``k_nu``/``k_cd``/``k_ce``/``k_rosen``
+    kernels (not a dense ``(S,S,L,X,X)`` ``mat``), so its coarse diagonal cannot
+    be sliced like :func:`_dense_collision_diagonal`.  It is however *diagonal in
+    L and in ``(theta, zeta)``* (collisions are local in real space), so probing
+    one constant-in-angle unit block per ``(species, x)`` and reading the
+    angle-averaged self ``(s, x, l)`` response recovers the exact self-species
+    x-diagonal ``preconditioner_species=1 + preconditioner_x=1`` reduction --
+    the same PAS-like coefficient the ``op.fp``/``op.sugama`` branches take.  The
+    densities are evaluated at ``Phi1=0`` (``n_pol=nHat``); the small Phi1 shift
+    only perturbs the *preconditioner* diagonal, which GCROT corrects.
+    """
+    from sfincs_jax.collisions import apply_fokker_planck_v3_phi1  # noqa: PLC0415
+
+    n_s, n_x, n_xi, n_t, n_z = op.f_shape
+    ph = jnp.zeros((n_t, n_z), dtype=jnp.float64)
+    k = n_s * n_x
+    probes = jnp.eye(k, dtype=jnp.float64).reshape(k, n_s, n_x, 1, 1, 1) * jnp.ones(
+        (1, 1, 1, n_xi, n_t, n_z), dtype=jnp.float64
+    )
+    y = jax.vmap(lambda f: apply_fokker_planck_v3_phi1(op.fp_phi1, f, phi1_hat=ph))(probes)
+    factor = op._fs_average_factor()  # (T, Z)
+    y_avg = jnp.einsum("tz,ksxltz->ksxl", factor, y) / jnp.sum(factor)
+    y_avg = y_avg.reshape(n_s, n_x, n_s, n_x, n_xi)
+    idx_s = jnp.arange(n_s)[:, None]
+    idx_x = jnp.arange(n_x)[None, :]
+    return y_avg[idx_s, idx_x, idx_s, idx_x, :]  # (S, X, L)
+
+
 def _materialize_borders(op: KineticOperator) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Exact border columns ``B`` (f_size, extra) and rows ``C`` (extra, f_size).
 
@@ -556,6 +590,76 @@ def _materialize_borders(op: KineticOperator) -> tuple[jnp.ndarray, jnp.ndarray]
     apply_t = _transposed_apply(op)
     c_rows = jax.vmap(apply_t, in_axes=1, out_axes=1)(basis)[:fs].T
     return b_cols, c_rows
+
+
+def _materialize_full_border(
+    op: KineticOperator,
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """Border columns ``B``, rows ``C``, and border-border block ``D`` of a Phi1 op.
+
+    For a Phi1-augmented operator the whole block after the f-block --
+    ``[ Phi1(theta,zeta) | lambda | sources ]`` of size ``p = phi1_size +
+    extra_size`` -- is treated as the border of ``[[A, B], [C, D]]``.  Unlike
+    the plain constraint border (``[[A, B], [C, 0]]``), ``D`` is *nonzero*: the
+    quasineutrality rows carry the adiabatic ``Phi1`` diagonal and the ``+lambda``
+    coupling, and the ``<Phi1>=0`` row couples ``Phi1`` (populateMatrix.F90 QN
+    block).  All three pieces are probed exactly from the Jacobian JVP
+    (:meth:`KineticOperator.apply`, which is ``d residual_phi1`` at
+    ``phi1_lin_state``) and its transpose -- ``p`` forward + ``p`` transposed
+    matvecs, cheap because the border (``~Ntheta*Nzeta``) is small.
+
+    Returns ``(b_cols, c_rows, d_block)`` with shapes ``(f_size, p)``,
+    ``(p, f_size)`` and ``(p, p)``.
+    """
+    n, fs = op.total_size, op.f_size
+    p = n - fs
+    basis = jnp.zeros((n, p), dtype=jnp.float64)
+    basis = basis.at[fs + jnp.arange(p), jnp.arange(p)].set(1.0)
+    applied = jax.vmap(op.apply, in_axes=1, out_axes=1)(basis)  # (n, p)
+    b_cols = applied[:fs]  # f-rows response to the border columns
+    d_block = applied[fs:]  # border-rows response to the border columns
+    apply_t = _transposed_apply(op)
+    c_rows = jax.vmap(apply_t, in_axes=1, out_axes=1)(basis)[:fs].T
+    return b_cols, c_rows, d_block
+
+
+def _bordered_schur_precond(
+    a_inv: Callable[[jnp.ndarray], jnp.ndarray],
+    b_cols: jnp.ndarray,
+    c_rows: jnp.ndarray,
+    d_block: jnp.ndarray,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Preconditioner for ``[[A, B], [C, D]]`` from an approximate ``A^{-1}``.
+
+    Generalizes ``solvax.operators.schur_projected_precond`` to a *nonzero*
+    border-border block ``D`` (the Phi1 quasineutrality border; that function
+    hard-codes ``D=0``).  Forms the small dense Schur complement
+    ``S = D - C a_inv(B)`` once (``p`` coarse ``a_inv`` solves of the columns of
+    ``B`` plus one ``p x p`` LU) and returns the exact inverse of the bordered
+    system with ``A^{-1}`` replaced by ``a_inv`` throughout::
+
+        y = S^{-1} (r_y - C a_inv(r_x)),    x = a_inv(r_x - B y).
+
+    With ``a_inv`` exact the preconditioned operator is the identity; with the
+    coarse (SFINCS-simplified, null-space-pinned) ``a_inv`` the border -- and in
+    particular the Phi1/lambda coupling -- is still eliminated exactly through
+    the projected Schur system, so a preconditioner built for the f-block ``A``
+    preconditions the full Phi1-augmented system.  Reduces algebraically to
+    ``schur_projected_precond`` when ``D=0`` (the constraint-only case).  Each
+    application costs two ``a_inv`` calls plus one small LU triangular solve.
+    """
+    fs = c_rows.shape[1]
+    ainv_b = jax.vmap(a_inv, in_axes=1, out_axes=1)(b_cols)  # (f_size, p)
+    schur = d_block - c_rows @ ainv_b  # (p, p)
+    schur_lu = lu_factor(schur)
+
+    def precond(r: jnp.ndarray) -> jnp.ndarray:
+        r_x, r_y = r[:fs], r[fs:]
+        y = lu_solve(schur_lu, r_y - c_rows @ a_inv(r_x))
+        x = a_inv(r_x - b_cols @ y)
+        return jnp.concatenate([x, y])
+
+    return precond
 
 
 def build_coarse_preconditioner(
@@ -576,6 +680,16 @@ def build_coarse_preconditioner(
     constraint rows of the *full* operator are then eliminated exactly with
     ``solvax.operators.schur_projected_precond``.
 
+    When ``op.include_phi1`` the operator is the Jacobian of the nonlinear Phi1
+    residual and its border is the whole quasineutrality block
+    ``[Phi1(theta,zeta) | lambda | sources]`` with a *nonzero* border-border
+    block ``D`` (the QN adiabatic Phi1 diagonal, the ``+lambda`` coupling, and
+    the ``<Phi1>=0`` row).  That full border is eliminated exactly with the
+    generalized bordered Schur complement (:func:`_bordered_schur_precond`) --
+    the coarse f-block solve plus a dense ``~Ntheta*Nzeta`` Schur solve -- so
+    the coarse preconditioner is Phi1-aware and the Newton inner Krylov solve
+    converges in far fewer iterations (:func:`sfincs_jax.phi1.solve_phi1`).
+
     Returns:
         ``(precond, precond_t)`` — approximate inverses of ``K`` and ``K^T``
         on flat ``(total_size,)`` vectors, sharing one factorization.
@@ -586,9 +700,9 @@ def build_coarse_preconditioner(
     batch = n_s * n_x
 
     stripped = replace(
-        op, fp=None, sugama=None, with_er_xidot=False, with_er_xdot=False,
+        op, fp=None, sugama=None, fp_phi1=None, with_er_xidot=False, with_er_xdot=False,
         with_magnetic_drifts=False,
-        external_phi1_hat=None, include_phi1_in_kinetic=False,
+        external_phi1_hat=None, include_phi1=False, include_phi1_in_kinetic=False,
     )
     blocks = stripped.to_block_tridiagonal()  # (L, S, X, TZ, TZ)
     lower, diag, upper = (jnp.transpose(a, (1, 2, 0, 3, 4)) for a in blocks)  # (S,X,L,TZ,TZ)
@@ -609,9 +723,37 @@ def build_coarse_preconditioner(
         if coll is not None:
             coef = _dense_collision_diagonal(coll.mat) * mask[None, :, :]  # (S, X, L)
             diag = diag + coef[:, :, :, None, None] * eye[None, None, None, :, :]
+    # includePhi1InCollisionOperator (op.fp_phi1): the poloidally varying FP
+    # operator has no dense ``mat`` to slice, so probe its exact self-species
+    # x-diagonal (L- and angle-diagonal) instead.  Without this the coarse
+    # f-block of a Phi1-in-collision deck is collisionless and singular.
+    if op.fp_phi1 is not None:
+        coef = _collision_phi1_diagonal(op) * mask[None, :, :]  # (S, X, L)
+        diag = diag + coef[:, :, :, None, None] * eye[None, None, None, :, :]
     if drop_l_coupling:
         lower = jnp.zeros_like(lower)
         upper = jnp.zeros_like(upper)
+
+    # Invertibility floor.  A purely collisionless, drift-free coarse f-block
+    # (``nu_n=0`` with ``Er=0`` -> no PAS/collision *and* no ExB diagonal) has
+    # EXACTLY zero diagonal blocks: only streaming/mirror couple L, so the
+    # block-Thomas factorization would divide by zero.  (The non-Phi1 tier-2
+    # path never hit this -- collisionless PAS decks route to the tier-1 direct
+    # solver -- but the Phi1 Newton inner solve forces the coarse preconditioner
+    # for every deck.)  Add a small per-(species, x) diagonal floor scaled by the
+    # band magnitude so every diagonal block is invertible; it is negligible
+    # against a real collision/ExB diagonal (and GCROT corrects the coarse
+    # operator regardless), and it degrades gracefully toward a well-scaled
+    # identity when the f-block is genuinely singular.
+    band = jnp.maximum(
+        jnp.max(jnp.abs(diag), axis=(2, 3, 4)),
+        jnp.maximum(jnp.max(jnp.abs(lower), axis=(2, 3, 4)), jnp.max(jnp.abs(upper), axis=(2, 3, 4))),
+    )  # (S, X)
+    band = jnp.where(band > 0.0, band, 1.0)
+    # 1e-8 (relative to the band) is tiny enough to leave a real diagonal -- and
+    # the tightly-clustered preconditioning it gives -- untouched, yet keeps the
+    # all-zero-diagonal collisionless case out of an exact-zero pivot.
+    diag = diag + (1e-8 * band)[:, :, None, None, None] * eye[None, None, None, :, :]
 
     # Masked (x, l) rows are identically zero in the operator: pin them with
     # the identity so the coarse factorization stays nonsingular.
@@ -643,6 +785,22 @@ def build_coarse_preconditioner(
         return apply
 
     a_inv, a_inv_t = _a_inv(False), _a_inv(True)
+    if op.include_phi1:
+        # Phi1-augmented operator: the border is the whole quasineutrality block
+        # ``[Phi1(theta,zeta) | lambda | sources]`` with a NONZERO border-border
+        # block ``D`` (the QN rows carry the adiabatic Phi1 diagonal + the
+        # ``+lambda`` coupling and the ``<Phi1>=0`` row couples Phi1), so the
+        # constraint-only ``schur_projected_precond`` (which assumes ``D=0``)
+        # does not apply.  Eliminate the full border exactly with the generalized
+        # bordered Schur complement -- the coarse tier-1 f-block solve plus a
+        # dense ``p x p`` (``p ~ Ntheta*Nzeta``) Schur solve over the Phi1/border
+        # block.  The Phi1->f coupling (``B``), the QN-from-f rows (``C``) and the
+        # Phi1/lambda border block (``D``) are all probed exactly from the
+        # Jacobian JVP, so only the f-block is approximated (GCROT corrects it).
+        b_cols, c_rows, d_block = _materialize_full_border(op)
+        precond = _bordered_schur_precond(a_inv, b_cols, c_rows, d_block)
+        precond_t = _bordered_schur_precond(a_inv_t, c_rows.T, b_cols.T, d_block.T)
+        return precond, precond_t
     if op.extra_size == 0:
         return a_inv, a_inv_t
     b_cols, c_rows = _materialize_borders(op)
