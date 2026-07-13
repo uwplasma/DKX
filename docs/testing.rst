@@ -290,9 +290,8 @@ through ``python -m sfincs_jax.validation.release write-output-trace`` or the tr
 not through always-on per-phase GPU memory polling. The runtime-drift audit also
 prefers the solver's logged ``elapsed_s=...`` value when available, falling back
 to subprocess wall time only for archived artifacts that do not record it. The suite
-subprocesses also pin ``SFINCS_JAX_PRECOMPILE=0`` unless explicitly overridden, and
-they leave ``JAX_COMPILATION_CACHE_DIR`` unset unless ``--jax-cache-dir`` is requested,
-so runtime drift is not polluted by eager precompile or persistent-cache write cost.
+subprocesses leave ``JAX_COMPILATION_CACHE_DIR`` unset unless ``--jax-cache-dir`` is
+requested, so runtime drift is not polluted by persistent-cache write cost.
 When a run changes solver branches unexpectedly, keep the emitted profiling
 marks and preconditioner ladder in the research-branch artifact bundle.
 For long RHSMode=1 profiling runs, keep the trace helper's phase log in the artifact
