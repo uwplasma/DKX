@@ -9,8 +9,9 @@ Performance and differentiability
 4) **Explicit separations of concerns**: non-differentiable I/O (reading `.bc`/`wout_*.nc`) is isolated from
    the differentiable compute graph.
 
-For a full, technique-by-technique breakdown (equations, derivations, knobs, and
-implementation notes), see :doc:`performance_techniques`.
+The design choices behind the measured numbers are collected in the
+`Performance patterns`_ section below; the equations and derivations behind them
+live in :doc:`numerics` and :doc:`differentiability`.
 
 
 Measured head-to-head: canonical stack vs SFINCS Fortran v3
@@ -333,8 +334,9 @@ The design choices that produce the numbers above, in one place:
   transport diagnostics trades recomputation for lower peak memory during
   autodiff on long chains.
 
-For the full technique-by-technique treatment — equations, derivations, tuning
-knobs, and implementation notes — see :doc:`performance_techniques`.
+For the equations and derivations behind these techniques, see :doc:`numerics`
+and :doc:`differentiability`; for parallel-execution knobs and batched scans,
+see :doc:`parallelism`.
 
 Differentiable paths
 --------------------

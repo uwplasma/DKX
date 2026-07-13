@@ -159,11 +159,14 @@ in CI:
 | Automatic memory-based solver-tier selection | ✅ | ❌ |
 | MPI multi-node execution | ❌ (single-node multicore + GPU) | ✅ |
 
-In development on the research roadmap: momentum-conserving flow corrections,
+Beyond the Fortran-v3 feature set, several JAX-only research capabilities have
+landed: momentum-conserving flow corrections (`sfincs_jax.momentum_correction`),
 a monoenergetic (collisionality, electric field) database mode with energy
-convolution, batched GPU scans, an extended-collisionality model operator, and
-a differentiable bounce-averaged fast model. See
-[docs/feature_matrix.rst](docs/feature_matrix.rst) for the detailed matrix.
+convolution (`sfincs_jax.monoenergetic`), batched multi-`Er`/multi-surface GPU
+scans (`sfincs_jax.batch`), and the variational transport-coefficient bounds
+above. Still in development on the research roadmap: an extended-collisionality
+(improved Sugama) model operator and a differentiable bounce-averaged fast
+model. See [docs/feature_matrix.rst](docs/feature_matrix.rst) for the matrix.
 
 ## Optimization showcase
 
