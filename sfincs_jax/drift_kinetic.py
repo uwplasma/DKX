@@ -1658,11 +1658,13 @@ class KineticOperator:
                 "and break the block-tridiagonal-in-L structure (tier-2 GCROT owns "
                 "these decks)."
             )
-        if self.fp is not None or self.fp_phi1 is not None:
+        if self.fp is not None or self.fp_phi1 is not None or self.sugama is not None:
             raise NotImplementedError(
                 "legendre_blocks currently supports pitch-angle-scattering collisions only; "
-                "Fokker-Planck couples (species, x) densely within each L "
-                "(its per-L blocks live in KineticOperator.fp.mat)."
+                "Fokker-Planck and the improved Sugama model operator couple (species, x) "
+                "densely within each L (their per-L blocks live in KineticOperator.fp.mat / "
+                "KineticOperator.sugama.mat). The tier-2 coarse preconditioner reduces them "
+                "to their PAS-like self-species x-diagonal in sfincs_jax.solve."
             )
         if self.external_phi1_hat is not None and self.include_phi1_in_kinetic:
             raise NotImplementedError(
