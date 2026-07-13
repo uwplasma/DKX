@@ -12,10 +12,28 @@ import pytest
 jax_config.update("jax_enable_x64", True)
 
 
+def _ensure_reference_goldens() -> None:
+    """Materialise the lzma-compressed Fortran goldens before any test reads them.
+
+    The heavy ``tests/ref`` binaries are committed only as ``*.xz`` (see
+    ``tests/_golden_cache.py``); decompress them into place on session start so
+    parity tests read byte-identical fixtures from a lightweight checkout.
+    """
+
+    import importlib.util
+
+    helper = Path(__file__).resolve().parent / "_golden_cache.py"
+    spec = importlib.util.spec_from_file_location("_sfincs_golden_cache", helper)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.ensure_decompressed()
+
+
 def pytest_configure() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(repo_root))
     os.environ.setdefault("SFINCS_JAX_FORTRAN_STDOUT", "0")
+    _ensure_reference_goldens()
 
 
 @pytest.fixture(autouse=True)
