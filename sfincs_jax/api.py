@@ -411,6 +411,117 @@ def momentum_corrected_bootstrap(
     )
 
 
+def batched_er_scan(
+    request: "SolveInputs | str | Path | Any",
+    er_values: Any,
+    *,
+    er_bracket: tuple[float, float] | None = None,
+    er_initial: float | None = None,
+    solve_method: str = "auto",
+    tol: float = 1.0e-10,
+    differentiable: bool = False,
+    max_batch: int | None = None,
+    memory_budget_gb: float | None = None,
+) -> Any:
+    """Batched ``E_r`` scan on one geometry (stable public facade).
+
+    Routes to :func:`sfincs_jax.batch.batched_er_scan`: one ``jax.vmap``ped
+    solve over a vector of radial-electric-field values sharing a single
+    geometry, returning batched states, moments, and the radial current ``J_r``
+    per ``E_r``.  Auto-chunked to a memory-budgeted batch size; differentiable
+    and jit-safe.  The heavy JAX/batch stack is imported lazily so
+    ``sfincs_jax.api`` stays cheap to import.
+
+    Args:
+        request: a prepared :class:`sfincs_jax.er.ErProblem`, or a deck
+            (:class:`SolveInputs` / namelist path) that is prepared with
+            :func:`sfincs_jax.er.prepare` (RHSMode=1, ``inputRadialCoordinate=4``
+            ``Er`` knob).
+        er_values: the ``E_r`` scan values, shape ``(batch,)``.
+        er_bracket, er_initial: optional bracket / initial ``E_r`` forwarded to
+            :func:`sfincs_jax.er.prepare` when ``request`` is a deck.
+        solve_method, tol: forwarded to the solve.
+        differentiable: differentiable implicit solves (for ``jax.grad``).
+        max_batch, memory_budget_gb: optional memory-budgeting overrides.
+
+    Returns:
+        A :class:`sfincs_jax.batch.BatchedSolveResult` (``radial_current``
+        populated).
+    """
+    from .batch import batched_er_scan as _batched_er_scan  # noqa: PLC0415
+    from .er import ErProblem, prepare  # noqa: PLC0415
+
+    if isinstance(request, ErProblem):
+        problem = request
+    else:
+        input_path, _wout, _out, _backend, _autodiff, _options = _solve_request_paths(request)
+        problem = prepare(
+            input_path,
+            solve_method=solve_method,
+            tol=tol,
+            er_bracket=er_bracket,
+            er_initial=er_initial,
+        )
+    return _batched_er_scan(
+        problem,
+        er_values,
+        solve_method=solve_method,
+        tol=tol,
+        differentiable=differentiable,
+        max_batch=max_batch,
+        memory_budget_gb=memory_budget_gb,
+    )
+
+
+def batched_surface_scan(
+    surfaces: Sequence[Any],
+    *,
+    solve_method: str = "auto",
+    tol: float = 1.0e-10,
+    differentiable: bool = False,
+    max_batch: int | None = None,
+    memory_budget_gb: float | None = None,
+) -> Any:
+    """Batched solve over a batch of flux surfaces (stable public facade).
+
+    Routes to :func:`sfincs_jax.batch.batched_surface_scan`: a ``jax.vmap``ped
+    solve over a sequence of flux-surface operators that share discretization
+    (grids/derivative matrices/layout) but differ in geometry, species,
+    collision, and drive leaves.  Auto-chunked to a memory-budgeted batch size;
+    differentiable and jit-safe.
+
+    Args:
+        surfaces: a sequence whose entries are each a built
+            :class:`sfincs_jax.drift_kinetic.KineticOperator`, or a deck
+            (:class:`SolveInputs` / namelist path) built into one per surface.
+        solve_method, tol, differentiable: forwarded to the solve.
+        max_batch, memory_budget_gb: optional memory-budgeting overrides.
+
+    Returns:
+        A :class:`sfincs_jax.batch.BatchedSolveResult` with batched states and
+        moments.
+    """
+    from .batch import batched_surface_scan as _batched_surface_scan  # noqa: PLC0415
+    from .drift_kinetic import KineticOperator, kinetic_operator_from_namelist  # noqa: PLC0415
+    from .inputs import load_sfincs_input  # noqa: PLC0415
+
+    operators = []
+    for surface in surfaces:
+        if isinstance(surface, KineticOperator):
+            operators.append(surface)
+            continue
+        input_path, _wout, _out, _backend, _autodiff, _options = _solve_request_paths(surface)
+        operators.append(kinetic_operator_from_namelist(load_sfincs_input(input_path).raw))
+    return _batched_surface_scan(
+        operators,
+        solve_method=solve_method,
+        tol=tol,
+        differentiable=differentiable,
+        max_batch=max_batch,
+        memory_budget_gb=memory_budget_gb,
+    )
+
+
 __all__ = [
     "BenchmarkReport",
     "GeometryState",
@@ -421,6 +532,8 @@ __all__ = [
     "SolveInputs",
     "SolverResult",
     "TransportResult",
+    "batched_er_scan",
+    "batched_surface_scan",
     "momentum_corrected_bootstrap",
     "read_output",
     "run_ambipolar_brent",
