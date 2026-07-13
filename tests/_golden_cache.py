@@ -84,3 +84,11 @@ def compress_all(ref_dir: Path = REF_DIR, preset: int = 9) -> list[Path]:
         xz_path.write_bytes(lzma.compress(target.read_bytes(), preset=preset))
         written.append(xz_path)
     return written
+
+
+if __name__ == "__main__":
+    # ``python tests/_golden_cache.py`` materialises the committed *.xz goldens
+    # into their uncompressed form, for consumers that run outside pytest (the
+    # examples-smoke CI job, or a fresh checkout that runs the parity examples).
+    count = ensure_decompressed()
+    print(f"materialised {count} reference goldens into {REF_DIR}")

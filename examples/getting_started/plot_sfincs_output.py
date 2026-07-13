@@ -8,6 +8,22 @@ from pathlib import Path
 from sfincs_jax.plotting import plot_sfincs_output_summary
 
 
+def _ensure_sample(path: Path) -> None:
+    """Materialize a bundled reference sample from its committed ``.xz`` if needed.
+
+    The heavy ``tests/ref`` fixtures are committed lzma-compressed; decompress
+    the default sample on demand so this example runs from a fresh checkout.
+    """
+
+    if path.exists():
+        return
+    compressed = path.with_name(path.name + ".xz")
+    if compressed.exists():
+        import lzma  # noqa: PLC0415
+
+        path.write_bytes(lzma.decompress(compressed.read_bytes()))
+
+
 def main(argv: list[str] | None = None) -> int:
     repo_root = Path(__file__).resolve().parents[2]
     parser = argparse.ArgumentParser(description=__doc__)
@@ -24,6 +40,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Output PDF/figure path.",
     )
     args = parser.parse_args(argv)
+    _ensure_sample(args.input_h5)
     out_path = plot_sfincs_output_summary(input_h5=args.input_h5, output_png=args.out)
     print(f"Wrote: {out_path}")
     return 0
