@@ -131,12 +131,15 @@ Magnetic drift terms (ΔL = 0 and ΔL = ±2)
 
 .. note::
 
-   The tangential magnetic drift is deferred on the canonical stack: the default
-   is ``magneticDriftScheme = 0``, and the consolidated
-   :class:`sfincs_jax.drift_kinetic.KineticOperator` raises ``NotImplementedError``
-   for ``magneticDriftScheme > 0``. The v3 coefficient forms below are documented
-   for reference and were parity-tested in the retained legacy pipeline; the
-   ``full`` vs ``DKES`` distinction on the canonical stack is carried by the
+   Every ``magneticDriftScheme`` from ``0`` (off, the default) through ``9`` is
+   built by the consolidated
+   :class:`sfincs_jax.drift_kinetic.KineticOperator`. When
+   ``magneticDriftScheme > 0`` the coefficient forms below are assembled and
+   applied inside ``KineticOperator.apply_f``. Because the drift term couples
+   :math:`L \leftrightarrow L\pm2` it breaks the block-tridiagonal-in-:math:`L`
+   structure, so ``KineticOperator.to_block_tridiagonal`` declines drift decks
+   and the tier-2 recycled-Krylov solver owns them (:doc:`numerics`). The
+   ``full`` versus ``DKES`` trajectory distinction is carried separately by the
    :math:`E_r` energy/pitch terms and the ``useDKESExBDrift`` switch
    (:doc:`physics_reference`).
 
@@ -194,9 +197,9 @@ To stabilize the drift advection, v3 supports upwinded angular derivative matric
 
    \mathrm{use\_plus}(\theta,\zeta) = \big(g_1\,\hat D(1,1)/Z\big) > 0.
 
-This upwind selection was parity-tested against frozen PETSc binaries for a
-`geometryScheme=11` fixture in the legacy pipeline; on the canonical stack the
-term is gated off by the default ``magneticDriftScheme = 0``.
+This upwind selection is parity-tested against frozen PETSc binaries for a
+`geometryScheme=11` fixture; it is active whenever ``magneticDriftScheme > 0``
+(the default ``magneticDriftScheme = 0`` leaves the magnetic-drift terms off).
 
 Collision operators (PAS and FP)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
