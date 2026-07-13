@@ -14,12 +14,19 @@ What this example teaches:
         fixed-boundary equilibrium (jac="implicit"), no finite differences.
         This is the reference vmec_jax QA recipe.
 
-      Stage B -- bootstrap reduction (this is where sfincs_jax enters).  The
-        QA equilibrium from stage A is quasisymmetric but was never optimized
-        for its neoclassical bootstrap current, so there is real headroom.  A
-        gradient-based loop now minimizes <j.B>/sqrt(<B^2>) -- computed by the
-        canonical sfincs_jax kinetic solve -- while penalties keep the field
-        quasisymmetric, at aspect ratio 6 and mean iota above 0.41.
+      Stage B -- bootstrap reduction at HELD precise QA (this is where
+        sfincs_jax enters).  The QA equilibrium from stage A is quasisymmetric
+        but was never optimized for its neoclassical bootstrap current, so
+        there is real headroom.  A gradient-based loop minimizes
+        <j.B>/sqrt(<B^2>) -- computed by the canonical sfincs_jax kinetic
+        solve -- while a hard one-sided cap holds the two-term quasisymmetry
+        ratio residual (the very metric stage A minimized) at the Stage-A
+        precise-QA level, at aspect ratio 6 and mean iota above 0.41.  Both
+        compared configurations are therefore precise QA: the showcase is
+        precise QA (no bootstrap optimization) vs precise QA held + bootstrap
+        optimization, so the reported bootstrap decrease is the reduction
+        achievable at fixed quasisymmetry -- a smaller, honest factor than a
+        QA-degrading search would advertise.
 
   - the differentiable route between the codes used by stage B, so that one
     jax.value_and_grad call returns the gradient of the *whole* physics chain:
@@ -33,11 +40,12 @@ What this example teaches:
         -> KineticOperator -> tier-2 GCROT solve with implicit differentiation
         -> FSABjHat;
 
-  - a constrained physics target expressed as penalty terms: keep the field
-    quasisymmetric (Boozer-spectrum QA metric: the energy fraction of the
-    symmetry-breaking n != 0 modes of |B|, plus the two-term ratio residual
-    across the volume as a guard), hold aspect ratio at 6, keep mean iota
-    above 0.41 (one-sided hinge), and drive <j.B> toward zero;
+  - a constrained physics target expressed as penalty terms: hold the field
+    quasisymmetric at the Stage-A level (a hard one-sided cap on the two-term
+    quasisymmetry ratio residual across the volume, plus the Boozer-spectrum QA
+    metric -- the energy fraction of the symmetry-breaking n != 0 modes of |B|
+    -- on the kinetic surface), hold aspect ratio at 6, keep mean iota above
+    0.41 (one-sided hinge), and drive <j.B> toward zero;
 
   - warm-starting the kinetic Krylov solve across optimizer evaluations with
     the previous solution (x0) and the GCROT recycle pair, hot-restarting the
@@ -50,7 +58,9 @@ What this example teaches:
 
 Physics: quasi-axisymmetry makes the guiding-centre drifts tokamak-like, so a
 QA field carries a substantial bootstrap current -- lowering it at fixed
-aspect ratio and iota is a genuine Pareto trade, not a free lunch.  The kinetic
+quasisymmetry, aspect ratio and iota is a genuine Pareto trade, not a free
+lunch (holding QA fixed makes the achievable bootstrap decrease honestly
+smaller than a search that is free to spend quasisymmetry).  The kinetic
 configuration is the classic SFINCS "full trajectories" setup: two-species
 pitch-angle-scattering collisions with a finite radial electric field
 (includeXDotTerm and includeElectricFieldTermInXiDot on), which routes to the
@@ -178,15 +188,25 @@ TARGET_IOTA = 0.42  # stage-A mean-iota target
 IOTA_MIN = 0.41  # hard requirement: mean iota must end above this
 IOTA_PEN_FLOOR = 0.415  # stage-B hinge activates below this (margin above IOTA_MIN)
 QS_SURFACES = np.asarray([0.1, 0.3, 0.5, 0.7, 0.9])  # two-term QS guard
-# Weights balance the Pareto trade between lowering <j.B> and holding QA:
-# the kinetic weight is large enough that the bootstrap term drives the search,
-# the aspect weight pins the aspect ratio near 6, and the two QS penalties keep
-# the field quasi-axisymmetric (the ratio residual as a volume guard).
+# Weights balance the Pareto trade between lowering <j.B> and *holding* QA at
+# the Stage-A level: the kinetic weight lets the bootstrap term drive the
+# search, the aspect weight pins aspect near 6, W_QS_BOOZ keeps the kinetic
+# surface quasi-axisymmetric, and the hard one-sided cap W_QS_HOLD forbids the
+# two-term ratio residual from rising past QS_HELD_TARGET -- so both compared
+# configurations stay precise QA and the bootstrap decrease is measured at
+# (essentially) fixed quasisymmetry.
 W_ASPECT = 1.0e3
 W_IOTA = 2.0e4
 W_QS_BOOZ = 5.0e4  # Boozer-spectrum QA metric on the kinetic surface
-W_QS_PROFILE = 5.0e3  # two-term ratio residual across QS_SURFACES (guard)
+W_QS_PROFILE = 5.0e3  # gentle pull of the two-term ratio residual toward zero
 W_KINETIC = 5.0e6
+# QA hold: a hard one-sided quadratic cap max(0, qs_profile - QS_HELD_TARGET)^2.
+# QS_HELD_TARGET is set from the Stage-A residual after the first evaluation to
+# QS_HELD_SLACK x that level; the slack is the small, documented QA budget the
+# bootstrap search may spend (both configs stay precise QA, sub-1e-3 residual).
+W_QS_HOLD = 1.0e10
+QS_HELD_SLACK = 1.8
+QS_HELD_TARGET = float("inf")  # set after the first (Stage-A) evaluation below
 
 # Kinetic figure of merit entering the objective.  Every entry of the dict is
 # CI-tested, so switching the commented line in just works.
@@ -292,7 +312,7 @@ inp0 = dataclasses.replace(
 # ----------------------------------------------------------------------------
 # 2) Stage B setup: differentiable equilibrium + kinetic operator template
 # ----------------------------------------------------------------------------
-print("Stage B: reduce the kinetic bootstrap current <j.B> of the QA equilibrium")
+print("Stage B: reduce the kinetic bootstrap current <j.B> at HELD precise QA")
 print("Step 1: differentiable fixed-boundary equilibrium (vmec_jax.core.implicit)")
 # hot_restart seeds each host VMEC solve from the previous boundary's converged
 # state (few iterations as the boundary drifts); the loose adjoint tolerance
@@ -475,15 +495,21 @@ def objective(dofs, warm=None):
     kinetic_term = KINETIC_OBJECTIVES[KINETIC_OBJECTIVE](mom)
     jbs = mom["FSABjHatOverRootFSAB2"]
 
+    # Hard one-sided cap that HOLDS quasisymmetry at the Stage-A level: it is
+    # exactly zero while the two-term ratio residual stays at/under
+    # QS_HELD_TARGET and rises steeply once it tries to exceed it, so the
+    # bootstrap search can spend at most the documented QA slack.
+    qs_excess = jnp.maximum(qs_profile - QS_HELD_TARGET, 0.0)
     total = (W_ASPECT * (aspect - TARGET_ASPECT) ** 2
              + W_IOTA * jnp.maximum(IOTA_PEN_FLOOR - iota_mean, 0.0) ** 2
              + W_QS_BOOZ * qs_booz
              + W_QS_PROFILE * qs_profile
+             + W_QS_HOLD * qs_excess ** 2
              + W_KINETIC * kinetic_term)
     sg = jax.lax.stop_gradient
     aux = {
         "aspect": aspect, "iota": iota_mean, "qs": qs_booz, "qs_profile": qs_profile,
-        "jbs": jbs, "kinetic_term": kinetic_term,
+        "qs_excess": qs_excess, "jbs": jbs, "kinetic_term": kinetic_term,
         "bmnc_b": sg(booz["bmnc_b"][0]),
         "booz_iota": sg(booz["iota_b"][0]),
         "booz_G": sg(booz["bvco_b"][0]),
@@ -556,6 +582,15 @@ if RUN_FD_CHECK:
     print("   chain is limited by the host equilibrium solver's ftol noise in FD)")
     if not (np.isfinite(fd_check["fd"]) and fd_check["rel"] < FD_GATE):
         raise SystemExit(f"end-to-end gradient check FAILED: rel {fd_check['rel']:.3e}")
+
+# Arm the QA hold: cap the two-term QS ratio residual at QS_HELD_SLACK x its
+# Stage-A (starting-point) value, so stage B reduces the bootstrap current at
+# (essentially) fixed quasisymmetry.  Set here -- after the starting-point
+# diagnostics above, which run on the smooth uncapped chain -- so the cap only
+# shapes the optimization loop below.
+QS_HELD_TARGET = QS_HELD_SLACK * float(aux0["qs_profile"])
+print(f"  QA hold armed: cap two-term QS ratio residual at {QS_HELD_TARGET:.4e} "
+      f"({QS_HELD_SLACK:g}x the Stage-A level {float(aux0['qs_profile']):.4e})")
 
 # ----------------------------------------------------------------------------
 # 7) Optimize stage B: scipy L-BFGS-B on the JAX value-and-gradient
@@ -630,17 +665,25 @@ if RUN_FD_CHECK:
 # ----------------------------------------------------------------------------
 # 8) Final results, saved outputs (optimized input + wout), read-back, plot
 # ----------------------------------------------------------------------------
-print("Step 7: final results")
+print("Step 7: final results (precise QA vs precise QA held + bootstrap)")
 jbs0, jbs1 = float(aux0["jbs"]), float(aux_final["jbs"])
+boot_x, boot_y = abs(jbs0), abs(jbs1)
+boot_factor = boot_x / max(boot_y, 1e-300)
+r_a, r_b = float(aux0["qs_profile"]), float(aux_final["qs_profile"])
 print(f"  QA shaping:      QS ratio {qs_seed:.3e} -> {qs_shaped:.3e} "
       f"(circular torus -> QA), iota {iota_seed:.3f} -> {iota_shaped:.3f}")
 print(f"  objective        {float(J0):.6e} -> {float(J_final):.6e}")
-print(f"  <j.B>/sqrt(<B^2>) {jbs0:+.6e} -> {jbs1:+.6e} "
-      f"({abs(jbs0) / max(abs(jbs1), 1e-300):.2f}x lower)")
-print(f"  QS residual      {float(aux0['qs']):.4e} -> {float(aux_final['qs']):.4e}")
-print(f"  QS ratio residual{float(aux0['qs_profile']):.4e} -> "
-      f"{float(aux_final['qs_profile']):.4e}")
-print(f"  aspect ratio     {float(aux0['aspect']):.4f} -> {float(aux_final['aspect']):.4f}")
+print("  config 1 = precise QA (no bootstrap opt);  "
+      "config 2 = precise QA held + bootstrap opt")
+print(f"  X = <j.B>/sqrt(<B^2>) config 1 = {jbs0:+.6e}")
+print(f"  Y = <j.B>/sqrt(<B^2>) config 2 = {jbs1:+.6e}")
+print(f"  bootstrap decrease at held QA:  |X| {boot_x:.6e} -> |Y| {boot_y:.6e}  "
+      f"({boot_factor:.2f}x lower)")
+print(f"  two-term QS ratio residual (HELD): {r_a:.4e} (config 1) -> {r_b:.4e} (config 2)"
+      f"   [cap {QS_HELD_TARGET:.4e} = {QS_HELD_SLACK:g}x config 1]")
+print(f"  Boozer non-QA fraction: {float(aux0['qs']):.4e} -> {float(aux_final['qs']):.4e}")
+print(f"  aspect ratio     {float(aux0['aspect']):.4f} -> {float(aux_final['aspect']):.4f} "
+      f"(target {TARGET_ASPECT})")
 print(f"  mean iota        {float(aux0['iota']):.4f} -> {float(aux_final['iota']):.4f} "
       f"(require > {IOTA_MIN})")
 objective_decreased = float(J_final) < float(J0)
@@ -673,7 +716,12 @@ history_path.write_text(json.dumps({
                    "seconds_first": t_first, "seconds_warm": t_warm},
     "fd_check_initial": fd_check, "fd_check_final": fd_check_final,
     "kinetic_objective": KINETIC_OBJECTIVE,
-    "targets": {"aspect": TARGET_ASPECT, "iota_min": IOTA_MIN},
+    "targets": {"aspect": TARGET_ASPECT, "iota_min": IOTA_MIN,
+                "qs_held_target": float(QS_HELD_TARGET),
+                "qs_held_slack": float(QS_HELD_SLACK)},
+    "bootstrap_at_held_qa": {"X_config1": boot_x, "Y_config2": boot_y,
+                             "factor": boot_factor,
+                             "qs_ratio_config1": r_a, "qs_ratio_config2": r_b},
     "dof_names": dof_names,
 }, indent=2) + "\n")
 read_back = json.loads(history_path.read_text())
@@ -702,33 +750,47 @@ def _boundary_surface_bmag(wout, ntheta=96, nzeta=256):
 
 
 fig = plt.figure(figsize=(12.8, 5.6))
-gs = fig.add_gridspec(2, 2, width_ratios=(1.0, 1.25), hspace=0.45,
-                      left=0.06, right=0.98, top=0.92, bottom=0.10)
+gs = fig.add_gridspec(2, 2, width_ratios=(1.0, 1.3), hspace=0.55, wspace=0.3,
+                      left=0.11, right=0.98, top=0.91, bottom=0.25)
 
-evals = [h["eval"] for h in history]
-ax = fig.add_subplot(gs[0, 0])
-ax.semilogy(evals, [h["objective"] for h in history], "-", color="tab:blue", lw=1.2)
-ax.annotate(f"start {float(J0):.1f}", xy=(evals[0], history[0]["objective"]),
-            xytext=(5, -12), textcoords="offset points", fontsize=9)
-ax.annotate(f"final {float(J_final):.1f}", xy=(evals[-1], history[-1]["objective"]),
-            xytext=(-10, 10), textcoords="offset points", ha="right", fontsize=9)
-ax.set_ylabel("total objective")
-ax.set_title("stage B: bootstrap-reduction progress", fontsize=11)
-ax.tick_params(labelbottom=False)
+cfg_colors = ["#8c8c8c", "#d62728"]  # config 1 (precise QA) / config 2 (held + boot)
+cfg_labels = [
+    f"precise QA\n(no bootstrap opt)\naspect {float(aux0['aspect']):.2f}, "
+    f"iota {float(aux0['iota']):.3f}",
+    f"precise QA held\n+ bootstrap opt\naspect {float(aux_final['aspect']):.2f}, "
+    f"iota {float(aux_final['iota']):.3f}",
+]
 
-ax = fig.add_subplot(gs[1, 0])
-ax.semilogy(evals, [abs(h["jbs"]) for h in history], "-", color="tab:red",
-            lw=1.2, label=r"|$\langle j{\cdot}B\rangle$|/$\sqrt{\langle B^2\rangle}$")
-ax.semilogy(evals, [h["qs"] for h in history], "-", color="tab:green",
-            lw=1.2, label="QS residual (non-QA energy fraction)")
-ax.annotate(f"{abs(jbs0):.1e}", xy=(evals[0], abs(history[0]["jbs"])),
-            xytext=(5, 6), textcoords="offset points", fontsize=9, color="tab:red")
-ax.annotate(f"{abs(jbs1):.1e}", xy=(evals[-1], abs(history[-1]["jbs"])),
-            xytext=(-10, 8), textcoords="offset points", ha="right",
-            fontsize=9, color="tab:red")
-ax.set_xlabel("objective evaluation")
-ax.legend(fontsize=8, loc="best")
-ax.set_title("bootstrap current and quasisymmetry", fontsize=11)
+# Panel A: bootstrap current of the two precise-QA configs (X vs Y).
+axA = fig.add_subplot(gs[0, 0])
+boot_vals = [boot_x, boot_y]
+for i, (v, c) in enumerate(zip(boot_vals, cfg_colors)):
+    axA.bar(i, v, width=0.62, color=c)
+    axA.annotate(f"{v:.2e}", xy=(i, v), xytext=(0, 3), textcoords="offset points",
+                 ha="center", fontsize=9)
+axA.set_ylabel(r"$|\langle j\!\cdot\!B\rangle|/\sqrt{\langle B^2\rangle}$")
+axA.set_title(f"bootstrap current  ({boot_factor:.2f}x lower at held QA)", fontsize=10.5)
+axA.set_xticks([0, 1])
+axA.set_xticklabels(["", ""])
+axA.set_xlim(-0.6, 1.6)
+axA.set_ylim(0, max(boot_vals) * 1.3)
+
+# Panel B: two-term QS ratio residual -- HELD near the Stage-A level.
+axB = fig.add_subplot(gs[1, 0])
+qs_vals = [r_a, r_b]
+for i, (v, c) in enumerate(zip(qs_vals, cfg_colors)):
+    axB.bar(i, v, width=0.62, color=c)
+    axB.annotate(f"{v:.2e}", xy=(i, v), xytext=(0, 3), textcoords="offset points",
+                 ha="center", fontsize=9)
+axB.axhline(QS_HELD_TARGET, ls="--", lw=0.9, color="k")
+axB.annotate(f"hold cap = {QS_HELD_SLACK:g}x", xy=(1.58, QS_HELD_TARGET), xytext=(0, 2),
+             textcoords="offset points", ha="right", va="bottom", fontsize=8)
+axB.set_ylabel("two-term QS\nratio residual")
+axB.set_title("quasisymmetry held (both precise QA)", fontsize=10.5)
+axB.set_xticks([0, 1])
+axB.set_xticklabels(cfg_labels, fontsize=8)
+axB.set_xlim(-0.6, 1.6)
+axB.set_ylim(0, max(max(qs_vals), float(QS_HELD_TARGET)) * 1.35)
 
 X, Y, Z, B = _boundary_surface_bmag(wouts["final"])
 norm = matplotlib.colors.Normalize(vmin=B.min(), vmax=B.max())
@@ -738,7 +800,7 @@ ax3d.plot_surface(X, Y, Z, facecolors=plt.cm.viridis(norm(B)),
 ax3d.set_box_aspect((np.ptp(X), np.ptp(Y), np.ptp(Z)), zoom=1.55)
 ax3d.set_axis_off()
 ax3d.view_init(elev=32, azim=-65)
-ax3d.set_title("optimized boundary, |B| (T)", fontsize=11, pad=0)
+ax3d.set_title("config 2 boundary, |B| (T)", fontsize=11, pad=0)
 mappable = plt.cm.ScalarMappable(norm=norm, cmap="viridis")
 cbar = fig.colorbar(mappable, ax=ax3d, shrink=0.62, pad=0.0, fraction=0.04)
 cbar.ax.tick_params(labelsize=8)
