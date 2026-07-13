@@ -31,6 +31,7 @@ import scipy.linalg as sla
 from sfincs_jax.drift_kinetic import KineticOperator
 from sfincs_jax.namelist import parse_sfincs_input_text, read_sfincs_input
 from sfincs_jax.solve import (
+    build_coarse_preconditioner,
     materialize_dense,
     solve,
     tier1_available,
@@ -600,6 +601,76 @@ def test_differentiable_solve_aborts_loudly_on_genuinely_singular_operator() -> 
 
     with pytest.raises(Exception, match="GCROT solve failed to converge"):
         jax.grad(loss)(jnp.asarray(1.0))
+
+
+# ---------------------------------------------------------------------------
+# jit-safety: the Nxi_for_x truncation mask must not host-materialize, so the
+# coarse preconditioner and the differentiable solve stay traceable and reuse
+# their compilation.  Regression guard for the two former
+# ``np.asarray(op._mask())`` host round-trips (solve.py / drift_kinetic.py) that
+# blocked jit-over-operator-leaves, vmap batching, and cross-eval jit reuse.
+# ---------------------------------------------------------------------------
+
+
+def test_coarse_preconditioner_is_jit_safe_over_traced_operator_leaves() -> None:
+    """``build_coarse_preconditioner`` must build when the operator *leaves* are
+    tracers (regression for ``mask = np.asarray(op._mask())`` at its top).
+
+    A ramped ``Nxi_for_x`` deck makes the truncation mask non-uniform; the
+    preconditioner action under jit-over-leaves must match the eager build.
+    """
+    op = _ramped_pas_op()
+    leaves, treedef = jax.tree_util.tree_flatten(op)
+    v = jnp.asarray(np.linspace(-1.0, 1.0, op.total_size), dtype=jnp.float64)
+
+    def precond_action(ls: list) -> jnp.ndarray:
+        precond, _ = build_coarse_preconditioner(jax.tree_util.tree_unflatten(treedef, ls))
+        return precond(v)
+
+    jitted = jax.jit(precond_action)(leaves)  # compiles (was a Tracer error)
+    ref, _ = build_coarse_preconditioner(op)
+    np.testing.assert_allclose(np.asarray(jitted), np.asarray(ref(v)), rtol=1e-9, atol=1e-11)
+
+
+def test_jit_value_and_grad_through_differentiable_solve_compiles_once() -> None:
+    """The differentiable solve must be jittable end-to-end and *reuse* its
+    compilation.
+
+    ``jax.jit(value_and_grad(...))`` around the differentiable tier-1 solve must
+    compile exactly once and NOT retrace when only the operator leaf VALUES
+    change — the optimization inner loop that used to recompile per eval.  The
+    jitted gradient still matches central finite differences.
+    """
+    op0 = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
+    traces = {"n": 0}
+
+    def loss(t_vec: jnp.ndarray) -> jnp.ndarray:
+        traces["n"] += 1  # increments once per trace (i.e. per compile)
+        op = replace(op0, t_hat=t_vec)
+        res = solve(op, op.rhs(), method="block_tridiagonal", differentiable=True)
+        return jnp.sum(res.x**2)
+
+    vg = jax.jit(jax.value_and_grad(loss))
+    p0 = jnp.reshape(op0.t_hat[0], (1,))
+    val0, g0 = vg(p0)
+    n_after_first = traces["n"]
+    val1, _ = vg(p0 * 1.3)  # different leaf VALUE, identical shape/dtype
+    val2, _ = vg(p0 * 0.6)
+    # compiled exactly once; new values reuse the executable (no retrace)
+    assert n_after_first == 1
+    assert traces["n"] == 1
+    assert np.isfinite(float(g0[0]))
+    assert float(val0) != float(val1) != float(val2)
+
+    # the jitted AD gradient matches central finite differences
+    def loss_plain(t: float) -> float:
+        op = replace(op0, t_hat=jnp.reshape(jnp.asarray(t), (1,)))
+        return float(jnp.sum(solve(op, op.rhs(), method="block_tridiagonal").x**2))
+
+    t0 = float(op0.t_hat[0])
+    eps = 1e-6
+    fd = (loss_plain(t0 + eps) - loss_plain(t0 - eps)) / (2.0 * eps)
+    np.testing.assert_allclose(float(g0[0]), fd, rtol=1e-5)
 
 
 # ---------------------------------------------------------------------------

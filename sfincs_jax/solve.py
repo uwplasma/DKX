@@ -585,9 +585,13 @@ def build_coarse_preconditioner(
     lower, diag, upper = (jnp.transpose(a, (1, 2, 0, 3, 4)) for a in blocks)  # (S,X,L,TZ,TZ)
 
     eye = jnp.eye(n_tz, dtype=jnp.float64)
-    mask = np.asarray(op._mask())  # (X, L)
+    # Keep the Nxi_for_x truncation mask as a jnp array (no host materialization)
+    # so the coarse preconditioner stays traceable when the operator leaves are
+    # tracers (jit-over-leaves / vmap / the differentiable kernel).  The shape is
+    # static; only the boolean pattern depends on the traced ``n_xi_for_x``.
+    mask = op._mask()  # (X, L)
     if op.fp is not None:
-        coef = _fp_diagonal_coefficients(op) * jnp.asarray(mask)[None, :, :]  # (S, X, L)
+        coef = _fp_diagonal_coefficients(op) * mask[None, :, :]  # (S, X, L)
         diag = diag + coef[:, :, :, None, None] * eye[None, None, None, :, :]
     if drop_l_coupling:
         lower = jnp.zeros_like(lower)
@@ -595,7 +599,7 @@ def build_coarse_preconditioner(
 
     # Masked (x, l) rows are identically zero in the operator: pin them with
     # the identity so the coarse factorization stays nonsingular.
-    pin = jnp.asarray(1.0 - mask)  # (X, L)
+    pin = 1.0 - mask  # (X, L)
     diag = diag + pin[None, :, :, None, None] * eye[None, None, None, :, :]
 
     # Pin the constant-on-surface null space of the l=0 block per (species, x)
