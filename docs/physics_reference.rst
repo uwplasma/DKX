@@ -491,8 +491,8 @@ Classical (collisional) transport
 
 In addition to the neoclassical fluxes above, the code evaluates the classical
 (finite-gyroradius, collisional) particle and heat fluxes from the friction
-forces of the linearized collision operator, following the vendored note
-``classical_radial_fluxes_2019-01-17``. These are written as
+forces of the linearized collision operator, following the upstream SFINCS
+classical-radial-fluxes note (see :doc:`upstream_docs`). These are written as
 ``classicalParticleFlux*`` / ``classicalHeatFlux*`` for geometries that provide
 the :math:`|\nabla\hat\psi|^2` metric (VMEC scheme 5 and Boozer ``.bc`` schemes
 11/12).
@@ -541,22 +541,22 @@ Equation-to-code map
      - :class:`sfincs_jax.magnetic_geometry.FluxSurfaceGeometry`
      - ``geometryScheme``
 
-Vendored derivations
+Upstream derivations
 --------------------
 
-The long-form upstream derivations are bundled under ``docs/upstream`` and
-linked from :doc:`upstream_docs`:
+The long-form derivations are documented in the peer-reviewed SFINCS paper
+(Landreman, Smith, Mollén, and Helander, *Phys. Plasmas* **21**, 042503 (2014),
+`doi:10.1063/1.4870077 <https://doi.org/10.1063/1.4870077>`_) and in the unpublished
+upstream SFINCS project documents archived at
+`github.com/landreman/sfincs <https://github.com/landreman/sfincs>`_ (cited from
+:doc:`upstream_docs`). The pieces most relevant to this reference are:
 
-- ``20150507-01 Technical documentation for version 3 of SFINCS.pdf`` — the
-  master v3 reference for the operator and normalization.
-- ``20131220-04 ... single species`` and ``20131219-01 ... multiple species`` —
-  the single- and multi-species drive and collision derivations.
-- ``20150402-01 Implementation of the Fokker-Planck operator.pdf`` — the
-  Rosenbluth-potential field term.
-- ``Phi1_implementation_2016-01.tex`` and
-  ``20150325-01 Effects on fluxes of including Phi_1.pdf`` — the
-  :math:`\Phi_1`/quasineutrality closure and its effect on the flux definitions.
-- ``20131206-02 Relating sfincs transport matrix to Beidler matrix.pdf`` — the
-  transport-matrix / Beidler-coefficient correspondence.
-- ``classical_radial_fluxes_2019-01-17.pdf`` and ``notes_dkes_sfincs.pdf`` —
-  the classical fluxes and DKES-limit compatibility.
+- the version-3 technical documentation — the master reference for the operator and
+  normalization;
+- the single-species and multi-species technical documentation — the drive and
+  collision derivations;
+- the Fokker--Planck operator implementation note — the Rosenbluth-potential field term;
+- the :math:`\Phi_1` implementation and "effects on fluxes" notes — the
+  :math:`\Phi_1`/quasineutrality closure and its effect on the flux definitions;
+- the transport-matrix / Beidler-matrix note — the transport-coefficient correspondence;
+- the classical-radial-fluxes and DKES notes — classical fluxes and DKES-limit compatibility.
