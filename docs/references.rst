@@ -92,16 +92,20 @@ Experimental and cross-code validation anchors
 - C. D. Beidler et al.,
   `Demonstration of reduced neoclassical energy transport in Wendelstein 7-X <https://www.nature.com/articles/s41586-021-03687-w>`_.
 
-Bundled technical notes and manuals
------------------------------------
+Upstream SFINCS technical notes and manuals
+-------------------------------------------
 
-The repository includes the main long-form references under ``docs/upstream``:
+The long-form SFINCS technical documentation (the version-3 technical notes, the
+Fokker--Planck implementation note, the :math:`\Phi_1` notes, and the SFINCS user
+manual) consists of **unpublished upstream project documents**. Following the
+repository policy of citing rather than vendoring, they are not redistributed here;
+their archival home is the upstream SFINCS project repository:
 
-- `20150507-01 Technical documentation for version 3 of SFINCS <docs/upstream/20150507-01%20Technical%20documentation%20for%20version%203%20of%20SFINCS.pdf>`_
-- `20150402-01 Implementation of the Fokker-Planck operator <docs/upstream/20150402-01%20Implementation%20of%20the%20Fokker-Planck%20operator.pdf>`_
-- `20150325-01 Effects on fluxes of including Phi_1 <docs/upstream/20150325-01%20Effects%20on%20fluxes%20of%20including%20Phi_1.pdf>`_
-- `SFINCS paper <docs/upstream/sfincsPaper/sfincsPaper.pdf>`_
-- `Version 3 user manual sources <docs/upstream/manual/version3/SFINCSUserManual.tex>`_
+- `SFINCS project (github.com/landreman/sfincs) <https://github.com/landreman/sfincs>`_
+
+The peer-reviewed reference for the model is the 2014 *Physics of Plasmas* paper
+cited above, and the physics/numerics that `sfincs_jax` relies on are reproduced in
+:doc:`theory_from_upstream`, :doc:`system_equations`, and :doc:`physics_reference`.
 
 JAX and differentiable programming
 ----------------------------------

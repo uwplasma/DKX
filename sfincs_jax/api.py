@@ -484,7 +484,7 @@ def batched_er_scan(
 ) -> Any:
     """Batched ``E_r`` scan on one geometry (stable public facade).
 
-    Routes to :func:`sfincs_jax.batch.batched_er_scan`: one ``jax.vmap``ped
+    Routes to :func:`sfincs_jax.batch.batched_er_scan`: one ``jax.vmap`` batched
     solve over a vector of radial-electric-field values sharing a single
     geometry, returning batched states, moments, and the radial current ``J_r``
     per ``E_r``.  Auto-chunked to a memory-budgeted batch size; differentiable
@@ -543,7 +543,7 @@ def batched_surface_scan(
 ) -> Any:
     """Batched solve over a batch of flux surfaces (stable public facade).
 
-    Routes to :func:`sfincs_jax.batch.batched_surface_scan`: a ``jax.vmap``-based
+    Routes to :func:`sfincs_jax.batch.batched_surface_scan`: a ``jax.vmap`` batched
     solve over a sequence of flux-surface operators that share discretization
     (grids/derivative matrices/layout) but differ in geometry, species,
     collision, and drive leaves.  Auto-chunked to a memory-budgeted batch size;

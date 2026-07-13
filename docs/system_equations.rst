@@ -28,8 +28,8 @@ system that `sfincs_jax` assembles and solves.
 For physics background and literature references, see :doc:`physics_models`
 and :doc:`physics_reference`.
 
-For full upstream context and derivations, see the vendored v3 manual and technical docs in
-``docs/upstream/`` (linked from :doc:`upstream_docs`).
+For full upstream context and derivations, see the SFINCS v3 technical notes and user
+manual in the upstream SFINCS project repository, cited from :doc:`upstream_docs`.
 
 Unknown ordering
 ----------------
