@@ -1,10 +1,11 @@
 Theory from the upstream SFINCS notes
 =====================================
 
-This page pulls the core narrative from the bundled SFINCS technical notes into the main
-documentation set. The goal is to keep the theory readable in the docs themselves, with
-the vendored PDFs in ``docs/upstream/`` serving as archival source material rather than
-the only place where the model is explained.
+This page pulls the core narrative from the SFINCS technical notes into the main
+documentation set. The goal is to keep the theory readable in the docs themselves. The
+original upstream notes are unpublished project documents archived in the upstream
+SFINCS project repository (cited from :doc:`upstream_docs`); the prose below is an
+original summary rather than a copy of those documents.
 
 Ordering and reduction used by SFINCS v3
 ----------------------------------------
@@ -205,14 +206,20 @@ That leads directly to the current engineering split in ``sfincs_jax``:
 - and a continuing push to encode more of the true operator structure in the
   preconditioners and fast solvers.
 
-Primary upstream sources summarized here
-----------------------------------------
+Primary sources summarized here
+-------------------------------
 
-- ``docs/upstream/20150507-01 Technical documentation for version 3 of SFINCS.pdf``
-- ``docs/upstream/20131220-04 Technical documentation for SFINCS with a single species.pdf``
-- ``docs/upstream/20131219-01 Technical documentation for SFINCS with multiple species.pdf``
-- ``docs/upstream/20150402-01 Implementation of the Fokker-Planck operator.pdf``
-- ``docs/upstream/20150325-01 Effects on fluxes of including Phi_1.pdf``
-- ``docs/upstream/Phi1_implementation_2016-01.tex``
-- ``docs/upstream/poloidal_variation_in_collision_operator_2017-09-08.tex``
-- ``docs/upstream/sfincsPaper/sfincsPaper.tex``
+The published reference for the model is M. Landreman, H. M. Smith, A. Mollén, and
+P. Helander, *Physics of Plasmas* **21**, 042503 (2014),
+`doi:10.1063/1.4870077 <https://doi.org/10.1063/1.4870077>`_.
+
+The narrative above additionally summarizes the following **unpublished upstream
+SFINCS project documents** (archived in the upstream repository,
+`github.com/landreman/sfincs <https://github.com/landreman/sfincs>`_; see
+:doc:`upstream_docs`):
+
+- Technical documentation for version 3 of SFINCS.
+- Technical documentation for SFINCS with a single species, and with multiple species.
+- Implementation of the Fokker--Planck operator.
+- Effects on fluxes of including :math:`\Phi_1`, and the :math:`\Phi_1` implementation note.
+- The poloidal-variation-in-collision-operator note.
