@@ -224,6 +224,13 @@ docs/upstream/**/*.synctex.gz
 # PyPI configuration file
 .pypirc
 
+# Heavy Fortran v3 reference goldens are committed only in lzma-compressed form
+# (tests/ref/*.xz); tests/conftest.py materialises these uncompressed copies on
+# demand (see tests/_golden_cache.py), so they must never be tracked.
+tests/ref/*.h5
+tests/ref/*.petscbin
+tests/ref/*.nc
+
 # Local benchmark scratch outputs.
 tests/current_*.json
 tests/current_sharded_*/
