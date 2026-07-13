@@ -268,6 +268,45 @@ def test_legendre_blocks_reject_l2_coupled_terms() -> None:
         op_md.legendre_blocks(0)
 
 
+def test_block_extraction_is_jit_safe_over_traced_operator_leaves() -> None:
+    """``to_block_tridiagonal`` must stay traceable when the operator *leaves*
+    are tracers (jit-over-leaves / vmap / the differentiable kernel).
+
+    Regression for the former ``mask = np.asarray(self._mask())`` host
+    round-trip in :meth:`KineticOperator.legendre_blocks`, which raised
+    ``TracerArrayConversionError`` once ``n_xi_for_x`` entered the trace.  A
+    ramped ``Nxi_for_x`` deck makes the truncation mask non-uniform (the
+    interesting, non-all-ones case); the extracted bands under jit-over-leaves
+    must match the eager bands to round-off (they differ only by ~1 float64 ULP
+    of XLA FMA contraction), so switching the mask to a traced jnp array leaves
+    the numerics unchanged.
+    """
+    text = (
+        PAS_DKES_ER_TEXT.replace("Nxi = 5", "Nxi = 16")
+        .replace("Nx = 3", "Nx = 5")
+        .replace("Nxi_for_x_option = 0", "Nxi_for_x_option = 1")
+    )
+    op = KineticOperator.from_namelist(parse_sfincs_input_text(text))
+    # the point of this fixture: a genuine speed-dependent Legendre ramp
+    assert int(np.min(np.asarray(op.n_xi_for_x))) < op.n_xi
+
+    leaves, treedef = jax.tree_util.tree_flatten(op)
+
+    def blocks_from_leaves(ls):
+        return jax.tree_util.tree_unflatten(treedef, ls).to_block_tridiagonal()
+
+    eager = op.to_block_tridiagonal()
+    jitted = jax.jit(blocks_from_leaves)(leaves)  # compiles (was a Tracer error)
+    for name in ("lower", "diag", "upper"):
+        np.testing.assert_allclose(
+            np.asarray(getattr(jitted, name)),
+            np.asarray(getattr(eager, name)),
+            rtol=1e-13,
+            atol=1e-13,
+            err_msg=f"{name} band changed under jit-over-leaves",
+        )
+
+
 # ---------------------------------------------------------------------------
 # Deferred features fail loudly at construction
 # ---------------------------------------------------------------------------
