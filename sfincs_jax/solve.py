@@ -52,6 +52,7 @@ and the PETSc ``Pmat`` idiom of production SFINCS.
 
 from __future__ import annotations
 
+import inspect
 import os
 import time
 from dataclasses import dataclass, replace
@@ -93,6 +94,16 @@ except ImportError as _solvax_exc:
     _SOLVAX_IMPORT_ERROR = _solvax_exc
 
 from sfincs_jax.drift_kinetic import KineticOperator  # noqa: E402
+
+
+# The nonzero-border-block ``d_block`` argument of
+# :func:`solvax.operators.schur_projected_precond` was upstreamed to solvax
+# (uwplasma/SOLVAX#20). Prefer it when the installed solvax exposes it; otherwise
+# fall back to the local ``_bordered_schur_precond`` so this module also works
+# against solvax releases that predate that argument.
+_SCHUR_ACCEPTS_D_BLOCK = schur_projected_precond is not None and (
+    "d_block" in inspect.signature(schur_projected_precond).parameters
+)
 
 
 def _require_solvax() -> None:
@@ -798,8 +809,14 @@ def build_coarse_preconditioner(
         # Phi1/lambda border block (``D``) are all probed exactly from the
         # Jacobian JVP, so only the f-block is approximated (GCROT corrects it).
         b_cols, c_rows, d_block = _materialize_full_border(op)
-        precond = _bordered_schur_precond(a_inv, b_cols, c_rows, d_block)
-        precond_t = _bordered_schur_precond(a_inv_t, c_rows.T, b_cols.T, d_block.T)
+        if _SCHUR_ACCEPTS_D_BLOCK:
+            precond = schur_projected_precond(a_inv, b_cols, c_rows, d_block=d_block)
+            precond_t = schur_projected_precond(
+                a_inv_t, c_rows.T, b_cols.T, d_block=d_block.T
+            )
+        else:
+            precond = _bordered_schur_precond(a_inv, b_cols, c_rows, d_block)
+            precond_t = _bordered_schur_precond(a_inv_t, c_rows.T, b_cols.T, d_block.T)
         return precond, precond_t
     if op.extra_size == 0:
         return a_inv, a_inv_t
