@@ -64,17 +64,17 @@ historical milestone comparison. It is not the release-facing status page.
 Historical reduced-runtime parity sweep (case-by-case)
 ------------------------------------------------------
 
-For rapid parity iteration, we also keep a reduced-resolution sweep generated with:
+For rapid parity iteration, we also keep the archived results of a
+reduced-resolution sweep. The runner that produced it (retired with the legacy
+pipeline) worked as follows:
 
-.. code-block:: bash
+1. copied each upstream input into ``tests/reduced_upstream_examples/<case>/input.namelist``,
+2. halved resolution axes adaptively until both Fortran and ``sfincs_jax`` runs were under 30s,
+3. compared the resulting ``sfincsOutput.h5`` files.
 
-   python -m sfincs_jax.validation.suite reduced --timeout-s 30 --max-attempts 6
-
-This workflow is still useful for fast local debugging and solver triage:
-
-1. copies each upstream input into ``tests/reduced_upstream_examples/<case>/input.namelist``,
-2. halves resolution axes adaptively until both Fortran and ``sfincs_jax`` runs are under 30s,
-3. compares resulting ``sfincsOutput.h5`` files.
+The reduced input decks are tracked in ``tests/reduced_inputs/``; a single case
+can still be run and compared directly with ``python -m sfincs_jax
+write-output`` and ``python -m sfincs_jax compare-h5`` (see :doc:`parity`).
 
 The practical table with per-case tolerance overrides is:
 

@@ -162,7 +162,8 @@ are float arrays. Gradients are accepted in every radial coordinate.
      - float; radial-electric-field drive in each coordinate
    * - ``collisionOperator``
      - ``0``
-     - int; 0 = full Fokker--Planck, 1 = pitch-angle scattering
+     - int; 0 = full Fokker--Planck, 1 = pitch-angle scattering, 3 = improved
+       Sugama model operator (momentum- and energy-conserving)
    * - ``constraintScheme``
      - ``-1``
      - int; source/constraint scheme (−1 = auto by collision operator)
@@ -195,13 +196,14 @@ are float arrays. Gradients are accepted in every radial coordinate.
      - int; 1 = full Boltzmann, 2 = EUTERPE adiabatic
    * - ``readExternalPhi1``
      - ``.false.``
-     - bool; **deferred** (see below)
+     - bool; treat :math:`\Phi_1` as a fixed external field (linear solve, no
+       Newton iteration)
    * - ``nuPrime`` / ``EStar``
      - ``1.0`` / ``0.0``
      - float; monoenergetic collisionality / electric field (``RHSMode=3``)
    * - ``magneticDriftScheme``
      - ``0``
-     - int; tangential magnetic drift (**> 0 deferred on the canonical stack**)
+     - int; tangential magnetic drift (schemes 0--9, matching Fortran v3)
    * - ``Krook``
      - ``0.0``
      - float; optional non-conserving drag
@@ -311,21 +313,22 @@ acted upon.
 
 These map onto the tier-2 coarse preconditioner in :doc:`numerics`.
 
-Deferred and unsupported inputs
--------------------------------
+Unsupported inputs
+------------------
 
-Stated plainly:
+Stated plainly, the remaining gaps against SFINCS Fortran v3 are:
 
-- **``&export_f`` group** — retained in ``raw`` only, untyped. Setting
-  ``export_full_f`` or ``export_delta_f`` rejects the run from the JAX pipeline
-  with a clear message ("export_f output is deferred to the legacy pipeline").
-- **``readExternalPhi1``** — parsed but not honored; a run with it set is routed
-  to the legacy pipeline, and reaching the canonical solver with it raises
-  ``NotImplementedError``.
-- **Non-stellarator-symmetric VMEC** — routed to the legacy owner; Boozer
-  ``.bc`` scheme 12 is the supported non-symmetric path (:doc:`geometry`).
-- **``magneticDriftScheme > 0``** and **resolution-ramp arrays** — deferred /
-  raw-only as noted above.
+- **MPI multi-node execution** — `sfincs_jax` runs single-node (multicore CPU
+  or GPU); there is no distributed-memory mode.
+- **Convergence-scan ramp arrays** (``NthetaNumRuns``, ``Nx_min``, ...) — no
+  typed fields; retained in ``raw`` only and not acted upon (see above).
+
+Everything else in the Fortran v3 input surface is fully supported on the
+canonical stack (see the README feature matrix for the parity evidence),
+including the ``&export_f`` group (``export_full_f`` / ``export_delta_f``),
+``readExternalPhi1`` (fixed external :math:`\Phi_1` as a linear solve),
+non-stellarator-symmetric (``lasym``) VMEC equilibria, and
+``magneticDriftScheme`` 0--9.
 
 Geometry and equilibrium inputs
 -------------------------------

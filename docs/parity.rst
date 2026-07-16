@@ -172,11 +172,21 @@ markers; use the summary generator to reproduce the table and figure):
 
    python examples/publication_figures/generate_fortran_suite_benchmark_summary.py
 
-To replace the tracked reports, run
-``python -m sfincs_jax.validation.suite scaled`` with
-either ``--fortran-exe /path/to/sfincs`` or a locally restored
-``--reference-results-root``. Slim source checkouts do not include the frozen
-Fortran HDF5 reference root used to produce the release-facing report files.
+The suite runner that produced the tracked reports was retired with the legacy
+pipeline; the reports are frozen release artifacts. To produce fresh Fortran
+reference outputs for a new comparison campaign, run the reference-data
+generator against a local Fortran build:
+
+.. code-block:: bash
+
+   python tools/generate_reference_data.py \
+     --binary /path/to/sfincs \
+     --examples-dir /path/to/sfincs/fortran/version3/examples \
+     --out-dir /tmp/reference-data-v2
+
+Day-to-day Fortran/JAX parity is enforced by the pytest golden gates: frozen
+``tests/ref`` fixtures plus the release-hosted reference data fetched by
+``python -m sfincs_jax.validation.data_fetch``.
 
 After a suite refresh, verify the structural output coverage explicitly:
 
@@ -197,21 +207,24 @@ runtime against that promoted reference lane:
      --threshold-ratio 1.25 \
      --min-baseline-runtime-s 1.0
 
-For faster targeted debugging, regenerate the reduced-suite files:
+The reduced-suite runner was retired along with the full-suite runner, so the
+reduced reports above are frozen archives. For faster targeted debugging, run
+one archived reduced-resolution case directly and compare against a local
+Fortran output:
 
 .. code-block:: bash
 
-   python -m sfincs_jax.validation.suite reduced --timeout-s 120 --max-attempts 1
+   python -m sfincs_jax write-output \
+     --input tests/reduced_inputs/HSX_FPCollisions_DKESTrajectories.input.namelist \
+     --out /tmp/sfincsOutput_jax.h5
 
-Reduced-suite default tolerances are ``rtol=5e-4`` and ``atol=1e-9``; override with ``--rtol``/``--atol``.
+   python -m sfincs_jax compare-h5 \
+     --a /tmp/sfincsOutput_jax.h5 --b /path/to/fortran/sfincsOutput.h5 \
+     --tolerances-json tests/reduced_inputs/HSX_FPCollisions_DKESTrajectories.compare_tolerances.json
 
-Target a single case family:
-
-.. code-block:: bash
-
-   python -m sfincs_jax.validation.suite reduced \
-     --pattern 'HSX_FPCollisions|filteredW7XNetCDF_2species_magneticDrifts|geometryScheme4_2species' \
-     --timeout-s 120 --max-attempts 1
+The archived practical reports used ``rtol=5e-4`` / ``atol=1e-9`` defaults with
+the per-case overrides in ``tests/reduced_inputs/*.compare_tolerances.json``;
+the strict reports ignore all overrides.
 
 Matrix/operator parity diagnosis against raw Fortran PETSc dumps is a
 research-branch workflow. The stable core keeps frozen-state diagnostic checks

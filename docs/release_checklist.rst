@@ -10,7 +10,7 @@ For a tagged release, `sfincs_jax` can claim the following only when the
 corresponding release artifacts are regenerated from the tagged commit:
 
 - full CPU and GPU parity for the vendored 39-case example suite, including
-  the compact release-audit extra input documented in the validation suite,
+  the compact release-audit extra input recorded in the tracked suite roots,
 - no ``jax_error`` or ``max_attempts`` in the release-facing suite artifacts,
 - matching ``sfincsOutput.h5`` common numeric datasets, zero missing Fortran top-level
   output keys in JAX, and the required terminal-output signals for the supported examples.
@@ -107,29 +107,25 @@ Smoke-run the examples that do not require optional dependencies:
    python examples/getting_started/write_sfincs_output_cli.py
    python examples/autodiff/matrix_free_residual_and_jvp.py
 
-Release-facing full suite run (vendored upstream inputs). A slim checkout does
-not include the frozen Fortran HDF5 reference root, so use either a local
-Fortran executable or a locally restored reference root:
+The release-facing suite roots under ``tests/`` are frozen artifacts of the
+retired suite runner; refreshing them is a research-branch campaign, not a
+stable-checkout command. For a new Fortran/JAX comparison, generate fresh
+Fortran reference outputs from the vendored upstream inputs with a local
+Fortran build, then audit the tracked roots with the release tools below:
 
 .. code-block:: bash
 
-   python -m sfincs_jax.validation.suite scaled \
-     --examples-root examples/sfincs_examples \
-     --resolution-reference-root /Users/rogeriojorge/local/tests/sfincs_original/fortran/version3/examples \
-     --fortran-exe /path/to/sfincs \
-     --out-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak \
-     --scale-factor 1.0 \
-     --runtime-target-basis fortran \
-     --fortran-min-runtime-s 0.0 \
-     --runtime-adjustment-iters 0 \
-     --jax-profile-marks on
+   python tools/generate_reference_data.py \
+     --binary /path/to/sfincs \
+     --examples-dir /path/to/sfincs/fortran/version3/examples \
+     --out-dir /tmp/reference-data-v2
 
-Each suite run writes:
+Each tracked suite root carries:
 
-- ``suite_output_key_coverage.json``
+- ``suite_report.json`` (and ``suite_report_strict.json`` where applicable)
 - ``suite_output_key_coverage_summary.json``
-- and, when ``--runtime-baseline-report`` is provided,
-  ``suite_runtime_drift.json`` plus ``suite_runtime_drift_summary.json``.
+- ``suite_runtime_drift.json`` plus ``suite_runtime_drift_summary.json``
+  for lanes audited against a baseline report.
 
 For release promotion, require:
 

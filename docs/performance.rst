@@ -327,6 +327,16 @@ The design choices that produce the numbers above, in one place:
 - **Preconditioning by a simplified exact solve.** Tier 2 is right-preconditioned
   by an exact tier-1 solve of a collision-/drift-simplified coarse operator (the
   Fortran ``preconditionerOptions`` idiom).
+- **Phi1-aware bordered-Schur coarse preconditioner.** The :math:`\Phi_1`
+  Newton inner solve is preconditioned by a generalized bordered Schur
+  complement that eliminates the quasineutrality border (the
+  :math:`\Phi_1(\theta,\zeta)` / :math:`\lambda` / source rows) exactly through
+  the coarse f-block solve plus a small dense Schur solve
+  (:func:`sfincs_jax.solve.build_coarse_preconditioner`). On the production PAS
+  Phi1 case this took the inner Krylov solve from 9198 unpreconditioned
+  iterations (about 398 s) to 5 iterations (about 13.5 s), a roughly 29x
+  speedup, with answers identical to machine precision and the differentiable
+  path preserved.
 - **Short-recurrence Krylov for transport.** RHSMode=2/3 solves default to
   memory-lean BiCGStab with a collision-diagonal preconditioner, with GMRES as a
   fallback.

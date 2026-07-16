@@ -88,13 +88,18 @@ uses those coefficients to build the drift terms in the DKE. [#boozer1980]_
 Collision operators
 -------------------
 
-SFINCS supports two collision models:
+SFINCS Fortran v3 supports two collision models, and `sfincs_jax` adds a third:
 
-- **Pitch-angle scattering (PAS)**: a diagonal-in-:math:`L` operator used for
-  reduced models and benchmark suites.
-- **Full linearized Fokker–Planck (Landau)**: implemented via Rosenbluth potentials
+- **Pitch-angle scattering (PAS)** (``collisionOperator = 1``): a
+  diagonal-in-:math:`L` operator used for reduced models and benchmark suites.
+- **Full linearized Fokker–Planck (Landau)** (``collisionOperator = 0``):
+  implemented via Rosenbluth potentials
   and dense coupling in the speed coordinate. This is the default for high-fidelity
   multispecies studies.
+- **Improved Sugama model operator** (``collisionOperator = 3``): the momentum-
+  and energy-conserving improved linearized model operator of Sugama *et al.*
+  (2019), a `sfincs_jax` research extension beyond Fortran v3 that remains
+  accurate into the highly collisional regime.
 
 The linearized FP operator is the most accurate model for neoclassical transport in
 SFINCS and is the basis for the collision-driven preconditioners used in `sfincs_jax`.
@@ -158,7 +163,7 @@ schematically
    j_\parallel = \sum_s Z_s e V_{\parallel,s}.
 
 `sfincs_jax` evaluates these moments in :mod:`sfincs_jax.moments` (with
-geometry-derived scalars in :mod:`sfincs_jax.diagnostics`).
+geometry-derived scalars in :mod:`sfincs_jax.magnetic_geometry`).
 
 Trajectory-model knobs
 ----------------------
