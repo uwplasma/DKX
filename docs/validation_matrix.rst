@@ -395,15 +395,17 @@ Solver-path policy refactor
 
 Current source and tests:
 
-- ``sfincs_jax/solvers/path_policy.py``
-- ``tests/test_solver_path_policy.py``
+- ``sfincs_jax/solve.py`` (the three-tier auto-policy and its tier-selection
+  helpers)
+- ``tests/test_solve.py`` and the solver-trace tests
 
 Scope and status:
 
-- The refactor centralizes directly testable policy decisions for solver JIT
-  eligibility, preconditioner dtype selection, PAS geometry-4 FP32 gating,
-  residual-rescue slack, DKES GMRES budget preservation, sparse-PC defaults,
-  structural-tolerance parsing, and resource-exhaustion classification.
+- Solver-path selection (tier eligibility, memory-based auto-selection,
+  preconditioner construction, residual gates, and recycling) is centralized
+  in ``sfincs_jax/solve.py``; the standalone legacy policy module was retired
+  with the legacy solver packages. Selection decisions are recorded in the
+  versioned solver trace (``sfincs_jax/solver_trace.py``).
 - This is a maintainability and reproducibility gate for solver-path selection.
   It does not by itself support a new performance or physics claim.
 
