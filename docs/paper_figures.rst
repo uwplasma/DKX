@@ -164,9 +164,11 @@ visible before committing to the full FP/PAS LHD+W7-X extension:
      --skip-existing \
      --scan-only
 
-The publication-figure scan launcher forces ``SFINCS_JAX_IMPLICIT_SOLVE=0`` for
-these executable scans. That keeps high-collisionality transport on the explicit
-performance path. The run plan caps sparse direct solves at ``30000`` active
+These executable scans run on the explicit (non-differentiable) performance
+path: the scan subprocesses go through the ``sfincsScan`` CLI flow, whose
+solves are explicit by default — implicit differentiation is opt-in from the
+Python API — and the launcher records ``implicit_solve: false`` in each run
+plan for provenance. The run plan caps sparse direct solves at ``30000`` active
 unknowns by default: the LHD FP pilot remains on the accurate host sparse-LU
 path, while larger W7-X FP high-``nu'`` runs must explicitly opt into the
 ``40000`` cap after a bounded pilot proves the residual gate is clean. The same
