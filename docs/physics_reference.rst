@@ -216,8 +216,8 @@ reduces to the collisionless streaming/mirror plus collisions.
    ``KineticOperator._er_xidot`` and ``_er_xdot``. The trajectory model is therefore encoded entirely by
    three flags: ``useDKESExBDrift`` (DKES :math:`E\times B`),
    ``includeElectricFieldTermInXiDot``, and ``includeXDotTerm``. The tangential
-   *magnetic* drift (``magneticDriftScheme > 0``) is deferred on the canonical
-   stack (``NotImplementedError`` at drift_kinetic.py); the ``full``
+   *magnetic* drift terms (``magneticDriftScheme`` 1--9, matching the Fortran
+   ``select case`` blocks) are assembled in ``drift_kinetic.py``; the ``full``
    trajectory here means the full :math:`E_r` terms.
 
 Thermodynamic and inductive drives
@@ -261,8 +261,11 @@ below).
 Collision operators
 -------------------
 
-`sfincs_jax` implements the two SFINCS collision models, selected by
-``collisionOperator``.
+`sfincs_jax` implements three collision models, selected by
+``collisionOperator``: the two SFINCS v3 operators (full Fokker--Planck and
+pitch-angle scattering) plus the momentum- and energy-conserving improved
+Sugama model operator (``collisionOperator = 3``), a research extension beyond
+Fortran v3.
 
 Pitch-angle scattering (``collisionOperator = 1``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -337,6 +340,26 @@ is the dominant cost of a multi-species Fokker--Planck run.
    pitch-angle-scattering and Fokker--Planck blocks are applied through
    ``KineticOperator.apply_f``.
 
+Improved Sugama model operator (``collisionOperator = 3``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A research extension beyond Fortran v3: the momentum- and energy-conserving
+*improved* linearized model collision operator of Sugama *et al.*
+(Phys. Plasmas 26, 102108, 2019), built with the moment-based field-particle
+construction of Frei, Ernst & Ricci (Phys. Plasmas 29, 093902, 2022). The
+test-particle part reuses the Fokker--Planck deflection and energy-diffusion
+kernels; the field-particle back-reaction is a low-rank moment term (L=0
+particle/energy, L=1 parallel momentum) whose coefficients cancel the
+test-particle moment functionals algebraically, so conservation is exact at
+the collocation level. It assembles into the same per-``L`` dense speed blocks
+as the Fokker--Planck operator.
+
+.. admonition:: Where in the code
+
+   The improved Sugama construction lives in :mod:`sfincs_jax.collisions`
+   next to the Fokker--Planck blocks and shares the same matvec
+   (``apply_fokker_planck_v3``), applied through ``KineticOperator.apply_f``.
+
 Flux-surface potential variation :math:`\Phi_1` and quasineutrality
 -------------------------------------------------------------------
 
@@ -373,7 +396,9 @@ map is differentiable through the implicit-function theorem.
    factor :math:`n_s e^{-Z_s\alpha\Phi_1/\hat T_s}` is applied in ``apply_f``.
    The nonlinear Newton driver is :func:`sfincs_jax.phi1.solve_phi1`, with the
    differentiable variant
-   :func:`sfincs_jax.phi1.phi1_state`. ``readExternalPhi1`` is deferred.
+   :func:`sfincs_jax.phi1.phi1_state`. ``readExternalPhi1`` treats
+   :math:`\Phi_1` as a fixed external field: a linear solve (no Newton
+   iteration) routed through :func:`sfincs_jax.run.run_profile`.
 
 Moments, fluxes, and transport coefficients
 -------------------------------------------
