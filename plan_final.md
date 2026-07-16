@@ -1,12 +1,12 @@
-# SFINCS_JAX Core-Slim Final Plan
+# SFINCS_JAX Active Plan
 
-Last updated: 2026-07-11. Active branch: `main` (PR #8 merged; single-branch repo)
+Last updated: 2026-07-15. Active branch: `main` (single-branch repo; v1.2.0
+released on PyPI and GitHub).
 
-This is the single active plan for the refactor branch. `plan.md` is the historical execution log. Do not create another competing plan. If any README, docs page, old
-branch note, issue, benchmark artifact, or checklist conflicts with this file, follow
-this file. This revision folds the previously separate architecture plan (see git
-history of `plan_claude.md`) into this document; its research notes, literature
-citations, and phase details remain available in history and in `docs/`.
+This is the single active plan. `plan.md` is the historical execution log.
+Do not create another competing plan. If any README, docs page, old branch
+note, issue, benchmark artifact, or checklist conflicts with this file,
+follow this file.
 
 ## One-Sentence Goal
 
@@ -19,225 +19,183 @@ bootstrap current, transport coefficients, plotting, and optimization.
 
 ## Current Review State
 
-- Branch head follows the canonical-stack series: a parity-pinned replacement
-  architecture now exists as flat root modules — `constants.py`, `species.py`,
-  `phase_space.py` (grids/discretization), `magnetic_geometry.py`,
-  `collisions.py`, `drift_kinetic.py` (the `KineticOperator`), `solve.py`
-  (three solver tiers on the external `solvax` library), `moments.py`
-  (diagnostics keyed by sfincsOutput.h5 names), `inputs.py` (typed namelist
-  with Fortran-cited defaults), and `console.py` (byte-parity Fortran stdout).
-  Each was admitted with equivalence tests against the old implementation
-  (1e-13..1e-15) and, where applicable, Fortran golden data
-  (`reference-data-v2` release) and tiny-grid PETSc matrix dumps.
-- The canonical stack covers every SFINCS v3 physics family: PAS + full-FP
-  collisions, DKES and full trajectories, RHSMode 1/2/3, constraint schemes
-  -1..4, geometry schemes 1/2/3/4/5/11/12/13 (with lasym),
-  Phi1/quasineutrality (kinetic, collision, readExternalPhi1), tangential
-  magnetic drifts 0-9, xGridScheme 1-8 with xDotDerivativeScheme -2..11, and
-  export_f/.npz/solver traces. The legacy pipeline was deleted (the big trim).
-- The external solver library `solvax` (github.com/uwplasma/SOLVAX) owns the
-  reusable numerics: block-tridiagonal Schur elimination (full, factor/solve
-  split, truncated-storage, transposed factor reuse, callback block assembly),
-  banded/periodic LU, recycled FGMRES/GCROT, coarse-operator and multigrid
-  preconditioners, implicit differentiation, mixed-precision refinement, and a
-  host SuperLU bridge (98% coverage, docs on Read the Docs). `sfincs_jax`
-  treats it as an optional dependency until it is published on PyPI; imports
-  are lazy/guarded and CI installs it from git.
-- The Repository-Wide Line Sweep executed: the legacy `problems/`,
-  `operators/`, `solvers/`, `outputs/`, `discretization/`, `geometry/`, and
-  `physics/` packages were deleted with their tests migrated to
-  Fortran-golden referees (package ~98k -> ~31k lines). The measured Fortran
-  baselines
-  (strong-scaling table, production-size memory limits, the ill-conditioned
-  scheme-1 monoenergetic off-diagonal) live in `docs/dev/failure_analysis.md`
-  pending promotion into `docs/` performance pages.
+Shipped state as of v1.2.0 (2026-07-13):
+
+- The canonical flat-module stack covers every SFINCS v3 physics family: PAS,
+  full linearized Fokker-Planck, and the improved Sugama model operator
+  (`collisionOperator = 0/1/3`); DKES and full trajectories; RHSMode 1/2/3;
+  constraint schemes -1..4; geometry schemes 1/2/3/4/5/11/12/13 with lasym;
+  Phi1/quasineutrality (kinetic, collision, readExternalPhi1); tangential
+  magnetic drifts 0-9; xGridScheme 1-8 with xDotDerivativeScheme -2..11;
+  export_f/.npz/solver traces. The legacy stack is deleted (98k -> ~34k lines)
+  and must not return.
+- Research capabilities beyond Fortran v3: Sugama-Nishimura momentum
+  correction, monoenergetic (nuPrime, EStar) database mode with energy
+  convolution, batched multi-`Er`/multi-surface `jax.vmap` scans, variational
+  D11 upper/lower bounds, Shaing-Callen collisionless limit, and a
+  differentiable bounce-averaged 1/nu effective-ripple surrogate with
+  differentiable bounce points.
+- Solver tiers live on `solvax` (PyPI, a **core dependency**): tier-1
+  structured block-Thomas direct (full/truncated/ramp-aware), tier-2 recycled
+  GCROT with an exact bordered-Schur coarse preconditioner, tier-3 host
+  SuperLU referee. The bordered-Schur primitive with a nonzero border block
+  `D` is upstreamed (`solvax.operators.schur_projected_precond(d_block=...)`);
+  `solve.py` dispatches to it when the installed solvax exposes it. The Phi1
+  Newton inner solve is preconditioned through the same machinery (production
+  PAS Phi1: 9198 unpreconditioned inner iterations / ~398 s -> 5 / ~13.5 s,
+  answers identical to machine precision). The improved-Sugama operator
+  solves on the differentiable tier-2 (verified tier2 == tier3 to 5.7e-12,
+  AD-vs-FD gradient 8.8e-12).
+- Repository: 15 MB tracked (goldens lzma-compressed and materialised on
+  demand; docs 4.7 MB with primary-literature citations only); docs build
+  clean under `sphinx -W`; CI green (six coverage shards, <10 min each,
+  heavy multi-compilation integration tests marked `slow`); 1000+ tests,
+  Fortran-golden parity referees throughout.
+- Flagship example: precise-QA vs precise-QA-held + bootstrap-reduction
+  through the differentiable vmec_jax -> booz_xform_jax -> sfincs_jax chain
+  (exact implicit/adjoint gradients end to end).
+
+## Concrete Code-Audit Rules
+
+- Equivalence is the admission referee: canonical changes land with tests
+  pinning them to Fortran golden data at documented tolerances.
+- Solver/preconditioner promotion into `auto` requires the production gates:
+  strict true residual, field-by-field Fortran parity, cold/warm runtime,
+  peak memory, CPU/GPU agreement where available, FD-checked gradients when
+  the path claims differentiability.
+- No env-var-only solver routes in stable code; opt-ins are namelist or API
+  arguments. (Applies to external PRs too — request an API knob when a
+  contribution ships env-var-only routing.)
+- The `solvax` boundary: physics-free numerics belong in solvax. Contribute
+  via PR branches off `origin/main` (solvax is actively PR-developed); gate
+  downstream adoption on the released PyPI version with signature guards.
+- Attribution: all commits authored as Rogerio Jorge; no AI co-author
+  trailers. Third-party research codes other than SFINCS are never named in
+  tracked files; adopted numerical ideas cite the primary literature.
+- Repo hygiene: no tracked file > 2 MB; heavy goldens committed only as
+  `tests/ref/*.xz`; README <= ~250 lines; docs cite, never vendor.
 
 ## Open Lanes
 
 | Lane | Status | Done when |
 | --- | --- | --- |
-| Canonical-stack replacement | Active | Public API/CLI route every supported case through `inputs -> drift_kinetic -> solve -> moments -> writer/console`; each slice deletes its old owners in the same series. |
-| Physics completion | Active | Phi1/quasineutrality, tangential magnetic drifts, constraint schemes 3/4, export_f, and non-stellarator-symmetric VMEC land in the canonical stack with parity gates, or are explicitly deferred with the old owner retained. |
-| Performance and memory | Active | Supported cases meet the production admission gates below; the truncated block elimination demonstrates production-resolution runs that dense/MUMPS approaches cannot fit locally. |
-| Strong-scaling parallelization | Active | On the local dev machine, sfincs_jax at N cores is competitive with `mpiexec -n N` Fortran (measured floor for the 744k-unknown HSX PAS case: 229.5 s at 2 ranks, degrading beyond); sharding is declared once at the grid layer (`shard_map`, virtual CPU devices), batch axes first, operator rows second. |
-| Examples/tests/scripts cleanup | Active | Examples are original SFINCS-v3 references plus <=10 curated workflows; tests are smaller, meaningful, >=95% coverage, and default CI is under 10 minutes. |
-| Parity/performance evidence | Active | Supported cases have checked Fortran-v3 parity/runtime/RSS/bootstrap evidence at documented grids; unpromoted cases are not marketed as stable. |
-| Docs/readme | Active | Public docs describe standalone stable software with equations, algorithm derivations, and verified citations; README <=~250 lines with badges and honest benchmarks. |
+| Strong-scaling / time-to-solution evidence | Active | The measured table, throughput framing, and harness below are published in docs/performance and the README table refreshed. |
+| Research roadmap items 1-6 | Queued | Each lands per the roadmap section with parity/gradient gates. |
 
-## Source Structure Rules
+### Strong-scaling / time-to-solution lane
 
-The stable package converges to flat, physics-named root modules; one-level
-domain packages only where a package earns its keep.
+The community norm (set by the recent monoenergetic-solver literature) is
+time-to-solution tables plus resolution-convergence evidence, not classic
+speedup curves. Deliverable:
 
-| Canonical owner | Stable purpose |
-| --- | --- |
-| `constants.py`, `species.py` | normalizations, radial-coordinate Jacobians, species pytrees, collisionality |
-| `phase_space.py` | theta/zeta grids and derivative matrices, Legendre pitch machinery, speed grid, Nxi-for-x ramps |
-| `magnetic_geometry.py` | all geometry schemes, VMEC/Boozer readers, differentiable Fourier path |
-| `collisions.py` | pitch-angle scattering and full Fokker-Planck with Rosenbluth terms |
-| `drift_kinetic.py` | the KineticOperator: term assembly, matrix-free apply, analytic Legendre blocks, RHS drives, bordered constraints |
-| `solve.py` | three-tier policy: structured block elimination, preconditioned recycled Krylov, host direct referee; implicit differentiation |
-| `moments.py` | velocity-space moments, flux families, transport matrices, NTV, classical transport |
-| `inputs.py`, `console.py` | typed namelist (Fortran-cited defaults/validation), byte-parity stdout blocks |
-| `api.py`, `cli.py` | thin public surface over the canonical modules |
-| future: `er.py`, `phi1.py`, `writer.py` | ambipolar root solve, quasineutrality slice, output files |
+1. Measured table on the 744k-unknown HSX PAS production deck: Fortran v3
+   MPI at n = 1/2/4/8 (laptop, 10 cores) and n = 1..32 (36-core
+   workstation), against `sfincs_jax` single-process (all cores) cold and
+   warm, and single-GPU. Report solve-driver seconds and end-to-end seconds.
+2. Batched-throughput framing: monoenergetic coefficients/second and
+   surfaces/second from the vmap scan API on CPU and GPU (the axis where a
+   single JAX process replaces an MPI allocation).
+3. Publish: `tools/benchmarks/` harness + a docs/performance section with the
+   table and reproduction commands. Local Fortran baselines recorded at
+   `fortran_scaling_baseline/`; workstation runs under `~/sfincs_scaling`.
 
-Old owners (`problems/`, `operators/`, `solvers/`, `outputs/`, `discretization/`,
-`geometry/`, `physics/`, `validation/`, `workflows/`, and implementation-heavy
-root modules) shrink to zero through vertical-slice replacement; every slice
-that routes a case family through the canonical stack deletes the superseded
-old files in the same series. Stable file names must describe physics or
-numerics — no `v3_`, version suffixes (`_v2`), `probe`, `campaign`, `rescue`,
-`candidate`, `legacy`, `hard_seed`, `native`, `symbolic`, `multifrontal`,
-`hss`, `blr`, or `qi_*` names. No nested package directories under
-`sfincs_jax/`.
+## Research Roadmap (2026-07 literature review)
 
-## Concrete Code-Audit Rules
+Priorities informed by the current landscape: a direct JAX competitor exists
+without a published methods paper; the recognized benchmark template is the
+monoenergetic-database comparison; kinetic-solver-in-the-loop optimization is
+the community-stated need; gradient-based optimization through a full local
+DKE solve has not been published by anyone.
 
-- Every stable file starts with a module docstring naming its physics/numerics
-  purpose and the SFINCS Fortran counterpart it mirrors; public functions
-  document units and normalization conventions.
-- Equivalence is the admission referee: a canonical module lands only with
-  tests pinning it to the old implementation (or Fortran golden data) at
-  documented tolerances; behavior changes require an explicit, tested reason.
-- Solver or preconditioner promotion into `auto` requires the production
-  admission gates: strict true residual, field-by-field Fortran parity on the
-  supported matrix, cold and warm runtime, process peak memory, CPU/GPU
-  agreement where available, and a finite-difference-checked gradient when the
-  path claims differentiability.
-- No env-var-only solver routes in stable code. Opt-in switches are namelist
-  or API arguments with documented semantics; experiments live on research
-  branches.
-- The `solvax` boundary: anything with no neoclassical physics in it (linear
-  algebra, Krylov, preconditioners, implicit diff) belongs in solvax, not in
-  this package. sfincs_jax must import solvax lazily until it is on PyPI, and
-  every module must remain importable without it.
-- Attribution: all commits authored as Rogerio Jorge; no AI co-author
-  trailers. Third-party research codes other than SFINCS are never named in
-  tracked files; adopted numerical ideas cite the primary literature.
-
-## Repository-Wide Line Sweep
-
-EXECUTED. Every vertical slice landed and the legacy pipeline was deleted in
-one final trim: the `problems/`, `operators/`, `solvers/`, `outputs/`,
-`discretization/`, `geometry/`, and `physics/` packages, root `grids.py` and
-`diagnostics.py`, and `workflows/mapped_xgrid.py` are gone; the live pieces
-were promoted (`solver_trace.py`, `xgrid.py`, `workflows/geometry_adapters.py`,
-the read side of `io.py`). Legacy-oracle tests were replaced by Fortran-golden
-referees (petscbin matvec/residual/state and sfincsOutput.h5 comparisons).
-`tests/fixtures/source_tree_expected.json` and `sfincs_jax/README.md` describe
-the canonical-only tree. The package now measures ~31k lines (from ~98k),
-inside the canonical end-state target of roughly 15-20 root modules plus small
-`io`-adjacent helpers (<=35k lines including docstrings).
-
-## File-Level Execution Queues
-
-All queued slices are DONE and their legacy owners deleted:
-
-1. RHSMode 3 slice (PAS/DKES) — canonical end to end.
-2. RHSMode 2 slice (same operators, three drives) — canonical.
-3. RHSMode 1 PAS and FP slices — canonical with writer/console parity.
-4. Ambipolar `er.py` (Brent parity + differentiable root) — canonical.
-5. Phi1/quasineutrality + tangential magnetic drifts — canonical.
-6. Writer consolidation + export_f — canonical (`writer.py`).
-
-Remaining file-level work happens through the Ordered Finish Plan lanes
-(behavior-suite consolidation, examples curation, docs rebuild), not through
-legacy deletions.
+1. **Methods + benchmark paper (top priority, medium scope).** Assemble: the
+   ICNTS-style monoenergetic benchmark (D11*, D31* vs collisionality and
+   Er/v for W7-X standard, LHD, TJ-II) against DKES/Fortran references;
+   bootstrap convergence toward the Shaing-Callen limit at low collisionality
+   (including the documented sub-asymptote dip); one W7-X ambipolar-Er
+   experimental case; a reactor-profile full-transport case; wall-clock
+   time-to-solution and coefficients/second tables; AD-vs-FD gradient
+   verification tables. Most pieces exist as modules/tests — the work is
+   assembly, convergence studies, and writing.
+2. **Kinetic-in-loop bootstrap-consistent optimization demo (medium).**
+   Replace analytic bootstrap proxies with the actual kinetic solve in a
+   precise-QA/QH optimization (gradients are free here), plus one QI
+   bootstrap-minimization case on a public benchmark boundary.
+3. **Differentiable ambipolar/electron-root optimization workflow
+   (small-medium).** Productize d(ambipolar Er)/d(shape): multi-species
+   reactor profiles, branch handling near root transitions, one
+   ion-to-electron transport-ratio optimization example.
+4. **Impurity package (small-medium).** Classical fluxes (nearly free,
+   algebraic), mixed-collisionality high-Z benchmark vs Fortran Phi1
+   results, vmap over charge states, temperature-screening-aware gradients.
+5. **Low-collisionality validity extension (large).** sqrt(nu) and
+   superbanana-plateau regimes validated against bounce-averaged references
+   and the Shaing-Callen convergence study; emit local-validity diagnostics
+   (orbit-width/Er-layer parameters).
+6. **Solver kernels (medium, opportunistic).** Adopt new solvax capabilities
+   as released: `d_block` Schur (done upstream), iterative refinement /
+   mixed-precision block-Thomas (replace the hand-rolled refinement step in
+   `solve.py`), `chunk_map` (replace hand-rolled batch chunking), deflated /
+   recycled Krylov across scan and optimizer continuation points.
+7. Nice-to-have: differentiable ML surrogate distilled from the
+   monoenergetic database; parallel-flow validation module against the
+   published W7-X flow database; low-rank/tensor-train exploration stays a
+   research branch.
 
 ## Ordered Finish Plan
 
-1. Keep CI green: the source-tree manifest, package README, and this plan are
-   updated in the same commit as any module addition, rename, or deletion.
-2. Execute the vertical slices in the order above; each slice ends with: the
-   canonical path as default for its cases, old owners deleted, parity/runtime
-   evidence recorded, and package lines lower than before the slice.
-3. Land the strong-scaling lane: joint XLA/BLAS thread budgeting exposed as
-   one `--cores`/API knob; shard the tier-1 batch axes and preconditioner line
-   batches via one mesh declaration; add `tools/benchmarks/strong_scaling.py`
-   and publish speedup-vs-cores curves against the measured Fortran table.
-4. Promote the benchmark/evidence tooling: the head-to-head and
-   reference-data generators live in `tools/`, produce the README table, and
-   the release gates consume `reference-data-v2` (retiring hard-coded local
-   paths and the v1-only manifest).
-5. Curate examples to original v3 references plus <=10 workflows (CLI solve/
-   plot, Python solve, output formats, transport coefficients, bootstrap/Redl,
-   ambipolar root, autodiff/JVP, VMEC/Boozer loading, optimization objective,
-   validation comparison), each a single readable script on the public API.
-   Example style contract (simsopt-like): no main() functions; input
-   parameters at the top; the user writes the objective function in the
-   script; gradients come from jax.grad/value_and_grad or library functions
-   that ship with gradients; scripts show how to read/create input files,
-   write outputs, plot, and print initial conditions, run progress, and final
-   results; no auxiliary functions that belong in the library. Flagship
-   optimization: QA stellarator with low bootstrap current following the
-   vmec_jax QA workflow with <j.B> from the kinetic solve (warm-started
-   solves + recycling across iterations, autodiff accuracy tested vs finite
-   differences, fast on CPU and GPU); alternative objectives (D11, L1, ...)
-   present as commented lines that are themselves CI-tested so uncommenting
-   them just works.
-6. Consolidate tests into behavior suites; coverage >=95% comes primarily from
-   deleting unreachable/experimental code, not from new test mass; default CI
-   under 10 minutes.
-7. Rebuild README/docs from the canonical stack: equations, discretization and
-   solver-tier derivations with literature citations, complete namelist and
-   output references, honest benchmark tables from `tools/benchmarks/`.
-8. Only after the replacement is complete, CI is green, and the PR reviewed:
-   repository hygiene (large-blob history rewrite, mailmap email unification,
-   release assets policy) and the PyPI/docs release train for `sfincs_jax` and
-   `solvax`. History rewriting is not part of ordinary refactor execution.
+1. Finish the strong-scaling/time-to-solution lane (measurements running on
+   laptop + workstation; GPU leg on the workstation's A4000s; then the
+   harness + docs section + README table refresh).
+2. Land the stale-docs fix branch (`par-docsfix`: inputs.rst limitations
+   block, validation.suite commands, collisionOperator=3 mentions,
+   architecture text, solvax-core wording, figure fix).
+3. External PR #9 (Rosenbluth quadrature stabilization): reviewed, tests
+   pass locally; request a namelist/API opt-in (env-var-only route conflicts
+   with the standing rule) then merge.
+4. solvax: next release (>=0.8.5) carries `d_block`; bump the sfincs_jax
+   minimum then and swap the hand-rolled refinement/chunking for the solvax
+   primitives (roadmap item 6).
+5. Start roadmap item 1 (methods-paper benchmark assembly).
 
-## No-Microtranche Rule
+## Source Structure Rules
 
-Do not spend a commit on one private helper unless it immediately unlocks a
-larger deletion. Start every work block from the slice queue above, delete or
-extract before moving code, keep file count flat or lower, prefer one clear
-domain file over many attempt-named files, add absence tests for extracted
-paths, and run focused tests plus one import/compile guard before committing.
-Full coverage and production benchmark runs happen at slice milestones.
+Flat, physics-named root modules; one-level domain packages only where a
+package earns its keep (`validation/`, `workflows/`). Stable file names
+describe physics or numerics — no version suffixes or attempt-names; no
+nested packages under `sfincs_jax/`. The module table in
+`sfincs_jax/README.md` and `tests/fixtures/source_tree_expected.json` are the
+enforced inventory; both are updated in the same commit as any module
+addition, rename, or deletion.
 
 ## Standard Validation Commands
 
 - `python -m pytest tests/test_source_tree_consolidation.py -q` (structure,
   plan governance, README contract)
 - `python -m pytest <touched-test-files> -q` per change; full
-  `python -m pytest -q` at slice milestones
-- `ruff check sfincs_jax tests tools`
-- `python -m compileall sfincs_jax -q`
-- `python -m pytest tests/test_docs_claims.py -q` when docs/README change
-- Size guard: no tracked file >2 MB; large artifacts go to GitHub releases
+  `python -m pytest -q -n auto -m "not slow"` at milestones
+- `ruff check sfincs_jax tests tools` and `python -m compileall sfincs_jax -q`
+- `micromamba run -n sfincs-jax python -m sphinx -b html docs docs/_build/html -q -W --keep-going`
+  when docs/README change
+- Size guard: no tracked file > 2 MB; heavy goldens only as `tests/ref/*.xz`
 
 ## Completion Gates
 
-- Every supported case family runs through the canonical stack by default;
-  the old `problems/operators/solvers/outputs` owners for that family are
-  deleted; package lines decrease at every slice milestone toward <=50k and
-  the canonical end-state.
+- CI green on main (six coverage shards under 10 minutes each); docs `-W`
+  clean; coverage >= the enforced fail-under.
 - Solver promotions pass the production admission gates (residual, parity,
   cold/warm runtime, peak memory, CPU/GPU, gradient).
-- `solvax` is a declared dependency once published on PyPI; until then it is
-  optional, lazily imported, and CI-installed from git.
-- Examples <=10 curated workflows plus v3 references; `benchmarks/` absent;
-  `scripts/` empty or documented release tooling.
-- Tests are smaller and meaningful, >=95% coverage, default CI under 10
-  minutes; parity gates consume the `reference-data-v2` release assets.
-- README/docs match the slim core, include the measured baselines (Fortran
-  strong-scaling table, memory limits), and do not market research paths.
-- No generated clutter, caches, local profiles, large binary artifacts, or
-  machine-specific paths in the tracked tree.
-- PR #8 is clean, pushed, and ready for review; history rewrite and releases
-  happen only after review.
+- README/docs match the shipped core with measured, reproducible benchmarks;
+  research paths are not marketed as stable.
+- Releases: version bumped in `pyproject.toml` + `__init__.py` together; a
+  `v*` tag push publishes to PyPI (irreversible — explicit sign-off only).
 
 ## Explicit Deferred Items
 
-Deferred unless production-gated: experimental QI/device-QI, native
-sparse-direct research, multifrontal replacements, lower-memory preconditioner
-research, GPU/multi-GPU campaigns, publication audits, and long stellarator
-optimization campaigns. They may be referenced in `docs/research_lanes.rst`
-only; they must not remain as stable source, examples, tests, README claims, or
-default solver branches. Every SFINCS v3 physics family is canonical and
-Fortran-golden gated; the legacy stack is deleted and must not return.
-Invalid-in-Fortran namelist values (quasineutralityOption > 2,
-collisionOperator > 1, constraintScheme > 4) are validation errors, not
-legacy fallbacks. The repository history rewrite and the PyPI release train are
-deferred to after review per the Ordered Finish Plan.
+Deferred unless production-gated: radially-global effects, MPI multi-node
+execution (single-node multicore + GPU is the supported envelope),
+experimental QI/device-QI campaigns, native sparse-direct research,
+low-rank/tensor-train kinetic solvers, publication audits, and long
+stellarator optimization campaigns. Invalid-in-Fortran namelist values
+(quasineutralityOption > 2, collisionOperator not in {0, 1, 3},
+constraintScheme > 4) are validation errors. History rewrites happen only as
+explicit, reviewed operations.
