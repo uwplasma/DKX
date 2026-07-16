@@ -219,6 +219,7 @@ def _d11_star_nu_star(tmp_path: Path, *, eps_h: float, nu: float, res: tuple[int
     return float(np.asarray(db.d11_star)[0, 0]) * float(np.asarray(db.nu_star)[0])
 
 
+@pytest.mark.slow
 def test_low_collisionality_converges_to_bounce_averaged_prediction(tmp_path: Path) -> None:
     """Full-DKE ``D11* nu*`` enters the ``1/nu`` regime and its geometry
     dependence converges to the surrogate ``Gamma_c`` ratio as ``nu -> 0``.
