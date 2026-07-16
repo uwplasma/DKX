@@ -67,8 +67,9 @@ import jax.numpy as jnp  # noqa: E402
 import numpy as np  # noqa: E402
 from jax.scipy.linalg import lu_factor, lu_solve  # noqa: E402
 
-# solvax is optional until its PyPI release (CI installs it from git): keep
-# this module importable without it and raise a clear error on first use.
+# solvax is a core dependency (installed automatically with sfincs_jax), but
+# keep this module importable without it and raise a clear error on first use
+# so broken/partial environments fail with an actionable message.
 try:  # noqa: E402
     from solvax.direct import (
         BlockTridiagFactors,
@@ -107,12 +108,14 @@ _SCHUR_ACCEPTS_D_BLOCK = schur_projected_precond is not None and (
 
 
 def _require_solvax() -> None:
-    """Raise a clear error when the optional ``solvax`` dependency is missing."""
+    """Raise a clear error when the ``solvax`` core dependency is missing."""
     if _SOLVAX_IMPORT_ERROR is not None:
         raise ImportError(
-            "sfincs_jax.solve requires the optional 'solvax' package for its "
-            "solver tiers (install with `pip install sfincs_jax[structured]` "
-            "or from git: pip install git+https://github.com/uwplasma/SOLVAX)"
+            "sfincs_jax.solve requires the 'solvax' package for its solver "
+            "tiers. solvax is a core dependency: `pip install sfincs_jax` "
+            "pulls it in automatically (the `sfincs_jax[structured]` extra is "
+            "a no-op alias). To install it directly: `pip install solvax` or "
+            "`pip install git+https://github.com/uwplasma/SOLVAX`."
         ) from _SOLVAX_IMPORT_ERROR
 
 __all__ = [

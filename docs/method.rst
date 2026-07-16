@@ -201,14 +201,19 @@ This upwind selection is parity-tested against frozen PETSc binaries for a
 `geometryScheme=11` fixture; it is active whenever ``magneticDriftScheme > 0``
 (the default ``magneticDriftScheme = 0`` leaves the magnetic-drift terms off).
 
-Collision operators (PAS and FP)
+Collision operators (PAS, FP, and improved Sugama)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-SFINCS v3 supports two collision models controlled by ``collisionOperator``:
+SFINCS v3 supports two collision models controlled by ``collisionOperator``,
+and `sfincs_jax` adds a third:
 
 - ``collisionOperator = 1``: pure pitch-angle scattering (PAS) in the Legendre basis.
 - ``collisionOperator = 0``: full linearized Fokker-Planck operator (Landau form), implemented via
   Rosenbluth potentials (and dense coupling in the speed coordinate :math:`x`).
+- ``collisionOperator = 3``: the momentum- and energy-conserving improved
+  Sugama model operator (a `sfincs_jax` research extension beyond Fortran v3);
+  it shares the Fokker-Planck test-particle kernels and dense per-:math:`L`
+  speed-block structure.
 
 For both models, the operator is diagonal in :math:`(\theta,\zeta)` and diagonal in the Legendre index :math:`L`.
 For a fixed :math:`L`, the action can be written as a dense x-space matrix-vector product that couples species:

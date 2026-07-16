@@ -99,7 +99,7 @@ by specific namelist parameters:
   controlled by ``useDKESExBDrift`` (DKES vs default v3 coefficient form) and by
   the radial electric field input (``dPhiHatdpsiHat``).
 - **Magnetic drift terms** (:math:`\mathbf{v}_m\cdot\nabla` + associated :math:`\partial_\xi` term):
-  enabled when ``magneticDriftScheme > 0`` (scheme ``1`` is fully supported in `sfincs_jax`);
+  enabled when ``magneticDriftScheme > 0`` (schemes ``1``--``9`` are fully supported in `sfincs_jax`);
   upwinding is controlled by ``magneticDriftDerivativeScheme``.
 - **Energy derivative term** (:math:`\dot{x}\,\partial_x`): enabled with ``includeXDotTerm = .true.``.
 - **Pitch-angle drift term** (:math:`\dot{\xi}\,\partial_\xi`): included in v3 with the ExB and magnetic

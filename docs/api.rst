@@ -61,9 +61,6 @@ Canonical modules
    * - ``sfincs_jax.writer`` / ``sfincs_jax.io``
      - ``sfincsOutput.h5`` / ``.nc`` / ``.npz`` writer and reader
      - :doc:`outputs`
-   * - ``sfincs_jax.diagnostics``
-     - Geometry-derived scalar diagnostics
-     - :doc:`outputs`
    * - ``sfincs_jax.sensitivity``
      - Implicit-differentiation observable derivatives (RHSMode 4/5 spine)
      - :doc:`feature_matrix`
