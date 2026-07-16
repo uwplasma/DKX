@@ -98,7 +98,16 @@ accepted only if it reduces the VMEC current diagnostic while preserving the
 finite-iota/aspect gate.  The plotted current profile is still not a completed
 kinetic SFINCS current.  A candidate selected from this step should be promoted
 with completed ``sfincs_jax scan-er`` outputs.  The corresponding kinetic
-observable is ``FSABjHatOverRootFSAB2``, i.e.
+observable is ``FSABjHatOverRootFSAB2``,
+
+.. math::
+
+   \frac{\langle\mathbf{J}\cdot\mathbf{B}\rangle}
+        {\sqrt{\langle B^2\rangle}},
+
+which should be checked together with residual convergence, CPU/GPU agreement,
+radial and velocity-space convergence, and SFINCS Fortran v3 comparison when
+the input lies in shared model scope.
 
 For a directly editable script, use
 ``examples/optimization/QA_optimization_bootstrap_current.py``.  It follows the
@@ -117,15 +126,6 @@ directories:
      --vmec-jax-root /path/to/vmec_jax \
      --qa-result-dir results/qa_opt_bootstrap_current_maxmode3/qa_only \
      --comparison-result-dir results/qa_opt_bootstrap_current_maxmode3/with_jdotb_current_objective
-
-.. math::
-
-   \frac{\langle\mathbf{J}\cdot\mathbf{B}\rangle}
-        {\sqrt{\langle B^2\rangle}},
-
-which should be checked together with residual convergence, CPU/GPU agreement,
-radial and velocity-space convergence, and SFINCS Fortran v3 comparison when
-the input lies in shared model scope.
 
 Objective Terms
 ---------------

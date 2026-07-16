@@ -71,47 +71,52 @@ contracts.
 Refactoring Plan
 ----------------
 
-The main code-health target is to keep implementation ownership in one level of
-domain folders below ``sfincs_jax/`` with only public entry points and stable
-facades at package root. The monolithic transport driver has been
-retired; refactor work should remain behavior-preserving, tested in gated
-slices, and should avoid new historical helper names such as top-level
+The main code-health target is a flat package: implementation ownership lives
+in single-purpose root modules directly under ``sfincs_jax/``, with only two
+package folders (``validation`` and ``workflows``) for tooling that sits
+outside the compute path. The legacy nested packages (``problems``,
+``solvers``, ``operators``, ``outputs``, ``geometry``, ``discretization``,
+``physics``) were deleted with the legacy pipeline; refactor work should remain
+behavior-preserving, tested in gated slices, and should not reintroduce nested
+implementation packages or historical helper names such as top-level
 ``rhs1_*`` files.
 
 1. Package structure and import contract
-   The retained package folders are ``discretization``, ``geometry``,
-   ``operators``, ``outputs``, ``physics``, ``problems``, ``solvers``,
-   ``validation``, and ``workflows``. Root modules are reserved for public
-   entry points and stable facades: API, CLI, solver results, input parsing,
-   plotting, sensitivity, diagnostics, grid helpers, paths, comparison, and
-   compatibility I/O. Import tests verify the package folders, documented root
-   modules, compatibility aliases, and absence of nested implementation
-   packages.
+   Every physics, discretization, and I/O owner is a flat root module
+   (``drift_kinetic.py``, ``collisions.py``, ``magnetic_geometry.py``,
+   ``phase_space.py``, ``xgrid.py``, ``moments.py``, ``writer.py``,
+   ``inputs.py``, ``run.py``, ``solve.py``, ``er.py``, ``phi1.py``, ...; see
+   the table in ``sfincs_jax/README.md``). ``validation/`` holds parity,
+   release-gate, and data-fetch tooling; ``workflows/`` holds optimization and
+   scan orchestration. Source-tree tests
+   (``tests/fixtures/source_tree_expected.json``) pin this layout and the
+   absence of nested implementation packages.
 
 2. Problem owners
-   RHSMode=1 profile-current/bootstrap-current orchestration belongs to flat
-   ``problems/profile_*.py`` modules. RHSMode=2/3 transport-matrix and
-   monoenergetic-response orchestration belongs to flat
-   ``problems/transport_*.py`` modules. Do not reintroduce non-root
-   compatibility facades for profile-response or transport-matrix owners; user
-   and contributor imports should point to canonical owners directly.
+   RHSMode=1 profile/bootstrap-current orchestration, RHSMode=2/3
+   transport-matrix and monoenergetic-response orchestration, and the
+   namelist-level dispatch all belong to ``run.py`` (``run_profile``,
+   ``run_transport_matrix``, ``run_from_namelist``). Do not reintroduce
+   separate compatibility facades for these owners; user and contributor
+   imports should point at ``run.py`` directly.
 
-3. Physics, discretization, and operators
-   Model terms, grids, quadrature, active layouts, residual construction, and
-   sparse/operator assembly live in domain packages named for the equations or
-   numerical objects they own. Each owner should have shape, masking,
-   zero-drive or constant-field, order-condition, conservation, or parity tests
-   where those properties apply.
+3. Physics and discretization owners
+   Model terms and residual construction live in ``drift_kinetic.py`` (the
+   matrix-free ``KineticOperator``), collision models in ``collisions.py``,
+   grids and quadrature in ``phase_space.py``/``xgrid.py``, and geometry in
+   ``magnetic_geometry.py``. Each owner should have shape, masking, zero-drive
+   or constant-field, order-condition, conservation, or parity tests where
+   those properties apply.
 
 4. Solver and preconditioner architecture
-   Reusable Krylov dispatch, residual gates, progress reporting, sparse
-   factors, recycling, checkpoints, and implicit-differentiation contracts live
-   in ``solvers``. Preconditioners are flat ``preconditioner_*.py`` modules
-   named by numerical structure: PAS, full-FP, QI, Schur, domain decomposition,
-   x-block, symbolic sparse, and transport-matrix blocks. Auto-selection remains
-   the user-facing default; implementation decisions should return metadata for
-   CPU/GPU safety, differentiable or non-differentiable status, setup-memory
-   estimates, expected operator shape, residual gates, and rejected candidates.
+   The three-tier solver policy (structured block elimination, preconditioned
+   recycled Krylov, host direct referee), the coarse and bordered-Schur
+   preconditioners, residual gates, recycling, and the
+   implicit-differentiation contract all live in ``solve.py`` on top of the
+   ``solvax`` library; reusable numerical kernels (block-Thomas, GCROT,
+   implicit solves) belong upstream in ``solvax``, not in new local modules.
+   Auto-selection remains the user-facing default, and solver decisions are
+   reported through the versioned trace schema in ``solver_trace.py``.
 
 5. I/O, workflow, validation, and benchmark boundaries
    HDF5/NPZ/NetCDF writes stay outside solver internals. Solver code returns
