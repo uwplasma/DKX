@@ -30,7 +30,7 @@ Quickstart
 state vector, solver statistics, and all velocity-space moments in memory. The
 CLI equivalent is ``sfincs_jax input.namelist --out sfincsOutput.h5``;
 ``sfincs_jax --plot sfincsOutput.h5`` builds a PDF diagnostics panel. See
-:doc:`installation` for the optional ``solvax`` structured-solver extra, GPU
+:doc:`installation` for the ``solvax`` structured-solver core dependency, GPU
 wheels, and the Fortran reference build.
 
 Examples
