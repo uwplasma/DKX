@@ -33,6 +33,19 @@ and a single figure + JSON pair written to
 - `gradient_verification.py`: the AD-vs-FD gradient-verification table
   (three derivatives through the monoenergetic-database, RHSMode=1 solve,
   and ambipolar-root paths; JSON + rst snippet).
+- `bootstrap_consistency_kinetic_loop.py`: the workflow case -- the
+  self-consistent-bootstrap equilibrium iteration with the actual
+  drift-kinetic solve inside the loop (in place of the Redl analytic proxy
+  [A. Redl et al., Phys. Plasmas 28, 022502 (2021)]) on a finite-beta
+  precise-QA reactor-scale configuration: a damped Picard iteration
+  equilibrium -> kinetic `<J.B>`(s) -> prescribed toroidal-current profile
+  -> equilibrium, the kinetic-vs-Redl discrepancy profile at the converged
+  state (the proxy error the loop removes), split resolution-refinement
+  error bars, and one end-to-end `jax.value_and_grad` of the total
+  bootstrap current through the differentiable equilibrium/Boozer/kinetic
+  chain [M. Landreman, S. Buller & M. Drevlak, Phys. Plasmas 29, 082501
+  (2022)].  Requires the optional vmec_jax + booz_xform_jax companions;
+  checkpointed and resumable (`SFINCS_JAX_BOOT_LOOP_MAX_NEW_STAGES`).
 
 ## Running
 

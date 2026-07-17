@@ -1,0 +1,387 @@
+{
+ "benchmark": "Kinetic-solver-in-the-loop bootstrap-consistent equilibrium iteration, finite-beta precise-QA reactor-scale configuration",
+ "references": [
+  "A. Redl et al., Phys. Plasmas 28, 022502 (2021)",
+  "M. Landreman, S. Buller and M. Drevlak, Phys. Plasmas 29, 082501 (2022)",
+  "M. Landreman and E. Paul, Phys. Rev. Lett. 128, 035001 (2022)",
+  "O. Sauter, C. Angioni and Y.R. Lin-Liu, Phys. Plasmas 6, 2834 (1999)"
+ ],
+ "configuration": {
+  "deck": "input.LandremanPaul2021_QA_reactorScale_lowres",
+  "boundary_truncation_max_mode": null,
+  "nfp": 2,
+  "ns": 25,
+  "vmec_ftol": 1e-10,
+  "pressure_pa_power_series": [
+   105983.9843391,
+   -104924.144495709,
+   0.0,
+   0.0,
+   0.0,
+   -104924.144495709,
+   103874.9030507519
+  ],
+  "ne_m3": "3.5e+19*(1 - 0.99*s^5)",
+  "Te_eV": "9450*(1 - 0.99*s)  (= Ti; Zeff = 1)",
+  "helicity_n": 0
+ },
+ "normalization": {
+  "nBar_m3": 1e+20,
+  "TBar_eV": 1000.0,
+  "mBar_kg": 1.67262192369e-27,
+  "BBar_T": 1.0,
+  "RBar_m": 1.0,
+  "nu_n": 0.00831565,
+  "current_scale_A_per_m2": 7012642.444294794,
+  "si_formula": "FSABjHat * e * nBar * sqrt(2*TBar/mBar) * BBar"
+ },
+ "kinetic_resolution": {
+  "Ntheta": 25,
+  "Nzeta": 13,
+  "Nxi": 48,
+  "NL": 4,
+  "Nx": 8,
+  "solver_tolerance": 1e-06,
+  "collision_operator": "full Fokker-Planck (two species)",
+  "Er": 0.0
+ },
+ "picard": {
+  "surfaces_s": [
+   0.08,
+   0.22000000000000003,
+   0.36000000000000004,
+   0.5,
+   0.64,
+   0.78,
+   0.92
+  ],
+  "relax": 0.5,
+  "tol": 0.01,
+  "fit_degree": 12,
+  "converged": true,
+  "iterations": 7,
+  "history": [
+   {
+    "iteration": 0,
+    "curtor_applied": 0.0,
+    "curtor": -324287.0675713055,
+    "delta": 1.0,
+    "jdotb_kinetic_si": [
+     -252729.19305019692,
+     -350715.8291096509,
+     -446386.7172780416,
+     -566435.6602099147,
+     -676539.9063981854,
+     -659568.6779098172,
+     -328523.1423882055
+    ],
+    "iota_mid": 0.4199938643843859,
+    "iota_edge": 0.42091804376340985,
+    "vmec_seconds": 4.311945915222168,
+    "kinetic_seconds": [
+     30.652199029922485,
+     18.156105995178223,
+     19.664682865142822,
+     20.727051973342896,
+     26.023227214813232,
+     22.651437044143677,
+     31.463621854782104
+    ],
+    "vmec_fsqr": 9.391819815812058e-11
+   },
+   {
+    "iteration": 1,
+    "curtor_applied": -324287.0675713055,
+    "curtor": -469124.4020196415,
+    "delta": 0.4711549531376449,
+    "jdotb_kinetic_si": [
+     -252041.6898112069,
+     -309962.32595267484,
+     -430796.3307097134,
+     -541290.904108197,
+     -640350.4350659909,
+     -621816.3880691924,
+     -312896.5839629643
+    ],
+    "iota_mid": 0.44045192026492247,
+    "iota_edge": 0.4477450614351046,
+    "vmec_seconds": 2.637543201446533,
+    "kinetic_seconds": [
+     17.101794719696045,
+     16.836003065109253,
+     14.714332103729248,
+     14.503725051879883,
+     15.39166522026062,
+     17.30737805366516,
+     21.590078115463257
+    ],
+    "vmec_fsqr": 9.40198915257917e-11
+   },
+   {
+    "iteration": 2,
+    "curtor_applied": -469124.4020196415,
+    "curtor": -539059.6848895866,
+    "delta": 0.2169451392041363,
+    "jdotb_kinetic_si": [
+     -251385.85976289213,
+     -339289.1148154828,
+     -424419.3288690155,
+     -530276.3528777757,
+     -625330.79922165,
+     -606511.1533342511,
+     -306437.8532849434
+    ],
+    "iota_mid": 0.4495294211384379,
+    "iota_edge": 0.4598597711283176,
+    "vmec_seconds": 2.6497249603271484,
+    "kinetic_seconds": [
+     17.174278259277344,
+     15.118046998977661,
+     17.807888984680176,
+     15.487726211547852,
+     14.097054958343506,
+     14.644484996795654,
+     16.99553894996643
+    ],
+    "vmec_fsqr": 9.83281735092603e-11
+   },
+   {
+    "iteration": 3,
+    "curtor_applied": -539059.6848895866,
+    "curtor": -571011.185132873,
+    "delta": 0.097624228289489,
+    "jdotb_kinetic_si": [
+     -251216.45222775836,
+     -337170.1677385493,
+     -420307.9324606088,
+     -524539.6808005526,
+     -617875.9809365454,
+     -599147.2452185219,
+     -303393.35170318285
+    ],
+    "iota_mid": 0.45445246161977604,
+    "iota_edge": 0.4655855103623537,
+    "vmec_seconds": 0.5011348724365234,
+    "kinetic_seconds": [
+     14.683230876922607,
+     13.301249742507935,
+     13.159393072128296,
+     13.061049938201904,
+     13.776869058609009,
+     14.415561199188232,
+     16.572683572769165
+    ],
+    "vmec_fsqr": 9.930268187034928e-11
+   },
+   {
+    "iteration": 4,
+    "curtor_applied": -571011.185132873,
+    "curtor": -585582.653785912,
+    "delta": 0.04356752152627361,
+    "jdotb_kinetic_si": [
+     -251058.62856141088,
+     -336061.08188592864,
+     -418301.21447645064,
+     -521887.3885546478,
+     -614525.0218792645,
+     -595887.5785539747,
+     -301973.1921756237
+    ],
+    "iota_mid": 0.45669962120081176,
+    "iota_edge": 0.4682122698213416,
+    "vmec_seconds": 2.807615041732788,
+    "kinetic_seconds": [
+     16.750427961349487,
+     27.85094904899597,
+     14.489396810531616,
+     14.130335092544556,
+     15.41248607635498,
+     15.316411972045898,
+     19.109577894210815
+    ],
+    "vmec_fsqr": 9.921108681677208e-11
+   },
+   {
+    "iteration": 5,
+    "curtor_applied": -585582.653785912,
+    "curtor": -592230.9897446025,
+    "delta": 0.019259194466068632,
+    "jdotb_kinetic_si": [
+     -250953.7826649659,
+     -335672.102178446,
+     -417397.0765486429,
+     -520607.2587870022,
+     -612946.1473792578,
+     -594358.9719024403,
+     -301424.31099188986
+    ],
+    "iota_mid": 0.45783670369697876,
+    "iota_edge": 0.469371113099335,
+    "vmec_seconds": 0.5888688564300537,
+    "kinetic_seconds": [
+     15.704886198043823,
+     15.672870874404907,
+     14.58233904838562,
+     14.183755874633789,
+     15.27715802192688,
+     15.29315996170044,
+     17.550162076950073
+    ],
+    "vmec_fsqr": 9.870140429372852e-11
+   },
+   {
+    "iteration": 6,
+    "curtor_applied": -592230.9897446025,
+    "curtor": -595236.4959853615,
+    "delta": 0.00848804959304596,
+    "jdotb_kinetic_si": [
+     -250881.72938549228,
+     -335314.2532057243,
+     -416910.8156831363,
+     -520023.30255339335,
+     -612244.5589634693,
+     -593716.4765992658,
+     -301090.2272587164
+    ],
+    "iota_mid": 0.4582885524757523,
+    "iota_edge": 0.4699219797680085,
+    "vmec_seconds": 2.5436487197875977,
+    "kinetic_seconds": [
+     16.020097017288208,
+     14.707098007202148,
+     12.627940893173218,
+     12.423588991165161,
+     12.875075817108154,
+     14.159305095672607,
+     15.760270118713379
+    ],
+    "vmec_fsqr": 9.934746088937752e-11
+   }
+  ]
+ },
+ "redl_contrast": {
+  "jdotb_redl_si": [
+   -271074.7603559271,
+   -353799.63389295153,
+   -435551.0168518276,
+   -541073.7232856276,
+   -638708.3672993953,
+   -619226.7619973572,
+   -300661.8415544143
+  ],
+  "jdotb_kinetic_si": [
+   -250881.72938549228,
+   -335314.2532057243,
+   -416910.8156831363,
+   -520023.30255339335,
+   -612244.5589634693,
+   -593716.4765992658,
+   -301090.2272587164
+  ],
+  "rel_discrepancy_of_max": [
+   0.03298196884692884,
+   0.03019280517334937,
+   0.030445678766421725,
+   0.03438237289992839,
+   0.04322424421497379,
+   0.04166682255417731,
+   0.0006996970377774692
+  ],
+  "mean_rel_discrepancy": 0.030513369927650986,
+  "max_rel_discrepancy": 0.04322424421497379,
+  "redl_nu_e_star": [
+   0.2618710936508775,
+   0.16201936534892303,
+   0.15997107042667427,
+   0.19261142776013385,
+   0.2719999937407746,
+   0.4700111232488801,
+   1.2768025397154328
+  ],
+  "redl_nu_i_star": [
+   0.2189713752769935,
+   0.13514001507008036,
+   0.1330224382812926,
+   0.1595239668747526,
+   0.22399738564138233,
+   0.3834968111298004,
+   1.0203574997250315
+  ],
+  "trapped_fraction": [
+   0.25854111020262327,
+   0.33149212844156295,
+   0.37347002562848863,
+   0.4039132645522059,
+   0.42804755192891775,
+   0.44817489725993676,
+   0.465964141477494
+  ]
+ },
+ "kinetic_resolution_probe": {
+  "angular": {
+   "s": 0.5,
+   "resolution": [
+    29,
+    13,
+    48,
+    4,
+    8
+   ],
+   "jdotb_refined": -517280.2588069175,
+   "jdotb_base": -520023.30255339335,
+   "rel_dev": 0.005302819312692368,
+   "seconds": 23.926573991775513
+  },
+  "velocity": {
+   "s": 0.5,
+   "resolution": [
+    25,
+    13,
+    64,
+    4,
+    10
+   ],
+   "jdotb_refined": -527793.6522099971,
+   "jdotb_base": -520023.30255339335,
+   "rel_dev": 0.01472232495420779,
+   "seconds": 39.17585301399231
+  },
+  "max_rel_dev": 0.01472232495420779,
+  "mid_surface_discrepancy_base_grid": 0.03438237289992839,
+  "mid_surface_discrepancy_refined_velocity_grid": 0.021690794766904362
+ },
+ "gradient_hook": {
+  "dof": "RBC(0,1)",
+  "dof_value": 1.679774143201,
+  "value_A": 429971.70511387894,
+  "value_is_magnitude": true,
+  "grad_A_per_m": 674680.2650710327,
+  "seconds": 31.212462663650513,
+  "rows": [
+   6,
+   12,
+   18
+  ],
+  "s_rows": [
+   0.22916666666666666,
+   0.4791666666666667,
+   0.7291666666666666
+  ],
+  "resolution": [
+   13,
+   13,
+   16,
+   4,
+   6
+  ],
+  "mboz_nboz": [
+   6,
+   6
+  ],
+  "loop_curtor_A": -595236.4959853615,
+  "rel_dev_vs_loop": 0.27764559462689076
+ },
+ "limitation": "The demonstration runs at reduced density (on-axis beta 0.75%) so the converged iota profile stays inside the rational-free window (2/5, 1/2).  At the profile paper's full reactor density (on-axis beta 2.4%) the self-consistent current drives iota across 1/2 and toward 2/3, and local drift-kinetic solves on surfaces near those low-order rationals become resonant at fixed resolution (order-of-magnitude jumps and sign flips in <J.B> were observed). A production-beta version of this loop needs resonance-aware surface placement or per-surface resolution control.",
+ "claim_boundary": "The kinetic-vs-Redl discrepancy profile compares the full-Fokker-Planck two-species drift-kinetic solve at Er = 0 and fixed reference Coulomb logarithm (nu_n) with the Redl fit's own Sauter per-surface collisionality model on the same equilibrium, geometry, and profiles.  The split angular/velocity refined re-solves bound the kinetic numerical error below the recorded discrepancy.  The gradient hook records one finite end-to-end derivative through the differentiable equilibrium -> Boozer -> kinetic chain at reduced resolution; its AD-vs-FD accuracy is documented in gradient_verification.py and the flagship optimization example, not re-verified here.",
+ "finding": "The Picard iteration with the actual drift-kinetic solve in the loop converges to a bootstrap-consistent finite-beta QA equilibrium in a handful of damped iterations (delta history in picard.history), with the self-consistent current raising the iota profile.  At the converged state the Redl analytic proxy over-predicts the kinetic bootstrap current across the interior profile by the recorded discrepancy (a few percent of the profile maximum, comparable to the proxy-vs-kinetic RMS reported for the self-consistent-bootstrap optima in the literature); the discrepancy survives the split resolution refinements (kinetic_resolution_probe records the mid-surface value on the refined velocity grid).  This is the proxy error that kinetic-in-the-loop iteration removes by construction."
+}
