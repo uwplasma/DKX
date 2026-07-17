@@ -26,6 +26,10 @@ Measured on 2026-07-16/17 (float64, tier-1 direct solves):
   (the small TJ-II bootstrap coefficient converges slowly), ~8 s.
 - HSX (11x61x32): ``D11*(nuPrime=1) = 1.73578230``, Onsager <= 1.9e-3 at
   nuPrime=1, ~15 s including the cached-equilibrium geometry load.
+- Shaing-Callen mini-scan (W7-X 17x31x24): ``D31*(nuPrime=1e-2) =
+  +9.82150972e-3``, ``D31*(nuPrime=3e-3) = -2.55865359e-2``, tiny-grid
+  limit ``D31*_SC = -5.90226369e-2``; distances to the limit 6.884e-2 ->
+  3.344e-2, ~11 s.
 """
 
 from __future__ import annotations
@@ -251,6 +255,68 @@ def test_tiny_hsx_monoenergetic_benchmark_scan(tmp_path: Path) -> None:
 
     # Frozen-tolerance regression value.
     assert abs(d11[0, 0] - HSX_D11_STAR_FROZEN) / HSX_D11_STAR_FROZEN < 1e-5
+
+
+# Frozen reference for the Shaing-Callen mini-scan (module docstring).
+SC_D31_STAR_FROZEN = -2.55865359e-2
+
+
+def test_tiny_shaing_callen_convergence_scan(tmp_path: Path) -> None:
+    """CI-sized version of examples/paper_benchmarks/shaing_callen_convergence.py.
+
+    Two-point W7-X nuPrime scan at 17x31x24 pinning the structure the full
+    benchmark relies on: D31* changes sign across the scan and moves
+    *toward* the Shaing-Callen collisionless value (evaluated for the same
+    surface, converted with the same normalization helper) as nuPrime
+    decreases, plus one frozen-tolerance value.  ~11 s.
+    """
+    import numpy as np
+
+    from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
+    from sfincs_jax.inputs import load_sfincs_input
+    from sfincs_jax.monoenergetic import (
+        monoenergetic_database,
+        monoenergetic_dstar_from_transport_matrix,
+    )
+    from sfincs_jax.shaing_callen import shaing_callen_d31_limit
+
+    deck = tmp_path / "shaing_callen_convergence_tiny.input.namelist"
+    deck.write_text(DECK_TEMPLATE)
+    nu_primes = [1e-2, 3e-3]  # descending: toward the collisionless limit
+    db = monoenergetic_database(deck, nu_primes, [0.0])
+    d31 = np.asarray(db.d31_star)[:, 0]
+    assert np.all(np.isfinite(d31))
+
+    # The Shaing-Callen limit for the same surface, in the same D31* units.
+    op = kinetic_operator_from_namelist(load_sfincs_input(deck).raw)
+    lim = shaing_callen_d31_limit(
+        np.asarray(op.b_hat), g_hat=db.g_hat, i_hat=db.i_hat, iota=db.iota,
+        n_periods=5, x=np.asarray(op.x), x_weights=np.asarray(op.x_weights),
+    )  # fmt: skip
+    tm = np.zeros((2, 2))
+    tm[1, 0] = lim.d31
+    point = monoenergetic_dstar_from_transport_matrix(
+        tm, nu_prime=1.0, delta=db.delta, g_hat=db.g_hat, i_hat=db.i_hat,
+        iota=db.iota, b0_over_bbar=db.b0_over_bbar,
+        fsab_hat2=float(np.asarray(db.fsab_hat2)), r_hat=db.r_hat,
+        x0=db.x0, w0=db.w0, nu_d_hat_x0=db.nu_d_hat_x0,
+    )  # fmt: skip
+    d31_limit = float(np.asarray(point.d31_star))
+    assert abs(d31_limit - (-5.90226369e-2)) / abs(d31_limit) < 1e-3
+
+    # Sign structure: positive on the plateau side, the limit's sign at the
+    # lowest collisionality (the benchmark's sign change).
+    assert d31_limit < 0.0
+    assert d31[0] > 0.0
+    assert np.sign(d31[1]) == np.sign(d31_limit)
+
+    # |D31* - limit| decreases as nuPrime decreases: the approach toward
+    # the collisionless asymptote (measured 6.884e-2 -> 3.344e-2).
+    distances = np.abs(d31 - d31_limit)
+    assert distances[1] < distances[0]
+
+    # Frozen-tolerance regression value at the low-collisionality point.
+    assert abs(d31[1] - SC_D31_STAR_FROZEN) / abs(SC_D31_STAR_FROZEN) < 1e-5
 
 
 def test_tiny_gradient_verification_row(tmp_path: Path) -> None:
