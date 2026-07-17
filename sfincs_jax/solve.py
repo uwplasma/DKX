@@ -144,23 +144,26 @@ _TIER1_BUDGET_ENV = "SFINCS_TIER1_MEMORY_BUDGET_GB"
 # solution blocks is exact for the standard transport quantities.
 _TIER1_KEEP_LOWEST_DEFAULT = 3
 
-# Size-aware device routing (``solve(device="auto")``, the default): on an
-# accelerator-default host, systems at or below these sizes run on the host
-# CPU instead — sub-ms solves are kernel-launch/latency-bound on GPU, not
-# compute-bound (see docs/performance.rst, "Same-host CPU/GPU crossover").
-# Same-host measurements on a 36-core Pop!_OS box with an RTX A4000
-# (2026-07-17): the GPU won every tier-1 warm solve down to 6.5k DOFs
-# (2.7x-39x) and every *preconditioned* tier-2 warm solve down to 2.8k DOFs
-# (1.5x-2.7x), so tier-1 auto-routing defaults to off (0).  The one measured
-# CPU-wins case is the small *unpreconditioned* tier-2 loop of the Phi1
-# Newton solve (4.5k DOFs: warm 0.048 s CPU vs 0.126 s GPU, cold 40 s vs
-# 52 s), whose systems are capped at 6,000 unknowns — hence the tier-2
-# default below.  Overridable via the environment variables (0 disables).
+# Size-aware device routing (``solve(device=...)``): on an accelerator-default
+# host, ``device="auto"`` runs systems at or below these sizes on the host CPU
+# instead.  Both thresholds default to 0 — auto-routing OFF — because the
+# same-host measurements do not support a nonzero default (36-core Pop!_OS box
+# with an RTX A4000, 2026-07-17, docs/performance.rst "Same-host CPU/GPU
+# crossover"): the GPU won every tier-1 warm solve measured down to 6.5k DOFs
+# (2.7x-39x) and every preconditioned tier-2 warm solve down to 2.8k DOFs
+# (1.5x-2.7x).  The one CPU-wins case — the small unpreconditioned tier-2
+# loop of the Phi1 Newton solve (4.5k DOFs: warm 0.048 s CPU vs 0.159 s GPU)
+# — did NOT recover its win under solve-level routing (0.12-0.13 s: the
+# per-Newton-iteration residuals stay on the GPU and each routed solve pays
+# device transfers plus a one-time CPU compile), so routing small Phi1
+# workloads is best done whole-process (``JAX_PLATFORMS=cpu``), not per
+# solve.  The knob remains for hosts where the balance differs: set e.g.
+# ``SFINCS_JAX_SOLVE_CPU_MAX_SIZE_TIER2=6000`` to route small tier-2 solves.
 _SOLVE_DEVICE_ENV = "SFINCS_JAX_SOLVE_DEVICE"
 _SOLVE_CPU_MAX_TIER1_ENV = "SFINCS_JAX_SOLVE_CPU_MAX_SIZE_TIER1"
 _SOLVE_CPU_MAX_TIER2_ENV = "SFINCS_JAX_SOLVE_CPU_MAX_SIZE_TIER2"
 _SOLVE_CPU_MAX_TIER1_DEFAULT = 0
-_SOLVE_CPU_MAX_TIER2_DEFAULT = 6_000
+_SOLVE_CPU_MAX_TIER2_DEFAULT = 0
 
 
 # =============================================================================
@@ -1650,19 +1653,20 @@ def solve(
         tier1_keep_lowest: number of Legendre blocks the truncated tier-1
             kernel computes exactly (default 3 — the RHSMode 1/2/3 drives and
             output moments live on ``l <= 2``).
-        device: where to run the solve.  ``"auto"`` (the default, also read
-            from the ``SFINCS_JAX_SOLVE_DEVICE`` environment variable) keeps
-            the solve on the default backend except on accelerator-default
-            hosts where the system is small enough that the CPU wins it
-            (small solves are kernel-launch/latency-bound on GPU; thresholds
-            ``SFINCS_JAX_SOLVE_CPU_MAX_SIZE_TIER1`` / ``_TIER2``, measured in
-            docs/performance.rst; set them to 0 to disable).  ``"default"``
-            disables routing; ``"cpu"``/``"gpu"`` force a backend; a
-            ``jax.Device`` pins the solve to that device.  Inputs are moved
-            with ``jax.device_put`` and the solution is returned on the
-            device that held ``rhs``.  Under ``jit``/``grad`` tracing the
-            knob is inert (arrays cannot move mid-trace), so jitted callers
-            are unaffected.
+        device: where to run the solve.  ``"cpu"``/``"gpu"`` force a backend
+            and a ``jax.Device`` pins the solve to that device: inputs are
+            moved with ``jax.device_put`` and the solution is returned on
+            the device that held ``rhs``.  ``"auto"`` (the default, also
+            read from the ``SFINCS_JAX_SOLVE_DEVICE`` environment variable)
+            additionally routes solves at or below the
+            ``SFINCS_JAX_SOLVE_CPU_MAX_SIZE_TIER1`` / ``_TIER2`` thresholds
+            to the host CPU on accelerator-default hosts — but both
+            thresholds default to 0 (no routing), because the same-host
+            measurements in docs/performance.rst found the GPU faster at
+            every practical size; the knobs exist for hosts where that
+            balance differs.  ``"default"`` disables all movement.  Under
+            ``jit``/``grad`` tracing the knob is inert (arrays cannot move
+            mid-trace), so jitted callers are unaffected.
 
     Auto-policy tier-1 routing (``method="auto"``, :func:`tier1_available` true):
 
