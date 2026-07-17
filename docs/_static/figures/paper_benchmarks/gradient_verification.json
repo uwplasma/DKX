@@ -1,0 +1,48 @@
+{
+ "table": "AD-vs-FD gradient verification (central finite differences)",
+ "note": "Each row evaluates the same scalar objective twice: jax.grad through the full solve (implicit differentiation), and a 2-point central finite difference with the step listed.  Tiny analytic-geometry decks; float64.",
+ "rows": [
+  {
+   "row": "a",
+   "objective": "D11* (nuPrime=0.3, EStar=0)",
+   "parameter": "Boozer amplitude B_10 (mirror-like term)",
+   "path": "RHSMode=3 monoenergetic database, from_fourier geometry, implicit-diff solve",
+   "value": 0.49707196711485174,
+   "ad": -27.91835895092556,
+   "fd": -27.918358963019415,
+   "fd_step": 1e-05,
+   "rel_dev": 4.3318651353650457e-10,
+   "ad_seconds": 5.420619964599609,
+   "fd_seconds": 2.031499147415161,
+   "row_seconds": 8.410035133361816
+  },
+  {
+   "row": "b",
+   "objective": "FSABjHat (two-species RHSMode=1 solve)",
+   "parameter": "nu_n (normalized collision frequency)",
+   "path": "RHSMode=1 linear solve (implicit diff) + moment assembly",
+   "value": 0.004198424095135876,
+   "ad": 0.006619073136906242,
+   "fd": 0.006619073109372193,
+   "fd_step": 8.4774e-08,
+   "rel_dev": 4.159804306538777e-09,
+   "ad_seconds": 2.111715078353882,
+   "fd_seconds": 0.8569872379302979,
+   "row_seconds": 3.4135148525238037
+  },
+  {
+   "row": "c",
+   "objective": "ambipolar Er root (ion root, two-species PAS deck)",
+   "parameter": "theta_n (scale on both species' dnHat/dpsiHat)",
+   "path": "implicit-function-theorem root solve (jax.lax.custom_root)",
+   "value": -0.40657840012291746,
+   "ad": -0.4589843561139698,
+   "fd": -0.4589843561504381,
+   "fd_step": 0.001,
+   "rel_dev": 7.945428282533186e-11,
+   "ad_seconds": 3.145819902420044,
+   "fd_seconds": 1.478759765625,
+   "row_seconds": 7.324249744415283
+  }
+ ]
+}
