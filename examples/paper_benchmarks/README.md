@@ -15,6 +15,17 @@ and a single figure + JSON pair written to
   coefficients (`D11*`, `D31*` versus `nuPrime` at several `EStar`) on the
   W7-X standard configuration at r/a = 0.5, with matched-deck SFINCS Fortran
   v3 cross-check points [C.D. Beidler et al., Nucl. Fusion 51, 076001 (2011)].
+- `monoenergetic_icnts_tjii.py`: the same scan on the TJ-II standard
+  configuration at s = 0.493 (strong-ripple limit of the benchmark set), with
+  the Boozer |B| spectrum supplied through `geometryScheme = 13` and the same
+  Fortran v3 cross-check recipe (plus a MUMPS pivot/refinement note recorded
+  in the JSON).
+- `monoenergetic_icnts_hsx.py`: the same scan on the HSX quasi-helically
+  symmetric configuration at r/a = 0.5 (`hsx3free.bc`), showing the
+  QH-suppressed 1/nu branch in contrast to W7-X and TJ-II.
+- `gradient_verification.py`: the AD-vs-FD gradient-verification table
+  (three derivatives through the monoenergetic-database, RHSMode=1 solve,
+  and ambipolar-root paths; JSON + rst snippet).
 
 ## Running
 
