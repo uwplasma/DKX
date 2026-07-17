@@ -101,7 +101,8 @@ the tier-1 truncated Legendre block elimination from `solvax`.
   takes 45.0 s (the Legendre scan is serial and A4000 FP64 is 1/32 rate).
 - The Fortran strong-scaling baseline on the same case: 463.6 s (1 rank),
   229.5 s (2 ranks, 101% efficiency), 240.9 s (4 ranks), 270.5 s (8 ranks).
-- A cross-machine end-to-end sweep (10-core laptop + 36-core workstation,
+- A cross-machine end-to-end sweep on the two-species production variant of
+  this deck (1,275,010 unknowns; 10-core laptop + 36-core workstation,
   freshly compiled Fortran MPI) repeats the shape: Fortran/MUMPS bottoms out
   near 8 ranks and degrades beyond (slower at 32 ranks than at 1), while one
   `sfincs_jax` process beats every measured MPI configuration — 3.1x the

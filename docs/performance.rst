@@ -107,9 +107,10 @@ Cross-machine end-to-end time to solution
 
 A second, independent sweep measures **end-to-end** wall time (operator
 build + solve + moments + output; ``run_profile`` on the ``sfincs_jax`` side,
-the full binary run on the Fortran side) for the same 744,610-unknown deck on
-two machines, with a freshly compiled Fortran v3 (conda PETSc 3.25 + MUMPS,
-MPI) and best-of-two repetitions per configuration. The Fortran run is one
+the full binary run on the Fortran side) for the two-species production
+variant of the same HSX PAS deck (1,275,010 unknowns) on two machines, with
+a freshly compiled Fortran v3 (conda PETSc 3.25 + MUMPS, MPI) and
+best-of-two repetitions per configuration. The Fortran run is one
 linear solve dominated by the preconditioner factorization plus a handful of
 Krylov applications, so end-to-end time is the honest cross-code metric.
 Reproduce with ``tools/benchmarks/time_to_solution.py``.
