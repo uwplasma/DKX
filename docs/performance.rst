@@ -208,10 +208,13 @@ CPU and GPU: where each wins
 ----------------------------
 
 The structured tier-1 path is the one that lets ``sfincs_jax`` fit and finish a
-production case; the honest headline is that **it reaches CPU/GPU parity on the
-direct tier, while every iterative or small-system path is dispatch-bound and
-runs slower on the GPU**. The full 744k-unknown HSX case was re-measured on both
-backends after the ramp-aware truncated kernel became the canonical route:
+production case; the honest headline is that **a development-MacBook CPU and a
+workstation RTX A4000 land at parity on the direct tier, while the iterative
+and small-system paths favored the MacBook CPU** — note these two backends
+live on *different machines*; the same-host CPU-vs-GPU picture is measured in
+"Same-host CPU/GPU crossover" below and looks very different. The full
+744k-unknown HSX case was re-measured on both backends after the ramp-aware
+truncated kernel became the canonical route:
 
 .. list-table:: Post-fix 744k HSX PAS/DKES head-to-head (end-to-end = build + solve)
    :header-rows: 1
@@ -230,19 +233,181 @@ backends after the ramp-aware truncated kernel became the canonical route:
      - 59.6 s e2e (26.2 s warm solve)
      - 2.3 GB
 
-Both backends route ``block_tridiagonal_truncated`` and land within a few seconds
+Both machines route ``block_tridiagonal_truncated`` and land within a few seconds
 of each other on the warm solve; under the tier-2 recycled-Krylov route the same
 case ran out of memory on the 16 GB GPU, so the structured tier is what makes it
-fit at all. A mid-size HSX case (336k unknowns) is at warm-solve parity as well
-(``3.5 s`` CPU versus ``3.3 s`` GPU).
+fit at all. A mid-size HSX case (336k unknowns) is at MacBook-CPU-vs-A4000
+parity as well (``3.5 s`` versus ``3.3 s`` warm).
 
-The GPU does **not** help the iterative and small-system paths. Full
-Fokker-Planck GCROT, the :math:`\Phi_1` Newton solve, ``value_and_grad``, the
-ambipolar Brent root, and a one-shot monoenergetic solve all run 2-5x *slower* on
-the A4000: they are dominated by serial iterations (and the tier-1 Legendre
-:math:`L`-scan is itself serial, with FP64 at 1/32 rate on this card), so device
-dispatch latency dominates. GPU wins require batched work — multi-:math:`E_r` or
-multi-surface ``vmap`` sweeps — not single solves.
+The GPU does **not** help the iterative and small-system paths *relative to a
+fast development CPU*. Full Fokker-Planck GCROT, the :math:`\Phi_1` Newton
+solve, ``value_and_grad``, the ambipolar Brent root, and a one-shot
+monoenergetic solve all ran 2-5x slower on the A4000 than on the development
+MacBook's CPU. A dedicated same-host re-measurement (next section) showed that
+this comparison mixes machines: on the workstation that hosts the A4000, the
+GPU beats *that machine's own 36-core CPU* on essentially every path and size,
+and the tier-1 production solve is FP64-compute-bound on the card (1/32-rate
+FP64), not dispatch-bound. The honest summary is per-machine: a fast laptop
+CPU beats a modest workstation GPU on small and iterative work; on the GPU's
+own host the GPU wins, and batched work — multi-:math:`E_r` or multi-surface
+``vmap`` sweeps — widens that win.
+
+Same-host CPU/GPU crossover (2026-07)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+All numbers in this section come from one host (36-core Pop!_OS workstation,
+RTX A4000 16 GB, JAX 0.10.2, ``CUDA_VISIBLE_DEVICES=0``), so CPU and GPU
+columns are the clean comparison; the development-MacBook CPU column is
+included to expose the cross-machine effect. Warm = second identical
+``solve()`` in-process (cached executable); cold = first solve in a fresh
+process with a *populated* persistent compilation cache. Reproduce with
+``tools/benchmarks/gpu_cpu_ladder.py``.
+
+**Tier-1 (direct truncated block-Thomas, the production route)** — the GPU won
+every measured size, 2.7x to 39x, so there is no same-host CPU/GPU crossover
+above the smallest deck measured (6.5k unknowns):
+
+.. list-table:: Warm tier-1 solve, HSX PAS/DKES family (seconds)
+   :header-rows: 1
+   :widths: 26 22 22 30
+
+   * - Unknowns
+     - Workstation CPU
+     - Workstation GPU
+     - Dev-MacBook CPU (other machine)
+   * - 6,488
+     - 1.41
+     - 0.53
+     - —
+   * - 40,584
+     - 3.04
+     - 1.17-2.20
+     - 0.62-0.73
+   * - 78,010
+     - 6.32
+     - 1.48
+     - —
+   * - 224,410
+     - 45.4
+     - 2.49
+     - —
+   * - 336,610
+     - 20.8-33.1
+     - 2.97-3.70
+     - 1.81
+   * - 688,810
+     - —
+     - 9.35
+     - —
+   * - 1,275,010 (production deck)
+     - 1,036
+     - 26.0-26.5
+     - —
+
+The production point is the full 2-species HSX deck (25x51x100x5 =
+1,275,010 unknowns): workstation CPU end-to-end 2,000.6 s (build 8.8 s, cold
+solve 952 s, warm solve 1,036 s) versus GPU end-to-end 72 s (warm solve
+26.0 s) — a 39x same-host GPU win. Two honesty notes: the workstation CPU
+warm repeat measured *slower* than its cold solve (1,036 s vs 952 s) and the
+224k/336k rungs overlap (45.4 s vs 20.8-33.1 s), i.e. all-core CPU timings
+on this box carry large run-to-run variance (thermal steady state at
+~34-thread load); and the earlier "~1,998 s office CPU warm" figure matches
+this end-to-end total, not the warm solve alone.
+
+**Tier-2 (GCROT-recycled FGMRES, preconditioned)** — the GPU also won every
+measured size warm; again no same-host crossover down to the smallest
+practical Fokker-Planck deck:
+
+.. list-table:: Warm tier-2 GCROT solve, W7-X FP family (seconds)
+   :header-rows: 1
+   :widths: 30 24 24 22
+
+   * - Unknowns
+     - Workstation CPU
+     - Workstation GPU
+     - GPU speedup
+   * - 2,804
+     - 1.38
+     - 0.93
+     - 1.5x
+   * - 11,884
+     - 4.03
+     - 2.75
+     - 1.5x
+   * - 78,628
+     - 21.7
+     - 12.0
+     - 1.8x
+   * - 155,524
+     - 67.8
+     - 25.2
+     - 2.7x
+
+Cold-including-compile favors the CPU at the small end (2.8k: 21.0 s CPU vs
+24.3 s GPU; 11.9k: 19.2 s vs 28.5 s) because GPU compilation is slower — a
+first-run effect the persistent cache removes on repetition.
+
+**Iterative and small-system paths, same host** — ``value_and_grad`` through
+the tier-1 solve (39.3k unknowns): warm 4.21 s CPU vs 3.03 s GPU; the
+ambipolar Brent root (2 species): 92.8 s CPU vs 48.4 s GPU end-to-end. The
+single measured CPU-wins case is the :math:`\Phi_1` Newton solve, whose
+unpreconditioned inner GCROT systems are capped at 6,000 unknowns (3,975
+here): warm re-solve 0.048 s CPU vs 0.159 s GPU (2.6x) and cold 40.3 s vs
+52.2 s. Per-``solve()`` routing of just those inner solves to the CPU did
+*not* recover the win (0.12-0.13 s: the per-iteration Newton residuals stay
+on the GPU and each routed solve pays device transfers plus a one-time CPU
+compile), so small :math:`\Phi_1`-heavy workloads are best run whole-process
+on the CPU (``JAX_PLATFORMS=cpu``).
+
+**Where the GPU time goes (profiler trace).** A ``jax.profiler`` capture of
+the warm 336k tier-1 GPU solve records 31,953 kernel launches with a mean
+kernel duration of 0.086 ms; the device is busy 2.74 s of the 3.18 s device
+span (13.8% idle), and the untraced warm solve is 2.97 s — i.e. the tier-1
+GPU solve is ~90% device compute, *not* host-dispatch-bound: the async
+dispatch pipeline keeps the serial Legendre scan's small kernels queued ahead
+of execution. The top kernels are FP64 dense linear algebra — ``getrf``
+(0.90 s), FP64 tensor-core GEMMs (0.80 s), ``trsm`` (0.45 s) — so the
+production solve sits within ~2.7x of the card's FP64 arithmetic floor
+(~5.5 TFlop at ~0.6 TFLOPS FP64). Faster-FP64 hardware, not lower launch
+latency, is what would speed this path up.
+
+**Device routing knob.** ``solve(device=...)`` gives explicit control:
+``"cpu"``/``"gpu"``/a ``jax.Device`` move the solve (inputs via
+``jax.device_put``, solution returned on the input's device; inert under
+``jit``/``grad`` tracing), and ``"auto"`` (default, env
+``SFINCS_JAX_SOLVE_DEVICE``) additionally consults the size thresholds
+``SFINCS_JAX_SOLVE_CPU_MAX_SIZE_TIER1`` / ``_TIER2``. Both thresholds
+default to 0 — automatic CPU-routing disabled — because the measurements
+above do not support a nonzero default on the reference host; they exist for
+hosts where the CPU/GPU balance differs (e.g. a strong CPU next to a weak
+accelerator: set ``SFINCS_JAX_SOLVE_CPU_MAX_SIZE_TIER2=6000``).
+
+**Cold starts and the persistent compilation cache.** The cache configured by
+``sfincs_jax.__init__`` (default ``~/.cache/sfincs_jax/jax_compilation_cache``,
+min-compile-time and min-entry-size forced to 0, GPU per-fusion autotune cache
+on by JAX default) was audited working cross-process on this host: with a
+populated cache the small-deck GPU cold solve drops 10.8 s -> 1.7 s, the CPU
+cold solve 7.8 s -> 3.0 s, and the :math:`\Phi_1` GPU cold solve 52.2 s ->
+15.0 s; at the production size the CPU cold solve ran at warm speed (952 s vs
+1,036 s warm). First-ever runs on a clean machine still pay full XLA
+compilation (historically ~2,100 s extra on the production CPU case), so cold
+-vs-warm expectations are: first run per (shape, backend) compiles; every
+later process reuses the cache and starts at warm speed plus a few seconds of
+cache loading.
+
+**Cyclic-reduction assessment (evaluation only, not adopted).** Block cyclic
+reduction would replace the serial length-:math:`L` block-Thomas recurrence
+with :math:`\log_2 L` parallel levels, at 2-3x the arithmetic and a working
+set touching all :math:`L` blocks per level. The trace above shows the
+regime it would need — a device idled by the serial scan — does not occur at
+production size: the A4000 is ~86% busy and FP64-throughput-bound, so
+inflating flops 2-3x to shorten the dependency chain would slow the solve
+down, and at small sizes (where the device *is* latency-bound) the absolute
+times are already sub-second and the memory-lean ``lax.map`` batching would
+have to be abandoned to expose the parallelism. Cyclic reduction only makes
+sense on hardware with FP64 headroom (data-center cards) combined with small
+:math:`N_\theta N_\zeta` blocks and long :math:`L` chains — the opposite
+corner from the production decks; it is left unimplemented.
 
 Production profiling battery
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

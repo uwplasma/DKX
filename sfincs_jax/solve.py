@@ -144,6 +144,27 @@ _TIER1_BUDGET_ENV = "SFINCS_TIER1_MEMORY_BUDGET_GB"
 # solution blocks is exact for the standard transport quantities.
 _TIER1_KEEP_LOWEST_DEFAULT = 3
 
+# Size-aware device routing (``solve(device=...)``): on an accelerator-default
+# host, ``device="auto"`` runs systems at or below these sizes on the host CPU
+# instead.  Both thresholds default to 0 — auto-routing OFF — because the
+# same-host measurements do not support a nonzero default (36-core Pop!_OS box
+# with an RTX A4000, 2026-07-17, docs/performance.rst "Same-host CPU/GPU
+# crossover"): the GPU won every tier-1 warm solve measured down to 6.5k DOFs
+# (2.7x-39x) and every preconditioned tier-2 warm solve down to 2.8k DOFs
+# (1.5x-2.7x).  The one CPU-wins case — the small unpreconditioned tier-2
+# loop of the Phi1 Newton solve (4.5k DOFs: warm 0.048 s CPU vs 0.159 s GPU)
+# — did NOT recover its win under solve-level routing (0.12-0.13 s: the
+# per-Newton-iteration residuals stay on the GPU and each routed solve pays
+# device transfers plus a one-time CPU compile), so routing small Phi1
+# workloads is best done whole-process (``JAX_PLATFORMS=cpu``), not per
+# solve.  The knob remains for hosts where the balance differs: set e.g.
+# ``SFINCS_JAX_SOLVE_CPU_MAX_SIZE_TIER2=6000`` to route small tier-2 solves.
+_SOLVE_DEVICE_ENV = "SFINCS_JAX_SOLVE_DEVICE"
+_SOLVE_CPU_MAX_TIER1_ENV = "SFINCS_JAX_SOLVE_CPU_MAX_SIZE_TIER1"
+_SOLVE_CPU_MAX_TIER2_ENV = "SFINCS_JAX_SOLVE_CPU_MAX_SIZE_TIER2"
+_SOLVE_CPU_MAX_TIER1_DEFAULT = 0
+_SOLVE_CPU_MAX_TIER2_DEFAULT = 0
+
 
 # =============================================================================
 # Result container
@@ -1453,6 +1474,100 @@ def _auto_route(
     return "gmres"
 
 
+def _env_size(name: str, default: int) -> int:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return int(float(raw))
+    except ValueError:
+        return default
+
+
+def _cpu_device_or_none() -> "jax.Device | None":
+    """The first host-CPU device, or ``None`` when the CPU backend is absent
+    (e.g. ``JAX_PLATFORMS=cuda`` initializes only the CUDA platform)."""
+    try:
+        return jax.local_devices(backend="cpu")[0]
+    except RuntimeError:
+        return None
+
+
+def _single_device_of(arr: jnp.ndarray) -> "jax.Device | None":
+    """The unique device holding ``arr``, or ``None`` (sharded/unknown)."""
+    try:
+        devices = arr.devices()
+    except Exception:
+        return None
+    if len(devices) != 1:
+        return None
+    return next(iter(devices))
+
+
+def _resolve_solve_device(
+    device: "str | jax.Device | None",
+    chosen: str,
+    op: KineticOperator,
+    traced: bool,
+) -> "jax.Device | None":
+    """Map the ``solve(device=...)`` knob to a target device (or ``None``).
+
+    ``None`` means "stay put" (no array movement).  Under jit/grad tracing the
+    knob is inert: arrays cannot be moved mid-trace, and the enclosing ``jit``
+    already pinned the computation's devices.
+    """
+    if traced or chosen == "direct":  # tier 3 is a host solve already
+        return None
+    if device is None:
+        device = os.environ.get(_SOLVE_DEVICE_ENV, "").strip().lower() or "auto"
+    if isinstance(device, jax.Device):
+        return device
+    device = str(device).strip().lower()
+    if device == "default":
+        return None
+    backend = jax.default_backend()
+    if device == "cpu":
+        if backend == "cpu":
+            return None
+        cpu = _cpu_device_or_none()
+        if cpu is None:
+            raise ValueError(
+                "solve(device='cpu') requested but no CPU backend is available "
+                "(JAX_PLATFORMS excludes 'cpu'?)."
+            )
+        return cpu
+    if device in ("gpu", "cuda", "tpu", "accelerator"):
+        if backend == "cpu":
+            raise ValueError(
+                f"solve(device={device!r}) requested but the default JAX backend is CPU "
+                "(no accelerator available)."
+            )
+        return None
+    if device != "auto":
+        raise ValueError(
+            f"unknown solve device {device!r}; expected 'auto', 'default', 'cpu', "
+            "'gpu', or a jax.Device"
+        )
+    if backend == "cpu":
+        return None
+    if chosen in ("block_tridiagonal", "block_tridiagonal_truncated"):
+        max_size = _env_size(_SOLVE_CPU_MAX_TIER1_ENV, _SOLVE_CPU_MAX_TIER1_DEFAULT)
+    else:
+        max_size = _env_size(_SOLVE_CPU_MAX_TIER2_ENV, _SOLVE_CPU_MAX_TIER2_DEFAULT)
+    if int(op.total_size) <= max_size:
+        cpu = _cpu_device_or_none()
+        if cpu is None:  # e.g. JAX_PLATFORMS=cuda: no CPU backend to route to
+            return None
+        print(
+            f"[sfincs_jax.solve] device route: total_size={int(op.total_size)} <= "
+            f"{max_size} — running this {'tier-1' if chosen.startswith('block') else 'tier-2'} "
+            f"solve on the host CPU (small solves are dispatch-bound on {backend}; "
+            f"override with device='default' or {_SOLVE_DEVICE_ENV})."
+        )
+        return cpu
+    return None
+
+
 def solve(
     op: KineticOperator,
     rhs: jnp.ndarray,
@@ -1472,6 +1587,7 @@ def solve(
     max_dense_size: int = 8192,
     tier1_memory_budget_gb: float | None = None,
     tier1_keep_lowest: int = _TIER1_KEEP_LOWEST_DEFAULT,
+    device: str | jax.Device | None = None,
 ) -> SolveResult:
     """Solve ``K x = rhs`` with the plan-§2.3 three-tier auto-policy.
 
@@ -1537,6 +1653,20 @@ def solve(
         tier1_keep_lowest: number of Legendre blocks the truncated tier-1
             kernel computes exactly (default 3 — the RHSMode 1/2/3 drives and
             output moments live on ``l <= 2``).
+        device: where to run the solve.  ``"cpu"``/``"gpu"`` force a backend
+            and a ``jax.Device`` pins the solve to that device: inputs are
+            moved with ``jax.device_put`` and the solution is returned on
+            the device that held ``rhs``.  ``"auto"`` (the default, also
+            read from the ``SFINCS_JAX_SOLVE_DEVICE`` environment variable)
+            additionally routes solves at or below the
+            ``SFINCS_JAX_SOLVE_CPU_MAX_SIZE_TIER1`` / ``_TIER2`` thresholds
+            to the host CPU on accelerator-default hosts — but both
+            thresholds default to 0 (no routing), because the same-host
+            measurements in docs/performance.rst found the GPU faster at
+            every practical size; the knobs exist for hosts where that
+            balance differs.  ``"default"`` disables all movement.  Under
+            ``jit``/``grad`` tracing the knob is inert (arrays cannot move
+            mid-trace), so jitted callers are unaffected.
 
     Auto-policy tier-1 routing (``method="auto"``, :func:`tier1_available` true):
 
@@ -1582,6 +1712,21 @@ def solve(
     chosen = method
     if method == "auto":
         chosen = _auto_route(op, rhs2d, tier1_memory_budget_gb, tier1_keep_lowest)
+
+    target_device = _resolve_solve_device(
+        device, chosen, op, _is_traced(rhs2d, *jax.tree_util.tree_leaves(op))
+    )
+    home_device: jax.Device | None = None
+    if target_device is not None:
+        home = _single_device_of(rhs2d)
+        if home is not None and home != target_device:
+            home_device = home
+            op = jax.device_put(op, target_device)
+            rhs2d = jax.device_put(rhs2d, target_device)
+            if x0 is not None:
+                x0 = jax.device_put(x0, target_device)
+            if recycle is not None:
+                recycle = jax.device_put(recycle, target_device)
 
     if chosen in ("block_tridiagonal", "block_tridiagonal_truncated"):
         if chosen == "block_tridiagonal":
@@ -1633,6 +1778,20 @@ def solve(
         if differentiable:
             raise RuntimeError("tier-3 (method='direct') is non-differentiable.")
         result = _solve_tier3(op, rhs2d, tol=tol, atol=atol, max_dense_size=max_dense_size)
+
+    if home_device is not None:
+        # Return the solution (and warm-start state) on the device that held
+        # the inputs, so downstream pipelines are unaffected by the routing.
+        result = replace(
+            result,
+            x=jax.device_put(result.x, home_device),
+            residual_norms=jax.device_put(result.residual_norms, home_device),
+            recycle=(
+                None
+                if result.recycle is None
+                else jax.device_put(result.recycle, home_device)
+            ),
+        )
 
     if squeeze:
         result = replace(result, x=result.x[:, 0])
