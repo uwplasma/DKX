@@ -102,6 +102,51 @@ Fortran/MUMPS saturates at 2 ranks on this machine and degrades beyond
 (performance/efficiency core asymmetry plus MUMPS OpenMP contention), so the
 practical Fortran floor for this case is about ``230 s``.
 
+Cross-machine end-to-end time to solution
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A second, independent sweep measures **end-to-end** wall time (operator
+build + solve + moments + output; ``run_profile`` on the ``sfincs_jax`` side,
+the full binary run on the Fortran side) for the same 744,610-unknown deck on
+two machines, with a freshly compiled Fortran v3 (conda PETSc 3.25 + MUMPS,
+MPI) and best-of-two repetitions per configuration. The Fortran run is one
+linear solve dominated by the preconditioner factorization plus a handful of
+Krylov applications, so end-to-end time is the honest cross-code metric.
+Reproduce with ``tools/benchmarks/time_to_solution.py``.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Configuration
+     - End-to-end [s]
+   * - Fortran MPI, 10-core laptop, n=1
+     - 350
+   * - Fortran MPI, 10-core laptop, best (n=8)
+     - 141
+   * - ``sfincs_jax``, laptop, one process (cold / warm)
+     - 62 / 46
+   * - Fortran MPI, 36-core workstation, n=1
+     - 1163
+   * - Fortran MPI, 36-core workstation, best (n=8)
+     - 802
+   * - Fortran MPI, 36-core workstation, n=32
+     - 1423
+   * - ``sfincs_jax``, workstation, one RTX A4000 GPU (cold / warm)
+     - 78 / 59
+   * - ``sfincs_jax``, workstation, one CPU process (cold / warm)
+     - 6132 / 1998
+
+The MPI scaling shape repeats on both machines: Fortran/MUMPS bottoms out
+around 8 ranks (1.4-2.5x over one rank) and *degrades* beyond — at 32 ranks
+the workstation run is slower than a single rank. One ``sfincs_jax`` process
+beats every measured Fortran configuration on the same hardware: 3.1x the
+laptop's best MPI time on CPU, and 13.6x the workstation's best MPI time on
+its GPU. The workstation's CPU path is dominated by the serial Legendre scan
+at that machine's low single-core throughput — on such hardware the GPU is
+the ``sfincs_jax`` backend of choice, and batched scans
+(:mod:`sfincs_jax.batch`, measured in ``tools/benchmarks/batched_scan.py``)
+are the axis where one process replaces an entire MPI allocation.
+
 Memory findings
 ~~~~~~~~~~~~~~~
 

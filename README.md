@@ -101,6 +101,12 @@ the tier-1 truncated Legendre block elimination from `solvax`.
   takes 45.0 s (the Legendre scan is serial and A4000 FP64 is 1/32 rate).
 - The Fortran strong-scaling baseline on the same case: 463.6 s (1 rank),
   229.5 s (2 ranks, 101% efficiency), 240.9 s (4 ranks), 270.5 s (8 ranks).
+- A cross-machine end-to-end sweep (10-core laptop + 36-core workstation,
+  freshly compiled Fortran MPI) repeats the shape: Fortran/MUMPS bottoms out
+  near 8 ranks and degrades beyond (slower at 32 ranks than at 1), while one
+  `sfincs_jax` process beats every measured MPI configuration — 3.1x the
+  laptop's best on CPU, 13.6x the workstation's best on its GPU
+  ([table](docs/performance.rst)).
 - At the full production resolution of this case (2.5 M unknowns), **neither**
   code fits a global sparse factorization in 24 GB; the truncated Legendre
   elimination needs only O(K m^2) memory (~0.3 GB here, vs ~91 GB for the
