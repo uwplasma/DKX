@@ -779,3 +779,100 @@ def test_solve_importable_without_solvax_and_fails_loudly_on_use() -> None:
     )
     assert proc.returncode == 0, proc.stderr
     assert "guarded-import-ok" in proc.stdout
+
+
+# ---------------------------------------------------------------------------
+# Size-aware device routing (solve(device=...))
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_solve_device_semantics_on_cpu_host() -> None:
+    """The routing knob on a CPU-default host: inert except explicit errors."""
+    from sfincs_jax.solve import _resolve_solve_device
+
+    op = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
+    assert jax.default_backend() == "cpu", "test assumes a CPU-default test host"
+    # auto/default/cpu: no movement on a CPU host.
+    assert _resolve_solve_device("auto", "block_tridiagonal", op, False) is None
+    assert _resolve_solve_device("default", "gmres", op, False) is None
+    assert _resolve_solve_device("cpu", "gmres", op, False) is None
+    assert _resolve_solve_device(None, "gmres", op, False) is None
+    # traced: always inert (jit-safety), whatever the request.
+    cpu0 = jax.local_devices(backend="cpu")[0]
+    assert _resolve_solve_device(cpu0, "gmres", op, True) is None
+    # explicit device object passes through untraced.
+    assert _resolve_solve_device(cpu0, "gmres", op, False) is cpu0
+    # tier 3 is a host solve already: no movement.
+    assert _resolve_solve_device(cpu0, "direct", op, False) is None
+    # accelerator request on a CPU-only host is a loud error.
+    with pytest.raises(ValueError, match="default JAX backend is CPU"):
+        _resolve_solve_device("gpu", "gmres", op, False)
+    with pytest.raises(ValueError, match="unknown solve device"):
+        _resolve_solve_device("quantum", "gmres", op, False)
+
+
+def test_solve_device_thresholds_read_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    from sfincs_jax.solve import (
+        _SOLVE_CPU_MAX_TIER1_DEFAULT,
+        _SOLVE_CPU_MAX_TIER2_DEFAULT,
+        _env_size,
+    )
+
+    # Auto-routing is OFF by default: the same-host measurements (see
+    # docs/performance.rst) found the GPU faster at every practical size, so
+    # a nonzero default is unsupported by data.  Users opt in via the envs.
+    assert _SOLVE_CPU_MAX_TIER1_DEFAULT == 0
+    assert _SOLVE_CPU_MAX_TIER2_DEFAULT == 0
+
+    monkeypatch.setenv("SFINCS_JAX_SOLVE_CPU_MAX_SIZE_TIER1", "12345")
+    assert _env_size("SFINCS_JAX_SOLVE_CPU_MAX_SIZE_TIER1", _SOLVE_CPU_MAX_TIER1_DEFAULT) == 12345
+    monkeypatch.setenv("SFINCS_JAX_SOLVE_CPU_MAX_SIZE_TIER1", "not-a-number")
+    assert (
+        _env_size("SFINCS_JAX_SOLVE_CPU_MAX_SIZE_TIER1", _SOLVE_CPU_MAX_TIER1_DEFAULT)
+        == _SOLVE_CPU_MAX_TIER1_DEFAULT
+    )
+    monkeypatch.delenv("SFINCS_JAX_SOLVE_CPU_MAX_SIZE_TIER1")
+    assert (
+        _env_size("SFINCS_JAX_SOLVE_CPU_MAX_SIZE_TIER2", _SOLVE_CPU_MAX_TIER2_DEFAULT)
+        == _SOLVE_CPU_MAX_TIER2_DEFAULT
+    )
+
+
+def test_solve_on_explicit_second_cpu_device_matches_and_returns_home() -> None:
+    """Real move/move-back exercise using two host CPU devices in a subprocess.
+
+    ``--xla_force_host_platform_device_count=2`` must be set before jax import,
+    so this runs in a fresh interpreter: solve on cpu:1 with inputs on cpu:0,
+    check the answer matches the unrouted solve and comes back on cpu:0.
+    """
+    import subprocess
+    import sys
+
+    deck = REF / "pas_1species_PAS_noEr_tiny_scheme1.input.namelist"
+    code = "\n".join(
+        [
+            "import os",
+            "os.environ['XLA_FLAGS'] = (os.environ.get('XLA_FLAGS', '') +",
+            "    ' --xla_force_host_platform_device_count=2').strip()",
+            "import jax, numpy as np",
+            "from sfincs_jax.drift_kinetic import KineticOperator",
+            "from sfincs_jax.namelist import read_sfincs_input",
+            "from sfincs_jax.solve import solve",
+            f"op = KineticOperator.from_namelist(read_sfincs_input({str(deck)!r}))",
+            "rhs = op.rhs()",
+            "cpu0, cpu1 = jax.local_devices(backend='cpu')[:2]",
+            "rhs0 = jax.device_put(rhs, cpu0)",
+            "ref = solve(op, rhs0, device='default')",
+            "routed = solve(op, rhs0, device=cpu1)",
+            "assert routed.method == ref.method",
+            "err = float(np.max(np.abs(np.asarray(routed.x) - np.asarray(ref.x))))",
+            "assert err < 1e-12, f'routed answer differs: {err}'",
+            "assert routed.x.devices() == {cpu0}, routed.x.devices()",
+            "print('device-routing-ok')",
+        ]
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=600
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "device-routing-ok" in proc.stdout
