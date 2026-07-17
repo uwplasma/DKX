@@ -818,6 +818,12 @@ def test_solve_device_thresholds_read_env(monkeypatch: pytest.MonkeyPatch) -> No
         _env_size,
     )
 
+    # Auto-routing is OFF by default: the same-host measurements (see
+    # docs/performance.rst) found the GPU faster at every practical size, so
+    # a nonzero default is unsupported by data.  Users opt in via the envs.
+    assert _SOLVE_CPU_MAX_TIER1_DEFAULT == 0
+    assert _SOLVE_CPU_MAX_TIER2_DEFAULT == 0
+
     monkeypatch.setenv("SFINCS_JAX_SOLVE_CPU_MAX_SIZE_TIER1", "12345")
     assert _env_size("SFINCS_JAX_SOLVE_CPU_MAX_SIZE_TIER1", _SOLVE_CPU_MAX_TIER1_DEFAULT) == 12345
     monkeypatch.setenv("SFINCS_JAX_SOLVE_CPU_MAX_SIZE_TIER1", "not-a-number")
