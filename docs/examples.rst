@@ -276,8 +276,8 @@ the recommended first stop for new workflows.
      - ``examples/transport/``, ``examples/autodiff/``, ``examples/optimization/``, ``examples/vmec_jax_finite_beta/``
      - You need a specific physics, optimization, VMEC, Redl, bootstrap-current, or differentiability workflow.
    * - ``validation``
-     - ``examples/parity/``, ``examples/performance/``, ``examples/publication_figures/``
-     - You need parity checks, runtime/memory evidence, CPU/GPU benchmark drivers, or regenerated documentation figures.
+     - ``examples/parity/``, ``examples/performance/``, ``examples/publication_figures/``, ``examples/paper_benchmarks/``
+     - You need parity checks, runtime/memory evidence, CPU/GPU benchmark drivers, regenerated documentation figures, or methods-paper benchmark cases.
    * - ``reference``
      - ``examples/data/``, ``examples/sfincs_examples/``
      - You need small shared inputs or recognizable SFINCS Fortran v3 decks for audits and compatibility checks.
