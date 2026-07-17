@@ -79,7 +79,7 @@ Shipped state as of v1.2.0 (2026-07-13):
 
 | Lane | Status | Done when |
 | --- | --- | --- |
-| Strong-scaling / time-to-solution evidence | Active | The measured table, throughput framing, and harness below are published in docs/performance and the README table refreshed. |
+| Strong-scaling / time-to-solution evidence | Done (2026-07-16) | Published: docs/performance.rst cross-machine table + README bullet; harness tools/benchmarks/time_to_solution.py. |
 | Research roadmap items 1-6 | Queued | Each lands per the roadmap section with parity/gradient gates. |
 
 ### Strong-scaling / time-to-solution lane
@@ -143,19 +143,20 @@ DKE solve has not been published by anyone.
 
 ## Ordered Finish Plan
 
-1. Finish the strong-scaling/time-to-solution lane (measurements running on
-   laptop + workstation; GPU leg on the workstation's A4000s; then the
-   harness + docs section + README table refresh).
-2. Land the stale-docs fix branch (`par-docsfix`: inputs.rst limitations
-   block, validation.suite commands, collisionOperator=3 mentions,
-   architecture text, solvax-core wording, figure fix).
+1. Strong-scaling/time-to-solution lane: DONE (docs/performance.rst table,
+   README bullet, tools/benchmarks/time_to_solution.py).
+2. Stale-docs sweep: DONE (merged 32589968).
 3. External PR #9 (Rosenbluth quadrature stabilization): reviewed, tests
-   pass locally; request a namelist/API opt-in (env-var-only route conflicts
-   with the standing rule) then merge.
+   pass locally; API-knob request posted on the PR — merge once the
+   contributor lands it.
 4. solvax: next release (>=0.8.5) carries `d_block`; bump the sfincs_jax
    minimum then and swap the hand-rolled refinement/chunking for the solvax
    primitives (roadmap item 6).
-5. Start roadmap item 1 (methods-paper benchmark assembly).
+5. Roadmap item 1 in progress: the ICNTS-style W7-X monoenergetic
+   benchmark landed (examples/paper_benchmarks/, Fortran cross-checks at
+   solver precision, orientation-robust Beidler normalization). Next
+   pieces: TJ-II/HSX configurations, Shaing-Callen low-nu convergence
+   study, gradient-verification table, W7-X ambipolar-Er case.
 
 ## Source Structure Rules
 
