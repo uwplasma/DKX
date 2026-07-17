@@ -80,7 +80,9 @@ Shipped state as of v1.2.0 (2026-07-13):
 | Lane | Status | Done when |
 | --- | --- | --- |
 | Strong-scaling / time-to-solution evidence | Done (2026-07-16) | Published: docs/performance.rst cross-machine table + README bullet; harness tools/benchmarks/time_to_solution.py. |
-| Research roadmap items 1-6 | Queued | Each lands per the roadmap section with parity/gradient gates. |
+| Research roadmap items 1-6 | Active (item 1 underway) | Each lands per the roadmap section with parity/gradient gates. |
+| GPU performance | Active | The single-solve CPU/GPU crossover is measured and documented; at least one landed fix (dispatch/sync elimination, compile-cache, or size-aware backend routing) with before/after numbers; the remaining GPU gaps have a written root-cause. |
+| DKX rename | Planned (decision-gated) | The rename executes only on an explicit go decision, following the sequenced plan below. |
 
 ### Strong-scaling / time-to-solution lane
 
@@ -98,6 +100,59 @@ speedup curves. Deliverable:
 3. Publish: `tools/benchmarks/` harness + a docs/performance section with the
    table and reproduction commands. Local Fortran baselines recorded at
    `fortran_scaling_baseline/`; workstation runs under `~/sfincs_scaling`.
+
+### GPU performance lane
+
+Measured facts to debug (not folklore): single solves on GPU are at or below
+CPU parity on several paths — the tier-1 Legendre elimination is a serial
+scan per (species, x) subsystem (batch axes are the only GPU parallelism);
+the iterative paths (Fokker-Planck GCROT, Phi1 Newton, gradients, ambipolar)
+run dispatch-bound serial iterations and have measured 2-5x slower on GPU
+than CPU; the workstation CPU cold run burned ~4100 s in XLA compilation
+(persistent-cache behavior on that host needs auditing); mixed-precision
+block-Thomas is a 1.79x GPU win but must stay GPU-gated (up to 4.5x slower
+on CPU). Work items:
+
+1. Per-phase CPU-vs-GPU profiles (operator build, factor, solve, moments,
+   and the Krylov iteration loop) across a size ladder, with a JAX profiler
+   trace on the GPU host; identify dispatch stalls, host syncs, and
+   recompilation.
+2. Measure the single-solve CPU/GPU crossover size; if small solves are
+   structurally CPU-bound, land size-aware backend routing (documented,
+   automatic, overridable) instead of leaving users to discover it.
+3. Eliminate found host-device syncs / per-iteration dispatch overheads in
+   the tier-2 loop (fori_loop/scan restructuring where measured to help).
+4. Evaluate a parallel block-tridiagonal kernel (cyclic-reduction family)
+   in solvax to break the serial-L ceiling for the direct tier; adopt only
+   if it beats the scan at production sizes with parity intact.
+5. Audit/enable the persistent compilation cache on the GPU host; document
+   cold-vs-warm expectations.
+
+### DKX rename lane (decision-gated)
+
+Rename ``sfincs_jax`` to ``DKX`` (import name ``dkx``). Name checks done
+2026-07-16: PyPI ``dkx`` is unclaimed; no significant GitHub collision; no
+import collision. The rename does NOT execute until an explicit go decision;
+sequenced plan:
+
+1. Freeze the name and casing (repo ``uwplasma/DKX``, package/import
+   ``dkx``, prose "DKX") and the expansion used in docs/paper.
+2. Inventory the rename surface mechanically (module dirs, pyproject,
+   ``__init__`` exports, CLI entry point name, env-var prefix
+   ``SFINCS_JAX_*`` -> ``DKX_*`` with back-compat reads, docs, README,
+   CITATION, badges, tests, tools, workflow files, release-asset manifests,
+   figure labels).
+3. One rename PR: package dir -> ``dkx/`` with a ``sfincs_jax`` compat shim
+   (re-export + DeprecationWarning, kept for >=2 releases); env vars read
+   both prefixes with the old one warning; CLI ships both entry points.
+4. Releases: publish ``dkx`` to PyPI; publish one final ``sfincs-jax``
+   release that depends on ``dkx`` and re-exports (turnstile release with a
+   clear notice). Version bumps to 2.0.0 at the rename.
+5. Rename the GitHub repo (GitHub auto-redirects old URLs); update RTD
+   project slug, badges, and the docs domain; update downstream references
+   (vmec_jax examples, office checkouts, CI).
+6. SFINCS remains named and cited exactly as today — the parity story
+   ("DKX vs SFINCS Fortran v3") is unchanged.
 
 ## Research Roadmap (2026-07 literature review)
 
