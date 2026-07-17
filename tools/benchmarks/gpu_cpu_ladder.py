@@ -37,9 +37,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
+
+# This tool measures the *requested* backend: pin solve() to the default
+# device so the size-aware auto-routing (solve(device="auto")) cannot silently
+# move small solves to the CPU mid-scan. Explicit env settings still win.
+os.environ.setdefault("SFINCS_JAX_SOLVE_DEVICE", "default")
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
@@ -133,6 +139,11 @@ def main() -> int:
     ap.add_argument("--size", choices=sorted(SIZES), help="built-in HSX PAS/DKES ladder size")
     ap.add_argument("--deck", type=Path, help="explicit input.namelist (overrides --size)")
     ap.add_argument("--scan", choices=["tier1", "tier2"], help="crossover scan instead of one profile")
+    ap.add_argument(
+        "--rungs",
+        default="",
+        help="scan rung slice, e.g. '0-3' or '2' (default: all rungs)",
+    )
     ap.add_argument("--method", default="auto", help="solve method (default auto)")
     ap.add_argument("--tol", type=float, default=1e-10)
     ap.add_argument("--repeat-warm", type=int, default=1, help="extra warm solves averaged into solve_warm_s")
@@ -143,6 +154,9 @@ def main() -> int:
     if args.scan:
         base = REPO_ROOT / (_HSX if args.scan == "tier1" else _S4_2SP)
         grid = TIER1_SCAN if args.scan == "tier1" else TIER2_SCAN
+        if args.rungs:
+            lo, _, hi = args.rungs.partition("-")
+            grid = grid[int(lo) : int(hi or lo) + 1]
         method = "auto" if args.scan == "tier1" else "gmres"
         text = base.read_text()
         if args.scan == "tier2":
