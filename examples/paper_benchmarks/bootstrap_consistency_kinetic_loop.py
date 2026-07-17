@@ -461,7 +461,7 @@ for it in range(N_PICARD):
             break
         continue
 
-    # a) equilibrium at the currently applied profile (warm-started in-process)
+    # a) equilibrium at the applied current profile (warm-started in-process)
     t0 = time.time()
     try:
         eq = vmec_optimize.solve_equilibrium(inp, initial_state=prev_state)
@@ -518,7 +518,7 @@ for it in range(N_PICARD):
     i_of_s = np.linalg.solve(matrix, rhs)
     dids_new = (jr_full * 2 * np.pi * psi_a - MU0 * i_of_s * dpds) / fsa_b2_full
 
-    # I'(s) currently driving the equilibrium: the flat zero-current start at
+    # I'(s) driving the equilibrium at this iteration: the flat zero-current start at
     # iteration 0 (so delta_0 = 1 and the first application is damped too).
     if it > 0:
         dids_applied = np.asarray(cache["iterations"][it - 1]["dids_applied"])
