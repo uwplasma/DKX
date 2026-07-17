@@ -36,7 +36,12 @@ frequency actually applied by the collision operator at the monoenergetic
 speed node, ``nu = nu_n nuDHat(x0) vBar/RBar``, so ``D33* -> 1`` exactly in
 the collisional limit.  The normalized collisionality reported alongside is
 ``nu_star = R0 nu / (iota v)`` and the normalized electric field is
-``v_E = |E_r| / (v B0) = |EStar| iota eps_t / x0``.
+``v_E = |E_r| / (v B0) = |EStar| iota eps_t / x0``.  The reference values
+and conversion factors use the unsigned orientation quantities ``|GHat|``,
+``|GHat + iota IHat|``, ``|iota|``, ``|B0OverBBar|`` so the coefficients are
+well defined for either stored field/flux orientation (identical to the
+signed formulas for standard-orientation decks; see
+:func:`monoenergetic_dstar_from_transport_matrix`).
 
 The conversion from the ``transportMatrix`` entries ``L^S`` to the physical
 matrix ``L^B`` defined by ``I_i = -n sum_j L^B_ij A_j`` (Beidler et al. 2011,
@@ -211,8 +216,8 @@ class MonoenergeticDatabase:
 
     @property
     def r_major(self) -> float:
-        """Beidler's ``R0`` in RBar units: ``GHat / B0OverBBar``."""
-        return float(self.g_hat) / float(self.b0_over_bbar)
+        """Beidler's ``R0`` in RBar units: ``|GHat / B0OverBBar|`` (positive)."""
+        return abs(float(self.g_hat) / float(self.b0_over_bbar))
 
     @property
     def eps_t(self) -> float:
@@ -221,14 +226,14 @@ class MonoenergeticDatabase:
 
     @property
     def nu_star(self) -> np.ndarray:
-        """``R0 nu/(iota v)`` for each ``nu_prime`` grid value."""
+        """``R0 nu/(iota v)`` for each ``nu_prime`` grid value (positive)."""
         nu_eff = (
-            np.asarray(self.nu_prime, dtype=np.float64)
-            * float(self.b0_over_bbar)
-            / (float(self.g_hat) + float(self.iota) * float(self.i_hat))
+            np.abs(np.asarray(self.nu_prime, dtype=np.float64))
+            * abs(float(self.b0_over_bbar))
+            / abs(float(self.g_hat) + float(self.iota) * float(self.i_hat))
             * float(self.nu_d_hat_x0)
         )
-        return self.r_major * nu_eff / (float(self.iota) * float(self.x0))
+        return self.r_major * nu_eff / (abs(float(self.iota)) * float(self.x0))
 
     @property
     def v_e(self) -> np.ndarray:
@@ -314,6 +319,18 @@ def monoenergetic_dstar_from_transport_matrix(
     physical ``L^B`` -> monoenergetic ``D_ij`` (single-node de-convolution)
     -> normalized ``D*``.  Pure ``jnp``; safe under ``jit``/``grad``.
 
+    Orientation robustness: the conversion and the reference values use the
+    unsigned orientation factors ``|GHat|``, ``|GHat + iota IHat|``,
+    ``|iota|``, ``|B0OverBBar|`` (Beidler's ``R0``, ``eps_t`` and the
+    plateau/banana/collisional references are positive lengths and rates by
+    definition).  For standard-orientation decks (``GHat > 0``,
+    ``iota > 0``) this is identical to the signed formulas; for equilibria
+    stored with the opposite field/flux orientation (e.g. Boozer ``.bc``
+    files with ``GHat < 0``) it gives the same well-defined coefficients the
+    orientation-standardized machine would produce (the RHSMode=3
+    ``transportMatrix`` is invariant under the joint sign convention, which
+    is why upstream v3 decks scan positive ``nuPrime`` on such files).
+
     Args:
         transport_matrix: shape ``(2, 2)`` RHSMode=3 matrix.
         nu_prime: the ``nuPrime`` the matrix was solved at.
@@ -331,10 +348,12 @@ def monoenergetic_dstar_from_transport_matrix(
     """
     tm = jnp.asarray(transport_matrix, dtype=jnp.float64)
     delta = jnp.asarray(delta, dtype=jnp.float64)
-    g_hat = jnp.asarray(g_hat, dtype=jnp.float64)
+    g_hat_signed = jnp.asarray(g_hat, dtype=jnp.float64)
     i_hat = jnp.asarray(i_hat, dtype=jnp.float64)
-    iota = jnp.asarray(iota, dtype=jnp.float64)
-    b0 = jnp.asarray(b0_over_bbar, dtype=jnp.float64)
+    iota_signed = jnp.asarray(iota, dtype=jnp.float64)
+    g_hat = jnp.abs(g_hat_signed)
+    iota = jnp.abs(iota_signed)
+    b0 = jnp.abs(jnp.asarray(b0_over_bbar, dtype=jnp.float64))
     fsab2 = jnp.asarray(fsab_hat2, dtype=jnp.float64)
     r_hat = jnp.asarray(r_hat, dtype=jnp.float64)
     x0 = jnp.asarray(x0, dtype=jnp.float64)
@@ -346,7 +365,7 @@ def monoenergetic_dstar_from_transport_matrix(
     dr_dpsi = 1.0 / (b0 * r_hat)
     r_major = g_hat / b0
     eps_t = r_hat / r_major
-    g_plus = g_hat + iota * i_hat
+    g_plus = jnp.abs(g_hat_signed + iota_signed * i_hat)
     vth = jnp.sqrt(t_hat / m_hat)
     v = x0 * vth
 
@@ -368,7 +387,7 @@ def monoenergetic_dstar_from_transport_matrix(
     v_d = delta * m_hat * v * v / (2.0 * z * r_major * b0)
     d11_p = (jnp.pi / 4.0) * v_d * v_d * r_major / (v * iota)
     d31_b = (2.0 / 3.0) * (v_d * r_major / (iota * eps_t)) * (_FT_LARGE_ASPECT * jnp.sqrt(eps_t))
-    nu_eff = jnp.asarray(nu_prime, dtype=jnp.float64) * b0 / g_plus * jnp.asarray(
+    nu_eff = jnp.abs(jnp.asarray(nu_prime, dtype=jnp.float64)) * b0 / g_plus * jnp.asarray(
         nu_d_hat_x0, dtype=jnp.float64
     )
     d33_ps = v * v * fsab2 / (3.0 * nu_eff * b0 * b0)
@@ -814,12 +833,17 @@ def energy_convolution(
 
     delta = jnp.asarray(db.delta, dtype=jnp.float64)
     alpha = jnp.asarray(db.alpha, dtype=jnp.float64)
-    g_hat = jnp.asarray(db.g_hat, dtype=jnp.float64)
+    g_hat_signed = jnp.asarray(db.g_hat, dtype=jnp.float64)
     i_hat = jnp.asarray(db.i_hat, dtype=jnp.float64)
-    iota = jnp.asarray(db.iota, dtype=jnp.float64)
-    b0 = jnp.asarray(db.b0_over_bbar, dtype=jnp.float64)
+    iota_signed = jnp.asarray(db.iota, dtype=jnp.float64)
+    b0_signed = jnp.asarray(db.b0_over_bbar, dtype=jnp.float64)
     fsab2 = jnp.asarray(db.fsab_hat2, dtype=jnp.float64)
-    g_plus = g_hat + iota * i_hat
+    # Orientation-robust factors, matching the D* conversion (see
+    # monoenergetic_dstar_from_transport_matrix): references are positive.
+    g_hat = jnp.abs(g_hat_signed)
+    iota = jnp.abs(iota_signed)
+    b0 = jnp.abs(b0_signed)
+    g_plus = jnp.abs(g_hat_signed + iota_signed * i_hat)
     r_major = g_hat / b0
     eps_t = jnp.asarray(db.r_hat, dtype=jnp.float64) / r_major
     x0 = jnp.asarray(db.x0, dtype=jnp.float64)
@@ -842,8 +866,10 @@ def energy_convolution(
         vth = jnp.sqrt(t_hat / m_hat)
         v = x_q * vth  # (X,)
 
-        nu_prime_x = g_plus / b0 * (x0 / nu_d_ref) * nu_n * nu_d_hat[s] / v
-        e_star_x = (alpha * delta / 2.0) * (g_hat / (iota * b0)) * dphi * x0 / v
+        nu_prime_x = g_plus / b0 * (x0 / nu_d_ref) * jnp.abs(nu_n) * nu_d_hat[s] / v
+        e_star_x = (
+            (alpha * delta / 2.0) * (g_hat_signed / (iota_signed * b0_signed)) * dphi * x0 / v
+        )
 
         d11s, d13s, d31s, d33s = _dstar_lookup(db, nu_prime_x, e_star_x)
 

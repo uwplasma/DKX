@@ -22,6 +22,11 @@
       "role": "Optimization objectives, candidate screening, and kinetic-promotion helpers.",
       "start_here": "optimization/qa_nfp2_sfincs_jax_objectives.py"
     },
+    "paper_benchmarks": {
+      "category": "validation",
+      "role": "Methods-paper benchmark cases with figures, JSON records, and Fortran v3 cross-checks.",
+      "start_here": "paper_benchmarks/monoenergetic_icnts_w7x.py"
+    },
     "parity": {
       "category": "validation",
       "role": "Frozen-reference parity checks against SFINCS Fortran v3 artifacts.",

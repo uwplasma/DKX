@@ -141,7 +141,7 @@ validation or benchmark workflow, or reference data.
 | --- | --- | --- |
 | `learning` | `tutorials/`, `getting_started/` | You want to learn the CLI, Python API, plots, output formats, and first operator/geometry concepts. |
 | `capability` | `transport/`, `autodiff/`, `optimization/`, `vmec_jax_finite_beta/` | You need a specific physics or differentiability workflow. |
-| `validation` | `parity/`, `performance/`, `publication_figures/` | You need parity checks, runtime/memory evidence, or regenerated documentation figures. |
+| `validation` | `parity/`, `performance/`, `publication_figures/`, `paper_benchmarks/` | You need parity checks, runtime/memory evidence, regenerated documentation figures, or methods-paper benchmark cases. |
 | `reference` | `data/`, `sfincs_examples/` | You need small shared inputs or recognizable SFINCS Fortran v3 decks for audits. |
 
 ### Folder Map
@@ -167,6 +167,9 @@ validation or benchmark workflow, or reference data.
   stable-core gates.
 - `publication_figures/`: scripts that regenerate documentation and paper
   figures from checked summaries or explicit benchmark runs.
+- `paper_benchmarks/`: community-standard benchmark cases for the methods
+  paper (ICNTS-style monoenergetic coefficient scans with Fortran v3
+  cross-checks), each writing a figure and a JSON record.
 - `sfincs_examples/`: vendored upstream SFINCS v3 example inputs plus helpers
   used for parity and benchmark-suite audits, not the recommended starting
   point for first-time users.
