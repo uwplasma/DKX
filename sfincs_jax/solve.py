@@ -1481,6 +1481,15 @@ def _env_size(name: str, default: int) -> int:
         return default
 
 
+def _cpu_device_or_none() -> "jax.Device | None":
+    """The first host-CPU device, or ``None`` when the CPU backend is absent
+    (e.g. ``JAX_PLATFORMS=cuda`` initializes only the CUDA platform)."""
+    try:
+        return jax.local_devices(backend="cpu")[0]
+    except RuntimeError:
+        return None
+
+
 def _single_device_of(arr: jnp.ndarray) -> "jax.Device | None":
     """The unique device holding ``arr``, or ``None`` (sharded/unknown)."""
     try:
@@ -1515,7 +1524,15 @@ def _resolve_solve_device(
         return None
     backend = jax.default_backend()
     if device == "cpu":
-        return None if backend == "cpu" else jax.local_devices(backend="cpu")[0]
+        if backend == "cpu":
+            return None
+        cpu = _cpu_device_or_none()
+        if cpu is None:
+            raise ValueError(
+                "solve(device='cpu') requested but no CPU backend is available "
+                "(JAX_PLATFORMS excludes 'cpu'?)."
+            )
+        return cpu
     if device in ("gpu", "cuda", "tpu", "accelerator"):
         if backend == "cpu":
             raise ValueError(
@@ -1535,13 +1552,16 @@ def _resolve_solve_device(
     else:
         max_size = _env_size(_SOLVE_CPU_MAX_TIER2_ENV, _SOLVE_CPU_MAX_TIER2_DEFAULT)
     if int(op.total_size) <= max_size:
+        cpu = _cpu_device_or_none()
+        if cpu is None:  # e.g. JAX_PLATFORMS=cuda: no CPU backend to route to
+            return None
         print(
             f"[sfincs_jax.solve] device route: total_size={int(op.total_size)} <= "
             f"{max_size} — running this {'tier-1' if chosen.startswith('block') else 'tier-2'} "
             f"solve on the host CPU (small solves are dispatch-bound on {backend}; "
             f"override with device='default' or {_SOLVE_DEVICE_ENV})."
         )
-        return jax.local_devices(backend="cpu")[0]
+        return cpu
     return None
 
 
