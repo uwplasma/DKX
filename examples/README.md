@@ -168,8 +168,9 @@ validation or benchmark workflow, or reference data.
 - `publication_figures/`: scripts that regenerate documentation and paper
   figures from checked summaries or explicit benchmark runs.
 - `paper_benchmarks/`: community-standard benchmark cases for the methods
-  paper (ICNTS-style monoenergetic coefficient scans with Fortran v3
-  cross-checks), each writing a figure and a JSON record.
+  paper (ICNTS-style monoenergetic coefficient scans on W7-X, TJ-II, and
+  HSX with Fortran v3 cross-checks, plus the AD-vs-FD gradient-verification
+  table), each writing a figure and a JSON record.
 - `sfincs_examples/`: vendored upstream SFINCS v3 example inputs plus helpers
   used for parity and benchmark-suite audits, not the recommended starting
   point for first-time users.
