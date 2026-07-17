@@ -1,0 +1,351 @@
+{
+ "benchmark": "Shaing-Callen low-collisionality bootstrap convergence, W7-X standard configuration",
+ "references": [
+  "K.C. Shaing and J.D. Callen, Phys. Fluids 26, 3315 (1983)",
+  "C.D. Beidler et al., Nucl. Fusion 51, 076001 (2011)",
+  "S.P. Hirshman et al., Phys. Fluids 29, 2951 (1986)",
+  "C.G. Albert et al., arXiv:2407.21599 (2024)"
+ ],
+ "equilibrium": "w7x_standardConfig.bc",
+ "rN": 0.5,
+ "e_star": [
+  0.0,
+  0.003
+ ],
+ "nu_prime": [
+  1.0,
+  0.3,
+  0.1,
+  0.03,
+  0.01,
+  0.003,
+  0.001,
+  0.0003
+ ],
+ "nu_star": [
+  0.9589122762072303,
+  0.2876736828621691,
+  0.09589122762072302,
+  0.02876736828621691,
+  0.009589122762072301,
+  0.0028767368286216908,
+  0.0009589122762072303,
+  0.00028767368286216905
+ ],
+ "resolution_schedule": {
+  "1": {
+   "Ntheta": 29,
+   "Nzeta": 55,
+   "Nxi": 64,
+   "seconds": 47.19011163711548
+  },
+  "0.3": {
+   "Ntheta": 29,
+   "Nzeta": 55,
+   "Nxi": 64,
+   "seconds": 52.06937384605408
+  },
+  "0.1": {
+   "Ntheta": 29,
+   "Nzeta": 55,
+   "Nxi": 64,
+   "seconds": 49.52861523628235
+  },
+  "0.03": {
+   "Ntheta": 29,
+   "Nzeta": 55,
+   "Nxi": 64,
+   "seconds": 48.80084300041199
+  },
+  "0.01": {
+   "Ntheta": 29,
+   "Nzeta": 55,
+   "Nxi": 64,
+   "seconds": 51.06358194351196
+  },
+  "0.003": {
+   "Ntheta": 29,
+   "Nzeta": 55,
+   "Nxi": 64,
+   "seconds": 93.20089101791382
+  },
+  "0.001": {
+   "Ntheta": 29,
+   "Nzeta": 55,
+   "Nxi": 96,
+   "seconds": 135.0588457584381
+  },
+  "0.0003": {
+   "Ntheta": 29,
+   "Nzeta": 55,
+   "Nxi": 112,
+   "seconds": 75.84528112411499
+  }
+ },
+ "solver_tolerance": 1e-08,
+ "d31_star": [
+  [
+   0.001961267919790772,
+   0.001961237954474209
+  ],
+  [
+   0.008043835731930463,
+   0.008043798146507769
+  ],
+  [
+   0.017036918551918377,
+   0.01703712623067923
+  ],
+  [
+   0.021088089571936454,
+   0.021089315892651908
+  ],
+  [
+   0.009877548814644121,
+   0.009887855552084981
+  ],
+  [
+   -0.02837278671218784,
+   -0.028062716769416036
+  ],
+  [
+   -0.09031271800260363,
+   -0.08480817659874743
+  ],
+  [
+   -0.13572011967631284,
+   -0.1102626436487164
+  ]
+ ],
+ "d11_star": [
+  [
+   0.7493480977930631,
+   0.7480997814747751
+  ],
+  [
+   0.38619360155334714,
+   0.38596485612110565
+  ],
+  [
+   0.27289996406413053,
+   0.2728667906677289
+  ],
+  [
+   0.1941252523860198,
+   0.19412899435557612
+  ],
+  [
+   0.17216396882265647,
+   0.17208933459357945
+  ],
+  [
+   0.24507382963759092,
+   0.243445108435376
+  ],
+  [
+   0.4962924569227911,
+   0.4728509454949498
+  ],
+  [
+   1.378659350098948,
+   1.0695930177909356
+  ]
+ ],
+ "shaing_callen_limit": {
+  "base": {
+   "b_grid": [
+    29,
+    55
+   ],
+   "upsample": 384,
+   "d31_transport_matrix_units": 0.028727728106658305,
+   "d31_star": -0.05356941067508152,
+   "lambda_bb": 0.3093303267857598,
+   "term_passing": 0.21593019134263602,
+   "term_trapped": 0.09340013544312378,
+   "b_max": 3.103205415852523
+  },
+  "fine": {
+   "b_grid": [
+    59,
+    111
+   ],
+   "upsample": 512,
+   "d31_transport_matrix_units": 0.028117688436417536,
+   "d31_star": -0.05243185237245874,
+   "lambda_bb": 0.30276162877221524,
+   "term_passing": 0.2159546628907738,
+   "term_trapped": 0.08680696588144145,
+   "b_max": 3.103357935081702
+  },
+  "check": {
+   "b_grid": [
+    91,
+    161
+   ],
+   "upsample": 512,
+   "d31_transport_matrix_units": 0.028118100042771644,
+   "d31_star": -0.05243261990651984,
+   "lambda_bb": 0.3027660608083147,
+   "term_passing": 0.21595101214948262,
+   "term_trapped": 0.08681504865883208,
+   "b_max": 3.1033581761425433
+  },
+  "rel_grid_sensitivity": 1.4638483876412191e-05,
+  "evaluator_note": "n_eta = 128 is quadrature-converged (doubling moves D31*_SC by < 1e-6 relative); the evaluator's spread across upsample settings is ~0.5% relative."
+ },
+ "asymptote_crossing_nu_prime_estar0": 0.001957920541375802,
+ "geometry": {
+  "GHat": -16.2,
+  "IHat": 2.7730000000000003e-07,
+  "iota": -0.87185,
+  "B0OverBBar": 2.79891589,
+  "rHat": 0.2622311221327587,
+  "R0": 5.787955278641832,
+  "eps_t": 0.04530634904875981
+ },
+ "scan_seconds": 552.7575435638428,
+ "convergence_check": {
+  "nu_prime": 0.0003,
+  "e_star": 0.0,
+  "kept_lowest_point": true,
+  "gate_rel_dev": 0.02,
+  "note": "Split per dimension group (pitch grid at 1.33x, angular grid at ~1.14x, each against the production point): a joint 1.3x re-solve would need a 30 GB band factorization on this machine.  Angular convergence is additionally supported by the nuPrime = 1e-3 check (29x55 vs 31x59x144: 5e-5 relative).",
+  "nxi_1p29x": {
+   "resolution": [
+    29,
+    55,
+    144
+   ],
+   "seconds": 111.20527219772339,
+   "d31_star": {
+    "base": -0.13572011967631284,
+    "fine": -0.13545935468802203,
+    "rel_dev": 0.0019250423043235202
+   },
+   "d11_star": {
+    "base": 1.378659350098948,
+    "fine": 1.3797909039586336,
+    "rel_dev": 0.0008200908242250505
+   }
+  },
+  "angles_1p14x": {
+   "resolution": [
+    33,
+    63,
+    112
+   ],
+   "seconds": 240.910160779953,
+   "d31_star": {
+    "base": -0.13572011967631284,
+    "fine": -0.13542012796027308,
+    "rel_dev": 0.002215266818591107
+   },
+   "d11_star": {
+    "base": 1.378659350098948,
+    "fine": 1.3658655661437678,
+    "rel_dev": 0.009366795878236172
+   }
+  }
+ },
+ "dropped_points": {
+  "nu_prime_1e-4": {
+   "reason": "Computed at (29, 55, 144) but excluded from the scan: the 1.14x-angular re-solve moved D31* by 5.3% (gate: 2%), and an angular-converged nuPrime = 1e-4 point is out of reach of the laptop memory/time budget.  Directionally the point continues the EStar = 0 deepening and the EStar = 3e-3 saturation.",
+   "row": {
+    "seconds": 344.6854751110077,
+    "resolution": [
+     29,
+     55,
+     144
+    ],
+    "nu_star": 9.589122762072303e-05,
+    "d11_star": [
+     3.8814232621428086,
+     1.7065625836086402
+    ],
+    "d31_star": [
+     -0.14806403261267637,
+     -0.11084139819141045
+    ],
+    "d13_star": [
+     0.14930432935139135,
+     0.11185353396752362
+    ],
+    "d33_star": [
+     0.5584108052418191,
+     0.5589079934245715
+    ]
+   },
+   "convergence_checks": {
+    "nxi_1p33x@nu=0.0001": {
+     "seconds": 324.8887538909912,
+     "resolution": [
+      29,
+      55,
+      192
+     ],
+     "d11_star": 3.883273911802095,
+     "d31_star": -0.14718469763685885,
+     "d13_star": 0.14841094535826832,
+     "d33_star": 0.5579817739192381
+    },
+    "angles_1p14x@nu=0.0001": {
+     "seconds": 379.29118180274963,
+     "resolution": [
+      33,
+      63,
+      144
+     ],
+     "d11_star": 3.848444290177086,
+     "d31_star": -0.14064538883393934,
+     "d13_star": 0.1416022495463392,
+     "d33_star": 0.5606621512962076
+    }
+   }
+  }
+ },
+ "fortran_crosscheck": [
+  {
+   "nu_prime": 0.03,
+   "e_star": 0.0001,
+   "resolution": [
+    29,
+    55,
+    64
+   ],
+   "fortran_seconds": 18.093503952026367,
+   "d31_star": {
+    "sfincs_jax": 0.021088090928772715,
+    "fortran": 0.02108809092873296,
+    "rel_dev": 1.885253281427555e-12
+   },
+   "d11_star": {
+    "sfincs_jax": 0.1941252569745921,
+    "fortran": 0.19412525697451416,
+    "rel_dev": 4.014812783424574e-13
+   }
+  },
+  {
+   "nu_prime": 0.001,
+   "e_star": 0.0001,
+   "resolution": [
+    29,
+    55,
+    96
+   ],
+   "fortran_seconds": 26.32158589363098,
+   "d31_star": {
+    "sfincs_jax": -0.09030307120777603,
+    "fortran": -0.09030307120993411,
+    "rel_dev": 2.389818244193435e-11
+   },
+   "d11_star": {
+    "sfincs_jax": 0.4962567514998231,
+    "fortran": 0.4962567514990884,
+    "rel_dev": 1.480575519582182e-12
+   }
+  }
+ ],
+ "fortran_crosscheck_note": "Matched decks at the scan resolution of each point; e_star = 1e-4 serves as the quasi-zero field (at exactly EStar = 0 the upstream Krylov solve returns an Onsager-violating matrix at this problem size).  The runs pass PETSc options '-mat_mumps_cntl_1 0.1 -mat_mumps_icntl_10 10' (MUMPS pivot threshold + iterative refinement; see the TJ-II script docstring for the upstream solver reproducibility note).",
+ "finding": "|D31*| grows toward the Shaing-Callen value as nuPrime drops, crosses the asymptote near the recorded nuPrime, and at EStar = 0 keeps deepening below it through nuPrime = 3e-4: the 1/nu-regime offset does not decay without orbit precession.  The small finite EStar = 3e-3 curve detaches from the EStar = 0 curve below nuPrime ~ 1e-3 and flattens back toward the asymptote (ExB precession); the dropped exploratory 1e-4 point continues both trends."
+}
