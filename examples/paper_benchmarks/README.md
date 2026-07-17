@@ -23,6 +23,13 @@ and a single figure + JSON pair written to
 - `monoenergetic_icnts_hsx.py`: the same scan on the HSX quasi-helically
   symmetric configuration at r/a = 0.5 (`hsx3free.bc`), showing the
   QH-suppressed 1/nu branch in contrast to W7-X and TJ-II.
+- `shaing_callen_convergence.py`: the low-collisionality "hard mode" test --
+  the bootstrap coefficient `D31*` on the W7-X standard configuration scanned
+  to `nuPrime = 3e-4` at `EStar = 0` and a small finite `EStar`, compared
+  against the collisionless Shaing-Callen asymptote evaluated for the same
+  surface [K.C. Shaing and J.D. Callen, Phys. Fluids 26, 3315 (1983)], with a
+  per-point `Nxi` resolution schedule, split 1.3x convergence gates, and
+  Fortran v3 cross-check points.
 - `gradient_verification.py`: the AD-vs-FD gradient-verification table
   (three derivatives through the monoenergetic-database, RHSMode=1 solve,
   and ambipolar-root paths; JSON + rst snippet).
