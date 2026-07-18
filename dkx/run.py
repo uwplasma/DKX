@@ -31,9 +31,8 @@ from dkx import console
 from dkx.constants import RadialCoordinates
 from dkx.drift_kinetic import (
     KineticOperator,
-    _geometry_and_radial,
     _n_periods_from_namelist,
-    kinetic_operator_from_namelist,
+    kinetic_operator_build_from_namelist,
 )
 from dkx.inputs import RawNamelist, SfincsInput, load_sfincs_input
 from dkx.magnetic_geometry import FluxSurfaceGeometry
@@ -283,11 +282,10 @@ def run_transport_matrix(
         )
 
     raw = _raw_with_validated_overrides(inp)
-    op = kinetic_operator_from_namelist(raw)
-    grids = _grids_from_input(inp, raw)
-    geom: FluxSurfaceGeometry
-    radial: RadialCoordinates
-    geom, radial = _geometry_and_radial(nml=raw, grids=grids)
+    build = kinetic_operator_build_from_namelist(raw)
+    op, grids = build.operator, build.grids
+    geom: FluxSurfaceGeometry = build.geometry
+    radial: RadialCoordinates = build.radial
 
     _emit_lines(emit, _startup_lines(inp=inp, op=op, grids=grids, input_name=namelist_path.name))
 
@@ -370,7 +368,7 @@ def run_transport_matrix(
             path=out_path, inp=inp, op=op, grids=grids, geom=geom, radial=radial,
             state_vectors=state_vectors, transport_matrix=transport_matrix,
             elapsed_times=elapsed, solver_diagnostics=solver_diagnostics,
-            variational_diagnostics=d11_bounds,
+            variational_diagnostics=d11_bounds, moments_table=moments_table,
             overwrite=overwrite, fortran_layout=fortran_layout,
         )  # fmt: skip
 
@@ -540,11 +538,10 @@ def run_profile(
     if raw is None:
         raise ValueError("run_profile requires an input parsed from a namelist file.")
 
-    op = kinetic_operator_from_namelist(raw)
-    grids = _grids_from_input(inp, raw)
-    geom: FluxSurfaceGeometry
-    radial: RadialCoordinates
-    geom, radial = _geometry_and_radial(nml=raw, grids=grids)
+    build = kinetic_operator_build_from_namelist(raw)
+    op, grids = build.operator, build.grids
+    geom: FluxSurfaceGeometry = build.geometry
+    radial: RadialCoordinates = build.radial
 
     _emit_lines(emit, _startup_lines(inp=inp, op=op, grids=grids, input_name=namelist_path.name))
 
@@ -610,7 +607,7 @@ def run_profile(
 
     # Classical fluxes at the run's gradients (classicalTransport.F90).
     _, _, surface, species = operator_containers(op)
-    gpsipsi, _diota = _geometry_extras(inp=inp, grids=grids, geom=geom, radial=radial)
+    gpsipsi, diotadpsi_hat = _geometry_extras(inp=inp, grids=grids, geom=geom, radial=radial)
     pf, hf = classical_fluxes(
         use_phi1=False, surface=surface, species=species,
         gpsipsi=gpsipsi, phi1_hat=np.zeros_like(gpsipsi),
@@ -633,6 +630,7 @@ def run_profile(
             converged=bool(result.converged) if op.include_phi1 else None,
             solver_method=result.method, solver_requested_method=result.method,
             residual_norm=residual_norm,
+            geometry_extras=(gpsipsi, diotadpsi_hat), moments_table=moments,
             overwrite=overwrite, fortran_layout=fortran_layout,
         )  # fmt: skip
 
@@ -711,11 +709,10 @@ def run_geometry(
     if raw is None:
         raise ValueError("run_geometry requires an input parsed from a namelist file.")
 
-    op = kinetic_operator_from_namelist(raw)
-    grids = _grids_from_input(inp, raw)
-    geom: FluxSurfaceGeometry
-    radial: RadialCoordinates
-    geom, radial = _geometry_and_radial(nml=raw, grids=grids)
+    build = kinetic_operator_build_from_namelist(raw)
+    op, grids = build.operator, build.grids
+    geom: FluxSurfaceGeometry = build.geometry
+    radial: RadialCoordinates = build.radial
 
     _emit_lines(emit, _startup_lines(inp=inp, op=op, grids=grids, input_name=namelist_path.name))
 
