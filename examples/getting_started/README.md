@@ -13,6 +13,11 @@ Suggested order:
 7. `plot_sfincs_output.py` — read an output file and generate a quick summary figure.
 8. `write_and_plot_multiple_formats.py` — write `.h5`, `.nc`, and `.npz` outputs and build a PDF diagnostics panel.
 
+Full solve-and-plot runs (build a deck, solve, read outputs back, and plot):
+
+- `run_tokamak.py` — single-species pitch-angle-scattering tokamak, HDF5/NetCDF read-back.
+- `run_w7x.py` — two-species Fokker-Planck run on real W7-X Boozer geometry (tier-2 Krylov solver).
+
 Run any script from the repo root, e.g.:
 
 ```bash

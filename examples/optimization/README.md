@@ -17,7 +17,7 @@ differences, and saves a compressed before/after plot plus a history JSON.
 Set `DKX_CI=1` to shrink resolution and iteration counts for a fast
 smoke run.
 
-- `examples/optimize_QA_bootstrap.py` — the flagship: a quasi-axisymmetric
+- `examples/optimization/optimize_QA_bootstrap.py` — the flagship: a quasi-axisymmetric
   boundary optimized for low bootstrap current `<j.B>` through the full
   boundary -> vmex equilibrium -> Boozer -> kinetic-solve chain.
 - `optimize_QH_bootstrap.py` — the quasi-helical analog on a precise-QH

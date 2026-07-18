@@ -1,6 +1,6 @@
 """Quasi-helical (QH) stellarator with low bootstrap current.
 
-The quasi-helical analog of ``examples/optimize_QA_bootstrap.py`` and the
+The quasi-helical analog of ``examples/optimization/optimize_QA_bootstrap.py`` and the
 kinetic sibling of ``vmex/examples/optimization/QH_optimization.py``.  Same
 differentiable chain -- boundary Fourier coefficients -> vmex implicit
 fixed-boundary equilibrium (custom-VJP adjoint) -> traceable VMEC spectral

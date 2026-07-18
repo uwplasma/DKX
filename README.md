@@ -41,7 +41,7 @@ PETSc/MUMPS.
 ## Quickstart
 
 Run a small circular-tokamak deck through the canonical driver (this mirrors
-[`examples/run_tokamak.py`](examples/run_tokamak.py), which also builds the
+[`examples/getting_started/run_tokamak.py`](examples/getting_started/run_tokamak.py), which also builds the
 namelist from Python dicts and plots the results):
 
 ```python
@@ -183,12 +183,12 @@ Six pedagogic scripts on the canonical API live at the top of
 [`examples/`](examples/) — no `main()`, parameters at the top, printed
 progress, a plot, and output files written and read back:
 
-- [`run_tokamak.py`](examples/run_tokamak.py) — build a namelist in Python, solve, read HDF5/NetCDF back.
-- [`run_w7x.py`](examples/run_w7x.py) — W7-X Boozer geometry with full Fokker-Planck collisions (tier-2 Krylov).
-- [`transport_coefficients.py`](examples/transport_coefficients.py) — monoenergetic transport matrices and a collisionality scan.
-- [`ambipolar_er_scan.py`](examples/ambipolar_er_scan.py) — scan `Er`, bracket and solve the ambipolar root.
-- [`gradients_tour.py`](examples/gradients_tour.py) — `jax.grad` through the solve, verified against finite differences.
-- [`optimize_QA_bootstrap.py`](examples/optimize_QA_bootstrap.py) — differentiable two-stage QA shaping and bootstrap-current reduction through the `vmex` → `dkx` chain (needs the optional companions).
+- [`run_tokamak.py`](examples/getting_started/run_tokamak.py) — build a namelist in Python, solve, read HDF5/NetCDF back.
+- [`run_w7x.py`](examples/getting_started/run_w7x.py) — W7-X Boozer geometry with full Fokker-Planck collisions (tier-2 Krylov).
+- [`transport_coefficients.py`](examples/transport/transport_coefficients.py) — monoenergetic transport matrices and a collisionality scan.
+- [`ambipolar_er_scan.py`](examples/vmex_finite_beta/ambipolar_er_scan.py) — scan `Er`, bracket and solve the ambipolar root.
+- [`gradients_tour.py`](examples/autodiff/gradients_tour.py) — `jax.grad` through the solve, verified against finite differences.
+- [`optimize_QA_bootstrap.py`](examples/optimization/optimize_QA_bootstrap.py) — differentiable two-stage QA shaping and bootstrap-current reduction through the `vmex` → `dkx` chain (needs the optional companions).
 
 The wider `examples/` tree (tutorial notebooks, parity/benchmark drivers,
 upstream SFINCS decks) is mapped in [`examples/README.md`](examples/README.md).

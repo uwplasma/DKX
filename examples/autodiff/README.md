@@ -11,3 +11,4 @@ Examples:
 - `implicit_diff_through_gmres_solve_scheme5.py` — implicit differentiation through a GMRES solve.
 - `differentiable_geometry_gradients.py` — differentiate geometry-derived quantities.
 - `vmex_to_boozer_sfincs_pipeline.py` — optional `vmex` + `booz_xform_jax` geometry workflow with a JAX/finite-difference gradient check.
+- `gradients_tour.py` — a guided tour of `jax.grad`/`jax.jacfwd` through the implicit solve for bootstrap current and fluxes, each derivative verified against central finite differences.

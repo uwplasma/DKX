@@ -21,7 +21,7 @@ agreement, and shows the differentiable geometry chain
 
    Reverse-mode ``jax.grad`` derivatives of kinetic observables (points) plotted
    against centered finite differences (line). Reproduce with
-   ``examples/gradients_tour.py``.
+   ``examples/autodiff/gradients_tour.py``.
 
 Implicit differentiation through the solve
 ------------------------------------------
@@ -184,7 +184,7 @@ Each arrow is a JAX transformation, so ``jax.grad`` of the bootstrap current
 :math:`\langle \mathbf{j}\cdot\mathbf{B}\rangle` (or a transport coefficient)
 with respect to the boundary Fourier modes propagates through the equilibrium
 solve, the Boozer transform, and the drift-kinetic solve without any finite
-differences. The flagship script ``examples/optimize_QA_bootstrap.py`` drives a
+differences. The flagship script ``examples/optimization/optimize_QA_bootstrap.py`` drives a
 quasi-axisymmetric, low-bootstrap optimization on exactly this chain with warm
 starts and finite-difference-verified gradients; the geometry link on its own is
 demonstrated in ``examples/autodiff/vmex_to_boozer_sfincs_pipeline.py``. See
@@ -193,7 +193,7 @@ demonstrated in ``examples/autodiff/vmex_to_boozer_sfincs_pipeline.py``. See
 Worked examples
 ---------------
 
-- ``examples/gradients_tour.py`` — ``jax.grad`` of kinetic outputs through the
+- ``examples/autodiff/gradients_tour.py`` — ``jax.grad`` of kinetic outputs through the
   implicit solve, checked against finite differences (the figure above).
 - ``examples/autodiff/matrix_free_residual_and_jvp.py`` — matrix-free residual
   and Jacobian-vector products for the F-block.
@@ -201,7 +201,7 @@ Worked examples
   differentiation through a full-system Krylov solve on a VMEC geometry.
 - ``examples/autodiff/differentiable_geometry_gradients.py`` — a geometry scalar
   differentiated with respect to harmonic amplitudes.
-- ``examples/optimize_QA_bootstrap.py`` — the flagship gradient-based
+- ``examples/optimization/optimize_QA_bootstrap.py`` — the flagship gradient-based
   optimization with kinetic :math:`\langle \mathbf{j}\cdot\mathbf{B}\rangle` in
   the objective.
 

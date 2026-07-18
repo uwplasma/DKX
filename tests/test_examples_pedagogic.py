@@ -1,6 +1,6 @@
 """Smoke tests for the flat pedagogic examples on the canonical stack.
 
-Each example under ``examples/*.py`` (the DKX example style
+Each flat pedagogic example listed in ``CASES`` (the DKX example style
 contract: no ``main()``, parameters at the top, prints of setup/progress/
 final results, at least one PNG plot, output-file writing plus read-back) is
 run as a subprocess with ``DKX_CI=1`` (the scripts' shrunken-resolution
@@ -23,7 +23,7 @@ OUT_DIR = EXAMPLES / "output"
 
 # script name -> (expected stdout fragments, expected plot file)
 CASES = {
-    "run_tokamak.py": (
+    "getting_started/run_tokamak.py": (
         (
             "FSABFlow:",  # Fortran-parity species results table (single species)
             "FSABjHat (bootstrap current):",
@@ -34,7 +34,7 @@ CASES = {
         ),
         OUT_DIR / "run_tokamak.png",
     ),
-    "run_w7x.py": (
+    "getting_started/run_w7x.py": (
         (
             "Solver tier used: gcrot",  # FP collisions must route to tier 2
             "tier-1 structured direct applicable: False",
@@ -44,7 +44,7 @@ CASES = {
         ),
         OUT_DIR / "run_w7x.png",
     ),
-    "transport_coefficients.py": (
+    "transport/transport_coefficients.py": (
         (
             "L11 (D11-like)",
             "max Onsager asymmetry",
@@ -53,7 +53,7 @@ CASES = {
         ),
         OUT_DIR / "transport_coefficients.png",
     ),
-    "ambipolar_er_scan.py": (
+    "vmex_finite_beta/ambipolar_er_scan.py": (
         (
             "ambipolar root via er.find_ambipolar_er",
             "ambipolar root: Er =",
@@ -63,7 +63,7 @@ CASES = {
         ),
         OUT_DIR / "ambipolar_er_scan.png",
     ),
-    "gradients_tour.py": (
+    "autodiff/gradients_tour.py": (
         (
             "all gradients verified against central finite differences",
             "d(FSABjHat)/d(THat)",
