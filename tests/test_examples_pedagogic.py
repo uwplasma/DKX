@@ -23,6 +23,15 @@ OUT_DIR = EXAMPLES / "output"
 
 # script name -> (expected stdout fragments, expected plot file)
 CASES = {
+    "getting_started/build_input_from_python.py": (
+        (
+            "SfincsInput round trip verified",
+            "in-memory run matches the file-based run: particleFlux_vm_psiHat =",
+            "solver tier used: block_tridiagonal",  # SolverOptions(method="auto") on a PAS deck
+            "nu_n = 3.0e-03:  particleFlux_vm_psiHat =",
+        ),
+        OUT_DIR / "build_input_from_python.png",
+    ),
     "getting_started/run_tokamak.py": (
         (
             "FSABFlow:",  # Fortran-parity species results table (single species)
