@@ -33,6 +33,22 @@ and a single figure + JSON pair written to
 - `gradient_verification.py`: the AD-vs-FD gradient-verification table
   (three derivatives through the monoenergetic-database, RHSMode=1 solve,
   and ambipolar-root paths; JSON + rst snippet).
+- `electron_root_optimization.py`: the differentiable ambipolar-Er /
+  electron-root optimization workflow (roadmap item 3).  Resolves the full
+  `J_r(E_r)` S-curve with all ambipolar roots classified ion / unstable /
+  electron by the `dJr/dEr` sign, scans `T_e/T_i` to bracket the
+  ion-root -> electron-root transition (the bifurcation diagram, including the
+  saddle-node fold where the electron/unstable pair is born), and
+  differentiates the selected ambipolar `E_r` through the implicit root
+  (`dkx.er.ambipolar_er`, verified AD-vs-FD) with a small gradient-descent
+  demo that drives the ambipolar `E_r` toward a target [H. Maassberg,
+  C.D. Beidler & E.E. Simmet, Plasma Phys. Control. Fusion 41, 1135 (1999);
+  Yu. Turkin et al., Phys. Plasmas 18, 022505 (2011); D.A. Spong, Phys.
+  Plasmas 12, 056114 (2005)].  The electron channel is brought into the
+  laptop-resolvable `E_r` window with a reduced ion/electron mass ratio; the
+  JSON `modeling_note` documents why (physical `m_e/m_i` suppresses it by
+  `(rho_e/rho_i)^2`).  Checkpointed under `output/electron_root/`
+  (`DKX_EROOT_FORCE=1` to recompute).
 - `bootstrap_consistency_kinetic_loop.py`: the workflow case -- the
   self-consistent-bootstrap equilibrium iteration with the actual
   drift-kinetic solve inside the loop (in place of the Redl analytic proxy
