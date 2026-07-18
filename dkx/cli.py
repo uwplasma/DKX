@@ -82,26 +82,17 @@ def _emit_parallel_runtime_info(*, args: argparse.Namespace) -> None:
         return os.environ.get(name, default).strip()
 
     cores = _env("DKX_CORES")
+    threads = _env("NPROC")
     cpu_devices = _env("DKX_CPU_DEVICES")
-    shard_axis = _env("DKX_MATVEC_SHARD_AXIS")
-    auto_shard = _env("DKX_AUTO_SHARD")
-    shard_pad = _env("DKX_SHARD_PAD")
     transport_parallel = _env("DKX_TRANSPORT_PARALLEL", "off") or "off"
     transport_workers = _env("DKX_TRANSPORT_PARALLEL_WORKERS", "1") or "1"
-    gmres_distributed = _env("DKX_GMRES_DISTRIBUTED")
-    distributed_krylov = _env("DKX_DISTRIBUTED_KRYLOV")
     distributed = _env("DKX_DISTRIBUTED")
 
     if not any(
         (
             cores,
             cpu_devices,
-            shard_axis,
-            auto_shard,
-            shard_pad,
             transport_parallel not in {"", "off"},
-            gmres_distributed,
-            distributed_krylov,
             distributed,
         )
     ):
@@ -110,22 +101,13 @@ def _emit_parallel_runtime_info(*, args: argparse.Namespace) -> None:
     _emit(
         " parallel:"
         f" cores={cores or '-'}"
-        f" cpu_devices={cpu_devices or '-'}"
-        f" shard_axis={shard_axis or '-'}"
-        f" auto_shard={auto_shard or '-'}"
-        f" shard_pad={shard_pad or '-'}",
+        f" threads={threads or '-'}"
+        f" cpu_devices={cpu_devices or '-'}",
         level=1,
         args=args,
     )
     _emit(
         f" transport_parallel: mode={transport_parallel} workers={transport_workers}",
-        level=1,
-        args=args,
-    )
-    _emit(
-        " distributed_solver:"
-        f" gmres={gmres_distributed or '-'}"
-        f" krylov={distributed_krylov or '-'}",
         level=1,
         args=args,
     )
@@ -217,7 +199,13 @@ def _add_common_cli_args(parser: argparse.ArgumentParser) -> None:
         "--cores",
         type=int,
         default=None,
-        help="Number of host CPU devices/cores to use (sets DKX_CORES).",
+        help=(
+            "Solver CPU threads (sets DKX_CORES; pins the XLA host threadpool "
+            "via NPROC plus the OpenMP/OpenBLAS pools before JAX initializes). "
+            "0 lets XLA size the threadpool itself; when omitted the threadpool "
+            "is clamped to min(8, cpu_count) — the measured optimum is 4-8 "
+            "threads, and a full-width pool on a many-core host is slower."
+        ),
     )
     parser.add_argument(
         "--fortran-stdout",
@@ -240,35 +228,6 @@ def _add_parallel_cli_args(parser: argparse.ArgumentParser) -> None:
         type=int,
         default=None,
         help="Parallel worker processes for independent transport-RHS solves.",
-    )
-    parser.add_argument(
-        "--shard-axis",
-        default=None,
-        choices=("auto", "off", "theta", "zeta", "x", "flat"),
-        help="Single-solve sharding axis for the executable path.",
-    )
-    parser.add_argument(
-        "--distributed-gmres",
-        default=None,
-        help="Override DKX_GMRES_DISTRIBUTED for distributed RHSMode=1 solves.",
-    )
-    parser.add_argument(
-        "--distributed-krylov",
-        default=None,
-        help="Override DKX_DISTRIBUTED_KRYLOV for sharded solves.",
-    )
-    parser.add_argument(
-        "--shard-pad",
-        dest="shard_pad",
-        action="store_true",
-        default=None,
-        help="Allow neutral padding when sharded dimensions are not divisible by device count.",
-    )
-    parser.add_argument(
-        "--no-shard-pad",
-        dest="shard_pad",
-        action="store_false",
-        help="Disable neutral padding for sharded dimensions.",
     )
     parser.add_argument(
         "--distributed",
@@ -751,29 +710,31 @@ def _cmd_ambipolar(args: argparse.Namespace) -> int:
 
 
 def _apply_cores_setting(cores: int | None) -> None:
+    """Record the requested solver thread count in the process environment.
+
+    ``cores > 0`` pins the XLA host threadpool (``NPROC`` — the variable XLA
+    actually reads when its CPU backend initializes) and defaults the host BLAS
+    pools (``OMP_NUM_THREADS``/``OPENBLAS_NUM_THREADS``) to match; ``cores ==
+    0`` requests XLA's own full-width sizing (``DKX_CORES=0`` suppresses the
+    package default clamp of ``min(8, cpu_count)``).  Thread counts only take
+    effect before JAX initializes, so the CLI re-execs itself with
+    ``DKX_CORES`` exported (:func:`_maybe_reexec_for_early_runtime`) and the
+    package applies the variables at import; the assignments here keep child
+    processes (transport workers, spawned tools) consistent.
+    """
     if cores is None:
         return
     try:
         cores_val = int(cores)
     except (TypeError, ValueError):
         return
-    if cores_val <= 0:
+    if cores_val < 0:
         return
     os.environ["DKX_CORES"] = str(cores_val)
-    backend_hint = os.environ.get("JAX_PLATFORM_NAME", "").strip().lower()
-    if cores_val > 1 and backend_hint not in {"gpu", "cuda", "rocm"}:
-        os.environ.setdefault("DKX_GMRES_DISTRIBUTED", "auto")
-    # Ensure host device count and XLA threading reflect the requested cores.
-    xla_flags = os.environ.get("XLA_FLAGS", "")
-    xla_parts = [p for p in xla_flags.split() if not p.startswith("--xla_force_host_platform_device_count=")]
-    xla_parts.append(f"--xla_force_host_platform_device_count={cores_val}")
-    os.environ["XLA_FLAGS"] = " ".join(xla_parts).strip()
-    os.environ.setdefault("DKX_CPU_DEVICES", str(cores_val))
-    # Enable auto-sharding unless explicitly disabled.
-    shard_env = os.environ.get("DKX_SHARD", "").strip().lower()
-    if cores_val > 1 and shard_env not in {"0", "false", "no", "off"}:
-        os.environ.setdefault("DKX_MATVEC_SHARD_AXIS", "auto")
-        os.environ.setdefault("DKX_AUTO_SHARD", "1")
+    if cores_val > 0:
+        os.environ["NPROC"] = str(cores_val)
+        os.environ.setdefault("OMP_NUM_THREADS", str(cores_val))
+        os.environ.setdefault("OPENBLAS_NUM_THREADS", str(cores_val))
 
 
 def _apply_runtime_env_defaults() -> None:
@@ -788,34 +749,6 @@ def _apply_parallel_runtime_settings(args: argparse.Namespace) -> None:
         workers_val = max(1, int(transport_workers))
         os.environ["DKX_TRANSPORT_PARALLEL"] = "process" if workers_val > 1 else "off"
         os.environ["DKX_TRANSPORT_PARALLEL_WORKERS"] = str(workers_val)
-
-    shard_axis = getattr(args, "shard_axis", None)
-    if shard_axis is not None:
-        shard_axis = str(shard_axis).strip().lower()
-        if shard_axis == "off":
-            os.environ["DKX_SHARD"] = "0"
-            os.environ["DKX_AUTO_SHARD"] = "0"
-            os.environ["DKX_MATVEC_SHARD_AXIS"] = "off"
-        elif shard_axis == "auto":
-            os.environ["DKX_SHARD"] = "1"
-            os.environ["DKX_AUTO_SHARD"] = "1"
-            os.environ["DKX_MATVEC_SHARD_AXIS"] = "auto"
-        else:
-            os.environ["DKX_SHARD"] = "1"
-            os.environ["DKX_AUTO_SHARD"] = "0"
-            os.environ["DKX_MATVEC_SHARD_AXIS"] = shard_axis
-
-    distributed_gmres = getattr(args, "distributed_gmres", None)
-    if distributed_gmres is not None:
-        os.environ["DKX_GMRES_DISTRIBUTED"] = str(distributed_gmres)
-
-    distributed_krylov = getattr(args, "distributed_krylov", None)
-    if distributed_krylov is not None:
-        os.environ["DKX_DISTRIBUTED_KRYLOV"] = str(distributed_krylov)
-
-    shard_pad = getattr(args, "shard_pad", None)
-    if shard_pad is not None:
-        os.environ["DKX_SHARD_PAD"] = "1" if shard_pad else "0"
 
     if bool(getattr(args, "distributed", False)):
         from . import initialize_distributed_runtime_from_env  # noqa: PLC0415
@@ -834,31 +767,6 @@ def _apply_parallel_runtime_settings(args: argparse.Namespace) -> None:
         if coordinator_port is not None:
             os.environ["DKX_COORDINATOR_PORT"] = str(int(coordinator_port))
         initialize_distributed_runtime_from_env()
-
-
-def _auto_cores_for_args(args: argparse.Namespace) -> int:
-    """Choose a conservative default core count by workload type.
-
-    On CPU, single-RHS RHSMode=1 solves (especially nonlinear includePhi1)
-    can regress with multi-device host sharding due synchronization/launch
-    overhead. Prefer one core by default there; keep a few cores for
-    transport-matrix/multi-RHS throughput workloads.
-    """
-    cpu_count = max(1, int(os.cpu_count() or 1))
-    cmd = getattr(getattr(args, "func", None), "__name__", "")
-    if cmd in {"_cmd_transport_matrix_v3", "_cmd_scan_er"}:
-        return min(3, cpu_count)
-    input_path = getattr(args, "input", None)
-    if input_path is None:
-        return min(3, cpu_count)
-    try:
-        nml = read_sfincs_input(Path(input_path))
-        rhs_mode = int(nml.group("general").get("RHSMODE", 1))
-    except Exception:  # noqa: BLE001
-        return min(3, cpu_count)
-    if rhs_mode in (2, 3):
-        return min(3, cpu_count)
-    return 1
 
 
 def _normalize_default_argv(argv: list[str]) -> list[str]:
@@ -883,9 +791,6 @@ def _normalize_default_argv(argv: list[str]) -> list[str]:
     global_opts_with_val = {
         "--cores",
         "--transport-workers",
-        "--shard-axis",
-        "--distributed-gmres",
-        "--distributed-krylov",
         "--process-id",
         "--process-count",
         "--coordinator-address",
@@ -898,8 +803,6 @@ def _normalize_default_argv(argv: list[str]) -> list[str]:
         "--quiet",
         "--fortran-stdout",
         "--no-fortran-stdout",
-        "--shard-pad",
-        "--no-shard-pad",
         "--distributed",
     }
     if "--plot" in argv:
@@ -965,12 +868,13 @@ def _normalize_default_argv(argv: list[str]) -> list[str]:
 
 
 def _maybe_reexec_for_early_runtime(argv: list[str]) -> None:
-    """Re-exec with early runtime env so host device count/bootstrap take effect.
+    """Re-exec with early runtime env so thread pinning/bootstrap take effect.
 
     The CLI is imported after the package, so JAX may already be imported before
     flags like `--cores` or `--distributed` are parsed. When those flags would
-    change pre-import runtime state, restart the process once with the relevant
-    env vars set before package import.
+    change pre-import runtime state (the XLA threadpool is sized once, at CPU
+    backend initialization), restart the process once with the relevant env
+    vars set before package import.
     """
     pre = argparse.ArgumentParser(add_help=False)
     pre.add_argument("--cores", type=int, default=None)
@@ -982,9 +886,8 @@ def _maybe_reexec_for_early_runtime(argv: list[str]) -> None:
     args, _ = pre.parse_known_args(argv)
 
     desired: dict[str, str] = {}
-    if args.cores is not None and int(args.cores) > 0:
+    if args.cores is not None and int(args.cores) >= 0:
         desired["DKX_CORES"] = str(int(args.cores))
-        desired["DKX_CPU_DEVICES"] = str(int(args.cores))
     if bool(args.distributed):
         desired["DKX_DISTRIBUTED"] = "1"
         if args.process_id is not None:
@@ -1026,10 +929,6 @@ def _merge_global_cli_args(argv: list[str], args: argparse.Namespace) -> argpars
         "cores",
         "fortran_stdout",
         "transport_workers",
-        "shard_axis",
-        "distributed_gmres",
-        "distributed_krylov",
-        "shard_pad",
         "distributed",
         "process_id",
         "process_count",
@@ -1344,9 +1243,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     args = _merge_global_cli_args(argv, args)
     _apply_runtime_env_defaults()
-    if args.cores is None and not os.environ.get("DKX_CORES"):
-        if not (os.environ.get("DKX_CI") or os.environ.get("CI")):
-            args.cores = _auto_cores_for_args(args)
+    # No CLI-side default core count: when --cores/DKX_CORES is absent the
+    # package import already clamped the threadpool to min(8, cpu_count).
     _apply_cores_setting(args.cores)
     _apply_parallel_runtime_settings(args)
     if args.fortran_stdout is True:

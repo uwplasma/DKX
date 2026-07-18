@@ -171,8 +171,8 @@ one-node and multi-host runs.
 
 .. code-block:: bash
 
-   # Multi-core CPU host devices + auto sharding
-   dkx --cores 8 --shard-axis auto /path/to/input.namelist
+   # Pin the solver threadpool to 4 CPU threads
+   dkx --cores 4 /path/to/input.namelist
 
    # RHSMode=2/3 transport-matrix run (canonical stack; all whichRHS drives
    # are solved in one shared multi-RHS solve)
@@ -191,14 +191,6 @@ one-node and multi-host runs.
      --transport-parallel-backend gpu \
      --scan-only
 
-   # Experimental one-node single-case multi-GPU sharded solve
-   CUDA_VISIBLE_DEVICES=0,1 \
-   dkx write-output \
-     --input /path/to/input.namelist \
-     --shard-axis theta \
-     --distributed-gmres auto \
-     --distributed-krylov auto
-
    # RHSMode=2/3 transport-matrix run on a selected GPU
    CUDA_VISIBLE_DEVICES=0 \
    dkx transport-matrix-v3 \
@@ -215,20 +207,20 @@ one-node and multi-host runs.
 
 Relevant CLI flags:
 
-- ``--cores``: request multiple host CPU devices before JAX loads.
+- ``--cores N``: pin the solver threadpool to ``N`` CPU threads (sets
+  ``DKX_CORES``, which is applied as ``NPROC`` — the variable XLA reads for
+  its host threadpool — plus the OpenMP/OpenBLAS pools before JAX
+  initializes).  ``--cores 0`` lets XLA size the threadpool itself; when the
+  flag is omitted the threadpool is clamped to ``min(8, cpu_count)`` — the
+  measured optimum is 4-8 threads, and a full-width pool on a many-core host
+  is several times slower than 8 threads (:doc:`performance`).
 - ``--transport-workers``: run independent ``whichRHS`` solves in parallel
   worker processes on the legacy RHSMode=2/3 output path (scan/export_f
   workflows); the canonical ``transport-matrix-v3`` driver solves all drives
   in one shared multi-RHS solve.
-- ``--shard-axis {auto,off,theta,zeta,x,flat}``: choose the single-solve sharding
-  mode for the executable path.
-- ``--distributed-gmres`` and ``--distributed-krylov``: control distributed
-  Krylov selection on sharded RHSMode=1 solves.
 - ``--distributed``, ``--process-id``, ``--process-count``,
   ``--coordinator-address``, and ``--coordinator-port``: enable one-node or
   multi-host JAX distributed initialization from the CLI.
-- ``--shard-pad`` / ``--no-shard-pad``: control neutral padding when the sharded
-  dimension is not divisible by the visible device count.
 - ``--plot /path/to/sfincsOutput.h5``: top-level shortcut for writing a PDF
   diagnostics panel from an existing output file. HDF5, NetCDF4, and NPZ outputs
   are supported.
@@ -238,9 +230,9 @@ For actual scaling measurements, prefer the benchmark scripts in
 selection, cache reuse, and output JSON/figure generation consistently.
 
 At verbosity level ``-v`` or higher, the CLI prints the active parallel
-runtime summary (requested cores, host-device count, shard axis, transport
-worker mode, distributed Krylov settings, and multi-host bootstrap fields).
-This is the supported way to verify what the executable is actually doing on a
+runtime summary (requested cores, pinned thread count, host-device count,
+transport worker mode, and multi-host bootstrap fields). This is the
+supported way to verify what the executable is actually doing on a
 workstation or cluster launch.
 
 Environment variables
@@ -279,44 +271,28 @@ on import.
   plotting scripts, used by ``postprocess-upstream`` and ``scan-er`` when the
   scripts are not found in a repo checkout.
 
-CPU parallelism and host devices
+CPU threads and host devices
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Set these **before** JAX is imported (i.e. before running
 ``python -m dkx``). The CLI ``--cores`` flag sets them for you.
 
-- ``DKX_CORES``: high-level CPU parallelism knob. When set to ``N`` > 1,
-  ``dkx`` enables process-parallel ``whichRHS`` solves **and** exposes
-  ``N`` host devices for optional sharded matvecs. Set ``DKX_SHARD=0`` to
-  keep process parallelism while disabling sharded matvecs. If neither
-  ``--cores`` nor ``DKX_CORES`` is set, CLI auto mode uses ``1`` core for
-  RHSMode=1 solves and up to ``3`` cores for RHSMode=2/3 transport runs.
-- ``DKX_CPU_DEVICES``: request multiple host CPU devices for JAX SPMD
-  sharded-JIT execution (sets ``--xla_force_host_platform_device_count``).
-- ``DKX_XLA_THREADS``: opt in to setting the XLA CPU thread count from
-  ``DKX_CORES``. Some JAX builds do not recognize
-  ``--xla_cpu_parallelism_threads``, so this is disabled by default.
-
-Single-solve sharding
-~~~~~~~~~~~~~~~~~~~~~~~
-
-- ``DKX_MATVEC_SHARD_AXIS``: shard the matvec along ``theta``, ``zeta``,
-  ``x``, ``flat``, or ``auto`` when multiple devices are available (``off``
-  disables it). ``auto`` chooses the larger of ``Ntheta``/``Nzeta``; ``flat``
-  shards the full state vector evenly across devices.
-- ``DKX_AUTO_SHARD``: set to ``0`` to disable auto sharding.
-- ``DKX_SHARD``: shorthand to disable auto sharding even when
-  ``DKX_CORES`` is set. Use ``0``/``false`` to keep single-device matvecs.
-- ``DKX_SHARD_PAD``: pad odd ``Ntheta``/``Nzeta`` (and ``Nx`` when
-  x-sharding is requested) internally so sharding can use even device counts
-  (default: enabled). Padding adds ghost planes with zero weights and does not
-  change outputs.
-- ``DKX_GMRES_DISTRIBUTED``: set to ``1`` to run the Krylov solver under
-  explicit ``jax.jit`` sharding (vectors kept sharded across devices) when using
-  ``flat`` sharding. Default: off (single-device GMRES).
-- ``DKX_DISTRIBUTED_KRYLOV``: distributed Krylov preference for
-  ``solve_method=auto`` under sharded solves. ``auto`` (default) selects
-  communication-reduced BiCGStab; ``gmres`` forces distributed GMRES.
+- ``DKX_CORES``: solver thread-count knob. ``N`` > 0 pins the XLA host
+  threadpool to ``N`` threads (applied as ``NPROC``, the variable XLA reads
+  when its CPU backend initializes) and defaults the host BLAS pools
+  (``OMP_NUM_THREADS``/``OPENBLAS_NUM_THREADS``) to match. ``0`` lets XLA
+  size the threadpool itself (full width). When unset, ``dkx`` clamps the
+  threadpool to ``min(8, cpu_count)``: the measured optimum is 4-8 threads
+  on both 10-core and 36-core hosts, and a full-width pool on a many-core
+  box is several times slower than 8 threads (:doc:`performance`). An
+  ``NPROC`` already present in the environment takes precedence over the
+  clamp (never over an explicit ``DKX_CORES``).
+- ``DKX_CPU_DEVICES``: explicit opt-in to force multiple host CPU devices
+  (sets ``--xla_force_host_platform_device_count``), for multi-device CPU
+  tests and SPMD experiments. Forced host devices share one threadpool, so
+  this does not speed up solves; use ``DKX_CORES`` for thread control.
+- ``DKX_XLA_THREADS``: inert; accepted and ignored. Thread control is
+  ``DKX_CORES``/``NPROC``.
 
 Multi-host distributed initialization
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -409,12 +385,12 @@ Writing output files with `dkx`
    # Default CLI mode (matches Fortran v3 behavior)
    dkx /path/to/input.namelist
 
-   # If --cores is omitted and DKX_CORES is unset, dkx auto-selects
-   # 1 core for RHSMode=1 and up to 3 cores for RHSMode=2/3 on non-CI machines.
+   # If --cores is omitted and DKX_CORES is unset, the solver threadpool is
+   # clamped to min(8, cpu_count) — the measured 4-8 thread optimum.
 
 .. code-block:: bash
 
-   # Parallel CPU run without environment variables
+   # Pin the solver threadpool without environment variables
    dkx --cores 4 /path/to/input.namelist
 
 .. code-block:: bash
