@@ -28,7 +28,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 import numpy as np
 
@@ -439,21 +439,31 @@ def _iteration_fields(
     state_vectors: np.ndarray,
     transport_matrix: np.ndarray,
     elapsed_times: np.ndarray,
+    moments_table: Mapping[str, Any] | None = None,
 ) -> Dict[str, np.ndarray]:
-    """Per-``whichRHS`` diagnostic datasets, stored in Fortran-file read order."""
+    """Per-``whichRHS`` diagnostic datasets, stored in Fortran-file read order.
+
+    ``moments_table`` optionally supplies the
+    :func:`dkx.moments.transport_moments_table` values of the same
+    ``state_vectors`` (the run drivers hold them for the returned moments), in
+    which case the shared multi-RHS moment integrals are not re-evaluated.
+    """
     import jax.numpy as jnp  # noqa: PLC0415
 
     layout, vgrid, surface, species = operator_containers(op)
     n = int(state_vectors.shape[0])
     stack = jnp.asarray(state_vectors, dtype=jnp.float64)
 
-    out: Dict[str, np.ndarray] = {
-        key: np.asarray(val, dtype=np.float64)
-        for key, val in transport_moments_table(
-            layout, vgrid, surface, species, stack,
-            rhs_mode=inp.general.rhs_mode, delta=op.delta, alpha=op.alpha,
-        ).items()  # fmt: skip
-    }
+    if moments_table is None:
+        out: Dict[str, np.ndarray] = {
+            key: np.asarray(val, dtype=np.float64)
+            for key, val in transport_moments_table(
+                layout, vgrid, surface, species, stack,
+                rhs_mode=inp.general.rhs_mode, delta=op.delta, alpha=op.alpha,
+            ).items()  # fmt: skip
+        }
+    else:
+        out = {key: np.asarray(val, dtype=np.float64) for key, val in moments_table.items()}
 
     # NTV kernel (zero for VMEC scheme 5, where v3 does not populate uHat).
     if inp.geometry.geometry_scheme == 5:
@@ -695,32 +705,42 @@ def _rhsmode1_iteration_fields(
     nu_n_eff: float,
     state_vector: np.ndarray,
     elapsed_seconds: float,
+    moments_table: Mapping[str, Any] | None = None,
 ) -> Dict[str, np.ndarray]:
     """RHSMode=1 solution-derived datasets, stored in Fortran-file read order.
 
     The single iteration axis (``NIterations=1``) is the trailing axis of every
     per-iteration dataset, matching ``writeHDF5Output.F90``.
+
+    ``moments_table`` optionally supplies the canonical h5-named moment table of
+    ``state_vector`` — :func:`dkx.run.profile_moments_from_operator`
+    with the NTV kernel applied, plus the ``classicalParticleFlux_psiHat`` /
+    ``classicalHeatFlux_psiHat`` entries — in which case the moment, NTV, and
+    classical-flux integrals are not re-evaluated here.
     """
     import jax.numpy as jnp  # noqa: PLC0415
 
     layout, vgrid, surface, species = operator_containers(op)
     x_full = jnp.asarray(state_vector, dtype=jnp.float64)
-    d = dict(
-        rhsmode1_moments(
-            layout, vgrid, surface, species, x_full,
-            delta=op.delta, alpha=op.alpha, phi1_from_state=bool(op.include_phi1),
-            phi1_hat=op.external_phi1_hat,
-        )  # fmt: skip
-    )
-
-    # NTV torque (zero for VMEC scheme 5, where v3 does not populate uHat).
-    if inp.geometry.geometry_scheme == 5:
-        kernel = jnp.zeros_like(jnp.asarray(op.b_hat))
+    if moments_table is not None:
+        d = dict(moments_table)
     else:
-        kernel = ntv_kernel(surface, u_hat=u_hat, g_hat=g_eff, i_hat=i_eff, iota=float(geom.iota))
-    ntv_before, ntv_s = ntv_moments(layout, vgrid, surface, species, x_full, kernel=kernel)
-    d["NTVBeforeSurfaceIntegral"] = ntv_before
-    d["NTV"] = ntv_s
+        d = dict(
+            rhsmode1_moments(
+                layout, vgrid, surface, species, x_full,
+                delta=op.delta, alpha=op.alpha, phi1_from_state=bool(op.include_phi1),
+                phi1_hat=op.external_phi1_hat,
+            )  # fmt: skip
+        )
+
+        # NTV torque (zero for VMEC scheme 5, where v3 does not populate uHat).
+        if inp.geometry.geometry_scheme == 5:
+            kernel = jnp.zeros_like(jnp.asarray(op.b_hat))
+        else:
+            kernel = ntv_kernel(surface, u_hat=u_hat, g_hat=g_eff, i_hat=i_eff, iota=float(geom.iota))
+        ntv_before, ntv_s = ntv_moments(layout, vgrid, surface, species, x_full, kernel=kernel)
+        d["NTVBeforeSurfaceIntegral"] = ntv_before
+        d["NTV"] = ntv_s
 
     out: Dict[str, np.ndarray] = {}
     for key in _RHSMODE1_ZTSN_KEYS:
@@ -756,12 +776,15 @@ def _rhsmode1_iteration_fields(
         )  # fmt: skip
 
     # Classical fluxes at the run's actual gradients (classicalTransport.F90).
-    pf, hf = classical_fluxes(
-        use_phi1=False, surface=surface, species=species,
-        gpsipsi=gpsipsi, phi1_hat=np.zeros_like(gpsipsi),
-        alpha=op.alpha, delta=op.delta, nu_n=nu_n_eff,
-        dn_hat_dpsi_hat=op.dn_hat_dpsi_hat, dt_hat_dpsi_hat=op.dt_hat_dpsi_hat,
-    )  # fmt: skip
+    if moments_table is not None:
+        pf, hf = moments_table["classicalParticleFlux_psiHat"], moments_table["classicalHeatFlux_psiHat"]
+    else:
+        pf, hf = classical_fluxes(
+            use_phi1=False, surface=surface, species=species,
+            gpsipsi=gpsipsi, phi1_hat=np.zeros_like(gpsipsi),
+            alpha=op.alpha, delta=op.delta, nu_n=nu_n_eff,
+            dn_hat_dpsi_hat=op.dn_hat_dpsi_hat, dt_hat_dpsi_hat=op.dt_hat_dpsi_hat,
+        )  # fmt: skip
     out["classicalParticleFlux_psiHat"] = np.asarray(pf, dtype=np.float64)[:, None]
     out["classicalHeatFlux_psiHat"] = np.asarray(hf, dtype=np.float64)[:, None]
 
@@ -1236,6 +1259,7 @@ def write_transport_output(
     elapsed_times: np.ndarray | None = None,
     solver_diagnostics: Dict[str, np.ndarray] | None = None,
     variational_diagnostics: Dict[str, np.ndarray] | None = None,
+    moments_table: Mapping[str, Any] | None = None,
     overwrite: bool = True,
     fortran_layout: bool = True,
 ) -> Path:
@@ -1263,6 +1287,10 @@ def write_transport_output(
             datasets (``transportCoeffD11UpperBound`` / ``...LowerBound`` /
             ``...BoundGap``; :mod:`dkx.variational`).  JAX-only keys
             with no Fortran counterpart.
+        moments_table: optional :func:`dkx.moments.transport_moments_table`
+            values of the same ``state_vectors`` (the run drivers hold them for
+            the returned moments); when given, the shared multi-RHS moment
+            integrals are not re-evaluated here.
         elapsed_times: per-``whichRHS`` wall-clock seconds (``elapsed time (s)``).
 
     Returns:
@@ -1289,6 +1317,7 @@ def write_transport_output(
         g_eff=float(base["GHat"]), i_eff=float(base["IHat"]),
         nu_n_eff=float(base["nu_n"]), state_vectors=state_vectors,
         transport_matrix=transport_matrix, elapsed_times=np.asarray(elapsed_times),
+        moments_table=moments_table,
     )  # fmt: skip
 
     export_cfg = _export_f_config(raw=inp.raw, grids=grids, geom=geom) if inp.raw is not None else None
@@ -1327,6 +1356,8 @@ def write_profile_output(
     solver_method: str | None = None,
     solver_requested_method: str | None = None,
     residual_norm: float | None = None,
+    geometry_extras: Tuple[np.ndarray, float] | None = None,
+    moments_table: Mapping[str, Any] | None = None,
     overwrite: bool = True,
     fortran_layout: bool = True,
 ) -> Path:
@@ -1361,6 +1392,15 @@ def write_profile_output(
             emitted as ``linearSolverMethod`` / ``linearSolverRequestedMethod``.
         residual_norm: converged residual norm emitted as
             ``linearSolverResidualNorm``.
+        geometry_extras: optional ``(gpsiHatpsiHat, diotadpsiHat)`` pair from
+            :func:`_geometry_extras` on the same inputs (the RHSMode=1 run
+            driver holds it for the classical fluxes); when given, the
+            file-based-geometry metric derivation is not re-run here.
+        moments_table: optional canonical h5-named moment table of
+            ``state_vector`` (:func:`dkx.run.profile_moments_from_operator`
+            with the NTV kernel applied, plus the classical-flux entries);
+            applied to single-iterate runs, skipping the moment/NTV/classical
+            re-evaluation in :func:`_rhsmode1_iteration_fields`.
         overwrite: when ``False``, raise :class:`FileExistsError` if ``path``
             already exists (the legacy ``--no-overwrite`` guard).
         fortran_layout: store the SFINCS v3 Fortran column-major dataset layout
@@ -1384,7 +1424,11 @@ def write_profile_output(
             history = [state_vector]
     n_iterations = len(history)
 
-    gpsipsi, diotadpsi_hat = _geometry_extras(inp=inp, grids=grids, geom=geom, radial=radial)
+    if geometry_extras is None:
+        gpsipsi, diotadpsi_hat = _geometry_extras(inp=inp, grids=grids, geom=geom, radial=radial)
+    else:
+        gpsipsi = np.asarray(geometry_extras[0], dtype=np.float64)
+        diotadpsi_hat = float(geometry_extras[1])
     base = _base_fields(
         inp=inp, op=op, grids=grids, geom=geom, radial=radial,
         gpsipsi=gpsipsi, diotadpsi_hat=diotadpsi_hat, n_rhs=n_iterations,
@@ -1402,6 +1446,7 @@ def write_profile_output(
             u_hat=base["uHat"], g_eff=float(base["GHat"]), i_eff=float(base["IHat"]),
             nu_n_eff=float(base["nu_n"]), state_vector=x,
             elapsed_seconds=elapsed_seconds if k == n_iterations - 1 else 0.0,
+            moments_table=moments_table if n_iterations == 1 else None,
         )  # fmt: skip
         for k, x in enumerate(history)
     ]

@@ -613,6 +613,18 @@ def _iter_bc_surfaces(
         )
 
 
+# Memoized .bc parses keyed by file identity (device/inode/mtime/size) and
+# geometry scheme.  Parsing a large .bc text file costs seconds and the same
+# equilibrium is read by grid construction, geometry selection, and the writer
+# metric derivation within one run (and across surfaces in scans), so the
+# parsed header/surface tables are shared.  Entries are treated as immutable
+# by every consumer; the file-identity key invalidates edited files.
+_BC_PARSE_CACHE: dict[
+    tuple[int, int, int, int, int], tuple[BoozerBcHeader, tuple[BoozerBcSurface, ...]]
+] = {}
+_BC_PARSE_CACHE_MAX = 4
+
+
 def read_boozer_bc(
     path: str | Path, *, geometry_scheme: int
 ) -> tuple[BoozerBcHeader, tuple[BoozerBcSurface, ...]]:
@@ -621,13 +633,24 @@ def read_boozer_bc(
     Pure function returning plain NumPy arrays; the sign switches applied in
     v3 ``geometry.F90`` (left- to right-handed system, and the ``CStconfig``
     files that need an extra flip for scheme 11) are folded into the header
-    ``psi_a_hat``.  Not differentiable; downstream construction is.
+    ``psi_a_hat``.  Not differentiable; downstream construction is.  Parses are
+    memoized on file identity (device/inode/mtime/size), so repeated reads of
+    an unchanged equilibrium return the shared parsed tables; treat the
+    returned header/surfaces as immutable.
     """
     if geometry_scheme not in {11, 12}:
         raise ValueError(f"geometry_scheme must be 11 or 12, got {geometry_scheme}")
     p = Path(path).expanduser()
     if not p.exists():
         p = resolve_existing_path(p).path
+
+    st = p.stat()
+    cache_key = (
+        int(st.st_dev), int(st.st_ino), int(st.st_mtime_ns), int(st.st_size), int(geometry_scheme),
+    )  # fmt: skip
+    cached = _BC_PARSE_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
 
     turkin_sign = 1
     with p.open("r") as f:
@@ -658,6 +681,9 @@ def read_boozer_bc(
         surfaces = tuple(
             _iter_bc_surfaces(fh=f, geometry_scheme=geometry_scheme, n_periods=n_periods, psi_a_hat=psi_a_hat)
         )
+    while len(_BC_PARSE_CACHE) >= _BC_PARSE_CACHE_MAX:
+        _BC_PARSE_CACHE.pop(next(iter(_BC_PARSE_CACHE)))
+    _BC_PARSE_CACHE[cache_key] = (header, surfaces)
     return header, surfaces
 
 
