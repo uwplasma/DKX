@@ -1,103 +1,110 @@
-"""Matrix-free residual + Jacobian-vector products (JVP) for the v3 F-block.
+"""Matrix-free residual and Jacobian-vector products (JVP) for the v3 F-block.
 
-This example demonstrates a key architectural milestone for a full SFINCS v3 port:
+What this example teaches:
+  - how to express the discrete drift-kinetic problem as a residual
+    ``r(x) = A x - b`` and apply the Jacobian matrix-free with ``jax.jvp``,
+  - how reverse-mode AD (``jax.grad``) differentiates a scalar built on the
+    residual, ``phi(x) = 0.5 * ||r(x)||^2``, with no sparse assembly,
+  - how the autodiff directional derivative matches a centered finite
+    difference.
 
-- Express the discrete problem as a residual function r(x) = A x - b.
-- Apply the Jacobian matrix-free using JVPs (or explicit matvecs for linear pieces).
-- Use `jax.grad`/`jax.jvp` to get sensitivities without assembling sparse matrices.
+Physics context: the base drift-kinetic system is linear in the distribution
+``x``, so ``r(x)`` is linear and ``J v`` is just ``A v``; the same JVP machinery
+extends to the nonlinear ``includePhi1`` Newton solve, keeping the Jacobian
+application matrix-free throughout [M. Landreman et al., Phys. Plasmas 21,
+042503 (2014); SFINCS technical documentation,
+https://github.com/landreman/sfincs].
 
-The residual here is linear in x (the base drift-kinetic system).  The same structure
-extends naturally to nonlinear residuals (the includePhi1 Newton solve reuses exactly
-this JVP machinery), while keeping the Jacobian application matrix-free.
+Run:
+  python examples/autodiff/matrix_free_residual_and_jvp.py
 """
 
 from __future__ import annotations
 
-# ruff: noqa: E402
-
-import argparse
-import sys
 from pathlib import Path
 
 import jax
 import jax.numpy as jnp
+import matplotlib
 import numpy as np
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
 
-from dkx.drift_kinetic import kinetic_operator_from_namelist
-from dkx.namelist import read_sfincs_input
+from dkx.drift_kinetic import kinetic_operator_from_namelist  # noqa: E402
+from dkx.namelist import read_sfincs_input  # noqa: E402
 
+# ----------------------------------------------------------------------------
+# Parameters
+# ----------------------------------------------------------------------------
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
-def _default_input() -> Path:
-    return Path(__file__).parents[2] / "tests" / "ref" / "pas_1species_PAS_noEr_tiny.input.namelist"
+# A tiny single-species PAS deck from the test suite.
+INPUT_NAMELIST = REPO_ROOT / "tests" / "ref" / "pas_1species_PAS_noEr_tiny.input.namelist"
+SEED = 0  # PRNG seed for the random state and direction vectors
+FD_EPS = 1e-6  # centered finite-difference step for the directional-derivative check
 
+OUTPUT_DIR = Path(__file__).resolve().parents[1] / "output" / "matrix_free_residual_and_jvp"
+PLOT_PATH = OUTPUT_DIR / "matrix_free_residual_and_jvp.png"
 
-def main() -> int:
-    p = argparse.ArgumentParser()
-    p.add_argument("--input", default=str(_default_input()))
-    p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--plot", action="store_true", help="Write a simple PNG (requires matplotlib).")
-    args = p.parse_args()
+# ----------------------------------------------------------------------------
+# 1) Build the operator and set up the residual
+# ----------------------------------------------------------------------------
+print("=== examples/autodiff/matrix_free_residual_and_jvp.py ===")
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+print(f"Step 1: building the operator from {INPUT_NAMELIST.name}")
+nml = read_sfincs_input(INPUT_NAMELIST)
+op = kinetic_operator_from_namelist(nml)
 
-    nml = read_sfincs_input(Path(args.input))
-    op = kinetic_operator_from_namelist(nml)
-
-    rng = np.random.default_rng(args.seed)
-    x0 = jnp.asarray(rng.normal(size=(op.total_size,)).astype(np.float64))
-    v = jnp.asarray(rng.normal(size=(op.total_size,)).astype(np.float64))
-
-    # Choose b so that the "true" solution is x0 (just for demonstration).
-    b = op.apply(x0)
-
-    def residual(x: jnp.ndarray) -> jnp.ndarray:
-        return op.apply(x) - b
-
-    # Residual and JVP:
-    r0, jv = jax.jvp(residual, (x0,), (v,))
-
-    # A small objective to demonstrate reverse-mode AD through the residual:
-    #   phi(x) = 0.5 * ||r(x)||^2
-    def phi(x):
-        r = residual(x)
-        return 0.5 * jnp.vdot(r, r)
-
-    grad_phi = jax.grad(phi)(x0)
-
-    # Finite-difference check of directional derivative:
-    eps = 1e-6
-    fd = float((phi(x0 + eps * v) - phi(x0 - eps * v)) / (2 * eps))
-    ad = float(jnp.vdot(grad_phi, v))
-
-    print(f"n={op.total_size}")
-    print(f"||r(x0)||_2 = {float(jnp.linalg.norm(r0)):.3e}  (should be ~0)")
-    print(f"||J v||_2   = {float(jnp.linalg.norm(jv)):.3e}")
-    print(f"directional derivative: finite-diff={fd:.6e}  autodiff={ad:.6e}  abs_err={abs(fd-ad):.3e}")
-
-    if args.plot:
-        try:
-            import matplotlib.pyplot as plt
-        except Exception as e:  # noqa: BLE001
-            raise SystemExit(f"--plot requested but matplotlib is unavailable: {e}")
-
-        # Plot phi(x0 + t v) for a small range of t to visualize smoothness.
-        ts = np.linspace(-5e-3, 5e-3, 101)
-        vals = np.array([float(phi(x0 + float(t) * v)) for t in ts])
-        fig, ax = plt.subplots(figsize=(6.0, 4.0))
-        ax.plot(ts, vals, lw=2)
-        ax.set_xlabel("t")
-        ax.set_ylabel(r"$\phi(x_0 + t v)$")
-        ax.set_title("Matrix-free residual objective (autodiff-ready)")
-        ax.grid(True, alpha=0.3)
-        out = Path("residual_objective.png")
-        fig.tight_layout()
-        fig.savefig(out, dpi=200)
-        print(f"Wrote {out}")
-
-    return 0
+rng = np.random.default_rng(SEED)
+x0 = jnp.asarray(rng.normal(size=(op.total_size,)).astype(np.float64))
+v = jnp.asarray(rng.normal(size=(op.total_size,)).astype(np.float64))
+b = op.apply(x0)  # choose b so the "true" solution is x0 (for demonstration)
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+def residual(x: jnp.ndarray) -> jnp.ndarray:
+    return op.apply(x) - b
+
+
+def phi(x: jnp.ndarray) -> jnp.ndarray:
+    r = residual(x)
+    return 0.5 * jnp.vdot(r, r)
+
+
+# ----------------------------------------------------------------------------
+# 2) Residual, JVP, and the reverse-mode gradient
+# ----------------------------------------------------------------------------
+print("Step 2: evaluating the residual, a JVP, and grad(phi)")
+r0, jv = jax.jvp(residual, (x0,), (v,))
+grad_phi = jax.grad(phi)(x0)
+
+# Finite-difference check of the directional derivative of phi along v.
+fd = float((phi(x0 + FD_EPS * v) - phi(x0 - FD_EPS * v)) / (2 * FD_EPS))
+ad = float(jnp.vdot(grad_phi, v))
+
+# ----------------------------------------------------------------------------
+# 3) Plot phi(x0 + t v) to visualize the smooth, differentiable objective
+# ----------------------------------------------------------------------------
+print("Step 3: plotting phi(x0 + t v)")
+ts = np.linspace(-5e-3, 5e-3, 101)
+vals = np.array([float(phi(x0 + float(t) * v)) for t in ts])
+fig, ax = plt.subplots(figsize=(5.8, 4.0))
+ax.plot(ts, vals, lw=2, color="tab:blue")
+ax.set_xlabel("t")
+ax.set_ylabel(r"$\phi(x_0 + t v)$")
+ax.set_title("Matrix-free residual objective (autodiff-ready)")
+ax.grid(True, alpha=0.3)
+fig.tight_layout()
+fig.savefig(PLOT_PATH, dpi=140)
+plt.close(fig)
+
+# ----------------------------------------------------------------------------
+# 4) Results
+# ----------------------------------------------------------------------------
+print("=== Final results ===")
+print(f"  n = {op.total_size}")
+print(f"  ||r(x0)||_2 = {float(jnp.linalg.norm(r0)):.3e}  (should be ~0)")
+print(f"  ||J v||_2   = {float(jnp.linalg.norm(jv)):.3e}")
+print(f"  directional derivative: finite-diff={fd:.6e}  autodiff={ad:.6e}  abs_err={abs(fd - ad):.3e}")
+print(f"  Saved plot: {PLOT_PATH.name}")
+print("Done: examples/autodiff/matrix_free_residual_and_jvp.py")

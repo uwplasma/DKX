@@ -1,93 +1,70 @@
+"""Compute v3 transport matrices (RHSMode=2 and RHSMode=3) with the JAX driver.
+
+What this example teaches:
+  - how ``dkx.run.run_transport_matrix`` runs the SFINCS v3 ``whichRHS`` loop
+    (one solve per right-hand side) and assembles the ``transportMatrix``,
+  - the two transport-matrix conventions: RHSMode=2 builds the 3x3
+    energy-integrated matrix, RHSMode=3 the 2x2 monoenergetic matrix,
+  - how to render each matrix as a heatmap.
+
+Physics context: the transport matrix relates the thermodynamic forces
+(density/temperature gradients and the parallel electric field) to the fluxes
+(radial particle/heat flux and the parallel bootstrap current) on one flux
+surface; it is the compact, force-free summary of the neoclassical solve
+[M. Landreman, H. M. Smith, A. Mollen and P. Helander, Phys. Plasmas 21,
+042503 (2014); SFINCS technical documentation,
+https://github.com/landreman/sfincs].  The RHSMode=3 monoenergetic form is the
+one used in the ICNTS benchmark database.  Both runs here use tiny grids so
+they finish in a couple of seconds -- they teach the workflow, not production
+physics.
+
+Run:
+  python examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py
+"""
+
 from __future__ import annotations
 
-"""
-Compute v3 transport matrices (RHSMode=2 and RHSMode=3) using the JAX matrix-free driver.
-
-This example demonstrates:
-  - The upstream v3 `whichRHS` loop for transport-matrix runs (RHSMode=2/3).
-  - Assembling `transportMatrix` from the solved distributions using v3's formulas.
-  - Running the same workflow via the CLI:
-
-        dkx transport-matrix-v3 --input input.namelist --out-matrix transportMatrix.npy
-
-Notes
------
-These are intentionally small toy runs (tiny grids) that complete quickly on a laptop.
-They are meant for learning the workflow, not for production physics.
-"""
-
 from pathlib import Path
-import sys
 
-import numpy as np
+import matplotlib
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
 
-from dkx.run import run_transport_matrix
+from dkx.run import run_transport_matrix  # noqa: E402
 
+# ----------------------------------------------------------------------------
+# Parameters
+# ----------------------------------------------------------------------------
+SOLVER_TOLERANCE = 1e-10  # Krylov tolerance for each whichRHS solve
 
-def _write_text(path: Path, text: str) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
-    return path
-
-
-def _try_plot_matrix(matrix: np.ndarray, *, out_png: Path, title: str) -> None:
-    try:
-        import matplotlib.pyplot as plt  # noqa: WPS433
-    except Exception:
-        return
-
-    out_png.parent.mkdir(parents=True, exist_ok=True)
-    fig, ax = plt.subplots(figsize=(5.2, 4.2), constrained_layout=True)
-    im = ax.imshow(matrix, cmap="coolwarm", interpolation="nearest")
-    ax.set_title(title)
-    ax.set_xlabel("column (whichRHS)")
-    ax.set_ylabel("row")
-    fig.colorbar(im, ax=ax, shrink=0.9)
-    fig.savefig(out_png, dpi=200)
-    plt.close(fig)
-
-
-def main() -> None:
-    root = Path(__file__).resolve().parents[2]
-    out_dir = root / "examples" / "transport" / "output" / "transport_matrix_rhsmode2_and_rhsmode3"
-
-    # RHSMode=2 (3x3) energy-integrated transport matrix in the simplified LHD model.
-    input_rhsmode2 = _write_text(
-        out_dir / "rhsmode2_scheme2.input.namelist",
-        """
+# RHSMode=2 (3x3) energy-integrated transport matrix, simplified LHD model
+# (geometryScheme=2).
+DECK_RHSMODE2 = """\
 &general
   RHSMode = 2
 /
-
 &geometryParameters
   geometryScheme = 2
 /
-
 &speciesParameters
   Zs = 1
   mHats = 1
   nHats = 1.0d+0
   THats = 1.0d+0
 /
-
 &physicsParameters
   Delta = 4.5694d-3
   alpha = 1.0d+0
-
   nu_n = 0.15d+0
   Er = 0.0d+0
-
   collisionOperator = 1
   includeXDotTerm = .false.
   includeElectricFieldTermInXiDot = .false.
   useDKESExBDrift = .true.
   includePhi1 = .false.
 /
-
 &resolutionParameters
   Ntheta = 9
   Nzeta = 9
@@ -96,21 +73,17 @@ def main() -> None:
   Nx = 3
   solverTolerance = 1d-10
 /
-
 &otherNumericalParameters
   Nxi_for_x_option = 0
 /
-""".lstrip(),
-    )
+"""
 
-    # RHSMode=3 (2x2) monoenergetic transport matrix in the 3-helicity analytic geometryScheme=1 model.
-    input_rhsmode3 = _write_text(
-        out_dir / "rhsmode3_scheme1.input.namelist",
-        """
+# RHSMode=3 (2x2) monoenergetic transport matrix, 3-helicity analytic model
+# (geometryScheme=1).
+DECK_RHSMODE3 = """\
 &general
   RHSMode = 3
 /
-
 &geometryParameters
   geometryScheme = 1
   epsilon_t = -0.07053d+0
@@ -122,18 +95,15 @@ def main() -> None:
   helicity_n = 10
   B0OverBBar = 1d+0
 /
-
 &physicsParameters
   nuPrime = 1.0d+0
   EStar = 0.1d+0
-
   collisionOperator = 1
   includeXDotTerm = .false.
   includeElectricFieldTermInXiDot = .false.
   useDKESExBDrift = .true.
   includePhi1 = .false.
 /
-
 &resolutionParameters
   Ntheta = 9
   Nzeta = 9
@@ -142,21 +112,53 @@ def main() -> None:
   Nx = 1
   solverTolerance = 1d-10
 /
-
 &otherNumericalParameters
   Nxi_for_x_option = 0
 /
-""".lstrip(),
-    )
+"""
 
-    for label, path in (("RHSMode=2", input_rhsmode2), ("RHSMode=3", input_rhsmode3)):
-        result = run_transport_matrix(path, tol=1e-10, emit=None)
-        tm = np.asarray(result.transport_matrix)
-        print(f"\n{label} transportMatrix (mathematical row/col order):\n{tm}\n")
+CASES = (("RHSMode=2", DECK_RHSMODE2), ("RHSMode=3", DECK_RHSMODE3))
 
-        fig_path = root / "examples" / "transport" / "figures" / f"transport_matrix_rhsmode2_and_rhsmode3_{label.replace('=', '').replace(' ', '_')}.png"
-        _try_plot_matrix(tm, out_png=fig_path, title=f"{label} transportMatrix")
+OUTPUT_DIR = Path(__file__).resolve().parents[1] / "output" / "transport_matrix_rhsmode2_and_rhsmode3"
 
+# ----------------------------------------------------------------------------
+# 1) Run both transport-matrix cases and collect the matrices
+# ----------------------------------------------------------------------------
+print("=== examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py ===")
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+matrices: dict[str, np.ndarray] = {}
+for label, deck_text in CASES:
+    print(f"Step 1[{label}]: writing the deck and running the whichRHS loop")
+    deck_path = OUTPUT_DIR / f"{label.replace('=', '').lower()}.input.namelist"
+    deck_path.write_text(deck_text, encoding="utf-8")
+    result = run_transport_matrix(deck_path, tol=SOLVER_TOLERANCE, emit=None)
+    tm = np.asarray(result.transport_matrix)
+    matrices[label] = tm
+    print(f"  {label} transportMatrix ({tm.shape[0]}x{tm.shape[1]}, mathematical row/col order):")
+    print("   " + np.array2string(tm, prefix="   "))
 
-if __name__ == "__main__":
-    main()
+# ----------------------------------------------------------------------------
+# 2) Plot each transport matrix as a heatmap
+# ----------------------------------------------------------------------------
+print("Step 2: plotting the transport matrices")
+fig, axes = plt.subplots(1, len(CASES), figsize=(9.0, 3.8), constrained_layout=True)
+for ax, (label, _) in zip(np.atleast_1d(axes), CASES):
+    tm = matrices[label]
+    im = ax.imshow(tm, cmap="coolwarm", interpolation="nearest")
+    ax.set_title(f"{label} transportMatrix")
+    ax.set_xlabel("column (whichRHS)")
+    ax.set_ylabel("row")
+    fig.colorbar(im, ax=ax, shrink=0.85)
+PLOT_PATH = OUTPUT_DIR / "transport_matrix_rhsmode2_and_rhsmode3.png"
+fig.savefig(PLOT_PATH, dpi=150)
+plt.close(fig)
+
+# ----------------------------------------------------------------------------
+# 3) Results
+# ----------------------------------------------------------------------------
+print("=== Final results ===")
+for label, _ in CASES:
+    tm = matrices[label]
+    print(f"  {label}: L11 (D11-like) = {float(tm[0, 0]):.6e}, shape = {tm.shape}")
+print(f"  Saved plot: {PLOT_PATH.name}")
+print("Done: examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py")

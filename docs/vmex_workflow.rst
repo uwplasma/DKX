@@ -53,27 +53,25 @@ transport scalar.  The current public scalar is explicitly
 ``boozer_spectrum_proxy_not_kinetic``; ``kinetic_transport_scalar_claimed`` and
 ``kinetic_solve_executed`` must both remain false in this lane.
 
-The existing end-to-end example has the same skip-safe backend contract:
+The end-to-end example has the same skip-safe backend contract:
 
 .. code-block:: bash
 
-   python examples/autodiff/vmex_to_boozer_sfincs_pipeline.py --check-backends --json
+   python examples/autodiff/vmex_to_boozer_sfincs_pipeline.py
 
-In ``--check-backends`` mode, the JSON payload includes
-``backend_readiness_gate``.  That gate is intentionally synthetic: it evaluates a
-small Boozer spectrum through a ``dkx`` proxy transport objective, checks
-the full spectral JAX gradient against centered finite differences, and checks a
-JVP against the gradient dot product.  It is a local
-backend-readiness/sensitivity check for the downstream differentiable objective,
-not evidence that ``vmex`` or ``booz_xform_jax`` executed.
+The script always prints the optional-backend status first and runs a
+dependency-free ``backend_readiness_gate``.  That gate is intentionally
+synthetic: it evaluates a small Boozer spectrum through a ``dkx`` proxy
+transport objective, checks the full spectral JAX gradient against centered
+finite differences, and checks a JVP against the gradient dot product.  It is a
+local backend-readiness/sensitivity check for the downstream differentiable
+objective, not evidence that ``vmex`` or ``booz_xform_jax`` executed.
 
-To persist a provenance record without running optional geometry code:
-
-.. code-block:: bash
-
-   python examples/autodiff/vmex_to_boozer_sfincs_pipeline.py \
-     --check-backends \
-     --summary-json workflow-summary.json
+A provenance record is persisted every run to
+``examples/output/vmex_to_boozer_sfincs_pipeline/vmex_to_boozer_sfincs_pipeline_summary.json``;
+its ``backend_readiness_gate`` field carries the same synthetic gate.  When the
+optional backends and a VMEC ``wout`` are unavailable, the summary is written
+without running any optional geometry code.
 
 Optional install pattern
 ------------------------
@@ -91,38 +89,24 @@ The status scaffold should then report both optional backends as available.
 Proxy-gradient gate
 -------------------
 
-Run the documented file-backed workflow with an explicit ``wout`` file:
+Run the documented file-backed workflow:
 
 .. code-block:: bash
 
-   python examples/autodiff/vmex_to_boozer_sfincs_pipeline.py \
-     --wout /path/to/wout_circular_tokamak.nc \
-     --mboz 3 \
-     --nboz 3 \
-     --surface 0.5 \
-     --steps 0 \
-     --summary-json workflow-summary.json
+   python examples/autodiff/vmex_to_boozer_sfincs_pipeline.py
 
-The same input can be supplied as:
+The ``WOUT_PATH``, ``SURFACE``, ``MBOZ``, ``NBOZ``, and ``STEPS`` parameters at
+the top of the script select the VMEC equilibrium, the surface, the Boozer
+resolution, and the number of descent steps.  A VMEC ``wout`` can also be
+supplied through the environment:
 
 .. code-block:: bash
 
    export DKX_VMEX_WOUT=/path/to/wout_circular_tokamak.nc
-   python examples/autodiff/vmex_to_boozer_sfincs_pipeline.py \
-     --mboz 3 \
-     --nboz 3 \
-     --surface 0.5 \
-     --steps 0
+   python examples/autodiff/vmex_to_boozer_sfincs_pipeline.py
 
-If ``vmex`` example decks are available, the example can build the VMEC-like
-object before the Boozer transform:
-
-.. code-block:: bash
-
-   python examples/autodiff/vmex_to_boozer_sfincs_pipeline.py \
-     --vmec-case circular_tokamak \
-     --vmec-max-iter 1 \
-     --steps 0
+The summary/provenance JSON is written to
+``examples/output/vmex_to_boozer_sfincs_pipeline/`` on every run.
 
 Differentiability contract
 --------------------------
@@ -179,7 +163,7 @@ The optional VMEC/Boozer integration tests use ``pytest.importorskip`` or a
 skip-status payload. Missing optional packages therefore record a skipped lane,
 not a failed default installation.
 
-In a file-backed optional run, the written ``workflow-summary.json`` must also
+In a file-backed optional run, the written summary JSON must also
 show ``no_solve_provenance_gate.status == "pass"``.  For that path the gate
 requires explicit provenance fields for the source ``wout`` or in-memory VMEC
 object, selected surface, Boozer resolution, objective grid shape, and spectral
@@ -195,7 +179,7 @@ Promotion rule
 
 This lane is complete enough for documented research use when:
 
-- ``--check-backends --json`` returns a valid workflow contract,
+- the dependency-free backend report returns a valid workflow contract,
 - ``backend_readiness_gate.status == "pass"`` in the no-optional-dependency
   preflight/backend-contract payload,
 - ``no_solve_provenance_gate.status == "pass"`` and
