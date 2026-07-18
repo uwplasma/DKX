@@ -64,29 +64,49 @@ def initialize_distributed_runtime_from_env() -> bool:
 # Optional JAX multi-host bootstrap (must run before any JAX device use).
 initialize_distributed_runtime_from_env()
 
-# High-level cores knob: set this before importing JAX to request N CPU devices
-# and enable auto-sharding by default.
+# High-level cores knob (DKX_CORES / CLI --cores): pin the XLA host CPU
+# threadpool.  XLA sizes its eigen threadpool from the NPROC environment
+# variable, read once when the CPU backend initializes, so this must run before
+# the first jax import (imports below).  Semantics:
+#
+#   DKX_CORES=N (N > 0)  pin the solver threadpool to N threads (NPROC), and
+#                        default the host BLAS pools (OMP/OpenBLAS) to match;
+#   DKX_CORES=0          let XLA size the threadpool itself (full width);
+#   unset                clamp to min(8, os.cpu_count()) unless NPROC is
+#                        already set: the measured optimum is 4-8 threads on
+#                        8-36-core hosts, and a full-width threadpool on a
+#                        many-core box is several times slower than 8 threads
+#                        (docs/performance.rst).
+#
+# Forcing multiple host *devices* is a separate, test-oriented concern: it is
+# available only through an explicit DKX_CPU_DEVICES (below) and has no
+# measured benefit for solves (all forced host devices share one threadpool).
 _cores_env = os.environ.get("DKX_CORES", "").strip()
 if _cores_env:
     try:
         _cores_val = int(_cores_env)
     except ValueError:
-        _cores_val = 0
-    if _cores_val > 0:
-        _threads_env = os.environ.get("DKX_XLA_THREADS", "").strip().lower()
-        if _threads_env in {"1", "true", "yes", "on"}:
-            _xla_flags = os.environ.get("XLA_FLAGS", "")
-            if "--xla_cpu_parallelism_threads" not in _xla_flags:
-                flag = f"--xla_cpu_parallelism_threads={_cores_val}"
-                os.environ["XLA_FLAGS"] = f"{_xla_flags} {flag}".strip()
-        shard_env = os.environ.get("DKX_SHARD", "").strip().lower()
-        if _cores_val > 1 and shard_env not in {"0", "false", "no", "off"}:
-            os.environ.setdefault("DKX_CPU_DEVICES", str(_cores_val))
-            os.environ.setdefault("DKX_MATVEC_SHARD_AXIS", "auto")
-            os.environ.setdefault("DKX_AUTO_SHARD", "1")
+        _cores_val = None  # invalid value: fail closed, change nothing
+    if _cores_val is not None and _cores_val > 0:
+        os.environ["NPROC"] = str(_cores_val)
+        os.environ.setdefault("OMP_NUM_THREADS", str(_cores_val))
+        os.environ.setdefault("OPENBLAS_NUM_THREADS", str(_cores_val))
+        os.environ.pop("_DKX_NPROC_DEFAULTED", None)
+    elif _cores_val == 0:
+        # Explicit "let XLA size the threadpool": undo a default clamp
+        # inherited from a parent dkx process (the sentinel marks our own
+        # clamp, never a user-set NPROC).
+        if os.environ.pop("_DKX_NPROC_DEFAULTED", None):
+            os.environ.pop("NPROC", None)
+else:
+    if "NPROC" not in os.environ:
+        os.environ["NPROC"] = str(min(8, os.cpu_count() or 1))
+        os.environ["_DKX_NPROC_DEFAULTED"] = "1"
 
-# Allow users to request multiple CPU devices for JAX SPMD sharded-JIT on host platforms.
-# This must be set before importing JAX.
+# Explicit opt-in: force multiple host CPU devices (JAX SPMD / multi-device
+# tests).  Must be set before importing JAX.  This is never derived from
+# DKX_CORES — forced host devices share one threadpool, so device forcing does
+# not speed up solves; thread control is the DKX_CORES/NPROC path above.
 _cpu_devices_env = os.environ.get("DKX_CPU_DEVICES", "").strip()
 if _cpu_devices_env:
     try:
