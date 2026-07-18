@@ -313,3 +313,58 @@ def test_grad_fsabjhat_wrt_t_hat_matches_finite_differences() -> None:
     )
     assert np.isfinite(g) and np.isfinite(fd) and abs(fd) > 0.0
     np.testing.assert_allclose(g, fd, rtol=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# Single-build invariant: one operator/geometry/grids derivation per run+write
+# ---------------------------------------------------------------------------
+
+
+def test_run_profile_write_path_builds_operator_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``run_profile`` with ``out_path`` derives every shared object exactly once.
+
+    The operator build, the grids construction, the flux-surface-geometry
+    derivation, the ``(gpsiHatpsiHat, diotadpsiHat)`` metric extras, and the
+    RHSMode=1 moment table each run once: the writer consumes the run's
+    objects instead of re-deriving them from the namelist.
+    """
+    import dkx.drift_kinetic as dk
+    import dkx.run as rn
+    import dkx.writer as wr
+    from dkx.run import run_profile
+
+    counts = {"build": 0, "grids": 0, "geometry": 0, "extras": 0, "moments": 0}
+
+    def counting(kind: str, fn):
+        def wrapped(*args, **kwargs):
+            counts[kind] += 1
+            return fn(*args, **kwargs)
+
+        return wrapped
+
+    # The build entry run_profile uses, plus its internal grid/geometry
+    # derivations (module-global lookups inside dkx.drift_kinetic).
+    monkeypatch.setattr(
+        rn, "kinetic_operator_build_from_namelist",
+        counting("build", dk.kinetic_operator_build_from_namelist),
+    )  # fmt: skip
+    monkeypatch.setattr(dk, "make_grids", counting("grids", dk.make_grids))
+    monkeypatch.setattr(dk, "_geometry_and_radial", counting("geometry", dk._geometry_and_radial))
+    # Writer-shared helpers, counted through both by-name import sites.
+    extras = counting("extras", wr._geometry_extras)
+    monkeypatch.setattr(wr, "_geometry_extras", extras)
+    monkeypatch.setattr(rn, "_geometry_extras", extras)
+    moments = counting("moments", rn.rhsmode1_moments)
+    monkeypatch.setattr(rn, "rhsmode1_moments", moments)
+    monkeypatch.setattr(wr, "rhsmode1_moments", moments)
+
+    run = run_profile(
+        REF / "pas_1species_PAS_noEr_tiny_scheme1.input.namelist",
+        out_path=tmp_path / "single_build.h5",
+        emit=None,
+    )
+
+    assert run.output_path is not None and run.output_path.exists()
+    assert counts == {"build": 1, "grids": 1, "geometry": 1, "extras": 1, "moments": 1}
