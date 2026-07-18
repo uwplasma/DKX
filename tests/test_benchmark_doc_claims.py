@@ -186,7 +186,7 @@ def test_readme_canonical_benchmark_claims_match_recorded_measurements() -> None
         assert artifact.stat().st_size <= 150 * 1024, artifact
         assert f"docs/_static/figures/readme/{name}" in readme, name
 
-    # README stays a compact landing page (plan_final.md Docs/readme lane).
+    # README stays a compact landing page (the DKX docs/readme policy).
     assert len(readme.splitlines()) <= 250
 
     # The canonical evidence also lands in the performance docs page.

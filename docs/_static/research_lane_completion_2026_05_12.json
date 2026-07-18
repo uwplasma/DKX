@@ -1,243 +1,243 @@
 {
-  "generated_at": "2026-07-07T00:00:00-05:00",
-  "lanes": [
+ "generated_at": "2026-07-07T00:00:00-05:00",
+ "lanes": [
+  {
+   "before_percent": 23,
+   "current_percent": 99,
+   "deferred_reason": "QI/device-QI hard-seed and production-ladder evidence has been extracted from the stable core and preserved on research/qi-device-hard-seed until a candidate implementation passes release residual, output, runtime, memory, CPU/GPU parity, and documentation gates.",
+   "evidence": [
     {
-      "before_percent": 23,
-      "current_percent": 99,
-      "deferred_reason": "QI/device-QI hard-seed and production-ladder evidence has been extracted from the stable core and preserved on research/qi-device-hard-seed until a candidate implementation passes release residual, output, runtime, memory, CPU/GPU parity, and documentation gates.",
-      "evidence": [
-        {
-          "claim": "Research-lane documentation now defines QI/device-QI as preserved research material rather than stable release evidence.",
-          "path": "docs/research_lanes.rst"
-        },
-        {
-          "claim": "The core-slim inventory records QI/device-QI artifacts as extract-research material outside stable defaults.",
-          "path": "tests/fixtures/core_slim_inventory.json"
-        },
-        {
-          "claim": "The final plan requires QI/device-QI source, tests, docs, and artifacts to pass strict release gates before returning to stable.",
-          "path": "plan_final.md"
-        }
-      ],
-      "gates": [
-        "Future QI/device-QI promotion requires compact regenerated artifacts from the candidate branch.",
-        "CPU and GPU runs must pass strict true-residual, output-write, runtime, memory, and observable-parity gates.",
-        "Stable README/docs must not cite extracted QI/device-QI artifacts as release evidence."
-      ],
-      "id": "production_qi_cpu_gpu",
-      "next_actions": [
-        "Keep QI/device-QI promotion work on research/qi-device-hard-seed or a successor research PR.",
-        "Reintroduce only the minimal stable source/tests/docs after regenerated CPU/GPU artifacts pass strict gates."
-      ],
-      "second_push_delta_percent": 76,
-      "second_push_result": "QI/device-QI material is preserved outside the stable core; stable release claims no longer depend on hard-seed artifacts that are not shipped.",
-      "status": "deferred",
-      "target_percent": 100,
-      "title": "Production-resolution QI CPU/GPU robustness"
+     "claim": "Research-lane documentation now defines QI/device-QI as preserved research material rather than stable release evidence.",
+     "path": "docs/research_lanes.rst"
     },
     {
-      "before_percent": 53,
-      "current_percent": 97,
-      "evidence": [
-        {
-          "claim": "Performance documentation preserves supported PAS memory/runtime routes and separates them from rejected experimental routes.",
-          "path": "docs/performance.rst"
-        },
-        {
-          "claim": "Matrix-free PAS policy and correction code own byte-budget and fail-fast guards.",
-          "path": "docs/research_lanes.rst"
-        },
-        {
-          "claim": "PAS matrix-free tests cover fail-fast allocation gates without launching slow production solves.",
-          "path": "docs/dev/trim_ledger.md"
-        }
-      ],
-      "gates": [
-        "Keep only PAS routes that preserve true residual and Fortran parity.",
-        "Reject candidates that avoid allocation but do not reduce the residual.",
-        "CPU and GPU default policy changes require bounded artifacts before README-facing claims."
-      ],
-      "id": "pas_geometry_runtime_memory",
-      "next_actions": [
-        "Promote a PAS route only after residual-clean CPU/GPU evidence improves runtime or peak memory on geometry-rich floors.",
-        "Keep generated PAS profiling outputs untracked unless they are compact checked evidence."
-      ],
-      "second_push_delta_percent": 44,
-      "second_push_result": "PAS memory/runtime evidence remains bounded and claim-scoped; default promotion remains evidence-gated.",
-      "status": "evidence_ready",
-      "target_percent": 97,
-      "title": "PAS and geometry-rich runtime/memory offenders"
+     "claim": "The core-slim inventory records QI/device-QI artifacts as extract-research material outside stable defaults.",
+     "path": "tests/fixtures/core_slim_inventory.json"
     },
     {
-      "before_percent": 66,
-      "current_percent": 95,
-      "evidence": [
-        {
-          "claim": "Transport-worker parallelism is documented separately from experimental single-case sharding.",
-          "path": "docs/parallelism.rst"
-        },
-        {
-          "claim": "Runtime policy code owns worker-count, backend, and claim-scope decisions.",
-          "path": "docs/dev/trim_ledger.md"
-        },
-        {
-          "claim": "Release-facing GPU transport-worker figure is checked in.",
-          "path": "docs/_static/figures/parallel/transport_parallel_scaling_gpu.png"
-        }
-      ],
-      "gates": [
-        "Case-parallel and transport-worker paths must preserve serial output ordering and parity.",
-        "Strong-scaling claims require per-worker work large enough to amortize setup.",
-        "Single-case multi-GPU remains experimental unless a measured artifact improves wall time and passes deterministic-output parity."
-      ],
-      "id": "parallel_scaling",
-      "next_actions": [
-        "Keep release-facing parallel claims scoped to independent transport-worker/case throughput.",
-        "Treat single-case sharding as research until deterministic-output and speedup gates pass."
-      ],
-      "second_push_delta_percent": 29,
-      "second_push_result": "Release-facing parallelism remains scoped to audited independent work; single-case sharding stays non-release.",
-      "status": "evidence_ready",
-      "target_percent": 95,
-      "title": "Executable parallelism and strong-scaling evidence"
-    },
-    {
-      "before_percent": 63,
-      "current_percent": 96,
-      "evidence": [
-        {
-          "claim": "The final plan defines the line-level code-audit and extraction contract for the refactor PR.",
-          "path": "plan_final.md"
-        },
-        {
-          "claim": "The source-map documentation identifies canonical domain owners.",
-          "path": "docs/source_map.rst"
-        },
-        {
-          "claim": "Source-tree consolidation tests enforce the refactor branch structure and extraction rules.",
-          "path": "tests/test_source_tree_consolidation.py"
-        }
-      ],
-      "gates": [
-        "Coverage gains must come from focused module tests, not slow full-solve duplication.",
-        "Large driver splits must preserve CLI/API parity and existing solver provenance.",
-        "CI-fast checks must remain within the documented time budget."
-      ],
-      "id": "refactor_coverage_ci",
-      "next_actions": [
-        "Continue file-complete inventory review and delete/extract research-only stable code.",
-        "Raise coverage only after source simplification makes focused tests cheaper."
-      ],
-      "second_push_delta_percent": 33,
-      "second_push_result": "The refactor lane remains target-saturated for planning and source-tree guardrails; line/file count reduction continues through the core-slim queues.",
-      "status": "evidence_ready",
-      "target_percent": 96,
-      "title": "Refactor, source map, coverage, and CI readiness"
-    },
-    {
-      "before_percent": 73,
-      "current_percent": 96,
-      "evidence": [
-        {
-          "claim": "VMEC/Boozer workflow documentation states the skip-safe workflow and differentiability contract.",
-          "path": "docs/vmex_workflow.rst"
-        },
-        {
-          "claim": "JAX geometry adapters isolate optional differentiable geometry handoff utilities.",
-          "path": "dkx/workflows/geometry_adapters.py"
-        },
-        {
-          "claim": "Workflow tests cover optional backend readiness and no-solve provenance.",
-          "path": "tests/test_vmex_workflow.py"
-        }
-      ],
-      "gates": [
-        "End-to-end optimization claims require differentiating through a validated geometry-to-transport scalar.",
-        "Boozer and VMEC optional dependencies must fail gracefully when not installed.",
-        "Profile-current and ambipolar outputs must pass convergence gates before publication claims."
-      ],
-      "id": "vmec_booz_sfincs_workflow",
-      "next_actions": [
-        "Keep optional VMEC/Boozer dependencies skip-safe in default CI.",
-        "Wire only validated kinetic-transport scalar paths into stable optimization docs."
-      ],
-      "second_push_delta_percent": 23,
-      "second_push_result": "The scoped geometry-proxy workflow remains evidence-ready; full kinetic gradients require separate validation before release claims.",
-      "status": "evidence_ready",
-      "target_percent": 96,
-      "title": "vmex to booz_xform_jax to dkx differentiable workflow"
-    },
-    {
-      "before_percent": 50,
-      "current_percent": 89,
-      "evidence": [
-        {
-          "claim": "Performance documentation records keep/reject gates for optional JAX-ecosystem solver candidates.",
-          "path": "docs/performance.rst"
-        },
-        {
-          "claim": "Solver path policy is isolated enough to host future library experiments behind measured residual, runtime, and memory gates.",
-          "path": "dkx/solve.py"
-        },
-        {
-          "claim": "Research-lane documentation keeps optional solver-library evaluations outside stable dependencies until admitted.",
-          "path": "docs/research_lanes.rst"
-        }
-      ],
-      "gates": [
-        "No new JAX ecosystem dependency is promoted unless it reduces runtime or memory on a documented case.",
-        "Any replacement solver must preserve autodiff semantics or explicitly remain in the non-differentiable CLI lane.",
-        "Hard-coded branch thresholds should move to measured policy gates when evidence exists."
-      ],
-      "id": "jax_ecosystem_solver_evaluation",
-      "next_actions": [
-        "Keep optional solver-library adoption studies outside stable examples until a reviewed implementation satisfies stable gates.",
-        "Resolve real-SFINCS residual/status blockers before any solver promotion."
-      ],
-      "second_push_delta_percent": 39,
-      "second_push_result": "Optional JAX ecosystem solver evaluations remain claim-scoped and are not stable runtime dependencies.",
-      "status": "evidence_ready",
-      "target_percent": 89,
-      "title": "JAX ecosystem solver/preconditioner evaluation"
-    },
-    {
-      "before_percent": 78,
-      "current_percent": 99,
-      "evidence": [
-        {
-          "claim": "README-facing Fortran/JAX runtime and active-memory comparison figure is checked in.",
-          "path": "docs/_static/figures/paper/dkx_fortran_suite_benchmark_summary.png"
-        },
-        {
-          "claim": "Validation manifest records release-ready, bounded-proxy, and deferred lanes explicitly.",
-          "path": "examples/publication_figures/validation_manifest.json"
-        },
-        {
-          "claim": "Benchmark-doc tests prevent stale benchmark ratio, figure, and scope wording from shipping.",
-          "path": "tests/test_benchmark_doc_claims.py"
-        }
-      ],
-      "gates": [
-        "README table and figure must be generated from the same canonical filtered rows.",
-        "No jax_error or max_attempts row may appear in public release-facing parity claims.",
-        "Low-resolution CI smoke rows must not be promoted into runtime comparison claims."
-      ],
-      "id": "benchmark_parity_docs",
-      "next_actions": [
-        "Regenerate final plots only after accepted performance-policy changes alter benchmark data.",
-        "Keep README/docs scope language tied to canonical checked benchmark rows."
-      ],
-      "second_push_delta_percent": 21,
-      "second_push_result": "Benchmark and docs claim gates remain tied to canonical summary evidence.",
-      "status": "evidence_ready",
-      "target_percent": 99,
-      "title": "Benchmark, parity, README, and documentation publication surface"
+     "claim": "The final plan requires QI/device-QI source, tests, docs, and artifacts to pass strict release gates before returning to stable.",
+     "path": "docs/development_roadmap.rst"
     }
-  ],
-  "minimum_substantial_delta_percent": 10,
-  "overall_average_percent": 95.9,
-  "purpose": "Compact research/performance lane tracker for the stable core. Percentages are engineering readiness estimates backed by checked-in evidence, not physics claims by themselves.",
-  "requested_second_push_delta_percent": 15,
-  "schema_version": 1,
-  "second_push_assessment": "Stable evidence is now compact and branch-scoped: QI/device-QI campaign artifacts are preserved outside the stable core, PAS/parallel/refactor/VMEC/JAX-ecosystem/benchmark lanes keep small checked evidence, and all future promotion claims must pass strict release gates before returning to README/docs."
+   ],
+   "gates": [
+    "Future QI/device-QI promotion requires compact regenerated artifacts from the candidate branch.",
+    "CPU and GPU runs must pass strict true-residual, output-write, runtime, memory, and observable-parity gates.",
+    "Stable README/docs must not cite extracted QI/device-QI artifacts as release evidence."
+   ],
+   "id": "production_qi_cpu_gpu",
+   "next_actions": [
+    "Keep QI/device-QI promotion work on research/qi-device-hard-seed or a successor research PR.",
+    "Reintroduce only the minimal stable source/tests/docs after regenerated CPU/GPU artifacts pass strict gates."
+   ],
+   "second_push_delta_percent": 76,
+   "second_push_result": "QI/device-QI material is preserved outside the stable core; stable release claims no longer depend on hard-seed artifacts that are not shipped.",
+   "status": "deferred",
+   "target_percent": 100,
+   "title": "Production-resolution QI CPU/GPU robustness"
+  },
+  {
+   "before_percent": 53,
+   "current_percent": 97,
+   "evidence": [
+    {
+     "claim": "Performance documentation preserves supported PAS memory/runtime routes and separates them from rejected experimental routes.",
+     "path": "docs/performance.rst"
+    },
+    {
+     "claim": "Matrix-free PAS policy and correction code own byte-budget and fail-fast guards.",
+     "path": "docs/research_lanes.rst"
+    },
+    {
+     "claim": "PAS matrix-free tests cover fail-fast allocation gates without launching slow production solves.",
+     "path": "docs/dev/trim_ledger.md"
+    }
+   ],
+   "gates": [
+    "Keep only PAS routes that preserve true residual and Fortran parity.",
+    "Reject candidates that avoid allocation but do not reduce the residual.",
+    "CPU and GPU default policy changes require bounded artifacts before README-facing claims."
+   ],
+   "id": "pas_geometry_runtime_memory",
+   "next_actions": [
+    "Promote a PAS route only after residual-clean CPU/GPU evidence improves runtime or peak memory on geometry-rich floors.",
+    "Keep generated PAS profiling outputs untracked unless they are compact checked evidence."
+   ],
+   "second_push_delta_percent": 44,
+   "second_push_result": "PAS memory/runtime evidence remains bounded and claim-scoped; default promotion remains evidence-gated.",
+   "status": "evidence_ready",
+   "target_percent": 97,
+   "title": "PAS and geometry-rich runtime/memory offenders"
+  },
+  {
+   "before_percent": 66,
+   "current_percent": 95,
+   "evidence": [
+    {
+     "claim": "Transport-worker parallelism is documented separately from experimental single-case sharding.",
+     "path": "docs/parallelism.rst"
+    },
+    {
+     "claim": "Runtime policy code owns worker-count, backend, and claim-scope decisions.",
+     "path": "docs/dev/trim_ledger.md"
+    },
+    {
+     "claim": "Release-facing GPU transport-worker figure is checked in.",
+     "path": "docs/_static/figures/parallel/transport_parallel_scaling_gpu.png"
+    }
+   ],
+   "gates": [
+    "Case-parallel and transport-worker paths must preserve serial output ordering and parity.",
+    "Strong-scaling claims require per-worker work large enough to amortize setup.",
+    "Single-case multi-GPU remains experimental unless a measured artifact improves wall time and passes deterministic-output parity."
+   ],
+   "id": "parallel_scaling",
+   "next_actions": [
+    "Keep release-facing parallel claims scoped to independent transport-worker/case throughput.",
+    "Treat single-case sharding as research until deterministic-output and speedup gates pass."
+   ],
+   "second_push_delta_percent": 29,
+   "second_push_result": "Release-facing parallelism remains scoped to audited independent work; single-case sharding stays non-release.",
+   "status": "evidence_ready",
+   "target_percent": 95,
+   "title": "Executable parallelism and strong-scaling evidence"
+  },
+  {
+   "before_percent": 63,
+   "current_percent": 96,
+   "evidence": [
+    {
+     "claim": "The final plan defines the line-level code-audit and extraction contract for the refactor PR.",
+     "path": "docs/development_roadmap.rst"
+    },
+    {
+     "claim": "The source-map documentation identifies canonical domain owners.",
+     "path": "docs/source_map.rst"
+    },
+    {
+     "claim": "Source-tree consolidation tests enforce the refactor branch structure and extraction rules.",
+     "path": "tests/test_source_tree_consolidation.py"
+    }
+   ],
+   "gates": [
+    "Coverage gains must come from focused module tests, not slow full-solve duplication.",
+    "Large driver splits must preserve CLI/API parity and existing solver provenance.",
+    "CI-fast checks must remain within the documented time budget."
+   ],
+   "id": "refactor_coverage_ci",
+   "next_actions": [
+    "Continue file-complete inventory review and delete/extract research-only stable code.",
+    "Raise coverage only after source simplification makes focused tests cheaper."
+   ],
+   "second_push_delta_percent": 33,
+   "second_push_result": "The refactor lane remains target-saturated for planning and source-tree guardrails; line/file count reduction continues through the core-slim queues.",
+   "status": "evidence_ready",
+   "target_percent": 96,
+   "title": "Refactor, source map, coverage, and CI readiness"
+  },
+  {
+   "before_percent": 73,
+   "current_percent": 96,
+   "evidence": [
+    {
+     "claim": "VMEC/Boozer workflow documentation states the skip-safe workflow and differentiability contract.",
+     "path": "docs/vmex_workflow.rst"
+    },
+    {
+     "claim": "JAX geometry adapters isolate optional differentiable geometry handoff utilities.",
+     "path": "dkx/workflows/geometry_adapters.py"
+    },
+    {
+     "claim": "Workflow tests cover optional backend readiness and no-solve provenance.",
+     "path": "tests/test_vmex_workflow.py"
+    }
+   ],
+   "gates": [
+    "End-to-end optimization claims require differentiating through a validated geometry-to-transport scalar.",
+    "Boozer and VMEC optional dependencies must fail gracefully when not installed.",
+    "Profile-current and ambipolar outputs must pass convergence gates before publication claims."
+   ],
+   "id": "vmec_booz_sfincs_workflow",
+   "next_actions": [
+    "Keep optional VMEC/Boozer dependencies skip-safe in default CI.",
+    "Wire only validated kinetic-transport scalar paths into stable optimization docs."
+   ],
+   "second_push_delta_percent": 23,
+   "second_push_result": "The scoped geometry-proxy workflow remains evidence-ready; full kinetic gradients require separate validation before release claims.",
+   "status": "evidence_ready",
+   "target_percent": 96,
+   "title": "vmex to booz_xform_jax to dkx differentiable workflow"
+  },
+  {
+   "before_percent": 50,
+   "current_percent": 89,
+   "evidence": [
+    {
+     "claim": "Performance documentation records keep/reject gates for optional JAX-ecosystem solver candidates.",
+     "path": "docs/performance.rst"
+    },
+    {
+     "claim": "Solver path policy is isolated enough to host future library experiments behind measured residual, runtime, and memory gates.",
+     "path": "dkx/solve.py"
+    },
+    {
+     "claim": "Research-lane documentation keeps optional solver-library evaluations outside stable dependencies until admitted.",
+     "path": "docs/research_lanes.rst"
+    }
+   ],
+   "gates": [
+    "No new JAX ecosystem dependency is promoted unless it reduces runtime or memory on a documented case.",
+    "Any replacement solver must preserve autodiff semantics or explicitly remain in the non-differentiable CLI lane.",
+    "Hard-coded branch thresholds should move to measured policy gates when evidence exists."
+   ],
+   "id": "jax_ecosystem_solver_evaluation",
+   "next_actions": [
+    "Keep optional solver-library adoption studies outside stable examples until a reviewed implementation satisfies stable gates.",
+    "Resolve real-SFINCS residual/status blockers before any solver promotion."
+   ],
+   "second_push_delta_percent": 39,
+   "second_push_result": "Optional JAX ecosystem solver evaluations remain claim-scoped and are not stable runtime dependencies.",
+   "status": "evidence_ready",
+   "target_percent": 89,
+   "title": "JAX ecosystem solver/preconditioner evaluation"
+  },
+  {
+   "before_percent": 78,
+   "current_percent": 99,
+   "evidence": [
+    {
+     "claim": "README-facing Fortran/JAX runtime and active-memory comparison figure is checked in.",
+     "path": "docs/_static/figures/paper/dkx_fortran_suite_benchmark_summary.png"
+    },
+    {
+     "claim": "Validation manifest records release-ready, bounded-proxy, and deferred lanes explicitly.",
+     "path": "examples/publication_figures/validation_manifest.json"
+    },
+    {
+     "claim": "Benchmark-doc tests prevent stale benchmark ratio, figure, and scope wording from shipping.",
+     "path": "tests/test_benchmark_doc_claims.py"
+    }
+   ],
+   "gates": [
+    "README table and figure must be generated from the same canonical filtered rows.",
+    "No jax_error or max_attempts row may appear in public release-facing parity claims.",
+    "Low-resolution CI smoke rows must not be promoted into runtime comparison claims."
+   ],
+   "id": "benchmark_parity_docs",
+   "next_actions": [
+    "Regenerate final plots only after accepted performance-policy changes alter benchmark data.",
+    "Keep README/docs scope language tied to canonical checked benchmark rows."
+   ],
+   "second_push_delta_percent": 21,
+   "second_push_result": "Benchmark and docs claim gates remain tied to canonical summary evidence.",
+   "status": "evidence_ready",
+   "target_percent": 99,
+   "title": "Benchmark, parity, README, and documentation publication surface"
+  }
+ ],
+ "minimum_substantial_delta_percent": 10,
+ "overall_average_percent": 95.9,
+ "purpose": "Compact research/performance lane tracker for the stable core. Percentages are engineering readiness estimates backed by checked-in evidence, not physics claims by themselves.",
+ "requested_second_push_delta_percent": 15,
+ "schema_version": 1,
+ "second_push_assessment": "Stable evidence is now compact and branch-scoped: QI/device-QI campaign artifacts are preserved outside the stable core, PAS/parallel/refactor/VMEC/JAX-ecosystem/benchmark lanes keep small checked evidence, and all future promotion claims must pass strict release gates before returning to README/docs."
 }
