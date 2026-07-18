@@ -115,11 +115,7 @@ def test_readme_quick_solve_command_uses_public_auto_path(tmp_path: Path) -> Non
     env["MPLBACKEND"] = "Agg"
     env.update(
         {
-            "DKX_AUTO_SHARD": "0",
             "DKX_CPU_DEVICES": "1",
-            "DKX_MATVEC_SHARD_AXIS": "off",
-            "DKX_SHARD": "0",
-            "DKX_SHARD_PAD": "0",
             "DKX_TRANSPORT_PARALLEL": "off",
             "DKX_TRANSPORT_PARALLEL_WORKERS": "1",
         }

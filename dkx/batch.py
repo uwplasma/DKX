@@ -18,8 +18,8 @@ axes:
 Both are thin builders over the primitive :func:`batched_solve`, which
 ``jax.vmap``s a solve-plus-moments over an explicit mapping of the varying
 operator leaves.  Peak memory is bounded automatically: the per-solve footprint
-comes from the tier-1 memory model in :mod:`dkx.solve`
-(:func:`dkx.solve.tier1_peak_memory_bytes`), the memory budget from the
+comes from the route-aware tier-1 memory model in :mod:`dkx.solve`
+(:func:`dkx.solve.auto_solve_peak_memory_bytes`), the memory budget from the
 device/host, and the batch is processed in ``jax.lax.map`` chunks of the
 computed size so only one chunk's intermediates are ever live.
 
@@ -44,7 +44,7 @@ import jax
 import jax.numpy as jnp
 
 from .drift_kinetic import KineticOperator
-from .solve import solve, tier1_peak_memory_bytes
+from .solve import auto_solve_peak_memory_bytes, solve
 
 # ---------------------------------------------------------------------------
 # Leaf classification and memory-budget defaults
@@ -52,7 +52,7 @@ from .solve import solve, tier1_peak_memory_bytes
 
 # Grid / derivative-matrix leaves that define the discretization: they set the
 # per-solve memory footprint and are read host-side by the ``solve`` auto-router
-# (``tier1_peak_memory_bytes`` / ``_auto_route``).  They MUST stay concrete
+# (``auto_solve_peak_memory_bytes`` / ``_auto_route``).  They MUST stay concrete
 # (shared, un-vmapped) so the router and the footprint estimate see real values,
 # so batching any of them is rejected and a surface scan keeps them from the
 # template operator (and requires every surface to agree on them).
@@ -85,10 +85,13 @@ _DEFAULT_BUDGET_FRACTION = 0.8
 # Budget floor when neither the device nor the host expose a memory size.
 _FALLBACK_BUDGET_GB = 8.0
 
-# Footprint floor: tiny reduced operators estimate at a few MB, and dividing the
-# budget by an unrealistically small footprint would pick an enormous chunk that
-# ignores the runtime's fixed overhead.  Clamp so the chunk stays sane.
-_MIN_FOOTPRINT_BYTES = 64.0 * 2.0**20  # 64 MB
+# Fixed per-solve allowance for everything the analytic working-set model does
+# not see: the JAX/XLA runtime, compiled executables, geometry/coefficient
+# leaves held by the operator, and allocator slack.  Measured process baselines
+# before the solve phase sit at ~0.4-0.5 GB on the profiling deck ladder; the
+# allowance also keeps tiny reduced operators from implying an enormous chunk
+# that ignores the runtime's fixed overhead.
+_RUNTIME_OVERHEAD_BYTES = 512.0 * 2.0**20  # 512 MB
 
 _BYTES_PER_GB = 2.0**30
 
@@ -141,17 +144,22 @@ jax.tree_util.register_dataclass(
 
 
 def solve_footprint_bytes(op: KineticOperator) -> float:
-    """Estimated peak bytes of one solve of ``op`` (tier-1 memory model).
+    """Estimated peak bytes of one ``method="auto"`` solve of ``op``.
 
-    Reuses :func:`dkx.solve.tier1_peak_memory_bytes` — the full-band
-    factorization peak the tier-1 auto-route sizes against — as a conservative
-    per-solve upper bound, adding the solved state vector, and clamped to a
-    small floor so tiny reduced operators do not imply an unrealistically large
-    chunk (:data:`_MIN_FOOTPRINT_BYTES`).
+    Follows the auto-router's own decision via
+    :func:`dkx.solve.auto_solve_peak_memory_bytes`: a solve that routes to the
+    truncated block-Thomas kernel (ramped ``Nxi_for_x`` or a full-band peak
+    above the tier-1 budget) is charged its truncated working set — ``O(keep *
+    m^2)`` per subsystem plus the compact coefficient buffers — not the
+    full-band factorization peak, which that route never allocates and which
+    overstates a production-shaped solve by ~46x (silently serializing batched
+    scans through ``chunk=1``).  Full-band and tier-2 routes keep the
+    conservative full-band peak.  The solved state vector and a fixed runtime
+    allowance (:data:`_RUNTIME_OVERHEAD_BYTES`) are added on top.
     """
-    factor_bytes = float(tier1_peak_memory_bytes(op))
+    route_bytes = float(auto_solve_peak_memory_bytes(op))
     state_bytes = float(op.total_size) * 8.0
-    return max(factor_bytes + state_bytes, _MIN_FOOTPRINT_BYTES)
+    return route_bytes + state_bytes + _RUNTIME_OVERHEAD_BYTES
 
 
 def _device_memory_bytes() -> float | None:
