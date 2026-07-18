@@ -171,9 +171,10 @@ validation or benchmark workflow, or reference data.
   paper (ICNTS-style monoenergetic coefficient scans on W7-X, TJ-II, and
   HSX with Fortran v3 cross-checks, the low-collisionality Shaing-Callen
   bootstrap-convergence study, the kinetic-solver-in-the-loop
-  bootstrap-consistency workflow on a finite-beta QA equilibrium, plus the
-  AD-vs-FD gradient-verification table), each writing a figure and a JSON
-  record.
+  bootstrap-consistency workflow on a finite-beta QA equilibrium, the
+  differentiable ambipolar-Er / electron-root optimization workflow with its
+  ion/unstable/electron S-curve branch handling, plus the AD-vs-FD
+  gradient-verification table), each writing a figure and a JSON record.
 - `sfincs_examples/`: vendored upstream SFINCS v3 example inputs plus helpers
   used for parity and benchmark-suite audits, not the recommended starting
   point for first-time users.

@@ -1,0 +1,430 @@
+{
+ "benchmark": "differentiable ambipolar-Er / electron-root optimization workflow",
+ "roadmap_item": "plan_final.md Research Roadmap item 3",
+ "references": [
+  "H. Maassberg, C.D. Beidler & E.E. Simmet, Plasma Phys. Control. Fusion 41, 1135 (1999)",
+  "Yu. Turkin et al., Phys. Plasmas 18, 022505 (2011)",
+  "D.A. Spong, Phys. Plasmas 12, 056114 (2005)"
+ ],
+ "geometry": {
+  "iota": 1.31,
+  "eps_t": 0.1,
+  "eps_h": 0.08,
+  "helicity_l": 2,
+  "helicity_n": 5
+ },
+ "physics": {
+  "nu_n": 0.001,
+  "dn": -0.5,
+  "dti": -1.0,
+  "dte": -3.0,
+  "mHat_electron": 0.25
+ },
+ "scurve": {
+  "te_ratio": 0.72,
+  "roots": [
+   {
+    "er": -0.1263358360131513,
+    "slope": 1.873796125871725e-05,
+    "root_type": "ion",
+    "bracket": [
+     -0.16666666666666696,
+     -0.04999999999999982
+    ]
+   },
+   {
+    "er": 0.9927664373901611,
+    "slope": -2.9869410303980438e-06,
+    "root_type": "unstable",
+    "bracket": [
+     0.8833333333333337,
+     1.0
+    ]
+   },
+   {
+    "er": 1.6611224074047282,
+    "slope": 1.4697593566741246e-06,
+    "root_type": "electron",
+    "bracket": [
+     1.583333333333333,
+     1.7000000000000002
+    ]
+   }
+  ],
+  "n_sign_changes": 3,
+  "near_degenerate_groups": [],
+  "selected_roots": {
+   "ion": {
+    "er": -0.1263358360131513,
+    "slope": 1.873796125871725e-05,
+    "root_type": "ion",
+    "bracket": [
+     -0.16666666666666696,
+     -0.04999999999999982
+    ]
+   },
+   "electron": {
+    "er": 1.6611224074047282,
+    "slope": 1.4697593566741246e-06,
+    "root_type": "electron",
+    "bracket": [
+     1.583333333333333,
+     1.7000000000000002
+    ]
+   }
+  }
+ },
+ "bifurcation": {
+  "te_ratios": [
+   0.3,
+   0.5,
+   0.7,
+   0.72,
+   0.8,
+   0.9,
+   1.1,
+   1.5
+  ],
+  "root_counts": [
+   1,
+   1,
+   3,
+   3,
+   3,
+   1,
+   1,
+   1
+  ],
+  "electron_root_onset": 0.7,
+  "entries": [
+   {
+    "te_ratio": 0.3,
+    "roots": [
+     {
+      "er": -0.9928341645478925,
+      "slope": 1.5944222776535353e-05,
+      "root_type": "ion",
+      "bracket": [
+       -1.0,
+       -0.666666666666667
+      ]
+     }
+    ],
+    "jr_at_zero": 1.888940080245444e-05,
+    "root_types": [
+     "ion"
+    ],
+    "near_degenerate_groups": []
+   },
+   {
+    "te_ratio": 0.5,
+    "roots": [
+     {
+      "er": -0.5381081818839959,
+      "slope": 2.2228191378939105e-05,
+      "root_type": "ion",
+      "bracket": [
+       -0.666666666666667,
+       -0.3333333333333339
+      ]
+     }
+    ],
+    "jr_at_zero": 1.1062172276471727e-05,
+    "root_types": [
+     "ion"
+    ],
+    "near_degenerate_groups": []
+   },
+   {
+    "te_ratio": 0.7,
+    "roots": [
+     {
+      "er": -0.1446836691855405,
+      "slope": 2.015567607502283e-05,
+      "root_type": "ion",
+      "bracket": [
+       -0.3333333333333339,
+       0.0
+      ]
+     },
+     {
+      "er": 1.329444938287488,
+      "slope": -1.295262149579657e-06,
+      "root_type": "unstable",
+      "bracket": [
+       1.0,
+       1.333333333333333
+      ]
+     },
+     {
+      "er": 1.3406404125773628,
+      "slope": 6.892618455740949e-07,
+      "root_type": "electron",
+      "bracket": [
+       1.333333333333333,
+       1.666666666666666
+      ]
+     }
+    ],
+    "jr_at_zero": 2.9161971694495165e-06,
+    "root_types": [
+     "electron",
+     "ion",
+     "unstable"
+    ],
+    "near_degenerate_groups": [
+     [
+      1,
+      2
+     ]
+    ]
+   },
+   {
+    "te_ratio": 0.72,
+    "roots": [
+     {
+      "er": -0.10659758605558872,
+      "slope": 2.020278349657578e-05,
+      "root_type": "ion",
+      "bracket": [
+       -0.3333333333333339,
+       0.0
+      ]
+     },
+     {
+      "er": 0.9948130004667661,
+      "slope": -4.165457277728081e-06,
+      "root_type": "unstable",
+      "bracket": [
+       0.6666666666666661,
+       1.0
+      ]
+     },
+     {
+      "er": 1.6617788830404354,
+      "slope": 9.976398769602065e-07,
+      "root_type": "electron",
+      "bracket": [
+       1.333333333333333,
+       1.666666666666666
+      ]
+     }
+    ],
+    "jr_at_zero": 2.153567952338664e-06,
+    "root_types": [
+     "electron",
+     "ion",
+     "unstable"
+    ],
+    "near_degenerate_groups": []
+   },
+   {
+    "te_ratio": 0.8,
+    "roots": [
+     {
+      "er": 0.17537872507237834,
+      "slope": 4.370358376800832e-06,
+      "root_type": "electron",
+      "bracket": [
+       0.0,
+       0.33333333333333304
+      ]
+     },
+     {
+      "er": 0.48638862266399185,
+      "slope": -4.51025409436326e-06,
+      "root_type": "unstable",
+      "bracket": [
+       0.33333333333333304,
+       0.6666666666666661
+      ]
+     },
+     {
+      "er": 1.9543692255421687,
+      "slope": 2.6420564406246195e-06,
+      "root_type": "electron",
+      "bracket": [
+       1.666666666666666,
+       2.0
+      ]
+     }
+    ],
+    "jr_at_zero": -7.664678802327186e-07,
+    "root_types": [
+     "electron",
+     "unstable"
+    ],
+    "near_degenerate_groups": []
+   },
+   {
+    "te_ratio": 0.9,
+    "roots": [
+     {
+      "er": 2.0954516998940522,
+      "slope": 3.1535644916191894e-06,
+      "root_type": "electron",
+      "bracket": [
+       2.0,
+       2.333333333333332
+      ]
+     }
+    ],
+    "jr_at_zero": -4.031037669275853e-06,
+    "root_types": [
+     "electron"
+    ],
+    "near_degenerate_groups": []
+   },
+   {
+    "te_ratio": 1.1,
+    "roots": [
+     {
+      "er": 2.178165462075299,
+      "slope": 3.903821521638066e-06,
+      "root_type": "electron",
+      "bracket": [
+       2.0,
+       2.333333333333332
+      ]
+     }
+    ],
+    "jr_at_zero": -8.736630878783062e-06,
+    "root_types": [
+     "electron"
+    ],
+    "near_degenerate_groups": []
+   },
+   {
+    "te_ratio": 1.5,
+    "roots": [
+     {
+      "er": 2.127728013224597,
+      "slope": 4.252384189787083e-06,
+      "root_type": "electron",
+      "bracket": [
+       2.0,
+       2.333333333333332
+      ]
+     }
+    ],
+    "jr_at_zero": -1.1452173978238891e-05,
+    "root_types": [
+     "electron"
+    ],
+    "near_degenerate_groups": []
+   }
+  ]
+ },
+ "differentiable": {
+  "resolution": {
+   "n_theta": 7,
+   "n_zeta": 7,
+   "n_xi": 8,
+   "n_x": 3
+  },
+  "base_root_er": -0.253590808595446,
+  "base_root_type": "ion",
+  "sensitivity": {
+   "parameter": "electron dT/dr scale (ECH control knob)",
+   "er_at_p1": -0.2535963698213867,
+   "ad": -0.19741549309035825,
+   "fd": -0.19741549356633303,
+   "fd_step": 0.001,
+   "rel_dev": 2.411030556736878e-09
+  },
+  "optimization": {
+   "target_er": -0.15,
+   "learning_rate": 6.0,
+   "history": [
+    {
+     "iter": 0,
+     "p": 1.0,
+     "objective": 0.005366103920084763,
+     "grad": 0.02045152843066017,
+     "er": -0.2535963698213867
+    },
+    {
+     "iter": 1,
+     "p": 0.877290829416039,
+     "objective": 0.0031499194853595327,
+     "grad": 0.01566936544285834,
+     "er": -0.22937152493633384
+    },
+    {
+     "iter": 2,
+     "p": 0.783274636758889,
+     "objective": 0.001848986026186313,
+     "grad": 0.012005284855022943,
+     "er": -0.21081095339141318
+    },
+    {
+     "iter": 3,
+     "p": 0.7112429276287513,
+     "objective": 0.0010853336788287176,
+     "grad": 0.009197932479680895,
+     "er": -0.1965904213080053
+    },
+    {
+     "iter": 4,
+     "p": 0.656055332750666,
+     "objective": 0.0006370735797117247,
+     "grad": 0.007047020631961136,
+     "er": -0.18569519798829318
+    },
+    {
+     "iter": 5,
+     "p": 0.6137732089588992,
+     "objective": 0.00037394990830194483,
+     "grad": 0.005399071525688359,
+     "er": -0.17734775706715067
+    },
+    {
+     "iter": 6,
+     "p": 0.581378779804769,
+     "objective": 0.00021950044933279758,
+     "grad": 0.004136483428429216,
+     "er": -0.17095234828523034
+    },
+    {
+     "iter": 7,
+     "p": 0.5565598792341937,
+     "objective": 0.00012884156826947058,
+     "grad": 0.0031691478515127715,
+     "er": -0.1660525118451581
+    },
+    {
+     "iter": 8,
+     "p": 0.5375449921251171,
+     "objective": 7.562676770672146e-05,
+     "grad": 0.0024280239371131528,
+     "er": -0.16229851761040504
+    }
+   ],
+   "objective_start": 0.005366103920084763,
+   "objective_end": 7.562676770672146e-05
+  },
+  "seconds": 35.02925705909729
+ },
+ "root_selection_rule": "Classify by dJr/dEr sign (stable iff dJr/dEr > 0; the field relaxes as dEr/dt ~ -J_r) and by E_r sign (ion root E_r<0, electron root E_r>0). Select the requested stable branch (most positive stable = electron; most negative stable = ion); skip near-degenerate fold roots (|dJr/dEr| tiny) as non-robust operating points.",
+ "modeling_note": "The physical m_e/m_i=1/1836 geometrically suppresses the electron neoclassical channel by (rho_e/rho_i)^2 on this analytic single-helicity field and pushes its superbanana resonance outside the laptop-resolvable E_r window, so that deck yields only the ion root across a wide profile scan. A reduced mass ratio mHat_e=0.25 brings the electron channel and its resonance into the same E_r window as the ion channel; the branch structure (ion/unstable/electron, the saddle-node transition, the implicit-diff sensitivity) is identical. The differentiable root uses an exact dense solve (feasible only at reduced resolution) and differentiates the robust ion root; the electron-root S-curve is resolved by the block solve at converged resolution.",
+ "provenance": {
+  "resolution_scan": {
+   "n_theta": 9,
+   "n_zeta": 9,
+   "n_xi": 32,
+   "n_x": 6
+  },
+  "resolution_grad": {
+   "n_theta": 7,
+   "n_zeta": 7,
+   "n_xi": 8,
+   "n_x": 3
+  },
+  "er_bracket": [
+   -6.0,
+   8.0
+  ],
+  "ci_mode": false,
+  "float64": true
+ }
+}
