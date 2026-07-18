@@ -1,90 +1,96 @@
-"""Implicit-differentiation through a full-system Krylov solve (VMEC `geometryScheme=5`).
+"""Implicit differentiation through a full-system Krylov solve (VMEC scheme 5).
 
-This example demonstrates *end-to-end differentiability through a linear solve* using
-implicit differentiation via `jax.lax.custom_linear_solve`.
+What this example teaches:
+  - how to differentiate *through a linear solve* ``A(nu_n) x = rhs(nu_n)`` with
+    implicit differentiation instead of backpropagating through the Krylov
+    iterations,
+  - how ``dkx.solve.solve(..., differentiable=True)`` wires the adjoint/transpose
+    solve so ``jax.grad`` of ``0.5 * ||x(nu_n)||^2`` is exact and cheap,
+  - how the implicit-diff gradient matches a centered finite difference.
 
-Instead of backpropagating through GMRES iterations (slow and numerically brittle), we use
-JAX's `custom_linear_solve` to define the gradient via the adjoint/transpose solve:
+Physics context: implicit differentiation via the adjoint identity
+``dL/dp = lambda^T (db/dp - (dA/dp) x)`` with ``A^T lambda = dL/dx`` is the
+standard way to get gradients through an iterative solver without unrolling it
+-- a key ingredient for gradient-based stellarator/neoclassical optimization
+[M. Landreman et al., Phys. Plasmas 21, 042503 (2014); SFINCS technical
+documentation, https://github.com/landreman/sfincs].  The ``auto`` solve policy
+routes this PAS deck to the structured direct tier.
 
-  A x = b,    dL/dp = λᵀ (db/dp - (dA/dp) x),    where Aᵀ λ = dL/dx.
-
-This is a key ingredient for gradient-based stellarator optimization workflows (e.g. electron-root
-design studies) once the physics model is fully ported.
-
-We treat `nu_n` (normalized collisionality) as a differentiable scalar and compute:
-
-  d/dnu_n  ( 0.5 * || x(nu_n) ||^2 ),  where  A(nu_n) x = rhs(nu_n).
-
-Requirements: none beyond the base `dkx` install.
-
-`--method` selects the `dkx.solve.solve` tier (`auto` routes this PAS deck
-to the structured direct tier; `gmres` forces the recycled-Krylov tier).
+Run:
+  python examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py
 """
 
 from __future__ import annotations
 
-import argparse
-import sys
 from dataclasses import replace
 from pathlib import Path
 
 import jax
 import jax.numpy as jnp
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
-
 from dkx.drift_kinetic import KineticOperator, kinetic_operator_from_namelist
 from dkx.namelist import read_sfincs_input
 from dkx.solve import solve
 
+# ----------------------------------------------------------------------------
+# Parameters
+# ----------------------------------------------------------------------------
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
-def _with_nu_n(op: KineticOperator, nu_n: jnp.ndarray) -> KineticOperator:
-    """Rebuild the PAS collision operator at a new `nu_n` (coef is linear in it)."""
+# Frozen Fortran v3 PAS fixture (single species, no Er, scheme 5).
+INPUT_NAMELIST = REPO_ROOT / "tests" / "ref" / "pas_1species_PAS_noEr_tiny_scheme5.input.namelist"
+
+# Solve tier: "auto" routes this PAS deck to the structured direct tier;
+# "gmres" forces the recycled-Krylov tier; "block_tridiagonal" the direct tier.
+SOLVE_METHOD = "auto"
+SOLVER_TOLERANCE = 1e-12
+FD_EPS = 1e-5  # centered finite-difference step for the gradient check
+
+
+def with_nu_n(op: KineticOperator, nu_n: jnp.ndarray) -> KineticOperator:
+    """Rebuild the PAS collision operator at a new ``nu_n`` (coef is linear in it)."""
+
     pas = op.pas
     scale = jnp.asarray(nu_n, dtype=jnp.float64) / pas.nu_n
     pas2 = replace(pas, nu_n=jnp.asarray(nu_n, dtype=jnp.float64), coef=pas.coef * scale)
     return replace(op, pas=pas2)
 
 
-def _default_input() -> Path:
-    return Path(__file__).parents[2] / "tests" / "ref" / "pas_1species_PAS_noEr_tiny_scheme5.input.namelist"
+# ----------------------------------------------------------------------------
+# 1) Build the operator
+# ----------------------------------------------------------------------------
+print("=== examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py ===")
+print(f"Step 1: building the operator from {INPUT_NAMELIST.name}")
+nml = read_sfincs_input(INPUT_NAMELIST)
+op0 = kinetic_operator_from_namelist(nml)
+if op0.pas is None:
+    raise RuntimeError("This example expects collisionOperator=1 (PAS), but op.pas is None.")
+nu0 = jnp.asarray(op0.pas.nu_n, dtype=jnp.float64)
 
 
-def main() -> int:
-    p = argparse.ArgumentParser()
-    p.add_argument("--input", default=str(_default_input()))
-    p.add_argument("--method", choices=("auto", "block_tridiagonal", "gmres"), default="auto")
-    p.add_argument("--eps", type=float, default=1e-5, help="finite-difference step for a quick check")
-    args = p.parse_args()
-
-    nml = read_sfincs_input(Path(args.input))
-    op0 = kinetic_operator_from_namelist(nml)
-
-    if op0.pas is None:
-        raise SystemExit("This example expects collisionOperator=1 (PAS), but op.pas is None.")
-
-    nu0 = jnp.asarray(op0.pas.nu_n, dtype=jnp.float64)
-
-    def objective(nu_n: jnp.ndarray) -> jnp.ndarray:
-        op = _with_nu_n(op0, nu_n)
-        b = op.rhs()
-        x = solve(op, b, method=str(args.method), tol=1e-12, differentiable=True).x
-        return 0.5 * jnp.vdot(jnp.reshape(x, (-1,)), jnp.reshape(x, (-1,)))
-
-    g = jax.grad(objective)(nu0)
-
-    eps = float(args.eps)
-    fd = (float(objective(nu0 + eps)) - float(objective(nu0 - eps))) / (2.0 * eps)
-
-    print(f"nu_n0 = {float(nu0):.6g}")
-    print(f"objective(nu_n0) = {float(objective(nu0)):.6e}")
-    print(f"d objective / d nu_n  (implicit-diff) = {float(g):.6e}")
-    print(f"d objective / d nu_n  (finite-diff)   = {fd:.6e}")
-    print(f"abs_err = {abs(float(g) - fd):.3e}")
-    return 0
+def objective(nu_n: jnp.ndarray) -> jnp.ndarray:
+    op = with_nu_n(op0, nu_n)
+    b = op.rhs()
+    x = solve(op, b, method=SOLVE_METHOD, tol=SOLVER_TOLERANCE, differentiable=True).x
+    x_flat = jnp.reshape(x, (-1,))
+    return 0.5 * jnp.vdot(x_flat, x_flat)
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+# ----------------------------------------------------------------------------
+# 2) Implicit-diff gradient vs centered finite difference
+# ----------------------------------------------------------------------------
+print(f"Step 2: differentiating through the '{SOLVE_METHOD}' solve (implicit diff)")
+grad = jax.grad(objective)(nu0)
+fd = (float(objective(nu0 + FD_EPS)) - float(objective(nu0 - FD_EPS))) / (2.0 * FD_EPS)
+abs_err = abs(float(grad) - fd)
+
+# ----------------------------------------------------------------------------
+# 3) Results
+# ----------------------------------------------------------------------------
+print("=== Final results ===")
+print(f"  nu_n0                              = {float(nu0):.6g}")
+print(f"  objective(nu_n0)                   = {float(objective(nu0)):.6e}")
+print(f"  d objective / d nu_n (implicit-diff)  = {float(grad):.6e}")
+print(f"  d objective / d nu_n (finite-diff)    = {fd:.6e}")
+print(f"  abs_err                            = {abs_err:.3e}")
+print("Done: examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py")
