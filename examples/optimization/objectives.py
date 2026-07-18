@@ -3,7 +3,7 @@
 This is a *small* shared library for the optimization example family
 (``optimize_QH_bootstrap.py``, ``optimize_electron_root.py``,
 ``optimize_impurity_screening.py``, and the flagship
-``examples/optimize_QA_bootstrap.py`` keeps its own inline copies so it stays
+``examples/optimization/optimize_QA_bootstrap.py`` keeps its own inline copies so it stays
 self-contained).  Every function here is a pure ``jax`` function of a solved
 moment table (the dict returned by
 :func:`dkx.run.profile_moments_from_operator`) or of a Boozer ``|B|``
