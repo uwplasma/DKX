@@ -117,15 +117,19 @@ def test_contracts_are_reexported_from_top_level_package() -> None:
     assert dkx.__version__
 
 
-def test_import_env_controls_cpu_devices_and_compilation_cache(
+def test_import_env_controls_solver_threads_and_compilation_cache(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     cache_dir = tmp_path / "jax-cache"
     monkeypatch.setenv("DKX_CORES", "2")
+    # DKX_XLA_THREADS is inert: it must neither abort the import nor inject
+    # the nonexistent --xla_cpu_parallelism_threads flag.
     monkeypatch.setenv("DKX_XLA_THREADS", "yes")
-    monkeypatch.delenv("DKX_SHARD", raising=False)
     monkeypatch.delenv("DKX_CPU_DEVICES", raising=False)
+    monkeypatch.delenv("NPROC", raising=False)
+    monkeypatch.delenv("OMP_NUM_THREADS", raising=False)
+    monkeypatch.delenv("OPENBLAS_NUM_THREADS", raising=False)
     monkeypatch.setenv("DKX_COMPILATION_CACHE_DIR", str(cache_dir))
     monkeypatch.delenv("JAX_COMPILATION_CACHE_DIR", raising=False)
     monkeypatch.setenv("XLA_FLAGS", "")
@@ -133,11 +137,13 @@ def test_import_env_controls_cpu_devices_and_compilation_cache(
     reloaded = importlib.reload(dkx)
 
     assert reloaded is dkx
-    assert dkx.os.environ["DKX_CPU_DEVICES"] == "2"
-    assert dkx.os.environ["DKX_MATVEC_SHARD_AXIS"] == "auto"
-    assert dkx.os.environ["DKX_AUTO_SHARD"] == "1"
-    assert "--xla_cpu_parallelism_threads=2" in dkx.os.environ["XLA_FLAGS"]
-    assert "--xla_force_host_platform_device_count=2" in dkx.os.environ["XLA_FLAGS"]
+    # --cores/DKX_CORES pins the XLA host threadpool (NPROC) and the host
+    # BLAS pools; it must NOT force host devices or touch XLA_FLAGS.
+    assert dkx.os.environ["NPROC"] == "2"
+    assert dkx.os.environ["OMP_NUM_THREADS"] == "2"
+    assert dkx.os.environ["OPENBLAS_NUM_THREADS"] == "2"
+    assert "DKX_CPU_DEVICES" not in dkx.os.environ
+    assert dkx.os.environ["XLA_FLAGS"] == ""
     assert dkx.os.environ["JAX_COMPILATION_CACHE_DIR"] == str(cache_dir)
     assert cache_dir.is_dir()
 
@@ -149,15 +155,66 @@ def test_import_env_controls_cpu_devices_and_compilation_cache(
     importlib.reload(dkx)
 
 
-def test_import_env_invalid_cpu_controls_are_fail_closed(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("DKX_CORES", "not-an-int")
-    monkeypatch.setenv("DKX_CPU_DEVICES", "not-an-int")
+def test_import_default_thread_clamp_and_zero_opt_out(monkeypatch: pytest.MonkeyPatch) -> None:
+    import os as os_mod
+
+    monkeypatch.setenv("DKX_DISABLE_COMPILATION_CACHE", "1")
+
+    # No DKX_CORES and no NPROC: the import clamps the threadpool to
+    # min(8, cpu_count) and marks the clamp as dkx-owned.
+    monkeypatch.delenv("DKX_CORES", raising=False)
+    monkeypatch.delenv("NPROC", raising=False)
+    monkeypatch.delenv("_DKX_NPROC_DEFAULTED", raising=False)
+    importlib.reload(dkx)
+    assert dkx.os.environ["NPROC"] == str(min(8, os_mod.cpu_count() or 1))
+    assert dkx.os.environ["_DKX_NPROC_DEFAULTED"] == "1"
+
+    # A user-set NPROC always wins over the default clamp.
+    monkeypatch.delenv("_DKX_NPROC_DEFAULTED", raising=False)
+    monkeypatch.setenv("NPROC", "3")
+    importlib.reload(dkx)
+    assert dkx.os.environ["NPROC"] == "3"
+    assert "_DKX_NPROC_DEFAULTED" not in dkx.os.environ
+
+    # DKX_CORES=0 means "let XLA size the threadpool": it removes a
+    # dkx-defaulted clamp (e.g. inherited across the CLI re-exec) but
+    # never a user-set NPROC.
+    monkeypatch.setenv("DKX_CORES", "0")
+    monkeypatch.setenv("NPROC", "8")
+    monkeypatch.setenv("_DKX_NPROC_DEFAULTED", "1")
+    importlib.reload(dkx)
+    assert "NPROC" not in dkx.os.environ
+    monkeypatch.setenv("NPROC", "5")
+    importlib.reload(dkx)
+    assert dkx.os.environ["NPROC"] == "5"
+
+    monkeypatch.delenv("DKX_CORES", raising=False)
+
+
+def test_import_env_explicit_cpu_devices_forces_host_device_count(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("DKX_CORES", raising=False)
+    monkeypatch.setenv("DKX_CPU_DEVICES", "2")
     monkeypatch.setenv("DKX_DISABLE_COMPILATION_CACHE", "1")
     monkeypatch.setenv("XLA_FLAGS", "")
 
     importlib.reload(dkx)
 
+    assert "--xla_force_host_platform_device_count=2" in dkx.os.environ["XLA_FLAGS"]
+
+
+def test_import_env_invalid_cpu_controls_are_fail_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DKX_CORES", "not-an-int")
+    monkeypatch.setenv("DKX_CPU_DEVICES", "not-an-int")
+    monkeypatch.setenv("DKX_DISABLE_COMPILATION_CACHE", "1")
+    monkeypatch.setenv("XLA_FLAGS", "")
+    monkeypatch.delenv("NPROC", raising=False)
+
+    importlib.reload(dkx)
+
     assert dkx.os.environ["XLA_FLAGS"] == ""
+    assert "NPROC" not in dkx.os.environ
 
 
 def test_distributed_runtime_env_bootstrap_is_safe_and_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:

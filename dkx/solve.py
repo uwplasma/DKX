@@ -121,6 +121,7 @@ def _require_solvax() -> None:
 __all__ = [
     "SolveResult",
     "Tier1Solver",
+    "auto_solve_peak_memory_bytes",
     "build_coarse_preconditioner",
     "build_tier1_solver",
     "materialize_dense",
@@ -128,6 +129,7 @@ __all__ = [
     "tier1_available",
     "tier1_full_band_bytes",
     "tier1_peak_memory_bytes",
+    "tier1_truncated_peak_memory_bytes",
 ]
 
 # Default memory budget above which ``solve(method="auto")`` prefers the
@@ -384,6 +386,48 @@ def tier1_peak_memory_bytes(op: KineticOperator) -> float:
     storage — the multiplier used by the validated HSX benchmark.
     """
     return 2.5 * tier1_full_band_bytes(op)
+
+
+def tier1_truncated_peak_memory_bytes(
+    op: KineticOperator, keep_lowest: int = _TIER1_KEEP_LOWEST_DEFAULT
+) -> float:
+    """Working-set estimate of the truncated tier-1 solve (:func:`_solve_tier1_truncated`).
+
+    The truncated route never materializes the full Legendre bands, so the
+    ~``tier1_peak_memory_bytes`` full-band peak wildly overestimates it (46x on
+    the 1.27M-DOF production deck).  Its live buffers, with block dimension
+    ``m = n_theta * n_zeta`` and subsystem batch ``B = n_species * n_x``
+    (float64, 8 bytes each):
+
+    * the compact coefficient set (:func:`_truncated_coefficients`): the two
+      angular derivative matrices, the ExB matrix, the kron assembly
+      temporaries, and the per-species streaming matrices —
+      ``(5 + n_species) * m^2`` entries;
+    * the per-subsystem broadcast of the streaming matrix
+      (``jnp.repeat`` to the ``B`` axis) — ``B * m^2`` entries;
+    * one subsystem's ``solvax.direct.block_thomas_truncated_fn`` sweep: the
+      LU carry, the assembled ``(L, D, U)`` block triple, elimination
+      temporaries, and the stacked ``keep`` head factors —
+      ``(2 * keep + 8) * m^2`` entries, doubled for the ``jax.lax.map``
+      pipeline (one subsystem in flight while the next is staged);
+    * the state buffers (zero-padded full-shape solution, its RHS reshape,
+      and the assembly/concat copies) — ``4 * total_size`` entries.
+
+    The sum is doubled as a safety margin for allocator slack and XLA fusion
+    temporaries.  Validated against measured process peaks on the profiling
+    deck ladder (production 1.27M / mid 337k / small 41k DOFs): the estimate
+    lands within about 1.1-1.5x of measurement, on the high side.
+    """
+    m = float(op.n_theta * op.n_zeta)
+    mm_bytes = m * m * 8.0
+    n_s = float(op.n_species)
+    batch = n_s * float(op.n_x)
+    keep = float(min(int(keep_lowest), int(op.n_xi)))
+    coeff_bytes = (5.0 + n_s) * mm_bytes
+    stream_broadcast_bytes = batch * mm_bytes
+    sweep_bytes = 2.0 * (2.0 * keep + 8.0) * mm_bytes
+    state_bytes = 4.0 * float(op.total_size) * 8.0
+    return 2.0 * (coeff_bytes + stream_broadcast_bytes + sweep_bytes + state_bytes)
 
 
 def _tier1_budget_bytes(budget_gb: float | None) -> tuple[float, float]:
@@ -1416,13 +1460,74 @@ def _solve_tier2(
 # =============================================================================
 
 
+def _auto_route_structural(
+    op: KineticOperator,
+    budget_gb: float | None = None,
+    keep_lowest: int = _TIER1_KEEP_LOWEST_DEFAULT,
+) -> str:
+    """The ``method="auto"`` tier-1 route decided from operator structure alone.
+
+    The RHS-free twin of :func:`_auto_route`, for callers that must predict the
+    route without a right-hand side (the memory model behind
+    :func:`auto_solve_peak_memory_bytes` and the batched-scan chunk sizing in
+    :mod:`dkx.batch`).  The one RHS-dependent check —
+    :func:`_rhs_confined_to_lowest_blocks` — is replaced by the structural
+    RHSMode 1/2/3 guarantee (drives and output moments on ``l <= 2``), exactly
+    the fallback :func:`_auto_route` itself uses when the RHS is traced.  Any
+    change to the routing conditions must be applied to both functions.
+
+    Returns ``"block_tridiagonal"``, ``"block_tridiagonal_truncated"``, or
+    ``"gmres"``.
+    """
+    ok, _reason = tier1_available(op)
+    if not ok:
+        return "gmres"
+    budget_bytes, _ = _tier1_budget_bytes(budget_gb)
+    if _uniform_nxi_for_x(op) and tier1_peak_memory_bytes(op) <= budget_bytes:
+        return "block_tridiagonal"
+    keep = min(keep_lowest, op.n_xi)
+    sup_ok, _sup_reason = _truncation_supported(op, keep)
+    if sup_ok and int(op.rhs_mode) in (1, 2, 3):
+        return "block_tridiagonal_truncated"
+    return "gmres"
+
+
+def auto_solve_peak_memory_bytes(
+    op: KineticOperator,
+    budget_gb: float | None = None,
+    keep_lowest: int = _TIER1_KEEP_LOWEST_DEFAULT,
+) -> float:
+    """Peak-memory estimate of the solve ``method="auto"`` would run on ``op``.
+
+    Follows the auto-router's own decision (:func:`_auto_route_structural`) so
+    the estimate models the kernel that actually executes: a solve that routes
+    to the truncated block-Thomas kernel is charged its truncated working set
+    (:func:`tier1_truncated_peak_memory_bytes`) — the full Legendre bands are
+    never allocated on that route, and charging their factorization peak
+    overstates a ramped or budget-forced production solve by ~46x.  The
+    full-band route keeps the factorization peak
+    (:func:`tier1_peak_memory_bytes`); the tier-2 GCROT fallback keeps it too,
+    as a deliberately conservative stand-in (its matvec working set is smaller,
+    but it has no validated model of its own).
+    """
+    route = _auto_route_structural(op, budget_gb, keep_lowest)
+    if route == "block_tridiagonal_truncated":
+        return tier1_truncated_peak_memory_bytes(op, keep_lowest=keep_lowest)
+    return tier1_peak_memory_bytes(op)
+
+
 def _auto_route(
     op: KineticOperator,
     rhs2d: jnp.ndarray,
     budget_gb: float | None,
     keep_lowest: int,
 ) -> str:
-    """Pick the tier for ``method="auto"`` and print a Fortran-style one-liner."""
+    """Pick the tier for ``method="auto"`` and print a Fortran-style one-liner.
+
+    Structural changes to the routing conditions here must be mirrored in
+    :func:`_auto_route_structural` (the RHS-free twin used by the memory
+    model).
+    """
     ok, _reason = tier1_available(op)
     if not ok:
         return "gmres"
@@ -1454,10 +1559,12 @@ def _auto_route(
             else f"peak estimate {peak_gb:.2f} GB > budget {budget_gb_val:.1f} GB "
             f"(bands {bands / 2.0**30:.2f} GB x2.5)"
         )
+        trunc_gb = tier1_truncated_peak_memory_bytes(op, keep_lowest=keep) / 2.0**30
         print(
             f"[dkx.solve] tier-1 route: truncated block-Thomas "
             f"(keep_lowest={keep}); {because}, "
-            f"solving the lowest {keep} Legendre blocks."
+            f"solving the lowest {keep} Legendre blocks "
+            f"(working-set estimate {trunc_gb:.2f} GB)."
         )
         return "block_tridiagonal_truncated"
 

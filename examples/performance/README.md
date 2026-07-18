@@ -14,10 +14,10 @@ production-floor scripts when you need release evidence.
 
 ## Scaling And Parallelism
 
-Host-device parallelism is configured through the `DKX_CORES` /
-`DKX_CPU_DEVICES` environment knobs documented in `docs/parallelism.rst`;
-the retired legacy transport-worker and structured-solve benchmark scripts were
-deleted with the legacy pipeline.
+Solver thread count is configured through the `DKX_CORES` environment knob
+(pins the XLA host threadpool; measured optimum 4-8 threads) documented in
+`docs/parallelism.rst`; the retired legacy transport-worker and
+structured-solve benchmark scripts were deleted with the legacy pipeline.
 
 Single-case sharded RHSMode=1 and one-GPU-per-case throughput campaign drivers
 are research-lane material, not stable examples. They are preserved outside the
