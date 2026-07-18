@@ -175,8 +175,10 @@ validation or benchmark workflow, or reference data.
   classical/neoclassical high-Z impurity-transport case with temperature
   screening and a charge-state scan, the differentiable ambipolar-Er /
   electron-root optimization workflow with its ion/unstable/electron S-curve
-  branch handling, plus the AD-vs-FD gradient-verification table), each
-  writing a figure and a JSON record.
+  branch handling, the W7-X ambipolar-Er experimental case validating the
+  DKX-predicted ambipolar radial electric field against a published
+  core-electron-root-confinement discharge, plus the AD-vs-FD
+  gradient-verification table), each writing a figure and a JSON record.
 - `sfincs_examples/`: vendored upstream SFINCS v3 example inputs plus helpers
   used for parity and benchmark-suite audits, not the recommended starting
   point for first-time users.
