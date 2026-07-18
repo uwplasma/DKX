@@ -449,7 +449,7 @@ columns and assembles :math:`L_{ij}` mapping the thermodynamic forces (radial
 gradient drive, parallel electric field) to the responses (radial flux, parallel
 flow). The shared :math:`\hat g_+ = \hat G + \iota\hat I` and
 :math:`b_0/\hat G^2` normalization structure is what enforces the Onsager
-symmetry :math:`L_{12}=L_{21}`; the ``examples/transport_coefficients.py`` script
+symmetry :math:`L_{12}=L_{21}`; the ``examples/transport/transport_coefficients.py`` script
 prints the measured Onsager asymmetry as a check. The classic result is that in
 a non-axisymmetric field the radial coefficient :math:`L_{11}` (:math:`D_{11}`-
 like) grows like :math:`1/\nu` at low collisionality:
@@ -509,7 +509,7 @@ through the ambipolar :math:`E_r`.
    classification: :func:`dkx.er.find_ambipolar_er` with the
    ``_brent`` kernel; differentiable root:
    :func:`dkx.er.ambipolar_er` (implicit-function theorem through
-   ``solvax.implicit.root_solve``). See ``examples/ambipolar_er_scan.py``.
+   ``solvax.implicit.root_solve``). See ``examples/vmex_finite_beta/ambipolar_er_scan.py``.
 
 Classical (collisional) transport
 ----------------------------------
