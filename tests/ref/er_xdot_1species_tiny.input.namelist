@@ -1,4 +1,4 @@
-! Auto-generated Er xDot-only collisionless fixture for sfincs_jax parity.
+! Auto-generated Er xDot-only collisionless fixture for dkx parity.
 
 &general
   saveMatricesAndVectorsInBinary = .t.

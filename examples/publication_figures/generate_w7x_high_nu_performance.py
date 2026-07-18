@@ -28,14 +28,14 @@ try:
     import matplotlib as mpl
     import matplotlib.pyplot as plt
 except Exception as exc:  # pragma: no cover
-    raise SystemExit("This example requires matplotlib. Install sfincs_jax first.") from exc
+    raise SystemExit("This example requires matplotlib. Install dkx first.") from exc
 
 import numpy as np
 
 
 DEFAULT_OUT_DIR = _REPO_ROOT / "docs" / "_static" / "figures" / "paper"
 DEFAULT_ARTIFACT_DIR = _REPO_ROOT / "examples" / "publication_figures" / "artifacts"
-DEFAULT_STEM = "sfincs_jax_w7x_high_nu_performance"
+DEFAULT_STEM = "dkx_w7x_high_nu_performance"
 DEFAULT_RESIDUAL_GATE = 1.0e-6
 
 

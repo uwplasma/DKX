@@ -249,9 +249,9 @@
           },
           "command": [
             "/opt/local/bin/python",
-            "/Users/rogeriojorge/local/tests/sfincs_jax/scripts/benchmark_pas_tz_memory_fallback.py",
+            "/Users/rogeriojorge/local/tests/dkx/scripts/benchmark_pas_tz_memory_fallback.py",
             "--input",
-            "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories/input.namelist",
+            "/Users/rogeriojorge/local/tests/dkx/examples/sfincs_examples/sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories/input.namelist",
             "--out",
             "docs/_static/rhs1_pas_production_solve_geometry11.json",
             "--variants",
@@ -291,7 +291,7 @@
             "--min-memory-reduction",
             "1.05"
           ],
-          "input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories/input.namelist",
+          "input": "/Users/rogeriojorge/local/tests/dkx/examples/sfincs_examples/sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_DKESTrajectories/input.namelist",
           "out": "docs/_static/rhs1_pas_production_solve_geometry11.json",
           "planned_parent_timeout_s": 510.0,
           "ready": false,
@@ -333,9 +333,9 @@
           },
           "command": [
             "/opt/local/bin/python",
-            "/Users/rogeriojorge/local/tests/sfincs_jax/scripts/benchmark_pas_tz_memory_fallback.py",
+            "/Users/rogeriojorge/local/tests/dkx/scripts/benchmark_pas_tz_memory_fallback.py",
             "--input",
-            "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/geometryScheme4_2species_PAS_noEr/input.namelist",
+            "/Users/rogeriojorge/local/tests/dkx/examples/sfincs_examples/geometryScheme4_2species_PAS_noEr/input.namelist",
             "--out",
             "docs/_static/rhs1_pas_production_solve_geometry4.json",
             "--variants",
@@ -375,7 +375,7 @@
             "--min-memory-reduction",
             "1.05"
           ],
-          "input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/geometryScheme4_2species_PAS_noEr/input.namelist",
+          "input": "/Users/rogeriojorge/local/tests/dkx/examples/sfincs_examples/geometryScheme4_2species_PAS_noEr/input.namelist",
           "out": "docs/_static/rhs1_pas_production_solve_geometry4.json",
           "planned_parent_timeout_s": 510.0,
           "ready": true,
@@ -417,9 +417,9 @@
           },
           "command": [
             "/opt/local/bin/python",
-            "/Users/rogeriojorge/local/tests/sfincs_jax/scripts/benchmark_pas_tz_memory_fallback.py",
+            "/Users/rogeriojorge/local/tests/dkx/scripts/benchmark_pas_tz_memory_fallback.py",
             "--input",
-            "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/HSX_PASCollisions_DKESTrajectories/input.namelist",
+            "/Users/rogeriojorge/local/tests/dkx/examples/sfincs_examples/HSX_PASCollisions_DKESTrajectories/input.namelist",
             "--out",
             "docs/_static/rhs1_pas_production_solve_hsx.json",
             "--variants",
@@ -459,7 +459,7 @@
             "--min-memory-reduction",
             "1.05"
           ],
-          "input": "/Users/rogeriojorge/local/tests/sfincs_jax/examples/sfincs_examples/HSX_PASCollisions_DKESTrajectories/input.namelist",
+          "input": "/Users/rogeriojorge/local/tests/dkx/examples/sfincs_examples/HSX_PASCollisions_DKESTrajectories/input.namelist",
           "out": "docs/_static/rhs1_pas_production_solve_hsx.json",
           "planned_parent_timeout_s": 510.0,
           "ready": true,

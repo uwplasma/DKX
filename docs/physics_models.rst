@@ -1,7 +1,7 @@
 Physics model and equations
 ===========================
 
-`sfincs_jax` solves a **radially local, steady-state drift-kinetic problem** on a
+`dkx` solves a **radially local, steady-state drift-kinetic problem** on a
 single flux surface. This page summarizes the governing model, the main approximations,
 and how the physics terms map onto the discretized operators documented in
 :doc:`system_equations`, :doc:`geometry`, and :doc:`numerics`.
@@ -11,7 +11,7 @@ For full derivations and code-location detail, see :doc:`physics_reference` and
 Model overview
 --------------
 
-`sfincs_jax` evolves the non-adiabatic perturbation :math:`f_{s1}` about a Maxwellian
+`dkx` evolves the non-adiabatic perturbation :math:`f_{s1}` about a Maxwellian
 background :math:`f_{s0}` on a single flux surface:
 
 .. math::
@@ -60,8 +60,8 @@ or, when the flux-surface-varying potential is included,
 
 The normalization conventions used for hats and dimensionless drives are summarized in
 :doc:`normalizations`. These conventions matter directly for the coefficients assembled by
-the consolidated :class:`sfincs_jax.drift_kinetic.KineticOperator` and the diagnostics
-written by :mod:`sfincs_jax.writer`.
+the consolidated :class:`dkx.drift_kinetic.KineticOperator` and the diagnostics
+written by :mod:`dkx.writer`.
 
 Geometry and guiding-center drifts
 ----------------------------------
@@ -88,7 +88,7 @@ uses those coefficients to build the drift terms in the DKE. [#boozer1980]_
 Collision operators
 -------------------
 
-SFINCS Fortran v3 supports two collision models, and `sfincs_jax` adds a third:
+SFINCS Fortran v3 supports two collision models, and `dkx` adds a third:
 
 - **Pitch-angle scattering (PAS)** (``collisionOperator = 1``): a
   diagonal-in-:math:`L` operator used for reduced models and benchmark suites.
@@ -98,11 +98,11 @@ SFINCS Fortran v3 supports two collision models, and `sfincs_jax` adds a third:
   multispecies studies.
 - **Improved Sugama model operator** (``collisionOperator = 3``): the momentum-
   and energy-conserving improved linearized model operator of Sugama *et al.*
-  (2019), a `sfincs_jax` research extension beyond Fortran v3 that remains
+  (2019), a `dkx` research extension beyond Fortran v3 that remains
   accurate into the highly collisional regime.
 
 The linearized FP operator is the most accurate model for neoclassical transport in
-SFINCS and is the basis for the collision-driven preconditioners used in `sfincs_jax`.
+SFINCS and is the basis for the collision-driven preconditioners used in `dkx`.
 [#sfincs2015]_
 
 Constraint closure and source/sink terms
@@ -162,8 +162,8 @@ schematically
    \qquad
    j_\parallel = \sum_s Z_s e V_{\parallel,s}.
 
-`sfincs_jax` evaluates these moments in :mod:`sfincs_jax.moments` (with
-geometry-derived scalars in :mod:`sfincs_jax.magnetic_geometry`).
+`dkx` evaluates these moments in :mod:`dkx.moments` (with
+geometry-derived scalars in :mod:`dkx.magnetic_geometry`).
 
 Trajectory-model knobs
 ----------------------

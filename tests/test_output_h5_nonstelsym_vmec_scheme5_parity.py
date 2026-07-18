@@ -3,13 +3,13 @@
 VMEC writes the complementary-parity Fourier tables (``bmns``, ``gmns``,
 ``bsub{u,v}mns``, ``bsubsmnc``, ``bsup{u,v}mns``, ``rmns``, ``zmnc``, ``lmnc``)
 for stellarator-asymmetric equilibria.  These tests pin the canonical wiring in
-:func:`sfincs_jax.magnetic_geometry.read_vmec_wout` /
-:meth:`sfincs_jax.magnetic_geometry.FluxSurfaceGeometry.from_vmec` (each cosine
+:func:`dkx.magnetic_geometry.read_vmec_wout` /
+:meth:`dkx.magnetic_geometry.FluxSurfaceGeometry.from_vmec` (each cosine
 sum gains its sine partner, and the sine-parity fields gain cosine partners)
 against a Fortran SFINCS v3 golden, mirroring the sibling
 ``test_output_h5_scheme*_parity`` tests.  The legacy ``outputs`` writer does not
 support lasym VMEC, so the canonical side runs through
-:func:`sfincs_jax.run.run_profile`.
+:func:`dkx.run.run_profile`.
 """
 
 from __future__ import annotations
@@ -18,8 +18,8 @@ from pathlib import Path
 
 import numpy as np
 
-from sfincs_jax.compare import compare_sfincs_outputs
-from sfincs_jax.io import read_sfincs_h5
+from dkx.compare import compare_sfincs_outputs
+from dkx.io import read_sfincs_h5
 
 REF = Path(__file__).parent / "ref"
 DECK = REF / "nonstelsym_vmec_tiny_scheme5.input.namelist"
@@ -53,7 +53,7 @@ _TRANSPORT_KEYS = [
 
 def _canonical_output(tmp_path: Path) -> Path:
     """Run the canonical RHSMode=1 solver on the lasym scheme-5 deck; write its h5."""
-    from sfincs_jax.run import run_profile
+    from dkx.run import run_profile
 
     out = tmp_path / "sfincsOutput.h5"
     run = run_profile(DECK, out_path=out, emit=None)
@@ -68,8 +68,8 @@ def test_geometry_bhat_matches_fortran_golden() -> None:
     The direct geometry gate (before transport): a sign / parity / Nyquist bug in
     the stellarator-asymmetric sine terms would surface here first.
     """
-    from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
-    from sfincs_jax.inputs import read_sfincs_input
+    from dkx.drift_kinetic import kinetic_operator_from_namelist
+    from dkx.inputs import read_sfincs_input
 
     op = kinetic_operator_from_namelist(read_sfincs_input(DECK))
     golden = read_sfincs_h5(GOLDEN)

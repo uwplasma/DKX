@@ -80,7 +80,7 @@
   "deterministic_output_check": false,
   "deterministic_output_probe_requested": true,
   "deterministic_output_tolerance": 1e-10,
-  "deterministic_output_dir": "/tmp/sfincs_jax_sharded_gpu_1v2_20260517_failclosed/deterministic_output_probe",
+  "deterministic_output_dir": "/tmp/dkx_sharded_gpu_1v2_20260517_failclosed/deterministic_output_probe",
   "deterministic_output_gate": {
     "schema_version": 1,
     "status": "probe_failed",

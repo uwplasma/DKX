@@ -27,7 +27,7 @@ python examples/publication_figures/generate_er_trajectory_sweep.py \
   --work-dir examples/publication_figures/output/er_sweep_tokamak_reference \
   --summary-json examples/publication_figures/output/er_sweep_tokamak_reference/summary.json \
   --out-dir docs/_static/figures/paper \
-  --stem sfincs_jax_er_trajectory_sweep_tokamak_reference
+  --stem dkx_er_trajectory_sweep_tokamak_reference
 
 python examples/publication_figures/generate_er_trajectory_sweep.py \
   --preset stellarator_like \
@@ -36,14 +36,14 @@ python examples/publication_figures/generate_er_trajectory_sweep.py \
   --work-dir examples/publication_figures/output/er_sweep_stellarator_fast_reference \
   --summary-json examples/publication_figures/output/er_sweep_stellarator_fast_reference/summary.json \
   --out-dir docs/_static/figures/paper \
-  --stem sfincs_jax_er_trajectory_sweep_stellarator_fast_reference
+  --stem dkx_er_trajectory_sweep_stellarator_fast_reference
 ```
 
 The corresponding checked summaries and figures are:
 - `examples/publication_figures/artifacts/er_sweep_tokamak_reference_summary.json`
 - `examples/publication_figures/artifacts/er_sweep_stellarator_fast_reference_summary.json`
-- `docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep_tokamak_reference.png`
-- `docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep_stellarator_fast_reference.png`
+- `docs/_static/figures/paper/dkx_er_trajectory_sweep_tokamak_reference.png`
+- `docs/_static/figures/paper/dkx_er_trajectory_sweep_stellarator_fast_reference.png`
 
 Bounded collisionality regression artifact:
 
@@ -64,7 +64,7 @@ split-operator execution so the FP and PAS ladders can be resumed independently
 on separate devices:
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 XLA_PYTHON_CLIENT_PREALLOCATE=false SFINCS_JAX_SCAN_RECYCLE=1 \
+CUDA_VISIBLE_DEVICES=0 XLA_PYTHON_CLIENT_PREALLOCATE=false DKX_SCAN_RECYCLE=1 \
 python examples/publication_figures/generate_sfincs_paper_figs.py \
   --case lhd \
   --collision-operators 0 \
@@ -73,7 +73,7 @@ python examples/publication_figures/generate_sfincs_paper_figs.py \
   --work-dir examples/publication_figures/output/lhd_reaudit_full \
   --summary-dir examples/publication_figures/artifacts
 
-CUDA_VISIBLE_DEVICES=1 XLA_PYTHON_CLIENT_PREALLOCATE=false SFINCS_JAX_SCAN_RECYCLE=1 \
+CUDA_VISIBLE_DEVICES=1 XLA_PYTHON_CLIENT_PREALLOCATE=false DKX_SCAN_RECYCLE=1 \
 python examples/publication_figures/generate_sfincs_paper_figs.py \
   --case lhd \
   --collision-operators 1 \
@@ -103,17 +103,17 @@ rerunning the missing points.
 
 The bounded LHD regression artifact is checked in as:
 - `examples/publication_figures/artifacts/lhd_collisionality_reaudit_fast_summary.json`
-- `docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality_reaudit_fast.png`
+- `docs/_static/figures/paper/dkx_fig1_lhd_collisionality_reaudit_fast.png`
 
 The bounded W7-X regression artifact is checked in as:
 - `examples/publication_figures/artifacts/w7x_collisionality_reaudit_fast_summary.json`
-- `docs/_static/figures/paper/sfincs_jax_fig2_w7x_collisionality_reaudit_fast.png`
+- `docs/_static/figures/paper/dkx_fig2_w7x_collisionality_reaudit_fast.png`
 
 The full collisionality figure family is checked in as:
 - `examples/publication_figures/artifacts/lhd_collisionality_summary.json`
-- `docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality.png`
+- `docs/_static/figures/paper/dkx_fig1_lhd_collisionality.png`
 - `examples/publication_figures/artifacts/w7x_collisionality_summary.json`
-- `docs/_static/figures/paper/sfincs_jax_fig2_w7x_collisionality.png`
+- `docs/_static/figures/paper/dkx_fig2_w7x_collisionality.png`
 
 The full artifacts are the validation-facing collisionality lane. The bounded
 artifacts are cheap regression inputs for branch-level checks.
@@ -128,10 +128,10 @@ Simakov-Helander reproduction explicitly closed until wider high-`nu` scans are
 pinned.
 
 Pinned outputs:
-- `examples/publication_figures/artifacts/sfincs_jax_simakov_helander_limit_audit_summary.json`
-- `docs/_static/figures/paper/sfincs_jax_simakov_helander_limit_audit.png`
-- `docs/_static/figures/paper/sfincs_jax_simakov_helander_limit_audit.pdf`
-- `examples/publication_figures/artifacts/sfincs_jax_simakov_helander_high_nu_run_plan.json`
+- `examples/publication_figures/artifacts/dkx_simakov_helander_limit_audit_summary.json`
+- `docs/_static/figures/paper/dkx_simakov_helander_limit_audit.png`
+- `docs/_static/figures/paper/dkx_simakov_helander_limit_audit.pdf`
+- `examples/publication_figures/artifacts/dkx_simakov_helander_high_nu_run_plan.json`
 
 Launch high-`nu` pilots before widening to full FP/PAS scans using the retained
 `generate_sfincs_paper_figs.py` scan driver:
@@ -156,7 +156,7 @@ python examples/publication_figures/generate_sfincs_paper_figs.py \
 ```
 
 The launcher forces the explicit executable solve path for scans
-(`SFINCS_JAX_IMPLICIT_SOLVE=0`) so high-collisionality transport can use sparse-LU
+(`DKX_IMPLICIT_SOLVE=0`) so high-collisionality transport can use sparse-LU
 first attempts/rescues when Krylov residuals stall. The checked-in high-`nu'`
 run plan uses a bounded sparse-direct cap and strict absolute/relative residual
 gates. LHD FP is accepted only with clean residuals. W7-X FP high-`nu'` has
@@ -174,9 +174,9 @@ python examples/publication_figures/generate_w7x_high_nu_performance.py
 ```
 
 Pinned outputs:
-- `examples/publication_figures/artifacts/sfincs_jax_w7x_high_nu_performance_summary.json`
-- `docs/_static/figures/paper/sfincs_jax_w7x_high_nu_performance.png`
-- `docs/_static/figures/paper/sfincs_jax_w7x_high_nu_performance.pdf`
+- `examples/publication_figures/artifacts/dkx_w7x_high_nu_performance_summary.json`
+- `docs/_static/figures/paper/dkx_w7x_high_nu_performance.png`
+- `docs/_static/figures/paper/dkx_w7x_high_nu_performance.pdf`
 
 Autodiff and sensitivity validation:
 
@@ -191,9 +191,9 @@ This writes a machine-readable summary plus PNG/PDF figures for:
 - differentiable `geometryScheme=4` Boozer harmonic sensitivity maps.
 
 Pinned outputs:
-- `examples/publication_figures/artifacts/sfincs_jax_autodiff_sensitivity_validation_summary.json`
-- `docs/_static/figures/paper/sfincs_jax_autodiff_gradient_check.png`
-- `docs/_static/figures/paper/sfincs_jax_autodiff_sensitivity_map.png`
+- `examples/publication_figures/artifacts/dkx_autodiff_sensitivity_validation_summary.json`
+- `docs/_static/figures/paper/dkx_autodiff_gradient_check.png`
+- `docs/_static/figures/paper/dkx_autodiff_sensitivity_map.png`
 
 W7-X ambipolar validation lane:
 
@@ -202,7 +202,7 @@ reconstruction and matching checked-in source artifact are available. The stable
 tree keeps the provenance template and package-level artifact gates:
 
 - `examples/publication_figures/provenance/w7x_ambipolar_provenance_template.json`
-- `sfincs_jax.validation.artifacts.build_w7x_ambipolar_root_provenance_panel`
+- `dkx.validation.artifacts.build_w7x_ambipolar_root_provenance_panel`
 
 Long W7-X ambipolar scan/figure generation belongs on the publication-audits
 research branch. Stable tests keep the deferred panel fail-closed behavior,

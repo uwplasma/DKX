@@ -2,7 +2,7 @@
 
 Runs each case in a fresh subprocess (clean peak-RSS and JIT state) and
 records per-stage wall time and memory via
-:class:`sfincs_jax.profiling.SimpleProfiler`:
+:class:`dkx.profiling.SimpleProfiler`:
 
 * RHSMode=1 cases: ``operator_build``, ``rhs``, ``solve_cold`` (includes
   compile), ``solve_warm`` (cached executable), ``moments``, plus an
@@ -160,7 +160,7 @@ def _write_deck(case: dict, workdir: Path) -> Path:
 def _run_case(name: str) -> dict:
     import jax
 
-    from sfincs_jax.profiling import SimpleProfiler
+    from dkx.profiling import SimpleProfiler
 
     case = CASES[name]
     report: dict = {"case": name, "backend": jax.default_backend()}
@@ -171,10 +171,10 @@ def _run_case(name: str) -> dict:
         runner = case["runner"]
 
         if runner == "rhs1":
-            from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
-            from sfincs_jax.namelist import read_sfincs_input
-            from sfincs_jax.run import profile_moments_from_operator, run_profile
-            from sfincs_jax.solve import solve
+            from dkx.drift_kinetic import kinetic_operator_from_namelist
+            from dkx.namelist import read_sfincs_input
+            from dkx.run import profile_moments_from_operator, run_profile
+            from dkx.solve import solve
 
             op = kinetic_operator_from_namelist(read_sfincs_input(deck))
             report["n_dofs"] = int(op.total_size)
@@ -199,7 +199,7 @@ def _run_case(name: str) -> dict:
             report["e2e_run_profile_s"] = time.perf_counter() - t0
 
         elif runner == "transport":
-            from sfincs_jax.run import run_transport_matrix
+            from dkx.run import run_transport_matrix
 
             t0 = time.perf_counter()
             run = run_transport_matrix(deck, tol=1e-10, emit=None)
@@ -208,7 +208,7 @@ def _run_case(name: str) -> dict:
             prof.mark("run_transport_matrix")
 
         elif runner == "phi1":
-            from sfincs_jax.phi1 import solve_phi1
+            from dkx.phi1 import solve_phi1
 
             res = solve_phi1(deck, tol=1e-9)
             prof.mark("solve_phi1_cold")
@@ -223,10 +223,10 @@ def _run_case(name: str) -> dict:
 
             import jax.numpy as jnp
 
-            from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
-            from sfincs_jax.namelist import read_sfincs_input
-            from sfincs_jax.run import profile_moments_from_operator
-            from sfincs_jax.solve import solve
+            from dkx.drift_kinetic import kinetic_operator_from_namelist
+            from dkx.namelist import read_sfincs_input
+            from dkx.run import profile_moments_from_operator
+            from dkx.solve import solve
 
             op0 = kinetic_operator_from_namelist(read_sfincs_input(deck))
             report["n_dofs"] = int(op0.total_size)
@@ -248,7 +248,7 @@ def _run_case(name: str) -> dict:
             prof.mark("value_and_grad_warm")
 
         elif runner == "ambipolar":
-            from sfincs_jax.er import find_ambipolar_er
+            from dkx.er import find_ambipolar_er
 
             res = find_ambipolar_er(deck, er_bracket=(-2.0, 2.0), tol=1e-8)
             prof.mark("find_ambipolar_er")

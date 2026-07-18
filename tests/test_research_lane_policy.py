@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from sfincs_jax.validation.release import check_research_lanes_main
-from sfincs_jax.validation.artifacts import (
+from dkx.validation.release import check_research_lanes_main
+from dkx.validation.artifacts import (
     ResearchLanePolicyError,
     check_research_lane_completion_file,
     research_lane_completion_errors,

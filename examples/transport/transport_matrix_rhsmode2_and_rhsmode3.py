@@ -8,7 +8,7 @@ This example demonstrates:
   - Assembling `transportMatrix` from the solved distributions using v3's formulas.
   - Running the same workflow via the CLI:
 
-        sfincs_jax transport-matrix-v3 --input input.namelist --out-matrix transportMatrix.npy
+        dkx transport-matrix-v3 --input input.namelist --out-matrix transportMatrix.npy
 
 Notes
 -----
@@ -25,7 +25,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.run import run_transport_matrix
+from dkx.run import run_transport_matrix
 
 
 def _write_text(path: Path, text: str) -> Path:

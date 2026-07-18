@@ -1,10 +1,10 @@
 """Canonical solver-trace sidecar parity for the run drivers.
 
-``sfincs_jax write-output --solver-trace`` now emits the sidecar from the
-canonical run drivers (:func:`sfincs_jax.run.run_profile` /
-:func:`sfincs_jax.run.run_transport_matrix`) instead of falling back to the
+``dkx write-output --solver-trace`` now emits the sidecar from the
+canonical run drivers (:func:`dkx.run.run_profile` /
+:func:`dkx.run.run_transport_matrix`) instead of falling back to the
 retired legacy pipeline.  The canonical trace uses
-the same :class:`sfincs_jax.solver_trace.SolverTrace` schema; the
+the same :class:`dkx.solver_trace.SolverTrace` schema; the
 solver-independent fields (backend, ``rhs_mode``, ``selected_path``,
 ``geometry_scheme``, ``collision_operator``, sizes, ``device_count``,
 convergence, residual target) match the legacy trace, while the retired-GMRES
@@ -18,9 +18,9 @@ from pathlib import Path
 
 import pytest
 
-from sfincs_jax.api import write_output
-from sfincs_jax.run import run_profile, run_transport_matrix
-from sfincs_jax.solver_trace import read_solver_trace_json
+from dkx.api import write_output
+from dkx.run import run_profile, run_transport_matrix
+from dkx.solver_trace import read_solver_trace_json
 
 REF = Path(__file__).parent / "ref"
 

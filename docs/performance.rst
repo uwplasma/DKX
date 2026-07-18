@@ -1,7 +1,7 @@
 Performance and differentiability
 =================================
 
-`sfincs_jax` is designed around a few principles that enable both speed and gradients:
+`dkx` is designed around a few principles that enable both speed and gradients:
 
 1) **Matrix-free operators**: avoid assembling sparse matrices; apply the discrete operator as a pure function.
 2) **JIT compilation**: compile hot kernels (matvecs, residuals, linear solves) with `jax.jit`.
@@ -21,13 +21,13 @@ The canonical-stack benchmark case is ``HSX_PASCollisions_DKESTrajectories``
 (RHSMode=1) at ``Ntheta=25, Nzeta=51, Nxi=100, Nx=5`` — 744,610 unknowns —
 measured on the same development machine (MacBook, Apple M4, ~10 cores, 24 GB)
 for both codes. The Fortran reference is the conda PETSc 3.23 + MUMPS 5.8.2
-build of SFINCS v3; ``sfincs_jax`` uses the tier-1 truncated Legendre block
+build of SFINCS v3; ``dkx`` uses the tier-1 truncated Legendre block
 elimination (``solvax`` ``block_thomas_truncated_fn``, blocks assembled on the
 fly from the analytic operator coefficients, ``keep_lowest=3`` — exact for
 every RHSMode=1 output).
 
 .. figure:: _static/figures/readme/tier1_hsx_runtime_memory.png
-   :alt: Runtime and peak memory bars for sfincs_jax and SFINCS Fortran v3 on the 744k-unknown HSX PAS case.
+   :alt: Runtime and peak memory bars for dkx and SFINCS Fortran v3 on the 744k-unknown HSX PAS case.
    :align: center
    :width: 90%
 
@@ -41,13 +41,13 @@ every RHSMode=1 output).
    * - Configuration
      - Warm solve [s]
      - Peak RSS [GB]
-   * - ``sfincs_jax`` MacBook M4 CPU, ``Nxi``-for-``x`` ramp
+   * - ``dkx`` MacBook M4 CPU, ``Nxi``-for-``x`` ramp
      - 27.2
      - 0.93
-   * - ``sfincs_jax`` MacBook M4 CPU, uniform ``Nxi``
+   * - ``dkx`` MacBook M4 CPU, uniform ``Nxi``
      - 44.3
      - 1.16
-   * - ``sfincs_jax`` RTX A4000 GPU
+   * - ``dkx`` RTX A4000 GPU
      - 45.0
      - 1.88 (0.05 GB VRAM buffers)
    * - SFINCS Fortran v3, 1 MPI rank
@@ -106,7 +106,7 @@ Cross-machine end-to-end time to solution
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A second, independent sweep measures **end-to-end** wall time (operator
-build + solve + moments + output; ``run_profile`` on the ``sfincs_jax`` side,
+build + solve + moments + output; ``run_profile`` on the ``dkx`` side,
 the full binary run on the Fortran side) for the two-species production
 variant of the same HSX PAS deck (1,275,010 unknowns) on two machines, with
 a freshly compiled Fortran v3 (conda PETSc 3.25 + MUMPS, MPI) and
@@ -124,7 +124,7 @@ Reproduce with ``tools/benchmarks/time_to_solution.py``.
      - 350
    * - Fortran MPI, 10-core laptop, best (n=8)
      - 141
-   * - ``sfincs_jax``, laptop, one process (cold / warm)
+   * - ``dkx``, laptop, one process (cold / warm)
      - 62 / 46
    * - Fortran MPI, 36-core workstation, n=1
      - 1163
@@ -132,20 +132,20 @@ Reproduce with ``tools/benchmarks/time_to_solution.py``.
      - 802
    * - Fortran MPI, 36-core workstation, n=32
      - 1423
-   * - ``sfincs_jax``, workstation, one RTX A4000 GPU (cold / warm)
+   * - ``dkx``, workstation, one RTX A4000 GPU (cold / warm)
      - 78 / 59
-   * - ``sfincs_jax``, workstation, one CPU process (cold / warm)
+   * - ``dkx``, workstation, one CPU process (cold / warm)
      - 6132 / 1998
 
 The MPI scaling shape repeats on both machines: Fortran/MUMPS bottoms out
 around 8 ranks (1.4-2.5x over one rank) and *degrades* beyond — at 32 ranks
-the workstation run is slower than a single rank. One ``sfincs_jax`` process
+the workstation run is slower than a single rank. One ``dkx`` process
 beats every measured Fortran configuration on the same hardware: 3.1x the
 laptop's best MPI time on CPU, and 13.6x the workstation's best MPI time on
 its GPU. The workstation's CPU path is dominated by the serial Legendre scan
 at that machine's low single-core throughput — on such hardware the GPU is
-the ``sfincs_jax`` backend of choice, and batched scans
-(:mod:`sfincs_jax.batch`, measured in ``tools/benchmarks/batched_scan.py``)
+the ``dkx`` backend of choice, and batched scans
+(:mod:`dkx.batch`, measured in ``tools/benchmarks/batched_scan.py``)
 are the axis where one process replaces an entire MPI allocation.
 
 Memory findings
@@ -167,7 +167,7 @@ Solver-noise finding
 
 The direct solve is more converged than the Fortran reference: Fortran's own
 electron ``FSABFlow`` scatters 51% across its 1/2/4/8-rank runs of this case
-(KSP ``rtol=1e-6`` iterative-solver noise), while ``sfincs_jax`` matches the
+(KSP ``rtol=1e-6`` iterative-solver noise), while ``dkx`` matches the
 closest Fortran run to ``2e-10`` and sits inside Fortran's own spread on every
 compared quantity.
 
@@ -202,13 +202,13 @@ Known issues
   ``transportMatrix[0,1]`` element only (``+1.62`` vs expected ``-1.08`` at
   ``solverTolerance=1e-6``; ``+26.3`` at ``1e-12`` — tolerance-unstable, so
   the element is ill-conditioned in this configuration). Parity tests pin that
-  element to upstream's expected value (``-1.07986``), which the ``sfincs_jax``
+  element to upstream's expected value (``-1.07986``), which the ``dkx``
   direct solve reproduces to ``4.2e-6``.
 
 CPU and GPU: where each wins
 ----------------------------
 
-The structured tier-1 path is the one that lets ``sfincs_jax`` fit and finish a
+The structured tier-1 path is the one that lets ``dkx`` fit and finish a
 production case; the honest headline is that **a development-MacBook CPU and a
 workstation RTX A4000 land at parity on the direct tier, while the iterative
 and small-system paths favored the MacBook CPU** — note these two backends
@@ -227,10 +227,10 @@ truncated kernel became the canonical route:
    * - SFINCS Fortran v3 (PETSc + MUMPS, dev MacBook)
      - > 2.6 h, unfinished
      - 3.6-5.7 GB
-   * - ``sfincs_jax`` CPU (dev MacBook)
+   * - ``dkx`` CPU (dev MacBook)
      - 41.4 s e2e (25.0 s warm solve)
      - 1.35 GB
-   * - ``sfincs_jax`` GPU (RTX A4000)
+   * - ``dkx`` GPU (RTX A4000)
      - 59.6 s e2e (26.2 s warm solve)
      - 2.3 GB
 
@@ -376,15 +376,15 @@ latency, is what would speed this path up.
 ``"cpu"``/``"gpu"``/a ``jax.Device`` move the solve (inputs via
 ``jax.device_put``, solution returned on the input's device; inert under
 ``jit``/``grad`` tracing), and ``"auto"`` (default, env
-``SFINCS_JAX_SOLVE_DEVICE``) additionally consults the size thresholds
-``SFINCS_JAX_SOLVE_CPU_MAX_SIZE_TIER1`` / ``_TIER2``. Both thresholds
+``DKX_SOLVE_DEVICE``) additionally consults the size thresholds
+``DKX_SOLVE_CPU_MAX_SIZE_TIER1`` / ``_TIER2``. Both thresholds
 default to 0 — automatic CPU-routing disabled — because the measurements
 above do not support a nonzero default on the reference host; they exist for
 hosts where the CPU/GPU balance differs (e.g. a strong CPU next to a weak
-accelerator: set ``SFINCS_JAX_SOLVE_CPU_MAX_SIZE_TIER2=6000``).
+accelerator: set ``DKX_SOLVE_CPU_MAX_SIZE_TIER2=6000``).
 
 **Cold starts and the persistent compilation cache.** The cache configured by
-``sfincs_jax.__init__`` (default ``~/.cache/sfincs_jax/jax_compilation_cache``,
+``dkx.__init__`` (default ``~/.cache/dkx/jax_compilation_cache``,
 min-compile-time and min-entry-size forced to 0, GPU per-fusion autotune cache
 on by JAX default) was audited working cross-process on this host: with a
 populated cache the small-deck GPU cold solve drops 10.8 s -> 1.7 s, the CPU
@@ -476,15 +476,15 @@ reference-runtime-window, so process launch, filesystem overhead, and JIT
 amortization do not dominate the shorter measurements. The full suite stays the
 parity audit; only the runtime/memory *plot* applies the window.
 
-.. figure:: _static/figures/paper/sfincs_jax_fortran_suite_benchmark_summary.png
-   :alt: Runtime and active-memory comparison for SFINCS Fortran v3 and sfincs_jax across the example suite.
+.. figure:: _static/figures/paper/dkx_fortran_suite_benchmark_summary.png
+   :alt: Runtime and active-memory comparison for SFINCS Fortran v3 and dkx across the example suite.
    :align: center
    :width: 92%
 
    Example-suite benchmark. Runtime bars (left) and active-memory bars (right)
-   for each reference-runtime-window case: SFINCS Fortran v3, ``sfincs_jax`` CPU
-   cold/warm, and ``sfincs_jax`` GPU cold/warm, ordered by best warm
-   ``sfincs_jax`` speedup over the Fortran v3 runtime. Fortran memory is process
+   for each reference-runtime-window case: SFINCS Fortran v3, ``dkx`` CPU
+   cold/warm, and ``dkx`` GPU cold/warm, ordered by best warm
+   ``dkx`` speedup over the Fortran v3 runtime. Fortran memory is process
    maximum RSS; JAX memory uses profiler RSS deltas over the fixed
    Python/JAX/XLA baseline. Reproduce with
    ``examples/publication_figures/generate_fortran_suite_benchmark_summary.py``.
@@ -494,7 +494,7 @@ Across the plotted rows the median cold JAX/Fortran wall-clock ratio is about
 ``2.89x`` on CPU and ``3.71x`` on GPU; the full process maximum-RSS ratios, kept
 in the summary JSON audit fields, are about ``4.75x`` on CPU and ``8.80x`` on
 GPU. The numeric summary and the top runtime/memory cases are recorded in
-``examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json``.
+``examples/publication_figures/artifacts/dkx_fortran_suite_benchmark_summary.json``.
 
 Compile time vs steady state
 ----------------------------
@@ -543,7 +543,7 @@ The design choices that produce the numbers above, in one place:
   complement that eliminates the quasineutrality border (the
   :math:`\Phi_1(\theta,\zeta)` / :math:`\lambda` / source rows) exactly through
   the coarse f-block solve plus a small dense Schur solve
-  (:func:`sfincs_jax.solve.build_coarse_preconditioner`). On the production PAS
+  (:func:`dkx.solve.build_coarse_preconditioner`). On the production PAS
   Phi1 case this took the inner Krylov solve from 9198 unpreconditioned
   iterations (about 398 s) to 5 iterations (about 13.5 s), a roughly 29x
   speedup, with answers identical to machine precision and the differentiable

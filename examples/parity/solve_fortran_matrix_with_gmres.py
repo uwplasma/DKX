@@ -1,6 +1,6 @@
 """Solve a frozen Fortran v3 PETSc matrix using JAX GMRES (matrix-free matvec).
 
-This script is a stepping stone for the full sfincs_jax solver:
+This script is a stepping stone for the full dkx solver:
 
 - Today: we read a PETSc AIJ matrix saved by the Fortran code and solve A x = b.
 - Later: we replace the matrix with a pure-JAX operator matvec (no assembly).
@@ -20,7 +20,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.validation.fortran import read_petsc_mat_aij, read_petsc_vec
+from dkx.validation.fortran import read_petsc_mat_aij, read_petsc_vec
 
 
 def csr_matvec(

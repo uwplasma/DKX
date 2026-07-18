@@ -1,4 +1,4 @@
-"""Tests for ``sfincs_jax.magnetic_geometry``.
+"""Tests for ``dkx.magnetic_geometry``.
 
 The analytic schemes are pinned against independent evaluations of the
 ``geometry.F90`` formulas; the VMEC/Boozer file paths are pinned against the
@@ -19,7 +19,7 @@ import pytest
 import jax
 import jax.numpy as jnp
 
-from sfincs_jax.magnetic_geometry import FluxSurfaceGeometry, read_vmec_wout
+from dkx.magnetic_geometry import FluxSurfaceGeometry, read_vmec_wout
 
 _NONSTELSYM_WOUT = Path(__file__).parent / "ref" / "wout_up_down_asymmetric_tokamak.nc"
 

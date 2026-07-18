@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from sfincs_jax import io
+from dkx import io
 
 
 def test_output_file_format_suffixes_and_invalid_suffix() -> None:
@@ -15,7 +15,7 @@ def test_output_file_format_suffixes_and_invalid_suffix() -> None:
     assert io.output_file_format(Path("sfincsOutput.nc")) == "netcdf"
     assert io.output_file_format(Path("sfincsOutput.netcdf")) == "netcdf"
     assert io.output_file_format(Path("sfincsOutput.npz")) == "npz"
-    with pytest.raises(ValueError, match="Unsupported sfincs_jax output suffix"):
+    with pytest.raises(ValueError, match="Unsupported dkx output suffix"):
         io.output_file_format(Path("sfincsOutput.txt"))
 
 
@@ -67,7 +67,7 @@ def test_output_file_roundtrip_preserves_names_strings_and_bools(tmp_path: Path,
 
 
 def _trace():
-    from sfincs_jax.solver_trace import SolverTrace, SolverTraceCandidate
+    from dkx.solver_trace import SolverTrace, SolverTraceCandidate
 
     return SolverTrace(
         backend="gpu",
@@ -113,7 +113,7 @@ def _trace():
 def test_write_sfincs_output_file_can_attach_solver_trace(tmp_path: Path, suffix: str) -> None:
     import h5py
 
-    from sfincs_jax.solver_trace import SolverTrace, read_solver_trace_h5
+    from dkx.solver_trace import SolverTrace, read_solver_trace_h5
 
     out = tmp_path / f"sfincsOutput{suffix}"
     trace = _trace()
@@ -131,9 +131,9 @@ def test_write_sfincs_output_file_can_attach_solver_trace(tmp_path: Path, suffix
     elif suffix == ".nc":
         netcdf4 = pytest.importorskip("netCDF4")
         with netcdf4.Dataset(out, "r") as ds:
-            loaded = SolverTrace.from_json(ds.getncattr("sfincs_jax_solver_trace_json"))
+            loaded = SolverTrace.from_json(ds.getncattr("dkx_solver_trace_json"))
     else:
         with np.load(out, allow_pickle=False) as npz:
-            loaded = SolverTrace.from_json(str(npz["sfincs_jax_solver_trace_json"].reshape(()).item()))
+            loaded = SolverTrace.from_json(str(npz["dkx_solver_trace_json"].reshape(()).item()))
 
     assert loaded == trace

@@ -8,7 +8,7 @@ Six pedagogic scripts on the canonical API sit at the top of ``examples/``.
 Each follows the same style contract: no ``main()``, all parameters at the top
 of the file, printed setup/progress/final results, at least one plot, and
 output files written and read back. All run on a laptop CPU; CI runs each one
-at shrunken resolution (``SFINCS_JAX_CI=1``) in
+at shrunken resolution (``DKX_CI=1``) in
 ``tests/test_examples_pedagogic.py``.
 
 ``examples/run_tokamak.py`` — first solve, from Python
@@ -18,7 +18,7 @@ at shrunken resolution (``SFINCS_JAX_CI=1``) in
 
    .. code-block:: python
 
-      from sfincs_jax.run import run_profile
+      from dkx.run import run_profile
 
       run = run_profile(deck_path, solve_method="auto", out_path=h5_path)
       gamma = float(run.moments["particleFlux_vm_psiHat"][0])
@@ -49,7 +49,7 @@ at shrunken resolution (``SFINCS_JAX_CI=1``) in
 ``examples/optimize_QA_bootstrap.py`` — flagship optimization
    Gradient-based optimization of a quasi-axisymmetric stellarator boundary
    for low bootstrap current: boundary Fourier coefficients ->
-   ``vmec_jax`` fixed-boundary equilibrium (implicit-adjoint VJP) ->
+   ``vmex`` fixed-boundary equilibrium (implicit-adjoint VJP) ->
    differentiable Boozer transform (``booz_xform_jax``) ->
    ``FluxSurfaceGeometry.from_fourier`` (geometryScheme-13 pure-JAX path) ->
    canonical kinetic solve (tier-2 GCROT, warm-started and recycled across
@@ -58,7 +58,7 @@ at shrunken resolution (``SFINCS_JAX_CI=1``) in
    gradient against central finite differences and holds aspect ratio, mean
    iota, and quasisymmetry with penalty terms. Alternative objective lines
    (e.g. ``D11``-style targets) ship commented and CI-tested. Requires
-   ``vmec_jax`` and ``booz_xform_jax``.
+   ``vmex`` and ``booz_xform_jax``.
 
    .. figure:: _static/figures/readme/optimize_QA_bootstrap.png
       :alt: QA low-bootstrap optimization dashboard: objective history, boundary cross-sections, |B| spectrum, and <j.B> profile.
@@ -80,13 +80,13 @@ The repository includes a structured `examples/` tree:
 - `examples/optimization/`: optimization patterns (may require extras)
 - `examples/performance/`: JIT/performance microbenchmarks
 - `examples/publication_figures/`: publication-style figure generation
-- `examples/vmec_jax_finite_beta/`: finite-beta ``vmec_jax`` to ``sfincs_jax`` radial bootstrap-current and ambipolar-``E_r`` workflow
+- `examples/vmex_finite_beta/`: finite-beta ``vmex`` to ``dkx`` radial bootstrap-current and ambipolar-``E_r`` workflow
 
 Run from the repo root:
 
 .. code-block:: bash
 
-   cd sfincs_jax
+   cd dkx
    python examples/tutorials/run_quick_output_and_plot.py --out-dir tutorial_output
    python examples/getting_started/build_grids_and_geometry.py
 
@@ -152,8 +152,8 @@ frozen-reference or benchmark workflow.
      - ``examples/autodiff/autodiff_gradient_nu_n_residual.py``
      - ``python examples/autodiff/autodiff_gradient_nu_n_residual.py``
    * - Compare kinetic bootstrap current with Redl
-     - ``examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py``
-     - ``python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py --case QA --quick --jax-vs-redl --solve-method auto``
+     - ``examples/vmex_finite_beta/compare_qs_paper_dkx_redl.py``
+     - ``python examples/vmex_finite_beta/compare_qs_paper_dkx_redl.py --case QA --quick --jax-vs-redl --solve-method auto``
    * - Time output formats and memory behavior
      - ``examples/performance/benchmark_output_formats.py``
      - ``python examples/performance/benchmark_output_formats.py --repeats 2``
@@ -192,7 +192,7 @@ folder name.
      - ``examples/autodiff/`` and ``examples/optimization/``
      - Starts with residual/JVP examples, then moves to QA/QI objectives and promotion gates.
    * - I need bootstrap current or Redl comparisons.
-     - ``examples/vmec_jax_finite_beta/``
+     - ``examples/vmex_finite_beta/``
      - Owns the VMEC, Redl, ambipolar-root, and bootstrap-current profile scripts.
    * - I need to validate against SFINCS Fortran v3 behavior.
      - ``examples/parity/`` and ``examples/publication_figures/``
@@ -227,24 +227,24 @@ convergence, or profiling detail.
      - ``examples/sfincs_examples/tokamak_1species_FPCollisions_noEr/input.namelist``
    * - VMEC ``wout_path`` input
      - ``examples/getting_started/write_sfincs_output_vmec.py``
-     - ``examples/vmec_jax_finite_beta/finite_beta_vmec_to_sfincs.py``
+     - ``examples/vmex_finite_beta/finite_beta_vmec_to_sfincs.py``
    * - RHSMode=2/3 transport matrix
      - ``examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py``
      - ``examples/transport/transport_matrix_rhsmode2_scheme11_and_scheme5.py``
    * - Bootstrap current vs Redl
-     - ``examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py``
+     - ``examples/vmex_finite_beta/compare_qs_paper_dkx_redl.py``
      - ``examples/tutorials/03_bootstrap_redl_and_optimization.ipynb``
    * - Ambipolar electric-field scan
-     - ``examples/vmec_jax_finite_beta/finite_beta_vmec_to_sfincs.py``
-     - ``examples/optimization/evaluate_sfincs_jax_promotion_scan.py``
+     - ``examples/vmex_finite_beta/finite_beta_vmec_to_sfincs.py``
+     - ``examples/optimization/evaluate_dkx_promotion_scan.py``
    * - Differentiable residual or flux
      - ``examples/autodiff/autodiff_gradient_nu_n_residual.py``
      - ``examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py``
    * - VMEC/Boozer/JAX workflow
-     - ``examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py``
+     - ``examples/autodiff/vmex_to_boozer_sfincs_pipeline.py``
      - ``examples/tutorials/04_geometry_validation_and_performance.ipynb``
    * - QA/QI optimization objective
-     - ``examples/optimization/qa_nfp2_sfincs_jax_objectives.py``
+     - ``examples/optimization/qa_nfp2_dkx_objectives.py``
      - ``examples/optimization/QA_optimization_bootstrap_current.py``
    * - CPU/GPU timing and output I/O
      - ``examples/performance/benchmark_output_formats.py``
@@ -273,7 +273,7 @@ the recommended first stop for new workflows.
      - ``examples/tutorials/``, ``examples/getting_started/``
      - You want to learn the CLI, Python API, plots, output formats, and first operator or geometry concepts.
    * - ``capability``
-     - ``examples/transport/``, ``examples/autodiff/``, ``examples/optimization/``, ``examples/vmec_jax_finite_beta/``
+     - ``examples/transport/``, ``examples/autodiff/``, ``examples/optimization/``, ``examples/vmex_finite_beta/``
      - You need a specific physics, optimization, VMEC, Redl, bootstrap-current, or differentiability workflow.
    * - ``validation``
      - ``examples/parity/``, ``examples/performance/``, ``examples/publication_figures/``, ``examples/paper_benchmarks/``
@@ -284,12 +284,12 @@ the recommended first stop for new workflows.
 
 Some geometry examples reference public W7-X/HSX/QI equilibrium fixtures by
 basename. Those multi-megabyte files are fetched from the
-``sfincs-jax-data-v1`` release into the local `sfincs_jax` data cache on first
+``sfincs-jax-data-v1`` release into the local `dkx` data cache on first
 use. To prefetch them before running examples, use:
 
 .. code-block:: bash
 
-   python -m sfincs_jax.validation.data_fetch
+   python -m dkx.validation.data_fetch
 
 Writing `sfincsOutput.h5` (Python + CLI):
 
@@ -305,13 +305,13 @@ Geometry-specific write-output examples:
    python examples/getting_started/write_sfincs_output_tokamak.py
    python examples/getting_started/write_sfincs_output_vmec.py
 
-Finite-beta VMEC-JAX to kinetic transport
+Finite-beta VMEX to kinetic transport
 -----------------------------------------
 
 The finite-beta example is a single Python script that reads the bundled
-``input.nfp2_QA_finite_beta`` VMEC input, runs ``vmec_jax`` for a bounded number
+``input.nfp2_QA_finite_beta`` VMEC input, runs ``vmex`` for a bounded number
 of fixed-boundary iterations, writes a VMEC-style ``wout`` file, and uses that
-file directly in ``sfincs_jax`` with ``geometryScheme=5``.  It then scans the
+file directly in ``dkx`` with ``geometryScheme=5``.  It then scans the
 normalized radial electric field on several flux surfaces, computes ambipolar
 radial-current roots when each scan brackets them, selects a continuous root
 branch, and writes a polished PNG/PDF panel with the radial electric-field
@@ -322,14 +322,14 @@ The radial-profile x-axis is normalized toroidal flux,
 
 .. code-block:: bash
 
-   export SFINCS_JAX_VMEC_JAX_ROOT=/path/to/vmec_jax  # optional for source checkouts
-   python examples/vmec_jax_finite_beta/finite_beta_vmec_to_sfincs.py
+   export DKX_VMEX_ROOT=/path/to/vmex  # optional for source checkouts
+   python examples/vmex_finite_beta/finite_beta_vmec_to_sfincs.py
 
-.. figure:: _static/figures/finite_beta_vmec_jax_sfincs_bootstrap_er.png
-   :alt: Finite-beta VMEC-JAX to sfincs_jax radial profiles, Er scans, fluxes, and magnetic-field contour.
+.. figure:: _static/figures/finite_beta_vmex_sfincs_bootstrap_er.png
+   :alt: Finite-beta VMEX to dkx radial profiles, Er scans, fluxes, and magnetic-field contour.
    :width: 100%
 
-   Finite-beta VMEC-JAX to ``sfincs_jax`` example panel.  The top row shows the
+   Finite-beta VMEX to ``dkx`` example panel.  The top row shows the
    ambipolar radial-electric-field profile versus normalized toroidal flux, the
    bootstrap-current profile versus normalized toroidal flux, and the sampled
    VMEC magnetic-field-strength contour.  The bottom row shows the representative
@@ -338,11 +338,11 @@ The radial-profile x-axis is normalized toroidal flux,
    roots; filled markers show the selected continuous branch; dashed black markers
    show the tighter root-bracket convergence scan at the same kinetic grid.
 
-The direct VMEC path does not require a Boozer transform: ``sfincs_jax`` consumes
+The direct VMEC path does not require a Boozer transform: ``dkx`` consumes
 the generated ``wout`` through the same scheme-5 geometry implementation used by
 file-based VMEC runs.  ``booz_xform_jax`` remains useful for the separate
 differentiable Boozer-spectrum workflow described below.  This finite-beta script
-is a primal transport example: it does not differentiate through the VMEC-JAX
+is a primal transport example: it does not differentiate through the VMEX
 fixed-boundary run, the ``wout`` file boundary, scheme-5 geometry evaluation, the
 SFINCS kinetic solve, or radial postprocessing.  Its summary JSON records that
 boundary in a workflow-contract block, plus radial-profile provenance for the
@@ -371,10 +371,10 @@ and bootstrap current:
 
 .. code-block:: bash
 
-   python examples/vmec_jax_finite_beta/plot_convergence_scan.py
+   python examples/vmex_finite_beta/plot_convergence_scan.py
 
-.. figure:: _static/figures/finite_beta_vmec_jax_sfincs_convergence_scan.png
-   :alt: Finite-beta VMEC-JAX to sfincs_jax convergence scan over kinetic resolution, angular resolution, and Er-root bracket width.
+.. figure:: _static/figures/finite_beta_vmex_sfincs_convergence_scan.png
+   :alt: Finite-beta VMEX to dkx convergence scan over kinetic resolution, angular resolution, and Er-root bracket width.
    :width: 100%
 
    Convergence scan for the finite-beta example.  The top panels show that the
@@ -391,29 +391,29 @@ and bootstrap current:
    is an explicit resolution audit rather than a claim of asymptotic
    kinetic-space convergence.
 
-SFINCS_JAX / Redl bootstrap-current comparison
+DKX / Redl bootstrap-current comparison
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The finite-beta directory includes a standalone diagnostic script for the QA and
 QH SFINCS/Redl benchmarks used in the Zenodo artifact associated with
 arXiv:2205.02914.  The script evaluates the Redl analytic formula on the
 archived VMEC ``wout_new_QA_aScaling.nc`` and ``wout_new_QH_aScaling.nc`` files
-and overlays ``sfincs_jax`` RHSMode=1 kinetic solves.  Use ``--jax-vs-redl`` for
+and overlays ``dkx`` RHSMode=1 kinetic solves.  Use ``--jax-vs-redl`` for
 the first-run path: it
-plots only ``sfincs_jax`` and Redl, and does not load or require a SFINCS
+plots only ``dkx`` and Redl, and does not load or require a SFINCS
 Fortran v3 executable or archived ``psiN_*/sfincsOutput.h5`` files.  If those
 archived SFINCS Fortran v3 outputs are present in the Zenodo tree, the script
 can also overlay them as a reference curve without installing or running the
-Fortran executable.  It intentionally makes one plot only: ``sfincs_jax``, Redl,
+Fortran executable.  It intentionally makes one plot only: ``dkx``, Redl,
 and optionally SFINCS Fortran v3, with no NTX or NEOPAX data.
 
-Run a quick QA ``sfincs_jax``-versus-Redl diagnostic with no Fortran v3
+Run a quick QA ``dkx``-versus-Redl diagnostic with no Fortran v3
 dependency:
 
 .. code-block:: bash
 
    JAX_ENABLE_X64=1 \
-   python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py \
+   python examples/vmex_finite_beta/compare_qs_paper_dkx_redl.py \
      --case QA \
      --quick \
      --jax-vs-redl \
@@ -425,7 +425,7 @@ For the quasi-helical benchmark, switch the case and stem:
 .. code-block:: bash
 
    JAX_ENABLE_X64=1 \
-   python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py \
+   python examples/vmex_finite_beta/compare_qs_paper_dkx_redl.py \
      --case QH \
      --quick \
      --jax-vs-redl \
@@ -433,7 +433,7 @@ For the quasi-helical benchmark, switch the case and stem:
      --stem qs_paper_qh_jax_redl_quick
 
 This no-Fortran mode still uses the Zenodo input decks and VMEC ``wout`` file,
-and still requires ``vmec_jax`` for the Redl algebra; it simply skips every
+and still requires ``vmex`` for the Redl algebra; it simply skips every
 SFINCS Fortran v3 output overlay and metric.
 
 Run the checked 11-surface educational diagnostic used for the same-resolution
@@ -442,7 +442,7 @@ QA figure:
 .. code-block:: bash
 
    JAX_ENABLE_X64=1 \
-   python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py \
+   python examples/vmex_finite_beta/compare_qs_paper_dkx_redl.py \
      --case QA \
      --stem qs_paper_qa_same_resolution_11surface \
      --s-values 0.1,0.15,0.25,0.3,0.45,0.5,0.6,0.7,0.75,0.85,0.9 \
@@ -451,7 +451,7 @@ QA figure:
      --real-ntheta 15 --real-nzeta 15 \
      --velocity-nxi 25 --velocity-nx 6 \
      --fortran-case-root outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5 \
-     --fortran-errorbar-json docs/_static/figures/vmec_jax_finite_beta/qs_paper_qa_same_resolution_11surface_fortran_errorbars.json \
+     --fortran-errorbar-json docs/_static/figures/vmex_finite_beta/qs_paper_qa_same_resolution_11surface_fortran_errorbars.json \
      --require-same-resolution \
      --solver-tolerance 1e-6 \
      --solve-method auto
@@ -460,7 +460,7 @@ Use ``--case QH --stem qs_paper_qh_same_resolution_11surface``,
 ``--fortran-case-root outputs/qs_paper_fortran_reduced_resolution/QH_Ntheta13_Nzeta13_Nxi21_Nx5``,
 and the QH Fortran-errorbar JSON sidecar for the quasi-helical configuration.
 If those local reduced-resolution Fortran sidecars are not present, add
-``--hide-fortran`` to generate a pure ``sfincs_jax``/Redl educational plot.
+``--hide-fortran`` to generate a pure ``dkx``/Redl educational plot.
 Add ``--quick`` for a three-surface smoke plot, or increase the surface list to
 rerun a denser radial diagnostic.
 
@@ -469,22 +469,22 @@ kinetic solves or requiring local HDF5 sidecars:
 
 .. code-block:: bash
 
-   python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py \
-     --from-summary-json docs/_static/figures/vmec_jax_finite_beta/qs_paper_qa_same_resolution_11surface.json \
+   python examples/vmex_finite_beta/compare_qs_paper_dkx_redl.py \
+     --from-summary-json docs/_static/figures/vmex_finite_beta/qs_paper_qa_same_resolution_11surface.json \
      --stem qs_paper_qa_same_resolution_11surface
 
-Add ``--jax-vs-redl`` (alias ``--hide-fortran``) for a pure ``sfincs_jax``
+Add ``--jax-vs-redl`` (alias ``--hide-fortran``) for a pure ``dkx``
 versus Redl plot. The default ``--s-values all`` evaluates all 39 archived
 surfaces; increase the grid beyond ``13 x 13 x 21 x 5`` for production accuracy
 studies.
 
-For an apples-to-apples SFINCS_JAX/SFINCS Fortran v3 figure, use the
+For an apples-to-apples DKX/SFINCS Fortran v3 figure, use the
 same-resolution gate:
 
 .. code-block:: bash
 
    JAX_ENABLE_X64=1 \
-   python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py \
+   python examples/vmex_finite_beta/compare_qs_paper_dkx_redl.py \
      --case QA --s-values 0.5 \
      --match-fortran-resolution \
      --require-same-resolution \
@@ -499,7 +499,7 @@ figure. JAX error bars come from ``--with-errorbars`` refinement probes. Fortran
 error bars are plotted only from an explicit ``--fortran-errorbar-json`` sidecar;
 the archived Zenodo outputs contain one Fortran solve per surface, so they do
 not by themselves define a convergence uncertainty.
-Use ``--verbose-sfincs`` or set ``SFINCS_JAX_EXAMPLE_VERBOSE=1`` for
+Use ``--verbose-sfincs`` or set ``DKX_EXAMPLE_VERBOSE=1`` for
 production-grid reruns so the script forwards phase, preconditioner, and Krylov
 progress messages while setup is running.
 
@@ -516,24 +516,24 @@ refinement bar is ``4.21%`` for QA and ``24.43%`` for QH, so QH is still a
 reduced-grid convergence stress test rather than a production-resolution claim.
 
 For this benchmark script, ``--solve-method auto`` runs in the
-runtime/non-autodiff lane (the script sets ``SFINCS_JAX_IMPLICIT_SOLVE=0``).
+runtime/non-autodiff lane (the script sets ``DKX_IMPLICIT_SOLVE=0``).
 The recorded finite-beta QA/QH figures below remain valid measured evidence,
 and reruns use the matrix-free ``auto`` policy. The script refuses to write
 nonconverged production-sized diagnostics.
 
-.. figure:: _static/figures/vmec_jax_finite_beta/qs_paper_qa_same_resolution_11surface.png
-   :alt: Same-resolution SFINCS_JAX and SFINCS Fortran v3 QA bootstrap-current comparison against the Redl analytic formula.
+.. figure:: _static/figures/vmex_finite_beta/qs_paper_qa_same_resolution_11surface.png
+   :alt: Same-resolution DKX and SFINCS Fortran v3 QA bootstrap-current comparison against the Redl analytic formula.
    :width: 100%
 
    Same-resolution 11-surface QA bootstrap-current gate.  The black curve is
    a local SFINCS Fortran v3 rerun at ``13 x 13 x 21 x 5``.  The red markers are
-   SFINCS_JAX at the same grid, with refinement bars from independent
+   DKX at the same grid, with refinement bars from independent
    real-space and velocity-space probes.  Fortran bars are refinement deltas
    from the archived ``25 x 39 x 60 x 7`` Fortran outputs.  The maximum
    JAX-vs-Fortran difference on the 11 surfaces is ``1.21e-3``.
 
-.. figure:: _static/figures/vmec_jax_finite_beta/qs_paper_qh_same_resolution_11surface.png
-   :alt: Same-resolution SFINCS_JAX and SFINCS Fortran v3 QH bootstrap-current comparison against the Redl analytic formula.
+.. figure:: _static/figures/vmex_finite_beta/qs_paper_qh_same_resolution_11surface.png
+   :alt: Same-resolution DKX and SFINCS Fortran v3 QH bootstrap-current comparison against the Redl analytic formula.
    :width: 100%
 
    Same-resolution 11-surface QH bootstrap-current gate.  The maximum
@@ -541,15 +541,15 @@ nonconverged production-sized diagnostics.
    radius are JAX velocity-space refinement deltas, not a Fortran/JAX
    normalization mismatch.
 
-.. figure:: _static/figures/vmec_jax_finite_beta/qs_paper_sfincs_jax_redl_comparison.png
-   :alt: SFINCS_JAX and SFINCS Fortran v3 bootstrap-current comparison against the Redl analytic formula.
+.. figure:: _static/figures/vmex_finite_beta/qs_paper_dkx_redl_comparison.png
+   :alt: DKX and SFINCS Fortran v3 bootstrap-current comparison against the Redl analytic formula.
    :width: 100%
 
    Paper-backed QA bootstrap-current mixed-grid diagnostic.  The Redl curve uses the
    archived VMEC equilibrium and the same polynomial profile contract used in
    the original SFINCS/Redl comparison.  The black curve is the archived
    SFINCS Fortran v3 output at the paper resolution ``25 x 39 x 60 x 7``.
-   The red markers are the ``sfincs_jax`` benchmark ``auto`` policy at
+   The red markers are the ``dkx`` benchmark ``auto`` policy at
    ``13 x 13 x 21 x 5`` on the same 39 archived radial surfaces.  All solves
    selected ``fortran_reduced_pc_gmres`` and reached the true-residual target.
    The right panels compare the total solve wall time over all plotted radii and
@@ -560,8 +560,8 @@ nonconverged production-sized diagnostics.
    Fortran, so this is a useful reduced-grid diagnostic while the full
    same-resolution production parity claim remains a separate gate.
 
-.. figure:: _static/figures/vmec_jax_finite_beta/qs_paper_qh_sfincs_jax_redl_comparison.png
-   :alt: SFINCS_JAX and SFINCS Fortran v3 QH bootstrap-current comparison against the Redl analytic formula.
+.. figure:: _static/figures/vmex_finite_beta/qs_paper_qh_dkx_redl_comparison.png
+   :alt: DKX and SFINCS Fortran v3 QH bootstrap-current comparison against the Redl analytic formula.
    :width: 100%
 
    Paper-backed QH bootstrap-current diagnostic with the same whole-radius
@@ -583,7 +583,7 @@ along the magnetic field,
 
    \langle J\cdot B\rangle .
 
-``sfincs_jax`` reports the dimensionless diagnostic
+``dkx`` reports the dimensionless diagnostic
 
 .. math::
 
@@ -601,7 +601,7 @@ post-processing script is
    \widehat{J}\,
    \left(437695\right)\left(10^{20}\right)e .
 
-The archived SFINCS Fortran v3 and generated ``sfincs_jax`` outputs both use
+The archived SFINCS Fortran v3 and generated ``dkx`` outputs both use
 ``FSABjHat`` and the same conversion factor.  This makes the plotted Fortran and
 JAX points a direct output-normalization check, not an extra model fit.
 
@@ -650,12 +650,12 @@ where :math:`s=\psi_N` and
 :math:`L_{31}`,
 :math:`L_{32}`, :math:`L_{34}`, and :math:`\alpha` are the Redl/Sauter
 bootstrap coefficients implemented in
-``vmec_jax.redl_bootstrap.redl_bootstrap_jdotb`` and used here only for the
+``vmex.redl_bootstrap.redl_bootstrap_jdotb`` and used here only for the
 analytic Redl curve.
 
 This check also exercises SFINCS v3 radial-coordinate compatibility:
 the archived inputs specify ``inputRadialCoordinate = 1`` and ``psiN_wish``,
-so ``sfincs_jax`` must select the VMEC surface from :math:`s=\psi_N` rather
+so ``dkx`` must select the VMEC surface from :math:`s=\psi_N` rather
 than assuming an ``rN_wish`` input.  The associated unit tests cover this
 ``psiN_wish`` path and the ``Er`` to ``dPhiHat/dpsiHat`` conversion.
 
@@ -669,7 +669,7 @@ Plotting a generated or frozen output file:
 
 .. code-block:: bash
 
-   sfincs_jax --plot sfincsOutput.h5
+   dkx --plot sfincsOutput.h5
    python examples/getting_started/plot_sfincs_output.py
 
 Matrix-free linear solve demo (using frozen PETSc binaries):
@@ -685,30 +685,30 @@ Transport matrices (RHSMode=2/3)
 Upstream v3 uses ``RHSMode=2`` and ``RHSMode=3`` to compute transport matrices by looping over multiple
 right-hand sides (``whichRHS``) and assembling a matrix from diagnostic moments of the solved distribution.
 
-`sfincs_jax` provides both a Python driver and a CLI:
+`dkx` provides both a Python driver and a CLI:
 
 .. code-block:: bash
 
    python examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py
-   sfincs_jax transport-matrix-v3 --input input.namelist --out-matrix transportMatrix.npy
+   dkx transport-matrix-v3 --input input.namelist --out-matrix transportMatrix.npy
 
 Upstream postprocessing (utils/)
 --------------------------------
 
-The mature SFINCS ecosystem includes a set of plotting scripts under `utils/`. `sfincs_jax` vendors these scripts
+The mature SFINCS ecosystem includes a set of plotting scripts under `utils/`. `dkx` vendors these scripts
 in `examples/sfincs_examples/utils/` and can run them non-interactively:
 
 .. code-block:: bash
 
-   sfincs_jax postprocess-upstream --case-dir /path/to/case --util sfincsScanPlot_1 -- pdf
+   dkx postprocess-upstream --case-dir /path/to/case --util sfincsScanPlot_1 -- pdf
 
 For a small end-to-end transport-matrix postprocessing workflow, generate a
 matrix and then call the supported upstream utility wrapper:
 
 .. code-block:: bash
 
-   sfincs_jax transport-matrix-v3 --input input.namelist --out-matrix transportMatrix.npy
-   sfincs_jax postprocess-upstream --case-dir . --util sfincsScanPlot_1 -- --pdf
+   dkx transport-matrix-v3 --input input.namelist --out-matrix transportMatrix.npy
+   dkx postprocess-upstream --case-dir . --util sfincsScanPlot_1 -- --pdf
 
 Some advanced examples require optional dependencies:
 
@@ -720,13 +720,13 @@ Optimization + figures
 ----------------------
 
 The retained optimization examples focus on a QA nfp=2 workflow: a fast
-differentiable proxy objective, an editable VMEC-JAX-style QA script with an
+differentiable proxy objective, an editable VMEX-style QA script with an
 optional bootstrap-current term, and promotion audits from completed
-``sfincs_jax scan-er`` outputs.
+``dkx scan-er`` outputs.
 
 .. code-block:: bash
 
-   python examples/optimization/qa_nfp2_sfincs_jax_objectives.py --objective balanced --steps 20
+   python examples/optimization/qa_nfp2_dkx_objectives.py --objective balanced --steps 20
    python examples/optimization/QA_optimization_bootstrap_current.py
 
 Optional ecosystem solver-library comparisons are research-lane material rather
@@ -737,7 +737,7 @@ Implicit differentiation through solves
 ---------------------------------------
 
 An important differentiability capability is **implicit differentiation** through a linear solve
-(``A x = b``) without backpropagating through Krylov iterations. `sfincs_jax` provides a small helper
+(``A x = b``) without backpropagating through Krylov iterations. `dkx` provides a small helper
 based on `jax.lax.custom_linear_solve` and demonstrates it here:
 
 .. code-block:: bash
@@ -748,12 +748,12 @@ based on `jax.lax.custom_linear_solve` and demonstrates it here:
 VMEC-to-Boozer Differentiable Geometry Workflow
 -----------------------------------------------
 
-For optional ``vmec_jax`` and ``booz_xform_jax`` installations, this example
-checks a public differentiable geometry workflow into ``sfincs_jax``:
+For optional ``vmex`` and ``booz_xform_jax`` installations, this example
+checks a public differentiable geometry workflow into ``dkx``:
 
 .. code-block:: bash
 
-   python examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py \
+   python examples/autodiff/vmex_to_boozer_sfincs_pipeline.py \
      --wout /path/to/wout_circular_tokamak.nc \
      --mboz 3 \
      --nboz 3 \
@@ -768,9 +768,9 @@ The backend-status path is safe in default CI and normal installations:
 
 .. code-block:: bash
 
-   python examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py --check-backends --json
+   python examples/autodiff/vmex_to_boozer_sfincs_pipeline.py --check-backends --json
 
-That command does not import ``vmec_jax`` or ``booz_xform_jax``.  The JSON output
+That command does not import ``vmex`` or ``booz_xform_jax``.  The JSON output
 contains a ``workflow_contract`` with shallow backend availability, differentiability
 labels, the exact geometry-proxy gradient claim, deferred kinetic-gradient work,
 and a no-overclaim gate that forbids presenting this lane as full
@@ -781,14 +781,14 @@ Parallel and scaling examples
 
 The legacy transport-worker scaling benchmark was deleted with the legacy
 pipeline. Host-device parallelism for canonical runs is configured through
-the ``SFINCS_JAX_CORES``/``SFINCS_JAX_CPU_DEVICES`` environment knobs
+the ``DKX_CORES``/``DKX_CPU_DEVICES`` environment knobs
 (:doc:`parallelism`); single-case sharded RHSMode=1 scaling remains a research
 lane rather than a stable example.
 
 .. note::
 
    ``geometryScheme=5`` (VMEC) and analytic tokamak ``geometryScheme=1`` are
-   supported public examples. `sfincs_jax` does not expose a
+   supported public examples. `dkx` does not expose a
    separate Miller-parameter geometry mode in the public CLI/API, so tokamak
    examples use the supported analytic Boozer tokamak path instead.
 
@@ -800,11 +800,11 @@ pattern for gradients without backpropagating through every Krylov iteration.
 Upstream SFINCS example inputs
 --------------------------------
 
-For convenience, `sfincs_jax` vendors the upstream-style SFINCS-v3 example suite
+For convenience, `dkx` vendors the upstream-style SFINCS-v3 example suite
 in `examples/sfincs_examples/`. These files are recognizable reference points
 for SFINCS users and support compatibility audits. A best-effort runner is
 provided:
 
 .. code-block:: bash
 
-   python examples/sfincs_examples/run_sfincs_jax.py --write-output
+   python examples/sfincs_examples/run_dkx.py --write-output

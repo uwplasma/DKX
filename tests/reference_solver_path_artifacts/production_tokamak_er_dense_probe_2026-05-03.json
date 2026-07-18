@@ -7,7 +7,7 @@
     "host": "local macOS",
     "backend": "cpu",
     "JAX_ENABLE_X64": "True",
-    "input_root": "/tmp/sfincs_jax_prod_bounded_local_ff15535_2026_05_03"
+    "input_root": "/tmp/dkx_prod_bounded_local_ff15535_2026_05_03"
   },
   "production_bounded_suite": {
     "launched": 11,
@@ -221,6 +221,6 @@
     "active_size_min_default": 5000,
     "active_size_max_default": 6500,
     "dense_matrix_bytes_max_default": 350000000,
-    "user_disable_env": "SFINCS_JAX_RHSMODE1_TOKAMAK_ER_DENSE=0"
+    "user_disable_env": "DKX_RHSMODE1_TOKAMAK_ER_DENSE=0"
   }
 }

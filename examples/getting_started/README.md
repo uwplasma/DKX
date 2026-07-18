@@ -1,6 +1,6 @@
 # Getting started
 
-These examples introduce the basic `sfincs_jax` workflow without requiring the Fortran v3 executable.
+These examples introduce the basic `dkx` workflow without requiring the Fortran v3 executable.
 
 Suggested order:
 

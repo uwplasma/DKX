@@ -1,6 +1,6 @@
 {
   "bootstrap_objective": 0.001766389081777711,
-  "claim_boundary": "This audit evaluates completed sfincs_jax kinetic outputs. It promotes a proxy optimization candidate only if the scan is bracketed, residual-gated, and the requested observables are present.",
+  "claim_boundary": "This audit evaluates completed dkx kinetic outputs. It promotes a proxy optimization candidate only if the scan is bracketed, residual-gated, and the requested observables are present.",
   "electron_root_penalty": 0.0,
   "failures": [],
   "flux_objective": {
@@ -23,7 +23,7 @@
         1.4313036515967776e-08,
         2.3868772135427496e-08
       ],
-      "path": "/tmp/sfincs_jax_finite_beta_9x9x7_gpu_campaign/gpu_scan/Er-1/sfincsOutput.h5",
+      "path": "/tmp/dkx_finite_beta_9x9x7_gpu_campaign/gpu_scan/Er-1/sfincsOutput.h5",
       "radial_current": -9.55573561945972e-09,
       "residual_gate": {
         "cpu_gpu_relative_difference": null,
@@ -47,7 +47,7 @@
         2.100957067554295e-08,
         2.3743929935205568e-08
       ],
-      "path": "/tmp/sfincs_jax_finite_beta_9x9x7_gpu_campaign/gpu_scan/Er0/sfincsOutput.h5",
+      "path": "/tmp/dkx_finite_beta_9x9x7_gpu_campaign/gpu_scan/Er0/sfincsOutput.h5",
       "radial_current": -2.734359259662617e-09,
       "residual_gate": {
         "cpu_gpu_relative_difference": null,
@@ -71,7 +71,7 @@
         2.2684544326813417e-08,
         2.3712592512110225e-08
       ],
-      "path": "/tmp/sfincs_jax_finite_beta_9x9x7_gpu_campaign/gpu_scan/Er0.25/sfincsOutput.h5",
+      "path": "/tmp/dkx_finite_beta_9x9x7_gpu_campaign/gpu_scan/Er0.25/sfincsOutput.h5",
       "radial_current": -1.0280481852968082e-09,
       "residual_gate": {
         "cpu_gpu_relative_difference": null,
@@ -95,7 +95,7 @@
         2.4359392125712113e-08,
         2.368126852274095e-08
       ],
-      "path": "/tmp/sfincs_jax_finite_beta_9x9x7_gpu_campaign/gpu_scan/Er0.5/sfincsOutput.h5",
+      "path": "/tmp/dkx_finite_beta_9x9x7_gpu_campaign/gpu_scan/Er0.5/sfincsOutput.h5",
       "radial_current": 6.781236029711641e-10,
       "residual_gate": {
         "cpu_gpu_relative_difference": null,
@@ -119,7 +119,7 @@
         2.603388335727035e-08,
         2.3649990066584893e-08
       ],
-      "path": "/tmp/sfincs_jax_finite_beta_9x9x7_gpu_campaign/gpu_scan/Er0.75/sfincsOutput.h5",
+      "path": "/tmp/dkx_finite_beta_9x9x7_gpu_campaign/gpu_scan/Er0.75/sfincsOutput.h5",
       "radial_current": 2.3838932906854574e-09,
       "residual_gate": {
         "cpu_gpu_relative_difference": null,
@@ -143,7 +143,7 @@
         2.7707788506260668e-08,
         2.3618789252165434e-08
       ],
-      "path": "/tmp/sfincs_jax_finite_beta_9x9x7_gpu_campaign/gpu_scan/Er1/sfincsOutput.h5",
+      "path": "/tmp/dkx_finite_beta_9x9x7_gpu_campaign/gpu_scan/Er1/sfincsOutput.h5",
       "radial_current": 4.088999254095234e-09,
       "residual_gate": {
         "cpu_gpu_relative_difference": null,
@@ -167,7 +167,7 @@
         5.423764329033956e-08,
         2.3156418153647426e-08
       ],
-      "path": "/tmp/sfincs_jax_finite_beta_9x9x7_gpu_campaign/gpu_scan/Er5/sfincsOutput.h5",
+      "path": "/tmp/dkx_finite_beta_9x9x7_gpu_campaign/gpu_scan/Er5/sfincsOutput.h5",
       "radial_current": 3.1081225136692133e-08,
       "residual_gate": {
         "cpu_gpu_relative_difference": null,
@@ -181,7 +181,7 @@
       "residual_target": 1.2917439402581075e-12
     }
   ],
-  "scan_dir": "/tmp/sfincs_jax_finite_beta_9x9x7_gpu_campaign/gpu_scan",
+  "scan_dir": "/tmp/dkx_finite_beta_9x9x7_gpu_campaign/gpu_scan",
   "selected_root": {
     "bracket": [
       0.25,
@@ -191,5 +191,5 @@
     "root_type": "electron",
     "slope": 6.824687153071889e-09
   },
-  "workflow": "sfincs_jax_optimization_high_fidelity_promotion"
+  "workflow": "dkx_optimization_high_fidelity_promotion"
 }
