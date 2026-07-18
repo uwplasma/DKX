@@ -14,21 +14,6 @@ EXPECTED_TREE = REPO_ROOT / "tests" / "fixtures" / "source_tree_expected.json"
 CORE_SLIM_INVENTORY = REPO_ROOT / "tests" / "fixtures" / "core_slim_inventory.json"
 PACKAGE_README = PACKAGE_ROOT / "README.md"
 SOURCE_MAP_DOC = REPO_ROOT / "docs" / "source_map.rst"
-ACTIVE_PLAN = REPO_ROOT / "plan_final.md"
-EXECUTION_LOG = REPO_ROOT / "plan.md"
-ALLOWED_ROOT_PLAN_FILES = ("plan.md", "plan_final.md")
-ACTIVE_PLAN_MAX_LINES = 420
-ACTIVE_PLAN_REQUIRED_SECTIONS = (
-    "## One-Sentence Goal",
-    "## Current Review State",
-    "## Open Lanes",
-    "## Source Structure Rules",
-    "## Ordered Finish Plan",
-    "## Concrete Code-Audit Rules",
-    "## Standard Validation Commands",
-    "## Completion Gates",
-    "## Explicit Deferred Items",
-)
 PACKAGE_README_REQUIRED_SECTIONS = (
     "## The Canonical Stack (the architecture)",
     "## Other Root Modules",
@@ -214,25 +199,17 @@ def test_source_tree_consolidation_target_matches_current_tree() -> None:
     assert expected["temporary_init_only_packages"] == []
 
 
-def test_plan_final_is_the_single_authoritative_plan() -> None:
-    """Prevent competing root-level plans from drifting into PR review."""
+def test_no_planning_artifacts_in_the_public_repo() -> None:
+    """Planning docs live in a private archive, not the public repository.
 
-    root_plan_files = sorted(path.name for path in REPO_ROOT.glob("*plan*.md"))
-    assert root_plan_files == list(ALLOWED_ROOT_PLAN_FILES)
+    ``plan.md`` / ``plan_final.md`` (development-history planning) and the
+    ``.test_durations`` pytest-split snapshot were moved out of the public
+    tree to keep it light; guard that none of them drift back in.
+    """
 
-    active_text = ACTIVE_PLAN.read_text(encoding="utf-8")
-    assert "single active plan" in active_text
-    assert "`plan.md` is the historical execution log" in active_text
-    assert "Do not create another competing plan" in active_text
-    assert len(active_text.splitlines()) <= ACTIVE_PLAN_MAX_LINES
-    for section in ACTIVE_PLAN_REQUIRED_SECTIONS:
-        assert section in active_text
-
-    log_text = EXECUTION_LOG.read_text(encoding="utf-8")
-    assert "Historical log only" in log_text
-    assert "Authoritative plan: `plan_final.md`" in log_text
-    assert "if this file conflicts with `plan_final.md`, follow" in log_text
-    assert "active implementation branch" not in log_text.lower()
+    stray_plans = sorted(path.name for path in REPO_ROOT.glob("*plan*.md"))
+    assert stray_plans == [], f"planning docs must not be tracked: {stray_plans}"
+    assert not (REPO_ROOT / ".test_durations").exists()
 
 
 def test_core_slim_inventory_covers_large_phase_a_owners() -> None:
