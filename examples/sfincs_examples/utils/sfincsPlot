@@ -2,7 +2,7 @@
 
 """Plot geometry and core diagnostics from a single sfincsOutput.h5.
 
-If ``sfincsOutput.h5`` is missing, this script runs sfincs_jax using a local
+If ``sfincsOutput.h5`` is missing, this script runs dkx using a local
 ``input.namelist``. Use ``--save-prefix /path/prefix`` to write figures to disk
 without opening a GUI window. Update ``input.namelist`` to change the physics
 inputs, or point this script at a different directory before running.
@@ -37,7 +37,7 @@ except Exception as exc:  # noqa: BLE001
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
-from sfincs_jax_driver import run_sfincs_jax
+from dkx_driver import run_dkx
 
 print ("This is "+ inspect.getfile(inspect.currentframe()))
 display_plot = True
@@ -58,7 +58,7 @@ output_path = Path("sfincsOutput.h5")  # Default output name used by sfincsScan 
 if not output_path.exists():
     input_path = Path("input.namelist")
     if input_path.exists():
-        run_sfincs_jax(input_namelist=input_path, output_path=output_path)
+        run_dkx(input_namelist=input_path, output_path=output_path)
     else:
         print ("Unable to open sfincsOutput.h5")
         raise

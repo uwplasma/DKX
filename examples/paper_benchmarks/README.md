@@ -44,8 +44,8 @@ and a single figure + JSON pair written to
   error bars, and one end-to-end `jax.value_and_grad` of the total
   bootstrap current through the differentiable equilibrium/Boozer/kinetic
   chain [M. Landreman, S. Buller & M. Drevlak, Phys. Plasmas 29, 082501
-  (2022)].  Requires the optional vmec_jax + booz_xform_jax companions;
-  checkpointed and resumable (`SFINCS_JAX_BOOT_LOOP_MAX_NEW_STAGES`).
+  (2022)].  Requires the optional vmex + booz_xform_jax companions;
+  checkpointed and resumable (`DKX_BOOT_LOOP_MAX_NEW_STAGES`).
 
 ## Running
 
@@ -57,6 +57,6 @@ python examples/paper_benchmarks/monoenergetic_icnts_w7x.py
 
 Set `SFINCS_FORTRAN_EXE=/path/to/sfincs` to enable the Fortran cross-check
 points (skipped otherwise).  Equilibrium files are fetched into the local
-`sfincs_jax` data cache on first use.  Expect several minutes per script at
+`dkx` data cache on first use.  Expect several minutes per script at
 production resolution; the CI-sized regression version of each case lives in
 the test suite (tests/test_paper_benchmark_monoenergetic in the repo root).

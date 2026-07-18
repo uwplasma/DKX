@@ -4,8 +4,8 @@ from pathlib import Path
 
 import numpy as np
 
-from sfincs_jax.api import write_output
-from sfincs_jax.io import read_sfincs_h5
+from dkx.api import write_output
+from dkx.io import read_sfincs_h5
 
 
 def _replace_line(text: str, old: str, new: str) -> str:
@@ -43,7 +43,7 @@ def test_monoenergetic_transport_write_output_exports_delta_f_and_full_f(tmp_pat
     input_path.write_text(text, encoding="utf-8")
 
     out_path = tmp_path / "monoenergetic_export.sfincsOutput.h5"
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_LOW_MEMORY", "1")
+    monkeypatch.setenv("DKX_TRANSPORT_LOW_MEMORY", "1")
     write_output(input_path, out_path)
 
     out = read_sfincs_h5(out_path)

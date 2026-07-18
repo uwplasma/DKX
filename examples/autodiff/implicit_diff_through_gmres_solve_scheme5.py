@@ -15,9 +15,9 @@ We treat `nu_n` (normalized collisionality) as a differentiable scalar and compu
 
   d/dnu_n  ( 0.5 * || x(nu_n) ||^2 ),  where  A(nu_n) x = rhs(nu_n).
 
-Requirements: none beyond the base `sfincs_jax` install.
+Requirements: none beyond the base `dkx` install.
 
-`--method` selects the `sfincs_jax.solve.solve` tier (`auto` routes this PAS deck
+`--method` selects the `dkx.solve.solve` tier (`auto` routes this PAS deck
 to the structured direct tier; `gmres` forces the recycled-Krylov tier).
 """
 
@@ -35,9 +35,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.drift_kinetic import KineticOperator, kinetic_operator_from_namelist
-from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.solve import solve
+from dkx.drift_kinetic import KineticOperator, kinetic_operator_from_namelist
+from dkx.namelist import read_sfincs_input
+from dkx.solve import solve
 
 
 def _with_nu_n(op: KineticOperator, nu_n: jnp.ndarray) -> KineticOperator:

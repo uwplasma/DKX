@@ -5,13 +5,13 @@ One in-process case = one backend (pick it with ``JAX_PLATFORMS=cpu`` or
 
 * ``operator_build`` — namelist -> :class:`KineticOperator` (host + device setup)
 * ``rhs`` — drive assembly
-* ``solve_cold`` — first :func:`sfincs_jax.solve.solve` (includes JIT compile,
+* ``solve_cold`` — first :func:`dkx.solve.solve` (includes JIT compile,
   or the persistent-cache load when the cache is warm)
 * ``solve_warm`` — second identical solve (cached executable; pure execution)
 * ``moments`` — output moments from the solution
 
 Compilation-cache state is controlled by the caller: point
-``SFINCS_JAX_COMPILATION_CACHE_DIR`` at a fresh directory for a true cold
+``DKX_COMPILATION_CACHE_DIR`` at a fresh directory for a true cold
 start, reuse it for a cache-warm cold start.
 
 Usage (from the repo root)::
@@ -45,7 +45,7 @@ from pathlib import Path
 # This tool measures the *requested* backend: pin solve() to the default
 # device so the size-aware auto-routing (solve(device="auto")) cannot silently
 # move small solves to the CPU mid-scan. Explicit env settings still win.
-os.environ.setdefault("SFINCS_JAX_SOLVE_DEVICE", "default")
+os.environ.setdefault("DKX_SOLVE_DEVICE", "default")
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
@@ -97,10 +97,10 @@ def _write_deck(base_text: str, patches: list[tuple[str, dict[str, str]]], workd
 def _phase_profile(deck: Path, *, method: str, tol: float, label: str) -> dict:
     import jax
 
-    from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
-    from sfincs_jax.namelist import read_sfincs_input
-    from sfincs_jax.run import profile_moments_from_operator
-    from sfincs_jax.solve import solve
+    from dkx.drift_kinetic import kinetic_operator_from_namelist
+    from dkx.namelist import read_sfincs_input
+    from dkx.run import profile_moments_from_operator
+    from dkx.solve import solve
 
     report: dict = {"case": label, "backend": jax.default_backend(), "method_requested": method}
     t0 = time.perf_counter()

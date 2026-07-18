@@ -3,14 +3,14 @@ from __future__ import annotations
 import numpy as np
 import jax.numpy as jnp
 
-from sfincs_jax.collisions import (
+from dkx.collisions import (
     apply_fokker_planck_v3,
     apply_fokker_planck_v3_phi1,
     make_fokker_planck_v3_operator,
     make_fokker_planck_v3_phi1_operator,
 )
-from sfincs_jax.inputs import load_sfincs_input
-from sfincs_jax.run import _grids_from_input
+from dkx.inputs import load_sfincs_input
+from dkx.run import _grids_from_input
 
 
 def test_phi1_in_collisions_reduces_to_no_phi1_when_phi1_zero() -> None:

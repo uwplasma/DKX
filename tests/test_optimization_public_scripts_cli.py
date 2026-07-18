@@ -12,18 +12,18 @@ _REPO = Path(__file__).resolve().parents[1]
 _OPTIMIZATION_DIR = _REPO / "examples" / "optimization"
 
 
-def _local_vmec_jax_root() -> Path | None:
-    env_root = os.environ.get("SFINCS_JAX_VMEC_JAX_ROOT")
+def _local_vmex_root() -> Path | None:
+    env_root = os.environ.get("DKX_VMEX_ROOT")
     candidates = [
         Path(env_root).expanduser() if env_root else None,
-        Path("/Users/rogeriojorge/local/vmec_jax"),
-        Path("/Users/rogeriojorge/vmec_jax"),
+        Path("/Users/rogeriojorge/local/vmex"),
+        Path("/Users/rogeriojorge/vmex"),
     ]
     for candidate in candidates:
         if candidate is None:
             continue
         result_dir = candidate / "examples" / "optimization" / "results" / "qa_opt" / "ess"
-        if (candidate / "vmec_jax").is_dir() and (result_dir / "wout_final.nc").is_file():
+        if (candidate / "vmex").is_dir() and (result_dir / "wout_final.nc").is_file():
             return candidate
     return None
 
@@ -57,14 +57,14 @@ def _assert_artifacts(out_dir: Path, stem: str) -> dict:
 
 def test_public_optimization_scripts_show_help() -> None:
     scripts = {
-        _OPTIMIZATION_DIR / "qa_nfp2_sfincs_jax_objectives.py": ["--out-dir", "--stem"],
+        _OPTIMIZATION_DIR / "qa_nfp2_dkx_objectives.py": ["--out-dir", "--stem"],
         _OPTIMIZATION_DIR / "qa_nfp2_bootstrap_current_comparison.py": [
-            "--vmec-jax-root",
+            "--vmex-root",
             "--comparison-result-dir",
         ],
-        _OPTIMIZATION_DIR / "evaluate_sfincs_jax_promotion_scan.py": ["--out-dir", "--stem"],
-        _OPTIMIZATION_DIR / "launch_sfincs_jax_candidate_scan.py": ["--out-dir", "--promotion-stem"],
-        _OPTIMIZATION_DIR / "compare_sfincs_jax_promotion_runs.py": ["--out-dir", "--stem"],
+        _OPTIMIZATION_DIR / "evaluate_dkx_promotion_scan.py": ["--out-dir", "--stem"],
+        _OPTIMIZATION_DIR / "launch_dkx_candidate_scan.py": ["--out-dir", "--promotion-stem"],
+        _OPTIMIZATION_DIR / "compare_dkx_promotion_runs.py": ["--out-dir", "--stem"],
     }
 
     for script, expected_flags in scripts.items():
@@ -77,7 +77,7 @@ def test_public_optimization_scripts_show_help() -> None:
 
 def test_qa_nfp2_public_script_writes_fast_demo_artifacts(tmp_path: Path) -> None:
     stem = "qa_proxy_cli"
-    script = _OPTIMIZATION_DIR / "qa_nfp2_sfincs_jax_objectives.py"
+    script = _OPTIMIZATION_DIR / "qa_nfp2_dkx_objectives.py"
 
     _run_script(
         script,
@@ -92,7 +92,7 @@ def test_qa_nfp2_public_script_writes_fast_demo_artifacts(tmp_path: Path) -> Non
     )
 
     payload = _assert_artifacts(tmp_path, stem)
-    assert payload["workflow"] == "qa_nfp2_sfincs_jax_neoclassical_optimization_proxy"
+    assert payload["workflow"] == "qa_nfp2_dkx_neoclassical_optimization_proxy"
     assert payload["nfp"] == 2
     assert payload["objective_preset"] == "balanced"
     assert payload["autodiff_gradient_gate"]["status"] == "pass"
@@ -103,15 +103,15 @@ def test_qa_nfp2_public_script_writes_fast_demo_artifacts(tmp_path: Path) -> Non
 def test_qa_bootstrap_comparison_script_writes_fast_demo_artifacts(tmp_path: Path) -> None:
     stem = "qa_bootstrap_comparison_cli"
     script = _OPTIMIZATION_DIR / "qa_nfp2_bootstrap_current_comparison.py"
-    vmec_jax_root = _local_vmec_jax_root()
-    if vmec_jax_root is None:
-        pytest.skip("vmec_jax QA_optimization.py result is not available")
+    vmex_root = _local_vmex_root()
+    if vmex_root is None:
+        pytest.skip("vmex QA_optimization.py result is not available")
 
     _run_script(
         script,
         [
-            "--vmec-jax-root",
-            str(vmec_jax_root),
+            "--vmex-root",
+            str(vmex_root),
             "--out-dir",
             str(tmp_path),
             "--stem",
@@ -120,17 +120,17 @@ def test_qa_bootstrap_comparison_script_writes_fast_demo_artifacts(tmp_path: Pat
     )
 
     payload = _assert_artifacts(tmp_path, stem)
-    assert payload["workflow"] == "sfincs_jax_vmec_jax_qa_optimization_current_diagnostic"
+    assert payload["workflow"] == "dkx_vmex_qa_optimization_current_diagnostic"
     assert payload["nfp"] == 2
     assert payload["targets"] == {"aspect_ratio": 5.0, "iota": 0.41}
     assert payload["qa_optimization"]["gate"]["status"] == "pass"
     assert abs(payload["qa_optimization"]["metrics"]["mean_iota"] - 0.41) < 2.0e-2
-    assert "not a completed high-fidelity sfincs_jax kinetic bootstrap-current claim" in payload["claim_boundary"]
+    assert "not a completed high-fidelity dkx kinetic bootstrap-current claim" in payload["claim_boundary"]
     assert payload["comparison"]["status"] == "baseline_only"
-    assert "sfincs_jax scan-er" in " ".join(payload["promotion_plan"]["required_gates"])
+    assert "dkx scan-er" in " ".join(payload["promotion_plan"]["required_gates"])
 
 
-def test_vmec_jax_bootstrap_optimization_script_is_reviewable_max_mode3() -> None:
+def test_vmex_bootstrap_optimization_script_is_reviewable_max_mode3() -> None:
     script = _OPTIMIZATION_DIR / "QA_optimization_bootstrap_current.py"
     text = script.read_text(encoding="utf-8")
 
@@ -139,12 +139,12 @@ def test_vmec_jax_bootstrap_optimization_script_is_reviewable_max_mode3() -> Non
     assert "INCLUDE_BOOTSTRAP_CURRENT_OBJECTIVE = False" in text
     assert "vj.JDotB" in text
     assert "RedlBootstrapMismatch" in text
-    assert "SFINCS_JAX_VMEC_JAX_ROOT" in text
+    assert "DKX_VMEX_ROOT" in text
 
 
 def test_promotion_public_script_writes_fast_demo_artifacts(tmp_path: Path) -> None:
     stem = "promotion_cli"
-    script = _OPTIMIZATION_DIR / "evaluate_sfincs_jax_promotion_scan.py"
+    script = _OPTIMIZATION_DIR / "evaluate_dkx_promotion_scan.py"
 
     _run_script(
         script,
@@ -159,7 +159,7 @@ def test_promotion_public_script_writes_fast_demo_artifacts(tmp_path: Path) -> N
     )
 
     payload = _assert_artifacts(tmp_path, stem)
-    assert payload["workflow"] == "sfincs_jax_optimization_high_fidelity_promotion"
+    assert payload["workflow"] == "dkx_optimization_high_fidelity_promotion"
     assert payload["gate_status"] == "pass"
     assert payload["selected_root"]["root_type"] == "electron"
     assert payload["bootstrap_objective"] > 0.0
@@ -170,9 +170,9 @@ def test_promotion_public_script_writes_fast_demo_artifacts(tmp_path: Path) -> N
 def test_promotion_public_script_allows_two_species_scan_without_impurity_objective(tmp_path: Path) -> None:
     stem = "promotion_two_species_cli"
     scan_dir = tmp_path / "scan"
-    script = _OPTIMIZATION_DIR / "evaluate_sfincs_jax_promotion_scan.py"
+    script = _OPTIMIZATION_DIR / "evaluate_dkx_promotion_scan.py"
 
-    from sfincs_jax.io import write_sfincs_h5
+    from dkx.io import write_sfincs_h5
 
     for er, current in [(-0.3, -1.0), (0.3, -0.2), (1.0, 0.3), (3.0, 1.4)]:
         run_dir = scan_dir / f"Er{er:g}"
@@ -217,7 +217,7 @@ def test_candidate_scan_launcher_and_comparison_script_write_artifacts(tmp_path:
     proxy.write_text(
         json.dumps(
             {
-                "workflow": "qa_nfp2_sfincs_jax_neoclassical_optimization_proxy",
+                "workflow": "qa_nfp2_dkx_neoclassical_optimization_proxy",
                 "objective_preset": "balanced",
                 "final_components": {"bootstrap": 0.1},
                 "autodiff_gradient_gate": {"status": "pass"},
@@ -229,7 +229,7 @@ def test_candidate_scan_launcher_and_comparison_script_write_artifacts(tmp_path:
     input_path.write_text("&physicsParameters\n/\n", encoding="utf-8")
 
     _run_script(
-        _OPTIMIZATION_DIR / "launch_sfincs_jax_candidate_scan.py",
+        _OPTIMIZATION_DIR / "launch_dkx_candidate_scan.py",
         [
             "--proxy-summary",
             str(proxy),
@@ -246,11 +246,11 @@ def test_candidate_scan_launcher_and_comparison_script_write_artifacts(tmp_path:
         ],
     )
     plan = json.loads((tmp_path / "candidate_scan" / "candidate_scan_plan.json").read_text(encoding="utf-8"))
-    assert plan["workflow"] == "sfincs_jax_optimization_candidate_scan_plan"
+    assert plan["workflow"] == "dkx_optimization_candidate_scan_plan"
     assert plan["er_values"] == [-1.0, 0.0, 1.0]
 
     promotion = {
-        "workflow": "sfincs_jax_optimization_high_fidelity_promotion",
+        "workflow": "dkx_optimization_high_fidelity_promotion",
         "selected_root": {"er": 0.5, "root_type": "electron"},
         "bootstrap_objective": 0.01,
         "flux_objective": {"total": 0.02},
@@ -262,7 +262,7 @@ def test_candidate_scan_launcher_and_comparison_script_write_artifacts(tmp_path:
     gpu.write_text(json.dumps({**promotion, "bootstrap_objective": 0.010000001}) + "\n", encoding="utf-8")
     stem = "comparison_cli"
     _run_script(
-        _OPTIMIZATION_DIR / "compare_sfincs_jax_promotion_runs.py",
+        _OPTIMIZATION_DIR / "compare_dkx_promotion_runs.py",
         [
             "--cpu",
             str(cpu),
@@ -277,13 +277,13 @@ def test_candidate_scan_launcher_and_comparison_script_write_artifacts(tmp_path:
         ],
     )
     comparison = _assert_artifacts(tmp_path, stem)
-    assert comparison["workflow"] == "sfincs_jax_optimization_promotion_comparison"
+    assert comparison["workflow"] == "dkx_optimization_promotion_comparison"
     assert comparison["status"] == "pass"
 
 
 def test_comparison_script_returns_two_when_cpu_gpu_gate_fails(tmp_path: Path) -> None:
     promotion = {
-        "workflow": "sfincs_jax_optimization_high_fidelity_promotion",
+        "workflow": "dkx_optimization_high_fidelity_promotion",
         "selected_root": {"er": 0.5, "root_type": "electron"},
         "bootstrap_objective": 0.01,
         "flux_objective": {"total": 0.02},
@@ -312,7 +312,7 @@ def test_comparison_script_returns_two_when_cpu_gpu_gate_fails(tmp_path: Path) -
     result = subprocess.run(
         [
             sys.executable,
-            str(_OPTIMIZATION_DIR / "compare_sfincs_jax_promotion_runs.py"),
+            str(_OPTIMIZATION_DIR / "compare_dkx_promotion_runs.py"),
             "--cpu",
             str(cpu),
             "--gpu",

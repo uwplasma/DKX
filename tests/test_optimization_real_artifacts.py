@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from sfincs_jax.workflows.optimization import estimate_rhs1_active_size
+from dkx.workflows.optimization import estimate_rhs1_active_size
 
 
 _REPO = Path(__file__).resolve().parents[1]
@@ -52,8 +52,8 @@ def test_finite_beta_electron_root_ladder_config_resolves_checked_artifacts() ->
     summary = _load("qa_nfp2_finite_beta_electron_root_convergence_ladder.json")
 
     assert config["production_floor"] == summary["production_floor"]
-    assert config["workflow"] == "sfincs_jax_finite_beta_electron_root_convergence_ladder_config"
-    assert summary["workflow"] == "sfincs_jax_finite_beta_electron_root_convergence_ladder"
+    assert config["workflow"] == "dkx_finite_beta_electron_root_convergence_ladder_config"
+    assert summary["workflow"] == "dkx_finite_beta_electron_root_convergence_ladder"
 
     config_tiers = config["tiers"]
     summary_tiers = summary["tiers"]
@@ -193,9 +193,9 @@ def test_finite_beta_xblock_policy_probe_window_stays_below_production_floor() -
 def test_qa_bootstrap_current_comparison_artifact_is_vmec_backed_and_finite_iota() -> None:
     payload = _load("qa_nfp2_bootstrap_current_comparison.json")
 
-    assert payload["workflow"] == "sfincs_jax_vmec_jax_qa_optimization_current_diagnostic"
-    assert "vmec_jax QA_optimization.py outputs" in payload["claim_boundary"]
-    assert "not a completed high-fidelity sfincs_jax kinetic bootstrap-current claim" in payload["claim_boundary"]
+    assert payload["workflow"] == "dkx_vmex_qa_optimization_current_diagnostic"
+    assert "vmex QA_optimization.py outputs" in payload["claim_boundary"]
+    assert "not a completed high-fidelity dkx kinetic bootstrap-current claim" in payload["claim_boundary"]
     assert payload["targets"] == {"aspect_ratio": 5.0, "iota": 0.41}
     assert payload["comparison"]["status"] == "baseline_only"
     qa = payload["qa_optimization"]

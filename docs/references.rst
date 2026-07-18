@@ -2,7 +2,7 @@ References and related work
 ===========================
 
 This page collects the main literature that informs the physics model, numerics,
-validation strategy, and workflow design of `sfincs_jax`.
+validation strategy, and workflow design of `dkx`.
 
 Foundational neoclassical theory
 --------------------------------
@@ -31,16 +31,16 @@ SFINCS model, collision operator, and speed grid
   Phys. Plasmas **21**, 042503 (2014). The SFINCS paper: the radially local
   drift-kinetic model, the ``Delta``/``alpha``/``nu_n`` normalization, and the
   full-vs-DKES trajectory comparison implemented in
-  :mod:`sfincs_jax.drift_kinetic`.
+  :mod:`dkx.drift_kinetic`.
 - M. Mollén et al.,
   `Implementation of a full linearized Fokker-Planck collision operator in SFINCS <https://arxiv.org/abs/1504.04810>`_.
-  Basis for the Fokker--Planck operator in :mod:`sfincs_jax.collisions`.
+  Basis for the Fokker--Planck operator in :mod:`dkx.collisions`.
 - M. Landreman and D. R. Ernst,
   `New velocity-space discretization for continuum kinetic calculations and Fokker--Planck collisions <https://arxiv.org/abs/1210.5289>`_,
   J. Comput. Phys. **243**, 130 (2013). The non-classical orthogonal-polynomial
   speed grid and Rosenbluth-potential field-term treatment implemented in
-  :func:`sfincs_jax.phase_space.make_speed_grid` and the Rosenbluth-potential
-  terms in :mod:`sfincs_jax.collisions`.
+  :func:`dkx.phase_space.make_speed_grid` and the Rosenbluth-potential
+  terms in :mod:`dkx.collisions`.
 - A. Redl et al.,
   `A new set of analytical formulae for the computation of the bootstrap current and the neoclassical conductivity in tokamaks <https://doi.org/10.1063/5.0012664>`_,
   Phys. Plasmas **28**, 022502 (2021). Bootstrap-current formula used as an
@@ -65,13 +65,13 @@ same discrete operator:
   the Legendre-mode monoenergetic drift-kinetic equation and the variational
   principle whose upper and lower bounds on the transport coefficients converge
   toward the true value from opposite sides as the Legendre resolution grows —
-  the basis for :mod:`sfincs_jax.variational`.
+  the basis for :mod:`dkx.variational`.
 - F. J. Escoto,
   `Fast and accurate calculation of the bootstrap current and radial neoclassical transport in low collisionality stellarator plasmas <https://arxiv.org/abs/2510.27513>`_,
   PhD thesis (2025). Derives the tridiagonal structure of the Legendre-mode
   representation of the monoenergetic drift-kinetic equation and the block
-  elimination that :meth:`sfincs_jax.drift_kinetic.KineticOperator.to_block_tridiagonal`
-  and :func:`sfincs_jax.solve.solve` exploit.
+  elimination that :meth:`dkx.drift_kinetic.KineticOperator.to_block_tridiagonal`
+  and :func:`dkx.solve.solve` exploit.
 
 Geometry and benchmark configurations
 -------------------------------------
@@ -79,7 +79,7 @@ Geometry and benchmark configurations
 - C. D. Beidler et al.,
   `Benchmarking of the mono-energetic transport coefficients -- results from the International Collaboration on Neoclassical Transport in Stellarators (ICNTS) <https://doi.org/10.1088/0029-5515/51/7/076001>`_,
   Nucl. Fusion **51**, 076001 (2011). Source of the analytic W7-X / LHD harmonic
-  tables used by :meth:`sfincs_jax.magnetic_geometry.FluxSurfaceGeometry.from_scheme`
+  tables used by :meth:`dkx.magnetic_geometry.FluxSurfaceGeometry.from_scheme`
   (geometry schemes 2/3/4) and of the monoenergetic benchmark coefficients.
 
 Experimental and cross-code validation anchors
@@ -104,7 +104,7 @@ their archival home is the upstream SFINCS project repository:
 - `SFINCS project (github.com/landreman/sfincs) <https://github.com/landreman/sfincs>`_
 
 The peer-reviewed reference for the model is the 2014 *Physics of Plasmas* paper
-cited above, and the physics/numerics that `sfincs_jax` relies on are reproduced in
+cited above, and the physics/numerics that `dkx` relies on are reproduced in
 :doc:`theory_from_upstream`, :doc:`system_equations`, and :doc:`physics_reference`.
 
 JAX and differentiable programming
@@ -136,7 +136,7 @@ is not sufficient as a quality target:
 Linear algebra and preconditioning
 ----------------------------------
 
-The solver stack in `sfincs_jax` draws on standard Krylov and preconditioning references:
+The solver stack in `dkx` draws on standard Krylov and preconditioning references:
 
 - Y. Saad and M. Schultz, “GMRES: A generalized minimal residual algorithm for solving
   nonsymmetric linear systems,” *SIAM J. Sci. Stat. Comput.* 7(3), 1986.

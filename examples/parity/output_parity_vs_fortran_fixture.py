@@ -1,7 +1,7 @@
-"""Compare a `sfincs_jax` output file against a frozen Fortran v3 output fixture.
+"""Compare a `dkx` output file against a frozen Fortran v3 output fixture.
 
 This example demonstrates:
-  - writing `sfincsOutput.h5` using `sfincs_jax`
+  - writing `sfincsOutput.h5` using `dkx`
   - comparing dataset values against a reference Fortran `sfincsOutput.h5`
   - (optional) plotting a heatmap of BHat differences
 
@@ -23,9 +23,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.compare import compare_sfincs_outputs
-from sfincs_jax.api import write_output
-from sfincs_jax.io import read_sfincs_h5
+from dkx.compare import compare_sfincs_outputs
+from dkx.api import write_output
+from dkx.io import read_sfincs_h5
 
 
 def main() -> int:

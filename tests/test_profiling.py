@@ -4,8 +4,8 @@ import io
 import sys
 from types import SimpleNamespace
 
-import sfincs_jax.profiling as profiling
-from sfincs_jax.profiling import (
+import dkx.profiling as profiling
+from dkx.profiling import (
     SimpleProfiler,
     Timer,
     _device_mem_mb,
@@ -102,21 +102,21 @@ def test_make_emit_respects_verbosity_quiet_and_prefix() -> None:
 
 
 def test_maybe_profiler_is_environment_opt_in(monkeypatch) -> None:
-    monkeypatch.delenv("SFINCS_JAX_PROFILE", raising=False)
-    monkeypatch.delenv("SFINCS_JAX_PROFILE_DEVICE_MEM", raising=False)
+    monkeypatch.delenv("DKX_PROFILE", raising=False)
+    monkeypatch.delenv("DKX_PROFILE_DEVICE_MEM", raising=False)
     assert maybe_profiler() is None
 
-    monkeypatch.setenv("SFINCS_JAX_PROFILE", "timings")
+    monkeypatch.setenv("DKX_PROFILE", "timings")
     profiler = maybe_profiler()
     assert isinstance(profiler, SimpleProfiler)
     assert profiler.sample_device_mem is False
 
-    monkeypatch.setenv("SFINCS_JAX_PROFILE", "full")
+    monkeypatch.setenv("DKX_PROFILE", "full")
     profiler = maybe_profiler()
     assert isinstance(profiler, SimpleProfiler)
     assert profiler.sample_device_mem is True
 
-    monkeypatch.setenv("SFINCS_JAX_PROFILE_DEVICE_MEM", "0")
+    monkeypatch.setenv("DKX_PROFILE_DEVICE_MEM", "0")
     profiler = maybe_profiler()
     assert isinstance(profiler, SimpleProfiler)
     assert profiler.sample_device_mem is False

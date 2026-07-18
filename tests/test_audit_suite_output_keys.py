@@ -5,7 +5,7 @@ from pathlib import Path
 
 import h5py
 
-from sfincs_jax.validation import release
+from dkx.validation import release
 
 
 def _write_h5(path: Path, keys: dict[str, float]) -> None:

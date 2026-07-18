@@ -3,12 +3,12 @@
 geometryScheme=13 supplies the Boozer |B| spectrum directly in the namelist as
 ``boozer_bmnc(m,n)`` / ``boozer_bmns(m,n)`` 2-D arrays (geometry.F90 case 13, the
 STELLOPT/BMNC optimization path).  These tests pin the canonical wiring in
-:func:`sfincs_jax.drift_kinetic.kinetic_operator_from_namelist` (via
+:func:`dkx.drift_kinetic.kinetic_operator_from_namelist` (via
 ``_geometry_and_radial`` routing to
-:meth:`sfincs_jax.magnetic_geometry.FluxSurfaceGeometry.from_fourier`) against a
+:meth:`dkx.magnetic_geometry.FluxSurfaceGeometry.from_fourier`) against a
 Fortran SFINCS v3 golden, mirroring the sibling ``test_output_h5_scheme*_parity``
 tests.  The legacy ``outputs`` writer intentionally does not support scheme 13, so
-the canonical side runs through :func:`sfincs_jax.run.run_profile`.
+the canonical side runs through :func:`dkx.run.run_profile`.
 """
 
 from __future__ import annotations
@@ -17,8 +17,8 @@ from pathlib import Path
 
 import numpy as np
 
-from sfincs_jax.compare import compare_sfincs_outputs
-from sfincs_jax.io import read_sfincs_h5
+from dkx.compare import compare_sfincs_outputs
+from dkx.io import read_sfincs_h5
 
 REF = Path(__file__).parent / "ref"
 DECK = REF / "pas_1species_PAS_noEr_tiny_scheme13.input.namelist"
@@ -59,7 +59,7 @@ _TRANSPORT_KEYS = [
 
 def _canonical_output(tmp_path: Path) -> Path:
     """Run the canonical RHSMode=1 solver on the scheme-13 deck and write its h5."""
-    from sfincs_jax.run import run_profile
+    from dkx.run import run_profile
 
     out = tmp_path / "sfincsOutput.h5"
     run = run_profile(DECK, out_path=out, emit=None)
@@ -105,10 +105,10 @@ def test_scheme13_from_namelist_matches_direct_from_fourier() -> None:
     """
     import jax.numpy as jnp
 
-    from sfincs_jax.drift_kinetic import _geometry_and_radial, _get_int, _n_periods_from_namelist
-    from sfincs_jax.inputs import read_sfincs_input
-    from sfincs_jax.magnetic_geometry import FluxSurfaceGeometry
-    from sfincs_jax.phase_space import make_grids
+    from dkx.drift_kinetic import _geometry_and_radial, _get_int, _n_periods_from_namelist
+    from dkx.inputs import read_sfincs_input
+    from dkx.magnetic_geometry import FluxSurfaceGeometry
+    from dkx.phase_space import make_grids
 
     raw = read_sfincs_input(DECK)
     res = raw.group("resolutionParameters")

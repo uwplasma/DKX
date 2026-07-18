@@ -4,9 +4,9 @@ from pathlib import Path
 
 import numpy as np
 
-from sfincs_jax.compare import compare_sfincs_outputs
-from sfincs_jax.api import write_output
-from sfincs_jax.io import read_sfincs_h5
+from dkx.compare import compare_sfincs_outputs
+from dkx.api import write_output
+from dkx.io import read_sfincs_h5
 
 
 def test_output_scheme4_quick2species_matches_fortran_fixture(tmp_path: Path) -> None:
@@ -16,7 +16,7 @@ def test_output_scheme4_quick2species_matches_fortran_fixture(tmp_path: Path) ->
     which exercises multi-species metadata and (small) grids.
 
     Only a subset of datasets are compared here: inputs + geometry + basic integrals.
-    Full solver outputs (e.g. flows/fluxes, exported f, etc.) are not yet written by `sfincs_jax`.
+    Full solver outputs (e.g. flows/fluxes, exported f, etc.) are not yet written by `dkx`.
     """
     here = Path(__file__).parent
     input_path = here / "ref" / "quick_2species_FPCollisions_noEr.input.namelist"
@@ -122,7 +122,7 @@ def test_output_scheme4_quick2species_matches_fortran_fixture(tmp_path: Path) ->
 
     # Ensure the compared keys exist in both files (avoid silently skipping missing datasets).
     for k in keys:
-        assert k in a, f"Missing key in sfincs_jax output: {k}"
+        assert k in a, f"Missing key in dkx output: {k}"
         assert k in b, f"Missing key in Fortran fixture: {k}"
 
     results = compare_sfincs_outputs(a_path=out_path, b_path=fortran_path, keys=keys, rtol=0, atol=1e-12)

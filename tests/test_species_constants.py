@@ -14,13 +14,13 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from sfincs_jax import constants, species
-from sfincs_jax.input_compat import (
+from dkx import constants, species
+from dkx.input_compat import (
     infer_species_input_radial_coordinate_for_gradients,
     scheme4_radial_constants,
 )
-from sfincs_jax.namelist import parse_sfincs_input_text, read_sfincs_input
-from sfincs_jax.collisions import _V3_PI, _V3_SQRTPI, nu_d_hat_pitch_angle_scattering_v3
+from dkx.namelist import parse_sfincs_input_text, read_sfincs_input
+from dkx.collisions import _V3_PI, _V3_SQRTPI, nu_d_hat_pitch_angle_scattering_v3
 
 
 def conversion_factors_to_from_dpsi_hat(*, psi_a_hat: float, a_hat: float, r_n: float) -> dict[str, float]:
@@ -211,7 +211,7 @@ def test_namelist_species_match_old_writer_path(species_block: str) -> None:
 
 def test_fortran_example_namelist_matches_full_system_operator() -> None:
     """Parity vs the canonical operator's own namelist parsing."""
-    from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
+    from dkx.drift_kinetic import kinetic_operator_from_namelist
 
     nml = read_sfincs_input(FORTRAN_EXAMPLE)
     op = kinetic_operator_from_namelist(nml)

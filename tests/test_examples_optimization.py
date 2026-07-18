@@ -1,8 +1,8 @@
 """Tests for the ``examples/optimization/`` gradient-based example family.
 
 Each example is a simsopt-style single script that optimizes a neoclassical
-objective through the canonical sfincs_jax kinetic solve with ``jax.grad``.  For
-every example this suite asserts, at CI resolution (``SFINCS_JAX_CI=1``, 2-3
+objective through the canonical dkx kinetic solve with ``jax.grad``.  For
+every example this suite asserts, at CI resolution (``DKX_CI=1``, 2-3
 iterations):
 
 1. the script runs end to end, the objective decreases, and the advertised
@@ -18,8 +18,8 @@ iterations):
 
 The shared ``objectives.py`` metric library is also unit-tested directly.
 
-optimize_QH_bootstrap needs the optional companions vmec_jax + booz_xform_jax;
-optimize_electron_root and optimize_impurity_screening need only sfincs_jax.
+optimize_QH_bootstrap needs the optional companions vmex + booz_xform_jax;
+optimize_electron_root and optimize_impurity_screening need only dkx.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-# These build full vmec_jax->Boozer->kinetic optimization chains; too heavy for
+# These build full vmex->Boozer->kinetic optimization chains; too heavy for
 # the fast coverage shards. Marked slow and excluded there (run in the full suite).
 pytestmark = pytest.mark.slow
 
@@ -57,12 +57,12 @@ def _run_example(name: str, env: dict) -> dict:
 
 
 # ===========================================================================
-# optimize_electron_root.py  (needs only sfincs_jax)
+# optimize_electron_root.py  (needs only dkx)
 # ===========================================================================
 @pytest.fixture(scope="module")
 def er_example() -> dict:
     return _run_example("optimize_electron_root.py",
-                        {"SFINCS_JAX_CI": "1", "SFINCS_JAX_ER_MAXITER": "3"})
+                        {"DKX_CI": "1", "DKX_ER_MAXITER": "3"})
 
 
 def test_electron_root_completes_and_decreases(er_example) -> None:
@@ -99,12 +99,12 @@ def test_electron_root_alternative_objectives(er_example) -> None:
 
 
 # ===========================================================================
-# optimize_impurity_screening.py  (needs only sfincs_jax)
+# optimize_impurity_screening.py  (needs only dkx)
 # ===========================================================================
 @pytest.fixture(scope="module")
 def imp_example() -> dict:
     return _run_example("optimize_impurity_screening.py",
-                        {"SFINCS_JAX_CI": "1", "SFINCS_JAX_IMP_MAXITER": "3"})
+                        {"DKX_CI": "1", "DKX_IMP_MAXITER": "3"})
 
 
 def test_impurity_completes_and_decreases(imp_example) -> None:
@@ -145,16 +145,16 @@ def test_impurity_alternative_objectives(imp_example) -> None:
 
 
 # ===========================================================================
-# optimize_QH_bootstrap.py  (needs vmec_jax + booz_xform_jax companions)
+# optimize_QH_bootstrap.py  (needs vmex + booz_xform_jax companions)
 # ===========================================================================
 @pytest.fixture(scope="module")
 def qh_example() -> dict:
-    pytest.importorskip("vmec_jax")
-    pytest.importorskip("vmec_jax.core.boozer_tables")
+    pytest.importorskip("vmex")
+    pytest.importorskip("vmex.core.boozer_tables")
     pytest.importorskip("booz_xform_jax")
     return _run_example("optimize_QH_bootstrap.py",
-                        {"SFINCS_JAX_CI": "1", "SFINCS_JAX_QH_MAXITER": "2",
-                         "SFINCS_JAX_QH_FD_CHECK": "1"})
+                        {"DKX_CI": "1", "DKX_QH_MAXITER": "2",
+                         "DKX_QH_FD_CHECK": "1"})
 
 
 def test_qh_completes_and_decreases(qh_example) -> None:

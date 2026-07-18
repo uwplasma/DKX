@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
-"""Plot distribution-function slices (delta-f or full-f) from sfincs_jax.
+"""Plot distribution-function slices (delta-f or full-f) from dkx.
 
 The script inspects ``sfincsOutput.h5`` and plots the two coordinates with the
-highest resolution. If the output file is missing, it runs sfincs_jax using a
+highest resolution. If the output file is missing, it runs dkx using a
 local ``input.namelist``. Enable ``export_delta_f`` or ``export_full_f`` in the
 namelist to generate the required datasets.
 
@@ -45,7 +45,7 @@ except Exception as exc:  # noqa: BLE001
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
-from sfincs_jax_driver import run_sfincs_jax
+from dkx_driver import run_dkx
 
 #print ("This is "+ inspect.getfile(inspect.currentframe()))
 this_filename = "sfincsPlotF"
@@ -68,7 +68,7 @@ output_path = Path("sfincsOutput.h5")  # Default output name used by sfincsScan 
 if not output_path.exists():
     input_path = Path("input.namelist")
     if input_path.exists():
-        run_sfincs_jax(input_namelist=input_path, output_path=output_path)
+        run_dkx(input_namelist=input_path, output_path=output_path)
     else:
         print ("Unable to open sfincsOutput.h5")
         exit(1)

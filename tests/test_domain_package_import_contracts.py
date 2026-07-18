@@ -15,25 +15,25 @@ from pathlib import Path
 
 
 DELETED_LEGACY_PACKAGES = (
-    "sfincs_jax.physics",
-    "sfincs_jax.discretization",
-    "sfincs_jax.geometry",
-    "sfincs_jax.operators",
-    "sfincs_jax.problems",
-    "sfincs_jax.solvers",
-    "sfincs_jax.outputs",
-    "sfincs_jax.grids",
-    "sfincs_jax.diagnostics",
-    "sfincs_jax.workflows.mapped_xgrid",
+    "dkx.physics",
+    "dkx.discretization",
+    "dkx.geometry",
+    "dkx.operators",
+    "dkx.problems",
+    "dkx.solvers",
+    "dkx.outputs",
+    "dkx.grids",
+    "dkx.diagnostics",
+    "dkx.workflows.mapped_xgrid",
 )
 
 DOMAIN_PACKAGES = (
-    "sfincs_jax.workflows",
-    "sfincs_jax.validation",
+    "dkx.workflows",
+    "dkx.validation",
 )
 
 ACTIVE_PACKAGE_EXPORTS = {
-    "sfincs_jax.workflows": (
+    "dkx.workflows": (
         "geometry_adapters",
         "optimization",
     ),
@@ -90,9 +90,9 @@ def test_deleted_legacy_packages_have_no_source_in_this_tree() -> None:
     another checkout cannot mask a reintroduction in this tree.
     """
 
-    root = Path(__file__).resolve().parents[1] / "sfincs_jax"
+    root = Path(__file__).resolve().parents[1] / "dkx"
     for module_name in DELETED_LEGACY_PACKAGES:
-        rel = module_name.removeprefix("sfincs_jax.").replace(".", "/")
+        rel = module_name.removeprefix("dkx.").replace(".", "/")
         assert not (root / rel).exists(), module_name
         assert not (root / f"{rel}.py").exists(), module_name
 
@@ -115,7 +115,7 @@ def test_domain_packages_are_importable_with_expected_facades() -> None:
 def test_workflow_optimization_aliases_resolve_to_owner() -> None:
     """Historical optimization_* module names keep resolving to the durable owner."""
 
-    owner = _import_module("sfincs_jax.workflows.optimization")
+    owner = _import_module("dkx.workflows.optimization")
     for name in (
         "optimization_comparison",
         "optimization_evidence",
@@ -124,14 +124,14 @@ def test_workflow_optimization_aliases_resolve_to_owner() -> None:
         "optimization_promotion",
         "optimization_workflow",
     ):
-        module = _import_module(f"sfincs_jax.workflows.{name}")
+        module = _import_module(f"dkx.workflows.{name}")
         assert module is owner, name
 
 
 def test_root_modules_are_explicitly_classified() -> None:
     """Every remaining package-root module has an owner class; no strays."""
 
-    root = Path(__file__).resolve().parents[1] / "sfincs_jax"
+    root = Path(__file__).resolve().parents[1] / "dkx"
     actual = {path.name for path in root.glob("*.py")}
     expected = set(ROOT_MODULE_CLASSIFICATIONS)
     assert actual == expected, (

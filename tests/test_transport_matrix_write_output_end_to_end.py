@@ -5,8 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from sfincs_jax.api import write_output
-from sfincs_jax.io import read_sfincs_h5
+from dkx.api import write_output
+from dkx.io import read_sfincs_h5
 
 
 def _is_numeric_dataset(x) -> bool:
@@ -91,7 +91,7 @@ def test_write_output_compute_transport_matrix_matches_fortran_fixture(base: str
     # radial-surface snapping and floating-point roundoff; keep a tight but forgiving atol.
     atol_full = 1e-6 if base == "monoenergetic_PAS_tiny_scheme12" else 5e-8
     rtol_full = 1e-12
-    # The variational entropy-production bounds (sfincs_jax.variational) are
+    # The variational entropy-production bounds (dkx.variational) are
     # JAX-only RHSMode=3 diagnostics with no Fortran counterpart — the same
     # documented allowance the RHSMode-1 tests grant the linearSolver*
     # metadata.  They are emitted for monoenergetic runs only, so the key-set
@@ -123,8 +123,8 @@ def test_transport_matrix_recycle_matches_fixture(tmp_path: Path, monkeypatch: p
     ref_path = here / "ref" / f"{base}.sfincsOutput.h5"
     out_path = tmp_path / f"{base}.sfincsOutput_recycle.h5"
 
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_RECYCLE_K", "2")
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_FORCE_KRYLOV", "1")
+    monkeypatch.setenv("DKX_TRANSPORT_RECYCLE_K", "2")
+    monkeypatch.setenv("DKX_TRANSPORT_FORCE_KRYLOV", "1")
 
     write_output(input_path, out_path)
 
@@ -151,7 +151,7 @@ def test_transport_output_can_include_solver_residual_diagnostics(
     input_path = here / "ref" / "transportMatrix_PAS_tiny_rhsMode2_scheme2.input.namelist"
     out_path = tmp_path / "sfincsOutput_with_residuals.h5"
 
-    monkeypatch.setenv("SFINCS_JAX_WRITE_SOLVER_DIAGNOSTICS", "1")
+    monkeypatch.setenv("DKX_WRITE_SOLVER_DIAGNOSTICS", "1")
     write_output(input_path, out_path)
 
     out = read_sfincs_h5(out_path)
