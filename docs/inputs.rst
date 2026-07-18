@@ -23,6 +23,17 @@ front:
   ``SfincsInput.raw``; an unknown *group* is likewise retained in ``raw`` but
   never typed. "Supported" below means specifically the typed fields.
 
+The parser has an inverse: :meth:`dkx.inputs.SfincsInput.to_namelist`
+serializes a typed input back to Fortran-readable namelist text (compact —
+non-default fields only — by default, every typed field with
+``include_defaults=True``), and :meth:`~dkx.inputs.SfincsInput.write` puts
+it in a file. Untyped keys retained in ``raw`` and the rank-2
+``boozer_bmnc(m,n)`` spectra survive the round trip. Inputs can also be
+built without a file at all: :meth:`dkx.inputs.SfincsInput.from_params`
+takes the flat Fortran parameter names of the tables below
+(case-insensitively) and returns a validated typed input that the run
+drivers accept directly (see :doc:`usage`).
+
 The tables give the Fortran namelist name, default, and type for every typed
 field, grouped by namelist.
 
