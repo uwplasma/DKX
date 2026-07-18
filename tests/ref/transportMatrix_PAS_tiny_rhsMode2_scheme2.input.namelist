@@ -1,4 +1,4 @@
-! Tiny RHSMode=2 (3x3) transport-matrix fixture for dkx parity testing.
+! Tiny RHSMode=2 (3x3) transport-matrix fixture for sfincs_jax parity testing.
 !
 ! This case is designed to be small but to exercise:
 ! - RHSMode=2 whichRHS loop (1..3) in v3

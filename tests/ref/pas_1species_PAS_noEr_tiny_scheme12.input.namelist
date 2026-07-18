@@ -1,4 +1,4 @@
-! Auto-generated tiny PAS collision example for dkx (geometryScheme=12, Boozer .bc).
+! Auto-generated tiny PAS collision example for sfincs_jax (geometryScheme=12, Boozer .bc).
 !
 ! This fixture targets end-to-end linear solve + output parity on a non-stellarator-symmetric `.bc` geometry:
 ! - geometryScheme=12 (.bc reader + non-stellarator-symmetric mode tables)
@@ -13,7 +13,6 @@
 &geometryParameters
   geometryScheme = 12
   equilibriumFile = "nonStelSym_tiny_geometryScheme12.bc"
-
   inputRadialCoordinate = 3  ! rN
   rN_wish = 0.6d+0
 /

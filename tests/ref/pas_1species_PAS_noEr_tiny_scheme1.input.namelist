@@ -1,4 +1,4 @@
-! Auto-generated tiny PAS collision example for dkx (geometryScheme=1, tokamak-like).
+! Auto-generated tiny PAS collision example for sfincs_jax (geometryScheme=1, tokamak-like).
 
 &general
   saveMatricesAndVectorsInBinary = .t.

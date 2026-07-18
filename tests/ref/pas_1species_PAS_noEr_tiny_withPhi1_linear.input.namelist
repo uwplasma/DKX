@@ -1,4 +1,4 @@
-! Tiny PAS example including Phi1 blocks, designed for parity testing in dkx.
+! Tiny PAS example including Phi1 blocks, designed for parity testing in sfincs_jax.
 !
 ! This case enables includePhi1 with a simple quasineutralityOption=2+adiabatic diagonal term,
 ! while keeping includePhi1InKineticEquation=.false. so the only Phi1 coupling is through the

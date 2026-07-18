@@ -1,4 +1,4 @@
-! Minimal output fixture for dkx `sfincsOutput.h5` parity (geometryScheme=2, simplified LHD model).
+! Minimal output fixture for sfincs_jax `sfincsOutput.h5` parity (geometryScheme=2, simplified LHD model).
 
 &general
   solveSystem = .false.

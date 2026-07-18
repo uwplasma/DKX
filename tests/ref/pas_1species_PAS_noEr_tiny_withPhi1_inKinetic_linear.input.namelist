@@ -1,4 +1,4 @@
-! Tiny PAS example including Phi1 in the kinetic equation, designed for parity testing in dkx.
+! Tiny PAS example including Phi1 in the kinetic equation, designed for parity testing in sfincs_jax.
 !
 ! This is a parity-first fixture: it aims to activate a small, targeted subset of Phi1-in-DKE coupling
 ! terms while keeping grids very small.

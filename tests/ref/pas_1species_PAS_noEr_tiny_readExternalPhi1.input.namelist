@@ -1,5 +1,5 @@
 ! Tiny PAS example that reads a FIXED external Phi1(theta,zeta) field (readExternalPhi1=.true.),
-! designed for parity testing in dkx.
+! designed for parity testing in sfincs_jax.
 !
 ! readExternalPhi1 makes the drift-kinetic equation LINEAR again: Phi1 is read from
 ! externalPhi1Filename and held fixed (NO quasineutrality block, NO Phi1 unknown, NO lambda row).
