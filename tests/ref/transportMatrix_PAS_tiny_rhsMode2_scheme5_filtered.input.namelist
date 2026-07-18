@@ -1,4 +1,4 @@
-! Tiny RHSMode=2 (3x3) transport-matrix fixture for dkx parity testing (geometryScheme=5 filtered VMEC wout).
+! Tiny RHSMode=2 (3x3) transport-matrix fixture for sfincs_jax parity testing (geometryScheme=5 filtered VMEC wout).
 !
 ! This case is designed to be small but to exercise:
 ! - geometryScheme=5 VMEC wout netCDF reader
@@ -14,7 +14,6 @@
 &geometryParameters
   geometryScheme = 5
   equilibriumFile = "wout_w7x_standardConfig.nc"
-
   inputRadialCoordinate = 3  ! rN
   rN_wish = 0.5
 

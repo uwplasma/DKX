@@ -1,4 +1,4 @@
-! Auto-generated tiny PAS collision example for dkx (VMEC geometryScheme=5).
+! Auto-generated tiny PAS collision example for sfincs_jax (VMEC geometryScheme=5).
 
 &general
   saveMatricesAndVectorsInBinary = .t.
