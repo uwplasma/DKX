@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [1, 2, 3, 4, 5, 6]
+        group: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     env:
       JAX_ENABLE_X64: "True"
       JAX_DISABLE_JIT: "0"
@@ -43,7 +43,7 @@ jobs:
           python -m dkx.validation.data_fetch --quiet
       - name: Coverage shard
         run: |
-          python -m pytest -q -n auto --dist=loadscope --splits 6 --group ${{ matrix.group }} --splitting-algorithm least_duration -m "not slow" --cov=dkx --cov-report=
+          python -m pytest -q -n auto --dist=loadscope --splits 10 --group ${{ matrix.group }} --splitting-algorithm least_duration -m "not slow" --cov=dkx --cov-report=
       - name: Upload coverage data
         uses: actions/upload-artifact@v7
         with:
