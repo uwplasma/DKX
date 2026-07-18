@@ -82,9 +82,11 @@ jobs:
           python -m coverage xml
       - name: Upload coverage
         uses: codecov/codecov-action@v6
+        continue-on-error: true
         with:
           files: ./coverage.xml
           use_oidc: true
+          fail_ci_if_error: false
 
   examples-smoke:
     runs-on: ubuntu-22.04
