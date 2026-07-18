@@ -183,43 +183,28 @@ def test_cmd_compare_h5_honors_tolerance_json(tmp_path: Path) -> None:
     assert rc == 0
 
 
-def test_apply_parallel_runtime_settings_shard_axis_off_and_auto(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in ("DKX_SHARD", "DKX_AUTO_SHARD", "DKX_MATVEC_SHARD_AXIS"):
+def test_apply_parallel_runtime_settings_transport_workers_off_and_on(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import os
+
+    for name in ("DKX_TRANSPORT_PARALLEL", "DKX_TRANSPORT_PARALLEL_WORKERS"):
         monkeypatch.delenv(name, raising=False)
 
     base = dict(
-        transport_workers=None,
-        distributed_gmres=None,
-        distributed_krylov=None,
-        shard_pad=None,
         distributed=False,
         process_id=None,
         process_count=None,
         coordinator_address=None,
         coordinator_port=None,
     )
-    cli._apply_parallel_runtime_settings(Namespace(**base, shard_axis="off"))
-    assert os_environ_subset() == {
-        "DKX_AUTO_SHARD": "0",
-        "DKX_MATVEC_SHARD_AXIS": "off",
-        "DKX_SHARD": "0",
-    }
+    cli._apply_parallel_runtime_settings(Namespace(**base, transport_workers=1))
+    assert os.environ["DKX_TRANSPORT_PARALLEL"] == "off"
+    assert os.environ["DKX_TRANSPORT_PARALLEL_WORKERS"] == "1"
 
-    cli._apply_parallel_runtime_settings(Namespace(**base, shard_axis="auto"))
-    assert os_environ_subset() == {
-        "DKX_AUTO_SHARD": "1",
-        "DKX_MATVEC_SHARD_AXIS": "auto",
-        "DKX_SHARD": "1",
-    }
-
-
-def os_environ_subset() -> dict[str, str]:
-    import os
-
-    return {
-        key: os.environ[key]
-        for key in ("DKX_AUTO_SHARD", "DKX_MATVEC_SHARD_AXIS", "DKX_SHARD")
-    }
+    cli._apply_parallel_runtime_settings(Namespace(**base, transport_workers=3))
+    assert os.environ["DKX_TRANSPORT_PARALLEL"] == "process"
+    assert os.environ["DKX_TRANSPORT_PARALLEL_WORKERS"] == "3"
 
 
 def test_plotting_shape_helpers_and_missing_panel_paths() -> None:
