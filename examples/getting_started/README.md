@@ -15,6 +15,7 @@ Suggested order:
 
 Full solve-and-plot runs (build a deck, solve, read outputs back, and plot):
 
+- `build_input_from_python.py` — build a typed `SfincsInput` programmatically (flat Fortran parameter names), write the namelist, and solve it in memory with `SolverOptions` — no input file needed.
 - `run_tokamak.py` — single-species pitch-angle-scattering tokamak, HDF5/NetCDF read-back.
 - `run_w7x.py` — two-species Fokker-Planck run on real W7-X Boozer geometry (tier-2 Krylov solver).
 

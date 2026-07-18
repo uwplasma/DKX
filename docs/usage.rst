@@ -21,6 +21,67 @@ Parsing an input file
    nml = read_sfincs_input("input.namelist")
    print(nml.group("geometryParameters")["GEOMETRYSCHEME"])
 
+Building an input in Python
+---------------------------
+
+An input deck does not have to start as a file.
+:meth:`dkx.inputs.SfincsInput.from_params` builds a typed, validated input
+from flat Fortran parameter names (matched case-insensitively — the same
+names an ``input.namelist`` uses), and the run drivers accept the object
+directly, so a complete solve needs no files at all:
+
+.. code-block:: python
+
+   from dkx import SfincsInput, SolverOptions, run_profile
+
+   inp = SfincsInput.from_params(
+       geometryScheme=1, inputRadialCoordinate=3, rN_wish=0.3,
+       iota=1.31, epsilon_t=0.1, epsilon_h=0.0, psiAHat=0.045, aHat=0.1,
+       Zs=[1.0], mHats=[1.0], nHats=[1.0], THats=[0.5],
+       dNHatdrHats=[-6.0], dTHatdrHats=[-3.0],
+       nu_n=8.4774e-3, collisionOperator=1,
+       Ntheta=15, Nzeta=1, Nxi=8, NL=4, Nx=6, solverTolerance=1e-10,
+   )
+   run = run_profile(inp, solver=SolverOptions(method="auto", tol=1e-10),
+                     out_path="sfincsOutput.h5", emit=None)
+   print(run.moments["particleFlux_vm_psiHat"])
+
+Unknown parameter names raise ``ValueError`` immediately, and the
+validateInput.F90-equivalent checks (including the RHSMode=3 hard overrides)
+run by default.  Serialize any typed input back to a Fortran-readable deck
+with :meth:`~dkx.inputs.SfincsInput.to_namelist` (a string) or
+:meth:`~dkx.inputs.SfincsInput.write` (a file); the compact default writes
+only the fields that differ from the Fortran defaults, and
+``include_defaults=True`` spells out every typed field.  The round trip is
+lossless: re-parsing written text reproduces every typed section field,
+the ``export_f`` group, untyped legacy keys retained in ``.raw``, and the
+rank-2 ``boozer_bmnc(m,n)`` spectra of geometryScheme=13 decks.  When an
+in-memory input reaches an output writer, the serialized text is stored as
+the ``input.namelist`` provenance dataset.  A runnable walkthrough lives at
+``examples/getting_started/build_input_from_python.py``.
+
+``run_profile``, ``run_transport_matrix``, ``run_from_namelist``, and
+:func:`dkx.api.write_output` all accept a path or an in-memory
+:class:`~dkx.inputs.SfincsInput`; path-based calls behave identically either
+way.
+
+Solver options
+--------------
+
+The quick ``solve_method``/``tol`` arguments of the run drivers cover most
+scripts.  The full typed knob set of :func:`dkx.solve.solve` is
+:class:`dkx.api.SolverOptions` — ``method``, ``tol``, ``atol``, ``restart``,
+``recycle_dim``, ``max_restarts``, ``differentiable``,
+``use_preconditioner``, ``device``, and ``memory_budget_gb`` — passed as
+``solver=SolverOptions(...)`` to ``run_profile``, ``run_transport_matrix``,
+or ``run_from_namelist``; when given, it supersedes ``solve_method`` and
+``tol``.  Environment variables keep acting as overrides for knobs left at
+``None`` (``memory_budget_gb=None`` reads ``DKX_TIER1_MEMORY_BUDGET_GB``).
+One honest exception: the ``cores`` field is carried for provenance only —
+XLA sizes its host threadpool once, before the first JAX device use, so
+thread pinning belongs to the ``DKX_CORES`` environment variable or the CLI
+``--cores`` flag (see :doc:`parallelism`).
+
 Building v3 grids and geometry
 ------------------------------
 
