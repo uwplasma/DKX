@@ -40,17 +40,17 @@ Six pedagogic scripts on the canonical API sit at the top of ``examples/``
 (no ``main()``, parameters at the top, printed progress, a plot, outputs
 written and read back); :doc:`examples` walks through each one:
 
-- ``examples/run_tokamak.py`` — build a namelist in Python, solve a circular
+- ``examples/getting_started/run_tokamak.py`` — build a namelist in Python, solve a circular
   tokamak, read HDF5/NetCDF back.
-- ``examples/run_w7x.py`` — W7-X Boozer geometry with full Fokker-Planck
+- ``examples/getting_started/run_w7x.py`` — W7-X Boozer geometry with full Fokker-Planck
   collisions (tier-2 recycled Krylov).
-- ``examples/transport_coefficients.py`` — monoenergetic transport matrices
+- ``examples/transport/transport_coefficients.py`` — monoenergetic transport matrices
   and a collisionality scan.
-- ``examples/ambipolar_er_scan.py`` — scan the radial electric field and
+- ``examples/vmex_finite_beta/ambipolar_er_scan.py`` — scan the radial electric field and
   solve the ambipolar root.
-- ``examples/gradients_tour.py`` — ``jax.grad`` through the kinetic solve,
+- ``examples/autodiff/gradients_tour.py`` — ``jax.grad`` through the kinetic solve,
   verified against finite differences.
-- ``examples/optimize_QA_bootstrap.py`` — flagship gradient-based QA
+- ``examples/optimization/optimize_QA_bootstrap.py`` — flagship gradient-based QA
   stellarator optimization with kinetic ``<j.B>`` in the objective.
 
 Performance and parity evidence

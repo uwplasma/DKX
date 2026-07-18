@@ -1,13 +1,31 @@
 ## Examples
 
-This directory is the learning surface for `dkx`. Start with
-`tutorials/` if you are starting with the code; jump to the topic folders if you
-already know which workflow you need. All first-pass examples avoid a local
-SFINCS Fortran v3 executable. Parity and benchmark scripts use frozen
-references or optional local Fortran only when explicitly requested.
+This directory is the learning surface for `dkx`. Start with `tutorials/` if you
+are new to the code, or jump straight to a topic folder if you already know the
+workflow you need. Every first-pass example runs without a SFINCS Fortran v3
+executable; parity and benchmark scripts use frozen references or optional local
+Fortran only when explicitly requested. This page is the navigation index;
+prose-level documentation lives in `docs/examples.rst`.
 
-The machine-readable navigation map lives in `workflow_catalog.json`. It lists
-the supported topic folders, first-pass entry points, typical commands, runtime
+### Topic Folders At A Glance
+
+| Folder | Category | Start here | What's inside |
+| --- | --- | --- | --- |
+| `getting_started/` | learning | `getting_started/write_sfincs_output_python.py` | CLI and Python outputs, plots, geometry setup, and full solve-and-plot runs. |
+| `tutorials/` | learning | `tutorials/run_quick_output_and_plot.py` | Notebook-led learning path plus a fast output writer/plotter. |
+| `transport/` | capability | `transport/transport_matrix_rhsmode2_and_rhsmode3.py` | RHSMode=2/3 transport matrices and collisionality scans. |
+| `autodiff/` | capability | `autodiff/autodiff_gradient_nu_n_residual.py` | JAX gradients, JVP/VJP, and implicit differentiation through the solve. |
+| `optimization/` | capability | `optimization/qa_nfp2_dkx_objectives.py` | Neoclassical objectives, candidate screening, and kinetic-promotion gates. |
+| `vmex_finite_beta/` | capability | `vmex_finite_beta/compare_qs_paper_dkx_redl.py` | Finite-beta VMEC, ambipolar `E_r`, Redl, and bootstrap-current workflows. |
+| `parity/` | validation | `parity/output_parity_vs_fortran_fixture.py` | Frozen-reference parity checks against SFINCS Fortran v3. |
+| `performance/` | validation | `performance/benchmark_output_formats.py` | Runtime, memory, and output-format benchmark drivers. |
+| `publication_figures/` | validation | `publication_figures/generate_validation_dashboard.py` | Regenerate documentation and paper figures from checked summaries. |
+| `paper_benchmarks/` | validation | `paper_benchmarks/monoenergetic_icnts_w7x.py` | Methods-paper benchmark cases with figures and JSON records. |
+| `sfincs_examples/` | reference | `sfincs_examples/run_dkx.py` | Vendored upstream SFINCS v3 decks for parity and benchmark audits. |
+| `data/` | reference | `data/geometryScheme4_quick_2species.input.namelist` | Small shared input files used by the examples above. |
+
+The machine-readable version of this map lives in `workflow_catalog.json`. It lists
+the topic folders, first-pass entry points, typical commands, runtime
 budgets, and whether a workflow needs a local SFINCS Fortran v3 executable.
 Tests keep this catalog synchronized with this README and the documentation.
 Use `list_workflows.py` when you want the catalog from the terminal:
@@ -167,18 +185,13 @@ validation or benchmark workflow, or reference data.
   stable-core gates.
 - `publication_figures/`: scripts that regenerate documentation and paper
   figures from checked summaries or explicit benchmark runs.
-- `paper_benchmarks/`: community-standard benchmark cases for the methods
-  paper (ICNTS-style monoenergetic coefficient scans on W7-X, TJ-II, and
-  HSX with Fortran v3 cross-checks, the low-collisionality Shaing-Callen
-  bootstrap-convergence study, the kinetic-solver-in-the-loop
-  bootstrap-consistency workflow on a finite-beta QA equilibrium, the
-  classical/neoclassical high-Z impurity-transport case with temperature
-  screening and a charge-state scan, the differentiable ambipolar-Er /
-  electron-root optimization workflow with its ion/unstable/electron S-curve
-  branch handling, the W7-X ambipolar-Er experimental case validating the
-  DKX-predicted ambipolar radial electric field against a published
-  core-electron-root-confinement discharge, plus the AD-vs-FD
-  gradient-verification table), each writing a figure and a JSON record.
+- `paper_benchmarks/`: methods-paper benchmark cases (ICNTS-style monoenergetic
+  coefficient scans on W7-X, TJ-II, and HSX with Fortran v3 cross-checks, the
+  Shaing-Callen bootstrap-convergence study, the kinetic-in-the-loop
+  bootstrap-consistency and high-Z impurity-transport workflows, the ambipolar-Er
+  / electron-root optimization case, the W7-X experimental ambipolar-Er
+  comparison, and the AD-vs-FD gradient-verification table), each writing a
+  figure and a JSON record.
 - `sfincs_examples/`: vendored upstream SFINCS v3 example inputs plus helpers
   used for parity and benchmark-suite audits, not the recommended starting
   point for first-time users.

@@ -11,7 +11,7 @@ output files written and read back. All run on a laptop CPU; CI runs each one
 at shrunken resolution (``DKX_CI=1``) in
 ``tests/test_examples_pedagogic.py``.
 
-``examples/run_tokamak.py`` — first solve, from Python
+``examples/getting_started/run_tokamak.py`` — first solve, from Python
    Builds a circular-tokamak ``input.namelist`` from Python dicts
    (``geometryScheme=1``, one ion species, pitch-angle-scattering collisions),
    runs the canonical driver, and reads the HDF5 output back. The key lines:
@@ -26,27 +26,27 @@ at shrunken resolution (``DKX_CI=1``) in
    It teaches the per-species results table, the four radial-coordinate flux
    conventions, and HDF5/NetCDF output selection by file suffix.
 
-``examples/run_w7x.py`` — stellarator geometry and full Fokker-Planck
+``examples/getting_started/run_w7x.py`` — stellarator geometry and full Fokker-Planck
    Loads a W7-X Boozer equilibrium and solves with the linearized
    Fokker-Planck operator, which routes ``auto`` to the tier-2 recycled-Krylov
    (GCROT) solver instead of the tier-1 structured direct path. It teaches
    geometry files, collision-operator selection, and how to inspect which
    solver tier ran (``run.solve_result.method``).
 
-``examples/transport_coefficients.py`` — RHSMode=3 transport matrices
+``examples/transport/transport_coefficients.py`` — RHSMode=3 transport matrices
    Computes monoenergetic transport matrices over a collisionality scan,
    checks Onsager symmetry, and plots ``L11`` versus ``nuPrime``.
 
-``examples/ambipolar_er_scan.py`` — ambipolar radial electric field
+``examples/vmex_finite_beta/ambipolar_er_scan.py`` — ambipolar radial electric field
    Scans ``Er``, brackets the sign change of the radial current, solves for
    the ambipolar root, and writes/reads the output at the root.
 
-``examples/gradients_tour.py`` — differentiating the solve
+``examples/autodiff/gradients_tour.py`` — differentiating the solve
    Takes ``jax.grad`` of fluxes and bootstrap current with respect to
    temperature and ``Er`` drives through the implicit-differentiation solve
    path, and verifies every gradient against central finite differences.
 
-``examples/optimize_QA_bootstrap.py`` — flagship optimization
+``examples/optimization/optimize_QA_bootstrap.py`` — flagship optimization
    Gradient-based optimization of a quasi-axisymmetric stellarator boundary
    for low bootstrap current: boundary Fourier coefficients ->
    ``vmex`` fixed-boundary equilibrium (implicit-adjoint VJP) ->
@@ -65,7 +65,7 @@ at shrunken resolution (``DKX_CI=1``) in
       :align: center
       :width: 90%
 
-      Output figure of ``examples/optimize_QA_bootstrap.py``.
+      Output figure of ``examples/optimization/optimize_QA_bootstrap.py``.
 
 Example tree
 ------------
