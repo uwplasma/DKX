@@ -1,6 +1,7 @@
 # Finite-Beta VMEX to DKX
 
-This directory contains a single runnable example for a finite-beta equilibrium:
+This directory collects the VMEC finite-beta and ambipolar radial
+electric-field workflows. The primary finite-beta equilibrium example is:
 
 ```bash
 python examples/vmex_finite_beta/finite_beta_vmec_to_sfincs.py
@@ -152,3 +153,16 @@ include `finite_beta_vmex_sfincs_bootstrap_er.png`,
 `finite_beta_vmex_sfincs_bootstrap_er.pdf`,
 `finite_beta_vmex_sfincs_convergence_scan.png`,
 `finite_beta_vmex_sfincs_convergence_scan.pdf`, and JSON summaries.
+
+## Ambipolar radial electric field (model field)
+
+`ambipolar_er_scan.py` is a self-contained ambipolarity example that needs no
+VMEC or `vmex` install. It builds a model field (`geometryScheme=1` with a
+small helical ripple) for an ion+electron pair, scans `Er`, then solves the
+radial-current root `J_r(Er) = 0` with `dkx.er.find_ambipolar_er`, classifies
+the ion/electron/unstable branch, and plots the species fluxes and residual
+with the root marked:
+
+```bash
+python examples/vmex_finite_beta/ambipolar_er_scan.py
+```
