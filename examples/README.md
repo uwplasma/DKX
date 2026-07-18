@@ -255,7 +255,7 @@ Common entry points:
 - Output parity vs Fortran fixture: `examples/parity/output_parity_vs_fortran_fixture.py`
 - Transport matrices (RHSMode 2/3): `examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py`
 - Differentiate a residual norm w.r.t. `nu_n`: `examples/autodiff/autodiff_gradient_nu_n_residual.py`
-- Implicit differentiation through BiCGStab: `examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py --solver bicgstab`
+- Implicit differentiation through a linear solve: `examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py`
 - Output writer/readback benchmark: `examples/performance/benchmark_output_formats.py --repeats 5`
 
 ### Validation And Benchmark Sweeps

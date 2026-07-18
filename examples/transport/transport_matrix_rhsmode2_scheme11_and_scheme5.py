@@ -1,81 +1,116 @@
-"""RHSMode=2 transport matrices for Boozer `.bc` and filtered VMEC netCDF geometries.
+"""RHSMode=2 transport matrices for Boozer ``.bc`` and filtered VMEC geometries.
 
-This example showcases end-to-end parity-tested support for:
-- `RHSMode=2` (3×3 transport matrix) with the upstream v3 `whichRHS = 1..3` loop
-- `geometryScheme=11` (Boozer `.bc`) and `geometryScheme=5` (VMEC `wout_*.nc`, filtered)
-- classical transport fluxes computed per-whichRHS (v3 `classicalTransport.F90`)
+What this example teaches:
+  - how ``dkx.api.write_output`` runs the SFINCS v3 ``whichRHS = 1..3`` loop for
+    a 3x3 RHSMode=2 transport matrix on two geometry backends:
+    ``geometryScheme=11`` (Boozer ``.bc``) and ``geometryScheme=5`` (filtered
+    VMEC ``wout_*.nc``),
+  - how ``dkx.compare.compare_sfincs_outputs`` checks the JAX output against the
+    frozen SFINCS Fortran v3 reference fixtures in ``tests/ref/``,
+  - how the classical (collisional) transport fluxes are reported per whichRHS.
 
-It reuses the frozen Fortran v3 fixtures in `tests/ref/` as a benchmark.
+Physics context: the transport matrix summarizes the neoclassical response on a
+flux surface; the classical fluxes add the collisional (finite-Larmor-radius)
+piece the v3 ``classicalTransport`` module computes [M. Landreman, H. M. Smith,
+A. Mollen and P. Helander, Phys. Plasmas 21, 042503 (2014); SFINCS technical
+documentation, https://github.com/landreman/sfincs].  Reproducing the frozen
+Fortran matrices to ~1e-8 shows the JAX driver matches the reference code on
+realistic Boozer and VMEC geometry.
+
+Run:
+  python examples/transport/transport_matrix_rhsmode2_scheme11_and_scheme5.py
 """
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
+import matplotlib
 import numpy as np
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
 
-from dkx.compare import compare_sfincs_outputs
-from dkx.api import write_output
+from dkx.api import write_output  # noqa: E402
+from dkx.compare import compare_sfincs_outputs  # noqa: E402
+from dkx.io import read_sfincs_h5  # noqa: E402
 
+# ----------------------------------------------------------------------------
+# Parameters
+# ----------------------------------------------------------------------------
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
-def _run_case(base: str, *, out_dir: Path) -> None:
-    input_path = _REPO_ROOT / "tests" / "ref" / f"{base}.input.namelist"
-    ref_path = _REPO_ROOT / "tests" / "ref" / f"{base}.sfincsOutput.h5"
-    out_path = out_dir / f"{base}.sfincsOutput_jax.h5"
+# The two frozen RHSMode=2 reference cases (Boozer .bc and filtered VMEC).
+CASES = (
+    "transportMatrix_PAS_tiny_rhsMode2_scheme11",
+    "transportMatrix_PAS_tiny_rhsMode2_scheme5_filtered",
+)
+
+# Parity tolerances against the frozen Fortran v3 fixtures.
+COMPARE_RTOL = 1e-12
+COMPARE_ATOL = 5e-8
+
+# Datasets to echo from the parity comparison.
+PARITY_KEYS = {
+    "transportMatrix",
+    "classicalHeatFlux_psiHat",
+    "classicalParticleFlux_psiHat",
+    "particleFlux_vm_psiHat",
+    "heatFlux_vm_psiHat",
+    "FSABFlow",
+}
+
+OUTPUT_DIR = Path(__file__).resolve().parents[1] / "output" / "transport_matrix_rhsmode2_scheme11_and_scheme5"
+
+# ----------------------------------------------------------------------------
+# 1) Solve each case, compare to the frozen Fortran reference, collect matrices
+# ----------------------------------------------------------------------------
+print("=== examples/transport/transport_matrix_rhsmode2_scheme11_and_scheme5.py ===")
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+matrices: dict[str, np.ndarray] = {}
+for base in CASES:
+    print(f"Step 1[{base}]: solving RHSMode=2 and comparing to the frozen fixture")
+    input_path = REPO_ROOT / "tests" / "ref" / f"{base}.input.namelist"
+    ref_path = REPO_ROOT / "tests" / "ref" / f"{base}.sfincsOutput.h5"
+    out_path = OUTPUT_DIR / f"{base}.sfincsOutput_jax.h5"
 
     write_output(input_path, out_path, overwrite=True)
 
-    # Print a short parity summary for key arrays.
-    results = compare_sfincs_outputs(a_path=ref_path, b_path=out_path, rtol=1e-12, atol=5e-8)
-    key_set = {
-        "transportMatrix",
-        "classicalHeatFlux_psiHat",
-        "classicalParticleFlux_psiHat",
-        "particleFlux_vm_psiHat",
-        "heatFlux_vm_psiHat",
-        "FSABFlow",
-    }
-    selected = [r for r in results if r.key in key_set]
-    print(f"\n[{base}]")
-    for r in sorted(selected, key=lambda x: x.key):
+    results = compare_sfincs_outputs(a_path=ref_path, b_path=out_path, rtol=COMPARE_RTOL, atol=COMPARE_ATOL)
+    for r in sorted((r for r in results if r.key in PARITY_KEYS), key=lambda x: x.key):
         status = "OK" if r.ok else "FAIL"
-        print(f"  {status:4s} {r.key:28s} max_abs={r.max_abs:.3e} max_rel={r.max_rel:.3e}")
+        print(f"    {status:4s} {r.key:28s} max_abs={r.max_abs:.3e} max_rel={r.max_rel:.3e}")
 
-    # A stronger check on the transport matrix itself:
-    # (Fortran HDF5 layout is transposed as read by Python; compare as written.)
-    # The fixture is already in Python-read order.
-    from dkx.io import read_sfincs_h5
+    # A stronger direct check on the transport matrix itself.
+    ref = read_sfincs_h5(ref_path)
+    got = read_sfincs_h5(out_path)
+    tm_ref = np.asarray(ref["transportMatrix"], dtype=np.float64)
+    tm_got = np.asarray(got["transportMatrix"], dtype=np.float64)
+    np.testing.assert_allclose(tm_ref, tm_got, rtol=0.0, atol=COMPARE_ATOL)
+    matrices[base] = tm_got
+    print(f"    transportMatrix matches the fixture within atol={COMPARE_ATOL:g}; wrote {out_path.name}")
 
-    a = read_sfincs_h5(ref_path)
-    b = read_sfincs_h5(out_path)
-    np.testing.assert_allclose(
-        np.asarray(a["transportMatrix"], dtype=np.float64),
-        np.asarray(b["transportMatrix"], dtype=np.float64),
-        rtol=0.0,
-        atol=5e-8,
-    )
+# ----------------------------------------------------------------------------
+# 2) Plot the JAX transport matrices
+# ----------------------------------------------------------------------------
+print("Step 2: plotting the transport matrices")
+fig, axes = plt.subplots(1, len(CASES), figsize=(9.4, 3.9), constrained_layout=True)
+for ax, base in zip(np.atleast_1d(axes), CASES):
+    tm = matrices[base]
+    im = ax.imshow(tm, cmap="coolwarm", interpolation="nearest")
+    ax.set_title(base.replace("transportMatrix_PAS_tiny_rhsMode2_", ""), fontsize=9)
+    ax.set_xlabel("column (whichRHS)")
+    ax.set_ylabel("row")
+    fig.colorbar(im, ax=ax, shrink=0.85)
+PLOT_PATH = OUTPUT_DIR / "transport_matrix_rhsmode2_scheme11_and_scheme5.png"
+fig.savefig(PLOT_PATH, dpi=150)
+plt.close(fig)
 
-    print(f"  wrote {out_path}")
-
-
-def main() -> None:
-    out_dir = _REPO_ROOT / "examples" / "transport" / "output" / "transport_matrix_rhsmode2_scheme11_and_scheme5"
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    for base in (
-        "transportMatrix_PAS_tiny_rhsMode2_scheme11",
-        "transportMatrix_PAS_tiny_rhsMode2_scheme5_filtered",
-    ):
-        _run_case(base, out_dir=out_dir)
-
-    print("\nDone.")
-
-
-if __name__ == "__main__":
-    main()
-
+# ----------------------------------------------------------------------------
+# 3) Results
+# ----------------------------------------------------------------------------
+print("=== Final results ===")
+for base in CASES:
+    print(f"  {base}: L11 = {float(matrices[base][0, 0]):.6e}")
+print(f"  Saved plot: {PLOT_PATH.name}")
+print("Done: examples/transport/transport_matrix_rhsmode2_scheme11_and_scheme5.py")
