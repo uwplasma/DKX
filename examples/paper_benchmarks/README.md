@@ -77,6 +77,30 @@ and a single figure + JSON pair written to
   Rutherford, Phys. Fluids 17, 1782 (1974); F.L. Hinton & R.D. Hazeltine, Rev.
   Mod. Phys. 48, 239 (1976); P. Helander & D.J. Sigmar, *Collisional Transport
   in Magnetized Plasmas*, CUP (2002)].  Checkpointed and resumable.
+- `w7x_ambipolar_er.py`: the W7-X ambipolar-`E_r` *experimental* case -- a
+  genuine data-validation against a published discharge.  The `n_e`, `T_e`,
+  `T_i` profiles and the reference `E_r` profile are hand-digitized
+  (approximate) from the core-electron-root-confinement (CERC) discharge W7-X
+  program 20160309.010 (2.0 MW / 300 ms) [N.A. Pablant et al., Phys. Plasmas
+  25, 022508 (2018)].  On the shipped Boozer standard-configuration equilibrium
+  (`w7x_standardConfig.bc`, `geometryScheme = 11`) DKX solves the local
+  two-species (H+ + electron) drift-kinetic problem at several flux surfaces,
+  scans `J_r(E_r) = sum_a Z_a Gamma_a`, and resolves every ambipolar root
+  classified ion / unstable / electron; the physically-realised branch is
+  followed by radial continuity to reproduce the CERC electron-root ->
+  ion-root crossover near `rho ~ 0.6`.  The DKX ambipolar `E_r(rho)` is
+  compared against both the measured (XICS) and the published neoclassical
+  reference `E_r`, with a resolution-convergence note (the coarse grid misses
+  the electron root; the production grid resolves it, converged to a 1.3x-finer
+  grid) and per-species neoclassical fluxes.  The deck-normalized `E_r` equals
+  the physical field in kV/m (`phiBar = TBar/e = 1 kV`), and the plasma is pure
+  hydrogen (`Z_eff = 1`) following the paper.  The profiles/reference are
+  labelled "digitized, approximate" in the script and JSON; the geometry is a
+  close but not identical match to the paper's OP1.1 VMEC vacuum equilibrium
+  [H. Maassberg, C.D. Beidler & Yu. Turkin, Phys. Plasmas 16, 072514 (2009);
+  C.D. Beidler et al., Nucl. Fusion 51, 076001 (2011)].  Checkpointed per
+  surface under `output/w7x_ambipolar_er/` (`DKX_W7XAMB_FORCE=1` to recompute);
+  needs the equilibrium on `DKX_EQUILIBRIA_DIRS`.
 
 ## Running
 
