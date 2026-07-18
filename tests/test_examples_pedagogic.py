@@ -1,6 +1,6 @@
 """Smoke tests for the flat pedagogic examples on the canonical stack.
 
-Each example under ``examples/*.py`` (the plan_final.md example style
+Each example under ``examples/*.py`` (the DKX example style
 contract: no ``main()``, parameters at the top, prints of setup/progress/
 final results, at least one PNG plot, output-file writing plus read-back) is
 run as a subprocess with ``DKX_CI=1`` (the scripts' shrunken-resolution
