@@ -25,14 +25,17 @@ scripts and explains the physics and diagnostics in a notebook format.
 
 ## Runnable Script
 
-For a fast script that saves files in a chosen output directory:
+For a fast script that writes files to its own output directory:
 
 ```bash
-python examples/tutorials/run_quick_output_and_plot.py --out-dir tutorial_output
+python examples/tutorials/run_quick_output_and_plot.py
 ```
 
 The script writes `sfincsOutput_tutorial.h5`, `.nc`, `.npz`, and
-`sfincsOutput_tutorial_summary.pdf` without requiring SFINCS Fortran v3.
+`sfincsOutput_tutorial_summary.pdf` into
+`examples/output/run_quick_output_and_plot/`, without requiring SFINCS
+Fortran v3.  Edit the `OUTPUT_DIR` parameter at the top to change where they
+go.
 
 ## Where To Go Next
 

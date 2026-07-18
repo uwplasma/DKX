@@ -44,7 +44,7 @@ temporary path, and none requires SFINCS Fortran v3 for the first run.
 
 | Goal | Entry script | Typical command |
 | --- | --- | --- |
-| Write output files and a diagnostics panel | `tutorials/run_quick_output_and_plot.py` | `python examples/tutorials/run_quick_output_and_plot.py --out-dir tutorial_output` |
+| Write output files and a diagnostics panel | `tutorials/run_quick_output_and_plot.py` | `python examples/tutorials/run_quick_output_and_plot.py` |
 | Inspect HDF5, NetCDF, NPZ, and plotting | `getting_started/write_and_plot_multiple_formats.py` | `python examples/getting_started/write_and_plot_multiple_formats.py` |
 | Load VMEC geometry through `wout_path` | `getting_started/write_sfincs_output_vmec.py` | `python examples/getting_started/write_sfincs_output_vmec.py` |
 | Compute a RHSMode=2/3 transport matrix | `transport/transport_matrix_rhsmode2_and_rhsmode3.py` | `python examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py` |

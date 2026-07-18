@@ -5,6 +5,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+# Converted teaching scripts write to examples/output/<script_stem>/ (their
+# top-level OUTPUT_DIR parameter); each is now run with no CLI flags.
+EXAMPLES_OUTPUT = REPO_ROOT / "examples" / "output"
+
 
 def _run_script(script: Path, *args: str) -> None:
     env = os.environ.copy()
@@ -12,48 +17,48 @@ def _run_script(script: Path, *args: str) -> None:
     subprocess.run([sys.executable, str(script), *args], cwd=str(script.parents[2]), env=env, check=True)
 
 
-def test_getting_started_tokamak_example(tmp_path: Path) -> None:
-    repo = Path(__file__).resolve().parents[1]
-    script = repo / "examples" / "getting_started" / "write_sfincs_output_tokamak.py"
-    out_path = tmp_path / "sfincsOutput_tokamak.h5"
-    _run_script(script, "--out", str(out_path))
+def test_getting_started_tokamak_example() -> None:
+    script = REPO_ROOT / "examples" / "getting_started" / "write_sfincs_output_tokamak.py"
+    out_path = EXAMPLES_OUTPUT / "write_sfincs_output_tokamak" / "sfincsOutput_tokamak.h5"
+    out_path.unlink(missing_ok=True)
+    _run_script(script)
     assert out_path.exists()
 
 
-def test_getting_started_vmec_example(tmp_path: Path) -> None:
-    repo = Path(__file__).resolve().parents[1]
-    script = repo / "examples" / "getting_started" / "write_sfincs_output_vmec.py"
-    out_path = tmp_path / "sfincsOutput_vmec.h5"
-    _run_script(script, "--out", str(out_path))
+def test_getting_started_vmec_example() -> None:
+    script = REPO_ROOT / "examples" / "getting_started" / "write_sfincs_output_vmec.py"
+    out_path = EXAMPLES_OUTPUT / "write_sfincs_output_vmec" / "sfincsOutput_vmec.h5"
+    out_path.unlink(missing_ok=True)
+    _run_script(script)
     assert out_path.exists()
 
 
-def test_getting_started_plot_example(tmp_path: Path) -> None:
-    repo = Path(__file__).resolve().parents[1]
-    script = repo / "examples" / "getting_started" / "plot_sfincs_output.py"
-    out_path = tmp_path / "sfincsOutput_summary.pdf"
-    _run_script(script, "--out", str(out_path))
+def test_getting_started_plot_example() -> None:
+    script = REPO_ROOT / "examples" / "getting_started" / "plot_sfincs_output.py"
+    out_path = EXAMPLES_OUTPUT / "plot_sfincs_output" / "sfincsOutput_summary.pdf"
+    out_path.unlink(missing_ok=True)
+    _run_script(script)
     assert out_path.exists()
 
 
-def test_getting_started_multiformat_output_example(tmp_path: Path) -> None:
-    repo = Path(__file__).resolve().parents[1]
-    script = repo / "examples" / "getting_started" / "write_and_plot_multiple_formats.py"
-    _run_script(script, "--out-dir", str(tmp_path))
-    assert (tmp_path / "sfincsOutput_getting_started.h5").exists()
-    assert (tmp_path / "sfincsOutput_getting_started.nc").exists()
-    assert (tmp_path / "sfincsOutput_getting_started.npz").exists()
-    assert (tmp_path / "sfincsOutput_getting_started_summary.pdf").exists()
+def test_getting_started_multiformat_output_example() -> None:
+    script = REPO_ROOT / "examples" / "getting_started" / "write_and_plot_multiple_formats.py"
+    out_dir = EXAMPLES_OUTPUT / "write_and_plot_multiple_formats"
+    _run_script(script)
+    assert (out_dir / "sfincsOutput_getting_started.h5").exists()
+    assert (out_dir / "sfincsOutput_getting_started.nc").exists()
+    assert (out_dir / "sfincsOutput_getting_started.npz").exists()
+    assert (out_dir / "sfincsOutput_getting_started_summary.pdf").exists()
 
 
-def test_tutorial_quick_output_and_plot_script(tmp_path: Path) -> None:
-    repo = Path(__file__).resolve().parents[1]
-    script = repo / "examples" / "tutorials" / "run_quick_output_and_plot.py"
-    _run_script(script, "--out-dir", str(tmp_path))
-    assert (tmp_path / "sfincsOutput_tutorial.h5").exists()
-    assert (tmp_path / "sfincsOutput_tutorial.nc").exists()
-    assert (tmp_path / "sfincsOutput_tutorial.npz").exists()
-    assert (tmp_path / "sfincsOutput_tutorial_summary.pdf").exists()
+def test_tutorial_quick_output_and_plot_script() -> None:
+    script = REPO_ROOT / "examples" / "tutorials" / "run_quick_output_and_plot.py"
+    out_dir = EXAMPLES_OUTPUT / "run_quick_output_and_plot"
+    _run_script(script)
+    assert (out_dir / "sfincsOutput_tutorial.h5").exists()
+    assert (out_dir / "sfincsOutput_tutorial.nc").exists()
+    assert (out_dir / "sfincsOutput_tutorial.npz").exists()
+    assert (out_dir / "sfincsOutput_tutorial_summary.pdf").exists()
 
 
 def test_output_format_benchmark_example(tmp_path: Path) -> None:

@@ -1,50 +1,60 @@
-"""Plot diagnostics from ``sfincsOutput.h5``/``.nc``/``.npz``."""
+"""Plot a diagnostics panel from a ``sfincsOutput.h5``/``.nc``/``.npz`` file.
+
+What this example teaches:
+  - how ``dkx.plotting.plot_sfincs_output_summary`` renders the same
+    multi-panel diagnostics figure that ``dkx --plot`` produces,
+  - how to point the plotter at any dkx output file and choose the output
+    figure format from the file suffix (PDF here),
+  - how the committed lzma-compressed reference fixtures are decompressed on
+    demand so the example runs from a fresh checkout.
+
+Physics context: the summary panel visualizes the f-independent basics of a
+neoclassical solve -- the magnetic-field strength on the flux surface, the
+speed grid, and the per-species fluxes and flows [SFINCS technical
+documentation, https://github.com/landreman/sfincs].  Here it runs on a frozen
+two-species ``geometryScheme=4`` reference output.
+
+Run:
+  python examples/getting_started/plot_sfincs_output.py
+"""
 
 from __future__ import annotations
 
-import argparse
+import sys
 from pathlib import Path
 
 from dkx.plotting import plot_sfincs_output_summary
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # examples/ on sys.path
+from _example_utils import ensure_uncompressed, output_dir  # noqa: E402
 
-def _ensure_sample(path: Path) -> None:
-    """Materialize a bundled reference sample from its committed ``.xz`` if needed.
+# ----------------------------------------------------------------------------
+# Parameters
+# ----------------------------------------------------------------------------
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
-    The heavy ``tests/ref`` fixtures are committed lzma-compressed; decompress
-    the default sample on demand so this example runs from a fresh checkout.
-    """
+# A frozen two-species reference output (committed lzma-compressed).
+INPUT_H5 = REPO_ROOT / "tests" / "ref" / "output_scheme4_2species_quick.sfincsOutput.h5"
 
-    if path.exists():
-        return
-    compressed = path.with_name(path.name + ".xz")
-    if compressed.exists():
-        import lzma  # noqa: PLC0415
+OUTPUT_DIR = output_dir(__file__)
+PLOT_PATH = OUTPUT_DIR / "sfincsOutput_summary.pdf"
 
-        path.write_bytes(lzma.decompress(compressed.read_bytes()))
+# ----------------------------------------------------------------------------
+# 1) Materialize the reference sample if only the compressed copy is present
+# ----------------------------------------------------------------------------
+print("=== examples/getting_started/plot_sfincs_output.py ===")
+print(f"Step 1: preparing the input sample: {INPUT_H5.name}")
+ensure_uncompressed(INPUT_H5)
 
+# ----------------------------------------------------------------------------
+# 2) Render the diagnostics panel
+# ----------------------------------------------------------------------------
+print("Step 2: rendering the diagnostics panel")
+out_path = plot_sfincs_output_summary(input_h5=INPUT_H5, output_png=PLOT_PATH)
 
-def main(argv: list[str] | None = None) -> int:
-    repo_root = Path(__file__).resolve().parents[2]
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--input-h5",
-        type=Path,
-        default=repo_root / "tests" / "ref" / "output_scheme4_2species_quick.sfincsOutput.h5",
-        help="Path to a dkx output file to visualize.",
-    )
-    parser.add_argument(
-        "--out",
-        type=Path,
-        default=Path(__file__).with_suffix("").parent / "output" / "sfincsOutput_summary.pdf",
-        help="Output PDF/figure path.",
-    )
-    args = parser.parse_args(argv)
-    _ensure_sample(args.input_h5)
-    out_path = plot_sfincs_output_summary(input_h5=args.input_h5, output_png=args.out)
-    print(f"Wrote: {out_path}")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+# ----------------------------------------------------------------------------
+# 3) Results
+# ----------------------------------------------------------------------------
+print("=== Final results ===")
+print(f"  Saved plot: {out_path}")
+print("Done: examples/getting_started/plot_sfincs_output.py")

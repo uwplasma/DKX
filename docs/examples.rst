@@ -87,7 +87,7 @@ Run from the repo root:
 .. code-block:: bash
 
    cd dkx
-   python examples/tutorials/run_quick_output_and_plot.py --out-dir tutorial_output
+   python examples/tutorials/run_quick_output_and_plot.py
    python examples/getting_started/build_grids_and_geometry.py
 
 For a guided classroom-style path, open the notebooks in
@@ -138,7 +138,7 @@ frozen-reference or benchmark workflow.
      - Typical command
    * - Write output files and a diagnostics panel
      - ``examples/tutorials/run_quick_output_and_plot.py``
-     - ``python examples/tutorials/run_quick_output_and_plot.py --out-dir tutorial_output``
+     - ``python examples/tutorials/run_quick_output_and_plot.py``
    * - Inspect HDF5, NetCDF, NPZ, and plotting
      - ``examples/getting_started/write_and_plot_multiple_formats.py``
      - ``python examples/getting_started/write_and_plot_multiple_formats.py``
