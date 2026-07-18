@@ -1,7 +1,7 @@
 """Tests for the consolidated inputs namelist reader and Fortran-parity prints.
 
 - Equivalence referee: inputs parsing of upstream Fortran example decks must
-  agree with the existing ``sfincs_jax.namelist`` reader.
+  agree with the existing ``dkx.namelist`` reader.
 - Defaults: an empty deck must yield the readInput.F90/globalVariables.F90
   defaults.
 - Golden prints: rendered stdout blocks must match
@@ -17,9 +17,9 @@ from pathlib import Path
 
 import pytest
 
-from sfincs_jax.namelist import read_sfincs_input as legacy_read_sfincs_input
-from sfincs_jax import console as prints
-from sfincs_jax.inputs import (
+from dkx.namelist import read_sfincs_input as legacy_read_sfincs_input
+from dkx import console as prints
+from dkx.inputs import (
     load_sfincs_input,
     parse_sfincs_input_text,
     read_sfincs_input,
@@ -51,7 +51,7 @@ def _require(path: Path) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# Equivalence referee: inputs vs the existing sfincs_jax.namelist reader.
+# Equivalence referee: inputs vs the existing dkx.namelist reader.
 # ---------------------------------------------------------------------------
 
 

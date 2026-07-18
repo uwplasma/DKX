@@ -1,4 +1,4 @@
-! Auto-generated tiny PAS collision example for sfincs_jax.
+! Auto-generated tiny PAS collision example for dkx.
 
 &general
   saveMatricesAndVectorsInBinary = .t.

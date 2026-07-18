@@ -140,15 +140,15 @@
       "evidence": [
         {
           "claim": "VMEC/Boozer workflow documentation states the skip-safe workflow and differentiability contract.",
-          "path": "docs/vmec_jax_workflow.rst"
+          "path": "docs/vmex_workflow.rst"
         },
         {
           "claim": "JAX geometry adapters isolate optional differentiable geometry handoff utilities.",
-          "path": "sfincs_jax/workflows/geometry_adapters.py"
+          "path": "dkx/workflows/geometry_adapters.py"
         },
         {
           "claim": "Workflow tests cover optional backend readiness and no-solve provenance.",
-          "path": "tests/test_vmec_jax_workflow.py"
+          "path": "tests/test_vmex_workflow.py"
         }
       ],
       "gates": [
@@ -165,7 +165,7 @@
       "second_push_result": "The scoped geometry-proxy workflow remains evidence-ready; full kinetic gradients require separate validation before release claims.",
       "status": "evidence_ready",
       "target_percent": 96,
-      "title": "vmec_jax to booz_xform_jax to sfincs_jax differentiable workflow"
+      "title": "vmex to booz_xform_jax to dkx differentiable workflow"
     },
     {
       "before_percent": 50,
@@ -177,7 +177,7 @@
         },
         {
           "claim": "Solver path policy is isolated enough to host future library experiments behind measured residual, runtime, and memory gates.",
-          "path": "sfincs_jax/solve.py"
+          "path": "dkx/solve.py"
         },
         {
           "claim": "Research-lane documentation keeps optional solver-library evaluations outside stable dependencies until admitted.",
@@ -206,7 +206,7 @@
       "evidence": [
         {
           "claim": "README-facing Fortran/JAX runtime and active-memory comparison figure is checked in.",
-          "path": "docs/_static/figures/paper/sfincs_jax_fortran_suite_benchmark_summary.png"
+          "path": "docs/_static/figures/paper/dkx_fortran_suite_benchmark_summary.png"
         },
         {
           "claim": "Validation manifest records release-ready, bounded-proxy, and deferred lanes explicitly.",

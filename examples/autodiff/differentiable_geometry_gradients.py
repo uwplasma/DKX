@@ -18,7 +18,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.magnetic_geometry import FluxSurfaceGeometry  # noqa: E402
+from dkx.magnetic_geometry import FluxSurfaceGeometry  # noqa: E402
 
 # W7-X standard (geometryScheme=4): (m, n) modes and flux functions.
 _B0_OVER_BBAR = 3.089

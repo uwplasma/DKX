@@ -1,14 +1,14 @@
 """Batched-vs-serial-loop throughput for an ``E_r`` scan and a surface scan.
 
-Measures the win from :mod:`sfincs_jax.batch` — a single ``jax.vmap``ped solve
+Measures the win from :mod:`dkx.batch` — a single ``jax.vmap``ped solve
 over many kinetic problems that share a discretization — against the naive
-serial Python loop of one :func:`sfincs_jax.solve.solve` per element, on the
+serial Python loop of one :func:`dkx.solve.solve` per element, on the
 same physics.  Two batch axes:
 
 * **``E_r`` scan** — a vector of radial-electric-field values on one geometry
-  (:func:`sfincs_jax.batch.batched_er_scan`); and
+  (:func:`dkx.batch.batched_er_scan`); and
 * **surface scan** — a batch of flux-surface operators sharing grids/layout
-  (:func:`sfincs_jax.batch.batched_surface_scan`).
+  (:func:`dkx.batch.batched_surface_scan`).
 
 For each axis the tool warms up (compiles), times the batched call and the
 serial loop, checks they agree, and prints per-backend throughput (solves/s)
@@ -115,8 +115,8 @@ def bench_er_scan(tmp: "Path", *, batch: int, res: dict[str, int]) -> dict[str, 
     """Batched vs serial-loop throughput of an ``E_r`` scan on one geometry."""
     import jax.numpy as jnp  # noqa: PLC0415
 
-    from sfincs_jax import batch as batch_mod  # noqa: PLC0415
-    from sfincs_jax import er as er_mod  # noqa: PLC0415
+    from dkx import batch as batch_mod  # noqa: PLC0415
+    from dkx import er as er_mod  # noqa: PLC0415
 
     deck = _deck(**res)
     problem = er_mod.prepare(_write_deck(tmp, deck, "er_scan.namelist"), er_bracket=(-5.0, 5.0))
@@ -149,11 +149,11 @@ def bench_surface_scan(tmp: "Path", *, surfaces: int, res: dict[str, int]) -> di
     """Batched vs serial-loop throughput of a multi-surface scan."""
     import jax.numpy as jnp  # noqa: PLC0415
 
-    from sfincs_jax import batch as batch_mod  # noqa: PLC0415
-    from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist  # noqa: PLC0415
-    from sfincs_jax.inputs import load_sfincs_input  # noqa: PLC0415
-    from sfincs_jax.run import profile_moments_from_operator  # noqa: PLC0415
-    from sfincs_jax.solve import solve  # noqa: PLC0415
+    from dkx import batch as batch_mod  # noqa: PLC0415
+    from dkx.drift_kinetic import kinetic_operator_from_namelist  # noqa: PLC0415
+    from dkx.inputs import load_sfincs_input  # noqa: PLC0415
+    from dkx.run import profile_moments_from_operator  # noqa: PLC0415
+    from dkx.solve import solve  # noqa: PLC0415
 
     ripples = np.linspace(0.03, 0.08, surfaces)
     gradients = np.linspace(-0.4, -0.7, surfaces)
@@ -190,7 +190,7 @@ def bench_surface_scan(tmp: "Path", *, surfaces: int, res: dict[str, int]) -> di
 
 
 def _print_report(backend: str, er: dict[str, Any], surf: dict[str, Any]) -> None:
-    print(f"\n=== sfincs_jax batched scan throughput  [backend: {backend}] ===")
+    print(f"\n=== dkx batched scan throughput  [backend: {backend}] ===")
     for title, r, count_key in (
         ("E_r scan (one geometry)", er, "batch"),
         ("surface scan (multi-geometry)", surf, "surfaces"),

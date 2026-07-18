@@ -1,7 +1,7 @@
 Normalizations and units
 ========================
 
-SFINCS v3 (and `sfincs_jax`) mixes *physical* quantities (:math:`n_s`,
+SFINCS v3 (and `dkx`) mixes *physical* quantities (:math:`n_s`,
 :math:`T_s`, ...) with dimensionless *normalized* quantities written with hats
 (``BHat`` :math:`=\hat B`, ...). This page collects the normalization
 conventions used throughout the code and the ``sfincsOutput.h5`` fields. The
@@ -82,7 +82,7 @@ geometry factor ``DHat``. Two derived scalars appear throughout:
 Radial coordinates
 ------------------
 
-`sfincs_jax` supports four radial labels, selected by ``inputRadialCoordinate``
+`dkx` supports four radial labels, selected by ``inputRadialCoordinate``
 for the flux surface and ``inputRadialCoordinateForGradients`` for the profile
 gradients:
 
@@ -107,7 +107,7 @@ coefficients are written in terms of :math:`d\hat\Phi/d\hat\psi` (the ``Er``,
 ``dPhiHatdpsiHat``, ``dPhiHatdrHat``, ... inputs are inter-converted through the
 radial-coordinate factors). The ambipolar solve drives ``Er`` directly
 (``inputRadialCoordinate = 4``); see :doc:`physics_reference` and
-:mod:`sfincs_jax.er`.
+:mod:`dkx.er`.
 
 Monoenergetic collisionality and electric field
 -----------------------------------------------

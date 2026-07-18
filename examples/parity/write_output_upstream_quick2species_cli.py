@@ -18,7 +18,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _select_input_path() -> Path:
-    if os.environ.get("SFINCS_JAX_CI") == "1" or os.environ.get("SFINCS_JAX_FAST_EXAMPLES") == "1":
+    if os.environ.get("DKX_CI") == "1" or os.environ.get("DKX_FAST_EXAMPLES") == "1":
         return _REPO_ROOT / "tests" / "reduced_inputs" / "quick_2species_FPCollisions_noEr.input.namelist"
     return (
         _REPO_ROOT
@@ -38,7 +38,7 @@ def main() -> int:
     cmd = [
         sys.executable,
         "-m",
-        "sfincs_jax",
+        "dkx",
         "write-output",
         "--input",
         str(input_path),
@@ -46,9 +46,9 @@ def main() -> int:
         str(out_path),
     ]
     env = os.environ.copy()
-    if os.environ.get("SFINCS_JAX_CI") == "1" or os.environ.get("SFINCS_JAX_FAST_EXAMPLES") == "1":
-        env.setdefault("SFINCS_JAX_FORTRAN_STDOUT", "0")
-        env.setdefault("SFINCS_JAX_SOLVER_ITER_STATS", "0")
+    if os.environ.get("DKX_CI") == "1" or os.environ.get("DKX_FAST_EXAMPLES") == "1":
+        env.setdefault("DKX_FORTRAN_STDOUT", "0")
+        env.setdefault("DKX_SOLVER_ITER_STATS", "0")
     subprocess.run(cmd, cwd=str(_REPO_ROOT), check=True, env=env)
     print(f"Wrote: {out_path}")
     return 0

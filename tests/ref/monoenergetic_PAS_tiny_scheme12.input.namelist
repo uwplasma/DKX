@@ -1,4 +1,4 @@
-! Tiny monoenergetic (RHSMode=3) PAS example for sfincs_jax parity testing (geometryScheme=12, Boozer .bc).
+! Tiny monoenergetic (RHSMode=3) PAS example for dkx parity testing (geometryScheme=12, Boozer .bc).
 !
 ! This fixture mirrors `monoenergetic_PAS_tiny_scheme11.*` but switches to geometryScheme=12
 ! (alternate Boozer conventions used in v3 for some equilibria).

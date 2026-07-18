@@ -1,4 +1,4 @@
-"""Referee tests for ``sfincs_jax.solve`` — the plan-§2.3 three-tier auto-policy.
+"""Referee tests for ``dkx.solve`` — the plan-§2.3 three-tier auto-policy.
 
 Tiny fixtures only (shared with ``tests/test_drift_kinetic.py``):
 
@@ -28,9 +28,9 @@ import numpy as np
 import pytest
 import scipy.linalg as sla
 
-from sfincs_jax.drift_kinetic import KineticOperator
-from sfincs_jax.namelist import parse_sfincs_input_text, read_sfincs_input
-from sfincs_jax.solve import (
+from dkx.drift_kinetic import KineticOperator
+from dkx.namelist import parse_sfincs_input_text, read_sfincs_input
+from dkx.solve import (
     build_coarse_preconditioner,
     materialize_dense,
     solve,
@@ -107,7 +107,7 @@ def test_tier1_matches_recorded_fortran_state_vectors_rhsmode3(base: str) -> Non
     RHSMode=3 transport columns; it replaces the equality test against the
     retired probing-based ``solvers/block_tridiagonal_transport`` POC.
     """
-    from sfincs_jax.validation.fortran import read_petsc_vec
+    from dkx.validation.fortran import read_petsc_vec
 
     op = _load_op(base)
     rhs = jnp.stack([op.rhs(1), op.rhs(2)], axis=1)
@@ -126,7 +126,7 @@ def test_tier1_matches_recorded_fortran_state_vectors_rhsmode3(base: str) -> Non
 
 def _vm_moments(op: KineticOperator, x_stack: np.ndarray) -> dict[str, np.ndarray]:
     """vm particle/heat fluxes + FSABFlow of solved states (moments module)."""
-    from sfincs_jax.moments import (
+    from dkx.moments import (
         FluxSurface,
         SpeciesParams,
         StateLayout,
@@ -749,7 +749,7 @@ def test_jit_value_and_grad_through_differentiable_solve_compiles_once() -> None
 
 
 def test_solve_importable_without_solvax_and_fails_loudly_on_use() -> None:
-    """``import sfincs_jax.solve`` must work without solvax; use must raise clearly.
+    """``import dkx.solve`` must work without solvax; use must raise clearly.
 
     Runs in a subprocess (this session already imported solvax) and hides the
     package by poisoning ``sys.modules`` before the import.
@@ -763,7 +763,7 @@ def test_solve_importable_without_solvax_and_fails_loudly_on_use() -> None:
             "for m in ('solvax', 'solvax.direct', 'solvax.implicit', 'solvax.krylov',",
             "          'solvax.native', 'solvax.operators'):",
             "    sys.modules[m] = None  # poisoned: import raises ImportError",
-            "import sfincs_jax.solve as solve_mod",
+            "import dkx.solve as solve_mod",
             "assert solve_mod._SOLVAX_IMPORT_ERROR is not None",
             "try:",
             "    solve_mod._require_solvax()",
@@ -788,7 +788,7 @@ def test_solve_importable_without_solvax_and_fails_loudly_on_use() -> None:
 
 def test_resolve_solve_device_semantics_on_cpu_host() -> None:
     """The routing knob on a CPU-default host: inert except explicit errors."""
-    from sfincs_jax.solve import _resolve_solve_device
+    from dkx.solve import _resolve_solve_device
 
     op = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
     assert jax.default_backend() == "cpu", "test assumes a CPU-default test host"
@@ -812,7 +812,7 @@ def test_resolve_solve_device_semantics_on_cpu_host() -> None:
 
 
 def test_solve_device_thresholds_read_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    from sfincs_jax.solve import (
+    from dkx.solve import (
         _SOLVE_CPU_MAX_TIER1_DEFAULT,
         _SOLVE_CPU_MAX_TIER2_DEFAULT,
         _env_size,
@@ -824,16 +824,16 @@ def test_solve_device_thresholds_read_env(monkeypatch: pytest.MonkeyPatch) -> No
     assert _SOLVE_CPU_MAX_TIER1_DEFAULT == 0
     assert _SOLVE_CPU_MAX_TIER2_DEFAULT == 0
 
-    monkeypatch.setenv("SFINCS_JAX_SOLVE_CPU_MAX_SIZE_TIER1", "12345")
-    assert _env_size("SFINCS_JAX_SOLVE_CPU_MAX_SIZE_TIER1", _SOLVE_CPU_MAX_TIER1_DEFAULT) == 12345
-    monkeypatch.setenv("SFINCS_JAX_SOLVE_CPU_MAX_SIZE_TIER1", "not-a-number")
+    monkeypatch.setenv("DKX_SOLVE_CPU_MAX_SIZE_TIER1", "12345")
+    assert _env_size("DKX_SOLVE_CPU_MAX_SIZE_TIER1", _SOLVE_CPU_MAX_TIER1_DEFAULT) == 12345
+    monkeypatch.setenv("DKX_SOLVE_CPU_MAX_SIZE_TIER1", "not-a-number")
     assert (
-        _env_size("SFINCS_JAX_SOLVE_CPU_MAX_SIZE_TIER1", _SOLVE_CPU_MAX_TIER1_DEFAULT)
+        _env_size("DKX_SOLVE_CPU_MAX_SIZE_TIER1", _SOLVE_CPU_MAX_TIER1_DEFAULT)
         == _SOLVE_CPU_MAX_TIER1_DEFAULT
     )
-    monkeypatch.delenv("SFINCS_JAX_SOLVE_CPU_MAX_SIZE_TIER1")
+    monkeypatch.delenv("DKX_SOLVE_CPU_MAX_SIZE_TIER1")
     assert (
-        _env_size("SFINCS_JAX_SOLVE_CPU_MAX_SIZE_TIER2", _SOLVE_CPU_MAX_TIER2_DEFAULT)
+        _env_size("DKX_SOLVE_CPU_MAX_SIZE_TIER2", _SOLVE_CPU_MAX_TIER2_DEFAULT)
         == _SOLVE_CPU_MAX_TIER2_DEFAULT
     )
 
@@ -855,9 +855,9 @@ def test_solve_on_explicit_second_cpu_device_matches_and_returns_home() -> None:
             "os.environ['XLA_FLAGS'] = (os.environ.get('XLA_FLAGS', '') +",
             "    ' --xla_force_host_platform_device_count=2').strip()",
             "import jax, numpy as np",
-            "from sfincs_jax.drift_kinetic import KineticOperator",
-            "from sfincs_jax.namelist import read_sfincs_input",
-            "from sfincs_jax.solve import solve",
+            "from dkx.drift_kinetic import KineticOperator",
+            "from dkx.namelist import read_sfincs_input",
+            "from dkx.solve import solve",
             f"op = KineticOperator.from_namelist(read_sfincs_input({str(deck)!r}))",
             "rhs = op.rhs()",
             "cpu0, cpu1 = jax.local_devices(backend='cpu')[:2]",

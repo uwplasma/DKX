@@ -1,16 +1,16 @@
-"""Canonical ambipolar radial-electric-field slice (:mod:`sfincs_jax.er`).
+"""Canonical ambipolar radial-electric-field slice (:mod:`dkx.er`).
 
 Pins the ``er.py`` slice against the legacy path it replaces:
 
-- :func:`sfincs_jax.er.radial_current` at three ``E_r`` reproduces a direct
+- :func:`dkx.er.radial_current` at three ``E_r`` reproduces a direct
   ``run_profile`` particle-flux computation to machine precision;
-- :func:`sfincs_jax.er.find_ambipolar_er` returns the same root as the legacy
+- :func:`dkx.er.find_ambipolar_er` returns the same root as the legacy
   Fortran-parity Brent solver (``problems/ambipolar.py``, captured before its
   deletion and hard-coded here);
 - warm starts / GCROT recycling reduce the total Krylov iteration count on a
   Fokker-Planck (tier-2) Er scan;
 - ion / electron / unstable classification from the sign of ``dJr/dEr``;
-- the differentiable :func:`sfincs_jax.er.ambipolar_er` gradient matches a
+- the differentiable :func:`dkx.er.ambipolar_er` gradient matches a
   central finite difference (implicit function theorem, not FD roots).
 """
 
@@ -97,8 +97,8 @@ def _write(tmp_path: Path, text: str, name: str = "input.namelist") -> Path:
 
 
 def test_radial_current_matches_run_profile(tmp_path: Path) -> None:
-    from sfincs_jax import er as er_mod
-    from sfincs_jax.run import run_profile
+    from dkx import er as er_mod
+    from dkx.run import run_profile
 
     prob = er_mod.prepare(_write(tmp_path, _pas_deck()), er_bracket=(-3.0, 1.0))
 
@@ -122,7 +122,7 @@ def test_radial_current_matches_run_profile(tmp_path: Path) -> None:
 
 
 def test_find_ambipolar_er_matches_legacy_brent(tmp_path: Path) -> None:
-    from sfincs_jax import er as er_mod
+    from dkx import er as er_mod
 
     result = er_mod.find_ambipolar_er(
         _write(tmp_path, _pas_deck()),
@@ -149,7 +149,7 @@ def test_brent_expands_bracket_and_finds_analytic_root() -> None:
     The initial bracket [0, 1] does not contain it, exercising the
     ``ambipolarSolver.F90`` sign-change expansion loop.
     """
-    from sfincs_jax.er import _brent
+    from dkx.er import _brent
 
     def eval_jr(er: float, _stage: str) -> float:
         return (er + 0.4) * (er * er + 1.0)
@@ -168,7 +168,7 @@ def test_brent_expands_bracket_and_finds_analytic_root() -> None:
 
 
 def test_warm_start_reduces_solver_iterations(tmp_path: Path) -> None:
-    from sfincs_jax import er as er_mod
+    from dkx import er as er_mod
 
     # Fokker-Planck collisions route the auto policy to the tier-2 recycled
     # GCROT solver, where warm starts and recycling pay off.
@@ -201,7 +201,7 @@ def test_warm_start_reduces_solver_iterations(tmp_path: Path) -> None:
 
 
 def test_root_classification_ion(tmp_path: Path) -> None:
-    from sfincs_jax import er as er_mod
+    from dkx import er as er_mod
 
     result = er_mod.find_ambipolar_er(
         _write(tmp_path, _pas_deck()), er_bracket=(-3.0, 1.0), all_roots=True, emit=None
@@ -215,7 +215,7 @@ def test_root_classification_ion(tmp_path: Path) -> None:
 
 
 def test_classify_unit_logic() -> None:
-    from sfincs_jax.er import _classify
+    from dkx.er import _classify
 
     assert _classify(-0.4, 1.0) == "ion"        # stable, Er < 0
     assert _classify(0.4, 1.0) == "electron"     # stable, Er > 0
@@ -233,7 +233,7 @@ def test_ambipolar_er_grad_matches_finite_difference(tmp_path: Path) -> None:
 
     jax.config.update("jax_enable_x64", True)
 
-    from sfincs_jax import er as er_mod
+    from dkx import er as er_mod
 
     deck = _pas_deck()
     prob = er_mod.prepare(_write(tmp_path, deck), er_bracket=(-3.0, 1.0))

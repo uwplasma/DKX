@@ -6,7 +6,7 @@ and PAS collisions (``nu_n = 8.4774e-3``) so the solve is well-conditioned.  Eac
 deck has a Fortran SFINCS v3 golden ``sfincsOutput.h5`` (single rank, MUMPS) and
 a ``whichMatrix_1`` PETSc matrix; the matrix parity lives in
 ``tests/test_magnetic_drifts_parity.py`` and this module pins the canonical
-:func:`sfincs_jax.run.run_profile` route end to end — the drift decks couple L±2
+:func:`dkx.run.run_profile` route end to end — the drift decks couple L±2
 so they are not block-tridiagonal and tier-2 GCROT owns them (solverTolerance
 1e-10 in the decks).
 
@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pytest
 
-from sfincs_jax.compare import compare_sfincs_outputs
+from dkx.compare import compare_sfincs_outputs
 
 REF = Path(__file__).parent / "ref"
 
@@ -72,9 +72,9 @@ def _golden(scheme: int) -> Path:
 def test_magdrift_scheme_matches_fortran_fixture(
     scheme: int, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from sfincs_jax.run import run_profile
+    from dkx.run import run_profile
 
-    monkeypatch.setenv("SFINCS_JAX_EQUILIBRIA_DIRS", str(REF))
+    monkeypatch.setenv("DKX_EQUILIBRIA_DIRS", str(REF))
     golden = _golden(scheme)
     assert golden.exists(), f"Missing Fortran fixture: {golden}"
 

@@ -3,8 +3,8 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "sfincs_jax"
-version = "1.2.0"
+name = "dkx"
+version = "2.0.0"
 description = "Neoclassical transport solver with CPU/GPU and differentiable JAX workflows"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -22,7 +22,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Retained as a no-op alias so existing `pip install sfincs_jax[structured]`
+# Retained as a no-op alias so existing `pip install dkx[structured]`
 # invocations keep working; solvax is now a core dependency (see above).
 structured = [
   "solvax",
@@ -39,14 +39,14 @@ docs = [
 ]
 
 [project.scripts]
-sfincs_jax = "sfincs_jax.cli:main"
+dkx = "dkx.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["sfincs_jax*"]
+include = ["dkx*"]
 
 [tool.setuptools.package-data]
-sfincs_jax = ["validation/*.json"]
+dkx = ["validation/*.json"]
 
 [tool.pytest.ini_options]
 addopts = ["--import-mode=prepend"]

@@ -1,6 +1,6 @@
 """Sugama-Nishimura parallel-momentum correction: physics and AD gates.
 
-Consistency gates for :mod:`sfincs_jax.momentum_correction` (moment method of
+Consistency gates for :mod:`dkx.momentum_correction` (moment method of
 H. Sugama and S. Nishimura, Phys. Plasmas 9, 4637 (2002); 15, 042502 (2008);
 monoenergetic-database application of H. Maassberg, C. D. Beidler, and Y.
 Turkin, Phys. Plasmas 16, 072504 (2009)).
@@ -112,8 +112,8 @@ def _independent_restoring_factor(db, *, z, m, t, n, nu_n, x, w):
     """
     import jax.numpy as jnp
 
-    from sfincs_jax.collisions import nu_d_hat_pitch_angle_scattering_v3
-    from sfincs_jax.monoenergetic import _dstar_lookup
+    from dkx.collisions import nu_d_hat_pitch_angle_scattering_v3
+    from dkx.monoenergetic import _dstar_lookup
 
     g = float(db.g_hat)
     ih = float(db.i_hat)
@@ -160,8 +160,8 @@ def test_single_species_reduces_to_momentum_restoring_factor() -> None:
     """
     import jax.numpy as jnp
 
-    from sfincs_jax.monoenergetic import monoenergetic_database
-    from sfincs_jax.momentum_correction import (
+    from dkx.monoenergetic import monoenergetic_database
+    from dkx.momentum_correction import (
         parallel_friction_matrix,
         parallel_viscosity,
         solve_corrected_flows,
@@ -203,7 +203,7 @@ def test_friction_matrix_is_symmetric_and_conserves_momentum() -> None:
     columns that sum to zero, so ``sum_a <B F_a> = 0`` -- like- and unlike-
     particle collisions exchange but do not create parallel momentum.
     """
-    from sfincs_jax.momentum_correction import parallel_friction_matrix
+    from dkx.momentum_correction import parallel_friction_matrix
 
     gamma = np.asarray(
         parallel_friction_matrix(
@@ -220,7 +220,7 @@ def test_friction_matrix_is_symmetric_and_conserves_momentum() -> None:
 
 
 def _run_profile_bootstrap(collop: int, tmp: Path):
-    from sfincs_jax.run import run_profile
+    from dkx.run import run_profile
 
     path = tmp / f"two_species_c{collop}.namelist"
     path.write_text(_TWO_SPECIES_DECK.format(collop=collop))
@@ -241,16 +241,16 @@ def test_multispecies_correction_moves_bootstrap_toward_full_fp() -> None:
     """
     import jax.numpy as jnp
 
-    from sfincs_jax.collisions import nu_d_hat_pitch_angle_scattering_v3
-    from sfincs_jax.drift_kinetic import _geometry_and_radial
-    from sfincs_jax.inputs import load_sfincs_input
-    from sfincs_jax.monoenergetic import monoenergetic_database
-    from sfincs_jax.momentum_correction import (
+    from dkx.collisions import nu_d_hat_pitch_angle_scattering_v3
+    from dkx.drift_kinetic import _geometry_and_radial
+    from dkx.inputs import load_sfincs_input
+    from dkx.monoenergetic import monoenergetic_database
+    from dkx.momentum_correction import (
         parallel_friction_matrix,
         parallel_viscosity,
         solve_corrected_flows,
     )
-    from sfincs_jax.run import _grids_from_input, _raw_with_validated_overrides
+    from dkx.run import _grids_from_input, _raw_with_validated_overrides
 
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -327,8 +327,8 @@ def test_gradient_of_corrected_bootstrap_matches_finite_differences() -> None:
     import jax
     import jax.numpy as jnp
 
-    from sfincs_jax.monoenergetic import monoenergetic_database
-    from sfincs_jax.momentum_correction import momentum_corrected_bootstrap
+    from dkx.monoenergetic import monoenergetic_database
+    from dkx.momentum_correction import momentum_corrected_bootstrap
 
     db = monoenergetic_database(MONO_DECK, list(np.geomspace(1e-3, 30.0, 12)), [0.0], emit=None)
 
@@ -355,9 +355,9 @@ def test_public_api_facade_matches_module() -> None:
     """The api.py facade returns the same corrected bootstrap as the module."""
     import jax.numpy as jnp
 
-    from sfincs_jax.api import momentum_corrected_bootstrap as facade
-    from sfincs_jax.monoenergetic import monoenergetic_database
-    from sfincs_jax.momentum_correction import momentum_corrected_bootstrap as direct
+    from dkx.api import momentum_corrected_bootstrap as facade
+    from dkx.monoenergetic import monoenergetic_database
+    from dkx.momentum_correction import momentum_corrected_bootstrap as direct
 
     db = monoenergetic_database(MONO_DECK, list(np.geomspace(1e-3, 30.0, 10)), [0.0], emit=None)
     kw = dict(

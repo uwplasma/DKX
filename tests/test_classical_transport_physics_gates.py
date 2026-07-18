@@ -3,7 +3,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.moments import FluxSurface, SpeciesParams, classical_fluxes
+from dkx.moments import FluxSurface, SpeciesParams, classical_fluxes
 
 
 def _two_species_classical_case() -> dict[str, object]:

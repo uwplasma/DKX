@@ -5,7 +5,7 @@ mode" test: the monoenergetic bootstrap coefficient ``D31*`` computed by the
 full drift-kinetic solve is scanned to very low normalized collisionality
 ``nuPrime`` and compared against the *collisionless* asymptote of
 K.C. Shaing and J.D. Callen, Phys. Fluids 26, 3315 (1983), evaluated for the
-same flux surface by :func:`sfincs_jax.shaing_callen.shaing_callen_d31_limit`
+same flux surface by :func:`dkx.shaing_callen.shaing_callen_d31_limit`
 (closed form of C.G. Albert et al., arXiv:2407.21599, eq. (42)).  The scan
 format and normalization follow the stellarator benchmark conventions of
 C.D. Beidler et al., Nucl. Fusion 51, 076001 (2011); the monoenergetic
@@ -72,7 +72,7 @@ convergence checks; the Fortran cross-check adds a few minutes when
 enabled).  Finished rows are cached in ``output/`` and skipped on re-runs;
 set ``SHAING_CALLEN_MAX_NEW_POINTS=N`` to stop after ``N`` newly computed
 solve stages (chunked/resumable runs).  The scan sets a 16 GB tier-1
-direct-factorization budget (``SFINCS_TIER1_MEMORY_BUDGET_GB``, preset
+direct-factorization budget (``DKX_TIER1_MEMORY_BUDGET_GB``, preset
 wins) so every scan point uses the full banded factorization on a 24 GB
 machine; the larger convergence-check points route through the truncated
 kernel + Krylov fallback automatically.
@@ -94,24 +94,24 @@ import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 
-os.environ.setdefault("SFINCS_TIER1_MEMORY_BUDGET_GB", "16")
+os.environ.setdefault("DKX_TIER1_MEMORY_BUDGET_GB", "16")
 
-from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist  # noqa: E402
-from sfincs_jax.inputs import load_sfincs_input  # noqa: E402
-from sfincs_jax.monoenergetic import (  # noqa: E402
+from dkx.drift_kinetic import kinetic_operator_from_namelist  # noqa: E402
+from dkx.inputs import load_sfincs_input  # noqa: E402
+from dkx.monoenergetic import (  # noqa: E402
     monoenergetic_database,
     monoenergetic_dstar_from_transport_matrix,
 )
-from sfincs_jax.shaing_callen import shaing_callen_d31_limit  # noqa: E402
+from dkx.shaing_callen import shaing_callen_d31_limit  # noqa: E402
 
 # ----------------------------------------------------------------------------
 # Parameters
 # ----------------------------------------------------------------------------
-EQUILIBRIUM = "w7x_standardConfig.bc"  # resolved via the sfincs_jax data cache
+EQUILIBRIUM = "w7x_standardConfig.bc"  # resolved via the dkx data cache
 RN_WISH = 0.5  # benchmark surface r/a = 0.5
 N_PERIODS = 5  # W7-X field periods (the .bc header value)
 
-# EStar values: exact zero (the pure 1/nu branch; sfincs_jax solves it
+# EStar values: exact zero (the pure 1/nu branch; dkx solves it
 # directly) plus one small finite field that turns on ExB precession.  The
 # Fortran cross-check uses EStar = 1e-4 as the quasi-zero field instead --
 # at exactly EStar = 0 the upstream Krylov solve returns an
@@ -426,7 +426,7 @@ fortran_records = []
 if FORTRAN_EXE and Path(FORTRAN_EXE).exists():
     import h5py
 
-    from sfincs_jax.validation.fortran import run_sfincs_fortran
+    from dkx.validation.fortran import run_sfincs_fortran
 
     print(f"Step 4: Fortran v3 cross-check at {len(FORTRAN_POINTS)} points", flush=True)
     fortran_env = {
@@ -461,7 +461,7 @@ if FORTRAN_EXE and Path(FORTRAN_EXE).exists():
             }
             save_cache(cache)
             budget.spend()
-        # The matched sfincs_jax value: EStar = 1e-4 is off the scan grid,
+        # The matched dkx value: EStar = 1e-4 is off the scan grid,
         # so re-solve the identical deck (cached).
         jkey = f"jax_{fkey}"
         if jkey not in cache["fortran"]:
@@ -480,7 +480,7 @@ if FORTRAN_EXE and Path(FORTRAN_EXE).exists():
         for key in ("d31_star", "d11_star"):
             ours = jax_point[key]
             ref = f_rec[key]
-            rec[key] = {"sfincs_jax": ours, "fortran": ref, "rel_dev": abs(ours - ref) / abs(ref)}
+            rec[key] = {"dkx": ours, "fortran": ref, "rel_dev": abs(ours - ref) / abs(ref)}
         fortran_records.append(rec)
         print(
             f"  (nuPrime={nu_prime:g}, EStar={e_star:g}) [{f_rec['seconds']:.0f} s]  "

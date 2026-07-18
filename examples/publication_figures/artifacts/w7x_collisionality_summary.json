@@ -40,12 +40,12 @@
     "require_residuals": true,
     "schema_version": 1,
     "source_script": "examples/publication_figures/generate_sfincs_paper_figs.py",
-    "summary_path": "/home/rjorge/sfincs_jax_regen_20260613/examples/publication_figures/artifacts/w7x_collisionality_summary.json",
+    "summary_path": "/home/rjorge/dkx_regen_20260613/examples/publication_figures/artifacts/w7x_collisionality_summary.json",
     "transport_maxiter": 0,
     "transport_parallel_backend": "auto",
     "transport_sparse_direct_max": 0,
     "transport_workers": 1,
-    "work_dir": "/home/rjorge/sfincs_jax_regen_20260613/examples/publication_figures/output/full_regen_20260613",
+    "work_dir": "/home/rjorge/dkx_regen_20260613/examples/publication_figures/output/full_regen_20260613",
     "write_solver_diagnostics": true
   },
   "rows": [

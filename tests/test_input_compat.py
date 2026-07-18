@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
-from sfincs_jax.input_compat import (
+from dkx.input_compat import (
     _resolve_equilibrium_file_from_namelist,
     bool_config_values,
     canonical_equilibrium_override,
@@ -25,8 +25,8 @@ from sfincs_jax.input_compat import (
     render_input_with_equilibrium_override,
     with_equilibrium_override,
 )
-from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
+from dkx.namelist import read_sfincs_input
+from dkx.drift_kinetic import kinetic_operator_from_namelist
 
 
 def test_shared_config_lookup_handles_namelists_and_nested_mappings() -> None:
@@ -315,7 +315,7 @@ def test_gradient_coordinate_inference_on_inductive_deck() -> None:
 
 
 def test_normradius_wish_alias_resolves_bc_geometry_surface() -> None:
-    from sfincs_jax.magnetic_geometry import selected_r_n_from_bc
+    from dkx.magnetic_geometry import selected_r_n_from_bc
 
     input_path = (
         Path(__file__).resolve().parent / "ref" / "multispecies_HSX_FPCollisions_DKESTrajectories.input.namelist"
@@ -415,9 +415,9 @@ def test_resolve_equilibrium_prefers_vmec_netcdf_sibling(tmp_path: Path) -> None
 
 
 def test_er_coordinate_and_split_gradient_coordinates_scheme5_example() -> None:
-    from sfincs_jax.drift_kinetic import _geometry_and_radial
-    from sfincs_jax.inputs import load_sfincs_input
-    from sfincs_jax.run import _grids_from_input
+    from dkx.drift_kinetic import _geometry_and_radial
+    from dkx.inputs import load_sfincs_input
+    from dkx.run import _grids_from_input
 
     input_path = (
         Path(__file__).resolve().parents[1]

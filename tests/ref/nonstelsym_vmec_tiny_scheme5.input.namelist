@@ -1,4 +1,4 @@
-! Tiny PAS collision example for sfincs_jax, non-stellarator-symmetric VMEC
+! Tiny PAS collision example for dkx, non-stellarator-symmetric VMEC
 ! (geometryScheme=5, lasym=T up-down asymmetric tokamak).
 
 &general

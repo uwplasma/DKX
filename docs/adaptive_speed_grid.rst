@@ -4,13 +4,13 @@ Speed grids (canonical) and the retired adaptive-map research lane
 Canonical speed grids
 ---------------------
 
-Every SFINCS v3 speed-grid option is canonical in :mod:`sfincs_jax.phase_space`
+Every SFINCS v3 speed-grid option is canonical in :mod:`dkx.phase_space`
 (``make_speed_grid``, ``xdot_diff_matrices``, ``make_grids``): ``xGridScheme``
 1-8 (the Landreman–Ernst polynomial grids with and without a node at ``x=0``,
 the uniform grids, and the Chebyshev variants) together with
 ``xDotDerivativeScheme`` -2..11 for the upwinded ``xDot`` derivative pairs.
 The polynomial x-grid kernel consumed by the collision operators lives in
-:mod:`sfincs_jax.xgrid`. Parity is pinned by Fortran goldens in
+:mod:`dkx.xgrid`. Parity is pinned by Fortran goldens in
 ``tests/test_output_h5_xgrid_schemes_parity.py`` and the phase-space unit
 tests.
 

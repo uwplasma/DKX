@@ -10,11 +10,11 @@ Collaboration on Neoclassical Transport in Stellarators (ICNTS) benchmark
 as its strongest-ripple, lowest-symmetry configuration.  The monoenergetic
 formulation is that of S.P. Hirshman et al., Phys. Fluids 29, 2951 (1986);
 the normalization conventions are documented in
-:mod:`sfincs_jax.monoenergetic`.
+:mod:`dkx.monoenergetic`.
 
 Geometry: the flux surface is supplied as a Boozer ``|B|`` spectrum through
 ``geometryScheme = 13`` (namelist ``boozer_bmnc(m,n)`` amplitudes), the one
-input path shared verbatim by sfincs_jax and the Fortran v3 executable for
+input path shared verbatim by dkx and the Fortran v3 executable for
 spectra that are not stored in a ``.bc`` file.  The 121 cosine amplitudes
 below (all modes with ``|B_mn / B_00| >= 1e-4``; max m = 7, max |n| = 20
 field periods) were extracted from the TJ-II mid-radius Boozer-spectrum file
@@ -24,7 +24,7 @@ NPeriods = 4).  ``psiAHat`` is the surface-linear toroidal-flux estimate
 ``phip = -1.52789e-2`` stored in the same file; ``aHat = R0/aspect``.
 Note the mixed stored orientation (``GHat > 0``, ``iota < 0``), which
 complements the W7-X case (``GHat < 0``, ``iota < 0``) in exercising the
-orientation-robust normalization.  Set ``SFINCS_TJII_FORT996`` to a fort.996
+orientation-robust normalization.  Set ``DKX_TJII_FORT996`` to a fort.996
 file path to regenerate the spectrum block (printed to stdout).
 
 What the script does mirrors ``monoenergetic_icnts_w7x.py``: a checkpointed
@@ -42,7 +42,7 @@ literature.
 
 Solver notes recorded in the JSON:
   - the scan sets a 14 GB tier-1 direct-factorization budget
-    (``SFINCS_TIER1_MEMORY_BUDGET_GB``) so every point uses the full
+    (``DKX_TIER1_MEMORY_BUDGET_GB``) so every point uses the full
     banded factorization on a 24 GB machine;
   - the Fortran v3 cross-check runs pass
     ``-mat_mumps_cntl_1 0.1 -mat_mumps_icntl_10 10``: with the default
@@ -51,7 +51,7 @@ Solver notes recorded in the JSON:
     preconditioned residual while the true residual stagnates at the
     10-percent level (verified against an exact factorization of the
     executable's own assembled matrix and right-hand side, which reproduces
-    the sfincs_jax coefficients to ~3e-7).
+    the dkx coefficients to ~3e-7).
 
 Expected runtime: ~12 min total on a 10-core laptop CPU (24 scan points at
 Ntheta=29, Nzeta=63, Nxi=70, ~20 s/point; ~2 min for the finer convergence
@@ -76,9 +76,9 @@ from PIL import Image
 
 # A 24 GB laptop fits the full tier-1 factorization of this deck at ~13 GB
 # peak; opt out by presetting the environment variable.
-os.environ.setdefault("SFINCS_TIER1_MEMORY_BUDGET_GB", "14")
+os.environ.setdefault("DKX_TIER1_MEMORY_BUDGET_GB", "14")
 
-from sfincs_jax.monoenergetic import (  # noqa: E402
+from dkx.monoenergetic import (  # noqa: E402
     monoenergetic_database,
     monoenergetic_dstar_from_transport_matrix,
 )
@@ -343,9 +343,9 @@ def row_key(nu_prime):
     return f"nu={nu_prime:.6g}@{N_THETA}x{N_ZETA}x{N_XI}"
 
 
-if os.environ.get("SFINCS_TJII_FORT996", ""):
-    print("Regenerated boozer_bmnc block from SFINCS_TJII_FORT996:")
-    print(regenerate_spectrum(Path(os.environ["SFINCS_TJII_FORT996"])))
+if os.environ.get("DKX_TJII_FORT996", ""):
+    print("Regenerated boozer_bmnc block from DKX_TJII_FORT996:")
+    print(regenerate_spectrum(Path(os.environ["DKX_TJII_FORT996"])))
 
 print("=== examples/paper_benchmarks/monoenergetic_icnts_tjii.py ===", flush=True)
 print(f"  TJ-II standard configuration (geometryScheme=13), rN = {RN_WISH}")
@@ -434,7 +434,7 @@ fortran_records = []
 if FORTRAN_EXE and Path(FORTRAN_EXE).exists():
     import h5py
 
-    from sfincs_jax.validation.fortran import run_sfincs_fortran
+    from dkx.validation.fortran import run_sfincs_fortran
 
     print(f"Step 3: Fortran v3 cross-check at {len(FORTRAN_POINTS)} points", flush=True)
     fortran_env = {
@@ -487,7 +487,7 @@ if FORTRAN_EXE and Path(FORTRAN_EXE).exists():
         for key in ("d11_star", "d31_star", "d33_star"):
             ours = jax_point[key]
             ref = f_rec[key]
-            rec[key] = {"sfincs_jax": ours, "fortran": ref, "rel_dev": abs(ours - ref) / abs(ref)}
+            rec[key] = {"dkx": ours, "fortran": ref, "rel_dev": abs(ours - ref) / abs(ref)}
         fortran_records.append(rec)
         print(
             f"  (nuPrime={nu_prime:g}, EStar={e_star:g}) [{f_rec['seconds']:.0f} s]  "

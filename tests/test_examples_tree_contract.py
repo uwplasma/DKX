@@ -23,7 +23,7 @@ ALLOWED_EXAMPLE_FOLDERS = {
     "sfincs_examples",
     "transport",
     "tutorials",
-    "vmec_jax_finite_beta",
+    "vmex_finite_beta",
 }
 
 FOLDERS_REQUIRING_README = ALLOWED_EXAMPLE_FOLDERS
@@ -40,7 +40,7 @@ FOLDER_CATEGORIES = {
     "sfincs_examples": "reference",
     "transport": "capability",
     "tutorials": "learning",
-    "vmec_jax_finite_beta": "capability",
+    "vmex_finite_beta": "capability",
 }
 
 REQUIRED_TASK_ENTRYPOINTS = {
@@ -52,8 +52,8 @@ REQUIRED_TASK_ENTRYPOINTS = {
     "getting_started/write_sfincs_output_python.py",
     "transport/transport_matrix_rhsmode2_and_rhsmode3.py",
     "autodiff/implicit_diff_through_gmres_solve_scheme5.py",
-    "vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py",
-    "optimization/qa_nfp2_sfincs_jax_objectives.py",
+    "vmex_finite_beta/compare_qs_paper_dkx_redl.py",
+    "optimization/qa_nfp2_dkx_objectives.py",
     "parity/output_parity_vs_fortran_fixture.py",
     "performance/benchmark_output_formats.py",
 }
@@ -66,7 +66,7 @@ CANONICAL_WORKFLOW_ENTRYPOINTS = {
     "getting_started/write_and_plot_multiple_formats.py",
     "transport/transport_matrix_rhsmode2_scheme11_and_scheme5.py",
     "autodiff/implicit_diff_through_gmres_solve_scheme5.py",
-    "vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py",
+    "vmex_finite_beta/compare_qs_paper_dkx_redl.py",
     "optimization/QA_optimization_bootstrap_current.py",
     "parity/collisionless_operator_matvec_parity.py",
     "performance/benchmark_output_formats.py",
@@ -78,17 +78,17 @@ APPLICATION_RECIPE_ENTRYPOINTS = {
     "getting_started/write_sfincs_output_tokamak.py",
     "sfincs_examples/tokamak_1species_FPCollisions_noEr/input.namelist",
     "getting_started/write_sfincs_output_vmec.py",
-    "vmec_jax_finite_beta/finite_beta_vmec_to_sfincs.py",
+    "vmex_finite_beta/finite_beta_vmec_to_sfincs.py",
     "transport/transport_matrix_rhsmode2_and_rhsmode3.py",
     "transport/transport_matrix_rhsmode2_scheme11_and_scheme5.py",
-    "vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py",
+    "vmex_finite_beta/compare_qs_paper_dkx_redl.py",
     "tutorials/03_bootstrap_redl_and_optimization.ipynb",
-    "optimization/evaluate_sfincs_jax_promotion_scan.py",
+    "optimization/evaluate_dkx_promotion_scan.py",
     "autodiff/autodiff_gradient_nu_n_residual.py",
     "autodiff/implicit_diff_through_gmres_solve_scheme5.py",
-    "autodiff/vmec_jax_to_boozer_sfincs_pipeline.py",
+    "autodiff/vmex_to_boozer_sfincs_pipeline.py",
     "tutorials/04_geometry_validation_and_performance.ipynb",
-    "optimization/qa_nfp2_sfincs_jax_objectives.py",
+    "optimization/qa_nfp2_dkx_objectives.py",
     "optimization/QA_optimization_bootstrap_current.py",
     "performance/benchmark_output_formats.py",
     "parity/output_parity_vs_fortran_fixture.py",
@@ -100,13 +100,13 @@ ONE_COMMAND_ENTRYPOINTS = {
     "getting_started/write_sfincs_output_vmec.py",
     "transport/transport_matrix_rhsmode2_and_rhsmode3.py",
     "autodiff/autodiff_gradient_nu_n_residual.py",
-    "vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py",
+    "vmex_finite_beta/compare_qs_paper_dkx_redl.py",
     "performance/benchmark_output_formats.py",
     "parity/output_parity_vs_fortran_fixture.py",
 }
 CATALOG_ENTRYPOINTS = ONE_COMMAND_ENTRYPOINTS | {
-    "optimization/qa_nfp2_sfincs_jax_objectives.py",
-    "autodiff/vmec_jax_to_boozer_sfincs_pipeline.py",
+    "optimization/qa_nfp2_dkx_objectives.py",
+    "autodiff/vmex_to_boozer_sfincs_pipeline.py",
 }
 
 CATALOG_REQUIRED_KEYWORDS = {
@@ -167,7 +167,7 @@ DECISION_MAP_TARGETS = {
     "transport/",
     "autodiff/",
     "optimization/",
-    "vmec_jax_finite_beta/",
+    "vmex_finite_beta/",
     "parity/",
     "publication_figures/",
     "performance/",
@@ -397,7 +397,7 @@ def test_examples_do_not_teach_v3_driver_facade_imports() -> None:
         if not path.is_file() or path.suffix not in checked_suffixes:
             continue
         text = path.read_text(encoding="utf-8")
-        if "v3_driver" in text or "sfincs_jax.v3_driver" in text:
+        if "v3_driver" in text or "dkx.v3_driver" in text:
             offenders.append(path.relative_to(REPO_ROOT).as_posix())
 
     assert offenders == []

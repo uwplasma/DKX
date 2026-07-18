@@ -7,8 +7,8 @@ from pathlib import Path
 
 import numpy as np
 
-from sfincs_jax.io import write_sfincs_h5
-from sfincs_jax.workflows.optimization import evaluate_sfincs_scan_promotion
+from dkx.io import write_sfincs_h5
+from dkx.workflows.optimization import evaluate_sfincs_scan_promotion
 
 
 _REPO = Path(__file__).resolve().parents[1]
@@ -94,7 +94,7 @@ def test_evaluate_sfincs_scan_promotion_can_allow_reference_outputs_without_resi
 
 
 def test_public_promotion_example_runs_demo(tmp_path: Path) -> None:
-    script = _REPO / "examples" / "optimization" / "evaluate_sfincs_jax_promotion_scan.py"
+    script = _REPO / "examples" / "optimization" / "evaluate_dkx_promotion_scan.py"
     subprocess.run(
         [
             sys.executable,
@@ -113,7 +113,7 @@ def test_public_promotion_example_runs_demo(tmp_path: Path) -> None:
     )
 
     payload = json.loads((tmp_path / "promotion_test.json").read_text(encoding="utf-8"))
-    assert payload["workflow"] == "sfincs_jax_optimization_high_fidelity_promotion"
+    assert payload["workflow"] == "dkx_optimization_high_fidelity_promotion"
     assert payload["gate_status"] == "pass"
     assert (tmp_path / "promotion_test.png").exists()
     assert (tmp_path / "promotion_test.pdf").exists()

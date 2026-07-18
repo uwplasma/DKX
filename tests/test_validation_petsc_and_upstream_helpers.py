@@ -6,8 +6,8 @@ import subprocess
 import numpy as np
 import pytest
 
-import sfincs_jax.validation.fortran as fortran_validation
-from sfincs_jax.validation.fortran import (
+import dkx.validation.fortran as fortran_validation
+from dkx.validation.fortran import (
     default_fortran_exe,
     parse_fortran_v3_profile_file,
     parse_fortran_v3_profile_text,
@@ -15,7 +15,7 @@ from sfincs_jax.validation.fortran import (
     read_petsc_vec,
     run_sfincs_fortran,
 )
-from sfincs_jax.workflows.scans import find_upstream_utils_dir, run_upstream_util
+from dkx.workflows.scans import find_upstream_utils_dir, run_upstream_util
 
 
 def test_petsc_vec_reader_roundtrips_big_endian_fixture(tmp_path: Path) -> None:
@@ -337,7 +337,7 @@ def test_fortran_runner_auto_workdir_localizes_and_merges_environment(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import sfincs_jax.io as io_module
+    import dkx.io as io_module
 
     input_path = tmp_path / "input_source.namelist"
     input_path.write_text("&general\n/\n", encoding="utf-8")
@@ -350,7 +350,7 @@ def test_fortran_runner_auto_workdir_localizes_and_merges_environment(
     monkeypatch.setattr(io_module, "localize_equilibrium_file_in_place", _fake_localize)
     exe = _write_fake_fortran_exe(
         tmp_path / "sfincs_env.sh",
-        "test \"${SFINCS_JAX_UNIT_ENV:-}\" = expected\n"
+        "test \"${DKX_UNIT_ENV:-}\" = expected\n"
         "printf 'Saving diagnostics to h5 file\\nGoodbye!\\n'\n"
         "printf 'fake h5' > sfincsOutput.h5\n"
         "exit 0\n",
@@ -359,7 +359,7 @@ def test_fortran_runner_auto_workdir_localizes_and_merges_environment(
     output = run_sfincs_fortran(
         input_namelist=input_path,
         exe=exe,
-        env={"SFINCS_JAX_UNIT_ENV": "expected"},
+        env={"DKX_UNIT_ENV": "expected"},
     )
 
     assert output.name == "sfincsOutput.h5"
@@ -375,11 +375,11 @@ def test_find_upstream_utils_dir_resolves_override_and_env(tmp_path: Path, monke
     with pytest.raises(FileNotFoundError, match="utils dir does not exist"):
         find_upstream_utils_dir(override=tmp_path / "missing")
 
-    monkeypatch.setenv("SFINCS_JAX_UPSTREAM_UTILS_DIR", str(utils))
+    monkeypatch.setenv("DKX_UPSTREAM_UTILS_DIR", str(utils))
     assert find_upstream_utils_dir() == utils
 
-    monkeypatch.setenv("SFINCS_JAX_UPSTREAM_UTILS_DIR", str(tmp_path / "missing_env"))
-    with pytest.raises(FileNotFoundError, match="SFINCS_JAX_UPSTREAM_UTILS_DIR"):
+    monkeypatch.setenv("DKX_UPSTREAM_UTILS_DIR", str(tmp_path / "missing_env"))
+    with pytest.raises(FileNotFoundError, match="DKX_UPSTREAM_UTILS_DIR"):
         find_upstream_utils_dir()
 
 

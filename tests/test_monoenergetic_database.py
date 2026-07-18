@@ -1,6 +1,6 @@
 """Monoenergetic-database mode: scans, normalization, convolution, gradients.
 
-Physics and consistency gates for :mod:`sfincs_jax.monoenergetic` (conventions
+Physics and consistency gates for :mod:`dkx.monoenergetic` (conventions
 of C.D. Beidler et al., Nucl. Fusion 51, 076001 (2011); monoenergetic
 formulation of S.P. Hirshman et al., Phys. Fluids 29, 2951 (1986)).
 
@@ -71,11 +71,11 @@ def test_database_points_match_direct_transport_matrix_solves(tmp_path: Path) ->
     at the same point must give the same normalized coefficients to solver
     precision (~1e-12) -- a consistency check of the scan plumbing.
     """
-    from sfincs_jax.monoenergetic import (
+    from dkx.monoenergetic import (
         monoenergetic_database,
         monoenergetic_dstar_from_transport_matrix,
     )
-    from sfincs_jax.run import run_transport_matrix
+    from dkx.run import run_transport_matrix
 
     nu_values = [1.196132e-3, 0.3]
     er_values = [0.0, 2.0e-3]
@@ -123,7 +123,7 @@ def test_normalization_physics_gates() -> None:
       independently converted off-diagonal channels.
     - ``D11* > 0`` and ``nu_star`` reproduces the scan collisionality.
     """
-    from sfincs_jax.monoenergetic import monoenergetic_database
+    from dkx.monoenergetic import monoenergetic_database
 
     db = monoenergetic_database(MONO_DECK, [1.196132e-3, 10.0], [0.0])
 
@@ -144,13 +144,13 @@ def _full_kinetic_lb_matrix():
     """The RHSMode=2 3x3 matrix of the PAS/DKES deck in Beidler L^B form.
 
     Applies the hat-unit ``transportMatrix -> L^B`` conversion factors of the
-    :mod:`sfincs_jax.monoenergetic` docstring to the full-kinetic solve
+    :mod:`dkx.monoenergetic` docstring to the full-kinetic solve
     (rows/columns 1,2 share the radial factor; index 3 is the parallel
     channel).
     """
-    from sfincs_jax.drift_kinetic import _geometry_and_radial
-    from sfincs_jax.inputs import load_sfincs_input
-    from sfincs_jax.run import _grids_from_input, _raw_with_validated_overrides, run_transport_matrix
+    from dkx.drift_kinetic import _geometry_and_radial
+    from dkx.inputs import load_sfincs_input
+    from dkx.run import _grids_from_input, _raw_with_validated_overrides, run_transport_matrix
 
     run = run_transport_matrix(RHS2_DECK, emit=None)
     op = run.operator
@@ -189,10 +189,10 @@ def _mapped_nu_primes(op) -> np.ndarray:
     """Database nuPrime values equivalent to each deck speed node (module docstring)."""
     import jax.numpy as jnp
 
-    from sfincs_jax.collisions import nu_d_hat_pitch_angle_scattering_v3
-    from sfincs_jax.drift_kinetic import _geometry_and_radial
-    from sfincs_jax.inputs import load_sfincs_input
-    from sfincs_jax.run import _grids_from_input, _raw_with_validated_overrides
+    from dkx.collisions import nu_d_hat_pitch_angle_scattering_v3
+    from dkx.drift_kinetic import _geometry_and_radial
+    from dkx.inputs import load_sfincs_input
+    from dkx.run import _grids_from_input, _raw_with_validated_overrides
 
     inp = load_sfincs_input(RHS2_DECK)
     raw = _raw_with_validated_overrides(inp)
@@ -227,7 +227,7 @@ def test_energy_convolution_reproduces_full_kinetic_transport_matrix() -> None:
     must match the full-kinetic solve to solver precision (measured max
     relative deviation 5.8e-14; asserted < 1e-10).
     """
-    from sfincs_jax.monoenergetic import energy_convolution, monoenergetic_database
+    from dkx.monoenergetic import energy_convolution, monoenergetic_database
 
     run, lb_full = _full_kinetic_lb_matrix()
     op = run.operator
@@ -261,7 +261,7 @@ def test_energy_convolution_interpolated_database_envelope() -> None:
     the scanned collisionality decade; the envelope tightens with the grid
     (16 points: 4.0e-2).  Asserted with ~2x margins.
     """
-    from sfincs_jax.monoenergetic import energy_convolution, monoenergetic_database
+    from dkx.monoenergetic import energy_convolution, monoenergetic_database
 
     run, lb_full = _full_kinetic_lb_matrix()
     op = run.operator
@@ -299,17 +299,17 @@ def test_gradient_of_convolved_l11_matches_finite_differences() -> None:
     import jax
     import jax.numpy as jnp
 
-    from sfincs_jax.drift_kinetic import (
+    from dkx.drift_kinetic import (
         _geometry_and_radial,
         kinetic_operator_from_namelist,
     )
-    from sfincs_jax.inputs import load_sfincs_input
-    from sfincs_jax.magnetic_geometry import FluxSurfaceGeometry
-    from sfincs_jax.monoenergetic import (
+    from dkx.inputs import load_sfincs_input
+    from dkx.magnetic_geometry import FluxSurfaceGeometry
+    from dkx.monoenergetic import (
         energy_convolution,
         monoenergetic_database_from_operator,
     )
-    from sfincs_jax.run import _grids_from_input, _raw_with_validated_overrides
+    from dkx.run import _grids_from_input, _raw_with_validated_overrides
 
     inp = load_sfincs_input(MONO_DECK)
     raw = _raw_with_validated_overrides(inp)
@@ -366,7 +366,7 @@ def test_gradient_of_convolved_l11_matches_finite_differences() -> None:
 
 def test_database_save_load_roundtrip(tmp_path: Path) -> None:
     """The compact npz format round-trips grids, coefficients, and provenance."""
-    from sfincs_jax.monoenergetic import load_database, monoenergetic_database, save_database
+    from dkx.monoenergetic import load_database, monoenergetic_database, save_database
 
     db = monoenergetic_database(MONO_DECK, [1.196132e-3, 0.5], [0.0, 1.0e-3])
     path = save_database(tmp_path / "db.npz", db)
@@ -389,8 +389,8 @@ def test_database_save_load_roundtrip(tmp_path: Path) -> None:
 
 def test_cli_monoenergetic_database(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     """The thin CLI subcommand writes the npz database and prints the table."""
-    from sfincs_jax import cli
-    from sfincs_jax.monoenergetic import load_database
+    from dkx import cli
+    from dkx.monoenergetic import load_database
 
     out = tmp_path / "database.npz"
     rc = cli.main(

@@ -1,4 +1,4 @@
-"""Structural and physics tests for ``sfincs_jax.drift_kinetic.KineticOperator``.
+"""Structural and physics tests for ``dkx.drift_kinetic.KineticOperator``.
 
 Element-wise Fortran matvec/RHS/residual parity lives in
 ``tests/test_kinetic_operator_fortran_parity.py`` (whichMatrix petscbin
@@ -17,8 +17,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from sfincs_jax.drift_kinetic import KineticOperator
-from sfincs_jax.namelist import parse_sfincs_input_text, read_sfincs_input
+from dkx.drift_kinetic import KineticOperator
+from dkx.namelist import parse_sfincs_input_text, read_sfincs_input
 
 REF = Path(__file__).parent / "ref"
 
@@ -181,7 +181,7 @@ def test_rhs_transport_columns_rhsmode2() -> None:
 def test_matrix_free_apply_equals_materialized() -> None:
     from scipy.sparse import csr_matrix
 
-    from sfincs_jax.validation.fortran import read_petsc_mat_aij
+    from dkx.validation.fortran import read_petsc_mat_aij
 
     base = "pas_1species_PAS_noEr_tiny_scheme1"
     op_new = KineticOperator.from_namelist(_load(base))
@@ -325,7 +325,7 @@ def test_include_phi1_is_canonical_with_collision_coupling() -> None:
     # includePhi1InCollisionOperator is canonical: the operator builds the
     # poloidally varying Fokker-Planck collision operator (fp_phi1, not fp) and
     # reproduces the frozen Fortran residual at the recorded Newton state.
-    from sfincs_jax.validation.fortran import read_petsc_vec
+    from dkx.validation.fortran import read_petsc_vec
 
     coll_base = "fp_1species_FPCollisions_noEr_tiny_withPhi1_inCollision"
     coll = _load(coll_base)
@@ -344,7 +344,7 @@ def test_magnetic_drifts_are_canonical_and_reject_block_extraction() -> None:
     # element-wise.
     from scipy.sparse import csr_matrix
 
-    from sfincs_jax.validation.fortran import read_petsc_mat_aij
+    from dkx.validation.fortran import read_petsc_mat_aij
 
     base = "magdrift_1species_tiny"
     nml = _load(base)
@@ -412,15 +412,15 @@ def test_geometry_scheme3_bfield_parity_and_end_to_end() -> None:
     """geometryScheme=3 is wired into the canonical operator and runs end to end.
 
     The analytic LHD inward-shifted geometry already lives in
-    :meth:`sfincs_jax.magnetic_geometry.FluxSurfaceGeometry.from_scheme` (scheme
+    :meth:`dkx.magnetic_geometry.FluxSurfaceGeometry.from_scheme` (scheme
     3); the operator builder used to raise ``NotImplementedError`` for it.  This
     pins the now-wired path: the operator B-field must equal ``from_scheme(3)``
     exactly, and a tiny monoenergetic (RHSMode=3) transport-matrix run must
     converge to finite fluxes through the canonical ``run_transport_matrix``.
     """
-    from sfincs_jax.magnetic_geometry import FluxSurfaceGeometry
-    from sfincs_jax.phase_space import make_grids
-    from sfincs_jax.run import run_transport_matrix
+    from dkx.magnetic_geometry import FluxSurfaceGeometry
+    from dkx.phase_space import make_grids
+    from dkx.run import run_transport_matrix
 
     name = "monoenergetic_PAS_tiny_scheme3"
     op = KineticOperator.from_namelist(_load(name))

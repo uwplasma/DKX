@@ -1,7 +1,7 @@
 Geometry models and loading
 ===========================
 
-`sfincs_jax` solves a radially local neoclassical kinetic problem on a single
+`dkx` solves a radially local neoclassical kinetic problem on a single
 flux surface, so geometry is not an incidental input: the magnetic field
 strength :math:`\hat B(\theta,\zeta)`, its derivatives, the Jacobian factor
 :math:`\hat D`, and the covariant/contravariant field components set the
@@ -10,10 +10,10 @@ terms (:doc:`physics_reference`), as well as the flux-surface averages used in
 every diagnostic.
 
 All geometry is consolidated in the single canonical module
-:mod:`sfincs_jax.magnetic_geometry`, which mirrors the Fortran v3 ``geometry.F90``
+:mod:`dkx.magnetic_geometry`, which mirrors the Fortran v3 ``geometry.F90``
 (``initializeGeometry`` / ``computeBHat_*`` / ``setBoozerCoordinates`` /
 ``computeBIntegrals``). Every geometry source produces the same normalized
-container, :class:`sfincs_jax.magnetic_geometry.FluxSurfaceGeometry`, on a
+container, :class:`dkx.magnetic_geometry.FluxSurfaceGeometry`, on a
 ``(Ntheta, Nzeta)`` grid.
 
 Supported geometry schemes
@@ -61,7 +61,7 @@ Supported geometry schemes
      - ``from_fourier(...)`` (differentiable)
 
 The namelist entry point
-:meth:`sfincs_jax.drift_kinetic.KineticOperator.from_namelist` builds geometry
+:meth:`dkx.drift_kinetic.KineticOperator.from_namelist` builds geometry
 schemes ``{1, 2, 3, 4, 5, 11, 12}`` directly from an ``input.namelist``. Scheme
 13 is reachable through the differentiable ``from_fourier`` constructor in
 Python; parsing ``bmnc``/``bmns`` amplitudes from a namelist is deferred (see
@@ -139,7 +139,7 @@ the spectral amplitudes ``bmnc``/``bmns`` flow through :math:`\hat B`,
 
    import jax
    import jax.numpy as jnp
-   from sfincs_jax.magnetic_geometry import FluxSurfaceGeometry
+   from dkx.magnetic_geometry import FluxSurfaceGeometry
 
    theta = jnp.linspace(0.0, 2.0 * jnp.pi, 24, endpoint=False)
    zeta = jnp.linspace(0.0, 2.0 * jnp.pi / 5.0, 20, endpoint=False)
@@ -168,7 +168,7 @@ The ``FluxSurfaceGeometry`` container
 
 The operator does not carry an opaque geometry object; the solve path works with
 explicitly normalized arrays collected in the frozen dataclass
-:class:`sfincs_jax.magnetic_geometry.FluxSurfaceGeometry`. Its fields follow the
+:class:`dkx.magnetic_geometry.FluxSurfaceGeometry`. Its fields follow the
 SFINCS v3 ``sfincsOutput.h5`` names (``BHat`` :math:`\to` ``b_hat``, ``DHat``
 :math:`\to` ``d_hat``, ...):
 
@@ -186,12 +186,12 @@ Two flux-surface averages are methods on the container:
 
 .. admonition:: Where in the code
 
-   :mod:`sfincs_jax.magnetic_geometry`. Constructors:
+   :mod:`dkx.magnetic_geometry`. Constructors:
    ``FluxSurfaceGeometry.from_scheme`` (analytic 1--4, magnetic_geometry.py),
    ``from_fourier`` (differentiable Boozer spectrum, magnetic_geometry.py),
    ``from_boozer`` (``.bc`` schemes 11/12), ``from_vmec`` (VMEC scheme 5).
-   Readers: :func:`sfincs_jax.magnetic_geometry.read_boozer_bc` and
-   :func:`sfincs_jax.magnetic_geometry.read_vmec_wout` are plain-NumPy pure
+   Readers: :func:`dkx.magnetic_geometry.read_boozer_bc` and
+   :func:`dkx.magnetic_geometry.read_vmec_wout` are plain-NumPy pure
    functions kept separate from geometry construction. The namelist dispatch is
    ``_geometry_and_radial``.
 
@@ -212,10 +212,10 @@ rather than tracked in the repository; a namelist that references one by
 basename resolves it through the path search in :doc:`inputs` and downloads the
 checked release asset into the user cache when needed.
 
-A JAX-native equilibrium producer (for example ``vmec_jax``) can be coupled
+A JAX-native equilibrium producer (for example ``vmex``) can be coupled
 through the same scheme-5 formulas. A primal finite-beta end-to-end example is
-``examples/vmec_jax_finite_beta/finite_beta_vmec_to_sfincs.py``, which builds a
-``wout`` with ``vmec_jax``, evaluates scheme-5 geometry, scans ``Er`` on several
+``examples/vmex_finite_beta/finite_beta_vmec_to_sfincs.py``, which builds a
+``wout`` with ``vmex``, evaluates scheme-5 geometry, scans ``Er`` on several
 surfaces, and plots core-to-edge ambipolar ``Er`` and bootstrap current versus
 :math:`\psi_N = r_N^2`.
 
@@ -234,7 +234,7 @@ Radial coordinates and geometry-derived scales
 ----------------------------------------------
 
 The geometry layer defines the conversion between the radial labels used
-throughout `sfincs_jax`:
+throughout `dkx`:
 
 .. math::
 

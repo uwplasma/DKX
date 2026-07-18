@@ -1,16 +1,16 @@
 Inputs (namelist) reference
 ===========================
 
-`sfincs_jax` reads Fortran-style namelist files, typically named
+`dkx` reads Fortran-style namelist files, typically named
 ``input.namelist``. The input surface is compatible with the mature SFINCS-style
 ecosystem so equilibria, scans, and case descriptions carry over, but this page
-documents the public `sfincs_jax` interface in its own right and enumerates every
+documents the public `dkx` interface in its own right and enumerates every
 parameter the canonical parser recognizes.
 
 How the namelist parser works
 -----------------------------
 
-The canonical typed parser is :class:`sfincs_jax.inputs.SfincsInput`. Group names
+The canonical typed parser is :class:`dkx.inputs.SfincsInput`. Group names
 are matched case-insensitively; each supported parameter is a typed field whose
 Python type is inferred from its default (``tuple`` :math:`\to` float array,
 ``bool``, ``int``, ``float``, else ``str``). Two behaviors are worth stating up
@@ -318,7 +318,7 @@ Unsupported inputs
 
 Stated plainly, the remaining gaps against SFINCS Fortran v3 are:
 
-- **MPI multi-node execution** — `sfincs_jax` runs single-node (multicore CPU
+- **MPI multi-node execution** — `dkx` runs single-node (multicore CPU
   or GPU); there is no distributed-memory mode.
 - **Convergence-scan ramp arrays** (``NthetaNumRuns``, ``Nx_min``, ...) — no
   typed fields; retained in ``raw`` only and not acted upon (see above).
@@ -342,13 +342,13 @@ equilibrium search order:
 - absolute path from the namelist or explicit override,
 - relative to the input namelist directory,
 - relative to the current working directory,
-- directories listed in ``SFINCS_JAX_EQUILIBRIA_DIRS``,
+- directories listed in ``DKX_EQUILIBRIA_DIRS``,
 - small bundled test/example data directories,
 - then known release-hosted public fixtures by basename, fetched into the
-  ``SFINCS_JAX_DATA_DIR`` cache when needed.
+  ``DKX_DATA_DIR`` cache when needed.
 
 Prefetch the fixture cache with
-``python -m sfincs_jax.validation.data_fetch``, or set ``SFINCS_JAX_OFFLINE=1``
+``python -m dkx.validation.data_fetch``, or set ``DKX_OFFLINE=1``
 to require a pre-populated cache.
 
 Runtime overrides
@@ -358,7 +358,7 @@ Without editing the namelist, override the equilibrium source through:
 
 - CLI: ``--equilibrium-file ...`` or ``--wout-path ...``
 - Python: ``equilibrium_file=...`` or ``wout_path=...`` in
-  :func:`sfincs_jax.api.write_output`
+  :func:`dkx.api.write_output`
 
 When an override is used, the embedded ``input.namelist`` dataset written to
 ``sfincsOutput.h5`` reflects the effective configuration.
@@ -371,7 +371,7 @@ overwrites the relevant drives internally before building each RHS. On the
 canonical stack this is ``KineticOperator._with_rhs_settings``, so the transport-mode right-hand side reproduces the
 v3 solver RHS exactly. For ``RHSMode = 3`` the speed grid collapses to the single
 node at :math:`x=1` (``Nx = 1``), matching v3 ``createGrids.F90``; this is handled
-by :meth:`sfincs_jax.drift_kinetic.KineticOperator.from_namelist`.
+by :meth:`dkx.drift_kinetic.KineticOperator.from_namelist`.
 
 Worked example decks are in ``examples/`` (see :doc:`examples`), and the geometry
 input knobs are cross-referenced from :doc:`geometry`.

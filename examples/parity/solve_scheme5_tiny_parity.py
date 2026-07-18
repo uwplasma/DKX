@@ -4,7 +4,7 @@ This script exercises the full canonical v3 linear solve stack for a VMEC equili
 
 - Builds the canonical `KineticOperator` (grids + `geometryScheme=5` VMEC geometry
   from `wout_*.nc` + constraint rows/cols) from the namelist.
-- Assembles the v3 RHS and solves `A x = rhs` with `sfincs_jax.solve.solve`.
+- Assembles the v3 RHS and solves `A x = rhs` with `dkx.solve.solve`.
 - Compares the resulting solution vector to a frozen Fortran v3 `stateVector` fixture.
 
 This is a key milestone toward full upstream v3 example-suite parity: not just geometry/output
@@ -23,10 +23,10 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.validation.fortran import read_petsc_vec
-from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
-from sfincs_jax.solve import solve
+from dkx.namelist import read_sfincs_input
+from dkx.validation.fortran import read_petsc_vec
+from dkx.drift_kinetic import kinetic_operator_from_namelist
+from dkx.solve import solve
 
 
 def _default_input() -> Path:
@@ -42,7 +42,7 @@ def main() -> int:
     p.add_argument("--input", default=str(_default_input()))
     p.add_argument("--statevector", default=str(_default_statevector()))
     p.add_argument("--tol", type=float, default=1e-12)
-    p.add_argument("--method", default="auto", help="sfincs_jax.solve.solve method")
+    p.add_argument("--method", default="auto", help="dkx.solve.solve method")
     args = p.parse_args()
 
     nml = read_sfincs_input(Path(args.input))

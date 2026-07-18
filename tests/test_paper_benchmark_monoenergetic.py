@@ -82,7 +82,7 @@ D11_STAR_FROZEN = 0.20596213
 
 
 def test_tiny_w7x_monoenergetic_benchmark_scan(tmp_path: Path) -> None:
-    from sfincs_jax.monoenergetic import monoenergetic_database
+    from dkx.monoenergetic import monoenergetic_database
 
     deck = tmp_path / "monoenergetic_icnts_w7x_tiny.input.namelist"
     deck.write_text(DECK_TEMPLATE)
@@ -179,7 +179,7 @@ HSX_DECK = """&general
 
 
 def test_tiny_tjii_monoenergetic_benchmark_scan(tmp_path: Path) -> None:
-    from sfincs_jax.monoenergetic import monoenergetic_database
+    from dkx.monoenergetic import monoenergetic_database
 
     deck = tmp_path / "monoenergetic_icnts_tjii_tiny.input.namelist"
     deck.write_text(_tjii_tiny_deck())
@@ -218,7 +218,7 @@ def test_tiny_tjii_monoenergetic_benchmark_scan(tmp_path: Path) -> None:
 
 
 def test_tiny_hsx_monoenergetic_benchmark_scan(tmp_path: Path) -> None:
-    from sfincs_jax.monoenergetic import monoenergetic_database
+    from dkx.monoenergetic import monoenergetic_database
 
     deck = tmp_path / "monoenergetic_icnts_hsx_tiny.input.namelist"
     deck.write_text(HSX_DECK)
@@ -272,13 +272,13 @@ def test_tiny_shaing_callen_convergence_scan(tmp_path: Path) -> None:
     """
     import numpy as np
 
-    from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
-    from sfincs_jax.inputs import load_sfincs_input
-    from sfincs_jax.monoenergetic import (
+    from dkx.drift_kinetic import kinetic_operator_from_namelist
+    from dkx.inputs import load_sfincs_input
+    from dkx.monoenergetic import (
         monoenergetic_database,
         monoenergetic_dstar_from_transport_matrix,
     )
-    from sfincs_jax.shaing_callen import shaing_callen_d31_limit
+    from dkx.shaing_callen import shaing_callen_d31_limit
 
     deck = tmp_path / "shaing_callen_convergence_tiny.input.namelist"
     deck.write_text(DECK_TEMPLATE)
@@ -333,11 +333,11 @@ def test_tiny_gradient_verification_row(tmp_path: Path) -> None:
 
     from dataclasses import replace
 
-    from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
-    from sfincs_jax.inputs import load_sfincs_input
-    from sfincs_jax.moments import rhsmode1_moments
-    from sfincs_jax.solve import solve
-    from sfincs_jax.writer import operator_containers
+    from dkx.drift_kinetic import kinetic_operator_from_namelist
+    from dkx.inputs import load_sfincs_input
+    from dkx.moments import rhsmode1_moments
+    from dkx.solve import solve
+    from dkx.writer import operator_containers
 
     src = (EXAMPLES_DIR / "gradient_verification.py").read_text(encoding="utf-8")
     pas_deck = re.search(r'PAS_DECK = """(.*?)"""', src, re.S).group(1)

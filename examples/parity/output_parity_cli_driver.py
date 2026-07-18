@@ -1,4 +1,4 @@
-"""Compare a `sfincs_jax` output file (generated via CLI) against a Fortran fixture.
+"""Compare a `dkx` output file (generated via CLI) against a Fortran fixture.
 
 Run:
   python examples/parity/output_parity_cli_driver.py
@@ -14,7 +14,7 @@ repo_root = Path(__file__).resolve().parents[2]
 if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
 
-from sfincs_jax.compare import compare_sfincs_outputs  # noqa: E402
+from dkx.compare import compare_sfincs_outputs  # noqa: E402
 
 
 def main() -> int:
@@ -27,7 +27,7 @@ def main() -> int:
     cmd = [
         sys.executable,
         "-m",
-        "sfincs_jax",
+        "dkx",
         "write-output",
         "--input",
         str(input_path),

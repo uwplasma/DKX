@@ -3,7 +3,7 @@ from __future__ import annotations
 import h5py
 import pytest
 
-from sfincs_jax.solver_trace import (
+from dkx.solver_trace import (
     SolverTrace,
     SolverTraceCandidate,
     read_solver_trace_h5,

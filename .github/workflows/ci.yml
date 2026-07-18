@@ -21,11 +21,11 @@ jobs:
     env:
       JAX_ENABLE_X64: "True"
       JAX_DISABLE_JIT: "0"
-      SFINCS_JAX_SOLVER_JIT: "1"
-      SFINCS_JAX_PRECOMPILE: "0"
-      SFINCS_JAX_PROFILE: "0"
-      SFINCS_JAX_CI: "1"
-      SFINCS_JAX_FAST_EXAMPLES: "1"
+      DKX_SOLVER_JIT: "1"
+      DKX_PRECOMPILE: "0"
+      DKX_PROFILE: "0"
+      DKX_CI: "1"
+      DKX_FAST_EXAMPLES: "1"
       COVERAGE_FILE: ".coverage.${{ matrix.group }}"
     steps:
       - uses: actions/checkout@v6
@@ -40,10 +40,10 @@ jobs:
           pip install -e ".[dev,structured]"
       - name: Fetch external equilibrium data
         run: |
-          python -m sfincs_jax.validation.data_fetch --quiet
+          python -m dkx.validation.data_fetch --quiet
       - name: Coverage shard
         run: |
-          python -m pytest -q -n auto --dist=loadscope --splits 6 --group ${{ matrix.group }} --splitting-algorithm least_duration -m "not slow" --cov=sfincs_jax --cov-report=
+          python -m pytest -q -n auto --dist=loadscope --splits 6 --group ${{ matrix.group }} --splitting-algorithm least_duration -m "not slow" --cov=dkx --cov-report=
       - name: Upload coverage data
         uses: actions/upload-artifact@v7
         with:
@@ -92,11 +92,11 @@ jobs:
     env:
       JAX_ENABLE_X64: "True"
       JAX_DISABLE_JIT: "0"
-      SFINCS_JAX_SOLVER_JIT: "1"
-      SFINCS_JAX_PRECOMPILE: "0"
-      SFINCS_JAX_PROFILE: "0"
-      SFINCS_JAX_CI: "1"
-      SFINCS_JAX_FAST_EXAMPLES: "1"
+      DKX_SOLVER_JIT: "1"
+      DKX_PRECOMPILE: "0"
+      DKX_PROFILE: "0"
+      DKX_CI: "1"
+      DKX_FAST_EXAMPLES: "1"
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -113,10 +113,10 @@ jobs:
           python tests/_golden_cache.py
       - name: Fetch external equilibrium data
         run: |
-          python -m sfincs_jax.validation.data_fetch --quiet
+          python -m dkx.validation.data_fetch --quiet
       - name: Smoke-run examples (no optional deps)
         env:
-          SFINCS_JAX_OFFLINE: "1"
+          DKX_OFFLINE: "1"
         run: |
           python examples/getting_started/build_grids_and_geometry.py
           python examples/getting_started/apply_collisionless_operator.py
@@ -124,7 +124,7 @@ jobs:
           python examples/getting_started/write_sfincs_output_cli.py
           python examples/getting_started/write_sfincs_output_vmec.py --out "${RUNNER_TEMP}/sfincsOutput_vmec_release_data.h5"
           python examples/getting_started/plot_sfincs_output.py
-          python examples/tutorials/run_quick_output_and_plot.py --out-dir "${RUNNER_TEMP}/sfincs_jax_tutorial_output"
+          python examples/tutorials/run_quick_output_and_plot.py --out-dir "${RUNNER_TEMP}/dkx_tutorial_output"
           python examples/parity/write_output_upstream_quick2species_python.py
           python examples/parity/write_output_upstream_quick2species_cli.py
           python examples/parity/geometry_scheme4_parity.py
@@ -143,11 +143,11 @@ jobs:
     env:
       JAX_ENABLE_X64: "True"
       JAX_DISABLE_JIT: "0"
-      SFINCS_JAX_SOLVER_JIT: "1"
-      SFINCS_JAX_PRECOMPILE: "0"
-      SFINCS_JAX_PROFILE: "0"
-      SFINCS_JAX_CI: "1"
-      SFINCS_JAX_FAST_EXAMPLES: "1"
+      DKX_SOLVER_JIT: "1"
+      DKX_PRECOMPILE: "0"
+      DKX_PROFILE: "0"
+      DKX_CI: "1"
+      DKX_FAST_EXAMPLES: "1"
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -161,18 +161,18 @@ jobs:
           pip install -e ".[dev,structured]"
       - name: Fetch release-hosted equilibrium data
         env:
-          SFINCS_JAX_DATA_DIR: "${{ runner.temp }}/sfincs_jax_release_data"
+          DKX_DATA_DIR: "${{ runner.temp }}/dkx_release_data"
         run: |
-          python -m sfincs_jax.validation.data_fetch --quiet
+          python -m dkx.validation.data_fetch --quiet
       - name: Verify release data in offline mode
         env:
-          SFINCS_JAX_DATA_DIR: "${{ runner.temp }}/sfincs_jax_release_data"
-          SFINCS_JAX_OFFLINE: "1"
+          DKX_DATA_DIR: "${{ runner.temp }}/dkx_release_data"
+          DKX_OFFLINE: "1"
         run: |
           python - <<'PY'
           from pathlib import Path
 
-          from sfincs_jax.validation.data_fetch import external_data_dir, external_data_manifest
+          from dkx.validation.data_fetch import external_data_dir, external_data_manifest
 
           root = external_data_dir()
           manifest = external_data_manifest()
@@ -192,7 +192,7 @@ jobs:
   # sfincs-specific probe depended on the deleted structured-CSR internals
   # (the retired structured-CSR operator internals), and the remaining lineax/
   # equinox/interpax checks were third-party library smoke tests with no
-  # sfincs_jax coverage. The real structured backend (solvax) is exercised by
+  # dkx coverage. The real structured backend (solvax) is exercised by
   # the coverage shards, which install the `structured` extra.
 
   tests:

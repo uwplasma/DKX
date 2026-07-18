@@ -1,16 +1,16 @@
 #!/usr/bin/env python
 """Plot a VMEC-backed QA optimization and bootstrap-current diagnostic.
 
-This script intentionally uses the real ``vmec_jax`` QA optimization artifacts
+This script intentionally uses the real ``vmex`` QA optimization artifacts
 from ``examples/optimization/QA_optimization.py``.  It does not construct a
 surrogate stellarator or a surrogate rotational-transform model.  The checked
 README/docs artifact is therefore tied to the VMEC equilibrium that targets
-aspect ratio 5 and mean iota 0.41 in the upstream ``vmec_jax`` script.
+aspect ratio 5 and mean iota 0.41 in the upstream ``vmex`` script.
 
 The current panel is a VMEC equilibrium diagnostic,
 ``jdotb / sqrt(bdotb)``.  It is useful for teaching how current-sensitive
 optimization hooks are inspected, but it is not a completed kinetic
-``sfincs_jax`` bootstrap-current claim.  Accepted candidates still need
+``dkx`` bootstrap-current claim.  Accepted candidates still need
 completed radial/velocity convergence and CPU/GPU/Fortran kinetic gates before
 being used as transport evidence.
 """
@@ -35,13 +35,13 @@ import numpy as np
 
 _SCRIPT_NAME = "examples/optimization/QA_optimization.py"
 _DEFAULT_STEM = "qa_nfp2_bootstrap_current_comparison"
-_TARGET_ASPECT_FROM_VMEC_JAX = 5.0
-_TARGET_IOTA_FROM_VMEC_JAX = 0.41
+_TARGET_ASPECT_FROM_VMEX = 5.0
+_TARGET_IOTA_FROM_VMEX = 0.41
 
 
 @dataclass(frozen=True)
-class VmecJaxContext:
-    """Resolved local ``vmec_jax`` module and repository paths."""
+class VmexContext:
+    """Resolved local ``vmex`` module and repository paths."""
 
     module: Any
     root: Path | None
@@ -65,10 +65,10 @@ class Candidate:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--vmec-jax-root",
+        "--vmex-root",
         type=Path,
         default=None,
-        help="Path to a local vmec_jax checkout. Defaults to SFINCS_JAX_VMEC_JAX_ROOT, then common local paths.",
+        help="Path to a local vmex checkout. Defaults to DKX_VMEX_ROOT, then common local paths.",
     )
     parser.add_argument(
         "--qa-result-dir",
@@ -80,7 +80,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--comparison-result-dir",
         type=Path,
         default=None,
-        help="Optional second vmec_jax result directory, for example a QA run with JDotB or RedlBootstrapMismatch.",
+        help="Optional second vmex result directory, for example a QA run with JDotB or RedlBootstrapMismatch.",
     )
     parser.add_argument(
         "--comparison-label",
@@ -95,7 +95,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--json", action="store_true", help="Print the machine-readable summary.")
 
     # Backward-compatible no-op flags retained so old README/demo commands fail
-    # only when the real vmec_jax artifacts are missing, not at argparse time.
+    # only when the real vmex artifacts are missing, not at argparse time.
     parser.add_argument("--steps", type=int, default=None, help=argparse.SUPPRESS)
     parser.add_argument("--learning-rate", type=float, default=None, help=argparse.SUPPRESS)
     parser.add_argument("--bootstrap-weight", type=float, default=None, help=argparse.SUPPRESS)
@@ -124,17 +124,17 @@ def _setup_mpl() -> None:
     )
 
 
-def _candidate_vmec_jax_roots(explicit: Path | None) -> list[Path | None]:
+def _candidate_vmex_roots(explicit: Path | None) -> list[Path | None]:
     roots: list[Path | None] = []
     if explicit is not None:
         roots.append(explicit.expanduser().resolve())
-    env_root = os.environ.get("SFINCS_JAX_VMEC_JAX_ROOT")
+    env_root = os.environ.get("DKX_VMEX_ROOT")
     if env_root:
         roots.append(Path(env_root).expanduser().resolve())
     roots.extend(
         [
-            Path("/Users/rogeriojorge/local/vmec_jax"),
-            Path("/Users/rogeriojorge/vmec_jax"),
+            Path("/Users/rogeriojorge/local/vmex"),
+            Path("/Users/rogeriojorge/vmex"),
             None,
         ]
     )
@@ -148,9 +148,9 @@ def _candidate_vmec_jax_roots(explicit: Path | None) -> list[Path | None]:
     return deduped
 
 
-def _import_vmec_jax(explicit_root: Path | None):
+def _import_vmex(explicit_root: Path | None):
     errors: list[str] = []
-    for root in _candidate_vmec_jax_roots(explicit_root):
+    for root in _candidate_vmex_roots(explicit_root):
         try:
             if root is not None:
                 if not root.exists():
@@ -158,36 +158,36 @@ def _import_vmec_jax(explicit_root: Path | None):
                     continue
                 if str(root) not in sys.path:
                     sys.path.insert(0, str(root))
-            import vmec_jax as vj  # type: ignore[import-not-found]
+            import vmex as vj  # type: ignore[import-not-found]
 
             return vj, root
         except Exception as exc:  # pragma: no cover - diagnostic path
             errors.append(f"{root or 'import path'}: {type(exc).__name__}: {exc}")
     joined = "\n  ".join(errors)
     raise RuntimeError(
-        "Could not import vmec_jax. Install it or pass --vmec-jax-root.\n"
+        "Could not import vmex. Install it or pass --vmex-root.\n"
         "Tried:\n  "
         f"{joined}"
     )
 
 
-def _resolve_context(args: argparse.Namespace) -> VmecJaxContext:
-    vj, root = _import_vmec_jax(args.vmec_jax_root)
+def _resolve_context(args: argparse.Namespace) -> VmexContext:
+    vj, root = _import_vmex(args.vmex_root)
     if args.qa_result_dir is not None:
         qa_result_dir = args.qa_result_dir.expanduser().resolve()
     elif root is not None:
         qa_result_dir = root / "examples" / "optimization" / "results" / "qa_opt" / "ess"
     else:
-        raise RuntimeError("Pass --qa-result-dir when vmec_jax is imported from site-packages.")
+        raise RuntimeError("Pass --qa-result-dir when vmex is imported from site-packages.")
 
     wout_path = qa_result_dir / "wout_final.nc"
     if not wout_path.exists():
         script_hint = (root / _SCRIPT_NAME) if root is not None else Path(_SCRIPT_NAME)
         raise FileNotFoundError(
-            f"Missing {wout_path}. Generate it with the real vmec_jax QA optimization first:\n"
-            f"  cd {root or '<vmec_jax checkout>'} && python {script_hint}"
+            f"Missing {wout_path}. Generate it with the real vmex QA optimization first:\n"
+            f"  cd {root or '<vmex checkout>'} && python {script_hint}"
         )
-    return VmecJaxContext(module=vj, root=root, qa_result_dir=qa_result_dir)
+    return VmexContext(module=vj, root=root, qa_result_dir=qa_result_dir)
 
 
 def _load_json(path: Path | None) -> dict[str, Any]:
@@ -235,8 +235,8 @@ def _candidate_metrics(wout: Any, history: dict[str, Any]) -> tuple[dict[str, An
         "aspect_from_history": None if history_aspect is None else float(history_aspect),
         "mean_iota": mean_iota,
         "iota_from_history": None if history_iota is None else float(history_iota),
-        "target_aspect_ratio": float(history.get("target_aspect", _TARGET_ASPECT_FROM_VMEC_JAX)),
-        "target_iota": float(history.get("target_iota", _TARGET_IOTA_FROM_VMEC_JAX)),
+        "target_aspect_ratio": float(history.get("target_aspect", _TARGET_ASPECT_FROM_VMEX)),
+        "target_iota": float(history.get("target_iota", _TARGET_IOTA_FROM_VMEX)),
         "jdotb_over_root_bdotb_rms": current_rms,
         "jdotb_over_root_bdotb_max_abs": current_max,
         "jdotb_rms": float(np.sqrt(np.mean(np.asarray(getattr(wout, "jdotb", [0.0]), dtype=float)[mask] ** 2)))
@@ -486,7 +486,7 @@ def _write_figure(
     _plot_profiles(ax_iota, ax_current, candidates)
     _plot_history(ax_hist, primary)
     fig.suptitle(
-        "VMEC-backed QA optimization diagnostic for sfincs_jax promotion",
+        "VMEC-backed QA optimization diagnostic for dkx promotion",
         fontsize=15,
         fontweight="bold",
     )
@@ -497,17 +497,17 @@ def _write_figure(
 
 def _summary(
     *,
-    ctx: VmecJaxContext,
+    ctx: VmexContext,
     primary: Candidate,
     comparison: Candidate | None,
     args: argparse.Namespace,
 ) -> dict[str, Any]:
     vmec_script = None if ctx.root is None else str((ctx.root / _SCRIPT_NAME).resolve())
     return {
-        "workflow": "sfincs_jax_vmec_jax_qa_optimization_current_diagnostic",
+        "workflow": "dkx_vmex_qa_optimization_current_diagnostic",
         "nfp": int(getattr(primary.wout, "nfp", 2)),
         "source": {
-            "vmec_jax_root": None if ctx.root is None else str(ctx.root),
+            "vmex_root": None if ctx.root is None else str(ctx.root),
             "qa_optimization_script": vmec_script,
             "qa_result_dir": str(primary.result_dir),
             "qa_wout": str(primary.wout_path),
@@ -534,22 +534,22 @@ def _summary(
         },
         "comparison": _comparison_metrics(primary, comparison),
         "claim_boundary": (
-            "This is a VMEC equilibrium diagnostic generated from vmec_jax "
+            "This is a VMEC equilibrium diagnostic generated from vmex "
             "QA_optimization.py outputs. The current profile is VMEC "
-            "jdotb/sqrt(bdotb), not a completed high-fidelity sfincs_jax "
+            "jdotb/sqrt(bdotb), not a completed high-fidelity dkx "
             "kinetic bootstrap-current claim."
         ),
         "promotion_plan": {
             "required_gates": [
                 "preserve finite target iota and target aspect in the VMEC wout, not just in optimizer history",
                 "if a current-aware VMEC candidate is supplied, require smaller VMEC jdotb/sqrt(bdotb) RMS without failing iota/aspect gates",
-                "run completed sfincs_jax scan-er calculations on accepted equilibria",
+                "run completed dkx scan-er calculations on accepted equilibria",
                 "check radial and velocity-space convergence of FSABjHatOverRootFSAB2",
                 "check CPU/GPU agreement and SFINCS Fortran v3 agreement when the model scopes overlap",
             ],
             "example_commands": [
-                "cd /path/to/vmec_jax && python examples/optimization/QA_optimization.py",
-                "python examples/optimization/qa_nfp2_bootstrap_current_comparison.py --vmec-jax-root /path/to/vmec_jax",
+                "cd /path/to/vmex && python examples/optimization/QA_optimization.py",
+                "python examples/optimization/qa_nfp2_bootstrap_current_comparison.py --vmex-root /path/to/vmex",
             ],
         },
         "plotting": {

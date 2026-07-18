@@ -1,6 +1,6 @@
 {
   "bootstrap_objective": 0.001766400705153655,
-  "claim_boundary": "This audit evaluates completed sfincs_jax kinetic outputs. It promotes a proxy optimization candidate only if the scan is bracketed, residual-gated, and the requested observables are present.",
+  "claim_boundary": "This audit evaluates completed dkx kinetic outputs. It promotes a proxy optimization candidate only if the scan is bracketed, residual-gated, and the requested observables are present.",
   "electron_root_penalty": 0.0,
   "failures": [],
   "flux_objective": {
@@ -23,7 +23,7 @@
         1.4312865871429229e-08,
         2.386880533789938e-08
       ],
-      "path": "/private/tmp/sfincs_jax_finite_beta_9x9x7_central_campaign/fortran_v3_scan/Er-1/sfincsOutput.h5",
+      "path": "/private/tmp/dkx_finite_beta_9x9x7_central_campaign/fortran_v3_scan/Er-1/sfincsOutput.h5",
       "radial_current": -9.555939466470151e-09,
       "residual_gate": {
         "cpu_gpu_relative_difference": null,
@@ -49,7 +49,7 @@
         2.1009517506967717e-08,
         2.3743935826223157e-08
       ],
-      "path": "/private/tmp/sfincs_jax_finite_beta_9x9x7_central_campaign/fortran_v3_scan/Er0/sfincsOutput.h5",
+      "path": "/private/tmp/dkx_finite_beta_9x9x7_central_campaign/fortran_v3_scan/Er0/sfincsOutput.h5",
       "radial_current": -2.7344183192554404e-09,
       "residual_gate": {
         "cpu_gpu_relative_difference": null,
@@ -75,7 +75,7 @@
         2.2684521742307425e-08,
         2.371259257314364e-08
       ],
-      "path": "/private/tmp/sfincs_jax_finite_beta_9x9x7_central_campaign/fortran_v3_scan/Er0.25/sfincsOutput.h5",
+      "path": "/private/tmp/dkx_finite_beta_9x9x7_central_campaign/fortran_v3_scan/Er0.25/sfincsOutput.h5",
       "radial_current": -1.028070830836215e-09,
       "residual_gate": {
         "cpu_gpu_relative_difference": null,
@@ -101,7 +101,7 @@
         2.435940079767076e-08,
         2.368126441053477e-08
       ],
-      "path": "/private/tmp/sfincs_jax_finite_beta_9x9x7_central_campaign/fortran_v3_scan/Er0.5/sfincsOutput.h5",
+      "path": "/private/tmp/dkx_finite_beta_9x9x7_central_campaign/fortran_v3_scan/Er0.5/sfincsOutput.h5",
       "radial_current": 6.781363871359898e-10,
       "residual_gate": {
         "cpu_gpu_relative_difference": null,
@@ -127,7 +127,7 @@
         2.603391798557499e-08,
         2.364997423141893e-08
       ],
-      "path": "/private/tmp/sfincs_jax_finite_beta_9x9x7_central_campaign/fortran_v3_scan/Er0.75/sfincsOutput.h5",
+      "path": "/private/tmp/dkx_finite_beta_9x9x7_central_campaign/fortran_v3_scan/Er0.75/sfincsOutput.h5",
       "radial_current": 2.383943754156061e-09,
       "residual_gate": {
         "cpu_gpu_relative_difference": null,
@@ -153,7 +153,7 @@
         2.7707851600979747e-08,
         2.3618765887857953e-08
       ],
-      "path": "/private/tmp/sfincs_jax_finite_beta_9x9x7_central_campaign/fortran_v3_scan/Er1/sfincsOutput.h5",
+      "path": "/private/tmp/dkx_finite_beta_9x9x7_central_campaign/fortran_v3_scan/Er1/sfincsOutput.h5",
       "radial_current": 4.089085713121795e-09,
       "residual_gate": {
         "cpu_gpu_relative_difference": null,
@@ -179,7 +179,7 @@
         5.423816609188719e-08,
         2.315627596256629e-08
       ],
-      "path": "/private/tmp/sfincs_jax_finite_beta_9x9x7_central_campaign/fortran_v3_scan/Er5/sfincsOutput.h5",
+      "path": "/private/tmp/dkx_finite_beta_9x9x7_central_campaign/fortran_v3_scan/Er5/sfincsOutput.h5",
       "radial_current": 3.10818901293209e-08,
       "residual_gate": {
         "cpu_gpu_relative_difference": null,
@@ -195,7 +195,7 @@
       "residual_target": null
     }
   ],
-  "scan_dir": "/private/tmp/sfincs_jax_finite_beta_9x9x7_central_campaign/fortran_v3_scan",
+  "scan_dir": "/private/tmp/dkx_finite_beta_9x9x7_central_campaign/fortran_v3_scan",
   "selected_root": {
     "bracket": [
       0.25,
@@ -205,5 +205,5 @@
     "root_type": "electron",
     "slope": 6.824828871888819e-09
   },
-  "workflow": "sfincs_jax_optimization_high_fidelity_promotion"
+  "workflow": "dkx_optimization_high_fidelity_promotion"
 }

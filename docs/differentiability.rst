@@ -1,7 +1,7 @@
 Differentiability
 =================
 
-`sfincs_jax` is differentiable end to end. Because the drift-kinetic operator,
+`dkx` is differentiable end to end. Because the drift-kinetic operator,
 its right-hand side, and the moment diagnostics are all pure JAX functions, a
 scalar built from a solved distribution — a flux, a bootstrap current, an
 ambipolar :math:`E_r`, a transport coefficient — can be handed straight to
@@ -12,10 +12,10 @@ stencil in the loop and no differentiation through solver iterations.
 This page explains how the gradient is taken through the linear solve, catalogues
 what is differentiable, reports the measured gradient-vs-finite-difference
 agreement, and shows the differentiable geometry chain
-``vmec_jax -> booz_xform_jax -> sfincs_jax`` used for stellarator optimization.
+``vmex -> booz_xform_jax -> dkx`` used for stellarator optimization.
 
-.. figure:: _static/figures/paper/sfincs_jax_autodiff_gradient_check.png
-   :alt: Autodiff gradients of sfincs_jax observables overlaid on centered finite differences.
+.. figure:: _static/figures/paper/dkx_autodiff_gradient_check.png
+   :alt: Autodiff gradients of dkx observables overlaid on centered finite differences.
    :align: center
    :width: 88%
 
@@ -67,10 +67,10 @@ function theorem rather than unrolled iterations.
 
 .. admonition:: Where in the code
 
-   ``solve(op, rhs, differentiable=True)`` (:func:`sfincs_jax.solve.solve`) wraps
+   ``solve(op, rhs, differentiable=True)`` (:func:`dkx.solve.solve`) wraps
    tiers 1 and 2 with the implicit adjoint. The scalar
-   ``ambipolar_er`` (:func:`sfincs_jax.er.ambipolar_er`) and the
-   ``phi1_state`` (:func:`sfincs_jax.phi1.phi1_state`) helpers return
+   ``ambipolar_er`` (:func:`dkx.er.ambipolar_er`) and the
+   ``phi1_state`` (:func:`dkx.phi1.phi1_state`) helpers return
    differentiable JAX arrays directly. The tier-3 host direct solve is *not*
    differentiable and raises if ``differentiable=True`` is requested.
 
@@ -87,7 +87,7 @@ What is differentiable
    * - **Geometry**
      - Boozer harmonics :math:`\hat B_{mn}` and derived metric coefficients, for
        analytic schemes and for JAX-native geometry producers
-     - :meth:`sfincs_jax.drift_kinetic.KineticOperator.apply` /
+     - :meth:`dkx.drift_kinetic.KineticOperator.apply` /
        ``booz_xform_jax``
    * - **Profiles**
      - densities, temperatures, their radial gradients, ``nu_n``, and the
@@ -95,21 +95,21 @@ What is differentiable
      - ``KineticOperator.rhs`` and the operator coefficients
    * - **Ambipolar** :math:`E_r`
      - the scalar root of :math:`J_r(E_r)=0` and any downstream function of it
-     - :func:`sfincs_jax.er.ambipolar_er`
+     - :func:`dkx.er.ambipolar_er`
    * - :math:`\Phi_1` **state**
      - the solved flux-surface potential :math:`\Phi_1(\theta,\zeta)` from the
        nonlinear quasineutrality Newton solve
-     - :func:`sfincs_jax.phi1.phi1_state`
+     - :func:`dkx.phi1.phi1_state`
    * - **Monoenergetic transport matrix**
      - the RHSMode=3 coefficients and the energy-convolved thermal
        :math:`L_{ij}`, differentiated w.r.t. geometry
-     - :func:`sfincs_jax.monoenergetic.monoenergetic_database_from_operator`
+     - :func:`dkx.monoenergetic.monoenergetic_database_from_operator`
        (``differentiable=True``)
 
 The file-based readers (``input.namelist``, ``.bc`` Boozer files, ``wout_*.nc``)
 are provenance and parity tools and are **not** differentiable. Geometry
 sensitivities flow through JAX-native producers instead — the analytic geometry
-schemes, or the ``vmec_jax -> booz_xform_jax`` transform below.
+schemes, or the ``vmex -> booz_xform_jax`` transform below.
 
 .. note::
 
@@ -187,8 +187,8 @@ solve, the Boozer transform, and the drift-kinetic solve without any finite
 differences. The flagship script ``examples/optimize_QA_bootstrap.py`` drives a
 quasi-axisymmetric, low-bootstrap optimization on exactly this chain with warm
 starts and finite-difference-verified gradients; the geometry link on its own is
-demonstrated in ``examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py``. See
-:doc:`optimization` and :doc:`vmec_jax_workflow` for the full workflow.
+demonstrated in ``examples/autodiff/vmex_to_boozer_sfincs_pipeline.py``. See
+:doc:`optimization` and :doc:`vmex_workflow` for the full workflow.
 
 Worked examples
 ---------------

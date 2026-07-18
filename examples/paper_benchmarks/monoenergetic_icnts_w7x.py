@@ -10,13 +10,13 @@ Collaboration on Neoclassical Transport in Stellarators (ICNTS) benchmark
 formulation is that of S.P. Hirshman et al., Phys. Fluids 29, 2951 (1986);
 the normalization conventions (equivalent-tokamak plateau value for ``D11``,
 large-aspect-ratio banana bootstrap value for ``D31``) are documented in
-:mod:`sfincs_jax.monoenergetic`.
+:mod:`dkx.monoenergetic`.
 
 What the script does:
   1. writes an RHSMode=3 input namelist on the W7-X standard-configuration
      equilibrium (fetched into the local data cache on first use),
   2. scans the (nuPrime, EStar) grid with
-     :func:`sfincs_jax.monoenergetic.monoenergetic_database`, one nuPrime
+     :func:`dkx.monoenergetic.monoenergetic_database`, one nuPrime
      row at a time, checkpointing every finished row to a cache file so an
      interrupted scan resumes where it stopped,
   3. re-solves one low-collisionality point at 1.5x resolution as a
@@ -58,7 +58,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 
-from sfincs_jax.monoenergetic import (
+from dkx.monoenergetic import (
     monoenergetic_database,
     monoenergetic_dstar_from_transport_matrix,
 )
@@ -66,7 +66,7 @@ from sfincs_jax.monoenergetic import (
 # ----------------------------------------------------------------------------
 # Parameters
 # ----------------------------------------------------------------------------
-EQUILIBRIUM = "w7x_standardConfig.bc"  # resolved via the sfincs_jax data cache
+EQUILIBRIUM = "w7x_standardConfig.bc"  # resolved via the dkx data cache
 RN_WISH = 0.5  # benchmark surface r/a = 0.5
 
 # nuPrime scan: 3x steps across Pfirsch-Schlueter -> plateau -> 1/nu.
@@ -92,7 +92,7 @@ CONV_RESOLUTION = (43, 83, 96)
 # solve reaches its tolerance yet returns an Onsager-violating transport
 # matrix at this problem size, which is why the upstream monoenergetic
 # examples scan EStar >= 1e-4.  Off-grid points are re-solved with
-# sfincs_jax on the identical deck, so every comparison is matched.
+# dkx on the identical deck, so every comparison is matched.
 FORTRAN_POINTS = [(3e-3, 1e-4), (3e-3, 1e-1), (3e-1, 1e-4), (30.0, 1e-4), (30.0, 1e-1)]
 FORTRAN_EXE = os.environ.get("SFINCS_FORTRAN_EXE", "")
 
@@ -247,7 +247,7 @@ fortran_records = []
 if FORTRAN_EXE and Path(FORTRAN_EXE).exists():
     import h5py
 
-    from sfincs_jax.validation.fortran import run_sfincs_fortran
+    from dkx.validation.fortran import run_sfincs_fortran
 
     print(f"Step 3: Fortran v3 cross-check at {len(FORTRAN_POINTS)} points", flush=True)
     c = cache["constants"]
@@ -276,7 +276,7 @@ if FORTRAN_EXE and Path(FORTRAN_EXE).exists():
                 **{k: float(np.asarray(getattr(point, k))) for k in COEFF_KEYS},
             }
             save_cache(cache)
-        # The matched sfincs_jax value: from the scan table when the point
+        # The matched dkx value: from the scan table when the point
         # is on the grid, otherwise a dedicated solve of the same deck.
         if nu_prime in NU_PRIMES and e_star in E_STARS:
             i, j = NU_PRIMES.index(nu_prime), E_STARS.index(e_star)
@@ -299,7 +299,7 @@ if FORTRAN_EXE and Path(FORTRAN_EXE).exists():
         for key in ("d11_star", "d31_star", "d33_star"):
             ours = jax_point[key]
             ref = f_rec[key]
-            rec[key] = {"sfincs_jax": ours, "fortran": ref, "rel_dev": abs(ours - ref) / abs(ref)}
+            rec[key] = {"dkx": ours, "fortran": ref, "rel_dev": abs(ours - ref) / abs(ref)}
         fortran_records.append(rec)
         print(
             f"  (nuPrime={nu_prime:g}, EStar={e_star:g}) [{f_rec['seconds']:.0f} s]  "

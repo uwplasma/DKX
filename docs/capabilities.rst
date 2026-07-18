@@ -1,20 +1,20 @@
 Reduced-model capabilities
 ==========================
 
-Beyond the full drift-kinetic solve, `sfincs_jax` ships three reduced-model tools
+Beyond the full drift-kinetic solve, `dkx` ships three reduced-model tools
 that make the monoenergetic layer of the theory directly usable: a
 **monoenergetic-database mode** for the community-standard
 :math:`(\nu'/v,\ E_r/v)` scan and energy convolution, **variational bounds** that
 bracket the monoenergetic :math:`D_{11}` and act as a convergence certificate, and
 a **Shaing-Callen collisionless-limit** evaluator for the bootstrap coefficient
 with an analytic axisymmetric cross-check. All three build on the same
-:class:`~sfincs_jax.drift_kinetic.KineticOperator` and normalizations as the full
+:class:`~dkx.drift_kinetic.KineticOperator` and normalizations as the full
 solve, so their results compose with everything else in the package.
 
 Monoenergetic database mode
 ---------------------------
 
-:mod:`sfincs_jax.monoenergetic` turns the RHSMode=3 monoenergetic transport-matrix
+:mod:`dkx.monoenergetic` turns the RHSMode=3 monoenergetic transport-matrix
 solve into the standard stellarator database workflow: scan the normalized
 collisionality ``nuPrime`` and radial-electric-field ``EStar`` plane, store the
 four monoenergetic coefficients :math:`D_{11}^\*, D_{13}^\*, D_{31}^\*, D_{33}^\*`
@@ -36,7 +36,7 @@ From Python:
 
 .. code-block:: python
 
-   from sfincs_jax.monoenergetic import (
+   from dkx.monoenergetic import (
        monoenergetic_database, energy_convolution, save_database,
    )
 
@@ -58,7 +58,7 @@ The equivalent one-liner from the CLI writes the same ``.npz`` and prints a
 
 .. code-block:: bash
 
-   sfincs_jax monoenergetic-database --input input.namelist \
+   dkx monoenergetic-database --input input.namelist \
      --nu-prime 3e-3 1e-2 3e-2 1e-1 3e-1 1.0 \
      --e-star 0.0 1e-4 3e-4 \
      --out monoenergeticDatabase.npz
@@ -70,7 +70,7 @@ limit. For a pitch-angle-scattering database with DKES trajectories, the energy
 convolution reproduces a full RHSMode=2 kinetic solve to ``5.8e-14``, and the
 convolved :math:`L_{11}` differentiates cleanly with respect to geometry
 (:doc:`differentiability`). The ``.npz`` carries a schema tag so
-:func:`~sfincs_jax.monoenergetic.load_database` round-trips it safely.
+:func:`~dkx.monoenergetic.load_database` round-trips it safely.
 
 Variational transport-coefficient bounds
 -----------------------------------------
@@ -87,12 +87,12 @@ discretization preserves the continuum entropy-production structure — it shrin
 under :math:`\theta`/:math:`\zeta`/:math:`\xi` refinement and at high
 collisionality.
 
-:func:`sfincs_jax.variational.monoenergetic_d11_bounds` returns this bracket from a
+:func:`dkx.variational.monoenergetic_d11_bounds` returns this bracket from a
 converged monoenergetic state:
 
 .. code-block:: python
 
-   from sfincs_jax.variational import monoenergetic_d11_bounds, d11_bounds_supported
+   from dkx.variational import monoenergetic_d11_bounds, d11_bounds_supported
 
    assert d11_bounds_supported(op)  # RHSMode=3, PAS, monoenergetic trajectories
    bounds = monoenergetic_d11_bounds(
@@ -102,7 +102,7 @@ converged monoenergetic state:
    print(bounds.lower, bounds.d11, bounds.upper)
    print("convergence certificate:", bounds.gap)  # |upper - lower| / |d11|
 
-The returned :class:`~sfincs_jax.variational.MonoenergeticD11Bounds` guarantees
+The returned :class:`~dkx.variational.MonoenergeticD11Bounds` guarantees
 ``lower <= transportMatrix[0][0] <= upper`` to solver-residual precision, so
 ``gap`` is an a-posteriori certificate that requires no reference solution: a
 small gap certifies a converged discretization, a large gap flags an
@@ -117,7 +117,7 @@ Shaing-Callen collisionless limit
 
 At asymptotically low collisionality the monoenergetic bootstrap coefficient (the
 RHSMode=3 ``transportMatrix[1][0]`` entry) approaches a collisionality-independent
-value fixed purely by the flux-surface geometry. :mod:`sfincs_jax.shaing_callen`
+value fixed purely by the flux-surface geometry. :mod:`dkx.shaing_callen`
 evaluates this limit directly from the geometry — the analytic result of `Shaing &
 Callen, Phys. Fluids 26, 3315 (1983) <https://doi.org/10.1063/1.864108>`_, in the
 closed form of Albert, Beidler, Kapper, Kasilov & Kernbichler, arXiv:2407.21599
@@ -126,7 +126,7 @@ spectrally on a Fourier-upsampled ``(theta, zeta)`` grid:
 
 .. code-block:: python
 
-   from sfincs_jax.shaing_callen import shaing_callen_d31_limit, trapped_fraction
+   from dkx.shaing_callen import shaing_callen_d31_limit, trapped_fraction
 
    limit = shaing_callen_d31_limit(
        b_hat, g_hat=g_hat, i_hat=i_hat, iota=iota, n_periods=nfp,
@@ -139,7 +139,7 @@ For an axisymmetric field the geometric factor collapses analytically to
 fraction — the tokamak banana-regime value of `Boozer & Gardner, Phys. Fluids B
 2, 2408 (1990) <https://doi.org/10.1063/1.859506>`_. That closed form is an
 independent cross-check on the spectral evaluator and is exposed as
-:func:`~sfincs_jax.shaing_callen.trapped_fraction`. The module underpins the
+:func:`~dkx.shaing_callen.trapped_fraction`. The module underpins the
 package's collisionless-limit physics tests, which confirm that a
 :math:`\nu'`-scan of the full monoenergetic solve envelopes the analytic value as
 collisionality drops.

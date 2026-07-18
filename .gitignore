@@ -79,8 +79,8 @@ outputs/
 
 # Public multi-megabyte equilibrium fixtures are release-hosted and fetched into
 # a user cache, not tracked in git.
-sfincs_jax/data/equilibria/*.bc
-sfincs_jax/data/equilibria/wout_w7x_standardConfig.*
+dkx/data/equilibria/*.bc
+dkx/data/equilibria/wout_w7x_standardConfig.*
 examples/additional_examples/wout_QI_nfp2_stable_Er_006_000043_hires_scaled.nc
 
 tests/debug_*/
@@ -88,7 +88,7 @@ tests/gating_*/
 tests/scaled_example_suite_*/
 tests/reduced_upstream_examples/**/fortran_run/
 tests/reduced_upstream_examples/**/sfincsOutput*.h5
-tests/reduced_upstream_examples/**/sfincs_jax.log
+tests/reduced_upstream_examples/**/dkx.log
 tests/reduced_upstream_examples/**/fortran.log
 tests/reduced_upstream_examples/**
 !tests/reduced_upstream_examples/suite_report.json

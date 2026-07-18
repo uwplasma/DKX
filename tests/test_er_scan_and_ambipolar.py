@@ -6,9 +6,9 @@ import pickle
 import numpy as np
 import pytest
 
-from sfincs_jax.ambipolar import radial_current_from_output, solve_ambipolar_from_scan_dir
-from sfincs_jax.io import read_sfincs_h5, write_sfincs_h5
-from sfincs_jax.workflows.scans import run_er_scan
+from dkx.ambipolar import radial_current_from_output, solve_ambipolar_from_scan_dir
+from dkx.io import read_sfincs_h5, write_sfincs_h5
+from dkx.workflows.scans import run_er_scan
 
 
 def _write_synthetic_scan_point(

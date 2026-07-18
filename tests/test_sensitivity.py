@@ -9,7 +9,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from sfincs_jax.sensitivity import (
+from dkx.sensitivity import (
     LinearObservableSystem,
     MatrixFreeLinearObservableSystem,
     adjoint_dot_product_check,
@@ -27,7 +27,7 @@ from sfincs_jax.sensitivity import (
     validate_fortran_v3_adjoint_sensitivity_output_surface,
     vjp_flux,
 )
-from sfincs_jax.namelist import parse_sfincs_input_text, read_sfincs_input
+from dkx.namelist import parse_sfincs_input_text, read_sfincs_input
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REFERENCE_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "fortran_v3_reference_fixture.json"
@@ -189,7 +189,7 @@ def test_fortran_v3_adjoint_sensitivity_constraints_reject_invalid_source_combin
 
 
 def test_fortran_v3_adjoint_output_fields_preserve_parallel_flow_source_gate() -> None:
-    """Pin the writeHDF5Output.F90 gate before sfincs_jax adds its own fields."""
+    """Pin the writeHDF5Output.F90 gate before dkx adds its own fields."""
 
     parallel_only = _adjoint_config(
         adjointOptions={
@@ -724,8 +724,8 @@ def test_rhs1_moment_observables_jvp_vjp_dot_product_gates() -> None:
     the flux/flow observables must satisfy <cotangent, J tangent> ==
     <J^T cotangent, tangent>.
     """
-    from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
-    from sfincs_jax.run import profile_moments_from_operator
+    from dkx.drift_kinetic import kinetic_operator_from_namelist
+    from dkx.run import profile_moments_from_operator
 
     input_path = Path(__file__).parent / "ref" / "pas_1species_PAS_noEr_tiny.input.namelist"
     op = kinetic_operator_from_namelist(read_sfincs_input(input_path))

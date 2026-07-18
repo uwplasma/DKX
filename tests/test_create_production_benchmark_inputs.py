@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from sfincs_jax.validation import release as bench_inputs
+from dkx.validation import release as bench_inputs
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -154,7 +154,7 @@ def test_generator_relabels_historic_external_deck_with_benchmark_resolution(tmp
         tmp_path
         / "external"
         / "outputs"
-        / "sfincs_jax_rhsmode1_profile_current_profiling"
+        / "dkx_rhsmode1_profile_current_profiling"
         / "cpu_17x21x12_deck"
         / "finite_beta"
         / "input.namelist"

@@ -86,8 +86,8 @@
           "evidence_tail": [
             "solve_v3_full_system_linear_gmres: PAS-TZ structured fallback guarded out (axis=tzfft); using cheap fallback",
             "solve_v3_full_system_linear_gmres: PAS-TZ guarded minres correction accepted 2 step(s), residual=2.134e-04->1.598e-04",
-            "solve_v3_full_system_linear_gmres: stage2 reduced GMRES skipped after guarded PAS-TZ fallback; set SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1 to retry",
-            "solve_v3_full_system_linear_gmres: skipping strong preconditioner after guarded PAS-TZ fallback; set SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry"
+            "solve_v3_full_system_linear_gmres: stage2 reduced GMRES skipped after guarded PAS-TZ fallback; set DKX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1 to retry",
+            "solve_v3_full_system_linear_gmres: skipping strong preconditioner after guarded PAS-TZ fallback; set DKX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry"
           ],
           "reason": "guarded-pas-tz-evidence-recorded",
           "status": "pass"
@@ -126,8 +126,8 @@
       "guarded_pas_tz_evidence_tail": [
         "solve_v3_full_system_linear_gmres: PAS-TZ structured fallback guarded out (axis=tzfft); using cheap fallback",
         "solve_v3_full_system_linear_gmres: PAS-TZ guarded minres correction accepted 2 step(s), residual=2.134e-04->1.598e-04",
-        "solve_v3_full_system_linear_gmres: stage2 reduced GMRES skipped after guarded PAS-TZ fallback; set SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1 to retry",
-        "solve_v3_full_system_linear_gmres: skipping strong preconditioner after guarded PAS-TZ fallback; set SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry"
+        "solve_v3_full_system_linear_gmres: stage2 reduced GMRES skipped after guarded PAS-TZ fallback; set DKX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1 to retry",
+        "solve_v3_full_system_linear_gmres: skipping strong preconditioner after guarded PAS-TZ fallback; set DKX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry"
       ],
       "guarded_pas_tz_seen": true,
       "max_rss_mb": 2877.109375,
@@ -146,8 +146,8 @@
         "solve_v3_full_system_linear_gmres: PAS-TZ structured fallback guarded out (axis=tzfft); using cheap fallback",
         " solve_v3_full_system_linear_gmres: starting Krylov iterations.",
         "solve_v3_full_system_linear_gmres: PAS-TZ guarded minres correction accepted 2 step(s), residual=2.134e-04->1.598e-04",
-        "solve_v3_full_system_linear_gmres: stage2 reduced GMRES skipped after guarded PAS-TZ fallback; set SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1 to retry",
-        "solve_v3_full_system_linear_gmres: skipping strong preconditioner after guarded PAS-TZ fallback; set SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry",
+        "solve_v3_full_system_linear_gmres: stage2 reduced GMRES skipped after guarded PAS-TZ fallback; set DKX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1 to retry",
+        "solve_v3_full_system_linear_gmres: skipping strong preconditioner after guarded PAS-TZ fallback; set DKX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry",
         "sparse_ilu: disabled (size=571200 > max=60000)",
         "ksp_iterations=400 solver=gmres",
         "solve_v3_full_system_linear_gmres: residual_norm=1.597673e-04",
@@ -229,8 +229,8 @@
           "evidence_tail": [
             "solve_v3_full_system_linear_gmres: PAS-TZ structured fallback guarded out (axis=tzfft); using cheap fallback",
             "solve_v3_full_system_linear_gmres: PAS-TZ guarded minres correction accepted 2 step(s), residual=2.134e-04->1.598e-04",
-            "solve_v3_full_system_linear_gmres: stage2 reduced GMRES skipped after guarded PAS-TZ fallback; set SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1 to retry",
-            "solve_v3_full_system_linear_gmres: skipping strong preconditioner after guarded PAS-TZ fallback; set SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry"
+            "solve_v3_full_system_linear_gmres: stage2 reduced GMRES skipped after guarded PAS-TZ fallback; set DKX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1 to retry",
+            "solve_v3_full_system_linear_gmres: skipping strong preconditioner after guarded PAS-TZ fallback; set DKX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry"
           ],
           "reason": "guarded-pas-tz-evidence-recorded",
           "status": "pass"
@@ -269,8 +269,8 @@
       "guarded_pas_tz_evidence_tail": [
         "solve_v3_full_system_linear_gmres: PAS-TZ structured fallback guarded out (axis=tzfft); using cheap fallback",
         "solve_v3_full_system_linear_gmres: PAS-TZ guarded minres correction accepted 2 step(s), residual=2.134e-04->1.598e-04",
-        "solve_v3_full_system_linear_gmres: stage2 reduced GMRES skipped after guarded PAS-TZ fallback; set SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1 to retry",
-        "solve_v3_full_system_linear_gmres: skipping strong preconditioner after guarded PAS-TZ fallback; set SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry"
+        "solve_v3_full_system_linear_gmres: stage2 reduced GMRES skipped after guarded PAS-TZ fallback; set DKX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1 to retry",
+        "solve_v3_full_system_linear_gmres: skipping strong preconditioner after guarded PAS-TZ fallback; set DKX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry"
       ],
       "guarded_pas_tz_seen": true,
       "max_rss_mb": 3144.765625,
@@ -289,8 +289,8 @@
         "solve_v3_full_system_linear_gmres: PAS-TZ structured fallback guarded out (axis=tzfft); using cheap fallback",
         " solve_v3_full_system_linear_gmres: starting Krylov iterations.",
         "solve_v3_full_system_linear_gmres: PAS-TZ guarded minres correction accepted 2 step(s), residual=2.134e-04->1.598e-04",
-        "solve_v3_full_system_linear_gmres: stage2 reduced GMRES skipped after guarded PAS-TZ fallback; set SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1 to retry",
-        "solve_v3_full_system_linear_gmres: skipping strong preconditioner after guarded PAS-TZ fallback; set SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry",
+        "solve_v3_full_system_linear_gmres: stage2 reduced GMRES skipped after guarded PAS-TZ fallback; set DKX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1 to retry",
+        "solve_v3_full_system_linear_gmres: skipping strong preconditioner after guarded PAS-TZ fallback; set DKX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1 to retry",
         "sparse_ilu: disabled (size=571200 > max=60000)",
         "ksp_iterations=20 solver=lgmres",
         "solve_v3_full_system_linear_gmres: residual_norm=1.597673e-04",

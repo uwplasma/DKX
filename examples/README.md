@@ -1,6 +1,6 @@
 ## Examples
 
-This directory is the learning surface for `sfincs_jax`. Start with
+This directory is the learning surface for `dkx`. Start with
 `tutorials/` if you are starting with the code; jump to the topic folders if you
 already know which workflow you need. All first-pass examples avoid a local
 SFINCS Fortran v3 executable. Parity and benchmark scripts use frozen
@@ -31,7 +31,7 @@ temporary path, and none requires SFINCS Fortran v3 for the first run.
 | Load VMEC geometry through `wout_path` | `getting_started/write_sfincs_output_vmec.py` | `python examples/getting_started/write_sfincs_output_vmec.py` |
 | Compute a RHSMode=2/3 transport matrix | `transport/transport_matrix_rhsmode2_and_rhsmode3.py` | `python examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py` |
 | Differentiate a residual with JAX | `autodiff/autodiff_gradient_nu_n_residual.py` | `python examples/autodiff/autodiff_gradient_nu_n_residual.py` |
-| Compare kinetic bootstrap current with Redl | `vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py` | `python examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py --case QA --quick --jax-vs-redl --solve-method auto` |
+| Compare kinetic bootstrap current with Redl | `vmex_finite_beta/compare_qs_paper_dkx_redl.py` | `python examples/vmex_finite_beta/compare_qs_paper_dkx_redl.py --case QA --quick --jax-vs-redl --solve-method auto` |
 | Time output formats and memory behavior | `performance/benchmark_output_formats.py` | `python examples/performance/benchmark_output_formats.py --repeats 2` |
 | Check a frozen Fortran-v3 output fixture | `parity/output_parity_vs_fortran_fixture.py` | `python examples/parity/output_parity_vs_fortran_fixture.py` |
 
@@ -60,7 +60,7 @@ For an interactive terminal version of this map, run
 | I want to learn the file formats and CLI/API basics. | `getting_started/` | These scripts isolate input parsing, output writing, VMEC paths, and plotting. |
 | I need transport coefficients. | `transport/` | These examples cover RHSMode=2/3 transport matrices and scan postprocessing. |
 | I need gradients or optimization hooks. | `autodiff/` then `optimization/` | Start with residual/JVP examples, then move to QA objectives and promotion gates. |
-| I need bootstrap current or Redl comparisons. | `vmec_jax_finite_beta/` | This folder owns the VMEC, Redl, ambipolar-root, and bootstrap-current profile scripts. |
+| I need bootstrap current or Redl comparisons. | `vmex_finite_beta/` | This folder owns the VMEC, Redl, ambipolar-root, and bootstrap-current profile scripts. |
 | I need to validate against SFINCS Fortran v3 behavior. | `parity/` then `publication_figures/` | The first folder has frozen fixtures; the second regenerates release-facing comparison plots. |
 | I need CPU/GPU runtime or memory evidence. | `performance/` | These scripts benchmark output formats, JIT behavior, transport workers, and optional backends. |
 | I recognize an upstream SFINCS input name. | `sfincs_examples/` | This folder preserves upstream-style decks for parity and benchmark audits, not first-pass learning. |
@@ -83,11 +83,11 @@ For an interactive terminal version of this map, run
 | If you want to... | Use this first | Then look at |
 | --- | --- | --- |
 | run one small case from the terminal | `tutorials/run_quick_output_and_plot.py` | `getting_started/write_sfincs_output_cli.py` |
-| call SFINCS-JAX from Python | `getting_started/write_sfincs_output_python.py` | `getting_started/write_and_plot_multiple_formats.py` |
+| call DKX from Python | `getting_started/write_sfincs_output_python.py` | `getting_started/write_and_plot_multiple_formats.py` |
 | understand transport matrices | `transport/transport_matrix_rhsmode2_and_rhsmode3.py` | `transport/transport_matrix_rhsmode2_scheme11_and_scheme5.py` |
 | differentiate a solve or residual | `tutorials/02_transport_and_autodiff.ipynb` | `autodiff/implicit_diff_through_gmres_solve_scheme5.py` |
-| compute bootstrap current and compare Redl | `tutorials/03_bootstrap_redl_and_optimization.ipynb` | `vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py` |
-| add neoclassical objectives to optimization | `optimization/qa_nfp2_sfincs_jax_objectives.py` | `optimization/QA_optimization_bootstrap_current.py` |
+| compute bootstrap current and compare Redl | `tutorials/03_bootstrap_redl_and_optimization.ipynb` | `vmex_finite_beta/compare_qs_paper_dkx_redl.py` |
+| add neoclassical objectives to optimization | `optimization/qa_nfp2_dkx_objectives.py` | `optimization/QA_optimization_bootstrap_current.py` |
 | choose geometry, validate outputs, and benchmark CPU/GPU | `tutorials/04_geometry_validation_and_performance.ipynb` | `getting_started/write_sfincs_output_vmec.py`, `performance/benchmark_output_formats.py` |
 | check CPU/GPU performance or output formats | `performance/benchmark_output_formats.py` | `performance/benchmark_transport_l11_vs_fortran.py` |
 | validate against frozen SFINCS Fortran v3 data | `parity/output_parity_vs_fortran_fixture.py` | `publication_figures/` and `sfincs_examples/` |
@@ -102,13 +102,13 @@ script or notebook that adds the technical detail needed for research workflows.
 | --- | --- | --- |
 | CLI output and diagnostics panel | `tutorials/run_quick_output_and_plot.py` | `getting_started/write_and_plot_multiple_formats.py` |
 | Analytic tokamak input | `getting_started/write_sfincs_output_tokamak.py` | `sfincs_examples/tokamak_1species_FPCollisions_noEr/input.namelist` |
-| VMEC `wout_path` input | `getting_started/write_sfincs_output_vmec.py` | `vmec_jax_finite_beta/finite_beta_vmec_to_sfincs.py` |
+| VMEC `wout_path` input | `getting_started/write_sfincs_output_vmec.py` | `vmex_finite_beta/finite_beta_vmec_to_sfincs.py` |
 | RHSMode=2/3 transport matrix | `transport/transport_matrix_rhsmode2_and_rhsmode3.py` | `transport/transport_matrix_rhsmode2_scheme11_and_scheme5.py` |
-| Bootstrap current vs Redl | `vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py` | `tutorials/03_bootstrap_redl_and_optimization.ipynb` |
-| Ambipolar electric-field scan | `vmec_jax_finite_beta/finite_beta_vmec_to_sfincs.py` | `optimization/evaluate_sfincs_jax_promotion_scan.py` |
+| Bootstrap current vs Redl | `vmex_finite_beta/compare_qs_paper_dkx_redl.py` | `tutorials/03_bootstrap_redl_and_optimization.ipynb` |
+| Ambipolar electric-field scan | `vmex_finite_beta/finite_beta_vmec_to_sfincs.py` | `optimization/evaluate_dkx_promotion_scan.py` |
 | Differentiable residual or flux | `autodiff/autodiff_gradient_nu_n_residual.py` | `autodiff/implicit_diff_through_gmres_solve_scheme5.py` |
-| VMEC/Boozer/JAX workflow | `autodiff/vmec_jax_to_boozer_sfincs_pipeline.py` | `tutorials/04_geometry_validation_and_performance.ipynb` |
-| QA/QI optimization objective | `optimization/qa_nfp2_sfincs_jax_objectives.py` | `optimization/QA_optimization_bootstrap_current.py` |
+| VMEC/Boozer/JAX workflow | `autodiff/vmex_to_boozer_sfincs_pipeline.py` | `tutorials/04_geometry_validation_and_performance.ipynb` |
+| QA/QI optimization objective | `optimization/qa_nfp2_dkx_objectives.py` | `optimization/QA_optimization_bootstrap_current.py` |
 | CPU/GPU timing and output I/O | `performance/benchmark_output_formats.py` | `performance/benchmark_transport_l11_vs_fortran.py` |
 | Frozen Fortran-v3 parity check | `parity/output_parity_vs_fortran_fixture.py` | `sfincs_examples/` for the retained upstream-style decks |
 
@@ -120,14 +120,14 @@ heavier workflow when you need release-quality evidence.
 
 | Capability | First-pass example | What it teaches | Production follow-up |
 | --- | --- | --- | --- |
-| CLI run and plot | `tutorials/run_quick_output_and_plot.py` | Run `sfincs_jax`, write HDF5/NetCDF/NPZ, and create a diagnostics PDF. | `getting_started/write_and_plot_multiple_formats.py` |
+| CLI run and plot | `tutorials/run_quick_output_and_plot.py` | Run `dkx`, write HDF5/NetCDF/NPZ, and create a diagnostics PDF. | `getting_started/write_and_plot_multiple_formats.py` |
 | Python API output | `getting_started/write_sfincs_output_python.py` | Call the output writer directly and inspect returned arrays. | `getting_started/write_sfincs_output_vmec.py` |
 | Geometry setup | `getting_started/build_grids_and_geometry.py` | Build v3 grids and analytic/VMEC geometry objects. | `tutorials/04_geometry_validation_and_performance.ipynb` |
 | Operator action | `getting_started/apply_collisionless_operator.py` | Apply one drift-kinetic operator term on a small grid. | `parity/collisionless_operator_matvec_parity.py` |
 | Transport matrix | `transport/transport_matrix_rhsmode2_and_rhsmode3.py` | Run RHSMode=2/3 and read transport coefficients. | `transport/transport_matrix_rhsmode2_scheme11_and_scheme5.py` |
 | Autodiff | `tutorials/02_transport_and_autodiff.ipynb` | Differentiate residual/transport quantities with JAX. | `autodiff/implicit_diff_through_gmres_solve_scheme5.py` |
-| Bootstrap current and Redl | `tutorials/03_bootstrap_redl_and_optimization.ipynb` | Compare kinetic bootstrap current with a Redl-formula workflow. | `vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py` |
-| Optimization objectives | `optimization/qa_nfp2_sfincs_jax_objectives.py` | Add neoclassical objectives to a QA optimization workflow. | `optimization/QA_optimization_bootstrap_current.py` |
+| Bootstrap current and Redl | `tutorials/03_bootstrap_redl_and_optimization.ipynb` | Compare kinetic bootstrap current with a Redl-formula workflow. | `vmex_finite_beta/compare_qs_paper_dkx_redl.py` |
+| Optimization objectives | `optimization/qa_nfp2_dkx_objectives.py` | Add neoclassical objectives to a QA optimization workflow. | `optimization/QA_optimization_bootstrap_current.py` |
 | Frozen Fortran-v3 parity | `parity/output_parity_vs_fortran_fixture.py` | Compare output fields against checked frozen references. | `sfincs_examples/` for retained upstream-style decks |
 | CPU/GPU performance | `performance/benchmark_output_formats.py` | Time output formats and inspect memory behavior. | `performance/benchmark_transport_l11_vs_fortran.py` |
 
@@ -140,7 +140,7 @@ validation or benchmark workflow, or reference data.
 | Category | Folders | Use when |
 | --- | --- | --- |
 | `learning` | `tutorials/`, `getting_started/` | You want to learn the CLI, Python API, plots, output formats, and first operator/geometry concepts. |
-| `capability` | `transport/`, `autodiff/`, `optimization/`, `vmec_jax_finite_beta/` | You need a specific physics or differentiability workflow. |
+| `capability` | `transport/`, `autodiff/`, `optimization/`, `vmex_finite_beta/` | You need a specific physics or differentiability workflow. |
 | `validation` | `parity/`, `performance/`, `publication_figures/`, `paper_benchmarks/` | You need parity checks, runtime/memory evidence, regenerated documentation figures, or methods-paper benchmark cases. |
 | `reference` | `data/`, `sfincs_examples/` | You need small shared inputs or recognizable SFINCS Fortran v3 decks for audits. |
 
@@ -156,7 +156,7 @@ validation or benchmark workflow, or reference data.
   VMEC/Boozer-to-SFINCS differentiable workflow examples.
 - `optimization/`: JAX-native proxy objectives, kinetic promotion scripts, and
   QA bootstrap-current optimization helpers.
-- `vmec_jax_finite_beta/`: finite-beta VMEC-to-SFINCS radial profiles,
+- `vmex_finite_beta/`: finite-beta VMEC-to-SFINCS radial profiles,
   ambipolar `E_r`, bootstrap-current comparisons, Redl formula checks, and
   convergence plots.
 - `parity/`: frozen-reference parity checks against SFINCS Fortran v3 outputs
@@ -192,12 +192,12 @@ structure are tested so the learning path stays usable.
 From the repo root:
 
 ```bash
-cd sfincs_jax
+cd dkx
 pip install -e ".[dev]"
 ```
 
 The standard install already includes `matplotlib` and `netCDF4`, so plotting
-examples, `sfincs_jax --plot`, and `--out sfincsOutput.nc` work without extra
+examples, `dkx --plot`, and `--out sfincsOutput.nc` work without extra
 dependencies.
 
 For optimization examples that use `optax`:
@@ -206,11 +206,11 @@ For optimization examples that use `optax`:
 pip install optax
 ```
 
-The finite-beta VMEC-JAX example requires an importable `vmec_jax` installation.
+The finite-beta VMEX example requires an importable `vmex` installation.
 If you have a source checkout, point the example at it with:
 
 ```bash
-export SFINCS_JAX_VMEC_JAX_ROOT=/path/to/vmec_jax
+export DKX_VMEX_ROOT=/path/to/vmex
 ```
 
 ### Running
@@ -231,8 +231,8 @@ Common entry points:
 - Write `.h5`, `.nc`, and `.npz`, then build a PDF diagnostics panel: `examples/getting_started/write_and_plot_multiple_formats.py`
 - Analytic tokamak example (`geometryScheme=1`): `examples/getting_started/write_sfincs_output_tokamak.py`
 - VMEC example (`geometryScheme=5`, `wout_path` override): `examples/getting_started/write_sfincs_output_vmec.py`
-- Finite-beta VMEC-JAX to convergence-gated SFINCS radial Er and bootstrap-current profiles: `examples/vmec_jax_finite_beta/finite_beta_vmec_to_sfincs.py`
-- Finite-beta kinetic/angular/root-bracket convergence scan from cached outputs: `examples/vmec_jax_finite_beta/plot_convergence_scan.py`
+- Finite-beta VMEX to convergence-gated SFINCS radial Er and bootstrap-current profiles: `examples/vmex_finite_beta/finite_beta_vmec_to_sfincs.py`
+- Finite-beta kinetic/angular/root-bracket convergence scan from cached outputs: `examples/vmex_finite_beta/plot_convergence_scan.py`
 - Plot `.h5`, `.nc`, or `.npz` output: `examples/getting_started/plot_sfincs_output.py`
 - Output parity vs Fortran fixture: `examples/parity/output_parity_vs_fortran_fixture.py`
 - Transport matrices (RHSMode 2/3): `examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py`
@@ -259,4 +259,4 @@ for runtime, memory, parity, or solver-policy changes.
 
 Detailed release-audit commands live in `docs/parity.rst`,
 `docs/performance.rst`, and `docs/fortran_examples.rst`. The scaled-suite
-driver is `python -m sfincs_jax.validation.suite scaled`.
+driver is `python -m dkx.validation.suite scaled`.

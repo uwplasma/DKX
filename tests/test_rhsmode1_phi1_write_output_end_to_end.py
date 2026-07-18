@@ -5,8 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from sfincs_jax.api import write_output
-from sfincs_jax.io import read_sfincs_h5
+from dkx.api import write_output
+from dkx.io import read_sfincs_h5
 
 
 def _is_numeric_dataset(x) -> bool:

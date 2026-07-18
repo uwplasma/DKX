@@ -14,8 +14,8 @@ production-floor scripts when you need release evidence.
 
 ## Scaling And Parallelism
 
-Host-device parallelism is configured through the `SFINCS_JAX_CORES` /
-`SFINCS_JAX_CPU_DEVICES` environment knobs documented in `docs/parallelism.rst`;
+Host-device parallelism is configured through the `DKX_CORES` /
+`DKX_CPU_DEVICES` environment knobs documented in `docs/parallelism.rst`;
 the retired legacy transport-worker and structured-solve benchmark scripts were
 deleted with the legacy pipeline.
 

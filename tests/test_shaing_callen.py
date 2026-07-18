@@ -47,8 +47,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from sfincs_jax.run import run_transport_matrix
-from sfincs_jax.shaing_callen import (
+from dkx.run import run_transport_matrix
+from dkx.shaing_callen import (
     shaing_callen_d31_limit,
     shaing_callen_lambda_bb,
     trapped_fraction,

@@ -28,10 +28,10 @@ import numpy as np
 
 from solvax.implicit import linear_solve as solvax_linear_solve
 
-from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
-from sfincs_jax.magnetic_geometry import FluxSurfaceGeometry
-from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.validation.artifacts import (
+from dkx.drift_kinetic import kinetic_operator_from_namelist
+from dkx.magnetic_geometry import FluxSurfaceGeometry
+from dkx.namelist import read_sfincs_input
+from dkx.validation.artifacts import (
     PAUL_2019_ADJOINT_URL,
     SFINCS_ADJOINT_APS_URL,
     build_autodiff_sensitivity_validation_summary,
@@ -58,9 +58,9 @@ class _SolveOut:
 
 DEFAULT_ARTIFACT_DIR = _REPO_ROOT / "examples" / "publication_figures" / "artifacts"
 DEFAULT_OUT_DIR = _REPO_ROOT / "docs" / "_static" / "figures" / "paper"
-DEFAULT_SUMMARY = DEFAULT_ARTIFACT_DIR / "sfincs_jax_autodiff_sensitivity_validation_summary.json"
-DEFAULT_GRADIENT_STEM = "sfincs_jax_autodiff_gradient_check"
-DEFAULT_SENSITIVITY_STEM = "sfincs_jax_autodiff_sensitivity_map"
+DEFAULT_SUMMARY = DEFAULT_ARTIFACT_DIR / "dkx_autodiff_sensitivity_validation_summary.json"
+DEFAULT_GRADIENT_STEM = "dkx_autodiff_gradient_check"
+DEFAULT_SENSITIVITY_STEM = "dkx_autodiff_sensitivity_map"
 DEFAULT_INPUT = _REPO_ROOT / "tests" / "ref" / "pas_1species_PAS_noEr_tiny_scheme5.input.namelist"
 
 

@@ -1,7 +1,7 @@
 Numerics and algorithms
 =======================
 
-`sfincs_jax` solves a large structured linear (or, with :math:`\Phi_1`,
+`dkx` solves a large structured linear (or, with :math:`\Phi_1`,
 nonlinear) system that comes from discretizing the radially local drift-kinetic
 equation of :doc:`physics_reference` on a single flux surface. This page
 describes the discretization, the three-tier solver policy, and the
@@ -71,12 +71,12 @@ warm solve at ``0.93 GB`` (ramp) and ``1.16 GB`` (uniform :math:`N_\xi`) — see
 .. admonition:: Where in the code
 
    Legendre couplings and Lorentz eigenvalues:
-   :func:`sfincs_jax.phase_space.legendre_coupling_upper` /
+   :func:`dkx.phase_space.legendre_coupling_upper` /
    ``legendre_coupling_lower`` / ``lorentz_eigenvalues``. Speed grid:
-   :func:`sfincs_jax.phase_space.make_speed_grid` and
+   :func:`dkx.phase_space.make_speed_grid` and
    ``speed_grid_diff_matrices``. Ramp:
-   :func:`sfincs_jax.phase_space.n_xi_for_x_ramp`. All are collected in
-   :class:`sfincs_jax.phase_space.Grids` via ``make_grids``.
+   :func:`dkx.phase_space.n_xi_for_x_ramp`. All are collected in
+   :class:`dkx.phase_space.Grids` via ``make_grids``.
 
 Linear-system structure
 -----------------------
@@ -101,7 +101,7 @@ cleanly.
 
 .. admonition:: Where in the code
 
-   The matrix-free action is :meth:`sfincs_jax.drift_kinetic.KineticOperator.apply`;
+   The matrix-free action is :meth:`dkx.drift_kinetic.KineticOperator.apply`;
    the right-hand side is ``KineticOperator.rhs``. The analytic
    block-tridiagonal-in-:math:`L` extraction is
    ``KineticOperator.to_block_tridiagonal``.
@@ -109,8 +109,8 @@ cleanly.
 The three solver tiers
 ----------------------
 
-The solve policy (:func:`sfincs_jax.solve.solve`, ``solve_method="auto"``) picks
-the cheapest adequate tier over a :class:`~sfincs_jax.drift_kinetic.KineticOperator`.
+The solve policy (:func:`dkx.solve.solve`, ``solve_method="auto"``) picks
+the cheapest adequate tier over a :class:`~dkx.drift_kinetic.KineticOperator`.
 
 Tier 1 — structured direct (block-tridiagonal Legendre elimination)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -185,7 +185,7 @@ cap under ``method="auto"``.
 
 .. admonition:: Where in the code
 
-   :func:`sfincs_jax.solve.solve` (auto policy, solve.py); tier-1 build
+   :func:`dkx.solve.solve` (auto policy, solve.py); tier-1 build
    ``build_tier1_solver`` and the truncated variant ``_solve_tier1_truncated``;
    tier-2 ``_solve_tier2`` with ``build_coarse_preconditioner``; tier-3
    ``_solve_tier3``. The structured factorization, recycled Krylov, and host
@@ -205,8 +205,8 @@ solve**, which reuses the same tier-1 block-Thomas factors
 solve. The cost of a gradient is therefore one additional solve, independent of
 the iteration count of the forward solve. The ambipolar :math:`E_r` root and the
 nonlinear :math:`\Phi_1` Newton solve are differentiated the same way at the
-outer (root) level (:func:`sfincs_jax.er.ambipolar_er`,
-:func:`sfincs_jax.phi1.phi1_state`).
+outer (root) level (:func:`dkx.er.ambipolar_er`,
+:func:`dkx.phi1.phi1_state`).
 
 Numerical building blocks — the structured factorizations, the recycled Krylov,
 the mixed-precision block-Thomas, and the implicit-solve wrappers — live in the

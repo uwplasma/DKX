@@ -3,10 +3,10 @@
 What this example teaches:
   - how to point a namelist at a real Boozer-coordinate equilibrium file
     (geometryScheme=11, the ``w7x_standardConfig.bc`` file that ships with the
-    SFINCS repository; sfincs_jax fetches and caches it automatically),
+    SFINCS repository; dkx fetches and caches it automatically),
   - how full Fokker-Planck (collisionOperator=0) multi-species runs work,
   - how the ``solve_method="auto"`` three-tier solver policy picks its tier,
-    and how to ask *why* (``sfincs_jax.solve.tier1_available``),
+    and how to ask *why* (``dkx.solve.tier1_available``),
   - how to plot the density/pressure perturbations of f1 on the flux surface.
 
 Physics context: Wendelstein 7-X is a stellarator, so its magnetic-field
@@ -24,7 +24,7 @@ poloidal+toroidal structure locked to the |B| ripple of W7-X.
 
 Expected runtime: ~30 s on a laptop CPU (~15 s of it JAX compilation).  The
 first ever run also downloads the ~1 MB equilibrium archive into
-``~/.cache/sfincs_jax``.
+``~/.cache/dkx``.
 
 Run:
   python examples/run_w7x.py
@@ -40,15 +40,15 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from sfincs_jax.run import run_profile
-from sfincs_jax.solve import tier1_available
+from dkx.run import run_profile
+from dkx.solve import tier1_available
 
 # ----------------------------------------------------------------------------
 # Parameters
 # ----------------------------------------------------------------------------
-CI = os.environ.get("SFINCS_JAX_CI") == "1"  # shrink resolution for CI
+CI = os.environ.get("DKX_CI") == "1"  # shrink resolution for CI
 
-EQUILIBRIUM = "w7x_standardConfig.bc"  # resolved via the sfincs_jax data cache
+EQUILIBRIUM = "w7x_standardConfig.bc"  # resolved via the dkx data cache
 RN_WISH = 0.5  # surface at r/a = 0.5
 
 # Resolution: intentionally small so the example runs in seconds.  Production

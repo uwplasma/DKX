@@ -4,7 +4,7 @@ Usage
 .. note::
 
    For RHSMode=1/2/3 cases the recommended entry points are the canonical
-   drivers (``sfincs_jax.run.run_profile`` and the transport-matrix runners)
+   drivers (``dkx.run.run_profile`` and the transport-matrix runners)
    shown in the quickstart on :doc:`index` and in :doc:`examples`. This page
    documents the full CLI and Python surface — the matrix-free operator, the
    three-tier solve, the output writers, ``Er`` scans, and the ambipolar and
@@ -16,7 +16,7 @@ Parsing an input file
 
 .. code-block:: python
 
-   from sfincs_jax.namelist import read_sfincs_input
+   from dkx.namelist import read_sfincs_input
 
    nml = read_sfincs_input("input.namelist")
    print(nml.group("geometryParameters")["GEOMETRYSCHEME"])
@@ -26,7 +26,7 @@ Building v3 grids and geometry
 
 .. code-block:: python
 
-   from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
+   from dkx.drift_kinetic import kinetic_operator_from_namelist
 
    op = kinetic_operator_from_namelist(nml)
    print(op.n_theta, op.n_zeta, op.n_x)   # grid sizes
@@ -51,7 +51,7 @@ Applying the operator directly
 ------------------------------
 
 On the canonical stack the whole drift-kinetic operator is the single
-consolidated :class:`sfincs_jax.drift_kinetic.KineticOperator`. Build it from a
+consolidated :class:`dkx.drift_kinetic.KineticOperator`. Build it from a
 parsed namelist and apply it matrix-free — no manual assembly of streaming,
 mirror, drift, or collision blocks is needed:
 
@@ -59,8 +59,8 @@ mirror, drift, or collision blocks is needed:
 
    import jax.numpy as jnp
    from pathlib import Path
-   from sfincs_jax.inputs import parse_sfincs_input_text
-   from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
+   from dkx.inputs import parse_sfincs_input_text
+   from dkx.drift_kinetic import kinetic_operator_from_namelist
 
    raw = parse_sfincs_input_text(Path("input.namelist").read_text())
    op = kinetic_operator_from_namelist(raw)
@@ -71,10 +71,10 @@ mirror, drift, or collision blocks is needed:
 The collision blocks are assembled into the operator automatically from
 ``collisionOperator``: pitch-angle scattering (``= 1``) or the full
 Fokker--Planck / Rosenbluth operator (``= 0``), both from
-:mod:`sfincs_jax.collisions` and applied inside ``KineticOperator.apply_f`` (the
+:mod:`dkx.collisions` and applied inside ``KineticOperator.apply_f`` (the
 distribution-block-only action). To solve the assembled system, hand the
-operator to :func:`sfincs_jax.solve.solve` (the three-tier auto policy in
-:doc:`numerics`), or use the high-level :func:`sfincs_jax.run.run_profile`.
+operator to :func:`dkx.solve.solve` (the three-tier auto policy in
+:doc:`numerics`), or use the high-level :func:`dkx.run.run_profile`.
 
 Running the Fortran v3 executable
 ---------------------------------
@@ -82,7 +82,7 @@ Running the Fortran v3 executable
 .. code-block:: bash
 
    export SFINCS_FORTRAN_EXE=/path/to/sfincs/fortran/version3/sfincs
-   sfincs_jax run-fortran --input /path/to/input.namelist
+   dkx run-fortran --input /path/to/input.namelist
 
 .. tip::
 
@@ -95,7 +95,7 @@ you can invoke the CLI module directly:
 
 .. code-block:: bash
 
-   python -m sfincs_jax run-fortran --input /path/to/input.namelist
+   python -m dkx run-fortran --input /path/to/input.namelist
 
 First CLI run
 -------------
@@ -104,32 +104,32 @@ The repository ships a tiny runnable input for quick installation checks:
 
 .. code-block:: bash
 
-   sfincs_jax examples/sfincs_examples/quick_2species_FPCollisions_noEr/input.namelist --out sfincsOutput.h5
-   sfincs_jax --plot sfincsOutput.h5
+   dkx examples/sfincs_examples/quick_2species_FPCollisions_noEr/input.namelist --out sfincsOutput.h5
+   dkx --plot sfincsOutput.h5
 
 The first command solves the input with the default ``auto`` policy and writes
 ``sfincsOutput.h5`` in the current working directory. The second command writes
 ``sfincsOutput_summary.pdf`` next to it unless ``--out`` is given explicitly.
 For normal production use, this is the intended public contract: provide one
-input file, optionally override the equilibrium file, and let ``sfincs_jax``
+input file, optionally override the equilibrium file, and let ``dkx``
 choose the validated solve path.
 Change only the output suffix to write NetCDF4 or NPZ instead:
 
 .. code-block:: bash
 
-   sfincs_jax examples/sfincs_examples/quick_2species_FPCollisions_noEr/input.namelist --out sfincsOutput.nc
-   sfincs_jax examples/sfincs_examples/quick_2species_FPCollisions_noEr/input.namelist --out sfincsOutput.npz
+   dkx examples/sfincs_examples/quick_2species_FPCollisions_noEr/input.namelist --out sfincsOutput.nc
+   dkx examples/sfincs_examples/quick_2species_FPCollisions_noEr/input.namelist --out sfincsOutput.npz
 
 Advanced linear-state export
 ----------------------------
 
 .. code-block:: bash
 
-   sfincs_jax solve-v3 --input /path/to/input.namelist --out-state stateVector.npy
+   dkx solve-v3 --input /path/to/input.namelist --out-state stateVector.npy
 
 .. code-block:: bash
 
-   python -m sfincs_jax solve-v3 --input /path/to/input.namelist --out-state stateVector.npy
+   python -m dkx solve-v3 --input /path/to/input.namelist --out-state stateVector.npy
 
 .. note::
 
@@ -142,7 +142,7 @@ Advanced linear-state export
    For end-to-end differentiation, build inputs via the Python API and keep the computation in JAX.
    File I/O, VMEC/Boozer parsing, and SciPy-based solver-history logging use NumPy and are not
    differentiable. Disable strict stdout/history logging with
-   ``SFINCS_JAX_FORTRAN_STDOUT=0`` when tracing gradients.
+   ``DKX_FORTRAN_STDOUT=0`` when tracing gradients.
 
 Advanced solver controls
 ------------------------
@@ -153,7 +153,7 @@ Only force a solver when reproducing a benchmark, debugging a path choice, or
 running an expert study where the output ``linearSolver*`` diagnostics and
 ``--solver-trace`` sidecar will be inspected.
 
-The ``sfincs_jax.solve`` policy accepts an explicit ``method`` (CLI
+The ``dkx.solve`` policy accepts an explicit ``method`` (CLI
 ``--solve-method``): ``auto`` (the default), ``block_tridiagonal`` and
 ``block_tridiagonal_truncated`` (the tier-1 structured direct solves),
 ``gmres`` (the tier-2 recycled Krylov solve), and ``direct`` (the tier-3 host
@@ -172,11 +172,11 @@ one-node and multi-host runs.
 .. code-block:: bash
 
    # Multi-core CPU host devices + auto sharding
-   sfincs_jax --cores 8 --shard-axis auto /path/to/input.namelist
+   dkx --cores 8 --shard-axis auto /path/to/input.namelist
 
    # RHSMode=2/3 transport-matrix run (canonical stack; all whichRHS drives
    # are solved in one shared multi-RHS solve)
-   sfincs_jax transport-matrix-v3 \
+   dkx transport-matrix-v3 \
      --input /path/to/input.namelist
 
    # High-nu publication pilot with one transport RHS worker per visible GPU
@@ -193,7 +193,7 @@ one-node and multi-host runs.
 
    # Experimental one-node single-case multi-GPU sharded solve
    CUDA_VISIBLE_DEVICES=0,1 \
-   sfincs_jax write-output \
+   dkx write-output \
      --input /path/to/input.namelist \
      --shard-axis theta \
      --distributed-gmres auto \
@@ -201,11 +201,11 @@ one-node and multi-host runs.
 
    # RHSMode=2/3 transport-matrix run on a selected GPU
    CUDA_VISIBLE_DEVICES=0 \
-   sfincs_jax transport-matrix-v3 \
+   dkx transport-matrix-v3 \
      --input /path/to/input.namelist
 
    # Multi-host JAX bootstrap for sharded solves
-   sfincs_jax write-output \
+   dkx write-output \
      --input /path/to/input.namelist \
      --distributed \
      --process-count 8 \
@@ -256,26 +256,26 @@ or debugging a path choice, not stable solver selectors.
 Precision, cache, and data files
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``sfincs_jax`` runs in float64 and enables the JAX persistent compilation cache
+``dkx`` runs in float64 and enables the JAX persistent compilation cache
 on import.
 
 - ``JAX_COMPILATION_CACHE_DIR``: standard JAX persistent compilation-cache
   directory, reused across runs (recommended for reduced-suite and batch runs).
-  When it is unset, ``sfincs_jax`` selects a writable default under ``~/.cache``
+  When it is unset, ``dkx`` selects a writable default under ``~/.cache``
   (or ``XDG_CACHE_HOME``).
-- ``SFINCS_JAX_COMPILATION_CACHE_DIR``: override for that default cache path when
+- ``DKX_COMPILATION_CACHE_DIR``: override for that default cache path when
   ``JAX_COMPILATION_CACHE_DIR`` is unset.
-- ``SFINCS_JAX_DISABLE_COMPILATION_CACHE``: set to ``1``/``true`` to skip enabling
+- ``DKX_DISABLE_COMPILATION_CACHE``: set to ``1``/``true`` to skip enabling
   the persistent compilation cache entirely.
-- ``SFINCS_JAX_DATA_DIR``: override the cache root for optional release-hosted
-  equilibrium data files (default: ``~/.cache/sfincs_jax/data``, honoring
+- ``DKX_DATA_DIR``: override the cache root for optional release-hosted
+  equilibrium data files (default: ``~/.cache/dkx/data``, honoring
   ``XDG_CACHE_HOME``).
-- ``SFINCS_JAX_OFFLINE``: set to ``1``/``true`` to forbid network fetches of
+- ``DKX_OFFLINE``: set to ``1``/``true`` to forbid network fetches of
   external equilibrium data; an uncached fixture raises instead of downloading.
-- ``SFINCS_JAX_EQUILIBRIA_DIRS``: OS-pathsep-separated search directories for
+- ``DKX_EQUILIBRIA_DIRS``: OS-pathsep-separated search directories for
   resolving relative or relocated equilibrium file paths referenced by an input
   deck.
-- ``SFINCS_JAX_UPSTREAM_UTILS_DIR``: directory holding the upstream v3 ``utils/``
+- ``DKX_UPSTREAM_UTILS_DIR``: directory holding the upstream v3 ``utils/``
   plotting scripts, used by ``postprocess-upstream`` and ``scan-er`` when the
   scripts are not found in a repo checkout.
 
@@ -283,51 +283,51 @@ CPU parallelism and host devices
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Set these **before** JAX is imported (i.e. before running
-``python -m sfincs_jax``). The CLI ``--cores`` flag sets them for you.
+``python -m dkx``). The CLI ``--cores`` flag sets them for you.
 
-- ``SFINCS_JAX_CORES``: high-level CPU parallelism knob. When set to ``N`` > 1,
-  ``sfincs_jax`` enables process-parallel ``whichRHS`` solves **and** exposes
-  ``N`` host devices for optional sharded matvecs. Set ``SFINCS_JAX_SHARD=0`` to
+- ``DKX_CORES``: high-level CPU parallelism knob. When set to ``N`` > 1,
+  ``dkx`` enables process-parallel ``whichRHS`` solves **and** exposes
+  ``N`` host devices for optional sharded matvecs. Set ``DKX_SHARD=0`` to
   keep process parallelism while disabling sharded matvecs. If neither
-  ``--cores`` nor ``SFINCS_JAX_CORES`` is set, CLI auto mode uses ``1`` core for
+  ``--cores`` nor ``DKX_CORES`` is set, CLI auto mode uses ``1`` core for
   RHSMode=1 solves and up to ``3`` cores for RHSMode=2/3 transport runs.
-- ``SFINCS_JAX_CPU_DEVICES``: request multiple host CPU devices for JAX SPMD
+- ``DKX_CPU_DEVICES``: request multiple host CPU devices for JAX SPMD
   sharded-JIT execution (sets ``--xla_force_host_platform_device_count``).
-- ``SFINCS_JAX_XLA_THREADS``: opt in to setting the XLA CPU thread count from
-  ``SFINCS_JAX_CORES``. Some JAX builds do not recognize
+- ``DKX_XLA_THREADS``: opt in to setting the XLA CPU thread count from
+  ``DKX_CORES``. Some JAX builds do not recognize
   ``--xla_cpu_parallelism_threads``, so this is disabled by default.
 
 Single-solve sharding
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-- ``SFINCS_JAX_MATVEC_SHARD_AXIS``: shard the matvec along ``theta``, ``zeta``,
+- ``DKX_MATVEC_SHARD_AXIS``: shard the matvec along ``theta``, ``zeta``,
   ``x``, ``flat``, or ``auto`` when multiple devices are available (``off``
   disables it). ``auto`` chooses the larger of ``Ntheta``/``Nzeta``; ``flat``
   shards the full state vector evenly across devices.
-- ``SFINCS_JAX_AUTO_SHARD``: set to ``0`` to disable auto sharding.
-- ``SFINCS_JAX_SHARD``: shorthand to disable auto sharding even when
-  ``SFINCS_JAX_CORES`` is set. Use ``0``/``false`` to keep single-device matvecs.
-- ``SFINCS_JAX_SHARD_PAD``: pad odd ``Ntheta``/``Nzeta`` (and ``Nx`` when
+- ``DKX_AUTO_SHARD``: set to ``0`` to disable auto sharding.
+- ``DKX_SHARD``: shorthand to disable auto sharding even when
+  ``DKX_CORES`` is set. Use ``0``/``false`` to keep single-device matvecs.
+- ``DKX_SHARD_PAD``: pad odd ``Ntheta``/``Nzeta`` (and ``Nx`` when
   x-sharding is requested) internally so sharding can use even device counts
   (default: enabled). Padding adds ghost planes with zero weights and does not
   change outputs.
-- ``SFINCS_JAX_GMRES_DISTRIBUTED``: set to ``1`` to run the Krylov solver under
+- ``DKX_GMRES_DISTRIBUTED``: set to ``1`` to run the Krylov solver under
   explicit ``jax.jit`` sharding (vectors kept sharded across devices) when using
   ``flat`` sharding. Default: off (single-device GMRES).
-- ``SFINCS_JAX_DISTRIBUTED_KRYLOV``: distributed Krylov preference for
+- ``DKX_DISTRIBUTED_KRYLOV``: distributed Krylov preference for
   ``solve_method=auto`` under sharded solves. ``auto`` (default) selects
   communication-reduced BiCGStab; ``gmres`` forces distributed GMRES.
 
 Multi-host distributed initialization
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- ``SFINCS_JAX_DISTRIBUTED``: enable JAX multi-host initialization (default:
+- ``DKX_DISTRIBUTED``: enable JAX multi-host initialization (default:
   off). When set, also provide:
 
-  - ``SFINCS_JAX_PROCESS_ID``: this process rank (0-based).
-  - ``SFINCS_JAX_PROCESS_COUNT``: total number of processes.
-  - ``SFINCS_JAX_COORDINATOR_ADDRESS``: host (or ``host:port``) of the coordinator.
-  - ``SFINCS_JAX_COORDINATOR_PORT``: coordinator port (default: ``1234``).
+  - ``DKX_PROCESS_ID``: this process rank (0-based).
+  - ``DKX_PROCESS_COUNT``: total number of processes.
+  - ``DKX_COORDINATOR_ADDRESS``: host (or ``host:port``) of the coordinator.
+  - ``DKX_COORDINATOR_PORT``: coordinator port (default: ``1234``).
 
 The CLI flags ``--distributed``, ``--process-id``, ``--process-count``,
 ``--coordinator-address``, and ``--coordinator-port`` set these for you.
@@ -335,9 +335,9 @@ The CLI flags ``--distributed``, ``--process-id``, ``--process-count``,
 Transport (RHSMode=2/3) worker parallelism
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- ``SFINCS_JAX_TRANSPORT_PARALLEL``: parallelize RHSMode=2/3 ``whichRHS`` solves
+- ``DKX_TRANSPORT_PARALLEL``: parallelize RHSMode=2/3 ``whichRHS`` solves
   across worker processes (``off``/``process``/``auto``).
-- ``SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS``: number of worker processes for
+- ``DKX_TRANSPORT_PARALLEL_WORKERS``: number of worker processes for
   parallel transport solves. The CLI ``--transport-workers`` flag sets both.
 
 includePhi1 Newton–Krylov tolerances
@@ -347,23 +347,23 @@ These are numerical overrides for the ``includePhi1 = .true.`` Newton–Krylov
 solve. They have no namelist/API equivalent and are overrides for parity or
 debugging, not solver selectors.
 
-- ``SFINCS_JAX_PHI1_NEWTON_TOL``: absolute nonlinear (Newton) tolerance for
+- ``DKX_PHI1_NEWTON_TOL``: absolute nonlinear (Newton) tolerance for
   includePhi1 solves (default: ``1e-12``). It governs how many Newton iterates
   are accepted and how many entries the ``NIterations`` output axis stores.
-- ``SFINCS_JAX_PHI1_GMRES_TOL``: inner GMRES tolerance for the includePhi1
+- ``DKX_PHI1_GMRES_TOL``: inner GMRES tolerance for the includePhi1
   Newton–Krylov step (default: ``1e-12``).
 
 Parity and physics overrides
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- ``SFINCS_JAX_ROSENBLUTH_METHOD``: how the Rosenbluth potential response
+- ``DKX_ROSENBLUTH_METHOD``: how the Rosenbluth potential response
   matrices are computed for ``collisionOperator=0`` with ``xGridScheme=5/6``.
 
   - ``quadpack`` (default): match the Fortran v3 QUADPACK-based implementation
     for parity.
   - ``analytic``: faster analytic integrals (may differ at strict parity level).
 
-- ``SFINCS_JAX_FP_STRICT_PARITY``: for ``collisionOperator=0`` multispecies runs,
+- ``DKX_FP_STRICT_PARITY``: for ``collisionOperator=0`` multispecies runs,
   force a scalar-ordered accumulation of the FP cross-species coupling to match
   v3 ordering.
 
@@ -373,20 +373,20 @@ Parity and physics overrides
 Diagnostics, profiling, and stdout
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- ``SFINCS_JAX_FORTRAN_STDOUT``: control strict Fortran-style stdout mirroring
+- ``DKX_FORTRAN_STDOUT``: control strict Fortran-style stdout mirroring
   (``1`` to mirror, ``0`` to silence). The CLI
   ``--fortran-stdout``/``--no-fortran-stdout`` flags set it.
-- ``SFINCS_JAX_WRITE_SOLVER_DIAGNOSTICS``: set to ``1`` to add per-``whichRHS``
+- ``DKX_WRITE_SOLVER_DIAGNOSTICS``: set to ``1`` to add per-``whichRHS``
   residual datasets (``transportResidualNorms``, ``transportRhsNorms``,
   ``transportRelativeResidualNorms``, ``transportMaxResidualNorm``, and
   ``transportMaxRelativeResidualNorm``) to transport H5 output. Publication scan
   scripts use these fields to reject unconverged high-``nu'`` outputs.
-- ``SFINCS_JAX_PROFILE``: enable phase-level timing and memory sampling for the
+- ``DKX_PROFILE``: enable phase-level timing and memory sampling for the
   solve (``1``/``timings``/``full``/``trace`` opt in). It emits ``profiling: ...``
   lines and trace metadata.
-- ``SFINCS_JAX_PROFILE_DEVICE_MEM``: also sample device (accelerator) memory in
-  the profiler; ``SFINCS_JAX_PROFILE=full``/``device`` implies it.
-- ``SFINCS_JAX_DEBUG``: set to ``1``/``true`` to re-raise full tracebacks from
+- ``DKX_PROFILE_DEVICE_MEM``: also sample device (accelerator) memory in
+  the profiler; ``DKX_PROFILE=full``/``device`` implies it.
+- ``DKX_DEBUG``: set to ``1``/``true`` to re-raise full tracebacks from
   CLI subcommands instead of printing a short error message.
 
 Internal and test-only variables
@@ -394,34 +394,34 @@ Internal and test-only variables
 
 These are not production tuning knobs and are listed only for completeness:
 
-- ``SFINCS_JAX_CI``: recognized alongside the standard ``CI`` variable to
+- ``DKX_CI``: recognized alongside the standard ``CI`` variable to
   suppress the CLI's automatic core selection in continuous-integration runs.
-- ``SFINCS_JAX_CLI_BOOTSTRAPPED``: set automatically when the CLI re-executes to
+- ``DKX_CLI_BOOTSTRAPPED``: set automatically when the CLI re-executes to
   apply pre-JAX environment defaults; not intended to be set by hand.
-- ``SFINCS_JAX_VMEC_JAX_WOUT``: points an optional VMEC/Boozer geometry-backend
+- ``DKX_VMEX_WOUT``: points an optional VMEC/Boozer geometry-backend
   integration test at a ``wout`` fixture; unused in normal runs.
 
-Writing output files with `sfincs_jax`
+Writing output files with `dkx`
 --------------------------------------
 
 .. code-block:: bash
 
    # Default CLI mode (matches Fortran v3 behavior)
-   sfincs_jax /path/to/input.namelist
+   dkx /path/to/input.namelist
 
-   # If --cores is omitted and SFINCS_JAX_CORES is unset, sfincs_jax auto-selects
+   # If --cores is omitted and DKX_CORES is unset, dkx auto-selects
    # 1 core for RHSMode=1 and up to 3 cores for RHSMode=2/3 on non-CI machines.
 
 .. code-block:: bash
 
    # Parallel CPU run without environment variables
-   sfincs_jax --cores 4 /path/to/input.namelist
+   dkx --cores 4 /path/to/input.namelist
 
 .. code-block:: bash
 
-   sfincs_jax write-output --input /path/to/input.namelist --out sfincsOutput.h5
-   sfincs_jax write-output --input /path/to/input.namelist --out sfincsOutput.nc
-   sfincs_jax write-output --input /path/to/input.namelist --out sfincsOutput.npz
+   dkx write-output --input /path/to/input.namelist --out sfincsOutput.h5
+   dkx write-output --input /path/to/input.namelist --out sfincsOutput.nc
+   dkx write-output --input /path/to/input.namelist --out sfincsOutput.npz
 
 The suffix selects the writer: ``.h5``/``.hdf5`` for Fortran-compatible HDF5,
 ``.nc``/``.netcdf`` for NetCDF4, and ``.npz`` for a fast uncompressed NumPy
@@ -470,23 +470,23 @@ environment variables or forcing a preconditioner.
 
 .. code-block:: bash
 
-   sfincs_jax write-output \
+   dkx write-output \
      --input /path/to/input.namelist \
      --out sfincsOutput.h5 \
      --equilibrium-file /path/to/equilibrium.bc
 
 .. code-block:: bash
 
-   sfincs_jax /path/to/input.namelist --wout-path /path/to/wout.nc --out sfincsOutput.h5
+   dkx /path/to/input.namelist --wout-path /path/to/wout.nc --out sfincsOutput.h5
 
 .. code-block:: bash
 
-   python -m sfincs_jax write-output --input /path/to/input.namelist --out sfincsOutput.h5
+   python -m dkx write-output --input /path/to/input.namelist --out sfincsOutput.h5
 
 .. code-block:: python
 
    from pathlib import Path
-   from sfincs_jax.api import write_output
+   from dkx.api import write_output
 
    write_output(Path("input.namelist"), Path("sfincsOutput.h5"))
 
@@ -514,16 +514,16 @@ environment variables or forcing a preconditioner.
 
 The CLI ``write-output`` command uses ``solve_method="auto"`` by default. That
 is the recommended production path. ``write_output`` routes the deck through
-the canonical RHSMode dispatch (:func:`sfincs_jax.run.run_from_namelist`);
+the canonical RHSMode dispatch (:func:`dkx.run.run_from_namelist`);
 for end-to-end differentiation use the pure APIs
-(:func:`sfincs_jax.solve.solve` with ``differentiable=True`` or
-:func:`sfincs_jax.er.ambipolar_er`).
+(:func:`dkx.solve.solve` with ``differentiable=True`` or
+:func:`dkx.er.ambipolar_er`).
 
 Inspect results immediately:
 
 .. code-block:: python
 
-   from sfincs_jax.io import read_sfincs_h5
+   from dkx.io import read_sfincs_h5
 
    out_path = write_output(Path("input.namelist"), Path("sfincsOutput.h5"))
    results = read_sfincs_h5(out_path)
@@ -552,7 +552,7 @@ you can use the ``scan-er`` subcommand:
 
 .. code-block:: bash
 
-   sfincs_jax scan-er \
+   dkx scan-er \
      --input /path/to/input.namelist \
      --out-dir /path/to/scan_dir \
      --min -0.1 --max 0.1 --n 5 \
@@ -570,7 +570,7 @@ For large scans, you can parallelize scan points:
 
 .. code-block:: bash
 
-   sfincs_jax scan-er \
+   dkx scan-er \
      --input /path/to/input.namelist \
      --out-dir /path/to/scan_dir \
      --min -0.1 --max 0.1 --n 41 \
@@ -580,7 +580,7 @@ For job arrays, slice the scan values with ``--index`` and ``--stride``:
 
 .. code-block:: bash
 
-   sfincs_jax scan-er \
+   dkx scan-er \
      --input /path/to/input.namelist \
      --out-dir /path/to/scan_dir \
      --min -0.1 --max 0.1 --n 401 \
@@ -595,13 +595,13 @@ outputs in process and applies a bracketed Brent solve:
 
 .. code-block:: bash
 
-   sfincs_jax ambipolar \
+   dkx ambipolar \
      --input /path/to/input.namelist \
      --out-dir /path/to/ambipolar_run \
      --er-min -0.1 --er-max 0.1 --er-initial 0.0
 
-The command routes through the canonical :mod:`sfincs_jax.er` slice
-(:func:`sfincs_jax.er.find_ambipolar_er`) and writes ``ambipolar_result.json``
+The command routes through the canonical :mod:`dkx.er` slice
+(:func:`dkx.er.find_ambipolar_er`) and writes ``ambipolar_result.json``
 with the converged flag, the selected root ``root_er``, its ``root_type``
 (ion / electron / unstable), the ordered radial-current ``iterations``, and
 every classified root in the bracket.  Warm starts and GCROT recycling are
@@ -612,7 +612,7 @@ CLI — also obtain a *differentiable* ambipolar :math:`E_r`:
 
 .. code-block:: python
 
-   from sfincs_jax import er
+   from dkx import er
 
    # Fortran-parity Brent root (bracket expansion + classification):
    result = er.find_ambipolar_er(
@@ -638,10 +638,10 @@ If you have a directory containing `sfincsOutput.h5`, you can run one of these s
 
 .. code-block:: bash
 
-   sfincs_jax postprocess-upstream --case-dir /path/to/case --util sfincsScanPlot_1 -- pdf
+   dkx postprocess-upstream --case-dir /path/to/case --util sfincsScanPlot_1 -- pdf
 
 For example, after running ``scan-er`` you can generate a PDF using the upstream script:
 
 .. code-block:: bash
 
-   sfincs_jax postprocess-upstream --case-dir /path/to/scan_dir --util sfincsScanPlot_2 -- pdf
+   dkx postprocess-upstream --case-dir /path/to/scan_dir --util sfincsScanPlot_2 -- pdf

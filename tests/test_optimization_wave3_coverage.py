@@ -24,8 +24,8 @@ def test_vmec_workflow_status_helpers_are_skip_safe_and_strict(
     capsys,
 ) -> None:
     mod = _load_script(
-        _REPO / "examples" / "optimization" / "vmec_jax_workflow_status.py",
-        "wave3_vmec_jax_workflow_status",
+        _REPO / "examples" / "optimization" / "vmex_workflow_status.py",
+        "wave3_vmex_workflow_status",
     )
 
     proxy_summary = tmp_path / "proxy summary.json"
@@ -39,11 +39,11 @@ def test_vmec_workflow_status_helpers_are_skip_safe_and_strict(
     assert str(proxy_summary) in command
 
     def fake_backend_report() -> dict[str, object]:
-        return {"backends": {"booz_xform_jax": True, "vmec_jax": False}}
+        return {"backends": {"booz_xform_jax": True, "vmex": False}}
 
     def fake_summary(*, backend_status):
         return {
-            "workflow": "vmec_jax_to_boozer_sfincs_geometry_proxy",
+            "workflow": "vmex_to_boozer_sfincs_geometry_proxy",
             "workflow_contract": {
                 "differentiated_graph": ["booz_xform_jax"],
                 "outside_differentiated_graph": ["SFINCS kinetic transport solve"],
@@ -80,7 +80,7 @@ def test_vmec_workflow_status_helpers_are_skip_safe_and_strict(
 
     status = mod.build_status(wout=Path("/tmp/wout.nc"), proxy_summary_json=proxy_summary, steps=3)
     assert status["status"] == "skipped"
-    assert status["skip_reason"] == "missing optional backends: vmec_jax"
+    assert status["skip_reason"] == "missing optional backends: vmex"
     assert status["backend_readiness_gate"]["optional_dependencies_required"] is False
     assert status["no_solve_provenance_gate"]["kinetic_solve_executed"] is False
     assert "--wout /tmp/wout.nc" in status["commands"]["proxy_gradient_gate"]
@@ -98,14 +98,14 @@ def test_vmec_workflow_status_helpers_are_skip_safe_and_strict(
 
 def test_vmec_workflow_status_human_output_handles_ready_payload(monkeypatch, capsys) -> None:
     mod = _load_script(
-        _REPO / "examples" / "optimization" / "vmec_jax_workflow_status.py",
-        "wave3_vmec_jax_workflow_status_ready",
+        _REPO / "examples" / "optimization" / "vmex_workflow_status.py",
+        "wave3_vmex_workflow_status_ready",
     )
     ready_payload = {
-        "workflow": "vmec_jax_to_boozer_sfincs_geometry_proxy",
+        "workflow": "vmex_to_boozer_sfincs_geometry_proxy",
         "status": "ready",
         "skip_reason": None,
-        "optional_backends": {"booz_xform_jax": True, "vmec_jax": True},
+        "optional_backends": {"booz_xform_jax": True, "vmex": True},
         "backend_readiness_gate": {
             "status": "pass",
             "optional_dependencies_required": False,
@@ -118,7 +118,7 @@ def test_vmec_workflow_status_human_output_handles_ready_payload(monkeypatch, ca
             "kinetic_transport_scalar_contract_gate": {"status": "pass"},
         },
         "differentiability_contract": {
-            "differentiated_graph": ["vmec_jax", "booz_xform_jax"],
+            "differentiated_graph": ["vmex", "booz_xform_jax"],
             "outside_differentiated_graph": ["SFINCS kinetic transport solve"],
             "no_overclaim_gate": {"status": "pass"},
             "not_claimed": "full transport gradients",

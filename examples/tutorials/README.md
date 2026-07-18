@@ -1,6 +1,6 @@
 # Tutorials
 
-This folder is the compact learning path for first-time `sfincs_jax` users. It does
+This folder is the compact learning path for first-time `dkx` users. It does
 not replace the topic folders under `examples/`; it points to the best first
 scripts and explains the physics and diagnostics in a notebook format.
 
@@ -41,7 +41,7 @@ The script writes `sfincsOutput_tutorial.h5`, `.nc`, `.npz`, and
 - Use `examples/transport/` for RHSMode=2/3 transport-matrix examples.
 - Use `examples/autodiff/` for JAX gradient, JVP/VJP, and implicit-solve
   examples.
-- Use `examples/vmec_jax_finite_beta/` for VMEC, Redl, ambipolar electric
+- Use `examples/vmex_finite_beta/` for VMEC, Redl, ambipolar electric
   field, and bootstrap-current workflows.
 - Use `examples/optimization/` for proxy objectives and kinetic promotion
   scripts.

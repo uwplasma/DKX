@@ -20,8 +20,8 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.api import write_output
-from sfincs_jax.io import read_sfincs_h5
+from dkx.api import write_output
+from dkx.io import read_sfincs_h5
 
 
 def main() -> int:

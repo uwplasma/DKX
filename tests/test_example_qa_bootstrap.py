@@ -2,7 +2,7 @@
 
 Covered here:
 
-1. the example runs end to end at toy resolution (``SFINCS_JAX_CI=1``) and
+1. the example runs end to end at toy resolution (``DKX_CI=1``) and
    the objective decreases;
 2. autodiff accuracy, documented honestly at two levels:
    - the Boozer-spectrum -> kinetic <j.B> segment (pure JAX + implicit
@@ -13,7 +13,7 @@ Covered here:
      end-to-end FD comparison is limited by the *finite-difference* noise of
      the iterative host equilibrium solve (ftol-termination noise ~5e-3 on
      small gradient components), not by the autodiff path — the same floor
-     the vmec_jax implicit-adjoint tests document;
+     the vmex implicit-adjoint tests document;
 3. every entry of ``KINETIC_OBJECTIVES`` (the commented alternative
    objectives in the example) evaluates to a finite scalar on the solved
    moments and participates in a full traced objective evaluation, so
@@ -21,7 +21,7 @@ Covered here:
 4. the example's traceable VMEC->Boozer bridge reproduces the host wout
    engine + classic booz_xform run on the same surface.
 
-Requires the optional companions vmec_jax (new core API) and booz_xform_jax;
+Requires the optional companions vmex (new core API) and booz_xform_jax;
 skipped otherwise.
 """
 
@@ -35,15 +35,15 @@ import numpy as np
 import pytest
 
 # Dependency-based skips only: the example needs the optional companion
-# packages vmec_jax (new core API with core.boozer_tables) and booz_xform_jax.
-# The starting VMEC input ships with vmec_jax; the example resolves it from
-# the installed package (override with SFINCS_JAX_QA_VMEC_INPUT).
-pytest.importorskip("vmec_jax")
-pytest.importorskip("vmec_jax.core.boozer_tables")
+# packages vmex (new core API with core.boozer_tables) and booz_xform_jax.
+# The starting VMEC input ships with vmex; the example resolves it from
+# the installed package (override with DKX_QA_VMEC_INPUT).
+pytest.importorskip("vmex")
+pytest.importorskip("vmex.core.boozer_tables")
 pytest.importorskip("booz_xform_jax")
 
-# The flagship optimization runs the full differentiable vmec_jax -> booz_xform_jax
-# -> sfincs_jax chain; even at toy resolution the one-time XLA compilation makes it
+# The flagship optimization runs the full differentiable vmex -> booz_xform_jax
+# -> dkx chain; even at toy resolution the one-time XLA compilation makes it
 # a multi-minute, memory-heavy integration test. Mark it slow so it stays out of the
 # fast, memory-bounded coverage shards (same policy as tests/test_examples_optimization.py);
 # it still runs in the full local suite.
@@ -57,9 +57,9 @@ EXAMPLE = REPO_ROOT / "examples" / "optimize_QA_bootstrap.py"
 def example():
     """Run the example once in-process at CI resolution; return its globals."""
     env = {
-        "SFINCS_JAX_CI": "1",
-        "SFINCS_JAX_QA_MAXITER": "2",
-        "SFINCS_JAX_QA_FD_CHECK": "1",
+        "DKX_CI": "1",
+        "DKX_QA_MAXITER": "2",
+        "DKX_QA_FD_CHECK": "1",
     }
     old = {k: os.environ.get(k) for k in env}
     os.environ.update(env)
@@ -180,8 +180,8 @@ def test_alternative_kinetic_objectives_evaluate(example) -> None:
 def test_boozer_bridge_matches_host_wout_engine(example) -> None:
     """The traceable VMEC->Boozer tables reproduce the host reference path."""
     from booz_xform_jax import Booz_xform
-    from vmec_jax.core import solver as vmec_solver
-    from vmec_jax.core.wout import wout_from_state
+    from vmex.core import solver as vmec_solver
+    from vmex.core.wout import wout_from_state
 
     g = example
     params0, inp0 = g["params0"], g["inp0"]

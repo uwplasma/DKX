@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Head-to-head benchmark: sfincs_jax tier-1 truncated solve vs the Fortran baseline.
+"""Head-to-head benchmark: dkx tier-1 truncated solve vs the Fortran baseline.
 
 Case: HSX PAS DKES RHSMode=1 (Ntheta=25, Nzeta=51, Nxi=100, Nx=5, two species;
 744,610 unknowns with the Fortran Nxi_for_x ramp).  The Fortran baseline
@@ -12,13 +12,13 @@ full tier-1 factor storage is ``3 * Nxi * S * X * TZ^2 * 8 B`` (~39 GB here),
 so when that estimate breaches the memory budget this benchmark uses
 ``solvax.direct.block_thomas_truncated_fn``: blocks are assembled on the fly
 from the analytic per-term coefficients of
-``sfincs_jax.drift_kinetic.KineticOperator.legendre_blocks`` (never
+``dkx.drift_kinetic.KineticOperator.legendre_blocks`` (never
 materializing the bands), and only the lowest ``keep_lowest=3`` Legendre
 blocks of the solution are computed.  That is exact for every RHSMode=1
 output moment (fluxes, flows, sources, FSA constraints): the drives have
 Legendre support l <= 2 and all moments contract against l <= 2 only.
 When the full tier-1 estimate fits the budget, the canonical
-``sfincs_jax.solve.solve(..., method="block_tridiagonal")`` path is used
+``dkx.solve.solve(..., method="block_tridiagonal")`` path is used
 instead.
 
 The input is run with ``Nxi_for_x_option = 0`` (uniform Nxi_for_x) because the
@@ -32,7 +32,7 @@ truncated kernel (n_blocks = Nxi_for_x[ix] per subsystem).
 
 Usage::
 
-    /usr/bin/time -l micromamba run -n sfincs-jax python \
+    /usr/bin/time -l micromamba run -n dkx python \
         tools/benchmarks/tier1_hsx_head_to_head.py \
         --input /Users/rogerio/local/fortran_scaling_baseline/sized/input.namelist \
         --fortran-h5 /Users/rogerio/local/fortran_scaling_baseline/sized/sfincsOutput.h5
@@ -71,15 +71,15 @@ import numpy as np  # noqa: E402
 
 from solvax.direct import block_thomas_truncated_fn  # noqa: E402
 
-from sfincs_jax.drift_kinetic import KineticOperator  # noqa: E402
-from sfincs_jax.moments import (  # noqa: E402
+from dkx.drift_kinetic import KineticOperator  # noqa: E402
+from dkx.moments import (  # noqa: E402
     FluxSurface,
     SpeciesParams,
     StateLayout,
     VelocityGrid,
     rhsmode1_moments,
 )
-from sfincs_jax.namelist import parse_sfincs_input_text  # noqa: E402
+from dkx.namelist import parse_sfincs_input_text  # noqa: E402
 
 KEEP_LOWEST = 3  # RHSMode=1 drives and output moments live on l <= 2
 
@@ -130,7 +130,7 @@ def full_band_gigabytes(op: KineticOperator) -> float:
 class TruncatedTier1:
     """Memory-lean tier-1 solve for the PAS/DKES family.
 
-    Mirrors ``sfincs_jax.solve.build_tier1_solver`` (same analytic blocks as
+    Mirrors ``dkx.solve.build_tier1_solver`` (same analytic blocks as
     ``KineticOperator.legendre_blocks``, same exact rank-one border absorption
     ``A~ = A + gamma B C``) but assembles the (m, m) blocks per Legendre index
     inside ``solvax.direct.block_thomas_truncated_fn``, so peak memory is
@@ -341,7 +341,7 @@ class TruncatedTier1:
 
 
 # =============================================================================
-# Moments (the consolidated diagnostics formulas in sfincs_jax.moments)
+# Moments (the consolidated diagnostics formulas in dkx.moments)
 # =============================================================================
 
 
@@ -367,7 +367,7 @@ def compute_moments(op: KineticOperator, x_full: np.ndarray) -> dict[str, np.nda
 
 
 def validate_small(base_text: str, n_xi: int = 30) -> None:
-    from sfincs_jax.solve import solve as canonical_solve
+    from dkx.solve import solve as canonical_solve
 
     text = patch_namelist(
         base_text, "resolutionParameters", {"Ntheta": "13", "Nzeta": "25", "Nxi": str(n_xi)}
@@ -509,7 +509,7 @@ def main() -> None:
     t0 = time.perf_counter()
     rhs = op.rhs()
     if use_full:
-        from sfincs_jax.solve import solve as canonical_solve
+        from dkx.solve import solve as canonical_solve
 
         def do_solve():
             res = canonical_solve(op, rhs, method="block_tridiagonal")

@@ -1,7 +1,7 @@
 """Autodiff tour: exact derivatives of kinetic outputs through the implicit solve.
 
 What this example teaches:
-  - what is differentiable in sfincs_jax: the pure-function route
+  - what is differentiable in dkx: the pure-function route
     (parse text -> KineticOperator -> solve(differentiable=True) ->
     profile_moments_from_operator) is a JAX-traceable pipeline end to end,
   - how to thread a physics parameter through the operator pytree with
@@ -12,7 +12,7 @@ What this example teaches:
 Physics context: because SFINCS' drift-kinetic equation is linear in the
 distribution function, a solved output (bootstrap current FSABjHat, radial
 particle flux, ...) is an implicit function of the physics inputs through
-K(p) f = b(p).  sfincs_jax wraps the solve in implicit differentiation
+K(p) f = b(p).  dkx wraps the solve in implicit differentiation
 (one extra adjoint/transposed solve reusing the same factorization), so
 ``jax.grad`` returns machine-accurate sensitivities such as d(FSABjHat)/dTHat
 — the building block for ambipolar-root derivatives and stellarator
@@ -43,15 +43,15 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
-from sfincs_jax.inputs import parse_sfincs_input_text
-from sfincs_jax.run import profile_moments_from_operator
-from sfincs_jax.solve import solve
+from dkx.drift_kinetic import kinetic_operator_from_namelist
+from dkx.inputs import parse_sfincs_input_text
+from dkx.run import profile_moments_from_operator
+from dkx.solve import solve
 
 # ----------------------------------------------------------------------------
 # Parameters
 # ----------------------------------------------------------------------------
-CI = os.environ.get("SFINCS_JAX_CI") == "1"  # shrink resolution for CI
+CI = os.environ.get("DKX_CI") == "1"  # shrink resolution for CI
 
 FD_EPS_REL = 1e-6  # central finite-difference relative step
 

@@ -10,21 +10,21 @@ objective.  The rows exercise the three differentiable tiers of the code:
       radial-diffusion coefficient (Beidler et al. normalization) with
       respect to a Boozer ``|B|`` cosine amplitude, through the
       RHSMode=3 monoenergetic-database path
-      (:func:`sfincs_jax.monoenergetic.monoenergetic_database_from_operator`
+      (:func:`dkx.monoenergetic.monoenergetic_database_from_operator`
       with ``differentiable=True`` solves on a
-      :meth:`~sfincs_jax.magnetic_geometry.FluxSurfaceGeometry.from_fourier`
+      :meth:`~dkx.magnetic_geometry.FluxSurfaceGeometry.from_fourier`
       geometry) -- the geometry-optimization entry point.
 
   (b) ``d(FSABjHat)/d(nu_n)``: derivative of the flux-surface-averaged
       bootstrap current of a two-species RHSMode=1 solve with respect to
       the normalized collision frequency, through the implicit-diff linear
-      solve (:func:`sfincs_jax.solve.solve` with ``differentiable=True``)
-      and the moment assembly (:func:`sfincs_jax.moments.rhsmode1_moments`).
+      solve (:func:`dkx.solve.solve` with ``differentiable=True``)
+      and the moment assembly (:func:`dkx.moments.rhsmode1_moments`).
 
   (c) ``d(Er_root)/d(theta_n)``: derivative of the ambipolar radial
       electric field with respect to a scale factor ``theta_n`` on both
       species' density gradients, through the implicit-function-theorem
-      root solve (:func:`sfincs_jax.er.ambipolar_er`, ``jax.lax.custom_root``
+      root solve (:func:`dkx.er.ambipolar_er`, ``jax.lax.custom_root``
       via solvax) -- no finite differences anywhere in the AD path.
 
 Outputs: ``docs/_static/figures/paper_benchmarks/gradient_verification.json``
@@ -50,18 +50,18 @@ import jax.numpy as jnp
 
 jax.config.update("jax_enable_x64", True)
 
-from sfincs_jax import er as er_mod  # noqa: E402
-from sfincs_jax.drift_kinetic import (  # noqa: E402
+from dkx import er as er_mod  # noqa: E402
+from dkx.drift_kinetic import (  # noqa: E402
     _geometry_and_radial,
     kinetic_operator_from_namelist,
 )
-from sfincs_jax.inputs import load_sfincs_input  # noqa: E402
-from sfincs_jax.magnetic_geometry import FluxSurfaceGeometry  # noqa: E402
-from sfincs_jax.moments import rhsmode1_moments  # noqa: E402
-from sfincs_jax.monoenergetic import monoenergetic_database_from_operator  # noqa: E402
-from sfincs_jax.run import _grids_from_input, _raw_with_validated_overrides  # noqa: E402
-from sfincs_jax.solve import solve  # noqa: E402
-from sfincs_jax.writer import operator_containers  # noqa: E402
+from dkx.inputs import load_sfincs_input  # noqa: E402
+from dkx.magnetic_geometry import FluxSurfaceGeometry  # noqa: E402
+from dkx.moments import rhsmode1_moments  # noqa: E402
+from dkx.monoenergetic import monoenergetic_database_from_operator  # noqa: E402
+from dkx.run import _grids_from_input, _raw_with_validated_overrides  # noqa: E402
+from dkx.solve import solve  # noqa: E402
+from dkx.writer import operator_containers  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 OUT_DIR = Path(__file__).parent / "output"

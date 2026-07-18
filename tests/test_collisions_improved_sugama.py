@@ -33,14 +33,14 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from sfincs_jax.collisions import (
+from dkx.collisions import (
     ImprovedSugamaV3Operator,
     apply_improved_sugama_v3,
     apply_pitch_angle_scattering_v3,
     make_improved_sugama_v3_operator,
     make_pitch_angle_scattering_v3_operator,
 )
-from sfincs_jax.phase_space import make_speed_grid, speed_grid_diff_matrices
+from dkx.phase_space import make_speed_grid, speed_grid_diff_matrices
 
 _K = 0.0
 
@@ -175,7 +175,7 @@ def _test_only_l1_block(z, m, n, t, *, n_x):
     without the momentum-restoring field term (i.e. the ``-nu_n(CE + pitch)``
     part only, ``nu_n = 1``).
     """
-    from sfincs_jax.collisions import _improved_sugama_pair_kernels
+    from dkx.collisions import _improved_sugama_pair_kernels
 
     sg = make_speed_grid(n_x=n_x, k=_K)
     x = np.asarray(sg.x, dtype=np.float64)
@@ -265,7 +265,7 @@ def test_grad_of_flow_through_operator_matches_finite_difference() -> None:
 
 def test_improved_sugama_apply_matches_dense_block_matvec_and_masks_l() -> None:
     """apply reproduces the dense per-L block matvec and honours the Nxi_for_x mask."""
-    from sfincs_jax.collisions import _mask_xi
+    from dkx.collisions import _mask_xi
 
     mat = np.zeros((1, 1, 3, 2, 2), dtype=np.float64)
     mat[0, 0, 0] = np.asarray([[1.0, 2.0], [3.0, 4.0]])
@@ -297,7 +297,7 @@ def test_pytree_roundtrip_and_jit() -> None:
     leaves, treedef = jax.tree_util.tree_flatten(op)
     rebuilt = jax.tree_util.tree_unflatten(treedef, leaves)
     f = jnp.asarray(np.cos(np.arange(2 * 6 * 4).reshape(2, 6, 4, 1, 1) / 5.0))
-    from sfincs_jax.collisions import apply_improved_sugama_v3_jit
+    from dkx.collisions import apply_improved_sugama_v3_jit
 
     np.testing.assert_allclose(
         np.asarray(apply_improved_sugama_v3_jit(rebuilt, f)),

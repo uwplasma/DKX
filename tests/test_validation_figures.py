@@ -7,8 +7,8 @@ import subprocess
 import numpy as np
 import pytest
 
-import sfincs_jax.validation.artifacts as validation_figures
-from sfincs_jax.validation.artifacts import (
+import dkx.validation.artifacts as validation_figures
+from dkx.validation.artifacts import (
     build_simakov_helander_high_nu_panel,
     build_w7x_ambipolar_root_provenance_panel,
 )
@@ -162,7 +162,7 @@ def test_w7x_ambipolar_panel_builds_sorted_zero_bracket_and_deferred_label() -> 
 
 
 def test_w7x_ambipolar_panel_records_provenance_but_keeps_untracked_artifact_deferred(tmp_path: Path) -> None:
-    source_artifact = tmp_path / "sfincs_jax_w7x_ambipolar_validation_summary.json"
+    source_artifact = tmp_path / "dkx_w7x_ambipolar_validation_summary.json"
     payload = _ambipolar_payload(provenance=_complete_provenance())
     source_artifact.write_text(json.dumps(payload), encoding="utf-8")
 
@@ -202,7 +202,7 @@ def test_w7x_ambipolar_panel_can_be_literature_ready_with_checked_artifact(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     payload = _ambipolar_payload(provenance=_complete_provenance())
-    source_artifact = tmp_path / "sfincs_jax_w7x_ambipolar_validation_summary.json"
+    source_artifact = tmp_path / "dkx_w7x_ambipolar_validation_summary.json"
     source_artifact.write_text(json.dumps(payload), encoding="utf-8")
     monkeypatch.setattr(validation_figures, "_is_git_tracked_file", lambda path: True)
 
@@ -251,7 +251,7 @@ def test_w7x_ambipolar_panel_fails_closed_for_tracked_payload_or_name_mismatch(
     assert wrong_name_panel["gates"]["source_artifact_checked_in"] is False
     assert wrong_name_panel["metadata"]["deferred_reason_codes"] == ["source_artifact_not_checked_in"]
 
-    mismatched_payload = tmp_path / "sfincs_jax_w7x_ambipolar_validation_summary.json"
+    mismatched_payload = tmp_path / "dkx_w7x_ambipolar_validation_summary.json"
     mismatched_payload.write_text(
         json.dumps({**payload, "runs": payload["runs"][:-1]}),
         encoding="utf-8",
@@ -381,7 +381,7 @@ def test_w7x_ambipolar_panel_rejects_malformed_payloads(
 
 def test_w7x_ambipolar_artifact_summary_reports_missing_named_artifact(tmp_path: Path) -> None:
     payload = _ambipolar_payload(provenance=_complete_provenance())
-    missing_artifact = tmp_path / "sfincs_jax_w7x_ambipolar_missing.json"
+    missing_artifact = tmp_path / "dkx_w7x_ambipolar_missing.json"
 
     panel = build_w7x_ambipolar_root_provenance_panel(
         payload,
@@ -398,7 +398,7 @@ def test_simakov_helander_high_nu_panel_can_be_literature_ready_with_checked_art
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     payload = _simakov_helander_payload()
-    source_artifact = tmp_path / "sfincs_jax_simakov_helander_high_nu_panel.json"
+    source_artifact = tmp_path / "dkx_simakov_helander_high_nu_panel.json"
     source_artifact.write_text(json.dumps(payload), encoding="utf-8")
     monkeypatch.setattr(validation_figures, "_is_git_tracked_file", lambda path: True)
 
@@ -466,7 +466,7 @@ def test_simakov_helander_high_nu_panel_defers_when_high_nu_range_is_insufficien
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     payload = _simakov_helander_payload(nuprime=[1.0, 3.0, 10.0, 30.0, 90.0])
-    source_artifact = tmp_path / "sfincs_jax_simakov_helander_high_nu_panel.json"
+    source_artifact = tmp_path / "dkx_simakov_helander_high_nu_panel.json"
     source_artifact.write_text(json.dumps(payload), encoding="utf-8")
     monkeypatch.setattr(validation_figures, "_is_git_tracked_file", lambda path: True)
 
@@ -489,7 +489,7 @@ def test_simakov_helander_high_nu_panel_defers_on_wrong_slope_and_trend(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     payload = _simakov_helander_payload(relative_errors=[0.5, 0.2, 0.02, 0.08, 0.1])
-    source_artifact = tmp_path / "sfincs_jax_simakov_helander_high_nu_panel.json"
+    source_artifact = tmp_path / "dkx_simakov_helander_high_nu_panel.json"
     source_artifact.write_text(json.dumps(payload), encoding="utf-8")
     monkeypatch.setattr(validation_figures, "_is_git_tracked_file", lambda path: True)
 
@@ -509,7 +509,7 @@ def test_simakov_helander_high_nu_panel_reports_provenance_gaps_and_untracked_ar
     tmp_path: Path,
 ) -> None:
     payload = _simakov_helander_payload(provenance={"scan_source": "local scratch scan"})
-    source_artifact = tmp_path / "sfincs_jax_simakov_helander_high_nu_panel.json"
+    source_artifact = tmp_path / "dkx_simakov_helander_high_nu_panel.json"
     source_artifact.write_text(json.dumps(payload), encoding="utf-8")
 
     panel = build_simakov_helander_high_nu_panel(payload, source_artifact=source_artifact)
@@ -612,7 +612,7 @@ def test_simakov_helander_artifact_summary_fail_closed_statuses(
     assert wrong_name_panel["source_artifact"]["looks_like_simakov_helander_artifact"] is False
     assert wrong_name_panel["source_artifact"]["status"] == "tracked_non_simakov_helander_artifact"
 
-    mismatched_payload = tmp_path / "sfincs_jax_simakov_helander_high_nu_panel.json"
+    mismatched_payload = tmp_path / "dkx_simakov_helander_high_nu_panel.json"
     mismatched_payload.write_text(
         json.dumps({**payload, "runs": payload["runs"][:-1]}),
         encoding="utf-8",
@@ -623,7 +623,7 @@ def test_simakov_helander_artifact_summary_fail_closed_statuses(
     assert mismatch_panel["source_artifact"]["payload_matches"] is False
     assert mismatch_panel["source_artifact"]["status"] == "tracked_simakov_helander_artifact_payload_mismatch"
 
-    missing_artifact = tmp_path / "sfincs_jax_simakov_helander_missing.json"
+    missing_artifact = tmp_path / "dkx_simakov_helander_missing.json"
     missing_panel = build_simakov_helander_high_nu_panel(payload, source_artifact=missing_artifact)
     assert missing_panel["source_artifact"]["exists"] is False
     assert missing_panel["source_artifact"]["status"] == "missing"

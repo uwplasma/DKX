@@ -1,7 +1,7 @@
 Validation Matrix
 =================
 
-This page tracks the publication-facing validation lanes for ``sfincs_jax``. The goal
+This page tracks the publication-facing validation lanes for ``dkx``. The goal
 is to connect each physics claim or benchmark figure to:
 
 - a literature anchor,
@@ -36,7 +36,7 @@ The schema is enforced by ``tests/test_validation_manifest_schema.py``. Implemen
 release lanes must point to existing scripts, artifacts, source files, and tests.
 Deferred post-release lanes are closed for the tagged release but retain literature
 anchors, implementation targets, tests, and acceptance criteria so follow-up research
-work is not lost. ``python -m sfincs_jax.validation.release check-gates`` applies the same path
+work is not lost. ``python -m dkx.validation.release check-gates`` applies the same path
 hygiene to deferred lanes: listed source files, tests, scripts, and artifacts must
 exist even when the claim status is ``closed_deferred``.
 
@@ -44,7 +44,7 @@ Release claim gate metadata
 ---------------------------
 
 Every manifest record has a ``release_gate`` block checked by
-``python -m sfincs_jax.validation.release check-gates`` and ``tests/test_release_gate_metadata.py``.
+``python -m dkx.validation.release check-gates`` and ``tests/test_release_gate_metadata.py``.
 The allowed ``claim_status`` values are:
 
 - ``release_ready``: checked-in artifacts support the documented release-scope
@@ -94,12 +94,12 @@ Script:
 
 Artifacts:
 
-- ``examples/publication_figures/artifacts/sfincs_jax_publication_validation_dashboard_summary.json``
-- ``docs/_static/figures/paper/sfincs_jax_publication_validation_dashboard.png``
-- ``docs/_static/figures/paper/sfincs_jax_publication_validation_dashboard.pdf``
+- ``examples/publication_figures/artifacts/dkx_publication_validation_dashboard_summary.json``
+- ``docs/_static/figures/paper/dkx_publication_validation_dashboard.png``
+- ``docs/_static/figures/paper/dkx_publication_validation_dashboard.pdf``
 
-.. figure:: _static/figures/paper/sfincs_jax_publication_validation_dashboard.png
-   :alt: Literature-anchored sfincs_jax validation dashboard
+.. figure:: _static/figures/paper/dkx_publication_validation_dashboard.png
+   :alt: Literature-anchored dkx validation dashboard
    :width: 92%
 
    Dashboard assembled from checked-in validation artifacts rather than hand-edited
@@ -124,22 +124,22 @@ Script:
 
 Artifacts:
 
-- ``examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json``
-- ``docs/_static/figures/paper/sfincs_jax_fortran_suite_benchmark_summary.png``
-- ``docs/_static/figures/paper/sfincs_jax_fortran_suite_benchmark_summary.pdf``
+- ``examples/publication_figures/artifacts/dkx_fortran_suite_benchmark_summary.json``
+- ``docs/_static/figures/paper/dkx_fortran_suite_benchmark_summary.png``
+- ``docs/_static/figures/paper/dkx_fortran_suite_benchmark_summary.pdf``
 
-.. figure:: _static/figures/paper/sfincs_jax_fortran_suite_benchmark_summary.png
+.. figure:: _static/figures/paper/dkx_fortran_suite_benchmark_summary.png
    :alt: Frozen CPU and GPU suite benchmark against SFINCS Fortran v3
    :width: 92%
 
    Cross-code release benchmark generated from frozen CPU/GPU suite reports. The
    plotted bars show wall-clock runtime and active solver memory for SFINCS
-   Fortran v3, ``sfincs_jax`` CPU cold/warm, and ``sfincs_jax`` GPU cold/warm
+   Fortran v3, ``dkx`` CPU cold/warm, and ``dkx`` GPU cold/warm
    across the reference-runtime-window rows whose Fortran v3 reference runtime
    is at least ``10 s``. The summary JSON records which frozen rows are excluded
    from public performance claims until production-resolution reruns exist. JAX active memory subtracts the fixed Python/JAX/XLA runtime
    baseline using profiler RSS deltas while preserving full process RSS in the
-   JSON audit fields. Cases are ordered by best warm ``sfincs_jax`` speedup over the
+   JSON audit fields. Cases are ordered by best warm ``dkx`` speedup over the
    Fortran v3 runtime. The acceptance tests require all 39 audited cases to remain
    ``parity_ok`` on both backends, with zero strict mismatches and no
    ``jax_error`` or ``max_attempts`` failures. Absolute runtime, memory, ratios,
@@ -163,9 +163,9 @@ Scripts:
 
 Artifacts:
 
-- ``docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality.png``
-- ``docs/_static/figures/paper/sfincs_jax_fig2_w7x_collisionality.png``
-- ``docs/_static/figures/paper/sfincs_jax_fig3_simakov_helander.png``
+- ``docs/_static/figures/paper/dkx_fig1_lhd_collisionality.png``
+- ``docs/_static/figures/paper/dkx_fig2_w7x_collisionality.png``
+- ``docs/_static/figures/paper/dkx_fig3_simakov_helander.png``
 
 The standard LHD and W7-X collisionality figures are generated from the
 corrected scan-input writer and recorded as audited full-resolution validation
@@ -190,21 +190,21 @@ Audited full artifacts:
 - full LHD summary:
   ``examples/publication_figures/artifacts/lhd_collisionality_summary.json``
 - full LHD figure:
-  ``docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality.png``
+  ``docs/_static/figures/paper/dkx_fig1_lhd_collisionality.png``
 - full W7-X summary:
   ``examples/publication_figures/artifacts/w7x_collisionality_summary.json``
 - full W7-X figure:
-  ``docs/_static/figures/paper/sfincs_jax_fig2_w7x_collisionality.png``
+  ``docs/_static/figures/paper/dkx_fig2_w7x_collisionality.png``
 
 Corrected bounded branch artifacts:
 
 - bounded corrected LHD summary:
   ``examples/publication_figures/artifacts/lhd_collisionality_reaudit_fast_summary.json``
 - bounded corrected LHD figure:
-  ``docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality_reaudit_fast.png``
+  ``docs/_static/figures/paper/dkx_fig1_lhd_collisionality_reaudit_fast.png``
 
-.. figure:: _static/figures/paper/sfincs_jax_fig1_lhd_collisionality_reaudit_fast.png
-   :alt: Corrected bounded LHD collisionality scan for sfincs_jax
+.. figure:: _static/figures/paper/dkx_fig1_lhd_collisionality_reaudit_fast.png
+   :alt: Corrected bounded LHD collisionality scan for dkx
    :width: 85%
 
    Corrected bounded LHD collisionality rerun with the guarded scan-input writer.
@@ -215,10 +215,10 @@ Corrected bounded branch artifacts:
 - bounded corrected W7-X summary:
   ``examples/publication_figures/artifacts/w7x_collisionality_reaudit_fast_summary.json``
 - bounded corrected W7-X figure:
-  ``docs/_static/figures/paper/sfincs_jax_fig2_w7x_collisionality_reaudit_fast.png``
+  ``docs/_static/figures/paper/dkx_fig2_w7x_collisionality_reaudit_fast.png``
 
-.. figure:: _static/figures/paper/sfincs_jax_fig2_w7x_collisionality_reaudit_fast.png
-   :alt: Corrected bounded W7-X collisionality scan for sfincs_jax
+.. figure:: _static/figures/paper/dkx_fig2_w7x_collisionality_reaudit_fast.png
+   :alt: Corrected bounded W7-X collisionality scan for dkx
    :width: 85%
 
    Corrected bounded W7-X collisionality rerun after fixing the scan-input writer.
@@ -240,21 +240,21 @@ Current script:
 
 Current artifacts:
 
-- ``examples/publication_figures/artifacts/sfincs_jax_autodiff_sensitivity_validation_summary.json``
-- ``docs/_static/figures/paper/sfincs_jax_autodiff_gradient_check.png``
-- ``docs/_static/figures/paper/sfincs_jax_autodiff_gradient_check.pdf``
-- ``docs/_static/figures/paper/sfincs_jax_autodiff_sensitivity_map.png``
-- ``docs/_static/figures/paper/sfincs_jax_autodiff_sensitivity_map.pdf``
+- ``examples/publication_figures/artifacts/dkx_autodiff_sensitivity_validation_summary.json``
+- ``docs/_static/figures/paper/dkx_autodiff_gradient_check.png``
+- ``docs/_static/figures/paper/dkx_autodiff_gradient_check.pdf``
+- ``docs/_static/figures/paper/dkx_autodiff_sensitivity_map.png``
+- ``docs/_static/figures/paper/dkx_autodiff_sensitivity_map.pdf``
 
 Fortran-v3 RHSMode 4/5 source-contract gates:
 
-- ``sfincs_jax.sensitivity.validate_fortran_v3_adjoint_sensitivity_constraints``
+- ``dkx.sensitivity.validate_fortran_v3_adjoint_sensitivity_constraints``
   mirrors the source-code restrictions from ``validateInput.F90`` for adjoint
   sensitivity decks.
-- ``sfincs_jax.sensitivity.fortran_v3_adjoint_sensitivity_output_fields`` pins
+- ``dkx.sensitivity.fortran_v3_adjoint_sensitivity_output_fields`` pins
   the sensitivity HDF5 field names emitted by ``writeHDF5Output.F90`` before
   the numerical Fortran replay fixtures are promoted.
-- ``sfincs_jax.sensitivity.fortran_v3_adjoint_sensitivity_output_ranks`` and
+- ``dkx.sensitivity.fortran_v3_adjoint_sensitivity_output_ranks`` and
   ``validate_fortran_v3_adjoint_sensitivity_output_surface`` validate the
   required RHSMode=4/5 field names and tensor ranks against either HDF5-like
   arrays or lightweight JSON summaries.
@@ -276,8 +276,8 @@ Fortran-v3 RHSMode 4/5 source-contract gates:
   errors below the checked tolerance, and the Fortran NaN mask for unfilled
   lambda/mode entries.
 
-.. figure:: _static/figures/paper/sfincs_jax_autodiff_gradient_check.png
-   :alt: Autodiff gradient validation for sfincs_jax
+.. figure:: _static/figures/paper/dkx_autodiff_gradient_check.png
+   :alt: Autodiff gradient validation for dkx
    :width: 92%
 
    Bounded manuscript-grade autodiff validation. The checked-in summary records
@@ -286,8 +286,8 @@ Fortran-v3 RHSMode 4/5 source-contract gates:
    tiny PAS fixture and validates the implicit-differentiation path without changing
    production solver defaults.
 
-.. figure:: _static/figures/paper/sfincs_jax_autodiff_sensitivity_map.png
-   :alt: Boozer harmonic sensitivity maps for sfincs_jax
+.. figure:: _static/figures/paper/dkx_autodiff_sensitivity_map.png
+   :alt: Boozer harmonic sensitivity maps for dkx
    :width: 92%
 
    Differentiable ``geometryScheme=4`` Boozer-harmonic sensitivity maps. This
@@ -395,7 +395,7 @@ Solver-path policy refactor
 
 Current source and tests:
 
-- ``sfincs_jax/solve.py`` (the three-tier auto-policy and its tier-selection
+- ``dkx/solve.py`` (the three-tier auto-policy and its tier-selection
   helpers)
 - ``tests/test_solve.py`` and the solver-trace tests
 
@@ -403,9 +403,9 @@ Scope and status:
 
 - Solver-path selection (tier eligibility, memory-based auto-selection,
   preconditioner construction, residual gates, and recycling) is centralized
-  in ``sfincs_jax/solve.py``; the standalone legacy policy module was retired
+  in ``dkx/solve.py``; the standalone legacy policy module was retired
   with the legacy solver packages. Selection decisions are recorded in the
-  versioned solver trace (``sfincs_jax/solver_trace.py``).
+  versioned solver trace (``dkx/solver_trace.py``).
 - This is a maintainability and reproducibility gate for solver-path selection.
   It does not by itself support a new performance or physics claim.
 
@@ -450,14 +450,14 @@ Current fixed artifacts:
 - audited tokamak-like reference summary:
   ``examples/publication_figures/artifacts/er_sweep_tokamak_reference_summary.json``
 - audited tokamak-like reference figure:
-  ``docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep_tokamak_reference.png``
+  ``docs/_static/figures/paper/dkx_er_trajectory_sweep_tokamak_reference.png``
 - bounded stellarator-like fast summary:
   ``examples/publication_figures/artifacts/er_sweep_stellarator_fast_reference_summary.json``
 - bounded stellarator-like fast figure:
-  ``docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep_stellarator_fast_reference.png``
+  ``docs/_static/figures/paper/dkx_er_trajectory_sweep_stellarator_fast_reference.png``
 
-.. figure:: _static/figures/paper/sfincs_jax_er_trajectory_sweep_tokamak_reference.png
-   :alt: Tokamak-like electric-field trajectory-model sweep for sfincs_jax
+.. figure:: _static/figures/paper/dkx_er_trajectory_sweep_tokamak_reference.png
+   :alt: Tokamak-like electric-field trajectory-model sweep for dkx
    :width: 85%
 
    Fixed tokamak-like ``E_r`` sweep across DKES, partial, and full trajectory
@@ -465,8 +465,8 @@ Current fixed artifacts:
    is backed by direct numerical assertions on zero-field agreement and
    finite-field model separation.
 
-.. figure:: _static/figures/paper/sfincs_jax_er_trajectory_sweep_stellarator_fast_reference.png
-   :alt: Stellarator-like electric-field trajectory-model sweep for sfincs_jax
+.. figure:: _static/figures/paper/dkx_er_trajectory_sweep_stellarator_fast_reference.png
+   :alt: Stellarator-like electric-field trajectory-model sweep for dkx
    :width: 85%
 
    Fixed stellarator-like fast branch scaffold across DKES, partial, and full
@@ -496,13 +496,13 @@ Closed branch evidence:
   on seven-point ``\\nu'`` ladders
 - a checked-in trend proxy records high-collisionality tail slopes from those
   corrected artifacts:
-  ``examples/publication_figures/artifacts/sfincs_jax_high_collisionality_trend_proxy_summary.json``
+  ``examples/publication_figures/artifacts/dkx_high_collisionality_trend_proxy_summary.json``
 - a checked-in Simakov-Helander normalization audit records the Appendix-B
   geometry ingredients, ``FSABHat2`` recomputation, inverse-``nu`` slope gates, and
   explicit readiness status:
-  ``examples/publication_figures/artifacts/sfincs_jax_simakov_helander_limit_audit_summary.json``
+  ``examples/publication_figures/artifacts/dkx_simakov_helander_limit_audit_summary.json``
 
-.. figure:: _static/figures/paper/sfincs_jax_high_collisionality_trend_proxy.png
+.. figure:: _static/figures/paper/dkx_high_collisionality_trend_proxy.png
    :alt: High-collisionality trend proxy from checked-in collisionality artifacts
    :width: 92%
 
@@ -515,7 +515,7 @@ Closed branch evidence:
    high-``nu`` scans are pinned, so this figure is kept as an implemented trend gate
    rather than the final analytic-limit reproduction.
 
-.. figure:: _static/figures/paper/sfincs_jax_simakov_helander_limit_audit.png
+.. figure:: _static/figures/paper/dkx_simakov_helander_limit_audit.png
    :alt: Simakov-Helander high-collisionality readiness audit
    :width: 92%
 
@@ -533,7 +533,7 @@ Post-release acceptance criteria:
 - keep the Simakov-Helander audit artifact in CI as the parent gate for future
   high-collisionality scan work,
 - use
-  ``examples/publication_figures/artifacts/sfincs_jax_simakov_helander_high_nu_run_plan.json``
+  ``examples/publication_figures/artifacts/dkx_simakov_helander_high_nu_run_plan.json``
   as the executable high-``nu'`` extension plan; it is generated from the audit
   and pins LHD and W7-X extension commands ending near ``nu'=100``,
 - run each plan entry's ``pilot_command`` first; the first LHD FP pilot at
@@ -578,7 +578,7 @@ Validation goal:
 
 Stable artifact gate:
 
-- ``sfincs_jax.validation.artifacts.build_w7x_ambipolar_root_provenance_panel``
+- ``dkx.validation.artifacts.build_w7x_ambipolar_root_provenance_panel``
 - ``examples/publication_figures/provenance/w7x_ambipolar_provenance_template.json``
 
 The stable branch keeps the ambipolar solver API, scan/readback tests, and a

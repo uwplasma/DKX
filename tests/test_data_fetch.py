@@ -7,7 +7,7 @@ import tarfile
 
 import pytest
 
-from sfincs_jax.validation import data_fetch
+from dkx.validation import data_fetch
 
 
 def _sha256_bytes(payload: bytes) -> str:
@@ -17,7 +17,7 @@ def _sha256_bytes(payload: bytes) -> str:
 def test_external_data_manifest_lists_release_fixtures() -> None:
     manifest = data_fetch.external_data_manifest()
 
-    assert manifest["release_tag"] == "sfincs-jax-data-v1"
+    assert manifest["release_tag"] == "dkx-data-v1"
     assert manifest["archive_sha256"]
     assert "wout_w7x_standardConfig.nc" in data_fetch.known_external_equilibrium_names()
     assert "hsx3free.bc" in data_fetch.known_external_equilibrium_names()
@@ -32,12 +32,12 @@ def test_unknown_external_equilibrium_does_not_fetch() -> None:
 
 
 def test_external_data_cache_root_honors_environment(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("SFINCS_JAX_DATA_DIR", str(tmp_path / "explicit"))
+    monkeypatch.setenv("DKX_DATA_DIR", str(tmp_path / "explicit"))
     assert data_fetch.data_cache_root() == tmp_path / "explicit"
 
-    monkeypatch.delenv("SFINCS_JAX_DATA_DIR", raising=False)
+    monkeypatch.delenv("DKX_DATA_DIR", raising=False)
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg"))
-    assert data_fetch.data_cache_root() == tmp_path / "xdg" / "sfincs_jax" / "data"
+    assert data_fetch.data_cache_root() == tmp_path / "xdg" / "dkx" / "data"
 
 
 def test_external_data_archive_rejects_path_traversal(tmp_path: Path) -> None:
@@ -84,9 +84,9 @@ def test_external_data_download_rejects_checksum_mismatch(tmp_path: Path) -> Non
 
 
 def test_external_equilibrium_download_extract_and_resolve(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.delenv("SFINCS_JAX_OFFLINE", raising=False)
+    monkeypatch.delenv("DKX_OFFLINE", raising=False)
     payload = b"small release-hosted fixture\n"
-    rel_path = Path("sfincs_jax/data/equilibria/tiny.bc")
+    rel_path = Path("dkx/data/equilibria/tiny.bc")
     release_dir = tmp_path / "release"
     release_dir.mkdir()
     archive_path = release_dir / "tiny-data.tar.gz"
@@ -111,7 +111,7 @@ def test_external_equilibrium_download_extract_and_resolve(tmp_path: Path, monke
         ],
     }
 
-    monkeypatch.setenv("SFINCS_JAX_DATA_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("DKX_DATA_DIR", str(tmp_path / "cache"))
     monkeypatch.setattr(data_fetch, "_load_manifest", lambda: manifest)
 
     target = data_fetch.ensure_external_equilibrium_data(quiet=True)
@@ -128,9 +128,9 @@ def test_external_equilibrium_download_reports_source_when_not_quiet(
     monkeypatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    monkeypatch.delenv("SFINCS_JAX_OFFLINE", raising=False)
+    monkeypatch.delenv("DKX_OFFLINE", raising=False)
     payload = b"small release-hosted fixture\n"
-    rel_path = Path("sfincs_jax/data/equilibria/tiny_verbose.bc")
+    rel_path = Path("dkx/data/equilibria/tiny_verbose.bc")
     release_dir = tmp_path / "release"
     release_dir.mkdir()
     archive_path = release_dir / "tiny-verbose-data.tar.gz"
@@ -155,17 +155,17 @@ def test_external_equilibrium_download_reports_source_when_not_quiet(
         ],
     }
 
-    monkeypatch.setenv("SFINCS_JAX_DATA_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("DKX_DATA_DIR", str(tmp_path / "cache"))
     monkeypatch.setattr(data_fetch, "_load_manifest", lambda: manifest)
 
     assert data_fetch.ensure_external_equilibrium_data(quiet=False) == tmp_path / "cache" / "test-v1"
-    assert "Downloading SFINCS-JAX external equilibrium data" in capsys.readouterr().out
+    assert "Downloading DKX external equilibrium data" in capsys.readouterr().out
 
 
 def test_external_equilibrium_extract_rejects_failed_file_verification(tmp_path: Path, monkeypatch) -> None:
     payload = b"corrupt extracted fixture\n"
     expected_payload = b"expected extracted fixture\n"
-    rel_path = Path("sfincs_jax/data/equilibria/tiny_corrupt_after_extract.bc")
+    rel_path = Path("dkx/data/equilibria/tiny_corrupt_after_extract.bc")
     cache_root = tmp_path / "cache"
     archive_path = cache_root / "tiny-corrupt-data.tar.gz"
     archive_path.parent.mkdir(parents=True)
@@ -190,7 +190,7 @@ def test_external_equilibrium_extract_rejects_failed_file_verification(tmp_path:
         ],
     }
 
-    monkeypatch.setenv("SFINCS_JAX_DATA_DIR", str(cache_root))
+    monkeypatch.setenv("DKX_DATA_DIR", str(cache_root))
     monkeypatch.setattr(data_fetch, "_load_manifest", lambda: manifest)
 
     with pytest.raises(RuntimeError, match="verification failed after extraction"):
@@ -199,7 +199,7 @@ def test_external_equilibrium_extract_rejects_failed_file_verification(tmp_path:
 
 def test_external_equilibrium_cached_data_short_circuits_download(tmp_path: Path, monkeypatch) -> None:
     payload = b"already cached\n"
-    rel_path = Path("sfincs_jax/data/equilibria/tiny_cached.bc")
+    rel_path = Path("dkx/data/equilibria/tiny_cached.bc")
     target = tmp_path / "cache" / "test-v1"
     cached = target / rel_path
     cached.parent.mkdir(parents=True, exist_ok=True)
@@ -220,8 +220,8 @@ def test_external_equilibrium_cached_data_short_circuits_download(tmp_path: Path
         ],
     }
 
-    monkeypatch.setenv("SFINCS_JAX_DATA_DIR", str(tmp_path / "cache"))
-    monkeypatch.setenv("SFINCS_JAX_OFFLINE", "1")
+    monkeypatch.setenv("DKX_DATA_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("DKX_OFFLINE", "1")
     monkeypatch.setattr(data_fetch, "_load_manifest", lambda: manifest)
 
     assert data_fetch.ensure_external_equilibrium_data(quiet=True) == target
@@ -233,7 +233,7 @@ def test_external_equilibrium_resolver_fetches_known_basename_on_cache_miss(
     monkeypatch,
 ) -> None:
     payload = b"created by fake fetch\n"
-    rel_path = Path("sfincs_jax/data/equilibria/tiny_fetch.nc")
+    rel_path = Path("dkx/data/equilibria/tiny_fetch.nc")
     manifest = {
         "version": "test-v1",
         "release_tag": "test-data",
@@ -259,7 +259,7 @@ def test_external_equilibrium_resolver_fetches_known_basename_on_cache_miss(
         fixture.write_bytes(payload)
         return target
 
-    monkeypatch.setenv("SFINCS_JAX_DATA_DIR", str(cache_root))
+    monkeypatch.setenv("DKX_DATA_DIR", str(cache_root))
     monkeypatch.setattr(data_fetch, "_load_manifest", lambda: manifest)
     monkeypatch.setattr(data_fetch, "ensure_external_equilibrium_data", _fake_fetch)
 
@@ -273,7 +273,7 @@ def test_external_equilibrium_resolver_rejects_corrupt_cached_file_without_fetch
 ) -> None:
     good_payload = b"expected fixture\n"
     bad_payload = b"wrong fixture\n"
-    rel_path = Path("sfincs_jax/data/equilibria/tiny_corrupt.nc")
+    rel_path = Path("dkx/data/equilibria/tiny_corrupt.nc")
     target = tmp_path / "cache" / "test-v1"
     cached = target / rel_path
     cached.parent.mkdir(parents=True, exist_ok=True)
@@ -293,7 +293,7 @@ def test_external_equilibrium_resolver_rejects_corrupt_cached_file_without_fetch
         ],
     }
 
-    monkeypatch.setenv("SFINCS_JAX_DATA_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("DKX_DATA_DIR", str(tmp_path / "cache"))
     monkeypatch.setattr(data_fetch, "_load_manifest", lambda: manifest)
 
     assert data_fetch.resolve_external_equilibrium("tiny_corrupt.nc", fetch=False) is None
@@ -303,7 +303,7 @@ def test_external_equilibrium_resolver_returns_none_if_fetch_does_not_produce_fi
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    rel_path = Path("sfincs_jax/data/equilibria/tiny_missing_after_fetch.nc")
+    rel_path = Path("dkx/data/equilibria/tiny_missing_after_fetch.nc")
     manifest = {
         "version": "test-v1",
         "release_tag": "test-data",
@@ -324,7 +324,7 @@ def test_external_equilibrium_resolver_returns_none_if_fetch_does_not_produce_fi
         calls.append("fetch")
         return tmp_path / "cache" / "test-v1"
 
-    monkeypatch.setenv("SFINCS_JAX_DATA_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("DKX_DATA_DIR", str(tmp_path / "cache"))
     monkeypatch.setattr(data_fetch, "_load_manifest", lambda: manifest)
     monkeypatch.setattr(data_fetch, "ensure_external_equilibrium_data", _fake_fetch)
 
@@ -335,7 +335,7 @@ def test_external_equilibrium_resolver_returns_none_if_fetch_does_not_produce_fi
 def test_external_equilibrium_file_verification_checks_missing_size_and_hash(
     tmp_path: Path,
 ) -> None:
-    rel_path = Path("sfincs_jax/data/equilibria/tiny_verify.bc")
+    rel_path = Path("dkx/data/equilibria/tiny_verify.bc")
     payload = b"reference fixture\n"
     manifest = {
         "files": [
@@ -403,9 +403,9 @@ def test_external_equilibrium_offline_missing_cache_raises(tmp_path: Path, monke
         "files": [],
     }
 
-    monkeypatch.setenv("SFINCS_JAX_DATA_DIR", str(tmp_path / "cache"))
-    monkeypatch.setenv("SFINCS_JAX_OFFLINE", "1")
+    monkeypatch.setenv("DKX_DATA_DIR", str(tmp_path / "cache"))
+    monkeypatch.setenv("DKX_OFFLINE", "1")
     monkeypatch.setattr(data_fetch, "_load_manifest", lambda: manifest)
 
-    with pytest.raises(FileNotFoundError, match="SFINCS_JAX_OFFLINE"):
+    with pytest.raises(FileNotFoundError, match="DKX_OFFLINE"):
         data_fetch.ensure_external_equilibrium_data(quiet=True)

@@ -1,7 +1,7 @@
 """Element-wise parity of the canonical tangential magnetic-drift terms vs Fortran v3.
 
 The tangential (poloidal+toroidal) magnetic drifts (``magneticDriftScheme`` 1-9)
-are consolidated into :class:`sfincs_jax.drift_kinetic.KineticOperator`
+are consolidated into :class:`dkx.drift_kinetic.KineticOperator`
 (``KineticOperator._magnetic_drifts``).  These tests compare the canonical
 operator, element by element, against frozen Fortran ``whichMatrix=1`` PETSc
 matrices for tiny Boozer (geometryScheme 11, W7-X standard) fixtures.
@@ -40,11 +40,11 @@ import numpy as np
 import pytest
 from scipy.sparse import csr_matrix
 
-from sfincs_jax.drift_kinetic import KineticOperator
+from dkx.drift_kinetic import KineticOperator
 
 
-from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.validation.fortran import read_petsc_mat_aij
+from dkx.namelist import read_sfincs_input
+from dkx.validation.fortran import read_petsc_mat_aij
 
 
 @dataclass(frozen=True)
@@ -100,7 +100,7 @@ def _canonical() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     each packed dof to its rectangular flat index.
     """
     with pytest.MonkeyPatch.context() as mp:
-        mp.setenv("SFINCS_JAX_EQUILIBRIA_DIRS", str(_REF))
+        mp.setenv("DKX_EQUILIBRIA_DIRS", str(_REF))
         nml = read_sfincs_input(_INPUT)
         op = KineticOperator.from_namelist(nml)
     assert op.with_magnetic_drifts
@@ -205,7 +205,7 @@ def test_magnetic_drift_scheme_full_fblock_matches_fortran(scheme: int) -> None:
     scheme-specific magnetic-drift terms — element-wise at rounding level.
     """
     with pytest.MonkeyPatch.context() as mp:
-        mp.setenv("SFINCS_JAX_EQUILIBRIA_DIRS", str(_REF))
+        mp.setenv("DKX_EQUILIBRIA_DIRS", str(_REF))
         nml = read_sfincs_input(_REF / f"magdrift_1species_tiny_scheme{scheme}.input.namelist")
         op = KineticOperator.from_namelist(nml)
     assert op.with_magnetic_drifts and op.magnetic_drift_scheme == scheme

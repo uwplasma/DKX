@@ -10,10 +10,10 @@ Runtime/memory bars (``tier1_hsx_runtime_memory.png``):
   ``docs/dev/failure_analysis.md`` sections "Phase 5.1 Fortran strong-scaling
   baseline" and "Phase-4 head-to-head" — ``HSX_PASCollisions_DKESTrajectories``
   at Ntheta=25, Nzeta=51, Nxi=100, Nx=5 (744,610 unknowns), RHSMode=1.
-  - sfincs_jax tier-1 truncated Legendre elimination (canonical stack), warm
+  - dkx tier-1 truncated Legendre elimination (canonical stack), warm
     solve: 27.2 s with the Nxi-for-x ramp discretization (0.93 GB peak RSS) and
     44.3 s with uniform Nxi (1.16 GB), MacBook M4 CPU, JAX x64.
-  - sfincs_jax on an RTX A4000 GPU: 45.0 s (the L-scan is serial and the A4000
+  - dkx on an RTX A4000 GPU: 45.0 s (the L-scan is serial and the A4000
     runs FP64 at 1/32 rate, so GPU ~= M4 CPU for this case).
   - SFINCS Fortran v3 (conda PETSc 3.23 + MUMPS 5.8.2), same deck, same
     machine: 463.6 s / 3.98 GB at 1 MPI rank and 229.5 s / 2.86 GB at 2 ranks
@@ -49,7 +49,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 OUT_DIR = REPO_ROOT / "docs" / "_static" / "figures" / "readme"
 
 # Palette (colorblind-validated defaults; color follows the code, not the bar).
-BLUE = "#2a78d6"  # sfincs_jax
+BLUE = "#2a78d6"  # dkx
 ORANGE = "#eb6834"  # SFINCS Fortran v3
 INK = "#0b0b0b"
 INK_2 = "#52514e"
@@ -59,9 +59,9 @@ GRID = "#e4e3df"
 CASE_LABEL = "HSX PAS/DKES, RHSMode=1, 25x51x100x5 (744,610 unknowns)"
 ROWS = (
     # label, runtime seconds, peak RSS GB, is_fortran
-    ("sfincs_jax\nM4, ramp", 27.2, 0.93, False),
-    ("sfincs_jax\nM4, uniform", 44.3, 1.16, False),
-    ("sfincs_jax\nA4000 GPU", 45.0, 1.88, False),
+    ("dkx\nM4, ramp", 27.2, 0.93, False),
+    ("dkx\nM4, uniform", 44.3, 1.16, False),
+    ("dkx\nA4000 GPU", 45.0, 1.88, False),
     ("Fortran v3\n1 rank", 463.6, 3.98, True),
     ("Fortran v3\n2 ranks", 229.5, 2.86, True),
 )

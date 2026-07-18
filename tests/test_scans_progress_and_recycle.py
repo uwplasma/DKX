@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-import sfincs_jax.workflows.scans as scans
-from sfincs_jax.namelist import Namelist
+import dkx.workflows.scans as scans
+from dkx.namelist import Namelist
 
 
 def _minimal_scan_input(path: Path, *, gradient_coord: int = 4) -> Path:
@@ -136,14 +136,14 @@ def test_find_upstream_utils_dir_honors_override_env_and_errors(tmp_path: Path, 
     with pytest.raises(FileNotFoundError, match="utils dir does not exist"):
         scans.find_upstream_utils_dir(override=tmp_path / "missing")
 
-    monkeypatch.setenv("SFINCS_JAX_UPSTREAM_UTILS_DIR", str(env_utils))
+    monkeypatch.setenv("DKX_UPSTREAM_UTILS_DIR", str(env_utils))
     assert scans.find_upstream_utils_dir() == env_utils
 
-    monkeypatch.setenv("SFINCS_JAX_UPSTREAM_UTILS_DIR", str(tmp_path / "missing_env"))
-    with pytest.raises(FileNotFoundError, match="SFINCS_JAX_UPSTREAM_UTILS_DIR does not exist"):
+    monkeypatch.setenv("DKX_UPSTREAM_UTILS_DIR", str(tmp_path / "missing_env"))
+    with pytest.raises(FileNotFoundError, match="DKX_UPSTREAM_UTILS_DIR does not exist"):
         scans.find_upstream_utils_dir()
 
-    monkeypatch.delenv("SFINCS_JAX_UPSTREAM_UTILS_DIR", raising=False)
+    monkeypatch.delenv("DKX_UPSTREAM_UTILS_DIR", raising=False)
     default_utils = scans.find_upstream_utils_dir()
     assert default_utils.name == "utils"
     assert (default_utils / "sfincsScanPlot_1").is_file()

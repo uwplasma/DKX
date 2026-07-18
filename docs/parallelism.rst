@@ -1,7 +1,7 @@
 Parallelism
 ===========
 
-`sfincs_jax` runs on a single node — a multi-core CPU or one GPU — and gets its
+`dkx` runs on a single node — a multi-core CPU or one GPU — and gets its
 throughput from three places: batched ``jax.vmap`` over independent solves,
 optional device sharding of a single large solve, and the structured ``solvax``
 solve tiers underneath. This covers the same physics that SFINCS Fortran v3
@@ -26,12 +26,12 @@ Two kinds of parallelism
 Batching independent solves
 ---------------------------
 
-The batched API in ``sfincs_jax.batch`` productizes ``jax.vmap`` over solves
+The batched API in ``dkx.batch`` productizes ``jax.vmap`` over solves
 that share a discretization:
 
 .. code-block:: python
 
-   from sfincs_jax.batch import batched_er_scan, batched_surface_scan
+   from dkx.batch import batched_er_scan, batched_surface_scan
 
    # Scan the radial electric field on one geometry.
    result = batched_er_scan(problem, er_values)
@@ -44,7 +44,7 @@ Both return a ``BatchedSolveResult`` carrying the stacked moments, both accept
 ``differentiable=True`` to keep the batch inside a ``jax.grad`` chain, and both
 take optional ``max_batch`` / ``memory_budget_gb`` overrides. Independent solves
 — a vector of ``E_r`` values, a set of surfaces, or the ``(nu*, E_r)`` grid of a
-monoenergetic database (``sfincs_jax.monoenergetic``) — are exactly the
+monoenergetic database (``dkx.monoenergetic``) — are exactly the
 parallel-friendly shape.
 
 **Automatic memory budgeting.** There are no sharding environment variables on
@@ -93,11 +93,11 @@ Multi-core CPU execution is requested **before JAX is imported**; the CLI
 
 .. code-block:: bash
 
-   sfincs_jax --cores 8 input.namelist       # or: export SFINCS_JAX_CORES=8
+   dkx --cores 8 input.namelist       # or: export DKX_CORES=8
 
-``SFINCS_JAX_CORES`` requests that many host CPU devices and enables auto
-sharding, ``SFINCS_JAX_CPU_DEVICES`` sets the device count directly, and
-``SFINCS_JAX_XLA_THREADS`` opts into pinning the XLA CPU thread count. Full
+``DKX_CORES`` requests that many host CPU devices and enables auto
+sharding, ``DKX_CPU_DEVICES`` sets the device count directly, and
+``DKX_XLA_THREADS`` opts into pinning the XLA CPU thread count. Full
 semantics and defaults are in the environment-variable reference (:doc:`usage`).
 
 Single-solve sharding
@@ -106,10 +106,10 @@ Single-solve sharding
 When one solve is too large for a single device, the matvec can be sharded
 across the host devices or GPUs:
 
-- ``SFINCS_JAX_MATVEC_SHARD_AXIS`` — ``auto``/``off``/``theta``/``zeta``/``x``/``flat``.
-- ``SFINCS_JAX_AUTO_SHARD`` and ``SFINCS_JAX_SHARD`` — enable and master-disable
+- ``DKX_MATVEC_SHARD_AXIS`` — ``auto``/``off``/``theta``/``zeta``/``x``/``flat``.
+- ``DKX_AUTO_SHARD`` and ``DKX_SHARD`` — enable and master-disable
   auto sharding.
-- ``SFINCS_JAX_SHARD_PAD`` — neutral padding when a sharded axis is not divisible
+- ``DKX_SHARD_PAD`` — neutral padding when a sharded axis is not divisible
   by the device count (does not change outputs).
 
 These mirror the angular domain decomposition an MPI code uses. Their full
@@ -120,20 +120,20 @@ Multi-host execution
 --------------------
 
 For multi-host device pools, JAX distributed initialization is opt-in via
-``SFINCS_JAX_DISTRIBUTED`` together with ``SFINCS_JAX_PROCESS_ID``,
-``SFINCS_JAX_PROCESS_COUNT``, ``SFINCS_JAX_COORDINATOR_ADDRESS``, and
-``SFINCS_JAX_COORDINATOR_PORT`` (or the matching ``--distributed``,
+``DKX_DISTRIBUTED`` together with ``DKX_PROCESS_ID``,
+``DKX_PROCESS_COUNT``, ``DKX_COORDINATOR_ADDRESS``, and
+``DKX_COORDINATOR_PORT`` (or the matching ``--distributed``,
 ``--process-id``, ``--process-count``, ``--coordinator-address``, and
 ``--coordinator-port`` CLI flags). Independent transport right-hand sides can
 additionally be spread across worker processes with
-``SFINCS_JAX_TRANSPORT_PARALLEL`` / ``SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS``
+``DKX_TRANSPORT_PARALLEL`` / ``DKX_TRANSPORT_PARALLEL_WORKERS``
 (CLI ``--transport-workers``). See :doc:`usage` for the full list.
 
 Relation to SFINCS Fortran v3
 -----------------------------
 
 SFINCS Fortran v3 scales one solve across many nodes with MPI domain
-decomposition. `sfincs_jax` targets a single node — a multi-core CPU or one GPU
+decomposition. `dkx` targets a single node — a multi-core CPU or one GPU
 — and recovers scan-level throughput a different way: batched ``vmap`` over
 independent solves, subspace recycling across neighbouring points, and exact
 gradients that replace finite-difference scans in optimization. Parallel paths

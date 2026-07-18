@@ -6,8 +6,8 @@ of ``sfincs/fortran/version3/utils``. They are kept with the upstream example
 suite so compatibility workflows can use the same plotting and scan
 post-processing layout as SFINCS Fortran v3.
 
-The supported public entry point is the ``sfincs_jax postprocess-upstream`` CLI.
-Generate ``sfincsOutput.h5`` first with ``sfincs_jax write-output`` or the
+The supported public entry point is the ``dkx postprocess-upstream`` CLI.
+Generate ``sfincsOutput.h5`` first with ``dkx write-output`` or the
 Python output writer, then run the selected upstream plotting script
 non-interactively through the CLI wrapper.
 
@@ -20,11 +20,11 @@ paths explicitly when a gradient calculation is required:
 
 .. code-block:: bash
 
-   sfincs_jax write-output --input input.namelist --out sfincsOutput.h5
-   sfincs_jax postprocess-upstream --case-dir . --util sfincsPlot -- --save-prefix /tmp/sfincsPlot
+   dkx write-output --input input.namelist --out sfincsOutput.h5
+   dkx postprocess-upstream --case-dir . --util sfincsPlot -- --save-prefix /tmp/sfincsPlot
 
 For differentiable Python workflows, use the pure canonical APIs
-(:func:`sfincs_jax.solve.solve` with ``differentiable=True``) before
+(:func:`dkx.solve.solve` with ``differentiable=True``) before
 post-processing the resulting HDF5 file.
 
 .. note::
@@ -39,20 +39,20 @@ Single run:
 
 .. code-block:: bash
 
-   sfincs_jax write-output --input input.namelist --out sfincsOutput.h5
-   sfincs_jax postprocess-upstream --case-dir . --util sfincsPlot -- --save-prefix /tmp/sfincsPlot
-   sfincs_jax postprocess-upstream --case-dir . --util sfincsPlotF -- --save /tmp/sfincsPlotF.png
+   dkx write-output --input input.namelist --out sfincsOutput.h5
+   dkx postprocess-upstream --case-dir . --util sfincsPlot -- --save-prefix /tmp/sfincsPlot
+   dkx postprocess-upstream --case-dir . --util sfincsPlotF -- --save /tmp/sfincsPlotF.png
 
 Scan:
 
 .. code-block:: bash
 
-   sfincs_jax scan-er --input input.namelist --out scan_er
-   sfincs_jax postprocess-upstream --case-dir scan_er --util sfincsScanPlot_2 -- --save /tmp/scan_er.png
+   dkx scan-er --input input.namelist --out scan_er
+   dkx postprocess-upstream --case-dir scan_er --util sfincsScanPlot_2 -- --save /tmp/scan_er.png
 
 The following sections document each script and show compact checked figures
 from the documentation static assets. The supported user entry point is the
-``sfincs_jax postprocess-upstream`` command shown above.
+``dkx postprocess-upstream`` command shown above.
 
 Scan directives (``!ss``)
 -------------------------
@@ -114,7 +114,7 @@ Single‑run plotting
    :align: center
    :width: 70%
 
-Scan launchers (run ``sfincs_jax``)
+Scan launchers (run ``dkx``)
 -----------------------------------
 
 ``sfincsScan``

@@ -1,4 +1,4 @@
-"""Composable neoclassical objectives for the sfincs_jax optimization examples.
+"""Composable neoclassical objectives for the dkx optimization examples.
 
 This is a *small* shared library for the optimization example family
 (``optimize_QH_bootstrap.py``, ``optimize_electron_root.py``,
@@ -6,7 +6,7 @@ This is a *small* shared library for the optimization example family
 ``examples/optimize_QA_bootstrap.py`` keeps its own inline copies so it stays
 self-contained).  Every function here is a pure ``jax`` function of a solved
 moment table (the dict returned by
-:func:`sfincs_jax.run.profile_moments_from_operator`) or of a Boozer ``|B|``
+:func:`dkx.run.profile_moments_from_operator`) or of a Boozer ``|B|``
 spectrum, so ``jax.grad`` / ``jax.value_and_grad`` flow through them.  The user
 writes the *scalar* objective (weights, penalties, which figure of merit) in
 each script by composing these building blocks.
@@ -38,9 +38,9 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from sfincs_jax.magnetic_geometry import FluxSurfaceGeometry
-from sfincs_jax.run import profile_moments_from_operator
-from sfincs_jax.solve import solve as kinetic_solve
+from dkx.magnetic_geometry import FluxSurfaceGeometry
+from dkx.run import profile_moments_from_operator
+from dkx.solve import solve as kinetic_solve
 
 jax.config.update("jax_enable_x64", True)
 
@@ -78,8 +78,8 @@ def solve_and_moments(op, *, tol=1e-9, x0=None, recycle=None,
     """Solve the drift-kinetic system and return ``(moment_table, SolveResult)``.
 
     Threads ``x0`` (warm start) and the GCROT ``recycle`` pair through the
-    canonical :func:`sfincs_jax.solve.solve`; the returned moment table is the
-    differentiable :func:`sfincs_jax.run.profile_moments_from_operator` output.
+    canonical :func:`dkx.solve.solve`; the returned moment table is the
+    differentiable :func:`dkx.run.profile_moments_from_operator` output.
     """
     result = kinetic_solve(op, op.rhs(), method=method, tol=tol,
                            differentiable=differentiable, x0=x0, recycle=recycle)

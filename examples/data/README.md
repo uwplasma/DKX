@@ -9,8 +9,8 @@ artifacts.
 
 - `geometryScheme4_quick_2species.input.namelist`: compact two-species input
   used by tutorial and getting-started workflows that need a fast, deterministic
-  SFINCS-JAX run.
+  DKX run.
 
 Large VMEC, Boozer, profiler, and benchmark artifacts should not be added here.
-Use the release-data fetcher in `sfincs_jax.validation.data_fetch` or point an
+Use the release-data fetcher in `dkx.validation.data_fetch` or point an
 example at a user-provided file instead.

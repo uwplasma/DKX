@@ -5,8 +5,8 @@ import re
 
 import pytest
 
-from sfincs_jax.workflows.scans import run_upstream_util
-from sfincs_jax.workflows.scans import run_er_scan
+from dkx.workflows.scans import run_upstream_util
+from dkx.workflows.scans import run_er_scan
 
 
 def _patch_solver_tolerance(txt: str, value: float) -> str:

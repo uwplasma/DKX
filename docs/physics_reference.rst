@@ -1,7 +1,7 @@
 Physics reference: the radially local drift-kinetic model
 =========================================================
 
-This page is the physics reference for the canonical `sfincs_jax` stack. It
+This page is the physics reference for the canonical `dkx` stack. It
 derives the radially local, linearized drift-kinetic equation (DKE) that the
 code solves, states the SFINCS normalization conventions, and maps every term
 onto the module that implements it. The equations quoted here are the forms the
@@ -18,7 +18,7 @@ and :doc:`numerics`; the geometry inputs are in :doc:`geometry`.
 Governing equation and the :math:`f_0+f_1` split
 ------------------------------------------------
 
-`sfincs_jax` solves for the non-adiabatic first-order distribution
+`dkx` solves for the non-adiabatic first-order distribution
 :math:`f_{s1}` of each kinetic species :math:`s` on a **single flux surface**,
 holding the radial profiles and their gradients fixed (the *radially local*
 approximation). The full distribution is split
@@ -58,12 +58,12 @@ inductive field. Each term is derived and mapped to code below.
 .. admonition:: Where in the code
 
    The whole operator is the single consolidated
-   :class:`sfincs_jax.drift_kinetic.KineticOperator`. Its matrix-free action on
+   :class:`dkx.drift_kinetic.KineticOperator`. Its matrix-free action on
    the distribution block is ``KineticOperator.apply_f``;
    the term-by-term pieces are the ``_streaming_mirror``, ``_exb``,
    ``_er_xidot``, and ``_er_xdot`` methods; the drive :math:`S_s` is
    ``KineticOperator.rhs``. Build one from a namelist
-   with :func:`sfincs_jax.drift_kinetic.kinetic_operator_from_namelist`.
+   with :func:`dkx.drift_kinetic.kinetic_operator_from_namelist`.
 
 Normalization: :math:`\Delta`, :math:`\alpha`, :math:`\nu_n`
 ------------------------------------------------------------
@@ -150,7 +150,7 @@ respectively. These two terms are always present.
 
    ``KineticOperator._streaming_mirror``. The Legendre
    coupling coefficients :math:`\frac{L+1}{2L+3}` and :math:`\frac{L}{2L-1}`
-   are :func:`sfincs_jax.phase_space.legendre_coupling_upper` /
+   are :func:`dkx.phase_space.legendre_coupling_upper` /
    ``legendre_coupling_lower``. The same coefficients build the analytic
    block-tridiagonal factorization in ``KineticOperator.legendre_blocks``.
 
@@ -261,7 +261,7 @@ below).
 Collision operators
 -------------------
 
-`sfincs_jax` implements three collision models, selected by
+`dkx` implements three collision models, selected by
 ``collisionOperator``: the two SFINCS v3 operators (full Fokker--Planck and
 pitch-angle scattering) plus the momentum- and energy-conserving improved
 Sugama model operator (``collisionOperator = 3``), a research extension beyond
@@ -291,9 +291,9 @@ solve applicable (:doc:`numerics`).
 
 .. admonition:: Where in the code
 
-   The pitch-angle-scattering operator lives in :mod:`sfincs_jax.collisions` and
+   The pitch-angle-scattering operator lives in :mod:`dkx.collisions` and
    is applied inside ``KineticOperator.apply_f``; the :math:`L(L+1)` factor is
-   :func:`sfincs_jax.phase_space.lorentz_eigenvalues`, and the deflection
+   :func:`dkx.phase_space.lorentz_eigenvalues`, and the deflection
    frequency and Chandrasekhar function are helpers in the same module.
 
 Full linearized Fokker--Planck (``collisionOperator = 0``)
@@ -334,7 +334,7 @@ is the dominant cost of a multi-species Fokker--Planck run.
 .. admonition:: Where in the code
 
    The full Fokker--Planck operator and its Rosenbluth-potential speed integrals
-   live in :mod:`sfincs_jax.collisions`, ported from the Landreman--Ernst
+   live in :mod:`dkx.collisions`, ported from the Landreman--Ernst
    speed-grid treatment
    (`arXiv:1210.5289 <https://arxiv.org/abs/1210.5289>`_). Both the
    pitch-angle-scattering and Fokker--Planck blocks are applied through
@@ -356,7 +356,7 @@ as the Fokker--Planck operator.
 
 .. admonition:: Where in the code
 
-   The improved Sugama construction lives in :mod:`sfincs_jax.collisions`
+   The improved Sugama construction lives in :mod:`dkx.collisions`
    next to the Fokker--Planck blocks and shares the same matvec
    (``apply_fokker_planck_v3``), applied through ``KineticOperator.apply_f``.
 
@@ -394,11 +394,11 @@ map is differentiable through the implicit-function theorem.
    are ``KineticOperator._quasineutrality_rows``; the
    :math:`\Phi_1`-in-kinetic coupling is ``_add_phi1_in_kinetic``; the :math:`\Phi_1`-in-collision poloidal density
    factor :math:`n_s e^{-Z_s\alpha\Phi_1/\hat T_s}` is applied in ``apply_f``.
-   The nonlinear Newton driver is :func:`sfincs_jax.phi1.solve_phi1`, with the
+   The nonlinear Newton driver is :func:`dkx.phi1.solve_phi1`, with the
    differentiable variant
-   :func:`sfincs_jax.phi1.phi1_state`. ``readExternalPhi1`` treats
+   :func:`dkx.phi1.phi1_state`. ``readExternalPhi1`` treats
    :math:`\Phi_1` as a fixed external field: a linear solve (no Newton
-   iteration) routed through :func:`sfincs_jax.run.run_profile`.
+   iteration) routed through :func:`dkx.run.run_profile`.
 
 Moments, fluxes, and transport coefficients
 -------------------------------------------
@@ -468,10 +468,10 @@ like) grows like :math:`1/\nu` at low collisionality:
 
 .. admonition:: Where in the code
 
-   Magnetic-drift fluxes: :func:`sfincs_jax.moments.vm_flux_moments`; RHSMode-1 per-species table including ``FSABjHat`` and
-   ``FSABFlow``: :func:`sfincs_jax.moments.rhsmode1_moments`;
+   Magnetic-drift fluxes: :func:`dkx.moments.vm_flux_moments`; RHSMode-1 per-species table including ``FSABjHat`` and
+   ``FSABFlow``: :func:`dkx.moments.rhsmode1_moments`;
    :math:`E\times B` flux: ``electric_drift_flux_moments``;
-   transport matrix: :func:`sfincs_jax.moments.transport_matrix_from_flux_arrays`.
+   transport matrix: :func:`dkx.moments.transport_matrix_from_flux_arrays`.
 
 Ambipolarity and the radial electric field
 ------------------------------------------
@@ -484,7 +484,7 @@ current would flow unless :math:`E_r` self-adjusts to the ambipolar root
 
    J_r(E_r) = \sum_s Z_s\,\Gamma_s(E_r) = 0.
 
-`sfincs_jax` evaluates :math:`J_r` at a given :math:`E_r` with one drift-kinetic
+`dkx` evaluates :math:`J_r` at a given :math:`E_r` with one drift-kinetic
 solve and finds the root with a bracket-expanding Brent solver that mirrors
 SFINCS Fortran v3 ``ambipolarSolver.F90`` (option 2), classifying each root as
 *ion*, *electron*, or *unstable*. The root is also exposed as a differentiable
@@ -505,10 +505,10 @@ through the ambipolar :math:`E_r`.
 .. admonition:: Where in the code
 
    Radial current :math:`J_r=\sum_a Z_a\Gamma_a`:
-   :func:`sfincs_jax.er.radial_current`; Brent root find and
-   classification: :func:`sfincs_jax.er.find_ambipolar_er` with the
+   :func:`dkx.er.radial_current`; Brent root find and
+   classification: :func:`dkx.er.find_ambipolar_er` with the
    ``_brent`` kernel; differentiable root:
-   :func:`sfincs_jax.er.ambipolar_er` (implicit-function theorem through
+   :func:`dkx.er.ambipolar_er` (implicit-function theorem through
    ``solvax.implicit.root_solve``). See ``examples/ambipolar_er_scan.py``.
 
 Classical (collisional) transport
@@ -548,22 +548,22 @@ Equation-to-code map
      - ``KineticOperator.rhs``
      - profile gradients, ``EParallelHat``
    * - Pitch-angle scattering
-     - Pitch-angle scattering in :mod:`sfincs_jax.collisions`
+     - Pitch-angle scattering in :mod:`dkx.collisions`
      - ``collisionOperator = 1``
    * - Full Fokker--Planck (Rosenbluth)
-     - Full Fokker--Planck in :mod:`sfincs_jax.collisions`
+     - Full Fokker--Planck in :mod:`dkx.collisions`
      - ``collisionOperator = 0``
    * - :math:`\Phi_1` / quasineutrality
-     - ``_quasineutrality_rows``, :mod:`sfincs_jax.phi1`
+     - ``_quasineutrality_rows``, :mod:`dkx.phi1`
      - ``includePhi1``, ``quasineutralityOption``
    * - Fluxes, ``FSABjHat``, transport matrix
-     - :mod:`sfincs_jax.moments`
+     - :mod:`dkx.moments`
      - ``RHSMode`` 1/2/3
    * - Ambipolar :math:`E_r`
-     - :mod:`sfincs_jax.er`
+     - :mod:`dkx.er`
      - ``inputRadialCoordinate = 4`` (``Er``)
    * - Flux-surface geometry
-     - :class:`sfincs_jax.magnetic_geometry.FluxSurfaceGeometry`
+     - :class:`dkx.magnetic_geometry.FluxSurfaceGeometry`
      - ``geometryScheme``
 
 Upstream derivations

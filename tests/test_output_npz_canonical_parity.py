@@ -1,7 +1,7 @@
 """Canonical ``.npz`` output parity for the RHSMode=1/2/3 run drivers.
 
-The canonical writer (:mod:`sfincs_jax.writer`) now emits ``.npz`` archives
-directly, so ``sfincs_jax write-output --out *.npz`` no longer falls back to the
+The canonical writer (:mod:`dkx.writer`) now emits ``.npz`` archives
+directly, so ``dkx write-output --out *.npz`` no longer falls back to the
 retired legacy pipeline.  These tests pin two
 properties on a tiny RHSMode=1 case and a tiny RHSMode=3 case:
 
@@ -19,9 +19,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from sfincs_jax.api import write_output
-from sfincs_jax.io import read_sfincs_h5, read_sfincs_output_file
-from sfincs_jax.run import run_profile, run_transport_matrix
+from dkx.api import write_output
+from dkx.io import read_sfincs_h5, read_sfincs_output_file
+from dkx.run import run_profile, run_transport_matrix
 
 REF = Path(__file__).parent / "ref"
 

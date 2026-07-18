@@ -9,7 +9,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from sfincs_jax.workflows.optimization import (
+from dkx.workflows.optimization import (
     bootstrap_current_objective,
     electron_root_penalty,
     find_ambipolar_roots,
@@ -157,7 +157,7 @@ def test_qi_proxy_objective_decreases_along_negative_gradient() -> None:
 
 
 def test_public_qa_nfp2_optimization_example_runs(tmp_path: Path) -> None:
-    script = _REPO / "examples" / "optimization" / "qa_nfp2_sfincs_jax_objectives.py"
+    script = _REPO / "examples" / "optimization" / "qa_nfp2_dkx_objectives.py"
     subprocess.run(
         [
             sys.executable,
@@ -176,7 +176,7 @@ def test_public_qa_nfp2_optimization_example_runs(tmp_path: Path) -> None:
     )
 
     summary = json.loads((tmp_path / "qa_proxy_test.json").read_text(encoding="utf-8"))
-    assert summary["workflow"] == "qa_nfp2_sfincs_jax_neoclassical_optimization_proxy"
+    assert summary["workflow"] == "qa_nfp2_dkx_neoclassical_optimization_proxy"
     assert summary["autodiff_gradient_gate"]["status"] == "pass"
     assert summary["history"][-1]["objective"] <= summary["history"][0]["objective"]
     assert (tmp_path / "qa_proxy_test.png").exists()
