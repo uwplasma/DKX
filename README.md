@@ -1,48 +1,51 @@
 # DKX
 
-[![CI](https://github.com/uwplasma/dkx/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/uwplasma/dkx/actions/workflows/ci.yml)
-[![Docs](https://github.com/uwplasma/dkx/actions/workflows/docs.yml/badge.svg?branch=main)](https://github.com/uwplasma/dkx/actions/workflows/docs.yml)
 [![PyPI](https://img.shields.io/pypi/v/dkx)](https://pypi.org/project/dkx/)
-[![Coverage](https://codecov.io/gh/uwplasma/dkx/branch/main/graph/badge.svg)](https://codecov.io/gh/uwplasma/dkx)
+[![CI](https://img.shields.io/github/actions/workflow/status/uwplasma/DKX/ci.yml?branch=main&label=ci)](https://github.com/uwplasma/DKX/actions/workflows/ci.yml)
+[![Docs](https://img.shields.io/readthedocs/sfincs-jax?label=docs)](https://sfincs-jax.readthedocs.io/en/latest/)
+[![License](https://img.shields.io/github/license/uwplasma/DKX)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/github/license/uwplasma/dkx)](LICENSE)
 
-`dkx` solves the radially local, linearized drift-kinetic equation on a
-flux surface — the same physics as [SFINCS Fortran v3](https://github.com/landreman/sfincs)
-— in pure JAX. One `input.namelist` plus one geometry file gives neoclassical
+**DKX** solves the radially local, linearized drift-kinetic equation on a flux
+surface — the same physics as [SFINCS Fortran v3](https://github.com/landreman/sfincs) —
+in pure JAX. One `input.namelist` plus one geometry file gives neoclassical
 particle/heat fluxes, parallel flows, bootstrap current, and transport matrices
-for stellarators and tokamaks, on CPU or GPU, with end-to-end automatic
-differentiation for sensitivities and optimization. Outputs, per-species result
-tables, and console prints are pinned field-by-field against SFINCS Fortran v3.
+for stellarators and tokamaks, on CPU or GPU. Every output is pinned
+field-by-field against SFINCS Fortran v3, and the whole solve is differentiable:
+`jax.grad` of any output with respect to any input, by implicit differentiation.
 
-## Installation
+![Measured parity envelopes of the canonical DKX stack against SFINCS Fortran v3](docs/_static/figures/readme/canonical_parity.png)
+
+*Every canonical module admitted against the reference implementation at pinned
+tolerances that run in CI: fluxes, flows, bootstrap current, transport matrices,
+collisions, geometry, and console prints all match SFINCS Fortran v3 to the
+envelopes shown.*
+
+## Install
 
 ```bash
 pip install dkx
 ```
 
 The solver tiers (block-tridiagonal Legendre elimination, recycled GCROT,
-implicit differentiation) live in the external [`solvax`](https://pypi.org/project/solvax/)
-library, which installs automatically as a core dependency.
-
-Optional extras:
-
-- **GPU**: install the matching CUDA build of JAX, e.g.
-  `pip install -U "jax[cuda12]"`.
-
-Large public equilibrium files (W7-X, HSX) are not shipped in the wheel; they
-are fetched from a GitHub release on first use and cached under
-`~/.cache/dkx/data`. Prefetch with
-`python -m dkx.validation.data_fetch`; see the
-[installation docs](docs/installation.rst) for offline/cache options and for
-building the SFINCS Fortran v3 reference executable with conda-provided
-PETSc/MUMPS.
+implicit differentiation) live in the external
+[`solvax`](https://pypi.org/project/solvax/) library, which installs
+automatically as a core dependency. For GPU, add the matching CUDA build of JAX,
+e.g. `pip install -U "jax[cuda12]"`. Large public equilibria (W7-X, HSX) are
+fetched from a GitHub release on first use and cached under `~/.cache/dkx/data`
+(prefetch with `python -m dkx.validation.data_fetch`; see the
+[installation docs](docs/installation.rst) for offline options).
 
 ## Quickstart
 
-Run a small circular-tokamak deck through the canonical driver (this mirrors
-[`examples/getting_started/run_tokamak.py`](examples/getting_started/run_tokamak.py), which also builds the
-namelist from Python dicts and plots the results):
+```bash
+dkx input.namelist --out sfincsOutput.h5    # solve, write SFINCS-keyed HDF5/NetCDF
+dkx --plot sfincsOutput.h5                  # PDF diagnostics panel
+```
+
+The same solve from Python (mirrors
+[`examples/getting_started/run_tokamak.py`](examples/getting_started/run_tokamak.py),
+which also builds the namelist from dicts and plots the result):
 
 ```python
 from pathlib import Path
@@ -76,159 +79,185 @@ print("particle flux:", float(run.moments["particleFlux_vm_psiHat"][0]))
 print("bootstrap current <j.B>:", float(run.moments["FSABjHat"]))
 ```
 
-`run_profile` prints the Fortran-parity console flow (banner, grids, solve
-progress, per-species results table), writes `sfincsOutput.h5`/`.nc` keyed by
-the SFINCS output names, and returns the state vector, solver statistics, and
-all moments in memory. The CLI equivalent is
-`dkx input.namelist --out sfincsOutput.h5`, and
-`dkx --plot sfincsOutput.h5` builds a PDF diagnostics panel.
-
-## Performance vs SFINCS Fortran v3
-
-Measured head-to-head on the same machine (MacBook, Apple M4, 24 GB) and the
-same deck: `HSX_PASCollisions_DKESTrajectories`, RHSMode=1, at
-`Ntheta=25, Nzeta=51, Nxi=100, Nx=5` — 744,610 unknowns. The Fortran reference
-is the conda PETSc 3.23 + MUMPS 5.8.2 build of SFINCS v3; `dkx` uses
-the tier-1 truncated Legendre block elimination from `solvax`.
-
-![Runtime and peak memory: dkx vs SFINCS Fortran v3 on the 744k-unknown HSX PAS case](docs/_static/figures/readme/tier1_hsx_runtime_memory.png)
-
-- With the matched `Nxi`-for-`x` ramp discretization, `dkx` solves in
-  **27.2 s at 0.93 GB** — 17x faster than 1-rank Fortran (463.6 s, 3.98 GB) and
-  8.4x faster than Fortran's best measured parallel floor (229.5 s / 2.86 GB
-  at 2 ranks; 4 and 8 ranks are slower on this machine), at roughly 30% of the
-  memory. With uniform `Nxi` it takes 44.3 s at 1.16 GB; an RTX A4000 GPU
-  takes 45.0 s (the Legendre scan is serial and A4000 FP64 is 1/32 rate).
-- The Fortran strong-scaling baseline on the same case: 463.6 s (1 rank),
-  229.5 s (2 ranks, 101% efficiency), 240.9 s (4 ranks), 270.5 s (8 ranks).
-- A cross-machine end-to-end sweep on the two-species production variant of
-  this deck (1,275,010 unknowns; 10-core laptop + 36-core workstation,
-  freshly compiled Fortran MPI) repeats the shape: Fortran/MUMPS bottoms out
-  near 8 ranks and degrades beyond (slower at 32 ranks than at 1), while one
-  `dkx` process beats every measured MPI configuration — 3.1x the
-  laptop's best on CPU, 13.6x the workstation's best on its GPU
-  ([table](docs/performance.rst)).
-- At the full production resolution of this case (2.5 M unknowns), **neither**
-  code fits a global sparse factorization in 24 GB; the truncated Legendre
-  elimination needs only O(K m^2) memory (~0.3 GB here, vs ~91 GB for the
-  full-band factor) and is the locally viable direct path.
-- The direct solve is more converged than the Fortran reference: Fortran's own
-  electron `FSABFlow` scatters 51% across its 1/2/4/8-rank runs (KSP
-  rtol=1e-6 solver noise), while `dkx` matches the closest Fortran run
-  to 2e-10 and sits inside Fortran's spread on every quantity.
-
-Scope: this is one measured 744k-unknown HSX PAS case; further cases are
-promoted here as each vertical slice lands with its own evidence. Regenerate
-the figure from the recorded values with
-`python tools/benchmarks/readme_figures.py`; rerun the measurement with
-`python tools/benchmarks/tier1_hsx_head_to_head.py`. Full tables, provenance,
-and known issues: [docs/performance.rst](docs/performance.rst).
+`run_profile` prints the Fortran-parity console flow, writes `sfincsOutput.h5`/`.nc`
+keyed by the SFINCS output names, and returns the state, solver statistics, and
+all moments in memory.
 
 ## Parity with SFINCS Fortran v3
 
-Every canonical module was admitted against the reference implementation
-(Fortran golden outputs, tiny-grid PETSc matrix dumps, or the retained legacy
-implementation) at pinned tolerances that run in CI:
-
-![Measured parity envelopes of the canonical stack](docs/_static/figures/readme/canonical_parity.png)
-
-The scheme-1 monoenergetic `transportMatrix[0,1]` element is pinned to
-upstream's expected value because that element is tolerance-unstable in the
-Fortran build itself; the `dkx` direct solve reproduces the expected
-value to 4.2e-6 by construction.
-
-## Functionality: dkx vs SFINCS Fortran v3
-
-Every SFINCS Fortran v3 physics family is supported, each admitted with
-Fortran-parity evidence (golden outputs, tiny-grid PETSc matrix dumps) pinned
-in CI:
+Every canonical module is admitted against the reference implementation —
+Fortran golden outputs, tiny-grid PETSc matrix dumps, or the retained legacy
+path — at pinned tolerances that run in CI (the envelope figure at the top of
+this page). Outputs, per-species result tables, and console prints match SFINCS
+Fortran v3 field-by-field. The scheme-1 monoenergetic `transportMatrix[0,1]`
+element is pinned to upstream's expected value because that element is
+tolerance-unstable in the Fortran build itself; the DKX direct solve reproduces
+the expected value to 4.2e-6 by construction.
 
 | Capability | dkx | SFINCS Fortran v3 |
 | --- | :---: | :---: |
-| RHSMode 1 (fluxes, flows, bootstrap current) | ✅ | ✅ |
-| RHSMode 2 / 3 (thermal and monoenergetic transport matrices) | ✅ | ✅ |
-| Pitch-angle scattering + full Fokker-Planck (Rosenbluth) collisions | ✅ | ✅ |
-| Full and DKES trajectory models; radial electric field | ✅ | ✅ |
-| Constraint schemes −1…4 | ✅ | ✅ |
-| Geometry: analytic 1–4, VMEC 5, Boozer `.bc` 11/12, namelist spectrum 13 | ✅ | ✅ |
-| Non-stellarator-symmetric VMEC (`lasym`) | ✅ | ✅ |
-| `Phi1`/quasineutrality (kinetic + collision coupling, `readExternalPhi1`) | ✅ | ✅ |
-| Tangential magnetic drifts (`magneticDriftScheme` 0–9) | ✅ | ✅ |
-| Speed grids `xGridScheme` 1–8; `xDotDerivativeScheme` −2…11 | ✅ | ✅ |
-| `export_f`, HDF5/NetCDF output, Fortran-format stdout | ✅ | ✅ |
+| RHSMode 1/2/3 (fluxes, flows, bootstrap current, transport matrices) | ✅ | ✅ |
+| Pitch-angle + full Fokker-Planck (Rosenbluth) collisions | ✅ | ✅ |
+| Geometry: analytic 1-4, VMEC 5, Boozer `.bc` 11/12, namelist spectrum 13; non-symmetric (`lasym`) | ✅ | ✅ |
+| `Phi1`/quasineutrality; Tangential magnetic drifts; `export_f` output | ✅ | ✅ |
 | Ambipolar radial-electric-field root solve | ✅ | ✅ |
-| Exact gradients of any output w.r.t. any input (`jax.grad`, implicit differentiation) | ✅ | ❌ (fixed adjoint pairs via RHSMode 4/5) |
-| Differentiable ambipolar root and `Phi1` state (implicit function theorem) | ✅ | ❌ |
-| GPU execution | ✅ | ❌ |
-| Variational upper/lower bounds on transport coefficients (convergence certificates) | ✅ | ❌ |
-| `.npz` output, versioned solver traces, geometry-only output | ✅ | ❌ |
-| Warm starts + Krylov recycling across scans and optimizer iterations | ✅ | ❌ |
-| Automatic memory-based solver-tier selection | ✅ | ❌ |
+| Exact gradients of any output w.r.t. any input (`jax.grad`, implicit differentiation) | ✅ | ❌ |
+| GPU execution; warm starts + Krylov recycling across scans | ✅ | ❌ |
+| Variational upper/lower transport bounds (convergence certificates) | ✅ | ❌ |
 | MPI multi-node execution | ❌ (single-node multicore + GPU) | ✅ |
 
-Beyond the Fortran-v3 feature set, several JAX-only research capabilities have
-landed: momentum-conserving flow corrections (`dkx.momentum_correction`),
-an extended-collisionality improved Sugama collision operator
-(`collisionOperator=3`, momentum- and energy-conserving into the
-Pfirsch-Schlüter regime), a monoenergetic (collisionality, electric field)
-database mode with energy convolution (`dkx.monoenergetic`), batched
-multi-`Er`/multi-surface GPU scans (`dkx.batch`), a differentiable
-bounce-averaged 1/ν effective-ripple surrogate (`dkx.bounce_averaged`),
-and the variational transport-coefficient bounds above. See
-[docs/feature_matrix.rst](docs/feature_matrix.rst) for the matrix.
+The full matrix — including the JAX-only research capabilities (momentum-conserving
+flow corrections, an extended-collisionality Sugama operator, monoenergetic
+database mode, batched GPU scans, a bounce-averaged 1/ν surrogate) — lives in
+[docs/feature_matrix.rst](docs/feature_matrix.rst).
+
+*Reproduce with the drivers in [`examples/parity/`](examples/parity/).*
+
+## Fast on CPU and GPU
+
+![Runtime and peak memory: dkx vs SFINCS Fortran v3 on the 744k-unknown HSX PAS case](docs/_static/figures/readme/tier1_hsx_runtime_memory.png)
+
+Measured head-to-head on the same machine (MacBook, Apple M4, 24 GB) and the
+same deck: `HSX_PASCollisions_DKESTrajectories`, RHSMode=1, at
+`Ntheta=25, Nzeta=51, Nxi=100, Nx=5` — **744,610 unknowns**. The Fortran
+reference is the conda PETSc 3.23 + MUMPS 5.8.2 build of SFINCS v3.
+
+- With the matched `Nxi`-for-`x` ramp discretization, DKX solves in
+  **27.2 s at 0.93 GB** — 17x faster than 1-rank Fortran (463.6 s, 3.98 GB) and
+  8.4x faster than Fortran's best measured parallel floor (229.5 s / 2.86 GB at
+  2 ranks), at roughly 30% of the memory. With uniform `Nxi` it takes 44.3 s at
+  1.16 GB; an RTX A4000 GPU takes 45.0 s (the Legendre scan is serial and A4000
+  FP64 is 1/32 rate).
+- A cross-machine sweep on the two-species production variant (1,275,010
+  unknowns) repeats the shape: one DKX process beats every measured MPI
+  configuration — 3.1x the laptop's best on CPU, 13.6x the workstation's best on
+  its GPU. At the full production resolution (2.5 M unknowns) neither code fits a
+  global sparse factorization in 24 GB, and the truncated Legendre elimination is
+  the locally viable direct path (~0.3 GB vs ~91 GB for the full-band factor).
+- The direct solve is more converged than the Fortran reference: Fortran's own
+  electron `FSABFlow` scatters 51% across its 1/2/4/8-rank runs (Krylov solver
+  noise), while DKX matches the closest Fortran run to 2e-10.
+
+Scope: this is **one measured 744k-unknown HSX PAS case**; further cases are
+promoted here as each vertical slice lands with its own evidence. Full tables,
+provenance, and known issues: [docs/performance.rst](docs/performance.rst);
+regenerate with `python tools/benchmarks/tier1_hsx_head_to_head.py` and
+`python tools/benchmarks/readme_figures.py`.
+
+## Differentiable optimization
+
+![QA low-bootstrap optimization: objective history, boundaries, |B| spectrum, and <j.B> profile](docs/_static/figures/readme/optimize_QA_bootstrap.png)
+
+One `jax.value_and_grad` differentiates the whole physics chain — boundary
+Fourier modes through the fixed-boundary MHD equilibrium (implicit adjoint), the
+differentiable Boozer transform, and the drift-kinetic solve — to the bootstrap
+current, with no finite differences. The flagship run shapes a genuine
+quasi-axisymmetric stellarator and then lowers its bootstrap current at held
+quasisymmetry, warm-starting the kinetic Krylov solve across optimizer
+iterations so each evaluation is a few seconds.
+
+*Reproduce with `python examples/optimization/optimize_QA_bootstrap.py` (needs
+the optional `vmex` + `booz_xform_jax` companions).*
+
+## Monoenergetic (ICNTS) benchmarks
+
+![ICNTS monoenergetic transport coefficients on W7-X vs SFINCS Fortran v3](docs/_static/figures/paper_benchmarks/monoenergetic_icnts_w7x.png)
+
+ICNTS-style monoenergetic coefficients (`D11*`, `D31*` versus collisionality at
+several `EStar`) on the W7-X, TJ-II, and HSX standard configurations, each with
+matched-deck SFINCS Fortran v3 cross-check points at solver precision. The
+quasi-helically symmetric HSX case shows the suppressed 1/ν branch that W7-X and
+TJ-II retain.
+
+*Reproduce with `python examples/paper_benchmarks/monoenergetic_icnts_w7x.py`
+(and the `_tjii` / `_hsx` companions).*
+
+## Low-collisionality bootstrap convergence
+
+![D31* approaching the Shaing-Callen asymptote on W7-X, with the finite-EStar dip](docs/_static/figures/paper_benchmarks/shaing_callen_convergence.png)
+
+The hard low-collisionality test: the bootstrap coefficient `D31*` on the W7-X
+standard configuration scanned to `nuPrime = 3e-4`, approaching the collisionless
+Shaing-Callen asymptote. At `EStar = 0` the coefficient keeps deepening past the
+asymptote — the 1/ν-regime offset does not decay without orbit precession — while
+a small finite `EStar` detaches below `nuPrime ~ 1e-3` and flattens back toward
+the asymptote, the E×B-precession dip.
+
+*Reproduce with `python examples/paper_benchmarks/shaing_callen_convergence.py`.*
+
+## Ambipolar Er and electron roots
+
+![DKX ambipolar E_r vs a published W7-X CERC discharge, with all roots classified](docs/_static/figures/paper_benchmarks/w7x_ambipolar_er.png)
+
+Validated against a real published W7-X core-electron-root-confinement discharge
+[Pablant et al., *Phys. Plasmas* 25, 022508 (2018)]: DKX resolves every ambipolar
+root of `J_r(E_r)`, classifies each as ion / unstable / electron by the `dJr/dEr`
+sign, and follows the physical branch by radial continuity to reproduce the
+electron-root → ion-root crossover near `ρ ~ 0.6`, matching the reference `E_r`
+within the digitization uncertainty (~1.5 kV/m mean difference).
+
+*Reproduce with `python examples/paper_benchmarks/w7x_ambipolar_er.py` and
+`python examples/paper_benchmarks/electron_root_optimization.py`.*
+
+## Impurity transport
+
+![Classical and neoclassical high-Z impurity transport with temperature screening](docs/_static/figures/paper_benchmarks/impurity_transport.png)
+
+Classical and neoclassical transport of a high-Z trace impurity in a hydrogenic
+bulk, anchored by a Fortran-parity check on the committed carbon two-species deck
+(neoclassical impurity flux to 1.5e-6 relative). The temperature-screening
+diagnostic recovers the exact `-Z` density-peaking coefficient and the classical
+1/2 collisional screening coefficient, with an autodiff ion-temperature-gradient
+derivative verified against finite differences.
+
+*Reproduce with `python examples/paper_benchmarks/impurity_transport.py`.*
+
+## Kinetic-in-the-loop bootstrap
+
+![Self-consistent finite-beta QA bootstrap with the drift-kinetic solve inside the loop](docs/_static/figures/paper_benchmarks/bootstrap_consistency_kinetic_loop.png)
+
+A self-consistent finite-β precise-QA equilibrium with the full drift-kinetic
+solve inside the Picard loop, in place of the Redl analytic proxy, converging in
+7 damped iterations. At the converged state the analytic proxy over-predicts the
+kinetic bootstrap current by a few percent across the interior profile — the
+error the kinetic-in-the-loop iteration removes by construction — and one
+`jax.value_and_grad` differentiates the total bootstrap current through the
+equilibrium → Boozer → kinetic chain.
+
+*Reproduce with `python examples/paper_benchmarks/bootstrap_consistency_kinetic_loop.py`
+(needs the optional `vmex` + `booz_xform_jax` companions).*
 
 ## Examples
 
-Six pedagogic scripts on the canonical API live at the top of
-[`examples/`](examples/) — no `main()`, parameters at the top, printed
-progress, a plot, and output files written and read back:
-
-- [`run_tokamak.py`](examples/getting_started/run_tokamak.py) — build a namelist in Python, solve, read HDF5/NetCDF back.
-- [`run_w7x.py`](examples/getting_started/run_w7x.py) — W7-X Boozer geometry with full Fokker-Planck collisions (tier-2 Krylov).
-- [`transport_coefficients.py`](examples/transport/transport_coefficients.py) — monoenergetic transport matrices and a collisionality scan.
-- [`ambipolar_er_scan.py`](examples/vmex_finite_beta/ambipolar_er_scan.py) — scan `Er`, bracket and solve the ambipolar root.
-- [`gradients_tour.py`](examples/autodiff/gradients_tour.py) — `jax.grad` through the solve, verified against finite differences.
-- [`optimize_QA_bootstrap.py`](examples/optimization/optimize_QA_bootstrap.py) — differentiable two-stage QA shaping and bootstrap-current reduction through the `vmex` → `dkx` chain (needs the optional companions).
-
-The wider `examples/` tree (tutorial notebooks, parity/benchmark drivers,
-upstream SFINCS decks) is mapped in [`examples/README.md`](examples/README.md).
+Six pedagogic scripts on the canonical API sit at the top of
+[`examples/`](examples/) — parameters at the top, printed progress, a plot, and
+output files written and read back. The wider tree (tutorial notebooks,
+parity/benchmark drivers, upstream SFINCS decks) is mapped in the navigable
+[`examples/README.md`](examples/README.md).
 
 ## Documentation
 
-```bash
-pip install -e ".[docs]"
-sphinx-build -b html -W docs docs/_build/html
-```
-
-Entry points: [docs/index.rst](docs/index.rst) (landing + quickstart),
-[docs/examples.rst](docs/examples.rst),
-[docs/performance.rst](docs/performance.rst) (measured evidence and known
-issues), [docs/inputs.rst](docs/inputs.rst) / [docs/outputs.rst](docs/outputs.rst)
-(namelist and output references), and
-[docs/system_equations.rst](docs/system_equations.rst) (the equations solved).
+Full documentation — installation, quickstart, the equations solved, namelist
+and output references, API, and measured performance/validation notes — at
+[sfincs-jax.readthedocs.io](https://sfincs-jax.readthedocs.io/).
 
 ## Known issues
 
 - `Nxi_for_x` ramps embed the truncated degrees of freedom as identity-pinned
   rows in the matrix-free operator (the Fortran code packs them out of its
-  matrix). The direct tier solves each (species, x) subsystem with its own
-  packed Legendre count — the exact Fortran discretization — and the
-  differentiable path pins the truncated rows; gradients through the ramped
-  route match finite differences to 1e-6 relative in the regression tests,
-  and every solve raises at execution time if a forward or adjoint solve
-  fails to converge.
+  matrix). The direct tier solves each `(species, x)` subsystem with its own
+  packed Legendre count — the exact Fortran discretization — and gradients
+  through the ramped route match finite differences to 1e-6 relative in the
+  regression tests; every solve raises at execution time if a forward or adjoint
+  solve fails to converge.
 - The scheme-1 monoenergetic `transportMatrix[0,1]` element is ill-conditioned
-  in the upstream configuration itself (tolerance-unstable in the Fortran
-  build); parity for it is pinned to upstream's expected value. Near-singular
-  structured eliminations (for example a collisionless `nu_n = 0` deck) fall
-  back automatically from the direct tier to the preconditioned Krylov tier.
-
-## Testing
-
-```bash
-pytest -q
-```
+  in the upstream configuration itself, so parity for it is pinned to upstream's
+  expected value. Near-singular structured eliminations (for example a
+  collisionless `nu_n = 0` deck) fall back automatically from the direct tier to
+  the preconditioned Krylov tier.
 
 ## License
 
-See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE). If you use DKX in published work, please cite this
+repository and the SFINCS drift-kinetic formulation
+[Landreman et al., *Phys. Plasmas* 21, 042503 (2014)].
