@@ -1,107 +1,203 @@
-"""Differentiable ``vmex`` -> ``booz_xform_jax`` -> ``dkx`` geometry workflow.
+"""Differentiable vmex -> booz_xform_jax -> dkx workflow.
 
-What this example teaches:
-  - how a VMEC ``wout`` (read through ``vmex``) is transformed on one flux
-    surface by ``booz_xform_jax`` and fed to a differentiable ``dkx`` Boozer
-    spectrum proxy transport objective,
-  - how ``jax.value_and_grad`` differentiates that objective w.r.t. an in-memory
-    spectral scale, validated against a centered finite difference, and how a
-    few scalar gradient-descent steps move it,
-  - the explicit differentiability boundary: only the spectral scaling ->
-    ``booz_xform_jax`` -> ``dkx`` proxy objective is differentiated; VMEC file
-    I/O, fixed-boundary setup, and the full SFINCS kinetic transport solve are
-    outside the differentiated graph (and are an explicit non-claim).
+This example is deliberately small enough to run as a documentation and CI-adjacent
+gate.  It uses vmex provenance for a VMEC ``wout`` object, transforms one flux
+surface with booz_xform_jax, evaluates a differentiable dkx Boozer-spectrum
+proxy transport objective, checks the gradient against a centered finite
+difference, and takes a few scalar optimization steps.
 
-Physics context: the optimized scalar is a bounded geometry/transport proxy on
-the Boozer |B| spectrum, the public interface point for fully JAX-native
-geometry workflows while the VMEC-boundary-to-kinetic-transport objective
-remains a larger research lane [M. Landreman et al., Phys. Plasmas 21, 042503
-(2014); SFINCS technical documentation, https://github.com/landreman/sfincs].
-The dependency-free local gradient gate always runs; the full pipeline runs
-when ``vmex`` and ``booz_xform_jax`` are installed and a VMEC ``wout`` resolves.
+The optimized scalar is a bounded geometry/transport proxy, not a full kinetic solve.
+It is the public interface point for fully JAX-native geometry workflows while the full
+VMEC-boundary-to-transport-solve objective remains a larger research lane.
 
-Run:
-  python examples/autodiff/vmex_to_boozer_sfincs_pipeline.py
+Only the in-memory spectral scaling, ``booz_xform_jax`` call, and
+``dkx`` Boozer-spectrum proxy transport objective are differentiated here.
+VMEC file reads, fixed-boundary setup, and the SFINCS kinetic transport solve are
+outside this example's differentiated graph.  The ``--check-backends`` and
+``--summary-json`` modes expose the same machine-readable workflow contract used
+by tests and documentation: optional backend checks are shallow, default CI does
+not require ``vmex`` or ``booz_xform_jax``, and full kinetic-transport
+gradients are an explicit non-claim.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
+import sys
 from pathlib import Path
 
-# Keep this documentation example readable: favor clean output over the
-# persistent compilation cache the full CLI enables.
+# Keep this documentation example readable. The full CLI keeps the persistent
+# compilation cache enabled by default; this tiny workflow favors clean output.
 os.environ.setdefault("DKX_DISABLE_COMPILATION_CACHE", "1")
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 os.environ.setdefault("GLOG_minloglevel", "2")
 
-import jax  # noqa: E402
-import jax.numpy as jnp  # noqa: E402
-import matplotlib  # noqa: E402
-import numpy as np  # noqa: E402
+import jax
+import jax.numpy as jnp
+import numpy as np
 
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
-from dkx.paths import resolve_existing_path  # noqa: E402
 from dkx.workflows.geometry_adapters import (  # noqa: E402
     boozer_spectrum_proxy_transport_gradient_gate,
     boozer_spectrum_proxy_transport_objective,
     geometry_proxy_no_solve_provenance_gate,
     geometry_proxy_workflow_summary,
     optional_jax_geometry_backend_report,
-    optional_jax_geometry_backend_status,
 )
-
-# ----------------------------------------------------------------------------
-# Parameters
-# ----------------------------------------------------------------------------
-REPO_ROOT = Path(__file__).resolve().parents[2]
-
-# VMEC wout override; None auto-resolves a public fixture (or set DKX_VMEX_WOUT).
-WOUT_PATH: Path | None = None
-
-# Boozer transform + on-surface grid.
-SURFACE = 0.5  # normalized toroidal flux s of the surface to transform
-MBOZ = 3  # poloidal Boozer resolution
-NBOZ = 3  # toroidal Boozer resolution
-N_THETA = 12
-N_ZETA = 10
-
-# Differentiable spectral-scale objective + optimization.
-SCALE0 = 1.0  # initial spectral scale
-FD_STEP = 1e-4  # centered finite-difference step for the gradient check
-STEPS = 3  # scalar gradient-descent steps
-LEARNING_RATE = 5.0
-
-OUTPUT_DIR = Path(__file__).resolve().parents[1] / "output" / "vmex_to_boozer_sfincs_pipeline"
-SUMMARY_JSON = OUTPUT_DIR / "vmex_to_boozer_sfincs_pipeline_summary.json"
-PLOT_PATH = OUTPUT_DIR / "vmex_to_boozer_sfincs_pipeline.png"
+from dkx.paths import resolve_existing_path  # noqa: E402
 
 
-def find_wout() -> Path | None:
-    """Resolve a VMEC ``wout`` fixture from the override, env, or data cache."""
-
+def _default_wout_candidates() -> list[Path]:
     candidates: list[Path] = []
-    if WOUT_PATH is not None:
-        candidates.append(Path(WOUT_PATH))
     env_path = os.environ.get("DKX_VMEX_WOUT", "").strip()
     if env_path:
         candidates.append(Path(env_path))
-    candidates.append(REPO_ROOT / "dkx" / "data" / "equilibria" / "wout_w7x_standardConfig.nc")
-    for candidate in candidates:
+    candidates.extend(
+        [
+            Path("/Users/rogeriojorge/local/vmex/examples/data/wout_circular_tokamak.nc"),
+            _REPO_ROOT / "dkx" / "data" / "equilibria" / "wout_w7x_standardConfig.nc",
+        ]
+    )
+    return candidates
+
+
+def _find_default_wout() -> Path:
+    for candidate in _default_wout_candidates():
         if candidate.exists():
             return candidate
     try:
         return resolve_existing_path("wout_w7x_standardConfig.nc").path
     except FileNotFoundError:
-        return None
+        pass
+    joined = "\n  ".join(str(path) for path in _default_wout_candidates())
+    raise FileNotFoundError(
+        "No default VMEC wout fixture found. Provide --wout or set "
+        "DKX_VMEX_WOUT. Checked:\n  "
+        f"{joined}"
+    )
 
 
-def surface_first_arrays(bx) -> dict[str, jnp.ndarray]:
-    """Collect the surface-major spectral arrays booz_xform_jax needs."""
+def _print_backend_status() -> None:
+    report = optional_jax_geometry_backend_report()
+    summary = geometry_proxy_workflow_summary()
+    readiness = _synthetic_backend_readiness_gate()
+    contract = report["workflow_contract"]
+    status = report["backends"]
+    print("Optional JAX geometry backend status:")
+    for name in ("vmex", "booz_xform_jax"):
+        availability = "available" if status[name] else "missing"
+        print(f"  {name}: {availability}")
+    print("Runnable paths:")
+    print("  no optional dependencies: run this script with --check-backends")
+    print(
+        "  file-backed setup: pass --wout /path/to/wout.nc "
+        "or set DKX_VMEX_WOUT"
+    )
+    print(
+        "  optional in-memory setup: pass --vmec-case circular_tokamak "
+        "when vmex is installed"
+    )
+    print("Differentiability boundary:")
+    print("  differentiated: scaled spectral arrays -> booz_xform_jax -> dkx proxy transport objective")
+    print(
+        "  file-backed/setup only: VMEC file I/O, vmex example solves, "
+        "and dkx VMEC file adapters"
+    )
+    print("  not claimed: full VMEC-boundary-to-SFINCS-transport gradients")
+    print("Public workflow contract:")
+    print(f"  version: {contract['contract_version']}")
+    print("  default CI requires vmex: false")
+    print("  default CI requires booz_xform_jax: false")
+    print(f"  no-overclaim gate: {contract['no_overclaim_gate']['status']}")
+    print(f"  kinetic gradient status: {contract['no_overclaim_gate']['kinetic_gradient_status']}")
+    print(
+        "  kinetic scalar contract gate: "
+        f"{contract['kinetic_transport_scalar_contract']['no_overclaim_gate']['status']}"
+    )
+    print("Workflow summary:")
+    print(
+        "  backend-readiness gate: "
+        f"{readiness['status']} "
+        f"(max_grad_error={readiness['max_gradient_abs_error']:.3e}, "
+        f"tol={readiness['gradient_tolerance']:.3e}, optional_deps=false)"
+    )
+    print(f"  numerical gradient gate: {summary['numerical_gradient_gate']['status']}")
+    print(f"  kinetic transport gradients: {summary['claims']['not_claimed']}")
+    print("Machine-readable report:")
+    print("  pass --json with --check-backends for backend and gradient-availability metadata")
+    print("  pass --summary-json PATH to write reusable workflow provenance JSON")
 
+
+def _write_summary_json(path: Path, summary: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _synthetic_backend_readiness_gate() -> dict[str, object]:
+    """Check the local dkx Boozer-proxy autodiff path without optionals."""
+    return boozer_spectrum_proxy_transport_gradient_gate()
+
+
+def _load_wout_from_vmec_case(args: argparse.Namespace):
+    try:
+        import vmex as vj
+        from vmex.driver import example_paths, run_fixed_boundary, wout_from_fixed_boundary_run
+        from vmex.vmec_tomnsp import vmec_angle_grid
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        raise SystemExit(
+            "Running a VMEC example case requires vmex. Install it or use --wout."
+        ) from exc
+
+    input_path, _ = example_paths(args.vmec_case)
+    cfg, _ = vj.load_input(str(input_path))
+    grid = vmec_angle_grid(
+        ntheta=int(args.vmec_ntheta),
+        nzeta=int(args.vmec_nzeta),
+        nfp=int(cfg.nfp),
+        lasym=bool(cfg.lasym),
+    )
+    run = run_fixed_boundary(
+        input_path,
+        max_iter=int(args.vmec_max_iter),
+        use_initial_guess=True,
+        vmec_project=False,
+        verbose=bool(args.verbose_vmec),
+        grid=grid,
+    )
+    wout = wout_from_fixed_boundary_run(run, include_fsq=False, fast_bcovar=True)
+    return wout, f"vmex fixed-boundary case '{args.vmec_case}'"
+
+
+def _load_wout_from_file(path: Path):
+    try:
+        from vmex import read_wout as read_vmex_wout
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        raise SystemExit("This example requires vmex.read_wout.") from exc
+    return read_vmex_wout(path), f"vmex.read_wout('{path}')"
+
+
+def _build_boozer_context(wout_like, *, mboz: int, nboz: int, surface: float):
+    try:
+        from booz_xform_jax import Booz_xform
+    except ImportError as exc:  # pragma: no cover - optional dependency
+        raise SystemExit("This example requires booz_xform_jax.") from exc
+
+    bx = Booz_xform()
+    bx.read_wout_data(wout_like)
+    bx.mboz = int(mboz)
+    bx.nboz = int(nboz)
+
+    s_in = np.asarray(bx.s_in, dtype=float)
+    surface_index = int(np.argmin(np.abs(s_in - float(surface))))
+    return bx, surface_index, float(s_in[surface_index])
+
+
+def _surface_first_arrays(bx) -> dict[str, jnp.ndarray]:
     return {
         "rmnc": jnp.asarray(np.asarray(bx.rmnc).T),
         "zmns": jnp.asarray(np.asarray(bx.zmns).T),
@@ -115,130 +211,162 @@ def surface_first_arrays(bx) -> dict[str, jnp.ndarray]:
     }
 
 
-# ----------------------------------------------------------------------------
-# 1) Optional backend status and the dependency-free gradient gate
-# ----------------------------------------------------------------------------
-print("=== examples/autodiff/vmex_to_boozer_sfincs_pipeline.py ===")
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-report = optional_jax_geometry_backend_report()
-status = optional_jax_geometry_backend_status()
-print("Step 1: optional backend status and the local gradient gate")
-for name in ("vmex", "booz_xform_jax"):
-    print(f"  {name}: {'available' if status[name] else 'missing'}")
-readiness = boozer_spectrum_proxy_transport_gradient_gate()
-print(
-    f"  local Boozer-proxy gradient gate: {readiness['status']} "
-    f"(max_grad_error={readiness['max_gradient_abs_error']:.3e}, "
-    f"tol={readiness['gradient_tolerance']:.3e})"
-)
-print("  differentiated graph: scaled spectral arrays -> booz_xform_jax -> dkx proxy transport objective")
-print("  not claimed: full VMEC-boundary-to-SFINCS kinetic transport gradients")
-
-# ----------------------------------------------------------------------------
-# 2) Full pipeline when both backends and a wout are available
-# ----------------------------------------------------------------------------
-wout_path = find_wout() if (status["vmex"] and status["booz_xform_jax"]) else None
-if wout_path is None:
-    print("Step 2: optional backends or a VMEC wout are unavailable -- skipping the full pipeline")
-    summary = geometry_proxy_workflow_summary()
-    summary["backend_readiness_gate"] = readiness
-    summary["no_solve_provenance_gate"] = geometry_proxy_no_solve_provenance_gate(
-        summary, require_file_provenance=False
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--wout", type=Path, default=None, help="VMEC wout file read through vmex.")
+    parser.add_argument(
+        "--check-backends",
+        action="store_true",
+        help="Print optional backend status and the current differentiability boundary, then exit.",
     )
-    SUMMARY_JSON.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print("=== Final results ===")
-    print(f"  backend report contract version: {report['workflow_contract']['contract_version']}")
-    print(f"  Wrote summary JSON: {SUMMARY_JSON.name}")
-    print("Done: examples/autodiff/vmex_to_boozer_sfincs_pipeline.py")
-else:
-    from booz_xform_jax import Booz_xform
-    from booz_xform_jax.jax_api import booz_xform_jax
-    from vmex import read_wout as read_vmex_wout
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="With --check-backends, emit backend and gradient-boundary metadata as JSON.",
+    )
+    parser.add_argument(
+        "--summary-json",
+        type=Path,
+        default=None,
+        help="Write reusable workflow summary/provenance JSON to this path.",
+    )
+    parser.add_argument(
+        "--vmec-case",
+        default=None,
+        help="Optional vmex example case to solve first, e.g. circular_tokamak.",
+    )
+    parser.add_argument("--vmec-max-iter", type=int, default=1)
+    parser.add_argument("--vmec-ntheta", type=int, default=16)
+    parser.add_argument("--vmec-nzeta", type=int, default=1)
+    parser.add_argument("--verbose-vmec", action="store_true")
+    parser.add_argument("--surface", type=float, default=0.5)
+    parser.add_argument("--mboz", type=int, default=3)
+    parser.add_argument("--nboz", type=int, default=3)
+    parser.add_argument("--n-theta", type=int, default=12)
+    parser.add_argument("--n-zeta", type=int, default=10)
+    parser.add_argument("--scale", type=float, default=1.0)
+    parser.add_argument("--fd-step", type=float, default=1.0e-4)
+    parser.add_argument("--steps", type=int, default=3, help="Scalar gradient-descent steps.")
+    parser.add_argument("--learning-rate", type=float, default=5.0)
+    args = parser.parse_args()
 
-    print(f"Step 2: reading the VMEC wout and building the Boozer context ({wout_path.name})")
-    wout_like = read_vmex_wout(wout_path)
-    provenance = f"vmex.read_wout('{wout_path}')"
-    bx = Booz_xform()
-    bx.read_wout_data(wout_like)
-    bx.mboz = int(MBOZ)
-    bx.nboz = int(NBOZ)
-    s_in = np.asarray(bx.s_in, dtype=float)
-    surface_index = int(np.argmin(np.abs(s_in - float(SURFACE))))
-    selected_surface = float(s_in[surface_index])
+    if args.check_backends:
+        summary = geometry_proxy_workflow_summary()
+        summary["backend_readiness_gate"] = _synthetic_backend_readiness_gate()
+        summary["no_solve_provenance_gate"] = geometry_proxy_no_solve_provenance_gate(
+            summary,
+            require_file_provenance=False,
+        )
+        if args.summary_json is not None:
+            _write_summary_json(args.summary_json, summary)
+        if args.json:
+            report = optional_jax_geometry_backend_report()
+            report["backend_readiness_gate"] = summary["backend_readiness_gate"]
+            report["no_solve_provenance_gate"] = summary["no_solve_provenance_gate"]
+            print(json.dumps(report, indent=2, sort_keys=True))
+        else:
+            _print_backend_status()
+            print(f"  no-solve provenance gate: {summary['no_solve_provenance_gate']['status']}")
+        return 0
 
-    arrays = surface_first_arrays(bx)
+    if args.vmec_case:
+        wout_like, provenance = _load_wout_from_vmec_case(args)
+    else:
+        wout_path = args.wout if args.wout is not None else _find_default_wout()
+        wout_like, provenance = _load_wout_from_file(wout_path)
+
+    bx, surface_index, selected_surface = _build_boozer_context(
+        wout_like,
+        mboz=args.mboz,
+        nboz=args.nboz,
+        surface=args.surface,
+    )
+    arrays = _surface_first_arrays(bx)
     non_axis = (arrays["xm_nyq"] != 0) | (arrays["xn_nyq"] != 0)
-    theta = jnp.linspace(0.0, 2.0 * jnp.pi, N_THETA, endpoint=False)
-    zeta = jnp.linspace(0.0, 2.0 * jnp.pi / float(bx.nfp), N_ZETA, endpoint=False)
+    theta = jnp.linspace(0.0, 2.0 * jnp.pi, int(args.n_theta), endpoint=False)
+    zeta = jnp.linspace(0.0, 2.0 * jnp.pi / float(bx.nfp), int(args.n_zeta), endpoint=False)
+
+    from booz_xform_jax.jax_api import booz_xform_jax
 
     def objective(scale: jnp.ndarray) -> jnp.ndarray:
         scaled_bmnc = jnp.where(non_axis[None, :], arrays["bmnc"] * scale, arrays["bmnc"])
         out = booz_xform_jax(
-            rmnc=arrays["rmnc"], zmns=arrays["zmns"], lmns=arrays["lmns"],
-            bmnc=scaled_bmnc, bsubumnc=arrays["bsubumnc"], bsubvmnc=arrays["bsubvmnc"],
-            iota=arrays["iota"], xm=bx.xm, xn=bx.xn, xm_nyq=bx.xm_nyq, xn_nyq=bx.xn_nyq,
-            nfp=int(bx.nfp), mboz=int(bx.mboz), nboz=int(bx.nboz), asym=bool(bx.asym),
+            rmnc=arrays["rmnc"],
+            zmns=arrays["zmns"],
+            lmns=arrays["lmns"],
+            bmnc=scaled_bmnc,
+            bsubumnc=arrays["bsubumnc"],
+            bsubvmnc=arrays["bsubvmnc"],
+            iota=arrays["iota"],
+            xm=bx.xm,
+            xn=bx.xn,
+            xm_nyq=bx.xm_nyq,
+            xn_nyq=bx.xn_nyq,
+            nfp=int(bx.nfp),
+            mboz=int(bx.mboz),
+            nboz=int(bx.nboz),
+            asym=bool(bx.asym),
             surface_indices=[surface_index],
-        )  # fmt: skip
+        )
         return boozer_spectrum_proxy_transport_objective(
-            out["bmnc_b"][0], out["ixm_b"], out["ixn_b"], theta=theta, zeta=zeta
+            out["bmnc_b"][0],
+            out["ixm_b"],
+            out["ixn_b"],
+            theta=theta,
+            zeta=zeta,
         )
 
-    print("Step 3: differentiating the proxy objective and taking a few descent steps")
-    scale0 = jnp.asarray(float(SCALE0))
+    scale0 = jnp.asarray(float(args.scale))
     value, gradient = jax.value_and_grad(objective)(scale0)
-    finite_difference = float(
-        (objective(scale0 + FD_STEP) - objective(scale0 - FD_STEP)) / (2.0 * FD_STEP)
-    )
-    gradient_error = abs(float(gradient) - finite_difference)
-
-    scale = scale0
-    trajectory = [(0, float(value), float(scale))]
-    for k in range(max(0, int(STEPS))):
-        loss, grad = jax.value_and_grad(objective)(scale)
-        scale = scale - float(LEARNING_RATE) * grad
-        trajectory.append((k + 1, float(loss), float(scale)))
-        print(f"  step {k + 1:02d}: proxy={float(loss):.9e}, scale={float(scale):.9f}")
-
+    step = float(args.fd_step)
+    finite_difference = (objective(scale0 + step) - objective(scale0 - step)) / (2.0 * step)
+    gradient_error = abs(float(gradient - finite_difference))
     summary = geometry_proxy_workflow_summary(
         provenance=provenance,
-        requested_surface=float(SURFACE),
+        requested_surface=float(args.surface),
         selected_surface=selected_surface,
         boozer_resolution={"mboz": int(bx.mboz), "nboz": int(bx.nboz)},
-        grid_shape={"n_theta": int(N_THETA), "n_zeta": int(N_ZETA)},
+        grid_shape={"n_theta": int(args.n_theta), "n_zeta": int(args.n_zeta)},
         scale=float(scale0),
         proxy_objective=float(value),
         autodiff_gradient=float(gradient),
-        finite_difference_gradient=finite_difference,
-        finite_difference_step=float(FD_STEP),
+        finite_difference_gradient=float(finite_difference),
+        finite_difference_step=step,
     )
-    summary["backend_readiness_gate"] = readiness
     summary["no_solve_provenance_gate"] = geometry_proxy_no_solve_provenance_gate(
-        summary, require_file_provenance=True
+        summary,
+        require_file_provenance=True,
     )
-    SUMMARY_JSON.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
-    steps = [t[0] for t in trajectory]
-    proxies = [t[1] for t in trajectory]
-    fig, ax = plt.subplots(figsize=(5.8, 4.0))
-    ax.plot(steps, proxies, "o-", color="tab:blue")
-    ax.set_xlabel("gradient-descent step")
-    ax.set_ylabel("proxy transport objective")
-    ax.set_title("vmex -> Boozer -> dkx proxy: descent trajectory")
-    ax.grid(True, alpha=0.3)
-    fig.tight_layout()
-    fig.savefig(PLOT_PATH, dpi=140)
-    plt.close(fig)
-
-    print("=== Final results ===")
+    print("Differentiable geometry workflow:")
     print(f"  VMEC provenance: {provenance}")
-    print(f"  Boozer surface: requested s={SURFACE:.3f}, selected s={selected_surface:.6f}")
-    print(f"  proxy objective(scale={float(scale0):.6g}) = {float(value):.12e}")
-    print(f"  d objective / d scale (JAX)         = {float(gradient):.12e}")
-    print(f"  d objective / d scale (centered FD) = {finite_difference:.12e}")
+    print(f"  Boozer surface: requested s={args.surface:.3f}, selected s={selected_surface:.6f}")
+    print(f"  Boozer resolution: mboz={bx.mboz}, nboz={bx.nboz}")
+    print(f"  dkx proxy transport objective(scale={float(scale0):.6g}) = {float(value):.12e}")
+    print(f"  d objective / d scale (JAX) = {float(gradient):.12e}")
+    print(f"  d objective / d scale (centered FD) = {float(finite_difference):.12e}")
     print(f"  abs gradient error = {gradient_error:.3e}")
     print(f"  numerical gradient gate: {summary['numerical_gradient_gate']['status']}")
     print(f"  no-solve provenance gate: {summary['no_solve_provenance_gate']['status']}")
-    print(f"  Saved plot: {PLOT_PATH.name}")
-    print(f"  Wrote summary JSON: {SUMMARY_JSON.name}")
-    print("Done: examples/autodiff/vmex_to_boozer_sfincs_pipeline.py")
+    print("  differentiated graph: scaled spectral arrays -> booz_xform_jax -> dkx proxy transport objective")
+    print(
+        "  outside graph: file I/O, VMEC setup, dkx VMEC file adapters, "
+        "and kinetic transport solve"
+    )
+    print("  not claimed: full VMEC-boundary-to-SFINCS kinetic transport gradients")
+
+    if args.summary_json is not None:
+        _write_summary_json(args.summary_json, summary)
+        print(f"  wrote workflow summary JSON: {args.summary_json}")
+
+    scale = scale0
+    for k in range(max(0, int(args.steps))):
+        loss, grad = jax.value_and_grad(objective)(scale)
+        scale = scale - float(args.learning_rate) * grad
+        print(f"  step {k + 1:02d}: proxy={float(loss):.12e}, scale={float(scale):.9f}")
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
