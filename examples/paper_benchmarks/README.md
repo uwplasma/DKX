@@ -46,6 +46,21 @@ and a single figure + JSON pair written to
   chain [M. Landreman, S. Buller & M. Drevlak, Phys. Plasmas 29, 082501
   (2022)].  Requires the optional vmex + booz_xform_jax companions;
   checkpointed and resumable (`DKX_BOOT_LOOP_MAX_NEW_STAGES`).
+- `impurity_transport.py`: the classical/neoclassical impurity-transport case
+  for a bulk hydrogenic plasma plus a high-Z trace impurity.  A Fortran v3
+  parity anchor on the committed two-species carbon example
+  (`quick_2species_FPCollisions_noEr`, neoclassical impurity
+  `particleFlux_vm_psiHat` vs the Fortran golden), a mixed-collisionality scan
+  on the W7-X standard configuration (full multi-species RHSMode=1 kinetic
+  solve for the neoclassical flux and the algebraic `dkx.impurity` classical
+  flux, checked against dkx's own `classicalTransport.F90` counterpart to
+  machine precision), a `vmap`-over-charge-state Z-scan, and the
+  temperature-screening diagnostic (exact `-Z` density peaking, the `1/2`
+  collisional screening coefficient, and an AD-vs-FD ion-temperature-gradient
+  derivative) [S.I. Braginskii, Rev. Plasma Phys. 1, 205 (1965); P.H.
+  Rutherford, Phys. Fluids 17, 1782 (1974); F.L. Hinton & R.D. Hazeltine, Rev.
+  Mod. Phys. 48, 239 (1976); P. Helander & D.J. Sigmar, *Collisional Transport
+  in Magnetized Plasmas*, CUP (2002)].  Checkpointed and resumable.
 
 ## Running
 
