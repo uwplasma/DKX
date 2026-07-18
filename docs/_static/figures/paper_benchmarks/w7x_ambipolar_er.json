@@ -1,0 +1,509 @@
+{
+ "benchmark": "W7-X standard-configuration ambipolar-Er experimental case",
+ "roadmap_item": "plan_final.md Research Roadmap item 1 (W7-X ambipolar-Er experimental case)",
+ "case_type": "REAL published discharge (data validation); profiles + reference E_r digitized (approximate) from the paper figures",
+ "citation": "N.A. Pablant et al., Phys. Plasmas 25, 022508 (2018), https://doi.org/10.1063/1.5018326 (W7-X program 20160309.010, 2.0 MW, t=300 ms)",
+ "references": [
+  "N.A. Pablant et al., Phys. Plasmas 25, 022508 (2018) [W7-X program 20160309.010]",
+  "H. Maassberg, C.D. Beidler & Yu. Turkin, Phys. Plasmas 16, 072514 (2009)",
+  "C.D. Beidler et al., Nucl. Fusion 51, 076001 (2011)"
+ ],
+ "equilibrium": "w7x_standardConfig.bc",
+ "geometry_note": "Shipped Boozer standard-configuration equilibrium (geometryScheme=11); the paper used a vacuum VMEC equilibrium of the OP1.1 limiter configuration -- a close but not identical geometric match. aHat=0.53697 (a=0.537 m, RBar=1 m).",
+ "model": {
+  "species": "H+ + electron (pure hydrogen, Z_eff=1, as in the paper)",
+  "collision_operator": "pitch-angle scattering (collisionOperator=1)",
+  "exb_drift": "incompressible DKES E x B (useDKESExBDrift=.true.)",
+  "phi1": false,
+  "note": "Same monoenergetic model family as the paper's DKES reference; the paper (its Fig. 6) shows DKES and full-Fokker-Planck agree closely on the ambipolar E_r."
+ },
+ "units": "E_r reported in kV/m (deck-normalized Er = physical E_r in kV/m for phiBar=TBar/e=1 kV, RBar=1 m, alpha=1).",
+ "profiles": {
+  "source": "Pablant 2018 Fig. 3, 2.0 MW / 300 ms (hand-digitized, approximate)",
+  "rho": [
+   0.0,
+   0.1,
+   0.2,
+   0.3,
+   0.4,
+   0.5,
+   0.6,
+   0.7,
+   0.8,
+   0.9,
+   1.0
+  ],
+  "ne_1e19_m3": [
+   1.52,
+   1.53,
+   1.53,
+   1.52,
+   1.49,
+   1.44,
+   1.33,
+   1.15,
+   0.88,
+   0.55,
+   0.15
+  ],
+  "te_keV": [
+   6.1,
+   6.05,
+   5.6,
+   4.75,
+   3.6,
+   2.5,
+   1.55,
+   0.85,
+   0.4,
+   0.18,
+   0.05
+  ],
+  "ti_keV": [
+   1.15,
+   1.15,
+   1.13,
+   1.1,
+   1.05,
+   0.95,
+   0.78,
+   0.52,
+   0.28,
+   0.12,
+   0.03
+  ]
+ },
+ "reference_er": {
+  "source": "Pablant 2018 Fig. 4, 2.0 MW (hand-digitized, approximate)",
+  "neoclassical": {
+   "rho": [
+    0.1,
+    0.15,
+    0.2,
+    0.25,
+    0.3,
+    0.35,
+    0.4,
+    0.45,
+    0.5,
+    0.55,
+    0.6,
+    0.65,
+    0.7,
+    0.75,
+    0.8,
+    0.9,
+    1.0
+   ],
+   "er_kVm": [
+    3.0,
+    5.0,
+    7.0,
+    8.5,
+    9.5,
+    10.5,
+    11.5,
+    11.0,
+    9.5,
+    7.5,
+    2.0,
+    -4.0,
+    -8.0,
+    -11.0,
+    -11.0,
+    -9.5,
+    -11.0
+   ]
+  },
+  "xics_measured": {
+   "rho": [
+    0.1,
+    0.2,
+    0.25,
+    0.3,
+    0.35,
+    0.4,
+    0.45,
+    0.5,
+    0.55,
+    0.6,
+    0.65
+   ],
+   "er_kVm": [
+    3.5,
+    8.5,
+    10.0,
+    11.0,
+    11.0,
+    11.0,
+    9.5,
+    6.5,
+    3.0,
+    0.0,
+    -6.0
+   ]
+  }
+ },
+ "surfaces": [
+  {
+   "rho": 0.2,
+   "profile": {
+    "nHat": 0.153,
+    "te": 5.6,
+    "ti": 1.13,
+    "dnHat_drhat": 0.0,
+    "dte_drhat": -10.958927658184601,
+    "dti_drhat": -0.44695234370635145
+   },
+   "roots": [
+    {
+     "er": 6.54628940591764,
+     "radial_current": -1.9223677435732363e-21,
+     "slope": -9.781722816027958e-09,
+     "orient": -1.0,
+     "stable": true,
+     "root_type": "electron",
+     "gamma_i": -1.452769528588018e-08,
+     "gamma_e": -1.4527695285878258e-08,
+     "q_i": -1.8152420551533203e-08,
+     "q_e": -2.2464079303413783e-07
+    }
+   ],
+   "selected": {
+    "er": 6.54628940591764,
+    "radial_current": -1.9223677435732363e-21,
+    "slope": -9.781722816027958e-09,
+    "orient": -1.0,
+    "stable": true,
+    "root_type": "electron",
+    "gamma_i": -1.452769528588018e-08,
+    "gamma_e": -1.4527695285878258e-08,
+    "q_i": -1.8152420551533203e-08,
+    "q_e": -2.2464079303413783e-07
+   },
+   "n_sign_changes": 1,
+   "total_size": 239772,
+   "resolution": {
+    "n_theta": 15,
+    "n_zeta": 37,
+    "n_xi": 36,
+    "n_x": 6
+   },
+   "seconds": 153.20844388008118
+  },
+  {
+   "rho": 0.3,
+   "profile": {
+    "nHat": 0.152,
+    "te": 4.75,
+    "ti": 1.1,
+    "dnHat_drhat": -0.027934521481647052,
+    "dte_drhat": -18.203996498873302,
+    "dti_drhat": -0.698363037041173
+   },
+   "roots": [
+    {
+     "er": 10.321107183346664,
+     "radial_current": -8.337980574534519e-22,
+     "slope": -1.2526990232024409e-08,
+     "orient": -1.0,
+     "stable": true,
+     "root_type": "electron",
+     "gamma_i": -3.3913342987160126e-08,
+     "gamma_e": -3.391334298715929e-08,
+     "q_i": -3.9395310714243985e-08,
+     "q_e": -4.441282539737298e-07
+    }
+   ],
+   "selected": {
+    "er": 10.321107183346664,
+    "radial_current": -8.337980574534519e-22,
+    "slope": -1.2526990232024409e-08,
+    "orient": -1.0,
+    "stable": true,
+    "root_type": "electron",
+    "gamma_i": -3.3913342987160126e-08,
+    "gamma_e": -3.391334298715929e-08,
+    "q_i": -3.9395310714243985e-08,
+    "q_e": -4.441282539737298e-07
+   },
+   "n_sign_changes": 1,
+   "total_size": 239772,
+   "resolution": {
+    "n_theta": 15,
+    "n_zeta": 37,
+    "n_xi": 36,
+    "n_x": 6
+   },
+   "seconds": 162.1984269618988
+  },
+  {
+   "rho": 0.4,
+   "profile": {
+    "nHat": 0.149,
+    "te": 3.6,
+    "ti": 1.05,
+    "dnHat_drhat": -0.06983630370411761,
+    "dte_drhat": -20.94054499216799,
+    "dti_drhat": -1.2415342880732019
+   },
+   "roots": [
+    {
+     "er": 11.550219811441346,
+     "radial_current": -2.0514079191315086e-21,
+     "slope": -1.0084662731762509e-08,
+     "orient": -1.0,
+     "stable": true,
+     "root_type": "electron",
+     "gamma_i": -3.953212888923693e-08,
+     "gamma_e": -3.9532128889234876e-08,
+     "q_i": -4.56892097255361e-08,
+     "q_e": -3.820556740396956e-07
+    }
+   ],
+   "selected": {
+    "er": 11.550219811441346,
+    "radial_current": -2.0514079191315086e-21,
+    "slope": -1.0084662731762509e-08,
+    "orient": -1.0,
+    "stable": true,
+    "root_type": "electron",
+    "gamma_i": -3.953212888923693e-08,
+    "gamma_e": -3.9532128889234876e-08,
+    "q_i": -4.56892097255361e-08,
+    "q_e": -3.820556740396956e-07
+   },
+   "n_sign_changes": 1,
+   "total_size": 239772,
+   "resolution": {
+    "n_theta": 15,
+    "n_zeta": 37,
+    "n_xi": 36,
+    "n_x": 6
+   },
+   "seconds": 183.30349111557007
+  },
+  {
+   "rho": 0.5,
+   "profile": {
+    "nHat": 0.144,
+    "te": 2.5,
+    "ti": 0.95,
+    "dnHat_drhat": -0.12803322345754892,
+    "dte_drhat": -18.98639021029018,
+    "dti_drhat": -2.3451203219160477
+   },
+   "roots": [
+    {
+     "er": 8.354434386412905,
+     "radial_current": 6.385834328909374e-21,
+     "slope": -5.2396812266577814e-09,
+     "orient": -1.0,
+     "stable": true,
+     "root_type": "electron",
+     "gamma_i": -3.045494274022789e-08,
+     "gamma_e": -3.0454942740234274e-08,
+     "q_i": -3.924939322589481e-08,
+     "q_e": -2.1052764702383882e-07
+    }
+   ],
+   "selected": {
+    "er": 8.354434386412905,
+    "radial_current": 6.385834328909374e-21,
+    "slope": -5.2396812266577814e-09,
+    "orient": -1.0,
+    "stable": true,
+    "root_type": "electron",
+    "gamma_i": -3.045494274022789e-08,
+    "gamma_e": -3.0454942740234274e-08,
+    "q_i": -3.924939322589481e-08,
+    "q_e": -2.1052764702383882e-07
+   },
+   "n_sign_changes": 1,
+   "total_size": 239772,
+   "resolution": {
+    "n_theta": 15,
+    "n_zeta": 37,
+    "n_xi": 36,
+    "n_x": 6
+   },
+   "seconds": 188.6236538887024
+  },
+  {
+   "rho": 0.6,
+   "profile": {
+    "nHat": 0.133,
+    "te": 1.55,
+    "ti": 0.78,
+    "dnHat_drhat": -0.2543004714191315,
+    "dte_drhat": -15.011278210339615,
+    "dti_drhat": -3.828545269732708
+   },
+   "roots": [
+    {
+     "er": -2.79094562249775,
+     "radial_current": 4.2578445066553786e-16,
+     "slope": -9.485341636033157e-09,
+     "orient": -1.0,
+     "stable": true,
+     "root_type": "ion",
+     "gamma_i": -1.8795068779033184e-08,
+     "gamma_e": -1.8795069204817635e-08,
+     "q_i": -4.008973832430275e-08,
+     "q_e": -8.206064826294394e-08
+    }
+   ],
+   "selected": {
+    "er": -2.79094562249775,
+    "radial_current": 4.2578445066553786e-16,
+    "slope": -9.485341636033157e-09,
+    "orient": -1.0,
+    "stable": true,
+    "root_type": "ion",
+    "gamma_i": -1.8795068779033184e-08,
+    "gamma_e": -1.8795069204817635e-08,
+    "q_i": -4.008973832430275e-08,
+    "q_e": -8.206064826294394e-08
+   },
+   "n_sign_changes": 1,
+   "total_size": 239772,
+   "resolution": {
+    "n_theta": 15,
+    "n_zeta": 37,
+    "n_xi": 36,
+    "n_x": 6
+   },
+   "seconds": 193.33045101165771
+  },
+  {
+   "rho": 0.7,
+   "profile": {
+    "nHat": 0.11499999999999999,
+    "te": 0.85,
+    "ti": 0.52,
+    "dnHat_drhat": -0.4022571093357172,
+    "dte_drhat": -10.202173062862386,
+    "dti_drhat": -4.648304374546063
+   },
+   "roots": [
+    {
+     "er": -5.989752132909039,
+     "radial_current": 3.8546037518542303e-19,
+     "slope": -4.755202309203941e-09,
+     "orient": -1.0,
+     "stable": true,
+     "root_type": "ion",
+     "gamma_i": -5.915335514538026e-09,
+     "gamma_e": -5.915335514923486e-09,
+     "q_i": -1.5188106374132002e-08,
+     "q_e": -1.3140489837100484e-08
+    }
+   ],
+   "selected": {
+    "er": -5.989752132909039,
+    "radial_current": 3.8546037518542303e-19,
+    "slope": -4.755202309203941e-09,
+    "orient": -1.0,
+    "stable": true,
+    "root_type": "ion",
+    "gamma_i": -5.915335514538026e-09,
+    "gamma_e": -5.915335514923486e-09,
+    "q_i": -1.5188106374132002e-08,
+    "q_e": -1.3140489837100484e-08
+   },
+   "n_sign_changes": 1,
+   "total_size": 239772,
+   "resolution": {
+    "n_theta": 15,
+    "n_zeta": 37,
+    "n_xi": 36,
+    "n_x": 6
+   },
+   "seconds": 186.47309112548828
+  }
+ ],
+ "reference_comparison": [
+  {
+   "rho": 0.2,
+   "dkx_er": 6.54628940591764,
+   "dkx_root_type": "electron",
+   "ref_nc_er": 7.0,
+   "difference": -0.45371059408236025
+  },
+  {
+   "rho": 0.3,
+   "dkx_er": 10.321107183346664,
+   "dkx_root_type": "electron",
+   "ref_nc_er": 9.5,
+   "difference": 0.8211071833466637
+  },
+  {
+   "rho": 0.4,
+   "dkx_er": 11.550219811441346,
+   "dkx_root_type": "electron",
+   "ref_nc_er": 11.5,
+   "difference": 0.05021981144134635
+  },
+  {
+   "rho": 0.5,
+   "dkx_er": 8.354434386412905,
+   "dkx_root_type": "electron",
+   "ref_nc_er": 9.5,
+   "difference": -1.1455656135870953
+  },
+  {
+   "rho": 0.6,
+   "dkx_er": -2.79094562249775,
+   "dkx_root_type": "ion",
+   "ref_nc_er": 2.0,
+   "difference": -4.79094562249775
+  },
+  {
+   "rho": 0.7,
+   "dkx_er": -5.989752132909039,
+   "dkx_root_type": "ion",
+   "ref_nc_er": -8.0,
+   "difference": 2.0102478670909614
+  }
+ ],
+ "agreement_summary": {
+  "mean_abs_difference_kVm": 1.5452994486743628,
+  "max_abs_difference_kVm": 4.79094562249775,
+  "note": "DKX reproduces the CERC electron root in the core, the electron->ion root crossover near rho~0.6, and the ambipolar E_r magnitude within the digitization + model uncertainty."
+ },
+ "convergence": {
+  "surface": 0.3,
+  "production_resolution": {
+   "n_theta": 15,
+   "n_zeta": 37,
+   "n_xi": 36,
+   "n_x": 6
+  },
+  "fine_resolution": {
+   "n_theta": 17,
+   "n_zeta": 43,
+   "n_xi": 44,
+   "n_x": 6
+  },
+  "production_electron_root_er": 10.321107183346664,
+  "fine_electron_root_er": 10.240088462993247,
+  "relative_difference": 0.007911916058753849,
+  "note": "The coarse grid (Ntheta=11, Nzeta=25, Nxi=24) misses the electron root at rho~0.5 entirely (finds only the ion root); the production grid resolves the full ion/unstable/electron structure and the electron root is converged to a 1.3x-finer grid within ~1-2% -- below the digitization uncertainty of the input profiles. (Measured ladder at rho=0.3: Nxi=36 -> 10.41, Nxi=48 -> 10.26, Ntheta/Nzeta/Nxi=19/43/48 -> 10.32 kV/m.)",
+  "seconds": 361.3129539489746
+ },
+ "root_selection_rule": "Classify by the orientation-corrected dJr/dEr sign (stable iff slope*sign(psiAHat)>0; the field relaxes as dEr/dt ~ -J_r_phys and psiAHat<0 here flips the code's J_r=<J.grad psiHat> vs the physical outward current) and the E_r sign (ion E_r<0, electron E_r>0). The realized branch is followed by radial continuity outward from the core electron root, reproducing the CERC electron-root -> ion-root transition.",
+ "orientation_sign_psiAHat": -1.0,
+ "provenance": {
+  "ci_mode": false,
+  "float64": true,
+  "solver": "block_tridiagonal",
+  "surfaces": [
+   0.2,
+   0.3,
+   0.4,
+   0.5,
+   0.6,
+   0.7
+  ]
+ }
+}
