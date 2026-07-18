@@ -393,7 +393,7 @@ def select_branch(surfaces: list[dict]) -> None:
 
     Starts from the innermost surface's electron root (CERC core) and, moving
     outward, selects at each surface the stable (``dJr/dEr > 0``) root closest in
-    ``E_r`` to the previously-selected value.  This follows the electron-root
+    ``E_r`` to the inner neighbour's selected value.  This follows the electron-root
     branch until it is annihilated at the saddle-node fold, then continues on the
     ion root -- reproducing the CERC electron-root -> ion-root crossover without
     reference to the measured profile.  Mutates each surface dict in place,
