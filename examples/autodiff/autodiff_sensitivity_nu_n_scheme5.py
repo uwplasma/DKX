@@ -1,19 +1,26 @@
-"""Autodiff sensitivity demo for the full-system residual (VMEC `geometryScheme=5`).
+"""Autodiff vs finite-difference sensitivity of the residual to ``nu_n``.
 
-This example shows a core advantage of a JAX port: automatic differentiation through the
-discrete operator/residual without forming sparse matrices.
+What this example teaches:
+  - how to differentiate the full-system residual objective
+    ``0.5 * || r(nu_n; x0) ||^2`` with respect to the normalized collisionality
+    ``nu_n`` using ``jax.grad`` -- straight through the matrix-free operator, no
+    sparse assembly (VMEC ``geometryScheme=5``),
+  - how to validate the autodiff gradient against a centered finite difference,
+  - how a perturbed state ``x0`` is built from a frozen Fortran v3
+    ``stateVector`` fixture.
 
-We treat `nu_n` (the normalized collisionality parameter) as a differentiable scalar and compute:
+Physics context: automatic differentiation through the discrete drift-kinetic
+operator is a core advantage of the JAX port -- exact gradients of neoclassical
+objectives with no hand-derived adjoints [M. Landreman et al., Phys. Plasmas
+21, 042503 (2014); SFINCS technical documentation,
+https://github.com/landreman/sfincs].
 
-  d/dnu_n  ( 0.5 * || r(nu_n; x0) ||^2 )
-
-where `x0` is a perturbed state vector built from a frozen Fortran v3 `stateVector` fixture.
+Run:
+  python examples/autodiff/autodiff_sensitivity_nu_n_scheme5.py
 """
 
 from __future__ import annotations
 
-import argparse
-import sys
 from dataclasses import replace
 from pathlib import Path
 
@@ -21,70 +28,71 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
-
 from dkx.drift_kinetic import KineticOperator, kinetic_operator_from_namelist
 from dkx.namelist import read_sfincs_input
 from dkx.validation.fortran import read_petsc_vec
 
+# ----------------------------------------------------------------------------
+# Parameters
+# ----------------------------------------------------------------------------
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
-def _with_nu_n(op: KineticOperator, nu_n: jnp.ndarray) -> KineticOperator:
-    """Rebuild the PAS collision operator at a new `nu_n` (coef is linear in it)."""
+# Frozen Fortran v3 PAS fixture (single species, no Er, scheme 5).
+INPUT_NAMELIST = REPO_ROOT / "tests" / "ref" / "pas_1species_PAS_noEr_tiny_scheme5.input.namelist"
+STATEVECTOR = REPO_ROOT / "tests" / "ref" / "pas_1species_PAS_noEr_tiny_scheme5.stateVector.petscbin"
+
+SEED = 0  # PRNG seed for the state-vector perturbation
+NOISE = 1e-3  # additive perturbation scale applied to x_ref
+FD_EPS = 1e-5  # centered finite-difference step for the gradient check
+
+
+def with_nu_n(op: KineticOperator, nu_n: jnp.ndarray) -> KineticOperator:
+    """Rebuild the PAS collision operator at a new ``nu_n`` (coef is linear in it)."""
+
     pas = op.pas
     scale = jnp.asarray(nu_n, dtype=jnp.float64) / pas.nu_n
     pas2 = replace(pas, nu_n=jnp.asarray(nu_n, dtype=jnp.float64), coef=pas.coef * scale)
     return replace(op, pas=pas2)
 
 
-def _default_input() -> Path:
-    return Path(__file__).parents[2] / "tests" / "ref" / "pas_1species_PAS_noEr_tiny_scheme5.input.namelist"
+# ----------------------------------------------------------------------------
+# 1) Build the operator and a perturbed state vector
+# ----------------------------------------------------------------------------
+print("=== examples/autodiff/autodiff_sensitivity_nu_n_scheme5.py ===")
+print(f"Step 1: building the operator from {INPUT_NAMELIST.name}")
+nml = read_sfincs_input(INPUT_NAMELIST)
+op = kinetic_operator_from_namelist(nml)
+if op.pas is None:
+    raise RuntimeError("This example expects collisionOperator=1 (PAS), but op.pas is None.")
+
+x_ref = jnp.asarray(read_petsc_vec(STATEVECTOR).values)
+rng = np.random.default_rng(SEED)
+x0 = x_ref + jnp.asarray(NOISE * rng.normal(size=(x_ref.size,)).astype(np.float64))
+nu0 = jnp.asarray(op.pas.nu_n, dtype=jnp.float64)
+rhs = op.rhs()
 
 
-def _default_statevector() -> Path:
-    return Path(__file__).parents[2] / "tests" / "ref" / "pas_1species_PAS_noEr_tiny_scheme5.stateVector.petscbin"
+def objective(nu_n: jnp.ndarray) -> jnp.ndarray:
+    op2 = with_nu_n(op, nu_n)
+    r = op2.apply(x0) - rhs
+    return 0.5 * jnp.vdot(r, r)
 
 
-def main() -> int:
-    p = argparse.ArgumentParser()
-    p.add_argument("--input", default=str(_default_input()))
-    p.add_argument("--statevector", default=str(_default_statevector()))
-    p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--noise", type=float, default=1e-3, help="additive perturbation scale applied to x_ref")
-    p.add_argument("--eps", type=float, default=1e-5, help="finite-difference step for a quick check")
-    args = p.parse_args()
+# ----------------------------------------------------------------------------
+# 2) Autodiff gradient vs centered finite difference
+# ----------------------------------------------------------------------------
+print("Step 2: comparing jax.grad against a centered finite difference")
+grad = jax.grad(objective)(nu0)
+fd = (float(objective(nu0 + FD_EPS)) - float(objective(nu0 - FD_EPS))) / (2.0 * FD_EPS)
+abs_err = abs(float(grad) - fd)
 
-    nml = read_sfincs_input(Path(args.input))
-    op = kinetic_operator_from_namelist(nml)
-    x_ref = jnp.asarray(read_petsc_vec(Path(args.statevector)).values)
-    rng = np.random.default_rng(int(args.seed))
-    noise = float(args.noise)
-    x0 = x_ref + jnp.asarray(noise * rng.normal(size=(x_ref.size,)).astype(np.float64))
-
-    if op.pas is None:
-        raise SystemExit("This example expects collisionOperator=1 (PAS), but op.pas is None.")
-
-    rhs = op.rhs()
-
-    def objective(nu_n: jnp.ndarray) -> jnp.ndarray:
-        op2 = _with_nu_n(op, nu_n)
-        r = op2.apply(x0) - rhs
-        return 0.5 * jnp.vdot(r, r)
-
-    nu0 = jnp.asarray(op.pas.nu_n, dtype=jnp.float64)
-    g = jax.grad(objective)(nu0)
-
-    eps = float(args.eps)
-    fd = (float(objective(nu0 + eps)) - float(objective(nu0 - eps))) / (2.0 * eps)
-
-    print(f"nu_n0 = {float(nu0):.6g}")
-    print(f"objective(nu_n0) = {float(objective(nu0)):.6e}")
-    print(f"d objective / d nu_n  (autodiff) = {float(g):.6e}")
-    print(f"d objective / d nu_n  (finite-diff) = {fd:.6e}")
-    print(f"abs_err = {abs(float(g) - fd):.3e}")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+# ----------------------------------------------------------------------------
+# 3) Results
+# ----------------------------------------------------------------------------
+print("=== Final results ===")
+print(f"  nu_n0                          = {float(nu0):.6g}")
+print(f"  objective(nu_n0)               = {float(objective(nu0)):.6e}")
+print(f"  d objective / d nu_n (autodiff)     = {float(grad):.6e}")
+print(f"  d objective / d nu_n (finite-diff)  = {fd:.6e}")
+print(f"  abs_err                        = {abs_err:.3e}")
+print("Done: examples/autodiff/autodiff_sensitivity_nu_n_scheme5.py")
