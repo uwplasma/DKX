@@ -25,8 +25,8 @@ try:
 except Exception as exc:  # pragma: no cover
     raise SystemExit("This example requires matplotlib. Install with: pip install matplotlib") from exc
 
-from sfincs_jax.api import write_output
-from sfincs_jax.namelist import read_sfincs_input
+from dkx.api import write_output
+from dkx.namelist import read_sfincs_input
 
 
 @dataclass(frozen=True)
@@ -108,7 +108,7 @@ def _setup_mpl() -> None:
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="generate_er_trajectory_sweep",
-        description="Generate a literature-anchored Er trajectory-model sweep scaffold for sfincs_jax.",
+        description="Generate a literature-anchored Er trajectory-model sweep scaffold for dkx.",
     )
     parser.add_argument("--input", type=Path, default=None, help="Base input.namelist. Overrides --preset.")
     parser.add_argument("--preset", choices=sorted(PRESETS), default="tokamak_like", help="Convenience preset for a base input.")
@@ -149,7 +149,7 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--stem",
-        default="sfincs_jax_er_trajectory_sweep",
+        default="dkx_er_trajectory_sweep",
         help="Output figure stem (without extension).",
     )
     parser.add_argument(

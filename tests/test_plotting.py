@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sfincs_jax.api import write_output
-from sfincs_jax.plotting import plot_sfincs_output_summary
+from dkx.api import write_output
+from dkx.plotting import plot_sfincs_output_summary
 
 
 def test_plot_sfincs_output_summary_writes_png(tmp_path: Path) -> None:

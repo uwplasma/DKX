@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
-from sfincs_jax.io import read_sfincs_h5
+from dkx.io import read_sfincs_h5
 
 
 def _quick_2species_output() -> dict[str, object]:

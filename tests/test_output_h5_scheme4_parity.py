@@ -4,9 +4,9 @@ from pathlib import Path
 
 import numpy as np
 
-from sfincs_jax.compare import compare_sfincs_outputs
-from sfincs_jax.api import write_output
-from sfincs_jax.io import read_sfincs_h5
+from dkx.compare import compare_sfincs_outputs
+from dkx.api import write_output
+from dkx.io import read_sfincs_h5
 
 
 def test_write_output_smoke(tmp_path: Path) -> None:

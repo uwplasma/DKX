@@ -1,6 +1,6 @@
 """Variational (entropy-production) bounds on the monoenergetic D11 coefficient.
 
-Physics gates for :mod:`sfincs_jax.variational`: the upper/lower functionals
+Physics gates for :mod:`dkx.variational`: the upper/lower functionals
 (Hirshman et al., Phys. Fluids 29, 2951 (1986); van Rij and Hirshman, Phys.
 Fluids B 1, 563 (1989)) must bracket the computed ``transportMatrix[0][0]``
 to solver-residual precision, the relative gap must shrink under grid
@@ -33,8 +33,8 @@ from pathlib import Path
 import h5py
 import pytest
 
-from sfincs_jax.run import run_transport_matrix
-from sfincs_jax.variational import monoenergetic_d11_bounds
+from dkx.run import run_transport_matrix
+from dkx.variational import monoenergetic_d11_bounds
 
 REF_DECK = Path(__file__).parent / "ref" / "monoenergetic_PAS_tiny_scheme1.input.namelist"
 

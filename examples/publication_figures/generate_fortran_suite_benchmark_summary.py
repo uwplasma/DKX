@@ -26,7 +26,7 @@ except Exception as exc:  # pragma: no cover
 
 import numpy as np
 
-from sfincs_jax.validation.artifacts import (
+from dkx.validation.artifacts import (
     SuiteCaseMetric,
     build_fortran_suite_benchmark_summary,
     filter_suite_metrics_by_fortran_runtime,
@@ -46,11 +46,11 @@ DEFAULT_GPU_REPORT = (
 )
 DEFAULT_ARTIFACT_DIR = _REPO_ROOT / "examples" / "publication_figures" / "artifacts"
 DEFAULT_OUT_DIR = _REPO_ROOT / "docs" / "_static" / "figures" / "paper"
-DEFAULT_STEM = "sfincs_jax_fortran_suite_benchmark_summary"
+DEFAULT_STEM = "dkx_fortran_suite_benchmark_summary"
 DEFAULT_MIN_FORTRAN_RUNTIME_S = 10.0
 PDF_METADATA = {
-    "Creator": "sfincs_jax",
-    "Producer": "sfincs_jax",
+    "Creator": "dkx",
+    "Producer": "dkx",
     "CreationDate": _dt.datetime(2026, 1, 1, tzinfo=_dt.UTC),
     "ModDate": _dt.datetime(2026, 1, 1, tzinfo=_dt.UTC),
 }
@@ -468,10 +468,10 @@ def _plot_grouped_bar_panel(
     height = 0.13
     series = (
         ("SFINCS Fortran v3", "#2f3437", 2.0),
-        ("sfincs_jax CPU cold", "#1f4f8a", 1.0),
-        ("sfincs_jax CPU warm", "#7fb3e8", 0.0),
-        ("sfincs_jax GPU cold", "#b45309", -1.0),
-        ("sfincs_jax GPU warm", "#f6ad55", -2.0),
+        ("dkx CPU cold", "#1f4f8a", 1.0),
+        ("dkx CPU warm", "#7fb3e8", 0.0),
+        ("dkx GPU cold", "#b45309", -1.0),
+        ("dkx GPU warm", "#f6ad55", -2.0),
     )
     values_by_label: dict[str, list[float]] = {label: [] for label, _, _ in series}
     for case in cases:
@@ -482,14 +482,14 @@ def _plot_grouped_bar_panel(
             values_by_label["SFINCS Fortran v3"].append(
                 _value_or_nan(reference_metric.fortran_runtime_s if reference_metric else None)
             )
-            values_by_label["sfincs_jax CPU cold"].append(
+            values_by_label["dkx CPU cold"].append(
                 _value_or_nan(cpu_metric.jax_runtime_s_cold if cpu_metric else None)
             )
-            values_by_label["sfincs_jax CPU warm"].append(_jax_warm_runtime_for_plot(cpu_metric))
-            values_by_label["sfincs_jax GPU cold"].append(
+            values_by_label["dkx CPU warm"].append(_jax_warm_runtime_for_plot(cpu_metric))
+            values_by_label["dkx GPU cold"].append(
                 _value_or_nan(gpu_metric.jax_runtime_s_cold if gpu_metric else None)
             )
-            values_by_label["sfincs_jax GPU warm"].append(_jax_warm_runtime_for_plot(gpu_metric))
+            values_by_label["dkx GPU warm"].append(_jax_warm_runtime_for_plot(gpu_metric))
         elif quantity == "memory":
             values_by_label["SFINCS Fortran v3"].append(
                 _value_or_nan(reference_metric.fortran_max_rss_mb if reference_metric else None)
@@ -497,16 +497,16 @@ def _plot_grouped_bar_panel(
             # JAX reports keep full process RSS for audit, but the public plot
             # uses profiler-derived active solver memory when it is available so
             # fixed Python/JAX/XLA runtime overhead does not dominate every bar.
-            values_by_label["sfincs_jax CPU cold"].append(
+            values_by_label["dkx CPU cold"].append(
                 _value_or_nan(cpu_metric.active_jax_memory_mb if cpu_metric else None)
             )
-            values_by_label["sfincs_jax CPU warm"].append(
+            values_by_label["dkx CPU warm"].append(
                 _value_or_nan(cpu_metric.active_jax_memory_mb if cpu_metric else None)
             )
-            values_by_label["sfincs_jax GPU cold"].append(
+            values_by_label["dkx GPU cold"].append(
                 _value_or_nan(gpu_metric.active_jax_memory_mb if gpu_metric else None)
             )
-            values_by_label["sfincs_jax GPU warm"].append(
+            values_by_label["dkx GPU warm"].append(
                 _value_or_nan(gpu_metric.active_jax_memory_mb if gpu_metric else None)
             )
         else:  # pragma: no cover - caller bug
@@ -626,7 +626,7 @@ def plot_benchmark_summary_from_payload(
     else:
         scope = f"reference-runtime rows; Fortran v3 >= {float(min_fortran_runtime_s):g} s"
     fig.suptitle(
-        f"SFINCS Fortran v3 vs sfincs_jax cold/warm CPU/GPU: {scope}",
+        f"SFINCS Fortran v3 vs dkx cold/warm CPU/GPU: {scope}",
         fontsize=13.0,
         y=0.998,
     )

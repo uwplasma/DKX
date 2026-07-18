@@ -1,4 +1,4 @@
-! Auto-generated small PAS collision example for sfincs_jax parity tests.
+! Auto-generated small PAS collision example for dkx parity tests.
 
 &general
   saveMatricesAndVectorsInBinary = .t.

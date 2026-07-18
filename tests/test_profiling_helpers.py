@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from sfincs_jax import profiling
+from dkx import profiling
 
 
 def test_make_emit_respects_quiet_verbosity_prefix_and_flush() -> None:
@@ -38,27 +38,27 @@ def test_timer_elapsed_uses_monotone_perf_counter(monkeypatch: pytest.MonkeyPatc
 def test_profile_env_flags_enable_profiler_and_device_sampling(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(profiling, "_rss_mb", lambda: 1.0)
     monkeypatch.setattr(profiling, "_peak_rss_mb", lambda: 2.0)
-    monkeypatch.delenv("SFINCS_JAX_PROFILE", raising=False)
-    monkeypatch.delenv("SFINCS_JAX_PROFILE_DEVICE_MEM", raising=False)
+    monkeypatch.delenv("DKX_PROFILE", raising=False)
+    monkeypatch.delenv("DKX_PROFILE_DEVICE_MEM", raising=False)
 
     assert profiling.maybe_profiler() is None
 
-    monkeypatch.setenv("SFINCS_JAX_PROFILE", "trace")
+    monkeypatch.setenv("DKX_PROFILE", "trace")
     profiler = profiling.maybe_profiler()
     assert profiler is not None
     assert profiler.sample_device_mem is False
 
-    monkeypatch.setenv("SFINCS_JAX_PROFILE", "full")
+    monkeypatch.setenv("DKX_PROFILE", "full")
     profiler = profiling.maybe_profiler()
     assert profiler is not None
     assert profiler.sample_device_mem is True
 
-    monkeypatch.setenv("SFINCS_JAX_PROFILE_DEVICE_MEM", "0")
+    monkeypatch.setenv("DKX_PROFILE_DEVICE_MEM", "0")
     profiler = profiling.maybe_profiler()
     assert profiler is not None
     assert profiler.sample_device_mem is False
 
-    monkeypatch.setenv("SFINCS_JAX_PROFILE_DEVICE_MEM", "yes")
+    monkeypatch.setenv("DKX_PROFILE_DEVICE_MEM", "yes")
     profiler = profiling.maybe_profiler()
     assert profiler is not None
     assert profiler.sample_device_mem is True

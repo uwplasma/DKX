@@ -1,6 +1,6 @@
 """Canonical ``export_f`` distribution-function output parity.
 
-The canonical writer (:mod:`sfincs_jax.writer`) now computes the ``full_f`` /
+The canonical writer (:mod:`dkx.writer`) now computes the ``full_f`` /
 ``delta_f`` distribution-function export on the ``export_f`` user grids from the
 solved state, so an ``export_full_f``/``export_delta_f`` deck no longer falls
 back to any non-canonical pipeline.
@@ -19,9 +19,9 @@ from pathlib import Path
 
 import numpy as np
 
-from sfincs_jax.api import write_output
-from sfincs_jax.io import read_sfincs_h5
-from sfincs_jax.run import run_profile
+from dkx.api import write_output
+from dkx.io import read_sfincs_h5
+from dkx.run import run_profile
 
 REF = Path(__file__).parent / "ref"
 
