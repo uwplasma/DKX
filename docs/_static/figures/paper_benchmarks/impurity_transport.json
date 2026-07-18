@@ -1,0 +1,156 @@
+{
+ "case": "classical_and_neoclassical_impurity_transport",
+ "equilibrium": "w7x_standardConfig.bc",
+ "rN_wish": 0.5,
+ "resolution": {
+  "Ntheta": 7,
+  "Nzeta": 13,
+  "Nxi": 8,
+  "Nx": 5,
+  "solverTolerance": 1e-08
+ },
+ "bulk": {
+  "Z": 1.0,
+  "mHat": 1.0,
+  "nHat": 0.6,
+  "THat": 1.0
+ },
+ "impurity": {
+  "Z": 6.0,
+  "mHat": 12.0,
+  "nHat": 0.006,
+  "THat": 1.0
+ },
+ "fortran_parity": {
+  "impurity_neoclassical_flux_dkx": 9.01290504237775e-11,
+  "impurity_neoclassical_flux_fortran": 9.012891342089195e-11,
+  "impurity_relative_agreement": 1.5200769691988857e-06,
+  "ion_neoclassical_flux_dkx": -8.827597310610814e-09,
+  "ion_neoclassical_flux_fortran": -8.82759883072599e-09,
+  "ion_relative_agreement": 1.7220030111598719e-07,
+  "solver_tolerance": 1e-06
+ },
+ "collisionality_scan": [
+  {
+   "nu_n": 0.0084774,
+   "impurity_neoclassical_flux": -1.2086808521195765e-11,
+   "ion_neoclassical_flux": -7.596082454713439e-09,
+   "impurity_classical_flux_dkx": 8.119027641284585e-11,
+   "impurity_classical_flux_module": 8.119027641284574e-11,
+   "impurity_classical_diffusion": 5.366196195120993e-09,
+   "impurity_strength": 0.36,
+   "geometry_factor": 0.10518294228583959,
+   "module_vs_dkx_rel_err": 1.4327118810235397e-15,
+   "converged": true,
+   "seconds": 10.103576250025071
+  },
+  {
+   "nu_n": 0.024,
+   "impurity_neoclassical_flux": 5.5194818472903474e-11,
+   "ion_neoclassical_flux": -1.7416585536689333e-08,
+   "impurity_classical_flux_dkx": 2.2985427535663063e-10,
+   "impurity_classical_flux_module": 2.298542753566303e-10,
+   "impurity_classical_diffusion": 1.5192005648300637e-08,
+   "impurity_strength": 0.36,
+   "geometry_factor": 0.10518294228583959,
+   "module_vs_dkx_rel_err": 1.4619790009486706e-15,
+   "converged": true,
+   "seconds": 9.736006334074773
+  },
+  {
+   "nu_n": 0.068,
+   "impurity_neoclassical_flux": 2.4882742472217646e-10,
+   "ion_neoclassical_flux": -3.339738830424481e-08,
+   "impurity_classical_flux_dkx": 6.512537801771201e-10,
+   "impurity_classical_flux_module": 6.512537801771192e-10,
+   "impurity_classical_diffusion": 4.304401600351847e-08,
+   "impurity_strength": 0.36,
+   "geometry_factor": 0.10518294228583959,
+   "module_vs_dkx_rel_err": 1.4289025529634066e-15,
+   "converged": true,
+   "seconds": 9.84356133302208
+  },
+  {
+   "nu_n": 0.16,
+   "impurity_neoclassical_flux": 6.658664309670331e-10,
+   "ion_neoclassical_flux": -4.4518403777638464e-08,
+   "impurity_classical_flux_dkx": 1.5323618357108708e-09,
+   "impurity_classical_flux_module": 1.5323618357108686e-09,
+   "impurity_classical_diffusion": 1.0128003765533758e-07,
+   "impurity_strength": 0.36,
+   "geometry_factor": 0.10518294228583959,
+   "module_vs_dkx_rel_err": 1.4844709855786502e-15,
+   "converged": true,
+   "seconds": 10.682708750013262
+  },
+  {
+   "nu_n": 0.3,
+   "impurity_neoclassical_flux": 1.4052110930301345e-09,
+   "ion_neoclassical_flux": -4.95606340858042e-08,
+   "impurity_classical_flux_dkx": 2.873178441957883e-09,
+   "impurity_classical_flux_module": 2.8731784419578785e-09,
+   "impurity_classical_diffusion": 1.8990007060375798e-07,
+   "impurity_strength": 0.36,
+   "geometry_factor": 0.10518294228583959,
+   "module_vs_dkx_rel_err": 1.5834357179505602e-15,
+   "converged": true,
+   "seconds": 23.582678749924526
+  }
+ ],
+ "classical_module_vs_dkx_max_rel_err": 1.5834357179505602e-15,
+ "charge_state_scan": {
+  "Z": [
+   2.0,
+   4.0,
+   6.0,
+   8.0,
+   10.0,
+   14.0,
+   18.0
+  ],
+  "nu_n": 0.0084774,
+  "impurity_nHat": 0.0001,
+  "classical_flux": [
+   4.99565678604194e-14,
+   -4.388237181213612e-13,
+   -9.700431583487955e-13,
+   -1.5140067764939814e-12,
+   -2.0634824736513973e-12,
+   -3.169891740961539e-12,
+   -4.28089044270529e-12
+  ],
+  "classical_diffusion": [
+   4.995656786041941e-09,
+   5.265884617456332e-09,
+   5.366196195120993e-09,
+   5.418550568504774e-09,
+   5.450708420965955e-09,
+   5.488170775396096e-09,
+   5.509319874090287e-09
+  ],
+  "screening_coefficient": [
+   0.20000000000000007,
+   0.3333333333333333,
+   0.38461538461538486,
+   0.4117647058823528,
+   0.4285714285714285,
+   0.4482758620689657,
+   0.4594594594594594
+  ]
+ },
+ "screening": {
+  "ion_density_peaking_coefficient": -6.0,
+  "screening_coefficient": 0.3846153846153848,
+  "screens": true,
+  "d_gamma_d_dTi_AD": -7.430117808629072e-11,
+  "d_gamma_d_dTi_FD": -7.430117809025475e-11,
+  "ad_fd_relative_deviation": 5.335084238515602e-11
+ },
+ "references": [
+  "S.I. Braginskii, Rev. Plasma Phys. 1, 205 (1965)",
+  "P.H. Rutherford, Phys. Fluids 17, 1782 (1974)",
+  "F.L. Hinton & R.D. Hazeltine, Rev. Mod. Phys. 48, 239 (1976)",
+  "K.-D. Wenzel & D.J. Sigmar, Nucl. Fusion 30, 1117 (1990)",
+  "P. Helander & D.J. Sigmar, Collisional Transport in Magnetized Plasmas, CUP (2002)"
+ ]
+}
