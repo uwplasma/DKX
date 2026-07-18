@@ -1,7 +1,7 @@
 Outputs (HDF5, NetCDF4, and NPZ)
 ================================
 
-`sfincs_jax` writes results to the format selected by the output filename:
+`dkx` writes results to the format selected by the output filename:
 
 - ``.h5`` / ``.hdf5``: Fortran-compatible HDF5, the parity and regression-test default.
 - ``.nc`` / ``.netcdf``: NetCDF4, useful for xarray, climate/space-physics tooling,
@@ -11,9 +11,9 @@ Outputs (HDF5, NetCDF4, and NPZ)
 
 The HDF5 layout is designed to remain compatible with the established SFINCS-style
 postprocessing ecosystem while also serving as the native public results format of
-`sfincs_jax`.
+`dkx`.
 
-Writing output with `sfincs_jax`
+Writing output with `dkx`
 --------------------------------
 
 CLI
@@ -21,13 +21,13 @@ CLI
 
 .. code-block:: bash
 
-   sfincs_jax write-output --input input.namelist --out sfincsOutput.h5
-   sfincs_jax write-output --input input.namelist --out sfincsOutput.nc
-   sfincs_jax write-output --input input.namelist --out sfincsOutput.npz
+   dkx write-output --input input.namelist --out sfincsOutput.h5
+   dkx write-output --input input.namelist --out sfincsOutput.nc
+   dkx write-output --input input.namelist --out sfincsOutput.npz
 
 .. code-block:: bash
 
-   sfincs_jax write-output \
+   dkx write-output \
      --input input.namelist \
      --out sfincsOutput.h5 \
      --wout-path /path/to/wout.nc
@@ -66,11 +66,11 @@ For a publication-style PDF diagnostics panel from an existing output file:
 
 .. code-block:: bash
 
-   sfincs_jax --plot sfincsOutput.h5
+   dkx --plot sfincsOutput.h5
 
 .. code-block:: bash
 
-   sfincs_jax plot-output --input-h5 sfincsOutput.h5 --out sfincsOutput_summary.pdf
+   dkx plot-output --input-h5 sfincsOutput.h5 --out sfincsOutput_summary.pdf
 
 Use ``--equilibrium-file`` for a generic Boozer or VMEC override, or ``--wout-path``
 as a compatibility alias for VMEC-centered workflows.
@@ -83,18 +83,18 @@ To time writer/readback overhead independently from JAX compile and solve cost:
 
 For transport-matrix runs (``RHSMode=2`` or ``RHSMode=3``), the Fortran code loops over
 multiple right-hand sides (``whichRHS``) and assembles a ``transportMatrix`` in the output.
-To replicate that end-to-end behavior in `sfincs_jax`, enable:
+To replicate that end-to-end behavior in `dkx`, enable:
 
 .. code-block:: bash
 
-   sfincs_jax write-output --input input.namelist --out sfincsOutput.h5 --compute-transport-matrix
+   dkx write-output --input input.namelist --out sfincsOutput.h5 --compute-transport-matrix
 
-In this mode, `sfincs_jax` also writes the RHSMode>1 diagnostics used by upstream scan plotting scripts:
+In this mode, `dkx` also writes the RHSMode>1 diagnostics used by upstream scan plotting scripts:
 ``FSABFlow``, ``particleFlux_vm_psiHat``, and ``heatFlux_vm_psiHat``.
 
 The default HDF5 output uses a Fortran-compatible array layout. This is useful both
 for existing postprocessing tools and for external validation with
-``sfincs_jax compare-h5``. NetCDF and NPZ use the same array layout policy so
+``dkx compare-h5``. NetCDF and NPZ use the same array layout policy so
 Python-level values match HDF5 readback.
 
 Python
@@ -103,7 +103,7 @@ Python
 .. code-block:: python
 
    from pathlib import Path
-   from sfincs_jax.api import write_output
+   from dkx.api import write_output
 
    write_output(Path("input.namelist"), Path("sfincsOutput.h5"))
 
@@ -124,16 +124,16 @@ Python
 
 .. code-block:: python
 
-   from sfincs_jax.io import read_sfincs_h5
+   from dkx.io import read_sfincs_h5
 
    out_path = write_output(Path("input.namelist"), Path("sfincsOutput.h5"))
    results = read_sfincs_h5(out_path)
    print(out_path)
    print(results["Ntheta"])
 
-When an equilibrium override is supplied, ``sfincs_jax`` updates the embedded
+When an equilibrium override is supplied, ``dkx`` updates the embedded
 ``input.namelist`` dataset/variable in the output file to match the effective run
-configuration. Use ``sfincs_jax.io.read_sfincs_output_file(...)`` to load HDF5,
+configuration. Use ``dkx.io.read_sfincs_output_file(...)`` to load HDF5,
 NetCDF, or NPZ outputs with the same dictionary interface.
 
 Output-variable reference
@@ -141,7 +141,7 @@ Output-variable reference
 
 The writer emits a **base** field set for every ``RHSMode`` plus a per-iteration
 set (``RHSMode=1`` profile diagnostics, or ``RHSMode=2/3`` transport columns).
-The moment producers are :func:`sfincs_jax.moments.rhsmode1_moments` and
+The moment producers are :func:`dkx.moments.rhsmode1_moments` and
 ``transport_moments_table``. In the shapes below, **S** = species, **T** =
 Ntheta, **Z** = Nzeta, **X** = Nx, **N** = number of RHS columns (1 for
 RHSMode 1). Base :math:`(\theta,\zeta)` geometry arrays are stored transposed and
@@ -264,7 +264,7 @@ Flux-flavor and radial-coordinate legend
 
 There is **no explicit** ``radialCurrent`` **dataset**: ambipolarity is the
 post-processing condition :math:`\sum_s Z_s\,\Gamma_s = 0` on the per-species
-``particleFlux_*`` outputs (:mod:`sfincs_jax.er`, :doc:`physics_reference`).
+``particleFlux_*`` outputs (:mod:`dkx.er`, :doc:`physics_reference`).
 
 Regression coverage
 -------------------
@@ -292,7 +292,7 @@ The CLI supports direct plotting from any existing ``sfincsOutput.h5``,
 
 .. code-block:: bash
 
-   sfincs_jax --plot sfincsOutput.h5
+   dkx --plot sfincsOutput.h5
 
 By default this writes ``<input>_summary.pdf`` next to the output file. Use
 ``plot-output --out`` to choose a different filename.
@@ -333,5 +333,5 @@ Fortran writes arrays in column-major order. When those HDF5 datasets are read b
 Python, multi-dimensional arrays often appear with axes reversed relative to the
 ``(itheta, izeta, ...)`` indexing used in the Fortran source.
 
-To make it easy to do *file-to-file* comparisons in Python, `sfincs_jax` writes arrays
-using the same convention by default (see `sfincs_jax.io.write_sfincs_h5`).
+To make it easy to do *file-to-file* comparisons in Python, `dkx` writes arrays
+using the same convention by default (see `dkx.io.write_sfincs_h5`).

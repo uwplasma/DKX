@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "Bounded public 3D FP/PAS sparse-host probe used to guard RHSMode=1 sparse-PC auto-selection. Runtimes are local cold subprocess measurements with SFINCS_JAX_PROFILE=1 and Fortran-reference output comparisons where available.",
+  "description": "Bounded public 3D FP/PAS sparse-host probe used to guard RHSMode=1 sparse-PC auto-selection. Runtimes are local cold subprocess measurements with DKX_PROFILE=1 and Fortran-reference output comparisons where available.",
   "fp_cases": {
     "HSX_FPCollisions_fullTrajectories": {
       "default": {

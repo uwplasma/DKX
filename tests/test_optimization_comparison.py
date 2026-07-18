@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from sfincs_jax.workflows.optimization import (
+from dkx.workflows.optimization import (
     PromotionComparisonTolerances,
     compare_cpu_gpu_promotions,
     compare_fortran_promotion,
@@ -22,7 +22,7 @@ def _promotion_payload(
     gate_status: str = "pass",
 ) -> dict[str, object]:
     return {
-        "workflow": "sfincs_jax_optimization_high_fidelity_promotion",
+        "workflow": "dkx_optimization_high_fidelity_promotion",
         "selected_root": {
             "er": er,
             "root_type": "electron",
@@ -92,12 +92,12 @@ def test_compare_cpu_gpu_promotions_reports_numeric_and_gate_failures() -> None:
 
 def test_compare_cpu_gpu_promotions_reports_missing_and_bad_payload_keys() -> None:
     cpu = {
-        "workflow": "sfincs_jax_optimization_high_fidelity_promotion",
+        "workflow": "dkx_optimization_high_fidelity_promotion",
         "bootstrap_objective": 2.5e-4,
         "flux_objective": {"total": 1.25e-3},
     }
     gpu = {
-        "workflow": "sfincs_jax_optimization_high_fidelity_promotion",
+        "workflow": "dkx_optimization_high_fidelity_promotion",
         "gate_status": "pass",
         "selected_root": {"er": "not-a-number"},
         "bootstrap_objective": float("inf"),
@@ -149,7 +149,7 @@ def test_compare_fortran_promotion_accepts_paths_and_flat_payload_keys(tmp_path:
     result = compare_fortran_promotion(jax_path, fortran_path, tolerances=tolerances)
 
     assert result["status"] == "pass"
-    assert result["reference_label"] == "sfincs_jax"
+    assert result["reference_label"] == "dkx"
     assert result["candidate_label"] == "fortran_v3"
     assert result["metrics"]["selected_root_er"]["candidate"] == 0.420001
 
@@ -173,9 +173,9 @@ def test_compare_optimization_promotions_includes_optional_fortran() -> None:
     )
 
     assert result["status"] == "pass"
-    assert set(result["comparisons"]) == {"cpu_gpu", "sfincs_jax_fortran_v3"}
+    assert set(result["comparisons"]) == {"cpu_gpu", "dkx_fortran_v3"}
     assert result["comparisons"]["cpu_gpu"]["status"] == "pass"
-    assert result["comparisons"]["sfincs_jax_fortran_v3"]["status"] == "pass"
+    assert result["comparisons"]["dkx_fortran_v3"]["status"] == "pass"
 
 
 def test_compare_cpu_gpu_promotions_can_skip_missing_flux_objective() -> None:

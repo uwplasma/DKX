@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       JAX_ENABLE_X64: "True"
-      SFINCS_JAX_CI: "1"
+      DKX_CI: "1"
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -63,7 +63,7 @@ jobs:
           assert not any("ntx" in str(case["case"]).lower() for case in cases)
           assert not any("ntx" in str(case["source_input"]).lower() for case in cases)
           assert all(case["size_estimate"]["run_recommendation"] for case in cases)
-          print(f"validated {len(cases)} production-resolution SFINCS_JAX inputs")
+          print(f"validated {len(cases)} production-resolution DKX inputs")
           PY
       - name: Upload generated inputs
         if: ${{ inputs.upload_artifact == 'true' }}

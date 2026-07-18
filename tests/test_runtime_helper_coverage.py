@@ -3,8 +3,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-import sfincs_jax
-from sfincs_jax.compare import _as_numpy, _center_fsa, _merge_tolerance_floor
+import dkx
+from dkx.compare import _as_numpy, _center_fsa, _merge_tolerance_floor
 
 
 def test_initialize_distributed_runtime_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -16,23 +16,23 @@ def test_initialize_distributed_runtime_from_env(monkeypatch: pytest.MonkeyPatch
         calls.append(kwargs)
 
     monkeypatch.setattr(jax_distributed, "initialize", _fake_initialize)
-    monkeypatch.setattr(sfincs_jax, "_distributed_runtime_initialized", False)
+    monkeypatch.setattr(dkx, "_distributed_runtime_initialized", False)
 
-    monkeypatch.delenv("SFINCS_JAX_DISTRIBUTED", raising=False)
-    assert sfincs_jax.initialize_distributed_runtime_from_env() is False
+    monkeypatch.delenv("DKX_DISTRIBUTED", raising=False)
+    assert dkx.initialize_distributed_runtime_from_env() is False
 
-    monkeypatch.setenv("SFINCS_JAX_DISTRIBUTED", "1")
-    monkeypatch.delenv("SFINCS_JAX_COORDINATOR_ADDRESS", raising=False)
-    monkeypatch.setattr(sfincs_jax, "_distributed_runtime_initialized", False)
-    assert sfincs_jax.initialize_distributed_runtime_from_env() is False
+    monkeypatch.setenv("DKX_DISTRIBUTED", "1")
+    monkeypatch.delenv("DKX_COORDINATOR_ADDRESS", raising=False)
+    monkeypatch.setattr(dkx, "_distributed_runtime_initialized", False)
+    assert dkx.initialize_distributed_runtime_from_env() is False
 
-    monkeypatch.setenv("SFINCS_JAX_COORDINATOR_ADDRESS", "127.0.0.1")
-    monkeypatch.setenv("SFINCS_JAX_COORDINATOR_PORT", "2345")
-    monkeypatch.setenv("SFINCS_JAX_PROCESS_COUNT", "2")
-    monkeypatch.setenv("SFINCS_JAX_PROCESS_ID", "1")
-    monkeypatch.setattr(sfincs_jax, "_distributed_runtime_initialized", False)
-    assert sfincs_jax.initialize_distributed_runtime_from_env() is True
-    assert sfincs_jax.initialize_distributed_runtime_from_env() is True
+    monkeypatch.setenv("DKX_COORDINATOR_ADDRESS", "127.0.0.1")
+    monkeypatch.setenv("DKX_COORDINATOR_PORT", "2345")
+    monkeypatch.setenv("DKX_PROCESS_COUNT", "2")
+    monkeypatch.setenv("DKX_PROCESS_ID", "1")
+    monkeypatch.setattr(dkx, "_distributed_runtime_initialized", False)
+    assert dkx.initialize_distributed_runtime_from_env() is True
+    assert dkx.initialize_distributed_runtime_from_env() is True
     assert len(calls) == 1
     assert calls[0] == {
         "coordinator_address": "127.0.0.1",

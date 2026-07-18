@@ -8,19 +8,19 @@ Unreleased
   architecture refactor: input, physics, discretization, operators, problems,
   solvers/preconditioners, parallel, workflows, validation, benchmarks, and
   compatibility. Import-contract tests verify that the new packages are
-  importable while ``sfincs_jax.geometry`` now owns analytic Boozer, Boozer-file,
+  importable while ``dkx.geometry`` now owns analytic Boozer, Boozer-file,
   VMEC, and JAX-native geometry adapters as a package. The ``io.py`` module path
   remains a compatibility facade until its later migration. The post-skeleton
   local full suite passed with ``2662 passed in 549.92 s``.
-- Added ``sfincs_jax/api.py`` with frozen public dataclass contracts for
+- Added ``dkx/api.py`` with frozen public dataclass contracts for
   normalized solve inputs, geometry/grid/operator summaries, preconditioner and
   solver metadata, transport summaries, output schemas, and benchmark reports.
   These contracts are JAX-free orchestration boundaries; solver-specific pytrees
   remain in numerical modules. The post-contract local full suite passed with
   ``2667 passed in 565.10 s``.
-- Extended ``sfincs_jax.api`` with lazy public facades for Python workflows:
+- Extended ``dkx.api`` with lazy public facades for Python workflows:
   ``write_output``, ``read_output``, and ``run_ambipolar_brent``. These names are
-  re-exported from ``sfincs_jax`` and are covered by fast monkeypatched routing
+  re-exported from ``dkx`` and are covered by fast monkeypatched routing
   tests so refactoring can move internal modules without changing public user
   code.
 - Added explicit fixed-shape setup-reuse admission metadata to the in-process
@@ -29,7 +29,7 @@ Unreleased
   current same-shape solve, the fixed-shape signature used for the decision, and
   a cumulative reuse count.
 - Added a matrix-free implicit linear-observable derivative contract in
-  ``sfincs_jax.sensitivity`` plus ambipolar radial-current adapters. Production
+  ``dkx.sensitivity`` plus ambipolar radial-current adapters. Production
   problem owners can now provide operator actions, transpose actions,
   parameter-derivative actions, and selected solve/transpose-solve closures
   without assembling dense matrices, while tests compare the matrix-free
@@ -86,7 +86,7 @@ Unreleased
   active ``particleFlux_vm_rN`` response and replay the Fortran v3 roots within
   the documented current and electric-field tolerances.
 - Added Fortran-v3 RHSMode=4/5 adjoint-sensitivity source contracts to
-  ``sfincs_jax.sensitivity``. The new helpers validate the Fortran-compatible
+  ``dkx.sensitivity``. The new helpers validate the Fortran-compatible
   adjoint namelist restrictions and return the sensitivity HDF5 fields written
   by ``writeHDF5Output.F90``, including the documented source-code gate for
   ``dParallelFlowdLambda``.
@@ -116,90 +116,90 @@ Unreleased
   bootstrap current, total heat flux, radial current, constant-current
   ``dPhidPsidLambda``, and debug finite-difference percent-error outputs.
 - Moved the first RHSMode=2/3 transport implementation cluster into
-  ``sfincs_jax.problems.transport_matrix``: setup, active/dense setup, loop
+  ``dkx.problems.transport_matrix``: setup, active/dense setup, loop
   support, finalization, streaming outputs, and postsolve diagnostics. The old
   top-level module paths now alias the new modules so existing imports and
   monkeypatch-based debug tests keep working. The post-move local full suite
   passed with ``2668 passed in 562.12 s``.
 - Moved the RHSMode=2/3 transport policy and solver-support cluster into
-  ``sfincs_jax.problems.transport_matrix``: backend/sparse/recycle policies,
+  ``dkx.problems.transport_matrix``: backend/sparse/recycle policies,
   solve policy, residual-quality gates, handoff policy, host-GMRES rescue,
   KSP iteration diagnostics, and linear-solve dispatch. The old top-level module
   paths remain aliases to preserve existing imports and monkeypatch seams. The
   post-move local full suite passed with ``2668 passed in 556.85 s``.
 - Moved the RHSMode=2/3 dense/active/sparse solve-support cluster into
-  ``sfincs_jax.problems.transport_matrix``: cached dense LU, batched all-RHS
+  ``dkx.problems.transport_matrix``: cached dense LU, batched all-RHS
   dense solves, active block-Schur/coarse factors, and sparse-direct rescue.
   The old top-level module paths remain aliases, so existing user scripts,
   tests, and debug monkeypatches keep working while the maintained source map
   uses the domain package. The post-move local full suite passed with
   ``2668 passed in 556.60 s``.
 - Moved the transport parallelism cluster into
-  ``sfincs_jax.problems.transport_matrix.parallel``: worker payloads, process/GPU
+  ``dkx.problems.transport_matrix.parallel``: worker payloads, process/GPU
   execution, runtime merge/partition helpers, persistent-pool management,
   scaling/sharding policy, validation, and the subprocess worker entry point.
   The maintained worker entry point is
-  ``python -m sfincs_jax.problems.transport_parallel_runtime`` for GPU
-  worker subprocesses; top-level ``sfincs_jax.transport_parallel_*`` aliases
+  ``python -m dkx.problems.transport_parallel_runtime`` for GPU
+  worker subprocesses; top-level ``dkx.transport_parallel_*`` aliases
   were removed in the consolidation pass. Focused parallel/import tests passed with
   ``139 passed``, a broader transport/CLI slice passed with ``169 passed``, and
   the post-move local full suite passed with ``2668 passed in 552.24 s``.
 - Moved the RHSMode=2/3 transport preconditioner/direct-operator cluster into
-  ``sfincs_jax.problems.transport_matrix``: preconditioner-kind dispatch,
+  ``dkx.problems.transport_matrix``: preconditioner-kind dispatch,
   direct reduced ``Pmat`` emission, direct active block-Schur setup, and
   Fortran-reduced sparse-factor preconditioning. Maintained imports now use the
-  ``sfincs_jax.problems.transport_matrix`` package directly; top-level
-  ``sfincs_jax.transport_*`` aliases were removed in the consolidation pass.
+  ``dkx.problems.transport_matrix`` package directly; top-level
+  ``dkx.transport_*`` aliases were removed in the consolidation pass.
   Focused preconditioner/direct tests passed with ``117 passed`` and a broader
   transport/preconditioner slice passed with ``148 passed``. The post-move
   local full suite passed with
   ``2668 passed in 554.82 s``.
 - Moved the RHSMode=1/2/3 transport diagnostics and transport-matrix assembly
-  implementation into ``sfincs_jax.problems.transport_diagnostics``.
+  implementation into ``dkx.problems.transport_diagnostics``.
   Existing notebooks and scripts should import this maintained domain module
   directly.
 - Moved RHSMode=1 host sparse ILU/LU matvec assembly, CSR factorization, cached
   dense/JAX triangular-factor materialization, and the full-system
   matrix-free adapter into
-  ``sfincs_jax.solvers.preconditioner_host_sparse``. The
+  ``dkx.solvers.preconditioner_host_sparse``. The
   historical ``v3_driver`` private helper names remain compatibility aliases,
   while the non-differentiable host-factor path now lives in the solver-domain
   package.
 - Moved RHSMode=1 profile-response support utilities into flat
-  ``sfincs_jax.problems.profile_*`` modules: residual gates, active-DOF
+  ``dkx.problems.profile_*`` modules: residual gates, active-DOF
   decisions, active full/reduced projection, accepted-solve handoff, and solver
   diagnostics. Maintained imports use the canonical flat modules directly; the
-  top-level ``sfincs_jax.rhs1_*`` aliases for these utilities were removed in
+  top-level ``dkx.rhs1_*`` aliases for these utilities were removed in
   the consolidation pass.
 - Consolidated RHSMode=1 profile-response solve-routing and strong
   preconditioner controls into
-  ``sfincs_jax.problems.profile_policies`` and
-  ``sfincs_jax.problems.profile_preconditioner_build``. The old
-  top-level ``sfincs_jax.rhs1_*`` policy aliases were removed in the
+  ``dkx.problems.profile_policies`` and
+  ``dkx.problems.profile_preconditioner_build``. The old
+  top-level ``dkx.rhs1_*`` policy aliases were removed in the
   consolidation pass; the maintained source map, API docs, and driver imports
   now use the domain package. Focused policy/import/driver validation passed with ``282`` tests
   and the post-consolidation local full suite passed with
   ``2670 passed in 579.02 s``.
 - Moved the remaining small RHSMode=1 x-block/QI control helpers into
-  ``sfincs_jax.problems.profile_policies``: guarded PAS-TZ structured
+  ``dkx.problems.profile_policies``: guarded PAS-TZ structured
   levels, QI device extra-coarse controls, QI minres-step probe selection, and
   safe x-block fallback initial-guess admission. ``v3_driver.py`` keeps the old
   private names as imported aliases, and focused policy/driver validation
   passed with ``285`` tests. The post-move local full suite passed with
   ``2678 passed in 555.29 s``.
 - Moved the constraintScheme=1 x-block moment-Schur wrapper into
-  ``sfincs_jax.operators.profile_system`` and the bounded host/device subspace
+  ``dkx.operators.profile_system`` and the bounded host/device subspace
   residual-equation corrections into
-  ``sfincs_jax.problems.profile_residual``. The driver now imports
+  ``dkx.problems.profile_residual``. The driver now imports
   the historical private names as aliases, while direct algebraic tests cover
   the canonical helper modules.
 - Moved the physics-aware x-block post-coarse direction builder into
-  ``sfincs_jax.problems.profile_residual`` next to the correction
+  ``dkx.problems.profile_residual`` next to the correction
   kernels that consume it. The driver keeps the historical private alias, and
   the sparse-pattern tests now validate the canonical helper path directly.
 - Moved residual-correction preconditioner composition, the safe
   non-finite/clipped preconditioner wrapper, and scalar preconditioned-minres
-  polish into ``sfincs_jax.problems.profile_residual``. The driver
+  polish into ``dkx.problems.profile_residual``. The driver
   retains the historical private aliases while direct tests exercise the
   canonical helpers.
 - Moved the operator-derived x-block QI coarse-basis and block-metadata helpers
@@ -273,13 +273,13 @@ Unreleased
   Phi1 participation, PAS/FP signatures, and dtype partitioning. The
   post-extraction local full suite passed with ``2556 passed in 543.16 s``.
 - Extracted the backend-safe tiny regularized least-squares kernel; it now
-  lives in ``sfincs_jax.solvers.krylov`` with the recycled Krylov initial-guess helper. The
+  lives in ``dkx.solvers.krylov`` with the recycled Krylov initial-guess helper. The
   driver keeps the historical private alias, while direct tests now cover
   dense-reference agreement, near-rank-deficient systems, empty coarse bases,
   and finite autodiff through the helper. The
   post-extraction local full suite passed with ``2558 passed in 542.63 s``.
 - Moved host sparse-direct GMRES polish next to the explicit host-sparse solver
-  owner; it now lives in ``sfincs_jax.solvers.explicit_sparse`` with the
+  owner; it now lives in ``dkx.solvers.explicit_sparse`` with the
   existing host direct-refinement kernels. Direct tests cover the polish helper
   with an injected solver and sparse-factor preconditioner. The post-extraction
   local full suite passed with ``2559 passed in 543.75 s``.
@@ -397,22 +397,22 @@ Unreleased
 - Consolidated RHSMode=2/3 active-system, direct reduced-``Pmat``, exact active
   transport-operator sparse emission, direct block-Schur setup, and full-FP
   Fortran-reduced LU preconditioner code into
-  ``sfincs_jax.problems.transport_linear_system``. Focused tests verify
+  ``dkx.problems.transport_linear_system``. Focused tests verify
   the emitted CSR matrices against the matrix-free active operator, physics
   coarse-basis source/constraint columns, direct block-Schur callback path, and
   Fortran-reduced LU symbolic/ND metadata.
 - Moved the RHSMode=1 full-FP sparse x-block/TZ preconditioner into
-  ``sfincs_jax.solvers.preconditioner_xblock_tz_sparse``. The module owns
+  ``dkx.solvers.preconditioner_xblock_tz_sparse``. The module owns
   host/JAX x-block factor setup, compact CSR and padded triangular apply,
   skipped-block diagonal fallback, and extra-variable Schur handling; the old
-  top-level ``sfincs_jax.rhs1_xblock_tz_sparse`` alias was removed in the
+  top-level ``dkx.rhs1_xblock_tz_sparse`` alias was removed in the
   consolidation pass.
 - Moved the PAS-only RHSMode=1 sparse x-block ILU/LU preconditioner into
-  ``sfincs_jax.solvers.preconditioner_pas_xblock_ilu``. The module owns the
+  ``dkx.solvers.preconditioner_pas_xblock_ilu``. The module owns the
   per-``(species,x)`` Legendre/theta/zeta block assembly, PETSc-style
   ILU/exact-LU setup policy, padded triangular-factor apply, threaded factor
   build, cache storage, and extra-variable Schur solve; the old
-  top-level ``sfincs_jax.rhs1_pas_xblock_ilu`` alias was removed in the
+  top-level ``dkx.rhs1_pas_xblock_ilu`` alias was removed in the
   consolidation pass.
 - Consolidated RHSMode=2/3 post-solve diagnostic assembly into
   ``problems.transport_matrix.finalize``. The owner now covers streamed versus
@@ -452,7 +452,7 @@ Unreleased
   recording, and KSP iteration-stat dispatch, with direct unit coverage for dense
   fallback accepted-state overrides.
 - Extracted the constraintScheme=1 nullspace/source-row projection; it now
-  lives in ``sfincs_jax.solvers.preconditioning`` so RHSMode=1 and RHSMode=2/3
+  lives in ``dkx.solvers.preconditioning`` so RHSMode=1 and RHSMode=2/3
   solve paths share the same owner. Direct tests cover no-op admission,
   environment disablement, transport roundoff skip behavior, and source-row
   residual reduction.
@@ -508,7 +508,7 @@ Highlights
   preconditioner into ``auto`` for eligible non-Phi1 transport-matrix runs.
   ``auto`` now tries this PETSc-like route by default with strict residual
   admission and memory caps; set
-  ``SFINCS_JAX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO=0`` to disable it for a
+  ``DKX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO=0`` to disable it for a
   benchmark campaign. Lower-memory symbolic/native replacements remain gated
   until production-floor CPU/GPU evidence passes.
 - Fixed a multi-device RHSMode=1 transformed-matvec bug found by the next QI
@@ -639,7 +639,7 @@ Highlights
 ~~~~~~~~~~
 
 - Added a standalone JAX-compatible RHSMode=1 QI block-Schur/angular/radial
-  coarse-preconditioner primitive in ``sfincs_jax/rhs1_qi_block_schur.py``.
+  coarse-preconditioner primitive in ``dkx/rhs1_qi_block_schur.py``.
   The primitive builds deterministic block, radial, angular, and Schur-like
   basis directions; applies a local-plus-coarse action; and exposes a
   fail-closed true-residual probe with rank and conditioning metadata. It is
@@ -650,7 +650,7 @@ Highlights
   bounded chunks from configured byte budgets, and tight budgets fail before
   launching a matvec or correction.
 - Added release-safe single-case sharded-solve planning metadata in
-  ``sfincs_jax/problems/transport_parallel_runtime.py``. The helper caps
+  ``dkx/problems/transport_parallel_runtime.py``. The helper caps
   requested devices to available work, records per-device balance diagnostics,
   and fail-closes release scaling claims for experimental single-case sharding.
 - Refreshed QI evidence metadata to include the scale-0.60 smoothed-load and
@@ -669,7 +669,7 @@ Validation
 - Package build and distribution metadata checks passed with ``python -m build``
   and ``twine check dist/*``.
 - The package version is ``1.1.4`` in both ``pyproject.toml`` and
-  ``sfincs_jax.__version__`` so the PyPI workflow can validate the matching
+  ``dkx.__version__`` so the PyPI workflow can validate the matching
   ``v1.1.4`` tag.
 
 Remaining research lanes
@@ -695,10 +695,10 @@ Highlights
   deferred or experimental research lanes.
 
 - Added an explicit ``pas_tzfft`` / ``pas_fft`` RHSMode=1 PAS preconditioner
-  candidate and a guarded ``SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK=tzfft``
+  candidate and a guarded ``DKX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK=tzfft``
   route for memory-unsafe PAS-TZ experiments.
 - Guarded PAS-TZ fallbacks now skip stage-2 GMRES by default unless
-  ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1`` is set. This keeps
+  ``DKX_RHSMODE1_PAS_TZ_GUARDED_STAGE2_RETRY=1`` is set. This keeps
   experimental memory fallback probes bounded when a candidate lowers the
   residual enough to avoid the generic high-ratio stage-2 skip but still misses
   the strict solve target.
@@ -707,7 +707,7 @@ Highlights
   (``~6.4e5``) to ``~1.9e-4`` in about ``3.3 s`` on the checked local smoke,
   but remains opt-in because it increases RSS and still misses the strict
   residual target.
-- Added ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_CORRECTION=tzfft`` as an opt-in
+- Added ``DKX_RHSMODE1_PAS_TZ_GUARDED_CORRECTION=tzfft`` as an opt-in
   cheap-base plus matrix-free streaming-correction probe. It is bounded and
   modestly improves the cheap collision fallback, but the checked geometry4
   smoke does not meet the promotion gate.
@@ -730,7 +730,7 @@ Validation
 - Sphinx documentation builds with warnings as errors after this release-note and
   scope refresh.
 - Focused version metadata validation requires ``pyproject.toml`` and
-  ``sfincs_jax.__version__`` to agree on ``1.1.3``.
+  ``dkx.__version__`` to agree on ``1.1.3``.
 
 Remaining research lanes
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -752,9 +752,9 @@ Highlights
 - Memory-unsafe PAS-TZ fallback routes are now bounded uniformly. The default
   route is the cheap collision fallback when available; the historical
   ``hybrid`` fallback remains available for A/B profiling with
-  ``SFINCS_JAX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK=hybrid``. All guarded fallback
+  ``DKX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK=hybrid``. All guarded fallback
   routes skip the expensive automatic strong-preconditioner retry unless
-  ``SFINCS_JAX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1`` is set.
+  ``DKX_RHSMODE1_PAS_TZ_GUARDED_STRONG_RETRY=1`` is set.
 - Guarded PAS-TZ and weak PAS forced/probe paths use accept-only matrix-free
   minimal-residual corrections before fail-fast classification. These
   corrections reuse the already-built preconditioner, store no dense angular
@@ -766,7 +766,7 @@ Highlights
 - Release metadata, production-benchmark workflow checks, and public
   runtime/validation figures were refreshed for the current ``main`` artifacts.
 - The PyPI workflow now validates that ``pyproject.toml``,
-  ``sfincs_jax.__version__``, and pushed release tags agree before publishing.
+  ``dkx.__version__``, and pushed release tags agree before publishing.
 
 Validation
 ~~~~~~~~~~
@@ -858,7 +858,7 @@ Highlights
   solve instead of only output-field assembly, and small bounded GPU cases can use
   dense accelerator transport when it is validated to be faster.
 - The CLI and Python output paths support HDF5, NetCDF4, and NPZ by output suffix,
-  and ``sfincs_jax --plot`` writes a PDF diagnostics panel from existing output
+  and ``dkx --plot`` writes a PDF diagnostics panel from existing output
   files.
 - Documentation covers the drift-kinetic equation being solved, geometry loading,
   normalizations, solver paths, output datasets, validation gates, performance

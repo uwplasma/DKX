@@ -107,8 +107,8 @@ Current scope limits
   The reduced-suite artifacts remain useful for debugging, fixture history, and faster local
   triage, but they are no longer the primary release status.
 - The unconstrained ``constraintScheme=0`` branch is rank-deficient, so different solvers can select different nullspace
-  components. For comparisons, sfincs_jax treats a small set of density/pressure-like outputs as gauge-dependent and
-  skips them when ``constraintScheme=0`` (see ``sfincs_jax/compare.py``).
+  components. For comparisons, dkx treats a small set of density/pressure-like outputs as gauge-dependent and
+  skips them when ``constraintScheme=0`` (see ``dkx/compare.py``).
 - Constrained PAS systems can also be branch-sensitive in current/flow
   diagnostics if a reference stops on a preconditioned residual while the true
   residual is still large.  These rows are treated as reference-quality blockers,
@@ -126,22 +126,22 @@ Current scope limits
 - VMEC geometryScheme=5 full Fokker–Planck fixtures exhibit small (~1e-6 absolute) differences in local flow/Mach
   diagnostics at isolated grid points. These deltas are well below the physics tolerance but can trip strict relative
   checks when the true value is near zero, so we apply a dedicated absolute-floor override for the VMEC FP subset in
-  ``sfincs_jax/compare.py``. The release-facing CPU and GPU example-suite audits remain strict-clean.
+  ``dkx/compare.py``. The release-facing CPU and GPU example-suite audits remain strict-clean.
 
 Near-zero tolerances
 --------------------
 
 Some diagnostics are expected to be very close to zero in specific regimes, so strict relative
-tolerances can overstate differences. ``sfincs_jax.compare.compare_sfincs_outputs`` applies small
+tolerances can overstate differences. ``dkx.compare.compare_sfincs_outputs`` applies small
 absolute floors for near-zero fields in these cases (e.g., RHSMode=1 constraintScheme=1/2 flow,
 pressure, and ``delta_f`` diagnostics; monoenergetic density/pressure moments; and RHSMode=2/3
 ``sources`` terms).
-These built-in floors are documented in ``sfincs_jax/compare.py`` and are always active in
+These built-in floors are documented in ``dkx/compare.py`` and are always active in
 practical parity checks; strict mode ignores per-case JSON overrides but still respects these
 near-zero safeguards.
 
 For ``includePhi1 = .true.`` runs, parity compares the converged (last) Newton iterate when
-datasets include an iteration axis, even if Fortran and sfincs_jax record different
+datasets include an iteration axis, even if Fortran and dkx record different
 ``NIterations`` metadata. This keeps parity focused on the final physical state instead of
 intermediate Newton-history bookkeeping.
 
@@ -186,13 +186,13 @@ generator against a local Fortran build:
 
 Day-to-day Fortran/JAX parity is enforced by the pytest golden gates: frozen
 ``tests/ref`` fixtures plus the release-hosted reference data fetched by
-``python -m sfincs_jax.validation.data_fetch``.
+``python -m dkx.validation.data_fetch``.
 
 After a suite refresh, verify the structural output coverage explicitly:
 
 .. code-block:: bash
 
-   python -m sfincs_jax.validation.release audit-output-keys \
+   python -m dkx.validation.release audit-output-keys \
      --suite-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak \
      --fail-on-missing
 
@@ -201,7 +201,7 @@ runtime against that promoted reference lane:
 
 .. code-block:: bash
 
-   python -m sfincs_jax.validation.release audit-runtime-drift \
+   python -m dkx.validation.release audit-runtime-drift \
      --baseline-report /path/to/frozen_cpu_baseline/suite_report.json \
      --candidate-report tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak/suite_report.json \
      --threshold-ratio 1.25 \
@@ -214,11 +214,11 @@ Fortran output:
 
 .. code-block:: bash
 
-   python -m sfincs_jax write-output \
+   python -m dkx write-output \
      --input tests/reduced_inputs/HSX_FPCollisions_DKESTrajectories.input.namelist \
      --out /tmp/sfincsOutput_jax.h5
 
-   python -m sfincs_jax compare-h5 \
+   python -m dkx compare-h5 \
      --a /tmp/sfincsOutput_jax.h5 --b /path/to/fortran/sfincsOutput.h5 \
      --tolerances-json tests/reduced_inputs/HSX_FPCollisions_DKESTrajectories.compare_tolerances.json
 

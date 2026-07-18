@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sfincs_jax.namelist import parse_sfincs_input_text, read_sfincs_input
+from dkx.namelist import parse_sfincs_input_text, read_sfincs_input
 
 
 def test_parse_input_namelist_quick_example() -> None:

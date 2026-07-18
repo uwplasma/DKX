@@ -8,8 +8,8 @@ from types import SimpleNamespace
 import jax.distributed as jax_distributed
 import pytest
 
-import sfincs_jax
-from sfincs_jax.api import (
+import dkx
+from dkx.api import (
     BenchmarkReport,
     GeometryState,
     GridState,
@@ -102,19 +102,19 @@ def test_result_schema_and_benchmark_contracts_are_immutable_summaries() -> None
 
 
 def test_contracts_are_reexported_from_top_level_package() -> None:
-    assert sfincs_jax.SolveInputs is SolveInputs
-    assert sfincs_jax.TransportResult is TransportResult
-    assert sfincs_jax.write_output is write_output
-    assert sfincs_jax.read_output is read_output
-    assert sfincs_jax.run_ambipolar_brent is run_ambipolar_brent
-    assert "SolveInputs" in sfincs_jax.__all__
-    assert "TransportResult" in sfincs_jax.__all__
-    assert "write_output" in sfincs_jax.__all__
-    assert "read_output" in sfincs_jax.__all__
-    assert "run_ambipolar_brent" in sfincs_jax.__all__
-    assert "initialize_distributed_runtime_from_env" in sfincs_jax.__all__
-    assert isinstance(sfincs_jax.__version__, str)
-    assert sfincs_jax.__version__
+    assert dkx.SolveInputs is SolveInputs
+    assert dkx.TransportResult is TransportResult
+    assert dkx.write_output is write_output
+    assert dkx.read_output is read_output
+    assert dkx.run_ambipolar_brent is run_ambipolar_brent
+    assert "SolveInputs" in dkx.__all__
+    assert "TransportResult" in dkx.__all__
+    assert "write_output" in dkx.__all__
+    assert "read_output" in dkx.__all__
+    assert "run_ambipolar_brent" in dkx.__all__
+    assert "initialize_distributed_runtime_from_env" in dkx.__all__
+    assert isinstance(dkx.__version__, str)
+    assert dkx.__version__
 
 
 def test_import_env_controls_cpu_devices_and_compilation_cache(
@@ -122,55 +122,55 @@ def test_import_env_controls_cpu_devices_and_compilation_cache(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     cache_dir = tmp_path / "jax-cache"
-    monkeypatch.setenv("SFINCS_JAX_CORES", "2")
-    monkeypatch.setenv("SFINCS_JAX_XLA_THREADS", "yes")
-    monkeypatch.delenv("SFINCS_JAX_SHARD", raising=False)
-    monkeypatch.delenv("SFINCS_JAX_CPU_DEVICES", raising=False)
-    monkeypatch.setenv("SFINCS_JAX_COMPILATION_CACHE_DIR", str(cache_dir))
+    monkeypatch.setenv("DKX_CORES", "2")
+    monkeypatch.setenv("DKX_XLA_THREADS", "yes")
+    monkeypatch.delenv("DKX_SHARD", raising=False)
+    monkeypatch.delenv("DKX_CPU_DEVICES", raising=False)
+    monkeypatch.setenv("DKX_COMPILATION_CACHE_DIR", str(cache_dir))
     monkeypatch.delenv("JAX_COMPILATION_CACHE_DIR", raising=False)
     monkeypatch.setenv("XLA_FLAGS", "")
 
-    reloaded = importlib.reload(sfincs_jax)
+    reloaded = importlib.reload(dkx)
 
-    assert reloaded is sfincs_jax
-    assert sfincs_jax.os.environ["SFINCS_JAX_CPU_DEVICES"] == "2"
-    assert sfincs_jax.os.environ["SFINCS_JAX_MATVEC_SHARD_AXIS"] == "auto"
-    assert sfincs_jax.os.environ["SFINCS_JAX_AUTO_SHARD"] == "1"
-    assert "--xla_cpu_parallelism_threads=2" in sfincs_jax.os.environ["XLA_FLAGS"]
-    assert "--xla_force_host_platform_device_count=2" in sfincs_jax.os.environ["XLA_FLAGS"]
-    assert sfincs_jax.os.environ["JAX_COMPILATION_CACHE_DIR"] == str(cache_dir)
+    assert reloaded is dkx
+    assert dkx.os.environ["DKX_CPU_DEVICES"] == "2"
+    assert dkx.os.environ["DKX_MATVEC_SHARD_AXIS"] == "auto"
+    assert dkx.os.environ["DKX_AUTO_SHARD"] == "1"
+    assert "--xla_cpu_parallelism_threads=2" in dkx.os.environ["XLA_FLAGS"]
+    assert "--xla_force_host_platform_device_count=2" in dkx.os.environ["XLA_FLAGS"]
+    assert dkx.os.environ["JAX_COMPILATION_CACHE_DIR"] == str(cache_dir)
     assert cache_dir.is_dir()
 
-    monkeypatch.delenv("SFINCS_JAX_CORES", raising=False)
-    monkeypatch.delenv("SFINCS_JAX_XLA_THREADS", raising=False)
-    monkeypatch.delenv("SFINCS_JAX_COMPILATION_CACHE_DIR", raising=False)
+    monkeypatch.delenv("DKX_CORES", raising=False)
+    monkeypatch.delenv("DKX_XLA_THREADS", raising=False)
+    monkeypatch.delenv("DKX_COMPILATION_CACHE_DIR", raising=False)
     monkeypatch.delenv("JAX_COMPILATION_CACHE_DIR", raising=False)
-    monkeypatch.setenv("SFINCS_JAX_DISABLE_COMPILATION_CACHE", "1")
-    importlib.reload(sfincs_jax)
+    monkeypatch.setenv("DKX_DISABLE_COMPILATION_CACHE", "1")
+    importlib.reload(dkx)
 
 
 def test_import_env_invalid_cpu_controls_are_fail_closed(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("SFINCS_JAX_CORES", "not-an-int")
-    monkeypatch.setenv("SFINCS_JAX_CPU_DEVICES", "not-an-int")
-    monkeypatch.setenv("SFINCS_JAX_DISABLE_COMPILATION_CACHE", "1")
+    monkeypatch.setenv("DKX_CORES", "not-an-int")
+    monkeypatch.setenv("DKX_CPU_DEVICES", "not-an-int")
+    monkeypatch.setenv("DKX_DISABLE_COMPILATION_CACHE", "1")
     monkeypatch.setenv("XLA_FLAGS", "")
 
-    importlib.reload(sfincs_jax)
+    importlib.reload(dkx)
 
-    assert sfincs_jax.os.environ["XLA_FLAGS"] == ""
+    assert dkx.os.environ["XLA_FLAGS"] == ""
 
 
 def test_distributed_runtime_env_bootstrap_is_safe_and_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sfincs_jax, "_distributed_runtime_initialized", True)
-    assert sfincs_jax.initialize_distributed_runtime_from_env() is True
+    monkeypatch.setattr(dkx, "_distributed_runtime_initialized", True)
+    assert dkx.initialize_distributed_runtime_from_env() is True
 
-    monkeypatch.setattr(sfincs_jax, "_distributed_runtime_initialized", False)
-    monkeypatch.delenv("SFINCS_JAX_DISTRIBUTED", raising=False)
-    assert sfincs_jax.initialize_distributed_runtime_from_env() is False
+    monkeypatch.setattr(dkx, "_distributed_runtime_initialized", False)
+    monkeypatch.delenv("DKX_DISTRIBUTED", raising=False)
+    assert dkx.initialize_distributed_runtime_from_env() is False
 
-    monkeypatch.setenv("SFINCS_JAX_DISTRIBUTED", "1")
-    monkeypatch.delenv("SFINCS_JAX_COORDINATOR_ADDRESS", raising=False)
-    assert sfincs_jax.initialize_distributed_runtime_from_env() is False
+    monkeypatch.setenv("DKX_DISTRIBUTED", "1")
+    monkeypatch.delenv("DKX_COORDINATOR_ADDRESS", raising=False)
+    assert dkx.initialize_distributed_runtime_from_env() is False
 
 
 def test_distributed_runtime_env_bootstrap_parses_and_calls_jax(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -179,15 +179,15 @@ def test_distributed_runtime_env_bootstrap_parses_and_calls_jax(monkeypatch: pyt
     def fake_initialize(**kwargs):
         calls.append(kwargs)
 
-    monkeypatch.setattr(sfincs_jax, "_distributed_runtime_initialized", False)
+    monkeypatch.setattr(dkx, "_distributed_runtime_initialized", False)
     monkeypatch.setattr(jax_distributed, "initialize", fake_initialize)
-    monkeypatch.setenv("SFINCS_JAX_DISTRIBUTED", "true")
-    monkeypatch.setenv("SFINCS_JAX_COORDINATOR_ADDRESS", "127.0.0.1")
-    monkeypatch.setenv("SFINCS_JAX_COORDINATOR_PORT", "3456")
-    monkeypatch.setenv("SFINCS_JAX_PROCESS_COUNT", "4")
-    monkeypatch.setenv("SFINCS_JAX_PROCESS_ID", "2")
+    monkeypatch.setenv("DKX_DISTRIBUTED", "true")
+    monkeypatch.setenv("DKX_COORDINATOR_ADDRESS", "127.0.0.1")
+    monkeypatch.setenv("DKX_COORDINATOR_PORT", "3456")
+    monkeypatch.setenv("DKX_PROCESS_COUNT", "4")
+    monkeypatch.setenv("DKX_PROCESS_ID", "2")
 
-    assert sfincs_jax.initialize_distributed_runtime_from_env() is True
+    assert dkx.initialize_distributed_runtime_from_env() is True
     assert calls == [
         {
             "coordinator_address": "127.0.0.1",
@@ -196,7 +196,7 @@ def test_distributed_runtime_env_bootstrap_parses_and_calls_jax(monkeypatch: pyt
             "process_id": 2,
         }
     ]
-    assert sfincs_jax.initialize_distributed_runtime_from_env() is True
+    assert dkx.initialize_distributed_runtime_from_env() is True
     assert len(calls) == 1
 
 
@@ -204,17 +204,17 @@ def test_distributed_runtime_env_bootstrap_fails_closed(monkeypatch: pytest.Monk
     def fake_initialize(**_kwargs):
         raise RuntimeError("backend unavailable")
 
-    monkeypatch.setattr(sfincs_jax, "_distributed_runtime_initialized", False)
+    monkeypatch.setattr(dkx, "_distributed_runtime_initialized", False)
     monkeypatch.setattr(jax_distributed, "initialize", fake_initialize)
-    monkeypatch.setenv("SFINCS_JAX_DISTRIBUTED", "yes")
-    monkeypatch.setenv("SFINCS_JAX_COORDINATOR_ADDRESS", "127.0.0.1")
+    monkeypatch.setenv("DKX_DISTRIBUTED", "yes")
+    monkeypatch.setenv("DKX_COORDINATOR_ADDRESS", "127.0.0.1")
 
-    assert sfincs_jax.initialize_distributed_runtime_from_env() is False
-    assert sfincs_jax._distributed_runtime_initialized is False
+    assert dkx.initialize_distributed_runtime_from_env() is False
+    assert dkx._distributed_runtime_initialized is False
 
-    monkeypatch.setenv("SFINCS_JAX_COORDINATOR_PORT", "not-an-int")
-    assert sfincs_jax.initialize_distributed_runtime_from_env() is False
-    assert sfincs_jax._distributed_runtime_initialized is False
+    monkeypatch.setenv("DKX_COORDINATOR_PORT", "not-an-int")
+    assert dkx.initialize_distributed_runtime_from_env() is False
+    assert dkx._distributed_runtime_initialized is False
 
 
 def test_public_write_output_facade_routes_solve_inputs(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -224,7 +224,7 @@ def test_public_write_output_facade_routes_solve_inputs(monkeypatch: pytest.Monk
         calls.append({"namelist_path": Path(namelist_path), **kwargs})
         return SimpleNamespace(output_path=Path(kwargs["out_path"]))
 
-    monkeypatch.setattr("sfincs_jax.run.run_from_namelist", fake_run_from_namelist)
+    monkeypatch.setattr("dkx.run.run_from_namelist", fake_run_from_namelist)
 
     request = SolveInputs(
         input_path="input.namelist",
@@ -248,7 +248,7 @@ def test_public_write_output_requires_input_and_output_paths(monkeypatch: pytest
     def fake_run_from_namelist(*_args, **_kwargs):
         raise AssertionError("runner should not be called for invalid API requests")
 
-    monkeypatch.setattr("sfincs_jax.run.run_from_namelist", fake_run_from_namelist)
+    monkeypatch.setattr("dkx.run.run_from_namelist", fake_run_from_namelist)
 
     with pytest.raises(ValueError, match="input_path is required"):
         write_output(SolveInputs(output_path="sfincsOutput.h5"))
@@ -264,7 +264,7 @@ def test_public_write_output_explicit_kwargs_override_options(monkeypatch: pytes
         calls.append({"namelist_path": Path(namelist_path), **kwargs})
         return SimpleNamespace(output_path=Path(kwargs["out_path"]))
 
-    monkeypatch.setattr("sfincs_jax.run.run_from_namelist", fake_run_from_namelist)
+    monkeypatch.setattr("dkx.run.run_from_namelist", fake_run_from_namelist)
 
     request = SolveInputs(
         input_path="input.namelist",
@@ -284,21 +284,21 @@ def test_public_read_output_facade_routes_output_reader(monkeypatch: pytest.Monk
         calls.append(path)
         return {"ok": True}
 
-    monkeypatch.setattr("sfincs_jax.io.read_sfincs_output_file", fake_read_sfincs_output_file)
+    monkeypatch.setattr("dkx.io.read_sfincs_output_file", fake_read_sfincs_output_file)
 
     assert read_output("sfincsOutput.npz") == {"ok": True}
     assert calls == [Path("sfincsOutput.npz")]
 
 
 def test_public_ambipolar_facade_routes_canonical_er_solver(monkeypatch: pytest.MonkeyPatch) -> None:
-    """run_ambipolar_brent routes to the canonical sfincs_jax.er slice."""
+    """run_ambipolar_brent routes to the canonical dkx.er slice."""
     calls: list[dict] = []
 
     def fake_find_ambipolar_er(input_path, **kwargs):
         calls.append({"input_path": input_path, **kwargs})
         return "ambipolar-result"
 
-    monkeypatch.setattr("sfincs_jax.er.find_ambipolar_er", fake_find_ambipolar_er)
+    monkeypatch.setattr("dkx.er.find_ambipolar_er", fake_find_ambipolar_er)
 
     request = SolveInputs(input_path="input.namelist", requires_autodiff=True, options={"emit": None})
 
@@ -330,7 +330,7 @@ def test_public_ambipolar_facade_forwards_bracket_and_tolerances(
         calls.append({"input_path": input_path, **kwargs})
         return "ambipolar-result"
 
-    monkeypatch.setattr("sfincs_jax.er.find_ambipolar_er", fake_find_ambipolar_er)
+    monkeypatch.setattr("dkx.er.find_ambipolar_er", fake_find_ambipolar_er)
 
     request = SolveInputs(input_path="input.namelist", requires_autodiff=True, options={})
     assert run_ambipolar_brent(

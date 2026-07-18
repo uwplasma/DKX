@@ -45,7 +45,7 @@ class TransportScanPoint:
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="generate_sfincs_paper_figs",
-        description="Reproduce low-resolution SFINCS paper figures with sfincs_jax runs.",
+        description="Reproduce low-resolution SFINCS paper figures with dkx runs.",
     )
     parser.add_argument(
         "--out-dir",
@@ -163,7 +163,7 @@ def _parse_args() -> argparse.Namespace:
         type=int,
         default=0,
         help=(
-            "Optional SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_MAX override for publication "
+            "Optional DKX_TRANSPORT_SPARSE_DIRECT_MAX override for publication "
             "transport scans. Use a positive bounded value for high-nu campaigns."
         ),
     )
@@ -171,7 +171,7 @@ def _parse_args() -> argparse.Namespace:
         "--transport-maxiter",
         type=int,
         default=0,
-        help="Optional SFINCS_JAX_TRANSPORT_MAXITER override for transport scan solves.",
+        help="Optional DKX_TRANSPORT_MAXITER override for transport scan solves.",
     )
     return parser.parse_args()
 
@@ -581,24 +581,24 @@ def _transport_scan_env(
 ) -> dict[str, str]:
     """Return scan-run environment overrides for the fast explicit transport path."""
     env = {
-        "SFINCS_JAX_IMPLICIT_SOLVE": "0",
-        "SFINCS_JAX_WRITE_SOLVER_DIAGNOSTICS": "1",
+        "DKX_IMPLICIT_SOLVE": "0",
+        "DKX_WRITE_SOLVER_DIAGNOSTICS": "1",
     }
     workers = max(1, int(transport_workers))
     backend = str(transport_parallel_backend).strip().lower()
     if workers > 1:
-        env["SFINCS_JAX_TRANSPORT_PARALLEL"] = "process"
-        env["SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS"] = str(workers)
+        env["DKX_TRANSPORT_PARALLEL"] = "process"
+        env["DKX_TRANSPORT_PARALLEL_WORKERS"] = str(workers)
         if backend in {"cpu", "gpu"}:
-            env["SFINCS_JAX_TRANSPORT_PARALLEL_BACKEND"] = backend
+            env["DKX_TRANSPORT_PARALLEL_BACKEND"] = backend
     if int(transport_sparse_direct_max) > 0:
-        env["SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_MAX"] = str(int(transport_sparse_direct_max))
+        env["DKX_TRANSPORT_SPARSE_DIRECT_MAX"] = str(int(transport_sparse_direct_max))
     if int(transport_maxiter) > 0:
-        env["SFINCS_JAX_TRANSPORT_MAXITER"] = str(int(transport_maxiter))
+        env["DKX_TRANSPORT_MAXITER"] = str(int(transport_maxiter))
     if float(abort_max_residual) > 0.0:
-        env["SFINCS_JAX_TRANSPORT_ABORT_MAX_RESIDUAL"] = f"{float(abort_max_residual):.16g}"
+        env["DKX_TRANSPORT_ABORT_MAX_RESIDUAL"] = f"{float(abort_max_residual):.16g}"
     if float(abort_max_relative_residual) > 0.0:
-        env["SFINCS_JAX_TRANSPORT_ABORT_MAX_RELATIVE_RESIDUAL"] = (
+        env["DKX_TRANSPORT_ABORT_MAX_RELATIVE_RESIDUAL"] = (
             f"{float(abort_max_relative_residual):.16g}"
         )
     return env
@@ -917,8 +917,8 @@ def main() -> None:
 
         if not scan_only and fig1_data:
             _plot_matrix_elements(
-                out_path=out_dir / "sfincs_jax_fig1_lhd_collisionality.png",
-                title="LHD collisionality scan (sfincs_jax)",
+                out_path=out_dir / "dkx_fig1_lhd_collisionality.png",
+                title="LHD collisionality scan (dkx)",
                 datasets=fig1_data,
             )
 
@@ -1028,8 +1028,8 @@ def main() -> None:
 
         if not scan_only and fig2_data:
             _plot_matrix_elements(
-                out_path=out_dir / "sfincs_jax_fig2_w7x_collisionality.png",
-                title="W7-X collisionality scan (sfincs_jax)",
+                out_path=out_dir / "dkx_fig2_w7x_collisionality.png",
+                title="W7-X collisionality scan (dkx)",
                 datasets=fig2_data,
             )
 
@@ -1040,7 +1040,7 @@ def main() -> None:
             "W7-X (FP)": fig2_data["Fokker-Planck"],
         }
         _plot_simakov_helander_proxy(
-            out_path=out_dir / "sfincs_jax_fig3_simakov_helander.png",
+            out_path=out_dir / "dkx_fig3_simakov_helander.png",
             title="High-collisionality proxy",
             datasets=fig3_data,
             element=(0, 0),

@@ -1,6 +1,6 @@
 {
   "bootstrap_objective": 0.002907603963023935,
-  "claim_boundary": "This audit evaluates completed sfincs_jax kinetic outputs. It promotes a proxy optimization candidate only if the scan is bracketed, residual-gated, and the requested observables are present.",
+  "claim_boundary": "This audit evaluates completed dkx kinetic outputs. It promotes a proxy optimization candidate only if the scan is bracketed, residual-gated, and the requested observables are present.",
   "electron_root_penalty": 0.0,
   "failures": [],
   "flux_objective": {
@@ -23,7 +23,7 @@
         1.1393011128141462e-08,
         3.081589922324982e-08
       ],
-      "path": "/private/tmp/sfincs_jax_finite_beta_electron_root_promotion_final/cpu_fortran_campaign/fortran_v3_scan/Er-1/sfincsOutput.h5",
+      "path": "/private/tmp/dkx_finite_beta_electron_root_promotion_final/cpu_fortran_campaign/fortran_v3_scan/Er-1/sfincsOutput.h5",
       "radial_current": -1.942288809510836e-08,
       "residual_gate": {
         "cpu_gpu_relative_difference": null,
@@ -49,7 +49,7 @@
         2.4912984181979236e-08,
         3.0600360970441464e-08
       ],
-      "path": "/private/tmp/sfincs_jax_finite_beta_electron_root_promotion_final/cpu_fortran_campaign/fortran_v3_scan/Er0/sfincsOutput.h5",
+      "path": "/private/tmp/dkx_finite_beta_electron_root_promotion_final/cpu_fortran_campaign/fortran_v3_scan/Er0/sfincsOutput.h5",
       "radial_current": -5.687376788462228e-09,
       "residual_gate": {
         "cpu_gpu_relative_difference": null,
@@ -75,7 +75,7 @@
         2.829713598964219e-08,
         3.054628174946018e-08
       ],
-      "path": "/private/tmp/sfincs_jax_finite_beta_electron_root_promotion_final/cpu_fortran_campaign/fortran_v3_scan/Er0.25/sfincsOutput.h5",
+      "path": "/private/tmp/dkx_finite_beta_electron_root_promotion_final/cpu_fortran_campaign/fortran_v3_scan/Er0.25/sfincsOutput.h5",
       "radial_current": -2.2491457598179905e-09,
       "residual_gate": {
         "cpu_gpu_relative_difference": null,
@@ -101,7 +101,7 @@
         3.167981499368321e-08,
         3.0492195274078466e-08
       ],
-      "path": "/private/tmp/sfincs_jax_finite_beta_electron_root_promotion_final/cpu_fortran_campaign/fortran_v3_scan/Er0.5/sfincsOutput.h5",
+      "path": "/private/tmp/dkx_finite_beta_electron_root_promotion_final/cpu_fortran_campaign/fortran_v3_scan/Er0.5/sfincsOutput.h5",
       "radial_current": 1.1876197196047463e-09,
       "residual_gate": {
         "cpu_gpu_relative_difference": null,
@@ -127,7 +127,7 @@
         3.505945509511744e-08,
         3.0438137613032365e-08
       ],
-      "path": "/private/tmp/sfincs_jax_finite_beta_electron_root_promotion_final/cpu_fortran_campaign/fortran_v3_scan/Er0.75/sfincsOutput.h5",
+      "path": "/private/tmp/dkx_finite_beta_electron_root_promotion_final/cpu_fortran_campaign/fortran_v3_scan/Er0.75/sfincsOutput.h5",
       "radial_current": 4.621317482085074e-09,
       "residual_gate": {
         "cpu_gpu_relative_difference": null,
@@ -153,7 +153,7 @@
         3.8434502094736155e-08,
         3.038414610745906e-08
       ],
-      "path": "/private/tmp/sfincs_jax_finite_beta_electron_root_promotion_final/cpu_fortran_campaign/fortran_v3_scan/Er1/sfincsOutput.h5",
+      "path": "/private/tmp/dkx_finite_beta_electron_root_promotion_final/cpu_fortran_campaign/fortran_v3_scan/Er1/sfincsOutput.h5",
       "radial_current": 8.050355987277092e-09,
       "residual_gate": {
         "cpu_gpu_relative_difference": null,
@@ -179,7 +179,7 @@
         9.064805971195913e-08,
         2.955799152218842e-08
       ],
-      "path": "/private/tmp/sfincs_jax_finite_beta_electron_root_promotion_final/cpu_fortran_campaign/fortran_v3_scan/Er5/sfincsOutput.h5",
+      "path": "/private/tmp/dkx_finite_beta_electron_root_promotion_final/cpu_fortran_campaign/fortran_v3_scan/Er5/sfincsOutput.h5",
       "radial_current": 6.10900681897707e-08,
       "residual_gate": {
         "cpu_gpu_relative_difference": null,
@@ -195,7 +195,7 @@
       "residual_target": null
     }
   ],
-  "scan_dir": "/private/tmp/sfincs_jax_finite_beta_electron_root_promotion_final/cpu_fortran_campaign/fortran_v3_scan",
+  "scan_dir": "/private/tmp/dkx_finite_beta_electron_root_promotion_final/cpu_fortran_campaign/fortran_v3_scan",
   "selected_root": {
     "bracket": [
       0.25,
@@ -205,5 +205,5 @@
     "root_type": "electron",
     "slope": 1.3747061917690947e-08
   },
-  "workflow": "sfincs_jax_optimization_high_fidelity_promotion"
+  "workflow": "dkx_optimization_high_fidelity_promotion"
 }

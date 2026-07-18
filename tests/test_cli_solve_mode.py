@@ -9,11 +9,11 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from sfincs_jax import cli
-from sfincs_jax.input_compat import effective_equilibrium_file
-from sfincs_jax.namelist import parse_sfincs_input_text
-from sfincs_jax.api import write_output
-from sfincs_jax.io import read_sfincs_h5
+from dkx import cli
+from dkx.input_compat import effective_equilibrium_file
+from dkx.namelist import parse_sfincs_input_text
+from dkx.api import write_output
+from dkx.io import read_sfincs_h5
 
 
 class _FakeNamelist:
@@ -44,8 +44,8 @@ def test_cmd_write_output_routes_solver_trace_through_canonical(monkeypatch, tmp
         out.write_bytes(b"")
         return SimpleNamespace(output_path=out)
 
-    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
-    monkeypatch.setattr("sfincs_jax.run.run_profile", _fake_run_profile)
+    monkeypatch.setattr("dkx.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("dkx.run.run_profile", _fake_run_profile)
 
     args = Namespace(
         input=str(tmp_path / "input.namelist"),
@@ -78,8 +78,8 @@ def test_cmd_write_output_accepts_extension_selected_formats(monkeypatch, tmp_pa
         out.write_bytes(b"")
         return SimpleNamespace(output_path=out)
 
-    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
-    monkeypatch.setattr("sfincs_jax.run.run_geometry", _fake_run_geometry)
+    monkeypatch.setattr("dkx.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("dkx.run.run_geometry", _fake_run_geometry)
 
     args = Namespace(
         input=str(tmp_path / "input.namelist"),
@@ -117,8 +117,8 @@ def test_cmd_solve_v3_routes_canonical_run_profile(monkeypatch, tmp_path: Path) 
             output_path=None,
         )
 
-    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
-    monkeypatch.setattr("sfincs_jax.run.run_profile", _fake_run_profile)
+    monkeypatch.setattr("dkx.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("dkx.run.run_profile", _fake_run_profile)
 
     out_state = tmp_path / "state.npy"
     args = Namespace(
@@ -156,8 +156,8 @@ def test_cmd_solve_v3_transport_mode_selects_which_rhs_column(monkeypatch, tmp_p
             output_path=None,
         )
 
-    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=2))
-    monkeypatch.setattr("sfincs_jax.run.run_transport_matrix", _fake_run_transport_matrix)
+    monkeypatch.setattr("dkx.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=2))
+    monkeypatch.setattr("dkx.run.run_transport_matrix", _fake_run_transport_matrix)
 
     out_state = tmp_path / "state.npy"
     args = Namespace(
@@ -200,13 +200,13 @@ def test_cmd_solve_v3_rhsmode4_is_a_validation_error(tmp_path: Path, capsys) -> 
     )
     assert cli._cmd_solve_v3(args) == 2
     err = capsys.readouterr().err
-    assert "sfincs_jax solve-v3 failed: RHSMode must be 1, 2, or 3 (got 4)" in err
+    assert "dkx solve-v3 failed: RHSMode must be 1, 2, or 3 (got 4)" in err
     assert "jax.grad" in err
     assert not (tmp_path / "state.npy").exists()
 
 
 def test_cmd_transport_matrix_v3_uses_canonical_run(monkeypatch, tmp_path: Path) -> None:
-    """transport-matrix-v3 routes through the canonical sfincs_jax.run driver."""
+    """transport-matrix-v3 routes through the canonical dkx.run driver."""
     captured: dict[str, object] = {}
 
     def _fake_run_transport_matrix(namelist_path, **kwargs):
@@ -219,8 +219,8 @@ def test_cmd_transport_matrix_v3_uses_canonical_run(monkeypatch, tmp_path: Path)
             output_path=None,
         )
 
-    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=2))
-    monkeypatch.setattr("sfincs_jax.run.run_transport_matrix", _fake_run_transport_matrix)
+    monkeypatch.setattr("dkx.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=2))
+    monkeypatch.setattr("dkx.run.run_transport_matrix", _fake_run_transport_matrix)
 
     args = Namespace(
         input=str(tmp_path / "input.namelist"),
@@ -252,8 +252,8 @@ def test_write_output_full_system_regression(tmp_path: Path, monkeypatch) -> Non
     )
     assert input_path.exists()
 
-    monkeypatch.setenv("SFINCS_JAX_FORTRAN_STDOUT", "0")
-    monkeypatch.setenv("SFINCS_JAX_SOLVER_ITER_STATS", "0")
+    monkeypatch.setenv("DKX_FORTRAN_STDOUT", "0")
+    monkeypatch.setenv("DKX_SOLVER_ITER_STATS", "0")
 
     out_path = tmp_path / "sfincsOutput.h5"
     write_output(input_path, out_path)
@@ -336,13 +336,13 @@ def test_default_plot_output_path_handles_sfincsoutput_suffix() -> None:
 
 
 def test_apply_parallel_runtime_settings_sets_transport_and_sharding(monkeypatch) -> None:
-    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_PARALLEL", raising=False)
-    monkeypatch.delenv("SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS", raising=False)
-    monkeypatch.delenv("SFINCS_JAX_MATVEC_SHARD_AXIS", raising=False)
-    monkeypatch.delenv("SFINCS_JAX_AUTO_SHARD", raising=False)
-    monkeypatch.delenv("SFINCS_JAX_GMRES_DISTRIBUTED", raising=False)
-    monkeypatch.delenv("SFINCS_JAX_DISTRIBUTED_KRYLOV", raising=False)
-    monkeypatch.delenv("SFINCS_JAX_SHARD_PAD", raising=False)
+    monkeypatch.delenv("DKX_TRANSPORT_PARALLEL", raising=False)
+    monkeypatch.delenv("DKX_TRANSPORT_PARALLEL_WORKERS", raising=False)
+    monkeypatch.delenv("DKX_MATVEC_SHARD_AXIS", raising=False)
+    monkeypatch.delenv("DKX_AUTO_SHARD", raising=False)
+    monkeypatch.delenv("DKX_GMRES_DISTRIBUTED", raising=False)
+    monkeypatch.delenv("DKX_DISTRIBUTED_KRYLOV", raising=False)
+    monkeypatch.delenv("DKX_SHARD_PAD", raising=False)
 
     cli._apply_parallel_runtime_settings(
         Namespace(
@@ -359,25 +359,25 @@ def test_apply_parallel_runtime_settings_sets_transport_and_sharding(monkeypatch
         )
     )
 
-    assert os.environ["SFINCS_JAX_TRANSPORT_PARALLEL"] == "process"
-    assert os.environ["SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS"] == "4"
-    assert os.environ["SFINCS_JAX_MATVEC_SHARD_AXIS"] == "theta"
-    assert os.environ["SFINCS_JAX_AUTO_SHARD"] == "0"
-    assert os.environ["SFINCS_JAX_GMRES_DISTRIBUTED"] == "auto"
-    assert os.environ["SFINCS_JAX_DISTRIBUTED_KRYLOV"] == "gmres"
-    assert os.environ["SFINCS_JAX_SHARD_PAD"] == "0"
+    assert os.environ["DKX_TRANSPORT_PARALLEL"] == "process"
+    assert os.environ["DKX_TRANSPORT_PARALLEL_WORKERS"] == "4"
+    assert os.environ["DKX_MATVEC_SHARD_AXIS"] == "theta"
+    assert os.environ["DKX_AUTO_SHARD"] == "0"
+    assert os.environ["DKX_GMRES_DISTRIBUTED"] == "auto"
+    assert os.environ["DKX_DISTRIBUTED_KRYLOV"] == "gmres"
+    assert os.environ["DKX_SHARD_PAD"] == "0"
 
 
 def test_apply_parallel_runtime_settings_initializes_distributed(monkeypatch) -> None:
     calls: list[str] = []
 
-    monkeypatch.delenv("SFINCS_JAX_DISTRIBUTED", raising=False)
-    monkeypatch.delenv("SFINCS_JAX_PROCESS_ID", raising=False)
-    monkeypatch.delenv("SFINCS_JAX_PROCESS_COUNT", raising=False)
-    monkeypatch.delenv("SFINCS_JAX_COORDINATOR_ADDRESS", raising=False)
-    monkeypatch.delenv("SFINCS_JAX_COORDINATOR_PORT", raising=False)
+    monkeypatch.delenv("DKX_DISTRIBUTED", raising=False)
+    monkeypatch.delenv("DKX_PROCESS_ID", raising=False)
+    monkeypatch.delenv("DKX_PROCESS_COUNT", raising=False)
+    monkeypatch.delenv("DKX_COORDINATOR_ADDRESS", raising=False)
+    monkeypatch.delenv("DKX_COORDINATOR_PORT", raising=False)
     monkeypatch.setattr(
-        "sfincs_jax.initialize_distributed_runtime_from_env",
+        "dkx.initialize_distributed_runtime_from_env",
         lambda: calls.append("init") or True,
     )
 
@@ -396,29 +396,29 @@ def test_apply_parallel_runtime_settings_initializes_distributed(monkeypatch) ->
         )
     )
 
-    assert os.environ["SFINCS_JAX_DISTRIBUTED"] == "1"
-    assert os.environ["SFINCS_JAX_PROCESS_ID"] == "1"
-    assert os.environ["SFINCS_JAX_PROCESS_COUNT"] == "2"
-    assert os.environ["SFINCS_JAX_COORDINATOR_ADDRESS"] == "worker0"
-    assert os.environ["SFINCS_JAX_COORDINATOR_PORT"] == "2345"
+    assert os.environ["DKX_DISTRIBUTED"] == "1"
+    assert os.environ["DKX_PROCESS_ID"] == "1"
+    assert os.environ["DKX_PROCESS_COUNT"] == "2"
+    assert os.environ["DKX_COORDINATOR_ADDRESS"] == "worker0"
+    assert os.environ["DKX_COORDINATOR_PORT"] == "2345"
     assert calls == ["init"]
 
 
 def test_emit_parallel_runtime_info_reports_active_parallel_env(monkeypatch, capsys) -> None:
-    monkeypatch.setenv("SFINCS_JAX_CORES", "8")
-    monkeypatch.setenv("SFINCS_JAX_CPU_DEVICES", "8")
-    monkeypatch.setenv("SFINCS_JAX_MATVEC_SHARD_AXIS", "theta")
-    monkeypatch.setenv("SFINCS_JAX_AUTO_SHARD", "1")
-    monkeypatch.setenv("SFINCS_JAX_SHARD_PAD", "1")
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL", "process")
-    monkeypatch.setenv("SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS", "4")
-    monkeypatch.setenv("SFINCS_JAX_GMRES_DISTRIBUTED", "auto")
-    monkeypatch.setenv("SFINCS_JAX_DISTRIBUTED_KRYLOV", "bicgstab")
-    monkeypatch.setenv("SFINCS_JAX_DISTRIBUTED", "1")
-    monkeypatch.setenv("SFINCS_JAX_PROCESS_ID", "1")
-    monkeypatch.setenv("SFINCS_JAX_PROCESS_COUNT", "2")
-    monkeypatch.setenv("SFINCS_JAX_COORDINATOR_ADDRESS", "node0")
-    monkeypatch.setenv("SFINCS_JAX_COORDINATOR_PORT", "1234")
+    monkeypatch.setenv("DKX_CORES", "8")
+    monkeypatch.setenv("DKX_CPU_DEVICES", "8")
+    monkeypatch.setenv("DKX_MATVEC_SHARD_AXIS", "theta")
+    monkeypatch.setenv("DKX_AUTO_SHARD", "1")
+    monkeypatch.setenv("DKX_SHARD_PAD", "1")
+    monkeypatch.setenv("DKX_TRANSPORT_PARALLEL", "process")
+    monkeypatch.setenv("DKX_TRANSPORT_PARALLEL_WORKERS", "4")
+    monkeypatch.setenv("DKX_GMRES_DISTRIBUTED", "auto")
+    monkeypatch.setenv("DKX_DISTRIBUTED_KRYLOV", "bicgstab")
+    monkeypatch.setenv("DKX_DISTRIBUTED", "1")
+    monkeypatch.setenv("DKX_PROCESS_ID", "1")
+    monkeypatch.setenv("DKX_PROCESS_COUNT", "2")
+    monkeypatch.setenv("DKX_COORDINATOR_ADDRESS", "node0")
+    monkeypatch.setenv("DKX_COORDINATOR_PORT", "1234")
 
     cli._emit_parallel_runtime_info(args=Namespace(verbose=1, quiet=False))
     out = capsys.readouterr().out
@@ -431,20 +431,20 @@ def test_emit_parallel_runtime_info_reports_active_parallel_env(monkeypatch, cap
 
 def test_emit_parallel_runtime_info_suppresses_empty_state(monkeypatch, capsys) -> None:
     for name in (
-        "SFINCS_JAX_CORES",
-        "SFINCS_JAX_CPU_DEVICES",
-        "SFINCS_JAX_MATVEC_SHARD_AXIS",
-        "SFINCS_JAX_AUTO_SHARD",
-        "SFINCS_JAX_SHARD_PAD",
-        "SFINCS_JAX_TRANSPORT_PARALLEL",
-        "SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS",
-        "SFINCS_JAX_GMRES_DISTRIBUTED",
-        "SFINCS_JAX_DISTRIBUTED_KRYLOV",
-        "SFINCS_JAX_DISTRIBUTED",
-        "SFINCS_JAX_PROCESS_ID",
-        "SFINCS_JAX_PROCESS_COUNT",
-        "SFINCS_JAX_COORDINATOR_ADDRESS",
-        "SFINCS_JAX_COORDINATOR_PORT",
+        "DKX_CORES",
+        "DKX_CPU_DEVICES",
+        "DKX_MATVEC_SHARD_AXIS",
+        "DKX_AUTO_SHARD",
+        "DKX_SHARD_PAD",
+        "DKX_TRANSPORT_PARALLEL",
+        "DKX_TRANSPORT_PARALLEL_WORKERS",
+        "DKX_GMRES_DISTRIBUTED",
+        "DKX_DISTRIBUTED_KRYLOV",
+        "DKX_DISTRIBUTED",
+        "DKX_PROCESS_ID",
+        "DKX_PROCESS_COUNT",
+        "DKX_COORDINATOR_ADDRESS",
+        "DKX_COORDINATOR_PORT",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -453,8 +453,8 @@ def test_emit_parallel_runtime_info_suppresses_empty_state(monkeypatch, capsys) 
 
 
 def test_maybe_reexec_for_early_runtime_reexecs_for_cores(monkeypatch) -> None:
-    monkeypatch.delenv("SFINCS_JAX_CORES", raising=False)
-    monkeypatch.delenv("SFINCS_JAX_CPU_DEVICES", raising=False)
+    monkeypatch.delenv("DKX_CORES", raising=False)
+    monkeypatch.delenv("DKX_CPU_DEVICES", raising=False)
     captured: dict[str, object] = {}
 
     def _fake_execvpe(executable, argv, env):
@@ -470,16 +470,16 @@ def test_maybe_reexec_for_early_runtime_reexecs_for_cores(monkeypatch) -> None:
     except SystemExit:
         pass
 
-    assert captured["argv"] == [cli.sys.executable, "-m", "sfincs_jax", "--cores", "4", "write-output", "--input", "input.namelist"]
+    assert captured["argv"] == [cli.sys.executable, "-m", "dkx", "--cores", "4", "write-output", "--input", "input.namelist"]
     env = captured["env"]
-    assert env["SFINCS_JAX_CORES"] == "4"
-    assert env["SFINCS_JAX_CPU_DEVICES"] == "4"
-    assert env["SFINCS_JAX_CLI_BOOTSTRAPPED"] == "1"
+    assert env["DKX_CORES"] == "4"
+    assert env["DKX_CPU_DEVICES"] == "4"
+    assert env["DKX_CLI_BOOTSTRAPPED"] == "1"
 
 
 def test_maybe_reexec_for_early_runtime_skips_when_env_matches(monkeypatch) -> None:
-    monkeypatch.setenv("SFINCS_JAX_CORES", "4")
-    monkeypatch.setenv("SFINCS_JAX_CPU_DEVICES", "4")
+    monkeypatch.setenv("DKX_CORES", "4")
+    monkeypatch.setenv("DKX_CPU_DEVICES", "4")
     called = []
     monkeypatch.setattr(cli.os, "execvpe", lambda *args, **kwargs: called.append((args, kwargs)))
     cli._maybe_reexec_for_early_runtime(["--cores", "4", "write-output", "--input", "input.namelist"])
@@ -488,11 +488,11 @@ def test_maybe_reexec_for_early_runtime_skips_when_env_matches(monkeypatch) -> N
 
 def test_maybe_reexec_for_early_runtime_reexecs_for_distributed(monkeypatch) -> None:
     for name in (
-        "SFINCS_JAX_DISTRIBUTED",
-        "SFINCS_JAX_PROCESS_ID",
-        "SFINCS_JAX_PROCESS_COUNT",
-        "SFINCS_JAX_COORDINATOR_ADDRESS",
-        "SFINCS_JAX_COORDINATOR_PORT",
+        "DKX_DISTRIBUTED",
+        "DKX_PROCESS_ID",
+        "DKX_PROCESS_COUNT",
+        "DKX_COORDINATOR_ADDRESS",
+        "DKX_COORDINATOR_PORT",
     ):
         monkeypatch.delenv(name, raising=False)
     captured: dict[str, object] = {}
@@ -525,11 +525,11 @@ def test_maybe_reexec_for_early_runtime_reexecs_for_distributed(monkeypatch) -> 
         pass
 
     env = captured["env"]
-    assert env["SFINCS_JAX_DISTRIBUTED"] == "1"
-    assert env["SFINCS_JAX_PROCESS_ID"] == "1"
-    assert env["SFINCS_JAX_PROCESS_COUNT"] == "2"
-    assert env["SFINCS_JAX_COORDINATOR_ADDRESS"] == "node0"
-    assert env["SFINCS_JAX_COORDINATOR_PORT"] == "1234"
+    assert env["DKX_DISTRIBUTED"] == "1"
+    assert env["DKX_PROCESS_ID"] == "1"
+    assert env["DKX_PROCESS_COUNT"] == "2"
+    assert env["DKX_COORDINATOR_ADDRESS"] == "node0"
+    assert env["DKX_COORDINATOR_PORT"] == "1234"
 
 
 def test_cmd_solve_v3_applies_equilibrium_override(monkeypatch, tmp_path: Path) -> None:
@@ -547,7 +547,7 @@ def test_cmd_solve_v3_applies_equilibrium_override(monkeypatch, tmp_path: Path) 
             output_path=None,
         )
 
-    monkeypatch.setattr("sfincs_jax.run.run_profile", _fake_run_profile)
+    monkeypatch.setattr("dkx.run.run_profile", _fake_run_profile)
 
     args = Namespace(
         input=str(input_path),
@@ -582,8 +582,8 @@ def test_main_accepts_quiet_after_subcommand(monkeypatch, tmp_path: Path) -> Non
         out.write_bytes(b"")
         return SimpleNamespace(output_path=out)
 
-    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
-    monkeypatch.setattr("sfincs_jax.run.run_profile", _fake_run_profile)
+    monkeypatch.setattr("dkx.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("dkx.run.run_profile", _fake_run_profile)
 
     rc = cli.main(
         [
@@ -618,8 +618,8 @@ def test_main_bare_input_uses_public_auto_contract(monkeypatch, tmp_path: Path) 
         nml.source_text = "&general\n/\n&geometryParameters\n/\n"
         return nml
 
-    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", _fake_namelist_with_source)
-    monkeypatch.setattr("sfincs_jax.run.run_profile", _fake_run_profile)
+    monkeypatch.setattr("dkx.cli.read_sfincs_input", _fake_namelist_with_source)
+    monkeypatch.setattr("dkx.run.run_profile", _fake_run_profile)
 
     rc = cli.main(
         [
@@ -665,8 +665,8 @@ def test_main_write_output_forwards_solver_trace_sidecar(monkeypatch, tmp_path: 
         out.write_bytes(b"")
         return SimpleNamespace(output_path=out)
 
-    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
-    monkeypatch.setattr("sfincs_jax.run.run_profile", _fake_run_profile)
+    monkeypatch.setattr("dkx.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("dkx.run.run_profile", _fake_run_profile)
 
     trace_path = tmp_path / "solver_trace.json"
     rc = cli.main(
@@ -698,8 +698,8 @@ def test_main_write_output_removed_solve_methods_error_cleanly(
     def _canonical_refuses(*_args, **_kwargs):
         raise NotImplementedError(f"solve_method={method} was removed from the canonical stack")
 
-    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
-    monkeypatch.setattr("sfincs_jax.run.run_profile", _canonical_refuses)
+    monkeypatch.setattr("dkx.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("dkx.run.run_profile", _canonical_refuses)
 
     rc = cli.main(
         [
@@ -716,7 +716,7 @@ def test_main_write_output_removed_solve_methods_error_cleanly(
 
     assert rc == 2
     err = capsys.readouterr().err
-    assert f"sfincs_jax write-output failed: solve_method={method} was removed" in err
+    assert f"dkx write-output failed: solve_method={method} was removed" in err
     assert "Traceback" not in err
 
 
@@ -733,8 +733,8 @@ def test_main_write_output_forwards_sparse_host_safe_solve_method(monkeypatch, t
         out.write_bytes(b"")
         return SimpleNamespace(output_path=out)
 
-    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
-    monkeypatch.setattr("sfincs_jax.run.run_profile", _fake_run_profile)
+    monkeypatch.setattr("dkx.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("dkx.run.run_profile", _fake_run_profile)
 
     rc = cli.main(
         [
@@ -760,7 +760,7 @@ def test_main_scan_er_forwards_structured_csr_solve_method(monkeypatch, tmp_path
         captured.update(kwargs)
         return SimpleNamespace()
 
-    monkeypatch.setattr("sfincs_jax.workflows.scans.run_er_scan", _fake_run_er_scan)
+    monkeypatch.setattr("dkx.workflows.scans.run_er_scan", _fake_run_er_scan)
 
     rc = cli.main(
         [
@@ -788,8 +788,8 @@ def test_main_write_output_reports_runtime_errors_without_traceback(monkeypatch,
     def _fake_run_profile(*_args, **_kwargs):
         raise RuntimeError("host sparse factorization failed")
 
-    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
-    monkeypatch.setattr("sfincs_jax.run.run_profile", _fake_run_profile)
+    monkeypatch.setattr("dkx.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("dkx.run.run_profile", _fake_run_profile)
 
     rc = cli.main(
         [
@@ -804,7 +804,7 @@ def test_main_write_output_reports_runtime_errors_without_traceback(monkeypatch,
 
     captured = capsys.readouterr()
     assert rc == 2
-    assert "sfincs_jax write-output failed: host sparse factorization failed" in captured.err
+    assert "dkx write-output failed: host sparse factorization failed" in captured.err
     assert "Traceback" not in captured.err
 
 
@@ -812,16 +812,16 @@ def test_main_preserves_shard_axis_before_subcommand(monkeypatch, tmp_path: Path
     captured: dict[str, object] = {}
 
     def _fake_run_geometry(namelist_path, **kwargs):
-        captured["shard_axis"] = os.environ.get("SFINCS_JAX_MATVEC_SHARD_AXIS")
+        captured["shard_axis"] = os.environ.get("DKX_MATVEC_SHARD_AXIS")
         out = Path(kwargs["out_path"])
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(b"")
         return SimpleNamespace(output_path=out)
 
-    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
-    monkeypatch.setattr("sfincs_jax.run.run_geometry", _fake_run_geometry)
-    monkeypatch.setenv("SFINCS_JAX_CORES", "4")
-    monkeypatch.setenv("SFINCS_JAX_CPU_DEVICES", "4")
+    monkeypatch.setattr("dkx.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
+    monkeypatch.setattr("dkx.run.run_geometry", _fake_run_geometry)
+    monkeypatch.setenv("DKX_CORES", "4")
+    monkeypatch.setenv("DKX_CPU_DEVICES", "4")
 
     rc = cli.main(
         [
@@ -847,15 +847,15 @@ def test_main_preserves_transport_workers_before_subcommand(monkeypatch, tmp_pat
     captured: dict[str, object] = {}
 
     def _fake_run_transport_matrix(namelist_path, **kwargs):
-        captured["parallel_mode"] = os.environ.get("SFINCS_JAX_TRANSPORT_PARALLEL")
-        captured["workers"] = os.environ.get("SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS")
+        captured["parallel_mode"] = os.environ.get("DKX_TRANSPORT_PARALLEL")
+        captured["workers"] = os.environ.get("DKX_TRANSPORT_PARALLEL_WORKERS")
         out = Path(kwargs["out_path"])
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(b"")
         return SimpleNamespace(output_path=out)
 
-    monkeypatch.setattr("sfincs_jax.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=2))
-    monkeypatch.setattr("sfincs_jax.run.run_transport_matrix", _fake_run_transport_matrix)
+    monkeypatch.setattr("dkx.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=2))
+    monkeypatch.setattr("dkx.run.run_transport_matrix", _fake_run_transport_matrix)
 
     rc = cli.main(
         [
@@ -883,7 +883,7 @@ def test_cmd_run_fortran_reports_output_path(monkeypatch, tmp_path: Path, capsys
         captured.update(kwargs)
         return output_path
 
-    monkeypatch.setattr("sfincs_jax.validation.fortran.run_sfincs_fortran", _fake_run_fortran)
+    monkeypatch.setattr("dkx.validation.fortran.run_sfincs_fortran", _fake_run_fortran)
 
     rc = cli._cmd_run_fortran(
         Namespace(
@@ -905,7 +905,7 @@ def test_cmd_run_fortran_reports_output_path(monkeypatch, tmp_path: Path, capsys
 
 def test_cmd_dump_h5_keys_and_json_payload(monkeypatch, tmp_path: Path, capsys) -> None:
     data = {"zeta": np.asarray([2.0]), "alpha": np.asarray([[1, 2]])}
-    monkeypatch.setattr("sfincs_jax.io.read_sfincs_h5", lambda _path: data)
+    monkeypatch.setattr("dkx.io.read_sfincs_h5", lambda _path: data)
 
     rc = cli._cmd_dump_h5(
         Namespace(
@@ -941,7 +941,7 @@ def test_cmd_compare_h5_prints_failures_and_show_all(monkeypatch, tmp_path: Path
         captured.update(kwargs)
         return results
 
-    monkeypatch.setattr("sfincs_jax.compare.compare_sfincs_outputs", _fake_compare)
+    monkeypatch.setattr("dkx.compare.compare_sfincs_outputs", _fake_compare)
 
     tolerances = tmp_path / "tolerances.json"
     tolerances.write_text(json.dumps({"bad_key": {"rtol": 0.1}}))
@@ -1005,7 +1005,7 @@ def test_postprocess_upstream_cli_strips_separator_and_forwards_flags(monkeypatc
     def _fake_run_upstream_util(**kwargs):
         captured.update(kwargs)
 
-    monkeypatch.setattr("sfincs_jax.workflows.scans.run_upstream_util", _fake_run_upstream_util)
+    monkeypatch.setattr("dkx.workflows.scans.run_upstream_util", _fake_run_upstream_util)
 
     rc = cli.main(
         [
@@ -1067,12 +1067,12 @@ def test_write_output_no_overwrite_errors_when_file_exists(tmp_path: Path, capsy
     )
     assert rc == 2
     err = capsys.readouterr().err
-    assert "sfincs_jax write-output failed" in err
+    assert "dkx write-output failed" in err
     assert str(out.resolve()) in err
     assert "Traceback" not in err
 
     # The library-level guard is the same FileExistsError the legacy writer raised.
-    from sfincs_jax.run import run_geometry
+    from dkx.run import run_geometry
 
     with pytest.raises(FileExistsError):
         run_geometry(_TINY_DECK, out_path=out, overwrite=False, emit=None)
@@ -1120,9 +1120,9 @@ def test_write_output_no_fortran_layout_reverses_axes(tmp_path: Path) -> None:
 
 def test_write_output_no_fortran_layout_covers_solution_datasets(tmp_path: Path) -> None:
     """fortran_layout=False also reverses the per-iteration solution datasets (one solve)."""
-    from sfincs_jax.drift_kinetic import _geometry_and_radial
-    from sfincs_jax.run import _grids_from_input, run_profile
-    from sfincs_jax.writer import write_profile_output
+    from dkx.drift_kinetic import _geometry_and_radial
+    from dkx.run import _grids_from_input, run_profile
+    from dkx.writer import write_profile_output
 
     fortran_out = tmp_path / "fortran.h5"
     native_out = tmp_path / "native.h5"
@@ -1155,7 +1155,7 @@ def test_write_output_no_fortran_layout_covers_solution_datasets(tmp_path: Path)
 
 def test_write_output_geometry_only_emits_base_and_geometry_fields(tmp_path: Path) -> None:
     """Canonical --geometry-only writes the state-independent base/geometry key set."""
-    from sfincs_jax.run import run_geometry
+    from dkx.run import run_geometry
 
     canonical_out = tmp_path / "canonical.h5"
     run = run_geometry(_TINY_DECK, out_path=canonical_out, emit=None)

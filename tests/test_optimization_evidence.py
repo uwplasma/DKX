@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sfincs_jax.workflows.optimization import (
+from dkx.workflows.optimization import (
     build_promotion_evidence_plan,
     prepare_fortran_er_scan_inputs,
 )
@@ -29,7 +29,7 @@ def test_promotion_evidence_plan_builds_cpu_gpu_fortran_commands(tmp_path: Path)
     )
     payload = plan.as_dict()
 
-    assert payload["workflow"] == "sfincs_jax_optimization_promotion_evidence_plan"
+    assert payload["workflow"] == "dkx_optimization_promotion_evidence_plan"
     assert [lane["label"] for lane in payload["lanes"]] == ["cpu", "gpu", "fortran_v3"]
     assert payload["lanes"][0]["env"] == {"JAX_PLATFORM_NAME": "cpu"}
     assert payload["lanes"][1]["env"] == {

@@ -1,0 +1,210 @@
+{
+  "collisionality": {
+    "lhd": {
+      "l11_fp_pas_separation": [
+        {
+          "abs_delta": 0.006580903900324116,
+          "fp_l11": -0.026439191437298688,
+          "nuprime": 0.099999982658,
+          "pas_l11": -0.033020095337622804,
+          "relative_to_fp": 0.24890715421199328
+        },
+        {
+          "abs_delta": 0.012062536892950747,
+          "fp_l11": -0.02152015372553137,
+          "nuprime": 0.215443431641,
+          "pas_l11": -0.03358269061848212,
+          "relative_to_fp": 0.5605228032660302
+        },
+        {
+          "abs_delta": 0.02504475883077581,
+          "fp_l11": -0.01660553550617993,
+          "nuprime": 0.464158802867,
+          "pas_l11": -0.04165029433695574,
+          "relative_to_fp": 1.5082174749170318
+        },
+        {
+          "abs_delta": 0.05290917810714523,
+          "fp_l11": -0.011376272200317733,
+          "nuprime": 0.99999982658,
+          "pas_l11": -0.06428545030746297,
+          "relative_to_fp": 4.65083615928841
+        },
+        {
+          "abs_delta": 0.1120912850092979,
+          "fp_l11": -0.007130480922475378,
+          "nuprime": 2.15443431641,
+          "pas_l11": -0.11922176593177328,
+          "relative_to_fp": 15.720017517469904
+        },
+        {
+          "abs_delta": 0.2391631124291133,
+          "fp_l11": -0.004391691389033867,
+          "nuprime": 4.641588028668,
+          "pas_l11": -0.24355480381814718,
+          "relative_to_fp": 54.45808715664947
+        },
+        {
+          "abs_delta": 0.5134438316134085,
+          "fp_l11": -0.0026646422304291884,
+          "nuprime": 9.9999982658,
+          "pas_l11": -0.5161084738438376,
+          "relative_to_fp": 192.68771835486115
+        }
+      ],
+      "l11_high_relative_separation": 192.68771835486115,
+      "l11_high_to_low_relative_separation_ratio": 774.134913738758,
+      "l11_low_relative_separation": 0.24890715421199328,
+      "labels": [
+        "Fokker-Planck",
+        "PAS"
+      ],
+      "nuprime": [
+        0.099999982658,
+        0.215443431641,
+        0.464158802867,
+        0.99999982658,
+        2.15443431641,
+        4.641588028668,
+        9.9999982658
+      ]
+    },
+    "w7x": {
+      "l11_fp_pas_separation": [
+        {
+          "abs_delta": 0.00011491051946710222,
+          "fp_l11": -0.0006551563907325943,
+          "nuprime": 0.100003009289,
+          "pas_l11": -0.0007700669101996966,
+          "relative_to_fp": 0.1753940297195446
+        },
+        {
+          "abs_delta": 0.00023303666106218042,
+          "fp_l11": -0.0006753649372300515,
+          "nuprime": 0.215449952319,
+          "pas_l11": -0.0009084015982922319,
+          "relative_to_fp": 0.3450529457717472
+        },
+        {
+          "abs_delta": 0.0005031159330386818,
+          "fp_l11": -0.0006823112705577647,
+          "nuprime": 0.464172851242,
+          "pas_l11": -0.0011854272035964465,
+          "relative_to_fp": 0.7373701047432543
+        },
+        {
+          "abs_delta": 0.001068111740126451,
+          "fp_l11": -0.0006305903294722349,
+          "nuprime": 1.000030092888,
+          "pas_l11": -0.001698702069598686,
+          "relative_to_fp": 1.693828291056088
+        },
+        {
+          "abs_delta": 0.0022536673788415332,
+          "fp_l11": -0.0005185700291087713,
+          "nuprime": 2.154499523193,
+          "pas_l11": -0.0027722374079503045,
+          "relative_to_fp": 4.345926783919133
+        },
+        {
+          "abs_delta": 0.004729290400713993,
+          "fp_l11": -0.0003701449975677068,
+          "nuprime": 4.641728512424,
+          "pas_l11": -0.0050994353982816995,
+          "relative_to_fp": 12.77685888446706
+        },
+        {
+          "abs_delta": 0.01002098848658366,
+          "fp_l11": -0.00022925596217282876,
+          "nuprime": 10.000300928877,
+          "pas_l11": -0.010250244448756489,
+          "relative_to_fp": 43.71091766428808
+        }
+      ],
+      "l11_high_relative_separation": 43.71091766428808,
+      "l11_high_to_low_relative_separation_ratio": 249.2155390590086,
+      "l11_low_relative_separation": 0.1753940297195446,
+      "labels": [
+        "Fokker-Planck",
+        "PAS"
+      ],
+      "nuprime": [
+        0.100003009289,
+        0.215449952319,
+        0.464172851242,
+        1.000030092888,
+        2.154499523193,
+        4.641728512424,
+        10.000300928877
+      ]
+    }
+  },
+  "metadata": {
+    "kind": "publication_validation_dashboard",
+    "literature": [
+      "https://doi.org/10.1063/1.4870077",
+      "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
+    ],
+    "schema_version": 1,
+    "source_artifacts": {
+      "lhd_collisionality": "lhd_collisionality_summary.json",
+      "stellarator_er_sweep": "er_sweep_stellarator_fast_reference_summary.json",
+      "tokamak_er_sweep": "er_sweep_tokamak_reference_summary.json",
+      "w7x_collisionality": "w7x_collisionality_summary.json"
+    }
+  },
+  "trajectory_sweeps": {
+    "stellarator": {
+      "er_values": [
+        -8.5897,
+        0.0,
+        8.5897
+      ],
+      "models": [
+        "dkes",
+        "full",
+        "partial"
+      ],
+      "nonzero_fsab_flow_spread": {
+        "-8.5897": 0.0006310669298875814,
+        "8.5897": 0.0009594077482996885
+      },
+      "nonzero_fsab_jhat_spread": {
+        "-8.5897": 0.000567906041595026,
+        "8.5897": 0.0008562662400849255
+      },
+      "zero_field_spread": {
+        "fsab_flow": 0.0,
+        "fsab_jhat": 0.0,
+        "heat_flux_vm_psi_hat": 0.0,
+        "particle_flux_vm_psi_hat": 0.0
+      }
+    },
+    "tokamak": {
+      "er_values": [
+        -30.0,
+        0.0,
+        30.0
+      ],
+      "models": [
+        "dkes",
+        "full",
+        "partial"
+      ],
+      "nonzero_fsab_flow_spread": {
+        "-30": 0.025045700652648162,
+        "30": 0.018139708815594097
+      },
+      "nonzero_fsab_jhat_spread": {
+        "-30": 0.025045700652648162,
+        "30": 0.018139708815594097
+      },
+      "zero_field_spread": {
+        "fsab_flow": 0.0,
+        "fsab_jhat": 0.0,
+        "heat_flux_vm_psi_hat": 0.0,
+        "particle_flux_vm_psi_hat": 0.0
+      }
+    }
+  }
+}

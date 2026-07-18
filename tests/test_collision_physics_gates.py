@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from sfincs_jax.collisions import (
+from dkx.collisions import (
     _V3_SQRTPI,
     _psi_chandra,
     apply_pitch_angle_scattering_v3,
@@ -18,8 +18,8 @@ from sfincs_jax.collisions import (
     polynomial_interpolation_matrix_np,
     rosenbluth_potential_terms_v3_np,
 )
-from sfincs_jax.xgrid import make_x_grid
-from sfincs_jax.phase_space import make_speed_grid, speed_grid_diff_matrices
+from dkx.xgrid import make_x_grid
+from dkx.phase_space import make_speed_grid, speed_grid_diff_matrices
 
 
 def _pas_operator():
