@@ -117,6 +117,57 @@ def test_contracts_are_reexported_from_top_level_package() -> None:
     assert dkx.__version__
 
 
+def test_flagship_capabilities_are_exported_from_top_level_package() -> None:
+    """The productized API surface: typed inputs, runners, solver knobs, scans."""
+
+    from dkx.api import SolverOptions
+    from dkx.inputs import SfincsInput, load_sfincs_input
+
+    assert dkx.SfincsInput is SfincsInput
+    assert dkx.load_sfincs_input is load_sfincs_input
+    assert dkx.SolverOptions is SolverOptions
+
+    lazy_exports = {
+        "run_profile": "dkx.run",
+        "run_transport_matrix": "dkx.run",
+        "run_from_namelist": "dkx.run",
+        "batched_solve": "dkx.batch",
+        "monoenergetic_database": "dkx.monoenergetic",
+        "ambipolar_er": "dkx.er",
+        "find_ambipolar_er": "dkx.er",
+        "classical_impurity_flux": "dkx.impurity",
+        "build_impurity_plasma": "dkx.impurity",
+    }
+    for name, owner in lazy_exports.items():
+        assert name in dkx.__all__, name
+        resolved = getattr(dkx, name)
+        assert callable(resolved), name
+        assert resolved.__module__ == owner, name
+        assert name in dir(dkx), name
+
+    for name in ("SfincsInput", "load_sfincs_input", "SolverOptions", "batched_er_scan",
+                 "run_monoenergetic_database"):  # fmt: skip
+        assert name in dkx.__all__, name
+
+    with pytest.raises(AttributeError, match="no attribute"):
+        getattr(dkx, "no_such_flagship_capability")
+
+
+def test_solver_options_is_a_frozen_contract_with_solve_kwargs() -> None:
+    from dkx.api import SolverOptions
+
+    options = SolverOptions(method="gmres", tol=1e-8, differentiable=True, memory_budget_gb=4.0)
+    with pytest.raises(FrozenInstanceError):
+        options.tol = 1e-6  # type: ignore[misc]
+
+    kwargs = options.solve_kwargs()
+    assert kwargs["method"] == "gmres"
+    assert kwargs["tol"] == 1e-8
+    assert kwargs["differentiable"] is True
+    assert kwargs["tier1_memory_budget_gb"] == 4.0
+    assert "cores" not in kwargs  # honest: threads are pinned pre-import (DKX_CORES/--cores)
+
+
 def test_import_env_controls_solver_threads_and_compilation_cache(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
