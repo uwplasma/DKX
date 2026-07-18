@@ -32,6 +32,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+# The module-scoped ``example`` fixture runs the multi-solve S-curve + Te/Ti
+# bifurcation benchmark once; under coverage instrumentation that peaks a CI
+# shard's memory and gets the runner reclaimed, so keep it out of the "not
+# slow" coverage shards (same policy as the flagship and bounce-averaged
+# integration gates). It still runs in the slow lane and locally.
+pytestmark = pytest.mark.slow
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE = REPO_ROOT / "examples" / "paper_benchmarks" / "electron_root_optimization.py"
 
