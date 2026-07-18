@@ -156,7 +156,9 @@ from dkx.species import SpeciesSet, species_set_from_namelist  # noqa: E402
 
 __all__ = [
     "KineticOperator",
+    "KineticOperatorBuild",
     "LegendreBlocks",
+    "kinetic_operator_build_from_namelist",
     "kinetic_operator_from_namelist",
 ]
 
@@ -2071,15 +2073,52 @@ def _load_external_phi1(*, nml: Any, phys: dict, grids: Grids) -> jnp.ndarray:
     return jnp.asarray(phi1, dtype=jnp.float64)
 
 
+class KineticOperatorBuild(NamedTuple):
+    """One operator build together with the grids/geometry it was derived from.
+
+    The single-build context of :func:`kinetic_operator_build_from_namelist`:
+    downstream consumers (the run drivers, the writer, diagnostics) share these
+    objects instead of re-deriving them from the namelist.
+
+    Attributes:
+        operator: the assembled :class:`KineticOperator`.
+        grids: the :class:`dkx.phase_space.Grids` the operator uses
+            (theta/zeta nodes and quadrature weights are not stored on the
+            operator itself).
+        geometry: the full :class:`dkx.magnetic_geometry.FluxSurfaceGeometry`
+            (radial-derivative fields included).
+        radial: the :class:`dkx.constants.RadialCoordinates` conversions
+            for the selected flux surface.
+    """
+
+    operator: KineticOperator
+    grids: Grids
+    geometry: FluxSurfaceGeometry
+    radial: RadialCoordinates
+
+
 def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
     """Build a :class:`KineticOperator` from a parsed SFINCS input namelist.
+
+    Thin facade over :func:`kinetic_operator_build_from_namelist` returning the
+    operator only; callers that also need the grids, geometry, or radial
+    conversions use the build function to avoid re-deriving them.
+    """
+    return kinetic_operator_build_from_namelist(nml).operator
+
+
+def kinetic_operator_build_from_namelist(nml: Any) -> KineticOperatorBuild:
+    """Build a :class:`KineticOperator` plus its grids/geometry/radial context.
 
     ``nml`` is a :class:`dkx.namelist.Namelist`.  Grids come from
     :func:`dkx.phase_space.make_grids`, geometry from
     :class:`dkx.magnetic_geometry.FluxSurfaceGeometry`, species from
     :func:`dkx.species.species_set_from_namelist`, radial-coordinate
     and monoenergetic conversions from :mod:`dkx.constants`, and
-    collision matrices from :mod:`dkx.collisions`.
+    collision matrices from :mod:`dkx.collisions`.  The returned
+    :class:`KineticOperatorBuild` carries the grids, flux-surface geometry, and
+    radial conversions alongside the operator so one build serves the solve,
+    diagnostics, and output-writing consumers.
 
     Supports ``geometryScheme`` in {1, 2, 3, 4, 5, 11, 12, 13} (analytic schemes
     1/2/3/4, file-based 5/11/12, and the namelist Boozer |B| spectrum 13) and
@@ -2402,7 +2441,7 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
     else:
         magnetic_drift_arrays = {}
 
-    return KineticOperator(
+    op = KineticOperator(
         n_species=n_species,
         n_x=grids.n_x,
         n_xi=grids.n_xi,
@@ -2468,6 +2507,7 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
         magnetic_drift_scheme=magnetic_drift_scheme if with_magnetic_drifts else 0,
         **magnetic_drift_arrays,
     )
+    return KineticOperatorBuild(operator=op, grids=grids, geometry=geom, radial=radial)
 
 
 apply_kinetic_operator_jit = jax.jit(lambda op, v: op.apply(v))
