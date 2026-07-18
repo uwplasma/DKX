@@ -31,12 +31,15 @@ import scipy.linalg as sla
 from dkx.drift_kinetic import KineticOperator
 from dkx.namelist import parse_sfincs_input_text, read_sfincs_input
 from dkx.solve import (
+    _resolve_subsystem_batch,
     build_coarse_preconditioner,
     materialize_dense,
     solve,
     tier1_available,
     tier1_full_band_bytes,
     tier1_peak_memory_bytes,
+    tier1_truncated_peak_memory_bytes,
+    tier1_truncated_subsystem_width,
 )
 
 REF = Path(__file__).parent / "ref"
@@ -334,6 +337,65 @@ def test_gradient_through_ramped_truncated_route_matches_finite_differences() ->
     fd = float((loss(jnp.asarray(t0 + eps)) - loss(jnp.asarray(t0 - eps))) / (2.0 * eps))
     assert np.isfinite(g) and np.isfinite(fd) and abs(fd) > 0.0
     np.testing.assert_allclose(g, fd, rtol=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# Subsystem batching: concurrent per-(species, x) elimination width
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("make_op", ["uniform", "ramped", "ramped_grouped"])
+def test_truncated_subsystem_batch_any_width_is_bit_identical(make_op: str) -> None:
+    """Every subsystem batch width must compute identical answers.
+
+    The width only changes how many independent (species, x) eliminations run
+    concurrently (grouped by equal ``Nxi_for_x`` block count on the ramped
+    path); the per-subsystem arithmetic is unchanged, so the solutions must
+    agree to the bit level.  ``ramped_grouped`` repeats ``Nxi_for_x`` values
+    so the equal-``n_blocks`` groups hold more than one subsystem and the
+    batched group path is genuinely exercised.
+    """
+    if make_op == "uniform":
+        op = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
+    else:
+        op = _ramped_pas_op()
+        if make_op == "ramped_grouped":
+            op = replace(
+                op, n_xi_for_x=jnp.asarray([4, 4, 9, 16, 16], dtype=jnp.int32)
+            )
+    rhs = op.rhs()
+    b = int(op.n_species) * int(op.n_x)
+    x1 = np.asarray(
+        solve(op, rhs, method="block_tridiagonal_truncated", subsystem_batch=1).x
+    )
+    for width in (2, b, "auto"):
+        r = solve(op, rhs, method="block_tridiagonal_truncated", subsystem_batch=width)
+        assert r.converged
+        diff = np.max(np.abs(np.asarray(r.x) - x1))
+        assert diff <= 1e-13, f"width={width}: max abs diff {diff:.3e}"
+
+
+def test_truncated_subsystem_width_respects_memory_budget() -> None:
+    op = _ramped_pas_op()
+    b = int(op.n_species) * int(op.n_x)
+    # A tiny budget forces the serial minimum-memory width.
+    assert tier1_truncated_subsystem_width(op, memory_budget_gb=1e-12) == 1
+    # An ample budget admits the full subsystem batch.
+    assert tier1_truncated_subsystem_width(op, memory_budget_gb=1024.0) == b
+    # The footprint model grows with the width it models (lockstep).
+    lean = tier1_truncated_peak_memory_bytes(op, subsystem_batch=1)
+    wide = tier1_truncated_peak_memory_bytes(op, subsystem_batch=b)
+    assert wide > lean
+    # "auto" is backend-aware: serial on CPU (measured best — XLA:CPU runs
+    # batched LAPACK calls serially per element), memory-budgeted elsewhere.
+    if jax.default_backend() == "cpu":
+        assert _resolve_subsystem_batch(op, "auto", 3) == 1
+    assert _resolve_subsystem_batch(op, 4, 3) == 4
+    assert _resolve_subsystem_batch(op, 10**6, 3) == b
+    with pytest.raises(ValueError):
+        _resolve_subsystem_batch(op, 0, 3)
+    with pytest.raises(ValueError):
+        _resolve_subsystem_batch(op, "wide", 3)
 
 
 # ---------------------------------------------------------------------------
