@@ -192,7 +192,7 @@ def read_sfincs_input(path: str | Path) -> RawNamelist:
 
 
 def _f(default: Any, fortran_name: str) -> Any:
-    return field(default=default, metadata={"nml": fortran_name.upper()})
+    return field(default=default, metadata={"nml": fortran_name})
 
 
 def _convert(value: Any, default: Any) -> Any:
@@ -388,6 +388,113 @@ _SECTION_CLASSES: Dict[str, type] = {
     "preconditioneroptions": PreconditionerOptions,
 }
 
+# (SfincsInput attribute, Fortran namelist group name) in canonical deck order.
+_SECTION_GROUPS: Tuple[Tuple[str, str], ...] = (
+    ("general", "general"),
+    ("geometry", "geometryParameters"),
+    ("species", "speciesParameters"),
+    ("physics", "physicsParameters"),
+    ("resolution", "resolutionParameters"),
+    ("other", "otherNumericalParameters"),
+    ("preconditioner", "preconditionerOptions"),
+)
+
+
+# --------------------------------------------------------------------------
+# Serializer: typed input -> Fortran-namelist text (the parser's inverse)
+# --------------------------------------------------------------------------
+
+
+def _format_scalar(value: Scalar) -> str:
+    """Render one value in Fortran-namelist syntax the parser round-trips."""
+    if isinstance(value, bool):
+        return ".true." if value else ".false."
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        return repr(value)  # shortest text that round-trips the float64 exactly
+    text = str(value)
+    quote = "'" if '"' in text else '"'
+    return f"{quote}{text}{quote}"
+
+
+def _format_value(value: Value | Tuple[float, ...]) -> str:
+    if isinstance(value, (list, tuple)):
+        return " ".join(_format_scalar(v) for v in value)
+    return _format_scalar(value)
+
+
+# Written even by compact decks: the geometry-family dispatch key has no
+# usable fallback in the raw-namelist readers (they fail loudly on a missing
+# geometryScheme rather than silently assuming the Fortran default).
+_COMPACT_ALWAYS_WRITE = frozenset({"GEOMETRYSCHEME"})
+
+
+def _section_lines(
+    section: Any,
+    *,
+    include_defaults: bool,
+    raw_group: Mapping[str, Value],
+    raw_indexed: Mapping[str, Mapping[Tuple[int, ...], Scalar]],
+) -> List[str]:
+    """One namelist group body: typed fields, untyped raw keys, rank-2 arrays."""
+    lines: List[str] = []
+    claimed: set[str] = set()
+    for fld in fields(type(section)):
+        name = fld.metadata.get("nml")
+        if name is None:
+            continue
+        claimed.add(name.upper())
+        value = getattr(section, fld.name)
+        if isinstance(value, tuple) and not value:
+            continue  # uninitialized species-style array (Fortran sentinel)
+        if (
+            not include_defaults
+            and value == fld.default
+            and name.upper() not in _COMPACT_ALWAYS_WRITE
+        ):
+            continue
+        lines.append(f"  {name} = {_format_value(value)}")
+    # Untyped keys the parser retained in ``raw`` (e.g. the legacy Boozer
+    # equilibrium aliases or externalPhi1Filename) survive the round trip.
+    for key, value in raw_group.items():
+        if key.upper() in claimed:
+            continue
+        lines.append(f"  {key} = {_format_value(value)}")
+    # Rank-2+ indexed assignments (the boozer_bmnc(m,n)/boozer_bmns(m,n)
+    # spectra of geometryScheme=13) are consumed from ``raw.indexed`` by the
+    # geometry builder and re-emitted verbatim here.
+    for base, entries in raw_indexed.items():
+        for idx, val in sorted(entries.items()):
+            if len(idx) < 2:
+                continue  # rank-1 assignments were folded into typed vectors
+            idx_txt = ",".join(str(i) for i in idx)
+            lines.append(f"  {base}({idx_txt}) = {_format_scalar(val)}")
+    return lines
+
+
+def _build_flat_fields() -> Dict[str, Tuple[str, str, Any]]:
+    """UPPERCASE Fortran name -> (section attribute, field name, default).
+
+    The flat constructor namespace of :meth:`SfincsInput.from_params`; built
+    once and asserted collision-free (every Fortran input name is unique
+    across the namelist groups, as in readInput.F90).
+    """
+    mapping: Dict[str, Tuple[str, str, Any]] = {}
+    for attr, display in _SECTION_GROUPS:
+        for fld in fields(_SECTION_CLASSES[display.lower()]):
+            name = fld.metadata.get("nml")
+            if name is None:
+                continue
+            key = name.upper()
+            if key in mapping:  # pragma: no cover - guarded by construction
+                raise AssertionError(f"Duplicate Fortran input name across sections: {name}")
+            mapping[key] = (attr, fld.name, fld.default)
+    return mapping
+
+
+_FLAT_FIELDS: Dict[str, Tuple[str, str, Any]] = _build_flat_fields()
+
 
 @dataclass(frozen=True)
 class SfincsInput:
@@ -395,6 +502,14 @@ class SfincsInput:
 
     ``export_f`` and anything not (yet) typed remain reachable through
     ``raw`` (the full parsed namelist) — the ``.raw`` fallback contract.
+
+    Build one from a file with :func:`load_sfincs_input`, or programmatically
+    with :meth:`from_params` using the flat Fortran parameter names
+    (``SfincsInput.from_params(Ntheta=17, geometryScheme=11, ...)``); the
+    nested section dataclasses use snake_case Python names (``n_theta``)
+    whose Fortran spelling is recorded in each field's ``nml`` metadata.
+    Serialize back to Fortran-namelist text with :meth:`to_namelist` or
+    :meth:`write`.
     """
 
     general: GeneralParams = field(default_factory=GeneralParams)
@@ -407,6 +522,108 @@ class SfincsInput:
     export_f: Mapping[str, Value] = field(default_factory=dict)
     raw: RawNamelist | None = None
     warnings: Tuple[str, ...] = ()
+
+    @classmethod
+    def from_params(cls, *, validate: bool = True, **params: Any) -> "SfincsInput":
+        """Build a typed input from flat Fortran-named parameters.
+
+        Parameter names are the Fortran ``input.namelist`` names
+        (``Ntheta``, ``geometryScheme``, ``equilibriumFile``, ``Zs``, ...),
+        matched case-insensitively and routed to the owning namelist section
+        automatically.  Species arrays accept lists or tuples.  Unknown names
+        raise ``ValueError`` (the ``.raw`` fallback of parsed decks has no
+        programmatic equivalent).
+
+        Args:
+            validate: run the validateInput.F90-equivalent checks and the
+                RHSMode=3 hard overrides (default), as :func:`load_sfincs_input`
+                does for files.
+            **params: flat Fortran-named values, e.g.
+                ``SfincsInput.from_params(geometryScheme=1, Ntheta=15, Zs=[1.0])``.
+
+        Returns:
+            The typed (and, by default, validated) :class:`SfincsInput` with
+            ``raw=None``; the run drivers synthesize the namelist via
+            :meth:`to_namelist` when needed.
+        """
+        section_kwargs: Dict[str, Dict[str, Any]] = {attr: {} for attr, _ in _SECTION_GROUPS}
+        for name, value in params.items():
+            entry = _FLAT_FIELDS.get(name.upper())
+            if entry is None:
+                raise ValueError(
+                    f"Unknown SFINCS input parameter {name!r}. Parameter names are the "
+                    "Fortran input.namelist names (case-insensitive), e.g. Ntheta, "
+                    "geometryScheme, equilibriumFile, Zs, nHats."
+                )
+            attr, field_name, default = entry
+            section_kwargs[attr][field_name] = _convert(value, default)
+        inp = cls(
+            **{
+                attr: _SECTION_CLASSES[display.lower()](**section_kwargs[attr])
+                for attr, display in _SECTION_GROUPS
+            }
+        )
+        return _validate(inp) if validate else inp
+
+    def to_namelist(self, *, include_defaults: bool = False) -> str:
+        """Serialize to SFINCS-style Fortran ``input.namelist`` text.
+
+        The output is the parser's inverse: ``load_sfincs_input`` of the
+        written text reproduces every typed section field, the ``export_f``
+        group, untyped keys retained in ``raw`` (legacy aliases such as
+        ``JGboozer_file``), and the rank-2 ``boozer_bmnc(m,n)`` spectra of
+        geometryScheme=13 decks.  The formatting (``&group`` ... ``/``,
+        ``.true.``/``.false.``, quoted strings, space-separated arrays) is the
+        Fortran-namelist subset both this parser and the SFINCS v3 Fortran
+        reader accept.
+
+        Args:
+            include_defaults: write every typed field; the default writes a
+                compact deck with only the fields that differ from the
+                Fortran defaults (globalVariables.F90).
+        """
+        raw_groups: Dict[str, Dict[str, Value]] = (
+            {name: dict(vals) for name, vals in self.raw.groups.items()} if self.raw is not None else {}
+        )
+        raw_indexed: Dict[str, Dict[str, Dict[Tuple[int, ...], Scalar]]] = (
+            {name: dict(vals) for name, vals in self.raw.indexed.items()} if self.raw is not None else {}
+        )
+        lines: List[str] = ["! SFINCS-style input.namelist written by dkx (SfincsInput.to_namelist)."]
+        known_groups = {"export_f"}
+        for attr, display in _SECTION_GROUPS:
+            group_key = display.lower()
+            known_groups.add(group_key)
+            lines.append(f"&{display}")
+            lines.extend(
+                _section_lines(
+                    getattr(self, attr),
+                    include_defaults=include_defaults,
+                    raw_group=raw_groups.get(group_key, {}),
+                    raw_indexed=raw_indexed.get(group_key, {}),
+                )
+            )
+            lines.append("/")
+        lines.append("&export_f")
+        lines.extend(f"  {key} = {_format_value(value)}" for key, value in self.export_f.items())
+        lines.append("/")
+        # Unknown groups the parser retained in ``raw`` survive verbatim.
+        for group_name, group_values in raw_groups.items():
+            if group_name in known_groups:
+                continue
+            lines.append(f"&{group_name}")
+            lines.extend(f"  {key} = {_format_value(value)}" for key, value in group_values.items())
+            for base, entries in raw_indexed.get(group_name, {}).items():
+                for idx, val in sorted(entries.items()):
+                    idx_txt = ",".join(str(i) for i in idx)
+                    lines.append(f"  {base}({idx_txt}) = {_format_scalar(val)}")
+            lines.append("/")
+        return "\n".join(lines) + "\n"
+
+    def write(self, path: str | Path, *, include_defaults: bool = False) -> Path:
+        """Write :meth:`to_namelist` text to ``path`` and return the ``Path``."""
+        out = Path(path)
+        out.write_text(self.to_namelist(include_defaults=include_defaults), encoding="utf-8")
+        return out
 
 
 def _merge_indexed(
@@ -440,8 +657,8 @@ def _build_section(section_name: str, nml: RawNamelist) -> Any:
     kwargs: Dict[str, Any] = {}
     for fld in fields(cls):
         key = fld.metadata.get("nml")
-        if key is not None and key in group:
-            kwargs[fld.name] = _convert(group[key], fld.default)
+        if key is not None and key.upper() in group:
+            kwargs[fld.name] = _convert(group[key.upper()], fld.default)
     return cls(**kwargs)
 
 

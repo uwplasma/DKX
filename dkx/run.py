@@ -23,18 +23,25 @@ import os
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Callable, Dict, Iterable
+from typing import Any, Callable, Dict, Iterable
 
 import numpy as np
 
 from dkx import console
+from dkx.api import SolverOptions
 from dkx.constants import RadialCoordinates
 from dkx.drift_kinetic import (
     KineticOperator,
     _n_periods_from_namelist,
     kinetic_operator_build_from_namelist,
 )
-from dkx.inputs import RawNamelist, SfincsInput, load_sfincs_input
+from dkx.inputs import (
+    RawNamelist,
+    SfincsInput,
+    load_sfincs_input,
+    parse_sfincs_input_text,
+    sfincs_input_from_raw,
+)
 from dkx.magnetic_geometry import FluxSurfaceGeometry
 from dkx.namelist import read_sfincs_input
 from dkx.moments import (
@@ -131,6 +138,47 @@ def _emit_lines(emit: Callable[[str], None] | None, lines: Iterable[str]) -> Non
         return
     for line in lines:
         emit(line)
+
+
+def _typed_sections_match(a: SfincsInput, b: SfincsInput) -> bool:
+    return all(
+        getattr(a, attr) == getattr(b, attr)
+        for attr in ("general", "geometry", "species", "physics", "resolution", "other", "preconditioner")
+    ) and dict(a.export_f) == dict(b.export_f)
+
+
+def _resolve_run_input(source: str | Path | SfincsInput) -> tuple[SfincsInput, Path | None, str]:
+    """Normalize a run input to ``(validated input, source path or None, display name)``.
+
+    A path is loaded exactly as before (``load_sfincs_input``).  An in-memory
+    :class:`SfincsInput` runs without touching disk: when it carries no
+    parsed ``raw`` deck — or its typed sections have been ``replace``d away
+    from the deck ``raw`` was parsed from — a raw namelist is synthesized
+    from :meth:`SfincsInput.to_namelist` (so the operator builder and the
+    output writers see exactly the typed values, and the ``input.namelist``
+    provenance dataset stores the serialized text).
+    """
+    if not isinstance(source, SfincsInput):
+        path = Path(source)
+        return load_sfincs_input(path), path, path.name
+    inp = source
+    if inp.raw is not None:
+        validated = sfincs_input_from_raw(inp.raw)
+        if _typed_sections_match(inp, validated) or _typed_sections_match(
+            inp, sfincs_input_from_raw(inp.raw, validate=False)
+        ):
+            path = inp.raw.source_path
+            return validated, path, (path.name if path is not None else "input.namelist")
+    # Fully explicit serialization: the operator builder reads raw keys with
+    # its own fallbacks, so every typed value is spelled out (a compact deck
+    # omitting a Fortran-default geometryScheme would not build).
+    source_path = inp.raw.source_path if inp.raw is not None else None
+    raw = parse_sfincs_input_text(inp.to_namelist(include_defaults=True), source_path=source_path)
+    return (
+        sfincs_input_from_raw(raw),
+        source_path,
+        (source_path.name if source_path is not None else "input.namelist"),
+    )
 
 
 def _raw_with_validated_overrides(inp: SfincsInput) -> RawNamelist:
@@ -239,10 +287,11 @@ def _startup_lines(
 
 
 def run_transport_matrix(
-    namelist_path: str | Path,
+    namelist_path: str | Path | SfincsInput,
     *,
     solve_method: str = "auto",
     tol: float = 1e-10,
+    solver: SolverOptions | None = None,
     out_path: str | Path | None = None,
     overwrite: bool = True,
     fortran_layout: bool = True,
@@ -253,10 +302,15 @@ def run_transport_matrix(
 
     Args:
         namelist_path: SFINCS ``input.namelist`` file (validated on load; the
-            RHSMode=3 monoenergetic hard overrides of validateInput.F90 apply).
+            RHSMode=3 monoenergetic hard overrides of validateInput.F90
+            apply), or an in-memory :class:`dkx.inputs.SfincsInput`
+            (runs without touching disk).
         solve_method: :func:`dkx.solve.solve` method (``"auto"`` picks
             the tier-1 structured direct path for the PAS/DKES family).
         tol: relative residual tolerance per whichRHS column.
+        solver: full typed knob set (:class:`dkx.api.SolverOptions`)
+            for the multi-RHS solve; when given, it supersedes
+            ``solve_method`` and ``tol``.
         out_path: optional ``sfincsOutput`` file (``.h5``, ``.nc``, or ``.npz``)
             written by :func:`dkx.writer.write_transport_output`.
         overwrite: when ``False``, raise :class:`FileExistsError` if
@@ -273,8 +327,9 @@ def run_transport_matrix(
         A :class:`TransportRun` with the transport matrix, states, solver
         stats, and moments tables.
     """
-    namelist_path = Path(namelist_path)
-    inp = load_sfincs_input(namelist_path)
+    inp, source_path, input_name = _resolve_run_input(namelist_path)
+    if solver is None:
+        solver = SolverOptions(method=solve_method, tol=tol)
     rhs_mode = inp.general.rhs_mode
     if rhs_mode not in (2, 3):
         raise NotImplementedError(
@@ -287,7 +342,7 @@ def run_transport_matrix(
     geom: FluxSurfaceGeometry = build.geometry
     radial: RadialCoordinates = build.radial
 
-    _emit_lines(emit, _startup_lines(inp=inp, op=op, grids=grids, input_name=namelist_path.name))
+    _emit_lines(emit, _startup_lines(inp=inp, op=op, grids=grids, input_name=input_name))
 
     import jax.numpy as jnp  # noqa: PLC0415
 
@@ -296,7 +351,7 @@ def run_transport_matrix(
 
     _emit_lines(emit, [console.entering_solver_line(), console.main_solve_begin_line()])
     t0 = time.perf_counter()
-    result = solve(op, rhs, method=solve_method, tol=tol)
+    result = solve(op, rhs, **solver.solve_kwargs())
     solve_seconds = time.perf_counter() - t0
     _emit_lines(emit, [console.main_solve_done_line(seconds=solve_seconds)])
     if not result.converged:
@@ -376,8 +431,8 @@ def run_transport_matrix(
         rhs_norm = float(np.max(np.linalg.norm(np.asarray(rhs, dtype=np.float64), axis=0)))
         write_run_solver_trace(
             path=solver_trace_path, inp=inp, op=op, solve_result=result,
-            rhs_norm=rhs_norm, solver_tol=float(tol), selected_path="transport_matrix",
-            elapsed_seconds=solve_seconds, input_namelist=namelist_path, output_path=out_path,
+            rhs_norm=rhs_norm, solver_tol=float(solver.tol), selected_path="transport_matrix",
+            elapsed_seconds=solve_seconds, input_namelist=source_path, output_path=out_path,
             compute_solution=False, compute_transport_matrix=True,
         )  # fmt: skip
 
@@ -492,10 +547,11 @@ def _species_results_console_lines(
 
 
 def run_profile(
-    namelist_path: str | Path,
+    namelist_path: str | Path | SfincsInput,
     *,
     solve_method: str = "auto",
     tol: float = 1e-10,
+    solver: SolverOptions | None = None,
     out_path: str | Path | None = None,
     overwrite: bool = True,
     fortran_layout: bool = True,
@@ -505,13 +561,22 @@ def run_profile(
     """Run a SFINCS v3 RHSMode=1 profile-gradient calculation end to end.
 
     Args:
-        namelist_path: SFINCS ``input.namelist`` file (validated on load).  The
+        namelist_path: SFINCS ``input.namelist`` file (validated on load), or
+            an in-memory :class:`dkx.inputs.SfincsInput` (runs without
+            touching disk; a programmatic input's serialized
+            :meth:`~dkx.inputs.SfincsInput.to_namelist` text becomes the
+            output's ``input.namelist`` provenance dataset).  The
             RHSMode=3 monoenergetic forcing adapter is *not* applied: RHSMode=1
             keeps the deck's collision operator, Er terms, and speed grid.
         solve_method: :func:`dkx.solve.solve` method (``"auto"`` picks
             tier 1 for the PAS/DKES family and tier-2 recycled Krylov for
             Fokker-Planck collisions).
         tol: relative residual tolerance for the single-RHS solve.
+        solver: full typed knob set (:class:`dkx.api.SolverOptions`) for
+            the single-RHS solve; when given, it supersedes ``solve_method``
+            and ``tol``.  ``includePhi1`` decks route to the Newton-Krylov
+            Phi1 solve, whose tolerances stay on the
+            ``DKX_PHI1_NEWTON_TOL``/``DKX_PHI1_GMRES_TOL`` knobs.
         out_path: optional ``sfincsOutput`` file (``.h5``, ``.nc``, or ``.npz``)
             written by :func:`dkx.writer.write_profile_output`.
         overwrite: when ``False``, raise :class:`FileExistsError` if
@@ -528,8 +593,9 @@ def run_profile(
         A :class:`ProfileRun` with the state, solver stats, and the full
         per-species moment table.
     """
-    namelist_path = Path(namelist_path)
-    inp = load_sfincs_input(namelist_path)
+    inp, source_path, input_name = _resolve_run_input(namelist_path)
+    if solver is None:
+        solver = SolverOptions(method=solve_method, tol=tol)
     if inp.general.rhs_mode != 1:
         raise NotImplementedError(
             "run_profile supports RHSMode=1; use run_transport_matrix for RHSMode 2/3."
@@ -543,7 +609,7 @@ def run_profile(
     geom: FluxSurfaceGeometry = build.geometry
     radial: RadialCoordinates = build.radial
 
-    _emit_lines(emit, _startup_lines(inp=inp, op=op, grids=grids, input_name=namelist_path.name))
+    _emit_lines(emit, _startup_lines(inp=inp, op=op, grids=grids, input_name=input_name))
 
     _emit_lines(emit, [console.entering_solver_line(), console.main_solve_begin_line()])
     t0 = time.perf_counter()
@@ -587,7 +653,7 @@ def run_profile(
         )
     else:
         rhs = op.rhs()
-        result = solve(op, rhs, method=solve_method, tol=tol)
+        result = solve(op, rhs, **solver.solve_kwargs())
         state_vector = np.asarray(result.x, dtype=np.float64).reshape((-1,))
         state_history = None
     solve_seconds = time.perf_counter() - t0
@@ -641,8 +707,8 @@ def run_profile(
             rhs_norm = 0.0
         write_run_solver_trace(
             path=solver_trace_path, inp=inp, op=op, solve_result=result,
-            rhs_norm=rhs_norm, solver_tol=float(tol), selected_path="rhsmode1_solution",
-            elapsed_seconds=solve_seconds, input_namelist=namelist_path, output_path=out_path,
+            rhs_norm=rhs_norm, solver_tol=float(solver.tol), selected_path="rhsmode1_solution",
+            elapsed_seconds=solve_seconds, input_namelist=source_path, output_path=out_path,
             compute_solution=True, compute_transport_matrix=False,
         )  # fmt: skip
 
@@ -672,7 +738,7 @@ class GeometryRun:
 
 
 def run_geometry(
-    namelist_path: str | Path,
+    namelist_path: str | Path | SfincsInput,
     *,
     out_path: str | Path,
     overwrite: bool = True,
@@ -688,7 +754,8 @@ def run_geometry(
     :func:`dkx.writer.write_geometry_output`.
 
     Args:
-        namelist_path: SFINCS ``input.namelist`` file (validated on load).
+        namelist_path: SFINCS ``input.namelist`` file (validated on load), or
+            an in-memory :class:`dkx.inputs.SfincsInput`.
         out_path: output file; the suffix selects ``.h5``/``.nc``/``.npz``.
         overwrite: when ``False``, raise :class:`FileExistsError` if
             ``out_path`` already exists.
@@ -703,8 +770,7 @@ def run_geometry(
         A :class:`GeometryRun` with the resolved output path.
     """
     t0 = time.perf_counter()
-    namelist_path = Path(namelist_path)
-    inp = load_sfincs_input(namelist_path)
+    inp, source_path, input_name = _resolve_run_input(namelist_path)
     raw = inp.raw if inp.general.rhs_mode == 1 else _raw_with_validated_overrides(inp)
     if raw is None:
         raise ValueError("run_geometry requires an input parsed from a namelist file.")
@@ -714,7 +780,7 @@ def run_geometry(
     geom: FluxSurfaceGeometry = build.geometry
     radial: RadialCoordinates = build.radial
 
-    _emit_lines(emit, _startup_lines(inp=inp, op=op, grids=grids, input_name=namelist_path.name))
+    _emit_lines(emit, _startup_lines(inp=inp, op=op, grids=grids, input_name=input_name))
 
     output_path = write_geometry_output(
         path=out_path, inp=inp, op=op, grids=grids, geom=geom, radial=radial,
@@ -725,7 +791,7 @@ def run_geometry(
         write_geometry_solver_trace(
             path=solver_trace_path, inp=inp, op=op,
             elapsed_seconds=time.perf_counter() - t0,
-            input_namelist=namelist_path, output_path=out_path,
+            input_namelist=source_path, output_path=out_path,
         )  # fmt: skip
 
     _emit_lines(emit, [console.goodbye_line()])
@@ -738,11 +804,12 @@ def run_geometry(
 
 
 def run_from_namelist(
-    namelist_path: str | Path,
+    namelist_path: str | Path | SfincsInput,
     *,
     out_path: str | Path,
     solve_method: str = "auto",
     tol: float | None = None,
+    solver: SolverOptions | None = None,
     overwrite: bool = True,
     fortran_layout: bool = True,
     solver_trace_path: str | Path | None = None,
@@ -756,11 +823,15 @@ def run_from_namelist(
     :func:`run_profile`, and RHSMode=2/3 to :func:`run_transport_matrix`.
 
     Args:
-        namelist_path: SFINCS ``input.namelist`` file (validated on load).
+        namelist_path: SFINCS ``input.namelist`` file (validated on load), or
+            an in-memory :class:`dkx.inputs.SfincsInput` (runs without
+            touching disk).
         out_path: output file; the suffix selects ``.h5``/``.nc``/``.npz``.
         solve_method: :func:`dkx.solve.solve` method for the solve runs.
         tol: relative residual tolerance; ``None`` reads the deck's
             ``solverTolerance`` (default ``1e-10``), matching the CLI.
+        solver: full typed knob set (:class:`dkx.api.SolverOptions`);
+            when given, it supersedes ``solve_method`` and ``tol``.
         overwrite: when ``False``, raise :class:`FileExistsError` if
             ``out_path`` already exists.
         fortran_layout: store the Fortran column-major dataset layout
@@ -774,7 +845,8 @@ def run_from_namelist(
         The underlying :class:`GeometryRun`, :class:`ProfileRun`, or
         :class:`TransportRun` (all carry ``output_path``).
     """
-    namelist_path = Path(namelist_path)
+    if not isinstance(namelist_path, SfincsInput):
+        namelist_path = Path(namelist_path)
     if geometry_only:
         return run_geometry(
             namelist_path,
@@ -784,11 +856,19 @@ def run_from_namelist(
             solver_trace_path=solver_trace_path,
             emit=emit,
         )
-    nml = read_sfincs_input(namelist_path)
-    rhs_mode = int(nml.group("general").get("RHSMODE", 1))
+    if isinstance(namelist_path, SfincsInput):
+        rhs_mode = int(namelist_path.general.rhs_mode)
+        if namelist_path.raw is not None:
+            deck_tol: Any = namelist_path.raw.group("resolutionParameters").get("SOLVERTOLERANCE", 1e-10)
+        else:
+            deck_tol = namelist_path.resolution.solver_tolerance
+    else:
+        nml = read_sfincs_input(namelist_path)
+        rhs_mode = int(nml.group("general").get("RHSMODE", 1))
+        deck_tol = nml.group("resolutionParameters").get("SOLVERTOLERANCE", 1e-10)
     if tol is None:
         try:
-            tol = float(nml.group("resolutionParameters").get("SOLVERTOLERANCE", 1e-10))
+            tol = float(deck_tol)
         except (TypeError, ValueError):
             tol = 1e-10
     if rhs_mode == 1:
@@ -796,6 +876,7 @@ def run_from_namelist(
             namelist_path,
             solve_method=solve_method,
             tol=tol,
+            solver=solver,
             out_path=out_path,
             overwrite=overwrite,
             fortran_layout=fortran_layout,
@@ -806,6 +887,7 @@ def run_from_namelist(
         namelist_path,
         solve_method=solve_method,
         tol=tol,
+        solver=solver,
         out_path=out_path,
         overwrite=overwrite,
         fortran_layout=fortran_layout,
