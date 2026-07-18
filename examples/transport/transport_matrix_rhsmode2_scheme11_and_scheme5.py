@@ -19,8 +19,8 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.compare import compare_sfincs_outputs
-from sfincs_jax.api import write_output
+from dkx.compare import compare_sfincs_outputs
+from dkx.api import write_output
 
 
 def _run_case(base: str, *, out_dir: Path) -> None:
@@ -49,7 +49,7 @@ def _run_case(base: str, *, out_dir: Path) -> None:
     # A stronger check on the transport matrix itself:
     # (Fortran HDF5 layout is transposed as read by Python; compare as written.)
     # The fixture is already in Python-read order.
-    from sfincs_jax.io import read_sfincs_h5
+    from dkx.io import read_sfincs_h5
 
     a = read_sfincs_h5(ref_path)
     b = read_sfincs_h5(out_path)

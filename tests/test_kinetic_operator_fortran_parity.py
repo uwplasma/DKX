@@ -3,7 +3,7 @@
 Consolidates the per-term legacy-operator parity suites (collisionless
 streaming/mirror, ExB, Er xDot/xiDot, PAS and Fokker-Planck collisions,
 full-system matvec/RHS/residual, monoenergetic and RHSMode=2 transport
-matrices) into direct comparisons of :class:`sfincs_jax.drift_kinetic.
+matrices) into direct comparisons of :class:`dkx.drift_kinetic.
 KineticOperator` against frozen Fortran v3 PETSc binaries:
 
 - ``<base>.whichMatrix_3.petscbin`` (the RHSMode=1 solver matrix) with the
@@ -27,9 +27,9 @@ import numpy as np
 import pytest
 from scipy.sparse import csr_matrix
 
-from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
-from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.validation.fortran import read_petsc_mat_aij, read_petsc_vec
+from dkx.drift_kinetic import kinetic_operator_from_namelist
+from dkx.namelist import read_sfincs_input
+from dkx.validation.fortran import read_petsc_mat_aij, read_petsc_vec
 
 REF = Path(__file__).parent / "ref"
 
@@ -164,8 +164,8 @@ def test_transport_matrix_assembly_from_frozen_fortran_states(base: str, n_rhs: 
     """
     import h5py
 
-    from sfincs_jax.moments import transport_matrix_from_state_vectors
-    from sfincs_jax.writer import operator_containers
+    from dkx.moments import transport_matrix_from_state_vectors
+    from dkx.writer import operator_containers
 
     op = _op(base)
     layout, vgrid, surface, species = operator_containers(op)
@@ -204,7 +204,7 @@ def test_rhsmode1_moments_from_frozen_fortran_state_match_golden() -> None:
     """
     import h5py
 
-    from sfincs_jax.run import profile_moments_from_operator
+    from dkx.run import profile_moments_from_operator
 
     base = "pas_1species_PAS_noEr_tiny_scheme1"
     op = _op(base)

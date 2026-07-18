@@ -1,0 +1,131 @@
+{
+  "bootstrap_objective": 0.010899999999999998,
+  "claim_boundary": "This audit evaluates completed dkx kinetic outputs. It promotes a proxy optimization candidate only if the scan is bracketed, residual-gated, and the requested observables are present.",
+  "electron_root_penalty": 0.0,
+  "failures": [],
+  "flux_objective": {
+    "impurity_penalty": 0.0,
+    "main_heat": 0.000936,
+    "main_particle": 0.005429584120982987,
+    "mean_impurity_flux": 0.016014492753623193,
+    "total": 0.006365584120982987
+  },
+  "gate_status": "pass",
+  "runs": [
+    {
+      "bootstrap_current": -0.0049999999999999975,
+      "er": -3.0,
+      "heat_flux": [
+        0.08399999999999999,
+        0.05600000000000001,
+        0.004
+      ],
+      "particle_flux": [
+        -0.06,
+        0.07,
+        -0.31166666666666665
+      ],
+      "path": "/Users/rogeriojorge/local/tests/dkx/docs/_static/figures/optimization/qa_nfp2_dkx_promotion_scan_demo_scan/Er-3/sfincsOutput.h5",
+      "radial_current": -2.0,
+      "residual_gate": {
+        "cpu_gpu_relative_difference": null,
+        "failures": [],
+        "max_cpu_gpu_relative_difference": 1e-07,
+        "residual_norm": 1e-10,
+        "residual_target": 1e-08,
+        "status": "pass"
+      },
+      "residual_norm": 1e-10,
+      "residual_target": 1e-08
+    },
+    {
+      "bootstrap_current": 0.025,
+      "er": -1.0,
+      "heat_flux": [
+        0.036,
+        0.024,
+        0.004
+      ],
+      "particle_flux": [
+        -0.02,
+        0.09000000000000001,
+        -0.115
+      ],
+      "path": "/Users/rogeriojorge/local/tests/dkx/docs/_static/figures/optimization/qa_nfp2_dkx_promotion_scan_demo_scan/Er-1/sfincsOutput.h5",
+      "radial_current": -0.8,
+      "residual_gate": {
+        "cpu_gpu_relative_difference": null,
+        "failures": [],
+        "max_cpu_gpu_relative_difference": 1e-07,
+        "residual_norm": 1e-10,
+        "residual_target": 1e-08,
+        "status": "pass"
+      },
+      "residual_norm": 1e-10,
+      "residual_target": 1e-08
+    },
+    {
+      "bootstrap_current": 0.055,
+      "er": 1.0,
+      "heat_flux": [
+        0.036,
+        0.024,
+        0.004
+      ],
+      "particle_flux": [
+        0.02,
+        0.11,
+        0.07333333333333332
+      ],
+      "path": "/Users/rogeriojorge/local/tests/dkx/docs/_static/figures/optimization/qa_nfp2_dkx_promotion_scan_demo_scan/Er1/sfincsOutput.h5",
+      "radial_current": 0.35,
+      "residual_gate": {
+        "cpu_gpu_relative_difference": null,
+        "failures": [],
+        "max_cpu_gpu_relative_difference": 1e-07,
+        "residual_norm": 1e-10,
+        "residual_target": 1e-08,
+        "status": "pass"
+      },
+      "residual_norm": 1e-10,
+      "residual_target": 1e-08
+    },
+    {
+      "bootstrap_current": 0.08499999999999999,
+      "er": 3.0,
+      "heat_flux": [
+        0.08399999999999999,
+        0.05600000000000001,
+        0.004
+      ],
+      "particle_flux": [
+        0.06,
+        0.13,
+        0.3283333333333333
+      ],
+      "path": "/Users/rogeriojorge/local/tests/dkx/docs/_static/figures/optimization/qa_nfp2_dkx_promotion_scan_demo_scan/Er3/sfincsOutput.h5",
+      "radial_current": 1.8999999999999997,
+      "residual_gate": {
+        "cpu_gpu_relative_difference": null,
+        "failures": [],
+        "max_cpu_gpu_relative_difference": 1e-07,
+        "residual_norm": 1e-10,
+        "residual_target": 1e-08,
+        "status": "pass"
+      },
+      "residual_norm": 1e-10,
+      "residual_target": 1e-08
+    }
+  ],
+  "scan_dir": "/Users/rogeriojorge/local/tests/dkx/docs/_static/figures/optimization/qa_nfp2_dkx_promotion_scan_demo_scan",
+  "selected_root": {
+    "bracket": [
+      -1.0,
+      1.0
+    ],
+    "er": 0.39130434782608714,
+    "root_type": "electron",
+    "slope": 0.575
+  },
+  "workflow": "dkx_optimization_high_fidelity_promotion"
+}

@@ -27,13 +27,13 @@ Package layout
 --------------
 
 The package is a flat set of canonical, physics-named root modules, plus
-one level of domain folders below ``sfincs_jax/`` for orchestration-only
+one level of domain folders below ``dkx/`` for orchestration-only
 code:
 
-- ``sfincs_jax/validation`` for frozen-reference loading, Fortran/PETSc
+- ``dkx/validation`` for frozen-reference loading, Fortran/PETSc
   fixture readers, release-data manifests, validation artifacts, and the
   release/benchmark command-line tooling.
-- ``sfincs_jax/workflows`` for scan orchestration (``scans.py``), optimization
+- ``dkx/workflows`` for scan orchestration (``scans.py``), optimization
   support (``optimization.py``), and JAX-native geometry adapters for external
   equilibrium producers (``geometry_adapters.py``).
 

@@ -49,7 +49,7 @@ Normalization hierarchy
 -----------------------
 
 The single- and multi-species notes define the normalized quantities used throughout
-SFINCS v3 and preserved in ``sfincs_jax``:
+SFINCS v3 and preserved in ``dkx``:
 
 .. math::
 
@@ -68,7 +68,7 @@ These normalizations are not just bookkeeping. They determine:
 - the exact factors that appear in the drift and collision operators,
 - and the interpretation of inputs and HDF5 outputs.
 
-This is one of the main reasons ``sfincs_jax`` keeps the v3 conventions instead of
+This is one of the main reasons ``dkx`` keeps the v3 conventions instead of
 recasting the problem in a more generic linear-algebra normalization.
 
 Drives, fluxes, and transport-matrix columns
@@ -107,7 +107,7 @@ remove nullspaces associated with those conserved quantities. In practice this i
 SFINCS carries explicit constraints and why different ``constraintScheme`` choices can
 change the algebraic branch even when the physics is equivalent.
 
-The important implementation consequence for ``sfincs_jax`` is that validation is not
+The important implementation consequence for ``dkx`` is that validation is not
 only about matching matrix entries. It is also about matching:
 
 - which nullspace or gauge is selected,
@@ -132,7 +132,7 @@ important even in a multispecies code:
 
 In this limit the kinetic problem becomes smaller and more structured. That is exactly
 why reduced monoenergetic and DKES-style codes can exploit specialized solvers that are not natural for
-the full SFINCS state. For ``sfincs_jax``, this is a strong hint that the worst
+the full SFINCS state. For ``dkx``, this is a strong hint that the worst
 monoenergetic and low-energy-coupling offenders should not necessarily be treated with
 the same generic flattened solver path used for full FP runs.
 
@@ -151,7 +151,7 @@ The note describes this using a transform matrix :math:`Y` and integral-evaluati
 matrices :math:`R`, so the map from a collocation-grid perturbation to the potentials is
 represented schematically by :math:`RY`.
 
-Two consequences matter directly for ``sfincs_jax``:
+Two consequences matter directly for ``dkx``:
 
 - the expensive part is dense in speed and species but independent of
   :math:`(\theta,\zeta)` once the geometry factors are separated,
@@ -160,7 +160,7 @@ Two consequences matter directly for ``sfincs_jax``:
   state.
 
 This is exactly the direction suggested by structured block elimination and by the
-existing species-by-:math:`x` block preconditioners already present in ``sfincs_jax``.
+existing species-by-:math:`x` block preconditioners already present in ``dkx``.
 
 Phi1, quasineutrality, and poloidally varying collisions
 --------------------------------------------------------
@@ -184,11 +184,11 @@ The practical message from those notes is subtle:
 - and nonlinear :math:`\Phi_1` solves are more than a simple outer loop because the
   Jacobian and source terms both change with the potential.
 
-This is why ``sfincs_jax`` keeps a more conservative, reference-oriented path for
+This is why ``dkx`` keeps a more conservative, reference-oriented path for
 requested differentiable ``\Phi_1`` workflows while allowing the CLI/default path to use
 more aggressive explicit strategies when they converge to the same final state.
 
-What this means for sfincs_jax engineering
+What this means for dkx engineering
 ------------------------------------------
 
 The upstream notes point to a consistent implementation strategy:
@@ -198,7 +198,7 @@ The upstream notes point to a consistent implementation strategy:
   and angle coordinates,
 - and avoid treating every hard case as an unstructured dense or generic Krylov problem.
 
-That leads directly to the current engineering split in ``sfincs_jax``:
+That leads directly to the current engineering split in ``dkx``:
 
 - a validation-oriented differentiable path for explicit Python requests and gradient
   workflows,

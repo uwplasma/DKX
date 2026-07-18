@@ -1,7 +1,7 @@
 Applications and research workflows
 ===================================
 
-`sfincs_jax` is designed for practical neoclassical analysis, benchmarking, and
+`dkx` is designed for practical neoclassical analysis, benchmarking, and
 optimization-oriented workflows. This page summarizes the main ways the code is used in
 practice and points to the repository examples that exercise those paths.
 
@@ -30,7 +30,7 @@ Examples:
 Geometry studies
 ^^^^^^^^^^^^^^^^
 
-`sfincs_jax` supports analytic, VMEC, and Boozer geometry workflows. This makes it
+`dkx` supports analytic, VMEC, and Boozer geometry workflows. This makes it
 useful for:
 
 - controlled analytic tokamak studies,

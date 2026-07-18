@@ -10,7 +10,7 @@ Neoclassical Transport in Stellarators (ICNTS) benchmark [C.D. Beidler et
 al., Nucl. Fusion 51, 076001 (2011)].  The monoenergetic formulation is
 that of S.P. Hirshman et al., Phys. Fluids 29, 2951 (1986); the
 normalization conventions are documented in
-:mod:`sfincs_jax.monoenergetic`.
+:mod:`dkx.monoenergetic`.
 
 The script mirrors ``monoenergetic_icnts_w7x.py``: a checkpointed
 (nuPrime, EStar) scan, a finer-grid convergence point, optional
@@ -34,7 +34,7 @@ Ntheta=15, Nzeta=91, Nxi=96, ~15 s/point; ~1 min for the 1.27x-resolution
 convergence point; the Fortran cross-check adds a few minutes when
 enabled).  Finished rows are cached in ``output/`` and skipped on re-runs.
 The scan sets a 14 GB tier-1 direct-factorization budget
-(``SFINCS_TIER1_MEMORY_BUDGET_GB``, preset wins) so every point uses the
+(``DKX_TIER1_MEMORY_BUDGET_GB``, preset wins) so every point uses the
 full banded factorization on a 24 GB machine; the Fortran cross-check runs
 pass the same MUMPS pivot/refinement options as the TJ-II case (see that
 script's docstring for the reproducibility note).
@@ -55,9 +55,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 
-os.environ.setdefault("SFINCS_TIER1_MEMORY_BUDGET_GB", "14")
+os.environ.setdefault("DKX_TIER1_MEMORY_BUDGET_GB", "14")
 
-from sfincs_jax.monoenergetic import (  # noqa: E402
+from dkx.monoenergetic import (  # noqa: E402
     monoenergetic_database,
     monoenergetic_dstar_from_transport_matrix,
 )
@@ -65,7 +65,7 @@ from sfincs_jax.monoenergetic import (  # noqa: E402
 # ----------------------------------------------------------------------------
 # Parameters
 # ----------------------------------------------------------------------------
-EQUILIBRIUM = "hsx3free.bc"  # resolved via the sfincs_jax data cache
+EQUILIBRIUM = "hsx3free.bc"  # resolved via the dkx data cache
 RN_WISH = 0.5  # benchmark surface r/a = 0.5
 
 # nuPrime scan: 3x steps across banana -> plateau -> Pfirsch-Schlueter.
@@ -240,7 +240,7 @@ fortran_records = []
 if FORTRAN_EXE and Path(FORTRAN_EXE).exists():
     import h5py
 
-    from sfincs_jax.validation.fortran import run_sfincs_fortran
+    from dkx.validation.fortran import run_sfincs_fortran
 
     print(f"Step 3: Fortran v3 cross-check at {len(FORTRAN_POINTS)} points", flush=True)
     fortran_env = {
@@ -293,7 +293,7 @@ if FORTRAN_EXE and Path(FORTRAN_EXE).exists():
         for key in ("d11_star", "d31_star", "d33_star"):
             ours = jax_point[key]
             ref = f_rec[key]
-            rec[key] = {"sfincs_jax": ours, "fortran": ref, "rel_dev": abs(ours - ref) / abs(ref)}
+            rec[key] = {"dkx": ours, "fortran": ref, "rel_dev": abs(ours - ref) / abs(ref)}
         fortran_records.append(rec)
         print(
             f"  (nuPrime={nu_prime:g}, EStar={e_star:g}) [{f_rec['seconds']:.0f} s]  "

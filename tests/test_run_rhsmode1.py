@@ -1,6 +1,6 @@
 """End-to-end tests for the canonical RHSMode=1 driver and writer.
 
-- ``sfincs_jax.run.run_profile`` solved states must reproduce the frozen
+- ``dkx.run.run_profile`` solved states must reproduce the frozen
   Fortran v3 ``stateVector`` fixtures, and the written h5 file must match the
   recorded Fortran ``sfincsOutput.h5`` golden where one exists (the tiny PAS
   scheme-1 axisymmetric fixture);
@@ -67,7 +67,7 @@ def _deck_path(base: str, tmp_dir: Path) -> Path:
 def _case(base: str, tmp_path_factory: pytest.TempPathFactory) -> dict:
     """One canonical run per fixture, cached module-wide."""
     if base not in _CACHE:
-        from sfincs_jax.run import run_profile
+        from dkx.run import run_profile
 
         tmp_dir = tmp_path_factory.mktemp(f"rhsmode1_{base}")
         deck = _deck_path(base, tmp_dir)
@@ -102,7 +102,7 @@ def _assert_scaled_close(a: np.ndarray, b: np.ndarray, *, tol: float, label: str
 def test_run_profile_state_and_bootstrap_closure(
     base: str, tmp_path_factory: pytest.TempPathFactory
 ) -> None:
-    from sfincs_jax.validation.fortran import read_petsc_vec
+    from dkx.validation.fortran import read_petsc_vec
 
     case = _case(base, tmp_path_factory)
     run = case["run"]
@@ -133,7 +133,7 @@ def test_run_profile_state_and_bootstrap_closure(
 
 
 def test_profile_h5_matches_fortran_golden(tmp_path_factory: pytest.TempPathFactory) -> None:
-    from sfincs_jax.compare import compare_sfincs_outputs
+    from dkx.compare import compare_sfincs_outputs
 
     base = "pas_1species_PAS_noEr_tiny_scheme1"
     case = _case(base, tmp_path_factory)
@@ -152,7 +152,7 @@ def test_profile_h5_matches_fortran_golden(tmp_path_factory: pytest.TempPathFact
 
 def _expected_species_block(run) -> tuple[str, ...]:
     """Re-render the species-results block from the run's moment table."""
-    from sfincs_jax import console
+    from dkx import console
 
     moments = run.moments
     op = run.operator
@@ -190,7 +190,7 @@ def _expected_species_block(run) -> tuple[str, ...]:
 def test_console_species_results_block_quick2species(
     tmp_path_factory: pytest.TempPathFactory,
 ) -> None:
-    from sfincs_jax import console
+    from dkx import console
 
     case = _case("quick_2species_FPCollisions_noEr", tmp_path_factory)
     run = case["run"]
@@ -238,7 +238,7 @@ def test_auto_policy_tier_selection(base: str, tmp_path_factory: pytest.TempPath
 
 
 def test_run_profile_rejects_transport_modes() -> None:
-    from sfincs_jax.run import run_profile
+    from dkx.run import run_profile
 
     with pytest.raises(NotImplementedError, match="RHSMode"):
         run_profile(REF / "monoenergetic_PAS_tiny_scheme1.input.namelist", emit=None)
@@ -256,16 +256,16 @@ def test_run_profile_magnetic_drifts_end_to_end(
 
     The ``magneticDriftScheme=1`` Boozer (geometryScheme 11) deck routes through
     the canonical stack.  Because the drift couples L±2 the operator is not
-    block-tridiagonal, so :func:`sfincs_jax.solve.solve` routes it to tier-2
+    block-tridiagonal, so :func:`dkx.solve.solve` routes it to tier-2
     GCROT (falling back to the exact tier-3 direct solve on this tiny
     collisionless fixture).  The drift assembly is validated element-wise
     against Fortran v3 in ``tests/test_magnetic_drifts_parity.py`` and the
     scheme 2-9 output families against Fortran goldens in
     ``tests/test_output_h5_magdrift_schemes_parity.py``.
     """
-    from sfincs_jax.run import run_profile
+    from dkx.run import run_profile
 
-    monkeypatch.setenv("SFINCS_JAX_EQUILIBRIA_DIRS", str(REF))
+    monkeypatch.setenv("DKX_EQUILIBRIA_DIRS", str(REF))
     deck = REF / "magdrift_1species_tiny.input.namelist"
 
     run = run_profile(deck, out_path=tmp_path / "magdrift.canonical.h5", emit=None)
@@ -288,10 +288,10 @@ def test_grad_fsabjhat_wrt_t_hat_matches_finite_differences() -> None:
     import jax
     import jax.numpy as jnp
 
-    from sfincs_jax.drift_kinetic import KineticOperator
-    from sfincs_jax.namelist import read_sfincs_input
-    from sfincs_jax.run import profile_moments_from_operator
-    from sfincs_jax.solve import solve
+    from dkx.drift_kinetic import KineticOperator
+    from dkx.namelist import read_sfincs_input
+    from dkx.run import profile_moments_from_operator
+    from dkx.solve import solve
 
     op0 = KineticOperator.from_namelist(
         read_sfincs_input(REF / "pas_1species_PAS_noEr_tiny_scheme1.input.namelist")

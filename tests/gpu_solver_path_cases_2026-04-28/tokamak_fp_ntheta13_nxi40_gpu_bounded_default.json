@@ -32,7 +32,7 @@
           "rss_mb": 680.9
         },
         {
-          "event": "sfincs_jax_output_dict",
+          "event": "dkx_output_dict",
           "total_s": 0.542,
           "delta_s": 0.142,
           "rss_mb": 713.7
@@ -120,7 +120,7 @@
     "wall_s": 3.732,
     "returncode": 0,
     "env": {
-      "SFINCS_JAX_RHSMODE1_SOLVE_METHOD": "dense"
+      "DKX_RHSMODE1_SOLVE_METHOD": "dense"
     },
     "status": "ok",
     "elapsed_s": 2.718,
@@ -150,7 +150,7 @@
           "rss_mb": 681.3
         },
         {
-          "event": "sfincs_jax_output_dict",
+          "event": "dkx_output_dict",
           "total_s": 0.501,
           "delta_s": 0.143,
           "rss_mb": 714.4
@@ -238,7 +238,7 @@
     "wall_s": 10.597,
     "returncode": 0,
     "env": {
-      "SFINCS_JAX_RHSMODE1_FORCE_KRYLOV": "1"
+      "DKX_RHSMODE1_FORCE_KRYLOV": "1"
     },
     "status": "ok",
     "elapsed_s": 9.539,
@@ -271,7 +271,7 @@
           "rss_mb": 680.5
         },
         {
-          "event": "sfincs_jax_output_dict",
+          "event": "dkx_output_dict",
           "total_s": 0.526,
           "delta_s": 0.145,
           "rss_mb": 713.6

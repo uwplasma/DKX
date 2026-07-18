@@ -96,5 +96,5 @@
  },
  "temporary_nested_packages": [],
  "temporary_init_only_packages": [],
- "final_depth_policy": "One package level below sfincs_jax is the target. temporary_nested_packages must remain empty unless a justified exception is documented."
+ "final_depth_policy": "One package level below dkx is the target. temporary_nested_packages must remain empty unless a justified exception is documented."
 }

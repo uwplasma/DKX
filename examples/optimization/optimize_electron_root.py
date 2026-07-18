@@ -10,7 +10,7 @@ confinement and impurity screening [Turkin et al., Phys. Plasmas 18, 022505
 This example optimizes the magnetic-field *shape* (a Boozer ``|B|`` spectrum) so
 that the ambipolar ``E_r`` moves toward the electron-root side.  The whole thing
 is differentiable: the ambipolar root comes from
-:func:`sfincs_jax.er.ambipolar_er`, which wraps the root condition with
+:func:`dkx.er.ambipolar_er`, which wraps the root condition with
 ``solvax.implicit.root_solve`` so ``jax.grad`` flows through ``E_r`` via the
 implicit function theorem ``dEr/dp = -(dJr/dEr)^{-1} dJr/dp`` (both Jacobians
 from autodiff of the kinetic solve, not finite differences).  The decision
@@ -46,13 +46,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))  # for `import objectiv
 import matplotlib.pyplot as plt  # noqa: E402
 
 import objectives as ob  # noqa: E402  (shared, minimal example objective library)
-from sfincs_jax import er as er_mod  # noqa: E402
-from sfincs_jax.phase_space import make_grids  # noqa: E402
+from dkx import er as er_mod  # noqa: E402
+from dkx.phase_space import make_grids  # noqa: E402
 
 # ----------------------------------------------------------------------------
 # Parameters
 # ----------------------------------------------------------------------------
-CI = os.environ.get("SFINCS_JAX_CI") == "1"
+CI = os.environ.get("DKX_CI") == "1"
 
 NFP = 4
 # Model Boozer |B| spectrum (BBar units): B00, mirror(0,1), helical(1,0),
@@ -84,7 +84,7 @@ ROOT_OBJECTIVES = {
     "maximize_er": lambda er: -er,
 }
 
-MAXITER = int(os.environ.get("SFINCS_JAX_ER_MAXITER", "3" if CI else "20"))
+MAXITER = int(os.environ.get("DKX_ER_MAXITER", "3" if CI else "20"))
 FD_EPS, FD_GATE = 1e-4, 1e-3
 OUT_DIR = Path(__file__).parent / "output"
 STEM = "optimize_electron_root"

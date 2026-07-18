@@ -17,7 +17,7 @@
     ],
     "artifacts": [
       "examples/publication_figures/artifacts/lhd_collisionality_summary.json",
-      "docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality.png"
+      "docs/_static/figures/paper/dkx_fig1_lhd_collisionality.png"
     ],
     "claims": [
       "Audited full LHD ion transport matrix elements versus collisionality at Er=0",
@@ -54,8 +54,8 @@
     ],
     "artifacts": [
       "examples/publication_figures/artifacts/lhd_collisionality_reaudit_fast_summary.json",
-      "docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality_reaudit_fast.png",
-      "docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality_reaudit_fast.pdf"
+      "docs/_static/figures/paper/dkx_fig1_lhd_collisionality_reaudit_fast.png",
+      "docs/_static/figures/paper/dkx_fig1_lhd_collisionality_reaudit_fast.pdf"
     ],
     "claims": [
       "The corrected bounded LHD collisionality lane resolves clear FP/PAS separation again",
@@ -92,7 +92,7 @@
     ],
     "artifacts": [
       "examples/publication_figures/artifacts/w7x_collisionality_summary.json",
-      "docs/_static/figures/paper/sfincs_jax_fig2_w7x_collisionality.png"
+      "docs/_static/figures/paper/dkx_fig2_w7x_collisionality.png"
     ],
     "claims": [
       "Audited full W7-X ion transport matrix elements versus collisionality at Er=0",
@@ -129,8 +129,8 @@
     ],
     "artifacts": [
       "examples/publication_figures/artifacts/w7x_collisionality_reaudit_fast_summary.json",
-      "docs/_static/figures/paper/sfincs_jax_fig2_w7x_collisionality_reaudit_fast.png",
-      "docs/_static/figures/paper/sfincs_jax_fig2_w7x_collisionality_reaudit_fast.pdf"
+      "docs/_static/figures/paper/dkx_fig2_w7x_collisionality_reaudit_fast.png",
+      "docs/_static/figures/paper/dkx_fig2_w7x_collisionality_reaudit_fast.pdf"
     ],
     "claims": [
       "The corrected bounded W7-X collisionality lane resolves clear FP/PAS separation again",
@@ -167,10 +167,10 @@
       "examples/publication_figures/generate_sfincs_paper_figs.py --plot-only"
     ],
     "artifacts": [
-      "docs/_static/figures/paper/sfincs_jax_fig3_simakov_helander.png",
-      "examples/publication_figures/artifacts/sfincs_jax_simakov_helander_limit_audit_summary.json",
-      "examples/publication_figures/artifacts/sfincs_jax_simakov_helander_high_nu_run_plan.json",
-      "docs/_static/figures/paper/sfincs_jax_simakov_helander_limit_audit.png"
+      "docs/_static/figures/paper/dkx_fig3_simakov_helander.png",
+      "examples/publication_figures/artifacts/dkx_simakov_helander_limit_audit_summary.json",
+      "examples/publication_figures/artifacts/dkx_simakov_helander_high_nu_run_plan.json",
+      "docs/_static/figures/paper/dkx_simakov_helander_limit_audit.png"
     ],
     "claims": [
       "High-collisionality transport-matrix trends should agree with analytic asymptotic limits",
@@ -178,7 +178,7 @@
     ],
     "source_code": [
       "examples/publication_figures/generate_sfincs_paper_figs.py",
-      "sfincs_jax/validation/artifacts.py"
+      "dkx/validation/artifacts.py"
     ],
     "tests": [
       "tests/test_generate_sfincs_paper_figs.py",
@@ -206,9 +206,9 @@
     ],
     "scripts": [],
     "artifacts": [
-      "examples/publication_figures/artifacts/sfincs_jax_high_collisionality_trend_proxy_summary.json",
-      "docs/_static/figures/paper/sfincs_jax_high_collisionality_trend_proxy.png",
-      "docs/_static/figures/paper/sfincs_jax_high_collisionality_trend_proxy.pdf"
+      "examples/publication_figures/artifacts/dkx_high_collisionality_trend_proxy_summary.json",
+      "docs/_static/figures/paper/dkx_high_collisionality_trend_proxy.png",
+      "docs/_static/figures/paper/dkx_high_collisionality_trend_proxy.pdf"
     ],
     "claims": [
       "PAS L11/L12 high-collisionality tails have positive power-law slopes on both corrected full collisionality artifacts",
@@ -216,7 +216,7 @@
       "LHD Fokker-Planck L11/L12 tails do not yet reach the asymptotic inverse-nu gate on the checked-in scan, so this implemented artifact is a bounded trend proxy rather than the full analytic-limit reproduction"
     ],
     "source_code": [
-      "sfincs_jax/validation/artifacts.py"
+      "dkx/validation/artifacts.py"
     ],
     "tests": [
       "tests/test_validation_artifacts.py"
@@ -244,9 +244,9 @@
     ],
     "scripts": [],
     "artifacts": [
-      "examples/publication_figures/artifacts/sfincs_jax_simakov_helander_limit_audit_summary.json",
-      "docs/_static/figures/paper/sfincs_jax_simakov_helander_limit_audit.png",
-      "docs/_static/figures/paper/sfincs_jax_simakov_helander_limit_audit.pdf"
+      "examples/publication_figures/artifacts/dkx_simakov_helander_limit_audit_summary.json",
+      "docs/_static/figures/paper/dkx_simakov_helander_limit_audit.png",
+      "docs/_static/figures/paper/dkx_simakov_helander_limit_audit.pdf"
     ],
     "claims": [
       "The checked-in LHD and W7-X output files contain the Appendix-B geometry ingredients needed for a reproducible normalization audit",
@@ -254,7 +254,7 @@
       "W7-X FP L11/L12 tails satisfy the inverse-nu slope proxy on the current range, while LHD still fails that gate"
     ],
     "source_code": [
-      "sfincs_jax/validation/artifacts.py"
+      "dkx/validation/artifacts.py"
     ],
     "tests": [
       "tests/test_validation_artifacts.py"
@@ -279,11 +279,11 @@
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
     ],
     "scripts": [
-      "examples/publication_figures/generate_er_trajectory_sweep.py --preset tokamak_like --er-values=-30,0,30 --stem sfincs_jax_er_trajectory_sweep_tokamak_reference"
+      "examples/publication_figures/generate_er_trajectory_sweep.py --preset tokamak_like --er-values=-30,0,30 --stem dkx_er_trajectory_sweep_tokamak_reference"
     ],
     "artifacts": [
-      "docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep_tokamak_reference.png",
-      "docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep_tokamak_reference.pdf",
+      "docs/_static/figures/paper/dkx_er_trajectory_sweep_tokamak_reference.png",
+      "docs/_static/figures/paper/dkx_er_trajectory_sweep_tokamak_reference.pdf",
       "examples/publication_figures/artifacts/er_sweep_tokamak_reference_summary.json"
     ],
     "claims": [
@@ -317,11 +317,11 @@
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
     ],
     "scripts": [
-      "examples/publication_figures/generate_er_trajectory_sweep.py --preset stellarator_like --fast --er-values=-8.5897,0,8.5897 --stem sfincs_jax_er_trajectory_sweep_stellarator_fast_reference"
+      "examples/publication_figures/generate_er_trajectory_sweep.py --preset stellarator_like --fast --er-values=-8.5897,0,8.5897 --stem dkx_er_trajectory_sweep_stellarator_fast_reference"
     ],
     "artifacts": [
-      "docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep_stellarator_fast_reference.png",
-      "docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep_stellarator_fast_reference.pdf",
+      "docs/_static/figures/paper/dkx_er_trajectory_sweep_stellarator_fast_reference.png",
+      "docs/_static/figures/paper/dkx_er_trajectory_sweep_stellarator_fast_reference.pdf",
       "examples/publication_figures/artifacts/er_sweep_stellarator_fast_reference_summary.json"
     ],
     "claims": [
@@ -359,9 +359,9 @@
       "examples/publication_figures/generate_validation_dashboard.py"
     ],
     "artifacts": [
-      "examples/publication_figures/artifacts/sfincs_jax_publication_validation_dashboard_summary.json",
-      "docs/_static/figures/paper/sfincs_jax_publication_validation_dashboard.png",
-      "docs/_static/figures/paper/sfincs_jax_publication_validation_dashboard.pdf"
+      "examples/publication_figures/artifacts/dkx_publication_validation_dashboard_summary.json",
+      "docs/_static/figures/paper/dkx_publication_validation_dashboard.png",
+      "docs/_static/figures/paper/dkx_publication_validation_dashboard.pdf"
     ],
     "claims": [
       "The dashboard is generated entirely from checked-in validation artifacts, not hand-edited figure data",
@@ -370,7 +370,7 @@
     ],
     "source_code": [
       "examples/publication_figures/generate_validation_dashboard.py",
-      "sfincs_jax/validation/artifacts.py"
+      "dkx/validation/artifacts.py"
     ],
     "tests": [
       "tests/test_generate_validation_dashboard.py",
@@ -401,9 +401,9 @@
       "examples/publication_figures/generate_fortran_suite_benchmark_summary.py"
     ],
     "artifacts": [
-      "examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json",
-      "docs/_static/figures/paper/sfincs_jax_fortran_suite_benchmark_summary.png",
-      "docs/_static/figures/paper/sfincs_jax_fortran_suite_benchmark_summary.pdf"
+      "examples/publication_figures/artifacts/dkx_fortran_suite_benchmark_summary.json",
+      "docs/_static/figures/paper/dkx_fortran_suite_benchmark_summary.png",
+      "docs/_static/figures/paper/dkx_fortran_suite_benchmark_summary.pdf"
     ],
     "claims": [
       "The release-facing frozen CPU suite has 39/39 parity_ok cases with no strict mismatches",
@@ -413,7 +413,7 @@
     ],
     "source_code": [
       "examples/publication_figures/generate_fortran_suite_benchmark_summary.py",
-      "sfincs_jax/validation/artifacts.py"
+      "dkx/validation/artifacts.py"
     ],
     "tests": [
       "tests/test_generate_fortran_suite_benchmark_summary.py",
@@ -451,9 +451,9 @@
       "This lane is closed for the tagged release as a post-release/nightly validation target because it requires a defensible W7-X profile and equilibrium reconstruction"
     ],
     "source_code": [
-      "sfincs_jax/ambipolar.py",
-      "sfincs_jax/io.py",
-      "sfincs_jax/validation/artifacts.py"
+      "dkx/ambipolar.py",
+      "dkx/io.py",
+      "dkx/validation/artifacts.py"
     ],
     "tests": [
       "tests/test_er_scan_and_ambipolar.py",
@@ -489,8 +489,8 @@
       "This lane is closed for the tagged release as a post-release cross-code target because shared-model normalizations must be pinned before claiming overlap"
     ],
     "source_code": [
-      "sfincs_jax/run.py",
-      "sfincs_jax/solve.py"
+      "dkx/run.py",
+      "dkx/solve.py"
     ],
     "tests": [
       "tests/test_run_transport.py",
@@ -520,11 +520,11 @@
       "examples/publication_figures/generate_autodiff_sensitivity_validation.py"
     ],
     "artifacts": [
-      "examples/publication_figures/artifacts/sfincs_jax_autodiff_sensitivity_validation_summary.json",
-      "docs/_static/figures/paper/sfincs_jax_autodiff_gradient_check.png",
-      "docs/_static/figures/paper/sfincs_jax_autodiff_gradient_check.pdf",
-      "docs/_static/figures/paper/sfincs_jax_autodiff_sensitivity_map.png",
-      "docs/_static/figures/paper/sfincs_jax_autodiff_sensitivity_map.pdf"
+      "examples/publication_figures/artifacts/dkx_autodiff_sensitivity_validation_summary.json",
+      "docs/_static/figures/paper/dkx_autodiff_gradient_check.png",
+      "docs/_static/figures/paper/dkx_autodiff_gradient_check.pdf",
+      "docs/_static/figures/paper/dkx_autodiff_sensitivity_map.png",
+      "docs/_static/figures/paper/dkx_autodiff_sensitivity_map.pdf"
     ],
     "claims": [
       "Implicit-diff gradients through a pinned full-system linear solve agree with centered finite differences below the recorded 1e-4 relative-error gate",
@@ -532,9 +532,9 @@
       "Scheme-4 Boozer harmonic sensitivity maps are generated as publication-ready figures; full VMEC-boundary optimization remains outside this bounded validation claim"
     ],
     "source_code": [
-      "sfincs_jax/solve.py",
-      "sfincs_jax/magnetic_geometry.py",
-      "sfincs_jax/validation/artifacts.py",
+      "dkx/solve.py",
+      "dkx/magnetic_geometry.py",
+      "dkx/validation/artifacts.py",
       "examples/publication_figures/generate_autodiff_sensitivity_validation.py"
     ],
     "tests": [

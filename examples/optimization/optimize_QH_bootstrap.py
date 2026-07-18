@@ -1,8 +1,8 @@
 """Quasi-helical (QH) stellarator with low bootstrap current.
 
 The quasi-helical analog of ``examples/optimize_QA_bootstrap.py`` and the
-kinetic sibling of ``vmec_jax/examples/optimization/QH_optimization.py``.  Same
-differentiable chain -- boundary Fourier coefficients -> vmec_jax implicit
+kinetic sibling of ``vmex/examples/optimization/QH_optimization.py``.  Same
+differentiable chain -- boundary Fourier coefficients -> vmex implicit
 fixed-boundary equilibrium (custom-VJP adjoint) -> traceable VMEC spectral
 tables -> booz_xform_jax |B| spectrum -> FluxSurfaceGeometry.from_fourier
 (geometryScheme 13) -> KineticOperator -> tier-2 GCROT solve with implicit
@@ -27,11 +27,11 @@ feeds the BBar=1 kinetic template unchanged.
 Runtime: dominated by the one-time reactor-scale VMEC-implicit-adjoint XLA
 compile plus ~40-60 s host equilibrium solves per L-BFGS-B evaluation, so the
 default 25-iteration loop takes on the order of half an hour on a laptop CPU
-(override with SFINCS_JAX_QH_MAXITER).  SFINCS_JAX_CI=1 shrinks it to a few
+(override with DKX_QH_MAXITER).  DKX_CI=1 shrinks it to a few
 minutes.
 
-Requires the optional companions vmec_jax (new core API with core.boozer_tables)
-and booz_xform_jax: pip install -e /path/to/vmec_jax /path/to/booz_xform_jax
+Requires the optional companions vmex (new core API with core.boozer_tables)
+and booz_xform_jax: pip install -e /path/to/vmex /path/to/booz_xform_jax
 
 Run:
   python examples/optimization/optimize_QH_bootstrap.py
@@ -56,36 +56,36 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))  # for `import objectiv
 
 import matplotlib.pyplot as plt  # noqa: E402
 
-try:  # optional companion packages (not needed by sfincs_jax itself)
-    import vmec_jax as _vmec_jax_pkg
-    from vmec_jax.core import implicit as vmec_implicit
-    from vmec_jax.core import optimize as vmec_optimize
-    from vmec_jax.core.boozer_tables import boozer_input_tables
-    from vmec_jax.core.input import VmecInput
+try:  # optional companion packages (not needed by dkx itself)
+    import vmex as _vmex_pkg
+    from vmex.core import implicit as vmec_implicit
+    from vmex.core import optimize as vmec_optimize
+    from vmex.core.boozer_tables import boozer_input_tables
+    from vmex.core.input import VmecInput
     from booz_xform_jax.jax_api import booz_xform_jax as booz_transform
 except ImportError as exc:
     raise SystemExit(
-        "This example needs vmec_jax (new core API, with core.boozer_tables) and "
-        "booz_xform_jax. Install with `pip install -e /path/to/vmec_jax "
+        "This example needs vmex (new core API, with core.boozer_tables) and "
+        "booz_xform_jax. Install with `pip install -e /path/to/vmex "
         "/path/to/booz_xform_jax`."
     ) from exc
 
 import objectives as ob  # noqa: E402  (shared, minimal example objective library)
-from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist  # noqa: E402
-from sfincs_jax.inputs import parse_sfincs_input_text  # noqa: E402
-from sfincs_jax.phase_space import make_grids  # noqa: E402
+from dkx.drift_kinetic import kinetic_operator_from_namelist  # noqa: E402
+from dkx.inputs import parse_sfincs_input_text  # noqa: E402
+from dkx.phase_space import make_grids  # noqa: E402
 
 # ----------------------------------------------------------------------------
 # Parameters
 # ----------------------------------------------------------------------------
-CI = os.environ.get("SFINCS_JAX_CI") == "1"  # shrink resolution for CI
+CI = os.environ.get("DKX_CI") == "1"  # shrink resolution for CI
 
-# Seed: Landreman-Paul reactor-scale precise QH, nfp=4 (ships with vmec_jax).
+# Seed: Landreman-Paul reactor-scale precise QH, nfp=4 (ships with vmex).
 VMEC_INPUT = (
-    Path(_vmec_jax_pkg.__file__).resolve().parents[1]
+    Path(_vmex_pkg.__file__).resolve().parents[1]
     / "examples" / "data" / "input.LandremanPaul2021_QH_reactorScale_lowres"
 )
-VMEC_INPUT = Path(os.environ.get("SFINCS_JAX_QH_VMEC_INPUT", VMEC_INPUT))
+VMEC_INPUT = Path(os.environ.get("DKX_QH_VMEC_INPUT", VMEC_INPUT))
 
 NS = 7 if CI else 13
 # The autodiff accuracy is checked on the kinetic *segment* (Step 5, pure JAX on
@@ -117,10 +117,10 @@ KINETIC_OBJECTIVE = "bootstrap_jbs2"       # (<j.B>/sqrt(<B^2>))^2 -> 0
 # KINETIC_OBJECTIVE = "heat_flux_l2"       # tested: sum_s Q_s^2
 KINETIC_OBJECTIVES = ob.MOMENT_METRICS
 
-MAXITER = int(os.environ.get("SFINCS_JAX_QH_MAXITER", "2" if CI else "25"))
+MAXITER = int(os.environ.get("DKX_QH_MAXITER", "2" if CI else "25"))
 BOUND_RADIUS = 0.02
 PENALTY_VALUE = 1.0e6
-RUN_FD_CHECK = os.environ.get("SFINCS_JAX_QH_FD_CHECK", "1") == "1"
+RUN_FD_CHECK = os.environ.get("DKX_QH_FD_CHECK", "1") == "1"
 # kinetic-segment gradient (Boozer spectrum -> <j.B>) vs central FD: pure JAX +
 # implicit linear solve, so autodiff-limited (rel ~1e-4..1e-6).
 FD_GATE = 1e-3
@@ -128,10 +128,10 @@ OUT_DIR = Path(__file__).parent / "output"
 STEM = "optimize_QH_bootstrap"
 
 # ----------------------------------------------------------------------------
-# 1) Differentiable fixed-boundary equilibrium (vmec_jax.core.implicit)
+# 1) Differentiable fixed-boundary equilibrium (vmex.core.implicit)
 # ----------------------------------------------------------------------------
 print("=== examples/optimization/optimize_QH_bootstrap.py ===")
-print("Step 1: differentiable QH equilibrium (vmec_jax.core.implicit)")
+print("Step 1: differentiable QH equilibrium (vmex.core.implicit)")
 if not VMEC_INPUT.exists():
     raise SystemExit(f"VMEC input not found: {VMEC_INPUT}")
 inp0 = VmecInput.from_file(str(VMEC_INPUT))
@@ -295,8 +295,8 @@ print(f"  kinetic iterations: cold {it_cold} -> warm {it_warm} "
 # boundary-dof gradient whose FD is limited by the reactor-scale host
 # equilibrium solver's ftol noise (~1.5%, see optimize_QA_bootstrap.py).  The
 # full-chain boundary gradient is still what L-BFGS-B uses below; the QS penalty
-# is a vmec_jax host-metric regularizer (its coarse-ns adjoint is FD-noisy but
-# correct in sign, validated at resolution in the vmec_jax suite).
+# is a vmex host-metric regularizer (its coarse-ns adjoint is FD-noisy but
+# correct in sign, validated at resolution in the vmex suite).
 print("Step 5: kinetic-segment autodiff accuracy (Boozer spectrum -> <j.B>)")
 value_and_grad = jax.value_and_grad(objective, has_aux=True)  # compiled in the loop below
 _bmnc_seed = jnp.asarray(aux0["bmnc_b"])

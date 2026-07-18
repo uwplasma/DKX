@@ -1,13 +1,13 @@
 Contributing
 ============
 
-`sfincs_jax` is maintained as scientific software: code, tests, benchmarks, and
+`dkx` is maintained as scientific software: code, tests, benchmarks, and
 documentation are expected to evolve together.
 
 Repository layout
 -----------------
 
-- `sfincs_jax/`: Python package code
+- `dkx/`: Python package code
 - `tests/`: unit tests and frozen reference fixtures (including some PETSc binaries)
 - `examples/`: pedagogic scripts organized by workflow category
 - `docs/`: Sphinx docs (Read the Docs compatible)
