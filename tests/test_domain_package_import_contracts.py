@@ -54,6 +54,7 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "constants.py": "stable physics kernel",
     "drift_kinetic.py": "stable operator kernel",
     "er.py": "public workflow API",
+    "impurity.py": "public physics API",
     "input_compat.py": "public compatibility API",
     "inputs.py": "public input API",
     "io.py": "public API",
