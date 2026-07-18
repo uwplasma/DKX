@@ -13,6 +13,8 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
+from .inputs import SfincsInput
+
 
 def _immutable_mapping(value: Mapping[str, Any] | None) -> Mapping[str, Any]:
     return MappingProxyType(dict(value or {}))
@@ -20,6 +22,76 @@ def _immutable_mapping(value: Mapping[str, Any] | None) -> Mapping[str, Any]:
 
 def _path_or_none(value: str | Path | None) -> Path | None:
     return None if value is None else Path(value)
+
+
+@dataclass(frozen=True, slots=True)
+class SolverOptions:
+    """Typed tuning knobs for :func:`dkx.solve.solve`, threaded by the run drivers.
+
+    Pass to :func:`dkx.run.run_profile`, :func:`dkx.run.run_transport_matrix`,
+    or :func:`dkx.run.run_from_namelist` as ``solver=SolverOptions(...)``; when
+    given, it supersedes the drivers' quick ``solve_method``/``tol`` arguments
+    and is expanded to :func:`dkx.solve.solve` keywords via
+    :meth:`solve_kwargs`.  Environment variables keep working as overrides for
+    knobs left at ``None`` (``memory_budget_gb=None`` reads
+    ``DKX_TIER1_MEMORY_BUDGET_GB`` inside the solve).
+
+    Attributes:
+        method: ``"auto"`` | ``"block_tridiagonal"`` | ``"gmres"`` |
+            ``"direct"`` (the three-tier policy of :func:`dkx.solve.solve`).
+        tol: relative residual tolerance (per RHS column).
+        atol: absolute residual floor.
+        restart: FGMRES cycle size ``m`` (tier 2).
+        recycle_dim: GCROT recycle directions ``k`` (tier 2).
+        max_restarts: tier-2 outer-cycle cap (the tier-3 trigger in auto).
+        differentiable: wrap the solution in an implicit-function-theorem
+            ``linear_solve`` so ``jax.grad`` flows through (tiers 1/2).
+        use_preconditioner: tier-2 coarse-operator preconditioner on/off.
+        device: JAX device for the solve (a platform string such as ``"cpu"``
+            or ``"gpu"``, or a concrete ``jax.Device``); ``None`` keeps the
+            operator's placement.
+        memory_budget_gb: budget above which ``method="auto"`` prefers the
+            memory-lean truncated tier-1 kernel over the full-band
+            factorization; ``None`` reads ``DKX_TIER1_MEMORY_BUDGET_GB``,
+            else the solve's default applies.
+        cores: host CPU threadpool width.  XLA sizes its threadpool once,
+            before the first JAX device use, so a value stored here CANNOT
+            change a process whose JAX backend is already initialized; it is
+            carried for provenance and planning only.  To actually pin
+            threads, set the ``DKX_CORES`` environment variable or the CLI
+            ``--cores`` flag before ``import dkx`` (see
+            ``docs/parallelism.rst``); :meth:`solve_kwargs` deliberately
+            excludes this field.
+    """
+
+    method: str = "auto"
+    tol: float = 1.0e-10
+    atol: float = 0.0
+    restart: int = 30
+    recycle_dim: int = 8
+    max_restarts: int = 200
+    differentiable: bool = False
+    use_preconditioner: bool = True
+    device: Any = None
+    memory_budget_gb: float | None = None
+    cores: int | None = None
+
+    def solve_kwargs(self) -> dict[str, Any]:
+        """Keyword arguments for :func:`dkx.solve.solve` (``cores`` excluded)."""
+        return {
+            "method": str(self.method),
+            "tol": float(self.tol),
+            "atol": float(self.atol),
+            "restart": int(self.restart),
+            "recycle_dim": int(self.recycle_dim),
+            "max_restarts": int(self.max_restarts),
+            "differentiable": bool(self.differentiable),
+            "use_preconditioner": bool(self.use_preconditioner),
+            "device": self.device,
+            "tier1_memory_budget_gb": (
+                None if self.memory_budget_gb is None else float(self.memory_budget_gb)
+            ),
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -179,18 +251,40 @@ def _solve_request_paths(
 
 
 def write_output(
-    request: SolveInputs | str | Path,
+    request: SolveInputs | SfincsInput | str | Path,
     output_path: str | Path | None = None,
     **kwargs: Any,
 ) -> Path:
     """Run ``dkx`` from Python and write an output file.
 
-    ``request`` may be a :class:`SolveInputs` object or an input namelist path.
-    Routes to :func:`dkx.run.run_from_namelist` (the canonical RHSMode
+    ``request`` may be a :class:`SolveInputs` object, an input namelist path,
+    or an in-memory :class:`dkx.inputs.SfincsInput` (no file is read or
+    written for the input; the output's ``input.namelist`` provenance dataset
+    stores :meth:`~dkx.inputs.SfincsInput.to_namelist` text when the input
+    was built programmatically).  Routes to
+    :func:`dkx.run.run_from_namelist` (the canonical RHSMode
     dispatch behind ``dkx write-output``).  The implementation imports
     the heavy run stack lazily so importing ``dkx.api`` stays cheap for
     docs, CLI validation, and downstream workflow planning.
     """
+
+    if isinstance(request, SfincsInput):
+        resolved_output = _path_or_none(output_path)
+        if resolved_output is None:
+            raise ValueError("output_path is required when the request is an in-memory SfincsInput.")
+        inp: SfincsInput = request
+        wout_override = kwargs.pop("wout_path", None)
+        if wout_override is not None:
+            from .input_compat import with_equilibrium_override  # noqa: PLC0415
+            from .inputs import parse_sfincs_input_text, sfincs_input_from_raw  # noqa: PLC0415
+
+            raw = inp.raw if inp.raw is not None else parse_sfincs_input_text(inp.to_namelist())
+            inp = sfincs_input_from_raw(with_equilibrium_override(nml=raw, wout_path=wout_override))
+
+        from .run import run_from_namelist  # noqa: PLC0415
+
+        run = run_from_namelist(inp, out_path=resolved_output, **kwargs)
+        return Path(run.output_path)
 
     input_path, wout_path, resolved_output, _backend, _requires_autodiff, options = _solve_request_paths(
         request,
@@ -587,7 +681,9 @@ __all__ = [
     "OperatorState",
     "OutputSchema",
     "PreconditionerState",
+    "SfincsInput",
     "SolveInputs",
+    "SolverOptions",
     "SolverResult",
     "TransportResult",
     "batched_er_scan",

@@ -209,12 +209,47 @@ from .api import (  # noqa: E402
     OutputSchema,
     PreconditionerState,
     SolveInputs,
+    SolverOptions,
     SolverResult,
     TransportResult,
+    batched_er_scan,
     read_output,
     run_ambipolar_brent,
+    run_monoenergetic_database,
     write_output,
 )
+from .inputs import SfincsInput, load_sfincs_input  # noqa: E402
+
+# Heavy flagship entry points (they import the JAX solve stack) are exported
+# lazily via PEP 562 module __getattr__ so `import dkx` stays cheap.
+_LAZY_EXPORTS = {
+    "run_profile": ("dkx.run", "run_profile"),
+    "run_transport_matrix": ("dkx.run", "run_transport_matrix"),
+    "run_from_namelist": ("dkx.run", "run_from_namelist"),
+    "batched_solve": ("dkx.batch", "batched_solve"),
+    "monoenergetic_database": ("dkx.monoenergetic", "monoenergetic_database"),
+    "ambipolar_er": ("dkx.er", "ambipolar_er"),
+    "find_ambipolar_er": ("dkx.er", "find_ambipolar_er"),
+    "classical_impurity_flux": ("dkx.impurity", "classical_impurity_flux"),
+    "build_impurity_plasma": ("dkx.impurity", "build_impurity_plasma"),
+}
+
+
+def __getattr__(name: str):
+    try:
+        module_name, attr = _LAZY_EXPORTS[name]
+    except KeyError:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from None
+    import importlib  # noqa: PLC0415
+
+    value = getattr(importlib.import_module(module_name), attr)
+    globals()[name] = value  # cache: subsequent lookups skip __getattr__
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(_LAZY_EXPORTS))
+
 
 __all__ = [
     "BenchmarkReport",
@@ -223,13 +258,27 @@ __all__ = [
     "OperatorState",
     "OutputSchema",
     "PreconditionerState",
+    "SfincsInput",
     "SolveInputs",
+    "SolverOptions",
     "SolverResult",
     "TransportResult",
     "__version__",
+    "ambipolar_er",
+    "batched_er_scan",
+    "batched_solve",
+    "build_impurity_plasma",
+    "classical_impurity_flux",
+    "find_ambipolar_er",
     "initialize_distributed_runtime_from_env",
+    "load_sfincs_input",
+    "monoenergetic_database",
     "read_output",
     "run_ambipolar_brent",
+    "run_from_namelist",
+    "run_monoenergetic_database",
+    "run_profile",
+    "run_transport_matrix",
     "write_output",
 ]
 
