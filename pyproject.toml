@@ -38,6 +38,12 @@ docs = [
   "sphinx-rtd-theme",
 ]
 
+[project.urls]
+Homepage = "https://github.com/uwplasma/DKX"
+Documentation = "https://sfincs-jax.readthedocs.io/"
+Repository = "https://github.com/uwplasma/DKX"
+Issues = "https://github.com/uwplasma/DKX/issues"
+
 [project.scripts]
 dkx = "dkx.cli:main"
 
