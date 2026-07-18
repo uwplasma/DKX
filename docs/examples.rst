@@ -776,10 +776,9 @@ Parallel and scaling examples
 -----------------------------
 
 The legacy transport-worker scaling benchmark was deleted with the legacy
-pipeline. Host-device parallelism for canonical runs is configured through
-the ``DKX_CORES``/``DKX_CPU_DEVICES`` environment knobs
-(:doc:`parallelism`); single-case sharded RHSMode=1 scaling remains a research
-lane rather than a stable example.
+pipeline. Solver thread count for canonical runs is configured through the
+``DKX_CORES`` environment knob (:doc:`parallelism`); single-case sharded
+RHSMode=1 scaling remains a research lane rather than a stable example.
 
 .. note::
 
