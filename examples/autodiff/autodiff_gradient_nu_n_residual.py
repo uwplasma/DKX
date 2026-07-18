@@ -7,7 +7,7 @@ This example is a lightweight differentiable residual check:
 - no optional dependencies
 - no generated benchmark fixtures
 
-It demonstrates a key `sfincs_jax` capability for "design/optimization-style" workflows:
+It demonstrates a key `dkx` capability for "design/optimization-style" workflows:
 differentiate a physics objective through the (matrix-free) residual evaluation.
 """
 
@@ -19,9 +19,9 @@ from pathlib import Path
 import jax
 import jax.numpy as jnp
 
-from sfincs_jax.drift_kinetic import KineticOperator, kinetic_operator_from_namelist
-from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.validation.fortran import read_petsc_vec
+from dkx.drift_kinetic import KineticOperator, kinetic_operator_from_namelist
+from dkx.namelist import read_sfincs_input
+from dkx.validation.fortran import read_petsc_vec
 
 
 def _with_nu_n(op: KineticOperator, nu_n: jnp.ndarray) -> KineticOperator:

@@ -5,9 +5,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from sfincs_jax.drift_kinetic import _geometry_and_radial
-from sfincs_jax.inputs import load_sfincs_input
-from sfincs_jax.run import _grids_from_input
+from dkx.drift_kinetic import _geometry_and_radial
+from dkx.inputs import load_sfincs_input
+from dkx.run import _grids_from_input
 
 
 def test_geometry_scheme11_matches_fortran_fixture() -> None:
@@ -19,11 +19,11 @@ def test_geometry_scheme11_matches_fortran_fixture() -> None:
     input_path = here / "ref" / "magdrift_1species_tiny.input.namelist"
     fixture_path = here / "ref" / "magdrift_1species_tiny.geometry.npz"
 
-    # CI only checks out the sfincs_jax repo; the upstream `sfincs/` folder is not available.
+    # CI only checks out the dkx repo; the upstream `sfincs/` folder is not available.
     # Force equilibriumFile resolution to use our vendored fixture directory.
     eq_dir = str(here / "ref")
     with pytest.MonkeyPatch.context() as mp:
-        mp.setenv("SFINCS_JAX_EQUILIBRIA_DIRS", eq_dir)
+        mp.setenv("DKX_EQUILIBRIA_DIRS", eq_dir)
 
         inp = load_sfincs_input(input_path)
         raw = inp.raw

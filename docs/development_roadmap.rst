@@ -1,7 +1,7 @@
 Development Roadmap
 ===================
 
-``sfincs_jax`` is a research neoclassical-transport code with production
+``dkx`` is a research neoclassical-transport code with production
 CLI/API paths, optional differentiable Python paths, CPU/GPU solver paths,
 benchmark generation, and explicitly gated research probes for difficult QI
 and parallel-scaling cases. The code-health roadmap is to keep those
@@ -18,7 +18,7 @@ Goals
 - Preserve release correctness: documented CPU/GPU examples remain clean, and
   SFINCS Fortran v3 comparisons remain reproducible.
 - Keep public defaults simple: users provide an input file and geometry, then
-  ``sfincs_jax`` chooses a safe solver path unless an advanced method is
+  ``dkx`` chooses a safe solver path unless an advanced method is
   explicitly requested.
 - Make research paths auditable: opt-in experiments must record solver method,
   residual history, memory, runtime, and failure reason.
@@ -34,7 +34,7 @@ The refactor keeps two solver lanes because they have different technical
 contracts.
 
 1. Production CLI/non-autodiff lane
-   This is the default for ``sfincs_jax input.namelist`` and for Python calls
+   This is the default for ``dkx input.namelist`` and for Python calls
    with ``differentiable=False``. It may use the fastest safe host or device
    path available for the requested model, including sparse factors,
    preconditioner caches, and other non-differentiable setup work. This lane
@@ -72,7 +72,7 @@ Refactoring Plan
 ----------------
 
 The main code-health target is a flat package: implementation ownership lives
-in single-purpose root modules directly under ``sfincs_jax/``, with only two
+in single-purpose root modules directly under ``dkx/``, with only two
 package folders (``validation`` and ``workflows``) for tooling that sits
 outside the compute path. The legacy nested packages (``problems``,
 ``solvers``, ``operators``, ``outputs``, ``geometry``, ``discretization``,
@@ -86,7 +86,7 @@ implementation packages or historical helper names such as top-level
    (``drift_kinetic.py``, ``collisions.py``, ``magnetic_geometry.py``,
    ``phase_space.py``, ``xgrid.py``, ``moments.py``, ``writer.py``,
    ``inputs.py``, ``run.py``, ``solve.py``, ``er.py``, ``phi1.py``, ...; see
-   the table in ``sfincs_jax/README.md``). ``validation/`` holds parity,
+   the table in ``dkx/README.md``). ``validation/`` holds parity,
    release-gate, and data-fetch tooling; ``workflows/`` holds optimization and
    scan orchestration. Source-tree tests
    (``tests/fixtures/source_tree_expected.json``) pin this layout and the

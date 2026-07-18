@@ -1,4 +1,4 @@
-! Tiny monoenergetic (RHSMode=3) PAS example for sfincs_jax parity testing (geometryScheme=5, VMEC wout netCDF).
+! Tiny monoenergetic (RHSMode=3) PAS example for dkx parity testing (geometryScheme=5, VMEC wout netCDF).
 !
 ! This fixture is intentionally small but exercises:
 ! - geometryScheme=5 (VMEC wout reader)

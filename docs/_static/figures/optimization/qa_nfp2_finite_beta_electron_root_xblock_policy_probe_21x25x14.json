@@ -1,5 +1,5 @@
 {
-  "workflow": "sfincs_jax_finite_beta_electron_root_xblock_policy_probe",
+  "workflow": "dkx_finite_beta_electron_root_xblock_policy_probe",
   "status": "pass_bounded",
   "claim_boundary": "This is an above-window medium-resolution solver-policy probe for the finite-beta QA electron-root workflow, not a production-floor convergence claim.",
   "resolution": {

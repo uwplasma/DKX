@@ -1,7 +1,7 @@
 Method overview
 ===============
 
-`sfincs_jax` implements a radially local neoclassical drift-kinetic solve stack with
+`dkx` implements a radially local neoclassical drift-kinetic solve stack with
 structured velocity-space discretization, matrix-free operator application, and
 CPU/GPU-capable solver orchestration.
 
@@ -52,7 +52,7 @@ the v3 geometry builder includes only modes satisfying
 
 with additional Nyquist exclusions for sine components.
 
-`sfincs_jax` matches this behavior when evaluating `.bc` geometries so that the resulting
+`dkx` matches this behavior when evaluating `.bc` geometries so that the resulting
 arrays are consistent with the v3 Jacobian assembly at a given resolution.
 
 Implemented operator terms
@@ -123,7 +123,7 @@ The v3 implementation includes:
 - Dense **x-matvec** using :math:`x\,\partial/\partial x` (with optional upwinding schemes).
 - Legendre couplings with :math:`L \leftrightarrow L\pm 2` (and a diagonal-in-:math:`L` piece).
 
-`sfincs_jax` implements the default `xDotDerivativeScheme = 0`, i.e.
+`dkx` implements the default `xDotDerivativeScheme = 0`, i.e.
 the same polynomial-grid differentiation matrix is used for both upwind directions.
 
 Magnetic drift terms (ΔL = 0 and ΔL = ±2)
@@ -133,7 +133,7 @@ Magnetic drift terms (ΔL = 0 and ΔL = ±2)
 
    Every ``magneticDriftScheme`` from ``0`` (off, the default) through ``9`` is
    built by the consolidated
-   :class:`sfincs_jax.drift_kinetic.KineticOperator`. When
+   :class:`dkx.drift_kinetic.KineticOperator`. When
    ``magneticDriftScheme > 0`` the coefficient forms below are assembled and
    applied inside ``KineticOperator.apply_f``. Because the drift term couples
    :math:`L \leftrightarrow L\pm2` it breaks the block-tridiagonal-in-:math:`L`
@@ -180,7 +180,7 @@ For `magneticDriftScheme = 1` (the first scheme ported), the v3 code defines the
    \qquad
    g_2^{(\theta)} = 2\,\hat B\,\big(\partial_{\zeta}\hat B_{\psi} - \partial_{\psi}\hat B_{\zeta}\big),
 
-and (for the zeta drift term as implemented in `sfincs_jax` parity fixtures)
+and (for the zeta drift term as implemented in `dkx` parity fixtures)
 
 .. math::
 
@@ -205,13 +205,13 @@ Collision operators (PAS, FP, and improved Sugama)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 SFINCS v3 supports two collision models controlled by ``collisionOperator``,
-and `sfincs_jax` adds a third:
+and `dkx` adds a third:
 
 - ``collisionOperator = 1``: pure pitch-angle scattering (PAS) in the Legendre basis.
 - ``collisionOperator = 0``: full linearized Fokker-Planck operator (Landau form), implemented via
   Rosenbluth potentials (and dense coupling in the speed coordinate :math:`x`).
 - ``collisionOperator = 3``: the momentum- and energy-conserving improved
-  Sugama model operator (a `sfincs_jax` research extension beyond Fortran v3);
+  Sugama model operator (a `dkx` research extension beyond Fortran v3);
   it shares the Fokker-Planck test-particle kernels and dense per-:math:`L`
   speed-block structure.
 
@@ -226,7 +226,7 @@ For a fixed :math:`L`, the action can be written as a dense x-space matrix-vecto
    \mathsf{C}^{(L)}_{a b, i j}\; f_{b, j, L, \theta, \zeta}.
 
 In the v3 matrix assembly, the overall normalization is applied via ``nu_n`` (see ``populateMatrix.F90``).
-On the canonical stack this model is :mod:`sfincs_jax.collisions` (the
+On the canonical stack this model is :mod:`dkx.collisions` (the
 pitch-angle-scattering and full Fokker--Planck operators), applied inside
 ``KineticOperator.apply_f`` and parity-tested by comparing a
 full F-block matvec against a frozen PETSc Jacobian for the v3 example
@@ -246,8 +246,8 @@ so that the Fokker--Planck operator remains diagonal in :math:`(\theta,\zeta)` b
 flux surface.
 
 On the canonical stack this poloidally varying collision operator is applied
-inside :meth:`sfincs_jax.drift_kinetic.KineticOperator.apply_f`, which rescales
-the :mod:`sfincs_jax.collisions` Fokker--Planck blocks by the poloidal density
+inside :meth:`dkx.drift_kinetic.KineticOperator.apply_f`, which rescales
+the :mod:`dkx.collisions` Fokker--Planck blocks by the poloidal density
 factor when ``includePhi1InCollisionOperator = .true.``. It is parity-tested
 against a frozen v3 PETSc matrix for the fixture
 ``fp_1species_FPCollisions_noEr_tiny_withPhi1_inCollision``. For derivations and
@@ -292,7 +292,7 @@ function rather than an assembled sparse matrix. For the linear kinetic block th
 where :math:`A` is represented by a matrix-free matvec and :math:`b` is a right-hand side.
 
 On the canonical stack the residual and Jacobian interface is the consolidated
-:class:`sfincs_jax.drift_kinetic.KineticOperator`:
+:class:`dkx.drift_kinetic.KineticOperator`:
 
 - ``KineticOperator.apply(v)`` is the matrix-free matvec :math:`Av`, and
   ``KineticOperator.rhs()`` is the right-hand side :math:`b`.
@@ -307,7 +307,7 @@ Linear solvers and preconditioning
 SFINCS v3 systems are large, stiff, and often ill-conditioned due to collision
 operators, constraint nullspaces, and mixed dense/sparse structure. The canonical
 stack keeps the operator matrix-free and applies a three-tier auto policy
-(:func:`sfincs_jax.solve.solve`) described in full in :doc:`numerics`:
+(:func:`dkx.solve.solve`) described in full in :doc:`numerics`:
 
 - **Tier 1** — a structured direct solve (block-tridiagonal Legendre
   elimination) for the DKES-trajectory / pitch-angle-scattering family;
@@ -354,7 +354,7 @@ and repeated solves need only forward/backward substitution:
    \qquad x_k = y_k - C_k x_{k+1}.
 
 On the canonical stack the blocks come from
-:meth:`sfincs_jax.drift_kinetic.KineticOperator.to_block_tridiagonal`, and the
+:meth:`dkx.drift_kinetic.KineticOperator.to_block_tridiagonal`, and the
 factor/solve is the ``solvax`` block-Thomas kernel with a **truncated-storage**
 back-substitution that retains only the low-:math:`L` blocks the right-hand side
 and moments touch. This is the Legendre block-tridiagonal method of

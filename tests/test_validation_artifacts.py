@@ -7,8 +7,8 @@ import h5py
 import numpy as np
 import pytest
 
-import sfincs_jax.validation.artifacts as artifacts
-from sfincs_jax.validation.artifacts import (
+import dkx.validation.artifacts as artifacts
+from dkx.validation.artifacts import (
     appendix_b_geometry_audit_from_h5,
     autodiff_gradient_error_summary,
     benchmark_artifact_policy_errors,
@@ -38,7 +38,7 @@ from sfincs_jax.validation.artifacts import (
     suite_case_metrics,
     suite_report_summary,
 )
-from sfincs_jax.validation.data_fetch import external_data_dir, external_data_version
+from dkx.validation.data_fetch import external_data_dir, external_data_version
 
 
 def _artifact_dir() -> Path:
@@ -46,7 +46,7 @@ def _artifact_dir() -> Path:
 
 
 def test_external_data_version_and_dir_follow_manifest_and_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("SFINCS_JAX_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("DKX_DATA_DIR", str(tmp_path / "data"))
 
     version = external_data_version()
     path = external_data_dir()
@@ -205,7 +205,7 @@ def test_simakov_helander_audit_records_geometry_and_keeps_full_gate_closed(tmp_
     assert "G1" in geometry["appendix_b_discrete_quantities"]
     assert "L11" in geometry["transport_matrix_coefficients_over_nuprime"]
 
-    pinned = json.loads((_artifact_dir() / "sfincs_jax_simakov_helander_limit_audit_summary.json").read_text())
+    pinned = json.loads((_artifact_dir() / "dkx_simakov_helander_limit_audit_summary.json").read_text())
     precomputed = {
         case: pinned["cases"][case]["appendix_b_geometry_audit"]
         for case in ("lhd", "w7x")
@@ -306,7 +306,7 @@ def test_fortran_suite_benchmark_schema_validator_fails_closed() -> None:
 
 
 def test_fortran_suite_benchmark_summary_records_source_reports_and_gates() -> None:
-    payload = json.loads((_artifact_dir() / "sfincs_jax_fortran_suite_benchmark_summary.json").read_text())
+    payload = json.loads((_artifact_dir() / "dkx_fortran_suite_benchmark_summary.json").read_text())
 
     assert payload["metadata"]["kind"] == "fortran_v3_suite_benchmark_summary"
     assert fortran_suite_benchmark_schema_errors(payload) == []
@@ -374,7 +374,7 @@ def test_production_cpu_report_uses_xblock_for_tokamak_fp_er_rows() -> None:
 
 def test_autodiff_sensitivity_summary_records_gradient_and_residual_gates() -> None:
     payload = load_autodiff_sensitivity_summary(
-        _artifact_dir() / "sfincs_jax_autodiff_sensitivity_validation_summary.json"
+        _artifact_dir() / "dkx_autodiff_sensitivity_validation_summary.json"
     )
     errors = autodiff_gradient_error_summary(payload)
 

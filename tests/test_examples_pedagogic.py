@@ -3,7 +3,7 @@
 Each example under ``examples/*.py`` (the plan_final.md example style
 contract: no ``main()``, parameters at the top, prints of setup/progress/
 final results, at least one PNG plot, output-file writing plus read-back) is
-run as a subprocess with ``SFINCS_JAX_CI=1`` (the scripts' shrunken-resolution
+run as a subprocess with ``DKX_CI=1`` (the scripts' shrunken-resolution
 branch); the test asserts a zero exit code, the expected result lines in
 stdout, and that the advertised plot file exists.
 """
@@ -82,7 +82,7 @@ def test_pedagogic_example_runs_and_reports(script: str) -> None:
         plot_path.unlink()
 
     env = dict(os.environ)
-    env["SFINCS_JAX_CI"] = "1"
+    env["DKX_CI"] = "1"
     env.setdefault("MPLBACKEND", "Agg")
     proc = subprocess.run(
         [sys.executable, str(EXAMPLES / script)],

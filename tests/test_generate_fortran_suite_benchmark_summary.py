@@ -139,7 +139,7 @@ def test_generate_fortran_suite_benchmark_summary_from_reports(tmp_path: Path) -
     pdf_path = out_dir / "suite_benchmark_test.pdf"
     assert pdf_path.exists()
     pdf_bytes = pdf_path.read_bytes()
-    assert b"/Creator (sfincs_jax)" in pdf_bytes
+    assert b"/Creator (dkx)" in pdf_bytes
     assert b"/CreationDate (D:20260101000000Z)" in pdf_bytes
     rc = mod.main(
         [
@@ -397,7 +397,7 @@ def test_checked_in_summary_matches_default_suite_reports(tmp_path: Path) -> Non
         / "examples"
         / "publication_figures"
         / "artifacts"
-        / "sfincs_jax_fortran_suite_benchmark_summary.json"
+        / "dkx_fortran_suite_benchmark_summary.json"
     )
     expected = mod.write_benchmark_summary(
         cpu_report=mod.DEFAULT_CPU_REPORT,

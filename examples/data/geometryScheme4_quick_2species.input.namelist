@@ -1,4 +1,4 @@
-! Minimal input file for sfincs_jax examples (geometryScheme=4).
+! Minimal input file for dkx examples (geometryScheme=4).
 
 &general
 /

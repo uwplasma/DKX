@@ -2,9 +2,9 @@
 
 xGridScheme 2 (Gauss-Radau), 3/4 (uniform grid on [0, xMax]), 7/8 (Chebyshev)
 and the upwinded ``xDotDerivativeScheme`` variants (-2, 1-11) are canonical:
-:func:`sfincs_jax.phase_space.make_grids` builds the nodes/weights/ddx pair
+:func:`dkx.phase_space.make_grids` builds the nodes/weights/ddx pair
 (ports of ``createGrids.F90``/``uniformDiffMatrices.F90``/``ChebyshevGrid.F90``)
-and :class:`sfincs_jax.drift_kinetic.KineticOperator` applies the x=0 boundary
+and :class:`dkx.drift_kinetic.KineticOperator` applies the x=0 boundary
 conditions (``pointAtX0``) and the upwinded E_r xDot term.  Each deck is pinned
 against a Fortran SFINCS v3 golden, mirroring the sibling
 ``test_output_h5_scheme*_parity`` tests.  Grid first: the ``x`` nodes must match
@@ -17,8 +17,8 @@ from pathlib import Path
 
 import pytest
 
-from sfincs_jax.compare import compare_sfincs_outputs
-from sfincs_jax.io import read_sfincs_h5
+from dkx.compare import compare_sfincs_outputs
+from dkx.io import read_sfincs_h5
 
 REF = Path(__file__).parent / "ref"
 
@@ -71,7 +71,7 @@ def _paths(tag: str) -> tuple[Path, Path]:
 def test_xgrid_scheme_matches_fortran_fixture(
     tag: str, x_grid_scheme: int, x_dot_scheme: int, tmp_path: Path
 ) -> None:
-    from sfincs_jax.run import run_profile
+    from dkx.run import run_profile
 
     deck, golden = _paths(tag)
     out = tmp_path / "sfincsOutput.h5"

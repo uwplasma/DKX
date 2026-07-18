@@ -23,7 +23,7 @@ except Exception as exc:  # pragma: no cover
 
 import numpy as np
 
-from sfincs_jax.validation.artifacts import (
+from dkx.validation.artifacts import (
     DEFAULT_PUBLICATION_ARTIFACTS,
     build_publication_validation_summary,
     load_collisionality_records,
@@ -34,7 +34,7 @@ from sfincs_jax.validation.artifacts import (
 
 DEFAULT_ARTIFACT_DIR = _REPO_ROOT / "examples" / "publication_figures" / "artifacts"
 DEFAULT_OUT_DIR = _REPO_ROOT / "docs" / "_static" / "figures" / "paper"
-DEFAULT_STEM = "sfincs_jax_publication_validation_dashboard"
+DEFAULT_STEM = "dkx_publication_validation_dashboard"
 
 
 def _setup_mpl() -> None:
@@ -62,7 +62,7 @@ def _setup_mpl() -> None:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="generate_validation_dashboard",
-        description="Generate the publication validation dashboard from checked-in sfincs_jax artifacts.",
+        description="Generate the publication validation dashboard from checked-in dkx artifacts.",
     )
     parser.add_argument(
         "--artifact-dir",

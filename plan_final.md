@@ -1,4 +1,4 @@
-# SFINCS_JAX Active Plan
+# DKX Active Plan
 
 Last updated: 2026-07-15. Active branch: `main` (single-branch repo; v1.2.0
 released on PyPI and GitHub).
@@ -10,7 +10,7 @@ follow this file.
 
 ## One-Sentence Goal
 
-Ship a small, understandable, fast, research-grade `sfincs_jax` core where one
+Ship a small, understandable, fast, research-grade `dkx` core where one
 input file plus one geometry runs accurate CPU/GPU neoclassical calculations
 with automatic robust defaults, SFINCS Fortran v3 parity where models overlap,
 competitive runtime and memory, evident physics/numerics in the source, and
@@ -52,7 +52,7 @@ Shipped state as of v1.2.0 (2026-07-13):
   heavy multi-compilation integration tests marked `slow`); 1000+ tests,
   Fortran-golden parity referees throughout.
 - Flagship example: precise-QA vs precise-QA-held + bootstrap-reduction
-  through the differentiable vmec_jax -> booz_xform_jax -> sfincs_jax chain
+  through the differentiable vmex -> booz_xform_jax -> dkx chain
   (exact implicit/adjoint gradients end to end).
 
 ## Concrete Code-Audit Rules
@@ -92,7 +92,7 @@ speedup curves. Deliverable:
 
 1. Measured table on the 744k-unknown HSX PAS production deck: Fortran v3
    MPI at n = 1/2/4/8 (laptop, 10 cores) and n = 1..32 (36-core
-   workstation), against `sfincs_jax` single-process (all cores) cold and
+   workstation), against `dkx` single-process (all cores) cold and
    warm, and single-GPU. Report solve-driver seconds and end-to-end seconds.
 2. Batched-throughput framing: monoenergetic coefficients/second and
    surfaces/second from the vmap scan API on CPU and GPU (the axis where a
@@ -130,7 +130,7 @@ on CPU). Work items:
 
 ### DKX rename lane (decision-gated)
 
-Rename ``sfincs_jax`` to ``DKX`` (import name ``dkx``). Name checks done
+Rename ``dkx`` to ``DKX`` (import name ``dkx``). Name checks done
 2026-07-16: PyPI ``dkx`` is unclaimed; no significant GitHub collision; no
 import collision. The rename does NOT execute until an explicit go decision;
 sequenced plan:
@@ -139,18 +139,18 @@ sequenced plan:
    ``dkx``, prose "DKX") and the expansion used in docs/paper.
 2. Inventory the rename surface mechanically (module dirs, pyproject,
    ``__init__`` exports, CLI entry point name, env-var prefix
-   ``SFINCS_JAX_*`` -> ``DKX_*`` with back-compat reads, docs, README,
+   ``DKX_*`` -> ``DKX_*`` with back-compat reads, docs, README,
    CITATION, badges, tests, tools, workflow files, release-asset manifests,
    figure labels).
-3. One rename PR: package dir -> ``dkx/`` with a ``sfincs_jax`` compat shim
+3. One rename PR: package dir -> ``dkx/`` with a ``dkx`` compat shim
    (re-export + DeprecationWarning, kept for >=2 releases); env vars read
    both prefixes with the old one warning; CLI ships both entry points.
-4. Releases: publish ``dkx`` to PyPI; publish one final ``sfincs-jax``
+4. Releases: publish ``dkx`` to PyPI; publish one final ``dkx``
    release that depends on ``dkx`` and re-exports (turnstile release with a
    clear notice). Version bumps to 2.0.0 at the rename.
 5. Rename the GitHub repo (GitHub auto-redirects old URLs); update RTD
    project slug, badges, and the docs domain; update downstream references
-   (vmec_jax examples, office checkouts, CI).
+   (vmex examples, office checkouts, CI).
 6. SFINCS remains named and cited exactly as today — the parity story
    ("DKX vs SFINCS Fortran v3") is unchanged.
 
@@ -204,7 +204,7 @@ DKE solve has not been published by anyone.
 3. External PR #9 (Rosenbluth quadrature stabilization): reviewed, tests
    pass locally; API-knob request posted on the PR — merge once the
    contributor lands it.
-4. solvax: next release (>=0.8.5) carries `d_block`; bump the sfincs_jax
+4. solvax: next release (>=0.8.5) carries `d_block`; bump the dkx
    minimum then and swap the hand-rolled refinement/chunking for the solvax
    primitives (roadmap item 6).
 5. Roadmap item 1 in progress: the ICNTS-style W7-X monoenergetic
@@ -218,8 +218,8 @@ DKE solve has not been published by anyone.
 Flat, physics-named root modules; one-level domain packages only where a
 package earns its keep (`validation/`, `workflows/`). Stable file names
 describe physics or numerics — no version suffixes or attempt-names; no
-nested packages under `sfincs_jax/`. The module table in
-`sfincs_jax/README.md` and `tests/fixtures/source_tree_expected.json` are the
+nested packages under `dkx/`. The module table in
+`dkx/README.md` and `tests/fixtures/source_tree_expected.json` are the
 enforced inventory; both are updated in the same commit as any module
 addition, rename, or deletion.
 
@@ -229,8 +229,8 @@ addition, rename, or deletion.
   plan governance, README contract)
 - `python -m pytest <touched-test-files> -q` per change; full
   `python -m pytest -q -n auto -m "not slow"` at milestones
-- `ruff check sfincs_jax tests tools` and `python -m compileall sfincs_jax -q`
-- `micromamba run -n sfincs-jax python -m sphinx -b html docs docs/_build/html -q -W --keep-going`
+- `ruff check dkx tests tools` and `python -m compileall dkx -q`
+- `micromamba run -n dkx python -m sphinx -b html docs docs/_build/html -q -W --keep-going`
   when docs/README change
 - Size guard: no tracked file > 2 MB; heavy goldens only as `tests/ref/*.xz`
 

@@ -25,9 +25,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.drift_kinetic import KineticOperator, kinetic_operator_from_namelist
-from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.validation.fortran import read_petsc_vec
+from dkx.drift_kinetic import KineticOperator, kinetic_operator_from_namelist
+from dkx.namelist import read_sfincs_input
+from dkx.validation.fortran import read_petsc_vec
 
 
 def _with_nu_n(op: KineticOperator, nu_n: jnp.ndarray) -> KineticOperator:

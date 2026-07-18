@@ -3,13 +3,13 @@
 Archived NTX RHSMode=1 Handoff
 ==============================
 
-This page is archived for provenance. The active SFINCS-JAX release plan no
-longer treats the NTX/NEOPAX profile-current ladder as a SFINCS-JAX blocking
+This page is archived for provenance. The active DKX release plan no
+longer treats the NTX/NEOPAX profile-current ladder as a DKX blocking
 lane; downstream NTX collaborators are continuing that workflow in the NTX
 repository. The solver-policy and output-observability changes recorded here
-remain useful for SFINCS-JAX production finite-beta/profile-current runs.
+remain useful for DKX production finite-beta/profile-current runs.
 
-This page records the SFINCS-JAX state that should be used by the NTX
+This page records the DKX state that should be used by the NTX
 finite-beta profile-current lane after the RHSMode=1 solver-policy audit.
 It is intentionally operational: commands, expected solver metadata, and the
 remaining physics caveat are listed in the same place.
@@ -48,7 +48,7 @@ finite-beta comparisons.
 
 .. code-block:: bash
 
-   JAX_ENABLE_X64=True sfincs_jax input.namelist \
+   JAX_ENABLE_X64=True dkx input.namelist \
      --output sfincsOutput.h5 \
      --solver-trace sfincsOutput.solver_trace.json
 
@@ -57,7 +57,7 @@ trace unless kernel-level profiling is specifically needed:
 
 .. code-block:: bash
 
-   JAX_ENABLE_X64=True python -m sfincs_jax.validation.release write-output-trace \
+   JAX_ENABLE_X64=True python -m dkx.validation.release write-output-trace \
      --input input.namelist \
      --out sfincsOutput.h5 \
      --compute-solution \
@@ -88,7 +88,7 @@ What Is Closed
 - The ``25 x 31 x 17, Nx=11`` production-resolution NTX deck completes locally
   with ``solve_method=sparse_pc_gmres`` in about ``121 s``, peak RSS about
   ``9.3 GB``, and residual ``4.31e-14`` against a ``2.09e-09`` target.
-- Fortran operator-dump audits show SFINCS-JAX applies the same sparse
+- Fortran operator-dump audits show DKX applies the same sparse
   RHSMode=1 operator as the clean Fortran v3 PETSc matrix branch to roundoff on
   the audited finite-beta decks.
 
@@ -97,11 +97,11 @@ What Remains Open
 
 The finite-beta RHSMode=1 bootstrap-current publication claim is still a
 physics-reference audit, not a stalled-solver issue.  The converged
-SFINCS-JAX sparse-PC branch matches the clean PETSc sparse-matrix branch, but
+DKX sparse-PC branch matches the clean PETSc sparse-matrix branch, but
 some MUMPS/SuperLU_DIST Fortran artifacts and Redl/NTX+NEOPAX comparisons use
 different nullspace/reference branches for the profile-current observable.
 
-Before promoting this lane as a publication parity result, NTX and SFINCS-JAX
+Before promoting this lane as a publication parity result, NTX and DKX
 should pin the physical branch by rerunning the radial/profile ladder with:
 
 - the same finite-beta VMEC geometry,

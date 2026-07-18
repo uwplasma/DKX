@@ -1,13 +1,13 @@
-"""Equivalence tests: sfincs_jax.phase_space must reproduce the old implementations.
+"""Equivalence tests: dkx.phase_space must reproduce the old implementations.
 
 The referee for the Phase 3.1a consolidation is exact (1e-15 / bitwise)
 agreement with the modules being replaced:
 
-* ``sfincs_jax.grids.uniform_diff_matrices``
-* ``sfincs_jax.xgrid`` (``make_x_grid``,
+* ``dkx.grids.uniform_diff_matrices``
+* ``dkx.xgrid`` (``make_x_grid``,
   ``make_x_polynomial_diff_matrices``)
-* ``sfincs_jax.discretization.v3.grids_from_namelist``
-* ``sfincs_jax.collisions.polynomial_interpolation_matrix_np``
+* ``dkx.discretization.v3.grids_from_namelist``
+* ``dkx.collisions.polynomial_interpolation_matrix_np``
 * the Legendre coupling formulas inlined in ``operators/profile_collisionless``
 
 plus a few absolute checks (quadrature exactness, hardcoded nodes).
@@ -20,10 +20,10 @@ import math
 import numpy as np
 import pytest
 
-from sfincs_jax import phase_space
-from sfincs_jax.xgrid import make_x_grid, make_x_polynomial_diff_matrices
-from sfincs_jax.namelist import parse_sfincs_input_text
-from sfincs_jax.collisions import polynomial_interpolation_matrix_np
+from dkx import phase_space
+from dkx.xgrid import make_x_grid, make_x_polynomial_diff_matrices
+from dkx.namelist import parse_sfincs_input_text
+from dkx.collisions import polynomial_interpolation_matrix_np
 
 TOL = dict(rtol=0.0, atol=1e-15)
 
@@ -33,7 +33,7 @@ def assert_exact(new, old) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Uniform periodic diff matrices vs old sfincs_jax.grids.uniform_diff_matrices
+# Uniform periodic diff matrices vs old dkx.grids.uniform_diff_matrices
 # ---------------------------------------------------------------------------
 
 
@@ -271,7 +271,7 @@ def test_grids_container_exposes_legendre_machinery() -> None:
 
 # ---------------------------------------------------------------------------
 # Aperiodic uniform diff matrices (xGridScheme 3/4 and the xDot upwind pairs)
-# vs the old full uniformDiffMatrices.F90 port in sfincs_jax.grids
+# vs the old full uniformDiffMatrices.F90 port in dkx.grids
 # ---------------------------------------------------------------------------
 
 

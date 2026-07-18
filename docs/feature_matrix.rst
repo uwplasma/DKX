@@ -1,4 +1,4 @@
-Fortran v3 And sfincs_jax Feature Matrix
+Fortran v3 And dkx Feature Matrix
 =========================================
 
 This page is the review anchor for functionality parity and intentional
@@ -12,7 +12,7 @@ README functionality table and lands here at the next audit pass. It separates t
 are easy to conflate during refactoring:
 
 - what the Fortran v3 code can do,
-- where that behavior lives in ``sfincs_jax``,
+- where that behavior lives in ``dkx``,
 - and which promotion gate is still required before making a production claim.
 
 Status definitions
@@ -44,12 +44,12 @@ Fortran v3 feature ownership
    * - Feature surface
      - Fortran v3 owner
      - Source/manual evidence
-     - ``sfincs_jax`` owner and status
+     - ``dkx`` owner and status
    * - Namelist schema, defaults, and validation
      - ``readInput.F90``, ``validateInput.F90``, ``globalVariables.F90``
      - Manual ``inputParameters.tex`` documents ``RHSMode``,
        ``ambipolarSolve``, geometry, collision, and drift compatibility.
-     - ``sfincs_jax.namelist`` and ``sfincs_jax.input_compat`` validation
+     - ``dkx.namelist`` and ``dkx.input_compat`` validation
        helpers: implemented, with compatibility guards expanded as refactoring
        exposes cleaner public contracts.
    * - RHSMode 1 profile-response solve
@@ -58,8 +58,8 @@ Fortran v3 feature ownership
      - Fortran performs a nonlinear or linear profile-response solve, then
        writes particle fluxes, heat fluxes, flows, currents, Phi1 fields, and
        convergence diagnostics.
-     - ``sfincs_jax.run`` :math:`\to` ``sfincs_jax.solve`` (three-tier auto
-       policy) over the consolidated ``sfincs_jax.drift_kinetic``:
+     - ``dkx.run`` :math:`\to` ``dkx.solve`` (three-tier auto
+       policy) over the consolidated ``dkx.drift_kinetic``:
        implemented with gates. QA/QH production-grid convergence is supported
        with documented solver-policy limits; lower-memory replacement remains a
        performance lane, not a correctness blocker.
@@ -67,7 +67,7 @@ Fortran v3 feature ownership
      - ``solver.F90``, ``diagnostics.F90``, ``validateInput.F90``
      - Fortran loops over transport RHS columns; RHSMode 3 enforces
        monoenergetic constraints such as ``Nx=1`` and DKES-compatible settings.
-     - ``sfincs_jax.run.run_transport_matrix`` :math:`\to` ``sfincs_jax.solve``:
+     - ``dkx.run.run_transport_matrix`` :math:`\to` ``dkx.solve``:
        implemented with gates.
        Geometry-rich production preconditioners are bounded by residual and
        setup-time admission tests before auto promotion.
@@ -75,8 +75,8 @@ Fortran v3 feature ownership
      - ``ambipolarSolver.F90``, ``solver.F90``, ``adjointDiagnostics.F90``
      - Safeguarded Newton/bisection uses an adjoint-computed
        ``dRadialCurrentdEr`` and maintains a bracket.
-     - ``sfincs_jax.er``: superseded by the differentiable
-       :func:`sfincs_jax.er.ambipolar_er`. Rather than a finite-difference /
+     - ``dkx.er``: superseded by the differentiable
+       :func:`dkx.er.ambipolar_er`. Rather than a finite-difference /
        adjoint ``dRadialCurrentdEr`` inside a hand-rolled Newton, the canonical
        slice finds the root with Brent and differentiates it exactly through the
        implicit function theorem (``solvax.implicit.root_solve``), with
@@ -85,7 +85,7 @@ Fortran v3 feature ownership
      - ``ambipolarSolver.F90``
      - Brent method evaluates the radial current at bracket endpoints and an
        initial guess, then uses inverse interpolation or bisection.
-     - ``sfincs_jax.er.find_ambipolar_er``: implemented on the canonical stack
+     - ``dkx.er.find_ambipolar_er``: implemented on the canonical stack
        with bracket expansion, warm starts / GCROT recycling, and root
        classification; pinned to the legacy Brent root and to a direct
        ``run_profile`` particle-flux computation in ``tests/test_er.py``.
@@ -93,8 +93,8 @@ Fortran v3 feature ownership
      - ``ambipolarSolver.F90``, ``solver.F90``, ``adjointDiagnostics.F90``
      - Pure Newton uses the adjoint-computed ``dRadialCurrentdEr`` and exits if
        a step leaves the allowed ``E_r`` bounds.
-     - ``sfincs_jax.er``: superseded by the differentiable
-       :func:`sfincs_jax.er.ambipolar_er`, whose implicit-function-theorem
+     - ``dkx.er``: superseded by the differentiable
+       :func:`dkx.er.ambipolar_er`, whose implicit-function-theorem
        gradient is finite-difference-verified in ``tests/test_er.py``
        (``jax.grad`` vs central FD, rtol 1e-4).
    * - RHSMode 4 fixed-``E_r`` sensitivities
@@ -103,7 +103,7 @@ Fortran v3 feature ownership
        ``adjointDiagnostics.F90``, ``testingAdjointDiagnostics.F90``
      - Fortran solves adjoint systems for particle flux, heat flux, bootstrap,
        parallel flow, total heat flux, and radial current sensitivities.
-     - ``sfincs_jax.sensitivity`` plus diagnostic observable builders:
+     - ``dkx.sensitivity`` plus diagnostic observable builders:
        source contract plus derivative spine present. Linear implicit
        derivative, JVP/VJP, dot-product, small RHSMode-1 radial-current gates,
        active Fortran-style option-1 ``dJ_r/dE_r`` replay, Fortran-v3
@@ -124,7 +124,7 @@ Fortran v3 feature ownership
      - ``populateMatrix.F90`` and collision-specific helpers
      - Manual and validation checks distinguish PAS and full Fokker-Planck
        branches, plus field-particle and momentum-restoring terms.
-     - ``sfincs_jax.collisions`` (pitch-angle-scattering and full Fokker--Planck
+     - ``dkx.collisions`` (pitch-angle-scattering and full Fokker--Planck
        operators): implemented for the
        release-facing suite, with high-pitch/geometry-rich performance gates
        tracked separately.
@@ -139,7 +139,7 @@ Fortran v3 feature ownership
      - ``geometry.F90``, ``radialCoordinates.F90``, ``updateBoozerGeometry.F90``
      - Fortran supports analytic, Boozer, VMEC-derived, and related geometry
        schemes, with RHSMode>3 restricted to Boozer coordinates.
-     - ``sfincs_jax.magnetic_geometry`` (``FluxSurfaceGeometry`` with schemes
+     - ``dkx.magnetic_geometry`` (``FluxSurfaceGeometry`` with schemes
        1--5/11/12 and the differentiable ``from_fourier``): implemented with
        gates. VMEC and differentiable spectra are supported; broader QI and
        scheme-13-via-namelist production promotion remains documented research
@@ -148,11 +148,11 @@ Fortran v3 feature ownership
      - ``evaluateResidual.F90``, ``populateMatrix.F90``, ``diagnostics.F90``
      - Fortran solves coupled kinetic/quasineutrality systems for compatible
        RHSMode-1 settings and rejects RHSMode>3 with Phi1.
-     - Canonical: ``sfincs_jax.drift_kinetic`` (the quasineutrality block, the
+     - Canonical: ``dkx.drift_kinetic`` (the quasineutrality block, the
        ``<Phi1>=0`` lambda row, the ``includePhi1InKineticEquation`` coupling,
        and the ``includePhi1InCollisionOperator`` poloidally varying
        Fokker-Planck collision operator, for ``quasineutralityOption`` 1/2) and
-       ``sfincs_jax.phi1`` (the nonlinear Newton solve ``solve_phi1`` --
+       ``dkx.phi1`` (the nonlinear Newton solve ``solve_phi1`` --
        ``solve.solve`` inner linear step, warm-started -- its accepted-iterate
        history variant ``solve_phi1_history``, and the differentiable
        ``phi1_state``); the default through ``run_profile`` and the CLI. RHSMode
@@ -162,7 +162,7 @@ Fortran v3 feature ownership
        sparse direct fallback, transpose solves, and MUMPS memory retry controls.
      - Fortran generally factors a preconditioner/direct matrix and uses the
        same infrastructure for adjoint/transpose solves.
-     - Native JAX/Python solver stack: implemented with gates. ``sfincs_jax``
+     - Native JAX/Python solver stack: implemented with gates. ``dkx``
        intentionally does not require PETSc/MUMPS/SuperLU_DIST. Current work
        focuses on reusable operator protocols, native block/Schur factors, and
        strict true-residual admission rather than external direct-solver
@@ -171,7 +171,7 @@ Fortran v3 feature ownership
      - ``writeHDF5Output.F90`` and diagnostics writers
      - Fortran writes HDF5 fields for inputs, geometry, solution, diagnostics,
        and adjoint quantities when enabled.
-     - ``sfincs_jax.writer`` / ``sfincs_jax.io`` and CLI plotting: implemented
+     - ``dkx.writer`` / ``dkx.io`` and CLI plotting: implemented
        for HDF5, NetCDF,
        NPZ, and PDF plot workflows. RHSMode 4/5 adjoint output contracts are
        pinned by compact Fortran-v3 sensitivity fixtures; production refreshes
@@ -184,7 +184,7 @@ Fortran v3 feature ownership
        implemented with gates. Single-case multi-GPU strong scaling and true
        device-QI are deferred research lanes until strict production gates pass.
 
-``sfincs_jax`` implementation status
+``dkx`` implementation status
 ------------------------------------
 
 .. list-table::
@@ -222,7 +222,7 @@ Fortran v3 feature ownership
        evaluator reuse, and production Fortran option-1/3 replay gates.
    * - RHSMode 4 fixed-``E_r`` sensitivities
      - source contract implemented; numerical replay pending
-     - ``sfincs_jax.sensitivity`` supports implicit linear observable
+     - ``dkx.sensitivity`` supports implicit linear observable
        derivatives, builder probes, JVP/VJP, adjoint dot-product checks,
        Fortran-compatible input validation, and HDF5 sensitivity field-name
        gates.
@@ -236,7 +236,7 @@ Fortran v3 feature ownership
        constant-current HDF5 diagnostics.
    * - QA/QH bootstrap-current validation
      - implemented with gates
-     - README/docs figures compare ``sfincs_jax``, SFINCS Fortran v3, and Redl
+     - README/docs figures compare ``dkx``, SFINCS Fortran v3, and Redl
        formula at matched resolutions where available.
      - More radial points and production-grid repeats after solver-policy
        changes.

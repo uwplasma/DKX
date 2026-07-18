@@ -13,7 +13,7 @@ import pytest
 
 def _load_example_module() -> ModuleType:
     repo = Path(__file__).resolve().parents[1]
-    script = repo / "examples" / "vmec_jax_finite_beta" / "finite_beta_vmec_to_sfincs.py"
+    script = repo / "examples" / "vmex_finite_beta" / "finite_beta_vmec_to_sfincs.py"
     spec = importlib.util.spec_from_file_location("finite_beta_vmec_to_sfincs", script)
     assert spec is not None
     assert spec.loader is not None
@@ -25,7 +25,7 @@ def _load_example_module() -> ModuleType:
 
 def _load_redl_compare_module() -> ModuleType:
     repo = Path(__file__).resolve().parents[1]
-    script = repo / "examples" / "vmec_jax_finite_beta" / "compare_landreman_paul_qa_bootstrap_redl.py"
+    script = repo / "examples" / "vmex_finite_beta" / "compare_landreman_paul_qa_bootstrap_redl.py"
     spec = importlib.util.spec_from_file_location("compare_landreman_paul_qa_bootstrap_redl", script)
     assert spec is not None
     assert spec.loader is not None
@@ -37,8 +37,8 @@ def _load_redl_compare_module() -> ModuleType:
 
 def _load_qs_paper_redl_module() -> ModuleType:
     repo = Path(__file__).resolve().parents[1]
-    script = repo / "examples" / "vmec_jax_finite_beta" / "compare_qs_paper_sfincs_jax_redl.py"
-    spec = importlib.util.spec_from_file_location("compare_qs_paper_sfincs_jax_redl", script)
+    script = repo / "examples" / "vmex_finite_beta" / "compare_qs_paper_dkx_redl.py"
+    spec = importlib.util.spec_from_file_location("compare_qs_paper_dkx_redl", script)
     assert spec is not None
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -139,7 +139,7 @@ def test_landreman_paul_redl_comparison_summarizes_synthetic_difference(tmp_path
         scale=6.0e6,
     )
 
-    assert payload["workflow"] == "landreman_paul_qa_sfincs_jax_redl_bootstrap_current_comparison"
+    assert payload["workflow"] == "landreman_paul_qa_dkx_redl_bootstrap_current_comparison"
     assert payload["comparison"]["n_compared"] == 1
     np.testing.assert_allclose(payload["comparison"]["max_abs_diff_A_per_m2"], 5.0e5)
     np.testing.assert_allclose(payload["comparison"]["max_rel_diff"], 0.25)
@@ -312,7 +312,7 @@ def test_qs_paper_redl_comparison_forwards_verbose_to_sfincs_writer(tmp_path, mo
     monkeypatch.setattr(mod, "write_output", fake_writer)
     args = mod._build_parser().parse_args(["--verbose-sfincs", "--force", "--out-dir", str(tmp_path)])
 
-    row = mod._run_or_read_sfincs_jax(
+    row = mod._run_or_read_dkx(
         source_input=source,
         wout_path=tmp_path / "wout.nc",
         run_dir=tmp_path / "run",
@@ -329,7 +329,7 @@ def test_qs_paper_redl_comparison_env_can_enable_sfincs_verbose(monkeypatch) -> 
     args = mod._build_parser().parse_args([])
 
     assert mod._verbose_sfincs_enabled(args) is False
-    monkeypatch.setenv("SFINCS_JAX_EXAMPLE_VERBOSE", "1")
+    monkeypatch.setenv("DKX_EXAMPLE_VERBOSE", "1")
     assert mod._verbose_sfincs_enabled(args) is True
 
 
@@ -471,7 +471,7 @@ def test_qs_paper_redl_comparison_plots_synthetic_payload(tmp_path) -> None:
             {"status": "ok", "s": 0.55, "jdotb_si": -7.60e6},
             {"status": "ok", "s": 0.6, "jdotb_si": -7.65e6},
         ],
-        "sfincs_jax": [
+        "dkx": [
             {"status": "ok", "s": 0.5, "jdotb_si": -7.62e6},
             {"status": "ok", "s": 0.55, "jdotb_si": -7.46e6},
             {"status": "ok", "s": 0.6, "jdotb_si": -7.13e6},
@@ -482,7 +482,7 @@ def test_qs_paper_redl_comparison_plots_synthetic_payload(tmp_path) -> None:
             "max_relative_difference": 0.05,
             "max_jax_relative_difference_vs_redl": 0.05,
             "max_jax_relative_difference_vs_fortran": 0.07,
-            "sfincs_jax_elapsed_s_sum": 12.3,
+            "dkx_elapsed_s_sum": 12.3,
             "max_errorbar_rel_to_baseline": 0.02,
         },
         "convergence_errorbars": {
@@ -507,7 +507,7 @@ def test_qs_paper_redl_comparison_regenerates_plot_from_summary_json(tmp_path) -
         "resolution_comparison": {"same_resolution_on_compared_surfaces": True},
         "redl": {"s": [0.45, 0.5, 0.55], "jdotb_si": [-3.0e6, -2.6e6, -2.4e6]},
         "sfincs_fortran_v3": [{"status": "ok", "s": 0.5, "jdotb_si": -2.55e6}],
-        "sfincs_jax": [{"status": "ok", "s": 0.5, "jdotb_si": -2.58e6}],
+        "dkx": [{"status": "ok", "s": 0.5, "jdotb_si": -2.58e6}],
         "metrics": {
             "requested_points": 1,
             "completed_points": 1,
@@ -515,8 +515,8 @@ def test_qs_paper_redl_comparison_regenerates_plot_from_summary_json(tmp_path) -
             "max_jax_relative_difference_vs_fortran": 0.01,
         },
         "performance": {
-            "runtime_total_s": {"sfincs_jax": 1.5, "sfincs_fortran_v3": 2.0},
-            "memory_peak_mb": {"sfincs_jax": 20.0, "sfincs_fortran_v3": 30.0},
+            "runtime_total_s": {"dkx": 1.5, "sfincs_fortran_v3": 2.0},
+            "memory_peak_mb": {"dkx": 20.0, "sfincs_fortran_v3": 30.0},
         },
     }
     summary = tmp_path / "summary.json"
@@ -575,7 +575,7 @@ def test_qs_paper_redl_comparison_can_hide_fortran_overlay(tmp_path) -> None:
         "sfincs_resolution_label": "13x13x21x5",
         "redl": {"s": [0.5, 0.6], "jdotb_si": [-7.6e6, -7.2e6]},
         "sfincs_fortran_v3": [{"status": "ok", "s": 0.5, "jdotb_si": -99.0e6}],
-        "sfincs_jax": [{"status": "ok", "s": 0.5, "jdotb_si": -7.62e6}],
+        "dkx": [{"status": "ok", "s": 0.5, "jdotb_si": -7.62e6}],
         "metrics": {
             "requested_points": 1,
             "completed_points": 1,

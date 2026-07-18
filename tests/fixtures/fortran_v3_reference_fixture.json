@@ -84,7 +84,7 @@
         "notes": [
           "The production probe was launched before the checked-in runner gained /usr/bin/time -lp wrapping, so peak RSS is not available in this summary.",
           "The run wrote useful SFINCS diagnostics and printed Goodbye, but the MPI finalization layer returned code 143 after the physical solve.",
-          "The case exercises the Brent ambipolar path on a larger W7-X-like analytic geometry and pins repeated operator/matrix setup behavior for the sfincs_jax ambipolar implementation plan."
+          "The case exercises the Brent ambipolar path on a larger W7-X-like analytic geometry and pins repeated operator/matrix setup behavior for the dkx ambipolar implementation plan."
         ]
       },
       "production_profile_summary_2026-06-23.json": {
@@ -845,7 +845,7 @@
           "Scratch logs were intentionally not committed because MUMPS/PETSc output is verbose.",
           "Fortran internal ambipolar timings are much smaller than process wall time in this local probe.",
           "Derivative-assisted options 1 and 3 use forward solves plus an adjoint radial-current solve per Er evaluation.",
-          "The geometry1 Brent probe wrote useful diagnostics but reported an MPI_Finalize error after the solve; sfincs_jax should separate solve completion from finalization/profiling failures."
+          "The geometry1 Brent probe wrote useful diagnostics but reported an MPI_Finalize error after the solve; dkx should separate solve completion from finalization/profiling failures."
         ]
       },
       "small_profile_summary_2026-06-23.json": {
@@ -1301,7 +1301,7 @@
       }
     }
   },
-  "description": "Compact Fortran v3 reference summaries and namelist text used by bounded sfincs_jax physics gates.",
+  "description": "Compact Fortran v3 reference summaries and namelist text used by bounded dkx physics gates.",
   "schema_version": 1,
   "sensitivity": {
     "namelists": {

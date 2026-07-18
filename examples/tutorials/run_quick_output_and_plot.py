@@ -6,7 +6,7 @@ Run from the repository root:
 
 The script is intentionally fast: it writes the standard output fields without
 computing a full transport solve, then reads each format back and builds the same
-summary panel used by ``sfincs_jax --plot``.
+summary panel used by ``dkx --plot``.
 """
 
 from __future__ import annotations
@@ -14,9 +14,9 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from sfincs_jax.api import write_output
-from sfincs_jax.io import read_sfincs_output_file
-from sfincs_jax.plotting import plot_sfincs_output_summary
+from dkx.api import write_output
+from dkx.io import read_sfincs_output_file
+from dkx.plotting import plot_sfincs_output_summary
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

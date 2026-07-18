@@ -1,7 +1,7 @@
 Optimization Workflows
 ======================
 
-``sfincs_jax`` supports optimization workflows in two layers:
+``dkx`` supports optimization workflows in two layers:
 
 1. **Fast differentiable proxies** used inside a stellarator optimizer.
 2. **High-fidelity kinetic gates** run on accepted designs before making a
@@ -11,11 +11,11 @@ This split is deliberate.  A full neoclassical solve at every VMEC objective
 evaluation is usually too expensive, and it can make optimizer behavior depend
 on solver tolerances, branch choices, and one-off failed scans.  The recommended
 workflow is therefore to optimize with cheap JAX-native terms and promote only
-selected candidates to full ``sfincs_jax`` scans.
+selected candidates to full ``dkx`` scans.
 
 The implementation lives in
-``sfincs_jax.workflows.optimization`` and the public example is
-``examples/optimization/qa_nfp2_sfincs_jax_objectives.py``.
+``dkx.workflows.optimization`` and the public example is
+``examples/optimization/qa_nfp2_dkx_objectives.py``.
 
 QA nfp=2 Example
 ----------------
@@ -24,16 +24,16 @@ Run the fast QA optimization lane from the repository root:
 
 .. code-block:: bash
 
-   python examples/optimization/qa_nfp2_sfincs_jax_objectives.py \
+   python examples/optimization/qa_nfp2_dkx_objectives.py \
      --objective balanced \
      --steps 120 \
      --out-dir docs/_static/figures/optimization \
-     --stem qa_nfp2_sfincs_jax_optimization_lane
+     --stem qa_nfp2_dkx_optimization_lane
 
 This produces a JSON provenance file plus PNG/PDF figures:
 
-.. figure:: _static/figures/optimization/qa_nfp2_sfincs_jax_optimization_lane.png
-   :alt: QA nfp=2 sfincs_jax optimization proxy dashboard.
+.. figure:: _static/figures/optimization/qa_nfp2_dkx_optimization_lane.png
+   :alt: QA nfp=2 dkx optimization proxy dashboard.
    :align: center
    :width: 95%
 
@@ -65,16 +65,16 @@ Bootstrap-Current Comparison Example
 ------------------------------------
 
 The most direct way to teach the geometry-to-transport workflow is to start from
-the real ``vmec_jax`` QA optimization output, verify that the VMEC equilibrium
+the real ``vmex`` QA optimization output, verify that the VMEC equilibrium
 has the intended finite rotational transform, and then use that equilibrium as
-the input to kinetic ``sfincs_jax`` promotion scans.  The checked figure below
-uses ``vmec_jax/examples/optimization/QA_optimization.py``, whose public target
+the input to kinetic ``dkx`` promotion scans.  The checked figure below
+uses ``vmex/examples/optimization/QA_optimization.py``, whose public target
 is aspect ratio 5 and mean iota 0.41.
 
 .. code-block:: bash
 
    python examples/optimization/qa_nfp2_bootstrap_current_comparison.py \
-     --vmec-jax-root /path/to/vmec_jax \
+     --vmex-root /path/to/vmex \
      --out-dir docs/_static/figures/optimization \
      --stem qa_nfp2_bootstrap_current_comparison
 
@@ -91,13 +91,13 @@ is aspect ratio 5 and mean iota 0.41.
    Panel F audits the ``QA_optimization.py`` objective and the final aspect/iota
    gate.  The checked artifact has aspect ratio 4.999999 and mean iota 0.4097.
 
-Pass ``--comparison-result-dir`` to overlay a second ``vmec_jax`` result, for
+Pass ``--comparison-result-dir`` to overlay a second ``vmex`` result, for
 example a QA run in which ``QA_optimization.py`` has been edited to add
 ``JDotB`` or ``RedlBootstrapMismatch`` to ``objective_tuples``.  That overlay is
 accepted only if it reduces the VMEC current diagnostic while preserving the
 finite-iota/aspect gate.  The plotted current profile is still not a completed
 kinetic SFINCS current.  A candidate selected from this step should be promoted
-with completed ``sfincs_jax scan-er`` outputs.  The corresponding kinetic
+with completed ``dkx scan-er`` outputs.  The corresponding kinetic
 observable is ``FSABjHatOverRootFSAB2``,
 
 .. math::
@@ -111,7 +111,7 @@ the input lies in shared model scope.
 
 For a directly editable script, use
 ``examples/optimization/QA_optimization_bootstrap_current.py``.  It follows the
-same workflow as ``vmec_jax/examples/optimization/QA_optimization.py`` but sets
+same workflow as ``vmex/examples/optimization/QA_optimization.py`` but sets
 ``MAX_MODE = 3`` for faster iteration and exposes
 ``INCLUDE_BOOTSTRAP_CURRENT_OBJECTIVE`` at the top of the file.  Run once with
 the flag disabled, once with it enabled, then compare the two result
@@ -119,11 +119,11 @@ directories:
 
 .. code-block:: bash
 
-   SFINCS_JAX_VMEC_JAX_ROOT=/path/to/vmec_jax \
+   DKX_VMEX_ROOT=/path/to/vmex \
      python examples/optimization/QA_optimization_bootstrap_current.py
 
    python examples/optimization/qa_nfp2_bootstrap_current_comparison.py \
-     --vmec-jax-root /path/to/vmec_jax \
+     --vmex-root /path/to/vmex \
      --qa-result-dir results/qa_opt_bootstrap_current_maxmode3/qa_only \
      --comparison-result-dir results/qa_opt_bootstrap_current_maxmode3/with_jdotb_current_objective
 
@@ -146,7 +146,7 @@ objective is
         {J_0 \sqrt{\langle B^2\rangle_i}}
    \right)^2 .
 
-In ``sfincs_jax`` output this uses ``FSABjHatOverRootFSAB2``.  The helper
+In ``dkx`` output this uses ``FSABjHatOverRootFSAB2``.  The helper
 ``bootstrap_current_objective`` evaluates the normalized least-squares penalty
 from completed kinetic outputs or cached radial profiles.
 
@@ -219,13 +219,13 @@ differentiable.
 High-Fidelity Promotion Gates
 -----------------------------
 
-Accepted designs should be promoted to actual ``sfincs_jax`` solves before
+Accepted designs should be promoted to actual ``dkx`` solves before
 publication or engineering decisions.  Real promotion starts only after the
-candidate has completed ``sfincs_jax scan-er`` outputs containing
+candidate has completed ``dkx scan-er`` outputs containing
 ``sfincsOutput.h5`` files for the requested electric-field grid.  The minimum
 promotion evidence is:
 
-- Same-profile ``sfincs_jax`` electric-field scans over each selected radius.
+- Same-profile ``dkx`` electric-field scans over each selected radius.
 - Ambipolar root bracketing with a positive electron root when requested.
 - Bootstrap-current normalization audit using ``FSABjHatOverRootFSAB2``.
 - Particle, heat, and impurity flux sign-convention audit.
@@ -237,7 +237,7 @@ The helper ``kinetic_validation_gate`` records residual and CPU/GPU agreement
 checks for promoted designs.  For production optimization campaigns, store the
 JSON summary generated by each proxy run together with the completed SFINCS
 scan outputs and solver traces.  The synthetic scan generated when
-``evaluate_sfincs_jax_promotion_scan.py`` is run without ``--scan-dir`` is only
+``evaluate_dkx_promotion_scan.py`` is run without ``--scan-dir`` is only
 a plotting/API demonstration and must not be treated as promotion evidence.
 
 Real Promotion Checklist
@@ -251,12 +251,12 @@ directory; anything before that is proxy provenance or scan planning.
 .. code-block:: bash
 
    mkdir -p runs/qa_candidate01/proxy runs/qa_candidate01/audit
-   python examples/optimization/qa_nfp2_sfincs_jax_objectives.py \
+   python examples/optimization/qa_nfp2_dkx_objectives.py \
      --objective balanced \
      --steps 120 \
      --out-dir runs/qa_candidate01/proxy \
      --stem candidate01_proxy
-   python examples/optimization/launch_sfincs_jax_candidate_scan.py \
+   python examples/optimization/launch_dkx_candidate_scan.py \
      --proxy-summary runs/qa_candidate01/proxy/candidate01_proxy.json \
      --input runs/qa_candidate01/input_r0p50.namelist \
      --out-dir runs/qa_candidate01/scan_cpu/r0p50 \
@@ -275,35 +275,35 @@ Fortran-derived promotion JSON files when that absence is documented.
 
 .. code-block:: bash
 
-   JAX_PLATFORM_NAME=cpu sfincs_jax scan-er \
+   JAX_PLATFORM_NAME=cpu dkx scan-er \
      --input runs/qa_candidate01/input_r0p50.namelist \
      --out-dir runs/qa_candidate01/scan_cpu/r0p50 \
      --values -3 -2 -1 0 1 2 3 \
      --compute-solution \
      --skip-existing \
      --jobs 4
-   python examples/optimization/evaluate_sfincs_jax_promotion_scan.py \
+   python examples/optimization/evaluate_dkx_promotion_scan.py \
      --scan-dir runs/qa_candidate01/scan_cpu/r0p50 \
      --out-dir runs/qa_candidate01/audit \
      --stem candidate01_r0p50_cpu \
      --require-electron-root \
      --impurity-species-index 2 \
      --target-impurity-flux 0.01
-   CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu sfincs_jax scan-er \
+   CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu dkx scan-er \
      --input runs/qa_candidate01/input_r0p50.namelist \
      --out-dir runs/qa_candidate01/scan_gpu/r0p50 \
      --values -3 -2 -1 0 1 2 3 \
      --compute-solution \
      --skip-existing \
      --jobs 1
-   python examples/optimization/evaluate_sfincs_jax_promotion_scan.py \
+   python examples/optimization/evaluate_dkx_promotion_scan.py \
      --scan-dir runs/qa_candidate01/scan_gpu/r0p50 \
      --out-dir runs/qa_candidate01/audit \
      --stem candidate01_r0p50_gpu \
      --require-electron-root \
      --impurity-species-index 2 \
      --target-impurity-flux 0.01
-   python examples/optimization/compare_sfincs_jax_promotion_runs.py \
+   python examples/optimization/compare_dkx_promotion_runs.py \
      --cpu runs/qa_candidate01/audit/candidate01_r0p50_cpu.json \
      --gpu runs/qa_candidate01/audit/candidate01_r0p50_gpu.json \
      --out-dir runs/qa_candidate01/audit \
@@ -317,19 +317,19 @@ audit before the final comparison:
    for run_dir in runs/qa_candidate01/scan_cpu/r0p50/Er*; do
      er_dir=$(basename "${run_dir}")
      mkdir -p "runs/qa_candidate01/scan_fortran/r0p50/${er_dir}"
-     sfincs_jax run-fortran \
+     dkx run-fortran \
        --exe /path/to/sfincs \
        --input "${run_dir}/input.namelist" \
        --workdir "runs/qa_candidate01/scan_fortran/r0p50/${er_dir}"
    done
-   python examples/optimization/evaluate_sfincs_jax_promotion_scan.py \
+   python examples/optimization/evaluate_dkx_promotion_scan.py \
      --scan-dir runs/qa_candidate01/scan_fortran/r0p50 \
      --out-dir runs/qa_candidate01/audit \
      --stem candidate01_r0p50_fortran \
      --require-electron-root \
      --impurity-species-index 2 \
      --target-impurity-flux 0.01
-   python examples/optimization/compare_sfincs_jax_promotion_runs.py \
+   python examples/optimization/compare_dkx_promotion_runs.py \
      --cpu runs/qa_candidate01/audit/candidate01_r0p50_cpu.json \
      --gpu runs/qa_candidate01/audit/candidate01_r0p50_gpu.json \
      --fortran runs/qa_candidate01/audit/candidate01_r0p50_fortran.json \
@@ -343,7 +343,7 @@ After running an electric-field scan for an accepted candidate, evaluate it with
 
 .. code-block:: bash
 
-   python examples/optimization/evaluate_sfincs_jax_promotion_scan.py \
+   python examples/optimization/evaluate_dkx_promotion_scan.py \
      --scan-dir /path/to/completed/scan-er-directory \
      --out-dir promotion_audit \
      --stem candidate01_promotion
@@ -355,8 +355,8 @@ current and species fluxes, and checks linear residual diagnostics.  If
 plotting and gate logic can be demonstrated without a long solve.  That
 synthetic mode is demo-only and cannot promote an optimization candidate.
 
-.. figure:: _static/figures/optimization/qa_nfp2_sfincs_jax_promotion_scan.png
-   :alt: High-fidelity sfincs_jax promotion scan dashboard.
+.. figure:: _static/figures/optimization/qa_nfp2_dkx_promotion_scan.png
+   :alt: High-fidelity dkx promotion scan dashboard.
    :align: center
    :width: 90%
 
@@ -364,15 +364,15 @@ synthetic mode is demo-only and cannot promote an optimization candidate.
    ambipolar radial-current bracket and selected electron root.  Panel B shows
    the bootstrap-current observable.  Panels C-D show particle and heat fluxes
    by species, together with the promotion gate status.  Real optimization
-   campaigns should use completed ``sfincs_jax scan-er`` outputs rather than the
+   campaigns should use completed ``dkx scan-er`` outputs rather than the
    synthetic demonstration scan used to generate this documentation artifact.
 
 Practical End-To-End Lane
 -------------------------
 
 Use this lane when a QA optimizer has produced a small set of accepted
-``vmec_jax`` candidates and you want a reproducible path from proxy evidence to
-kinetic validation.  The repository does not make ``vmec_jax`` or
+``vmex`` candidates and you want a reproducible path from proxy evidence to
+kinetic validation.  The repository does not make ``vmex`` or
 ``booz_xform_jax`` hard dependencies; a production campaign may run the VMEC
 optimization in a separate checkout and hand this repository an accepted
 ``wout`` plus the SFINCS profiles, species, radial surface, and resolution.
@@ -402,16 +402,16 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
 
    .. code-block:: bash
 
-      python examples/optimization/vmec_jax_workflow_status.py --json
+      python examples/optimization/vmex_workflow_status.py --json
 
-   For an accepted ``vmec_jax`` candidate with a written ``wout`` file, persist
+   For an accepted ``vmex`` candidate with a written ``wout`` file, persist
    the file-backed proxy-gradient provenance:
 
    .. code-block:: bash
 
       mkdir -p runs/qa_candidate01/proxy
-      python examples/autodiff/vmec_jax_to_boozer_sfincs_pipeline.py \
-        --wout /path/to/vmec_jax/run/wout_candidate01.nc \
+      python examples/autodiff/vmex_to_boozer_sfincs_pipeline.py \
+        --wout /path/to/vmex/run/wout_candidate01.nc \
         --mboz 3 \
         --nboz 3 \
         --surface 0.5 \
@@ -422,7 +422,7 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
 
    .. code-block:: bash
 
-      python examples/optimization/qa_nfp2_sfincs_jax_objectives.py \
+      python examples/optimization/qa_nfp2_dkx_objectives.py \
         --objective balanced \
         --steps 120 \
         --out-dir runs/qa_candidate01/proxy \
@@ -442,7 +442,7 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
 
    .. code-block:: bash
 
-      python examples/optimization/launch_sfincs_jax_candidate_scan.py \
+      python examples/optimization/launch_dkx_candidate_scan.py \
         --proxy-summary runs/qa_candidate01/proxy/candidate01_proxy.json \
         --input runs/qa_candidate01/input_r0p50.namelist \
         --out-dir runs/qa_candidate01/scan_cpu/r0p50 \
@@ -460,7 +460,7 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
    .. code-block:: bash
 
       mkdir -p runs/qa_candidate01/scan_cpu/r0p50
-      JAX_PLATFORM_NAME=cpu sfincs_jax scan-er \
+      JAX_PLATFORM_NAME=cpu dkx scan-er \
         --input runs/qa_candidate01/input_r0p50.namelist \
         --out-dir runs/qa_candidate01/scan_cpu/r0p50 \
         --values -3 -2 -1 0 1 2 3 \
@@ -473,7 +473,7 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
 
    .. code-block:: bash
 
-      JAX_PLATFORM_NAME=cpu sfincs_jax scan-er \
+      JAX_PLATFORM_NAME=cpu dkx scan-er \
         --input runs/qa_candidate01/input_r0p50.namelist \
         --out-dir runs/qa_candidate01/scan_cpu/r0p50 \
         --min -3 \
@@ -504,7 +504,7 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
 
    .. code-block:: bash
 
-      python examples/optimization/evaluate_sfincs_jax_promotion_scan.py \
+      python examples/optimization/evaluate_dkx_promotion_scan.py \
         --scan-dir runs/qa_candidate01/scan_cpu/r0p50 \
         --out-dir runs/qa_candidate01/audit \
         --stem candidate01_r0p50_cpu \
@@ -515,7 +515,7 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
 
    .. code-block:: bash
 
-      sfincs_jax ambipolar-solve \
+      dkx ambipolar-solve \
         --scan-dir runs/qa_candidate01/scan_cpu/r0p50 \
         --n-fine 1000
 
@@ -524,7 +524,7 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
 
    .. code-block:: bash
 
-      sfincs_jax ambipolar \
+      dkx ambipolar \
         --input runs/qa_candidate01/input_r0p50.namelist \
         --out-dir runs/qa_candidate01/ambipolar_cpu/r0p50 \
         --er-min -3 --er-max 3 --er-initial 0
@@ -546,7 +546,7 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
    .. code-block:: bash
 
       mkdir -p runs/qa_candidate01/scan_gpu/r0p50
-      CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu sfincs_jax scan-er \
+      CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu dkx scan-er \
         --input runs/qa_candidate01/input_r0p50.namelist \
         --out-dir runs/qa_candidate01/scan_gpu/r0p50 \
         --values -3 -2 -1 0 1 2 3 \
@@ -559,24 +559,24 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
    .. code-block:: bash
 
       ER_DIR=Er1
-      sfincs_jax compare-h5 \
+      dkx compare-h5 \
         --a runs/qa_candidate01/scan_cpu/r0p50/${ER_DIR}/sfincsOutput.h5 \
         --b runs/qa_candidate01/scan_gpu/r0p50/${ER_DIR}/sfincsOutput.h5 \
         --rtol 1e-8 \
         --atol 1e-10 \
         --show-all
 
-   When the case lies in the shared ``sfincs_jax``/SFINCS Fortran v3 model
+   When the case lies in the shared ``dkx``/SFINCS Fortran v3 model
    scope and a compiled Fortran executable is available, run the same selected
    point through Fortran and compare the HDF5 outputs:
 
    .. code-block:: bash
 
       mkdir -p runs/qa_candidate01/fortran/r0p50_${ER_DIR}
-      sfincs_jax run-fortran \
+      dkx run-fortran \
         --input runs/qa_candidate01/scan_cpu/r0p50/${ER_DIR}/input.namelist \
         --workdir runs/qa_candidate01/fortran/r0p50_${ER_DIR}
-      sfincs_jax compare-h5 \
+      dkx compare-h5 \
         --a runs/qa_candidate01/scan_cpu/r0p50/${ER_DIR}/sfincsOutput.h5 \
         --b runs/qa_candidate01/fortran/r0p50_${ER_DIR}/sfincsOutput.h5 \
         --rtol 1e-8 \
@@ -605,14 +605,14 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
 
    .. code-block:: bash
 
-      python examples/optimization/compare_sfincs_jax_promotion_runs.py \
+      python examples/optimization/compare_dkx_promotion_runs.py \
         --cpu runs/qa_candidate01/audit/candidate01_r0p50_cpu.json \
         --gpu runs/qa_candidate01/audit/candidate01_r0p50_gpu.json \
         --fortran runs/qa_candidate01/audit/candidate01_r0p50_fortran.json \
         --out-dir runs/qa_candidate01/audit \
         --stem candidate01_r0p50_comparison
 
-   .. figure:: _static/figures/optimization/qa_nfp2_sfincs_jax_promotion_comparison_w7x_reduced_real.png
+   .. figure:: _static/figures/optimization/qa_nfp2_dkx_promotion_comparison_w7x_reduced_real.png
       :alt: CPU/GPU/Fortran promotion-comparison report.
       :align: center
       :width: 90%
@@ -628,10 +628,10 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
 
    The reduced-W7-X comparison passed the default strict gates without relaxed
    tolerances: CPU/GPU root, bootstrap-objective, and flux-objective relative
-   differences were below :math:`5\times 10^{-13}`, and the SFINCS-JAX versus
+   differences were below :math:`5\times 10^{-13}`, and the DKX versus
    Fortran-v3 differences were below :math:`8\times 10^{-11}`.  The checked
    demo/format-only comparison remains available as
-   ``qa_nfp2_sfincs_jax_promotion_comparison.*`` for fast documentation and
+   ``qa_nfp2_dkx_promotion_comparison.*`` for fast documentation and
    script-layout regression checks.
 
    .. figure:: _static/figures/optimization/qa_nfp2_finite_beta_electron_root_promotion_comparison.png
@@ -647,7 +647,7 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
       ``dNHatdrHats = (0, -5)``, and ``dTHatdrHats = (0, -10)``.  All three
       lanes selected a positive electron root in the bracket
       :math:`E_r\in[0.25,0.5]`; the JAX CPU/GPU roots agreed to
-      :math:`3.1\times10^{-13}` absolute difference, and the SFINCS-JAX versus
+      :math:`3.1\times10^{-13}` absolute difference, and the DKX versus
       Fortran-v3 root differed by :math:`7.1\times10^{-8}`.  The comparison
       used explicit promotion tolerances ``selected_root_er_atol = 1e-7``,
       ``bootstrap_objective_rtol = 1e-5``, and
@@ -668,7 +668,7 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
       the second tier is a completed :math:`9\times9\times7\times4`
       CPU/GPU/Fortran scan.  The intermediate tier remains backend-clean:
       CPU/GPU root agreement is :math:`8.94\times10^{-14}` and
-      SFINCS-JAX/Fortran-v3 root agreement is :math:`1.91\times10^{-7}`.  The
+      DKX/Fortran-v3 root agreement is :math:`1.91\times10^{-7}`.  The
       root moved from :math:`E_r=0.4136092671` to
       :math:`E_r=0.4006366757`, so the ladder is useful evidence but not a
       final physics claim.  The summary is intentionally marked ``deferred``
@@ -767,13 +767,13 @@ Fortran-v3 comparison where the models overlap.
 VMEC JAX Integration
 --------------------
 
-The current ``vmec_jax`` QA script already exposes objective tuples such as
+The current ``vmex`` QA script already exposes objective tuples such as
 aspect ratio, mean iota, and quasisymmetry.  The neoclassical lane should be
 added as an outer-loop or accepted-candidate gate:
 
 .. code-block:: python
 
-   from sfincs_jax.workflows.optimization import (
+   from dkx.workflows.optimization import (
        bootstrap_current_objective,
        find_ambipolar_roots,
        flux_selectivity_objective,
@@ -782,7 +782,7 @@ added as an outer-loop or accepted-candidate gate:
 
 Inside every VMEC optimizer residual evaluation, use the differentiable proxy
 if a transport-informed term is needed.  After a candidate is accepted, write a
-VMEC ``wout``, transform or load the geometry, run the selected ``sfincs_jax``
+VMEC ``wout``, transform or load the geometry, run the selected ``dkx``
 surfaces, and evaluate the high-fidelity gates above.
 
 This keeps the optimizer fast while preserving a clear evidence path from

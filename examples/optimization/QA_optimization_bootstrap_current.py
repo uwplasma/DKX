@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 """QA optimization with an optional bootstrap-current objective.
 
-This example intentionally mirrors ``vmec_jax/examples/optimization/QA_optimization.py``
+This example intentionally mirrors ``vmex/examples/optimization/QA_optimization.py``
 so the only conceptual change is easy to audit: set
 ``INCLUDE_BOOTSTRAP_CURRENT_OBJECTIVE`` below to compare the original
 quasisymmetry/iota/aspect optimization against the same optimization with an
 added VMEC ``JDotB`` current penalty.
 
-Run from the ``sfincs_jax`` repository root:
+Run from the ``dkx`` repository root:
 
     python examples/optimization/QA_optimization_bootstrap_current.py
 
@@ -28,18 +28,18 @@ import numpy as np
 
 # ---------------------------------------------------------------------------
 # User parameters.  These are intended to be edited directly, matching the
-# style of vmec_jax/examples/optimization/QA_optimization.py.
+# style of vmex/examples/optimization/QA_optimization.py.
 # ---------------------------------------------------------------------------
 
-# Local vmec_jax checkout.  Override without editing this file with:
-#   SFINCS_JAX_VMEC_JAX_ROOT=/path/to/vmec_jax python examples/optimization/QA_optimization_bootstrap_current.py
-VMEC_JAX_ROOT_HINT = Path(os.environ.get("SFINCS_JAX_VMEC_JAX_ROOT", "/Users/rogeriojorge/local/vmec_jax"))
+# Local vmex checkout.  Override without editing this file with:
+#   DKX_VMEX_ROOT=/path/to/vmex python examples/optimization/QA_optimization_bootstrap_current.py
+VMEX_ROOT_HINT = Path(os.environ.get("DKX_VMEX_ROOT", "/Users/rogeriojorge/local/vmex"))
 
-# Use the same QA seeds as vmec_jax's public QA_optimization.py.
+# Use the same QA seeds as vmex's public QA_optimization.py.
 USE_SIMPLE_SEED = True  # Start from near-circular RBC(0,0), RBC(0,1), ZBS(0,1).
 SIMPLE_SEED_PERTURBATION = 1.0e-5
 
-# Keep this example fast enough for iteration.  The public vmec_jax script uses
+# Keep this example fast enough for iteration.  The public vmex script uses
 # MAX_MODE=5; use 3 here to compare current-objective behavior quickly.
 MAX_MODE = 3
 MIN_VMEC_MODE = MAX_MODE + 2
@@ -76,7 +76,7 @@ SAVE_STAGE_WOUTS = False
 MAKE_PLOTS = True
 
 # Physics targets and least-squares objective weights.  These are SIMSOPT-style
-# tuple weights, so vmec_jax minimizes sqrt(weight) * (J - target).
+# tuple weights, so vmex minimizes sqrt(weight) * (J - target).
 TARGET_ASPECT = 5.0
 TARGET_IOTA = 0.41
 HELICITY_M = 1
@@ -87,9 +87,9 @@ IOTA_WEIGHT = 10_000.0
 QS_WEIGHT = 1.0
 
 # VMEC current objective.  This is an equilibrium-current diagnostic objective,
-# not a completed kinetic sfincs_jax bootstrap-current objective.  It is the
+# not a completed kinetic dkx bootstrap-current objective.  It is the
 # right fast VMEC-side knob for "small <J.B>" design scans; accepted candidates
-# should still be promoted to sfincs_jax scans and checked with
+# should still be promoted to dkx scans and checked with
 # FSABjHatOverRootFSAB2.
 JDOTB_SURFACES = (0.25, 0.50, 0.75)
 JDOTB_NORMALIZATION = 50.0
@@ -102,18 +102,18 @@ INCLUDE_REDL_BOOTSTRAP_MISMATCH = False
 REDL_BOOTSTRAP_WEIGHT = 1.0
 BOOTSTRAP_SURFACES = (0.25, 0.50, 0.75)
 NE_COEFFS = [3.0e20, 0.0, 0.0, 0.0, 0.0, -2.97e20]  # m^-3, polynomial in s.
-TE_COEFFS = [15.0e3, -14.85e3]  # eV; Ti defaults to Te in vmec_jax's residual.
+TE_COEFFS = [15.0e3, -14.85e3]  # eV; Ti defaults to Te in vmex's residual.
 
 
-def _import_vmec_jax():
-    """Import vmec_jax from the requested checkout or an installed package."""
+def _import_vmex():
+    """Import vmex from the requested checkout or an installed package."""
 
-    if VMEC_JAX_ROOT_HINT.exists() and str(VMEC_JAX_ROOT_HINT) not in sys.path:
-        sys.path.insert(0, str(VMEC_JAX_ROOT_HINT))
-    import vmec_jax as vj  # type: ignore[import-not-found]
-    from vmec_jax._compat import enable_x64
+    if VMEX_ROOT_HINT.exists() and str(VMEX_ROOT_HINT) not in sys.path:
+        sys.path.insert(0, str(VMEX_ROOT_HINT))
+    import vmex as vj  # type: ignore[import-not-found]
+    from vmex._compat import enable_x64
 
-    root = VMEC_JAX_ROOT_HINT if VMEC_JAX_ROOT_HINT.exists() else Path(vj.__file__).resolve().parents[1]
+    root = VMEX_ROOT_HINT if VMEX_ROOT_HINT.exists() else Path(vj.__file__).resolve().parents[1]
     enable_x64(True)
     return vj, root
 
@@ -135,8 +135,8 @@ def _current_summary(wout) -> dict[str, float]:
 
 
 def main() -> int:
-    vj, vmec_jax_root = _import_vmec_jax()
-    data_dir = vmec_jax_root / "examples" / "data"
+    vj, vmex_root = _import_vmex()
+    data_dir = vmex_root / "examples" / "data"
     warm_start_input_file = data_dir / "input.nfp2_QA_omnigenity"
     simple_seed_input_file = data_dir / "input.minimal_seed_nfp2"
     input_file = simple_seed_input_file if USE_SIMPLE_SEED else warm_start_input_file
@@ -156,7 +156,7 @@ def main() -> int:
     )
 
     print("\nQA optimization with optional bootstrap-current objective")
-    print(f"  vmec_jax root:       {vmec_jax_root}")
+    print(f"  vmex root:       {vmex_root}")
     print(f"  input file:          {input_file}")
     print(f"  output dir:          {OUTPUT_DIR}")
     print(f"  max mode:            {MAX_MODE}")
@@ -309,7 +309,7 @@ def main() -> int:
     print("\nCompare the two modes with:")
     print(
         "  python examples/optimization/qa_nfp2_bootstrap_current_comparison.py "
-        f"--vmec-jax-root {vmec_jax_root} "
+        f"--vmex-root {vmex_root} "
         f"--qa-result-dir {OUTPUT_ROOT / 'qa_only'} "
         f"--comparison-result-dir {OUTPUT_ROOT / 'with_jdotb_current_objective'}"
     )

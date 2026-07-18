@@ -8,7 +8,7 @@ import pytest
 
 import numpy as _np
 
-from sfincs_jax.magnetic_geometry import (
+from dkx.magnetic_geometry import (
     FluxSurfaceGeometry,
     VmecWout,
     _scale_factors,

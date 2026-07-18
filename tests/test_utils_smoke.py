@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from sfincs_jax.api import write_output
+from dkx.api import write_output
 
 
 def _inject_group(text: str, group: str, lines: list[str]) -> str:

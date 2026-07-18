@@ -9,7 +9,7 @@ If you pass additional arguments, this script forwards them to
 You can call ``sfincsScanPlot_<type>`` directly if you prefer.
 """
 
-# This python script plots various types of scan in which sfincs_jax is run
+# This python script plots various types of scan in which dkx is run
 # multiple times.  All this script does is check input.namelist to read scanType,
 # and then call the appropriate script sfincsScanPlot_X.  You are also welcome
 # to run sfincsScanPlot_X directly.

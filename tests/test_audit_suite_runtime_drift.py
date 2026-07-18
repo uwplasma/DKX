@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from sfincs_jax.validation import release
+from dkx.validation import release
 
 
 def test_audit_suite_runtime_drift_flags_only_cases_above_threshold(tmp_path: Path) -> None:

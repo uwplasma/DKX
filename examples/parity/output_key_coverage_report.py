@@ -1,10 +1,10 @@
-"""Report which `sfincsOutput.h5` datasets are missing in `sfincs_jax`.
+"""Report which `sfincsOutput.h5` datasets are missing in `dkx`.
 
 This script compares:
-  - a `sfincsOutput.h5` written by `sfincs_jax write-output`
+  - a `sfincsOutput.h5` written by `dkx write-output`
   - a frozen Fortran v3 `sfincsOutput.h5` fixture
 
-and prints keys that exist in the Fortran file but are not written by `sfincs_jax` yet.
+and prints keys that exist in the Fortran file but are not written by `dkx` yet.
 
 Run:
   python examples/parity/output_key_coverage_report.py
@@ -19,8 +19,8 @@ repo_root = Path(__file__).resolve().parents[2]
 if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
 
-from sfincs_jax.api import write_output
-from sfincs_jax.io import read_sfincs_h5
+from dkx.api import write_output
+from dkx.io import read_sfincs_h5
 
 
 def main() -> int:

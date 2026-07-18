@@ -40,12 +40,12 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from sfincs_jax.run import run_transport_matrix
+from dkx.run import run_transport_matrix
 
 # ----------------------------------------------------------------------------
 # Parameters
 # ----------------------------------------------------------------------------
-CI = os.environ.get("SFINCS_JAX_CI") == "1"  # shrink resolution for CI
+CI = os.environ.get("DKX_CI") == "1"  # shrink resolution for CI
 
 # Collisionality scan: one decade of nuPrime, 5 points (3 in CI).
 NU_PRIMES = np.logspace(-2.0, -1.0, 3 if CI else 5)
@@ -117,9 +117,9 @@ OUT_DIR.mkdir(parents=True, exist_ok=True)
 # caches the compiled solve kernels, so only the first point pays compilation.
 # For dense scans the lower-level route pays off even more: build one
 # KineticOperator, then reuse the tier-1 factorization across right-hand sides
-# (sfincs_jax.solve.build_tier1_solver) or warm-start tier-2 Krylov solves by
+# (dkx.solve.build_tier1_solver) or warm-start tier-2 Krylov solves by
 # passing the previous SolveResult's ``recycle=(C, U)`` pair and ``x0`` to
-# sfincs_jax.solve.solve — the recycled deflation space makes neighboring
+# dkx.solve.solve — the recycled deflation space makes neighboring
 # collisionality points converge in a handful of iterations.
 matrices = []
 for i, nu_prime in enumerate(NU_PRIMES):

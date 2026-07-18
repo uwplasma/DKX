@@ -4,7 +4,7 @@ These examples demonstrate the **transport-matrix** modes in SFINCS v3:
 - `RHSMode=3`: monoenergetic (2×2) transport matrix
 - `RHSMode=2`: energy-integrated (3×3) transport matrix
 
-Use the ``sfincs_jax postprocess-upstream`` CLI for upstream scanplot workflows
+Use the ``dkx postprocess-upstream`` CLI for upstream scanplot workflows
 after writing an output file or scan directory.
 
 Examples:

@@ -1,7 +1,7 @@
 """Write a SFINCS-style `sfincsOutput.h5` using the CLI.
 
 This example demonstrates:
-  - invoking the `sfincs_jax` CLI from Python
+  - invoking the `dkx` CLI from Python
   - loading the resulting HDF5 output
   - using the fast geometry-only write path for a smoke test
 
@@ -21,7 +21,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.io import read_sfincs_h5
+from dkx.io import read_sfincs_h5
 
 
 def main() -> int:
@@ -33,7 +33,7 @@ def main() -> int:
     cmd = [
         sys.executable,
         "-m",
-        "sfincs_jax",
+        "dkx",
         "write-output",
         "--input",
         str(input_path),

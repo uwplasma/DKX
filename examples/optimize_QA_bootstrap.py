@@ -4,7 +4,7 @@ What this example teaches:
   - the modern two-stage stellarator design loop that reaches a *genuine*
     quasi-axisymmetric (QA) equilibrium and then lowers its bootstrap current:
 
-      Stage A -- QA shaping (vmec_jax.optimize.least_squares).  Starting from a
+      Stage A -- QA shaping (vmex.optimize.least_squares).  Starting from a
         circular torus (input.minimal_seed_nfp2, R0 = 1 m, a = 0.2 m, exactly
         axisymmetric so its rotational transform vanishes at first order), a
         staged max_mode continuation drives the two-term quasisymmetry ratio
@@ -12,13 +12,13 @@ What this example teaches:
         The decision variables are the boundary Fourier coefficients RBC/ZBS;
         the gradients are the exact implicit (adjoint) Jacobian of the
         fixed-boundary equilibrium (jac="implicit"), no finite differences.
-        This is the reference vmec_jax QA recipe.
+        This is the reference vmex QA recipe.
 
       Stage B -- bootstrap reduction at HELD precise QA (this is where
-        sfincs_jax enters).  The QA equilibrium from stage A is quasisymmetric
+        dkx enters).  The QA equilibrium from stage A is quasisymmetric
         but was never optimized for its neoclassical bootstrap current, so
         there is real headroom.  A gradient-based loop minimizes
-        <j.B>/sqrt(<B^2>) -- computed by the canonical sfincs_jax kinetic
+        <j.B>/sqrt(<B^2>) -- computed by the canonical dkx kinetic
         solve -- while a hard one-sided cap holds the two-term quasisymmetry
         ratio residual (the very metric stage A minimized) at the Stage-A
         precise-QA level, at aspect ratio 6 and mean iota above 0.41.  Both
@@ -30,10 +30,10 @@ What this example teaches:
 
   - the differentiable route between the codes used by stage B, so that one
     jax.value_and_grad call returns the gradient of the *whole* physics chain:
-        boundary dofs -> vmec_jax.core.implicit.solve_implicit (fixed-boundary
+        boundary dofs -> vmex.core.implicit.solve_implicit (fixed-boundary
         MHD equilibrium with an implicit-adjoint custom VJP)
         -> traceable single-surface VMEC spectral tables
-           (vmec_jax.core.boozer_tables.boozer_input_tables; validated
+           (vmex.core.boozer_tables.boozer_input_tables; validated
            against the host wout tables in tests/test_example_qa_bootstrap.py)
         -> booz_xform_jax (differentiable Boozer transform, |B| spectrum)
         -> FluxSurfaceGeometry.from_fourier (geometryScheme-13 pure-JAX path)
@@ -85,11 +85,11 @@ VMEC solve plus the kinetic value_and_grad (a few seconds per warm
 evaluation).  The whole example runs in well under an hour on a laptop CPU.
 Progress is appended to a per-evaluation log file and the best point is
 checkpointed after every evaluation, so a long run is inspectable while it goes
-and resumable (SFINCS_JAX_QA_DOFS_INIT).  With SFINCS_JAX_CI=1 everything
+and resumable (DKX_QA_DOFS_INIT).  With DKX_CI=1 everything
 shrinks to a couple of minutes.
 
-Requires the optional companions of this example (not needed by sfincs_jax
-itself):  pip install -e /path/to/vmec_jax /path/to/booz_xform_jax
+Requires the optional companions of this example (not needed by dkx
+itself):  pip install -e /path/to/vmex /path/to/booz_xform_jax
 
 Run:
   python examples/optimize_QA_bootstrap.py
@@ -107,50 +107,50 @@ import matplotlib
 import numpy as np
 import scipy.optimize
 
-from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
-from sfincs_jax.inputs import parse_sfincs_input_text
-from sfincs_jax.magnetic_geometry import FluxSurfaceGeometry
-from sfincs_jax.phase_space import make_grids
-from sfincs_jax.run import profile_moments_from_operator
-from sfincs_jax.solve import solve as kinetic_solve
+from dkx.drift_kinetic import kinetic_operator_from_namelist
+from dkx.inputs import parse_sfincs_input_text
+from dkx.magnetic_geometry import FluxSurfaceGeometry
+from dkx.phase_space import make_grids
+from dkx.run import profile_moments_from_operator
+from dkx.solve import solve as kinetic_solve
 
 jax.config.update("jax_enable_x64", True)
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt  # noqa: E402
 
-try:  # optional companion packages (not needed by sfincs_jax itself)
-    import vmec_jax as _vmec_jax_pkg
-    from vmec_jax import optimize as vmec_optimize
-    from vmec_jax.core import implicit as vmec_implicit
-    from vmec_jax.core import solver as vmec_solver
-    from vmec_jax.core.boozer_tables import boozer_input_tables
-    from vmec_jax.core.input import VmecInput
-    from vmec_jax.core.wout import wout_from_state, write_wout
+try:  # optional companion packages (not needed by dkx itself)
+    import vmex as _vmex_pkg
+    from vmex import optimize as vmec_optimize
+    from vmex.core import implicit as vmec_implicit
+    from vmex.core import solver as vmec_solver
+    from vmex.core.boozer_tables import boozer_input_tables
+    from vmex.core.input import VmecInput
+    from vmex.core.wout import wout_from_state, write_wout
     from booz_xform_jax.jax_api import booz_xform_jax as booz_transform
 except ImportError as exc:
     raise SystemExit(
-        "This example needs vmec_jax (new core API, with core.boozer_tables and "
+        "This example needs vmex (new core API, with core.boozer_tables and "
         "optimize.least_squares) and booz_xform_jax. Install with "
-        "`pip install -e /path/to/vmec_jax /path/to/booz_xform_jax`."
+        "`pip install -e /path/to/vmex /path/to/booz_xform_jax`."
     ) from exc
 
 # ----------------------------------------------------------------------------
 # Parameters
 # ----------------------------------------------------------------------------
-CI = os.environ.get("SFINCS_JAX_CI") == "1"  # shrink resolution for CI
+CI = os.environ.get("DKX_CI") == "1"  # shrink resolution for CI
 
-# Stage-A seed: a circular torus shipped with vmec_jax (examples/data of an
+# Stage-A seed: a circular torus shipped with vmex (examples/data of an
 # editable checkout); resolved from the installed package so no sibling-
 # directory layout is assumed.
 SEED_INPUT = (
-    Path(_vmec_jax_pkg.__file__).resolve().parents[1]
+    Path(_vmex_pkg.__file__).resolve().parents[1]
     / "examples" / "data" / "input.minimal_seed_nfp2"
 )
-SEED_INPUT = Path(os.environ.get("SFINCS_JAX_QA_SEED_INPUT", SEED_INPUT))
+SEED_INPUT = Path(os.environ.get("DKX_QA_SEED_INPUT", SEED_INPUT))
 # A small helical RBC/ZBS(n=1, m=1) kick breaks the circular torus' iota
 # saddle (its transform is second-order in the 3D shaping, so its gradient
-# vanishes there) -- the same tie-break the vmec_jax QA example uses.
+# vanishes there) -- the same tie-break the vmex QA example uses.
 SEED_PERTURBATION = 0.03
 
 # Equilibrium resolution and convergence (the host VMEC solves dominate cost).
@@ -215,10 +215,10 @@ KINETIC_OBJECTIVE = "bootstrap_jbs2"  # (<j.B>/sqrt(<B^2>))^2 -> drive to zero
 # KINETIC_OBJECTIVE = "heat_flux_l2"      # tested: uncomment to use (sum_s Q_s^2)
 
 # Stage-B optimizer (scipy L-BFGS-B on jax.value_and_grad of the objective).
-MAXITER = int(os.environ.get("SFINCS_JAX_QA_MAXITER", "2" if CI else "25"))
+MAXITER = int(os.environ.get("DKX_QA_MAXITER", "2" if CI else "25"))
 BOUND_RADIUS = 0.05  # box bounds |dof - dof0| <= radius keep trial boundaries physical
 PENALTY_VALUE = 1.0e6  # returned for trial boundaries where VMEC fails (zero-crash)
-RUN_FD_CHECK = os.environ.get("SFINCS_JAX_QA_FD_CHECK", "1") == "1"
+RUN_FD_CHECK = os.environ.get("DKX_QA_FD_CHECK", "1") == "1"
 # Central-FD step and acceptance gate for the end-to-end gradient check.  The
 # autodiff gradient is exact (the Boozer->kinetic segment agrees with FD to
 # ~3e-6, gated in the CI test); the *full-chain* FD comparison is limited by
@@ -230,23 +230,23 @@ RUN_FD_CHECK = os.environ.get("SFINCS_JAX_QA_FD_CHECK", "1") == "1"
 FD_EPS = 1e-5 if CI else 3e-4
 FD_GATE = 5e-2 if CI else 1.5e-2
 
-# Optional resume: point SFINCS_JAX_QA_DOFS_INIT at a checkpoint .npz written
+# Optional resume: point DKX_QA_DOFS_INIT at a checkpoint .npz written
 # by a previous (interrupted) run to start stage B from its best point.
-DOFS_INIT = os.environ.get("SFINCS_JAX_QA_DOFS_INIT", "")
+DOFS_INIT = os.environ.get("DKX_QA_DOFS_INIT", "")
 
-OUT_DIR = Path(os.environ.get("SFINCS_JAX_QA_OUT_DIR", str(Path(__file__).parent / "output")))
+OUT_DIR = Path(os.environ.get("DKX_QA_OUT_DIR", str(Path(__file__).parent / "output")))
 STEM = "optimize_QA_bootstrap"
 
 # ----------------------------------------------------------------------------
-# 1) Stage A: circular torus -> precise QA via vmec_jax.optimize.least_squares
+# 1) Stage A: circular torus -> precise QA via vmex.optimize.least_squares
 # ----------------------------------------------------------------------------
 print("=== examples/optimize_QA_bootstrap.py ===")
-print("Stage A: QA shaping with vmec_jax.optimize.least_squares (implicit Jacobian)")
+print("Stage A: QA shaping with vmex.optimize.least_squares (implicit Jacobian)")
 if not SEED_INPUT.exists():
     raise SystemExit(
         f"seed input not found: {SEED_INPUT}\n"
-        "Point SFINCS_JAX_QA_SEED_INPUT at input.minimal_seed_nfp2 from the "
-        "vmec_jax examples/data directory."
+        "Point DKX_QA_SEED_INPUT at input.minimal_seed_nfp2 from the "
+        "vmex examples/data directory."
     )
 seed = VmecInput.from_file(str(SEED_INPUT))
 _rbc, _zbs = seed.rbc.copy(), seed.zbs.copy()
@@ -313,7 +313,7 @@ inp0 = dataclasses.replace(
 # 2) Stage B setup: differentiable equilibrium + kinetic operator template
 # ----------------------------------------------------------------------------
 print("Stage B: reduce the kinetic bootstrap current <j.B> at HELD precise QA")
-print("Step 1: differentiable fixed-boundary equilibrium (vmec_jax.core.implicit)")
+print("Step 1: differentiable fixed-boundary equilibrium (vmex.core.implicit)")
 # hot_restart seeds each host VMEC solve from the previous boundary's converged
 # state (few iterations as the boundary drifts); the loose adjoint tolerance
 # matches the trust region's ~1e-3 gradient need -- together these make every

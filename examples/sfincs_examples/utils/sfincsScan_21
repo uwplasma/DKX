@@ -34,7 +34,7 @@ subdirectory with a tailored ``input.namelist``.
 
 import os, inspect
 from pathlib import Path
-from sfincs_jax_driver import run_sfincs_jax
+from dkx_driver import run_dkx
 from builtins import input
 
 #print ("This is "+ inspect.getfile(inspect.currentframe()))
@@ -188,7 +188,7 @@ for runNum in range(numRunsInScan):
        input_lines.append(line)
    input_path = Path(filename)
    input_path.write_text("".join(input_lines))
-   run_sfincs_jax(
+   run_dkx(
        input_namelist=input_path,
        output_path=Path(outputFilename),
    )

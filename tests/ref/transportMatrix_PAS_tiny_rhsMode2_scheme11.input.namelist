@@ -1,4 +1,4 @@
-! Tiny RHSMode=2 (3x3) transport-matrix fixture for sfincs_jax parity testing (geometryScheme=11, Boozer .bc).
+! Tiny RHSMode=2 (3x3) transport-matrix fixture for dkx parity testing (geometryScheme=11, Boozer .bc).
 !
 ! This case is designed to be small but to exercise:
 ! - geometryScheme=11 Boozer .bc reader (including NPeriods)

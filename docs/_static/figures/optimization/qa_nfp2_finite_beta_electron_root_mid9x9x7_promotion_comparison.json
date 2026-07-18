@@ -51,9 +51,9 @@
         "selected_root_er_rtol": 1e-07
       }
     },
-    "sfincs_jax_fortran_v3": {
+    "dkx_fortran_v3": {
       "candidate_label": "fortran_v3",
-      "comparison": "sfincs_jax_vs_fortran_v3_promotion",
+      "comparison": "dkx_vs_fortran_v3_promotion",
       "failures": [],
       "metrics": {
         "bootstrap_objective": {
@@ -93,7 +93,7 @@
           "status": "pass"
         }
       },
-      "reference_label": "sfincs_jax",
+      "reference_label": "dkx",
       "status": "pass",
       "tolerances": {
         "bootstrap_objective_rtol": 1e-05,
@@ -105,9 +105,9 @@
   },
   "failures": [],
   "inputs": {
-    "cpu": "/Users/rogeriojorge/local/tests/sfincs_jax/docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_mid9x9x7_cpu_promotion.json",
-    "fortran": "/Users/rogeriojorge/local/tests/sfincs_jax/docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_mid9x9x7_fortran_v3_promotion.json",
-    "gpu": "/Users/rogeriojorge/local/tests/sfincs_jax/docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_mid9x9x7_gpu_promotion.json"
+    "cpu": "/Users/rogeriojorge/local/tests/dkx/docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_mid9x9x7_cpu_promotion.json",
+    "fortran": "/Users/rogeriojorge/local/tests/dkx/docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_mid9x9x7_fortran_v3_promotion.json",
+    "gpu": "/Users/rogeriojorge/local/tests/dkx/docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_mid9x9x7_gpu_promotion.json"
   },
   "status": "pass",
   "tolerances": {
@@ -116,5 +116,5 @@
     "selected_root_er_atol": 1e-06,
     "selected_root_er_rtol": 1e-07
   },
-  "workflow": "sfincs_jax_optimization_promotion_comparison"
+  "workflow": "dkx_optimization_promotion_comparison"
 }

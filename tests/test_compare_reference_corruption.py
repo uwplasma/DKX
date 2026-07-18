@@ -6,7 +6,7 @@ import h5py
 import numpy as np
 import pytest
 
-from sfincs_jax.compare import compare_h5_outputs, compare_sfincs_outputs
+from dkx.compare import compare_h5_outputs, compare_sfincs_outputs
 
 
 def _write_minimal_compare_h5(path: Path, *, gpsi: np.ndarray, dtheta: np.ndarray) -> None:

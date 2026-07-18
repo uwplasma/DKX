@@ -25,7 +25,7 @@ def test_generate_autodiff_sensitivity_validation_plot_only_from_checked_artifac
         / "examples"
         / "publication_figures"
         / "artifacts"
-        / "sfincs_jax_autodiff_sensitivity_validation_summary.json"
+        / "dkx_autodiff_sensitivity_validation_summary.json"
     )
     out_dir = tmp_path / "figures"
 

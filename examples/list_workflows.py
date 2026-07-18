@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""List public ``sfincs_jax`` examples by task.
+"""List public ``dkx`` examples by task.
 
 The examples tree intentionally contains several topic folders. This small
 browser keeps first-time navigation simple by reading the checked
@@ -22,7 +22,7 @@ CATALOG_PATH = EXAMPLES_ROOT / "workflow_catalog.json"
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="List recommended sfincs_jax examples from examples/workflow_catalog.json.",
+        description="List recommended dkx examples from examples/workflow_catalog.json.",
     )
     parser.add_argument(
         "--topic",

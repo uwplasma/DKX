@@ -1,7 +1,7 @@
 Testing, validation, and CI
 ===========================
 
-`sfincs_jax` is validated with a layered testing strategy. The code is not trusted
+`dkx` is validated with a layered testing strategy. The code is not trusted
 because any single benchmark happens to pass; it is trusted because the operator,
 solvers, output writer, and public workflows are all exercised at multiple levels.
 
@@ -33,7 +33,7 @@ The main release-facing checks compare:
 
 Comparisons against the mature Fortran implementation are used as a validation anchor,
 not as the public identity of the code. The purpose of those checks is to show that the
-standalone `sfincs_jax` implementation reproduces trusted neoclassical physics on the
+standalone `dkx` implementation reproduces trusted neoclassical physics on the
 supported audited scope.
 
 Test categories
@@ -69,7 +69,7 @@ the checked-in scientific artifact rather than a single function. The key files 
 - ``examples/publication_figures/artifacts/*.json``
 - ``examples/publication_figures/generate_validation_dashboard.py``
 - ``examples/publication_figures/generate_fortran_suite_benchmark_summary.py``
-- ``sfincs_jax/validation/artifacts.py``
+- ``dkx/validation/artifacts.py``
 
 The dashboard tests are intentionally cheap enough for CI. They do not rerun the full
 collisionality or electric-field scans; instead, they check the frozen artifacts for
@@ -151,7 +151,7 @@ The same checks are also represented in the repository CI/CD configuration:
   through Codecov using GitHub OIDC,
 - ``external-data-smoke`` fetches the release-hosted W7-X/HSX/QI equilibrium
   archive into an isolated cache, then reruns VMEC-path output tests and the
-  VMEC getting-started example with ``SFINCS_JAX_OFFLINE=1`` so CI proves that
+  VMEC getting-started example with ``DKX_OFFLINE=1`` so CI proves that
   public release data is complete and usable without accidental network access,
 - ``.github/workflows/docs.yml`` builds the Sphinx documentation,
 - ``.github/workflows/publish-pypi.yml`` handles packaging/release publication.
@@ -162,8 +162,8 @@ Release-hosted data gates
 Large public equilibrium fixtures are intentionally not tracked in git and are
 not included in wheels. The CI contract for those files is:
 
-- fetch the checksum-pinned ``sfincs-jax-data-v1`` release archive with
-  ``python -m sfincs_jax.validation.data_fetch --quiet``;
+- fetch the checksum-pinned ``dkx-data-v1`` release archive with
+  ``python -m dkx.validation.data_fetch --quiet``;
 - verify every manifest entry exists in the configured cache;
 - rerun the public VMEC output path in offline mode;
 - keep ``tests/test_data_fetch.py`` as the unit gate for manifest structure,
@@ -178,7 +178,7 @@ Coverage audits use the full test suite with package instrumentation:
 
 .. code-block:: bash
 
-   pytest -q --cov=sfincs_jax --cov-report=term --cov-report=xml
+   pytest -q --cov=dkx --cov-report=term --cov-report=xml
 
 The exact collected-test count changes as targeted regression tests are added,
 so release notes and the refactor plan cite dated local/CI artifacts rather
@@ -286,7 +286,7 @@ default to ``--jax-profile-marks off`` so runtime drift is measured without
 profiler interference. Only opt into ``on`` or ``full`` when the goal is an
 explicit profiling lane, and leave per-mark device-memory sampling off unless
 you are doing targeted device-memory diagnosis. Kernel/XLA traces should go
-through ``python -m sfincs_jax.validation.release write-output-trace`` or the transport-trace helpers,
+through ``python -m dkx.validation.release write-output-trace`` or the transport-trace helpers,
 not through always-on per-phase GPU memory polling. The runtime-drift audit also
 prefers the solver's logged ``elapsed_s=...`` value when available, falling back
 to subprocess wall time only for archived artifacts that do not record it. The suite
@@ -327,7 +327,7 @@ unit/regression suite:
 - :doc:`validation_matrix` is the corresponding human-facing documentation page.
 - ``tests/test_validation_manifest_schema.py`` enforces that every lane has explicit
   source-code anchors, protecting tests, and acceptance gates.
-- ``python -m sfincs_jax.validation.release check-gates`` and ``tests/test_release_gate_metadata.py`` add a
+- ``python -m dkx.validation.release check-gates`` and ``tests/test_release_gate_metadata.py`` add a
   CI-fast release gate over the manifest's ``release_gate`` metadata. Each lane must be
   ``release_ready``, ``regression_scaffold``, ``bounded_proxy``, or
   ``closed_deferred``; no lane may remain ambiguous in the release manifest. The
@@ -338,13 +338,13 @@ unit/regression suite:
   tagged release claim, but it is not allowed to rot silently.
 - ``docs/_static/research_lane_completion_2026_05_12.json`` records the active
   research/performance lanes, evidence artifacts, completion estimates, gates,
-  and next actions for the checked research-lane cycle. ``python -m sfincs_jax.validation.release check-research-lanes``
+  and next actions for the checked research-lane cycle. ``python -m dkx.validation.release check-research-lanes``
   and ``tests/test_research_lane_policy.py`` enforce that those percentages are
   evidence-backed and that active lanes record substantial measured progress
   before their completion estimate is increased. The policy is target-capped:
   if a lane has fewer percentage points remaining than the current push target,
   it must reach its checked target rather than overclaiming beyond it.
-- ``python -m sfincs_jax.validation.release check-research-lanes`` and
+- ``python -m dkx.validation.release check-research-lanes`` and
   ``tests/test_research_lane_policy.py`` provide the offline gate for deferred
   QI/device-QI evidence. The gate checks provenance, fail-closed metadata, and
   evidence-backed completion percentages only; it is not a convergence
@@ -357,11 +357,11 @@ The ``E_r`` trajectory-model sweep family is a release-facing validation lane:
 - pinned tokamak-like reference artifact:
   ``examples/publication_figures/artifacts/er_sweep_tokamak_reference_summary.json``
 - pinned tokamak-like reference figure:
-  ``docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep_tokamak_reference.png``
+  ``docs/_static/figures/paper/dkx_er_trajectory_sweep_tokamak_reference.png``
 - pinned stellarator-like fast artifact:
   ``examples/publication_figures/artifacts/er_sweep_stellarator_fast_reference_summary.json``
 - pinned stellarator-like fast figure:
-  ``docs/_static/figures/paper/sfincs_jax_er_trajectory_sweep_stellarator_fast_reference.png``
+  ``docs/_static/figures/paper/dkx_er_trajectory_sweep_stellarator_fast_reference.png``
 
 This lane is used as:
 
@@ -392,22 +392,22 @@ The audited full artifacts from that lane are checked in:
 - summary:
   ``examples/publication_figures/artifacts/lhd_collisionality_summary.json``
 - figure:
-  ``docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality.png``
+  ``docs/_static/figures/paper/dkx_fig1_lhd_collisionality.png``
 - summary:
   ``examples/publication_figures/artifacts/w7x_collisionality_summary.json``
 - figure:
-  ``docs/_static/figures/paper/sfincs_jax_fig2_w7x_collisionality.png``
+  ``docs/_static/figures/paper/dkx_fig2_w7x_collisionality.png``
 
 The bounded fast artifacts remain checked in for branch-level regression work:
 
 - summary:
   ``examples/publication_figures/artifacts/lhd_collisionality_reaudit_fast_summary.json``
 - figure:
-  ``docs/_static/figures/paper/sfincs_jax_fig1_lhd_collisionality_reaudit_fast.png``
+  ``docs/_static/figures/paper/dkx_fig1_lhd_collisionality_reaudit_fast.png``
 - summary:
   ``examples/publication_figures/artifacts/w7x_collisionality_reaudit_fast_summary.json``
 - figure:
-  ``docs/_static/figures/paper/sfincs_jax_fig2_w7x_collisionality_reaudit_fast.png``
+  ``docs/_static/figures/paper/dkx_fig2_w7x_collisionality_reaudit_fast.png``
 
 The full artifacts are guarded by direct tests on the seven-point collisionality ladder
 and FP/PAS label coverage. The corrected fast artifacts are guarded by lighter direct
@@ -444,7 +444,7 @@ gates at the documented production grid.
 The high-collisionality Simakov-Helander lane has a bounded normalization audit:
 
 - artifact:
-  ``examples/publication_figures/artifacts/sfincs_jax_simakov_helander_limit_audit_summary.json``
+  ``examples/publication_figures/artifacts/dkx_simakov_helander_limit_audit_summary.json``
 - focused test: ``tests/test_validation_artifacts.py``
 
 This audit checks that the checked-in geometry output fields are sufficient for the
@@ -453,7 +453,7 @@ It intentionally does not close the full analytic-limit reproduction, because th
 current audited collisionality scans stop near ``nu'=10``.
 
 The deferred Simakov-Helander panel-data scaffold is also executable in
-``sfincs_jax.validation.artifacts`` and guarded by
+``dkx.validation.artifacts`` and guarded by
 ``tests/test_validation_figures.py``. It consumes a compact payload of
 ``nuprime``, computed value, and analytic-limit rows, then records:
 
@@ -489,7 +489,7 @@ mistaken for a closed W7-X or Simakov-Helander physics validation.
 
 The W7-X ambipolar literature lane is kept as a deferred artifact gate, not as a
 stable long-run figure generator. The retained package-level validation is
-``sfincs_jax.validation.artifacts.build_w7x_ambipolar_root_provenance_panel`` with
+``dkx.validation.artifacts.build_w7x_ambipolar_root_provenance_panel`` with
 focused coverage in ``tests/test_validation_figures.py`` and the core ambipolar
 scan/solve tests. The gate records explicit ``deferred_reasons``, provenance
 completeness scores, finite-root checks, current-bracket checks, and matching

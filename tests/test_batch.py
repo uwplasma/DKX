@@ -1,4 +1,4 @@
-"""Batched multi-surface / multi-``E_r`` vmap productization (:mod:`sfincs_jax.batch`).
+"""Batched multi-surface / multi-``E_r`` vmap productization (:mod:`dkx.batch`).
 
 Gates for the first-class batched-solve API:
 
@@ -11,7 +11,7 @@ Gates for the first-class batched-solve API:
   chunked result is identical to the single-chunk result;
 - batching a discretization leaf, or a surface batch that disagrees on the
   discretization, is rejected with a clear error;
-- the :mod:`sfincs_jax.api` facades route to the same result.
+- the :mod:`dkx.api` facades route to the same result.
 """
 
 from __future__ import annotations
@@ -91,8 +91,8 @@ def _write(tmp_path: Path, text: str, name: str = "input.namelist") -> Path:
 
 
 def _build_op(tmp_path: Path, *, epsilon_h: float, dndr: float, name: str):
-    from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
-    from sfincs_jax.inputs import load_sfincs_input
+    from dkx.drift_kinetic import kinetic_operator_from_namelist
+    from dkx.inputs import load_sfincs_input
 
     deck = _pas_deck(epsilon_h=epsilon_h, dndr=dndr)
     raw = load_sfincs_input(_write(tmp_path, deck, name)).raw
@@ -110,8 +110,8 @@ def test_batched_er_scan_matches_serial(tmp_path: Path) -> None:
     jax.config.update("jax_enable_x64", True)
     import jax.numpy as jnp
 
-    from sfincs_jax import batch as batch_mod
-    from sfincs_jax import er as er_mod
+    from dkx import batch as batch_mod
+    from dkx import er as er_mod
 
     prob = er_mod.prepare(_write(tmp_path, _pas_deck()), er_bracket=(-5.0, 5.0))
     er_values = jnp.asarray([-2.0, -1.0, -0.5, 0.0, 0.5, 0.7], dtype=jnp.float64)
@@ -151,9 +151,9 @@ def test_batched_surface_scan_matches_serial(tmp_path: Path) -> None:
     jax.config.update("jax_enable_x64", True)
     import jax.numpy as jnp
 
-    from sfincs_jax import batch as batch_mod
-    from sfincs_jax.run import profile_moments_from_operator
-    from sfincs_jax.solve import solve
+    from dkx import batch as batch_mod
+    from dkx.run import profile_moments_from_operator
+    from dkx.solve import solve
 
     specs = [(0.03, -0.5), (0.05, -0.6), (0.07, -0.4)]
     ops = [
@@ -190,10 +190,10 @@ def test_batched_grad_matches_per_element_and_fd(tmp_path: Path) -> None:
     jax.config.update("jax_enable_x64", True)
     import jax.numpy as jnp
 
-    from sfincs_jax import batch as batch_mod
-    from sfincs_jax import er as er_mod
-    from sfincs_jax.run import profile_moments_from_operator
-    from sfincs_jax.solve import solve
+    from dkx import batch as batch_mod
+    from dkx import er as er_mod
+    from dkx.run import profile_moments_from_operator
+    from dkx.solve import solve
 
     prob = er_mod.prepare(_write(tmp_path, _pas_deck()), er_bracket=(-5.0, 5.0))
     er_values = jnp.asarray([-2.0, -0.5, 0.5], dtype=jnp.float64)
@@ -246,8 +246,8 @@ def test_jit_batched_solve_compiles_and_matches(tmp_path: Path) -> None:
     jax.config.update("jax_enable_x64", True)
     import jax.numpy as jnp
 
-    from sfincs_jax import batch as batch_mod
-    from sfincs_jax import er as er_mod
+    from dkx import batch as batch_mod
+    from dkx import er as er_mod
 
     prob = er_mod.prepare(_write(tmp_path, _pas_deck()), er_bracket=(-5.0, 5.0))
     er_values = jnp.asarray([-1.5, 0.0, 0.6], dtype=jnp.float64)
@@ -280,8 +280,8 @@ def test_auto_chunk_size_respects_budget_and_max_batch(tmp_path: Path) -> None:
 
     jax.config.update("jax_enable_x64", True)
 
-    from sfincs_jax import batch as batch_mod
-    from sfincs_jax import er as er_mod
+    from dkx import batch as batch_mod
+    from dkx import er as er_mod
 
     prob = er_mod.prepare(_write(tmp_path, _pas_deck()), er_bracket=(-5.0, 5.0))
     op = prob.operator
@@ -309,8 +309,8 @@ def test_chunked_batch_matches_single_chunk(tmp_path: Path) -> None:
     jax.config.update("jax_enable_x64", True)
     import jax.numpy as jnp
 
-    from sfincs_jax import batch as batch_mod
-    from sfincs_jax import er as er_mod
+    from dkx import batch as batch_mod
+    from dkx import er as er_mod
 
     prob = er_mod.prepare(_write(tmp_path, _pas_deck()), er_bracket=(-5.0, 5.0))
     er_values = jnp.asarray([-2.0, -1.0, -0.5, 0.0, 0.5], dtype=jnp.float64)
@@ -343,8 +343,8 @@ def test_batching_discretization_leaf_is_rejected(tmp_path: Path) -> None:
     jax.config.update("jax_enable_x64", True)
     import jax.numpy as jnp
 
-    from sfincs_jax import batch as batch_mod
-    from sfincs_jax import er as er_mod
+    from dkx import batch as batch_mod
+    from dkx import er as er_mod
 
     prob = er_mod.prepare(_write(tmp_path, _pas_deck()), er_bracket=(-5.0, 5.0))
     op = prob.operator
@@ -362,9 +362,9 @@ def test_surface_scan_requires_shared_discretization(tmp_path: Path) -> None:
 
     jax.config.update("jax_enable_x64", True)
 
-    from sfincs_jax import batch as batch_mod
-    from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
-    from sfincs_jax.inputs import load_sfincs_input
+    from dkx import batch as batch_mod
+    from dkx.drift_kinetic import kinetic_operator_from_namelist
+    from dkx.inputs import load_sfincs_input
 
     op_a = _build_op(tmp_path, epsilon_h=0.05, dndr=-0.5, name="a.namelist")
     # A different Ntheta changes the discretization -> must be rejected.
@@ -391,9 +391,9 @@ def test_api_batched_facades_route(tmp_path: Path) -> None:
     jax.config.update("jax_enable_x64", True)
     import jax.numpy as jnp
 
-    from sfincs_jax import api
-    from sfincs_jax import batch as batch_mod
-    from sfincs_jax import er as er_mod
+    from dkx import api
+    from dkx import batch as batch_mod
+    from dkx import er as er_mod
 
     deck_path = _write(tmp_path, _pas_deck())
     er_values = jnp.asarray([-1.5, -0.3, 0.4], dtype=jnp.float64)

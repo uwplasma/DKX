@@ -1,0 +1,151 @@
+from __future__ import annotations
+
+import argparse
+from dataclasses import dataclass
+from pathlib import Path
+import re
+import shutil
+import sys
+import time
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from dkx.compare import compare_sfincs_outputs  # noqa: E402
+from dkx.validation.fortran import run_sfincs_fortran  # noqa: E402
+from dkx.api import write_output  # noqa: E402
+from dkx.io import localize_equilibrium_file_in_place  # noqa: E402
+from dkx.namelist import read_sfincs_input  # noqa: E402
+
+
+@dataclass(frozen=True)
+class CaseResult:
+    case_dir: Path
+    input_namelist: Path
+    ok: bool
+    error: str | None = None
+    dkx_output: Path | None = None
+    fortran_output: Path | None = None
+
+
+def _iter_input_namelists(root: Path) -> list[Path]:
+    return sorted(root.rglob("input.namelist"))
+
+
+def _matches(pattern: str | None, p: Path) -> bool:
+    if not pattern:
+        return True
+    return re.search(pattern, str(p), flags=re.IGNORECASE) is not None
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Run dkx on the vendored upstream Fortran v3 example suite.")
+    parser.add_argument("--root", default=Path(__file__).resolve().parent, type=Path, help="Suite root directory")
+    parser.add_argument(
+        "--out-root",
+        default=Path("/tmp") / "dkx_v3_example_suite",
+        type=Path,
+        help="Scratch directory in which cases are copied and executed (default: /tmp/...).",
+    )
+    parser.add_argument(
+        "--in-place",
+        action="store_true",
+        help="Run cases in-place (will write outputs into the vendored example directories).",
+    )
+    parser.add_argument("--pattern", default=None, help="Regex filter on case path (case-insensitive)")
+    parser.add_argument("--limit", default=None, type=int, help="Stop after N cases")
+    parser.add_argument("--write-output", action="store_true", help="Run `dkx write-output` for each case")
+    parser.add_argument(
+        "--compute-transport-matrix",
+        action="store_true",
+        help="If a case has RHSMode=2/3, also compute `transportMatrix` (can be slow).",
+    )
+    parser.add_argument("--compare-fortran", action="store_true", help="Also run the Fortran executable and compare outputs")
+    parser.add_argument("--fortran-exe", default=None, type=Path, help="Path to the compiled Fortran v3 `sfincs` executable")
+    parser.add_argument("--rtol", default=1e-10, type=float)
+    parser.add_argument("--atol", default=1e-10, type=float)
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("-v", "--verbose", action="count", default=0)
+    args = parser.parse_args()
+
+    root: Path = args.root
+    if not root.exists():
+        raise SystemExit(f"--root does not exist: {root}")
+
+    inputs = [p for p in _iter_input_namelists(root) if _matches(args.pattern, p)]
+    if args.limit is not None:
+        inputs = inputs[: int(args.limit)]
+
+    if not args.write_output and not args.compare_fortran:
+        raise SystemExit("Nothing to do: pass --write-output and/or --compare-fortran.")
+    if args.compare_fortran and args.fortran_exe is None:
+        raise SystemExit("--compare-fortran requires --fortran-exe")
+
+    results: list[CaseResult] = []
+    t0 = time.time()
+
+    for i, input_path in enumerate(inputs, start=1):
+        case_dir = input_path.parent
+        case = case_dir.name
+        if args.verbose:
+            print(f"[{i}/{len(inputs)}] {case_dir}")
+
+        try:
+            if args.in_place:
+                workdir = case_dir
+                w_input = input_path
+            else:
+                workdir = Path(args.out_root).resolve() / case
+                if workdir.exists() and not args.dry_run:
+                    shutil.rmtree(workdir)
+                if not args.dry_run:
+                    shutil.copytree(case_dir, workdir)
+                w_input = workdir / "input.namelist"
+
+            if not args.dry_run:
+                # Ensure equilibriumFile is runnable from the copied workdir.
+                localize_equilibrium_file_in_place(input_namelist=w_input, overwrite=False)
+
+            nml = read_sfincs_input(w_input)
+            rhs_mode = int(nml.group("general").get("RHSMODE", 1))
+
+            jax_out = None
+            if args.write_output:
+                jax_out = workdir / "sfincsOutput_jax.h5"
+                if not args.dry_run:
+                    write_output(w_input, jax_out, overwrite=True)
+
+            f_out = None
+            if args.compare_fortran:
+                f_out = workdir / "sfincsOutput_fortran.h5"
+                if not args.dry_run:
+                    # Run in the workdir so the localized equilibrium file is used.
+                    tmp = run_sfincs_fortran(input_namelist=w_input, exe=args.fortran_exe, workdir=workdir)
+                    tmp.replace(f_out)
+
+            if args.compare_fortran and jax_out is not None and f_out is not None and not args.dry_run:
+                compare_sfincs_outputs(a=jax_out, b=f_out, rtol=float(args.rtol), atol=float(args.atol))
+
+            results.append(CaseResult(case_dir=workdir, input_namelist=w_input, ok=True, dkx_output=jax_out, fortran_output=f_out))
+
+        except Exception as e:  # noqa: BLE001
+            results.append(CaseResult(case_dir=case_dir if args.in_place else (Path(args.out_root) / case_dir.name), input_namelist=input_path, ok=False, error=str(e)))
+            if args.verbose:
+                print(f"  FAIL: {e}")
+
+    ok = [r for r in results if r.ok]
+    bad = [r for r in results if not r.ok]
+    dt = time.time() - t0
+
+    print(f"cases_total={len(results)} ok={len(ok)} failed={len(bad)} elapsed_s={dt:.2f}")
+    if bad:
+        print("Failures (first 30):")
+        for r in bad[:30]:
+            print(f"- {r.case_dir}: {r.error}")
+        return 2
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

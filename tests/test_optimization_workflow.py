@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from sfincs_jax.workflows.optimization import (
+from dkx.workflows.optimization import (
     build_candidate_scan_plan,
     compare_promotion_pair,
     er_values_from_bounds,
@@ -115,7 +115,7 @@ def test_candidate_scan_plan_serialization_is_deterministic(tmp_path: Path) -> N
     assert plan_a.as_dict()["scan_command"] == [
         sys.executable,
         "-m",
-        "sfincs_jax",
+        "dkx",
         "scan-er",
         "--input",
         str(input_path.resolve()),
@@ -154,7 +154,7 @@ def test_write_candidate_scan_plan_embeds_proxy_metadata(tmp_path: Path) -> None
         tmp_path / "plan.json",
         plan,
         proxy_payload={
-            "workflow": "qa_nfp2_sfincs_jax_neoclassical_optimization_proxy",
+            "workflow": "qa_nfp2_dkx_neoclassical_optimization_proxy",
             "objective_preset": "balanced",
             "final_components": {"bootstrap": 0.1},
             "autodiff_gradient_gate": {"status": "pass"},
@@ -162,7 +162,7 @@ def test_write_candidate_scan_plan_embeds_proxy_metadata(tmp_path: Path) -> None
     )
     payload = json.loads(out.read_text(encoding="utf-8"))
 
-    assert payload["workflow"] == "sfincs_jax_optimization_candidate_scan_plan"
+    assert payload["workflow"] == "dkx_optimization_candidate_scan_plan"
     assert payload["proxy_objective_preset"] == "balanced"
     assert payload["proxy_autodiff_gradient_gate"]["status"] == "pass"
 
@@ -173,7 +173,7 @@ def test_public_candidate_scan_launcher_dry_run(tmp_path: Path) -> None:
     proxy.write_text(
         json.dumps(
             {
-                "workflow": "qa_nfp2_sfincs_jax_neoclassical_optimization_proxy",
+                "workflow": "qa_nfp2_dkx_neoclassical_optimization_proxy",
                 "objective_preset": "balanced",
                 "final_components": {"bootstrap": 0.1},
                 "autodiff_gradient_gate": {"status": "pass"},
@@ -183,7 +183,7 @@ def test_public_candidate_scan_launcher_dry_run(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     input_path.write_text("&physicsParameters\n/\n", encoding="utf-8")
-    script = _REPO / "examples" / "optimization" / "launch_sfincs_jax_candidate_scan.py"
+    script = _REPO / "examples" / "optimization" / "launch_dkx_candidate_scan.py"
     subprocess.run(
         [
             sys.executable,
@@ -213,4 +213,4 @@ def test_public_candidate_scan_launcher_dry_run(tmp_path: Path) -> None:
     payload = json.loads((tmp_path / "scan" / "candidate_scan_plan.json").read_text(encoding="utf-8"))
 
     assert payload["er_values"] == [-1.0, 0.0, 1.0]
-    assert payload["proxy_workflow"] == "qa_nfp2_sfincs_jax_neoclassical_optimization_proxy"
+    assert payload["proxy_workflow"] == "qa_nfp2_dkx_neoclassical_optimization_proxy"

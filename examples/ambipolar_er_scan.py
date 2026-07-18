@@ -1,12 +1,12 @@
-"""Ambipolar radial electric field: scan Er, then solve J_r(Er) = 0 with sfincs_jax.er.
+"""Ambipolar radial electric field: scan Er, then solve J_r(Er) = 0 with dkx.er.
 
 What this example teaches:
   - the ambipolarity workflow: in a stellarator the species' radial fluxes
     depend independently on Er, and the physical Er is the root of the radial
     current J_r(Er) = sum_s Z_s Gamma_s(Er) = 0,
-  - how to evaluate the radial current at one Er with ``sfincs_jax.er.radial_current``
+  - how to evaluate the radial current at one Er with ``dkx.er.radial_current``
     (one canonical drift-kinetic solve) and map Gamma_s(Er),
-  - how to find the ambipolar root with ``sfincs_jax.er.find_ambipolar_er`` — the
+  - how to find the ambipolar root with ``dkx.er.find_ambipolar_er`` — the
     Fortran-parity Brent solver (bracket expansion, warm starts, ion/electron/
     unstable classification) that replaces a hand-written bisection,
   - how to plot Gamma_s(Er) and the residual with the root marked.
@@ -23,9 +23,9 @@ ripple is added to a model field (geometryScheme=1) and an ion+electron pair
 is scanned over Er; the E x B drift enters the kinetic equation through the
 DKES collisionality-like term (useDKESExBDrift).
 
-The ambipolar root is found by ``sfincs_jax.er.find_ambipolar_er``, which mirrors
+The ambipolar root is found by ``dkx.er.find_ambipolar_er``, which mirrors
 SFINCS Fortran v3 ``ambipolarSolver.F90`` (option 2 Brent) and additionally
-exposes a differentiable root ``sfincs_jax.er.ambipolar_er`` (see the autodiff
+exposes a differentiable root ``dkx.er.ambipolar_er`` (see the autodiff
 examples) so ``jax.grad`` can flow through the ambipolar Er.
 
 Expected runtime: ~25 s on a laptop CPU (the first solve compiles; each further
@@ -45,13 +45,13 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from sfincs_jax import er as er_solver
-from sfincs_jax.run import run_profile
+from dkx import er as er_solver
+from dkx.run import run_profile
 
 # ----------------------------------------------------------------------------
 # Parameters
 # ----------------------------------------------------------------------------
-CI = os.environ.get("SFINCS_JAX_CI") == "1"  # shrink resolution for CI
+CI = os.environ.get("DKX_CI") == "1"  # shrink resolution for CI
 
 ER_BRACKET = (-3.0, 1.0)          # Er search bracket (normalized deck units)
 ER_SCAN = np.linspace(*ER_BRACKET, 5 if CI else 7)  # coarse scan for the plot
@@ -130,7 +130,7 @@ def write_deck(er: float) -> Path:
 
 
 # ----------------------------------------------------------------------------
-# 1) Coarse scan: map Gamma_s(Er) and J_r(Er) with sfincs_jax.er.radial_current
+# 1) Coarse scan: map Gamma_s(Er) and J_r(Er) with dkx.er.radial_current
 # ----------------------------------------------------------------------------
 print("=== examples/ambipolar_er_scan.py ===")
 print("Step 1: coarse Er scan (one canonical solve per Er via er.radial_current)")

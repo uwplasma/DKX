@@ -1,7 +1,7 @@
-sfincs_jax
-==========
+DKX
+===
 
-`sfincs_jax` solves the radially local, linearized drift-kinetic equation on a
+`dkx` solves the radially local, linearized drift-kinetic equation on a
 flux surface — the same physics as SFINCS Fortran v3 — in pure JAX. One
 ``input.namelist`` plus one geometry file gives neoclassical particle/heat
 fluxes, parallel flows, bootstrap current, and transport matrices for
@@ -13,12 +13,12 @@ Quickstart
 
 .. code-block:: bash
 
-   pip install sfincs_jax
+   pip install dkx
 
 .. code-block:: python
 
    from pathlib import Path
-   from sfincs_jax.run import run_profile
+   from dkx.run import run_profile
 
    run = run_profile(Path("input.namelist"), solve_method="auto",
                      out_path=Path("sfincsOutput.h5"))
@@ -28,8 +28,8 @@ Quickstart
 ``run_profile`` prints the Fortran-parity console flow, writes
 ``sfincsOutput.h5``/``.nc`` keyed by the SFINCS output names, and returns the
 state vector, solver statistics, and all velocity-space moments in memory. The
-CLI equivalent is ``sfincs_jax input.namelist --out sfincsOutput.h5``;
-``sfincs_jax --plot sfincsOutput.h5`` builds a PDF diagnostics panel. See
+CLI equivalent is ``dkx input.namelist --out sfincsOutput.h5``;
+``dkx --plot sfincsOutput.h5`` builds a PDF diagnostics panel. See
 :doc:`installation` for the ``solvax`` structured-solver core dependency, GPU
 wheels, and the Fortran reference build.
 
@@ -69,8 +69,8 @@ full 39-case CPU/GPU example suite against SFINCS Fortran v3 and plots every
 row whose Fortran reference runtime clears a ``10 s`` reference-runtime-window,
 so process-launch and JIT-amortization noise does not dominate the bars.
 
-.. figure:: _static/figures/paper/sfincs_jax_fortran_suite_benchmark_summary.png
-   :alt: Runtime and active-memory comparison for SFINCS Fortran v3 and sfincs_jax across the example suite.
+.. figure:: _static/figures/paper/dkx_fortran_suite_benchmark_summary.png
+   :alt: Runtime and active-memory comparison for SFINCS Fortran v3 and dkx across the example suite.
    :align: center
    :width: 90%
 
@@ -91,7 +91,7 @@ What this documentation covers
 - evidence: :doc:`performance`, :doc:`parity`, :doc:`feature_matrix`,
   :doc:`fortran_comparison`, :doc:`validation_matrix`
 - workflows: :doc:`applications`, :doc:`optimization`, :doc:`parallelism`,
-  :doc:`vmec_jax_workflow`
+  :doc:`vmex_workflow`
 
 .. toctree::
    :maxdepth: 2
@@ -106,7 +106,7 @@ What this documentation covers
    outputs
    normalizations
    geometry
-   vmec_jax_workflow
+   vmex_workflow
    method
    numerics
    differentiability

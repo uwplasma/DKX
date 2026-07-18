@@ -9,14 +9,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
-from sfincs_jax import cli
-from sfincs_jax import plotting
-from sfincs_jax.validation.artifacts import (
+from dkx import cli
+from dkx import plotting
+from dkx.validation.artifacts import (
     check_benchmark_artifact_file,
     check_benchmark_artifact_files,
     fortran_suite_benchmark_summary_errors,
 )
-from sfincs_jax.validation.artifacts import (
+from dkx.validation.artifacts import (
     build_simakov_helander_high_nu_panel,
     build_w7x_ambipolar_root_provenance_panel,
 )
@@ -64,7 +64,7 @@ def test_cmd_plot_output_uses_sfincsoutput_default_pdf(monkeypatch, tmp_path: Pa
         return output_png.resolve()
 
     monkeypatch.setattr(
-        "sfincs_jax.plotting.plot_sfincs_output_summary",
+        "dkx.plotting.plot_sfincs_output_summary",
         fake_plot_sfincs_output_summary,
     )
 
@@ -104,7 +104,7 @@ def test_cmd_dump_h5_keys_only_and_json(tmp_path: Path, capsys: pytest.CaptureFi
 
 
 def test_cmd_ambipolar_summary_records_canonical_er_result(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    from sfincs_jax.er import AmbipolarIteration, AmbipolarResult, AmbipolarRoot
+    from dkx.er import AmbipolarIteration, AmbipolarResult, AmbipolarRoot
 
     input_path = tmp_path / "input.namelist"
     input_path.write_text("&general\n RHSMode = 1\n/\n", encoding="utf-8")
@@ -127,7 +127,7 @@ def test_cmd_ambipolar_summary_records_canonical_er_result(monkeypatch: pytest.M
             roots=(AmbipolarRoot(er=-0.25, radial_current=1.0e-13, slope=3.0e-8, root_type="ion"),),
         )
 
-    monkeypatch.setattr("sfincs_jax.er.find_ambipolar_er", fake_find_ambipolar_er)
+    monkeypatch.setattr("dkx.er.find_ambipolar_er", fake_find_ambipolar_er)
 
     summary_path = tmp_path / "summary.json"
     rc = cli._cmd_ambipolar(
@@ -184,7 +184,7 @@ def test_cmd_compare_h5_honors_tolerance_json(tmp_path: Path) -> None:
 
 
 def test_apply_parallel_runtime_settings_shard_axis_off_and_auto(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in ("SFINCS_JAX_SHARD", "SFINCS_JAX_AUTO_SHARD", "SFINCS_JAX_MATVEC_SHARD_AXIS"):
+    for name in ("DKX_SHARD", "DKX_AUTO_SHARD", "DKX_MATVEC_SHARD_AXIS"):
         monkeypatch.delenv(name, raising=False)
 
     base = dict(
@@ -200,16 +200,16 @@ def test_apply_parallel_runtime_settings_shard_axis_off_and_auto(monkeypatch: py
     )
     cli._apply_parallel_runtime_settings(Namespace(**base, shard_axis="off"))
     assert os_environ_subset() == {
-        "SFINCS_JAX_AUTO_SHARD": "0",
-        "SFINCS_JAX_MATVEC_SHARD_AXIS": "off",
-        "SFINCS_JAX_SHARD": "0",
+        "DKX_AUTO_SHARD": "0",
+        "DKX_MATVEC_SHARD_AXIS": "off",
+        "DKX_SHARD": "0",
     }
 
     cli._apply_parallel_runtime_settings(Namespace(**base, shard_axis="auto"))
     assert os_environ_subset() == {
-        "SFINCS_JAX_AUTO_SHARD": "1",
-        "SFINCS_JAX_MATVEC_SHARD_AXIS": "auto",
-        "SFINCS_JAX_SHARD": "1",
+        "DKX_AUTO_SHARD": "1",
+        "DKX_MATVEC_SHARD_AXIS": "auto",
+        "DKX_SHARD": "1",
     }
 
 
@@ -218,7 +218,7 @@ def os_environ_subset() -> dict[str, str]:
 
     return {
         key: os.environ[key]
-        for key in ("SFINCS_JAX_AUTO_SHARD", "SFINCS_JAX_MATVEC_SHARD_AXIS", "SFINCS_JAX_SHARD")
+        for key in ("DKX_AUTO_SHARD", "DKX_MATVEC_SHARD_AXIS", "DKX_SHARD")
     }
 
 

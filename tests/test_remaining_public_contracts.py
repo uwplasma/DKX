@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from sfincs_jax.validation.artifacts import (
+from dkx.validation.artifacts import (
     ARTIFACT_CLASS_RELEASE_BLOCKING,
     BenchmarkArtifactIndex,
     BenchmarkArtifactIndexEntry,
@@ -18,9 +18,9 @@ from sfincs_jax.validation.artifacts import (
     SuiteCaseMetric,
     validate_benchmark_artifact_file,
 )
-from sfincs_jax.validation.fortran import PetscCSRMatrix, PetscVec, parse_fortran_v3_profile_file
-from sfincs_jax.workflows import optimization as opt
-from sfincs_jax.workflows.optimization import (
+from dkx.validation.fortran import PetscCSRMatrix, PetscVec, parse_fortran_v3_profile_file
+from dkx.workflows import optimization as opt
+from dkx.workflows.optimization import (
     AmbipolarRoot,
     AmbipolarRootSummary,
     CandidateScanPlan,
@@ -116,7 +116,7 @@ def test_optimization_evidence_and_fortran_scan_contracts(
         compute_transport_matrix=False,
         jobs=2,
         skip_existing=True,
-        scan_command=("sfincs_jax", "scan-er"),
+        scan_command=("dkx", "scan-er"),
         promotion_command=("python", "promote.py"),
     )
     assert candidate.as_dict()["jobs"] == 2
@@ -126,7 +126,7 @@ def test_optimization_evidence_and_fortran_scan_contracts(
         backend="jax_cpu",
         scan_dir=tmp_path / "cpu_scan",
         promotion_dir=tmp_path / "cpu_promotion",
-        scan_command=("sfincs_jax", "scan-er"),
+        scan_command=("dkx", "scan-er"),
         promotion_command=("python", "promote.py"),
         env={"JAX_PLATFORM_NAME": "cpu"},
     )

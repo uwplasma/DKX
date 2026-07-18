@@ -48,14 +48,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))  # for `import objectiv
 import matplotlib.pyplot as plt  # noqa: E402
 
 import objectives as ob  # noqa: E402  (shared, minimal example objective library)
-from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist  # noqa: E402
-from sfincs_jax.inputs import parse_sfincs_input_text  # noqa: E402
-from sfincs_jax.phase_space import make_grids  # noqa: E402
+from dkx.drift_kinetic import kinetic_operator_from_namelist  # noqa: E402
+from dkx.inputs import parse_sfincs_input_text  # noqa: E402
+from dkx.phase_space import make_grids  # noqa: E402
 
 # ----------------------------------------------------------------------------
 # Parameters
 # ----------------------------------------------------------------------------
-CI = os.environ.get("SFINCS_JAX_CI") == "1"
+CI = os.environ.get("DKX_CI") == "1"
 
 NFP = 4
 BMNC_M = np.asarray([0, 0, 1, 1])
@@ -89,7 +89,7 @@ FLUX_OBJECTIVES = {
     "impurity_heat_flux": lambda mom: ob.species_heat_flux(mom, IMP) ** 2,
 }
 
-MAXITER = int(os.environ.get("SFINCS_JAX_IMP_MAXITER", "3" if CI else "20"))
+MAXITER = int(os.environ.get("DKX_IMP_MAXITER", "3" if CI else "20"))
 FD_EPS, FD_GATE = 1e-4, 1e-3
 OUT_DIR = Path(__file__).parent / "output"
 STEM = "optimize_impurity_screening"

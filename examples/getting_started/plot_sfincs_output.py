@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from sfincs_jax.plotting import plot_sfincs_output_summary
+from dkx.plotting import plot_sfincs_output_summary
 
 
 def _ensure_sample(path: Path) -> None:
@@ -31,7 +31,7 @@ def main(argv: list[str] | None = None) -> int:
         "--input-h5",
         type=Path,
         default=repo_root / "tests" / "ref" / "output_scheme4_2species_quick.sfincsOutput.h5",
-        help="Path to a sfincs_jax output file to visualize.",
+        help="Path to a dkx output file to visualize.",
     )
     parser.add_argument(
         "--out",

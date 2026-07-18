@@ -8,10 +8,10 @@ density/pressure constraint rows are identical across 1/3/4.
 
 The legacy ``operators``/``problems`` stack reuses the cs1 source basis for
 cs3/4 (a bug that stays invisible whenever the sources solve to ~0), so these
-fixtures pin the *canonical* :func:`sfincs_jax.drift_kinetic.kinetic_operator_from_namelist`
+fixtures pin the *canonical* :func:`dkx.drift_kinetic.kinetic_operator_from_namelist`
 against a Fortran SFINCS v3 golden — NOT against the legacy writer — mirroring
 the sibling ``test_output_h5_scheme*_parity`` tests.  The canonical side runs
-through :func:`sfincs_jax.run.run_profile`.
+through :func:`dkx.run.run_profile`.
 """
 
 from __future__ import annotations
@@ -20,8 +20,8 @@ from pathlib import Path
 
 import pytest
 
-from sfincs_jax.compare import compare_sfincs_outputs
-from sfincs_jax.io import read_sfincs_h5
+from dkx.compare import compare_sfincs_outputs
+from dkx.io import read_sfincs_h5
 
 REF = Path(__file__).parent / "ref"
 
@@ -69,7 +69,7 @@ def _golden(cs: str) -> Path:
 
 @pytest.mark.parametrize("cs", SCHEMES)
 def test_constraintscheme34_matches_fortran_fixture(cs: str, tmp_path: Path) -> None:
-    from sfincs_jax.run import run_profile
+    from dkx.run import run_profile
 
     golden = _golden(cs)
     assert golden.exists(), f"Missing Fortran fixture: {golden}"

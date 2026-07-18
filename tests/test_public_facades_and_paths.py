@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from sfincs_jax.paths import resolve_existing_path
-from sfincs_jax.validation import data_fetch
+from dkx.paths import resolve_existing_path
+from dkx.validation import data_fetch
 
 
 def test_resolve_existing_path_uses_extra_search_dirs_and_basename(tmp_path: Path) -> None:
@@ -19,7 +19,7 @@ def test_resolve_existing_path_uses_extra_search_dirs_and_basename(tmp_path: Pat
     resolved_relative = resolve_existing_path(
         "nested/wout_unit.nc",
         base_dir=tmp_path / "missing-base",
-        env_search_var="SFINCS_JAX_TEST_EMPTY_SEARCH",
+        env_search_var="DKX_TEST_EMPTY_SEARCH",
         extra_search_dirs=(extra_root,),
     )
     assert resolved_relative.path == target
@@ -27,7 +27,7 @@ def test_resolve_existing_path_uses_extra_search_dirs_and_basename(tmp_path: Pat
     stale_absolute = tmp_path / "old-machine" / "missing" / "wout_unit.nc"
     resolved_stale = resolve_existing_path(
         stale_absolute,
-        env_search_var="SFINCS_JAX_TEST_EMPTY_SEARCH",
+        env_search_var="DKX_TEST_EMPTY_SEARCH",
         extra_search_dirs=(target.parent,),
     )
     assert resolved_stale.path == target
@@ -52,7 +52,7 @@ def test_resolve_existing_path_uses_release_data_resolver(
     resolved = resolve_existing_path(
         "known.bc",
         base_dir=tmp_path / "empty",
-        env_search_var="SFINCS_JAX_TEST_EMPTY_SEARCH",
+        env_search_var="DKX_TEST_EMPTY_SEARCH",
     )
 
     assert resolved.path == external
@@ -71,7 +71,7 @@ def test_resolve_existing_path_failure_preserves_attempted_paths(
         resolve_existing_path(
             missing,
             base_dir=tmp_path,
-            env_search_var="SFINCS_JAX_TEST_EMPTY_SEARCH",
+            env_search_var="DKX_TEST_EMPTY_SEARCH",
             extra_search_dirs=(tmp_path / "extra",),
         )
 

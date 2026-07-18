@@ -32,15 +32,15 @@ def _ensure_reference_goldens() -> None:
 def pytest_configure() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(repo_root))
-    os.environ.setdefault("SFINCS_JAX_FORTRAN_STDOUT", "0")
+    os.environ.setdefault("DKX_FORTRAN_STDOUT", "0")
     _ensure_reference_goldens()
 
 
 @pytest.fixture(autouse=True)
-def _restore_sfincs_jax_environment():
+def _restore_dkx_environment():
     """Prevent solver-policy environment overrides from leaking across tests."""
 
-    prefix = "SFINCS_JAX_"
+    prefix = "DKX_"
     before = {key: value for key, value in os.environ.items() if key.startswith(prefix)}
     yield
     for key in [key for key in os.environ if key.startswith(prefix) and key not in before]:
@@ -51,7 +51,7 @@ def _restore_sfincs_jax_environment():
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """Keep CI runtime under control by skipping the slowest integration tests."""
-    if os.environ.get("SFINCS_JAX_CI", "0") != "1":
+    if os.environ.get("DKX_CI", "0") != "1":
         return
 
     # Skip only the heaviest end-to-end tests in CI; keep unit + fast parity checks.

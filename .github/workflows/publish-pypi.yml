@@ -26,10 +26,10 @@ jobs:
           from pathlib import Path
 
           pyproject_version = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
-          init_text = Path("sfincs_jax/__init__.py").read_text()
+          init_text = Path("dkx/__init__.py").read_text()
           match = re.search(r'^__version__ = "([^"]+)"$', init_text, re.MULTILINE)
           if match is None:
-              raise SystemExit("Could not find sfincs_jax.__version__")
+              raise SystemExit("Could not find dkx.__version__")
           init_version = match.group(1)
           if pyproject_version != init_version:
               raise SystemExit(f"Version mismatch: pyproject={pyproject_version}, __init__={init_version}")

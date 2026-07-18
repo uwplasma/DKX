@@ -1,5 +1,5 @@
 {
-  "claim_boundary": "This is a VMEC equilibrium diagnostic generated from vmec_jax QA_optimization.py outputs. The current profile is VMEC jdotb/sqrt(bdotb), not a completed high-fidelity sfincs_jax kinetic bootstrap-current claim.",
+  "claim_boundary": "This is a VMEC equilibrium diagnostic generated from vmex QA_optimization.py outputs. The current profile is VMEC jdotb/sqrt(bdotb), not a completed high-fidelity dkx kinetic bootstrap-current claim.",
   "comparison": {
     "current_reduction_fraction": null,
     "reason": "No --comparison-result-dir was supplied.",
@@ -13,13 +13,13 @@
   },
   "promotion_plan": {
     "example_commands": [
-      "cd /path/to/vmec_jax && python examples/optimization/QA_optimization.py",
-      "python examples/optimization/qa_nfp2_bootstrap_current_comparison.py --vmec-jax-root /path/to/vmec_jax"
+      "cd /path/to/vmex && python examples/optimization/QA_optimization.py",
+      "python examples/optimization/qa_nfp2_bootstrap_current_comparison.py --vmex-root /path/to/vmex"
     ],
     "required_gates": [
       "preserve finite target iota and target aspect in the VMEC wout, not just in optimizer history",
       "if a current-aware VMEC candidate is supplied, require smaller VMEC jdotb/sqrt(bdotb) RMS without failing iota/aspect gates",
-      "run completed sfincs_jax scan-er calculations on accepted equilibria",
+      "run completed dkx scan-er calculations on accepted equilibria",
       "check radial and velocity-space convergence of FSABjHatOverRootFSAB2",
       "check CPU/GPU agreement and SFINCS Fortran v3 agreement when the model scopes overlap"
     ]
@@ -162,15 +162,15 @@
   },
   "source": {
     "comparison_result_dir": null,
-    "qa_history": "/Users/rogeriojorge/local/vmec_jax/examples/optimization/results/qa_opt/ess/history.json",
-    "qa_optimization_script": "/Users/rogeriojorge/local/vmec_jax/examples/optimization/QA_optimization.py",
-    "qa_result_dir": "/Users/rogeriojorge/local/vmec_jax/examples/optimization/results/qa_opt/ess",
-    "qa_wout": "/Users/rogeriojorge/local/vmec_jax/examples/optimization/results/qa_opt/ess/wout_final.nc",
-    "vmec_jax_root": "/Users/rogeriojorge/local/vmec_jax"
+    "qa_history": "/Users/rogeriojorge/local/vmex/examples/optimization/results/qa_opt/ess/history.json",
+    "qa_optimization_script": "/Users/rogeriojorge/local/vmex/examples/optimization/QA_optimization.py",
+    "qa_result_dir": "/Users/rogeriojorge/local/vmex/examples/optimization/results/qa_opt/ess",
+    "qa_wout": "/Users/rogeriojorge/local/vmex/examples/optimization/results/qa_opt/ess/wout_final.nc",
+    "vmex_root": "/Users/rogeriojorge/local/vmex"
   },
   "targets": {
     "aspect_ratio": 5.0,
     "iota": 0.41
   },
-  "workflow": "sfincs_jax_vmec_jax_qa_optimization_current_diagnostic"
+  "workflow": "dkx_vmex_qa_optimization_current_diagnostic"
 }

@@ -1,10 +1,10 @@
 Upstream SFINCS sources and primary literature
 ==============================================
 
-`sfincs_jax` reimplements the radially local, multi-species drift-kinetic model of
+`dkx` reimplements the radially local, multi-species drift-kinetic model of
 the mature SFINCS code. Rather than vendoring copies of the upstream papers and
 internal technical notes, this documentation transcribes the physics and numerical
-content that `sfincs_jax` depends on into its own pages and cites the primary
+content that `dkx` depends on into its own pages and cites the primary
 sources below.
 
 The most important derived physics and numerical content lives in:
@@ -42,5 +42,5 @@ redistributed here. Their archival home is the upstream SFINCS project repositor
 - `SFINCS project (github.com/landreman/sfincs) <https://github.com/landreman/sfincs>`_
 
 Readers who need the original derivations should consult that repository directly.
-The material that `sfincs_jax` actually relies on is reproduced, in original prose,
+The material that `dkx` actually relies on is reproduced, in original prose,
 on the derived-theory pages linked above.

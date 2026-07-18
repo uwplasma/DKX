@@ -2,7 +2,7 @@
 
 What this example teaches:
   - how to create a SFINCS ``input.namelist`` from scratch as a Python dict,
-  - how to run the canonical RHSMode=1 driver (``sfincs_jax.run.run_profile``),
+  - how to run the canonical RHSMode=1 driver (``dkx.run.run_profile``),
   - how to read the per-species results table and the moments dictionary,
   - how to write ``sfincsOutput`` in both HDF5 and NetCDF and read it back,
   - how to plot f-independent basics (B on the surface, fluxes per radial coordinate).
@@ -37,12 +37,12 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from sfincs_jax.run import run_profile
+from dkx.run import run_profile
 
 # ----------------------------------------------------------------------------
 # Parameters (all inputs live at the top of the script)
 # ----------------------------------------------------------------------------
-CI = os.environ.get("SFINCS_JAX_CI") == "1"  # shrink resolution for CI
+CI = os.environ.get("DKX_CI") == "1"  # shrink resolution for CI
 
 # Resolution (Fortran names; Nzeta=1 because the field is axisymmetric).
 N_THETA = 9 if CI else 15

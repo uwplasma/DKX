@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from sfincs_jax.io import read_sfincs_h5
+from dkx.io import read_sfincs_h5
 
 
 RHS_MODE1_CURRENT_FIXTURES = (

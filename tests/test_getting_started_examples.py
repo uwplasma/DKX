@@ -74,7 +74,7 @@ def test_cli_plot_shortcut_on_fixture(tmp_path: Path) -> None:
     env = os.environ.copy()
     env["MPLBACKEND"] = "Agg"
     subprocess.run(
-        [sys.executable, "-m", "sfincs_jax", "--plot", str(input_h5), "--out", str(output_png)],
+        [sys.executable, "-m", "dkx", "--plot", str(input_h5), "--out", str(output_png)],
         cwd=str(repo),
         env=env,
         check=True,
@@ -83,7 +83,7 @@ def test_cli_plot_shortcut_on_fixture(tmp_path: Path) -> None:
 
 
 def test_cli_plot_shortcut_accepts_netcdf(tmp_path: Path) -> None:
-    from sfincs_jax.io import read_sfincs_h5, write_sfincs_output_file
+    from dkx.io import read_sfincs_h5, write_sfincs_output_file
 
     repo = Path(__file__).resolve().parents[1]
     input_h5 = repo / "tests" / "ref" / "output_scheme4_2species_quick.sfincsOutput.h5"
@@ -93,7 +93,7 @@ def test_cli_plot_shortcut_accepts_netcdf(tmp_path: Path) -> None:
     env = os.environ.copy()
     env["MPLBACKEND"] = "Agg"
     subprocess.run(
-        [sys.executable, "-m", "sfincs_jax", "--plot", str(input_nc), "--out", str(output_pdf)],
+        [sys.executable, "-m", "dkx", "--plot", str(input_nc), "--out", str(output_pdf)],
         cwd=str(repo),
         env=env,
         check=True,
@@ -110,20 +110,20 @@ def test_readme_quick_solve_command_uses_public_auto_path(tmp_path: Path) -> Non
     env["MPLBACKEND"] = "Agg"
     env.update(
         {
-            "SFINCS_JAX_AUTO_SHARD": "0",
-            "SFINCS_JAX_CPU_DEVICES": "1",
-            "SFINCS_JAX_MATVEC_SHARD_AXIS": "off",
-            "SFINCS_JAX_SHARD": "0",
-            "SFINCS_JAX_SHARD_PAD": "0",
-            "SFINCS_JAX_TRANSPORT_PARALLEL": "off",
-            "SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS": "1",
+            "DKX_AUTO_SHARD": "0",
+            "DKX_CPU_DEVICES": "1",
+            "DKX_MATVEC_SHARD_AXIS": "off",
+            "DKX_SHARD": "0",
+            "DKX_SHARD_PAD": "0",
+            "DKX_TRANSPORT_PARALLEL": "off",
+            "DKX_TRANSPORT_PARALLEL_WORKERS": "1",
         }
     )
     subprocess.run(
         [
             sys.executable,
             "-m",
-            "sfincs_jax",
+            "dkx",
             str(input_path),
             "--out",
             str(output_h5),
@@ -137,7 +137,7 @@ def test_readme_quick_solve_command_uses_public_auto_path(tmp_path: Path) -> Non
         [
             sys.executable,
             "-m",
-            "sfincs_jax",
+            "dkx",
             "--plot",
             str(output_h5),
             "--out",

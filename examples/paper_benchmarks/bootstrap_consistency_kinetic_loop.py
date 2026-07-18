@@ -29,7 +29,7 @@ equilibrium feedback.
 
 Documented configuration limitations (measured while building this case):
   - the repository's other finite-beta QA deck
-    (examples/vmec_jax_finite_beta/input.nfp2_QA_finite_beta) has almost
+    (examples/vmex_finite_beta/input.nfp2_QA_finite_beta) has almost
     entirely current-driven rotational transform (iota ~ 0.02 without its
     6.1 MA current), so a from-scratch zero-current Picard start is
     degenerate there (the equilibrium solve stalls at fsq ~ 1e-4);
@@ -91,18 +91,18 @@ nu_n = 8.31565e-3 (fixed reference Coulomb logarithm); SI conversion
 computes its own Sauter per-surface Coulomb logarithms, so the two lanes'
 effective collisionalities differ at the few-percent level -- part of the
 recorded proxy-vs-kinetic contract, as in the sibling Redl-comparison
-example (examples/vmec_jax_finite_beta/).  Er = 0 is the standard convention
+example (examples/vmex_finite_beta/).  Er = 0 is the standard convention
 for proxy comparisons (the Redl fit carries no Er dependence).
 
 Expected runtime: ~20 min for the Picard loop on a 10-core laptop CPU
 (~7 damped iterations x [one warm equilibrium solve ~5 s + 7 kinetic surface
 solves ~10-25 s each]), plus ~5-10 min for the differentiable-chain gradient
 hook (XLA compilation dominated).  Finished stages are cached in ``output/`` and
-skipped on re-runs; set SFINCS_JAX_BOOT_LOOP_MAX_NEW_STAGES=N to stop
+skipped on re-runs; set DKX_BOOT_LOOP_MAX_NEW_STAGES=N to stop
 cleanly after N newly computed stages (chunked/resumable runs).
 
-Requires the optional companions of this example (not needed by sfincs_jax
-itself): pip install -e /path/to/vmec_jax /path/to/booz_xform_jax
+Requires the optional companions of this example (not needed by dkx
+itself): pip install -e /path/to/vmex /path/to/booz_xform_jax
 
 Run (from the repo root):
   python examples/paper_benchmarks/bootstrap_consistency_kinetic_loop.py
@@ -127,12 +127,12 @@ import jax.numpy as jnp
 
 jax.config.update("jax_enable_x64", True)
 
-from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist  # noqa: E402
-from sfincs_jax.inputs import parse_sfincs_input_text  # noqa: E402
-from sfincs_jax.magnetic_geometry import FluxSurfaceGeometry  # noqa: E402
-from sfincs_jax.phase_space import make_grids  # noqa: E402
-from sfincs_jax.run import profile_moments_from_operator, run_profile  # noqa: E402
-from sfincs_jax.solve import solve as kinetic_solve  # noqa: E402
+from dkx.drift_kinetic import kinetic_operator_from_namelist  # noqa: E402
+from dkx.inputs import parse_sfincs_input_text  # noqa: E402
+from dkx.magnetic_geometry import FluxSurfaceGeometry  # noqa: E402
+from dkx.phase_space import make_grids  # noqa: E402
+from dkx.run import profile_moments_from_operator, run_profile  # noqa: E402
+from dkx.solve import solve as kinetic_solve  # noqa: E402
 
 # jax 0.6.x compatibility: ``register_dataclass``'s drop_fields validation
 # unpacks the sequence with ``*`` (``difference_update(*drop_fields)``), so a
@@ -157,36 +157,36 @@ def _register_dataclass_compat(nodetype, data_fields=None, meta_fields=None, dro
 
 jax.tree_util.register_dataclass = _register_dataclass_compat
 
-try:  # optional companion packages (not needed by sfincs_jax itself)
-    import vmec_jax as _vmec_jax_pkg
-    from vmec_jax.core import bootstrap as vmec_bootstrap
-    from vmec_jax.core import implicit as vmec_implicit
-    from vmec_jax.core import optimize as vmec_optimize
-    from vmec_jax.core.boozer_tables import boozer_input_tables
-    from vmec_jax.core.input import VmecInput
-    from vmec_jax.core.profiles import MU0
-    from vmec_jax.core.wout import write_wout
+try:  # optional companion packages (not needed by dkx itself)
+    import vmex as _vmex_pkg
+    from vmex.core import bootstrap as vmec_bootstrap
+    from vmex.core import implicit as vmec_implicit
+    from vmex.core import optimize as vmec_optimize
+    from vmex.core.boozer_tables import boozer_input_tables
+    from vmex.core.input import VmecInput
+    from vmex.core.profiles import MU0
+    from vmex.core.wout import write_wout
     from booz_xform_jax.jax_api import booz_xform_jax as booz_transform
 except ImportError as exc:
     raise SystemExit(
-        "This benchmark needs vmec_jax (core API with core.bootstrap and "
+        "This benchmark needs vmex (core API with core.bootstrap and "
         "core.boozer_tables) and booz_xform_jax. Install with "
-        "`pip install -e /path/to/vmec_jax /path/to/booz_xform_jax`."
+        "`pip install -e /path/to/vmex /path/to/booz_xform_jax`."
     ) from exc
 
 # ----------------------------------------------------------------------------
 # Parameters
 # ----------------------------------------------------------------------------
-CI = os.environ.get("SFINCS_JAX_BOOT_LOOP_CI") == "1"  # shrink everything for CI
+CI = os.environ.get("DKX_BOOT_LOOP_CI") == "1"  # shrink everything for CI
 
 # The precise-QA reactor-scale boundary (vacuum deck shipped with the host
 # equilibrium package; resolved from the installed package so no sibling
 # directory layout is assumed) [Landreman & Paul, PRL 128, 035001 (2022)].
 DECK = (
-    Path(_vmec_jax_pkg.__file__).resolve().parents[1]
+    Path(_vmex_pkg.__file__).resolve().parents[1]
     / "examples" / "data" / "input.LandremanPaul2021_QA_reactorScale_lowres"
 )
-DECK = Path(os.environ.get("SFINCS_JAX_BOOT_LOOP_DECK", DECK))
+DECK = Path(os.environ.get("DKX_BOOT_LOOP_DECK", DECK))
 MAX_MODE_TRUNC = 2 if CI else None  # CI: truncate boundary harmonics for speed
 
 # Kinetic-profile shape of arXiv:2205.02914 with a 1% edge floor; the
@@ -248,9 +248,9 @@ GRAD_TOL = 1e-7
 MBOZ, NBOZ = (3, 3) if CI else (6, 6)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-OUT_DIR = Path(os.environ.get("SFINCS_JAX_BOOT_LOOP_OUT_DIR", Path(__file__).parent / "output"))
+OUT_DIR = Path(os.environ.get("DKX_BOOT_LOOP_OUT_DIR", Path(__file__).parent / "output"))
 FIG_DIR = Path(os.environ.get(
-    "SFINCS_JAX_BOOT_LOOP_FIG_DIR",
+    "DKX_BOOT_LOOP_FIG_DIR",
     REPO_ROOT / "docs" / "_static" / "figures" / "paper_benchmarks"))
 STEM = "bootstrap_consistency_kinetic_loop"
 CACHE_PATH = OUT_DIR / f"{STEM}_cache{'_ci' if CI else ''}.json"
@@ -258,7 +258,7 @@ JSON_PATH = FIG_DIR / f"{STEM}.json"
 PNG_PATH = FIG_DIR / f"{STEM}.png"
 
 # Chunked runs: stop cleanly after this many newly computed solve stages.
-MAX_NEW_STAGES = int(os.environ.get("SFINCS_JAX_BOOT_LOOP_MAX_NEW_STAGES", "0")) or None
+MAX_NEW_STAGES = int(os.environ.get("DKX_BOOT_LOOP_MAX_NEW_STAGES", "0")) or None
 
 KINETIC_DECK_TEMPLATE = """! Finite-beta QA bootstrap-consistency surface deck.
 ! Generated by examples/paper_benchmarks/bootstrap_consistency_kinetic_loop.py
@@ -390,8 +390,8 @@ print("=== examples/paper_benchmarks/bootstrap_consistency_kinetic_loop.py ===",
 if not DECK.exists():
     raise SystemExit(
         f"equilibrium input deck not found: {DECK}\n"
-        "Point SFINCS_JAX_BOOT_LOOP_DECK at input.LandremanPaul2021_QA_reactorScale_lowres "
-        "from the vmec_jax examples/data directory."
+        "Point DKX_BOOT_LOOP_DECK at input.LandremanPaul2021_QA_reactorScale_lowres "
+        "from the vmex examples/data directory."
     )
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 FIG_DIR.mkdir(parents=True, exist_ok=True)

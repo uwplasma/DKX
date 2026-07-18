@@ -17,7 +17,7 @@ has an exact content match to a frozen in-repo Fortran fixture.
 
 For each upstream example input we report:
 
-1. whether ``sfincs_jax`` successfully writes ``sfincsOutput.h5`` for that exact input,
+1. whether ``dkx`` successfully writes ``sfincsOutput.h5`` for that exact input,
 2. whether that exact input has a frozen Fortran output fixture in-repo and matches it,
 3. and the reason when exact-input frozen-fixture parity is not verified.
 
@@ -26,7 +26,7 @@ How this table is maintained
 
 The checked table is a release artifact. Its maintenance logic is:
 
-- Runs ``sfincs_jax write-output`` semantics for each upstream example input.
+- Runs ``dkx write-output`` semantics for each upstream example input.
 - Matches each input against ``tests/ref/*.input.namelist`` by exact file content.
 - If a matching frozen ``tests/ref/*.sfincsOutput.h5`` exists, compares datasets with
   ``compare_sfincs_outputs``.
@@ -69,12 +69,12 @@ reduced-resolution sweep. The runner that produced it (retired with the legacy
 pipeline) worked as follows:
 
 1. copied each upstream input into ``tests/reduced_upstream_examples/<case>/input.namelist``,
-2. halved resolution axes adaptively until both Fortran and ``sfincs_jax`` runs were under 30s,
+2. halved resolution axes adaptively until both Fortran and ``dkx`` runs were under 30s,
 3. compared the resulting ``sfincsOutput.h5`` files.
 
 The reduced input decks are tracked in ``tests/reduced_inputs/``; a single case
-can still be run and compared directly with ``python -m sfincs_jax
-write-output`` and ``python -m sfincs_jax compare-h5`` (see :doc:`parity`).
+can still be run and compared directly with ``python -m dkx
+write-output`` and ``python -m dkx compare-h5`` (see :doc:`parity`).
 
 The practical table with per-case tolerance overrides is:
 
@@ -125,4 +125,4 @@ The reduced runner classifies non-parity cases into:
 - ``output field mismatch``
 
 and also records a compact print-parity score (shared runtime-log signals between
-Fortran and ``sfincs_jax``) to track progress toward terminal-output parity.
+Fortran and ``dkx``) to track progress toward terminal-output parity.

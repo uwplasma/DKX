@@ -1,4 +1,4 @@
-! Tiny monoenergetic (RHSMode=3) PAS example for sfincs_jax parity testing (geometryScheme=11, Boozer .bc).
+! Tiny monoenergetic (RHSMode=3) PAS example for dkx parity testing (geometryScheme=11, Boozer .bc).
 !
 ! This fixture is intentionally small but exercises:
 ! - geometryScheme=11 (.bc reader + NPeriods handling)

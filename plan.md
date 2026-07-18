@@ -1,4 +1,4 @@
-# SFINCS_JAX Refactor And Release-Readiness Execution Log
+# DKX Refactor And Release-Readiness Execution Log
 
 Historical log only. The authoritative active plan is `plan_final.md`. Do not
 use this file to determine active branches, milestones, or next steps unless
@@ -36,10 +36,10 @@ Latest execution checkpoint:
   `profile_solve.py <=5,500` and sparse-handoff line gates. Batch B
   consolidated RHSMode=2/3 active dense setup, active factors, direct
   reduced-``Pmat`` emission, direct block-Schur setup, and Fortran-reduced LU
-  setup into `sfincs_jax.problems.transport_linear_system`, deleting
+  setup into `dkx.problems.transport_linear_system`, deleting
   five old implementation files. Batch C consolidated internal
   transport-parallel policy and sharding into
-  `sfincs_jax.problems.transport_parallel_runtime`, keeping `worker.py`
+  `dkx.problems.transport_parallel_runtime`, keeping `worker.py`
   only as the subprocess entry point. Batch D consolidated solver support into
   durable owners: `explicit_sparse.py`, `preconditioning.py`, and
   `diagnostics.py`. Batch E classified every remaining package-root module in
@@ -129,11 +129,11 @@ Next ordered implementation sequence:
 
 Batch A validation evidence:
 
-- `python -m py_compile sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_sparse_handoff.py
+- `python -m py_compile dkx/problems/profile_solve.py
+  dkx/problems/profile_sparse_handoff.py
   tests/test_domain_package_import_contracts.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_sparse_handoff.py
+- `python -m ruff check dkx/problems/profile_solve.py
+  dkx/problems/profile_sparse_handoff.py
   tests/test_domain_package_import_contracts.py` passed.
 - `python -m pytest tests/test_domain_package_import_contracts.py
   tests/test_profile_response_sparse_pc.py tests/test_profile_response_dense.py
@@ -150,15 +150,15 @@ Batch A validation evidence:
 
 Batch B validation evidence:
 
-- `python -m py_compile sfincs_jax/problems/transport_linear_system.py
-  sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_dense.py
+- `python -m py_compile dkx/problems/transport_linear_system.py
+  dkx/problems/profile_solve.py
+  dkx/problems/profile_dense.py
   tests/test_domain_package_import_contracts.py
   tests/test_transport_active_dense_setup.py tests/test_transport_active_factor.py
   tests/test_fortran_reduced_preconditioner.py` passed.
-- `python -m ruff check sfincs_jax/problems/transport_linear_system.py
-  sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_dense.py
+- `python -m ruff check dkx/problems/transport_linear_system.py
+  dkx/problems/profile_solve.py
+  dkx/problems/profile_dense.py
   tests/test_domain_package_import_contracts.py
   tests/test_transport_active_dense_setup.py tests/test_transport_active_factor.py
   tests/test_fortran_reduced_preconditioner.py` passed.
@@ -178,7 +178,7 @@ Batch B validation evidence:
 
 ## One-Sentence Plan
 
-Make `sfincs_jax` a small, domain-organized, research-grade neoclassical
+Make `dkx` a small, domain-organized, research-grade neoclassical
 transport code with parity against SFINCS Fortran v3 where models overlap,
 simple input-file CLI defaults, explicit differentiable Python lanes, fast and
 memory-bounded CPU/GPU execution, a manageable number of well-named files, and
@@ -189,7 +189,7 @@ deferred research lanes.
 
 ### Done
 
-- A source-audited Fortran v3 versus `sfincs_jax` feature matrix now lives in
+- A source-audited Fortran v3 versus `dkx` feature matrix now lives in
   `docs/feature_matrix.rst` and is linked from the Sphinx index. It records the
   implementation owner and promotion gate for ambipolar options 1/2/3, RHSMode
   4/5 sensitivities, solver backends, geometry/Phi1 compatibility, outputs, and
@@ -201,22 +201,22 @@ deferred research lanes.
   adjoint-solve counts, RSS bounds, PETSc marker provenance, and physical
   residual/success-marker separation without running Fortran in CI.
 - The public API contract now includes lazy workflow facades
-  `sfincs_jax.write_output`, `sfincs_jax.read_output`, and
-  `sfincs_jax.run_ambipolar_brent`, with fast routing tests. This gives users a
+  `dkx.write_output`, `dkx.read_output`, and
+  `dkx.run_ambipolar_brent`, with fast routing tests. This gives users a
   stable Python entry point before more internals move out of legacy modules.
 - The real in-process ambipolar evaluator now has an explicit fixed-shape setup
   reuse admission contract. Each evaluation records whether a prior state
   existed, whether it was used, the input/output shape signatures, the admission
   reason, and a cumulative same-shape reuse count; the CLI summary serializes
   the same fields.
-- `sfincs_jax.sensitivity` now has a matrix-free implicit
+- `dkx.sensitivity` now has a matrix-free implicit
   linear-observable derivative contract, and
-  `sfincs_jax.problems.ambipolar` exposes matching radial-current adapters.
+  `dkx.problems.ambipolar` exposes matching radial-current adapters.
   Production owners can provide operator actions, transpose actions,
   parameter-derivative actions, and solve/transpose-solve closures without
   dense assembly; focused tests compare the certificate against the dense path
   and centered finite differences.
-- `sfincs_jax.problems.ambipolar` now has a concrete
+- `dkx.problems.ambipolar` now has a concrete
   `matrix_free_rhs1_vm_radial_current_linear_observable_system` builder for the
   RHSMode-1 radial-current path. The builder uses real matrix-free full-system
   operator actions and caller-supplied transpose/solve closures, while the
@@ -246,29 +246,29 @@ deferred research lanes.
   - active-projected x-block / overlap-Schwarz / diagonal-Schur / line
     preconditioners,
   - active sparse-factor preconditioners.
-- Flat output file-format helpers moved to `sfincs_jax.outputs.formats`.
+- Flat output file-format helpers moved to `dkx.outputs.formats`.
 - Nonlinear Phi1 Newton-Krylov profile-response solve logic moved to
-  `sfincs_jax.problems.profile_phi1_newton`.
+  `dkx.problems.profile_phi1_newton`.
 - Transport-parallel runtime glue moved out of `v3_driver.py` into
-  `sfincs_jax.problems.transport_matrix.parallel`, and the active transport
-  DOF index helper moved into `sfincs_jax.problems.transport_matrix.active_dense`
+  `dkx.problems.transport_matrix.parallel`, and the active transport
+  DOF index helper moved into `dkx.problems.transport_matrix.active_dense`
   in commit `eeb2a85`.
 - Final RHSMode=1/profile-response linear-solve handoff moved into
-  `sfincs_jax.problems.profile_response.finalization` in commit `e1c6fa4`.
+  `dkx.problems.profile_response.finalization` in commit `e1c6fa4`.
 - Initial operator/RHS problem materialization moved into
-  `sfincs_jax.problems.profile_setup` in commit `611e283`.
+  `dkx.problems.profile_setup` in commit `611e283`.
 - QI-device admission/build/probe/install logic moved out of `v3_driver.py`
-  into `sfincs_jax.problems.profile_sparse_qi`; `v3_driver.py` now
+  into `dkx.problems.profile_sparse_qi`; `v3_driver.py` now
   passes solve-local arrays/operators/timing into the domain-owned QI pipeline
   context for the tested fail-closed research lane.
 - Stale private `v3_driver.py` QI policy aliases are being deleted when their
-  canonical owner is now `sfincs_jax.problems.profile_policies`; tests
+  canonical owner is now `dkx.problems.profile_policies`; tests
   now enforce that ownership boundary instead of preserving aliases only for
   historical convenience.
 - QI seed/Galerkin/two-level/device/deflated stage orchestration no longer
   lives inline in `v3_driver.py`; the driver now calls
   `run_xblock_qi_preconditioner_pipeline()` from
-  `sfincs_jax.problems.profile_sparse_qi`, while QI builder wiring
+  `dkx.problems.profile_sparse_qi`, while QI builder wiring
   and metadata construction stay in the profile-response sparse package.
 - Final stale `v3_driver.py` QI coarse-basis/block-metadata aliases were
   removed. The extracted QI pipeline now obtains canonical coarse-basis and
@@ -276,51 +276,51 @@ deferred research lanes.
   that old private driver aliases stay gone rather than preserving them for
   historical convenience.
 - RHSMode=1 PAS-family binding moved into
-  `sfincs_jax.solvers.preconditioners.pas.RHS1PasFamilyBuilders`; `v3_driver.py`
+  `dkx.solvers.preconditioners.pas.RHS1PasFamilyBuilders`; `v3_driver.py`
   now keeps only thin private wrappers that inject current low-level builders
   for compatibility-sensitive tests and debug workflows.
 - RHSMode=1 strong-preconditioner family build mapping moved from flat
   `rhs1_strong_fallback.py`/driver imports into
-  `sfincs_jax.problems.profile_preconditioner_build.RHS1StrongPreconditionerFamilyBuilders`.
+  `dkx.problems.profile_preconditioner_build.RHS1StrongPreconditionerFamilyBuilders`.
   `rhs1_strong_fallback.py` is now only a compatibility facade for historical
   imports.
 - RHSMode=1 production-output refusal gates, residual/target extraction,
   solver-trace memory estimates, and nonconverged sidecar trace writing moved
-  from `io.py` into `sfincs_jax.outputs.rhsmode1`.
+  from `io.py` into `dkx.outputs.rhsmode1`.
 - RHSMode=1 solver-diagnostics output schema, including residual convergence,
   sparse-PC timing/memory fields, direct-tail support-mode metadata, true
   coupled-coarse fields, and residual-target ratios, moved from `io.py` into
-  `sfincs_jax.outputs.rhsmode1` without adding a new file.
+  `dkx.outputs.rhsmode1` without adding a new file.
 - RHSMode=2/3 transport solver residual-output arrays moved from `io.py` into
-  `sfincs_jax.outputs.transport`, with a direct output-schema test covering
+  `dkx.outputs.transport`, with a direct output-schema test covering
   missing RHS diagnostics and max residual summaries.
 - RHSMode=2/3 streaming HDF5 transport writer and radial derivative conversion
-  factors moved from `io.py` into `sfincs_jax.outputs.transport`. `io.py` now
+  factors moved from `io.py` into `dkx.outputs.transport`. `io.py` now
   orchestrates when streaming is selected, while the output-domain module owns
   slice-wise HDF5 layout, flux variants, classical flux arrays, transport
   matrix, elapsed time, and solver-diagnostic datasets.
 - Output geometry-cache gates, stable cache paths, content-based equilibrium
   identity, cache-key construction, and disk load/save moved from `io.py` into
-  `sfincs_jax.outputs.cache`. `io.py` now only injects its equilibrium resolver
+  `dkx.outputs.cache`. `io.py` now only injects its equilibrium resolver
   into a thin compatibility wrapper for the cache-key helper.
 - RHSMode=1 x-block sparse-PC final metadata and payload assembly moved out of
   `v3_driver.py` into the profile-response sparse x-block handoff helpers. The
   driver now supplies solve-local scope plus the accepted physical solution,
-  while `sfincs_jax.problems.profile_response.sparse_pc` owns the final
+  while `dkx.problems.profile_response.sparse_pc` owns the final
   diagnostic payload contract used by `V3LinearSolveResult`.
 - QI-specific code left in `v3_driver.py` was audited after the extraction.
   The remaining references are live solve-local handoff for the tested QI
   pipeline and augmented-Krylov path; metadata-only relay locals made obsolete
   by the sparse-PC finalization handoff were deleted.
 - QI default-builder wiring moved into
-  `sfincs_jax.problems.profile_sparse_qi.build_xblock_qi_stage_pipeline_context()`.
+  `dkx.problems.profile_sparse_qi.build_xblock_qi_stage_pipeline_context()`.
   `v3_driver.py` now passes only solve-local arrays/operators/timing into the
   QI pipeline instead of importing every coarse/Galerkin/two-level/device/
   deflated helper directly. Tests patch the canonical QI device-preconditioner
   module rather than stale driver aliases.
 - Matrix-free QI seed context construction, env-gate resolution, and optional
   early/pre-sparse attempt bookkeeping moved into
-  `sfincs_jax.problems.profile_response.qi_device_seed`. `v3_driver.py` now
+  `dkx.problems.profile_response.qi_device_seed`. `v3_driver.py` now
   keeps only the reduced-solve hook placement, the strong-solver skip flag, and
   replay-state update when the domain helper reports an improved seed.
 - Final direct QI two-level/global-coupling builder aliases were removed from
@@ -328,19 +328,19 @@ deferred research lanes.
   builders internally when the driver does not inject a test builder, and tests
   assert that the old private driver aliases stay absent.
 - Transport runtime backend/dtype policy binding moved into
-  `sfincs_jax.problems.transport_policies.TransportRuntimePolicy`.
+  `dkx.problems.transport_policies.TransportRuntimePolicy`.
   `v3_driver.py` now keeps bound method aliases for compatibility and no longer
   owns private transport backend-injection wrapper functions.
 - Active-projected diagonal-Schur, x-ell kinetic-line, angular-line, and native
   indexed Schwarz
   preconditioners moved from `rhs1_full_assembly.py` into
-  `sfincs_jax.solvers.preconditioner_xblock_active`. The assembly
+  `dkx.solvers.preconditioner_xblock_active`. The assembly
   module now keeps compatibility aliases plus dispatch/admission logic for
   these builders.
 - Active-projected global field-split, multiline field-split, bounded native
   stack, and Fortran-v3-reduced native-stack preconditioners moved from
   `rhs1_full_assembly.py` into
-  `sfincs_jax.solvers.preconditioner_xblock_active`. The extracted
+  `dkx.solvers.preconditioner_xblock_active`. The extracted
   module owns local base dispatch for x-block/angular/native-indexed bases, and
   `rhs1_full_assembly.py` injects its dispatcher only where a still-local base
   family is needed.
@@ -369,7 +369,7 @@ deferred research lanes.
     flux, parallel flow, total heat flux, radial current, bootstrap current,
     and, for `RHSMode=5`, `dPhi/dPsi`. Debug mode also writes finite-difference
     sensitivity checks and percent errors.
-  - `sfincs_jax` currently has Er-scan postprocessing compatible with upstream
+  - `dkx` currently has Er-scan postprocessing compatible with upstream
     scan scripts and several autodiff validation examples, but not yet a
     first-class in-solver ambipolar Newton / adjoint-sensitivity API matching
     these Fortran v3 modes.
@@ -477,15 +477,15 @@ deferred research lanes.
 
 ### Current Code Shape
 
-- `sfincs_jax/v3_driver.py`: about 12.2k lines, still the largest orchestration
+- `dkx/v3_driver.py`: about 12.2k lines, still the largest orchestration
   and compatibility surface.
-- `sfincs_jax/rhs1_full_assembly.py`: about 6.0k lines, now mostly RHSMode=1
+- `dkx/rhs1_full_assembly.py`: about 6.0k lines, now mostly RHSMode=1
   exact/active CSR assembly, admission, dispatch, and compatibility.
-- `sfincs_jax/io.py`: about 4.3k lines, still owns too much solved-field physics
+- `dkx/io.py`: about 4.3k lines, still owns too much solved-field physics
   schema and provenance materialization; RHSMode=1 output safety and solver
-  diagnostics now live in `sfincs_jax.outputs.rhsmode1`, transport-output
-  helpers live in `sfincs_jax.outputs.transport`, and geometry-cache helpers
-  live in `sfincs_jax.outputs.cache`.
+  diagnostics now live in `dkx.outputs.rhsmode1`, transport-output
+  helpers live in `dkx.outputs.transport`, and geometry-cache helpers
+  live in `dkx.outputs.cache`.
 - Package size: about 289 Python files and 160k package lines.
 - Largest remaining package clusters:
   `problems/transport_matrix`, `problems/profile_response`,
@@ -516,7 +516,7 @@ deferred research lanes.
 
 2. **Simple user workflow**
    A typical user should run
-   `sfincs_jax input.namelist --wout-path wout.nc --out sfincsOutput.h5` and
+   `dkx input.namelist --wout-path wout.nc --out sfincsOutput.h5` and
    get a robust solve, clear progress, phase timing, output metadata, and
    plots without knowing solver internals.
 
@@ -729,8 +729,8 @@ explicit implementation lane.
 
 Actions:
 
-1. Add a domain owner, tentatively `sfincs_jax.problems.ambipolar` or
-   `sfincs_jax.problems.profile_response.sensitivity`, with:
+1. Add a domain owner, tentatively `dkx.problems.ambipolar` or
+   `dkx.problems.profile_response.sensitivity`, with:
    - Brent root solve matching `ambipolarSolveOption=2`,
    - safeguarded Newton/bisection matching `ambipolarSolveOption=1`,
    - pure Newton matching `ambipolarSolveOption=3`,
@@ -759,7 +759,7 @@ Actions:
 
 Acceptance:
 
-- `sfincs_jax` can answer "what is d current / d Er?" from a public API.
+- `dkx` can answer "what is d current / d Er?" from a public API.
 - Fortran-v3 ambipolar option semantics are documented and tested where shared.
 - Host-only finite differences are labeled debug/reference, not the primary
   differentiable claim.
@@ -965,7 +965,7 @@ Results:
   RSS around `5.7-5.8 GB`.
 - Production helical option 2 reached `|J_r| ~ 8.1e-12` but did not print
   Fortran's Brent success marker before exhausting its evaluation budget. This
-  must remain a marker/residual split in sfincs_jax, not an implicit success.
+  must remain a marker/residual split in dkx, not an implicit success.
 - Focused validation passed: `python -m pytest tests/test_ambipolar_problem.py
   -q --tb=short`, JSON validation, runner `py_compile`, namelist sanity check,
   and `git diff --check`.
@@ -976,14 +976,14 @@ Next best steps:
    1 residual graph and finite-difference gate.
 2. Wire that derivative into the existing safeguarded Newton and pure Newton
    ambipolar solvers.
-3. Add sfincs_jax-vs-Fortran replay gates for the new production profiles
+3. Add dkx-vs-Fortran replay gates for the new production profiles
    without running Fortran in CI.
 
 ## 2026-06-25 Implicit Linear Sensitivity Certificate
 
 Steps taken:
 
-1. Added `sfincs_jax.sensitivity` as the domain owner for reusable
+1. Added `dkx.sensitivity` as the domain owner for reusable
    implicit/adjoint derivative certificates.
 2. Implemented `implicit_linear_observable_derivative` for
    `A(p) x(p) = b(p)` and `J(p) = c(p)^T x(p) + J0(p)`.
@@ -992,7 +992,7 @@ Steps taken:
    primal/tangent/adjoint residuals, and optionally compares to centered finite
    differences.
 4. Added `implicit_linear_radial_current_derivative` in
-   `sfincs_jax.problems.ambipolar`, returning the existing
+   `dkx.problems.ambipolar`, returning the existing
    `RadialCurrentDerivativeResult` contract expected by the safeguarded Newton
    and pure Newton ambipolar solvers.
 5. Added API/docs entries and import-contract coverage for the new public
@@ -1007,14 +1007,14 @@ Results:
 - Sphinx docs build passed:
   `python -m sphinx -b html docs docs/_build/html -q`.
 - Static checks passed:
-  `python -m py_compile sfincs_jax/sensitivity.py
-  sfincs_jax/problems/ambipolar.py sfincs_jax/problems/__init__.py` and
+  `python -m py_compile dkx/sensitivity.py
+  dkx/problems/ambipolar.py dkx/problems/__init__.py` and
   `git diff --check`.
 
 Next best steps:
 
 1. Wire the certificate to the concrete RHSMode 1 radial-current residual graph
-   so `dJr/dEr` uses the actual SFINCS_JAX operator/RHS derivatives.
+   so `dJr/dEr` uses the actual DKX operator/RHS derivatives.
 2. Compare the concrete derivative against centered finite differences on a
    tiny RHSMode 1 case.
 3. Use that derivative provider in safeguarded Newton and pure Newton
@@ -1026,7 +1026,7 @@ Steps taken:
 
 1. Added `LinearObservableSystem` and
    `implicit_linear_observable_derivative_from_builder` to
-   `sfincs_jax.sensitivity`.
+   `dkx.sensitivity`.
 2. The builder API gives concrete RHSMode 1/4/5 owners one fixed-shape handoff:
    emit `A(p)`, `b(p)`, the scalar observable vector, and their parameter
    derivatives from the true operator graph.
@@ -1043,8 +1043,8 @@ Results:
   tests/test_domain_package_import_contracts.py -q --tb=short` with
   `26 passed`.
 - Static compile passed:
-  `python -m py_compile sfincs_jax/sensitivity.py
-  sfincs_jax/problems/ambipolar.py sfincs_jax/problems/__init__.py`.
+  `python -m py_compile dkx/sensitivity.py
+  dkx/problems/ambipolar.py dkx/problems/__init__.py`.
 
 Next best steps:
 
@@ -1059,7 +1059,7 @@ Next best steps:
 
 Steps taken:
 
-1. Added `probe_linear_observable_vector` to `sfincs_jax.sensitivity`.
+1. Added `probe_linear_observable_vector` to `dkx.sensitivity`.
 2. The helper recovers `J(x) = c^T x + J0` from an existing scalar diagnostic
    by probing basis vectors in bounded chunks.
 3. Added tests for nonzero-offset observables and chunk sizes that do not
@@ -1072,7 +1072,7 @@ Results:
   tests/test_domain_package_import_contracts.py -q --tb=short` with
   `14 passed`.
 - Static checks passed:
-  `python -m py_compile sfincs_jax/sensitivity.py` and `git diff --check`.
+  `python -m py_compile dkx/sensitivity.py` and `git diff --check`.
 
 Next best steps:
 
@@ -1086,7 +1086,7 @@ Next best steps:
 Steps taken:
 
 1. Added `radial_current_vm_psi_hat_from_state` to
-   `sfincs_jax.problems.transport_diagnostics`.
+   `dkx.problems.transport_diagnostics`.
 2. Added `radial_current_vm_psi_hat_observable_vector`, which recovers the
    scalar radial-current observable vector from the existing diagnostic in
    bounded chunks.
@@ -1113,7 +1113,7 @@ Next best steps:
 Steps taken:
 
 1. Added `dense_rhs1_vm_radial_current_linear_observable_system` to
-   `sfincs_jax.problems.ambipolar`.
+   `dkx.problems.ambipolar`.
 2. The helper assembles the true small-deck RHSMode 1 operator, RHS, radial
    current observable, and centered finite-difference derivatives from an
    operator triplet.
@@ -1142,7 +1142,7 @@ Next best steps:
 Steps taken:
 
 1. Added `jvp_flux`, `vjp_flux`, and `adjoint_dot_product_check` to
-   `sfincs_jax.sensitivity`.
+   `dkx.sensitivity`.
 2. Added a real RHSMode 1 radial-current diagnostic test for
    `<JVP(dp), y> = <dp, VJP(y)>`.
 3. Updated docs to describe the dot-product gate as the first reusable
@@ -1189,7 +1189,7 @@ Next best steps:
 
 Steps taken:
 
-1. Added `MatrixFreeLinearObservableSystem` to `sfincs_jax.sensitivity`.
+1. Added `MatrixFreeLinearObservableSystem` to `dkx.sensitivity`.
 2. Added matrix-free tangent/adjoint derivative certificates that use supplied
    operator actions, transpose actions, parameter-derivative actions, and
    solve/transpose-solve closures instead of dense matrices.
@@ -1468,7 +1468,7 @@ Steps taken:
 2. Wired the active `particleFlux_vm_rN` response into the real safeguarded
    Newton and pure-Newton root solvers, including current-evaluation caching
    and Fortran-compatibility validation.
-3. Exposed the helper through `sfincs_jax.problems` and added import-contract
+3. Exposed the helper through `dkx.problems` and added import-contract
    coverage.
 4. Added physical small-deck replay tests for the checked helical option-1 and
    option-3 Fortran roots.
@@ -1515,7 +1515,7 @@ Steps taken:
    `writeHDF5Output.F90` for RHSMode 4/5 adjoint restrictions and output
    fields.
 2. Added `validate_fortran_v3_adjoint_sensitivity_constraints` to
-   `sfincs_jax.sensitivity`, mirroring the Fortran source restrictions for
+   `dkx.sensitivity`, mirroring the Fortran source restrictions for
    no Phi1, no inductive field, no tangential magnetic drifts,
    `constraintScheme=-1/1`, `collisionOperator=0`, Boozer-coordinate geometry
    restrictions, and RHSMode-5 radial-current sensitivity rejection.
@@ -1541,7 +1541,7 @@ Results:
   `JAX_ENABLE_X64=True python -m pytest tests/test_sensitivity.py
   tests/test_ambipolar_problem.py tests/test_domain_package_import_contracts.py
   -q --tb=short` with `48 passed in 63.27 s`.
-- `python -m ruff check sfincs_jax/sensitivity.py tests/test_sensitivity.py
+- `python -m ruff check dkx/sensitivity.py tests/test_sensitivity.py
   tests/test_domain_package_import_contracts.py`, `git diff --check`, and
   `python -m sphinx -b html docs docs/_build/html -q` passed.
 
@@ -1558,7 +1558,7 @@ Next best steps:
 
 1. Create small RHSMode-4 Fortran fixture namelists and output summaries for
    one or two sensitivity targets.
-2. Add sfincs_jax numerical output-field scaffolding only after those fixture
+2. Add dkx numerical output-field scaffolding only after those fixture
    values are pinned.
 3. Continue the review-ready refactor tranche by moving fixture generation and
    comparison helpers behind compact domain APIs.
@@ -1568,8 +1568,8 @@ Next best steps:
 Steps taken:
 
 1. Moved duplicated case-insensitive namelist/nested-mapping lookup helpers
-   from `sfincs_jax.problems.ambipolar` and `sfincs_jax.sensitivity` into
-   `sfincs_jax.input_compat`.
+   from `dkx.problems.ambipolar` and `dkx.sensitivity` into
+   `dkx.input_compat`.
 2. Rewired the ambipolar and RHSMode 4/5 sensitivity validators to use the
    shared helpers.
 3. Added direct `input_compat` coverage for scalar defaults, vector boolean
@@ -1584,8 +1584,8 @@ Results:
   tests/test_sensitivity.py tests/test_ambipolar_problem.py
   tests/test_domain_package_import_contracts.py -q --tb=short` with
   `71 passed in 67.78 s`.
-- `python -m ruff check sfincs_jax/input_compat.py sfincs_jax/sensitivity.py
-  sfincs_jax/problems/ambipolar.py tests/test_input_compat.py
+- `python -m ruff check dkx/input_compat.py dkx/sensitivity.py
+  dkx/problems/ambipolar.py tests/test_input_compat.py
   tests/test_sensitivity.py tests/test_ambipolar_problem.py
   tests/test_domain_package_import_contracts.py`, `git diff --check`, and
   `python -m sphinx -b html docs docs/_build/html -q` passed.
@@ -1654,7 +1654,7 @@ Current lane status:
 Next best steps:
 
 1. Add one more RHSMode-4 fixture targeting heat flux or bootstrap current.
-2. Add the first sfincs_jax output-surface scaffolding for RHSMode-4 fields
+2. Add the first dkx output-surface scaffolding for RHSMode-4 fields
    once at least two Fortran summaries are pinned.
 3. Keep production option-1/3 replay and RHSMode-5 constant-current fixtures
    outside normal CI until the small fixture layer is stable.
@@ -1671,7 +1671,7 @@ Steps taken:
    remains a scratch artifact.
 3. Added `fortran_v3_adjoint_sensitivity_output_ranks` and
    `validate_fortran_v3_adjoint_sensitivity_output_surface` to
-   `sfincs_jax.sensitivity`, so RHSMode=4/5 output field names and tensor
+   `dkx.sensitivity`, so RHSMode=4/5 output field names and tensor
    ranks can be validated against either HDF5-like arrays or lightweight
    summaries.
 4. Added tests pinning both compact Fortran RHSMode=4 summaries and the
@@ -1697,7 +1697,7 @@ Results:
   tests/test_sensitivity.py tests/test_ambipolar_problem.py
   tests/test_domain_package_import_contracts.py -q --tb=short` with
   `74 passed in 65.69 s`.
-- `python -m ruff check sfincs_jax/sensitivity.py tests/test_sensitivity.py
+- `python -m ruff check dkx/sensitivity.py tests/test_sensitivity.py
   tests/test_domain_package_import_contracts.py`, `git diff --check`,
   `python -m json.tool
   benchmarks/fortran_v3_sensitivity_reference/small_rhsmode45_summary_2026-06-25.json`,
@@ -1808,8 +1808,8 @@ Results:
 
 - `v3_driver.py` decreased from `12,242` to `12,133` lines in this tranche.
 - The diff is a net simplification of one file:
-  `sfincs_jax/v3_driver.py | 207 ++++++++++++------------------------------------`.
-- `python -m py_compile sfincs_jax/v3_driver.py` passed.
+  `dkx/v3_driver.py | 207 ++++++++++++------------------------------------`.
+- `python -m py_compile dkx/v3_driver.py` passed.
 - Focused dispatch/PAS validation passed:
   `python -m pytest tests/test_transport_preconditioner_dispatch.py
   tests/test_v3_driver_rhs1_dispatch_coverage.py
@@ -1820,7 +1820,7 @@ Results:
   tests/test_transport_parallel.py::test_transport_theta_dd_preconditioner_matches_default
   tests/test_transport_parallel.py::test_transport_theta_schwarz_preconditioner_matches_default
   -q --tb=short` with `2 passed in 18.26 s`.
-- `python -m ruff check sfincs_jax/v3_driver.py` and `git diff --check`
+- `python -m ruff check dkx/v3_driver.py` and `git diff --check`
   passed.
 
 Current lane status:
@@ -1942,7 +1942,7 @@ Results:
   tests/test_sensitivity.py tests/test_ambipolar_problem.py
   tests/test_domain_package_import_contracts.py -q --tb=short` with
   `77 passed in 66.48 s`.
-- `python -m ruff check sfincs_jax/sensitivity.py tests/test_sensitivity.py`,
+- `python -m ruff check dkx/sensitivity.py tests/test_sensitivity.py`,
   JSON validation for both RHSMode 4/5 summaries, `git diff --check`, and
   `python -m sphinx -b html docs docs/_build/html -q` passed.
 
@@ -1972,7 +1972,7 @@ Steps taken:
    selected the strong-preconditioner lazy-cache closure because it belongs to
    transport preconditioner dispatch rather than driver orchestration.
 2. Added `TransportStrongPreconditionerCache` to
-   `sfincs_jax/problems/transport_matrix/preconditioner_dispatch.py`.
+   `dkx/problems/transport_matrix/preconditioner_dispatch.py`.
 3. Replaced the nested full/reduced cache closure in
    `solve_v3_transport_matrix_linear_gmres` with the new domain helper while
    preserving lazy construction, reduced/full separation, and primary
@@ -1995,8 +1995,8 @@ Results:
   tests/test_transport_parallel.py::test_transport_theta_schwarz_preconditioner_matches_default
   -q --tb=short` passed with `2 passed in 12.55 s`.
 - `python -m ruff check
-  sfincs_jax/problems/transport_matrix/preconditioner_dispatch.py
-  sfincs_jax/v3_driver.py tests/test_transport_preconditioner_dispatch.py`
+  dkx/problems/transport_matrix/preconditioner_dispatch.py
+  dkx/v3_driver.py tests/test_transport_preconditioner_dispatch.py`
   and `git diff --check` passed.
 
 Current lane status:
@@ -2026,7 +2026,7 @@ Steps taken:
    confirmed that environment parsing, factor-cache creation, and pattern-cache
    creation belong with the sparse-direct transport module.
 2. Added `transport_sparse_direct_context_from_env` to
-   `sfincs_jax/problems/transport_matrix/sparse_direct_solve.py`.
+   `dkx/problems/transport_matrix/sparse_direct_solve.py`.
 3. Replaced the inline `v3_driver.py` sparse-drop parsing and context
    construction with that helper, preserving the same per-solve fresh cache
    semantics and driver-provided callback hooks.
@@ -2048,8 +2048,8 @@ Results:
   tests/test_transport_parallel.py::test_transport_theta_schwarz_preconditioner_matches_default
   -q --tb=short` passed with `2 passed in 12.35 s`.
 - `python -m ruff check
-  sfincs_jax/problems/transport_matrix/sparse_direct_solve.py
-  sfincs_jax/v3_driver.py tests/test_transport_sparse_direct_solve.py` and
+  dkx/problems/transport_matrix/sparse_direct_solve.py
+  dkx/v3_driver.py tests/test_transport_sparse_direct_solve.py` and
   `git diff --check` passed.
 
 Current lane status:
@@ -2076,7 +2076,7 @@ Steps taken:
    `_solve_linear` and `_solve_linear_with_residual` wrappers as driver glue
    over `TransportLinearSolveContext`.
 2. Added `TransportLinearSolveCallbacks` to
-   `sfincs_jax/problems/transport_matrix/linear_solve.py`, binding the context
+   `dkx/problems/transport_matrix/linear_solve.py`, binding the context
    once and exposing `solve` and `solve_with_residual` callbacks.
 3. Replaced the two local wrapper functions in `v3_driver.py` with the bound
    callback methods.
@@ -2099,7 +2099,7 @@ Results:
   tests/test_transport_parallel.py::test_transport_theta_schwarz_preconditioner_matches_default
   -q --tb=short` passed with `2 passed in 12.32 s`.
 - `python -m ruff check
-  sfincs_jax/problems/transport_matrix/linear_solve.py sfincs_jax/v3_driver.py
+  dkx/problems/transport_matrix/linear_solve.py dkx/v3_driver.py
   tests/test_transport_linear_solve.py` and `git diff --check` passed.
 
 Current lane status:
@@ -2125,7 +2125,7 @@ Steps taken:
 
 1. Re-reviewed the checked Fortran-v3 ambipolar small and production summaries
    against the remaining `plan_final.md` ambipolar lane.
-2. Confirmed that sfincs_jax already has in-process option-1/2/3 root solvers,
+2. Confirmed that dkx already has in-process option-1/2/3 root solvers,
    small real-deck option-1/3 gates, Brent replay gates, fixed-shape setup
    reuse metadata, and CLI serialization tests.
 3. Added a production option-1/3 metadata gate that pins the derivative-solve
@@ -2185,7 +2185,7 @@ Results:
   tests/test_ambipolar_problem.py tests/test_domain_package_import_contracts.py
   -q --tb=short` passed with `56 passed in 64.75 s`.
 - `python -m sphinx -b html docs docs/_build/html -q`,
-  `python -m ruff check tests/test_sensitivity.py sfincs_jax/sensitivity.py`,
+  `python -m ruff check tests/test_sensitivity.py dkx/sensitivity.py`,
   and `git diff --check` passed.
 
 Current lane status:
@@ -2211,7 +2211,7 @@ Steps taken:
 1. Re-inventoried the remaining nested helpers in `v3_driver.py` after the
    ambipolar and RHSMode 4/5 closure work.
 2. Moved the RHSMode=2/3 constraint-nullspace projection adapter into
-   `sfincs_jax/problems/transport_finalize.py` as
+   `dkx/problems/transport_finalize.py` as
    `TransportConstraintNullspaceProjector`.
 3. Rewired `v3_driver.py` so dense-batch and RHS finalization paths receive
    `constraint_projector.project` instead of a local projection closure.
@@ -2235,9 +2235,9 @@ Results:
   tests/test_transport_parallel.py::test_transport_theta_schwarz_preconditioner_matches_default
   -q --tb=short` passed with `2 passed in 12.16 s`.
 - `python -m ruff check
-  sfincs_jax/problems/transport_finalize.py sfincs_jax/v3_driver.py
+  dkx/problems/transport_finalize.py dkx/v3_driver.py
   tests/test_constraint_projection.py`, `python -m py_compile
-  sfincs_jax/v3_driver.py`, and `git diff --check` passed.
+  dkx/v3_driver.py`, and `git diff --check` passed.
 
 Current lane status:
 
@@ -2327,10 +2327,10 @@ Results:
   tests/test_transport_solve_finalization.py tests/test_constraint_projection.py
   -q --tb=short` passed with `52 passed in 1.82 s`.
 - `python -m ruff check
-  sfincs_jax/problems/transport_matrix/sparse_direct_solve.py
-  sfincs_jax/v3_driver.py tests/test_transport_sparse_direct_solve.py`,
-  `python -m py_compile sfincs_jax/v3_driver.py
-  sfincs_jax/problems/transport_matrix/sparse_direct_solve.py`, and
+  dkx/problems/transport_matrix/sparse_direct_solve.py
+  dkx/v3_driver.py tests/test_transport_sparse_direct_solve.py`,
+  `python -m py_compile dkx/v3_driver.py
+  dkx/problems/transport_matrix/sparse_direct_solve.py`, and
   `git diff --check` passed.
 
 Current lane status:
@@ -2373,9 +2373,9 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/v3_driver.py
-  sfincs_jax/problems/transport_parallel_runtime.py
-  sfincs_jax/problems/transport_parallel_worker.py` passed.
+- `python -m py_compile dkx/v3_driver.py
+  dkx/problems/transport_parallel_runtime.py
+  dkx/problems/transport_parallel_worker.py` passed.
 - `python -m pytest tests/test_domain_package_import_contracts.py
   tests/test_policy_module_docstrings.py tests/test_helper_module_coverage.py
   -q --tb=short` passed with `20 passed in 1.99 s`.
@@ -2441,13 +2441,13 @@ Next best steps:
 Steps taken:
 
 1. Moved RHSMode-1 operator/layout/source modules from top-level `rhs1_*`
-   names into `sfincs_jax.operators.profile_response`.
+   names into `dkx.operators.profile_response`.
 2. Moved full-system CSR assembly, structured CSR bundle construction,
    true-operator rescue, Fortran-reduced direct-tail materialization, and
    device-CSR runtime helpers into the same operator domain package.
 3. Moved KSP diagnostics, host/large-CPU/direct-tail policy, solver-policy
    parsing, active-preconditioner auto policy, and general RHSMode-1
-   preconditioner auto policy into `sfincs_jax.problems.profile_response`.
+   preconditioner auto policy into `dkx.problems.profile_response`.
 4. Deleted the obsolete `rhs1_strong_fallback.py` facade after imports were
    pointed at `problems.profile_response.preconditioner_build`.
 5. Rewrote source, tests, scripts, and API docs to import the new canonical
@@ -2471,9 +2471,9 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/operators/profile_*.py
-  sfincs_jax/problems/profile_response/*.py sfincs_jax/v3_driver.py
-  sfincs_jax/io.py` passed.
+- `python -m py_compile dkx/operators/profile_*.py
+  dkx/problems/profile_response/*.py dkx/v3_driver.py
+  dkx/io.py` passed.
 - Focused moved RHSMode-1 module tests passed with
   `302 passed in 77.53 s`.
 - Broad RHSMode-1/profile-response sweep passed with
@@ -2503,7 +2503,7 @@ Next best steps:
 Steps taken:
 
 1. Moved all remaining top-level RHSMode-1 solver/preconditioner files into
-   `sfincs_jax.solvers.preconditioners`.
+   `dkx.solvers.preconditioners`.
 2. Routed PAS policy/runtime files into `solvers.preconditioners.pas`.
 3. Routed x-block, low-mode coarse, and x-block sparse-host policy files into
    `solvers.preconditioners.xblock`.
@@ -2529,8 +2529,8 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/solvers/preconditioners/**/*.py
-  sfincs_jax/v3_driver.py` passed.
+- `python -m py_compile dkx/solvers/preconditioners/**/*.py
+  dkx/v3_driver.py` passed.
 - Focused solver-family tests passed with `619 passed in 46.01 s`.
 - Broad RHSMode-1/profile-response/v3 sparse sweep passed with
   `1472 passed in 334.53 s`.
@@ -2564,17 +2564,17 @@ Next best steps:
 Steps taken:
 
 1. Merged x-block sparse-host policy helpers into
-   `sfincs_jax.solvers.preconditioner_xblock_policy`.
+   `dkx.solvers.preconditioner_xblock_policy`.
 2. Merged QI Galerkin probe-selection policy helpers into
-   `sfincs_jax.solvers.preconditioners.qi.residual_galerkin`.
+   `dkx.solvers.preconditioners.qi.residual_galerkin`.
 3. Merged domain-decomposition patch/block-size policy helpers into
-   `sfincs_jax.solvers.preconditioner_domain_decomposition.line_blocks`.
+   `dkx.solvers.preconditioner_domain_decomposition.line_blocks`.
 4. Merged RHSMode-1 Schur policy resolution into
-   `sfincs_jax.solvers.preconditioners.schur.rhs1`.
+   `dkx.solvers.preconditioners.schur.rhs1`.
 5. Merged symbolic-sparse frontal/reduced-factor policy helpers into
-   `sfincs_jax.solvers.preconditioner_symbolic_policy`.
+   `dkx.solvers.preconditioner_symbolic_policy`.
 6. Merged reduced-Pmat elimination-plan helpers into
-   `sfincs_jax.solvers.preconditioners.symbolic_sparse.rhs1_fortran_reduced`.
+   `dkx.solvers.preconditioners.symbolic_sparse.rhs1_fortran_reduced`.
 7. Deleted the empty profile-response operator namespace initializer and
    removed duplicate API-doc entries created by the redirected modules.
 
@@ -2590,10 +2590,10 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/solvers/preconditioners/**/*.py
-  sfincs_jax/v3_driver.py sfincs_jax/operators/profile_*.py
-  sfincs_jax/problems/profile_response/*.py
-  sfincs_jax/problems/profile_response/sparse/*.py` passed.
+- `python -m py_compile dkx/solvers/preconditioners/**/*.py
+  dkx/v3_driver.py dkx/operators/profile_*.py
+  dkx/problems/profile_response/*.py
+  dkx/problems/profile_response/sparse/*.py` passed.
 - Focused merged-policy/profile-response tests passed with
   `669 passed in 152.15 s`.
 - Import-contract/docstring/helper tests passed with `20 passed in 1.26 s`.
@@ -2615,9 +2615,9 @@ Next best steps:
 1. Commit and push the Iteration 3 count-consolidation batch.
 2. Execute Lane 1 Iteration 4 in one coarse move: relocate
    `solve_v3_full_system_linear_gmres` to
-   `sfincs_jax.problems.profile_solve` and
+   `dkx.problems.profile_solve` and
    `solve_v3_transport_matrix_linear_gmres` to
-   `sfincs_jax.problems.transport_solve`, leaving `v3_driver.py` as a
+   `dkx.problems.transport_solve`, leaving `v3_driver.py` as a
    thin compatibility shim.
 3. After Iteration 4, execute Lane 1 Iteration 5 once: dead-code pruning,
    docs/API cleanup, final count checks, focused physics/refactor tests, docs
@@ -2631,13 +2631,13 @@ Steps taken:
    current structural debt has moved from `v3_driver.py` into larger domain
    owners rather than disappearing.
 2. Moved the legacy profile-response solve entry point into
-   `sfincs_jax.problems.profile_solve`.
+   `dkx.problems.profile_solve`.
 3. Moved the legacy RHSMode 2/3 transport solve entry point into
-   `sfincs_jax.problems.transport_solve`.
+   `dkx.problems.transport_solve`.
 4. Absorbed the old low-level profile-response and transport
    `linear_solve.py` implementations into their solve owners and queued those
    two files for deletion.
-5. Replaced `sfincs_jax.v3_driver` with a small compatibility shim that aliases
+5. Replaced `dkx.v3_driver` with a small compatibility shim that aliases
    the profile-response solve owner and injects the transport solve entry
    points for legacy imports.
 6. Rewrote `plan_final.md` so it is the single authoritative plan. Lane 1 now
@@ -2650,21 +2650,21 @@ Current inventory:
 - Package Python files: `239`.
 - Top-level `rhs1_*` files: `0`.
 - Top-level `transport_*` files: `0`.
-- `sfincs_jax/v3_driver.py`: `47` lines.
-- `sfincs_jax/problems/profile_solve.py`: `11,279` lines.
-- `sfincs_jax/problems/transport_solve.py`: `1,763` lines.
+- `dkx/v3_driver.py`: `47` lines.
+- `dkx/problems/profile_solve.py`: `11,279` lines.
+- `dkx/problems/transport_solve.py`: `1,763` lines.
 - `problems/profile_response`: `33` Python files and about `50k` lines.
 - `problems/transport_matrix`: `33` Python files and about `15k` lines.
 - `solvers/preconditioners`: `50` Python files and about `37k` lines.
 
 Validation so far:
 
-- `python -m py_compile sfincs_jax/v3_driver.py
-  sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/transport_solve.py
-  sfincs_jax/problems/profile_response/*.py
-  sfincs_jax/problems/transport_matrix/*.py` passed.
-- Import smoke confirmed `sfincs_jax.v3_driver` resolves to the
+- `python -m py_compile dkx/v3_driver.py
+  dkx/problems/profile_solve.py
+  dkx/problems/transport_solve.py
+  dkx/problems/profile_response/*.py
+  dkx/problems/transport_matrix/*.py` passed.
+- Import smoke confirmed `dkx.v3_driver` resolves to the
   profile-response solve owner and that the profile-response and transport
   solve entry points have domain-owned `__module__` values.
 - Focused CLI/import/profile/transport tests passed with
@@ -2674,10 +2674,10 @@ Validation so far:
 - Legacy helper compatibility tests passed with `101 passed in 25.14 s`.
 - Broad RHSMode-1 sparse-pattern sweep passed with
   `242 passed in 164.52 s`.
-- Sphinx `-W` build passed after documenting `sfincs_jax.v3_driver` as a
+- Sphinx `-W` build passed after documenting `dkx.v3_driver` as a
   compatibility shim.
 - `git diff --check` passed.
-- Broad `python -m ruff check sfincs_jax tests` still fails on existing
+- Broad `python -m ruff check dkx tests` still fails on existing
   package-wide lint debt outside this extraction; Lane 1 Tranche B/D now
   explicitly require narrowing or removing temporary broad ignores on extracted
   modules.
@@ -2712,16 +2712,16 @@ Next best steps:
 Steps taken:
 
 1. Consolidated six profile-response policy shards into
-   `sfincs_jax.problems.profile_policies`:
+   `dkx.problems.profile_policies`:
    `active_preconditioner_policy.py`, `direct_tail_policy.py`,
    `host_policy.py`, `large_cpu_policy.py`,
    `preconditioner_auto_policy.py`, and `solver_policy.py` were deleted.
 2. Consolidated top-level profile-response finalization and KSP replay
-   diagnostics into `sfincs_jax.problems.profile_solver_diagnostics`;
+   diagnostics into `dkx.problems.profile_solver_diagnostics`;
    `finalization.py` and `ksp_diagnostics.py` were deleted.
 3. Moved sparse-PC Krylov execution helpers from
-   `sfincs_jax.problems.profile_response.sparse.krylov` into
-   `sfincs_jax.problems.profile_response.sparse_pc`; `sparse/krylov.py` was
+   `dkx.problems.profile_response.sparse.krylov` into
+   `dkx.problems.profile_response.sparse_pc`; `sparse/krylov.py` was
    deleted. Shared sparse-PC finalization remains in
    `profile_sparse_finalization.py` because direct/x-block/
    Fortran-reduced sparse paths share the same payload contracts.
@@ -2738,12 +2738,12 @@ Current inventory:
 
 - Package Python files: `230`.
 - `problems/profile_response`: `24` Python files and about `50k` lines.
-- `sfincs_jax/problems/profile_solve.py`: `11,279` lines.
-- `sfincs_jax/problems/profile_policies.py`: `6,380` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: `3,761` lines.
-- `sfincs_jax/problems/profile_solver_diagnostics.py`: `812` lines.
-- `sfincs_jax/problems/transport_matrix`: `33` Python files.
-- `sfincs_jax/solvers/preconditioners`: `50` Python files.
+- `dkx/problems/profile_solve.py`: `11,279` lines.
+- `dkx/problems/profile_policies.py`: `6,380` lines.
+- `dkx/problems/profile_response/sparse_pc.py`: `3,761` lines.
+- `dkx/problems/profile_solver_diagnostics.py`: `812` lines.
+- `dkx/problems/transport_matrix`: `33` Python files.
+- `dkx/solvers/preconditioners`: `50` Python files.
 
 Validation:
 
@@ -2751,8 +2751,8 @@ Validation:
   `526 passed in 39.20s`.
 - Scoped ruff passed for the consolidated profile-response modules and sparse
   tests.
-- `python -m py_compile sfincs_jax/problems/profile_response/*.py
-  sfincs_jax/problems/profile_response/sparse/*.py` passed.
+- `python -m py_compile dkx/problems/profile_response/*.py
+  dkx/problems/profile_response/sparse/*.py` passed.
 - `python -m sphinx -W -b html docs docs/_build/html` passed.
 
 Current lane status:
@@ -2784,15 +2784,15 @@ Next best steps:
 Steps taken:
 
 1. Moved the profile linear-solve routing contracts from
-   `sfincs_jax.problems.profile_solve` into the existing dense owner:
+   `dkx.problems.profile_solve` into the existing dense owner:
    `ProfileLinearSolveContext`, `solve_profile_linear`,
    `solve_profile_linear_with_residual`, dense-KSP full/reduced solve
    contexts, constraintScheme=0 PETSc-compatible sparse-ILU, and host SciPy
-   rescue now live in `sfincs_jax.problems.profile_dense`.
+   rescue now live in `dkx.problems.profile_dense`.
 2. Updated `tests/test_profile_response_linear_solve.py` to import from the
    canonical dense owner instead of the monolithic solve owner.
 3. Moved the explicit host structured-CSR RHSMode-1 solve entry point into
-   `sfincs_jax.problems.profile_dense`, beside the auto-routing
+   `dkx.problems.profile_dense`, beside the auto-routing
    code that invokes it. `profile_response.solve` imports it only for
    compatibility and internal dispatch.
 4. Preserved behavior and legacy import compatibility while removing another
@@ -2802,11 +2802,11 @@ Current inventory:
 
 - Package Python files: `230`.
 - `problems/profile_response`: `24` Python files.
-- `sfincs_jax/problems/profile_solve.py`: `10,400` lines.
-- `sfincs_jax/problems/profile_dense.py`: `2,487` lines.
-- `sfincs_jax/problems/profile_response/auto_solve.py`: `550` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: `3,761` lines.
-- `sfincs_jax/v3_driver.py`: `47` lines.
+- `dkx/problems/profile_solve.py`: `10,400` lines.
+- `dkx/problems/profile_dense.py`: `2,487` lines.
+- `dkx/problems/profile_response/auto_solve.py`: `550` lines.
+- `dkx/problems/profile_response/sparse_pc.py`: `3,761` lines.
+- `dkx/v3_driver.py`: `47` lines.
 
 Validation:
 
@@ -2814,9 +2814,9 @@ Validation:
   `522 passed in 43.29s`.
 - Scoped ruff passed for `profile_response.dense`, `profile_response.auto_solve`,
   and the moved linear-solve test.
-- `python -m py_compile sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_response/auto_solve.py
-  sfincs_jax/problems/profile_dense.py` passed.
+- `python -m py_compile dkx/problems/profile_solve.py
+  dkx/problems/profile_response/auto_solve.py
+  dkx/problems/profile_dense.py` passed.
 - `python -m sphinx -W -b html docs docs/_build/html` passed.
 
 Current lane status:
@@ -2846,12 +2846,12 @@ Next best steps:
 Steps taken:
 
 1. Moved the former top-level
-   `sfincs_jax/problems/profile_response/sparse_pc.py` module into
-   `sfincs_jax/problems/profile_sparse_handoff.py`.
+   `dkx/problems/profile_response/sparse_pc.py` module into
+   `dkx/problems/profile_sparse_handoff.py`.
 2. Rewrote source and focused tests to import the canonical sparse-package
    owner.
 3. Exported the handoff owner through
-   `sfincs_jax.problems.profile_response.sparse`.
+   `dkx.problems.profile_response.sparse`.
 4. Updated `docs/api.rst` and `docs/source_map.rst` so docs no longer point at
    deleted `profile_response/sparse_pc.py`, `profile_response/linear_solve.py`,
    `profile_response/finalization.py`, or `sparse/krylov.py` owners.
@@ -2860,18 +2860,18 @@ Current inventory:
 
 - Package Python files: `230`.
 - `problems/profile_response`: `24` Python files.
-- `sfincs_jax/problems/profile_solve.py`: `10,400` lines.
-- `sfincs_jax/problems/profile_sparse_handoff.py`: `3,761` lines.
-- `sfincs_jax/problems/profile_response/sparse_pc.py`: deleted.
-- `sfincs_jax/v3_driver.py`: `47` lines.
+- `dkx/problems/profile_solve.py`: `10,400` lines.
+- `dkx/problems/profile_sparse_handoff.py`: `3,761` lines.
+- `dkx/problems/profile_response/sparse_pc.py`: deleted.
+- `dkx/v3_driver.py`: `47` lines.
 
 Validation:
 
 - Focused sparse/RHSMode-1 tests passed: `498 passed in 42.21s`.
 - Scoped ruff passed for `profile_response.sparse.handoff`, sparse exports,
   `profile_response.solve`, and `tests/test_profile_response_sparse_pc.py`.
-- `python -m py_compile sfincs_jax/problems/profile_response/*.py
-  sfincs_jax/problems/profile_response/sparse/*.py` passed.
+- `python -m py_compile dkx/problems/profile_response/*.py
+  dkx/problems/profile_response/sparse/*.py` passed.
 - `python -m sphinx -W -b html docs docs/_build/html` passed.
 - `git diff --check` passed.
 
@@ -2903,12 +2903,12 @@ Next best steps:
 
 Steps taken:
 
-1. Merged `sfincs_jax/problems/profile_response/active_projection.py` into
-   `sfincs_jax/problems/profile_response/active_dof.py`.
-2. Merged `sfincs_jax/problems/profile_response/qi_device_seed.py` into
-   `sfincs_jax/problems/profile_sparse_qi.py`.
-3. Merged `sfincs_jax/problems/profile_response/strong_preconditioning.py`
-   into `sfincs_jax/problems/profile_preconditioner_build.py`.
+1. Merged `dkx/problems/profile_response/active_projection.py` into
+   `dkx/problems/profile_response/active_dof.py`.
+2. Merged `dkx/problems/profile_response/qi_device_seed.py` into
+   `dkx/problems/profile_sparse_qi.py`.
+3. Merged `dkx/problems/profile_response/strong_preconditioning.py`
+   into `dkx/problems/profile_preconditioner_build.py`.
 4. Rewrote source, tests, and docs to import the canonical owners.
 5. Updated `docs/source_map.rst` and `docs/api.rst` so the merged owners are
    documented once.
@@ -2917,11 +2917,11 @@ Current inventory:
 
 - Package Python files: `227`.
 - `problems/profile_response`: `21` Python files.
-- `sfincs_jax/problems/profile_solve.py`: `10,400` lines.
-- `sfincs_jax/problems/profile_response/active_projection.py`: deleted.
-- `sfincs_jax/problems/profile_response/qi_device_seed.py`: deleted.
-- `sfincs_jax/problems/profile_response/strong_preconditioning.py`: deleted.
-- `sfincs_jax/v3_driver.py`: `47` lines.
+- `dkx/problems/profile_solve.py`: `10,400` lines.
+- `dkx/problems/profile_response/active_projection.py`: deleted.
+- `dkx/problems/profile_response/qi_device_seed.py`: deleted.
+- `dkx/problems/profile_response/strong_preconditioning.py`: deleted.
+- `dkx/v3_driver.py`: `47` lines.
 
 Validation:
 
@@ -2930,8 +2930,8 @@ Validation:
 - Broader sparse/RHSMode-1 tests passed:
   `498 passed in 42.12s`.
 - Scoped ruff passed for touched profile-response source and tests.
-- `python -m py_compile sfincs_jax/problems/profile_response/*.py
-  sfincs_jax/problems/profile_response/sparse/*.py` passed.
+- `python -m py_compile dkx/problems/profile_response/*.py
+  dkx/problems/profile_response/sparse/*.py` passed.
 - `git diff --check` passed.
 
 Current lane status:
@@ -2966,10 +2966,10 @@ Steps taken:
    RHSMode-1 explicit sparse-pattern probing, sparse-JAX preconditioner
    materialization, host sparse direct factor-builder callback injection, host
    sparse direct polish, and unsharded submatrix probing from
-   `sfincs_jax/problems/profile_solve.py` into
-   `sfincs_jax/problems/profile_sparse_direct.py`.
+   `dkx/problems/profile_solve.py` into
+   `dkx/problems/profile_sparse_direct.py`.
 2. Kept the historical private names visible through `solve.py` imports so
-   existing solve-path calls and `sfincs_jax.v3_driver` compatibility imports
+   existing solve-path calls and `dkx.v3_driver` compatibility imports
    still resolve.
 3. Updated helper-internal tests to patch the canonical sparse-direct owner
    instead of patching old `v3_driver` globals for moved implementation
@@ -2981,15 +2981,15 @@ Current inventory:
 
 - Package Python files: `227`.
 - `problems/profile_response`: `21` Python files.
-- `sfincs_jax/problems/profile_solve.py`: `10,175` lines.
-- `sfincs_jax/problems/profile_sparse_direct.py`: `3,616` lines.
-- `sfincs_jax/v3_driver.py`: `47` lines.
+- `dkx/problems/profile_solve.py`: `10,175` lines.
+- `dkx/problems/profile_sparse_direct.py`: `3,616` lines.
+- `dkx/v3_driver.py`: `47` lines.
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_sparse_direct.py
-  sfincs_jax/problems/transport_solve.py` passed.
+- `python -m py_compile dkx/problems/profile_solve.py
+  dkx/problems/profile_sparse_direct.py
+  dkx/problems/transport_solve.py` passed.
 - Scoped ruff passed for touched source and tests.
 - Sparse-helper canonical-owner coverage passed:
   `15 passed in 0.74s`.
@@ -3025,10 +3025,10 @@ Next best steps:
 Steps taken:
 
 1. Moved the remaining current-backend RHSMode-1 dense/sparse/PAS/x-block
-   admission wrappers from `sfincs_jax/problems/profile_solve.py` into
-   `sfincs_jax/problems/profile_policies.py`.
+   admission wrappers from `dkx/problems/profile_solve.py` into
+   `dkx/problems/profile_policies.py`.
 2. Kept the historical private names visible through `solve.py` imports so
-   existing solve-path calls and `sfincs_jax.v3_driver` compatibility imports
+   existing solve-path calls and `dkx.v3_driver` compatibility imports
    still resolve.
 3. Updated `docs/source_map.rst` to remove stale top-level RHSMode-1 policy
    shard references and document `policies.py` as the owner of current-backend
@@ -3039,14 +3039,14 @@ Current inventory:
 
 - Package Python files: `227`.
 - `problems/profile_response`: `21` Python files.
-- `sfincs_jax/problems/profile_solve.py`: `9,730` lines.
-- `sfincs_jax/problems/profile_policies.py`: `6,876` lines.
-- `sfincs_jax/v3_driver.py`: `47` lines.
+- `dkx/problems/profile_solve.py`: `9,730` lines.
+- `dkx/problems/profile_policies.py`: `6,876` lines.
+- `dkx/v3_driver.py`: `47` lines.
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_policies.py` passed.
+- `python -m py_compile dkx/problems/profile_solve.py
+  dkx/problems/profile_policies.py` passed.
 - Scoped ruff passed for touched source.
 - Policy and heuristic coverage passed:
   `147 passed in 25.46s`.
@@ -3082,8 +3082,8 @@ Next best steps:
 Steps taken:
 
 1. Moved the current RHSMode-1 preconditioner registry and binding layer from
-   `sfincs_jax/problems/profile_solve.py` into
-   `sfincs_jax/problems/profile_preconditioner_build.py`.
+   `dkx/problems/profile_solve.py` into
+   `dkx/problems/profile_preconditioner_build.py`.
 2. The canonical owner now exposes the dispatch binding, PAS-family
    compatibility builders, Schur binding, x-block builder aliases,
    transport `tzfft` reuse, and strong fallback binding.
@@ -3099,18 +3099,18 @@ Current inventory:
 - Package source lines: `163,622`.
 - `problems/profile_response`: `21` Python files and `50,187` lines.
 - `solvers/preconditioners`: `50` Python files and `37,043` lines.
-- `sfincs_jax/problems/profile_solve.py`: `9,410` lines.
-- `sfincs_jax/problems/profile_preconditioner_build.py`: `2,683`
+- `dkx/problems/profile_solve.py`: `9,410` lines.
+- `dkx/problems/profile_preconditioner_build.py`: `2,683`
   lines.
-- `sfincs_jax/v3_driver.py`: `47` lines.
+- `dkx/v3_driver.py`: `47` lines.
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_preconditioner_build.py` passed.
+- `python -m py_compile dkx/problems/profile_solve.py
+  dkx/problems/profile_preconditioner_build.py` passed.
 - `python -m ruff check
-  sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_preconditioner_build.py` passed.
+  dkx/problems/profile_solve.py
+  dkx/problems/profile_preconditioner_build.py` passed.
 - `python -m ruff check
   tests/test_v3_driver_rhs1_dispatch_coverage.py
   tests/test_v3_driver_strong_fallback_coverage.py
@@ -3153,8 +3153,8 @@ Next best steps:
 Steps taken:
 
 1. Moved x-block sparse-PC final metadata/payload builders from
-   `sfincs_jax/problems/profile_sparse_handoff.py` into the canonical
-   x-block owner, `sfincs_jax/problems/profile_sparse_xblock.py`.
+   `dkx/problems/profile_sparse_handoff.py` into the canonical
+   x-block owner, `dkx/problems/profile_sparse_xblock.py`.
    `handoff.py` now re-exports those names only for compatibility.
 2. Updated `solve.py` to import the moved x-block final payload helpers from
    `sparse.xblock` rather than from the handoff compatibility surface.
@@ -3171,21 +3171,21 @@ Current inventory:
 
 - Package Python files: `227`.
 - Package source lines: `163,474`.
-- `sfincs_jax/problems/profile_solve.py`: `9,412` lines.
-- `sfincs_jax/problems/profile_sparse_direct.py`: `3,569` lines.
-- `sfincs_jax/problems/profile_sparse_handoff.py`: `3,649` lines.
-- `sfincs_jax/problems/profile_sparse_xblock.py`: `4,572` lines.
-- `sfincs_jax/problems/profile_sparse_qi.py`: `4,885` lines.
-- `sfincs_jax/problems/profile_sparse_fortran_reduced.py`: `1,335`
+- `dkx/problems/profile_solve.py`: `9,412` lines.
+- `dkx/problems/profile_sparse_direct.py`: `3,569` lines.
+- `dkx/problems/profile_sparse_handoff.py`: `3,649` lines.
+- `dkx/problems/profile_sparse_xblock.py`: `4,572` lines.
+- `dkx/problems/profile_sparse_qi.py`: `4,885` lines.
+- `dkx/problems/profile_sparse_fortran_reduced.py`: `1,335`
   lines.
-- `sfincs_jax/problems/profile_sparse_policy.py`: `1,133` lines.
+- `dkx/problems/profile_sparse_policy.py`: `1,133` lines.
 
 Validation:
 
-- `python -m ruff check sfincs_jax/problems/profile_response/sparse` passed.
+- `python -m ruff check dkx/problems/profile_response/sparse` passed.
 - `python -m py_compile
-  sfincs_jax/problems/profile_response/sparse/*.py
-  sfincs_jax/problems/profile_solve.py` passed.
+  dkx/problems/profile_response/sparse/*.py
+  dkx/problems/profile_solve.py` passed.
 - Sparse parser audit shows only `sparse/policy.py` owns the bool/int/float
   parser family under `problems/profile_response/sparse`; the remaining
   `fortran_reduced._env_float_first` is a different multi-key helper.
@@ -3221,21 +3221,21 @@ Steps taken:
 
 1. Deleted five obsolete top-level helper modules instead of keeping
    compatibility shims:
-   `sfincs_jax/solver_runtime.py`, `sfincs_jax/matrix_reductions.py`,
-   `sfincs_jax/solve_mode_policy.py`,
-   `sfincs_jax/solver_progress_policy.py`, and
-   `sfincs_jax/phase_timing.py`.
+   `dkx/solver_runtime.py`, `dkx/matrix_reductions.py`,
+   `dkx/solve_mode_policy.py`,
+   `dkx/solver_progress_policy.py`, and
+   `dkx/phase_timing.py`.
 2. Moved GMRES result finite-state and XLA readiness helpers into the canonical
-   Krylov owner, `sfincs_jax/solver.py`.
+   Krylov owner, `dkx/solver.py`.
 3. Moved diagonal and block-diagonal matrix-reduction helpers into
-   `sfincs_jax/solvers/preconditioner_operators.py`, where simplified
+   `dkx/solvers/preconditioner_operators.py`, where simplified
    preconditioner-operator shaping already lives.
 4. Moved implicit/differentiable solve-mode selection into
-   `sfincs_jax/problems/profile_policies.py`.
+   `dkx/problems/profile_policies.py`.
 5. Merged pure duration/runtime/progress-threshold helpers into
-   `sfincs_jax/solvers/progress.py`.
+   `dkx/solvers/progress.py`.
 6. Moved benchmark/audit phase timing into
-   `sfincs_jax/validation_artifacts.py`.
+   `dkx/validation_artifacts.py`.
 7. Rewrote source, script, docs, and focused-test imports to use canonical
    owners and removed stale API/source-map entries for the deleted modules.
 
@@ -3244,20 +3244,20 @@ Current inventory:
 - Package Python files: `222` (down from `227`).
 - Package-root Python files: `90` (down from `95`).
 - Package source lines: `163,423` (down from `163,474`).
-- `sfincs_jax/v3_driver.py`: `47` lines.
-- `sfincs_jax/problems/profile_solve.py`: `9,412` lines.
+- `dkx/v3_driver.py`: `47` lines.
+- `dkx/problems/profile_solve.py`: `9,412` lines.
 
 Validation:
 
 - `python -m ruff check
-  sfincs_jax/solver.py
-  sfincs_jax/solvers/preconditioner_operators.py
-  sfincs_jax/problems/profile_policies.py
-  sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_phi1_newton.py
-  sfincs_jax/problems/transport_solve.py
-  sfincs_jax/solvers/progress.py
-  sfincs_jax/validation_artifacts.py
+  dkx/solver.py
+  dkx/solvers/preconditioner_operators.py
+  dkx/problems/profile_policies.py
+  dkx/problems/profile_solve.py
+  dkx/problems/profile_phi1_newton.py
+  dkx/problems/transport_solve.py
+  dkx/solvers/progress.py
+  dkx/validation_artifacts.py
   tests/test_solver_runtime.py
   tests/test_matrix_reductions.py
   tests/test_phase_timing.py
@@ -3265,14 +3265,14 @@ Validation:
   tests/test_solver_progress_policy.py
   scripts/run_zenodo_vmec_parity_campaign.py` passed.
 - `python -m py_compile
-  sfincs_jax/solver.py
-  sfincs_jax/solvers/preconditioner_operators.py
-  sfincs_jax/problems/profile_policies.py
-  sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_phi1_newton.py
-  sfincs_jax/problems/transport_solve.py
-  sfincs_jax/solvers/progress.py
-  sfincs_jax/validation_artifacts.py` passed.
+  dkx/solver.py
+  dkx/solvers/preconditioner_operators.py
+  dkx/problems/profile_policies.py
+  dkx/problems/profile_solve.py
+  dkx/problems/profile_phi1_newton.py
+  dkx/problems/transport_solve.py
+  dkx/solvers/progress.py
+  dkx/validation_artifacts.py` passed.
 - Focused helper tests passed:
   `python -m pytest
   tests/test_solver_runtime.py
@@ -3326,20 +3326,20 @@ Next best steps:
 Steps taken:
 
 1. Deleted five more obsolete package-root implementation modules:
-   `sfincs_jax/linear_algebra.py`,
-   `sfincs_jax/newton_krylov_diagnostics.py`,
-   `sfincs_jax/phi1_line_search.py`, `sfincs_jax/sparse.py`, and
-   `sfincs_jax/verbose.py`.
+   `dkx/linear_algebra.py`,
+   `dkx/newton_krylov_diagnostics.py`,
+   `dkx/phi1_line_search.py`, `dkx/sparse.py`, and
+   `dkx/verbose.py`.
 2. Moved the differentiable tiny least-squares kernel and recycled Krylov
-   initial-guess builder into `sfincs_jax/solver.py`.
-3. Moved the JAX-native CSR matvec into `sfincs_jax/solvers/explicit_sparse.py`, where
+   initial-guess builder into `dkx/solver.py`.
+3. Moved the JAX-native CSR matvec into `dkx/solvers/explicit_sparse.py`, where
    sparse operator/factor infrastructure already lives.
 4. Moved deterministic `make_emit` and `Timer` utilities into
-   `sfincs_jax/profiling.py`.
+   `dkx/profiling.py`.
 5. Moved Phi1 accepted-iterate line-search/update logic into
-   `sfincs_jax/problems/profile_phi1_newton.py`.
+   `dkx/problems/profile_phi1_newton.py`.
 6. Moved optional Newton-Krylov PETSc-style KSP history replay into
-   `sfincs_jax/problems/profile_solver_diagnostics.py`.
+   `dkx/problems/profile_solver_diagnostics.py`.
 7. Rewrote source, example, test, and API docs imports to use the canonical
    owners; no compatibility shims were kept for the deleted modules.
 
@@ -3348,8 +3348,8 @@ Current inventory:
 - Package Python files: `217` (down from `222`).
 - Package-root Python files: `85` (down from `90`).
 - Package source lines: `163,358` (down from `163,423`).
-- `sfincs_jax/v3_driver.py`: `47` lines.
-- `sfincs_jax/problems/profile_solve.py`: `9,412` lines.
+- `dkx/v3_driver.py`: `47` lines.
+- `dkx/problems/profile_solve.py`: `9,412` lines.
 
 Validation:
 
@@ -3398,7 +3398,7 @@ Steps taken:
 
 1. Merged parent-side execution, payload packing, process-pool cache
    management, parent solve orchestration, and worker-result validation into
-   `sfincs_jax/problems/transport_parallel_runtime.py`.
+   `dkx/problems/transport_parallel_runtime.py`.
 2. Deleted five transport-parallel micro-files:
    `execution.py`, `payload.py`, `pool.py`, `solve.py`, and `validation.py`.
 3. Updated source, tests, examples, and docs so payload, execution, pool,
@@ -3415,11 +3415,11 @@ Current inventory:
 - Package Python files: `212` (down from `217`).
 - Package-root Python files: `85` (unchanged).
 - Package source lines: `163,301` (down from `163,358`).
-- `sfincs_jax/problems/transport_matrix`: `28` Python files.
-- `sfincs_jax/problems/transport_matrix/parallel`: `5` Python files including
+- `dkx/problems/transport_matrix`: `28` Python files.
+- `dkx/problems/transport_matrix/parallel`: `5` Python files including
   `__init__.py`; implementation owners are `runtime.py`, `policy.py`,
   `sharding.py`, and `worker.py`.
-- `sfincs_jax/problems/profile_solve.py`: `9,412` lines.
+- `dkx/problems/profile_solve.py`: `9,412` lines.
 
 Validation:
 
@@ -3470,7 +3470,7 @@ Next best steps:
 Steps taken:
 
 1. Moved six root validation/artifact policy modules into the canonical
-   `sfincs_jax.validation` package:
+   `dkx.validation` package:
    `validation/artifacts.py`, `validation/figures.py`, `validation/math.py`,
    `validation/benchmark_artifacts.py`, `validation/research_lanes.py`, and
    `validation/qi_device.py`.
@@ -3488,13 +3488,13 @@ Current inventory:
 
 - Package Python files: `212` (unchanged because files moved, not deleted).
 - Package-root Python files: `79` (down from `85`).
-- `sfincs_jax.validation`: `7` Python files including `__init__.py`.
+- `dkx.validation`: `7` Python files including `__init__.py`.
 
 Validation:
 
 - Scoped `ruff` passed for moved validation modules, touched scripts, touched
   tests, and `transport_matrix/parallel/runtime.py`.
-- `python -m py_compile` passed for `sfincs_jax/validation/*.py` and
+- `python -m py_compile` passed for `dkx/validation/*.py` and
   `transport_matrix/parallel/runtime.py`.
 - Focused validation/release tests passed:
   `python -m pytest tests/test_research_lane_policy.py
@@ -3533,7 +3533,7 @@ Next best steps:
 
 Steps taken:
 
-1. Moved nine workflow/evidence root modules into `sfincs_jax.workflows`
+1. Moved nine workflow/evidence root modules into `dkx.workflows`
    without compatibility shims:
    `optimization_comparison.py`, `optimization_evidence.py`,
    `optimization_ladder.py`, `optimization_objectives.py`,
@@ -3541,7 +3541,7 @@ Steps taken:
    `mapped_xgrid_objectives.py`, `mapped_xgrid_transport_evidence.py`, and
    `qi_res15_gpu_campaign.py`.
 2. Updated imports in tests, examples, scripts, and docs to canonical
-   `sfincs_jax.workflows.*` module paths.
+   `dkx.workflows.*` module paths.
 3. Updated workflow module relative imports after moving them below the
    package root.
 4. Updated `docs/validation_matrix.rst` so the mapped-xgrid source anchors
@@ -3551,11 +3551,11 @@ Current inventory:
 
 - Package Python files: `212` (unchanged because files moved, not merged).
 - Package-root Python files: `70` (down from `79`).
-- `sfincs_jax.workflows`: `10` Python files including `__init__.py`.
+- `dkx.workflows`: `10` Python files including `__init__.py`.
 
 Validation:
 
-- `python -m py_compile sfincs_jax/workflows/*.py` passed.
+- `python -m py_compile dkx/workflows/*.py` passed.
 - Scoped `ruff` passed for moved workflow modules, touched tests, touched
   scripts, and touched optimization examples.
 - Focused workflow tests passed:
@@ -3593,13 +3593,13 @@ Next best steps:
 
 Steps taken:
 
-1. Moved ten root solver utility modules into `sfincs_jax.solvers` without
+1. Moved ten root solver utility modules into `dkx.solvers` without
    compatibility shims:
    `path_policy.py`, `profile_compare.py`, `progress.py`,
    `selection_policy.py`, `state.py`, `trace.py`, `krylov_dispatch.py`,
    `implicit.py`, `memory_model.py`, and `sparse_triangular.py`.
 2. Updated source, tests, examples, scripts, docs, and release/validation
-   manifests to canonical `sfincs_jax.solvers.*` imports or source paths.
+   manifests to canonical `dkx.solvers.*` imports or source paths.
 3. Patched internal relative imports in IO/output/profile-response/PAS/x-block
    owners that still referenced the old root modules.
 
@@ -3607,7 +3607,7 @@ Current inventory:
 
 - Package Python files: `212` (unchanged because files moved, not merged).
 - Package-root Python files: `60` (down from `70`).
-- `sfincs_jax.solvers`: `11` top-level Python files including `__init__.py`,
+- `dkx.solvers`: `11` top-level Python files including `__init__.py`,
   plus preconditioner subpackages.
 
 Validation:
@@ -3652,13 +3652,13 @@ Next best steps:
 Steps taken:
 
 1. Moved the remaining reusable root solver/preconditioner implementation
-   family into `sfincs_jax.solvers` without compatibility shims:
+   family into `dkx.solvers` without compatibility shims:
    `explicit_sparse.py`, `explicit_sparse_factor_builder.py`,
    `explicit_sparse_factor_policy.py`, `native_block_factor.py`,
    `preconditioner_caches.py`, `preconditioner_context.py`,
    `preconditioner_operators.py`, and `preconditioner_setup.py`.
 2. Rewrote source, tests, examples, scripts, and docs to use canonical
-   `sfincs_jax.solvers.*` imports and source paths.
+   `dkx.solvers.*` imports and source paths.
 3. Fixed moved-module relative imports, including the lazy V3 full-system
    operator import used by x-block sparse preconditioner setup.
 4. Updated `plan_final.md` so it remains the single authoritative plan:
@@ -3669,7 +3669,7 @@ Current inventory:
 
 - Package Python files: `212` (unchanged because files moved, not merged).
 - Package-root Python files: `52` (down from `60`; root-count gate met).
-- `sfincs_jax.solvers`: `19` top-level Python files including `__init__.py`,
+- `dkx.solvers`: `19` top-level Python files including `__init__.py`,
   plus preconditioner subpackages.
 - `problems/profile_response`: `13` package files, with `solve.py` still the
   main blocker at `9,411` lines.
@@ -3725,8 +3725,8 @@ Next best steps:
 Steps taken:
 
 1. Moved the driver-facing RHSMode=1 x-block sparse-PC GMRES branch from
-   `sfincs_jax/problems/profile_solve.py` into the existing
-   `sfincs_jax/problems/profile_sparse_handoff.py` owner.
+   `dkx/problems/profile_solve.py` into the existing
+   `dkx/problems/profile_sparse_handoff.py` owner.
 2. Added `XBlockSparsePCBranchContext` and `run_xblock_sparse_pc_branch()` so
    the solve entry point passes solve-local state and callbacks explicitly.
    The numerical x-block stage kernels and final payload builders remain in
@@ -3744,9 +3744,9 @@ Current inventory:
 - Package Python files: `212`.
 - Package-root Python files: `52`.
 - Package source lines: `163,535`.
-- `sfincs_jax/problems/profile_solve.py`: `8,671` lines, down from
+- `dkx/problems/profile_solve.py`: `8,671` lines, down from
   `9,411` in the previous checkpoint.
-- `sfincs_jax/problems/profile_sparse_handoff.py`: `4,623` lines
+- `dkx/problems/profile_sparse_handoff.py`: `4,623` lines
   after taking the x-block sparse-PC branch orchestration.
 - `problems/profile_response`: `13` package files.
 
@@ -3754,8 +3754,8 @@ Validation:
 
 - Scoped `ruff` passed for `profile_solve.py`,
   `profile_sparse_handoff.py`, and the focused sparse/x-block tests.
-- `python -m py_compile sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_sparse_handoff.py` passed.
+- `python -m py_compile dkx/problems/profile_solve.py
+  dkx/problems/profile_sparse_handoff.py` passed.
 - Targeted x-block/export tests passed with `5 passed in 11.14 s`.
 - Broader sparse/profile-response regression passed:
   `python -m pytest tests/test_profile_response_sparse_pc.py
@@ -3790,13 +3790,13 @@ Next best steps:
 Steps taken:
 
 1. Consolidated the Schur RHSMode-1 implementation family into
-   `sfincs_jax.solvers.preconditioner_schur_profile`.
+   `dkx.solvers.preconditioner_schur_profile`.
 2. Deleted the historical implementation files:
    `schur/rhs1.py`, `schur/rhs1_coarse_basis.py`,
    `schur/rhs1_coarse_policy.py`, and `schur/rhs1_full_csr.py`.
 3. Updated package exports, tests, source-map documentation, and dependent
    x-block/symbolic-sparse imports to use the canonical Schur owner.
-4. Preserved the `sfincs_jax.v3_driver` compatibility behavior by keeping a
+4. Preserved the `dkx.v3_driver` compatibility behavior by keeping a
    local Schur wrapper in `profile_response.solve` that binds builder globals
    from that module, so existing monkeypatch/debug scripts still work without
    recreating old implementation files.
@@ -3850,8 +3850,8 @@ Next best steps:
 Steps taken:
 
 1. Moved the full-space sparse retry stage from
-   `sfincs_jax/problems/profile_solve.py` into the existing sparse
-   handoff owner, `sfincs_jax/problems/profile_sparse_handoff.py`.
+   `dkx/problems/profile_solve.py` into the existing sparse
+   handoff owner, `dkx/problems/profile_sparse_handoff.py`.
 2. Added `RHS1FullSparseRetryStageContext`,
    `RHS1FullSparseRetryStageResult`, and
    `run_rhs1_full_sparse_retry_stage` so the solve entry point now delegates
@@ -3874,10 +3874,10 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_sparse_handoff.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_sparse_handoff.py
+- `python -m py_compile dkx/problems/profile_solve.py
+  dkx/problems/profile_sparse_handoff.py` passed.
+- `python -m ruff check dkx/problems/profile_solve.py
+  dkx/problems/profile_sparse_handoff.py
   tests/test_profile_response_sparse_pc.py` passed.
 - `python -m pytest
   tests/test_profile_response_sparse_pc.py::test_rhs1_full_sparse_retry_stage_uses_measured_sparse_jax_path
@@ -3934,10 +3934,10 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_sparse_handoff.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_sparse_handoff.py
+- `python -m py_compile dkx/problems/profile_solve.py
+  dkx/problems/profile_sparse_handoff.py` passed.
+- `python -m ruff check dkx/problems/profile_solve.py
+  dkx/problems/profile_sparse_handoff.py
   tests/test_profile_response_sparse_pc.py` passed.
 - `python -m pytest
   tests/test_profile_response_sparse_pc.py::test_rhs1_sparse_retry_stage_uses_measured_sparse_jax_path
@@ -3974,7 +3974,7 @@ Steps taken:
 
 1. Added `RHS1ScipyRescueStageContext`,
    `RHS1ScipyRescueStageResult`, and `run_rhs1_scipy_rescue_stage` to
-   `sfincs_jax/problems/profile_dense.py`.
+   `dkx/problems/profile_dense.py`.
 2. Moved the CPU-only SciPy rescue admission, active-size-cap metadata,
    x-block skip message, rescue execution, improvement gate, and failure
    metadata out of `profile_solve.py`.
@@ -3996,10 +3996,10 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_dense.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_dense.py
+- `python -m py_compile dkx/problems/profile_solve.py
+  dkx/problems/profile_dense.py` passed.
+- `python -m ruff check dkx/problems/profile_solve.py
+  dkx/problems/profile_dense.py
   tests/test_profile_response_linear_solve.py` passed.
 - `python -m pytest
   tests/test_profile_response_linear_solve.py::test_run_rhs1_scipy_rescue_stage_accepts_improving_cpu_rescue
@@ -4040,14 +4040,14 @@ Steps taken:
    52 package-root Python files, `v3_driver.py` at 47 lines,
    `profile_solve.py` at 8,328 lines, and `io.py` at 4,263 lines.
 2. Confirmed that there are no top-level `rhs1_*.py` or `transport_*.py`
-   implementation/alias modules left in `sfincs_jax`.
+   implementation/alias modules left in `dkx`.
 3. Built an AST-backed root import inventory. The safe root cleanup target was
    validation/benchmark tooling, not core physics or public API modules.
 4. Moved these root validation helpers into canonical validation owners:
-   `sfincs_jax/fortran.py` -> `sfincs_jax/validation/fortran.py`,
-   `sfincs_jax/fortran_profile.py` ->
-   `sfincs_jax/validation/fortran_profile.py`, and
-   `sfincs_jax/h5_parity.py` -> `sfincs_jax/validation/h5_parity.py`.
+   `dkx/fortran.py` -> `dkx/validation/fortran.py`,
+   `dkx/fortran_profile.py` ->
+   `dkx/validation/fortran_profile.py`, and
+   `dkx/h5_parity.py` -> `dkx/validation/h5_parity.py`.
 5. Rewrote CLI, scripts, examples, and tests to import the new validation
    owners directly. No compatibility shim was kept because all in-repository
    callers were updated and these helpers are validation tooling, not the
@@ -4120,14 +4120,14 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/validation/fortran.py
-  sfincs_jax/validation/fortran_profile.py
-  sfincs_jax/validation/h5_parity.py sfincs_jax/cli.py
+- `python -m py_compile dkx/validation/fortran.py
+  dkx/validation/fortran_profile.py
+  dkx/validation/h5_parity.py dkx/cli.py
   scripts/summarize_fortran_v3_profile.py
   scripts/run_zenodo_vmec_parity_campaign.py
   scripts/compare_v3_example_suite.py
   examples/parity/geometry_scheme4_parity.py
-  examples/sfincs_examples/run_sfincs_jax.py
+  examples/sfincs_examples/run_dkx.py
   tests/test_fortran_profile.py tests/test_h5_parity.py
   tests/test_helper_module_coverage.py` passed.
 - `python -m ruff check` over the same touched source/script/example/test set
@@ -4163,10 +4163,10 @@ Steps taken:
 1. Audited `petsc_binary.py` imports. It is used by parity tests, debug
    scripts, and educational examples to read PETSc Vec/AIJ binary artifacts,
    not by production solve orchestration.
-2. Moved `sfincs_jax/petsc_binary.py` to
-   `sfincs_jax/validation/petsc_binary.py`.
+2. Moved `dkx/petsc_binary.py` to
+   `dkx/validation/petsc_binary.py`.
 3. Rewrote all in-repository imports and `docs/api.rst` to reference
-   `sfincs_jax.validation.petsc_binary` directly. No root compatibility shim
+   `dkx.validation.petsc_binary` directly. No root compatibility shim
    was kept because this is validation/debug tooling and the PR is explicitly
    migrating internal imports to canonical owners.
 
@@ -4188,13 +4188,13 @@ Validation:
   tests/test_transport_matrix_rhsmode3_parity.py
   tests/test_domain_package_import_contracts.py -q --tb=short` passed with
   `176 passed`.
-- `python -m ruff check sfincs_jax/validation/petsc_binary.py
-  sfincs_jax/validation/fortran.py
-  sfincs_jax/validation/fortran_profile.py
-  sfincs_jax/validation/h5_parity.py` passed.
-- Direct imports from `sfincs_jax.validation.petsc_binary`,
-  `sfincs_jax.validation.fortran`, `sfincs_jax.validation.fortran_profile`,
-  and `sfincs_jax.validation.h5_parity` passed.
+- `python -m ruff check dkx/validation/petsc_binary.py
+  dkx/validation/fortran.py
+  dkx/validation/fortran_profile.py
+  dkx/validation/h5_parity.py` passed.
+- Direct imports from `dkx.validation.petsc_binary`,
+  `dkx.validation.fortran`, `dkx.validation.fortran_profile`,
+  and `dkx.validation.h5_parity` passed.
 - `git diff --check` passed.
 - A full ruff pass over every import-rewritten parity/example file was not used
   as a gate for this checkpoint because it exposed pre-existing `E402`/`E741`
@@ -4281,8 +4281,8 @@ Next best steps:
 Steps taken:
 
 1. Moved the fortran-reduced x-block sparse-PC backend implementation out of
-   `sfincs_jax/problems/profile_solve.py` and into the existing
-   sparse owner `sfincs_jax/problems/profile_sparse_handoff.py`.
+   `dkx/problems/profile_solve.py` and into the existing
+   sparse owner `dkx/problems/profile_sparse_handoff.py`.
 2. Added `FortranReducedXBlockBackendContext` and
    `solve_fortran_reduced_xblock_backend` so the driver passes a typed context
    and receives the same linear-solve payload as before.
@@ -4302,10 +4302,10 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_sparse_handoff.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_sparse_handoff.py` passed.
+- `python -m py_compile dkx/problems/profile_solve.py
+  dkx/problems/profile_sparse_handoff.py` passed.
+- `python -m ruff check dkx/problems/profile_solve.py
+  dkx/problems/profile_sparse_handoff.py` passed.
 - `python -m pytest tests/test_profile_response_sparse_pc.py
   tests/test_rhs1_handoff.py tests/test_domain_package_import_contracts.py -q
   --tb=short` passed with `402 passed`.
@@ -4369,11 +4369,11 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_sparse_handoff.py
+- `python -m py_compile dkx/problems/profile_solve.py
+  dkx/problems/profile_sparse_handoff.py
   tests/test_domain_package_import_contracts.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_sparse_handoff.py
+- `python -m ruff check dkx/problems/profile_solve.py
+  dkx/problems/profile_sparse_handoff.py
   tests/test_domain_package_import_contracts.py` passed.
 - `python -m pytest tests/test_domain_package_import_contracts.py
   tests/test_profile_response_sparse_pc.py tests/test_rhs1_handoff.py -q
@@ -4442,11 +4442,11 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_sparse_handoff.py
+- `python -m py_compile dkx/problems/profile_solve.py
+  dkx/problems/profile_sparse_handoff.py
   tests/test_domain_package_import_contracts.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_sparse_handoff.py
+- `python -m ruff check dkx/problems/profile_solve.py
+  dkx/problems/profile_sparse_handoff.py
   tests/test_domain_package_import_contracts.py` passed.
 - `python -m pytest tests/test_domain_package_import_contracts.py
   tests/test_profile_response_sparse_pc.py tests/test_rhs1_handoff.py -q
@@ -4517,11 +4517,11 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_sparse_handoff.py
+- `python -m py_compile dkx/problems/profile_solve.py
+  dkx/problems/profile_sparse_handoff.py
   tests/test_domain_package_import_contracts.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_sparse_handoff.py
+- `python -m ruff check dkx/problems/profile_solve.py
+  dkx/problems/profile_sparse_handoff.py
   tests/test_domain_package_import_contracts.py` passed.
 - `python -m pytest tests/test_domain_package_import_contracts.py
   tests/test_profile_response_sparse_pc.py tests/test_rhs1_handoff.py -q
@@ -4620,10 +4620,10 @@ Steps taken:
 
 1. Moved RHSMode=1 result contracts (`V3LinearSolveResult`,
    `V3NewtonKrylovResult`, and `v3_linear_solve_result_from_payload`) into the
-   existing `sfincs_jax.problems.profile_solver_diagnostics` owner.
+   existing `dkx.problems.profile_solver_diagnostics` owner.
 2. Moved `V3TransportMatrixSolveResult` into the existing
-   `sfincs_jax.problems.transport_finalize` owner.
-3. Replaced `sfincs_jax/v3_results.py` with a 13-line compatibility facade for
+   `dkx.problems.transport_finalize` owner.
+3. Replaced `dkx/v3_results.py` with a 13-line compatibility facade for
    historical imports.
 4. Rewrote package-internal imports in profile-response, transport, parallel,
    and workflow modules to use the new domain owners directly.
@@ -4634,8 +4634,8 @@ Steps taken:
 
 Results:
 
-- Package-internal imports from `sfincs_jax.v3_results`: `0`.
-- `sfincs_jax/v3_results.py` decreased from `119` lines to `13` lines.
+- Package-internal imports from `dkx.v3_results`: `0`.
+- `dkx/v3_results.py` decreased from `119` lines to `13` lines.
 - Package file count remains `209`; package-root file count remains `48`.
 - Package source lines are `164,861`, below the `164,865` consolidation
   baseline.
@@ -4658,8 +4658,8 @@ Validation:
   tests/test_transport_matrix_rhsmode2_parity.py
   tests/test_transport_matrix_rhsmode3_parity.py -q --tb=short` passed with
   `36 passed`.
-- A direct compatibility import check confirmed `sfincs_jax.v3_results`
-  re-exports the domain-owned classes and `sfincs_jax.v3_driver` still imports
+- A direct compatibility import check confirmed `dkx.v3_results`
+  re-exports the domain-owned classes and `dkx.v3_driver` still imports
   as the profile-response solve module.
 - `git diff --check` passed.
 
@@ -4690,12 +4690,12 @@ Next best steps:
 Steps taken:
 
 1. Moved conservative and Fortran-reduced sparse structural patterns from the
-   historical root module `sfincs_jax/v3_sparse_pattern.py` into the
+   historical root module `dkx/v3_sparse_pattern.py` into the
    operator-domain owner
-   `sfincs_jax/operators/profile_sparse_pattern.py`.
+   `dkx/operators/profile_sparse_pattern.py`.
 2. Removed the historical root file instead of keeping a compatibility facade,
    because package-internal imports, docs, examples, scripts, and tests no
-   longer import `sfincs_jax.v3_sparse_pattern`.
+   longer import `dkx.v3_sparse_pattern`.
 3. Rewired sparse-pattern imports in profile-response full-system operators,
    sparse direct/preconditioner paths, transport-matrix sparse/direct helpers,
    and focused tests to use the operator-domain owner.
@@ -4712,8 +4712,8 @@ Steps taken:
 
 Results:
 
-- Package-internal imports from `sfincs_jax.v3_sparse_pattern`: `0`.
-- `sfincs_jax/v3_sparse_pattern.py` was removed from the package root.
+- Package-internal imports from `dkx.v3_sparse_pattern`: `0`.
+- `dkx/v3_sparse_pattern.py` was removed from the package root.
 - Package file count remains `209`; package-root file count decreases from
   `48` to `47`.
 - Package source lines are `164,891`. This is temporarily above the
@@ -4725,13 +4725,13 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_sparse_handoff.py
-  sfincs_jax/problems/profile_solve.py
-  sfincs_jax/operators/profile_sparse_pattern.py
+- `python -m py_compile dkx/problems/profile_sparse_handoff.py
+  dkx/problems/profile_solve.py
+  dkx/operators/profile_sparse_pattern.py
   tests/test_v3_sparse_pattern.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_sparse_handoff.py
-  sfincs_jax/problems/profile_solve.py
-  sfincs_jax/operators/profile_sparse_pattern.py
+- `python -m ruff check dkx/problems/profile_sparse_handoff.py
+  dkx/problems/profile_solve.py
+  dkx/operators/profile_sparse_pattern.py
   tests/test_v3_sparse_pattern.py` passed.
 - `python -m pytest
   tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_xblock_backend_solves_tiny_rhs1_system
@@ -4771,11 +4771,11 @@ Next best steps:
 Steps taken:
 
 1. Moved the RHSMode-1 matrix-free kinetic f-block implementation from the
-   historical root module `sfincs_jax/v3_fblock.py` into the operator-domain
-   owner `sfincs_jax/operators/profile_fblock.py`.
+   historical root module `dkx/v3_fblock.py` into the operator-domain
+   owner `dkx/operators/profile_fblock.py`.
 2. Removed the historical root file instead of keeping a compatibility facade,
    because package-internal imports, docs, examples, scripts, and focused
-   tests now import `sfincs_jax.operators.profile_fblock`.
+   tests now import `dkx.operators.profile_fblock`.
 3. Rewired direct imports in `v3_system.py`, `residual.py`, ambipolar helpers,
    examples, scripts, f-block tests, and residual/JVP tests to the new owner.
 4. Updated `docs/source_map.rst`, `docs/api.rst`,
@@ -4788,8 +4788,8 @@ Steps taken:
 
 Results:
 
-- Package-internal imports from `sfincs_jax.v3_fblock`: `0`.
-- `sfincs_jax/v3_fblock.py` was removed from the package root.
+- Package-internal imports from `dkx.v3_fblock`: `0`.
+- `dkx/v3_fblock.py` was removed from the package root.
 - Package file count remains `209`; package-root file count decreases from
   `47` to `46`.
 - Package source lines are `164,903`. This is still temporarily above the
@@ -4801,14 +4801,14 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/operators/profile_fblock.py
-  sfincs_jax/v3_system.py sfincs_jax/residual.py
-  sfincs_jax/problems/ambipolar.py tests/test_v3_fblock_smoke.py
+- `python -m py_compile dkx/operators/profile_fblock.py
+  dkx/v3_system.py dkx/residual.py
+  dkx/problems/ambipolar.py tests/test_v3_fblock_smoke.py
   tests/test_rhs1_fblock_assembly.py tests/test_domain_package_import_contracts.py`
   passed.
-- `python -m ruff check sfincs_jax/operators/profile_fblock.py
-  sfincs_jax/v3_system.py sfincs_jax/residual.py
-  sfincs_jax/problems/ambipolar.py tests/test_v3_fblock_smoke.py
+- `python -m ruff check dkx/operators/profile_fblock.py
+  dkx/v3_system.py dkx/residual.py
+  dkx/problems/ambipolar.py tests/test_v3_fblock_smoke.py
   tests/test_rhs1_fblock_assembly.py tests/test_domain_package_import_contracts.py`
   passed.
 - `python -m pytest tests/test_v3_fblock_smoke.py tests/test_residual_jvp.py
@@ -4820,8 +4820,8 @@ Validation:
   tests/test_fblock_fused_matvec.py tests/test_rhs1_fblock_assembly.py
   -q --tb=short` passed with `45 passed`.
 - A direct import check confirmed
-  `sfincs_jax.operators.profile_fblock.V3FBlockOperator.__module__`
-  is the new owner and `sfincs_jax.v3_fblock` is no longer importable.
+  `dkx.operators.profile_fblock.V3FBlockOperator.__module__`
+  is the new owner and `dkx.v3_fblock` is no longer importable.
 
 Progress:
 
@@ -4851,11 +4851,11 @@ Next best steps:
 Steps taken:
 
 1. Moved the matrix-free full-system profile-response operator from the
-   historical root module `sfincs_jax/v3_system.py` into the operator-domain
-   owner `sfincs_jax/operators/profile_system.py`.
+   historical root module `dkx/v3_system.py` into the operator-domain
+   owner `dkx/operators/profile_system.py`.
 2. Removed the historical root file instead of keeping a compatibility facade,
    because package-internal imports, docs, examples, scripts, and focused
-   tests now import `sfincs_jax.operators.profile_system`.
+   tests now import `dkx.operators.profile_system`.
 3. Rewired imports across profile-response, transport-matrix, preconditioner,
    residual, output, examples, scripts, and tests to the new owner.
 4. Updated docs and import contracts so `operators.profile_response.system`
@@ -4867,8 +4867,8 @@ Steps taken:
 
 Results:
 
-- Package-internal imports from `sfincs_jax.v3_system`: `0`.
-- `sfincs_jax/v3_system.py` was removed from the package root.
+- Package-internal imports from `dkx.v3_system`: `0`.
+- `dkx/v3_system.py` was removed from the package root.
 - Package file count remains `209`; package-root file count decreases from
   `46` to `45`.
 - Package source lines are `164,907`; still above the `164,865`
@@ -4878,16 +4878,16 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/operators/profile_system.py
-  sfincs_jax/residual.py sfincs_jax/constraint_projection.py
-  sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/transport_solve.py
+- `python -m py_compile dkx/operators/profile_system.py
+  dkx/residual.py dkx/constraint_projection.py
+  dkx/problems/profile_solve.py
+  dkx/problems/transport_solve.py
   tests/test_full_system_operator_jit.py tests/test_v3_system_cached_matvec.py`
   passed.
-- `python -m ruff check sfincs_jax/operators/profile_system.py
-  sfincs_jax/residual.py sfincs_jax/constraint_projection.py
-  sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/transport_solve.py
+- `python -m ruff check dkx/operators/profile_system.py
+  dkx/residual.py dkx/constraint_projection.py
+  dkx/problems/profile_solve.py
+  dkx/problems/transport_solve.py
   tests/test_full_system_operator_jit.py tests/test_v3_system_cached_matvec.py`
   passed.
 - `python -m pytest tests/test_domain_package_import_contracts.py
@@ -4934,13 +4934,13 @@ Next best steps:
 Steps taken:
 
 1. Moved the SFINCS-v3-compatible grid/geometry implementation from the
-   historical root module `sfincs_jax/v3.py` into
-   `sfincs_jax/discretization/v3.py`.
+   historical root module `dkx/v3.py` into
+   `dkx/discretization/v3.py`.
 2. Rewrote package-internal imports to the domain owner, including diagnostics,
    I/O, output-cache helpers, profile-response f-block/full-system operators,
    transport parallel runtime, and profile-response solve orchestration.
 3. Migrated docs, examples, scripts, and focused tests away from
-   `sfincs_jax.v3` to `sfincs_jax.discretization.v3`, so the historical root
+   `dkx.v3` to `dkx.discretization.v3`, so the historical root
    facade could be deleted instead of preserved.
 4. Updated `docs/api.rst`, `docs/source_map.rst`,
    `docs/performance_techniques.rst`, `docs/inputs.rst`,
@@ -4953,10 +4953,10 @@ Steps taken:
 
 Results:
 
-- Package-internal imports from `sfincs_jax.v3`: `0`.
-- Repo references to `sfincs_jax.v3` or `sfincs_jax/v3.py`: `0`, except the
+- Package-internal imports from `dkx.v3`: `0`.
+- Repo references to `dkx.v3` or `dkx/v3.py`: `0`, except the
   intentional historical-owner note in `docs/source_map.rst`.
-- `sfincs_jax/v3.py` was deleted.
+- `dkx/v3.py` was deleted.
 - Package file count remains `209`; package-root file count decreases from
   `45` to `44`, meeting the Sweep 0 package-root target.
 - Package source lines are `164,911`; still above the `164,865`
@@ -4965,17 +4965,17 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/discretization/v3.py
-  sfincs_jax/diagnostics.py sfincs_jax/io.py
-  sfincs_jax/operators/profile_fblock.py
-  sfincs_jax/operators/profile_system.py
-  sfincs_jax/problems/profile_solve.py
+- `python -m py_compile dkx/discretization/v3.py
+  dkx/diagnostics.py dkx/io.py
+  dkx/operators/profile_fblock.py
+  dkx/operators/profile_system.py
+  dkx/problems/profile_solve.py
   tests/test_domain_package_import_contracts.py` passed.
-- `python -m ruff check sfincs_jax/discretization/v3.py
-  sfincs_jax/diagnostics.py sfincs_jax/io.py
-  sfincs_jax/operators/profile_fblock.py
-  sfincs_jax/operators/profile_system.py
-  sfincs_jax/problems/profile_solve.py
+- `python -m ruff check dkx/discretization/v3.py
+  dkx/diagnostics.py dkx/io.py
+  dkx/operators/profile_fblock.py
+  dkx/operators/profile_system.py
+  dkx/problems/profile_solve.py
   tests/test_domain_package_import_contracts.py` passed.
 - `python -m pytest tests/test_domain_package_import_contracts.py
   tests/test_mapped_xgrid_v3.py tests/test_v3_geometry_scheme4.py
@@ -5069,7 +5069,7 @@ Steps taken:
 
 1. Added `SparsePCFactorPreflightRunContext`,
    `SparsePCFactorPreflightRunResult`, and `run_sparse_pc_factor_preflight()`
-   to `sfincs_jax.problems.profile_sparse_handoff`, keeping the
+   to `dkx.problems.profile_sparse_handoff`, keeping the
    factor-preflight evaluator and progress messages inside the existing sparse
    owner instead of adding another helper file.
 2. Replaced the inline factor-preflight execution block in
@@ -5092,10 +5092,10 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_sparse_handoff.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_sparse_handoff.py` passed.
+- `python -m py_compile dkx/problems/profile_solve.py
+  dkx/problems/profile_sparse_handoff.py` passed.
+- `python -m ruff check dkx/problems/profile_solve.py
+  dkx/problems/profile_sparse_handoff.py` passed.
 - `python -m pytest
   tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_xblock_backend_solves_tiny_rhs1_system
   tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_structured_pc_preflight_can_fail_fast
@@ -5157,10 +5157,10 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_sparse_handoff.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_sparse_handoff.py` passed.
+- `python -m py_compile dkx/problems/profile_solve.py
+  dkx/problems/profile_sparse_handoff.py` passed.
+- `python -m ruff check dkx/problems/profile_solve.py
+  dkx/problems/profile_sparse_handoff.py` passed.
 - `python -m pytest
   tests/test_v3_sparse_pattern.py::test_fortran_reduced_pc_gmres_xblock_backend_solves_tiny_rhs1_system
   tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_structured_pc_preflight_can_fail_fast
@@ -5225,10 +5225,10 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_sparse_handoff.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_sparse_handoff.py` passed.
+- `python -m py_compile dkx/problems/profile_solve.py
+  dkx/problems/profile_sparse_handoff.py` passed.
+- `python -m ruff check dkx/problems/profile_solve.py
+  dkx/problems/profile_sparse_handoff.py` passed.
 - `python -m pytest
   tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_true_coupled_coarse_records_bounded_metadata
   tests/test_v3_sparse_pattern.py::test_fortran_reduced_direct_tail_true_coupled_coarse_auto_promotes_active_lu
@@ -5291,10 +5291,10 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_sparse_handoff.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_sparse_handoff.py` passed.
+- `python -m py_compile dkx/problems/profile_solve.py
+  dkx/problems/profile_sparse_handoff.py` passed.
+- `python -m ruff check dkx/problems/profile_solve.py
+  dkx/problems/profile_sparse_handoff.py` passed.
 - `python -m pytest
   tests/test_profile_response_sparse_pc.py::test_sparse_pc_residual_candidate_acceptance_base_improvement_override_sets_passed
   tests/test_v3_sparse_pattern.py::test_true_operator_residual_window_lsq_reduces_global_residual
@@ -5327,15 +5327,15 @@ Next best steps:
 
 Steps taken:
 
-1. Confirmed `sfincs_jax/v3_results.py` had no package-internal imports; only
+1. Confirmed `dkx/v3_results.py` had no package-internal imports; only
    docs and tests still used the 13-line compatibility facade.
 2. Rewrote `tests/test_v3_results.py` and
    `tests/test_profile_response_finalization.py` to import result contracts
    from their canonical problem owners:
    `problems.profile_response.solver_diagnostics` and
    `problems.transport_matrix.finalize`.
-3. Removed the `sfincs_jax.v3_results` API page entry and source-map entry.
-4. Deleted `sfincs_jax/v3_results.py`.
+3. Removed the `dkx.v3_results` API page entry and source-map entry.
+4. Deleted `dkx/v3_results.py`.
 5. Updated `plan_final.md` so `v3_results.py` is listed with the deleted
    historical roots and `v3_driver.py` is the only remaining `v3_*` root shim.
 
@@ -5343,7 +5343,7 @@ Results:
 
 - Package Python files decreased from `209` to `208`.
 - Package-root Python files decreased from `44` to `43`.
-- Only `sfincs_jax/v3_driver.py` remains under the package root matching
+- Only `dkx/v3_driver.py` remains under the package root matching
   `v3_*.py`.
 - Top-level `rhs1_*` and `transport_*` aliases remain deleted.
 
@@ -5395,10 +5395,10 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_sparse_handoff.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_solve.py
-  sfincs_jax/problems/profile_sparse_handoff.py` passed.
+- `python -m py_compile dkx/problems/profile_solve.py
+  dkx/problems/profile_sparse_handoff.py` passed.
+- `python -m ruff check dkx/problems/profile_solve.py
+  dkx/problems/profile_sparse_handoff.py` passed.
 - `git diff --check` passed.
 - `python -m pytest
   tests/test_profile_response_sparse_pc.py::test_sparse_pc_residual_candidate_acceptance_base_improvement_override_sets_passed
@@ -5436,8 +5436,8 @@ Steps taken:
 1. Moved sparse-PC GMRES attempt helpers, stagnation/progress callback logic,
    typed finalization state builders, finalization bundle construction, and
    final GMRES payload construction from
-   `sfincs_jax/problems/profile_sparse_handoff.py` to the existing
-   `sfincs_jax/problems/profile_sparse_finalization.py` owner.
+   `dkx/problems/profile_sparse_handoff.py` to the existing
+   `dkx/problems/profile_sparse_finalization.py` owner.
 2. Kept the legacy sparse handoff import surface stable by importing and
    re-exporting the moved names from the compatibility layer.
 3. Updated sparse-PC import-contract tests so the canonical owner is now
@@ -5462,8 +5462,8 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_sparse_finalization.py sfincs_jax/problems/profile_sparse_handoff.py sfincs_jax/problems/profile_solve.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_sparse_finalization.py sfincs_jax/problems/profile_sparse_handoff.py sfincs_jax/problems/profile_solve.py tests/test_profile_response_sparse_pc.py` passed.
+- `python -m py_compile dkx/problems/profile_sparse_finalization.py dkx/problems/profile_sparse_handoff.py dkx/problems/profile_solve.py` passed.
+- `python -m ruff check dkx/problems/profile_sparse_finalization.py dkx/problems/profile_sparse_handoff.py dkx/problems/profile_solve.py tests/test_profile_response_sparse_pc.py` passed.
 - `python -m pytest tests/test_profile_response_sparse_pc.py -q --tb=short`
   passed with `329 passed in 3.09s`.
 - `python -m pytest
@@ -5502,8 +5502,8 @@ Next best steps:
 Steps taken:
 
 1. Moved the x-block branch/setup/stage cluster from
-   `sfincs_jax/problems/profile_sparse_handoff.py` to the existing
-   `sfincs_jax/problems/profile_sparse_xblock.py` owner. This moved
+   `dkx/problems/profile_sparse_handoff.py` to the existing
+   `dkx/problems/profile_sparse_xblock.py` owner. This moved
    x-block sparse-PC setup policy, side-policy setup, assembled-operator
    setup/preflight/device/matvec helpers, local preconditioner setup,
    moment-Schur/two-level/global-coupling stage helpers, seed policy setup,
@@ -5531,8 +5531,8 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_sparse_xblock.py sfincs_jax/problems/profile_sparse_handoff.py sfincs_jax/problems/profile_solve.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_sparse_xblock.py sfincs_jax/problems/profile_sparse_handoff.py sfincs_jax/problems/profile_solve.py tests/test_profile_response_sparse_pc.py` passed.
+- `python -m py_compile dkx/problems/profile_sparse_xblock.py dkx/problems/profile_sparse_handoff.py dkx/problems/profile_solve.py` passed.
+- `python -m ruff check dkx/problems/profile_sparse_xblock.py dkx/problems/profile_sparse_handoff.py dkx/problems/profile_solve.py tests/test_profile_response_sparse_pc.py` passed.
 - `python -m pytest tests/test_profile_response_sparse_pc.py -q --tb=short`
   passed with `329 passed in 2.66s`.
 - `python -m pytest tests/test_domain_package_import_contracts.py tests/test_profile_response_sparse_pc.py::test_sparse_xblock_module_reexports_match_compat_layer -q --tb=short`
@@ -5613,8 +5613,8 @@ Next best steps:
 
 Steps taken:
 
-1. Merged `sfincs_jax/problems/profile_response/active_dof.py` into the
-   existing `sfincs_jax/problems/profile_setup.py` owner. Active-DOF
+1. Merged `dkx/problems/profile_response/active_dof.py` into the
+   existing `dkx/problems/profile_setup.py` owner. Active-DOF
    decisions, active index maps, full/reduced JAX gather/scatter primitives,
    PAS constraint projection, FP pitch-mode active-index selection, and final
    RHSMode-1 cleanup now live with the setup/finalization contracts that use
@@ -5638,8 +5638,8 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_setup.py sfincs_jax/problems/profile_solve.py sfincs_jax/problems/profile_solver_diagnostics.py tests/test_rhs1_active_dof.py tests/test_rhs1_active_projection.py tests/test_profile_response_active_projection.py tests/test_profile_response_sparse_pc.py tests/test_domain_package_import_contracts.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_setup.py sfincs_jax/problems/profile_solve.py sfincs_jax/problems/profile_solver_diagnostics.py tests/test_rhs1_active_dof.py tests/test_rhs1_active_projection.py tests/test_profile_response_active_projection.py tests/test_profile_response_sparse_pc.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m py_compile dkx/problems/profile_setup.py dkx/problems/profile_solve.py dkx/problems/profile_solver_diagnostics.py tests/test_rhs1_active_dof.py tests/test_rhs1_active_projection.py tests/test_profile_response_active_projection.py tests/test_profile_response_sparse_pc.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m ruff check dkx/problems/profile_setup.py dkx/problems/profile_solve.py dkx/problems/profile_solver_diagnostics.py tests/test_rhs1_active_dof.py tests/test_rhs1_active_projection.py tests/test_profile_response_active_projection.py tests/test_profile_response_sparse_pc.py tests/test_domain_package_import_contracts.py` passed.
 - `python -m pytest tests/test_rhs1_active_dof.py tests/test_rhs1_active_projection.py tests/test_profile_response_active_projection.py tests/test_profile_response_setup.py tests/test_domain_package_import_contracts.py -q --tb=short` passed with `39 passed`.
 - `python -m pytest tests/test_profile_response_sparse_pc.py -q --tb=short`
   passed with `329 passed`.
@@ -5661,8 +5661,8 @@ Next best steps:
 Steps taken:
 
 1. Merged the transport retry/residual polish relay
-   `sfincs_jax/problems/transport_matrix/handoff_policy.py` into the durable
-   transport policy owner `sfincs_jax/problems/transport_policies.py`.
+   `dkx/problems/transport_matrix/handoff_policy.py` into the durable
+   transport policy owner `dkx/problems/transport_policies.py`.
 2. Rewired `profile_solve.py`, focused handoff-policy tests, import
    contract tests, API docs, and the source map to import the policy owner
    directly.
@@ -5676,7 +5676,7 @@ Results:
 - Package Python files decreased from `205` to `204`.
 - `problems/transport_matrix` files including `parallel/` decreased from `28`
   to `27`.
-- `sfincs_jax/problems/transport_policies.py` is now `747` lines and
+- `dkx/problems/transport_policies.py` is now `747` lines and
   owns dense/sparse/direct/tzfft runtime admission plus RHSMode-3 polish
   retry policy.
 - The Batch B review-ready gate remains open: transport matrix plus
@@ -5684,8 +5684,8 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/transport_policies.py sfincs_jax/problems/transport_solve.py sfincs_jax/problems/profile_solve.py tests/test_transport_handoff_policy.py tests/test_domain_package_import_contracts.py` passed.
-- `python -m ruff check sfincs_jax/problems/transport_policies.py sfincs_jax/problems/transport_solve.py sfincs_jax/problems/profile_solve.py tests/test_transport_handoff_policy.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m py_compile dkx/problems/transport_policies.py dkx/problems/transport_solve.py dkx/problems/profile_solve.py tests/test_transport_handoff_policy.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m ruff check dkx/problems/transport_policies.py dkx/problems/transport_solve.py dkx/problems/profile_solve.py tests/test_transport_handoff_policy.py tests/test_domain_package_import_contracts.py` passed.
 - `python -m pytest tests/test_transport_handoff_policy.py tests/test_domain_package_import_contracts.py tests/test_transport_solve_policy.py -q --tb=short` passed with `26 passed`.
 - `sphinx-build -W -b html docs docs/_build/html` passed.
 
@@ -5705,12 +5705,12 @@ Next best steps:
 
 Steps taken:
 
-1. Merged `sfincs_jax/problems/transport_matrix/solve_policy.py` into the
-   durable owner `sfincs_jax/problems/transport_policies.py`.
+1. Merged `dkx/problems/transport_matrix/solve_policy.py` into the
+   durable owner `dkx/problems/transport_policies.py`.
    Geometry-scheme parsing, low-memory output policy, active-DOF admission,
    dense fallback/preconditioner admission, state-vector retention, GMRES
    budgets, and per-`whichRHS` loop policy now live in the policy owner.
-2. Merged `sfincs_jax/problems/transport_matrix/preconditioner_dispatch.py`
+2. Merged `dkx/problems/transport_matrix/preconditioner_dispatch.py`
    into the same policy owner. Preconditioner-kind normalization, automatic
    transport preconditioner selection, DD/sparse-JAX environment parsing,
    reduced/full builder dispatch, and strong-preconditioner caching now live
@@ -5729,7 +5729,7 @@ Results:
 - Package source lines decreased from `165,574` to `165,517`.
 - `problems/transport_matrix` files including `parallel/` decreased from `27`
   to `25`.
-- `sfincs_jax/problems/transport_policies.py` is now `2,123` lines and
+- `dkx/problems/transport_policies.py` is now `2,123` lines and
   owns the transport runtime, solve, retry, active/dense, and preconditioner
   dispatch policy family.
 - The Batch B transport file-count gate remains open: `25` files must decrease
@@ -5737,8 +5737,8 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/transport_policies.py sfincs_jax/problems/transport_matrix/active_dense.py sfincs_jax/problems/profile_solve.py tests/test_transport_solve_policy.py tests/test_transport_preconditioner_dispatch.py tests/test_domain_package_import_contracts.py` passed.
-- `python -m ruff check sfincs_jax/problems/transport_policies.py sfincs_jax/problems/transport_matrix/active_dense.py sfincs_jax/problems/profile_solve.py tests/test_transport_solve_policy.py tests/test_transport_preconditioner_dispatch.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m py_compile dkx/problems/transport_policies.py dkx/problems/transport_matrix/active_dense.py dkx/problems/profile_solve.py tests/test_transport_solve_policy.py tests/test_transport_preconditioner_dispatch.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m ruff check dkx/problems/transport_policies.py dkx/problems/transport_matrix/active_dense.py dkx/problems/profile_solve.py tests/test_transport_solve_policy.py tests/test_transport_preconditioner_dispatch.py tests/test_domain_package_import_contracts.py` passed.
 - `python -m pytest tests/test_transport_solve_policy.py tests/test_transport_preconditioner_dispatch.py tests/test_transport_active_dense_setup.py tests/test_domain_package_import_contracts.py -q --tb=short` passed with `54 passed`.
 - `python -m pytest tests/test_transport_*.py -q --tb=short` passed with
   `273 passed`.
@@ -5762,18 +5762,18 @@ Next best steps:
 
 Steps taken:
 
-1. Merged `sfincs_jax/problems/transport_matrix/dense_lu.py` into
-   `sfincs_jax/problems/transport_solve.py`. Dense-LU solver and
+1. Merged `dkx/problems/transport_matrix/dense_lu.py` into
+   `dkx/problems/transport_solve.py`. Dense-LU solver and
    preconditioner construction now live with the transport solve branches that
    call them.
-2. Merged `sfincs_jax/problems/transport_matrix/host_gmres.py` into
+2. Merged `dkx/problems/transport_matrix/host_gmres.py` into
    `transport_matrix/solve.py`. The explicit host SciPy GMRES fallback/rescue
    helper now lives with solve orchestration while keeping the same residual
    acceptance policy from `transport_matrix/policies.py`.
-3. Merged `sfincs_jax/problems/transport_matrix/iteration_stats.py` into
+3. Merged `dkx/problems/transport_matrix/iteration_stats.py` into
    `transport_matrix/solve.py`. Optional host-side Krylov history diagnostics
    now live with the solve owner and remain non-fatal.
-4. Merged `sfincs_jax/problems/transport_matrix/residual_quality.py` into
+4. Merged `dkx/problems/transport_matrix/residual_quality.py` into
    `transport_matrix/policies.py`. Transport worker residual-abort threshold
    parsing and diagnostic formatting now live with policy, and both sequential
    and parallel transport paths import that owner.
@@ -5797,8 +5797,8 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/transport_solve.py sfincs_jax/problems/transport_policies.py sfincs_jax/problems/transport_matrix/loop.py sfincs_jax/problems/transport_parallel_runtime.py sfincs_jax/problems/profile_solve.py tests/test_transport_dense_lu.py tests/test_transport_host_gmres.py tests/test_transport_iteration_stats.py tests/test_transport_residual_quality.py tests/test_domain_package_import_contracts.py` passed.
-- `python -m ruff check sfincs_jax/problems/transport_solve.py sfincs_jax/problems/transport_policies.py sfincs_jax/problems/transport_matrix/loop.py sfincs_jax/problems/transport_parallel_runtime.py sfincs_jax/problems/profile_solve.py tests/test_transport_dense_lu.py tests/test_transport_host_gmres.py tests/test_transport_iteration_stats.py tests/test_transport_residual_quality.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m py_compile dkx/problems/transport_solve.py dkx/problems/transport_policies.py dkx/problems/transport_matrix/loop.py dkx/problems/transport_parallel_runtime.py dkx/problems/profile_solve.py tests/test_transport_dense_lu.py tests/test_transport_host_gmres.py tests/test_transport_iteration_stats.py tests/test_transport_residual_quality.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m ruff check dkx/problems/transport_solve.py dkx/problems/transport_policies.py dkx/problems/transport_matrix/loop.py dkx/problems/transport_parallel_runtime.py dkx/problems/profile_solve.py tests/test_transport_dense_lu.py tests/test_transport_host_gmres.py tests/test_transport_iteration_stats.py tests/test_transport_residual_quality.py tests/test_domain_package_import_contracts.py` passed.
 - `python -m pytest tests/test_transport_dense_lu.py tests/test_transport_host_gmres.py tests/test_transport_iteration_stats.py tests/test_transport_residual_quality.py tests/test_transport_loop_support.py tests/test_transport_parallel_runtime.py tests/test_domain_package_import_contracts.py -q --tb=short` passed with `44 passed`.
 - `python -m pytest tests/test_transport_*.py -q --tb=short` passed with
   `273 passed`.
@@ -5822,16 +5822,16 @@ Next best steps:
 
 Steps taken:
 
-1. Merged `sfincs_jax/problems/transport_matrix/dense_batch.py` into
-   `sfincs_jax/problems/transport_solve.py`. All-RHS dense transport
+1. Merged `dkx/problems/transport_matrix/dense_batch.py` into
+   `dkx/problems/transport_solve.py`. All-RHS dense transport
    matrix assembly, active-DOF projection, streamed diagnostic collection,
    residual bookkeeping, and per-`whichRHS` dense progress emission now live
    with the solve owner.
-2. Merged `sfincs_jax/problems/transport_matrix/loop.py` into
+2. Merged `dkx/problems/transport_matrix/loop.py` into
    `transport_matrix/solve.py`. Full/reduced matvec caching, bounded recycle
    bases, stored-state recycle seeding, recycled initial guesses, residual
    gates, and ETA progress bookkeeping now live with solve orchestration.
-3. Merged `sfincs_jax/problems/transport_matrix/sparse_direct_solve.py` into
+3. Merged `dkx/problems/transport_matrix/sparse_direct_solve.py` into
    `transport_matrix/solve.py`. Sparse-pattern admission/caching, direct
    active FP operator factor reuse, explicit sparse helper materialization,
    fallback sparse-ILU setup, host iterative refinement, float32 polish, and
@@ -5853,8 +5853,8 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/transport_solve.py sfincs_jax/problems/transport_policies.py sfincs_jax/problems/profile_solve.py tests/test_transport_dense_batch.py tests/test_transport_loop_support.py tests/test_transport_sparse_direct_solve.py tests/test_domain_package_import_contracts.py` passed.
-- `python -m ruff check sfincs_jax/problems/transport_solve.py sfincs_jax/problems/transport_policies.py sfincs_jax/problems/profile_solve.py tests/test_transport_dense_batch.py tests/test_transport_loop_support.py tests/test_transport_sparse_direct_solve.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m py_compile dkx/problems/transport_solve.py dkx/problems/transport_policies.py dkx/problems/profile_solve.py tests/test_transport_dense_batch.py tests/test_transport_loop_support.py tests/test_transport_sparse_direct_solve.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m ruff check dkx/problems/transport_solve.py dkx/problems/transport_policies.py dkx/problems/profile_solve.py tests/test_transport_dense_batch.py tests/test_transport_loop_support.py tests/test_transport_sparse_direct_solve.py tests/test_domain_package_import_contracts.py` passed.
 - `python -m pytest tests/test_transport_dense_batch.py tests/test_transport_loop_support.py tests/test_transport_sparse_direct_solve.py tests/test_transport_dense_lu.py tests/test_transport_host_gmres.py tests/test_transport_iteration_stats.py tests/test_transport_residual_quality.py tests/test_domain_package_import_contracts.py -q --tb=short` passed with `36 passed`.
 - `python -m pytest tests/test_transport_*.py -q --tb=short` passed with
   `273 passed`.
@@ -5881,13 +5881,13 @@ Steps taken:
 
 1. Moved the full explicitly requested `sparse_pc_gmres` /
    `xblock_sparse_pc_gmres` branch out of
-   `sfincs_jax/problems/profile_solve.py` into the existing
-   `sfincs_jax/problems/profile_sparse_handoff.py` sparse owner.
+   `dkx/problems/profile_solve.py` into the existing
+   `dkx/problems/profile_sparse_handoff.py` sparse owner.
    The solve entry point now delegates through
    `try_run_requested_sparse_pc_gmres_branch(...)`.
 2. Moved the large default RHSMode-1 preconditioner selection policy block out
    of `profile_solve.py` into
-   `sfincs_jax/problems/profile_policies.py` as
+   `dkx/problems/profile_policies.py` as
    `resolve_rhs1_default_preconditioner_selection(...)`.
 3. Kept behavior stable by passing the existing driver scope into the moved
    owner functions and by updating only the values that the moved policy branch
@@ -5914,8 +5914,8 @@ Results:
 
 Validation:
 
-- `python -m py_compile sfincs_jax/problems/profile_solve.py sfincs_jax/problems/profile_sparse_handoff.py sfincs_jax/problems/profile_policies.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_solve.py sfincs_jax/problems/profile_sparse_handoff.py sfincs_jax/problems/profile_policies.py` passed.
+- `python -m py_compile dkx/problems/profile_solve.py dkx/problems/profile_sparse_handoff.py dkx/problems/profile_policies.py` passed.
+- `python -m ruff check dkx/problems/profile_solve.py dkx/problems/profile_sparse_handoff.py dkx/problems/profile_policies.py` passed.
 - `python -m pytest tests/test_profile_response_sparse_pc.py tests/test_profile_response_dense.py tests/test_rhs1_solver_policy.py tests/test_v3_sparse_pattern.py -q --tb=short` passed with `510 passed in 103.18s`.
 - `python -m pytest tests/test_domain_package_import_contracts.py tests/test_profile_response_finalization.py tests/test_profile_response_linear_solve.py tests/test_profile_response_auto_solve.py -q --tb=short` passed with `29 passed in 1.68s`.
 - `git diff --check` passed.
@@ -5947,7 +5947,7 @@ Next best steps:
 Steps taken:
 
 1. Kept the large sparse-PC branch in the existing
-   `sfincs_jax/problems/profile_sparse_handoff.py` owner, but
+   `dkx/problems/profile_sparse_handoff.py` owner, but
    replaced its duplicated 364-entry literal re-export list with owner-module
    export composition plus explicit local and diagnostics compatibility
    exports.
@@ -5978,8 +5978,8 @@ Validation:
 
 - Exact handoff export-set comparison against `HEAD` passed with no missing or
   extra symbols.
-- `python -m py_compile sfincs_jax/problems/profile_sparse_handoff.py sfincs_jax/problems/profile_solve.py sfincs_jax/problems/profile_policies.py` passed.
-- `python -m ruff check sfincs_jax/problems/profile_sparse_handoff.py sfincs_jax/problems/profile_solve.py sfincs_jax/problems/profile_policies.py` passed.
+- `python -m py_compile dkx/problems/profile_sparse_handoff.py dkx/problems/profile_solve.py dkx/problems/profile_policies.py` passed.
+- `python -m ruff check dkx/problems/profile_sparse_handoff.py dkx/problems/profile_solve.py dkx/problems/profile_policies.py` passed.
 - `python -m pytest tests/test_profile_response_sparse_pc.py tests/test_profile_response_dense.py tests/test_rhs1_solver_policy.py tests/test_v3_sparse_pattern.py -q --tb=short` passed with `510 passed in 103.81s`.
 - `python -m pytest tests/test_domain_package_import_contracts.py tests/test_profile_response_finalization.py tests/test_profile_response_linear_solve.py tests/test_profile_response_auto_solve.py -q --tb=short` passed with `29 passed in 1.98s`.
 
@@ -5998,7 +5998,7 @@ Next best steps:
 
 1. Move to Batch B instead of continuing handoff churn: reduce `io.py` from
    `4,264` lines to `<=1,200` by moving concrete output implementation into
-   `sfincs_jax/outputs`.
+   `dkx/outputs`.
 2. Merge only obvious transport/output relay files where the owner is clearer;
    do not add new helper shards.
 3. After Batch B, execute Batch C solver/preconditioner-family compression,
@@ -6009,14 +6009,14 @@ Next best steps:
 
 Steps taken:
 
-1. Moved the concrete output writer implementation from `sfincs_jax/io.py` to
-   the output-domain owner `sfincs_jax/outputs/writer.py`.
-2. Recreated `sfincs_jax/io.py` as a small compatibility facade that re-exports
+1. Moved the concrete output writer implementation from `dkx/io.py` to
+   the output-domain owner `dkx/outputs/writer.py`.
+2. Recreated `dkx/io.py` as a small compatibility facade that re-exports
    public output readers/writers and delegates legacy private names to
    `outputs.writer` through module-level `__getattr__`.
 3. Rewrote moved-module imports from root-relative local imports to parent
    package imports and output-sibling imports.
-4. Added the moved writer API to `sfincs_jax.outputs.__all__` and refreshed the
+4. Added the moved writer API to `dkx.outputs.__all__` and refreshed the
    domain import-contract test.
 5. Updated `plan_final.md` to mark the `io.py <=1,200` gate as met and to
    record the temporary file-count/source-line debt from adding
@@ -6024,22 +6024,22 @@ Steps taken:
 
 Results:
 
-- `sfincs_jax/io.py` decreased from `4,264` lines to `49` lines.
-- `sfincs_jax/outputs/writer.py` now owns the concrete `4,264`-line writer.
+- `dkx/io.py` decreased from `4,264` lines to `49` lines.
+- `dkx/outputs/writer.py` now owns the concrete `4,264`-line writer.
 - Package Python files increased from `195` to `196`; this must be paid back
   before the final review gate.
 - Package source lines increased from `165,371` to `165,430`; this must be
   paid back below the previous `165,398` checkpoint before review.
 - Public import parity is preserved:
-  `sfincs_jax.io.write_sfincs_jax_output_h5` and
-  `sfincs_jax.outputs.write_sfincs_jax_output_h5` resolve to the same function.
+  `dkx.io.write_dkx_output_h5` and
+  `dkx.outputs.write_dkx_output_h5` resolve to the same function.
 - Legacy private imports used by focused tests still resolve through the
   `io.py` facade.
 
 Validation:
 
-- `python -m py_compile sfincs_jax/io.py sfincs_jax/outputs/__init__.py sfincs_jax/outputs/writer.py` passed.
-- `python -m ruff check sfincs_jax/io.py sfincs_jax/outputs/__init__.py sfincs_jax/outputs/writer.py tests/test_domain_package_import_contracts.py` passed.
+- `python -m py_compile dkx/io.py dkx/outputs/__init__.py dkx/outputs/writer.py` passed.
+- `python -m ruff check dkx/io.py dkx/outputs/__init__.py dkx/outputs/writer.py tests/test_domain_package_import_contracts.py` passed.
 - `python -m pytest tests/test_domain_package_import_contracts.py tests/test_output_h5_scheme5_parity.py tests/test_input_compat.py tests/test_transport_matrix_rhsmode3_parity.py tests/test_rhsmode1_current_closure.py -q --tb=short` passed with `42 passed`.
 - `python -m pytest tests/test_api_contracts.py tests/test_cli_solve_mode.py tests/test_cli_validation_io_fast_coverage.py tests/test_io_output_policy_coverage.py tests/test_output_formats.py tests/test_solver_trace_output_formats.py tests/test_transport_output_schema.py tests/test_transport_streaming_outputs.py tests/test_write_output_return_results.py -q --tb=short` passed with `101 passed`.
 - Explicit legacy-private import probe for `_OUTPUT_GEOM_CACHE`,
@@ -6067,11 +6067,11 @@ Next best steps:
 
 Steps taken:
 
-1. Merged `sfincs_jax/solvers/preconditioner_caches.py`,
-   `sfincs_jax/solvers/preconditioner_context.py`,
-   `sfincs_jax/solvers/preconditioner_operators.py`, and
-   `sfincs_jax/solvers/preconditioner_setup.py` into the durable owner
-   `sfincs_jax/solvers/preconditioning.py`.
+1. Merged `dkx/solvers/preconditioner_caches.py`,
+   `dkx/solvers/preconditioner_context.py`,
+   `dkx/solvers/preconditioner_operators.py`, and
+   `dkx/solvers/preconditioner_setup.py` into the durable owner
+   `dkx/solvers/preconditioning.py`.
 2. Deleted the four old files in the same batch and rewrote live imports across
    profile-response, transport-matrix, preconditioner-family modules, tests,
    and docs.
@@ -6087,7 +6087,7 @@ Results:
 - Package source lines: `165,865`.
 - Solver-root Python files: `14`.
 - Preconditioner Python files: `35`.
-- `sfincs_jax/solvers/preconditioning.py`: `1,173` lines.
+- `dkx/solvers/preconditioning.py`: `1,173` lines.
 - `profile_solve.py`: `5,420` lines.
 - `profile_sparse_handoff.py`: `5,500` lines.
 - `v3_driver.py`: `47` lines.
@@ -6129,14 +6129,14 @@ Next best steps:
 
 Steps taken:
 
-1. Merged `sfincs_jax/solvers/explicit_sparse_factor_policy.py` and
-   `sfincs_jax/solvers/explicit_sparse_factor_builder.py` into the canonical
-   `sfincs_jax/solvers/explicit_sparse.py` owner.
+1. Merged `dkx/solvers/explicit_sparse_factor_policy.py` and
+   `dkx/solvers/explicit_sparse_factor_builder.py` into the canonical
+   `dkx/solvers/explicit_sparse.py` owner.
 2. Deleted both old explicit-sparse support files and rewrote live source,
    tests, API docs, source map, testing docs, and release notes to the
    consolidated owner.
 3. Kept the existing focused test filenames for continuity, but their imports
-   now exercise `sfincs_jax.solvers.explicit_sparse` directly.
+   now exercise `dkx.solvers.explicit_sparse` directly.
 4. Fixed a validation-exposed sparse-PC branch bug: requested sparse-PC setup
    now initializes `residual_vec_current` from the zero-state residual when
    optional factor preflight is disabled, and the auto-preflight retry context
@@ -6150,7 +6150,7 @@ Results:
 - Package source lines: `165,929`.
 - Solver-root Python files: `17`.
 - Preconditioner Python files: `35`.
-- `sfincs_jax/solvers/explicit_sparse.py`: `4,952` lines.
+- `dkx/solvers/explicit_sparse.py`: `4,952` lines.
 - `profile_solve.py`: `5,420` lines.
 - `profile_sparse_handoff.py`: `5,500` lines.
 - `v3_driver.py`: `47` lines.
@@ -6193,10 +6193,10 @@ Next best steps:
 Steps taken:
 
 1. Merged the remaining internal transport-parallel policy and sharding owners
-   into `sfincs_jax/problems/transport_parallel_runtime.py`.
+   into `dkx/problems/transport_parallel_runtime.py`.
 2. Deleted `parallel/policy.py` and `parallel/sharding.py`.
 3. Kept `parallel/worker.py` as the documented
-   `python -m sfincs_jax.problems.transport_parallel_worker`
+   `python -m dkx.problems.transport_parallel_worker`
    subprocess entry point; it is no longer considered consolidation debt.
 4. Updated source, examples, tests, API docs, source map, parallelism docs,
    research-lane docs, and release notes to import and describe the
@@ -6210,9 +6210,9 @@ Results:
 - Package Python files: `176`.
 - Package-root Python files: `43`.
 - Package source lines: `165,968`.
-- `sfincs_jax/problems/transport_matrix`: `10` Python files including
+- `dkx/problems/transport_matrix`: `10` Python files including
   `parallel`.
-- `sfincs_jax/problems/transport_matrix/parallel`: `3` Python files:
+- `dkx/problems/transport_matrix/parallel`: `3` Python files:
   `__init__.py`, `runtime.py`, and `worker.py`.
 - `profile_solve.py`: `5,420` lines.
 - `profile_sparse_handoff.py`: `5,500` lines.
@@ -6260,14 +6260,14 @@ Next best steps:
 Steps taken:
 
 1. Fixed stale imports exposed by fail-fast validation after the consolidation:
-   `optimization_evidence.py` now uses `sfincs_jax.validation.fortran`,
-   ambipolar and output writing use `sfincs_jax.solvers.diagnostics` for Krylov
+   `optimization_evidence.py` now uses `dkx.validation.fortran`,
+   ambipolar and output writing use `dkx.solvers.diagnostics` for Krylov
    state helpers, the sparse-first heuristic test patches
    `profile_response.policies`, and the structured f-block benchmark imports
    private builders from `profile_response.preconditioner_build` instead of
    `v3_driver.py`.
 2. Fixed benchmark-summary path determinism by changing
-   `sfincs_jax.validation.artifacts._repo_stable_path()` to relativize against
+   `dkx.validation.artifacts._repo_stable_path()` to relativize against
    the repository root rather than the package root.
 3. Updated `docs/_static/research_lane_completion_2026_05_12.json` so evidence
    paths point at the consolidated QI, transport-parallel, and sparse-handoff
@@ -6280,13 +6280,13 @@ Results:
 - Package Python files: `168`.
 - Package-root Python files: `43`.
 - Package source lines: `165,758`.
-- `sfincs_jax/v3_driver.py`: `47` lines.
-- `sfincs_jax/io.py`: `64` lines.
-- `sfincs_jax/problems/profile_solve.py`: `5,420` lines.
-- `sfincs_jax/problems/profile_sparse_handoff.py`: `5,500` lines.
-- `sfincs_jax/problems/profile_policies.py`: `7,369` lines.
-- `sfincs_jax/problems/profile_sparse_xblock.py`: `7,689` lines.
-- `sfincs_jax/problems/profile_sparse_qi.py`: `4,873` lines.
+- `dkx/v3_driver.py`: `47` lines.
+- `dkx/io.py`: `64` lines.
+- `dkx/problems/profile_solve.py`: `5,420` lines.
+- `dkx/problems/profile_sparse_handoff.py`: `5,500` lines.
+- `dkx/problems/profile_policies.py`: `7,369` lines.
+- `dkx/problems/profile_sparse_xblock.py`: `7,689` lines.
+- `dkx/problems/profile_sparse_qi.py`: `4,873` lines.
 
 Validation:
 

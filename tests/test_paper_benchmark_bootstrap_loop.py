@@ -23,7 +23,7 @@ benchmark relies on:
 Measured on 2026-07-17 (float64, laptop CPU): full CI run ~30 s;
 ``history[1].curtor = -199850.025 A``; deltas 1.0 -> 0.4877 -> 0.2349.
 
-Requires the optional companions vmec_jax (core API) and booz_xform_jax;
+Requires the optional companions vmex (core API) and booz_xform_jax;
 skipped otherwise.
 """
 
@@ -37,8 +37,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-pytest.importorskip("vmec_jax")
-pytest.importorskip("vmec_jax.core.bootstrap")
+pytest.importorskip("vmex")
+pytest.importorskip("vmex.core.bootstrap")
 pytest.importorskip("booz_xform_jax")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -55,13 +55,13 @@ def example(tmp_path_factory):
     out_dir = tmp_path_factory.mktemp("bootloop_out")
     fig_dir = tmp_path_factory.mktemp("bootloop_fig")
     env = {
-        "SFINCS_JAX_BOOT_LOOP_CI": "1",
-        "SFINCS_JAX_BOOT_LOOP_OUT_DIR": str(out_dir),
-        "SFINCS_JAX_BOOT_LOOP_FIG_DIR": str(fig_dir),
+        "DKX_BOOT_LOOP_CI": "1",
+        "DKX_BOOT_LOOP_OUT_DIR": str(out_dir),
+        "DKX_BOOT_LOOP_FIG_DIR": str(fig_dir),
     }
     old = {k: os.environ.get(k) for k in env}
     os.environ.update(env)
-    os.environ.pop("SFINCS_JAX_BOOT_LOOP_MAX_NEW_STAGES", None)
+    os.environ.pop("DKX_BOOT_LOOP_MAX_NEW_STAGES", None)
     try:
         return runpy.run_path(str(EXAMPLE), run_name="bootstrap_loop_benchmark")
     finally:

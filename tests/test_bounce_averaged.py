@@ -1,6 +1,6 @@
 """Physics and differentiability gates for the bounce-averaged 1/nu surrogate.
 
-:mod:`sfincs_jax.bounce_averaged` computes the effective ripple ``epsilon_eff``
+:mod:`dkx.bounce_averaged` computes the effective ripple ``epsilon_eff``
 and the trapped-particle bounce integrals of the radial magnetic drift from the
 ``|B|`` Boozer spectrum.  These tests pin four things:
 
@@ -43,13 +43,13 @@ import numpy as np
 import pytest
 
 # Importing the module enables float64 (required by the finite-difference gate).
-from sfincs_jax.bounce_averaged import (
+from dkx.bounce_averaged import (
     BounceAveragedTransport,
     bounce_averaged_transport,
     deep_well_bounce_integrals,
     effective_ripple,
 )
-from sfincs_jax.magnetic_geometry import FluxSurfaceGeometry
+from dkx.magnetic_geometry import FluxSurfaceGeometry
 
 HELICAL_DECK = Path(__file__).parent / "ref" / "monoenergetic_PAS_tiny_scheme1.input.namelist"
 
@@ -181,7 +181,7 @@ def test_effective_ripple_gradient_flows_with_correct_sign() -> None:
 
 def test_jit_and_vmap_over_geometries() -> None:
     """The surrogate is jit-compilable and vmaps over a batch of geometries."""
-    from sfincs_jax.bounce_averaged import _gamma_c
+    from dkx.bounce_averaged import _gamma_c
 
     jitted = jax.jit(lambda bh: _gamma_c(bh, _G_HAT, 0.0, _IOTA, _N_PERIODS, 1.0,
                                          12, 8, 80, 48, 96, 14, 160, 1)[0])  # fmt: skip
@@ -199,7 +199,7 @@ def test_jit_and_vmap_over_geometries() -> None:
 
 
 def _d11_star_nu_star(tmp_path: Path, *, eps_h: float, nu: float, res: tuple[int, int, int]) -> float:
-    from sfincs_jax.monoenergetic import monoenergetic_database
+    from dkx.monoenergetic import monoenergetic_database
 
     text = HELICAL_DECK.read_text()
 

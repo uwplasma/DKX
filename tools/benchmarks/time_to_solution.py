@@ -1,11 +1,11 @@
-"""Time-to-solution table: Fortran v3 MPI ranks vs one sfincs_jax process.
+"""Time-to-solution table: Fortran v3 MPI ranks vs one dkx process.
 
 Runs the same production namelist through (a) the SFINCS Fortran v3 binary
-under ``mpirun -n {ranks}`` and (b) a single ``sfincs_jax`` process (cold and
+under ``mpirun -n {ranks}`` and (b) a single ``dkx`` process (cold and
 warm, all cores or one GPU), and reports end-to-end seconds per configuration.
 End-to-end wall time is the honest cross-code metric here: the Fortran run is
 one linear RHSMode=1 solve whose cost is dominated by the preconditioner
-factorization plus a handful of Krylov applications, while the sfincs_jax
+factorization plus a handful of Krylov applications, while the dkx
 auto tier solves the same system directly; internal phase timers are not
 comparable one-to-one.
 
@@ -78,10 +78,10 @@ def run_fortran(
 
 
 def run_jax(deck: Path) -> dict:
-    """Cold (includes JIT) + warm end-to-end sfincs_jax timings on one process."""
+    """Cold (includes JIT) + warm end-to-end dkx timings on one process."""
     import jax
 
-    from sfincs_jax.run import run_profile
+    from dkx.run import run_profile
 
     t0 = time.perf_counter()
     first = run_profile(str(deck), emit=None)
@@ -114,7 +114,7 @@ def main(argv: list[str] | None = None) -> int:
     if not deck.exists():
         raise SystemExit(f"input namelist not found: {deck}")
 
-    report: dict = {"input": str(deck), "fortran": [], "sfincs_jax": None}
+    report: dict = {"input": str(deck), "fortran": [], "dkx": None}
 
     if not args.jax_only:
         if args.fortran_binary is None or not args.fortran_binary.exists():
@@ -134,8 +134,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  fortran n={ranks}: {best}", file=sys.stderr)
 
     if not args.fortran_only:
-        report["sfincs_jax"] = run_jax(deck)
-        print(f"  sfincs_jax: {report['sfincs_jax']}", file=sys.stderr)
+        report["dkx"] = run_jax(deck)
+        print(f"  dkx: {report['dkx']}", file=sys.stderr)
 
     json.dump(report, sys.stdout, indent=2)
     print()

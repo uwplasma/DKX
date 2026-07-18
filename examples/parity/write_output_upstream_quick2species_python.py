@@ -19,12 +19,12 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.api import write_output  # noqa: E402
-from sfincs_jax.io import read_sfincs_h5  # noqa: E402
+from dkx.api import write_output  # noqa: E402
+from dkx.io import read_sfincs_h5  # noqa: E402
 
 
 def _select_input_path() -> Path:
-    if os.environ.get("SFINCS_JAX_CI") == "1" or os.environ.get("SFINCS_JAX_FAST_EXAMPLES") == "1":
+    if os.environ.get("DKX_CI") == "1" or os.environ.get("DKX_FAST_EXAMPLES") == "1":
         return _REPO_ROOT / "tests" / "reduced_inputs" / "quick_2species_FPCollisions_noEr.input.namelist"
     return (
         _REPO_ROOT

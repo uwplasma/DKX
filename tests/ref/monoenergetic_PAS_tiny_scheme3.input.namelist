@@ -1,4 +1,4 @@
-! Tiny monoenergetic (RHSMode=3) PAS example for sfincs_jax on geometryScheme=3
+! Tiny monoenergetic (RHSMode=3) PAS example for dkx on geometryScheme=3
 ! (LHD inward-shifted analytic Boozer model; geometry.F90 case 3, harmonics from
 ! Beidler et al., Nuclear Fusion 51, 076001 (2011), Table 1).
 !

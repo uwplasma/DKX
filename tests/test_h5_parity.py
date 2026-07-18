@@ -6,7 +6,7 @@ import h5py
 import numpy as np
 import pytest
 
-from sfincs_jax.compare import (
+from dkx.compare import (
     H5DatasetParity,
     _as_numpy,
     _center_fsa,
