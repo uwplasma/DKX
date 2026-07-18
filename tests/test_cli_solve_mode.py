@@ -292,10 +292,6 @@ def test_normalize_default_argv_keeps_parallel_flags() -> None:
     argv = [
         "--cores",
         "8",
-        "--shard-axis",
-        "theta",
-        "--distributed-gmres",
-        "auto",
         "--transport-workers",
         "3",
         "input.namelist",
@@ -305,10 +301,6 @@ def test_normalize_default_argv_keeps_parallel_flags() -> None:
     assert cli._normalize_default_argv(argv) == [
         "--cores",
         "8",
-        "--shard-axis",
-        "theta",
-        "--distributed-gmres",
-        "auto",
         "--transport-workers",
         "3",
         "write-output",
@@ -335,22 +327,13 @@ def test_default_plot_output_path_handles_sfincsoutput_suffix() -> None:
     assert path.name == "sfincsOutput_summary.pdf"
 
 
-def test_apply_parallel_runtime_settings_sets_transport_and_sharding(monkeypatch) -> None:
+def test_apply_parallel_runtime_settings_sets_transport_workers(monkeypatch) -> None:
     monkeypatch.delenv("DKX_TRANSPORT_PARALLEL", raising=False)
     monkeypatch.delenv("DKX_TRANSPORT_PARALLEL_WORKERS", raising=False)
-    monkeypatch.delenv("DKX_MATVEC_SHARD_AXIS", raising=False)
-    monkeypatch.delenv("DKX_AUTO_SHARD", raising=False)
-    monkeypatch.delenv("DKX_GMRES_DISTRIBUTED", raising=False)
-    monkeypatch.delenv("DKX_DISTRIBUTED_KRYLOV", raising=False)
-    monkeypatch.delenv("DKX_SHARD_PAD", raising=False)
 
     cli._apply_parallel_runtime_settings(
         Namespace(
             transport_workers=4,
-            shard_axis="theta",
-            distributed_gmres="auto",
-            distributed_krylov="gmres",
-            shard_pad=False,
             distributed=False,
             process_id=None,
             process_count=None,
@@ -361,11 +344,6 @@ def test_apply_parallel_runtime_settings_sets_transport_and_sharding(monkeypatch
 
     assert os.environ["DKX_TRANSPORT_PARALLEL"] == "process"
     assert os.environ["DKX_TRANSPORT_PARALLEL_WORKERS"] == "4"
-    assert os.environ["DKX_MATVEC_SHARD_AXIS"] == "theta"
-    assert os.environ["DKX_AUTO_SHARD"] == "0"
-    assert os.environ["DKX_GMRES_DISTRIBUTED"] == "auto"
-    assert os.environ["DKX_DISTRIBUTED_KRYLOV"] == "gmres"
-    assert os.environ["DKX_SHARD_PAD"] == "0"
 
 
 def test_apply_parallel_runtime_settings_initializes_distributed(monkeypatch) -> None:
@@ -384,10 +362,6 @@ def test_apply_parallel_runtime_settings_initializes_distributed(monkeypatch) ->
     cli._apply_parallel_runtime_settings(
         Namespace(
             transport_workers=None,
-            shard_axis=None,
-            distributed_gmres=None,
-            distributed_krylov=None,
-            shard_pad=None,
             distributed=True,
             process_id=1,
             process_count=2,
@@ -406,14 +380,10 @@ def test_apply_parallel_runtime_settings_initializes_distributed(monkeypatch) ->
 
 def test_emit_parallel_runtime_info_reports_active_parallel_env(monkeypatch, capsys) -> None:
     monkeypatch.setenv("DKX_CORES", "8")
+    monkeypatch.setenv("NPROC", "8")
     monkeypatch.setenv("DKX_CPU_DEVICES", "8")
-    monkeypatch.setenv("DKX_MATVEC_SHARD_AXIS", "theta")
-    monkeypatch.setenv("DKX_AUTO_SHARD", "1")
-    monkeypatch.setenv("DKX_SHARD_PAD", "1")
     monkeypatch.setenv("DKX_TRANSPORT_PARALLEL", "process")
     monkeypatch.setenv("DKX_TRANSPORT_PARALLEL_WORKERS", "4")
-    monkeypatch.setenv("DKX_GMRES_DISTRIBUTED", "auto")
-    monkeypatch.setenv("DKX_DISTRIBUTED_KRYLOV", "bicgstab")
     monkeypatch.setenv("DKX_DISTRIBUTED", "1")
     monkeypatch.setenv("DKX_PROCESS_ID", "1")
     monkeypatch.setenv("DKX_PROCESS_COUNT", "2")
@@ -423,9 +393,8 @@ def test_emit_parallel_runtime_info_reports_active_parallel_env(monkeypatch, cap
     cli._emit_parallel_runtime_info(args=Namespace(verbose=1, quiet=False))
     out = capsys.readouterr().out
 
-    assert "parallel: cores=8 cpu_devices=8 shard_axis=theta auto_shard=1 shard_pad=1" in out
+    assert "parallel: cores=8 threads=8 cpu_devices=8" in out
     assert "transport_parallel: mode=process workers=4" in out
-    assert "distributed_solver: gmres=auto krylov=bicgstab" in out
     assert "multi_host: enabled=1 process_id=1 process_count=2 coordinator=node0 port=1234" in out
 
 
@@ -433,13 +402,8 @@ def test_emit_parallel_runtime_info_suppresses_empty_state(monkeypatch, capsys) 
     for name in (
         "DKX_CORES",
         "DKX_CPU_DEVICES",
-        "DKX_MATVEC_SHARD_AXIS",
-        "DKX_AUTO_SHARD",
-        "DKX_SHARD_PAD",
         "DKX_TRANSPORT_PARALLEL",
         "DKX_TRANSPORT_PARALLEL_WORKERS",
-        "DKX_GMRES_DISTRIBUTED",
-        "DKX_DISTRIBUTED_KRYLOV",
         "DKX_DISTRIBUTED",
         "DKX_PROCESS_ID",
         "DKX_PROCESS_COUNT",
@@ -448,6 +412,9 @@ def test_emit_parallel_runtime_info_suppresses_empty_state(monkeypatch, capsys) 
     ):
         monkeypatch.delenv(name, raising=False)
 
+    # NPROC alone (e.g. the import-time default clamp) must not trigger the
+    # parallel banner.
+    monkeypatch.setenv("NPROC", "8")
     cli._emit_parallel_runtime_info(args=Namespace(verbose=1, quiet=False))
     assert capsys.readouterr().out == ""
 
@@ -473,13 +440,13 @@ def test_maybe_reexec_for_early_runtime_reexecs_for_cores(monkeypatch) -> None:
     assert captured["argv"] == [cli.sys.executable, "-m", "dkx", "--cores", "4", "write-output", "--input", "input.namelist"]
     env = captured["env"]
     assert env["DKX_CORES"] == "4"
-    assert env["DKX_CPU_DEVICES"] == "4"
+    # --cores controls threads only; it must not force host devices.
+    assert "DKX_CPU_DEVICES" not in env
     assert env["DKX_CLI_BOOTSTRAPPED"] == "1"
 
 
 def test_maybe_reexec_for_early_runtime_skips_when_env_matches(monkeypatch) -> None:
     monkeypatch.setenv("DKX_CORES", "4")
-    monkeypatch.setenv("DKX_CPU_DEVICES", "4")
     called = []
     monkeypatch.setattr(cli.os, "execvpe", lambda *args, **kwargs: called.append((args, kwargs)))
     cli._maybe_reexec_for_early_runtime(["--cores", "4", "write-output", "--input", "input.namelist"])
@@ -808,11 +775,12 @@ def test_main_write_output_reports_runtime_errors_without_traceback(monkeypatch,
     assert "Traceback" not in captured.err
 
 
-def test_main_preserves_shard_axis_before_subcommand(monkeypatch, tmp_path: Path) -> None:
+def test_main_preserves_cores_before_subcommand(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
 
     def _fake_run_geometry(namelist_path, **kwargs):
-        captured["shard_axis"] = os.environ.get("DKX_MATVEC_SHARD_AXIS")
+        captured["cores"] = os.environ.get("DKX_CORES")
+        captured["threads"] = os.environ.get("NPROC")
         out = Path(kwargs["out_path"])
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(b"")
@@ -821,14 +789,11 @@ def test_main_preserves_shard_axis_before_subcommand(monkeypatch, tmp_path: Path
     monkeypatch.setattr("dkx.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=1))
     monkeypatch.setattr("dkx.run.run_geometry", _fake_run_geometry)
     monkeypatch.setenv("DKX_CORES", "4")
-    monkeypatch.setenv("DKX_CPU_DEVICES", "4")
 
     rc = cli.main(
         [
             "--cores",
             "4",
-            "--shard-axis",
-            "theta",
             "write-output",
             "--input",
             str(tmp_path / "input.namelist"),
@@ -840,7 +805,8 @@ def test_main_preserves_shard_axis_before_subcommand(monkeypatch, tmp_path: Path
     )
 
     assert rc == 0
-    assert captured["shard_axis"] == "theta"
+    assert captured["cores"] == "4"
+    assert captured["threads"] == "4"
 
 
 def test_main_preserves_transport_workers_before_subcommand(monkeypatch, tmp_path: Path) -> None:
@@ -976,11 +942,29 @@ def test_cmd_compare_h5_prints_failures_and_show_all(monkeypatch, tmp_path: Path
     assert "FAIL bad_key" in out
 
 
-def test_auto_cores_for_args_handles_no_or_unreadable_input(monkeypatch) -> None:
-    monkeypatch.setattr(cli.os, "cpu_count", lambda: 16)
+def test_apply_cores_setting_pins_threads_and_zero_defers_to_xla(monkeypatch) -> None:
+    for name in ("DKX_CORES", "NPROC", "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
+        monkeypatch.delenv(name, raising=False)
 
-    assert cli._auto_cores_for_args(Namespace(func=None, input=None)) == 3
-    assert cli._auto_cores_for_args(Namespace(func=lambda: None, input="/does/not/exist")) == 3
+    cli._apply_cores_setting(4)
+    assert os.environ["DKX_CORES"] == "4"
+    assert os.environ["NPROC"] == "4"
+    assert os.environ["OMP_NUM_THREADS"] == "4"
+    assert os.environ["OPENBLAS_NUM_THREADS"] == "4"
+
+    # cores=0 records the "let XLA size the threadpool" preference without
+    # pinning anything itself.
+    monkeypatch.delenv("NPROC", raising=False)
+    cli._apply_cores_setting(0)
+    assert os.environ["DKX_CORES"] == "0"
+    assert "NPROC" not in os.environ
+
+    # None / negative / junk change nothing.
+    cli._apply_cores_setting(None)
+    cli._apply_cores_setting(-2)
+    cli._apply_cores_setting("junk")  # type: ignore[arg-type]
+    assert os.environ["DKX_CORES"] == "0"
+    assert "NPROC" not in os.environ
 
 
 def test_normalize_default_argv_edge_cases() -> None:

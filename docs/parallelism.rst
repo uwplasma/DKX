@@ -49,8 +49,11 @@ parallel-friendly shape.
 
 **Automatic memory budgeting.** There are no sharding environment variables on
 this path. The batch runs in ``jax.lax.map`` chunks sized from the per-solve
-tier-1 memory footprint and the resolved device (or host) memory budget, so only
-one chunk's intermediates are ever live. ``memory_budget_gb`` overrides the
+memory footprint of the route the ``auto`` policy actually takes — a solve
+that routes to the memory-lean truncated tier-1 kernel is charged its
+truncated working set, not the full-band factorization peak that route never
+allocates — and the resolved device (or host) memory budget, so only one
+chunk's intermediates are ever live. ``memory_budget_gb`` overrides the
 resolved budget and ``max_batch`` caps the chunk size; the defaults need
 neither.
 
@@ -85,36 +88,28 @@ on the **direct** tier and runs the **iterative** and small-system paths 2-5x
 wins therefore come from **batched** direct-tier work — multi-``E_r`` or
 multi-surface sweeps — not from single solves.
 
-Host devices and CPU threads
-----------------------------
+CPU threads
+-----------
 
-Multi-core CPU execution is requested **before JAX is imported**; the CLI
+The XLA host threadpool is sized once, when the CPU backend initializes, so
+thread control must be in place **before JAX is imported**; the CLI
 ``--cores`` flag sets the environment for you:
 
 .. code-block:: bash
 
-   dkx --cores 8 input.namelist       # or: export DKX_CORES=8
+   dkx --cores 4 input.namelist       # or: export DKX_CORES=4
 
-``DKX_CORES`` requests that many host CPU devices and enables auto
-sharding, ``DKX_CPU_DEVICES`` sets the device count directly, and
-``DKX_XLA_THREADS`` opts into pinning the XLA CPU thread count. Full
-semantics and defaults are in the environment-variable reference (:doc:`usage`).
-
-Single-solve sharding
----------------------
-
-When one solve is too large for a single device, the matvec can be sharded
-across the host devices or GPUs:
-
-- ``DKX_MATVEC_SHARD_AXIS`` — ``auto``/``off``/``theta``/``zeta``/``x``/``flat``.
-- ``DKX_AUTO_SHARD`` and ``DKX_SHARD`` — enable and master-disable
-  auto sharding.
-- ``DKX_SHARD_PAD`` — neutral padding when a sharded axis is not divisible
-  by the device count (does not change outputs).
-
-These mirror the angular domain decomposition an MPI code uses. Their full
-behaviour, together with the distributed-Krylov knobs, is documented in
-:doc:`usage`.
+``DKX_CORES=N`` pins the solver threadpool to ``N`` threads (applied as
+``NPROC``, the variable XLA reads, plus the OpenMP/OpenBLAS pools);
+``DKX_CORES=0`` lets XLA size the threadpool itself; when unset the
+threadpool is clamped to ``min(8, cpu_count)``. The measured optimum is 4-8
+threads on both a 10-core laptop and a 36-core workstation — a full-width
+threadpool on the many-core box runs the tier-1 warm solve several times
+slower than 8 threads (:doc:`performance`). ``DKX_CPU_DEVICES`` is a
+separate, explicit opt-in that forces multiple host *devices* for
+multi-device CPU tests; forced host devices share one threadpool, so it is
+not a performance knob. Full semantics and defaults are in the
+environment-variable reference (:doc:`usage`).
 
 Multi-host execution
 --------------------
