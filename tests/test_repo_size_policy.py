@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sfincs_jax.validation import release
+from dkx.validation import release
 
 
 def test_tracked_large_files_are_reviewed() -> None:

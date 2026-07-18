@@ -22,8 +22,8 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist  # noqa: E402
-from sfincs_jax.namelist import read_sfincs_input  # noqa: E402
+from dkx.drift_kinetic import kinetic_operator_from_namelist  # noqa: E402
+from dkx.namelist import read_sfincs_input  # noqa: E402
 
 
 def _default_input() -> Path:

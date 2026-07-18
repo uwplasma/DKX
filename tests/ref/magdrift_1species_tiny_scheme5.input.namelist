@@ -1,4 +1,4 @@
-! Auto-generated magnetic-drift-only collisionless fixture for sfincs_jax parity.
+! Auto-generated magnetic-drift-only collisionless fixture for dkx parity.
 
 &general
   saveMatricesAndVectorsInBinary = .t.

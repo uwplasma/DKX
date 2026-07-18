@@ -1,0 +1,120 @@
+{
+  "comparisons": {
+    "cpu_gpu": {
+      "candidate_label": "gpu",
+      "comparison": "cpu_vs_gpu_promotion",
+      "failures": [],
+      "metrics": {
+        "bootstrap_objective": {
+          "abs_diff": 0.0,
+          "atol": 0.0,
+          "candidate": 0.010899999999999998,
+          "limit": 1.0899999999999998e-08,
+          "reference": 0.010899999999999998,
+          "rel_diff": 0.0,
+          "rtol": 1e-06,
+          "status": "pass"
+        },
+        "flux_objective_total": {
+          "abs_diff": 0.0,
+          "atol": 0.0,
+          "candidate": 0.006365584120982987,
+          "limit": 6.365584120982987e-09,
+          "reference": 0.006365584120982987,
+          "rel_diff": 0.0,
+          "rtol": 1e-06,
+          "status": "pass"
+        },
+        "gate_status": {
+          "candidate": "pass",
+          "reference": "pass",
+          "required": "pass",
+          "status": "pass"
+        },
+        "selected_root_er": {
+          "abs_diff": 0.0,
+          "atol": 1e-10,
+          "candidate": 0.39130434782608714,
+          "limit": 3.9230434782608714e-08,
+          "reference": 0.39130434782608714,
+          "rel_diff": 0.0,
+          "rtol": 1e-07,
+          "status": "pass"
+        }
+      },
+      "reference_label": "cpu",
+      "status": "pass",
+      "tolerances": {
+        "bootstrap_objective_rtol": 1e-06,
+        "flux_objective_total_rtol": 1e-06,
+        "selected_root_er_atol": 1e-10,
+        "selected_root_er_rtol": 1e-07
+      }
+    },
+    "dkx_fortran_v3": {
+      "candidate_label": "fortran_v3",
+      "comparison": "dkx_vs_fortran_v3_promotion",
+      "failures": [],
+      "metrics": {
+        "bootstrap_objective": {
+          "abs_diff": 0.0,
+          "atol": 0.0,
+          "candidate": 0.010899999999999998,
+          "limit": 1.0899999999999998e-08,
+          "reference": 0.010899999999999998,
+          "rel_diff": 0.0,
+          "rtol": 1e-06,
+          "status": "pass"
+        },
+        "flux_objective_total": {
+          "abs_diff": 0.0,
+          "atol": 0.0,
+          "candidate": 0.006365584120982987,
+          "limit": 6.365584120982987e-09,
+          "reference": 0.006365584120982987,
+          "rel_diff": 0.0,
+          "rtol": 1e-06,
+          "status": "pass"
+        },
+        "gate_status": {
+          "candidate": "pass",
+          "reference": "pass",
+          "required": "pass",
+          "status": "pass"
+        },
+        "selected_root_er": {
+          "abs_diff": 0.0,
+          "atol": 1e-10,
+          "candidate": 0.39130434782608714,
+          "limit": 3.9230434782608714e-08,
+          "reference": 0.39130434782608714,
+          "rel_diff": 0.0,
+          "rtol": 1e-07,
+          "status": "pass"
+        }
+      },
+      "reference_label": "dkx",
+      "status": "pass",
+      "tolerances": {
+        "bootstrap_objective_rtol": 1e-06,
+        "flux_objective_total_rtol": 1e-06,
+        "selected_root_er_atol": 1e-10,
+        "selected_root_er_rtol": 1e-07
+      }
+    }
+  },
+  "failures": [],
+  "inputs": {
+    "cpu": "/Users/rogeriojorge/local/tests/dkx/docs/_static/figures/optimization/qa_nfp2_dkx_promotion_scan.json",
+    "fortran": "/Users/rogeriojorge/local/tests/dkx/docs/_static/figures/optimization/qa_nfp2_dkx_promotion_scan.json",
+    "gpu": "/Users/rogeriojorge/local/tests/dkx/docs/_static/figures/optimization/qa_nfp2_dkx_promotion_scan.json"
+  },
+  "status": "pass",
+  "tolerances": {
+    "bootstrap_objective_rtol": 1e-06,
+    "flux_objective_total_rtol": 1e-06,
+    "selected_root_er_atol": 1e-10,
+    "selected_root_er_rtol": 1e-07
+  },
+  "workflow": "dkx_optimization_promotion_comparison"
+}

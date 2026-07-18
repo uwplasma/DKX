@@ -1,4 +1,4 @@
-"""Benchmark sfincs_jax output writers and readers without running a solve.
+"""Benchmark dkx output writers and readers without running a solve.
 
 This script uses an existing output fixture, then writes equivalent HDF5,
 NetCDF4, and NPZ files. It isolates serialization cost from JAX compile/solve
@@ -18,7 +18,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from sfincs_jax.io import read_sfincs_h5, read_sfincs_output_file, write_sfincs_output_file
+from dkx.io import read_sfincs_h5, read_sfincs_output_file, write_sfincs_output_file
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]

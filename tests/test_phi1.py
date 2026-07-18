@@ -1,10 +1,10 @@
 """Canonical Phi1 / quasineutrality slice: parity, convergence, gradient, output.
 
 Covers the ``includePhi1`` vertical slice consolidated into
-:mod:`sfincs_jax.drift_kinetic` (the quasineutrality block, the ``<Phi1>=0``
+:mod:`dkx.drift_kinetic` (the quasineutrality block, the ``<Phi1>=0``
 lambda row, and the Phi1-in-kinetic-equation coupling for
 ``quasineutralityOption`` 1/2) and its nonlinear Newton solve in
-:mod:`sfincs_jax.phi1`.
+:mod:`dkx.phi1`.
 
 Parity oracles: the frozen Fortran reference fixtures (residual/stateVector
 petscbin + whichMatrix_3 Jacobians for the linear decks, sfincsOutput.h5
@@ -27,13 +27,13 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-# x64 is enabled on import of any sfincs_jax operator module (drift_kinetic).
-from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist
-from sfincs_jax.moments import rhsmode1_moments
-from sfincs_jax.namelist import read_sfincs_input
-from sfincs_jax.phi1 import operator_from_input, phi1_state, solve_phi1
-from sfincs_jax.validation.fortran import read_petsc_vec
-from sfincs_jax.writer import operator_containers
+# x64 is enabled on import of any dkx operator module (drift_kinetic).
+from dkx.drift_kinetic import kinetic_operator_from_namelist
+from dkx.moments import rhsmode1_moments
+from dkx.namelist import read_sfincs_input
+from dkx.phi1 import operator_from_input, phi1_state, solve_phi1
+from dkx.validation.fortran import read_petsc_vec
+from dkx.writer import operator_containers
 
 _REF = Path(__file__).parent / "ref"
 # The Fortran-parity fixture (quasineutralityOption=2, includePhi1InKineticEquation,
@@ -83,7 +83,7 @@ def test_jacobian_matvec_matches_fortran_whichmatrix3_linear_decks(stem: str) ->
     """The Phi1 Jacobian JVP equals the frozen Fortran whichMatrix=3 on linear decks."""
     from scipy.sparse import csr_matrix
 
-    from sfincs_jax.validation.fortran import read_petsc_mat_aij
+    from dkx.validation.fortran import read_petsc_mat_aij
 
     op = kinetic_operator_from_namelist(read_sfincs_input(_REF / f"{stem}.input.namelist"))
     x0 = jnp.asarray(read_petsc_vec(_REF / f"{stem}.stateVector.petscbin").values)
@@ -159,7 +159,7 @@ def test_preconditioner_reduces_inner_iterations_and_preserves_answer() -> None:
     """The Phi1-aware coarse preconditioner cuts inner Krylov iterations exactly.
 
     Enabling the bordered-Schur coarse preconditioner
-    (:func:`sfincs_jax.solve.build_coarse_preconditioner`, which
+    (:func:`dkx.solve.build_coarse_preconditioner`, which
     Schur-eliminates the Phi1 quasineutrality border in addition to the
     constraint border) must take strictly fewer total inner Krylov iterations
     than the unpreconditioned full-restart solve, and converge to the *same*
@@ -210,7 +210,7 @@ def test_phi1_output_gradient_matches_finite_difference() -> None:
 
 
 def test_run_profile_routes_phi1_to_canonical() -> None:
-    from sfincs_jax.run import run_profile
+    from dkx.run import run_profile
 
     run = run_profile(_INPUT, tol=1e-9, emit=None)
     assert run.solve_result.method == "phi1_newton_krylov"
@@ -219,9 +219,9 @@ def test_run_profile_routes_phi1_to_canonical() -> None:
 
 
 def test_h5_phi1_fields_vs_fortran_golden(tmp_path: Path) -> None:
-    from sfincs_jax.compare import compare_sfincs_outputs
-    from sfincs_jax.io import read_sfincs_h5
-    from sfincs_jax.run import run_profile
+    from dkx.compare import compare_sfincs_outputs
+    from dkx.io import read_sfincs_h5
+    from dkx.run import run_profile
 
     fortran_path = _REF / f"{_FIXTURE}.sfincsOutput.h5"
     fort = read_sfincs_h5(fortran_path)
@@ -295,8 +295,8 @@ def test_h5_phi1_new_families_vs_fortran_golden(stem: str, tmp_path: Path) -> No
     BeforeSurfaceIntegral fields, the dPhi1Hat gradients, the lambda multiplier,
     the Phi1 scalar metadata, and the Newton metadata.
     """
-    from sfincs_jax.io import read_sfincs_h5
-    from sfincs_jax.run import run_profile
+    from dkx.io import read_sfincs_h5
+    from dkx.run import run_profile
 
     deck = _REF / f"{stem}.input.namelist"
     tol = _PHI1_H5_DECKS[stem]
@@ -404,7 +404,7 @@ def test_collision_phi1_solve_matches_fortran_reference() -> None:
 
 
 def test_collision_phi1_run_profile_routes_to_canonical() -> None:
-    from sfincs_jax.run import run_profile
+    from dkx.run import run_profile
 
     run = run_profile(_COLL_INPUT, tol=1e-9, emit=None)
     assert run.solve_result.method == "phi1_newton_krylov"
@@ -456,7 +456,7 @@ def test_read_external_phi1_operator_is_linear_f_only(tmp_path: Path) -> None:
 
 def test_read_external_phi1_state_matches_fortran(tmp_path: Path) -> None:
     """Canonical linear solve state vs the Fortran readExternalPhi1 golden state."""
-    from sfincs_jax.solve import solve
+    from dkx.solve import solve
 
     op = kinetic_operator_from_namelist(read_sfincs_input(_rext_run_dir(tmp_path)))
     res = solve(op, op.rhs(), method="auto", tol=1e-11)
@@ -469,7 +469,7 @@ def test_read_external_phi1_state_matches_fortran(tmp_path: Path) -> None:
 
 def test_read_external_phi1_run_profile_is_linear(tmp_path: Path) -> None:
     """run_profile solves readExternalPhi1 with a single LINEAR solve (no Newton)."""
-    from sfincs_jax.run import run_profile
+    from dkx.run import run_profile
 
     deck = _rext_run_dir(tmp_path)
     run = run_profile(deck, tol=1e-11, emit=None)
@@ -483,8 +483,8 @@ def test_read_external_phi1_run_profile_is_linear(tmp_path: Path) -> None:
 
 def test_read_external_phi1_uses_external_field(tmp_path: Path) -> None:
     """The emitted Phi1Hat equals the external field's last-iteration slice."""
-    from sfincs_jax.io import read_sfincs_h5
-    from sfincs_jax.run import run_profile
+    from dkx.io import read_sfincs_h5
+    from dkx.run import run_profile
 
     deck = _rext_run_dir(tmp_path)
     can_path = tmp_path / "canon.h5"
@@ -504,8 +504,8 @@ def test_read_external_phi1_output_matches_fortran(tmp_path: Path) -> None:
     Every shared numeric field agrees to the sibling tiny-deck budget (atol 5e-8);
     the core neoclassical/flux/moment/Phi1 fields agree far tighter (~1e-10).
     """
-    from sfincs_jax.io import read_sfincs_h5
-    from sfincs_jax.run import run_profile
+    from dkx.io import read_sfincs_h5
+    from dkx.run import run_profile
 
     deck = _rext_run_dir(tmp_path)
     can_path = tmp_path / "canon.h5"

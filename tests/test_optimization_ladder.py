@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from sfincs_jax.workflows.optimization import (
+from dkx.workflows.optimization import (
     dense_matrix_gib,
     estimate_rhs1_active_size,
     evaluate_promotion_ladder,
@@ -17,7 +17,7 @@ _REPO = Path(__file__).resolve().parents[1]
 
 def _promotion_payload(er: float, *, gate_status: str = "pass") -> dict[str, object]:
     return {
-        "workflow": "sfincs_jax_optimization_high_fidelity_promotion",
+        "workflow": "dkx_optimization_high_fidelity_promotion",
         "gate_status": gate_status,
         "selected_root": {
             "er": er,

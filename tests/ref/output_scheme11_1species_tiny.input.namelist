@@ -1,4 +1,4 @@
-! Minimal output fixture for sfincs_jax `sfincsOutput.h5` parity (geometryScheme=11 from .bc file).
+! Minimal output fixture for dkx `sfincsOutput.h5` parity (geometryScheme=11 from .bc file).
 
 &general
   saveMatricesAndVectorsInBinary = .false.

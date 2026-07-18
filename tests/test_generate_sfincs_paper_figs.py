@@ -321,8 +321,8 @@ def test_run_applies_extra_environment_to_child(
     child = tmp_path / "child_env.py"
     child.write_text(
         "import os\n"
-        "print('implicit=' + os.environ.get('SFINCS_JAX_IMPLICIT_SOLVE', ''))\n"
-        "print('workers=' + os.environ.get('SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS', ''))\n"
+        "print('implicit=' + os.environ.get('DKX_IMPLICIT_SOLVE', ''))\n"
+        "print('workers=' + os.environ.get('DKX_TRANSPORT_PARALLEL_WORKERS', ''))\n"
     )
     mod._run(
         [sys.executable, str(child)],
@@ -330,8 +330,8 @@ def test_run_applies_extra_environment_to_child(
         timeout_s=5.0,
         label="child-env",
         extra_env={
-            "SFINCS_JAX_IMPLICIT_SOLVE": "0",
-            "SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS": "2",
+            "DKX_IMPLICIT_SOLVE": "0",
+            "DKX_TRANSPORT_PARALLEL_WORKERS": "2",
         },
     )
     captured = capsys.readouterr().out
@@ -343,8 +343,8 @@ def test_transport_scan_env_defaults_to_explicit_and_enables_parallel_workers() 
     mod = _load_module()
     serial = mod._transport_scan_env(transport_workers=1, transport_parallel_backend="gpu")
     assert serial == {
-        "SFINCS_JAX_IMPLICIT_SOLVE": "0",
-        "SFINCS_JAX_WRITE_SOLVER_DIAGNOSTICS": "1",
+        "DKX_IMPLICIT_SOLVE": "0",
+        "DKX_WRITE_SOLVER_DIAGNOSTICS": "1",
     }
 
     parallel = mod._transport_scan_env(
@@ -355,15 +355,15 @@ def test_transport_scan_env_defaults_to_explicit_and_enables_parallel_workers() 
         abort_max_residual=1.0e-6,
         abort_max_relative_residual=2.0e-6,
     )
-    assert parallel["SFINCS_JAX_IMPLICIT_SOLVE"] == "0"
-    assert parallel["SFINCS_JAX_WRITE_SOLVER_DIAGNOSTICS"] == "1"
-    assert parallel["SFINCS_JAX_TRANSPORT_PARALLEL"] == "process"
-    assert parallel["SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS"] == "2"
-    assert parallel["SFINCS_JAX_TRANSPORT_PARALLEL_BACKEND"] == "gpu"
-    assert parallel["SFINCS_JAX_TRANSPORT_SPARSE_DIRECT_MAX"] == "90000"
-    assert parallel["SFINCS_JAX_TRANSPORT_MAXITER"] == "1200"
-    assert parallel["SFINCS_JAX_TRANSPORT_ABORT_MAX_RESIDUAL"] == "1e-06"
-    assert parallel["SFINCS_JAX_TRANSPORT_ABORT_MAX_RELATIVE_RESIDUAL"] == "2e-06"
+    assert parallel["DKX_IMPLICIT_SOLVE"] == "0"
+    assert parallel["DKX_WRITE_SOLVER_DIAGNOSTICS"] == "1"
+    assert parallel["DKX_TRANSPORT_PARALLEL"] == "process"
+    assert parallel["DKX_TRANSPORT_PARALLEL_WORKERS"] == "2"
+    assert parallel["DKX_TRANSPORT_PARALLEL_BACKEND"] == "gpu"
+    assert parallel["DKX_TRANSPORT_SPARSE_DIRECT_MAX"] == "90000"
+    assert parallel["DKX_TRANSPORT_MAXITER"] == "1200"
+    assert parallel["DKX_TRANSPORT_ABORT_MAX_RESIDUAL"] == "1e-06"
+    assert parallel["DKX_TRANSPORT_ABORT_MAX_RELATIVE_RESIDUAL"] == "2e-06"
 
 
 def test_residual_quality_gates_missing_and_bad_transport_outputs(tmp_path: Path) -> None:
@@ -457,7 +457,7 @@ def test_main_skip_existing_skips_rerun_for_complete_selected_operator(
     payload = json.loads((summary_dir / "lhd_collisionality_fast_summary.json").read_text())
     assert payload["metadata"]["labels_to_collision_operator"] == {"PAS": 1}
     assert [row["label"] for row in payload["rows"]] == ["PAS", "PAS", "PAS", "PAS"]
-    assert not (out_dir / "sfincs_jax_fig1_lhd_collisionality.png").exists()
+    assert not (out_dir / "dkx_fig1_lhd_collisionality.png").exists()
 
 
 def test_main_skip_existing_prunes_incomplete_dirs_and_reruns_partial_operator(
@@ -558,11 +558,11 @@ def test_main_transport_workers_forwarded_to_scan_environment(
 
     assert captured_envs == [
         {
-            "SFINCS_JAX_IMPLICIT_SOLVE": "0",
-            "SFINCS_JAX_WRITE_SOLVER_DIAGNOSTICS": "1",
-            "SFINCS_JAX_TRANSPORT_PARALLEL": "process",
-            "SFINCS_JAX_TRANSPORT_PARALLEL_WORKERS": "2",
-            "SFINCS_JAX_TRANSPORT_PARALLEL_BACKEND": "gpu",
+            "DKX_IMPLICIT_SOLVE": "0",
+            "DKX_WRITE_SOLVER_DIAGNOSTICS": "1",
+            "DKX_TRANSPORT_PARALLEL": "process",
+            "DKX_TRANSPORT_PARALLEL_WORKERS": "2",
+            "DKX_TRANSPORT_PARALLEL_BACKEND": "gpu",
         }
     ]
 
@@ -666,7 +666,7 @@ def test_main_plot_only_allows_single_selected_operator_output(
     payload = json.loads((summary_dir / "lhd_collisionality_fast_summary.json").read_text())
     assert payload["metadata"]["labels_to_collision_operator"] == {"PAS": 1}
     assert [row["label"] for row in payload["rows"]] == ["PAS", "PAS", "PAS", "PAS"]
-    assert (out_dir / "sfincs_jax_fig1_lhd_collisionality.png").exists()
+    assert (out_dir / "dkx_fig1_lhd_collisionality.png").exists()
 
 
 def test_main_plot_only_rejects_incomplete_scan_before_rewriting_summary(
@@ -703,4 +703,4 @@ def test_main_plot_only_rejects_incomplete_scan_before_rewriting_summary(
         mod.main()
 
     assert not (summary_dir / "lhd_collisionality_fast_summary.json").exists()
-    assert not (out_dir / "sfincs_jax_fig1_lhd_collisionality.png").exists()
+    assert not (out_dir / "dkx_fig1_lhd_collisionality.png").exists()

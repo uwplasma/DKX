@@ -3,7 +3,7 @@
 Validation against reference implementations
 ============================================
 
-`sfincs_jax` validates outputs and solver behavior against a mature Fortran SFINCS implementation as a
+`dkx` validates outputs and solver behavior against a mature Fortran SFINCS implementation as a
 reference implementation.
 
 .. note::
@@ -36,15 +36,15 @@ checks unless they are rerun at production-comparison resolution.
 
    python examples/publication_figures/generate_fortran_suite_benchmark_summary.py
 
-.. figure:: _static/figures/paper/sfincs_jax_fortran_suite_benchmark_summary.png
-   :alt: sfincs_jax CPU/GPU suite benchmark against SFINCS Fortran v3
+.. figure:: _static/figures/paper/dkx_fortran_suite_benchmark_summary.png
+   :alt: dkx CPU/GPU suite benchmark against SFINCS Fortran v3
    :width: 92%
 
    Release benchmark generated from the profiled CPU/GPU suite reports. Panel A
    compares wall-clock runtime and Panel B compares active solver memory for the
-   reference-runtime-window subset, with separate ``sfincs_jax`` cold and warm bars for
+   reference-runtime-window subset, with separate ``dkx`` cold and warm bars for
    CPU and GPU.
-   Cases are ordered by best warm ``sfincs_jax`` speedup over the Fortran v3
+   Cases are ordered by best warm ``dkx`` speedup over the Fortran v3
    runtime.
    The benchmark artifacts have median cold JAX/Fortran wall-clock ratios of about
    ``0.021x`` on CPU and ``0.037x`` on GPU for the plotted reference-runtime
@@ -52,7 +52,7 @@ checks unless they are rerun at production-comparison resolution.
    fields, while the public memory bars use profiler active RSS deltas over the
    fixed Python/JAX/XLA baseline; the median active-memory ratios are about
    ``2.89x`` on CPU and ``3.71x`` on GPU. The top runtime and memory cases are recorded in
-   ``examples/publication_figures/artifacts/sfincs_jax_fortran_suite_benchmark_summary.json``.
+   ``examples/publication_figures/artifacts/dkx_fortran_suite_benchmark_summary.json``.
 
 Use :doc:`parity` for the scope map and comparison policy, :doc:`performance` for CPU/GPU
 runtime and memory context, and :doc:`fortran_examples` for the exact-input frozen-fixture audit.

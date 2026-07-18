@@ -1,0 +1,51 @@
+{
+  "metadata": {
+    "baseline": "Ntheta=7,Nzeta=7,Nxi=7,NL=6,Nx=6",
+    "description": "Finite-beta VMEX to dkx one-parameter resolution probes at r_N=0.50.",
+    "normalization": "Er and FSABjHat are normalized dkx output quantities.",
+    "source": "Generated on office RTX A4000 GPUs during the high-resolution finite-beta documentation campaign."
+  },
+  "profiles": {
+    "7/6/6": {
+      "bootstrap_current_at_roots": [
+        -0.03702260654762835
+      ],
+      "roots_er": [
+        -4.877247650844164
+      ],
+      "selected_ambipolar_er": -4.877247650844164,
+      "selected_bootstrap_current": -0.03702260654762835
+    },
+    "7/6/7": {
+      "bootstrap_current_at_roots": [
+        -0.037090406520339674
+      ],
+      "roots_er": [
+        -5.251047238306574
+      ],
+      "selected_ambipolar_er": -5.251047238306574,
+      "selected_bootstrap_current": -0.037090406520339674
+    },
+    "7/7/6": {
+      "bootstrap_current_at_roots": [
+        -0.037022543970283886
+      ],
+      "roots_er": [
+        -4.878136249343604
+      ],
+      "selected_ambipolar_er": -4.878136249343604,
+      "selected_bootstrap_current": -0.037022543970283886
+    },
+    "8/6/6": {
+      "bootstrap_current_at_roots": [
+        -0.03388370555780832
+      ],
+      "roots_er": [
+        -4.456042982799244
+      ],
+      "selected_ambipolar_er": -4.456042982799244,
+      "selected_bootstrap_current": -0.03388370555780832
+    }
+  },
+  "r_n": 0.5
+}

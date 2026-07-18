@@ -1,4 +1,4 @@
-"""Compare sfincs_jax `geometryScheme=4` fields against a Fortran v3 run.
+"""Compare dkx `geometryScheme=4` fields against a Fortran v3 run.
 
 This script is useful when extending the geometry implementation. It compares:
 - `BHat`
@@ -22,9 +22,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from sfincs_jax.validation.fortran import run_sfincs_fortran  # noqa: E402
-from sfincs_jax.namelist import read_sfincs_input  # noqa: E402
-from sfincs_jax.drift_kinetic import kinetic_operator_from_namelist  # noqa: E402
+from dkx.validation.fortran import run_sfincs_fortran  # noqa: E402
+from dkx.namelist import read_sfincs_input  # noqa: E402
+from dkx.drift_kinetic import kinetic_operator_from_namelist  # noqa: E402
 
 
 def main() -> int:
@@ -58,7 +58,7 @@ def main() -> int:
         dbth_f = f["dBHatdtheta"][...]
         dbze_f = f["dBHatdzeta"][...]
 
-    # Fortran HDF5 output uses (Nzeta, Ntheta); sfincs_jax uses (Ntheta, Nzeta).
+    # Fortran HDF5 output uses (Nzeta, Ntheta); dkx uses (Ntheta, Nzeta).
     bhat = np.asarray(op.b_hat).T
     dbth = np.asarray(op.db_hat_dtheta).T
     dbze = np.asarray(op.db_hat_dzeta).T

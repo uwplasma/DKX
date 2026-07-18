@@ -41,25 +41,25 @@ _DEFAULTS = {
 
 
 def configure_krylov_recycle(prev_dir: Path | None, current_dir: Path) -> None:
-    """Configure sfincs_jax Krylov recycling between scan points.
+    """Configure dkx Krylov recycling between scan points.
 
-    Enable by setting `SFINCS_JAX_SCAN_RECYCLE=1` in the environment. This will
-    pass `SFINCS_JAX_STATE_IN/OUT` to sfincs_jax runs so each scan point can
+    Enable by setting `DKX_SCAN_RECYCLE=1` in the environment. This will
+    pass `DKX_STATE_IN/OUT` to dkx runs so each scan point can
     warm-start from the previous point's saved state.
     """
-    flag = os.environ.get("SFINCS_JAX_SCAN_RECYCLE", "").strip().lower()
+    flag = os.environ.get("DKX_SCAN_RECYCLE", "").strip().lower()
     if flag not in {"1", "true", "yes", "on"}:
         return
-    state_out = current_dir / "sfincs_jax_state.npz"
-    os.environ["SFINCS_JAX_STATE_OUT"] = str(state_out)
+    state_out = current_dir / "dkx_state.npz"
+    os.environ["DKX_STATE_OUT"] = str(state_out)
     if prev_dir is None:
-        os.environ.pop("SFINCS_JAX_STATE_IN", None)
+        os.environ.pop("DKX_STATE_IN", None)
         return
-    prev_state = prev_dir / "sfincs_jax_state.npz"
+    prev_state = prev_dir / "dkx_state.npz"
     if prev_state.exists():
-        os.environ["SFINCS_JAX_STATE_IN"] = str(prev_state)
+        os.environ["DKX_STATE_IN"] = str(prev_state)
     else:
-        os.environ.pop("SFINCS_JAX_STATE_IN", None)
+        os.environ.pop("DKX_STATE_IN", None)
 
 
 def format_scan_duration(seconds):
@@ -414,7 +414,7 @@ def readDefault(varName, intOrFloatOrString, required=True):
     return returnValue
 
 
-def run_sfincs_jax_in_dir(
+def run_dkx_in_dir(
     *,
     directory,
     input_lines,
@@ -424,14 +424,14 @@ def run_sfincs_jax_in_dir(
     overwrite=True,
     verbose=True,
 ):
-    from sfincs_jax_driver import run_sfincs_jax  # local helper in utils
+    from dkx_driver import run_dkx  # local helper in utils
 
     directory = Path(directory).resolve()
     directory.mkdir(parents=True, exist_ok=True)
     input_path = directory / inputFilename
     input_path.write_text("".join(input_lines))
     output_path = directory / output_filename
-    run_sfincs_jax(
+    run_dkx(
         input_namelist=input_path,
         output_path=output_path,
         compute_transport_matrix=compute_transport_matrix,

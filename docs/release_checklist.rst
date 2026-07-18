@@ -6,7 +6,7 @@ This page is intended for maintainers preparing a tagged release (PyPI + Read th
 What this project can and cannot claim
 --------------------------------------
 
-For a tagged release, `sfincs_jax` can claim the following only when the
+For a tagged release, `dkx` can claim the following only when the
 corresponding release artifacts are regenerated from the tagged commit:
 
 - full CPU and GPU parity for the vendored 39-case example suite, including
@@ -45,8 +45,8 @@ From the repository root:
 .. code-block:: bash
 
    pytest -q
-   python -m sfincs_jax.validation.release check-gates
-   python -m sfincs_jax.validation.release check-research-lanes
+   python -m dkx.validation.release check-gates
+   python -m dkx.validation.release check-research-lanes
    sphinx-build -W -b html docs docs/_build/html
    python -m build
    python -m twine check dist/*
@@ -63,8 +63,8 @@ For a fast claim-scope check without running the whole suite, use:
 
    pytest -q tests/test_validation_manifest_schema.py tests/test_release_gate_metadata.py
    pytest -q tests/test_benchmark_doc_claims.py tests/test_generate_fortran_suite_benchmark_summary.py
-   python -m sfincs_jax.validation.release check-gates
-   python -m sfincs_jax.validation.release check-research-lanes
+   python -m dkx.validation.release check-gates
+   python -m dkx.validation.release check-research-lanes
 
 This validates that publication-facing lanes are either implemented for the
 documented release-scope claim, kept as bounded scaffolds/proxies, or explicitly
@@ -136,15 +136,15 @@ Manual audit commands:
 
 .. code-block:: bash
 
-   python -m sfincs_jax.validation.data_fetch --quiet
-   SFINCS_JAX_OFFLINE=1 python examples/getting_started/write_sfincs_output_vmec.py \
-     --out /tmp/sfincs_jax_vmec_release_data_smoke.h5
+   python -m dkx.validation.data_fetch --quiet
+   DKX_OFFLINE=1 python examples/getting_started/write_sfincs_output_vmec.py \
+     --out /tmp/dkx_vmec_release_data_smoke.h5
 
-   python -m sfincs_jax.validation.release audit-output-keys \
+   python -m dkx.validation.release audit-output-keys \
      --suite-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak \
      --fail-on-missing
 
-   python -m sfincs_jax.validation.release audit-runtime-drift \
+   python -m dkx.validation.release audit-runtime-drift \
      --baseline-report /path/to/frozen_cpu_baseline/suite_report.json \
      --candidate-report tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak/suite_report.json \
      --threshold-ratio 1.25 \
@@ -174,7 +174,7 @@ full-suite solves:
    # promoted default route is added with residual/runtime/RSS gates.
 
 The manual GitHub workflow ``Production Benchmark Inputs`` should also pass
-before a release. It validates that the generated SFINCS_JAX-owned benchmark
+before a release. It validates that the generated DKX-owned benchmark
 manifest still has 39 cases, uses the documented ``25 x 51 x 4 x 100`` 3D floor
 and ``33 x 1 x 12 x 140`` tokamak floor, applies the calibrated
 ``89 x 1 x 24 x 300`` RHSMode=1 PAS/no-``E_r`` tokamak floor, and does not
@@ -185,7 +185,7 @@ Packaging sanity check
 
 Before tagging:
 
-- update ``pyproject.toml`` and ``sfincs_jax.__version__`` together,
+- update ``pyproject.toml`` and ``dkx.__version__`` together,
 - verify ``pytest -q tests/test_package_metadata.py`` passes,
 - ensure the intended tag is exactly ``v<package-version>``,
 - ensure GitHub CI and Docs are green on the commit being tagged.

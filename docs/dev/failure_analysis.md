@@ -35,7 +35,7 @@ bounds and re-measure key numbers on an idle machine before publishing.
 
 ## Baseline timings collected so far (this machine)
 
-| Case | Fortran (1 rank) | sfincs_jax warm | JAX RSS |
+| Case | Fortran (1 rank) | dkx warm | JAX RSS |
 |---|---|---|---|
 | quick_2species_FPCollisions_noEr | 0.06 s solve | 20 s cold / n.a. warm | ~1 GB |
 | tokamak_1species_FPCollisions_noEr_withQN | (from reference sweep manifest) | 4.2 s | 1.6 GB |
@@ -163,7 +163,7 @@ realistic-sized case (m >= ~169 probed at low Nxi / high collisionality all dive
 only m <= 49 converge, too small to benefit). The isolated fp32 factorization is ~1.5x
 faster on the A4000, but the "large enough to help" and "well-conditioned enough for
 fp32" regimes do not overlap for these operators. Conclusion: mixed precision is NOT
-the GPU lever for sfincs_jax tier-1 and must not be auto-engaged (it would silently
+the GPU lever for dkx tier-1 and must not be auto-engaged (it would silently
 return non-converged results or always fall back to fp64, a net regression). The tool
 remains in solvax for well-conditioned consumers. The real GPU levers here are (a)
 better operator conditioning / preconditioning so fp32 becomes viable, and (b)
@@ -204,7 +204,7 @@ Findings and actions:
    warm solve): geometry + collision-matrix assembly is the next profile
    target after the Phi1 work.
 4. **GPU battery invalidated by a stale install**: the office `sfincs-gpu` env
-   had an old wheel shadowing the repo (no `sfincs_jax.phi1`/`er`), so all GPU
+   had an old wheel shadowing the repo (no `dkx.phi1`/`er`), so all GPU
    numbers ran old code (fixed with an editable install; re-run pending). Under
    the OLD tier-2 route the ramped HSX cases also **OOM'd on the 16 GB A4000**
    (1.4 GiB / 12.1 GiB allocations failed) — the ramp-aware tier-1 (885 MB on
@@ -221,8 +221,8 @@ tier-1 active) and the full production HSX case on both backends:
 | hsx_pas_dkes_prod (Ntheta=25 Nzeta=51 Nxi=100 Nx=5; 744,610 packed DOFs) | runtime | peak RSS |
 | --- | --- | --- |
 | Fortran v3 (PETSc+MUMPS, dev MacBook, earlier baseline) | > 2.6 h, unfinished | 3.6-5.7 GB |
-| sfincs_jax CPU (dev MacBook) | 41.4 s e2e (25.0 s warm solve) | 1.35 GB |
-| sfincs_jax GPU (A4000) | 59.6 s e2e (26.2 s warm solve) | 2.3 GB |
+| dkx CPU (dev MacBook) | 41.4 s e2e (25.0 s warm solve) | 1.35 GB |
+| dkx GPU (A4000) | 59.6 s e2e (26.2 s warm solve) | 2.3 GB |
 
 Both backends route block_tridiagonal_truncated; under the tier-2 route the
 same case OOM'd the 16 GB GPU. Mid-size HSX warm solve is at CPU/GPU parity (3.5 s vs

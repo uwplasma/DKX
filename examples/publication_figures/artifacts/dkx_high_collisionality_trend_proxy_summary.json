@@ -1,0 +1,94 @@
+{
+  "cases": {
+    "lhd": {
+      "gates": {
+        "fp_l11_l12_inverse_like": true,
+        "pas_l11_l12_positive": true
+      },
+      "n_fit": 3,
+      "nuprime_tail": [
+        2.15443431641,
+        4.641588028668,
+        9.9999982658
+      ],
+      "slopes": {
+        "Fokker-Planck": {
+          "L11": -0.6412198736489123,
+          "L12": -0.6212128035303096,
+          "L21": -0.6219841607277371,
+          "L22": 0.7091604820923194,
+          "L33": 0.23488266729872445
+        },
+        "PAS": {
+          "L11": 0.9545781589660239,
+          "L12": 0.8733773134686047,
+          "L21": 0.8733773134686087,
+          "L22": 0.75400299588332,
+          "L33": -0.9610420893112563
+        }
+      },
+      "state": "asymptotic_trend_proxy"
+    },
+    "w7x": {
+      "gates": {
+        "fp_l11_l12_inverse_like": false,
+        "pas_l11_l12_positive": true
+      },
+      "n_fit": 3,
+      "nuprime_tail": [
+        2.154499523193,
+        4.641728512424,
+        10.000300928877
+      ],
+      "slopes": {
+        "Fokker-Planck": {
+          "L11": -0.5317301609611231,
+          "L12": -0.4347863173438659,
+          "L21": -0.43855407959481585,
+          "L22": 0.4710718772989093,
+          "L33": 0.40482535816294946
+        },
+        "PAS": {
+          "L11": 0.8518557046646398,
+          "L12": 0.6971218400205074,
+          "L21": 0.6971218400204483,
+          "L22": 0.560170835128172,
+          "L33": -0.9684258324456632
+        }
+      },
+      "state": "needs_wider_high_nu_scan"
+    }
+  },
+  "gates": {
+    "all_fp_l11_l12_inverse_like": false,
+    "all_pas_l11_l12_positive": true,
+    "checked_in_converged_artifact": false,
+    "full_simakov_helander_reproduction_closed": true,
+    "proxy_or_deferred_only": true,
+    "ready_for_literature_claim": false
+  },
+  "metadata": {
+    "kind": "high_collisionality_trend_proxy",
+    "literature": [
+      "https://doi.org/10.1063/1.4870077",
+      "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
+    ],
+    "notes": [
+      "The SFINCS 2014 paper states that PAS L11/L12 scale like +nu at high collisionality.",
+      "Momentum-conserving FP/model-operator L11/L12 should approach inverse-nu scaling only in the nu' >> 1 limit.",
+      "The checked-in scans stop at nu'=10, so this artifact is a trend proxy, not the full Simakov-Helander analytic-limit reproduction."
+    ],
+    "publication_figure": {
+      "artifact_class": "checked_in_high_collisionality_trend_proxy",
+      "checked_in_converged_artifact": false,
+      "claim_status": "proxy_or_deferred",
+      "manuscript_label": "checked-in trend proxy; full analytic-limit validation deferred",
+      "ready_for_physics_validation_claim": false
+    },
+    "schema_version": 1,
+    "source_artifacts": {
+      "lhd_collisionality": "lhd_collisionality_summary.json",
+      "w7x_collisionality": "w7x_collisionality_summary.json"
+    }
+  }
+}

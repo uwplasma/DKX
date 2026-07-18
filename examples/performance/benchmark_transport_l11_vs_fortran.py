@@ -2,9 +2,9 @@
 
 This script generates a 2x2 panel figure. Each panel corresponds to one case and shows:
 1) left: the figure of merit `L11 = transportMatrix[0,0]` across repeated runs
-2) right (inset): mean runtime per run for Fortran vs `sfincs_jax`
+2) right (inset): mean runtime per run for Fortran vs `dkx`
 
-For `sfincs_jax`, runtime excludes compilation by performing one warm-up run per case.
+For `dkx`, runtime excludes compilation by performing one warm-up run per case.
 
 Usage
 -----
@@ -33,15 +33,15 @@ import h5py
 import numpy as np
 
 try:
-    os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "sfincs_jax_mplconfig"))
+    os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "dkx_mplconfig"))
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 except Exception as exc:  # noqa: BLE001
     raise SystemExit("This example requires matplotlib. Install with: pip install matplotlib") from exc
 
-from sfincs_jax.api import write_output
-from sfincs_jax.io import localize_equilibrium_file_in_place
+from dkx.api import write_output
+from dkx.io import localize_equilibrium_file_in_place
 
 
 def _l11_from_h5(path: Path) -> float:
@@ -145,7 +145,7 @@ def main() -> int:
         if not input_template.exists():
             raise FileNotFoundError(str(input_template))
 
-        case_tmp = Path(tempfile.mkdtemp(prefix=f"sfincs_jax_bench_{label}_"))
+        case_tmp = Path(tempfile.mkdtemp(prefix=f"dkx_bench_{label}_"))
         try:
             fortran_times: list[float] = []
             fortran_l11: list[float] = []
@@ -217,15 +217,15 @@ def main() -> int:
 
     handles, labels = flat_axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="upper center", ncol=2, frameon=False)
-    fig.suptitle("SFINCS vs sfincs_jax: relative L11 difference and runtime (JAX runtime excludes compilation)", y=1.02)
+    fig.suptitle("SFINCS vs dkx: relative L11 difference and runtime (JAX runtime excludes compilation)", y=1.02)
 
-    png_path = out_dir / "sfincs_vs_sfincs_jax_l11_runtime_2x2.png"
-    pdf_path = out_dir / "sfincs_vs_sfincs_jax_l11_runtime_2x2.pdf"
+    png_path = out_dir / "sfincs_vs_dkx_l11_runtime_2x2.png"
+    pdf_path = out_dir / "sfincs_vs_dkx_l11_runtime_2x2.pdf"
     fig.savefig(png_path, dpi=220)
     fig.savefig(pdf_path)
     plt.close(fig)
 
-    summary_path = out_dir / "sfincs_vs_sfincs_jax_l11_runtime_2x2.json"
+    summary_path = out_dir / "sfincs_vs_dkx_l11_runtime_2x2.json"
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
 
     print(f"Wrote {png_path}")

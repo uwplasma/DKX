@@ -1,10 +1,10 @@
 """End-to-end tests for the canonical RHSMode=2/3 driver and writer.
 
-- ``sfincs_jax.run.run_transport_matrix`` transport matrices must match the
+- ``dkx.run.run_transport_matrix`` transport matrices must match the
   recorded Fortran v3 ``sfincsOutput.h5`` goldens on the tiny monoenergetic
   scheme1/scheme11 and RHSMode=2 scheme2 fixtures;
 - stdout must contain the exact golden Fortran banner/grid/Goodbye lines;
-- importing ``sfincs_jax.run`` must never (re)introduce a legacy
+- importing ``dkx.run`` must never (re)introduce a legacy
   ``problems``/``operators``/``outputs`` package.
 """
 
@@ -52,7 +52,7 @@ def _assert_scaled_close(a: np.ndarray, b: np.ndarray, *, tol: float, label: str
 
 @pytest.mark.parametrize("base", FIXTURES)
 def test_run_transport_matrix_matches_fortran_golden(base: str, tmp_path: Path) -> None:
-    from sfincs_jax.run import run_transport_matrix
+    from dkx.run import run_transport_matrix
 
     run = run_transport_matrix(
         REF / f"{base}.input.namelist",
@@ -87,7 +87,7 @@ def test_run_transport_matrix_matches_fortran_golden(base: str, tmp_path: Path) 
 def test_writer_netcdf_mirrors_h5(tmp_path: Path) -> None:
     from netCDF4 import Dataset
 
-    from sfincs_jax.run import run_transport_matrix
+    from dkx.run import run_transport_matrix
 
     base = "monoenergetic_PAS_tiny_scheme1"
     run = run_transport_matrix(
@@ -112,8 +112,8 @@ def test_writer_netcdf_mirrors_h5(tmp_path: Path) -> None:
 
 
 def test_console_lines_for_scheme1_fixture(capsys: pytest.CaptureFixture[str]) -> None:
-    from sfincs_jax import console
-    from sfincs_jax.run import run_transport_matrix
+    from dkx import console
+    from dkx.run import run_transport_matrix
 
     run = run_transport_matrix(REF / "monoenergetic_PAS_tiny_scheme1.input.namelist")
     lines = [ln.rstrip() for ln in capsys.readouterr().out.splitlines()]
@@ -153,7 +153,7 @@ def test_console_lines_for_scheme1_fixture(capsys: pytest.CaptureFixture[str]) -
 
 def test_transport_matrix_lines_match_fortran_golden_format() -> None:
     """Byte-parity of the transport-matrix block vs the frozen Fortran log."""
-    from sfincs_jax import console
+    from dkx import console
 
     rendered = console.transport_matrix_lines(
         [[-4.2660661992651783e-002, 7.9331964106435927e-004],
@@ -175,10 +175,10 @@ def test_transport_matrix_lines_match_fortran_golden_format() -> None:
 def test_run_module_does_not_import_legacy_stack() -> None:
     code = (
         "import sys\n"
-        "import sfincs_jax.run\n"
-        "import sfincs_jax.writer\n"
+        "import dkx.run\n"
+        "import dkx.writer\n"
         "bad = sorted(m for m in sys.modules if m.startswith(("
-        "'sfincs_jax.problems', 'sfincs_jax.operators', 'sfincs_jax.outputs')))\n"
+        "'dkx.problems', 'dkx.operators', 'dkx.outputs')))\n"
         "print('LEGACY_IMPORTS=' + '|'.join(bad))\n"
     )
     proc = subprocess.run(
@@ -195,7 +195,7 @@ def test_run_module_does_not_import_legacy_stack() -> None:
 
 
 def test_run_rejects_rhsmode1() -> None:
-    from sfincs_jax.run import run_transport_matrix
+    from dkx.run import run_transport_matrix
 
     with pytest.raises(NotImplementedError, match="RHSMode"):
         run_transport_matrix(REF / "pas_1species_PAS_noEr_tiny_scheme1.input.namelist", emit=None)

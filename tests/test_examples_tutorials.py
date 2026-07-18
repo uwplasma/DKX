@@ -46,7 +46,7 @@ def test_tutorial_notebooks_are_pedagogic_and_parseable() -> None:
         assert len(cells) >= 9, path.name
         assert len(markdown_cells) >= 5, path.name
         assert len(code_cells) >= 3, path.name
-        assert "sfincs_jax" in text, path.name
+        assert "dkx" in text, path.name
 
 
 def test_tutorial_commands_reference_existing_scripts() -> None:
@@ -54,8 +54,8 @@ def test_tutorial_commands_reference_existing_scripts() -> None:
         "examples/tutorials/run_quick_output_and_plot.py",
         "examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py",
         "examples/autodiff/autodiff_gradient_nu_n_residual.py",
-        "examples/vmec_jax_finite_beta/compare_qs_paper_sfincs_jax_redl.py",
-        "examples/optimization/qa_nfp2_sfincs_jax_objectives.py",
+        "examples/vmex_finite_beta/compare_qs_paper_dkx_redl.py",
+        "examples/optimization/qa_nfp2_dkx_objectives.py",
     }
     for script in referenced_scripts:
         assert (REPO_ROOT / script).is_file(), script

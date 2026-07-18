@@ -8,7 +8,7 @@ import subprocess
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-PACKAGE_ROOT = REPO_ROOT / "sfincs_jax"
+PACKAGE_ROOT = REPO_ROOT / "dkx"
 SCRIPT_ROOT = REPO_ROOT / "scripts"
 EXPECTED_TREE = REPO_ROOT / "tests" / "fixtures" / "source_tree_expected.json"
 CORE_SLIM_INVENTORY = REPO_ROOT / "tests" / "fixtures" / "core_slim_inventory.json"
@@ -76,13 +76,13 @@ INVENTORY_DECISIONS = {
     "extract-pr",
 }
 REQUIRED_CORE_SLIM_SOURCE_OWNERS = {
-    "sfincs_jax/drift_kinetic.py",
-    "sfincs_jax/solve.py",
-    "sfincs_jax/writer.py",
-    "sfincs_jax/magnetic_geometry.py",
-    "sfincs_jax/moments.py",
-    "sfincs_jax/validation/artifacts.py",
-    "sfincs_jax/validation/release.py",
+    "dkx/drift_kinetic.py",
+    "dkx/solve.py",
+    "dkx/writer.py",
+    "dkx/magnetic_geometry.py",
+    "dkx/moments.py",
+    "dkx/validation/artifacts.py",
+    "dkx/validation/release.py",
 }
 REQUIRED_CORE_SLIM_NONPACKAGE_OWNERS = {
     "examples",
@@ -391,7 +391,7 @@ def test_package_readme_explains_public_surface_and_implementation_boundaries() 
     expected_phrases = (
         "canonical stack of flat, physics-named root modules",
         "transitional interim owners while the vertical slices landed",
-        "one folder below `sfincs_jax/`, no nested",
+        "one folder below `dkx/`, no nested",
         "canonical root modules are the stable import surface",
         "Compatibility aliases may remain",
         "fetched through `validation.data_fetch` from release assets",
@@ -413,7 +413,7 @@ def test_package_tree_has_no_tracked_generated_or_large_runtime_outputs() -> Non
     """Keep the importable package light and independent of local run artifacts."""
 
     result = subprocess.run(
-        ["git", "ls-files", "sfincs_jax"],
+        ["git", "ls-files", "dkx"],
         cwd=REPO_ROOT,
         check=True,
         text=True,
@@ -439,7 +439,7 @@ def test_source_map_doc_describes_current_one_level_layout() -> None:
 
     assert "one level of domain folders" in text
     for package in expected["allowed_root_packages"]:
-        assert f"``sfincs_jax/{package}``" in text
+        assert f"``dkx/{package}``" in text
 
 
 def test_source_map_doc_does_not_teach_deleted_file_history() -> None:
@@ -466,7 +466,7 @@ def test_source_map_doc_does_not_teach_deleted_file_history() -> None:
     offenders = [
         package
         for package in sorted(removed_packages)
-        if f"``sfincs_jax/{package}``" in text or f"`sfincs_jax/{package}`" in text
+        if f"``dkx/{package}``" in text or f"`dkx/{package}`" in text
     ]
     assert offenders == []
 
@@ -482,11 +482,11 @@ def test_package_sources_do_not_import_deleted_v3_driver() -> None:
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    if alias.name == "sfincs_jax.v3_driver":
+                    if alias.name == "dkx.v3_driver":
                         offenders.append(path.relative_to(REPO_ROOT).as_posix())
             elif isinstance(node, ast.ImportFrom):
                 module = node.module or ""
-                if module in {"sfincs_jax.v3_driver", "v3_driver"}:
+                if module in {"dkx.v3_driver", "v3_driver"}:
                     offenders.append(path.relative_to(REPO_ROOT).as_posix())
 
     assert offenders == []
@@ -635,12 +635,12 @@ def test_test_suite_does_not_import_deleted_v3_driver() -> None:
         rel = path.relative_to(REPO_ROOT).as_posix()
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
-                if any(alias.name == "sfincs_jax.v3_driver" for alias in node.names):
+                if any(alias.name == "dkx.v3_driver" for alias in node.names):
                     offenders.append(rel)
             elif isinstance(node, ast.ImportFrom):
                 module = node.module or ""
-                imports_driver = module == "sfincs_jax.v3_driver" or (
-                    module == "sfincs_jax" and any(alias.name == "v3_driver" for alias in node.names)
+                imports_driver = module == "dkx.v3_driver" or (
+                    module == "dkx" and any(alias.name == "v3_driver" for alias in node.names)
                 )
                 if imports_driver:
                     offenders.append(rel)
@@ -673,7 +673,7 @@ def test_deleted_tiny_validation_facades_are_absent() -> None:
     """Keep Fortran/PETSc fixture readers in one validation owner."""
 
     assert not (PACKAGE_ROOT / "validation" / "petsc_binary.py").exists()
-    module = importlib.import_module("sfincs_jax.validation.fortran")
+    module = importlib.import_module("dkx.validation.fortran")
     assert hasattr(module, "read_petsc_vec")
     assert hasattr(module, "read_petsc_mat_aij")
 
@@ -703,7 +703,7 @@ def test_deleted_h5_parity_validation_facade_is_absent() -> None:
     """Strict HDF5 parity is part of the public comparison API."""
 
     assert not (PACKAGE_ROOT / "validation" / "h5_parity.py").exists()
-    module = importlib.import_module("sfincs_jax.compare")
+    module = importlib.import_module("dkx.compare")
     assert hasattr(module, "compare_h5_outputs")
     assert hasattr(module, "H5DatasetParity")
 
@@ -719,19 +719,19 @@ def test_canonical_root_modules_are_importable() -> None:
     """The canonical flat root modules replace the deleted legacy packages."""
 
     canonical_modules = (
-        "sfincs_jax.drift_kinetic",
-        "sfincs_jax.solve",
-        "sfincs_jax.run",
-        "sfincs_jax.writer",
-        "sfincs_jax.phase_space",
-        "sfincs_jax.magnetic_geometry",
-        "sfincs_jax.moments",
-        "sfincs_jax.collisions",
-        "sfincs_jax.species",
-        "sfincs_jax.phi1",
-        "sfincs_jax.er",
-        "sfincs_jax.solver_trace",
-        "sfincs_jax.xgrid",
+        "dkx.drift_kinetic",
+        "dkx.solve",
+        "dkx.run",
+        "dkx.writer",
+        "dkx.phase_space",
+        "dkx.magnetic_geometry",
+        "dkx.moments",
+        "dkx.collisions",
+        "dkx.species",
+        "dkx.phi1",
+        "dkx.er",
+        "dkx.solver_trace",
+        "dkx.xgrid",
     )
     for module_name in canonical_modules:
         module = importlib.import_module(module_name)

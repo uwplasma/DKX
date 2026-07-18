@@ -9,19 +9,19 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from sfincs_jax.ambipolar import (
+from dkx.ambipolar import (
     _fortran_bool_to_py,
     _infer_var_name_from_scan_input,
     _scanplot2_labels,
     _scanplot2_outputs_for_run,
     radial_current_from_output,
 )
-from sfincs_jax.validation.fortran import default_fortran_exe, run_sfincs_fortran
-from sfincs_jax.namelist import Namelist
-from sfincs_jax.paths import _strip_quotes, resolve_existing_path
-from sfincs_jax.profiling import SimpleProfiler, _device_mem_mb, _rss_mb, maybe_profiler
-from sfincs_jax.workflows.scans import _er_scan_var_name, _patch_scalar_in_group, linspace_including_endpoints, run_er_scan
-from sfincs_jax.profiling import Timer, make_emit
+from dkx.validation.fortran import default_fortran_exe, run_sfincs_fortran
+from dkx.namelist import Namelist
+from dkx.paths import _strip_quotes, resolve_existing_path
+from dkx.profiling import SimpleProfiler, _device_mem_mb, _rss_mb, maybe_profiler
+from dkx.workflows.scans import _er_scan_var_name, _patch_scalar_in_group, linspace_including_endpoints, run_er_scan
+from dkx.profiling import Timer, make_emit
 
 
 def test_fortran_bool_and_radial_current_helpers() -> None:
@@ -128,7 +128,7 @@ def test_paths_helpers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     target = tmp_path / "equilibria" / "wout.nc"
     target.parent.mkdir()
     target.write_text("ok")
-    monkeypatch.setenv("SFINCS_JAX_EQUILIBRIA_DIRS", f'"{target.parent}"')
+    monkeypatch.setenv("DKX_EQUILIBRIA_DIRS", f'"{target.parent}"')
     assert _strip_quotes("'abc'") == "abc"
     resolved = resolve_existing_path('"wout.nc"', base_dir=tmp_path)
     assert resolved.path == target
@@ -140,7 +140,7 @@ def test_paths_helpers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_profiling_and_verbose_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
-    import sfincs_jax.profiling as profiling
+    import dkx.profiling as profiling
 
     fake_psutil = SimpleNamespace(
         Process=lambda: SimpleNamespace(memory_info=lambda: SimpleNamespace(rss=12_500_000))
@@ -168,21 +168,21 @@ def test_profiling_and_verbose_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
     assert profiler_with_dev.entries[0]["device_mb"] == pytest.approx(3.0)
     assert device_mem_calls == [1, 1]
 
-    monkeypatch.setenv("SFINCS_JAX_PROFILE", "on")
-    monkeypatch.delenv("SFINCS_JAX_PROFILE_DEVICE_MEM", raising=False)
+    monkeypatch.setenv("DKX_PROFILE", "on")
+    monkeypatch.delenv("DKX_PROFILE_DEVICE_MEM", raising=False)
     prof = maybe_profiler()
     assert prof is not None
     assert prof.sample_device_mem is False
-    monkeypatch.setenv("SFINCS_JAX_PROFILE_DEVICE_MEM", "1")
+    monkeypatch.setenv("DKX_PROFILE_DEVICE_MEM", "1")
     prof = maybe_profiler()
     assert prof is not None
     assert prof.sample_device_mem is True
-    monkeypatch.delenv("SFINCS_JAX_PROFILE_DEVICE_MEM", raising=False)
-    monkeypatch.setenv("SFINCS_JAX_PROFILE", "full")
+    monkeypatch.delenv("DKX_PROFILE_DEVICE_MEM", raising=False)
+    monkeypatch.setenv("DKX_PROFILE", "full")
     prof = maybe_profiler()
     assert prof is not None
     assert prof.sample_device_mem is True
-    monkeypatch.setenv("SFINCS_JAX_PROFILE", "off")
+    monkeypatch.setenv("DKX_PROFILE", "off")
     assert maybe_profiler() is None
 
     lines: list[str] = []
@@ -192,7 +192,7 @@ def test_profiling_and_verbose_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
     assert any("hello" in line for line in lines)
     assert not any("skip" in line for line in lines)
 
-    import sfincs_jax.profiling as verbose
+    import dkx.profiling as verbose
 
     t = iter([2.0, 2.4])
     monkeypatch.setattr(verbose.time, "perf_counter", lambda: next(t))
@@ -223,8 +223,8 @@ def test_fortran_wrapper_and_entrypoint_helpers(tmp_path: Path, monkeypatch: pyt
         Path(cwd, "sfincsOutput.h5").write_bytes(b"")
         return SimpleNamespace(returncode=0)
 
-    monkeypatch.setattr("sfincs_jax.io.localize_equilibrium_file_in_place", _fake_localize)
-    monkeypatch.setattr("sfincs_jax.validation.fortran.subprocess.run", _fake_run)
+    monkeypatch.setattr("dkx.io.localize_equilibrium_file_in_place", _fake_localize)
+    monkeypatch.setattr("dkx.validation.fortran.subprocess.run", _fake_run)
 
     out = run_sfincs_fortran(
         input_namelist=input_path,
@@ -243,7 +243,7 @@ def test_fortran_wrapper_and_entrypoint_helpers(tmp_path: Path, monkeypatch: pyt
         stdout.write("MPI_Finalize failed\n")
         return SimpleNamespace(returncode=143)
 
-    monkeypatch.setattr("sfincs_jax.validation.fortran.subprocess.run", _fake_finalize_failure)
+    monkeypatch.setattr("dkx.validation.fortran.subprocess.run", _fake_finalize_failure)
     out = run_sfincs_fortran(input_namelist=input_path, exe=exe, workdir=workdir)
     assert out == workdir / "sfincsOutput.h5"
 
@@ -252,14 +252,14 @@ def test_fortran_wrapper_and_entrypoint_helpers(tmp_path: Path, monkeypatch: pyt
         stdout.write("MPI_Finalize failed\n")
         return SimpleNamespace(returncode=2)
 
-    monkeypatch.setattr("sfincs_jax.validation.fortran.subprocess.run", _fake_real_failure)
+    monkeypatch.setattr("dkx.validation.fortran.subprocess.run", _fake_real_failure)
     with pytest.raises(subprocess.CalledProcessError):
         run_sfincs_fortran(input_namelist=input_path, exe=exe, workdir=workdir)
 
-    monkeypatch.setattr("sfincs_jax.cli.main", lambda: 7)
-    sys.modules.pop("sfincs_jax.__main__", None)
+    monkeypatch.setattr("dkx.cli.main", lambda: 7)
+    sys.modules.pop("dkx.__main__", None)
     with pytest.raises(SystemExit) as excinfo:
-        runpy.run_module("sfincs_jax.__main__", run_name="__main__")
+        runpy.run_module("dkx.__main__", run_name="__main__")
     assert excinfo.value.code == 7
 
 
@@ -315,8 +315,8 @@ def test_scan_helpers_and_run_er_scan(tmp_path: Path, monkeypatch: pytest.Monkey
         )
         Path(out_path).write_bytes(b"")
 
-    monkeypatch.setattr("sfincs_jax.workflows.scans.localize_equilibrium_file_in_place", _fake_localize)
-    monkeypatch.setattr("sfincs_jax.workflows.scans.run_from_namelist", _fake_write)
+    monkeypatch.setattr("dkx.workflows.scans.localize_equilibrium_file_in_place", _fake_localize)
+    monkeypatch.setattr("dkx.workflows.scans.run_from_namelist", _fake_write)
     emits: list[tuple[int, str]] = []
 
     result = run_er_scan(

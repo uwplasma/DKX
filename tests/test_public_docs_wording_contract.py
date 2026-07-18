@@ -10,7 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_TEXT_SUFFIXES = {".md", ".rst", ".py", ".ipynb"}
 PUBLIC_TEXT_ROOTS = {
     "README.md",
-    "sfincs_jax/README.md",
+    "dkx/README.md",
     "docs",
     "examples",
 }

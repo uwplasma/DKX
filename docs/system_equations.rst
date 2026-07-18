@@ -1,7 +1,7 @@
 Drift-kinetic equation and system of equations
 ==============================================
 
-`sfincs_jax` starts from the radially local, steady drift-kinetic equation on one
+`dkx` starts from the radially local, steady drift-kinetic equation on one
 flux surface. The unknown is the non-adiabatic part of the species distribution,
 ``f_s1``; outputs such as particle flux, heat flux, parallel flow, bootstrap-current
 proxies, NTV, and transport-matrix coefficients are velocity-space and flux-surface
@@ -16,7 +16,7 @@ Fokker-Planck/Rosenbluth operator, depending on ``collisionOperator``. Only afte
 this discretization does the problem become the block linear/nonlinear algebraic
 system described below.
 
-In its most general supported configuration, `sfincs_jax` solves a coupled system consisting of:
+In its most general supported configuration, `dkx` solves a coupled system consisting of:
 
 1) a drift-kinetic equation (DKE) for each kinetic species,
 2) an optional quasineutrality equation for the flux-surface variation of the electrostatic potential
@@ -24,7 +24,7 @@ In its most general supported configuration, `sfincs_jax` solves a coupled syste
 3) auxiliary constraints that remove nullspaces and enforce moment conditions.
 
 This page summarizes the block structure and the equations most relevant to the linear
-system that `sfincs_jax` assembles and solves.
+system that `dkx` assembles and solves.
 For physics background and literature references, see :doc:`physics_models`
 and :doc:`physics_reference`.
 
@@ -62,7 +62,7 @@ of the distribution function on a single flux surface. We write
    f_s = f_{s0} + f_{s1},
 
 where :math:`f_{s0}` is the Maxwellian (optionally modified by :math:`\Phi_1`) and :math:`f_{s1}` is
-the unknown. In normalized v3 form, the matrix-free operator assembled by `sfincs_jax` corresponds to
+the unknown. In normalized v3 form, the matrix-free operator assembled by `dkx` corresponds to
 
 .. math::
 
@@ -99,7 +99,7 @@ by specific namelist parameters:
   controlled by ``useDKESExBDrift`` (DKES vs default v3 coefficient form) and by
   the radial electric field input (``dPhiHatdpsiHat``).
 - **Magnetic drift terms** (:math:`\mathbf{v}_m\cdot\nabla` + associated :math:`\partial_\xi` term):
-  enabled when ``magneticDriftScheme > 0`` (schemes ``1``--``9`` are fully supported in `sfincs_jax`);
+  enabled when ``magneticDriftScheme > 0`` (schemes ``1``--``9`` are fully supported in `dkx`);
   upwinding is controlled by ``magneticDriftDerivativeScheme``.
 - **Energy derivative term** (:math:`\dot{x}\,\partial_x`): enabled with ``includeXDotTerm = .true.``.
 - **Pitch-angle drift term** (:math:`\dot{\xi}\,\partial_\xi`): included in v3 with the ExB and magnetic
@@ -162,8 +162,8 @@ Not every optional Phi1 coupling that appears in the extended literature is acti
 every public workflow. The supported scope is documented in :doc:`inputs`,
 :doc:`outputs`, and :doc:`fortran_comparison`. On the canonical stack the blocks
 above are built by the consolidated
-:class:`sfincs_jax.drift_kinetic.KineticOperator` (streaming/mirror, ExB, the
+:class:`dkx.drift_kinetic.KineticOperator` (streaming/mirror, ExB, the
 :math:`E_r` terms, the quasineutrality rows, and the ``<Phi1>=0`` Lagrange row),
-by :mod:`sfincs_jax.collisions` (PAS and Fokker--Planck blocks), and by
-:mod:`sfincs_jax.phi1` (the nonlinear :math:`\Phi_1` Newton solve). See the
+by :mod:`dkx.collisions` (PAS and Fokker--Planck blocks), and by
+:mod:`dkx.phi1` (the nonlinear :math:`\Phi_1` Newton solve). See the
 equation-to-code map in :doc:`physics_reference`.

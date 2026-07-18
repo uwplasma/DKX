@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from sfincs_jax.validation.artifacts import (
+from dkx.validation.artifacts import (
     ARTIFACT_CLASS_FORTRAN_SUITE_SUMMARY,
     ARTIFACT_CLASS_LEGACY,
     ARTIFACT_CLASS_NON_PAS,
@@ -494,7 +494,7 @@ def test_release_index_excludes_legacy_schema_v1_from_gate(tmp_path: Path) -> No
 
 def test_release_index_classifies_non_pas_unrelated_file(tmp_path: Path) -> None:
     artifact = tmp_path / "package_metadata.json"
-    artifact.write_text(json.dumps({"name": "sfincs-jax", "schema_version": 2}) + "\n")
+    artifact.write_text(json.dumps({"name": "dkx", "schema_version": 2}) + "\n")
 
     entry = classify_benchmark_artifact_file(artifact)
 
@@ -504,7 +504,7 @@ def test_release_index_classifies_non_pas_unrelated_file(tmp_path: Path) -> None
 
 
 def test_release_index_classifies_fortran_suite_summary(tmp_path: Path) -> None:
-    artifact = tmp_path / "sfincs_jax_fortran_suite_benchmark_summary.json"
+    artifact = tmp_path / "dkx_fortran_suite_benchmark_summary.json"
     artifact.write_text(json.dumps(_valid_fortran_suite_summary_payload()) + "\n")
 
     entry = classify_benchmark_artifact_file(artifact)
@@ -520,7 +520,7 @@ def test_checked_in_fortran_suite_summary_is_release_indexed() -> None:
         / "examples"
         / "publication_figures"
         / "artifacts"
-        / "sfincs_jax_fortran_suite_benchmark_summary.json"
+        / "dkx_fortran_suite_benchmark_summary.json"
     )
 
     entry = classify_benchmark_artifact_file(artifact)
