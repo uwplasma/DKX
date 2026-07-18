@@ -1,4 +1,4 @@
-! Tiny monoenergetic (RHSMode=3) PAS example for dkx parity testing (geometryScheme=1).
+! Tiny monoenergetic (RHSMode=3) PAS example for sfincs_jax parity testing (geometryScheme=1).
 !
 ! This fixture mirrors the upstream v3 monoenergetic workflow:
 ! - RHSMode=3 triggers nuPrime/EStar overwrites of (nu_n, dPhiHatdpsiHat) in v3.

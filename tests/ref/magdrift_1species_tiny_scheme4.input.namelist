@@ -1,4 +1,4 @@
-! Auto-generated magnetic-drift-only collisionless fixture for dkx parity.
+! Auto-generated magnetic-drift-only collisionless fixture for sfincs_jax parity.
 
 &general
   saveMatricesAndVectorsInBinary = .t.
@@ -6,7 +6,7 @@
 
 &geometryParameters
   geometryScheme = 11
-  equilibriumFile = "../sfincs/equilibria/w7x_standardConfig.bc"
+  equilibriumFile = "w7x_standardConfig.bc"
   rN_wish = 0.5d+0
 /
 

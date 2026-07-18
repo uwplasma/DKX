@@ -17,7 +17,7 @@ def _sha256_bytes(payload: bytes) -> str:
 def test_external_data_manifest_lists_release_fixtures() -> None:
     manifest = data_fetch.external_data_manifest()
 
-    assert manifest["release_tag"] == "dkx-data-v1"
+    assert manifest["release_tag"] == "sfincs-jax-data-v1"
     assert manifest["archive_sha256"]
     assert "wout_w7x_standardConfig.nc" in data_fetch.known_external_equilibrium_names()
     assert "hsx3free.bc" in data_fetch.known_external_equilibrium_names()
