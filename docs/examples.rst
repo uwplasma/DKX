@@ -87,7 +87,7 @@ Run from the repo root:
 .. code-block:: bash
 
    cd dkx
-   python examples/tutorials/run_quick_output_and_plot.py --out-dir tutorial_output
+   python examples/tutorials/run_quick_output_and_plot.py
    python examples/getting_started/build_grids_and_geometry.py
 
 For a guided classroom-style path, open the notebooks in
@@ -138,7 +138,7 @@ frozen-reference or benchmark workflow.
      - Typical command
    * - Write output files and a diagnostics panel
      - ``examples/tutorials/run_quick_output_and_plot.py``
-     - ``python examples/tutorials/run_quick_output_and_plot.py --out-dir tutorial_output``
+     - ``python examples/tutorials/run_quick_output_and_plot.py``
    * - Inspect HDF5, NetCDF, NPZ, and plotting
      - ``examples/getting_started/write_and_plot_multiple_formats.py``
      - ``python examples/getting_started/write_and_plot_multiple_formats.py``
@@ -742,8 +742,10 @@ based on `jax.lax.custom_linear_solve` and demonstrates it here:
 
 .. code-block:: bash
 
-   python examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py --solver gmres
-   python examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py --solver bicgstab
+   python examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py
+
+Edit the ``SOLVE_METHOD`` parameter at the top of the script to route the solve
+through the ``auto``, ``block_tridiagonal``, or ``gmres`` tier.
 
 VMEC-to-Boozer Differentiable Geometry Workflow
 -----------------------------------------------
@@ -753,27 +755,21 @@ checks a public differentiable geometry workflow into ``dkx``:
 
 .. code-block:: bash
 
-   python examples/autodiff/vmex_to_boozer_sfincs_pipeline.py \
-     --wout /path/to/wout_circular_tokamak.nc \
-     --mboz 3 \
-     --nboz 3 \
-     --surface 0.5
+   python examples/autodiff/vmex_to_boozer_sfincs_pipeline.py
 
-The script reports a Boozer-spectrum geometry proxy, its JAX gradient, a centered
-finite-difference gradient, and a few scalar optimization steps.  It is a fast
-research workflow gate for JAX-native geometry coupling; it is not a full kinetic
-transport optimization solve.
+The script first prints the optional-backend status and runs a dependency-free
+Boozer-proxy gradient gate.  When ``vmex`` and ``booz_xform_jax`` are installed
+and a VMEC ``wout`` resolves, it then reports a Boozer-spectrum geometry proxy,
+its JAX gradient, a centered finite-difference gradient, and a few scalar
+optimization steps.  Edit the ``WOUT_PATH``, ``SURFACE``, ``MBOZ``, and
+``NBOZ`` parameters at the top (or set ``DKX_VMEX_WOUT``) to change the input.
+It is a fast research workflow gate for JAX-native geometry coupling; it is not
+a full kinetic transport optimization solve.
 
-The backend-status path is safe in default CI and normal installations:
-
-.. code-block:: bash
-
-   python examples/autodiff/vmex_to_boozer_sfincs_pipeline.py --check-backends --json
-
-That command does not import ``vmex`` or ``booz_xform_jax``.  The JSON output
-contains a ``workflow_contract`` with shallow backend availability, differentiability
-labels, the exact geometry-proxy gradient claim, deferred kinetic-gradient work,
-and a no-overclaim gate that forbids presenting this lane as full
+The dependency-free backend status and gradient gate always run first, and the
+workflow summary JSON records shallow backend availability, differentiability
+labels, the exact geometry-proxy gradient claim, deferred kinetic-gradient
+work, and a no-overclaim gate that forbids presenting this lane as full
 VMEC-boundary-to-SFINCS transport differentiation.
 
 Parallel and scaling examples

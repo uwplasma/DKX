@@ -124,9 +124,9 @@ jobs:
           python examples/getting_started/apply_collisionless_operator.py
           python examples/getting_started/write_sfincs_output_python.py
           python examples/getting_started/write_sfincs_output_cli.py
-          python examples/getting_started/write_sfincs_output_vmec.py --out "${RUNNER_TEMP}/sfincsOutput_vmec_release_data.h5"
+          python examples/getting_started/write_sfincs_output_vmec.py
           python examples/getting_started/plot_sfincs_output.py
-          python examples/tutorials/run_quick_output_and_plot.py --out-dir "${RUNNER_TEMP}/dkx_tutorial_output"
+          python examples/tutorials/run_quick_output_and_plot.py
           python examples/parity/write_output_upstream_quick2species_python.py
           python examples/parity/write_output_upstream_quick2species_cli.py
           python examples/parity/geometry_scheme4_parity.py
@@ -187,8 +187,8 @@ jobs:
             tests/test_data_fetch.py::test_external_data_manifest_lists_release_fixtures \
             tests/test_data_fetch.py::test_unknown_external_equilibrium_does_not_fetch \
             tests/test_cli_solve_mode.py::test_normalize_default_argv_keeps_wout_path_override
-          python examples/getting_started/write_sfincs_output_vmec.py --out "${RUNNER_TEMP}/sfincsOutput_vmec_release_data.h5"
-          test -s "${RUNNER_TEMP}/sfincsOutput_vmec_release_data.h5"
+          python examples/getting_started/write_sfincs_output_vmec.py
+          test -s examples/output/write_sfincs_output_vmec/sfincsOutput_vmec.h5
 
   # NOTE: the former `optional-ecosystem-gates` job was removed. Its only
   # sfincs-specific probe depended on the deleted structured-CSR internals
