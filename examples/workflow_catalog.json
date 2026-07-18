@@ -158,7 +158,7 @@
       "id": "vmec_boozer_jax_pipeline",
       "goal": "Inspect the VMEX to Boozer/DKX differentiable workflow.",
       "entrypoint": "autodiff/vmex_to_boozer_sfincs_pipeline.py",
-      "command": "python examples/autodiff/vmex_to_boozer_sfincs_pipeline.py",
+      "command": "python examples/autodiff/vmex_to_boozer_sfincs_pipeline.py --help",
       "topic": "autodiff_geometry",
       "keywords": ["vmex", "booz_xform_jax", "boozer", "autodiff", "geometry"],
       "runtime_budget": "optional dependency workflow",
