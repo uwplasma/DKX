@@ -1,4 +1,4 @@
-"""Tests for the flagship example ``examples/optimize_QA_bootstrap.py``.
+"""Tests for the flagship example ``examples/optimization/optimize_QA_bootstrap.py``.
 
 Covered here:
 
@@ -50,7 +50,7 @@ pytest.importorskip("booz_xform_jax")
 pytestmark = pytest.mark.slow
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-EXAMPLE = REPO_ROOT / "examples" / "optimize_QA_bootstrap.py"
+EXAMPLE = REPO_ROOT / "examples" / "optimization" / "optimize_QA_bootstrap.py"
 
 
 @pytest.fixture(scope="module")
