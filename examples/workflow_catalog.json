@@ -68,7 +68,7 @@
       "id": "cli_output_panel",
       "goal": "Write output files and a diagnostics panel.",
       "entrypoint": "tutorials/run_quick_output_and_plot.py",
-      "command": "python examples/tutorials/run_quick_output_and_plot.py --out-dir tutorial_output",
+      "command": "python examples/tutorials/run_quick_output_and_plot.py",
       "topic": "getting_started",
       "keywords": ["cli", "plot", "hdf5", "netcdf", "npz", "diagnostics"],
       "runtime_budget": "seconds",
