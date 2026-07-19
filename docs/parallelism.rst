@@ -63,6 +63,29 @@ beats a serial Python loop even on CPU — about ``9.5x`` for an ``E_r`` scan an
 sits at CPU parity but a batch fills the device. Reproduce both with
 ``python tools/benchmarks/batched_scan.py``.
 
+**Multiple devices.** The batch elements are embarrassingly parallel, so the
+batched calls also accept a ``devices`` argument that splits the batch across
+devices: ``devices="auto"`` uses every local device of the default backend
+when more than one is visible, and an explicit sequence of ``jax.Device``
+objects selects a subset. Each device receives a contiguous near-equal shard
+of the batch, runs the same memory-budgeted chunked solve on it — the budget
+bounds each device's chunk, so the auto-chunking arithmetic is per device —
+and the results are gathered on the host in batch order. Anything short of
+two usable devices, or a batch smaller than the device count, degrades to the
+single-device path unchanged, and traced inputs (inside ``jax.jit`` /
+``jax.grad``) fall back to the single-device path, which computes the same
+answer; keep ``devices=None`` on paths meant for tracing. The per-element
+computation is the single-device computation: with matched executed chunk
+widths (an explicit ``max_batch``) the results are bitwise identical across
+device counts, and the identity gate in ``tests/test_batch.py`` verifies
+element-wise identical results for one versus two forced host CPU devices
+(``DKX_CPU_DEVICES=2``), which exercises the same split/placement/gather path
+as two GPUs. Multi-GPU *speedup* validation is pending access to a
+multi-GPU host — the API is measured-correct on multi-device CPU, where no
+speedup is possible (forced host devices share one threadpool) and the split
+costs one extra per-shard dispatch, so the honest CPU expectation is
+neutral-to-slower wall time.
+
 Solve tiers and where the GPU helps
 -----------------------------------
 
