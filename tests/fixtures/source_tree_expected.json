@@ -33,6 +33,7 @@
   "solve.py",
   "solver_trace.py",
   "species.py",
+  "validity.py",
   "variational.py",
   "writer.py",
   "xgrid.py"
@@ -71,6 +72,7 @@
   "solve.py",
   "solver_trace.py",
   "species.py",
+  "validity.py",
   "variational.py",
   "writer.py",
   "xgrid.py"
