@@ -156,10 +156,14 @@ thread control must be in place **before JAX is imported**; the CLI
 threadpool is clamped to ``min(8, cpu_count)``. The measured optimum is 4-8
 threads on both a 10-core laptop and a 36-core workstation: tier-1 thread
 scaling saturates near 2-2.5x and **inverts** beyond the optimum on wide
-machines. On the 36-core workstation the tier-1 warm solve measures 9.7 s at
-1 thread, 4.87 s at 8 threads, and 29.9 s at the full 36 threads — the XLA
-fork-join overhead over the sequential Legendre-block sweep dominates once the
-pool is too wide. The guidance on many-core hosts is to set ``--cores`` to
+machines. On the 36-core workstation the mid HSX deck (336,610 unknowns) warm
+tier-1 solve measures 9.7 s at 1 thread, 7.8 s at 2, 5.6 s at 4, and 4.87 s at
+8 threads — the optimum, a 1.99x speedup at 25% parallel efficiency — then
+rises back to 12.2 s at 16, 56.6 s at 32, and 29.3 s at the full 36. The
+operator build stays flat near 8 s at every core count, so the inversion is
+entirely the XLA fork-join overhead over the sequential Legendre-block sweep
+once the pool is too wide (the wide-pool tail carries large run-to-run
+variance). The guidance on many-core hosts is to set ``--cores`` to
 roughly 4-8, not to ``nproc``. ``DKX_CPU_DEVICES`` is a separate, explicit
 opt-in that forces multiple host *devices* for multi-device CPU tests; forced
 host devices share one threadpool, so it is not a performance knob. Full
