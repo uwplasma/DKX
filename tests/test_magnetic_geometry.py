@@ -19,7 +19,7 @@ import pytest
 import jax
 import jax.numpy as jnp
 
-from dkx.magnetic_geometry import FluxSurfaceGeometry, read_vmec_wout
+from dkx.magnetic_geometry import FluxSurfaceGeometry, read_vmec_wout, _u_and_bsubpsi
 
 _NONSTELSYM_WOUT = Path(__file__).parent / "ref" / "wout_up_down_asymmetric_tokamak.nc"
 
@@ -301,3 +301,126 @@ def test_from_fourier_with_sine_spectrum_is_finite_and_truncated() -> None:
         )
     )(bmnc)
     assert float(grad[2]) == 0.0
+
+
+# ---------------------------------------------------------------------------
+# _u_and_bsubpsi vectorization: bit-identity vs the scalar-loop reference
+# ---------------------------------------------------------------------------
+
+
+def _u_and_bsubpsi_reference(
+    *, theta, zeta, n_periods, b_hat, iota, g_hat, i_hat, p_prime_hat, non_stel_sym
+):
+    """Pre-vectorization scalar-loop reference for ``_u_and_bsubpsi``.
+
+    The production routine hoists the per-harmonic trig to a single 2-D
+    ``cos``/``sin`` and does the ``b_sub_psi`` accumulation as whole-grid
+    in-place adds; both are order-preserving, so its output must stay
+    bit-for-bit equal to this literal transcription of the original loop
+    (which keeps the ``h_amp`` reduction as sequential per-``itheta``
+    ``np.dot``).  Any drift here would silently change the Boozer
+    magnetic-drift operator.
+    """
+    ntheta = int(theta.shape[0])
+    nzeta = int(zeta.shape[0])
+    h_hat = 1.0 / (b_hat * b_hat)
+    b_sub_psi = np.zeros_like(b_hat)
+    db_sub_psi_dtheta = np.zeros_like(b_hat)
+    db_sub_psi_dzeta = np.zeros_like(b_hat)
+    m_max = int(ntheta / 2.0)
+    n_max = int(nzeta / 2.0)
+    theta_half = ntheta / 2.0
+    zeta_half = nzeta / 2.0
+    zeta_is_even = float(int(zeta_half)) == zeta_half
+    for m in range(m_max + 1):
+        if m == 0:
+            startn = 1
+        elif float(m) == theta_half:
+            startn = 0
+        elif zeta_is_even:
+            startn = -n_max + 1
+        else:
+            startn = -n_max
+        for n in range(startn, n_max + 1):
+            for is_cos in (True, False):
+                if not is_cos and not non_stel_sym:
+                    continue
+                nyquist = (
+                    (m == 0 and float(n) == zeta_half)
+                    or (float(m) == theta_half and n == 0)
+                    or (float(m) == theta_half and float(n) == zeta_half)
+                )
+                h_amp = 0.0
+                if is_cos:
+                    for itheta in range(ntheta):
+                        ang = float(m) * float(theta[itheta]) - float(n * n_periods) * zeta
+                        w = (1.0 if nyquist else 2.0) / float(ntheta * nzeta)
+                        h_amp += w * float(np.dot(np.cos(ang), h_hat[itheta, :]))
+                elif not nyquist:
+                    for itheta in range(ntheta):
+                        ang = float(m) * float(theta[itheta]) - float(n * n_periods) * zeta
+                        h_amp += (2.0 / float(ntheta * nzeta)) * float(np.dot(np.sin(ang), h_hat[itheta, :]))
+                denom = float(n * n_periods) - float(iota) * float(m)
+                numer = float(iota) * (float(g_hat) * float(m) + float(i_hat) * float(n * n_periods))
+                u_amp = 0.0 if denom == 0.0 else (numer / denom) * h_amp
+                d_dtheta_amp = -float(p_prime_hat) / float(iota) * (u_amp - float(iota) * float(i_hat) * h_amp)
+                d_dzeta_amp = float(p_prime_hat) * (u_amp + float(g_hat) * h_amp)
+                for itheta in range(ntheta):
+                    ang = float(m) * float(theta[itheta]) - float(n * n_periods) * zeta
+                    c = np.cos(ang)
+                    s = np.sin(ang)
+                    if is_cos:
+                        db_sub_psi_dtheta[itheta, :] += d_dtheta_amp * c
+                        db_sub_psi_dzeta[itheta, :] += d_dzeta_amp * c
+                        if n == 0:
+                            b_sub_psi[itheta, :] += (d_dtheta_amp / float(m)) * s
+                        else:
+                            b_sub_psi[itheta, :] += -(d_dzeta_amp / float(n) / float(n_periods)) * s
+                    else:
+                        db_sub_psi_dtheta[itheta, :] += d_dtheta_amp * s
+                        db_sub_psi_dzeta[itheta, :] += d_dzeta_amp * s
+                        if n == 0:
+                            b_sub_psi[itheta, :] += -(d_dtheta_amp / float(m)) * c
+                        else:
+                            b_sub_psi[itheta, :] += (d_dzeta_amp / float(n) / float(n_periods)) * c
+    return b_sub_psi, db_sub_psi_dtheta, db_sub_psi_dzeta
+
+
+def _u_bsubpsi_inputs(n_theta: int, n_zeta: int, n_periods: int, non_stel_sym: bool):
+    theta = np.linspace(0.0, 2.0 * math.pi, n_theta, endpoint=False, dtype=np.float64)
+    zeta = np.linspace(0.0, 2.0 * math.pi / n_periods, n_zeta, endpoint=False, dtype=np.float64)
+    th = theta[:, None]
+    ze = zeta[None, :]
+    # A smooth, strictly positive |B| with a helical ripple (and, when
+    # non_stel_sym, a sine component so the odd-parity harmonic branch runs).
+    b_hat = 1.0 + 0.12 * np.cos(th) + 0.06 * np.cos(th - n_periods * ze) - 0.03 * np.cos(2.0 * n_periods * ze)
+    if non_stel_sym:
+        b_hat = b_hat + 0.04 * np.sin(th - n_periods * ze) + 0.02 * np.sin(2.0 * th)
+    return np.ascontiguousarray(theta), np.ascontiguousarray(zeta), np.ascontiguousarray(b_hat)
+
+
+@pytest.mark.parametrize("n_theta,n_zeta", [(12, 12), (13, 11), (17, 33), (8, 6)])
+@pytest.mark.parametrize("non_stel_sym", [False, True])
+def test_u_and_bsubpsi_matches_scalar_reference(n_theta, n_zeta, non_stel_sym) -> None:
+    """The vectorized ``_u_and_bsubpsi`` must be bit-for-bit the scalar loop.
+
+    Covers even/odd Ntheta,Nzeta (the theta_half / zeta_is_even / nyquist
+    branches) and both the stellarator-symmetric and non-symmetric spectra.
+    """
+    n_periods = 4
+    theta, zeta, b_hat = _u_bsubpsi_inputs(n_theta, n_zeta, n_periods, non_stel_sym)
+    kwargs = dict(
+        theta=theta,
+        zeta=zeta,
+        n_periods=n_periods,
+        b_hat=b_hat,
+        iota=0.87,
+        g_hat=1.13,
+        i_hat=0.021,
+        p_prime_hat=-0.35,
+        non_stel_sym=non_stel_sym,
+    )
+    got = _u_and_bsubpsi(**kwargs)
+    ref = _u_and_bsubpsi_reference(**kwargs)
+    for g, r in zip(got, ref):
+        assert np.array_equal(g, r)
