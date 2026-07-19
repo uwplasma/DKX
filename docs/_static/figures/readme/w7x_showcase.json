@@ -1,0 +1,62 @@
+{
+ "case": "W7-X standard configuration, CERC profiles (Pablant 2018)",
+ "source_record": "docs/_static/figures/paper_benchmarks/w7x_ambipolar_er.json",
+ "model": "two-species H+ + electron, pitch-angle scattering, DKES ExB, RHSMode=1, solver=block_tridiagonal, one solve per surface at the ambipolar E_r of the committed benchmark record",
+ "jboot_ka_per_hat": 7012.647018186299,
+ "surfaces": [
+  {
+   "rho": 0.2,
+   "er": 6.54628940591764,
+   "root_type": "electron",
+   "fsab_jhat": -0.008817653237660093,
+   "ion_z_fsab_flow": -0.0025982982285639718,
+   "electron_z_fsab_flow": -0.006219355009096122,
+   "seconds": 10.33716893196106
+  },
+  {
+   "rho": 0.3,
+   "er": 10.321107183346664,
+   "root_type": "electron",
+   "fsab_jhat": -0.012349436392514512,
+   "ion_z_fsab_flow": -0.0038827109800985927,
+   "electron_z_fsab_flow": -0.00846672541241592,
+   "seconds": 9.65288782119751
+  },
+  {
+   "rho": 0.4,
+   "er": 11.550219811441346,
+   "root_type": "electron",
+   "fsab_jhat": -0.009833554003082268,
+   "ion_z_fsab_flow": -0.0036077554983443565,
+   "electron_z_fsab_flow": -0.006225798504737912,
+   "seconds": 10.083688020706177
+  },
+  {
+   "rho": 0.5,
+   "er": 8.354434386412905,
+   "root_type": "electron",
+   "fsab_jhat": -0.009676682557599077,
+   "ion_z_fsab_flow": -0.0020704501981346807,
+   "electron_z_fsab_flow": -0.007606232359464397,
+   "seconds": 9.144183158874512
+  },
+  {
+   "rho": 0.6,
+   "er": -2.79094562249775,
+   "root_type": "ion",
+   "fsab_jhat": -0.007836140448292712,
+   "ion_z_fsab_flow": -0.0007467192566541916,
+   "electron_z_fsab_flow": -0.00708942119163852,
+   "seconds": 9.054055213928223
+  },
+  {
+   "rho": 0.7,
+   "er": -5.989752132909039,
+   "root_type": "ion",
+   "fsab_jhat": -0.003377939559776604,
+   "ion_z_fsab_flow": -0.0004345176517805784,
+   "electron_z_fsab_flow": -0.0029434219079960255,
+   "seconds": 10.836946249008179
+  }
+ ]
+}
