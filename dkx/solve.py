@@ -130,6 +130,7 @@ __all__ = [
     "tier1_full_band_bytes",
     "tier1_peak_memory_bytes",
     "tier1_truncated_peak_memory_bytes",
+    "tier1_truncated_subsystem_width",
 ]
 
 # Default memory budget above which ``solve(method="auto")`` prefers the
@@ -389,15 +390,18 @@ def tier1_peak_memory_bytes(op: KineticOperator) -> float:
 
 
 def tier1_truncated_peak_memory_bytes(
-    op: KineticOperator, keep_lowest: int = _TIER1_KEEP_LOWEST_DEFAULT
+    op: KineticOperator,
+    keep_lowest: int = _TIER1_KEEP_LOWEST_DEFAULT,
+    subsystem_batch: int | str = "auto",
 ) -> float:
     """Working-set estimate of the truncated tier-1 solve (:func:`_solve_tier1_truncated`).
 
     The truncated route never materializes the full Legendre bands, so the
     ~``tier1_peak_memory_bytes`` full-band peak wildly overestimates it (46x on
     the 1.27M-DOF production deck).  Its live buffers, with block dimension
-    ``m = n_theta * n_zeta`` and subsystem batch ``B = n_species * n_x``
-    (float64, 8 bytes each):
+    ``m = n_theta * n_zeta``, subsystem batch ``B = n_species * n_x``, and
+    concurrent elimination width ``w = subsystem_batch`` (float64, 8 bytes
+    each):
 
     * the compact coefficient set (:func:`_truncated_coefficients`): the two
       angular derivative matrices, the ExB matrix, the kron assembly
@@ -405,15 +409,21 @@ def tier1_truncated_peak_memory_bytes(
       ``(5 + n_species) * m^2`` entries;
     * the per-subsystem broadcast of the streaming matrix
       (``jnp.repeat`` to the ``B`` axis) — ``B * m^2`` entries;
-    * one subsystem's ``solvax.direct.block_thomas_truncated_fn`` sweep: the
-      LU carry, the assembled ``(L, D, U)`` block triple, elimination
-      temporaries, and the stacked ``keep`` head factors —
-      ``(2 * keep + 8) * m^2`` entries, doubled for the ``jax.lax.map``
-      pipeline (one subsystem in flight while the next is staged);
+    * ``w`` concurrent ``solvax.direct.block_thomas_truncated_fn`` sweeps
+      (the batched ``jax.lax.map(..., batch_size=w)`` elimination in
+      :func:`_solve_tier1_truncated`): per subsystem the LU carry, the
+      assembled ``(L, D, U)`` block triple, elimination temporaries, and the
+      stacked ``keep`` head factors — ``w * (2 * keep + 8) * m^2`` entries,
+      doubled for the ``jax.lax.map`` pipeline (one batch in flight while the
+      next is staged; ``w = 1`` is the fully serial sweep);
     * the state buffers (zero-padded full-shape solution, its RHS reshape,
       and the assembly/concat copies) — ``4 * total_size`` entries.
 
-    The sum is doubled as a safety margin for allocator slack and XLA fusion
+    ``subsystem_batch="auto"`` models the width the solve itself resolves
+    (:func:`_resolve_subsystem_batch`: width 1 on the CPU backend, the
+    memory-budgeted :func:`tier1_truncated_subsystem_width` on accelerators);
+    an integer models that fixed width (clamped to ``[1, B]``).  The sum is
+    doubled as a safety margin for allocator slack and XLA fusion
     temporaries.  Validated against measured process peaks on the profiling
     deck ladder (production 1.27M / mid 337k / small 41k DOFs): the estimate
     lands within about 1.1-1.5x of measurement, on the high side.
@@ -423,11 +433,75 @@ def tier1_truncated_peak_memory_bytes(
     n_s = float(op.n_species)
     batch = n_s * float(op.n_x)
     keep = float(min(int(keep_lowest), int(op.n_xi)))
+    if isinstance(subsystem_batch, str):
+        width = float(_resolve_subsystem_batch(op, subsystem_batch, int(keep)))
+    else:
+        width = float(max(1, min(int(subsystem_batch), int(batch))))
     coeff_bytes = (5.0 + n_s) * mm_bytes
     stream_broadcast_bytes = batch * mm_bytes
-    sweep_bytes = 2.0 * (2.0 * keep + 8.0) * mm_bytes
+    sweep_bytes = 2.0 * width * (2.0 * keep + 8.0) * mm_bytes
     state_bytes = 4.0 * float(op.total_size) * 8.0
     return 2.0 * (coeff_bytes + stream_broadcast_bytes + sweep_bytes + state_bytes)
+
+
+def tier1_truncated_subsystem_width(
+    op: KineticOperator,
+    keep_lowest: int = _TIER1_KEEP_LOWEST_DEFAULT,
+    memory_budget_gb: float | None = None,
+) -> int:
+    """Largest subsystem batch width whose modeled footprint fits the budget.
+
+    The memory-aware chooser behind ``subsystem_batch="auto"`` on accelerator
+    backends: the widest ``w in [1, B]`` (``B = n_species * n_x``) such that
+    :func:`tier1_truncated_peak_memory_bytes` with ``subsystem_batch=w`` stays
+    within :func:`dkx.batch.resolve_memory_budget_bytes` — an explicit
+    ``memory_budget_gb``, else a fraction of the device/host memory.  Width 1
+    reproduces the fully serial per-subsystem elimination, so a tight budget
+    degrades gracefully to the minimum-memory behavior.
+    """
+    from .batch import resolve_memory_budget_bytes  # local import: batch imports solve
+
+    budget = resolve_memory_budget_bytes(memory_budget_gb)
+    b = max(1, int(op.n_species) * int(op.n_x))
+    for width in range(b, 1, -1):
+        if tier1_truncated_peak_memory_bytes(op, keep_lowest, subsystem_batch=width) <= budget:
+            return width
+    return 1
+
+
+def _resolve_subsystem_batch(
+    op: KineticOperator, subsystem_batch: int | str, keep: int
+) -> int:
+    """Map the ``solve(subsystem_batch=...)`` knob to a concrete width.
+
+    ``"auto"`` is backend-aware:
+
+    * CPU backend — width 1, the fully serial sweep.  Measured on the
+      10-core M4 profiling host (336,610-DOF hsx_pas_dkes_mid warm solves,
+      8 threads): every width > 1 is neutral-to-slower than width 1 (ramped
+      deck 10.3 s at width 1 vs 11.4 s grouped width 2; uniform-Nxi variant
+      16.6 s at width 1 vs 20.5 s at width 10), because XLA:CPU executes the
+      batch axis of the LAPACK factor/solve custom calls serially per
+      element with extra cache pressure — the batched sweep adds memory,
+      not CPU parallelism.
+    * accelerator backends — the widest width whose modeled footprint fits
+      the memory budget (:func:`tier1_truncated_subsystem_width`); batched
+      scans raise device occupancy there, and the budget clamp bounds the
+      working set.
+    """
+    if isinstance(subsystem_batch, str):
+        if subsystem_batch.strip().lower() != "auto":
+            raise ValueError(
+                f"unknown subsystem_batch {subsystem_batch!r}; expected 'auto' "
+                "or a positive integer width"
+            )
+        if jax.default_backend() == "cpu":
+            return 1
+        return tier1_truncated_subsystem_width(op, keep_lowest=keep)
+    width = int(subsystem_batch)
+    if width < 1:
+        raise ValueError(f"subsystem_batch must be >= 1, got {width}")
+    return min(width, max(1, int(op.n_species) * int(op.n_x)))
 
 
 def _tier1_budget_bytes(budget_gb: float | None) -> tuple[float, float]:
@@ -1160,6 +1234,7 @@ def _solve_tier1_truncated(
     keep: int,
     tol: float,
     atol: float,
+    subsystem_batch: int | str = "auto",
 ) -> SolveResult:
     """Memory-lean tier-1 solve: only the lowest ``keep`` Legendre blocks.
 
@@ -1178,6 +1253,18 @@ def _solve_tier1_truncated(
     discretization (``indices.F90``), whose truncated DOFs the zero-padded
     ``l >= keep`` tail already covers (``keep <= min Nxi_for_x`` is enforced
     by :func:`_truncation_supported`).
+
+    ``subsystem_batch`` sets how many of the ``B = n_species * n_x``
+    independent subsystems are eliminated concurrently (the
+    ``jax.lax.map(..., batch_size=w)`` vmapped-chunk axis): width 1 is the
+    fully serial minimum-memory sweep, width ``B`` eliminates every subsystem
+    at once, and ``"auto"`` resolves backend-aware — width 1 on CPU, the
+    widest memory-budget-fitting width on accelerators
+    (:func:`_resolve_subsystem_batch`).  On the ramped path subsystems are
+    grouped by equal ``n_blocks`` (all species at the speed nodes sharing one
+    ``Nxi_for_x`` value) and batched within each group, so every subsystem
+    keeps exactly its own static block count at any width — identical
+    per-subsystem arithmetic to the serial sweep.
 
     Differentiability: the whole solve is a pure-JAX composition of
     ``block_thomas_truncated_fn`` sweeps, so ``jax.grad`` differentiates
@@ -1234,34 +1321,65 @@ def _solve_tier1_truncated(
         sol = block_thomas_truncated_fn(block_fn, n_blocks, rhs_low, keep)  # (keep, TZ, R)
         return sol, jnp.zeros((n_rhs,), dtype=jnp.float64)
 
-    # lax.map processes one subsystem at a time (scan-based) so the peak stays
-    # at a single subsystem's O(keep * m^2) working set, not B times it.
+    # Concurrency across the B independent subsystems: lax.map with
+    # batch_size=w eliminates w subsystems per vmapped chunk (the peak holds w
+    # concurrent O(keep * m^2) sweeps); width 1 (batch_size=None) is the fully
+    # serial scan-based sweep with a single subsystem's working set.
+    width = _resolve_subsystem_batch(op, subsystem_batch, keep)
+
+    def _map_subsystems(fn, inputs, n_sub: int):
+        w = min(width, n_sub)
+        return jax.lax.map(fn, inputs, batch_size=None if w == 1 else w)
+
     if _uniform_nxi_for_x(op):
-        f_low_b, s_b = jax.lax.map(
+        f_low_b, s_b = _map_subsystems(
             lambda t: solve_one(t, n_xi),
             (stream_b, mirror_b, pas_b, x_b, gamma_b, rhs_low_b, r_c_b),
+            batch,
         )
     else:
         # Ramped Nxi_for_x: each (species, x) subsystem is closed, so it is
         # eliminated with its own static n_blocks = Nxi_for_x[ix] (the packed
-        # Fortran discretization) — group per speed node, map over species.
+        # Fortran discretization).  Subsystems are grouped by equal n_blocks —
+        # all species at the speed nodes sharing one Nxi_for_x value — and
+        # batched within each group, preserving the exact per-subsystem block
+        # count at any width.
         rhs_low_sx = rhs_low_b.reshape(n_s, n_x, keep, n_tz, n_rhs)
         r_c_sx = r_c_b.reshape(n_s, n_x, n_rhs)
-        f_parts: list[jnp.ndarray] = []
-        s_parts: list[jnp.ndarray] = []
+        groups: dict[int, list[int]] = {}
         for ix, nb in enumerate(int(v) for v in np.asarray(op.n_xi_for_x)):
-            f_ix, s_ix = jax.lax.map(
-                lambda t, nb=nb: solve_one(t, nb),
-                (
+            groups.setdefault(nb, []).append(ix)
+        f_low_sx = jnp.zeros((n_s, n_x, keep, n_tz, n_rhs), dtype=jnp.float64)
+        s_sx = jnp.zeros((n_s, n_x, n_rhs), dtype=jnp.float64)
+        for nb, ixs in groups.items():
+            g = len(ixs)
+            idx = np.asarray(ixs)
+            if g == 1:
+                # Single-speed-node group (all ramp values distinct — the
+                # production shape): slice views, no gather/repeat copies.
+                ix = ixs[0]
+                inputs = (
                     coef["stream"], coef["mirror"], coef["pas"][:, ix],
                     jnp.broadcast_to(op.x[ix], (n_s,)), coef["gamma"][:, ix],
                     rhs_low_sx[:, ix], r_c_sx[:, ix],
-                ),
-            )  # fmt: skip
-            f_parts.append(f_ix)
-            s_parts.append(s_ix)
-        f_low_b = jnp.stack(f_parts, axis=1).reshape(batch, keep, n_tz, n_rhs)
-        s_b = jnp.stack(s_parts, axis=1).reshape(batch, n_rhs)
+                )  # fmt: skip
+            else:
+                inputs = (
+                    jnp.repeat(coef["stream"], g, axis=0),
+                    jnp.repeat(coef["mirror"], g, axis=0),
+                    coef["pas"][:, idx].reshape(n_s * g, n_xi),
+                    jnp.tile(op.x[idx], n_s),
+                    coef["gamma"][:, idx].reshape(n_s * g),
+                    rhs_low_sx[:, idx].reshape(n_s * g, keep, n_tz, n_rhs),
+                    r_c_sx[:, idx].reshape(n_s * g, n_rhs),
+                )  # fmt: skip
+            f_g, s_g = _map_subsystems(
+                lambda t, nb=nb: solve_one(t, nb), inputs, n_s * g
+            )
+            f_low_sx = f_low_sx.at[:, idx].set(f_g.reshape(n_s, g, keep, n_tz, n_rhs))
+            s_sx = s_sx.at[:, idx].set(s_g.reshape(n_s, g, n_rhs))
+        f_low_b = f_low_sx.reshape(batch, keep, n_tz, n_rhs)
+        s_b = s_sx.reshape(batch, n_rhs)
     # Force the async truncated block-Thomas sweep to complete so the timing is
     # real compute, not JAX dispatch latency (a no-op under jit/grad tracing).
     f_low_b, s_b = jax.block_until_ready((f_low_b, s_b))
@@ -1521,6 +1639,7 @@ def _auto_route(
     rhs2d: jnp.ndarray,
     budget_gb: float | None,
     keep_lowest: int,
+    subsystem_batch: int | str = "auto",
 ) -> str:
     """Pick the tier for ``method="auto"`` and print a Fortran-style one-liner.
 
@@ -1559,11 +1678,16 @@ def _auto_route(
             else f"peak estimate {peak_gb:.2f} GB > budget {budget_gb_val:.1f} GB "
             f"(bands {bands / 2.0**30:.2f} GB x2.5)"
         )
-        trunc_gb = tier1_truncated_peak_memory_bytes(op, keep_lowest=keep) / 2.0**30
+        width = _resolve_subsystem_batch(op, subsystem_batch, keep)
+        n_sub = max(1, int(op.n_species) * int(op.n_x))
+        trunc_gb = (
+            tier1_truncated_peak_memory_bytes(op, keep, subsystem_batch=width) / 2.0**30
+        )
         print(
             f"[dkx.solve] tier-1 route: truncated block-Thomas "
             f"(keep_lowest={keep}); {because}, "
             f"solving the lowest {keep} Legendre blocks "
+            f"with subsystem batch width {width} of {n_sub} "
             f"(working-set estimate {trunc_gb:.2f} GB)."
         )
         return "block_tridiagonal_truncated"
@@ -1694,6 +1818,7 @@ def solve(
     max_dense_size: int = 8192,
     tier1_memory_budget_gb: float | None = None,
     tier1_keep_lowest: int = _TIER1_KEEP_LOWEST_DEFAULT,
+    subsystem_batch: int | str = "auto",
     device: str | jax.Device | None = None,
 ) -> SolveResult:
     """Solve ``K x = rhs`` with the plan-§2.3 three-tier auto-policy.
@@ -1760,6 +1885,19 @@ def solve(
         tier1_keep_lowest: number of Legendre blocks the truncated tier-1
             kernel computes exactly (default 3 — the RHSMode 1/2/3 drives and
             output moments live on ``l <= 2``).
+        subsystem_batch: how many of the ``B = n_species * n_x`` independent
+            (species, x) subsystems the truncated tier-1 kernel eliminates
+            concurrently.  ``"auto"`` (default) is backend-aware: width 1 on
+            the CPU backend (XLA:CPU runs batched LAPACK factor/solve calls
+            serially per batch element, so wider sweeps measure
+            neutral-to-slower — see :func:`_resolve_subsystem_batch`), and on
+            accelerators the widest width whose modeled footprint
+            (:func:`tier1_truncated_peak_memory_bytes`) fits the memory
+            budget (:func:`tier1_truncated_subsystem_width`).  An integer
+            fixes the width (clamped to ``[1, B]``; 1 is the fully serial
+            minimum-memory sweep).  Any width computes identical
+            per-subsystem arithmetic — the knob trades memory for batched
+            parallel work.  Ignored by the non-truncated tiers.
         device: where to run the solve.  ``"cpu"``/``"gpu"`` force a backend
             and a ``jax.Device`` pins the solve to that device: inputs are
             moved with ``jax.device_put`` and the solution is returned on
@@ -1818,7 +1956,9 @@ def solve(
 
     chosen = method
     if method == "auto":
-        chosen = _auto_route(op, rhs2d, tier1_memory_budget_gb, tier1_keep_lowest)
+        chosen = _auto_route(
+            op, rhs2d, tier1_memory_budget_gb, tier1_keep_lowest, subsystem_batch
+        )
 
     target_device = _resolve_solve_device(
         device, chosen, op, _is_traced(rhs2d, *jax.tree_util.tree_leaves(op))
@@ -1840,7 +1980,9 @@ def solve(
             result = _solve_tier1(op, rhs2d, tol=tol, atol=atol, differentiable=differentiable)
         else:
             keep = min(tier1_keep_lowest, op.n_xi)
-            result = _solve_tier1_truncated(op, rhs2d, keep=keep, tol=tol, atol=atol)
+            result = _solve_tier1_truncated(
+                op, rhs2d, keep=keep, tol=tol, atol=atol, subsystem_batch=subsystem_batch
+            )
         if method == "auto" and not result.converged and not differentiable:
             # Structured elimination has no pivoting across blocks: on
             # near-singular systems (e.g. a nu_n=0 collisionless deck, whose
