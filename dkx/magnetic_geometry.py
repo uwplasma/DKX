@@ -1096,6 +1096,8 @@ def _u_and_bsubpsi(
     """
     ntheta = int(theta.shape[0])
     nzeta = int(zeta.shape[0])
+    theta = np.asarray(theta, dtype=np.float64)
+    zeta = np.asarray(zeta, dtype=np.float64)
     h_hat = 1.0 / (b_hat * b_hat)
     b_sub_psi = np.zeros_like(b_hat)
     db_sub_psi_dtheta = np.zeros_like(b_hat)
@@ -1117,7 +1119,17 @@ def _u_and_bsubpsi(
         else:
             startn = -n_max
 
+        # theta angle is separable per harmonic: ang[itheta, izeta] =
+        # m*theta[itheta] - n*Nfp*zeta[izeta].  Precomputing cos/sin of the whole
+        # (theta, zeta) grid once (instead of per itheta, twice per harmonic)
+        # gives bit-identical values -- cos/sin are elementwise -- while the
+        # h_amp reduction stays the exact per-itheta np.dot(BLAS)/sequential sum.
+        m_theta = float(m) * theta  # matches float(m) * float(theta[itheta]) per element
         for n in range(startn, n_max + 1):
+            n_zeta = float(n * n_periods) * zeta
+            ang = m_theta[:, None] - n_zeta[None, :]
+            cos2d = np.cos(ang)
+            sin2d = np.sin(ang)
             for is_cos in (True, False):
                 if not is_cos and not non_stel_sym:
                     continue
@@ -1128,14 +1140,13 @@ def _u_and_bsubpsi(
                 )
                 h_amp = 0.0
                 if is_cos:
+                    w = (1.0 if nyquist else 2.0) / float(ntheta * nzeta)
                     for itheta in range(ntheta):
-                        ang = float(m) * float(theta[itheta]) - float(n * n_periods) * zeta
-                        w = (1.0 if nyquist else 2.0) / float(ntheta * nzeta)
-                        h_amp += w * float(np.dot(np.cos(ang), h_hat[itheta, :]))
+                        h_amp += w * float(np.dot(cos2d[itheta, :], h_hat[itheta, :]))
                 elif not nyquist:
+                    w = 2.0 / float(ntheta * nzeta)
                     for itheta in range(ntheta):
-                        ang = float(m) * float(theta[itheta]) - float(n * n_periods) * zeta
-                        h_amp += (2.0 / float(ntheta * nzeta)) * float(np.dot(np.sin(ang), h_hat[itheta, :]))
+                        h_amp += w * float(np.dot(sin2d[itheta, :], h_hat[itheta, :]))
 
                 denom = float(n * n_periods) - float(iota) * float(m)
                 numer = float(iota) * (float(g_hat) * float(m) + float(i_hat) * float(n * n_periods))
@@ -1144,24 +1155,23 @@ def _u_and_bsubpsi(
                 d_dtheta_amp = -float(p_prime_hat) / float(iota) * (u_amp - float(iota) * float(i_hat) * h_amp)
                 d_dzeta_amp = float(p_prime_hat) * (u_amp + float(g_hat) * h_amp)
 
-                for itheta in range(ntheta):
-                    ang = float(m) * float(theta[itheta]) - float(n * n_periods) * zeta
-                    c = np.cos(ang)
-                    s = np.sin(ang)
-                    if is_cos:
-                        db_sub_psi_dtheta[itheta, :] += d_dtheta_amp * c
-                        db_sub_psi_dzeta[itheta, :] += d_dzeta_amp * c
-                        if n == 0:
-                            b_sub_psi[itheta, :] += (d_dtheta_amp / float(m)) * s
-                        else:
-                            b_sub_psi[itheta, :] += -(d_dzeta_amp / float(n) / float(n_periods)) * s
+                # Each (itheta, izeta) is touched once per harmonic, so the whole-grid
+                # in-place add reproduces the per-itheta accumulation element-for-element
+                # in the same harmonic order.
+                if is_cos:
+                    db_sub_psi_dtheta += d_dtheta_amp * cos2d
+                    db_sub_psi_dzeta += d_dzeta_amp * cos2d
+                    if n == 0:
+                        b_sub_psi += (d_dtheta_amp / float(m)) * sin2d
                     else:
-                        db_sub_psi_dtheta[itheta, :] += d_dtheta_amp * s
-                        db_sub_psi_dzeta[itheta, :] += d_dzeta_amp * s
-                        if n == 0:
-                            b_sub_psi[itheta, :] += -(d_dtheta_amp / float(m)) * c
-                        else:
-                            b_sub_psi[itheta, :] += (d_dzeta_amp / float(n) / float(n_periods)) * c
+                        b_sub_psi += -(d_dzeta_amp / float(n) / float(n_periods)) * sin2d
+                else:
+                    db_sub_psi_dtheta += d_dtheta_amp * sin2d
+                    db_sub_psi_dzeta += d_dzeta_amp * sin2d
+                    if n == 0:
+                        b_sub_psi += -(d_dtheta_amp / float(m)) * cos2d
+                    else:
+                        b_sub_psi += (d_dzeta_amp / float(n) / float(n_periods)) * cos2d
     return b_sub_psi, db_sub_psi_dtheta, db_sub_psi_dzeta
 
 
