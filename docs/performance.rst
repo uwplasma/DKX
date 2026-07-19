@@ -410,6 +410,87 @@ sense on hardware with FP64 headroom (data-center cards) combined with small
 :math:`N_\theta N_\zeta` blocks and long :math:`L` chains — the opposite
 corner from the production decks; it is left unimplemented.
 
+Measured GPU anatomy and memory headroom (RTX A4000)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The same host quantifies how far the structured tier-1 route stretches a 16 GB
+card. All rows are warm best-of-N ``block_tridiagonal_truncated`` solves of
+HSX-family decks on the RTX A4000 (12.56 GB usable device budget), with the
+device peak read from ``jax`` device-memory statistics; every solve converged
+with residuals in ``1e-13 .. 1e-15``.
+
+.. figure:: _static/figures/gpu_anatomy_memory.png
+   :alt: Left, single RTX A4000 device-peak memory versus unknown count against the 12.56 GB budget; right, mid-deck warm CPU solve versus pinned core count with the 8-core optimum.
+   :align: center
+   :width: 92%
+
+   Left: single-GPU memory ladder — device peak stays far under the 12.56 GB
+   budget, a 2.53M-unknown solve peaking at 2.21 GB. Right: 36-core CPU
+   single-solve thread scaling on the mid deck (336,610 unknowns), warm solve
+   versus pinned cores, bottoming at the 8-core optimum and inverting past it.
+   Regenerate with ``python tools/benchmarks/gpu_anatomy_figure.py``.
+
+.. list-table:: Warm tier-1 solve, single RTX A4000: memory ladder
+   :header-rows: 1
+   :widths: 36 22 22
+
+   * - Unknowns
+     - Device peak [GB]
+     - Warm solve [s]
+   * - 336,610
+     - 0.18
+     - 3.7
+   * - 1,275,010 (production)
+     - 0.61
+     - 25.6
+   * - 2,025,010
+     - 1.42
+     - 85.3
+   * - 2,525,010
+     - 2.21
+     - 157.6
+
+The device peak grows far slower than the unknown count because the truncated
+tier-1 kernel only ever materializes its ``O(K m^2)`` working set (the lowest
+Legendre blocks), not the full band: the 2,525,010-unknown solve peaks at
+2.21 GB where the conservative full-band charge for that system is ~208 GB, so
+multi-million-unknown decks fit with large headroom on the 16 GB card — the
+route-aware footprint model (`End-to-end pipeline efficiency`_) is what lets the
+``auto`` policy account for this truncated working set rather than the full-band
+peak. The first over-budget rung above 2,525,010 unknowns is the only measured
+out-of-memory point: its truncated working-set estimate is 26.25 GB, past the
+12.56 GB device budget.
+
+Per-phase anatomy for the production and mid decks (warm, same host):
+
+.. list-table:: Warm-solve phase breakdown [s]
+   :header-rows: 1
+   :widths: 34 16 16 16 18
+
+   * - Deck (unknowns)
+     - Build
+     - RHS
+     - Warm solve
+     - Moments
+   * - Mid (336,610)
+     - 2.85
+     - 1.55
+     - 3.7
+     - 3.78
+   * - Production (1,275,010)
+     - 6.36
+     - 2.74
+     - 25.6
+     - 5.57
+
+The truncated solve dominates end-to-end time at the production size, while
+operator build, right-hand-side assembly, and moment evaluation stay a few
+seconds each. The device-memory budget knob (``DKX_TIER1_MEMORY_BUDGET_GB``)
+gates only batch chunking, not the single truncated solve: sweeping it across
+``2``/``8``/``32`` on the mid deck leaves the warm solve at ~3.6-4.0 s and the
+device peak at ~0.12 GB in all three, confirming the single-solve footprint is
+budget-independent.
+
 Production profiling battery
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
