@@ -517,6 +517,47 @@ For steady-state benchmarking, take repeated JAX runs and report the warm timing
 set a persistent ``JAX_COMPILATION_CACHE_DIR`` to reuse compiled kernels across
 processes.
 
+End-to-end pipeline efficiency
+------------------------------
+
+The head-to-head figures above are warm *solve* times; a production run also
+parses the equilibrium, builds the operator, evaluates moments, and writes
+output. Three pipeline choices keep that wall-clock envelope small.
+
+**One build through every consumer.** A ``run_profile(out_path=...)`` call
+threads a single :class:`~dkx.drift_kinetic.KineticOperator` build through the
+operator apply, the run-level geometry derivation, the two writer
+geometry-extras passes, and the moment evaluation, and
+:func:`dkx.magnetic_geometry.read_boozer_bc` memoizes each ``.bc`` parse on
+file identity. Building once, rather than re-parsing the 32 MB Boozer ``.bc``
+per consumer, takes the warm end-to-end production run (the 1,275,010-unknown
+HSX PAS deck) from 43.6 s to 26.7 s, and the small reduced deck from 15.6 s to
+2.3 s, with dataset-exact outputs on the six audited decks including the
+production case (a counting regression test in
+``tests/test_run_rhsmode1.py`` pins the one-build behavior). Ambipolar loops,
+monoenergetic scans, and batched scans inherit the memoized parse for free.
+
+**Whole-file vectorized ``.bc`` parse.** The Boozer ``.bc`` reader parses the
+whole file in one vectorized pass, bit-identical to the line-by-line reference
+it falls back to on ragged blocks. The 32 MB ``hsx3free.bc`` parses in 0.38 s
+against 2.22 s line-by-line (5.8x), and ``w7x_standardConfig.bc`` in 0.18 s
+against 1.34 s (7.3x); on the small deck the whole-file parse pulls the cold
+start from 6.19 s to 4.29 s and the operator build from 5.14 s to 2.58 s.
+
+**Route-aware memory footprint.** The ``auto`` policy's memory estimate models
+the kernel the solve actually executes. A deck that routes to the truncated
+tier-1 block-Thomas kernel is charged its truncated working set, not the
+full-band factorization peak that route never allocates. On the production
+deck that takes the estimate from 53.06 GB (the full-band charge) to 1.68 GB,
+against a measured process peak of ~1.16 GB; the mid deck drops from 6.16 GB
+to 0.73 GB. Charging the full-band peak had capped batched scans at a single
+chunk; the route-aware estimate un-serializes them. At a 19.2 GB budget the
+auto chunk count on the production deck rises from 1 to 11, and a mid-deck
+8-point ``batched_er_scan`` runs in one chunk at 749 MB peak instead of three
+chunks at 2084 MB. The per-solve footprint model is
+:func:`dkx.solve.auto_solve_peak_memory_bytes`, which the batch chunker in
+:mod:`dkx.batch` reads to size its ``jax.lax.map`` chunks (:doc:`parallelism`).
+
 Performance patterns
 --------------------
 
@@ -554,6 +595,14 @@ The design choices that produce the numbers above, in one place:
 - **Gradient checkpointing.** ``jax.checkpoint`` around collision operators and
   transport diagnostics trades recomputation for lower peak memory during
   autodiff on long chains.
+- **Build once, parse once.** The run pipeline threads a single operator build
+  through every consumer and memoizes ``.bc`` parses on file identity, and the
+  ``.bc`` reader parses the whole file in one vectorized pass — the end-to-end
+  and cold-start levers detailed under `End-to-end pipeline efficiency`_.
+- **Route-aware memory estimate.** The ``auto`` policy charges the truncated
+  working set the solve actually allocates, not the full-band factorization
+  peak, which un-serializes batched scans into memory-budgeted chunks
+  (`End-to-end pipeline efficiency`_ and :doc:`parallelism`).
 
 For the equations and derivations behind these techniques, see :doc:`numerics`
 and :doc:`differentiability`; for parallel-execution knobs and batched scans,
