@@ -1,11 +1,12 @@
 Parallelism
 ===========
 
-`dkx` runs on a single node — a multi-core CPU or one GPU — and gets its
-throughput from three places: batched ``jax.vmap`` over independent solves,
-optional device sharding of a single large solve, and the structured ``solvax``
-solve tiers underneath. This covers the same physics that SFINCS Fortran v3
-spreads across many nodes with MPI, while keeping the whole path differentiable.
+`dkx` runs on a single node — a multi-core CPU or the node's local GPUs — and
+gets its throughput from two places: batched ``jax.vmap`` over independent
+solves (optionally split across the node's devices) and the structured
+``solvax`` solve tiers underneath. This covers the same physics that SFINCS
+Fortran v3 spreads across many nodes with MPI, while keeping the whole path
+differentiable.
 
 The lever to reach for first is **batching independent solves**. Scanning the
 radial electric field, sweeping flux surfaces, or building a monoenergetic
@@ -19,9 +20,11 @@ Two kinds of parallelism
   ``whichRHS`` right-hand sides, or many optimizer/scan points. They share a
   discretization and differ only in a few physics leaves, so one batched call
   solves them together. This is where the throughput is.
-- **Within a single solve.** One large linear system split across host devices
-  or GPUs along ``theta``/``zeta``/``x``. Available for cases too large for a
-  single device, but secondary to batching for scan-shaped work.
+- **Across the node's devices.** When more than one accelerator is visible, the
+  batch of independent solves splits across them (``devices=...``); each device
+  runs the same memory-budgeted chunked solve on its shard, so multiple GPUs
+  fill with scan-shaped work. A single solve runs whole on one device — there
+  is no internal split of one linear system across devices.
 
 Batching independent solves
 ---------------------------
@@ -111,6 +114,31 @@ on the **direct** tier and runs the **iterative** and small-system paths 2-5x
 wins therefore come from **batched** direct-tier work — multi-``E_r`` or
 multi-surface sweeps — not from single solves.
 
+Subsystem batching within a tier-1 solve
+----------------------------------------
+
+The truncated tier-1 kernel eliminates ``B = n_species * n_x`` independent
+``(species, x)`` subsystems. ``solve(subsystem_batch=...)`` sets how many it
+eliminates concurrently. An integer fixes the width (clamped to ``[1, B]``;
+``1`` is the fully serial, minimum-memory sweep), and any width computes
+identical per-subsystem arithmetic — the knob trades memory for batched
+parallel work, so the CPU path is byte-identical to the serial sweep.
+
+``subsystem_batch="auto"`` (the default) is backend-aware:
+
+- **CPU backend — width 1.** XLA:CPU runs the batch axis of the LAPACK
+  factor/solve custom calls serially per element, so a wider sweep only adds
+  memory and cache pressure, not parallelism. Measured on the 336,610-unknown
+  mid HSX deck at 8 threads, every width above 1 is neutral-to-slower: the
+  ramped deck is 10.3 s at width 1 versus 11.4 s at width 2, and the
+  uniform-``Nxi`` variant 16.6 s at width 1 versus 20.5 s at width 10.
+- **Accelerator backends — memory-budgeted width.** The widest width whose
+  modeled footprint (:func:`dkx.solve.tier1_truncated_peak_memory_bytes`) fits
+  the memory budget, because batching raises device occupancy there while the
+  budget clamp bounds the working set.
+
+The knob is ignored by the non-truncated tiers.
+
 CPU threads
 -----------
 
@@ -123,16 +151,20 @@ thread control must be in place **before JAX is imported**; the CLI
    dkx --cores 4 input.namelist       # or: export DKX_CORES=4
 
 ``DKX_CORES=N`` pins the solver threadpool to ``N`` threads (applied as
-``NPROC``, the variable XLA reads, plus the OpenMP/OpenBLAS pools);
+``NPROC``, the variable XLA reads, plus the host BLAS OpenMP/OpenBLAS pools);
 ``DKX_CORES=0`` lets XLA size the threadpool itself; when unset the
 threadpool is clamped to ``min(8, cpu_count)``. The measured optimum is 4-8
-threads on both a 10-core laptop and a 36-core workstation — a full-width
-threadpool on the many-core box runs the tier-1 warm solve several times
-slower than 8 threads (:doc:`performance`). ``DKX_CPU_DEVICES`` is a
-separate, explicit opt-in that forces multiple host *devices* for
-multi-device CPU tests; forced host devices share one threadpool, so it is
-not a performance knob. Full semantics and defaults are in the
-environment-variable reference (:doc:`usage`).
+threads on both a 10-core laptop and a 36-core workstation: tier-1 thread
+scaling saturates near 2-2.5x and **inverts** beyond the optimum on wide
+machines. On the 36-core workstation the tier-1 warm solve measures 9.7 s at
+1 thread, 4.87 s at 8 threads, and 29.9 s at the full 36 threads — the XLA
+fork-join overhead over the sequential Legendre-block sweep dominates once the
+pool is too wide. The guidance on many-core hosts is to set ``--cores`` to
+roughly 4-8, not to ``nproc``. ``DKX_CPU_DEVICES`` is a separate, explicit
+opt-in that forces multiple host *devices* for multi-device CPU tests; forced
+host devices share one threadpool, so it is not a performance knob. Full
+semantics and defaults are in the environment-variable reference
+(:doc:`usage`).
 
 Multi-host execution
 --------------------

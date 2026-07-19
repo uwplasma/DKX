@@ -80,7 +80,10 @@ or ``run_from_namelist``; when given, it supersedes ``solve_method`` and
 One honest exception: the ``cores`` field is carried for provenance only —
 XLA sizes its host threadpool once, before the first JAX device use, so
 thread pinning belongs to the ``DKX_CORES`` environment variable or the CLI
-``--cores`` flag (see :doc:`parallelism`).
+``--cores`` flag (see :doc:`parallelism`).  Scan-level throughput knobs live
+outside ``SolverOptions``: batched and multi-device solves
+(``batched_er_scan`` / ``batched_solve`` with ``devices=``) and the tier-1
+``solve(subsystem_batch=...)`` width are documented in :doc:`parallelism`.
 
 Building v3 grids and geometry
 ------------------------------
