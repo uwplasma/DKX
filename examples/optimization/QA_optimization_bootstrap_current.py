@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """QA optimization with an optional bootstrap-current objective.
 
 This example intentionally mirrors ``vmex/examples/optimization/QA_optimization.py``
@@ -134,187 +133,185 @@ def _current_summary(wout) -> dict[str, float]:
     }
 
 
-def main() -> int:
-    vj, vmex_root = _import_vmex()
-    data_dir = vmex_root / "examples" / "data"
-    warm_start_input_file = data_dir / "input.nfp2_QA_omnigenity"
-    simple_seed_input_file = data_dir / "input.minimal_seed_nfp2"
-    input_file = simple_seed_input_file if USE_SIMPLE_SEED else warm_start_input_file
+# ---------------------------------------------------------------------------
+# Flat pipeline (runs on
+# ``python examples/optimization/QA_optimization_bootstrap_current.py``).
+# ---------------------------------------------------------------------------
+vj, vmex_root = _import_vmex()
+data_dir = vmex_root / "examples" / "data"
+warm_start_input_file = data_dir / "input.nfp2_QA_omnigenity"
+simple_seed_input_file = data_dir / "input.minimal_seed_nfp2"
+input_file = simple_seed_input_file if USE_SIMPLE_SEED else warm_start_input_file
 
-    input_file = vj.prepare_simple_omnigenity_seed_input(
-        input_file,
-        OUTPUT_DIR,
-        max_mode=MAX_MODE,
-        min_vmec_mode=MIN_VMEC_MODE,
-        enabled=USE_SIMPLE_SEED,
-        perturbation=SIMPLE_SEED_PERTURBATION,
-    )
-    stage_modes = vj.qs_stage_modes(
-        max_mode=MAX_MODE,
-        use_mode_continuation=USE_MODE_CONTINUATION,
-        continuation_nfev=CONTINUATION_NFEV,
-    )
+input_file = vj.prepare_simple_omnigenity_seed_input(
+    input_file,
+    OUTPUT_DIR,
+    max_mode=MAX_MODE,
+    min_vmec_mode=MIN_VMEC_MODE,
+    enabled=USE_SIMPLE_SEED,
+    perturbation=SIMPLE_SEED_PERTURBATION,
+)
+stage_modes = vj.qs_stage_modes(
+    max_mode=MAX_MODE,
+    use_mode_continuation=USE_MODE_CONTINUATION,
+    continuation_nfev=CONTINUATION_NFEV,
+)
 
-    print("\nQA optimization with optional bootstrap-current objective")
-    print(f"  vmex root:       {vmex_root}")
-    print(f"  input file:          {input_file}")
-    print(f"  output dir:          {OUTPUT_DIR}")
-    print(f"  max mode:            {MAX_MODE}")
-    print(f"  bootstrap objective: {'enabled' if INCLUDE_BOOTSTRAP_CURRENT_OBJECTIVE else 'disabled'}")
+print("\nQA optimization with optional bootstrap-current objective")
+print(f"  vmex root:       {vmex_root}")
+print(f"  input file:          {input_file}")
+print(f"  output dir:          {OUTPUT_DIR}")
+print(f"  max mode:            {MAX_MODE}")
+print(f"  bootstrap objective: {'enabled' if INCLUDE_BOOTSTRAP_CURRENT_OBJECTIVE else 'disabled'}")
 
-    vmec = vj.FixedBoundaryVMEC.from_input(
-        input_file,
-        max_mode=MAX_MODE,
-        min_vmec_mode=MIN_VMEC_MODE,
-        output_dir=OUTPUT_DIR,
-    )
+vmec = vj.FixedBoundaryVMEC.from_input(
+    input_file,
+    max_mode=MAX_MODE,
+    min_vmec_mode=MIN_VMEC_MODE,
+    output_dir=OUTPUT_DIR,
+)
 
-    aspect = vj.AspectRatio()
-    iota = vj.MeanIota()
-    qs = vj.QuasisymmetryRatioResidual(
-        helicity_m=HELICITY_M,
-        helicity_n=HELICITY_N,
-        surfaces=SURFACES,
-    )
+aspect = vj.AspectRatio()
+iota = vj.MeanIota()
+qs = vj.QuasisymmetryRatioResidual(
+    helicity_m=HELICITY_M,
+    helicity_n=HELICITY_N,
+    surfaces=SURFACES,
+)
 
-    objective_tuples = [
-        (aspect.J, TARGET_ASPECT, ASPECT_WEIGHT),
-        (iota.J, TARGET_IOTA, IOTA_WEIGHT),
-        (qs.J, 0.0, QS_WEIGHT),
-    ]
+objective_tuples = [
+    (aspect.J, TARGET_ASPECT, ASPECT_WEIGHT),
+    (iota.J, TARGET_IOTA, IOTA_WEIGHT),
+    (qs.J, 0.0, QS_WEIGHT),
+]
 
-    if INCLUDE_BOOTSTRAP_CURRENT_OBJECTIVE:
-        objective_tuples.append(
-            (
-                vj.JDotB(
-                    surfaces=JDOTB_SURFACES,
-                    normalize=JDOTB_NORMALIZATION,
-                ).J,
-                0.0,
-                JDOTB_WEIGHT,
-            )
+if INCLUDE_BOOTSTRAP_CURRENT_OBJECTIVE:
+    objective_tuples.append(
+        (
+            vj.JDotB(
+                surfaces=JDOTB_SURFACES,
+                normalize=JDOTB_NORMALIZATION,
+            ).J,
+            0.0,
+            JDOTB_WEIGHT,
         )
-
-    # If you prefer the upstream-file style, comment out the if-block above and
-    # uncomment this objective tuple for a hard-coded QA+current run:
-    #
-    # objective_tuples.append(
-    #     (vj.JDotB(surfaces=JDOTB_SURFACES, normalize=JDOTB_NORMALIZATION).J, 0.0, JDOTB_WEIGHT)
-    # )
-
-    if INCLUDE_REDL_BOOTSTRAP_MISMATCH:
-        objective_tuples.append(
-            (
-                vj.RedlBootstrapMismatch(
-                    helicity_n=HELICITY_N,
-                    ne_coeffs=NE_COEFFS,
-                    Te_coeffs=TE_COEFFS,
-                    surfaces=BOOTSTRAP_SURFACES,
-                ).J,
-                0.0,
-                REDL_BOOTSTRAP_WEIGHT,
-            )
-        )
-
-    problem = vj.LeastSquaresProblem.from_tuples(objective_tuples)
-
-    print("\nAssembled least-squares problem:")
-    print(f"  objectives: {', '.join(problem.objective_names)}")
-    print(f"  scalar terms: {problem.scalar_objective_names}")
-
-    result = vj.least_squares_solve(
-        vmec,
-        problem,
-        stage_modes=stage_modes,
-        max_nfev=MAX_NFEV,
-        continuation_nfev=CONTINUATION_NFEV,
-        method=METHOD,
-        ftol=FTOL,
-        gtol=GTOL,
-        xtol=XTOL,
-        use_ess=USE_ESS,
-        ess_alpha=ALPHA,
-        label=f"QA max_mode={MAX_MODE} {'+ JDotB' if INCLUDE_BOOTSTRAP_CURRENT_OBJECTIVE else 'QA-only'}",
-        use_mode_continuation=USE_MODE_CONTINUATION,
-        inner_max_iter=INNER_MAX_ITER,
-        inner_ftol=INNER_FTOL,
-        trial_max_iter=TRIAL_MAX_ITER,
-        trial_ftol=TRIAL_FTOL,
-        solver_device=SOLVER_DEVICE,
-        scipy_tr_solver=SCIPY_TR_SOLVER,
-        scipy_lsmr_maxiter=SCIPY_LSMR_MAXITER,
-        save_stage_inputs=SAVE_STAGE_INPUTS,
-        save_stage_wouts=SAVE_STAGE_WOUTS,
-        save_final_outputs=False,
     )
 
-    history = result.history
-    objective_history = result.objective_history
-    timing = result.timing_summary
-    result_summary = result.summary
-    saved_paths = vj.save_optimization_result(result, output_dir=OUTPUT_DIR)
+# If you prefer the upstream-file style, comment out the if-block above and
+# uncomment this objective tuple for a hard-coded QA+current run:
+#
+# objective_tuples.append(
+#     (vj.JDotB(surfaces=JDOTB_SURFACES, normalize=JDOTB_NORMALIZATION).J, 0.0, JDOTB_WEIGHT)
+# )
 
-    print("\nFinal diagnostics from result.history:")
-    print(f"  stages:           {result_summary['stage_modes']}")
-    print(f"  aspect ratio:     {history['aspect_final']:.6g}")
-    print(f"  mean iota:        {history['iota_final']:.6g}")
-    print(f"  QS objective:     {history['qs_final']:.6e}")
-    print(f"  total objective:  {history['objective_final']:.6e}")
-    print(f"  wall time:        {timing['total_wall_time_s']:.2f} s")
-    print(f"  objective samples: {objective_history[:5]} ... {objective_history[-3:]}")
+if INCLUDE_REDL_BOOTSTRAP_MISMATCH:
+    objective_tuples.append(
+        (
+            vj.RedlBootstrapMismatch(
+                helicity_n=HELICITY_N,
+                ne_coeffs=NE_COEFFS,
+                Te_coeffs=TE_COEFFS,
+                surfaces=BOOTSTRAP_SURFACES,
+            ).J,
+            0.0,
+            REDL_BOOTSTRAP_WEIGHT,
+        )
+    )
 
-    print("\nFiles saved from result objects:")
-    for name, path in saved_paths.as_dict().items():
+problem = vj.LeastSquaresProblem.from_tuples(objective_tuples)
+
+print("\nAssembled least-squares problem:")
+print(f"  objectives: {', '.join(problem.objective_names)}")
+print(f"  scalar terms: {problem.scalar_objective_names}")
+
+result = vj.least_squares_solve(
+    vmec,
+    problem,
+    stage_modes=stage_modes,
+    max_nfev=MAX_NFEV,
+    continuation_nfev=CONTINUATION_NFEV,
+    method=METHOD,
+    ftol=FTOL,
+    gtol=GTOL,
+    xtol=XTOL,
+    use_ess=USE_ESS,
+    ess_alpha=ALPHA,
+    label=f"QA max_mode={MAX_MODE} {'+ JDotB' if INCLUDE_BOOTSTRAP_CURRENT_OBJECTIVE else 'QA-only'}",
+    use_mode_continuation=USE_MODE_CONTINUATION,
+    inner_max_iter=INNER_MAX_ITER,
+    inner_ftol=INNER_FTOL,
+    trial_max_iter=TRIAL_MAX_ITER,
+    trial_ftol=TRIAL_FTOL,
+    solver_device=SOLVER_DEVICE,
+    scipy_tr_solver=SCIPY_TR_SOLVER,
+    scipy_lsmr_maxiter=SCIPY_LSMR_MAXITER,
+    save_stage_inputs=SAVE_STAGE_INPUTS,
+    save_stage_wouts=SAVE_STAGE_WOUTS,
+    save_final_outputs=False,
+)
+
+history = result.history
+objective_history = result.objective_history
+timing = result.timing_summary
+result_summary = result.summary
+saved_paths = vj.save_optimization_result(result, output_dir=OUTPUT_DIR)
+
+print("\nFinal diagnostics from result.history:")
+print(f"  stages:           {result_summary['stage_modes']}")
+print(f"  aspect ratio:     {history['aspect_final']:.6g}")
+print(f"  mean iota:        {history['iota_final']:.6g}")
+print(f"  QS objective:     {history['qs_final']:.6e}")
+print(f"  total objective:  {history['objective_final']:.6e}")
+print(f"  wall time:        {timing['total_wall_time_s']:.2f} s")
+print(f"  objective samples: {objective_history[:5]} ... {objective_history[-3:]}")
+
+print("\nFiles saved from result objects:")
+for name, path in saved_paths.as_dict().items():
+    print(f"  {name}: {path}")
+
+wout_final = vj.load_wout(saved_paths.final_wout)
+current = _current_summary(wout_final)
+print("\nVMEC current diagnostic from final wout:")
+print(f"  rms(jdotb):                 {current['jdotb_rms']:.6e}")
+print(f"  rms(jdotb/sqrt(bdotb)):     {current['jdotb_over_root_bdotb_rms']:.6e}")
+
+theta, zeta, b_lcfs = vj.vmecplot2_bmag_grid(
+    wout_final,
+    s_index=-1,
+    ntheta=64,
+    nzeta=64,
+    zeta_max=2.0 * np.pi / float(wout_final.nfp),
+)
+print("\nLCFS |B| data from vmecplot2_bmag_grid:")
+print(f"  theta grid: {theta.shape}, zeta grid: {zeta.shape}, B grid: {b_lcfs.shape}")
+print(f"  Bmin/Bmax:  {np.min(b_lcfs):.6g} / {np.max(b_lcfs):.6g}")
+
+if MAKE_PLOTS:
+    print("\nGenerating initial-vs-final plots:")
+    plot_paths = {
+        "boundary_comparison": vj.plot_3d_boundary_comparison(
+            saved_paths.initial_wout,
+            saved_paths.final_wout,
+            outdir=OUTPUT_DIR,
+        ),
+        "initial_vs_final_lcfs_boozer_bmag_contours": vj.plot_boozer_lcfs_bmag_comparison(
+            saved_paths.initial_wout,
+            saved_paths.final_wout,
+            outdir=OUTPUT_DIR,
+        ),
+        "objective_history": vj.plot_objective_history(
+            saved_paths.history,
+            outdir=OUTPUT_DIR,
+        ),
+    }
+    print("\nPlot files selected by this script:")
+    for name, path in plot_paths.items():
         print(f"  {name}: {path}")
 
-    wout_final = vj.load_wout(saved_paths.final_wout)
-    current = _current_summary(wout_final)
-    print("\nVMEC current diagnostic from final wout:")
-    print(f"  rms(jdotb):                 {current['jdotb_rms']:.6e}")
-    print(f"  rms(jdotb/sqrt(bdotb)):     {current['jdotb_over_root_bdotb_rms']:.6e}")
-
-    theta, zeta, b_lcfs = vj.vmecplot2_bmag_grid(
-        wout_final,
-        s_index=-1,
-        ntheta=64,
-        nzeta=64,
-        zeta_max=2.0 * np.pi / float(wout_final.nfp),
-    )
-    print("\nLCFS |B| data from vmecplot2_bmag_grid:")
-    print(f"  theta grid: {theta.shape}, zeta grid: {zeta.shape}, B grid: {b_lcfs.shape}")
-    print(f"  Bmin/Bmax:  {np.min(b_lcfs):.6g} / {np.max(b_lcfs):.6g}")
-
-    if MAKE_PLOTS:
-        print("\nGenerating initial-vs-final plots:")
-        plot_paths = {
-            "boundary_comparison": vj.plot_3d_boundary_comparison(
-                saved_paths.initial_wout,
-                saved_paths.final_wout,
-                outdir=OUTPUT_DIR,
-            ),
-            "initial_vs_final_lcfs_boozer_bmag_contours": vj.plot_boozer_lcfs_bmag_comparison(
-                saved_paths.initial_wout,
-                saved_paths.final_wout,
-                outdir=OUTPUT_DIR,
-            ),
-            "objective_history": vj.plot_objective_history(
-                saved_paths.history,
-                outdir=OUTPUT_DIR,
-            ),
-        }
-        print("\nPlot files selected by this script:")
-        for name, path in plot_paths.items():
-            print(f"  {name}: {path}")
-
-    print("\nCompare the two modes with:")
-    print(
-        "  python examples/optimization/qa_nfp2_bootstrap_current_comparison.py "
-        f"--vmex-root {vmex_root} "
-        f"--qa-result-dir {OUTPUT_ROOT / 'qa_only'} "
-        f"--comparison-result-dir {OUTPUT_ROOT / 'with_jdotb_current_objective'}"
-    )
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+print("\nCompare the two modes with:")
+print(
+    "  python examples/optimization/qa_nfp2_bootstrap_current_comparison.py "
+    f"--vmex-root {vmex_root} "
+    f"--qa-result-dir {OUTPUT_ROOT / 'qa_only'} "
+    f"--comparison-result-dir {OUTPUT_ROOT / 'with_jdotb_current_objective'}"
+)

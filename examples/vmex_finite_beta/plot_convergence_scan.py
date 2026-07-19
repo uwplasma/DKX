@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Plot finite-beta VMEX/DKX resolution sensitivity from cached runs.
 
 The finite-beta transport example can be expensive at high velocity-space
@@ -13,7 +12,6 @@ Run from the repository root after generating the finite-beta example outputs:
 
 from __future__ import annotations
 
-import argparse
 import importlib.util
 import json
 import os
@@ -33,8 +31,15 @@ import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EXAMPLE_DIR = Path(__file__).resolve().parent
-DEFAULT_OUT_DIR = EXAMPLE_DIR / "output"
-DEFAULT_STEM = "finite_beta_vmex_sfincs_convergence_scan"
+
+# ---------------------------------------------------------------------------
+# Parameters (edit these directly; no command-line flags)
+# ---------------------------------------------------------------------------
+# Directory holding the cached ``finite_beta_vmec_to_sfincs.py`` scan outputs
+# and where this script writes its PNG/PDF/JSON summary.
+OUT_DIR = EXAMPLE_DIR / "output"
+# Basename for the figure and summary artifacts.
+STEM = "finite_beta_vmex_sfincs_convergence_scan"
 
 
 def _load_pipeline_module() -> ModuleType:
@@ -354,25 +359,17 @@ def plot_convergence_payload(payload: dict[str, object], out_dir: Path, stem: st
     return png.resolve(), pdf.resolve()
 
 
-def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
-    parser.add_argument("--stem", default=DEFAULT_STEM)
-    return parser
-
-
-def main(argv: list[str] | None = None) -> int:
-    args = _build_parser().parse_args(argv)
-    out_dir = Path(args.out_dir).resolve()
-    payload = build_convergence_payload(out_dir)
-    png, pdf = plot_convergence_payload(payload, out_dir, str(args.stem))
-    json_path = out_dir / f"{args.stem}_summary.json"
-    json_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(f"Convergence scan PNG: {png}")
-    print(f"Convergence scan PDF: {pdf}")
-    print(f"Convergence scan JSON: {json_path.resolve()}")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+# ---------------------------------------------------------------------------
+# Flat pipeline (runs on
+# ``python examples/vmex_finite_beta/plot_convergence_scan.py``).
+# ---------------------------------------------------------------------------
+print("=== examples/vmex_finite_beta/plot_convergence_scan.py ===")
+out_dir = OUT_DIR.resolve()
+print(f"Reading cached finite-beta scans from: {out_dir}")
+payload = build_convergence_payload(out_dir)
+png, pdf = plot_convergence_payload(payload, out_dir, STEM)
+json_path = out_dir / f"{STEM}_summary.json"
+json_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+print(f"Convergence scan PNG: {png}")
+print(f"Convergence scan PDF: {pdf}")
+print(f"Convergence scan JSON: {json_path.resolve()}")
