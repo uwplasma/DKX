@@ -14,12 +14,15 @@ for stellarators and tokamaks, on CPU or GPU. Every output is pinned
 field-by-field against SFINCS Fortran v3, and the whole solve is differentiable:
 `jax.grad` of any output with respect to any input, by implicit differentiation.
 
-![Measured parity envelopes of the canonical DKX stack against SFINCS Fortran v3](docs/_static/figures/readme/canonical_parity.png)
+![W7-X standard configuration: 3-D boundary |B|, bootstrap current profile, and ambipolar radial electric field, all from DKX kinetic solves](docs/_static/figures/readme/w7x_showcase.png)
 
-*Every canonical module admitted against the reference implementation at pinned
-tolerances that run in CI: fluxes, flows, bootstrap current, transport matrices,
-collisions, geometry, and console prints all match SFINCS Fortran v3 to the
-envelopes shown.*
+*The W7-X standard configuration, solved by DKX: the plasma boundary colored by
+`|B|`, the bootstrap current profile built from one two-species kinetic solve
+per flux surface at its ambipolar electric field, and the ambipolar `E_r` — an
+electron-root core crossing to the ion root near mid-radius — against published
+references [Pablant et al., *Phys. Plasmas* 25, 022508 (2018)]. Every curve is
+a `dkx` kinetic-solve output, differentiable end to end
+(`python tools/benchmarks/readme_showcase_w7x.py`).*
 
 ## Install
 
@@ -87,12 +90,18 @@ all moments in memory.
 
 Every canonical module is admitted against the reference implementation —
 Fortran golden outputs, tiny-grid PETSc matrix dumps, or the retained legacy
-path — at pinned tolerances that run in CI (the envelope figure at the top of
-this page). Outputs, per-species result tables, and console prints match SFINCS
+path — at pinned tolerances that run in CI (the envelope figure below).
+Outputs, per-species result tables, and console prints match SFINCS
 Fortran v3 field-by-field. The scheme-1 monoenergetic `transportMatrix[0,1]`
 element is pinned to upstream's expected value because that element is
 tolerance-unstable in the Fortran build itself; the DKX direct solve reproduces
 the expected value to 4.2e-6 by construction.
+
+![Measured parity envelopes of the canonical DKX stack against SFINCS Fortran v3](docs/_static/figures/readme/canonical_parity.png)
+
+*Measured parity envelopes: fluxes, flows, bootstrap current, transport
+matrices, collisions, geometry, and console prints all match SFINCS Fortran v3
+to the tolerances shown, in CI.*
 
 | Capability | dkx | SFINCS Fortran v3 |
 | --- | :---: | :---: |
