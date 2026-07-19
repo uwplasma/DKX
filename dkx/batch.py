@@ -23,6 +23,15 @@ comes from the route-aware tier-1 memory model in :mod:`dkx.solve`
 device/host, and the batch is processed in ``jax.lax.map`` chunks of the
 computed size so only one chunk's intermediates are ever live.
 
+Because the batch elements are embarrassingly parallel, the batch can also be
+split **across devices** (``devices="auto"`` or an explicit device list): each
+device receives a contiguous shard of the batch, runs the same chunked
+solve-plus-moments on it, and the results are gathered on the host.  The
+per-element computation is identical to the single-device path, the memory
+budget applies per device, and anything short of two usable devices (or a
+batch smaller than the device count) degrades to the single-device path
+unchanged.
+
 Design constraints honoured here:
 
 * reuse :func:`dkx.solve.solve` and the operator read-only (no new solver
@@ -111,9 +120,13 @@ class BatchedSolveResult:
             (:func:`dkx.run.profile_moments_from_operator`), every entry
             with a leading batch axis, e.g. ``particleFlux_vm_psiHat`` shape
             ``(batch, n_species)`` and ``FSABjHat`` shape ``(batch,)``.
-        chunk_size: the memory-budgeted ``jax.lax.map`` chunk size actually used.
+        chunk_size: the memory-budgeted ``jax.lax.map`` chunk size actually
+            used.  With a multi-device split this is the per-device chunk
+            (the memory budget applies per device).
         n_chunks: number of chunks the batch was processed in
-            (``ceil(batch / chunk_size)``).
+            (``ceil(batch / chunk_size)``).  With a multi-device split this is
+            the number of sequential chunks on the busiest device
+            (``ceil(largest_shard / chunk_size)``).
         method: the ``solve_method`` requested for every element.
         radial_current: ``J_r = sum_a Z_a Gamma_a`` per element, shape
             ``(batch,)`` — populated by :func:`batched_er_scan`, ``None``
@@ -265,6 +278,56 @@ def _validate_batch_leaves(op: KineticOperator, batch_leaves: Mapping[str, Any])
 
 
 # ---------------------------------------------------------------------------
+# Multi-device split: resolve the device set and shard the batch axis
+# ---------------------------------------------------------------------------
+
+
+def _resolve_devices(
+    devices: Sequence[jax.Device] | str | None, batch: int
+) -> list[jax.Device] | None:
+    """Resolve the ``devices`` argument to a multi-device list, or ``None``.
+
+    ``None`` keeps the single-device path.  ``"auto"`` selects every local
+    device of the default backend when more than one is visible.  An explicit
+    non-empty sequence is taken as given.  Any resolution with fewer than two
+    devices — or a batch smaller than the device count, which would leave
+    devices idle — returns ``None`` so the caller degrades to the
+    single-device path unchanged.
+    """
+    if devices is None:
+        return None
+    if isinstance(devices, str):
+        if devices != "auto":
+            raise ValueError(
+                f"devices={devices!r} is not recognised; pass None, 'auto', or an "
+                "explicit sequence of jax.Device objects."
+            )
+        devs = list(jax.local_devices())
+    else:
+        devs = list(devices)
+        if not devs:
+            raise ValueError(
+                "devices must be None, 'auto', or a non-empty sequence of "
+                "jax.Device objects."
+            )
+    if len(devs) < 2 or batch < len(devs):
+        return None
+    return devs
+
+
+def _shard_bounds(batch: int, n_devices: int) -> list[tuple[int, int]]:
+    """Contiguous near-equal ``[lo, hi)`` batch slices, one per device."""
+    base, extra = divmod(batch, n_devices)
+    bounds: list[tuple[int, int]] = []
+    lo = 0
+    for d in range(n_devices):
+        hi = lo + base + (1 if d < extra else 0)
+        bounds.append((lo, hi))
+        lo = hi
+    return bounds
+
+
+# ---------------------------------------------------------------------------
 # The primitive: vmap a solve-plus-moments over varying operator leaves
 # ---------------------------------------------------------------------------
 
@@ -279,6 +342,7 @@ def batched_solve(
     max_batch: int | None = None,
     memory_budget_gb: float | None = None,
     ntv_kernel_tz: Any | None = None,
+    devices: Sequence[jax.Device] | str | None = None,
 ) -> BatchedSolveResult:
     """Solve a batch of kinetic problems sharing ``op``'s discretization.
 
@@ -293,6 +357,16 @@ def batched_solve(
     Only ``op``'s varying leaves are mapped; every other leaf — crucially the
     discretization grids — is closed over and stays concrete, which keeps the
     host-side solver auto-route and the footprint estimate well defined.
+
+    With ``devices`` resolving to two or more devices the batch is split into
+    contiguous near-equal shards, each shard is placed on its device
+    (``jax.device_put``) and processed by the same chunked solve — the
+    asynchronous dispatch overlaps the devices — and the results are gathered
+    on the host.  The per-element computation is identical to the
+    single-device path and the memory budget applies per device.  This
+    multi-device split is host-side orchestration: inside a ``jax.jit`` or
+    ``jax.grad`` trace (traced ``batch_leaves``) it falls back to the
+    single-device path, which computes the identical result.
 
     Args:
         op: the base operator (defines grids, layout, and the shared leaves).
@@ -310,8 +384,14 @@ def batched_solve(
         max_batch: optional hard cap on the chunk size.
         memory_budget_gb: optional memory budget override (GB); defaults to a
             fraction of the device/host memory (:func:`resolve_memory_budget_bytes`).
+            With a multi-device split the budget bounds each device's chunk.
         ntv_kernel_tz: optional NTV geometric kernel forwarded to the moment
             table (see :func:`dkx.run.profile_moments_from_operator`).
+        devices: ``None`` (single-device, the default), ``"auto"`` (every local
+            device of the default backend when more than one is visible), or an
+            explicit sequence of ``jax.Device`` objects to split the batch
+            across.  Fewer than two resolved devices, or a batch smaller than
+            the device count, degrades to the single-device path unchanged.
 
     Returns:
         A :class:`BatchedSolveResult` with batched ``states`` and ``moments``.
@@ -320,9 +400,16 @@ def batched_solve(
 
     _validate_batch_leaves(op, batch_leaves)
     batch = _batch_size_of(batch_leaves)
-    chunk = auto_chunk_size(
-        op, batch, max_batch=max_batch, memory_budget_gb=memory_budget_gb
-    )
+    leaves_map = dict(batch_leaves)
+
+    devs = _resolve_devices(devices, batch)
+    if devs is not None and any(
+        isinstance(leaf, jax.core.Tracer)
+        for leaf in jax.tree_util.tree_leaves(leaves_map)
+    ):
+        # Under a jit/grad trace the host-side device orchestration below is
+        # not traceable; the single-device path computes the identical result.
+        devs = None
 
     def solve_one(leaves: Mapping[str, Any]):
         op_i = dataclasses.replace(op, **leaves)
@@ -337,8 +424,40 @@ def batched_solve(
         moments = profile_moments_from_operator(op_i, state, ntv_kernel_tz=ntv_kernel_tz)
         return state, dict(moments)
 
-    states, moments = jax.lax.map(solve_one, dict(batch_leaves), batch_size=chunk)
-    n_chunks = -(-batch // chunk)
+    if devs is None:
+        chunk = auto_chunk_size(
+            op, batch, max_batch=max_batch, memory_budget_gb=memory_budget_gb
+        )
+        states, moments = jax.lax.map(solve_one, leaves_map, batch_size=chunk)
+        n_chunks = -(-batch // chunk)
+    else:
+        bounds = _shard_bounds(batch, len(devs))
+        shard_max = max(hi - lo for lo, hi in bounds)
+        # The memory budget is per device: each device only ever holds one of
+        # its own chunks' intermediates, so the chunk is sized from the budget
+        # of a single device and the largest shard.
+        chunk = auto_chunk_size(
+            op, shard_max, max_batch=max_batch, memory_budget_gb=memory_budget_gb
+        )
+        shards = []
+        for dev, (lo, hi) in zip(devs, bounds):
+            shard_leaves = jax.tree_util.tree_map(
+                lambda a, lo=lo, hi=hi, dev=dev: jax.device_put(
+                    jnp.asarray(a)[lo:hi], dev
+                ),
+                leaves_map,
+            )
+            # Eager dispatch is asynchronous, so the devices overlap naturally.
+            shards.append(
+                jax.lax.map(solve_one, shard_leaves, batch_size=min(chunk, hi - lo))
+            )
+        gathered = jax.device_get(shards)
+        states = jnp.concatenate([s for s, _ in gathered], axis=0)
+        moments = {
+            key: jnp.concatenate([m[key] for _, m in gathered], axis=0)
+            for key in gathered[0][1]
+        }
+        n_chunks = -(-shard_max // chunk)
     return BatchedSolveResult(
         states=states,
         moments=dict(moments),
@@ -362,6 +481,7 @@ def batched_er_scan(
     differentiable: bool = False,
     max_batch: int | None = None,
     memory_budget_gb: float | None = None,
+    devices: Sequence[jax.Device] | str | None = None,
 ) -> BatchedSolveResult:
     """Batched radial current / moments over a vector of ``E_r`` on one geometry.
 
@@ -381,6 +501,7 @@ def batched_er_scan(
         differentiable: differentiable implicit solves (for ``jax.grad``).
         max_batch, memory_budget_gb: memory-budgeting overrides
             (:func:`auto_chunk_size`).
+        devices: multi-device split of the scan (see :func:`batched_solve`).
 
     Returns:
         A :class:`BatchedSolveResult` with ``radial_current`` populated.
@@ -397,6 +518,7 @@ def batched_er_scan(
         differentiable=differentiable,
         max_batch=max_batch,
         memory_budget_gb=memory_budget_gb,
+        devices=devices,
     )
     z_s = jnp.asarray(problem.z_s, dtype=jnp.float64)
     gamma = jnp.asarray(result.moments["particleFlux_vm_psiHat"])  # (batch, n_species)
@@ -469,6 +591,7 @@ def batched_surface_scan(
     max_batch: int | None = None,
     memory_budget_gb: float | None = None,
     ntv_kernel_tz: Any | None = None,
+    devices: Sequence[jax.Device] | str | None = None,
 ) -> BatchedSolveResult:
     """Batched solve / moments over a sequence of flux-surface operators.
 
@@ -485,6 +608,7 @@ def batched_surface_scan(
         solve_method, tol, differentiable: forwarded to :func:`batched_solve`.
         max_batch, memory_budget_gb: memory-budgeting overrides.
         ntv_kernel_tz: optional NTV kernel forwarded to the moment table.
+        devices: multi-device split of the batch (see :func:`batched_solve`).
 
     Returns:
         A :class:`BatchedSolveResult` with batched ``states`` and ``moments``.
@@ -503,6 +627,7 @@ def batched_surface_scan(
         max_batch=max_batch,
         memory_budget_gb=memory_budget_gb,
         ntv_kernel_tz=ntv_kernel_tz,
+        devices=devices,
     )
 
 
