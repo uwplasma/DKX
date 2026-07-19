@@ -638,15 +638,24 @@ def eq(a, b):
     return np.array_equal(np.asarray(a), np.asarray(b))
 
 
+def close(a, b):
+    # The default config executes different lax.map widths on the single- and
+    # sharded paths (8 vs 4 per shard); XLA CPU may emit width-dependent code
+    # whose results differ in the last ulp on some ISAs, so the default-config
+    # gate uses the same tight tolerance as the chunked-equivalence test.  The
+    # matched-width gate below stays bitwise.
+    return np.allclose(np.asarray(a), np.asarray(b), rtol=0.0, atol=1e-12)
+
+
 # Default config: single device vs the two-device split.
 single = batch_mod.batched_er_scan(prob, er_values)
 multi = batch_mod.batched_er_scan(prob, er_values, devices="auto")
 assert single.chunk_size == 8 and single.n_chunks == 1
 assert multi.chunk_size == 4 and multi.n_chunks == 1  # proves the split ran
-assert eq(single.states, multi.states)
-assert eq(single.radial_current, multi.radial_current)
+assert close(single.states, multi.states)
+assert close(single.radial_current, multi.radial_current)
 for key in single.moments:
-    assert eq(single.moments[key], multi.moments[key]), key
+    assert close(single.moments[key], multi.moments[key]), key
 
 # Matched executed chunk width (2 on both paths): identity is bitwise by
 # construction (same compiled per-element program).
