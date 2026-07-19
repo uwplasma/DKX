@@ -429,7 +429,7 @@
   },
   {
    "path": "dkx/magnetic_geometry.py",
-   "lines_at_audit": 2000,
+   "lines_at_audit": 2400,
    "category": "core",
    "action": "retain",
    "public_imports": [],
