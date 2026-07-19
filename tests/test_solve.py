@@ -938,3 +938,89 @@ def test_solve_on_explicit_second_cpu_device_matches_and_returns_home() -> None:
     )
     assert proc.returncode == 0, proc.stderr
     assert "device-routing-ok" in proc.stdout
+
+
+def test_truncated_bounded_adjoint_matches_taped_gradient() -> None:
+    # tier1_adjoint_window selects solvax's structure-preserving custom VJP for
+    # the truncated kernel. The primal is unchanged, a full window reproduces
+    # the taped gradient exactly (solvax pins full-window bitwise equality on
+    # the generated path), and a small window agrees to the O(rho^{2w}) decay
+    # of the block-dominant collisional operator.
+    import inspect as _inspect
+
+    from solvax.direct import block_thomas_truncated_fn as _fn
+
+    if "params" not in _inspect.signature(_fn).parameters:
+        pytest.skip("installed solvax predates params/adjoint_window (needs >= 0.8.7)")
+
+    op = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
+    rhs = op.rhs()
+    n_xi = int(op.n_xi)
+
+    kwargs = dict(method="block_tridiagonal_truncated", tol=1e-10)
+    r_taped = solve(op, rhs, **kwargs)
+    r_bounded = solve(op, rhs, tier1_adjoint_window=n_xi, **kwargs)
+    assert r_bounded.method == r_taped.method
+    np.testing.assert_allclose(
+        np.asarray(r_bounded.x), np.asarray(r_taped.x), rtol=0.0, atol=0.0
+    )
+
+    def loss(scale: jnp.ndarray, window: int | None) -> jnp.ndarray:
+        scaled = replace(op, t_hat=op.t_hat * scale)
+        return jnp.sum(solve(scaled, rhs, tier1_adjoint_window=window, **kwargs).x ** 2)
+
+    one = jnp.asarray(1.0)
+    g_taped = jax.grad(lambda s: loss(s, None))(one)
+    g_full = jax.grad(lambda s: loss(s, n_xi))(one)
+    np.testing.assert_allclose(float(g_full), float(g_taped), rtol=1e-12)
+    g_small = jax.grad(lambda s: loss(s, 4))(one)
+    np.testing.assert_allclose(float(g_small), float(g_taped), rtol=1e-6)
+
+
+def test_truncated_bounded_adjoint_is_subsystem_batch_invariant() -> None:
+    # The bounded adjoint (tier1_adjoint_window) and subsystem batching
+    # (subsystem_batch) are orthogonal knobs that meet inside solve_one: on
+    # accelerators subsystem_batch > 1 vmaps solve_one, and therefore vmaps the
+    # generated-block custom VJP of block_thomas_truncated_fn. This pins that
+    # the custom VJP is vmap-safe in both directions — the primal and the
+    # gradient must be identical at width 1 (serial) and width B (fully
+    # batched), on a genuinely multi-subsystem op (B = n_species * n_x = 3).
+    import inspect as _inspect
+
+    from solvax.direct import block_thomas_truncated_fn as _fn
+
+    if "params" not in _inspect.signature(_fn).parameters:
+        pytest.skip("installed solvax predates params/adjoint_window (needs >= 0.8.7)")
+
+    op = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
+    b = int(op.n_species * op.n_x)
+    assert b > 1  # guards the test's premise (would be vacuous at B=1)
+    rhs = op.rhs()
+    n_xi = int(op.n_xi)
+    kwargs = dict(method="block_tridiagonal_truncated", tol=1e-10)
+
+    x_serial = solve(op, rhs, subsystem_batch=1, tier1_adjoint_window=n_xi, **kwargs).x
+    x_batched = solve(op, rhs, subsystem_batch=b, tier1_adjoint_window=n_xi, **kwargs).x
+    np.testing.assert_allclose(np.asarray(x_batched), np.asarray(x_serial), rtol=0, atol=1e-18)
+
+    def loss(scale: jnp.ndarray, width: int) -> jnp.ndarray:
+        scaled = replace(op, t_hat=op.t_hat * scale)
+        return jnp.sum(
+            solve(scaled, rhs, subsystem_batch=width, tier1_adjoint_window=n_xi, **kwargs).x
+            ** 2
+        )
+
+    one = jnp.asarray(1.0)
+    g_serial = jax.grad(lambda s: loss(s, 1))(one)
+    g_batched = jax.grad(lambda s: loss(s, b))(one)
+    np.testing.assert_allclose(float(g_batched), float(g_serial), rtol=1e-12)
+
+
+def test_truncated_bounded_adjoint_requires_recent_solvax() -> None:
+    import dkx.solve as solve_mod
+
+    if solve_mod._TRUNCATED_FN_ACCEPTS_PARAMS:
+        pytest.skip("installed solvax supports params; error path not reachable")
+    op = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
+    with pytest.raises(RuntimeError, match="solvax >= 0.8.7"):
+        solve(op, op.rhs(), method="block_tridiagonal_truncated", tier1_adjoint_window=2)

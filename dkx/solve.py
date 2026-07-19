@@ -52,6 +52,7 @@ and the PETSc ``Pmat`` idiom of production SFINCS.
 
 from __future__ import annotations
 
+import functools
 import inspect
 import os
 import time
@@ -104,6 +105,15 @@ from dkx.drift_kinetic import KineticOperator  # noqa: E402
 # against solvax releases that predate that argument.
 _SCHUR_ACCEPTS_D_BLOCK = schur_projected_precond is not None and (
     "d_block" in inspect.signature(schur_projected_precond).parameters
+)
+
+# The structure-preserving generated-block bounded adjoint
+# (``params``/``adjoint_window``) was upstreamed to solvax (uwplasma/SOLVAX#35,
+# released in 0.8.7). Probe for it the same way as ``d_block`` above; the
+# truncated tier-1 kernel raises an actionable error when the option is
+# requested against an older solvax rather than silently taping.
+_TRUNCATED_FN_ACCEPTS_PARAMS = block_thomas_truncated_fn is not None and (
+    "params" in inspect.signature(block_thomas_truncated_fn).parameters
 )
 
 
@@ -1190,6 +1200,54 @@ def _truncated_coefficients(op: KineticOperator) -> dict[str, jnp.ndarray]:
     }  # fmt: skip
 
 
+def _truncated_blocks(
+    params: tuple[jnp.ndarray, ...],
+    k: jnp.ndarray,
+    *,
+    n_xi: int,
+    shift_border: bool,
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """Analytic ``(L_k, D_k, U_k)`` as a pure function of ``(params, k)``.
+
+    ``params`` carries every differentiable array entering the blocks —
+    ``(stream, mirror, pas_row, x_val, gamma, exb, b0, c0, cl, cu)`` — so the
+    same function serves both the legacy closure form (via
+    :func:`_truncated_block_fn`) and solvax's structure-preserving
+    ``params``/``adjoint_window`` custom VJP, which requires the
+    differentiable inputs to be explicit arguments rather than closed-over
+    tracers.  Only the static ints/bools stay in the closure.
+    """
+    stream, mirror, pas_row, x_val, gamma, exb, b0, c0, cl, cu = params
+    m = exb.shape[0]
+    idx = jnp.arange(m)
+    kf = k.astype(jnp.float64)
+    cl_k = jnp.take(cl, k)
+    lower = (x_val * cl_k) * stream
+    lower = lower.at[idx, idx].add((x_val * (-cl_k * (kf - 1.0))) * mirror)
+    cu_k = jnp.take(cu, jnp.minimum(k, n_xi - 1))
+    upper = (x_val * cu_k) * stream
+    upper = upper.at[idx, idx].add((x_val * (cu_k * (kf + 2.0))) * mirror)
+    diag = exb.at[idx, idx].add(jnp.take(pas_row, k))
+    if shift_border:
+        diag = jnp.where(k == 0, diag + gamma * jnp.outer(b0, c0), diag)
+    return lower, diag, upper
+
+
+def _truncated_params(
+    coef: dict[str, jnp.ndarray],
+    stream: jnp.ndarray,
+    mirror: jnp.ndarray,
+    pas_row: jnp.ndarray,
+    x_val: jnp.ndarray,
+    gamma: jnp.ndarray,
+) -> tuple[jnp.ndarray, ...]:
+    """The differentiable-parameter pytree consumed by :func:`_truncated_blocks`."""
+    return (
+        stream, mirror, pas_row, x_val, gamma,
+        coef["exb"], coef["b0"], coef["c0"], coef["cl"], coef["cu"],
+    )
+
+
 def _truncated_block_fn(
     coef: dict[str, jnp.ndarray],
     n_xi: int,
@@ -1206,23 +1264,13 @@ def _truncated_block_fn(
     With ``shift_border`` the rank-one border ``gamma * outer(b0, c0)`` is added
     to the ``l=0`` diagonal block (the exact ``A~ = A + gamma B C`` absorption);
     without it the raw physical blocks are returned (used for residual checks).
+    The block algebra lives in :func:`_truncated_blocks`; this wrapper only
+    closes over the parameter pytree for the legacy index-only signature.
     """
-    exb, b0, c0, cl, cu = coef["exb"], coef["b0"], coef["c0"], coef["cl"], coef["cu"]
-    m = exb.shape[0]
-    idx = jnp.arange(m)
+    params = _truncated_params(coef, stream, mirror, pas_row, x_val, gamma)
 
     def block_fn(k: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-        kf = k.astype(jnp.float64)
-        cl_k = jnp.take(cl, k)
-        lower = (x_val * cl_k) * stream
-        lower = lower.at[idx, idx].add((x_val * (-cl_k * (kf - 1.0))) * mirror)
-        cu_k = jnp.take(cu, jnp.minimum(k, n_xi - 1))
-        upper = (x_val * cu_k) * stream
-        upper = upper.at[idx, idx].add((x_val * (cu_k * (kf + 2.0))) * mirror)
-        diag = exb.at[idx, idx].add(jnp.take(pas_row, k))
-        if shift_border:
-            diag = jnp.where(k == 0, diag + gamma * jnp.outer(b0, c0), diag)
-        return lower, diag, upper
+        return _truncated_blocks(params, k, n_xi=n_xi, shift_border=shift_border)
 
     return block_fn
 
@@ -1235,6 +1283,7 @@ def _solve_tier1_truncated(
     tol: float,
     atol: float,
     subsystem_batch: int | str = "auto",
+    adjoint_window: int | None = None,
 ) -> SolveResult:
     """Memory-lean tier-1 solve: only the lowest ``keep`` Legendre blocks.
 
@@ -1268,14 +1317,32 @@ def _solve_tier1_truncated(
 
     Differentiability: the whole solve is a pure-JAX composition of
     ``block_thomas_truncated_fn`` sweeps, so ``jax.grad`` differentiates
-    straight through it (the block-Thomas scan is short and reverse-mode
-    cheap).  It is *not* wrapped in the full-operator implicit-function-theorem
-    adjoint used by the full tier-1/tier-2 paths: this solve inverts the
-    *reduced* Schur-complemented operator on the lowest ``keep`` blocks, not
-    the full band, so a full-operator ``A^T`` adjoint would be inconsistent and
-    silently corrupt gradients.  Direct autodiff is exact here.
+    straight through it.  It is *not* wrapped in the full-operator
+    implicit-function-theorem adjoint used by the full tier-1/tier-2 paths:
+    this solve inverts the *reduced* Schur-complemented operator on the lowest
+    ``keep`` blocks, not the full band, so a full-operator ``A^T`` adjoint
+    would be inconsistent and silently corrupt gradients.  Two consistent
+    reverse-mode paths exist instead.  The default tapes the generated sweeps
+    (exact, but the tape grows with ``n_xi``: ``O(n_xi * m^2)`` per
+    subsystem).  With ``adjoint_window=w`` (requires solvax >= 0.8.7) the
+    solve uses solvax's structure-preserving custom VJP for generated blocks:
+    the right-hand-side gradient is an exactly *generated* truncated solve of
+    the transposed operator, and the coefficient gradients are pulled back
+    through the block assembly's own derivative on the leading ``keep + w``
+    Legendre blocks — reverse mode then runs at ``O((keep + w) * m^2)`` per
+    subsystem, independent of ``n_xi``, matching the forward sweep.  The
+    window trades nothing on the right-hand-side gradient and has
+    ``O(rho^{2w})`` coefficient-gradient error for the block-dominant
+    collisional operators this kernel targets; ``w >= n_xi`` reproduces the
+    taped gradient exactly (solvax pins full-window bitwise equality).
     """
     _require_solvax()
+    if adjoint_window is not None and not _TRUNCATED_FN_ACCEPTS_PARAMS:
+        raise RuntimeError(
+            "adjoint_window requires solvax >= 0.8.7 "
+            "(block_thomas_truncated_fn params support); installed solvax "
+            "predates it. Upgrade solvax or omit adjoint_window."
+        )
     n_s, n_x, n_xi, n_t, n_z = op.f_shape
     n_tz = n_t * n_z
     batch = n_s * n_x
@@ -1303,13 +1370,31 @@ def _solve_tier1_truncated(
 
     def solve_one(inputs, n_blocks: int):
         stream, mirror, pas_row, x_val, gamma, rhs_low, r_c = inputs
-        block_fn = _truncated_block_fn(
-            coef, n_xi, stream, mirror, pas_row, x_val, gamma, shift_border=(cs == 2)
-        )
+
+        def truncated_solve(rhs_cols: jnp.ndarray) -> jnp.ndarray:
+            if adjoint_window is not None:
+                # Structure-preserving bounded adjoint (solvax >= 0.8.7): the
+                # differentiable coefficients travel as an explicit params
+                # pytree, and reverse mode runs at O((keep + w) * m^2) per
+                # subsystem instead of taping the full n_blocks sweep.
+                params = _truncated_params(coef, stream, mirror, pas_row, x_val, gamma)
+                block_fn_pk = functools.partial(
+                    _truncated_blocks, n_xi=n_xi, shift_border=(cs == 2)
+                )
+                return block_thomas_truncated_fn(
+                    block_fn_pk, n_blocks, rhs_cols, keep,
+                    params=params, adjoint_window=adjoint_window,
+                )
+            block_fn = _truncated_block_fn(
+                coef, n_xi, stream, mirror, pas_row, x_val, gamma,
+                shift_border=(cs == 2),
+            )
+            return block_thomas_truncated_fn(block_fn, n_blocks, rhs_cols, keep)
+
         if cs == 2:
             z_col = jnp.zeros((keep, n_tz, 1), dtype=jnp.float64).at[0, :, 0].set(b0)
             rhs_stack = jnp.concatenate([rhs_low, z_col], axis=2)  # (keep, TZ, R+1)
-            sol = block_thomas_truncated_fn(block_fn, n_blocks, rhs_stack, keep)
+            sol = truncated_solve(rhs_stack)
             y = sol[:, :, :n_rhs]  # (keep, TZ, R)
             z = sol[:, :, n_rhs]  # (keep, TZ)
             c_y0 = c0 @ y[0]  # (R,)
@@ -1318,7 +1403,7 @@ def _solve_tier1_truncated(
             s = gamma * r_c + shift  # (R,)
             f_low = y - shift[None, None, :] * z[:, :, None]  # (keep, TZ, R)
             return f_low, s
-        sol = block_thomas_truncated_fn(block_fn, n_blocks, rhs_low, keep)  # (keep, TZ, R)
+        sol = truncated_solve(rhs_low)  # (keep, TZ, R)
         return sol, jnp.zeros((n_rhs,), dtype=jnp.float64)
 
     # Concurrency across the B independent subsystems: lax.map with
@@ -1819,6 +1904,7 @@ def solve(
     tier1_memory_budget_gb: float | None = None,
     tier1_keep_lowest: int = _TIER1_KEEP_LOWEST_DEFAULT,
     subsystem_batch: int | str = "auto",
+    tier1_adjoint_window: int | None = None,
     device: str | jax.Device | None = None,
 ) -> SolveResult:
     """Solve ``K x = rhs`` with the plan-§2.3 three-tier auto-policy.
@@ -1898,6 +1984,16 @@ def solve(
             minimum-memory sweep).  Any width computes identical
             per-subsystem arithmetic — the knob trades memory for batched
             parallel work.  Ignored by the non-truncated tiers.
+        tier1_adjoint_window: opt-in bounded reverse mode for the truncated
+            tier-1 kernel (requires solvax >= 0.8.7).  ``None`` (default)
+            keeps the taped gradient — bit-identical behavior to previous
+            releases.  An integer ``w`` selects solvax's structure-preserving
+            custom VJP: ``jax.grad`` through the truncated solve then runs at
+            ``O((keep + w) m^2)`` memory per (species, x) subsystem instead of
+            taping the full ``Nxi`` sweep, with an exact right-hand-side
+            gradient and ``O(rho^{2w})`` coefficient-gradient error;
+            ``w >= Nxi`` reproduces the taped gradient exactly.  See
+            :func:`_solve_tier1_truncated`.
         device: where to run the solve.  ``"cpu"``/``"gpu"`` force a backend
             and a ``jax.Device`` pins the solve to that device: inputs are
             moved with ``jax.device_put`` and the solution is returned on
@@ -1981,7 +2077,9 @@ def solve(
         else:
             keep = min(tier1_keep_lowest, op.n_xi)
             result = _solve_tier1_truncated(
-                op, rhs2d, keep=keep, tol=tol, atol=atol, subsystem_batch=subsystem_batch
+                op, rhs2d, keep=keep, tol=tol, atol=atol,
+                subsystem_batch=subsystem_batch,
+                adjoint_window=tier1_adjoint_window,
             )
         if method == "auto" and not result.converged and not differentiable:
             # Structured elimination has no pivoting across blocks: on
