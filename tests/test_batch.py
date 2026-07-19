@@ -11,12 +11,19 @@ Gates for the first-class batched-solve API:
   chunked result is identical to the single-chunk result;
 - batching a discretization leaf, or a surface batch that disagrees on the
   discretization, is rejected with a clear error;
-- the :mod:`dkx.api` facades route to the same result.
+- the :mod:`dkx.api` facades route to the same result;
+- the multi-device split (``devices=``) is element-wise identical to the
+  single-device path — verified in-process with a duplicated device list and
+  in a fresh subprocess with two forced host CPU devices — and anything short
+  of two usable devices degrades to the single-device path unchanged.
 """
 
 from __future__ import annotations
 
 import dataclasses
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -454,3 +461,240 @@ def test_api_batched_facades_route(tmp_path: Path) -> None:
         rtol=0.0,
         atol=1e-12,
     )
+
+
+# ---------------------------------------------------------------------------
+# 7. Multi-device split: identity across device counts, degrade, per-device
+#    chunk arithmetic
+# ---------------------------------------------------------------------------
+
+
+def _assert_batched_results_identical(a, b) -> None:
+    """Element-wise (bitwise) identity of two ``BatchedSolveResult`` payloads."""
+    assert np.array_equal(np.asarray(a.states), np.asarray(b.states))
+    if a.radial_current is not None:
+        assert np.array_equal(
+            np.asarray(a.radial_current), np.asarray(b.radial_current)
+        )
+    assert set(a.moments) == set(b.moments)
+    for key in a.moments:
+        assert np.array_equal(np.asarray(a.moments[key]), np.asarray(b.moments[key])), key
+
+
+def test_devices_degrade_and_validation(tmp_path: Path) -> None:
+    """One usable device (or a too-small batch) degrades to the existing path."""
+    import jax
+
+    jax.config.update("jax_enable_x64", True)
+    import jax.numpy as jnp
+
+    from dkx import batch as batch_mod
+    from dkx import er as er_mod
+
+    d0 = jax.devices()[0]
+
+    # Resolution rules (pure arithmetic, no dispatch).
+    assert batch_mod._resolve_devices(None, 8) is None
+    assert batch_mod._resolve_devices([d0], 8) is None  # one device -> degrade
+    assert batch_mod._resolve_devices([d0, d0], 1) is None  # batch < devices
+    assert batch_mod._resolve_devices([d0, d0], 2) == [d0, d0]
+    if len(jax.local_devices()) == 1:
+        assert batch_mod._resolve_devices("auto", 8) is None
+    with pytest.raises(ValueError, match="not recognised"):
+        batch_mod._resolve_devices("all", 8)
+    with pytest.raises(ValueError, match="non-empty"):
+        batch_mod._resolve_devices([], 8)
+
+    # Shard bounds: contiguous, near-equal, ordered.
+    assert batch_mod._shard_bounds(8, 2) == [(0, 4), (4, 8)]
+    assert batch_mod._shard_bounds(7, 2) == [(0, 4), (4, 7)]
+    assert batch_mod._shard_bounds(5, 3) == [(0, 2), (2, 4), (4, 5)]
+
+    # End-to-end degrade: `devices` that resolve to one device produce the
+    # identical result and chunk metadata as the default path.
+    prob = er_mod.prepare(_write(tmp_path, _pas_deck()), er_bracket=(-5.0, 5.0))
+    er_values = jnp.asarray([-1.0, 0.0, 0.5], dtype=jnp.float64)
+    base = batch_mod.batched_er_scan(prob, er_values)
+    for devices in ([d0], "auto") if len(jax.local_devices()) == 1 else ([d0],):
+        degraded = batch_mod.batched_er_scan(prob, er_values, devices=devices)
+        assert degraded.chunk_size == base.chunk_size
+        assert degraded.n_chunks == base.n_chunks
+        _assert_batched_results_identical(base, degraded)
+
+
+def test_duplicate_device_split_matches_single(tmp_path: Path) -> None:
+    """The full multi-device code path (split/place/gather) is element-wise
+    identical to the single-device path at matched chunk widths.
+
+    A duplicated device list exercises the whole orchestration on one physical
+    device; ``max_batch=2`` pins the executed ``lax.map`` width to 2 on both
+    paths, so the per-element computation is the same compiled program and the
+    identity is bitwise.
+    """
+    import jax
+
+    jax.config.update("jax_enable_x64", True)
+    import jax.numpy as jnp
+
+    from dkx import batch as batch_mod
+    from dkx import er as er_mod
+
+    prob = er_mod.prepare(_write(tmp_path, _pas_deck()), er_bracket=(-5.0, 5.0))
+    er_values = jnp.asarray(
+        [-2.0, -1.5, -1.0, -0.5, 0.0, 0.3, 0.5, 0.7], dtype=jnp.float64
+    )
+    d0 = jax.devices()[0]
+
+    single = batch_mod.batched_er_scan(prob, er_values, max_batch=2)
+    multi = batch_mod.batched_er_scan(
+        prob, er_values, max_batch=2, devices=[d0, d0]
+    )
+    assert single.chunk_size == 2 and single.n_chunks == 4
+    # Per-device metadata: shards of 4, two sequential chunks of 2 per device.
+    assert multi.chunk_size == 2 and multi.n_chunks == 2
+    _assert_batched_results_identical(single, multi)
+
+
+def test_multi_device_per_device_chunk_arithmetic(tmp_path: Path) -> None:
+    """The memory budget bounds each device's chunk, not the whole batch."""
+    import jax
+
+    jax.config.update("jax_enable_x64", True)
+    import jax.numpy as jnp
+
+    from dkx import batch as batch_mod
+    from dkx import er as er_mod
+
+    prob = er_mod.prepare(_write(tmp_path, _pas_deck()), er_bracket=(-5.0, 5.0))
+    er_values = jnp.asarray(
+        [-2.0, -1.5, -1.0, -0.5, 0.0, 0.3, 0.5, 0.7], dtype=jnp.float64
+    )
+    d0 = jax.devices()[0]
+
+    # Generous budget: each device takes its whole shard in one chunk.
+    roomy = batch_mod.batched_er_scan(
+        prob, er_values, memory_budget_gb=64.0, devices=[d0, d0]
+    )
+    assert roomy.chunk_size == 4 and roomy.n_chunks == 1
+    # Tiny budget: one solve at a time on each device.
+    tight = batch_mod.batched_er_scan(
+        prob, er_values, memory_budget_gb=1e-6, devices=[d0, d0]
+    )
+    assert tight.chunk_size == 1 and tight.n_chunks == 4
+    np.testing.assert_allclose(
+        np.asarray(tight.radial_current),
+        np.asarray(roomy.radial_current),
+        rtol=0.0,
+        atol=1e-12,
+    )
+
+
+def test_multi_device_falls_back_under_jit_trace(tmp_path: Path) -> None:
+    """Traced batch leaves fall back to the (traceable) single-device path."""
+    import jax
+
+    jax.config.update("jax_enable_x64", True)
+    import jax.numpy as jnp
+
+    from dkx import batch as batch_mod
+    from dkx import er as er_mod
+
+    prob = er_mod.prepare(_write(tmp_path, _pas_deck()), er_bracket=(-5.0, 5.0))
+    er_values = jnp.asarray([-1.0, 0.0, 0.5], dtype=jnp.float64)
+    dphi = jnp.asarray(prob.dphi_per_er, dtype=jnp.float64) * er_values
+    batch_leaves = {"dphi_hat_dpsi_hat": dphi, "dphi_hat_dpsi_hat_kinetic": dphi}
+    d0 = jax.devices()[0]
+
+    eager = batch_mod.batched_solve(prob.operator, batch_leaves)
+    jitted = jax.jit(
+        lambda leaves: batch_mod.batched_solve(
+            prob.operator, leaves, devices=[d0, d0]
+        )
+    )(batch_leaves)
+    np.testing.assert_allclose(
+        np.asarray(jitted.states), np.asarray(eager.states), rtol=0.0, atol=1e-12
+    )
+
+
+_TWO_DEVICE_SCRIPT = """
+import sys
+
+import numpy as np
+import jax
+
+jax.config.update("jax_enable_x64", True)
+import jax.numpy as jnp
+
+from dkx import batch as batch_mod
+from dkx import er as er_mod
+
+assert len(jax.devices()) == 2, f"expected 2 forced CPU devices, got {jax.devices()}"
+
+prob = er_mod.prepare(sys.argv[1], er_bracket=(-5.0, 5.0))
+er_values = jnp.asarray([-2.0, -1.5, -1.0, -0.5, 0.0, 0.3, 0.5, 0.7])
+
+
+def eq(a, b):
+    return np.array_equal(np.asarray(a), np.asarray(b))
+
+
+# Default config: single device vs the two-device split.
+single = batch_mod.batched_er_scan(prob, er_values)
+multi = batch_mod.batched_er_scan(prob, er_values, devices="auto")
+assert single.chunk_size == 8 and single.n_chunks == 1
+assert multi.chunk_size == 4 and multi.n_chunks == 1  # proves the split ran
+assert eq(single.states, multi.states)
+assert eq(single.radial_current, multi.radial_current)
+for key in single.moments:
+    assert eq(single.moments[key], multi.moments[key]), key
+
+# Matched executed chunk width (2 on both paths): identity is bitwise by
+# construction (same compiled per-element program).
+single2 = batch_mod.batched_er_scan(prob, er_values, max_batch=2)
+multi2 = batch_mod.batched_er_scan(prob, er_values, max_batch=2, devices="auto")
+assert multi2.chunk_size == 2 and multi2.n_chunks == 2
+assert eq(single2.states, multi2.states)
+assert eq(single2.radial_current, multi2.radial_current)
+for key in single2.moments:
+    assert eq(single2.moments[key], multi2.moments[key]), key
+
+# A batch smaller than the device count degrades to the single-device path.
+one = batch_mod.batched_er_scan(prob, er_values[:1], devices="auto")
+ref = batch_mod.batched_er_scan(prob, er_values[:1])
+assert one.chunk_size == ref.chunk_size == 1
+assert eq(one.states, ref.states)
+
+print("MULTI_DEVICE_IDENTITY_OK")
+"""
+
+
+def test_two_forced_cpu_devices_identity(tmp_path: Path) -> None:
+    """1-vs-2 forced host CPU devices: the split is element-wise identical.
+
+    Two forced host devices carry the same correctness story as two GPUs (the
+    split, placement, and gather are the same code path), so this is the
+    portable identity gate for the multi-device API.  Device forcing must
+    happen before JAX initializes, hence the fresh subprocess.
+    """
+    deck_path = _write(tmp_path, _pas_deck())
+    script_path = tmp_path / "two_device_identity.py"
+    script_path.write_text(_TWO_DEVICE_SCRIPT)
+
+    repo_root = Path(__file__).resolve().parents[1]
+    env = dict(os.environ)
+    env["DKX_CPU_DEVICES"] = "2"
+    env.pop("XLA_FLAGS", None)  # derive the forced-device flag fresh
+    env["JAX_ENABLE_X64"] = "True"
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(repo_root)] + [p for p in [env.get("PYTHONPATH", "")] if p]
+    )
+
+    proc = subprocess.run(
+        [sys.executable, str(script_path), str(deck_path)],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=600,
+    )
+    assert proc.returncode == 0, f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
+    assert "MULTI_DEVICE_IDENTITY_OK" in proc.stdout
