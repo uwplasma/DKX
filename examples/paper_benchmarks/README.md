@@ -30,6 +30,19 @@ and a single figure + JSON pair written to
   surface [K.C. Shaing and J.D. Callen, Phys. Fluids 26, 3315 (1983)], with a
   per-point `Nxi` resolution schedule, split 1.3x convergence gates, and
   Fortran v3 cross-check points.
+- `low_collisionality_validity.py`: the companion local-validity case on the
+  same W7-X standard surface -- overlays the `dkx.validity` collisionality-regime
+  classifier (Pfirsch-Schlueter / plateau / banana / 1/nu / sqrt-nu /
+  superbanana-plateau), the E x B resonance-layer parameter
+  `k_ExB = omega_E/nu_eff` marking the 1/nu -> sqrt(nu) boundary, the
+  drift-resonance ratio `k_res`, and the finite-orbit-width parameter
+  `delta_FOW = w_b/L` on the `D31*(nuPrime)` scan at `EStar = 0, 3e-3, 1e-2`.
+  Shows that the measured plateau -> 1/nu transition and the finite-`EStar`
+  detachment line up with the classifier's boundaries [F.L. Hinton &
+  R.D. Hazeltine, Rev. Mod. Phys. 48, 239 (1976); K.C. Shaing, Phys. Fluids 27,
+  1567 (1984); D.-I. Ho & R.M. Kulsrud, Phys. Fluids 30, 442 (1987); C.D. Beidler
+  et al., Nucl. Fusion 51, 076001 (2011)].  Modest 17 x 31 grid, checkpointed and
+  resumable (`LOW_COLL_VALIDITY_MAX_NEW_POINTS`).
 - `gradient_verification.py`: the AD-vs-FD gradient-verification table
   (three derivatives through the monoenergetic-database, RHSMode=1 solve,
   and ambipolar-root paths; JSON + rst snippet).
