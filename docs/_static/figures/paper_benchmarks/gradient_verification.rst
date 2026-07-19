@@ -1,3 +1,5 @@
+:orphan:
+
 .. list-table:: AD-vs-FD gradient verification
    :header-rows: 1
 
