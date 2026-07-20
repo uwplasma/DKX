@@ -93,7 +93,7 @@ N_ZETA_3D = 561
 VIEW_ELEV = 31.0
 VIEW_AZIM = -58.0
 CMAP_3D = "jet"
-BOX_ZOOM = 1.7  # enlarge the flat W7-X torus so it fills its 3-D axes without cramping
+BOX_ZOOM = 1.25  # fit the full W7-X torus width with margin, no side clipping
 
 # --- Left-column 3-D panel geometry (figure fraction) -----------------------
 # Oversized axes with a title just above and a vertical colorbar snug to the
