@@ -387,7 +387,7 @@
   },
   {
    "path": "dkx/solve.py",
-   "lines_at_audit": 2100,
+   "lines_at_audit": 2200,
    "category": "core",
    "action": "retain",
    "public_imports": [],
