@@ -14,11 +14,13 @@ for stellarators and tokamaks, on CPU or GPU. Every output is pinned
 field-by-field against SFINCS Fortran v3, and the whole solve is differentiable:
 `jax.grad` of any output with respect to any input, by implicit differentiation.
 
-![W7-X standard configuration: the 3-D boundary colored by |B| and by parallel current, the bootstrap current profile, and the ambipolar radial electric field, all from DKX kinetic solves](docs/_static/figures/readme/w7x_showcase.png)
+![W7-X standard configuration: the 3-D boundary colored by |B| and by the local parallel current density, the bootstrap current profile, and the ambipolar radial electric field, all from DKX kinetic solves](docs/_static/figures/readme/w7x_showcase.png)
 
 *The W7-X standard configuration, solved by DKX. The plasma boundary is drawn
-twice — colored by `|B|` and by the parallel current density `<j.B>/|B|`, whose
-flux-surface average is the bootstrap current — beside the bootstrap-current
+twice — colored by `|B|` and by the local parallel current density
+`j‖(θ, ζ)`, the genuine θ,ζ-resolved current from a drift-kinetic solve that
+carries the Pfirsch-Schlüter and bootstrap structure and whose flux-surface
+average `<j‖ B>` is the bootstrap current — beside the bootstrap-current
 profile, one two-species kinetic solve per flux surface at its ambipolar
 electric field, and the ambipolar `E_r`, an electron-root core crossing to the
 ion root near mid-radius, against published references [Pablant et al.,
