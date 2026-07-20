@@ -1,25 +1,38 @@
 """Generate the README hero figure: a W7-X standard-configuration showcase.
 
-Three panels, all W7-X standard configuration:
-
-``(a)`` the 3-D plasma boundary colored by ``|B|``, evaluated from the Fourier
-surface of ``wout_w7x_standardConfig.nc`` (resolved through
+Four panels in a 2x2 layout, all W7-X standard configuration.  Left column,
+two stacked 3-D plasma boundaries evaluated from the Fourier surface of
+``wout_w7x_standardConfig.nc`` (resolved through
 :func:`dkx.paths.resolve_existing_path`, i.e. ``DKX_EQUILIBRIA_DIRS`` or the
-fetched data cache).
+fetched data cache), both drawn with the ``jet`` colormap:
 
-``(b)`` the bootstrap current profile ``<j.B>(rho)``: one two-species
+``(a)`` the boundary colored by ``|B|``.
+
+``(b)`` the boundary colored by the parallel current density
+``j_par = <j.B> / |B|`` — the total parallel current whose flux-surface
+average is the bootstrap current.  ``<j.B>`` is the flux-surface-averaged
+parallel current of the outermost cached surface (``rho = 0.7``) from
+``w7x_showcase.json``; dividing that constant by the same boundary ``|B|``
+field used in panel (a) gives a field with ``<j_par |B|> = <j.B>`` exactly, so
+its surface average is the bootstrap current.  Units are ``kA m^-2`` (the
+bootstrap ``<j.B>`` is in ``kA T m^-2``; dividing by ``|B|`` in ``T`` removes
+one factor of tesla).
+
+Right column, two line plots:
+
+``(c)`` the bootstrap current profile ``<j.B>(rho)``: one two-species
 (H+ + electron) drift-kinetic solve per flux surface at that surface's
 ambipolar radial electric field, with the per-species ``Z_s FSABFlow_s``
 contributions.  The species profiles, resolution, physics switches, and the
 ambipolar ``E_r`` per surface come from the committed benchmark record
 ``docs/_static/figures/paper_benchmarks/w7x_ambipolar_er.json`` (the Pablant
 2018 CERC discharge case, ``examples/paper_benchmarks/w7x_ambipolar_er.py``),
-so panel (b) is the bootstrap-current output of exactly that validated setup.
+so panel (c) is the bootstrap-current output of exactly that validated setup.
 The SI conversion ``<j.B> = FSABjHat * vBar * nBar * e`` (kA T m^-2 with
 ``vBar = 437695 m/s``, ``nBar = 1e20 m^-3``) is the one documented in
 ``docs/examples.rst``.
 
-``(c)`` the ambipolar ``E_r(rho)`` with every root classified ion/electron,
+``(d)`` the ambipolar ``E_r(rho)`` with every root classified ion/electron,
 replotted directly from the same committed JSON (no recompute) next to the
 published neoclassical and XICS-measured references.
 
@@ -44,6 +57,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.ticker import MaxNLocator
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 OUT_DIR = REPO_ROOT / "docs" / "_static" / "figures" / "readme"
@@ -74,7 +88,17 @@ N_THETA_3D = 240
 N_ZETA_3D = 601
 VIEW_ELEV = 22.0
 VIEW_AZIM = -56.0
-CMAP_3D = "plasma"
+CMAP_3D = "jet"
+
+# Left-column 3-D panels: oversized rects (x0, y0, w, h in figure fraction) that
+# absorb the wide whitespace 3-D axes leave around a flat, wide W7-X boundary,
+# with a title just above and a horizontal colorbar just below each torus.
+TORUS_TOP_RECT = (-0.055, 0.485, 0.66, 0.45)
+TORUS_TOP_TITLE_XY = (0.275, 0.905)
+TORUS_TOP_CBAR_RECT = (0.085, 0.525, 0.34, 0.017)
+TORUS_BOT_RECT = (-0.055, 0.035, 0.66, 0.45)
+TORUS_BOT_TITLE_XY = (0.275, 0.438)
+TORUS_BOT_CBAR_RECT = (0.085, 0.083, 0.34, 0.017)
 
 # --- Palette (shared with readme_figures.py; color follows the code) --------
 BLUE = "#2a78d6"  # dkx
@@ -214,16 +238,25 @@ def _boundary_from_wout() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarra
     return rr * np.cos(ze), rr * np.sin(ze), zz, bmag
 
 
-def _panel_boundary(fig: plt.Figure, gs) -> None:
-    xx, yy, zz, bmag = _boundary_from_wout()
-    ax = fig.add_subplot(gs, projection="3d")
-    norm = plt.Normalize(float(bmag.min()), float(bmag.max()))
+def _add_torus(
+    fig: plt.Figure,
+    rect: tuple[float, float, float, float],
+    xx: np.ndarray,
+    yy: np.ndarray,
+    zz: np.ndarray,
+    field: np.ndarray,
+    title: str,
+    title_xy: tuple[float, float],
+) -> plt.Normalize:
+    """Draw one W7-X boundary torus colored by ``field``; return its ``|B|`` norm."""
+    ax = fig.add_axes(rect, projection="3d")
+    norm = plt.Normalize(float(field.min()), float(field.max()))
     cmap = plt.get_cmap(CMAP_3D)
     ax.plot_surface(
         xx,
         yy,
         zz,
-        facecolors=cmap(norm(bmag)),
+        facecolors=cmap(norm(field)),
         rcount=N_THETA_3D,
         ccount=N_ZETA_3D,
         linewidth=0,
@@ -233,27 +266,26 @@ def _panel_boundary(fig: plt.Figure, gs) -> None:
     ax.set_box_aspect((np.ptp(xx), np.ptp(yy), np.ptp(zz)))
     ax.set_axis_off()
     ax.view_init(elev=VIEW_ELEV, azim=VIEW_AZIM)
-    box = ax.get_position()
-    ax.set_position(
-        [
-            box.x0 - 0.36 * box.width,
-            box.y0 - 0.26 * box.height,
-            1.72 * box.width,
-            1.66 * box.height,
-        ]
-    )
-    fig.text(
-        box.x0 + 0.42 * box.width,
-        0.895,
-        "(a) plasma boundary, colored by $|B|$",
-        fontsize=10.5,
-        color=INK,
-        ha="center",
-    )
-    mappable = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-    cax = fig.add_axes([box.x0 + 0.13 * box.width, 0.075, 0.60 * box.width, 0.022])
+    fig.text(title_xy[0], title_xy[1], title, fontsize=10.5, color=INK, ha="center")
+    return norm
+
+
+def _add_torus_colorbar(
+    fig: plt.Figure,
+    norm: plt.Normalize,
+    cbar_label: str,
+    cbar_rect: tuple[float, float, float, float],
+) -> None:
+    """Horizontal colorbar for a torus panel.
+
+    Added after both toruses so it draws last and its tick labels are never
+    painted over by the stacked (later-added) 3-D axes above/below it.
+    """
+    mappable = plt.cm.ScalarMappable(cmap=plt.get_cmap(CMAP_3D), norm=norm)
+    cax = fig.add_axes(list(cbar_rect))
     cbar = fig.colorbar(mappable, cax=cax, orientation="horizontal")
-    cbar.set_label("$|B|$ [T]", fontsize=9, color=INK_2)
+    cbar.ax.xaxis.set_major_locator(MaxNLocator(nbins=5))
+    cbar.set_label(cbar_label, fontsize=9, color=INK_2)
     cbar.ax.tick_params(labelsize=8, colors=INK_2)
     cbar.outline.set_edgecolor(GRID)
 
@@ -272,7 +304,7 @@ def _panel_bootstrap(ax: plt.Axes, showcase: dict) -> None:
     ax.set_xlabel("$\\rho$ (normalized minor radius)", fontsize=9.5)
     ax.set_ylabel("$\\langle\\, j_{\\|}\\, B\\,\\rangle$  [kA T m$^{-2}$]", fontsize=9.5)
     ax.set_title(
-        "(b) bootstrap current, one kinetic solve per surface at the ambipolar $E_r$",
+        "(c) bootstrap current, one kinetic solve per surface at the ambipolar $E_r$",
         fontsize=10.5,
         color=INK,
     )
@@ -326,7 +358,7 @@ def _panel_ambipolar_er(ax: plt.Axes, record: dict) -> None:
     ax.set_xlabel("$\\rho$ (normalized minor radius)", fontsize=9.5)
     ax.set_ylabel("$E_r$  [kV/m]", fontsize=9.5)
     ax.set_title(
-        "(c) ambipolar $E_r$: electron-root core, crossover near $\\rho \\sim 0.6$",
+        "(d) ambipolar $E_r$: electron-root core, crossover near $\\rho \\sim 0.6$",
         fontsize=10.5,
         color=INK,
     )
@@ -355,22 +387,53 @@ def main() -> None:
         showcase = compute_bootstrap_profile(record)
         JSON_PATH.write_text(json.dumps(showcase, indent=1) + "\n")
 
-    fig = plt.figure(figsize=(15.0, 7.2), dpi=120)
-    gs = fig.add_gridspec(
+    fig = plt.figure(figsize=(14.6, 8.2), dpi=120)
+
+    # Left column: two stacked 3-D boundaries (|B| over j_par), jet colormap.
+    xx, yy, zz, bmag = _boundary_from_wout()
+    edge = showcase["surfaces"][-1]
+    # Bootstrap <j.B> of the outermost cached surface, in kA T m^-2; dividing by
+    # the boundary |B| [T] gives j_par [kA m^-2] with <j_par |B|> = <j.B>.
+    jboot_edge = float(edge["fsab_jhat"]) * float(showcase["jboot_ka_per_hat"])
+    jpar = jboot_edge / bmag
+    norm_b = _add_torus(
+        fig,
+        TORUS_TOP_RECT,
+        xx,
+        yy,
+        zz,
+        bmag,
+        "(a) plasma boundary, colored by $|B|$",
+        TORUS_TOP_TITLE_XY,
+    )
+    norm_j = _add_torus(
+        fig,
+        TORUS_BOT_RECT,
+        xx,
+        yy,
+        zz,
+        jpar,
+        "(b) parallel current $\\langle\\, j_{\\|}\\, B\\,\\rangle / |B|$"
+        "  (surface-average $=$ bootstrap)",
+        TORUS_BOT_TITLE_XY,
+    )
+    # Colorbars after both toruses so neither 3-D axes overpaints their labels.
+    _add_torus_colorbar(fig, norm_b, "$|B|$ [T]", TORUS_TOP_CBAR_RECT)
+    _add_torus_colorbar(fig, norm_j, "$j_{\\|}$ [kA m$^{-2}$]", TORUS_BOT_CBAR_RECT)
+
+    # Right column: bootstrap profile over ambipolar E_r (unchanged content).
+    gs_r = fig.add_gridspec(
         2,
-        2,
-        width_ratios=(1.08, 1.0),
-        left=0.035,
-        right=0.985,
+        1,
+        left=0.585,
+        right=0.99,
         top=0.865,
         bottom=0.085,
         hspace=0.42,
-        wspace=0.14,
     )
-    _panel_boundary(fig, gs[:, 0])
-    ax_boot = fig.add_subplot(gs[0, 1])
+    ax_boot = fig.add_subplot(gs_r[0])
     _panel_bootstrap(ax_boot, showcase)
-    ax_er = fig.add_subplot(gs[1, 1])
+    ax_er = fig.add_subplot(gs_r[1])
     _panel_ambipolar_er(ax_er, record)
     fig.suptitle(
         "DKX on the W7-X standard configuration: drift-kinetic neoclassical transport, "
