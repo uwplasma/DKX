@@ -152,16 +152,20 @@ roughly one forward solve, as predicted.
 
 .. warning::
 
-   **Do not trust a tier-2 gradient on a numerically singular Fokker-Planck
-   system.** Full Fokker-Planck with ``constraintScheme=1`` on the flagship
-   optimization deck produces a near-singular operator (about 5 zero singular
-   values, condition number :math:`\sim 2\times10^{36}`). The recycled-Krylov
-   adjoint stagnates and the vector-Jacobian product returns a wrong gradient
-   with no error raised (``-1.7e-3`` from autodiff versus ``+2.8e-5`` from finite
-   differences on the affected degree of freedom). The PAS + :math:`E_r` gradient
-   on the same optimization chain is exact. Until the adjoint residual is
-   surfaced in ``SolveResult`` and flagged when it misses tolerance, validate
-   gradients on singular-FP decks against a finite difference before using them.
+   **A tier-2 gradient on a singular operator aborts rather than answers.**
+   The implicit-function-theorem adjoint is a *transposed* solve, and on an
+   operator whose null space the constraint scheme does not span it is the
+   only thing that fails: the physical drive stays in the range of
+   :math:`A`, so the forward solve converges to ``1e-15`` and every field of
+   ``SolveResult`` looks healthy while the vector-Jacobian product returns
+   garbage. ``dkx`` recomputes the true residual :math:`\|A^T y - g\|` from
+   the operator after the transposed solve — never the Krylov method's own
+   estimate — records it in ``SolveResult.adjoint``, and raises with the
+   residual and the remedies unless you pass ``check_adjoint=False``. Read
+   ``result.adjoint`` after the backward pass to see the number behind the
+   decision; the check is silent on near-singular decks whose adjoint
+   residual is at the double-precision backward-error floor, where the
+   gradient is right even though the requested tolerance is unreachable.
 
 The differentiable optimization chain
 -------------------------------------
