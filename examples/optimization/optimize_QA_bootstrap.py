@@ -51,7 +51,8 @@ What this example teaches:
     the previous solution (x0) and the GCROT recycle pair, hot-restarting the
     host VMEC solve from the previous boundary (make_config(hot_restart=True))
     and using a loose equilibrium adjoint tolerance (the trust region only
-    needs ~1e-3 gradients), so every warm evaluation is a few seconds; and
+    needs ~1e-3 gradients) -- which is what keeps a momentum-conserving
+    collision operator affordable inside the optimization loop; and
 
   - verifying the end-to-end gradient against central finite differences at
     the starting point AND at the optimized end point.
@@ -61,12 +62,19 @@ QA field carries a substantial bootstrap current -- lowering it at fixed
 quasisymmetry, aspect ratio and iota is a genuine Pareto trade, not a free
 lunch (holding QA fixed makes the achievable bootstrap decrease honestly
 smaller than a search that is free to spend quasisymmetry).  The kinetic
-configuration is the classic SFINCS "full trajectories" setup: two-species
-pitch-angle-scattering collisions with a finite radial electric field
-(includeXDotTerm and includeElectricFieldTermInXiDot on), which routes to the
-tier-2 GCROT solver where warm starts and recycling matter [Landreman, Smith,
-Mollen & Helander, Phys. Plasmas 21, 042503 (2014); Landreman & Paul, PRL 128,
-035001 (2022)].
+configuration is the classic "full trajectories" setup -- two species (ions and
+electrons) with a finite radial electric field carried by the full-trajectory
+terms (includeXDotTerm and includeElectricFieldTermInXiDot on), which routes to
+the tier-2 GCROT solver where warm starts and recycling matter -- at
+reactor-core conditions, and with the *momentum-conserving* full linearized
+Fokker-Planck collision operator, which the bootstrap current requires because
+<j.B> is itself a parallel-momentum moment [Landreman, Smith, Mollen &
+Helander, Phys. Plasmas 21, 042503 (2014); Helander & Sigmar, Collisional
+Transport in Magnetized Plasmas, CUP (2002); Landreman & Paul, PRL 128, 035001
+(2022)].  The kinetic surface sits in the banana regime, where the bootstrap
+current is set by the field geometry the optimizer is allowed to change rather
+than by collisions; the script prints that classification (dkx.validity) next to
+the solved moments.
 
 Gradient accuracy (measured, documented honestly):
   - Boozer-spectrum -> kinetic <j.B> segment: autodiff vs central FD agree to
@@ -79,10 +87,14 @@ Gradient accuracy (measured, documented honestly):
     finite differences, not by the autodiff chain.
   - CPU vs GPU: the objective agrees to ~8e-11 relative at identical inputs.
 
-Expected runtime: stage A is dominated by the one-time implicit-Jacobian XLA
-compile per continuation stage (warm forward solves ~1 s); stage B by the host
-VMEC solve plus the kinetic value_and_grad (a few seconds per warm
-evaluation).  The whole example runs in well under an hour on a laptop CPU.
+Expected runtime (measured on a laptop CPU, default resolution): stage A ~190 s,
+dominated by the one-time implicit-Jacobian XLA compile per continuation stage
+(warm forward solves ~1 s); stage B by the host VMEC solve plus the kinetic
+value_and_grad -- the first objective evaluation ~31 s including compilation,
+warm ones ~8 s, and one value_and_grad ~30 s.  The momentum-conserving
+collision operator is most of that kinetic cost (a pitch-angle operator needs a
+fraction of it but gets the bootstrap current wrong by tens of percent).  The
+whole example runs in well under an hour.
 Progress is appended to a per-evaluation log file and the best point is
 checkpointed after every evaluation, so a long run is inspectable while it goes
 and resumable (DKX_QA_DOFS_INIT).  With DKX_CI=1 everything
@@ -107,12 +119,16 @@ import matplotlib
 import numpy as np
 import scipy.optimize
 
+from dkx.bounce_averaged import effective_ripple
+from dkx.collisions import nu_d_hat_pitch_angle_scattering_v3
+from dkx.constants import RadialCoordinates
 from dkx.drift_kinetic import kinetic_operator_from_namelist
 from dkx.inputs import parse_sfincs_input_text
 from dkx.magnetic_geometry import FluxSurfaceGeometry
 from dkx.phase_space import make_grids
 from dkx.run import profile_moments_from_operator
 from dkx.solve import solve as kinetic_solve
+from dkx.validity import local_validity_report
 
 jax.config.update("jax_enable_x64", True)
 matplotlib.use("Agg")
@@ -163,20 +179,16 @@ VMEC_MAX_ITER = 5000
 # (RBC(0,0), the major radius, stays fixed - same convention as simsopt).
 MAX_MODE = 1 if CI else 2
 SHAPE_SCHEDULE = (1,) if CI else (1, 2)  # stage-A max_mode continuation
-SHAPE_MAX_NFEV = 3 if CI else 60         # trial budget per stage-A stage
+# Trial budget per stage-A stage.  The CI budget has to be large enough to break
+# the circular seed's iota saddle: a surface left at iota ~ 0 has no rotational
+# transform to hold the parallel dynamics, and the drift-kinetic operator there
+# is nearly singular (the Krylov solve stalls before the requested tolerance).
+# Ten trials reach iota ~ 0.42 and cost no more wall time than three did.
+SHAPE_MAX_NFEV = 10 if CI else 60
 SHAPE_FTOL = 1e-3 if CI else 1e-5
 
 # Boozer transform resolution for the kinetic flux surface.
 MBOZ, NBOZ = (2, 2) if CI else (4, 4)
-
-# Kinetic solve: two species (ions + electrons), pitch-angle-scattering
-# collisions, finite Er with the full-trajectory Er terms (this is what makes
-# the system route to the tier-2 GCROT solver, where warm starts/recycling
-# apply; it is also a nonsingular, exactly implicit-differentiable system).
-KIN_NTHETA, KIN_NZETA, KIN_NXI, KIN_NL, KIN_NX = (9, 7, 8, 4, 4) if CI else (13, 11, 16, 4, 6)
-ER = 1.0  # normalized radial electric field (template rHat convention)
-NU_N = 0.1  # normalized collisionality
-KINETIC_SOLVER_TOL = 1e-9
 
 # Physics targets and penalty weights for the stage-B scalar objective.  The
 # aspect target is two-sided; the iota constraint is the one-sided hinge
@@ -208,6 +220,85 @@ W_QS_HOLD = 1.0e10
 QS_HELD_SLACK = 1.8
 QS_HELD_TARGET = float("inf")  # set after the first (Stage-A) evaluation below
 
+# ----------------------------------------------------------------------------
+# Kinetic solve: resolution, which flux surface, and the conditions on it
+# ----------------------------------------------------------------------------
+# Two species (ions + electrons) with a finite radial electric field carried by
+# the full-trajectory terms (includeXDotTerm / includeElectricFieldTermInXiDot),
+# which routes the system to the tier-2 GCROT solver where warm starts and
+# recycling matter; it is also nonsingular and exactly implicit-differentiable.
+KIN_NTHETA, KIN_NZETA, KIN_NXI, KIN_NL, KIN_NX = (9, 7, 8, 4, 4) if CI else (13, 11, 24, 4, 6)
+KINETIC_SOLVER_TOL = 1e-9
+S_KINETIC_ROW = NS // 2  # half-mesh radial row carrying the kinetic flux surface
+S_KINETIC = (S_KINETIC_ROW - 0.5) / (NS - 1)  # normalized toroidal flux of that row
+
+# COLLISION OPERATOR.  <j.B> is a parallel-momentum moment of the distribution
+# function, so the operator has to conserve parallel momentum or the bootstrap
+# current is systematically wrong.  Pitch-angle scattering (collisionOperator=1)
+# conserves particles but not momentum: it drops the field-particle
+# back-reaction through which each species returns the momentum it takes from
+# the others.  The full linearized Fokker-Planck operator (collisionOperator=0)
+# carries that term and conserves momentum exactly, which is what
+# bootstrap-current calculations require [Helander & Sigmar, Collisional
+# Transport in Magnetized Plasmas, CUP (2002), ch. 8 and 11; Landreman, Smith,
+# Mollen & Helander, Phys. Plasmas 21, 042503 (2014)].  Measured on the Stage-A
+# QA surface at the conditions and resolution below, pitch-angle scattering
+# returns <j.B>/sqrt(<B^2>) = 2.383e-1 against 1.626e-1 for the full operator --
+# a 47% overestimate that is purely the missing momentum restoration (in a
+# collisional deck the same comparison is a factor 2.8).  The momentum- AND
+# energy-conserving improved Sugama model operator (collisionOperator=3; Sugama
+# et al., Phys. Plasmas 26, 102108 (2019)) is the cheaper fallback -- 25% fewer
+# Krylov iterations here, and within 18% of the full operator at this
+# resolution -- but the full operator is affordable, so the flagship uses it.
+# Nxi = 24 (against 16) is what the banana regime costs: the pitch-angle
+# resolution the collisional deck could get away with leaves <j.B> 8% low, while
+# 24 is within 1% of Nxi = 32.
+COLLISION_OPERATOR = 0
+
+# NORMALIZATION.  Delta = mBar vBar/(e BBar RBar) fixes the reference set
+# (RBar = 1 m, BBar = 1 T, TBar = 1 keV, mBar = m_proton, nBar = 1e20 m^-3), and
+# nu_n = nuBar RBar/vBar is the collisionality AT those reference values -- a
+# pure normalization constant, not a plasma property: 0.00831565 with a Coulomb
+# logarithm of 17.  The actual plasma enters through nHats/THats below.  Raising
+# nu_n instead of the densities is what puts a case in the wrong regime: 12x
+# this value gives nu_star = 2.2e-1, six to ten times the banana boundary
+# eps_t^1.5, which is the plateau regime -- there the bootstrap current is set
+# by collisions rather than by the geometry the optimizer may change.  Step 3b
+# below prints where the surface actually lands.
+DELTA = 4.5694e-3
+NU_N = 0.00831565
+ER = 1.0  # radial electric field in kV/m (phiBar/RBar); ion-root scale
+
+# REACTOR SCALE.  Stage A shapes a unit-scale equilibrium (R0 ~ 1 m, |B| ~ 1 T).
+# Aspect ratio, iota and quasisymmetry are scale invariant, so the shaping stage
+# never needs a machine size -- but neoclassical transport is not scale
+# invariant: both the collisionality and the orbit width depend on size and
+# field strength.  The kinetic surface is therefore rigidly rescaled to reactor
+# dimensions before the drift-kinetic solve.  A rigid scale (lengths x L, field
+# x S) maps a Boozer surface exactly: |B| -> S |B|, (G, I) -> L S (G, I),
+# psiAHat -> L^2 S psiAHat, iota unchanged.  Reactor-core density and
+# temperature on the unit-scale torus would instead mean beta of order 1 and
+# banana orbits wider than the temperature scale length (measured delta_FOW =
+# w_b/L_T = 1.4), where no radially-local kinetic model applies at all.
+A_MINOR = 1.70442623  # m, reactor minor radius of the reference QA case
+B_AXIS = 5.9021049  # T, |B_00| of the same reference case
+A_HAT_UNIT = 1.0 / TARGET_ASPECT  # unit-scale minor radius (R0 ~ 1 m units)
+R_SCALE = A_MINOR / A_HAT_UNIT  # length scale factor of the rigid rescale
+
+# PROFILES.  Reactor-core density and temperature of the reference
+# bootstrap-current study, evaluated at the kinetic surface:
+#     n(s) = 4.13 (1 - s^5) x 1e20 m^-3,     T(s) = 12 (1 - s) keV,
+# with s the normalized toroidal flux.  nBar = 1e20 m^-3 and TBar = 1 keV, so
+# nHat and THat ARE those numbers.  rHat = A_MINOR sqrt(s) is the flux-surface
+# radius, hence d/drHat = (2 sqrt(s)/A_MINOR) d/ds for the gradient drives
+# [Landreman, Buller & Drevlak, arXiv:2205.02914].
+N_AXIS, T_AXIS = 4.13, 12.0  # 1e20 m^-3 and keV on axis
+_DS_DRHAT = 2.0 * np.sqrt(S_KINETIC) / A_MINOR
+NHAT = N_AXIS * (1.0 - S_KINETIC**5)  # 1e20 m^-3 on the kinetic surface
+THAT = T_AXIS * (1.0 - S_KINETIC)  # keV on the kinetic surface
+DNHAT_DRHAT = -5.0 * N_AXIS * S_KINETIC**4 * _DS_DRHAT
+DTHAT_DRHAT = -T_AXIS * _DS_DRHAT
+
 # Kinetic figure of merit entering the objective.  Every entry of the dict is
 # CI-tested, so switching the commented line in just works.
 KINETIC_OBJECTIVE = "bootstrap_jbs2"  # (<j.B>/sqrt(<B^2>))^2 -> drive to zero
@@ -222,13 +313,17 @@ RUN_FD_CHECK = os.environ.get("DKX_QA_FD_CHECK", "1") == "1"
 # Central-FD step and acceptance gate for the end-to-end gradient check.  The
 # autodiff gradient is exact (the Boozer->kinetic segment agrees with FD to
 # ~3e-6, gated in the CI test); the *full-chain* FD comparison is limited by
-# the host equilibrium solver's ftol termination noise.  An eps sweep
-# (1e-5 .. 1e-3) shows the FD value converging monotonically toward the stable
-# autodiff value and plateauing near ~7e-3 (the noise floor), so the gate below
-# accommodates that floor and FD_EPS sits at the sweep optimum -- the comparison
-# is limited by finite differences, not by the autodiff chain.
-FD_EPS = 1e-5 if CI else 3e-4
-FD_GATE = 5e-2 if CI else 1.5e-2
+# the host equilibrium solver's ftol termination noise, which a finite
+# difference divides by eps.  Measured eps sweep on the dominant dof at the
+# default resolution, with the autodiff value fixed at 2.18005e+06:
+#     3e-5 -> 3.40e-2,  1e-4 -> 2.93e-2,  3e-4 -> 1.72e-2,  1e-3 -> 1.27e-2,
+# i.e. the FD value climbs monotonically toward the stable autodiff value as
+# the step grows out of the noise, with no sign of truncation error yet.  So
+# FD_EPS sits at the top of that sweep and the gate accommodates the remaining
+# noise floor -- the comparison is limited by finite differences, not by the
+# autodiff chain.
+FD_EPS = 1e-5 if CI else 1e-3
+FD_GATE = 5e-2 if CI else 2.5e-2
 
 # Optional resume: point DKX_QA_DOFS_INIT at a checkpoint .npz written
 # by a previous (interrupted) run to start stage B from its best point.
@@ -358,8 +453,14 @@ IDX_B00 = int(np.where((BOOZ_XM == 0) & (BOOZ_XN == 0))[0][0])
 # 3) Kinetic operator template (built once; geometry replaced per evaluation)
 # ----------------------------------------------------------------------------
 print("Step 2: kinetic-operator template (canonical KineticOperator route)")
-PSI_A_HAT = abs(float(inp0.phiedge)) / (2.0 * np.pi)
-A_HAT = 1.0 / TARGET_ASPECT  # minor radius in RBar units for R0 ~ 1 m
+# The rigid rescale from the unit-scale equilibrium to the reactor dimensions
+# declared at the top: B_UNIT is the flux-consistent field of the unit-scale
+# surface (psiAHat = B a^2/2), so the rescaled surface carries |B| ~ B_AXIS at
+# minor radius A_MINOR, and its psiAHat is B_AXIS A_MINOR^2/2.
+PSI_A_HAT_UNIT = abs(float(inp0.phiedge)) / (2.0 * np.pi)
+B_UNIT = 2.0 * PSI_A_HAT_UNIT / A_HAT_UNIT**2
+B_SCALE = B_AXIS / B_UNIT  # field scale factor of the rigid rescale
+PSI_A_HAT = PSI_A_HAT_UNIT * R_SCALE**2 * B_SCALE
 
 KINETIC_TEMPLATE = f"""! Template generated by examples/optimization/optimize_QA_bootstrap.py
 &general
@@ -369,22 +470,24 @@ KINETIC_TEMPLATE = f"""! Template generated by examples/optimization/optimize_QA
   geometryScheme = 1
   helicity_n = {NFP}
   psiAHat = {PSI_A_HAT:.10g}
-  aHat = {A_HAT:.10g}
+  aHat = {A_MINOR:.10g}
+  inputRadialCoordinate = 1
+  psiN_wish = {S_KINETIC:.10g}
 /
 &speciesParameters
   Zs = 1.0d+0 -1.0d+0
   mHats = 1.0d+0 5.446170214d-4
-  nHats = 1.0d+0 1.0d+0
-  THats = 1.0d+0 1.0d+0
-  dNHatdpsiHats = -1.5d+0 -1.5d+0
-  dTHatdpsiHats = -3.0d+0 -3.0d+0
+  nHats = {NHAT:.10g} {NHAT:.10g}
+  THats = {THAT:.10g} {THAT:.10g}
+  dNHatdrHats = {DNHAT_DRHAT:.10g} {DNHAT_DRHAT:.10g}
+  dTHatdrHats = {DTHAT_DRHAT:.10g} {DTHAT_DRHAT:.10g}
 /
 &physicsParameters
-  Delta = 4.5694d-3
+  Delta = {DELTA:.10g}
   alpha = 1.0d+0
   nu_n = {NU_N}
   Er = {ER}
-  collisionOperator = 1
+  collisionOperator = {COLLISION_OPERATOR}
   includeXDotTerm = .true.
   includeElectricFieldTermInXiDot = .true.
 /
@@ -404,8 +507,6 @@ KINETIC_TEMPLATE = f"""! Template generated by examples/optimization/optimize_QA
 /
 """
 op_template = kinetic_operator_from_namelist(parse_sfincs_input_text(KINETIC_TEMPLATE))
-S_KINETIC_ROW = NS // 2  # half-mesh radial row of the kinetic flux surface
-S_KINETIC = (S_KINETIC_ROW - 0.5) / (NS - 1)  # normalized toroidal flux of that row
 
 # The kinetic angular grids (theta/zeta nodes and quadrature weights) are
 # fixed by the template resolution.
@@ -415,7 +516,13 @@ _kin_grids = make_grids(
 )
 _KIN_THETA, _KIN_ZETA = _kin_grids.theta, _kin_grids.zeta
 _KIN_THETA_W, _KIN_ZETA_W = _kin_grids.theta_weights, _kin_grids.zeta_weights
-print(f"  species: ions + electrons, PAS collisions, nu_n={NU_N}, Er={ER}")
+print(f"  species: ions + electrons, full linearized Fokker-Planck collisions "
+      f"(collisionOperator={COLLISION_OPERATOR}, momentum-conserving), "
+      f"nu_n={NU_N:g}, Er={ER:g} kV/m")
+print(f"  reactor scale: minor radius {A_MINOR:.4f} m, |B| ~ {B_AXIS:.3f} T "
+      f"(rigid rescale x{R_SCALE:.3f} in length, x{B_SCALE:.3f} in field)")
+print(f"  profiles at s = {S_KINETIC:.4f}: n = {NHAT:.4f}e20 m^-3, T = {THAT:.4f} keV, "
+      f"dn/drHat = {DNHAT_DRHAT:.5f}, dT/drHat = {DTHAT_DRHAT:.4f}")
 print(f"  grids: Ntheta={KIN_NTHETA} Nzeta={KIN_NZETA} Nxi={KIN_NXI} Nx={KIN_NX} "
       f"(matrix size {op_template.total_size})")
 print(f"  kinetic flux surface: half-mesh row {S_KINETIC_ROW} of {NS} (s ~ {S_KINETIC:.3f})")
@@ -424,17 +531,28 @@ print(f"  kinetic flux surface: half-mesh row {S_KINETIC_ROW} of {NS} (s ~ {S_KI
 # ----------------------------------------------------------------------------
 # 4) The differentiable physics chain (stage B), written out in this script
 # ----------------------------------------------------------------------------
-def kinetic_moments(booz, x0=None, recycle=None):
-    """Solve the drift-kinetic equation on the Boozer surface; return moments."""
-    bmnc_b = booz["bmnc_b"][0]
+def reactor_surface_geometry(booz):
+    """Boozer surface of the equilibrium, rigidly rescaled to reactor size/field.
+
+    Lengths x R_SCALE and field x B_SCALE: ``|B| -> B_SCALE |B|`` and
+    ``(G, I) -> R_SCALE B_SCALE (G, I)`` (``iota`` is scale invariant), the
+    exact image of the unit-scale surface at reactor dimensions.  Traceable in
+    the spectrum, so gradients flow through the rescale unchanged.
+    """
     ixm = np.asarray(booz["ixm_b"])
     ixn = np.asarray(booz["ixn_b"])  # includes the nfp factor
-    geom = FluxSurfaceGeometry.from_fourier(
-        theta=_KIN_THETA, zeta=_KIN_ZETA, bmnc=bmnc_b,
+    return FluxSurfaceGeometry.from_fourier(
+        theta=_KIN_THETA, zeta=_KIN_ZETA, bmnc=booz["bmnc_b"][0] * B_SCALE,
         m=jnp.asarray(ixm), n=jnp.asarray(ixn // NFP),
-        n_periods=NFP, iota=booz["iota_b"][0], g_hat=booz["bvco_b"][0],
-        i_hat=booz["buco_b"][0],
+        n_periods=NFP, iota=booz["iota_b"][0],
+        g_hat=booz["bvco_b"][0] * (B_SCALE * R_SCALE),
+        i_hat=booz["buco_b"][0] * (B_SCALE * R_SCALE),
     )
+
+
+def kinetic_moments(booz, x0=None, recycle=None):
+    """Solve the drift-kinetic equation on the Boozer surface; return moments."""
+    geom = reactor_surface_geometry(booz)
     fsab2 = geom.fsab_hat2(theta_weights=_KIN_THETA_W, zeta_weights=_KIN_ZETA_W)
     op = dataclasses.replace(
         op_template,
@@ -539,6 +657,61 @@ print(f"  QS residual      = {float(aux0['qs']):.4e} (Boozer non-QA energy fract
 print(f"  QS ratio residual= {float(aux0['qs_profile']):.4e} ({len(QS_SURFACES)} surfaces)")
 print(f"  <j.B>/sqrt(<B^2>)= {float(aux0['jbs']):.6e}")
 print(f"  cold kinetic iterations = {aux0['kinetic_iterations']}")
+
+
+# ----------------------------------------------------------------------------
+# 5b) Which transport regime the kinetic surface is in (dkx.validity)
+# ----------------------------------------------------------------------------
+def regime_report(aux):
+    """Collisionality regime + radial-locality verdict for the kinetic surface.
+
+    The bootstrap current is only 'geometry dominated' -- the premise of
+    optimizing it by reshaping the boundary -- when the surface sits in the
+    long-mean-free-path (banana) regime, ``nu_star < eps_t^{3/2}``.  Higher
+    collisionality moves it into the plateau / Pfirsch-Schlueter regimes where
+    collisions, not the field geometry, set the parallel current.
+    """
+    booz = {"bmnc_b": jnp.asarray(aux["bmnc_b"])[None, :],
+            "ixm_b": BOOZ_XM, "ixn_b": BOOZ_XN,
+            "iota_b": jnp.asarray(aux["booz_iota"])[None],
+            "bvco_b": jnp.asarray(aux["booz_G"])[None],
+            "buco_b": jnp.asarray(aux["booz_I"])[None]}
+    geom = reactor_surface_geometry(booz)
+    b00 = float(aux["bmnc_b"][IDX_B00]) * B_SCALE
+    g_hat = float(aux["booz_G"]) * B_SCALE * R_SCALE
+    i_hat = float(aux["booz_I"]) * B_SCALE * R_SCALE
+    iota = float(aux["booz_iota"])
+    r_major = (g_hat + iota * i_hat) / b00  # (G + iota I)/B0, the connection length
+    r_hat = A_MINOR * np.sqrt(S_KINETIC)
+    eps_t = r_hat / r_major  # inverse aspect ratio of the surface
+    # nu_star = R0 nu_D/(iota v) for the thermal ion (x = 1) at these profiles
+    nu_d = float(nu_d_hat_pitch_angle_scattering_v3(
+        x=jnp.asarray([1.0]), z_s=jnp.asarray([1.0, -1.0]),
+        m_hats=jnp.asarray([1.0, 5.446170214e-4]),
+        n_hats=jnp.asarray([NHAT, NHAT]), t_hats=jnp.asarray([THAT, THAT]))[0, 0])
+    nu_star = r_major * NU_N * nu_d / (abs(iota) * np.sqrt(THAT))
+    radial = RadialCoordinates(psi_a_hat=PSI_A_HAT, a_hat=A_MINOR,
+                               r_n=float(np.sqrt(S_KINETIC)))
+    e_star = (radial.d_dr_hat_to_d_dpsi_hat * (-ER)) * DELTA * g_hat / (2.0 * iota * b00)
+    eps_eff = float(effective_ripple(geom, r_eff=r_hat))
+    l_grad = min(NHAT / abs(DNHAT_DRHAT), THAT / abs(DTHAT_DRHAT))  # min(L_n, L_T)
+    return local_validity_report(
+        nu_star=nu_star, e_star=e_star, delta=DELTA, g_hat=g_hat, iota=iota,
+        b0_over_bbar=b00, eps_t=eps_t, grad_scale_length_hat=l_grad,
+        t_hat=THAT, epsilon_eff=eps_eff), eps_eff, b00, r_major
+
+
+print("Step 3b: transport regime of the kinetic surface (dkx.validity)")
+validity, EPS_EFF, B00_REACTOR, R_MAJOR = regime_report(aux0)
+BANANA_BOUNDARY = validity.eps_t**1.5
+print(f"  surface: |B00| = {B00_REACTOR:.3f} T, R0 = {R_MAJOR:.3f} m, "
+      f"eps_t = {validity.eps_t:.4f}, effective ripple = {EPS_EFF:.2e}")
+print(f"  nu_star = {validity.nu_star:.4e} vs banana boundary eps_t^1.5 = "
+      f"{BANANA_BOUNDARY:.4e}  ({validity.nu_star / BANANA_BOUNDARY:.2f}x)")
+print(f"  regime = {validity.regime.value}  (E x B precession k_ExB = "
+      f"{validity.k_exb:.3f}; collisions de-trap first while that stays below 1)")
+print(f"  radial locality: delta_FOW = w_b/L = {validity.delta_fow:.4f} "
+      f"({validity.radial_locality_flag.value}); overall {validity.overall_flag.value}")
 
 print("Step 4: warm-start savings (x0 + GCROT recycle from the previous solve)")
 t0 = time.perf_counter()
@@ -716,6 +889,18 @@ history_path.write_text(json.dumps({
                    "seconds_first": t_first, "seconds_warm": t_warm},
     "fd_check_initial": fd_check, "fd_check_final": fd_check_final,
     "kinetic_objective": KINETIC_OBJECTIVE,
+    "kinetic_conditions": {
+        "collision_operator": COLLISION_OPERATOR, "nu_n": NU_N, "Delta": DELTA,
+        "Er_kV_per_m": ER, "s": S_KINETIC,
+        "nHat_1e20_per_m3": NHAT, "THat_keV": THAT,
+        "dNHatdrHat": DNHAT_DRHAT, "dTHatdrHat": DTHAT_DRHAT,
+        "a_minor_m": A_MINOR, "B_axis_T": B_AXIS,
+        "length_scale": R_SCALE, "field_scale": B_SCALE,
+        "regime": validity.regime.value, "nu_star": validity.nu_star,
+        "banana_boundary": BANANA_BOUNDARY, "epsilon_eff": EPS_EFF,
+        "k_ExB": validity.k_exb, "delta_FOW": validity.delta_fow,
+        "radial_locality": validity.radial_locality_flag.value,
+    },
     "targets": {"aspect": TARGET_ASPECT, "iota_min": IOTA_MIN,
                 "qs_held_target": float(QS_HELD_TARGET),
                 "qs_held_slack": float(QS_HELD_SLACK)},
@@ -793,6 +978,7 @@ axB.set_xlim(-0.6, 1.6)
 axB.set_ylim(0, max(max(qs_vals), float(QS_HELD_TARGET)) * 1.35)
 
 X, Y, Z, B = _boundary_surface_bmag(wouts["final"])
+B = B * B_SCALE  # unit-scale equilibrium shown at the reactor field strength
 norm = matplotlib.colors.Normalize(vmin=B.min(), vmax=B.max())
 ax3d = fig.add_subplot(gs[:, 1], projection="3d")
 ax3d.plot_surface(X, Y, Z, facecolors=plt.cm.viridis(norm(B)),
@@ -800,7 +986,7 @@ ax3d.plot_surface(X, Y, Z, facecolors=plt.cm.viridis(norm(B)),
 ax3d.set_box_aspect((np.ptp(X), np.ptp(Y), np.ptp(Z)), zoom=1.55)
 ax3d.set_axis_off()
 ax3d.view_init(elev=32, azim=-65)
-ax3d.set_title("config 2 boundary, |B| (T)", fontsize=11, pad=0)
+ax3d.set_title("config 2 boundary, |B| (T) at reactor scale", fontsize=11, pad=0)
 mappable = plt.cm.ScalarMappable(norm=norm, cmap="viridis")
 cbar = fig.colorbar(mappable, ax=ax3d, shrink=0.62, pad=0.0, fraction=0.04)
 cbar.ax.tick_params(labelsize=8)
