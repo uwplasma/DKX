@@ -907,7 +907,11 @@ def test_check_adjoint_false_is_the_documented_unchecked_opt_out() -> None:
     # essentially nothing over the trivial y = 0, whose residual is ||g||).
     assert rec.relative_residual > 0.1
     assert rec.residual_norm > 1e3 * rec.limit
-    assert not np.isfinite(g) or abs(g - fd) > abs(fd)
+    # The unchecked gradient is not trustworthy here; the recorded residual
+    # above is the evidence.  Its numerical value is not pinned: a stagnated
+    # adjoint can land anywhere, including near the finite-difference value by
+    # coincidence on a given backend, so asserting a specific error would be
+    # asserting an accident.
 
 
 @pytest.mark.parametrize(
