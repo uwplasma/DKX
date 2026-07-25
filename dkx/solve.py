@@ -45,6 +45,15 @@ costs one transposed solve which reuses the same tier-1 factors
 (``block_thomas_solve(transpose=True)``) or a transposed-preconditioner
 GCROT solve.  Tier 3 is a loud, non-differentiable escape hatch.
 
+That transposed solve is the one place where a bad answer is invisible: the
+forward solution, its residual, and every other field of :class:`SolveResult`
+stay correct while the gradient is silently wrong.  The differentiable tier-2
+path therefore recomputes each solve's *true* residual from the operator
+(``||A^T y - g||``, never the Krylov method's internal estimate), records it
+in :class:`AdjointDiagnostics` on :attr:`SolveResult.adjoint`, and — unless
+``check_adjoint=False`` — raises at execution time when it misses both the
+requested tolerance and the double-precision backward-error floor.
+
 Fortran correspondence: ``solver.F90`` (KSP setup / preconditioner matrix
 ``whichMatrix=0``), ``preconditioner.F90`` (the ``preconditioner_*`` knobs),
 and the PETSc ``Pmat`` idiom of production SFINCS.
@@ -55,7 +64,7 @@ from __future__ import annotations
 import inspect
 import os
 import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any, Callable
 
 from jax import config as _jax_config
@@ -175,6 +184,110 @@ _SOLVE_CPU_MAX_TIER2_DEFAULT = 0
 
 
 @dataclass(frozen=True)
+class SolveResidualRecord:
+    """One differentiable-solve residual measured on the host at execution time.
+
+    Attributes:
+        label: ``"forward"`` or ``"adjoint (transposed)"``.
+        rhs_index: column of the right-hand side this solve belongs to.
+        residual_norm: the *true* residual norm — ``||A x - b||`` for the
+            forward solve, ``||A^T y - g||`` for the adjoint one, recomputed
+            from the operator itself rather than read off the Krylov method's
+            internal (recursively updated) estimate.
+        rhs_norm: ``||b||`` (adjoint: ``||g||``, the cotangent).
+        solution_norm: ``||x||`` (adjoint: ``||y||``).
+        operator_norm: probe estimate of ``||A||`` (adjoint: ``||A^T||``),
+            used for the attainable backward-error floor.
+        target: the residual the caller asked for, ``max(atol, tol*||b||)``.
+        floor: the float64 backward-error floor
+            ``slack * eps * (||A|| ||x|| + ||b||)`` — no solver can push the
+            residual of *this* system below it in double precision.
+        limit: the accepted residual, ``factor * max(target, floor)``.
+        within_tolerance: ``residual_norm <= limit`` and every norm finite.
+    """
+
+    label: str
+    rhs_index: int
+    residual_norm: float
+    rhs_norm: float
+    solution_norm: float
+    operator_norm: float
+    target: float
+    floor: float
+    limit: float
+    within_tolerance: bool
+
+    @property
+    def relative_residual(self) -> float:
+        """``residual_norm / ||b||`` (``inf`` for a zero right-hand side)."""
+        if self.rhs_norm > 0.0:
+            return self.residual_norm / self.rhs_norm
+        return float("inf") if self.residual_norm > 0.0 else 0.0
+
+
+@dataclass
+class AdjointDiagnostics:
+    """True residuals of the implicit-differentiation solves of one :func:`solve`.
+
+    The implicit-function-theorem VJP costs one *transposed* solve, and a
+    transposed solve that stalls returns a wrong gradient while the forward
+    solution stays perfectly good — the failure mode this container exists to
+    make visible.  Records are appended by a ``jax.debug.callback`` when the
+    corresponding solve actually executes (the adjoint ones during the
+    backward pass), so a freshly returned :class:`SolveResult` carries an
+    empty one; read it after ``jax.grad``/``jax.vjp`` has run.
+
+    Under ``jax.jit`` the callback closure is captured at *trace* time, so a
+    cached jitted function keeps appending to the object built on its first
+    trace.  Call :meth:`reset` between measurements.
+
+    Attributes:
+        tol, atol: the tolerances the solve was asked for.
+        factor: the accepted slack over ``max(target, floor)``
+            (``adjoint_residual_factor`` of :func:`solve`).
+        checked: whether a failure raises (``check_adjoint`` of :func:`solve`).
+        records: the :class:`SolveResidualRecord` list, in execution order.
+    """
+
+    tol: float
+    atol: float
+    factor: float
+    checked: bool
+    records: list[SolveResidualRecord] = field(default_factory=list)
+
+    def reset(self) -> None:
+        """Drop every record (e.g. between two runs of a jitted function)."""
+        self.records.clear()
+
+    def _select(self, label_prefix: str) -> list[SolveResidualRecord]:
+        return [r for r in self.records if r.label.startswith(label_prefix)]
+
+    @property
+    def adjoint_records(self) -> list[SolveResidualRecord]:
+        """Only the transposed (adjoint) solves."""
+        return self._select("adjoint")
+
+    @property
+    def forward_records(self) -> list[SolveResidualRecord]:
+        """Only the forward solves run under the implicit-diff wrapper."""
+        return self._select("forward")
+
+    @property
+    def worst_relative_residual(self) -> float:
+        """Largest ``||A^T y - g|| / ||g||`` over the adjoint solves.
+
+        ``0.0`` when the backward pass has not run yet (no records).
+        """
+        rel = [r.relative_residual for r in self.adjoint_records]
+        return max(rel) if rel else 0.0
+
+    @property
+    def converged(self) -> bool:
+        """Whether every recorded solve landed inside its accepted residual."""
+        return all(r.within_tolerance for r in self.records)
+
+
+@dataclass(frozen=True)
 class SolveResult:
     """Outcome of :func:`solve`.
 
@@ -196,6 +309,12 @@ class SolveResult:
             device-compute time, not JAX async-dispatch latency (which would
             under-report by ~10x).  Under ``jit``/``grad`` the blocks are no-ops
             and the values are trace-time only.
+        adjoint: :class:`AdjointDiagnostics` of the implicit-differentiation
+            solves (differentiable tier 2 only, else ``None``).  Empty when the
+            result is returned: the records are appended at *execution* time,
+            i.e. the forward ones when the value is computed and the adjoint
+            ones when the backward pass runs, so inspect it after the enclosing
+            ``jax.grad`` / ``jax.vjp`` call has completed.
     """
 
     x: jnp.ndarray
@@ -205,6 +324,7 @@ class SolveResult:
     converged: bool
     recycle: tuple[jnp.ndarray, jnp.ndarray] | None
     timings: dict[str, float]
+    adjoint: AdjointDiagnostics | None = None
 
 
 def _as_columns(rhs: jnp.ndarray) -> tuple[jnp.ndarray, bool]:
@@ -286,28 +406,194 @@ def _pinned_matvecs(
     return matvec, matvec_t
 
 
-def _convergence_guard(label: str) -> Callable[[jnp.ndarray, jnp.ndarray], None]:
-    """Host callback that aborts loudly when a differentiable solve stalls.
+# Accepted slack over the residual the caller asked for, before a
+# differentiable solve is declared failed.  The default of :func:`solve`'s
+# ``adjoint_residual_factor``.
+DEFAULT_ADJOINT_RESIDUAL_FACTOR = 10.0
+
+# Multiple of the float64 unit roundoff in the attainable backward-error floor
+# ``_ADJOINT_FLOOR_SLACK * eps * (||A|| ||x|| + ||b||)``.  A Krylov solve is
+# backward stable, so its residual settles at that scale; on a near-singular
+# system with a large-norm solution the floor is *above* ``tol * ||b||`` and
+# the requested tolerance is simply unreachable in double precision.  Judging
+# such a solve failed would abort perfectly good gradients.
+_ADJOINT_FLOOR_SLACK = 32.0
+
+# Hard ceiling on that floor, relative to ``||b||``.  Without it a *diverged*
+# solve would excuse itself: its solution norm blows up, so a floor
+# proportional to ``||A|| ||x||`` grows past the residual it is meant to
+# judge.  ``x = 0`` always attains ``||r|| = ||b||``, so no argument about
+# attainable accuracy can justify a residual anywhere near ``||b||``; 1e-6
+# is far below any converged solve yet far above the near-singular
+# stagnation the floor exists to tolerate.
+_ADJOINT_FLOOR_MAX_RELATIVE = 1e-6
+
+# Rademacher probes used to estimate ``||A||`` for that floor.  Each costs one
+# operator apply against the hundreds the Krylov solve itself runs.
+_ADJOINT_NORM_PROBES = 2
+
+_EPS64 = float(np.finfo(np.float64).eps)
+
+
+def _operator_norm_estimate(
+    matvec: Callable[[jnp.ndarray], jnp.ndarray], n: int
+) -> jnp.ndarray:
+    """Probe estimate of ``||A||_2`` from a few Rademacher matvecs.
+
+    ``max_i ||A u_i|| / ||u_i||`` over fixed pseudo-random sign vectors: a
+    lower bound on the spectral norm, tight to within a small factor for the
+    operators here, and used only to set the order of magnitude of the
+    backward-error floor in :func:`_residual_guard`.
+    """
+    key = jax.random.PRNGKey(0)
+    est = jnp.asarray(0.0, dtype=jnp.float64)
+    for i in range(_ADJOINT_NORM_PROBES):
+        u = jax.random.rademacher(jax.random.fold_in(key, i), (n,), dtype=jnp.float64)
+        est = jnp.maximum(est, jnp.linalg.norm(matvec(u)) / jnp.linalg.norm(u))
+    return est
+
+
+def _residual_guard(
+    label: str,
+    rhs_index: int,
+    *,
+    tol: float,
+    atol: float,
+    factor: float,
+    raise_on_failure: bool,
+    diagnostics: AdjointDiagnostics | None,
+) -> Callable[..., None]:
+    """Host callback that records — and by default aborts on — a bad solve.
 
     Used on both the forward and the adjoint (transposed) GCROT solves of the
-    ``differentiable=True`` tier-2 path: a stalled Krylov solve there would
-    otherwise return a silently wrong solution/gradient (the historical
-    FP+constraintScheme=1 failure mode).  Runs at execution time via
-    ``jax.debug.callback`` so it works under ``jit``/``grad`` tracing.
+    ``differentiable=True`` tier-2 path.  A stalled *adjoint* solve is the
+    dangerous one: the forward solution stays good, nothing in the returned
+    :class:`SolveResult` changes, and the implicit-function-theorem VJP hands
+    back a wrong gradient (the singular Fokker-Planck +
+    ``constraintScheme=1`` failure mode).  Runs at execution time via
+    ``jax.debug.callback``, so it fires under ``jit``/``grad`` tracing and,
+    for the adjoint, during the backward pass.
+
+    The residual handed in is recomputed from the operator itself
+    (``||A^T y - g||``), never the Krylov method's internal recursive
+    estimate.  It is accepted when it meets the requested
+    ``max(atol, tol*||b||)`` *or* sits at the double-precision backward-error
+    floor ``_ADJOINT_FLOOR_SLACK * eps * (||A|| ||x|| + ||b||)``, both times
+    with ``factor`` slack.  The floor matters: when the operator is
+    near-singular the adjoint solution norm explodes, and no backward-stable
+    method can then drive ``||A^T y - g||`` down to ``tol * ||g||``.  It is
+    capped at ``_ADJOINT_FLOOR_MAX_RELATIVE * ||b||`` so a diverged solve
+    cannot excuse itself with its own inflated solution norm.
     """
 
-    def guard(converged: jnp.ndarray, res_norm: jnp.ndarray) -> None:
-        if not bool(np.asarray(converged)):
-            raise RuntimeError(
-                f"[dkx.solve] differentiable {label} GCROT solve failed to "
-                f"converge (residual norm {float(np.asarray(res_norm)):.3e}). "
-                "A stalled solve here silently corrupts gradients, so it aborts "
-                "instead: the operator is likely singular (e.g. a physical null "
-                "space the constraint scheme does not fix). Pass "
-                "check_adjoint=False to bypass at your own risk."
-            )
+    def guard(
+        res_norm: jnp.ndarray,
+        rhs_norm: jnp.ndarray,
+        sol_norm: jnp.ndarray,
+        op_norm: jnp.ndarray,
+    ) -> None:
+        res = float(np.asarray(res_norm))
+        b_norm = float(np.asarray(rhs_norm))
+        x_norm = float(np.asarray(sol_norm))
+        a_norm = float(np.asarray(op_norm))
+        target = max(atol, tol * b_norm)
+        floor = min(
+            _ADJOINT_FLOOR_SLACK * _EPS64 * (a_norm * x_norm + b_norm),
+            _ADJOINT_FLOOR_MAX_RELATIVE * b_norm,
+        )
+        limit = factor * max(target, floor)
+        ok = bool(
+            np.isfinite(res)
+            and np.isfinite(x_norm)
+            and np.isfinite(a_norm)
+            and res <= limit
+        )
+        record = SolveResidualRecord(
+            label=label,
+            rhs_index=rhs_index,
+            residual_norm=res,
+            rhs_norm=b_norm,
+            solution_norm=x_norm,
+            operator_norm=a_norm,
+            target=target,
+            floor=floor,
+            limit=limit,
+            within_tolerance=ok,
+        )
+        if diagnostics is not None:
+            diagnostics.records.append(record)
+        if ok or not raise_on_failure:
+            return
+        rel = record.relative_residual
+        formula = "||A^T y - g|| / ||g||" if label.startswith("adjoint") else (
+            "||A x - b|| / ||b||"
+        )
+        raise RuntimeError(
+            f"[dkx.solve] differentiable {label} GCROT solve failed to "
+            f"converge on right-hand side {rhs_index}: the true relative "
+            f"residual {formula} is {rel:.3e} (residual {res:.3e}, "
+            f"rhs norm {b_norm:.3e}, solution norm {x_norm:.3e}), above the accepted "
+            f"{limit:.3e} = {factor:g} x max(requested {target:.3e}, "
+            f"float64 backward-error floor {floor:.3e}). Returning would "
+            "silently corrupt the implicit-differentiation gradient, so the "
+            "solve aborts instead.\n"
+            "Likely cause: a singular or near-singular operator whose null "
+            "space the constraint scheme does not span — full Fokker-Planck "
+            "with constraintScheme=1, or an Er xDot/xiDot deck under the "
+            "per-speed constraintScheme=2 border. The physical drive stays "
+            "in the range of A, so the forward solve converges and only the "
+            "transposed solve against a generic cotangent stalls; that is "
+            "why nothing else in the SolveResult looks wrong.\n"
+            "Remedies: raise the resolution or pick a constraint scheme that "
+            "regularizes this operator (SFINCS pairs constraintScheme=1 with "
+            "the Fokker-Planck/Sugama operators and 2 with pitch-angle "
+            "scattering); referee the case on a direct tier "
+            "(method='block_tridiagonal' where available, or method='direct' "
+            "for a non-differentiable check of the forward solve); tighten "
+            "tol and raise max_restarts; or, if you have verified the "
+            "gradient against finite differences yourself, pass "
+            "check_adjoint=False (or raise adjoint_residual_factor) and read "
+            "SolveResult.adjoint for the residuals behind this decision."
+        )
 
     return guard
+
+
+def _guarded_solve(
+    label: str,
+    rhs_index: int,
+    matvec: Callable[[jnp.ndarray], jnp.ndarray],
+    rhs_col: jnp.ndarray,
+    x: jnp.ndarray,
+    *,
+    tol: float,
+    atol: float,
+    factor: float,
+    raise_on_failure: bool,
+    diagnostics: AdjointDiagnostics | None,
+) -> jnp.ndarray:
+    """Measure ``x``'s true residual against ``matvec`` and hand it to the guard.
+
+    Returns ``x`` unchanged: the check observes, it never alters the solution,
+    so forward answers are bit-identical with and without it.
+    """
+    residual = matvec(x) - rhs_col
+    jax.debug.callback(
+        _residual_guard(
+            label,
+            rhs_index,
+            tol=tol,
+            atol=atol,
+            factor=factor,
+            raise_on_failure=raise_on_failure,
+            diagnostics=diagnostics,
+        ),
+        jnp.linalg.norm(residual),
+        jnp.linalg.norm(rhs_col),
+        jnp.linalg.norm(x),
+        _operator_norm_estimate(matvec, rhs_col.shape[0]),
+    )
+    return x
 
 
 # =============================================================================
@@ -1474,6 +1760,7 @@ def _solve_tier2(
     max_restarts: int,
     differentiable: bool,
     check_adjoint: bool,
+    adjoint_residual_factor: float = DEFAULT_ADJOINT_RESIDUAL_FACTOR,
 ) -> SolveResult:
     traced = _is_traced(rhs2d, *jax.tree_util.tree_leaves(op))
     t0 = time.perf_counter()
@@ -1501,6 +1788,16 @@ def _solve_tier2(
     # on the Nxi_for_x-truncated DOFs, so the system (and in particular its
     # transpose, used by the differentiable adjoint) is nonsingular.
     matvec, matvec_t = _pinned_matvecs(op)
+    diagnostics = (
+        AdjointDiagnostics(
+            tol=float(tol),
+            atol=float(atol),
+            factor=float(adjoint_residual_factor),
+            checked=bool(check_adjoint),
+        )
+        if differentiable
+        else None
+    )
     cols: list[jnp.ndarray] = []
     total_iters: int | None = 0
     converged = True
@@ -1529,33 +1826,42 @@ def _solve_tier2(
         if differentiable:
             # Re-run under the implicit-function-theorem wrapper so gradients
             # flow (one extra solve; the adjoint uses the transposed
-            # preconditioner and the same recycle-free GCROT).  With
-            # check_adjoint on, both the forward and the adjoint solves abort
-            # loudly on non-convergence instead of silently corrupting the
-            # gradient (jax.debug.callback fires at execution time).
-            def fwd_solve(rhs_col: jnp.ndarray) -> jnp.ndarray:
+            # preconditioner and the same recycle-free GCROT).  Both the
+            # forward and the adjoint (transposed) solves have their *true*
+            # residual recomputed from the operator and recorded in
+            # ``diagnostics``; with check_adjoint on a miss aborts loudly
+            # instead of silently corrupting the gradient
+            # (jax.debug.callback fires at execution time, i.e. during the
+            # backward pass for the adjoint).
+            def _measured(
+                label: str,
+                mv: Callable[[jnp.ndarray], jnp.ndarray],
+                pc: Callable[[jnp.ndarray], jnp.ndarray] | None,
+                rhs_col: jnp.ndarray,
+                index: int = j,
+            ) -> jnp.ndarray:
                 s = gcrot(
-                    matvec, rhs_col, precond=precond, m=restart, k=recycle_dim,
+                    mv, rhs_col, precond=pc, m=restart, k=recycle_dim,
                     rtol=tol, atol=atol, max_restarts=max_restarts,
                 )
-                if check_adjoint:
-                    jax.debug.callback(
-                        _convergence_guard("forward"), s.converged, s.residual_norm
-                    )
-                return s.x
+                return _guarded_solve(
+                    label,
+                    index,
+                    mv,
+                    rhs_col,
+                    s.x,
+                    tol=tol,
+                    atol=atol,
+                    factor=adjoint_residual_factor,
+                    raise_on_failure=check_adjoint,
+                    diagnostics=diagnostics,
+                )
+
+            def fwd_solve(rhs_col: jnp.ndarray) -> jnp.ndarray:
+                return _measured("forward", matvec, precond, rhs_col)
 
             def t_solve(rhs_col: jnp.ndarray) -> jnp.ndarray:
-                s = gcrot(
-                    matvec_t, rhs_col, precond=precond_t, m=restart, k=recycle_dim,
-                    rtol=tol, atol=atol, max_restarts=max_restarts,
-                )
-                if check_adjoint:
-                    jax.debug.callback(
-                        _convergence_guard("adjoint (transposed)"),
-                        s.converged,
-                        s.residual_norm,
-                    )
-                return s.x
+                return _measured("adjoint (transposed)", matvec_t, precond_t, rhs_col)
 
             cols.append(_implicit_solve(matvec, matvec_t, b, fwd_solve, t_solve))
         else:
@@ -1570,6 +1876,7 @@ def _solve_tier2(
         converged=converged,
         recycle=recycle,
         timings={"build": t1 - t0, "solve": t2 - t1},
+        adjoint=diagnostics,
     )
 
 
@@ -1810,6 +2117,7 @@ def solve(
     recycle: tuple[jnp.ndarray, jnp.ndarray] | None = None,
     differentiable: bool = False,
     check_adjoint: bool = True,
+    adjoint_residual_factor: float = DEFAULT_ADJOINT_RESIDUAL_FACTOR,
     use_preconditioner: bool = True,
     drop_l_coupling_in_precond: bool = False,
     restart: int = 30,
@@ -1851,10 +2159,34 @@ def solve(
         check_adjoint: (differentiable tier 2 only, default on) abort loudly
             — a ``RuntimeError`` raised from a ``jax.debug.callback`` at
             execution time — when the forward or the adjoint (transposed)
-            GCROT solve fails to converge.  A stalled Krylov solve under the
-            implicit-function-theorem wrapper otherwise returns silently
-            wrong gradients; this is how the singular FP+constraintScheme=1
-            embedding used to fail before truncated-DOF pinning (see below).
+            GCROT solve misses its residual.  A stalled *adjoint* solve is
+            invisible from the outside: the forward solution and every field
+            of the returned :class:`SolveResult` are fine and only the
+            implicit-function-theorem gradient is wrong, which is how the
+            singular Fokker-Planck + ``constraintScheme=1`` system corrupts
+            an optimization.  Set ``False`` for the explicitly unchecked
+            path; the residuals are still recorded in
+            :attr:`SolveResult.adjoint`, so a caller that opts out can
+            inspect them and decide.  The check recomputes the true residual
+            from the operator (``||A^T y - g||``, one extra apply plus two
+            norm probes per solve) rather than trusting the Krylov method's
+            internal estimate, and it never touches the solution — forward
+            answers are identical either way.
+        adjoint_residual_factor: how far over its residual a differentiable
+            solve may land before ``check_adjoint`` calls it a failure
+            (default 10).  The accepted residual is ``factor *
+            max(atol, tol*||b||, floor)``, where ``floor = 32 * eps *
+            (||A|| ||x|| + ||b||)`` is the double-precision backward-error
+            floor of that solve.  The floor is what keeps healthy cases
+            quiet: on a near-singular operator the adjoint solution norm
+            explodes (the cotangent has a component along an almost-null
+            direction), and no backward-stable method can then drive
+            ``||A^T y - g||`` down to ``tol * ||g||`` — the gradient is fine,
+            the requested residual is simply unreachable.  The floor is
+            capped at ``1e-6 * ||b||`` so a solve that diverges outright
+            cannot excuse itself with its own inflated solution norm; a
+            genuinely inconsistent adjoint misses by many orders of
+            magnitude and is caught regardless.
 
     Operators with a truncated Legendre resolution (non-uniform ``Nxi_for_x``)
     are structurally singular in the rectangular state layout: the truncated
@@ -2013,6 +2345,7 @@ def solve(
             max_restarts=max_restarts,
             differentiable=differentiable,
             check_adjoint=check_adjoint,
+            adjoint_residual_factor=adjoint_residual_factor,
         )
         if method == "auto" and not result.converged and not differentiable:
             print(

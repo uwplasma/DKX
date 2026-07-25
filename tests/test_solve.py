@@ -31,6 +31,7 @@ import scipy.linalg as sla
 from dkx.drift_kinetic import KineticOperator
 from dkx.namelist import parse_sfincs_input_text, read_sfincs_input
 from dkx.solve import (
+    SolveResult,
     _resolve_subsystem_batch,
     build_coarse_preconditioner,
     materialize_dense,
@@ -733,6 +734,275 @@ def test_differentiable_solve_aborts_loudly_on_genuinely_singular_operator() -> 
 
     with pytest.raises(Exception, match="GCROT solve failed to converge"):
         jax.grad(loss)(jnp.asarray(1.0))
+
+
+# ---------------------------------------------------------------------------
+# The adjoint-residual guard.  The implicit-function-theorem VJP runs one
+# *transposed* solve, and that solve is the only place in dkx where a wrong
+# answer leaves no trace: the forward solution and every field of SolveResult
+# stay right while jax.grad hands back garbage.  The contract is
+#
+#   (a) the true residual ||A^T y - g|| is recomputed from the operator (not
+#       read off the Krylov method) and recorded on SolveResult.adjoint;
+#   (b) a solve that misses both the requested tolerance and the float64
+#       backward-error floor raises, by default, with an actionable message;
+#   (c) no false positives: healthy decks must return their exact gradient
+#       without raising, including near-singular ones whose adjoint solution
+#       norm makes ``tol * ||g||`` unreachable in double precision.
+# ---------------------------------------------------------------------------
+
+# Two species with full Fokker-Planck collisions, constraintScheme=1, a finite
+# Er with both the xDot and xiDot terms, and *uniform* Nxi_for_x — the shape of
+# the flagship-optimization deck, at referee size.  Nothing here is truncated,
+# so the active-DOF pinning is a no-op and the operator's conditioning is the
+# only thing under test.
+FP_CS1_ER_UNIFORM_TEXT = """
+&general
+  RHSMode = 1
+/
+&geometryParameters
+  geometryScheme = 1
+  helicity_n = 2
+  psiAHat = 8.5714
+  aHat = 1.70442623
+/
+&speciesParameters
+  Zs = 1.0d+0 -1.0d+0
+  mHats = 1.0d+0 5.446170214d-4
+  nHats = 1.7 1.7
+  THats = 5.0 5.0
+  dNHatdrHats = -0.09 -0.09
+  dTHatdrHats = -5.0 -5.0
+/
+&physicsParameters
+  Delta = 4.5694d-3
+  alpha = 1.0d+0
+  nu_n = 0.00831565
+  Er = 1.0
+  collisionOperator = 0
+  includeXDotTerm = .true.
+  includeElectricFieldTermInXiDot = .true.
+/
+&resolutionParameters
+  Ntheta = 5
+  Nzeta = 5
+  Nxi = 8
+  NL = 4
+  Nx = 4
+/
+&otherNumericalParameters
+  xGridScheme = 5
+  Nxi_for_x_option = 0
+/
+"""
+
+
+def _tier2_grad_vs_fd(
+    op0: KineticOperator, *, tol: float = 1e-10, seed: int = 11, **solve_kw
+) -> tuple[float, float, SolveResult]:
+    """``jax.grad`` through the differentiable tier-2 solve vs central FD.
+
+    The scalar is threaded through ``THat`` (streaming/mirror and the RHS drive
+    depend on it; the collision matrices stay frozen, so finite differences see
+    the same function).  The cotangent is a fixed pseudo-random vector — a
+    generic linear functional, the hardest case for the adjoint solve and the
+    one a composed objective actually produces.
+    """
+    mask = op0.active_dof_mask()
+    w = jnp.asarray(np.random.default_rng(seed).standard_normal(op0.total_size))
+    if mask is not None:
+        w = w * mask  # truncated DOFs carry no physics; keep the cotangent on the rest
+    captured: dict[str, SolveResult] = {}
+
+    def loss(scale: jnp.ndarray, differentiable: bool = True) -> jnp.ndarray:
+        op = replace(op0, t_hat=op0.t_hat * scale)
+        result = solve(
+            op, op.rhs(), method="gmres", tol=tol,
+            differentiable=differentiable, **solve_kw,
+        )
+        if differentiable:
+            captured["result"] = result
+        return jnp.dot(w, result.x)
+
+    g = float(jax.grad(loss)(jnp.asarray(1.0)))
+    eps = 1e-5
+    fd = float(
+        (loss(jnp.asarray(1.0 + eps), differentiable=False)
+         - loss(jnp.asarray(1.0 - eps), differentiable=False)) / (2.0 * eps)
+    )
+    return g, fd, captured["result"]
+
+
+def test_adjoint_residual_is_recorded_on_the_solve_result() -> None:
+    """SolveResult.adjoint must carry the *true* transposed-solve residual.
+
+    Empty when the result is handed back (the adjoint has not run yet), filled
+    once the backward pass executes.  The recorded residual is recomputed from
+    the operator, so it is the number a caller can act on.
+    """
+    op0 = KineticOperator.from_namelist(
+        parse_sfincs_input_text(FP_CS1_ER_UNIFORM_TEXT)
+    )
+    g, fd, result = _tier2_grad_vs_fd(op0)
+    np.testing.assert_allclose(g, fd, rtol=1e-6)
+
+    diag = result.adjoint
+    assert diag is not None and diag.checked
+    assert diag.tol == 1e-10
+    adj = diag.adjoint_records
+    assert len(adj) == 1 and len(diag.forward_records) == 1
+    rec = adj[0]
+    assert rec.label.startswith("adjoint")
+    assert rec.within_tolerance and diag.converged
+    # The residual is the one the operator itself reports, and it is genuinely
+    # above the requested tol*||g|| here: this near-singular deck is exactly
+    # the case the backward-error floor exists to accept.
+    assert rec.residual_norm > rec.target
+    assert rec.residual_norm <= rec.limit
+    assert diag.worst_relative_residual == rec.relative_residual
+    assert 0.0 < rec.relative_residual < 1e-6
+
+    diag.reset()
+    assert diag.records == [] and diag.worst_relative_residual == 0.0
+
+
+def test_singular_tier2_adjoint_raises_instead_of_returning_a_wrong_gradient() -> None:
+    """A deck whose transposed solve diverges must abort, not hand back a number.
+
+    ``er_xidot_1species_tiny`` pairs the Er xiDot term with the per-speed
+    ``constraintScheme=2`` border, which does not span the resulting null space
+    (smallest singular value ~4e-19 against ``||A|| ~ 15``).  The *forward*
+    solve converges to 1e-15 — the drive stays in the range of ``A`` — while
+    the transposed solve against a generic cotangent diverges by 50 orders of
+    magnitude.  Nothing in SolveResult would show it.
+    """
+    op0 = _load_op("er_xidot_1species_tiny")
+    with pytest.raises(Exception, match="GCROT solve failed to converge"):
+        _tier2_grad_vs_fd(op0, max_restarts=20)
+
+
+def test_singular_tier2_adjoint_message_names_cause_and_remedies() -> None:
+    """The abort has to be actionable, not just loud."""
+    op0 = _load_op("er_xidot_1species_tiny")
+    with pytest.raises(Exception) as excinfo:
+        _tier2_grad_vs_fd(op0, max_restarts=20)
+    msg = str(excinfo.value)
+    assert "adjoint (transposed)" in msg
+    assert "||A^T y - g|| / ||g||" in msg  # the true residual, named
+    for remedy in ("constraint scheme", "method='direct'", "check_adjoint=False",
+                   "SolveResult.adjoint", "adjoint_residual_factor"):
+        assert remedy in msg, remedy
+
+
+def test_check_adjoint_false_is_the_documented_unchecked_opt_out() -> None:
+    """Opting out must not raise — and must still record the residual."""
+    op0 = _load_op("er_xidot_1species_tiny")
+    g, fd, result = _tier2_grad_vs_fd(op0, max_restarts=20, check_adjoint=False)
+    diag = result.adjoint
+    assert diag is not None and not diag.checked
+    rec = diag.adjoint_records[0]
+    assert not rec.within_tolerance and not diag.converged
+    # The unchecked path is unchecked: the caller gets the wrong gradient it
+    # asked for, plus the residual that proves it wrong (the adjoint achieved
+    # essentially nothing over the trivial y = 0, whose residual is ||g||).
+    assert rec.relative_residual > 0.1
+    assert rec.residual_norm > 1e3 * rec.limit
+    assert not np.isfinite(g) or abs(g - fd) > abs(fd)
+
+
+@pytest.mark.parametrize(
+    "deck",
+    [
+        "multispecies_quick_2species_FPCollisions_noEr",  # FP, constraintScheme=1
+        "fp_1species_FPCollisions_noEr_tiny_cs3",  # FP, constraintScheme=3
+        "fp_1species_FPCollisions_noEr_tiny_cs4",  # FP, constraintScheme=4
+    ],
+)
+def test_healthy_tier2_gradients_are_exact_and_do_not_raise(deck: str) -> None:
+    """No false positives: a guard that fires on good decks is worse than the bug.
+
+    Each of these routes through the same differentiable tier-2 adjoint the
+    guard watches, and each must come back matching finite differences with
+    every recorded residual inside tolerance.
+    """
+    op0 = _load_op(deck)
+    g, fd, result = _tier2_grad_vs_fd(op0)
+    assert np.isfinite(g) and abs(fd) > 0.0
+    np.testing.assert_allclose(g, fd, rtol=1e-5)
+    diag = result.adjoint
+    assert diag is not None and diag.converged
+    assert all(r.within_tolerance for r in diag.records)
+
+
+def test_flagship_shaped_fp_cs1_gradient_matches_fd_without_raising() -> None:
+    """The documented failing configuration, at referee size.
+
+    Full Fokker-Planck + constraintScheme=1 + finite Er on a uniform
+    ``Nxi_for_x`` grid: the adjoint stagnates two decades above ``tol*||g||``
+    because the cotangent excites an almost-null direction and ``||y||`` blows
+    up, yet the resulting gradient is right.  Judging that solve failed would
+    abort a healthy optimization; judging it silently fine is the original bug.
+    """
+    op0 = KineticOperator.from_namelist(
+        parse_sfincs_input_text(FP_CS1_ER_UNIFORM_TEXT)
+    )
+    assert op0.constraint_scheme == 1 and op0.fp is not None
+    assert op0.active_dof_mask() is None  # uniform: pinning is not what saves this
+    g, fd, result = _tier2_grad_vs_fd(op0)
+    np.testing.assert_allclose(g, fd, rtol=1e-6)
+    assert result.adjoint is not None and result.adjoint.converged
+
+
+def test_adjoint_guard_survives_jit() -> None:
+    """Production gradients run under ``jit``; the guard has to fire there too.
+
+    ``jax.debug.callback`` executes inside the compiled backward pass, so both
+    the recording and the abort must survive compilation — the alternative is a
+    check that quietly stops existing exactly where it matters.
+    """
+    op0 = _load_op("multispecies_quick_2species_FPCollisions_noEr")
+    captured: dict[str, SolveResult] = {}
+    w = jnp.asarray(np.random.default_rng(11).standard_normal(op0.total_size))
+
+    def loss(scale: jnp.ndarray, op_base: KineticOperator = op0) -> jnp.ndarray:
+        op = replace(op_base, t_hat=op_base.t_hat * scale)
+        result = solve(op, op.rhs(), method="gmres", tol=1e-10, differentiable=True)
+        captured["result"] = result
+        return jnp.dot(w, result.x)
+
+    g = float(jax.jit(jax.grad(loss))(jnp.asarray(1.0)))
+    assert np.isfinite(g)
+    diag = captured["result"].adjoint
+    assert diag is not None and diag.converged
+    assert [r.label for r in diag.records] == ["forward", "adjoint (transposed)"]
+
+    op_singular = _load_op("er_xidot_1species_tiny")
+    ws = jnp.asarray(np.random.default_rng(11).standard_normal(op_singular.total_size))
+
+    def loss_singular(scale: jnp.ndarray) -> jnp.ndarray:
+        op = replace(op_singular, t_hat=op_singular.t_hat * scale)
+        result = solve(
+            op, op.rhs(), method="gmres", tol=1e-10, differentiable=True,
+            max_restarts=20,
+        )
+        return jnp.dot(ws, result.x)
+
+    with pytest.raises(Exception, match="GCROT solve failed to converge"):
+        jax.jit(jax.grad(loss_singular))(jnp.asarray(1.0))
+
+
+def test_adjoint_guard_leaves_the_forward_solution_untouched() -> None:
+    """No physics change: the check observes, it never alters an answer."""
+    op0 = _load_op("multispecies_quick_2species_FPCollisions_noEr")
+    rhs = op0.rhs()
+    checked = solve(op0, rhs, method="gmres", tol=1e-10, differentiable=True)
+    unchecked = solve(
+        op0, rhs, method="gmres", tol=1e-10, differentiable=True, check_adjoint=False
+    )
+    plain = solve(op0, rhs, method="gmres", tol=1e-10)
+    assert np.array_equal(np.asarray(checked.x), np.asarray(unchecked.x))
+    assert np.array_equal(np.asarray(checked.x), np.asarray(plain.x))
+    assert plain.adjoint is None  # non-differentiable solves run no adjoint
 
 
 # ---------------------------------------------------------------------------
