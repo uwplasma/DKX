@@ -188,15 +188,38 @@ Parity referees
 Known issues
 ~~~~~~~~~~~~
 
-- **Silently wrong tier-2 adjoint on singular FP systems.** Full
-  Fokker-Planck with ``constraintScheme=1`` on the flagship-optimization deck
-  yields a numerically singular system (~5 zero singular values, condition
-  number ~2e36); the tier-2 GCROT adjoint stagnates and the implicit-diff VJP
-  returns a wrong gradient without any error (AD ``-1.7e-3`` vs FD
-  ``+2.8e-5`` on the affected dof). PAS+``Er`` tier-2 gradients on the same
-  chain are exact (``2.9e-6`` vs FD). Fix direction: surface adjoint-solve
-  convergence in ``SolveResult`` and raise/flag when the adjoint residual
-  misses tolerance. A reproducer is tracked.
+- **Singular tier-2 adjoints abort; they cannot be differentiated.** The
+  implicit-function-theorem VJP of the tier-2 solve costs one *transposed*
+  solve, and that solve is the only place in ``dkx`` where a wrong answer
+  leaves no trace: the physical drive stays in the range of :math:`A`, so the
+  forward solve converges to ``1e-15`` and every field of ``SolveResult``
+  looks healthy while the gradient is garbage. Operators whose null space the
+  constraint scheme does not span hit this — an ``Er`` ``xiDot`` deck under
+  the per-speed ``constraintScheme=2`` border, for instance, has a smallest
+  singular value ~``4e-19`` against :math:`\|A\| \sim 15`, and its transposed
+  solve diverges by 50 orders of magnitude against a generic cotangent.
+  ``dkx`` recomputes each differentiable solve's *true* residual from the
+  operator (never the Krylov method's internal estimate), records it in
+  ``SolveResult.adjoint`` (:class:`~dkx.solve.AdjointDiagnostics`), and
+  raises with the residual and the remedies unless ``check_adjoint=False``.
+  There is no correct gradient to return in that regime: recovering one would
+  need a least-squares (pseudo-inverse) adjoint, and the offending null
+  directions are spread across the whole Legendre spectrum rather than
+  confined to the source/constraint border, so they cannot be deflated from
+  the vectors the constraint scheme knows.
+- **A large adjoint residual is not by itself a wrong gradient.** On a
+  near-singular operator — full Fokker-Planck with ``constraintScheme=1``, a
+  finite ``Er``, uniform ``Nxi_for_x``, condition number ~``6e10`` — a generic
+  cotangent excites an almost-null direction, the adjoint solution norm
+  reaches ~``7e7``, and no backward-stable method can then drive
+  :math:`\|A^T y - g\|` down to ``tol`` times :math:`\|g\|`: GCROT stagnates
+  two decades above it at a relative residual of ``2e-8`` while the gradient
+  it produces still matches finite differences to ``1e-9``. The guard
+  therefore accepts a residual that meets *either* the requested tolerance or
+  the float64 backward-error floor ``32 eps (||A|| ||y|| + ||g||)``, times
+  ``adjoint_residual_factor`` (default 10); the floor is capped at ``1e-6``
+  relative so a solve that diverges outright cannot excuse itself with its own
+  inflated solution norm.
 - **Ill-conditioned scheme-1 monoenergetic off-diagonal.** The Fortran build
   itself fails upstream's ``tests.py`` on the ``monoenergetic_geometryScheme1``
   ``transportMatrix[0,1]`` element only (``+1.62`` vs expected ``-1.08`` at
