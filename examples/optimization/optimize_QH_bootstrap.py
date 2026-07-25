@@ -19,10 +19,13 @@ Physics: the seed is the Landreman-Paul reactor-scale precise QH (nfp=4), which
 is already strongly quasi-helical; the optimizer reduces the normalized
 bootstrap current on a mid-radius surface while penalty terms hold aspect ratio,
 mean iota and the two-term QS residual [Landreman & Buller, arXiv:2205.02914].
-The kinetic setup is the classic SFINCS full-trajectory two-species run (PAS
-collisions, finite Er), routed to the tier-2 GCROT solver where warm starts and
-recycling matter.  The reactor-scale |B| spectrum is normalized by B00 so it
-feeds the BBar=1 kinetic template unchanged.
+The kinetic setup is the classic full-trajectory two-species run at
+reactor-core density and temperature with the momentum-conserving full
+linearized Fokker-Planck collision operator (the bootstrap current is a
+parallel-momentum moment, so a momentum-conserving operator is not optional)
+and a finite Er, routed to the tier-2 GCROT solver where warm starts and
+recycling matter.  The seed is reactor scale, so its |B| spectrum feeds the
+BBar = 1 T, RBar = 1 m kinetic template unnormalized.
 
 Runtime: dominated by the one-time reactor-scale VMEC-implicit-adjoint XLA
 compile plus ~40-60 s host equilibrium solves per L-BFGS-B evaluation, so the
@@ -97,9 +100,39 @@ VMEC_MAX_ITER = 5000
 MAX_MODE = 1 if CI else 2  # boundary RBC/ZBS with m,|n| <= MAX_MODE
 MBOZ, NBOZ = (2, 2) if CI else (3, 3)
 
-# Kinetic solve: ions + electrons, PAS collisions, finite Er full trajectories.
+# Kinetic solve: ions + electrons, full linearized Fokker-Planck collisions,
+# finite Er full trajectories.
 KIN = (9, 7, 8, 4, 4) if CI else (13, 11, 16, 4, 6)  # Ntheta,Nzeta,Nxi,NL,Nx
-ER, NU_N, KIN_TOL = 1.0, 0.1, 1e-9
+# <j.B> is a parallel-momentum moment, so the collision operator must conserve
+# parallel momentum: pitch-angle scattering (collisionOperator=1) drops the
+# field-particle back-reaction that returns momentum between species and
+# misestimates the bootstrap current, while the full linearized Fokker-Planck
+# operator (collisionOperator=0) conserves it exactly [Helander & Sigmar,
+# Collisional Transport in Magnetized Plasmas, CUP (2002), ch. 8 and 11].  Same
+# choice, and same reasoning, as the flagship optimize_QA_bootstrap.py.
+COLLISION_OPERATOR = 0
+# nu_n = nuBar RBar/vBar is the collisionality at the reference values implied
+# by Delta = 4.5694e-3 (nBar = 1e20 m^-3, TBar = 1 keV, RBar = 1 m, BBar = 1 T,
+# mBar = m_proton) with Coulomb logarithm 17 -- a normalization constant; the
+# plasma itself enters through nHats/THats.  A larger value drives the surface
+# out of the banana regime, where the bootstrap current stops being set by the
+# geometry the optimizer may change.
+DELTA, NU_N = 4.5694e-3, 0.00831565
+ER, KIN_TOL = 1.0, 1e-9  # Er in kV/m (phiBar/RBar), ion-root scale
+
+# Reactor-core profiles of the reference bootstrap-current study evaluated at
+# the kinetic surface (s = normalized toroidal flux):
+#   n(s) = 4.13 (1 - s^5) x 1e20 m^-3,  T(s) = 12 (1 - s) keV, rHat = a sqrt(s)
+# [Landreman, Buller & Drevlak, arXiv:2205.02914].  The seed is already
+# reactor scale, so its |B| spectrum feeds the kinetic template unnormalized.
+A_MINOR = 1.70442623  # m, reactor minor radius of the reference scaling
+N_AXIS, T_AXIS = 4.13, 12.0  # 1e20 m^-3 and keV on axis
+S_KINETIC = (NS // 2 - 0.5) / (NS - 1)
+_DS_DRHAT = 2.0 * np.sqrt(S_KINETIC) / A_MINOR
+NHAT = N_AXIS * (1.0 - S_KINETIC**5)
+THAT = T_AXIS * (1.0 - S_KINETIC)
+DNHAT_DRHAT = -5.0 * N_AXIS * S_KINETIC**4 * _DS_DRHAT
+DTHAT_DRHAT = -T_AXIS * _DS_DRHAT
 
 # Targets and weights (QH: iota is large and negative here).  The kinetic
 # bootstrap term is the optimization driver (its gradient is autodiff-accurate,
@@ -173,22 +206,24 @@ KINETIC_TEMPLATE = f"""&general
   geometryScheme = 1
   helicity_n = {NFP}
   psiAHat = {PSI_A_HAT:.10g}
-  aHat = 0.16
+  aHat = {A_MINOR:.10g}
+  inputRadialCoordinate = 1
+  psiN_wish = {S_KINETIC:.10g}
 /
 &speciesParameters
   Zs = 1.0d+0 -1.0d+0
   mHats = 1.0d+0 5.446170214d-4
-  nHats = 1.0d+0 1.0d+0
-  THats = 1.0d+0 1.0d+0
-  dNHatdpsiHats = -1.5d+0 -1.5d+0
-  dTHatdpsiHats = -3.0d+0 -3.0d+0
+  nHats = {NHAT:.10g} {NHAT:.10g}
+  THats = {THAT:.10g} {THAT:.10g}
+  dNHatdrHats = {DNHAT_DRHAT:.10g} {DNHAT_DRHAT:.10g}
+  dTHatdrHats = {DTHAT_DRHAT:.10g} {DTHAT_DRHAT:.10g}
 /
 &physicsParameters
-  Delta = 4.5694d-3
+  Delta = {DELTA:.10g}
   alpha = 1.0d+0
   nu_n = {NU_N}
   Er = {ER}
-  collisionOperator = 1
+  collisionOperator = {COLLISION_OPERATOR}
   includeXDotTerm = .true.
   includeElectricFieldTermInXiDot = .true.
 /
@@ -212,7 +247,11 @@ S_ROW = NS // 2  # half-mesh radial row carrying the kinetic flux surface
 _g = make_grids(n_theta=op_template.n_theta, n_zeta=op_template.n_zeta,
                 n_xi=op_template.n_xi, n_x=op_template.n_x, n_l=KIN[3],
                 n_periods=NFP, x_grid_scheme=5)
-print(f"  ions + electrons, PAS, nu_n={NU_N}, Er={ER}; matrix size {op_template.total_size}")
+print(f"  ions + electrons, full Fokker-Planck (collisionOperator="
+      f"{COLLISION_OPERATOR}), nu_n={NU_N:g}, Er={ER:g} kV/m; "
+      f"matrix size {op_template.total_size}")
+print(f"  reactor-core profiles at s = {S_KINETIC:.4f}: n = {NHAT:.4f}e20 m^-3, "
+      f"T = {THAT:.4f} keV (a = {A_MINOR:.4f} m)")
 
 
 # ----------------------------------------------------------------------------
@@ -237,11 +276,13 @@ def objective(dofs, warm=None):
         xm=tabs["xm"], xn=tabs["xn"], xm_nyq=tabs["xm"], xn_nyq=tabs["xn"],
         nfp=NFP, mboz=MBOZ, nboz=NBOZ, asym=False)
     bmnc_b = booz["bmnc_b"][0]
-    b00 = bmnc_b[0]  # BBar = B00: normalize the reactor-scale spectrum to O(1)
+    # BBar = 1 T and RBar = 1 m: the seed is reactor scale, so its spectrum goes
+    # in unnormalized and the surface carries its true field strength -- the
+    # collisionality and orbit width the profiles above assume.
     op = ob.operator_with_boozer_geometry(
-        op_template, bmnc=bmnc_b / b00, m=jnp.asarray(BOOZ_XM),
+        op_template, bmnc=bmnc_b, m=jnp.asarray(BOOZ_XM),
         n=jnp.asarray(BOOZ_XN // NFP), nfp=NFP, iota=booz["iota_b"][0],
-        g_hat=booz["bvco_b"][0] / b00, i_hat=booz["buco_b"][0] / b00,
+        g_hat=booz["bvco_b"][0], i_hat=booz["buco_b"][0],
         theta=_g.theta, zeta=_g.zeta,
         theta_weights=_g.theta_weights, zeta_weights=_g.zeta_weights)
     mom, result = ob.solve_and_moments(
@@ -253,9 +294,9 @@ def objective(dofs, warm=None):
              + W_QS * qs + W_KINETIC * kinetic_term)
     sg = jax.lax.stop_gradient
     aux = {"aspect": aspect, "iota": iota_mean, "qs": qs, "jbs": jbs,
-           "kinetic_term": kinetic_term, "bmnc_b": sg(bmnc_b / b00),
-           "booz_iota": sg(booz["iota_b"][0]), "booz_g": sg(booz["bvco_b"][0] / b00),
-           "booz_i": sg(booz["buco_b"][0] / b00),
+           "kinetic_term": kinetic_term, "bmnc_b": sg(bmnc_b),
+           "booz_iota": sg(booz["iota_b"][0]), "booz_g": sg(booz["bvco_b"][0]),
+           "booz_i": sg(booz["buco_b"][0]),
            "particle_flux": sg(mom["particleFlux_vm_psiHat"]),
            "heat_flux": sg(mom["heatFlux_vm_psiHat"]),
            "x_solution": sg(result.x),
