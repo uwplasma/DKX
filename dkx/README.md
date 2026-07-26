@@ -57,6 +57,7 @@ errors raised by `inputs.load_sfincs_input`. There is no legacy fallback.
 | `compare.py` | HDF5 comparison, frozen-reference parity, benchmark-table utilities. |
 | `io.py`, `namelist.py`, `input_compat.py`, `paths.py` | Output-file reading and generic dict serializers, SFINCS-style namelist parsing, input aliases, data/cache paths. |
 | `profiling.py` | Timers and memory probes. |
+| `collocation.py` | **Experimental** second discretization of the radially-local drift-kinetic equation, with pitch as a *grid* (half-index uniform pitch angle, upwinded streaming/mirror) instead of a Legendre spectrum. It exists because the modal basis admits no convergent relaxation -- streaming and the mirror force are strictly off-diagonal in the Legendre index -- so it cannot be preconditioned by multigrid, while a pitch grid can: `solve_collocation` runs GCROT under a semicoarsened geometric-multigrid cycle over `(alpha, theta, zeta)` built from `solvax.precond`. Scope today is one species, `collisionOperator = 1`, RHSMode 1, DKES-like trajectories; it does not touch `drift_kinetic.py` or `solve.py` and changes no existing answer. |
 
 ## Remaining Domain Packages
 
