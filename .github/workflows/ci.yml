@@ -13,7 +13,11 @@ concurrency:
 jobs:
   coverage:
     runs-on: ubuntu-22.04
-    timeout-minutes: 10
+    # Setup (cold pip cache after any pyproject change, plus the equilibrium
+    # fetch) can take ~7 min on its own, and the shards run without a committed
+    # duration map, so pytest-split balances by count rather than time. 20 min
+    # keeps a slow-but-healthy shard from being SIGTERMed mid-run.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
