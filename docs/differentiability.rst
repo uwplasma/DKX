@@ -74,6 +74,71 @@ function theorem rather than unrolled iterations.
    differentiable JAX arrays directly. The tier-3 host direct solve is *not*
    differentiable and raises if ``differentiable=True`` is requested.
 
+Bounded reverse mode for the truncated tier-1 kernel
+----------------------------------------------------
+
+One tier is deliberately outside the implicit-adjoint wrapper. The memory-lean
+truncated tier-1 kernel
+(``solve(op, rhs, method="block_tridiagonal_truncated")``) inverts the *reduced*
+Schur-complemented operator on the lowest ``tier1_keep_lowest`` Legendre blocks
+rather than the full band, so a full-operator :math:`A^{\mathsf T}` adjoint would
+be inconsistent and would silently corrupt the gradient. Its blocks are instead
+assembled on the fly, which keeps the **forward** working set at
+:math:`O(\text{keep}\cdot m^2)` per ``(species, x)`` subsystem, independent of
+:math:`N_\xi` — the property that lets large ramped PAS/DKES decks route through
+tier 1 at all.
+
+Plain ``jax.grad`` through that kernel tapes the generated sweeps, so the
+**reverse** pass costs :math:`O(N_\xi\cdot m^2)` per subsystem and gives back
+the block-count independence exactly where gradient-based transport and profile
+inversion need it. ``solve(..., tier1_adjoint_window=w)`` restores it by routing
+through ``solvax``'s structure-preserving custom VJP for generated blocks
+(requires ``solvax >= 0.8.7``): the right-hand-side gradient is an exactly
+*generated* truncated solve of the transposed operator, and the coefficient
+gradients are pulled back through the block assembly's own derivative on the
+leading ``keep + w`` blocks. Reverse mode then runs at
+:math:`O((\text{keep}+w)\cdot m^2)` per subsystem, matching the forward sweep.
+
+``tier1_adjoint_window=None`` is the default and keeps the taped gradient, so
+behavior is unchanged unless the option is passed. The right-hand-side gradient
+carries no window error at any :math:`w`; the coefficient-gradient error decays
+as :math:`O(\rho^{2w})` for the block-dominant collisional operators this kernel
+targets, and :math:`w \ge N_\xi` reproduces the taped gradient exactly. The knob
+composes with ``subsystem_batch`` — the custom VJP is ``vmap``-safe, and the
+gradient is identical at any batch width.
+
+Compiled peak temporary working set of a ``jax.grad`` through the truncated
+solve on the tiny scheme-1 PAS fixture, sweeping :math:`N_\xi` at a fixed
+window ``w = 4`` (XLA ``memory_analysis().temp_size_in_bytes``):
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 28 28 24
+
+   * - :math:`N_\xi`
+     - taped (MiB)
+     - ``tier1_adjoint_window=4`` (MiB)
+     - reduction
+   * - 8
+     - 0.161
+     - 0.068
+     - 2.4x
+   * - 32
+     - 0.528
+     - 0.068
+     - 7.7x
+   * - 128
+     - 1.994
+     - 0.068
+     - 29.2x
+   * - 256
+     - 3.949
+     - 0.068
+     - 57.9x
+
+The taped column grows linearly in :math:`N_\xi`; the windowed column is flat,
+which is the whole point of the option.
+
 What is differentiable
 ----------------------
 

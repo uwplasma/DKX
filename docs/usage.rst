@@ -396,12 +396,10 @@ debugging, not solver selectors.
 Parity and physics overrides
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- ``DKX_ROSENBLUTH_METHOD``: how the Rosenbluth potential response
-  matrices are computed for ``collisionOperator=0`` with ``xGridScheme=5/6``.
-
-  - ``quadpack`` (default): match the Fortran v3 QUADPACK-based implementation
-    for parity.
-  - ``analytic``: faster analytic integrals (may differ at strict parity level).
+- ``DKX_ROSENBLUTH_METHOD``: an override for the ``RosenbluthMethod`` namelist
+  key / ``rosenbluth_method=`` builder argument described in
+  :ref:`rosenbluth-method`. It applies only when neither of those is set, and
+  it takes the same three values.
 
 - ``DKX_FP_STRICT_PARITY``: for ``collisionOperator=0`` multispecies runs,
   force a scalar-ordered accumulation of the FP cross-species coupling to match
