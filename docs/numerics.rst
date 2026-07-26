@@ -44,7 +44,7 @@ boundary layer at low collisionality.
 .. _widened-upwind:
 
 Widened upwind stencils
-^^^^^^^^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~~~~~~~~
 
 A centered difference puts *no* weight on the diagonal
 (:math:`c_0 = 0`), so the advection operator it generates has an empty diagonal
