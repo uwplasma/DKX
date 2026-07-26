@@ -407,6 +407,26 @@
    "review_status": "canonical_owner_post_trim"
   },
   {
+   "path": "dkx/multigrid.py",
+   "lines_at_audit": 1500,
+   "category": "core",
+   "action": "retain",
+   "public_imports": [],
+   "internal_callers": [
+    "dkx/solve.py"
+   ],
+   "tests": [
+    "tests/test_multigrid.py"
+   ],
+   "docs_examples": [
+    "dkx/README.md",
+    "docs/performance.rst"
+   ],
+   "retention_reason": "Sole owner of the semicoarsened multigrid tier-2 preconditioner: hierarchy planning, rediscretized coarse operators, transfers and relaxations behind solve(preconditioner='multigrid').",
+   "next_step": "Keep the hierarchy and relaxations here; a new smoother needs a measured smoothing factor on a real operator plus the tier-2 parity gate.",
+   "review_status": "canonical_owner_post_trim"
+  },
+  {
    "path": "dkx/writer.py",
    "lines_at_audit": 1700,
    "category": "core",

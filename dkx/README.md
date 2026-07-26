@@ -25,6 +25,7 @@ packages remain: `validation/` and `workflows/`.
 | `collisions.py` | Pitch-angle scattering and full Fokker-Planck with Rosenbluth terms. |
 | `drift_kinetic.py` | The `KineticOperator`: term assembly, matrix-free apply, analytic Legendre blocks, RHS drives, bordered constraints. |
 | `solve.py` | Three-tier policy (structured block elimination, preconditioned recycled Krylov, host direct referee) on the `solvax` library (a core dependency); implicit differentiation. |
+| `multigrid.py` | Semicoarsened geometric-multigrid preconditioner for the tier-2 Krylov solve: rediscretized coarse operators on coarsened (theta, zeta[, xi]) grids, pitch-collocation and Legendre-plane relaxations, and the existing block-Thomas solve on the coarsest grid. |
 | `moments.py` | Velocity-space moments, flux families, transport matrices, NTV, classical transport, keyed by sfincsOutput.h5 names. |
 | `inputs.py`, `console.py` | Typed namelist with Fortran-cited defaults/validation; byte-parity Fortran stdout blocks. |
 | `run.py` | End-to-end RHSMode 1/2/3 drivers (`run_profile`, `run_transport_matrix`, `run_geometry`) plus the namelist-level dispatch `run_from_namelist`. |
