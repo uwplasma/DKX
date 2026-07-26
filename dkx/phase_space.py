@@ -30,6 +30,7 @@ polynomial x-grid kernel the collision operators consume lives in
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 
@@ -55,8 +56,11 @@ __all__ = [
     "rosenbluth_potential_grid_size",
     "speed_grid_diff_matrices",
     "speed_weight",
+    "stencil_diagonal_dominance",
     "uniform_aperiodic_diff_matrices",
     "uniform_periodic_diff_matrices",
+    "widened_upwind_periodic_diff_matrix",
+    "widened_upwind_stencil",
     "xdot_diff_matrices",
 ]
 
@@ -67,7 +71,11 @@ __all__ = [
 
 #: Internal uniformDiffMatrices scheme numbers with at least one production
 #: call site. All are periodic grids that include x_min but not x_max.
-_PERIODIC_SCHEMES = frozenset({0, 10, 20, 80, 90, 100, 110, 120, 130})
+#: Codes below 200 are the SFINCS v3 ``uniformDiffMatrices.F90`` numbering
+#: (0-130, with the aperiodic variants at those values plus 2); the 200 block
+#: holds the dkx-only widened upwind stencils, which upstream numbering can
+#: never reach.
+_PERIODIC_SCHEMES = frozenset({0, 10, 20, 80, 90, 100, 110, 120, 130, 200, 210, 220, 230})
 
 #: thetaDerivativeScheme / zetaDerivativeScheme (namelist) -> internal scheme.
 #: 0 = spectral collocation, 1 = 2nd-order centered FD, 2 = 4th-order centered FD.
@@ -82,6 +90,226 @@ _MAGNETIC_DRIFT_SCHEME_MAP = {
     -2: (110, 100),
     -3: (130, 120),
 }
+
+
+# ----------------------------------------------------------------------------
+# 1a. Widened upwind stencils (dkx extension to uniformDiffMatrices.F90)
+# ----------------------------------------------------------------------------
+
+#: Widened upwind stencils for the first derivative on a uniform grid, given as
+#: ``order -> (offsets, coefficients)`` in units of ``1/dx`` and oriented for a
+#: **positive** wind (advection ``a df/dx`` with ``a > 0``, so the stencil leans
+#: upstream toward negative offsets and the on-node coefficient is positive).
+#:
+#: Each entry is the solution of the standard Vandermonde moment conditions
+#: ``sum_j c_j o_j^m = m! delta_{m1}`` for ``m = 0 .. N-1`` on ``N`` distinct
+#: offsets, so an ``N``-point stencil is accurate to order ``N - 1``. The
+#: offsets themselves were selected by exhaustive search over every ``N``-point
+#: offset set that
+#:
+#: * lies in a window of width ``N + 1`` containing 0 (two grid cells wider than
+#:   the compact ``N``-point stencil — the "widening"),
+#: * is dissipative for a positive wind, i.e. the Fourier symbol
+#:   ``chat(k) = sum_j c_j exp(i k o_j)`` satisfies ``Re chat(k) >= 0`` for all
+#:   ``k`` in ``[-pi, pi]`` with strict positivity away from ``k = 0``, and
+#: * maximizes the diagonal-dominance ratio
+#:   ``|c_0| / sum_{j != 0} |c_j|`` (:func:`stencil_diagonal_dominance`).
+#:
+#: The last criterion is the whole point: a relaxation smoother or a simple
+#: diagonal preconditioner on an advection-dominated operator only works when
+#: the discrete derivative carries weight on the diagonal, and a centered
+#: stencil carries exactly none (``c_0 = 0``). The measured ratios are
+#: ``5/7 ~ 0.714`` (order 3) and ``13/21 ~ 0.619`` (order 4), against ``0`` for
+#: both centered schemes and ``1/3``, ``5/14``, ``2/11`` for the compact
+#: upwind-biased stencils of ``magneticDriftDerivativeScheme`` 1/2/3.
+#:
+#: On upwind-biased differencing for advection and the dissipativity criterion
+#: see Fromm, J. Comput. Phys. 3, 176 (1968); Warming & Beam, AIAA J. 14, 1241
+#: (1976); Tam & Webb, J. Comput. Phys. 107, 262 (1993); and Hirsch,
+#: *Numerical Computation of Internal and External Flows*, 2nd ed. (2007),
+#: ch. 8. Arbitrary-offset weights follow Fornberg, Math. Comput. 51, 699
+#: (1988).
+_WIDENED_UPWIND_STENCILS: dict[int, tuple[tuple[int, ...], tuple[float, ...]]] = {
+    # 4 points, span 5, truncation error +1/4 dx^3 d4f/dx4, |c_0|/off = 5/7.
+    3: ((-3, -1, 0, 2), (1.0 / 15.0, -1.0, 5.0 / 6.0, 1.0 / 10.0)),
+    # 5 points, span 6, truncation error +1/5 dx^4 d5f/dx5, |c_0|/off = 13/21.
+    4: (
+        (-4, -3, -1, 0, 2),
+        (-1.0 / 12.0, 4.0 / 15.0, -4.0 / 3.0, 13.0 / 12.0, 1.0 / 15.0),
+    ),
+}
+
+#: Internal scheme code of each widened upwind stencil, as
+#: ``order -> (plus, minus)`` where ``plus`` is the positive-wind orientation.
+_WIDENED_UPWIND_SCHEMES: dict[int, tuple[int, int]] = {3: (200, 210), 4: (220, 230)}
+
+#: Internal scheme code -> ``(order, wind_sign)``.
+_WIDENED_UPWIND_SCHEME_INFO: dict[int, tuple[int, float]] = {
+    scheme: (order, sign)
+    for order, pair in _WIDENED_UPWIND_SCHEMES.items()
+    for scheme, sign in zip(pair, (1.0, -1.0))
+}
+
+#: dkx-only ``thetaDerivativeScheme`` / ``zetaDerivativeScheme`` extension
+#: codes -> internal scheme. SFINCS v3 numbers every namelist scheme knob with
+#: small integers (0-2 for the angular schemes, -3..3 for
+#: ``magneticDriftDerivativeScheme``, -2..11 for ``xDotDerivativeScheme``, 1-8
+#: for ``xGridScheme``), so the 100 block is reserved for dkx extensions and
+#: cannot collide with an upstream value. The sign selects the wind: ``+103``
+#: is the 3rd-order widened upwind stencil for a positive wind and ``-103`` the
+#: mirrored stencil for a negative wind, and likewise ``+/-104`` at 4th order.
+#: These are not bit-parity with the Fortran code and are never a default.
+_WIDENED_ANGLE_DERIVATIVE_SCHEME_MAP = {103: 200, -103: 210, 104: 220, -104: 230}
+
+#: dkx-only ``magneticDriftDerivativeScheme`` extension codes -> (plus, minus),
+#: with the same sign convention as the SFINCS +/-1, +/-2, +/-3 pairs (a
+#: negative code swaps the two orientations).
+_WIDENED_MAGNETIC_DRIFT_SCHEME_MAP = {
+    103: (200, 210),
+    -103: (210, 200),
+    104: (220, 230),
+    -104: (230, 220),
+}
+
+
+def widened_upwind_stencil(
+    *, order: int, wind_sign: float = 1.0
+) -> tuple[tuple[int, ...], tuple[float, ...]]:
+    """Offsets and ``1/dx`` coefficients of a widened upwind stencil.
+
+    See :data:`_WIDENED_UPWIND_STENCILS` for the construction and the
+    literature. The stencil is mirrored for a negative wind: the offsets are
+    negated and the coefficients change sign, which is the exact reflection of
+    the positive-wind stencil about the evaluation node and preserves both the
+    order of accuracy and the diagonal weight.
+
+    Args:
+      order: Order of accuracy, 3 (4-point stencil) or 4 (5-point stencil).
+      wind_sign: Sign of the local advection speed; positive selects the
+        upstream-leaning (negative-offset) stencil, negative its mirror. Zero
+        is rejected because it leaves the upwind direction undefined.
+
+    Returns:
+      Tuple ``(offsets, coefficients)`` sorted by increasing offset. Multiply
+      the coefficients by ``1/dx`` to get the derivative weights.
+    """
+    stencil = _WIDENED_UPWIND_STENCILS.get(int(order))
+    if stencil is None:
+        raise ValueError(
+            f"Invalid widened upwind order {order} (supported: "
+            f"{sorted(_WIDENED_UPWIND_STENCILS)})"
+        )
+    offsets, coefficients = stencil
+    wind_sign = float(wind_sign)
+    if wind_sign == 0.0:
+        raise ValueError("wind_sign must be nonzero; the upwind direction is otherwise undefined")
+    if wind_sign > 0.0:
+        return offsets, coefficients
+    mirrored = sorted(zip((-o for o in offsets), (-c for c in coefficients)))
+    return tuple(o for o, _ in mirrored), tuple(c for _, c in mirrored)
+
+
+def stencil_diagonal_dominance(
+    offsets: Sequence[int], coefficients: Sequence[float]
+) -> float:
+    """Diagonal-to-off-diagonal row-sum ratio ``|c_0| / sum_{j != 0} |c_j|``.
+
+    The diagonal-dominance measure that decides whether a relaxation smoother
+    or a diagonal preconditioner is useful on the advection operator ``a d/dx``
+    built from this stencil: the row of the resulting matrix has diagonal
+    ``a c_0 / dx`` and off-diagonal entries ``a c_j / dx``, so the ratio is
+    independent of both the wind speed and the grid spacing. Every consistent
+    first-derivative stencil satisfies ``sum_j c_j = 0``, which bounds the
+    ratio by 1 (attained only by the two-point first-order upwind stencil).
+
+    Args:
+      offsets: Grid offsets of the stencil.
+      coefficients: Matching coefficients in units of ``1/dx``.
+
+    Returns:
+      The ratio as a float; ``0.0`` for a stencil with no on-node coefficient
+      (both centered schemes), ``inf`` for a stencil with no off-diagonal
+      entries.
+    """
+    offsets = tuple(int(o) for o in offsets)
+    coefficients = tuple(float(c) for c in coefficients)
+    if len(offsets) != len(coefficients):
+        raise ValueError("offsets and coefficients must have the same length")
+    diagonal = sum(abs(c) for o, c in zip(offsets, coefficients) if o == 0)
+    off_diagonal = sum(abs(c) for o, c in zip(offsets, coefficients) if o != 0)
+    if off_diagonal == 0.0:
+        return math.inf
+    return diagonal / off_diagonal
+
+
+def _periodic_stencil_rows(
+    *, n: int, dx: float, offsets: Sequence[int], coefficients: Sequence[float]
+) -> np.ndarray:
+    """Circulant matrix of one stencil on a periodic n-point grid."""
+    rows = np.arange(n)
+    out = np.zeros((n, n), dtype=np.float64)
+    for offset, coefficient in zip(offsets, coefficients):
+        out[rows, (rows + int(offset)) % n] += float(coefficient) / dx
+    return out
+
+
+def widened_upwind_periodic_diff_matrix(
+    *,
+    n: int,
+    x_min: float,
+    x_max: float,
+    order: int,
+    wind_sign: float | Sequence[float] | np.ndarray,
+) -> jnp.ndarray:
+    """Wind-oriented widened upwind d/dx matrix on a uniform periodic grid.
+
+    The orientation of every row is set by the sign of the local advection
+    speed, which for the drift-kinetic streaming and drift terms is fixed by
+    the field geometry. Pass a scalar when the wind has one sign over the whole
+    coordinate, or an array of per-point signs when it does not.
+
+    Args:
+      n: Number of grid points; must exceed the stencil span so that no two
+        offsets alias onto the same column.
+      x_min: Left end of the periodic interval (included in the grid).
+      x_max: Right end of the periodic interval (excluded from the grid).
+      order: Order of accuracy, 3 or 4 (see :func:`widened_upwind_stencil`).
+      wind_sign: Scalar sign of the advection speed, or an array of shape
+        ``(n,)`` giving the sign at each grid point.
+
+    Returns:
+      A JAX float64 array of shape ``(n, n)``.
+    """
+    if n < 2:
+        raise ValueError(f"n must be at least 2, got {n}")
+    if x_min >= x_max:
+        raise ValueError(f"x_max must be > x_min, got x_min={x_min}, x_max={x_max}")
+    offsets, _ = widened_upwind_stencil(order=order)
+    span = max(offsets) - min(offsets)
+    if n <= span:
+        raise ValueError(
+            f"n must be greater than the stencil span {span} for the order-{order} "
+            f"widened upwind stencil, got n={n}"
+        )
+
+    dx = (float(x_max) - float(x_min)) / n
+    plus = _periodic_stencil_rows(
+        n=n, dx=dx, offsets=offsets, coefficients=widened_upwind_stencil(order=order)[1]
+    )
+    signs = np.asarray(wind_sign, dtype=np.float64)
+    if signs.ndim == 0 and float(signs) > 0.0:
+        return jnp.asarray(plus)
+    minus_offsets, minus_coefficients = widened_upwind_stencil(order=order, wind_sign=-1.0)
+    minus = _periodic_stencil_rows(
+        n=n, dx=dx, offsets=minus_offsets, coefficients=minus_coefficients
+    )
+    if signs.ndim == 0:
+        return jnp.asarray(minus)
+    if signs.shape != (n,):
+        raise ValueError(f"wind_sign must be a scalar or have shape {(n,)}, got {signs.shape}")
+    if np.any(signs == 0.0):
+        raise ValueError("wind_sign must be nonzero at every grid point")
+    return jnp.asarray(np.where(signs[:, None] > 0.0, plus, minus))
 
 
 def uniform_periodic_diff_matrices(
@@ -109,13 +337,17 @@ def uniform_periodic_diff_matrices(
         left/right-biased 5-point upwind (3rd order, first derivative only);
         ``120``/``130`` left/right-biased 6-point upwind (4th order, first
         derivative only). The upwinded pairs implement
-        ``magneticDriftDerivativeScheme`` 1/2/3.
+        ``magneticDriftDerivativeScheme`` 1/2/3. The dkx-only 200 block adds
+        the widened upwind stencils of :func:`widened_upwind_stencil`:
+        ``200``/``210`` positive/negative-wind 4-point (3rd order) and
+        ``220``/``230`` positive/negative-wind 5-point (4th order), first
+        derivative only.
 
     Returns:
       Tuple ``(x, weights, ddx, d2dx2)`` of JAX float64 arrays with shapes
       ``(n,)``, ``(n,)``, ``(n, n)``, ``(n, n)``. For schemes 100-130 only the
       first-derivative matrix is populated (``d2dx2`` is zero), matching the
-      Fortran code.
+      Fortran code; the same holds for the widened 200 block.
     """
     if scheme not in _PERIODIC_SCHEMES:
         raise ValueError(
@@ -291,6 +523,18 @@ def uniform_periodic_diff_matrices(
             ddx[i, (i - int(sign)) % n] = -sign / dx
             ddx[i, (i - 2 * int(sign)) % n] = sign / (4 * dx)
             ddx[i, (i - 3 * int(sign)) % n] = -sign / (30 * dx)
+
+    else:
+        # dkx-only widened upwind stencils (200 block), first derivative only.
+        order, wind_sign = _WIDENED_UPWIND_SCHEME_INFO[scheme]
+        return (
+            jnp.asarray(x),
+            jnp.asarray(weights),
+            widened_upwind_periodic_diff_matrix(
+                n=n, x_min=x_min, x_max=x_max, order=order, wind_sign=wind_sign
+            ),
+            jnp.asarray(d2dx2),
+        )
 
     return jnp.asarray(x), jnp.asarray(weights), jnp.asarray(ddx), jnp.asarray(d2dx2)
 
@@ -1284,13 +1528,23 @@ class Grids:
         return lorentz_eigenvalues(self.n_xi)
 
 
+def _angle_derivative_scheme(namelist_scheme: int) -> int | None:
+    """thetaDerivativeScheme / zetaDerivativeScheme -> internal scheme, or None."""
+    scheme = _ANGLE_DERIVATIVE_SCHEME_MAP.get(namelist_scheme)
+    if scheme is not None:
+        return scheme
+    return _WIDENED_ANGLE_DERIVATIVE_SCHEME_MAP.get(namelist_scheme)
+
+
 def _upwinded_pair(
     *, n: int, x_max: float, magnetic_drift_derivative_scheme: int, ddx_centered: jnp.ndarray
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Return the (plus, minus) upwinded periodic d/dx pair for one angle."""
     if magnetic_drift_derivative_scheme == 0:
         return ddx_centered, ddx_centered
-    schemes = _MAGNETIC_DRIFT_SCHEME_MAP.get(magnetic_drift_derivative_scheme)
+    schemes = _MAGNETIC_DRIFT_SCHEME_MAP.get(
+        magnetic_drift_derivative_scheme
+    ) or _WIDENED_MAGNETIC_DRIFT_SCHEME_MAP.get(magnetic_drift_derivative_scheme)
     if schemes is None:
         raise ValueError(
             f"Invalid magneticDriftDerivativeScheme={magnetic_drift_derivative_scheme}"
@@ -1338,11 +1592,15 @@ def make_grids(
       n_l: Number of Legendre modes in the Rosenbluth potentials.
       n_periods: Number of toroidal field periods of the device.
       theta_derivative_scheme: Namelist ``thetaDerivativeScheme``
-        (0 spectral, 1 2nd-order FD, 2 4th-order FD).
+        (0 spectral, 1 2nd-order FD, 2 4th-order FD). The dkx-only opt-in
+        codes ``+/-103`` and ``+/-104`` select the 3rd- and 4th-order widened
+        upwind stencils of :func:`widened_upwind_stencil`, with the sign giving
+        the wind direction; they are not bit-parity with the Fortran code.
       zeta_derivative_scheme: Namelist ``zetaDerivativeScheme`` (same options).
       magnetic_drift_derivative_scheme: Namelist
         ``magneticDriftDerivativeScheme`` (0 = centered; +/-1, +/-2, +/-3 =
-        upwinded pairs of increasing order).
+        upwinded pairs of increasing order; dkx-only ``+/-103`` and ``+/-104``
+        = the widened upwind pairs of 3rd and 4th order).
       x_grid_scheme: Namelist ``xGridScheme``; 1/5 are the Landreman-Ernst
         polynomial grid with no node at x=0 (5 is the v3 default), 2/6 pin a
         node at x=0 (Gauss-Radau), 3/4 are the uniform grid on
@@ -1386,7 +1644,7 @@ def make_grids(
         n_xi_for_x_option = 0
 
     # --- theta ---
-    theta_scheme = _ANGLE_DERIVATIVE_SCHEME_MAP.get(theta_derivative_scheme)
+    theta_scheme = _angle_derivative_scheme(theta_derivative_scheme)
     if theta_scheme is None:
         raise ValueError(f"Invalid thetaDerivativeScheme={theta_derivative_scheme}")
     theta, theta_weights, ddtheta, _ = uniform_periodic_diff_matrices(
@@ -1401,7 +1659,7 @@ def make_grids(
 
     # --- zeta ---
     zeta_max = 2 * math.pi / n_periods
-    zeta_scheme = _ANGLE_DERIVATIVE_SCHEME_MAP.get(zeta_derivative_scheme)
+    zeta_scheme = _angle_derivative_scheme(zeta_derivative_scheme)
     if zeta_scheme is None:
         raise ValueError(f"Invalid zetaDerivativeScheme={zeta_derivative_scheme}")
     if n_zeta == 1:
