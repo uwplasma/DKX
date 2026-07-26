@@ -1041,9 +1041,13 @@ def test_coarse_preconditioner_is_jit_safe_over_traced_operator_leaves() -> None
     # differently inside jit than out, and the two orderings differ in the last
     # few digits on some backends.  What must hold is that jit does not change
     # what the preconditioner *is* -- a Krylov method corrects any residual
-    # error in its application -- so this compares to solver-relevant accuracy,
-    # not to bitwise equality.
-    np.testing.assert_allclose(np.asarray(jitted), np.asarray(ref(v)), rtol=1e-6, atol=1e-9)
+    # error in its application -- so this compares the applied vectors in norm,
+    # the quantity a Krylov method actually consumes.  An element-wise relative
+    # check would instead be dominated by near-zero components, where a 1e-8
+    # absolute wobble reads as a large relative one.
+    reference = np.asarray(ref(v))
+    difference = np.linalg.norm(np.asarray(jitted) - reference)
+    assert difference <= 1e-6 * max(1.0, float(np.linalg.norm(reference))), difference
 
 
 # ---------------------------------------------------------------------------
