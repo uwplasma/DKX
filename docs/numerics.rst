@@ -41,6 +41,66 @@ code can use directional **upwind** derivative matrices selected pointwise from
 the sign of the local drift coefficient, which stabilizes the trapped-passing
 boundary layer at low collisionality.
 
+.. _widened-upwind:
+
+Widened upwind stencils
+^^^^^^^^^^^^^^^^^^^^^^^
+
+A centered difference puts *no* weight on the diagonal
+(:math:`c_0 = 0`), so the advection operator it generates has an empty diagonal
+and neither a relaxation smoother nor a diagonal preconditioner can act on it.
+`dkx` therefore offers opt-in **widened upwind** angular stencils chosen for
+diagonal dominance rather than for the smallest truncation constant. Both are
+periodic, first-derivative only, and come as a mirrored pair whose orientation
+is set by the sign of the local wind:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 12 10 30 20 14 14
+
+   * - Namelist
+     - Order
+     - Offsets (positive wind)
+     - Coefficients :math:`\times\,\Delta`
+     - :math:`|c_0|/\sum_{j\neq0}|c_j|`
+     - Truncation
+   * - ``±103``
+     - 3
+     - :math:`(-3,-1,0,+2)`
+     - :math:`(1/15,\,-1,\,5/6,\,1/10)`
+     - :math:`5/7 \approx 0.714`
+     - :math:`+\tfrac14 \Delta^3 f^{(4)}`
+   * - ``±104``
+     - 4
+     - :math:`(-4,-3,-1,0,+2)`
+     - :math:`(-1/12,\,4/15,\,-4/3,\,13/12,\,1/15)`
+     - :math:`13/21 \approx 0.619`
+     - :math:`+\tfrac15 \Delta^4 f^{(5)}`
+
+For comparison the same measure is :math:`0` for both centered schemes and for
+spectral collocation, and :math:`1/3`, :math:`5/14`, :math:`2/11` for the
+compact upwind-biased stencils of ``magneticDriftDerivativeScheme`` 1, 2, 3. The
+offsets are not free choices: each is the unique maximizer of
+:math:`|c_0|/\sum_{j\neq0}|c_j|` over every :math:`N`-point offset set inside a
+window of width :math:`N+1` that is exact to order :math:`N-1` and dissipative
+for the given wind (:math:`\mathrm{Re}\,\hat c(k)\ge 0` for the Fourier symbol
+:math:`\hat c(k) = \sum_j c_j e^{ik o_j}`). Reversing the wind mirrors the
+stencil, which preserves both the order and the diagonal weight; using the wrong
+orientation flips the sign of :math:`\mathrm{Re}\,\hat c` and is unstable. See
+Fromm, *J. Comput. Phys.* **3**, 176 (1968); Warming & Beam, *AIAA J.* **14**,
+1241 (1976); Tam & Webb, *J. Comput. Phys.* **107**, 262 (1993); and Fornberg,
+*Math. Comput.* **51**, 699 (1988) for the arbitrary-offset weights.
+
+These stencils are a `dkx`-only extension: they are **not** bit-parity with the
+Fortran code, they are never a default, and the Fortran-parity suites pin the
+centered schemes. The namelist numbering uses a 100 block precisely because
+upstream numbers every scheme knob with small integers, so no future upstream
+value can collide. ``thetaDerivativeScheme`` / ``zetaDerivativeScheme`` take
+``±103`` and ``±104`` with the sign giving the wind direction;
+``magneticDriftDerivativeScheme`` takes the same codes with its usual
+pair-swapping sign convention, which routes the stencils through the existing
+pointwise upwind selector.
+
 Velocity-space discretization
 -----------------------------
 
