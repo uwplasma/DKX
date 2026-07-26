@@ -387,7 +387,7 @@
   },
   {
    "path": "dkx/solve.py",
-   "lines_at_audit": 2600,
+   "lines_at_audit": 2717,
    "category": "core",
    "action": "retain",
    "public_imports": [],
@@ -404,6 +404,26 @@
    ],
    "retention_reason": "The three-tier canonical solve policy (block-tridiagonal, GCROT, direct) is the single solver owner after the legacy solvers package deletion.",
    "next_step": "Keep tier policies here; new tiers need parity and memory gates.",
+   "review_status": "canonical_owner_post_trim"
+  },
+  {
+   "path": "dkx/multigrid.py",
+   "lines_at_audit": 2000,
+   "category": "core",
+   "action": "retain",
+   "public_imports": [],
+   "internal_callers": [
+    "dkx/solve.py"
+   ],
+   "tests": [
+    "tests/test_multigrid.py"
+   ],
+   "docs_examples": [
+    "dkx/README.md",
+    "docs/performance.rst"
+   ],
+   "retention_reason": "Sole owner of the semicoarsened multigrid tier-2 preconditioner: hierarchy planning, rediscretized coarse operators, transfers and relaxations behind solve(preconditioner='multigrid'), plus the pitch-basis diagnostics that record why that route cannot reach tolerance on a Legendre-modal discretization.",
+   "next_step": "Keep the hierarchy, relaxations and pitch-basis diagnostics here; a new smoother needs a measured smoothing factor and line-smoother spectral radius on a real operator plus the tier-2 parity gate.",
    "review_status": "canonical_owner_post_trim"
   },
   {

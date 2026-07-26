@@ -600,6 +600,281 @@ in the summary JSON audit fields, are about ``4.75x`` on CPU and ``8.80x`` on
 GPU. The numeric summary and the top runtime/memory cases are recorded in
 ``examples/publication_figures/artifacts/dkx_fortran_suite_benchmark_summary.json``.
 
+Tier-2 preconditioners: coarse block-Thomas vs multigrid
+--------------------------------------------------------
+
+Every physics ``dkx`` is uniquely good at -- full Fokker-Planck and improved
+Sugama collisions, ``Phi1``/quasineutrality, tangential magnetic drifts, the
+ambipolar-``E_r`` ``xDot``/``xiDot`` terms -- has no block-tridiagonal-in-L
+structure, so it is locked out of the tier-1 direct path and must go through
+tier 2.  The classical tier-2 preconditioner
+(:func:`dkx.solve.build_coarse_preconditioner`) inverts the SFINCS-simplified
+operator *exactly* with a batched block-Thomas factorization whose blocks are
+``Ntheta*Nzeta`` square, and rebuilds it on **every call**:
+``O(Nxi Nspecies Nx (Ntheta Nzeta)^3)`` time and
+``O(Nxi Nspecies Nx (Ntheta Nzeta)^2)`` memory.  At ``21 x 41`` the bands alone
+are about ``10 GB``.
+
+:mod:`dkx.multigrid` implements the obvious remedy -- keep the same simplified
+operator and the same exact elimination of the bordered constraint/``Phi1``
+rows, and replace only its inner f-block inverse with a semicoarsened
+geometric-multigrid V-cycle over ``(theta, zeta[, xi])``, with rediscretized
+coarse operators and the existing block-Thomas solve on the coarsest grid.  It
+is selected with ``solve(preconditioner="multigrid")``; the default stays
+``"coarse"``.
+
+Measured ladder (MacBook, Apple M4, CPU, ``float64``; one-species NCSX VMEC
+geometry, ``collisionOperator=0`` with the ``xDot`` and ``xiDot`` terms on,
+``solverTolerance=1e-8``, GCROT ``m=30, k=8`` capped at 600 iterations;
+reproduce with ``tools/benchmarks/tier2_multigrid_ladder.py``):
+
+.. note::
+
+   The coarse route's iteration counts are those of the *adaptive* ``l = 0``
+   null-space pin (:func:`dkx.solve._l0_pin_gamma`).  The simplified ``l = 0``
+   diagonal block is annihilated by streaming, mirror, ExB and pitch-angle
+   scattering on a distribution constant over the flux surface, so that null
+   vector has to be removed -- but sizing the rank-one pin that removes it by
+   the mean ``|diagonal|`` over all ``L``, which the ``nu l(l+1)/2`` collision
+   diagonal makes ~1e3 times larger than the ``l = 0`` block itself, lets the
+   pin dominate the very block it regularizes.  Sizing it by the ``1e-8``
+   invertibility floor instead, and applying it only where the block's own
+   ``l = 0`` diagonal does not already clear that level, is the difference
+   between 21 and 24 iterations on this ladder and 87 and 149 at identical
+   residuals.
+
+.. list-table:: Tier-2 preconditioner ladder, full Fokker-Planck + full trajectories
+   :header-rows: 1
+
+   * - grid (Ntheta x Nzeta x Nxi x Nx)
+     - unknowns
+     - route
+     - iterations
+     - build (s)
+     - solve (s)
+     - peak RSS (GB)
+     - final relative residual
+   * - 11 x 21 x 41 x 5
+     - 47,357
+     - coarse
+     - 21
+     - 2.6
+     - 1.7
+     - 2.7
+     - 1.7e-11
+   * - 11 x 21 x 41 x 5
+     - 47,357
+     - multigrid
+     - 600 (cap)
+     - 5.8
+     - 17.2
+     - 1.6
+     - 2.2e-03
+   * - 15 x 31 x 61 x 6
+     - 170,192
+     - coarse
+     - 24
+     - 10.8
+     - 6.6
+     - 7.8
+     - 2.8e-11
+   * - 15 x 31 x 61 x 6
+     - 170,192
+     - multigrid
+     - 600 (cap)
+     - 5.7
+     - 44.0
+     - 2.6
+     - 3.3e-03
+   * - 21 x 41 x 81 x 7
+     - 488,194
+     - coarse
+     - did not finish
+     - > 2400 (killed)
+     - ---
+     - 11.6
+     - ---
+   * - 21 x 41 x 81 x 7
+     - 488,194
+     - multigrid
+     - 600 (cap)
+     - 35.9
+     - 150.2
+     - 5.9
+     - 4.8e-03
+
+At 488k unknowns the classical route never emitted a row: it was killed after
+40 minutes with an 11.6 GB peak and 4,670 s of *system* time (426 million page
+reclaims, i.e. the machine spent its time swapping the bands rather than
+factoring them).  The multigrid route ran the same case to its iteration cap in
+186 s at 5.9 GB.
+
+**The honest result: multigrid makes the large case runnable -- 186 s and half
+the memory where the classical preconditioner does not finish at all -- and it
+does not reach the requested tolerance.**  Where the classical route does fit
+in memory it is strictly better (21 and 24 iterations to ``1e-11`` against a
+600-iteration cap at ``2e-3``).  The reason is measured, not guessed, and it is
+a property of the drift-kinetic operator rather than of the cycle:
+
+* *No cheap smoother is complementary to angular coarsening.*  The two
+  dominant terms live in different bases -- collisions are diagonal in the
+  Legendre index and **dense** in pitch collocation (keeping only the
+  collocation diagonal discards 65% of the reduced collision operator in the
+  2-norm; a lumped tridiagonal-in-pitch approximation still discards 31%),
+  while streaming is diagonal in pitch collocation and ``L +- 1`` in Legendre.
+  A relaxation that resolves one direction exactly smooths *that* direction and
+  nothing else: measured on the real NCSX operator, the exact ``(L, zeta)``
+  plane sweep has a smoothing factor ``mu = 0.87`` across ``zeta`` and
+  ``mu = 214`` across ``theta``; the best pitch-collocation sweep reaches
+  ``mu ~ 1.0`` only at ``omega = 0.2``, where it barely moves the iterate.
+* *The near-null directions are not grid-aligned.*  The operator's stiff
+  directions are distributions constant **along the field line**, which is
+  neither a ``theta`` mode nor a ``zeta`` mode.  Slicing the flux surface into
+  lines or planes manufactures one spurious near-null direction per line, and a
+  coarser angular grid carries a *different* discrete field-line trajectory, so
+  its near-null space does not match the fine grid's either.  That is why the
+  additive two-level variant (exact coarse solve plus plane relaxation) stalls
+  at the same residual as the unpreconditioned solve, and why even coarsening
+  ``Nzeta`` alone by a factor of two is enough to break the correction.
+* *Pitch p-coarsening makes it worse.*  Restricting a smooth error, solving the
+  coarse operator exactly and prolonging back recovers it to 0.056 for
+  ``Nzeta 21 -> 11``, 0.415 for ``Ntheta 11 -> 5`` and 0.440 for both angles --
+  but 1.023 once ``Nxi`` is halved as well, i.e. worse than doing nothing.
+  ``coarsen_xi`` is therefore ``False`` by default.
+
+What the exercise *did* buy, and it is worth recording, is a measurement of how
+much the classical preconditioner's own regularization costs -- which turned out
+to be the larger win.  A full-strength rank-one pin of the constant-on-surface
+null space of the ``l = 0`` block is not free: against no regularization at all
+(only the ``1e-8`` invertibility floor) it costs the 47k case **87 GCROT
+iterations instead of 21**, and a uniform diagonal shift is worse still (60
+iterations at ``1e-2`` of the mean collision diagonal, no convergence at
+``1.0``).  Dropping the pin outright is not an option either -- a collisionless,
+drift-free f-block has an *exactly* zero ``l = 0`` diagonal, and the ``Phi1``
+Newton inner solve forces the coarse preconditioner for every deck -- which is
+why the pin is adaptive (:func:`dkx.solve._l0_pin_gamma`).  Measured per deck on
+this geometry at ``11 x 21 x 41 x 5``, adaptive against unconditional: full
+Fokker-Planck with ``Er`` 21 against 87, improved Sugama with ``Er`` 20 against
+84, and no difference where the pin was already harmless or is genuinely needed
+(pitch-angle scattering 7 either way, ``Er = 0`` 18 either way).
+
+Why no smoother exists in a Legendre-modal pitch basis
+-------------------------------------------------------
+
+The stalls above are not a bad choice of cycle or sweep.  They follow from one
+structural fact, pinned by ``tests/test_multigrid.py`` and reproducible with
+``tools/benchmarks/tier2_pitch_basis_study.py``: **parallel streaming and the
+mirror force are strictly off-diagonal in the Legendre index.**  They couple
+``L -> L +- 1`` and contribute nothing to the ``(L, L)`` block, so a ``theta``-
+or ``zeta``-line relaxation taken at fixed ``L`` never sees the operator's
+dominant term -- no angular stencil, upwinded or not, can give that block
+diagonal weight from a term that has no diagonal.  The remaining line, the
+``L``-line at fixed angle, contains the mirror force, which is near-*skew*-
+symmetric with a diagonal (``nu_D l(l+1)/2``) that vanishes with the
+collisionality.
+
+Measured on one ``(species, speed)`` block of the real simplified operator
+(W7-X standard configuration, ``9 x 11 x 13``, alternating exact line solves in
+all three coordinates, ``omega = 1``), ``rho(S)`` is the spectral radius of the
+relaxation's error propagator and ``rho(TG)`` the two-grid convergence factor
+of a ``V(1,1)`` cycle around it:
+
+.. list-table:: Line relaxation and two-grid factors, same operator, two pitch bases
+   :header-rows: 1
+
+   * - discretization
+     - stencil ``d``
+     - ``rho(S)``, ``nu_n = 8.3e-3``
+     - ``rho(TG)``, ``1e-1`` / ``8.3e-3`` / ``1e-4``
+   * - Legendre-modal, coarsen ``(theta, zeta)``
+     - ---
+     - 5.9e6
+     - 1.5e7 / 4.0e13 / 3.3e24
+   * - pitch grid, 1st-order upwind
+     - 1.00
+     - 0.97
+     - 0.39 / 0.24 / 0.74
+   * - pitch grid, widened 2nd order
+     - 0.88
+     - 0.98
+     - 0.49 / 0.36 / 0.80
+   * - pitch grid, widened 4th order
+     - 0.62
+     - 0.97
+     - 0.91 / 0.49 / 1.25
+   * - pitch grid, textbook 3rd order
+     - 0.33
+     - 1.04
+     - 2.68 / 0.89 / 3.68
+   * - pitch grid, centered
+     - 0.00
+     - 2.2e2
+     - 1.3e2 / 4.7e4 / 5.1e11
+
+``rho(S) > 1`` is fatal -- a coarse-grid correction cannot rescue a divergent
+relaxation -- and the modal basis has no convergent line relaxation at any
+collisionality, by three to twelve orders of magnitude.  On a pitch *grid* the
+same continuum operator does have one, and the convergence factor is a monotone
+function of the stencil's diagonal dominance ``d``: widening a stencil (skipping
+near neighbours to keep diagonal weight at a fixed formal order, the trade
+Leonard's QUICK family makes) beats the textbook upwind-biased scheme of the
+same or higher order.
+
+**Changing basis inside the preconditioner only does not rescue it.**  The
+transform is cheap and exact (``Nxi**2`` per angular point,
+``cond(V) ~ 7`` at ``Nalpha = Nxi``), and ``dkx.multigrid.pitch_collocation_
+surrogate`` builds the surrogate -- the classical low-order-preconditions-
+spectral construction (Orszag 1980; Deville & Mund 1985).  But the surrogate
+has to satisfy two requirements at once and they are opposed.  GMRES on the
+modal operator preconditioned by each surrogate's *exact* inverse, at
+``nu_n = 8.3e-3`` on the same ``9 x 11 x 13`` block:
+
+.. list-table:: The surrogate cannot be both accurate and smoothable
+   :header-rows: 1
+
+   * - surrogate
+     - GMRES iterations
+     - ``rho(TG)``
+   * - centered angles, centered pitch
+     - 18
+     - 4.7e4
+   * - centered angles, upwind pitch
+     - 21
+     - 4.0e4
+   * - widened 2nd order everywhere
+     - 199
+     - 0.37
+   * - 1st-order upwind everywhere
+     - 201
+     - 0.24
+   * - no preconditioner
+     - > 400
+     - ---
+
+The upwind column also degrades with angular resolution (261 at ``9 x 15``,
+> 400 at ``13 x 21``) where the centered column barely moves (18, 24, 41 at
+``9 x 15 x 17``, ``13 x 21 x 17``, ``17 x 25 x 33``).  Note which axis does the
+damage: upwinding the *pitch* direction alone is nearly free (18 -> 21); it is
+upwinding the *angles*, where dkx's stencils are centered by construction
+(SFINCS ``thetaDerivativeScheme`` 1/2), that costs the order of magnitude.
+Double discretisation -- accurate operator on the fine level, upwinded smoother
+and coarse operators (Brandt 1982; Trottenberg et al. section 7.4) -- does not
+close the gap either: ``rho(TG)`` is 1.46, 1.94 and 2.27 across the same three
+collisionalities, divergent everywhere.
+
+**What would be required** is a change to the *discretization*, not to the
+preconditioner: pitch as a collocation grid, so that ``xi`` is a multiplication
+operator and ``xi b.grad`` has a diagonal that an upwind angular stencil can
+weight, with the mirror force an upwinded advection in the pitch angle and all
+of ``(alpha, theta, zeta)`` coarsened together.  That changes the answers at
+fixed resolution, breaks the Fortran matrix parity the repository is gated on,
+and requires the Fokker-Planck and improved-Sugama collision operators -- built
+in the Legendre basis, where they are ``L``-diagonal -- to be re-derived on a
+pitch grid where they are dense.  And it buys a preconditioner that is *worse*
+than the classical block-Thomas wherever the classical one fits in memory.  The
+scope of the multigrid route is therefore unchanged: opt-in, for the grids where
+the exact factorization does not fit.
+
 Compile time vs steady state
 ----------------------------
 

@@ -32,6 +32,8 @@ from dkx.drift_kinetic import KineticOperator
 from dkx.namelist import parse_sfincs_input_text, read_sfincs_input
 from dkx.solve import (
     SolveResult,
+    _COARSE_DIAGONAL_FLOOR,
+    _l0_pin_gamma,
     _resolve_subsystem_batch,
     build_coarse_preconditioner,
     materialize_dense,
@@ -1036,6 +1038,70 @@ def test_coarse_preconditioner_is_jit_safe_over_traced_operator_leaves() -> None
     jitted = jax.jit(precond_action)(leaves)  # compiles (was a Tracer error)
     ref, _ = build_coarse_preconditioner(op)
     np.testing.assert_allclose(np.asarray(jitted), np.asarray(ref(v)), rtol=1e-9, atol=1e-11)
+
+
+# ---------------------------------------------------------------------------
+# The adaptive l=0 null-space pin.  The simplified l=0 diagonal block is
+# annihilated by streaming, mirror, ExB and pitch-angle scattering on a
+# distribution constant over the flux surface, so *something* must regularize
+# it or the coarsest block-Thomas divides by zero.  Doing that unconditionally,
+# at the mean |diagonal| over all L, made the pin dominate the very block it
+# regularized: 87 GCROT iterations against 21 on the NCSX 11x21x41x5 tier-2
+# ladder.  The contract now is that the pin is sized by the invertibility floor
+# and fires only where the block really is singular.
+# ---------------------------------------------------------------------------
+
+
+def test_l0_pin_is_floor_sized_and_off_on_a_regular_block() -> None:
+    """The pin tops the null direction up to the floor, and stops there.
+
+    ``(gamma * ones (x) c0) @ ones = gamma * sum(c0)`` is the row sum the pin
+    adds to the ``l = 0`` block, so that product — not ``gamma`` itself, whose
+    sign follows ``sum(c0)`` and hence the Jacobian sign convention — is the
+    quantity with a contract.
+    """
+    band = jnp.asarray([[2.0]])
+    c0 = jnp.asarray([0.25, 0.75])  # sum(c0) = 1.0
+    scale = jnp.asarray([[7.0]])  # the legacy sizing; must not matter any more
+    floor = _COARSE_DIAGONAL_FLOOR * 2.0  # floor * band
+
+    # Exactly singular in the pinned direction -> pinned up to the floor.
+    singular = _l0_pin_gamma(jnp.zeros((1, 1)), band, scale, c0)
+    assert float(singular[0, 0] * jnp.sum(c0)) == pytest.approx(floor, rel=1e-12)
+    # ... and the amount does NOT key on the mean |diagonal| over all L, which
+    # the ``nu l(l+1)/2`` collision diagonal makes ~1e3x larger at high l.
+    louder = _l0_pin_gamma(jnp.zeros((1, 1)), band, scale * 1e3, c0)
+    assert float(louder[0, 0]) == float(singular[0, 0])
+
+    # Half the floor missing -> exactly half the floor supplied (adaptive, not
+    # a switch: the pin supplies the shortfall).
+    half = _l0_pin_gamma(jnp.asarray([[0.5 * floor]]), band, scale, c0)
+    assert float(half[0, 0] * jnp.sum(c0)) == pytest.approx(0.5 * floor, rel=1e-12)
+
+    # A block whose own l=0 diagonal already clears the floor gets no pin.
+    regular = _l0_pin_gamma(jnp.asarray([[1e-3]]), band, scale, c0)
+    assert float(regular[0, 0]) == 0.0
+
+
+def test_coarse_preconditioner_stays_finite_on_an_exactly_singular_l0_block() -> None:
+    """A collisionless, drift-free f-block must still factor.
+
+    ``nu_n=0`` with ``Er=0`` leaves the coarse f-block's diagonal EXACTLY zero —
+    only streaming and the mirror force couple ``L`` — which is the case the pin
+    exists for.  (Collisionless pitch-angle-scattering decks route to the tier-1
+    direct solver, but the ``Phi1`` Newton inner solve forces the coarse
+    preconditioner for every deck.)  Both the preconditioner and its transpose
+    must come back finite rather than dividing by zero.
+    """
+    txt = _load_text("pas_1species_PAS_noEr_tiny").replace("nu_n = 8.4774d-3", "nu_n = 0d+0")
+    op = KineticOperator.from_namelist(parse_sfincs_input_text(txt))
+    precond, precond_t = build_coarse_preconditioner(op)
+    v = jnp.asarray(np.linspace(-1.0, 1.0, op.total_size), dtype=jnp.float64)
+    for apply in (precond, precond_t):
+        assert np.all(np.isfinite(np.asarray(apply(v))))
+    # The deck still solves through tier 2 on that preconditioner.
+    result = solve(op, op.rhs(), method="gmres", tol=1e-10)
+    assert result.converged
 
 
 def test_jit_value_and_grad_through_differentiable_solve_compiles_once() -> None:
