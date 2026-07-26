@@ -267,13 +267,15 @@ acted upon.
      - Meaning
    * - ``thetaDerivativeScheme`` / ``zetaDerivativeScheme``
      - ``2`` / ``2``
-     - angular finite-difference scheme
+     - angular finite-difference scheme; ``±103`` / ``±104`` opt into the
+       `dkx`-only widened upwind stencils (:ref:`widened-upwind`)
    * - ``ExBDerivativeSchemeTheta`` / ``ExBDerivativeSchemeZeta``
      - ``0`` / ``0``
      - ExB derivative scheme
    * - ``magneticDriftDerivativeScheme``
      - ``3``
-     - magnetic-drift derivative / upwinding scheme
+     - magnetic-drift derivative / upwinding scheme; also accepts the
+       `dkx`-only ``±103`` / ``±104`` widened upwind pairs
    * - ``xDotDerivativeScheme``
      - ``0``
      - speed-derivative scheme (canonical: 0)

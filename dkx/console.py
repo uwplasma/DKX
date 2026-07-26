@@ -180,6 +180,11 @@ _DERIVATIVE_DESCRIPTIONS = {
     0: "spectral collocation",
     1: "centered finite differences, 3-point stencil",
     2: "centered finite differences, 5-point stencil",
+    # dkx-only widened upwind extensions (dkx.phase_space.widened_upwind_stencil).
+    103: "widened upwind finite differences, 4-point stencil, positive wind",
+    -103: "widened upwind finite differences, 4-point stencil, negative wind",
+    104: "widened upwind finite differences, 5-point stencil, positive wind",
+    -104: "widened upwind finite differences, 5-point stencil, negative wind",
 }
 
 
