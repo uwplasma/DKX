@@ -873,6 +873,29 @@ def collocation_operator_from_namelist(
     )
 
 
+def _dense_coarse_solve_fallback(matvec, shape, *, batch_dims: int = 0):
+    """Exact coarsest-level solve probed from ``matvec``, batched over leading axes.
+
+    A stand-in for the solver library's own routine, kept only so the backend
+    runs against a release that predates it.  Probing costs one matvec per
+    coarse unknown, which is affordable precisely because the coarsest grid is
+    tiny; batching keeps the cost ``O(n_b n^3)`` rather than ``O((n_b n)^3)``.
+    """
+    batch = tuple(int(s) for s in shape[:batch_dims])
+    inner = tuple(int(s) for s in shape[batch_dims:])
+    n = int(np.prod(inner))
+
+    eye = jnp.eye(n, dtype=jnp.result_type(float)).reshape((n, *inner))
+    probes = jnp.broadcast_to(eye.reshape((n, *(1,) * len(batch), *inner)), (n, *batch, *inner))
+    columns = jax.vmap(matvec)(probes).reshape((n, *batch, n))
+    factor = jax.scipy.linalg.lu_factor(jnp.moveaxis(columns, 0, -1))
+
+    def solve(rhs):
+        return jax.scipy.linalg.lu_solve(factor, rhs.reshape((*batch, n))).reshape(shape)
+
+    return solve
+
+
 def _smoother(op: CollocationOperator, options: CollocationOptions):
     """Relaxation for one multigrid level.
 
@@ -983,7 +1006,12 @@ def _preconditioner(
         ``(precond, shapes)``: the ``r -> M^{-1} r`` callable and the grid shapes
         of the hierarchy, finest first.
     """
-    from solvax.precond import dense_coarse_solve, multigrid, semicoarsening_hierarchy
+    from solvax.precond import multigrid, semicoarsening_hierarchy
+
+    try:  # a released solver library may predate the batched coarsest-level solve
+        from solvax.precond import dense_coarse_solve
+    except ImportError:  # pragma: no cover - exercised only against older releases
+        dense_coarse_solve = _dense_coarse_solve_fallback
 
     coarse_options = replace(options, stencil=options.relaxation_stencil)
 
