@@ -662,6 +662,25 @@ def _build_section(section_name: str, nml: RawNamelist) -> Any:
     return cls(**kwargs)
 
 
+def _widened_upwind_scheme_codes() -> Tuple[Tuple[int, ...], Tuple[int, ...]]:
+    """The dkx-only widened-upwind namelist codes, ``(angle, magnetic drift)``.
+
+    These extend ``thetaDerivativeScheme`` / ``zetaDerivativeScheme`` and
+    ``magneticDriftDerivativeScheme`` past the values validateInput.F90 accepts,
+    so they are opt-in only and never a default. :mod:`dkx.phase_space` owns the
+    numbering; the import is deferred so this module stays a leaf.
+    """
+    from dkx.phase_space import (
+        _WIDENED_ANGLE_DERIVATIVE_SCHEME_MAP,
+        _WIDENED_MAGNETIC_DRIFT_SCHEME_MAP,
+    )
+
+    return (
+        tuple(sorted(_WIDENED_ANGLE_DERIVATIVE_SCHEME_MAP)),
+        tuple(sorted(_WIDENED_MAGNETIC_DRIFT_SCHEME_MAP)),
+    )
+
+
 def _validate(inp: SfincsInput) -> SfincsInput:
     """Replicate the checks of validateInput.F90 that dkx relies on.
 
@@ -723,10 +742,22 @@ def _validate(inp: SfincsInput) -> SfincsInput:
         raise ValueError("xMax must be positive.")
     if res.solver_tolerance <= 0:
         raise ValueError("solverTolerance must be positive.")
-    if other.theta_derivative_scheme not in (0, 1, 2):
-        raise ValueError("thetaDerivativeScheme must be 0, 1, or 2.")
-    if other.zeta_derivative_scheme not in (0, 1, 2):
-        raise ValueError("zetaDerivativeScheme must be 0, 1, or 2.")
+    widened_angle, widened_drift = _widened_upwind_scheme_codes()
+    if other.theta_derivative_scheme not in (0, 1, 2) + widened_angle:
+        raise ValueError(
+            "thetaDerivativeScheme must be 0, 1, or 2, or one of the dkx-only widened "
+            f"upwind codes {list(widened_angle)}."
+        )
+    if other.zeta_derivative_scheme not in (0, 1, 2) + widened_angle:
+        raise ValueError(
+            "zetaDerivativeScheme must be 0, 1, or 2, or one of the dkx-only widened "
+            f"upwind codes {list(widened_angle)}."
+        )
+    if other.magnetic_drift_derivative_scheme not in (0, 1, 2, 3, -1, -2, -3) + widened_drift:
+        raise ValueError(
+            "magneticDriftDerivativeScheme must be 0, +/-1, +/-2, or +/-3, or one of the "
+            f"dkx-only widened upwind codes {list(widened_drift)}."
+        )
     if not 1 <= other.x_grid_scheme <= 8:
         raise ValueError("xGridScheme must be between 1 and 8.")
     if not -2 <= other.x_dot_derivative_scheme <= 11:
