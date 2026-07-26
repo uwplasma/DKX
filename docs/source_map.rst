@@ -60,6 +60,14 @@ Physics and numerics:
 - ``solve.py``: the three-tier solve policy (structured block elimination,
   recycled Krylov with a coarse-operator preconditioner, host direct referee)
   on the external ``solvax`` library; implicit differentiation.
+- ``multigrid.py``: the semicoarsened geometric-multigrid tier-2
+  preconditioner selected by ``solve(preconditioner="multigrid")``:
+  rediscretized coarse operators on coarsened ``(theta, zeta[, xi])`` grids,
+  pitch-collocation and Legendre-plane relaxations, and the block-Thomas solve
+  on the coarsest grid; plus the pitch-basis diagnostics
+  (``pitch_collocation_surrogate``, ``line_diagonal_dominance``,
+  ``line_smoother_spectral_radius``) that measure why that route cannot reach
+  tolerance on a Legendre-modal pitch discretization.
 - ``phi1.py``: the Phi1/quasineutrality Newton solve.
 - ``moments.py``: velocity-space moments, flux families, transport matrices,
   NTV, classical transport (``diagnostics.F90``,
