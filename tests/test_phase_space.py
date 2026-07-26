@@ -11,6 +11,12 @@ agreement with the modules being replaced:
 * the Legendre coupling formulas inlined in ``operators/profile_collisionless``
 
 plus a few absolute checks (quadrature exactness, hardcoded nodes).
+
+The widened upwind stencils are a dkx-only extension with no Fortran
+counterpart, so their referee is the mathematics instead: moment conditions,
+measured order of accuracy, measured diagonal dominance, dissipativity of the
+Fourier symbol, and agreement with the centered discretization on a solved
+monoenergetic transport coefficient.
 """
 
 from __future__ import annotations
@@ -38,9 +44,348 @@ def assert_exact(new, old) -> None:
 
 
 def test_uniform_periodic_diff_matrices_rejects_dropped_schemes() -> None:
-    for scheme in (1, 2, 3, 11, 12, 13, 21, 30, 42, 52, 81, 92, 101, 112, 121, 131):
+    for scheme in (1, 2, 3, 11, 12, 13, 21, 30, 42, 52, 81, 92, 101, 112, 121, 131, 201, 240):
         with pytest.raises(ValueError):
             phase_space.uniform_periodic_diff_matrices(n=8, x_min=0.0, x_max=1.0, scheme=scheme)
+
+
+# ---------------------------------------------------------------------------
+# Widened upwind stencils (dkx-only extension, opt-in and never a default)
+# ---------------------------------------------------------------------------
+
+#: Diagonal-to-off-diagonal row-sum ratio of every first-derivative stencil the
+#: periodic builder offers, measured once and pinned here. The two centered
+#: schemes carry no diagonal weight at all, which is exactly why a relaxation
+#: smoother or a diagonal preconditioner is useless on the advection operator
+#: they generate.
+_EXPECTED_DIAGONAL_DOMINANCE = {
+    0: 0.0,  # 3-point centered (thetaDerivativeScheme 1)
+    10: 0.0,  # 5-point centered (thetaDerivativeScheme 2)
+    20: 0.0,  # Fourier spectral collocation (thetaDerivativeScheme 0)
+    80: 1.0 / 3.0,  # magneticDriftDerivativeScheme 1
+    100: 5.0 / 14.0,  # magneticDriftDerivativeScheme 2
+    120: 2.0 / 11.0,  # magneticDriftDerivativeScheme 3
+    200: 5.0 / 7.0,  # widened 3rd order, positive wind
+    210: 5.0 / 7.0,  # widened 3rd order, negative wind
+    220: 13.0 / 21.0,  # widened 4th order, positive wind
+    230: 13.0 / 21.0,  # widened 4th order, negative wind
+}
+
+
+def _row_diagonal_dominance(matrix: np.ndarray, row: int) -> float:
+    """|A_ii| / sum_{j != i} |A_ij| for one row of a differentiation matrix."""
+    values = np.abs(np.asarray(matrix)[row])
+    return float(values[row] / (values.sum() - values[row]))
+
+
+@pytest.mark.parametrize("order", [3, 4])
+@pytest.mark.parametrize("wind_sign", [1.0, -1.0])
+def test_widened_upwind_stencil_satisfies_its_moment_conditions(
+    order: int, wind_sign: float
+) -> None:
+    """The stencil reproduces d/dx exactly on polynomials up to degree ``order``."""
+    offsets, coefficients = phase_space.widened_upwind_stencil(order=order, wind_sign=wind_sign)
+    assert len(offsets) == order + 1
+    assert len(set(offsets)) == order + 1
+    o = np.asarray(offsets, dtype=float)
+    c = np.asarray(coefficients, dtype=float)
+    for m in range(order + 1):
+        expected = 1.0 if m == 1 else 0.0
+        np.testing.assert_allclose(float(c @ (o**m)), expected, rtol=0.0, atol=1e-14)
+    # The order+2'th moment must NOT vanish, or the stencil would be more
+    # accurate than advertised and the pinned truncation constants would be wrong.
+    assert abs(float(c @ (o ** (order + 1)))) > 1e-3
+
+
+def test_widened_upwind_stencil_orientation_is_a_mirror() -> None:
+    """The negative-wind stencil is the reflection of the positive-wind one."""
+    for order in (3, 4):
+        plus_offsets, plus_coefficients = phase_space.widened_upwind_stencil(order=order)
+        minus_offsets, minus_coefficients = phase_space.widened_upwind_stencil(
+            order=order, wind_sign=-1.0
+        )
+        assert minus_offsets == tuple(sorted(-o for o in plus_offsets))
+        mirrored = dict(zip(minus_offsets, minus_coefficients))
+        for offset, coefficient in zip(plus_offsets, plus_coefficients):
+            assert mirrored[-offset] == pytest.approx(-coefficient, rel=0.0, abs=1e-15)
+        # The positive-wind stencil leans upstream and puts positive weight on
+        # the node itself, which is what makes the operator diagonally dominant.
+        assert dict(zip(plus_offsets, plus_coefficients))[0] > 0.0
+        assert sum(1 for o in plus_offsets if o < 0) > sum(1 for o in plus_offsets if o > 0)
+    with pytest.raises(ValueError, match="wind_sign"):
+        phase_space.widened_upwind_stencil(order=4, wind_sign=0.0)
+    with pytest.raises(ValueError, match="Invalid widened upwind order"):
+        phase_space.widened_upwind_stencil(order=2)
+
+
+@pytest.mark.parametrize("order", [3, 4])
+def test_widened_upwind_converges_at_its_advertised_order(order: int) -> None:
+    """Error ratios under grid refinement recover the formal order of accuracy."""
+    scheme_plus, scheme_minus = phase_space._WIDENED_UPWIND_SCHEMES[order]
+    for scheme in (scheme_plus, scheme_minus):
+        errors = []
+        for n in (32, 64, 128, 256):
+            x, _, ddx, d2dx2 = phase_space.uniform_periodic_diff_matrices(
+                n=n, x_min=0.0, x_max=2 * math.pi, scheme=scheme
+            )
+            x = np.asarray(x)
+            f = np.sin(3.0 * x) + np.cos(x)
+            exact = 3.0 * np.cos(3.0 * x) - np.sin(x)
+            errors.append(float(np.max(np.abs(np.asarray(ddx) @ f - exact))))
+            # Like the Fortran upwind schemes 100-130, only d/dx is populated.
+            assert np.all(np.asarray(d2dx2) == 0.0)
+        rates = [math.log2(a / b) for a, b in zip(errors, errors[1:])]
+        assert min(rates) > order - 0.25, (scheme, errors, rates)
+        assert max(rates) < order + 0.25, (scheme, errors, rates)
+
+
+def test_widened_upwind_is_more_diagonally_dominant_than_centered() -> None:
+    """The measured diagonal/off-diagonal row-sum ratio, scheme by scheme."""
+    n = 33
+    measured = {}
+    for scheme, expected in _EXPECTED_DIAGONAL_DOMINANCE.items():
+        _, _, ddx, _ = phase_space.uniform_periodic_diff_matrices(
+            n=n, x_min=0.0, x_max=2 * math.pi, scheme=scheme
+        )
+        measured[scheme] = _row_diagonal_dominance(np.asarray(ddx), n // 2)
+        assert measured[scheme] == pytest.approx(expected, rel=1e-12, abs=1e-14)
+        offsets, coefficients = (
+            phase_space.widened_upwind_stencil(
+                order=phase_space._WIDENED_UPWIND_SCHEME_INFO[scheme][0],
+                wind_sign=phase_space._WIDENED_UPWIND_SCHEME_INFO[scheme][1],
+            )
+            if scheme in phase_space._WIDENED_UPWIND_SCHEME_INFO
+            else (None, None)
+        )
+        if offsets is not None:
+            assert phase_space.stencil_diagonal_dominance(offsets, coefficients) == pytest.approx(
+                measured[scheme], rel=1e-12
+            )
+    # The point of the widened stencils: strictly more diagonal weight than any
+    # centered scheme (which has none) and than the compact upwind stencils of
+    # the same or higher order.
+    assert measured[200] > measured[100] > measured[10] == 0.0
+    assert measured[200] > 2.0 * measured[80]  # 4-point stencils, same order
+    assert measured[220] > 3.0 * measured[120]  # 5- vs 6-point, same nominal order
+
+
+def test_stencil_diagonal_dominance_bounds() -> None:
+    # sum_j c_j = 0 caps the ratio at 1, attained only by 2-point upwinding.
+    assert phase_space.stencil_diagonal_dominance((-1, 0), (-1.0, 1.0)) == pytest.approx(1.0)
+    assert phase_space.stencil_diagonal_dominance((-1, 0, 1), (-0.5, 0.0, 0.5)) == 0.0
+    assert phase_space.stencil_diagonal_dominance((0,), (0.0,)) == math.inf
+    with pytest.raises(ValueError):
+        phase_space.stencil_diagonal_dominance((0, 1), (1.0,))
+
+
+@pytest.mark.parametrize("order", [3, 4])
+def test_widened_upwind_symbol_is_dissipative_for_the_matching_wind(order: int) -> None:
+    """Re of the Fourier symbol is >= 0 upwind and <= 0 with the wrong orientation.
+
+    A negative real part means the discrete advection operator amplifies rather
+    than damps that mode, so getting the orientation backwards is unstable; this
+    pins the sign convention of :func:`widened_upwind_stencil`.
+    """
+    k = np.linspace(-math.pi, math.pi, 1001)
+    offsets, coefficients = phase_space.widened_upwind_stencil(order=order)
+    symbol = sum(c * np.exp(1j * k * o) for o, c in zip(offsets, coefficients))
+    assert symbol.real.min() > -1e-12
+    assert symbol.real[-1] > 1.0  # strong damping of the grid-Nyquist mode
+    wrong = sum(
+        c * np.exp(1j * k * o)
+        for o, c in zip(*phase_space.widened_upwind_stencil(order=order, wind_sign=-1.0))
+    )
+    assert wrong.real.max() < 1e-12
+
+
+def test_widened_upwind_periodic_diff_matrix_accepts_a_per_point_wind() -> None:
+    n = 17
+    plus = np.asarray(
+        phase_space.widened_upwind_periodic_diff_matrix(
+            n=n, x_min=0.0, x_max=2 * math.pi, order=4, wind_sign=1.0
+        )
+    )
+    minus = np.asarray(
+        phase_space.widened_upwind_periodic_diff_matrix(
+            n=n, x_min=0.0, x_max=2 * math.pi, order=4, wind_sign=-1.0
+        )
+    )
+    # Scalar orientations agree with the corresponding internal scheme codes.
+    for scheme, reference in ((220, plus), (230, minus)):
+        _, _, ddx, _ = phase_space.uniform_periodic_diff_matrices(
+            n=n, x_min=0.0, x_max=2 * math.pi, scheme=scheme
+        )
+        assert_exact(ddx, reference)
+    # A per-point wind picks the orientation row by row.
+    signs = np.where(np.arange(n) % 2 == 0, 1.0, -1.0)
+    mixed = np.asarray(
+        phase_space.widened_upwind_periodic_diff_matrix(
+            n=n, x_min=0.0, x_max=2 * math.pi, order=4, wind_sign=signs
+        )
+    )
+    assert_exact(mixed[signs > 0], plus[signs > 0])
+    assert_exact(mixed[signs < 0], minus[signs < 0])
+    with pytest.raises(ValueError, match="nonzero at every grid point"):
+        phase_space.widened_upwind_periodic_diff_matrix(
+            n=n, x_min=0.0, x_max=2 * math.pi, order=4, wind_sign=np.zeros(n)
+        )
+    with pytest.raises(ValueError, match="stencil span"):
+        phase_space.widened_upwind_periodic_diff_matrix(
+            n=6, x_min=0.0, x_max=2 * math.pi, order=4, wind_sign=1.0
+        )
+
+
+def test_widened_upwind_scheme_codes_cannot_collide_with_upstream() -> None:
+    """The dkx-only codes sit outside every SFINCS v3 numbering range."""
+    # Internal uniformDiffMatrices codes: v3 uses 0-130 (aperiodic = periodic + 2).
+    assert min(phase_space._WIDENED_UPWIND_SCHEME_INFO) >= 200
+    assert not set(phase_space._WIDENED_UPWIND_SCHEME_INFO) & set(
+        phase_space._ANGLE_DERIVATIVE_SCHEME_MAP.values()
+    )
+    assert not set(phase_space._WIDENED_UPWIND_SCHEME_INFO) & phase_space._APERIODIC_SCHEMES
+    # Namelist codes: v3 uses 0-2 for the angular schemes and -3..3 for the
+    # magnetic-drift scheme, so the 100 block is unreachable from upstream.
+    for code in phase_space._WIDENED_ANGLE_DERIVATIVE_SCHEME_MAP:
+        assert abs(code) >= 100
+        assert code not in phase_space._ANGLE_DERIVATIVE_SCHEME_MAP
+    for code in phase_space._WIDENED_MAGNETIC_DRIFT_SCHEME_MAP:
+        assert abs(code) >= 100
+        assert code not in phase_space._MAGNETIC_DRIFT_SCHEME_MAP
+
+
+def test_make_grids_widened_upwind_is_opt_in_and_never_default() -> None:
+    default = phase_space.make_grids(n_theta=11, n_zeta=11, n_xi=4, n_x=3, n_l=2, n_periods=4)
+    centered = phase_space.uniform_periodic_diff_matrices(
+        n=11, x_min=0.0, x_max=2 * math.pi, scheme=10
+    )[2]
+    # Defaults stay on the Fortran-parity centered / compact-upwind schemes.
+    assert_exact(default.ddtheta, centered)
+    assert_exact(
+        default.ddtheta_magdrift_plus,
+        phase_space.uniform_periodic_diff_matrices(
+            n=11, x_min=0.0, x_max=2 * math.pi, scheme=120
+        )[2],
+    )
+    for namelist_code, scheme in phase_space._WIDENED_ANGLE_DERIVATIVE_SCHEME_MAP.items():
+        grids = phase_space.make_grids(
+            n_theta=11,
+            n_zeta=11,
+            n_xi=4,
+            n_x=3,
+            n_l=2,
+            n_periods=4,
+            theta_derivative_scheme=namelist_code,
+            zeta_derivative_scheme=namelist_code,
+        )
+        expected = phase_space.uniform_periodic_diff_matrices(
+            n=11, x_min=0.0, x_max=2 * math.pi, scheme=scheme
+        )[2]
+        assert_exact(grids.ddtheta, expected)
+        assert _row_diagonal_dominance(np.asarray(grids.ddtheta), 5) > 0.6
+    for namelist_code, (plus, minus) in phase_space._WIDENED_MAGNETIC_DRIFT_SCHEME_MAP.items():
+        grids = phase_space.make_grids(
+            n_theta=11,
+            n_zeta=11,
+            n_xi=4,
+            n_x=3,
+            n_l=2,
+            n_periods=4,
+            magnetic_drift_derivative_scheme=namelist_code,
+        )
+        for got, want in (
+            (grids.ddtheta_magdrift_plus, plus),
+            (grids.ddtheta_magdrift_minus, minus),
+        ):
+            assert_exact(
+                got,
+                phase_space.uniform_periodic_diff_matrices(
+                    n=11, x_min=0.0, x_max=2 * math.pi, scheme=want
+                )[2],
+            )
+    with pytest.raises(ValueError, match="thetaDerivativeScheme"):
+        phase_space.make_grids(
+            n_theta=11, n_zeta=11, n_xi=4, n_x=3, n_l=2, n_periods=4,
+            theta_derivative_scheme=105,
+        )
+
+
+_MONOENERGETIC_DECK = """
+&general
+  RHSMode = 3
+/
+&geometryParameters
+  geometryScheme = 1
+  epsilon_t = -0.07053d+0
+  epsilon_h = 0.05067d+0
+  iota = 0.4542d+0
+  GHat = 3.7481d+0
+  IHat = 0d+0
+  helicity_l = 2
+  helicity_n = 10
+  B0OverBBar = 1
+/
+&speciesParameters
+/
+&physicsParameters
+  nuPrime = 1.0d+0
+  EStar = 0.0d+0
+  collisionOperator = 1
+  includeXDotTerm = .false.
+  includeElectricFieldTermInXiDot = .false.
+  useDKESExBDrift = .true.
+  includePhi1 = .false.
+/
+&resolutionParameters
+  Ntheta = {n_angle}
+  Nzeta = {n_angle}
+  Nxi = 18
+  Nx = 1
+  solverTolerance = 1d-10
+/
+&otherNumericalParameters
+  thetaDerivativeScheme = {scheme}
+  zetaDerivativeScheme = {scheme}
+/
+"""
+
+
+def _monoenergetic_d11(*, n_angle: int, scheme: int) -> float:
+    from dkx.inputs import sfincs_input_from_raw
+    from dkx.run import run_transport_matrix
+
+    text = _MONOENERGETIC_DECK.format(n_angle=n_angle, scheme=scheme)
+    run = run_transport_matrix(
+        sfincs_input_from_raw(parse_sfincs_input_text(text)), emit=None
+    )
+    return float(np.asarray(run.transport_matrix)[0, 0])
+
+
+def test_widened_upwind_solve_agrees_with_the_centered_discretization() -> None:
+    """A solved D11 converges to the centered scheme's answer under refinement.
+
+    The two schemes are different discretizations, so they agree only up to
+    truncation error and the comparison has to be made where both are
+    converged. The tolerances follow from the leading truncation constants: the
+    widened stencils carry ``+1/4`` (3rd order) and ``+1/5`` (4th order)
+    against ``-1/30`` for the centered 4th-order scheme, so the gap between two
+    solved D11 values is expected to run roughly an order of magnitude above
+    the centered scheme's own discretization error. Refining the angular grid
+    must therefore shrink the gap at the widened stencil's own order, which is
+    the real assertion here; the absolute bound is deliberately loose.
+    """
+    coarse, fine = 15, 21
+    reference = {n: _monoenergetic_d11(n_angle=n, scheme=2) for n in (coarse, fine)}
+    # The centered scheme is itself converged at these resolutions, or the
+    # comparison below would be meaningless.
+    assert abs(reference[fine] - reference[coarse]) / abs(reference[fine]) < 5e-3
+    for scheme in (103, 104):
+        gaps = {}
+        for n in (coarse, fine):
+            value = _monoenergetic_d11(n_angle=n, scheme=scheme)
+            gaps[n] = abs(value - reference[n]) / abs(reference[n])
+        assert gaps[coarse] < 2.0e-2, (scheme, gaps)
+        assert gaps[fine] < 5.0e-3, (scheme, gaps)
+        assert gaps[fine] < gaps[coarse] / 2.0, (scheme, gaps)
 
 
 def test_spectral_theta_derivative_is_exact_on_fourier_modes() -> None:
