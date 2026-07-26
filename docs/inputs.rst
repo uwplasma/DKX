@@ -291,6 +291,45 @@ acted upon.
    * - ``whichParallelSolverToFactorPreconditioner`` / ``PETSCPreallocationStrategy``
      - ``1`` / ``1``
      - legacy PETSc knobs (retained for compatibility)
+   * - ``RosenbluthMethod``
+     - ``'quadpack'``
+     - Rosenbluth-potential quadrature (:ref:`rosenbluth-method`); a ``dkx``
+       extension with no Fortran v3 counterpart
+
+.. _rosenbluth-method:
+
+``RosenbluthMethod``: Rosenbluth-potential quadrature
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+How the Rosenbluth potential response matrices are integrated for
+``collisionOperator = 0`` with ``xGridScheme = 5``/``6``:
+
+``'quadpack'`` (default)
+   The upstream Fortran v3 algorithm — QUADPACK on every moment, at fixed
+   ``1e-13`` tolerances. This is the parity route.
+
+``'hybrid'``
+   QUADPACK for :math:`L = 0\ldots3` — bitwise, so the particle, energy, and
+   parallel-momentum conservation moments are untouched — and closed-form
+   moments for :math:`L \ge 4`. The high-:math:`L` blocks are where the
+   near-zero polynomial cancellations and the sharply peaked negative-power
+   upper moments make a fixed QUADPACK tolerance ill-conditioned; the analytic
+   route evaluates them as an incomplete-gamma recurrence with a large-argument
+   continued fraction and accumulates the polynomial moments in extended
+   precision.
+
+``'analytic'``
+   Closed-form moments at every :math:`L`, including the low-:math:`L` blocks.
+   Faster, and it may differ from the Fortran at strict-parity level.
+
+The same selector is available as the ``rosenbluth_method=`` argument of
+:func:`dkx.collisions.make_fokker_planck_v3_operator` and
+:func:`dkx.collisions.make_fokker_planck_v3_phi1_operator`, and as the
+``method=`` argument of
+:func:`dkx.collisions.rosenbluth_potential_terms_v3_np`. The
+``DKX_ROSENBLUTH_METHOD`` environment variable overrides the default only when
+no namelist key or API argument is given. An unrecognized value raises rather
+than falling back.
 
 ``&preconditionerOptions``
 --------------------------
