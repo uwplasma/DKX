@@ -435,6 +435,43 @@ def _rosenbluth_potential_terms_v3_np_quadpack(
     return terms
 
 
+ROSENBLUTH_METHODS: tuple[str, ...] = ("quadpack", "analytic", "hybrid")
+"""Accepted ``rosenbluth_method`` values, in order of increasing Fortran divergence."""
+
+
+def resolve_rosenbluth_method(method: str | None) -> str:
+    """Normalize and validate a Rosenbluth-quadrature selector.
+
+    ``method`` is the explicit route — the ``rosenbluth_method=`` argument of
+    the collision-operator builders, which the ``RosenbluthMethod`` key of
+    ``&otherNumericalParameters`` feeds.  Only when it is ``None`` does the
+    ``DKX_ROSENBLUTH_METHOD`` environment variable act as an override, and
+    with neither set the default is ``"quadpack"`` — the upstream Fortran v3
+    algorithm, for parity.
+
+    Raises:
+        ValueError: for any selector outside :data:`ROSENBLUTH_METHODS`, so a
+            mistyped namelist key or environment override fails loudly instead
+            of silently falling back to the default.
+    """
+    raw = method
+    if raw is None:
+        raw = os.environ.get("DKX_ROSENBLUTH_METHOD", "") or None
+    if raw is None:
+        return "quadpack"
+    resolved = str(raw).strip().lower()
+    if not resolved:
+        return "quadpack"
+    if resolved not in ROSENBLUTH_METHODS:
+        raise ValueError(
+            f"Unknown RosenbluthPotentialTerms method={raw!r}. "
+            f"Use one of {', '.join(repr(m) for m in ROSENBLUTH_METHODS)} "
+            "(namelist RosenbluthMethod, the rosenbluth_method= builder "
+            "argument, or the DKX_ROSENBLUTH_METHOD override)."
+        )
+    return resolved
+
+
 def rosenbluth_potential_terms_v3_np(
     *,
     x: np.ndarray,  # (X,)
@@ -450,17 +487,18 @@ def rosenbluth_potential_terms_v3_np(
 ) -> np.ndarray:
     """Compute v3 `RosenbluthPotentialTerms` for xGridScheme=5/6 (new scheme).
 
+    Args:
+        method: one of :data:`ROSENBLUTH_METHODS`, resolved by
+            :func:`resolve_rosenbluth_method` (``None`` consults
+            ``DKX_ROSENBLUTH_METHOD`` and then falls back to ``"quadpack"``).
+
     Returns
     -------
     terms:
       Array of shape (S, S, NL, X, X) with index ordering:
       (species_row, species_col, L, x_row, x_col).
     """
-    if method is None:
-        # Default to the upstream Fortran algorithm for parity. Users can opt into the
-        # faster analytic path via `DKX_ROSENBLUTH_METHOD=analytic`.
-        method = os.environ.get("DKX_ROSENBLUTH_METHOD", "").strip().lower() or "quadpack"
-    method = str(method).strip().lower()
+    method = resolve_rosenbluth_method(method)
 
     if method == "quadpack":
         return _rosenbluth_potential_terms_v3_np_quadpack(
@@ -507,10 +545,10 @@ def rosenbluth_potential_terms_v3_np(
             )
         return terms
     if method != "analytic":
-        raise ValueError(
-            f"Unknown RosenbluthPotentialTerms method={method!r}. "
-            "Use 'analytic', 'hybrid', or 'quadpack'."
-        )
+        # Unreachable through resolve_rosenbluth_method; a structural guard so
+        # a new entry in ROSENBLUTH_METHODS without a branch here fails loudly
+        # rather than falling through to the analytic path.
+        raise ValueError(f"RosenbluthPotentialTerms method={method!r} has no branch.")
 
     x = np.asarray(x, dtype=np.float64)
     x_weights = np.asarray(x_weights, dtype=np.float64)
@@ -772,8 +810,16 @@ def make_fokker_planck_v3_operator(
     nl: int,
     n_xi_for_x: np.ndarray,
     strict_parity: bool = False,
+    rosenbluth_method: str | None = None,
 ) -> FokkerPlanckV3Operator:
-    """Construct the collisionOperator=0 (no-Phi1) v3 collision operator."""
+    """Construct the collisionOperator=0 (no-Phi1) v3 collision operator.
+
+    Args:
+        rosenbluth_method: how the Rosenbluth potential response matrices are
+            evaluated — one of :data:`ROSENBLUTH_METHODS`, resolved by
+            :func:`resolve_rosenbluth_method`.  ``None`` keeps the Fortran-parity
+            ``"quadpack"`` default unless ``DKX_ROSENBLUTH_METHOD`` overrides it.
+    """
     x = np.asarray(x, dtype=np.float64)
     x_weights = np.asarray(x_weights, dtype=np.float64)
     ddx = np.asarray(ddx, dtype=np.float64)
@@ -803,6 +849,7 @@ def make_fokker_planck_v3_operator(
         n_hats=n_hats,
         t_hats=t_hats,
         nl=int(nl),
+        method=rosenbluth_method,
     )  # (S,S,NL,X,X)
 
     # Build nuDHat and CECD (both omit the overall factor nu_n, matching v3).
@@ -1057,11 +1104,15 @@ def make_fokker_planck_v3_phi1_operator(
     nl: int,
     alpha: float,
     n_xi_for_x: np.ndarray,
+    rosenbluth_method: str | None = None,
 ) -> FokkerPlanckV3Phi1Operator:
     """Construct the poloidally varying v3 FP collision operator (`includePhi1InCollisionOperator=true`).
 
     The returned operator factors out the (theta,zeta) dependence into a runtime scaling by
     `n_pol = nHat * exp(-Z*alpha*Phi1Hat/THat)`.
+
+    Args:
+        rosenbluth_method: as in :func:`make_fokker_planck_v3_operator`.
     """
     x = np.asarray(x, dtype=np.float64)
     x_weights = np.asarray(x_weights, dtype=np.float64)
@@ -1093,6 +1144,7 @@ def make_fokker_planck_v3_phi1_operator(
         n_hats=np.ones_like(n_hats),
         t_hats=t_hats,
         nl=int(nl),
+        method=rosenbluth_method,
     )  # (S,S,NL,X,X)
 
     k_nu = np.zeros((n_species, n_species, n_x), dtype=np.float64)
