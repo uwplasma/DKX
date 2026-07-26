@@ -143,6 +143,7 @@ __all__ = [
     "auto_solve_peak_memory_bytes",
     "build_coarse_preconditioner",
     "build_tier1_solver",
+    "build_tier2_preconditioner",
     "materialize_dense",
     "solve",
     "tier1_available",
@@ -186,6 +187,13 @@ _SOLVE_CPU_MAX_TIER1_ENV = "DKX_SOLVE_CPU_MAX_SIZE_TIER1"
 _SOLVE_CPU_MAX_TIER2_ENV = "DKX_SOLVE_CPU_MAX_SIZE_TIER2"
 _SOLVE_CPU_MAX_TIER1_DEFAULT = 0
 _SOLVE_CPU_MAX_TIER2_DEFAULT = 0
+
+# Tier-2 preconditioner routes of ``solve(preconditioner=...)``.  ``"coarse"``
+# is the historical default (exact block-Thomas of the SFINCS-simplified
+# operator); ``"multigrid"`` swaps its inner f-block inverse for the
+# semicoarsened V-cycle of :mod:`dkx.multigrid` and needs a solvax newer than
+# the pinned release (:func:`dkx.multigrid.multigrid_available`).
+_TIER2_PRECONDITIONERS = ("coarse", "multigrid", "none")
 
 
 # =============================================================================
@@ -1111,6 +1119,57 @@ def _bordered_schur_precond(
     return precond
 
 
+# Invertibility floor of the coarse f-block, relative to the operator's own band
+# magnitude.  1e-8 is tiny enough to leave a real diagonal -- and the tightly
+# clustered preconditioning it gives -- untouched, yet keeps an all-zero-diagonal
+# collisionless deck out of an exact-zero pivot.  Mirrored by
+# ``dkx.multigrid._DIAGONAL_FLOOR``.
+_COARSE_DIAGONAL_FLOOR = 1e-8
+# Experiment knob for :func:`_l0_pin_gamma`: ``"never"``, ``"legacy"``, or a
+# float overriding the relative level of the l=0 null-space pin.
+_L0_PIN_ENV = "DKX_COARSE_L0_PIN"
+
+
+def _l0_pin_gamma(
+    defect: jnp.ndarray, band: jnp.ndarray, scale: jnp.ndarray, c0: jnp.ndarray
+) -> jnp.ndarray:
+    """``(S, X)`` weight of the rank-one ``ones (x) c0`` pin on the ``l = 0`` block.
+
+    The simplified ``l = 0`` diagonal block ``A_0`` has one *known* null vector:
+    a distribution constant on the flux surface, annihilated by streaming, by
+    the mirror force, by ExB, and by pitch-angle scattering
+    (``nu l(l+1)/2 = 0`` at ``l = 0``).  ``defect = max_i |sum_j (A_0)_ij|`` is
+    exactly that vector's residual, so it measures how singular ``A_0`` really
+    is in the one direction this pin removes -- and it is what makes the pin
+    adaptive rather than unconditional.
+
+    The pin raises that direction to the *same* relative level as the isotropic
+    invertibility floor and no further: with ``sum_j (ones (x) c0)_ij = sum(c0)``
+    the added row sum is ``gamma sum(c0)``, so
+
+        gamma sum(c0) = max(0, floor * band - defect)
+
+    tops the constant direction up to ``floor * band`` when the block really is
+    singular there and switches the pin off completely -- ``gamma = 0`` -- as
+    soon as the block's own ``l = 0`` diagonal already exceeds it.  Sizing it by
+    the floor rather than by ``scale`` (the mean ``|diagonal|`` over *all* ``L``,
+    which the ``nu l(l+1)/2`` collision diagonal makes ~1e3 times larger at high
+    ``l``) is what keeps the coarse operator close to the operator it
+    preconditions; see :func:`build_coarse_preconditioner`.
+
+    ``DKX_COARSE_L0_PIN`` overrides the floor for experiments: ``"never"``
+    disables the pin, ``"legacy"`` restores the unconditional full-strength pin,
+    and a float sets the relative level directly.
+    """
+    mode = os.environ.get(_L0_PIN_ENV, "").strip().lower()
+    if mode == "legacy":
+        return jnp.broadcast_to(scale / jnp.max(jnp.abs(c0)), defect.shape)
+    level = _COARSE_DIAGONAL_FLOOR if not mode else (0.0 if mode == "never" else float(mode))
+    if level <= 0.0:
+        return jnp.zeros_like(defect)
+    return jnp.maximum(level * band - defect, 0.0) / jnp.sum(c0)
+
+
 def build_coarse_preconditioner(
     op: KineticOperator, *, drop_l_coupling: bool = False
 ) -> tuple[Callable[[jnp.ndarray], jnp.ndarray], Callable[[jnp.ndarray], jnp.ndarray]]:
@@ -1199,24 +1258,37 @@ def build_coarse_preconditioner(
         jnp.maximum(jnp.max(jnp.abs(lower), axis=(2, 3, 4)), jnp.max(jnp.abs(upper), axis=(2, 3, 4))),
     )  # (S, X)
     band = jnp.where(band > 0.0, band, 1.0)
-    # 1e-8 (relative to the band) is tiny enough to leave a real diagonal -- and
-    # the tightly-clustered preconditioning it gives -- untouched, yet keeps the
-    # all-zero-diagonal collisionless case out of an exact-zero pivot.
-    diag = diag + (1e-8 * band)[:, :, None, None, None] * eye[None, None, None, :, :]
+    # How singular the ``l = 0`` diagonal block actually is in the direction the
+    # rank-one pin below removes, measured *before* the floor masks it: the
+    # constant-on-surface vector is that block's exact null vector, so its row
+    # sums ``A_0 @ ones`` are the whole defect.  Adding the floor first would
+    # make every block look regular here (an all-zero ``A_0`` floored to
+    # ``floor * I`` has row sums ``floor``), which is precisely the case the pin
+    # exists for.  See :func:`_l0_pin_gamma`.
+    l0_defect = jnp.max(jnp.abs(jnp.sum(diag[:, :, 0], axis=-1)), axis=-1)  # (S, X)
+    floor = _COARSE_DIAGONAL_FLOOR * band
+    diag = diag + floor[:, :, None, None, None] * eye[None, None, None, :, :]
 
     # Masked (x, l) rows are identically zero in the operator: pin them with
     # the identity so the coarse factorization stays nonsingular.
     pin = 1.0 - mask  # (X, L)
     diag = diag + pin[None, :, :, None, None] * eye[None, None, None, :, :]
 
-    # Pin the constant-on-surface null space of the l=0 block per (species, x)
-    # (PAS has no l=0 collision diagonal; harmless when the block is regular).
+    # Adaptive rank-one pin of the constant-on-surface null space of the l=0
+    # block, per (species, x): it tops that direction up to the same relative
+    # level as the isotropic floor above when the block really is singular
+    # there, and switches off entirely when the block's own l=0 diagonal already
+    # exceeds it.  Measured on the NCSX 11x21x41x5 tier-2 ladder, the historical
+    # unconditional full-strength pin (``scale``, the mean |diagonal| over *all*
+    # L, which the ``nu l(l+1)/2`` collision diagonal makes ~1e3x larger at high
+    # l) cost GCROT 87 iterations against 21 for the same factorization of the
+    # same operator pinned at the floor.  See :func:`_l0_pin_gamma`.
     c0 = op._fs_average_factor().reshape(-1)
     ones = jnp.ones((n_tz,), dtype=jnp.float64)
     d4 = diag.reshape(batch, n_xi, n_tz, n_tz)
     scale = jnp.mean(jnp.abs(jnp.diagonal(d4, axis1=2, axis2=3)), axis=(1, 2))
     scale = jnp.where(scale > 0.0, scale, 1.0)
-    gamma = scale / jnp.max(jnp.abs(c0))
+    gamma = _l0_pin_gamma(l0_defect, band, scale.reshape(n_s, n_x), c0).reshape(-1)
     d4 = d4.at[:, 0].add(gamma[:, None, None] * jnp.outer(ones, c0)[None, :, :])
 
     factors = jax.vmap(block_thomas_factor)(
@@ -1830,6 +1902,44 @@ def _truncated_partial_residual(
     return jnp.sqrt(jnp.sum(sq, axis=0))
 
 
+def _resolve_preconditioner(preconditioner: str | None, use_preconditioner: bool) -> str:
+    """Normalize the tier-2 preconditioner request.
+
+    ``preconditioner=None`` keeps the historical ``use_preconditioner`` boolean
+    (``True`` -> the coarse block-Thomas preconditioner, ``False`` -> none), so
+    every existing caller is byte-for-byte unaffected.
+    """
+    if preconditioner is None:
+        return "coarse" if use_preconditioner else "none"
+    name = str(preconditioner).strip().lower()
+    if name not in _TIER2_PRECONDITIONERS:
+        raise ValueError(
+            f"unknown preconditioner {preconditioner!r}; expected one of "
+            f"{sorted(_TIER2_PRECONDITIONERS)}"
+        )
+    return name
+
+
+def build_tier2_preconditioner(
+    op: KineticOperator, kind: str, *, drop_l_coupling: bool = False
+) -> tuple[Callable[[jnp.ndarray], jnp.ndarray], Callable[[jnp.ndarray], jnp.ndarray]]:
+    """``(precond, precond_t)`` for the requested tier-2 preconditioner.
+
+    ``"coarse"`` is :func:`build_coarse_preconditioner` (the exact block-Thomas
+    factorization of the SFINCS-simplified operator); ``"multigrid"`` is
+    :func:`dkx.multigrid.build_multigrid_preconditioner`, which approximates
+    the inverse of that *same* operator with a semicoarsened multigrid V-cycle
+    and so is affordable where the cubic-in-``Ntheta*Nzeta`` factorization is
+    not.  Both eliminate the bordered constraint / ``Phi1`` rows identically,
+    and neither changes the solution: they change how fast tier 2 reaches it.
+    """
+    if kind == "coarse":
+        return build_coarse_preconditioner(op, drop_l_coupling=drop_l_coupling)
+    from dkx.multigrid import build_multigrid_preconditioner  # noqa: PLC0415
+
+    return build_multigrid_preconditioner(op, drop_l_coupling=drop_l_coupling)
+
+
 def _solve_tier2(
     op: KineticOperator,
     rhs2d: jnp.ndarray,
@@ -1838,7 +1948,7 @@ def _solve_tier2(
     atol: float,
     x0: jnp.ndarray | None,
     recycle: tuple[jnp.ndarray, jnp.ndarray] | None,
-    use_preconditioner: bool,
+    preconditioner: str,
     drop_l_coupling_in_precond: bool,
     restart: int,
     recycle_dim: int,
@@ -1850,9 +1960,9 @@ def _solve_tier2(
     traced = _is_traced(rhs2d, *jax.tree_util.tree_leaves(op))
     t0 = time.perf_counter()
     precond = precond_t = None
-    if use_preconditioner:
-        precond, precond_t = build_coarse_preconditioner(
-            op, drop_l_coupling=drop_l_coupling_in_precond
+    if preconditioner != "none":
+        precond, precond_t = build_tier2_preconditioner(
+            op, preconditioner, drop_l_coupling=drop_l_coupling_in_precond
         )
         # The preconditioner closure captures the async coarse block-Thomas
         # factorization; force it to complete (a zero probe) so the "build"
@@ -2204,6 +2314,7 @@ def solve(
     check_adjoint: bool = True,
     adjoint_residual_factor: float = DEFAULT_ADJOINT_RESIDUAL_FACTOR,
     use_preconditioner: bool = True,
+    preconditioner: str | None = None,
     drop_l_coupling_in_precond: bool = False,
     restart: int = 30,
     recycle_dim: int = 8,
@@ -2288,7 +2399,35 @@ def solve(
     ``n_blocks = Nxi_for_x[ix]`` (exactly the packed Fortran system) and
     zero-pads everything above, so ramped PAS/DKES decks route through it;
     only the full tier-1 factorization requires uniform ``Nxi_for_x``.
-        use_preconditioner: tier-2 coarse-operator preconditioner on/off.
+        use_preconditioner: tier-2 preconditioner on/off (legacy boolean; a
+            non-``None`` ``preconditioner`` overrides it).
+        preconditioner: which tier-2 preconditioner to build —
+
+            ``"coarse"``
+                the classical one (:func:`build_coarse_preconditioner`): an
+                exact batched block-Thomas factorization of the
+                SFINCS-simplified operator, with dense ``Ntheta*Nzeta``
+                blocks.  ``O(Nxi Nspecies Nx (Ntheta Nzeta)**3)`` time and
+                ``O(Nxi Nspecies Nx (Ntheta Nzeta)**2)`` memory *per solve*.
+            ``"multigrid"``
+                the same simplified operator, inverted approximately by the
+                semicoarsened geometric multigrid V-cycle of
+                :mod:`dkx.multigrid`: linear in the grid size and therefore
+                affordable at angular resolutions where the cubic
+                factorization is not.  It buys that affordability at the cost
+                of preconditioner quality — on the measured NCSX
+                full-Fokker-Planck ladder it does *not* reach the tier-2
+                tolerance, and ``docs/performance.rst`` records both the table
+                and the diagnosis — so it stays opt-in.  Needs a ``solvax``
+                newer than the pinned release
+                (:func:`dkx.multigrid.multigrid_available`).
+            ``"none"``
+                unpreconditioned GCROT.
+
+            ``None`` (the default) keeps the historical behaviour selected by
+            ``use_preconditioner``, so nothing changes silently.  A
+            preconditioner cannot change the answer — only the iteration
+            count and the wall time.
         drop_l_coupling_in_precond: the Fortran ``preconditioner_xi=1`` knob
             (drop the L±1 streaming coupling in the coarse operator).
         restart: FGMRES cycle size ``m``.
@@ -2436,7 +2575,7 @@ def solve(
             atol=atol,
             x0=x0,
             recycle=recycle,
-            use_preconditioner=use_preconditioner,
+            preconditioner=_resolve_preconditioner(preconditioner, use_preconditioner),
             drop_l_coupling_in_precond=drop_l_coupling_in_precond,
             restart=restart,
             recycle_dim=recycle_dim,
