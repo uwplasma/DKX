@@ -167,23 +167,29 @@ def _poly_coeffs_monomial(xg: XGrid) -> list[np.ndarray]:
     Coefficients are in ascending powers, i.e. `p(x) = sum_m coeff[m] * x**m`.
     """
     n = int(xg.x.size)
-    a = np.asarray(xg.poly_a, dtype=np.float64)
-    b = np.asarray(xg.poly_b, dtype=np.float64)
+    # Forming high-order monomial coefficients is intrinsically more poorly
+    # conditioned than evaluating the polynomials with their 3-term
+    # recurrence.  Keep the coefficient construction in extended precision:
+    # these coefficients are only used by the analytic moment integrals below,
+    # where several individually large monomial moments can cancel.
+    dtype = np.longdouble
+    a = np.asarray(xg.poly_a, dtype=dtype)
+    b = np.asarray(xg.poly_b, dtype=dtype)
 
     coeffs: list[np.ndarray] = []
-    coeffs.append(np.array([1.0], dtype=np.float64))  # j=1
+    coeffs.append(np.array([1.0], dtype=dtype))  # j=1
     if n == 1:
         return coeffs
 
-    coeffs.append(np.array([-float(a[1]), 1.0], dtype=np.float64))  # j=2
+    coeffs.append(np.array([-a[1], 1.0], dtype=dtype))  # j=2
     for j in range(2, n):
-        aj = float(a[j])
-        bj = float(b[j])
+        aj = a[j]
+        bj = b[j]
         p_j = coeffs[j - 1]
         p_jm1 = coeffs[j - 2]
 
         # (x - aj) * p_j
-        out = np.zeros((p_j.size + 1,), dtype=np.float64)
+        out = np.zeros((p_j.size + 1,), dtype=dtype)
         out[0] = -aj * p_j[0]
         for m in range(1, p_j.size):
             out[m] = p_j[m - 1] - aj * p_j[m]
@@ -204,16 +210,63 @@ def _monomial_int_lower(xb: float, n: int) -> float:
 
 
 def _monomial_int_upper(xb: float, n: int) -> float:
-    """∫_xb^∞ t^n e^{-t^2} dt (supports n < 0 via quadrature)."""
+    """∫_xb^∞ t^n e^{-t^2} dt for any integer ``n`` used by v3.
+
+    The result is ``Gamma((n+1)/2, xb**2) / 2``.  SciPy's regularized
+    incomplete-gamma functions do not accept non-positive shape parameters,
+    so continue the upper incomplete gamma downward from ``a=0`` (integer
+    branch) or ``a=1/2`` (half-integer branch).  This removes the last
+    QUADPACK calls from the analytic Rosenbluth path, including the sharply
+    peaked negative-power integrals at electron/ion mass ratios.
+    """
     if n >= 0:
         a = 0.5 * (n + 1.0)
         return float(0.5 * sp_special.gamma(a) * sp_special.gammaincc(a, xb * xb))
 
-    def f(t: float) -> float:
-        return (t**n) * math.exp(-(t * t))
+    x2 = float(xb * xb)
+    target = 0.5 * (n + 1.0)
+    if target < 0.0 and x2 >= 1.0:
+        # Downward recurrence subtracts two nearly equal exponentially small
+        # numbers when x is large.  Lentz's continued fraction evaluates the
+        # *unregularized* Gamma(a,x) directly and remains well scaled there.
+        tiny = 1e-300
+        b_cf = x2 + 1.0 - target
+        c_cf = 1.0 / tiny
+        d_cf = 1.0 / b_cf
+        h_cf = d_cf
+        for iteration in range(1, 10001):
+            an = -float(iteration) * (float(iteration) - target)
+            b_cf += 2.0
+            d_cf = an * d_cf + b_cf
+            if abs(d_cf) < tiny:
+                d_cf = tiny
+            c_cf = b_cf + an / c_cf
+            if abs(c_cf) < tiny:
+                c_cf = tiny
+            d_cf = 1.0 / d_cf
+            update = d_cf * c_cf
+            h_cf *= update
+            if abs(update - 1.0) < 2e-15:
+                break
+        upper_gamma = math.exp(-x2 + target * math.log(x2)) * h_cf
+        return float(0.5 * upper_gamma)
 
-    val, _ = quad(f, xb, np.inf, epsabs=1e-13, epsrel=1e-13, limit=5000)
-    return float(val)
+    if n % 2:
+        # Odd n -> integer target.  Gamma(0, x) = E1(x).
+        current = 0.0
+        upper_gamma = float(sp_special.exp1(x2))
+    else:
+        # Even n -> half-integer target.  Start from Gamma(1/2, x).
+        current = 0.5
+        upper_gamma = float(math.sqrt(math.pi) * sp_special.gammaincc(0.5, x2))
+
+    exp_minus_x2 = math.exp(-x2)
+    while current > target:
+        next_a = current - 1.0
+        # Gamma(a+1,x) = a Gamma(a,x) + x^a exp(-x).
+        upper_gamma = (upper_gamma - (x2**next_a) * exp_minus_x2) / next_a
+        current = next_a
+    return float(0.5 * upper_gamma)
 
 
 def _evaluate_polynomial_v3(x: float, *, j: int, a: np.ndarray, b: np.ndarray) -> float:
@@ -382,6 +435,43 @@ def _rosenbluth_potential_terms_v3_np_quadpack(
     return terms
 
 
+ROSENBLUTH_METHODS: tuple[str, ...] = ("quadpack", "analytic", "hybrid")
+"""Accepted ``rosenbluth_method`` values, in order of increasing Fortran divergence."""
+
+
+def resolve_rosenbluth_method(method: str | None) -> str:
+    """Normalize and validate a Rosenbluth-quadrature selector.
+
+    ``method`` is the explicit route — the ``rosenbluth_method=`` argument of
+    the collision-operator builders, which the ``RosenbluthMethod`` key of
+    ``&otherNumericalParameters`` feeds.  Only when it is ``None`` does the
+    ``DKX_ROSENBLUTH_METHOD`` environment variable act as an override, and
+    with neither set the default is ``"quadpack"`` — the upstream Fortran v3
+    algorithm, for parity.
+
+    Raises:
+        ValueError: for any selector outside :data:`ROSENBLUTH_METHODS`, so a
+            mistyped namelist key or environment override fails loudly instead
+            of silently falling back to the default.
+    """
+    raw = method
+    if raw is None:
+        raw = os.environ.get("DKX_ROSENBLUTH_METHOD", "") or None
+    if raw is None:
+        return "quadpack"
+    resolved = str(raw).strip().lower()
+    if not resolved:
+        return "quadpack"
+    if resolved not in ROSENBLUTH_METHODS:
+        raise ValueError(
+            f"Unknown RosenbluthPotentialTerms method={raw!r}. "
+            f"Use one of {', '.join(repr(m) for m in ROSENBLUTH_METHODS)} "
+            "(namelist RosenbluthMethod, the rosenbluth_method= builder "
+            "argument, or the DKX_ROSENBLUTH_METHOD override)."
+        )
+    return resolved
+
+
 def rosenbluth_potential_terms_v3_np(
     *,
     x: np.ndarray,  # (X,)
@@ -397,17 +487,18 @@ def rosenbluth_potential_terms_v3_np(
 ) -> np.ndarray:
     """Compute v3 `RosenbluthPotentialTerms` for xGridScheme=5/6 (new scheme).
 
+    Args:
+        method: one of :data:`ROSENBLUTH_METHODS`, resolved by
+            :func:`resolve_rosenbluth_method` (``None`` consults
+            ``DKX_ROSENBLUTH_METHOD`` and then falls back to ``"quadpack"``).
+
     Returns
     -------
     terms:
       Array of shape (S, S, NL, X, X) with index ordering:
       (species_row, species_col, L, x_row, x_col).
     """
-    if method is None:
-        # Default to the upstream Fortran algorithm for parity. Users can opt into the
-        # faster analytic path via `DKX_ROSENBLUTH_METHOD=analytic`.
-        method = os.environ.get("DKX_ROSENBLUTH_METHOD", "").strip().lower() or "quadpack"
-    method = str(method).strip().lower()
+    method = resolve_rosenbluth_method(method)
 
     if method == "quadpack":
         return _rosenbluth_potential_terms_v3_np_quadpack(
@@ -421,8 +512,43 @@ def rosenbluth_potential_terms_v3_np(
             t_hats=t_hats,
             nl=nl,
         )
+    if method == "hybrid":
+        # L=0 and L=1 own the particle/energy and parallel-momentum
+        # conservation moments.  Keep the warning-free low-L QUADPACK values
+        # (and L=2,3 for a small parity margin), then use closed-form moments
+        # for the high-L blocks in which near-zero cancellation and negative
+        # powers make the fixed 1e-13 QUADPACK tolerance ill-conditioned.
+        terms = rosenbluth_potential_terms_v3_np(
+            x=x,
+            x_weights=x_weights,
+            x_grid_k=x_grid_k,
+            xg=xg,
+            z_s=z_s,
+            m_hats=m_hats,
+            n_hats=n_hats,
+            t_hats=t_hats,
+            nl=nl,
+            method="analytic",
+        )
+        nl_quadpack = min(int(nl), 4)
+        if nl_quadpack:
+            terms[:, :, :nl_quadpack, :, :] = _rosenbluth_potential_terms_v3_np_quadpack(
+                x=x,
+                x_weights=x_weights,
+                x_grid_k=x_grid_k,
+                xg=xg,
+                z_s=z_s,
+                m_hats=m_hats,
+                n_hats=n_hats,
+                t_hats=t_hats,
+                nl=nl_quadpack,
+            )
+        return terms
     if method != "analytic":
-        raise ValueError(f"Unknown RosenbluthPotentialTerms method={method!r}. Use 'analytic' or 'quadpack'.")
+        # Unreachable through resolve_rosenbluth_method; a structural guard so
+        # a new entry in ROSENBLUTH_METHODS without a branch here fails loudly
+        # rather than falling through to the analytic path.
+        raise ValueError(f"RosenbluthPotentialTerms method={method!r} has no branch.")
 
     x = np.asarray(x, dtype=np.float64)
     x_weights = np.asarray(x_weights, dtype=np.float64)
@@ -435,17 +561,17 @@ def rosenbluth_potential_terms_v3_np(
     n_species = int(z_s.size)
     expx2 = np.exp(-(x * x))
 
-    # collocation2modal(j,i) in the Fortran code:
+    # collocation2modal(j,i) in the Fortran code.  Use the stable 3-term
+    # recurrence for point evaluation; monomial coefficients are reserved for
+    # the analytic integrals below.
     poly_coeffs = _poly_coeffs_monomial(xg)
     poly_c = np.asarray(xg.poly_c, dtype=np.float64)
+    poly_a = np.asarray(xg.poly_a, dtype=np.float64)
+    poly_b = np.asarray(xg.poly_b, dtype=np.float64)
     pvals = np.zeros((n_x, n_x), dtype=np.float64)  # (j,i)
     for j in range(1, n_x + 1):
-        coeff = poly_coeffs[j - 1]
-        # Evaluate with ascending coefficients:
-        p = np.zeros_like(x)
-        for m, cm in enumerate(coeff):
-            p += cm * (x**m)
-        pvals[j - 1, :] = p
+        for i in range(n_x):
+            pvals[j - 1, i] = _evaluate_polynomial_v3(float(x[i]), j=j, a=poly_a, b=poly_b)
     collocation2modal = (x_weights[None, :] * (x[None, :] ** float(x_grid_k)) * pvals) / (
         poly_c[1 : n_x + 1, None]
     )
@@ -483,16 +609,18 @@ def rosenbluth_potential_terms_v3_np(
                         coeff = poly_coeffs[j - 1]
 
                         def poly_int_lower(base_power: int) -> float:
-                            acc = 0.0
-                            for m, cm in enumerate(coeff):
-                                acc += float(cm) * _monomial_int_lower(xb_safe, base_power + m)
-                            return float(acc)
+                            moments = np.asarray(
+                                [_monomial_int_lower(xb_safe, base_power + m) for m in range(coeff.size)],
+                                dtype=np.longdouble,
+                            )
+                            return float(np.sum(coeff * moments, dtype=np.longdouble))
 
                         def poly_int_upper(base_power: int) -> float:
-                            acc = 0.0
-                            for m, cm in enumerate(coeff):
-                                acc += float(cm) * _monomial_int_upper(xb_safe, base_power + m)
-                            return float(acc)
+                            moments = np.asarray(
+                                [_monomial_int_upper(xb_safe, base_power + m) for m in range(coeff.size)],
+                                dtype=np.longdouble,
+                            )
+                            return float(np.sum(coeff * moments, dtype=np.longdouble))
 
                         i_2pl = poly_int_lower(ell + 2)
                         i_4pl = poly_int_lower(ell + 4)
@@ -682,8 +810,16 @@ def make_fokker_planck_v3_operator(
     nl: int,
     n_xi_for_x: np.ndarray,
     strict_parity: bool = False,
+    rosenbluth_method: str | None = None,
 ) -> FokkerPlanckV3Operator:
-    """Construct the collisionOperator=0 (no-Phi1) v3 collision operator."""
+    """Construct the collisionOperator=0 (no-Phi1) v3 collision operator.
+
+    Args:
+        rosenbluth_method: how the Rosenbluth potential response matrices are
+            evaluated — one of :data:`ROSENBLUTH_METHODS`, resolved by
+            :func:`resolve_rosenbluth_method`.  ``None`` keeps the Fortran-parity
+            ``"quadpack"`` default unless ``DKX_ROSENBLUTH_METHOD`` overrides it.
+    """
     x = np.asarray(x, dtype=np.float64)
     x_weights = np.asarray(x_weights, dtype=np.float64)
     ddx = np.asarray(ddx, dtype=np.float64)
@@ -713,6 +849,7 @@ def make_fokker_planck_v3_operator(
         n_hats=n_hats,
         t_hats=t_hats,
         nl=int(nl),
+        method=rosenbluth_method,
     )  # (S,S,NL,X,X)
 
     # Build nuDHat and CECD (both omit the overall factor nu_n, matching v3).
@@ -967,11 +1104,15 @@ def make_fokker_planck_v3_phi1_operator(
     nl: int,
     alpha: float,
     n_xi_for_x: np.ndarray,
+    rosenbluth_method: str | None = None,
 ) -> FokkerPlanckV3Phi1Operator:
     """Construct the poloidally varying v3 FP collision operator (`includePhi1InCollisionOperator=true`).
 
     The returned operator factors out the (theta,zeta) dependence into a runtime scaling by
     `n_pol = nHat * exp(-Z*alpha*Phi1Hat/THat)`.
+
+    Args:
+        rosenbluth_method: as in :func:`make_fokker_planck_v3_operator`.
     """
     x = np.asarray(x, dtype=np.float64)
     x_weights = np.asarray(x_weights, dtype=np.float64)
@@ -1003,6 +1144,7 @@ def make_fokker_planck_v3_phi1_operator(
         n_hats=np.ones_like(n_hats),
         t_hats=t_hats,
         nl=int(nl),
+        method=rosenbluth_method,
     )  # (S,S,NL,X,X)
 
     k_nu = np.zeros((n_species, n_species, n_x), dtype=np.float64)

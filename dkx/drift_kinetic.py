@@ -151,6 +151,7 @@ from dkx.collisions import (  # noqa: E402
     make_fokker_planck_v3_phi1_operator,
     make_improved_sugama_v3_operator,
     make_pitch_angle_scattering_v3_operator,
+    resolve_rosenbluth_method,
 )
 from dkx.species import SpeciesSet, species_set_from_namelist  # noqa: E402
 
@@ -187,6 +188,17 @@ def _get_bool(group: dict, key: str, default: bool = False) -> bool:
     if isinstance(v, list):
         v = v[0] if v else default
     return bool(v)
+
+
+def _get_str_or_none(group: dict, key: str) -> str | None:
+    """A namelist string value, or ``None`` when the key is absent or blank."""
+    v = group.get(key.upper(), None)
+    if isinstance(v, list):
+        v = v[0] if v else None
+    if v is None:
+        return None
+    text = str(v).strip()
+    return text or None
 
 
 def _mask_xi(n_xi_for_x: jnp.ndarray, n_xi: int) -> jnp.ndarray:
@@ -2308,6 +2320,11 @@ def kinetic_operator_build_from_namelist(nml: Any) -> KineticOperatorBuild:
     fp = None
     fp_phi1 = None
     sugama = None
+    # &otherNumericalParameters RosenbluthMethod selects how the Fokker-Planck
+    # Rosenbluth response matrices are integrated ('quadpack' for Fortran
+    # parity, 'hybrid', or 'analytic').  Resolved eagerly so a mistyped deck
+    # fails on any collisionOperator, not only the branches that consume it.
+    rosenbluth_method = resolve_rosenbluth_method(_get_str_or_none(other, "RosenbluthMethod"))
     if include_phi1_in_collision and collision_operator != 0:
         raise NotImplementedError(
             "includePhi1InCollisionOperator=.true. requires collisionOperator=0 "
@@ -2357,6 +2374,7 @@ def kinetic_operator_build_from_namelist(nml: Any) -> KineticOperatorBuild:
         # operator (collisions.FokkerPlanckV3Phi1Operator); the collision
         # densities are shifted by exp(-Z*alpha*Phi1Hat/THat) at apply time.
         fp_phi1 = make_fokker_planck_v3_phi1_operator(
+            rosenbluth_method=rosenbluth_method,
             x=np.asarray(grids.x, dtype=np.float64),
             x_weights=np.asarray(grids.x_weights, dtype=np.float64),
             ddx=np.asarray(grids.ddx, dtype=np.float64),
@@ -2384,6 +2402,7 @@ def kinetic_operator_build_from_namelist(nml: Any) -> KineticOperatorBuild:
         else:
             strict_parity = bool(rhs_mode == 1 and n_species > 1)
         fp = make_fokker_planck_v3_operator(
+            rosenbluth_method=rosenbluth_method,
             x=np.asarray(grids.x, dtype=np.float64),
             x_weights=np.asarray(grids.x_weights, dtype=np.float64),
             ddx=np.asarray(grids.ddx, dtype=np.float64),
