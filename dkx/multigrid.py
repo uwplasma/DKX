@@ -340,13 +340,10 @@ References
 
 Availability
 ------------
-The cycle driver, transfers and smoothers come from ``solvax`` >
-0.8.7 (``solvax.precond.multigrid``, ``solvax.smoothers.upwind_smoother``,
-``solvax.transfer``).  Those landed after the currently pinned PyPI release,
-so this module feature-detects them (:func:`multigrid_available`) exactly as
-:mod:`dkx.solve` feature-detects ``schur_projected_precond(d_block=...)``;
-with an older solvax installed the ``preconditioner="multigrid"`` route
-raises a clear error and every other route is unaffected.
+The cycle driver, transfers and smoothers come from ``solvax`` >= 0.9.1
+(``solvax.precond.multigrid``, ``solvax.smoothers.upwind_smoother``,
+``solvax.transfer``), which :mod:`dkx` requires outright, so this module
+imports them unconditionally.
 """
 
 from __future__ import annotations
@@ -366,31 +363,16 @@ import jax.numpy as jnp  # noqa: E402
 from dkx.drift_kinetic import KineticOperator  # noqa: E402
 from dkx.phase_space import uniform_periodic_diff_matrices  # noqa: E402
 
-try:  # noqa: E402
-    from solvax.direct import block_thomas_factor, block_thomas_solve
-    from solvax.precond import MultigridLevel, multigrid as solvax_multigrid
-    from solvax.smoothers import (
-        alternating_smoother,
-        plane_smoother,
-        relaxation,
-        smoothing_factor,
-        tridiagonal_smoother,
-        upwind_smoother,
-    )
-
-    _MULTIGRID_IMPORT_ERROR: BaseException | None = None
-except ImportError as _exc:  # pragma: no cover - exercised by old solvax installs
-    block_thomas_factor = None  # type: ignore[assignment]
-    block_thomas_solve = None  # type: ignore[assignment]
-    MultigridLevel = None  # type: ignore[assignment, misc]
-    solvax_multigrid = None  # type: ignore[assignment]
-    alternating_smoother = None  # type: ignore[assignment]
-    plane_smoother = None  # type: ignore[assignment]
-    relaxation = None  # type: ignore[assignment]
-    smoothing_factor = None  # type: ignore[assignment]
-    tridiagonal_smoother = None  # type: ignore[assignment]
-    upwind_smoother = None  # type: ignore[assignment]
-    _MULTIGRID_IMPORT_ERROR = _exc
+from solvax.direct import block_thomas_factor, block_thomas_solve  # noqa: E402
+from solvax.precond import MultigridLevel, multigrid as solvax_multigrid  # noqa: E402
+from solvax.smoothers import (  # noqa: E402
+    alternating_smoother,
+    plane_smoother,
+    relaxation,
+    smoothing_factor,
+    tridiagonal_smoother,
+    upwind_smoother,
+)
 
 __all__ = [
     "MultigridSettings",
@@ -402,7 +384,6 @@ __all__ = [
     "hierarchy_shapes",
     "line_diagonal_dominance",
     "measure_smoothing_factor",
-    "multigrid_available",
     "periodic_transfer_matrices",
     "pitch_collocation_surrogate",
     "simplified_operator",
@@ -415,29 +396,6 @@ __all__ = [
 # coarse f-block (whose diagonal is EXACTLY zero) still factors; mirrors
 # ``dkx.solve.build_coarse_preconditioner``.
 _DIAGONAL_FLOOR = 1e-8
-
-
-def multigrid_available() -> tuple[bool, str]:
-    """Whether the installed ``solvax`` exposes the multigrid API this needs.
-
-    Returns:
-        ``(True, "")`` when :mod:`solvax.precond`, :mod:`solvax.smoothers` and
-        :mod:`solvax.transfer` provide the cycle driver, the upwind line
-        smoother and the transfer builders; otherwise ``(False, reason)``.
-    """
-    if _MULTIGRID_IMPORT_ERROR is not None:
-        return False, (
-            "the installed solvax has no multigrid API "
-            f"({_MULTIGRID_IMPORT_ERROR}); dkx.multigrid needs solvax > 0.8.7 "
-            "(pip install git+https://github.com/uwplasma/SOLVAX)"
-        )
-    return True, ""
-
-
-def _require_multigrid() -> None:
-    ok, reason = multigrid_available()
-    if not ok:
-        raise ImportError(f"the multigrid tier-2 preconditioner is unavailable: {reason}")
 
 
 @dataclass(frozen=True)
@@ -1467,7 +1425,6 @@ def build_multigrid_f_inverse(
         to an approximate solution of the simplified f-block, and ``shapes``
         lists the ``(Ntheta, Nzeta, Nxi)`` of every level.
     """
-    _require_multigrid()
     simplified = simplified_operator(op, drop_l_coupling=drop_l_coupling)
     levels = _levels(simplified, settings)
     shapes = tuple((int(a.n_theta), int(a.n_zeta), int(a.n_xi)) for a in levels)
@@ -1541,8 +1498,6 @@ def build_multigrid_preconditioner(
         on flat ``(total_size,)`` vectors.
     """
     from dkx.solve import (  # noqa: PLC0415
-        _SCHUR_ACCEPTS_D_BLOCK,
-        _bordered_schur_precond,
         _materialize_borders,
         _materialize_full_border,
         schur_projected_precond,
@@ -1559,14 +1514,9 @@ def build_multigrid_preconditioner(
 
     if op.include_phi1:
         b_cols, c_rows, d_block = _materialize_full_border(op)
-        if _SCHUR_ACCEPTS_D_BLOCK:
-            return (
-                schur_projected_precond(a_inv, b_cols, c_rows, d_block=d_block),
-                schur_projected_precond(a_inv_t, c_rows.T, b_cols.T, d_block=d_block.T),
-            )
         return (
-            _bordered_schur_precond(a_inv, b_cols, c_rows, d_block),
-            _bordered_schur_precond(a_inv_t, c_rows.T, b_cols.T, d_block.T),
+            schur_projected_precond(a_inv, b_cols, c_rows, d_block=d_block),
+            schur_projected_precond(a_inv_t, c_rows.T, b_cols.T, d_block=d_block.T),
         )
     if op.extra_size == 0:
         return a_inv, a_inv_t
@@ -1596,7 +1546,6 @@ def measure_smoothing_factor(
     complementary; ``mu`` near one means the cycle will not converge no matter
     what cycle index or transfers are used.
     """
-    _require_multigrid()
     simplified = simplified_operator(op)
     smoother = _level_smoother(simplified, settings, settings.shift)
     coarsen = (False, False, bool(settings.coarsen_xi), True, True)
