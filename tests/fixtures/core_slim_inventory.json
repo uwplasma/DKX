@@ -408,7 +408,7 @@
   },
   {
    "path": "dkx/multigrid.py",
-   "lines_at_audit": 1500,
+   "lines_at_audit": 2000,
    "category": "core",
    "action": "retain",
    "public_imports": [],
@@ -422,8 +422,8 @@
     "dkx/README.md",
     "docs/performance.rst"
    ],
-   "retention_reason": "Sole owner of the semicoarsened multigrid tier-2 preconditioner: hierarchy planning, rediscretized coarse operators, transfers and relaxations behind solve(preconditioner='multigrid').",
-   "next_step": "Keep the hierarchy and relaxations here; a new smoother needs a measured smoothing factor on a real operator plus the tier-2 parity gate.",
+   "retention_reason": "Sole owner of the semicoarsened multigrid tier-2 preconditioner: hierarchy planning, rediscretized coarse operators, transfers and relaxations behind solve(preconditioner='multigrid'), plus the pitch-basis diagnostics that record why that route cannot reach tolerance on a Legendre-modal discretization.",
+   "next_step": "Keep the hierarchy, relaxations and pitch-basis diagnostics here; a new smoother needs a measured smoothing factor and line-smoother spectral radius on a real operator plus the tier-2 parity gate.",
    "review_status": "canonical_owner_post_trim"
   },
   {

@@ -141,21 +141,165 @@ alternating upwind lines             5.63        ---        5.87
 Only the direction a relaxation resolves exactly is smoothed: the
 ``(L, zeta)``-plane sweep has ``mu = 0.87`` across ``zeta`` and ``mu = 214``
 across ``theta``.  No cheap sweep is complementary to angular coarsening in
-*both* angles at once, and the reason is physical rather than algorithmic --
-the operator's near-null directions are distributions constant *along the
-field line*, which is neither a ``theta`` mode nor a ``zeta`` mode.  Splitting
-the surface into lines or planes manufactures a whole family of spurious
-near-null directions (one per line; :func:`_legendre_plane_blocks` pins the
-worst of them, taking ``mu_theta`` from 602 to 214), and a coarse angular grid
-carries an entirely *different* discrete field-line trajectory, so its
-near-null space does not match the fine one either.
+*both* angles at once, and the near-null directions -- distributions nearly
+constant along the field line, which is neither a ``theta`` mode nor a ``zeta``
+mode -- are represented by no coarse grid this hierarchy can build.
+:func:`line_diagonal_dominance` and :func:`line_smoother_spectral_radius` say
+why in one number, and the next section is that measurement.
 
-The consequence, measured end to end and reported honestly in
-``docs/performance.rst``: on the NCSX full-Fokker-Planck ladder the multigrid
-route is affordable where the classical preconditioner is not, but it does not
-reach the tier-2 tolerance, while the exact block-Thomas of the same simplified
-operator does so in 86 iterations.  The route is therefore opt-in
+The consequence, measured end to end and reported in ``docs/performance.rst``:
+on the full-Fokker-Planck ladder the multigrid route is affordable where the
+classical preconditioner is not, but it does not reach the tier-2 tolerance,
+while the exact block-Thomas of the same simplified operator does so in 21
+iterations.  The route is therefore opt-in
 (``solve(preconditioner="multigrid")``) and the default is unchanged.
+
+Why no relaxation smooths in a Legendre-modal pitch basis
+---------------------------------------------------------
+The stalls above are not a bad choice of cycle, transfer or sweep ordering.
+They follow from one structural fact about the discretization, which
+``tests/test_multigrid.py`` pins:
+
+**Parallel streaming and the mirror force are strictly off-diagonal in the
+Legendre index.**  They couple ``L -> L +- 1`` and contribute *nothing* to the
+``(L, L)`` block (see :meth:`KineticOperator.legendre_blocks`: the diagonal
+block is ExB plus the collision diagonal and nothing else).  Every line of an
+alternating line relaxation therefore misses the operator's dominant term:
+
+* a ``theta``- or ``zeta``-line block, taken at fixed ``L``, contains no
+  streaming at all -- so no angular stencil, upwinded or not, can give that
+  block diagonal weight from the term that dominates the operator;
+* the ``L``-line block, taken at fixed ``(theta, zeta)``, does contain the
+  ``L +- 1`` coupling, but only its angle-diagonal part, which is the mirror
+  force: a tridiagonal matrix with ``-L(L-1)/(2L-1)`` below and
+  ``(L+1)(L+2)/(2L+3)`` above the diagonal, i.e. near-*skew*-symmetric with a
+  diagonal of ``nu_D l(l+1)/2`` that vanishes with the collisionality.
+
+Measured with :func:`line_smoother_spectral_radius` on the real simplified
+operator (one ``(species, speed)`` block, W7-X standard configuration,
+``9 x 11 x 13``, alternating exact line solves in all three coordinates,
+``omega = 1``):
+
+===========================  =========  =========  =========
+``nu_n``                     ``1e-1``   ``8.3e-3``  ``1e-4``
+===========================  =========  =========  =========
+Legendre-modal ``rho(S)``    3.8e3      5.9e6      1.7e12
+pitch grid + upwind          0.88       0.97       1.00
+pitch grid + centered        11.5       2.2e2      6.3e5
+===========================  =========  =========  =========
+
+``rho(S) > 1`` is fatal: a coarse-grid correction cannot rescue a divergent
+relaxation.  The modal basis has no convergent line relaxation at any
+collisionality, and the gap grows as ``nu`` falls.  Correspondingly the
+two-grid factor ``rho(TG)`` of a full ``V(1,1)`` cycle with rediscretized
+coarse operators and linear-interpolation transfers, coarsening ``(theta,
+zeta)`` in the modal basis and ``(alpha, theta, zeta)`` on the pitch grid:
+
+==========================  =========  ==========  =========  ==========
+discretization              ``d``      ``1e-1``   ``8.3e-3``  ``1e-4``
+==========================  =========  ==========  =========  ==========
+Legendre-modal              ---        1.5e7      4.0e13     3.3e24
+collocation, ``up1``        1.00       0.39       0.24       0.74
+collocation, widened 2nd    0.88       0.49       0.36       0.80
+collocation, textbook 2nd   0.60       0.65       0.48       1.09
+collocation, widened 4th    0.62       0.91       0.49       1.25
+collocation, textbook 3rd   0.33       2.68       0.89       3.68
+collocation, centered       0.00       1.3e2      4.7e4      5.1e11
+==========================  =========  ==========  =========  ==========
+
+``d`` is the stencil's diagonal dominance (:func:`stencil_matrices`).  The
+convergence factor is a monotone function of it, and the widened stencils --
+which skip near neighbours to keep diagonal weight at a given formal order --
+beat the textbook upwind-biased ones of the *same or higher* order.  That is
+the whole of the recipe: relaxation smooths an advection only where the
+discretization is diagonally dominant, and a modal pitch basis is nowhere
+diagonally dominant in the streaming term because the streaming term has no
+diagonal there at all (Brandt 1977, section 3; Trottenberg et al., sections 2.1
+and 7.4; the widening trade is Leonard's, Comput. Methods Appl. Mech. Eng.
+**19**, 59 (1979); the difficulty of smoothing an accurate drift-kinetic
+discretization is stated in M. Landreman, Bull. Am. Phys. Soc. **62**, JP11.128
+(2017)).
+
+Why changing basis inside the preconditioner does not rescue it
+--------------------------------------------------------------
+The obvious escape is to keep dkx's Legendre discretization for the *solve*
+(and with it the Fortran parity) and change basis only inside the
+preconditioner: transform the residual to a pitch grid with the Legendre
+Vandermonde ``V``, smooth there, transform back with ``V^+``.  The transform
+is cheap and exact -- ``Nxi**2`` per angular point, ``cond(V) ~ 7`` at
+``Nalpha = Nxi`` on the half-index uniform-``alpha`` grid -- and
+:func:`pitch_collocation_surrogate` builds exactly that surrogate.  Coupling a
+low-order finite-difference discretization to a spectral one this way is
+standard practice (S. A. Orszag, J. Comput. Phys. **37**, 70 (1980); M. O.
+Deville & E. H. Mund, J. Comput. Phys. **60**, 517 (1985)).
+
+It does not work, for a reason that is quantitative rather than structural.
+Two requirements pull in opposite directions:
+
+*P1*
+    the surrogate must be spectrally close to the modal operator, or the outer
+    Krylov solve pays the difference;
+*P2*
+    the surrogate must admit a convergent relaxation, or its own inverse is no
+    cheaper than the one it replaces.
+
+Upwinding buys ``P2`` and costs ``P1``.  Measured on the same ``9 x 11 x 13``
+deck at ``nu_n = 8.3e-3`` as the tables above: GMRES on the modal operator
+preconditioned by the surrogate's *exact* inverse needs
+
+======================================  ================  ============
+surrogate                               GMRES iterations  ``rho(TG)``
+======================================  ================  ============
+centered angles, centered pitch         18                4.7e4
+centered angles, upwind pitch           21                4.0e4
+widened-2nd everywhere                  199               0.37
+first-order upwind everywhere           201               0.24
+(no preconditioner)                     > 400             ---
+======================================  ================  ============
+
+-- and the upwind column degrades further with angular resolution (261 at
+``9 x 15``, > 400 at ``13 x 21``), while the centered column barely moves (18,
+24, 41 at ``9 x 15 x 17``, ``13 x 21 x 17``, ``17 x 25 x 33``).  The half that
+is a good preconditioner is exactly the half no relaxation smooths.  Note
+which axis does the damage: upwinding the *pitch* direction alone is nearly
+free (18 -> 21), because dkx's pitch operator is spectral anyway; it is
+upwinding the *angles* -- where dkx's own stencils are centered by
+construction, SFINCS ``thetaDerivativeScheme`` 1/2 -- that costs the order of
+magnitude.
+
+Nor does double discretisation (accurate operator on the fine level, upwinded
+smoother and coarse operators; Brandt 1981; Trottenberg et al., section 7.4)
+close the gap: with the centered surrogate as ``A`` and the ``up1`` surrogate
+supplying the line blocks and the coarse level, ``rho(TG)`` is 1.46, 1.94 and
+2.27 at ``nu_n = 1e-1``, ``8.3e-3`` and ``1e-4`` -- divergent at every
+collisionality.  Over-resolving the pitch grid does not help either
+(``Nalpha = 2 Nxi + 1`` takes the centered surrogate from 18 iterations to
+310, because the extra nodes are outside the modal operator's range and the
+pseudo-inverse projects them away).
+
+What *would* be required
+------------------------
+A convergent cycle needs a discretization that is diagonally dominant in the
+streaming term, and streaming has a diagonal only when pitch is a *grid*: on a
+pitch-angle collocation grid ``xi`` is a multiplication operator, so
+``xi b.grad`` is diagonal in pitch and its upwind angular stencil puts weight
+on the matrix diagonal, while the mirror force becomes an advection in
+``alpha`` whose upwind discretization is diagonally dominant in turn.  Then
+all of ``(alpha, theta, zeta)`` can be coarsened together, which is what keeps
+the advection direction fixed relative to the mesh on every level.
+
+That is a change to dkx's *discretization*, not to its preconditioner: it
+changes the answers at fixed resolution, breaks the Fortran matrix parity the
+repository is gated on, and requires the Fokker-Planck and improved-Sugama
+collision operators -- which are built in the Legendre basis, where they are
+``L``-diagonal -- to be re-derived on a pitch grid, where they are dense
+(keeping only the collocation diagonal discards 65% of the reduced operator in
+the 2-norm; a lumped tridiagonal-in-pitch approximation still discards 31%).
+It is a project, not a patch, and it buys a preconditioner that is *worse*
+than the classical block-Thomas wherever the classical one fits in memory (21
+iterations to ``1e-11``).  The honest scope of the multigrid route is
+therefore unchanged: opt-in, for the grids where the exact factorization does
+not fit.
 
 Coarsest level
 --------------
@@ -173,7 +317,26 @@ References
   (1993).
 - U. Trottenberg, C. W. Oosterlee & A. Schuller, *Multigrid*, Academic Press
   (2001) -- ch. 2 (transfers, rediscretized coarse operators), ch. 5
-  (semicoarsening), section 7.4 (downstream relaxation for convection).
+  (semicoarsening), sections 2.1, 5.1 and 7.4 (line relaxation, double
+  discretisation and downstream relaxation for convection).
+- A. Brandt, "Guide to multigrid development", in *Multigrid Methods*, Lecture
+  Notes in Mathematics **960**, Springer (1982) -- double discretisation.
+- B. P. Leonard, "A stable and accurate convective modelling procedure based on
+  quadratic upstream interpolation", Comput. Methods Appl. Mech. Eng. **19**,
+  59 (1979) -- trading stencil width for boundedness/diagonal weight.
+- S. A. Orszag, "Spectral methods for problems in complex geometries",
+  J. Comput. Phys. **37**, 70 (1980); M. O. Deville & E. H. Mund, "Chebyshev
+  pseudospectral solution of second-order elliptic equations with finite
+  element preconditioning", J. Comput. Phys. **60**, 517 (1985) -- low-order
+  discretizations as preconditioners for spectral ones.
+- M. L. Adams & E. W. Larsen, "Fast iterative methods for discrete-ordinates
+  particle transport calculations", Prog. Nucl. Energy **40**, 3 (2002) -- the
+  same near-null-space obstruction in neutral-particle transport, and the
+  synthetic-acceleration family of remedies for it.
+- M. Landreman, "A multigrid method for drift-kinetic calculations in
+  stellarators and rippled tokamaks", Bull. Am. Phys. Soc. **62**, JP11.128
+  (2017) -- multigrid smoothers are unstable for accurate discretizations of
+  this equation.
 
 Availability
 ------------
@@ -188,6 +351,7 @@ raises a clear error and every other route is unaffected.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, replace
 from typing import Callable
 
@@ -230,13 +394,19 @@ except ImportError as _exc:  # pragma: no cover - exercised by old solvax instal
 
 __all__ = [
     "MultigridSettings",
+    "PitchCollocationSurrogate",
+    "UPWIND_STENCILS",
     "build_multigrid_f_inverse",
     "coarsen_operator",
+    "dense_simplified_block",
     "hierarchy_shapes",
+    "line_diagonal_dominance",
     "measure_smoothing_factor",
     "multigrid_available",
     "periodic_transfer_matrices",
+    "pitch_collocation_surrogate",
     "simplified_operator",
+    "stencil_matrices",
     "xi_transfer_matrices",
 ]
 
@@ -752,10 +922,12 @@ def _shift(level: KineticOperator, weight: float) -> jnp.ndarray:
     by ExB, and by pitch-angle scattering (``nu l(l+1)/2 = 0`` at ``l = 0``).
     Something must remove it or the coarsest block-Thomas divides by zero.
 
-    :func:`dkx.solve.build_coarse_preconditioner` removes it with a rank-one
-    pin of that constant on the ``l = 0`` block *in addition to* a ``1e-8``
-    relative diagonal floor.  Here only the floor is used -- a *uniform* shift
-    ``A + delta I`` -- for two measured reasons:
+    :func:`dkx.solve.build_coarse_preconditioner` removes it with a ``1e-8``
+    relative diagonal floor plus an *adaptive* rank-one pin of that constant on
+    the ``l = 0`` block (:func:`dkx.solve._l0_pin_gamma`), sized to the same
+    ``1e-8`` level and applied only where that block really is singular.  Here
+    only the floor is used -- a *uniform* shift ``A + delta I`` -- for two
+    measured reasons:
 
     * ``delta I`` commutes with every basis change, so it is represented
       exactly in the pitch-collocation basis one smoother family works in, in
@@ -768,9 +940,11 @@ def _shift(level: KineticOperator, weight: float) -> jnp.ndarray:
       block-Thomas of this simplified operator as the tier-2 preconditioner on
       the NCSX ``11 x 21 x 41 x 5`` deck, GCROT needs **21** iterations at
       ``delta = 0``, 60 at ``1e-2`` of the mean collision diagonal, and never
-      converges at ``1.0``.  (The production rank-one pin costs 86.)  The
-      default weight is therefore the ``1e-8`` invertibility floor and nothing
-      more -- enough to keep a collisionless, drift-free f-block, whose
+      converges at ``1.0``.  (The *unconditional* full-strength rank-one pin
+      that :func:`dkx.solve.build_coarse_preconditioner` used to apply cost 87
+      on the same deck; sizing it by the floor instead is what recovered the
+      21.)  The default weight is therefore the ``1e-8`` invertibility floor and
+      nothing more -- enough to keep a collisionless, drift-free f-block, whose
       diagonal is *exactly* zero, out of a zero pivot.
 
     The scale is the mean collision diagonal, falling back to the streaming
@@ -1435,3 +1609,363 @@ def measure_smoothing_factor(
         steps=steps,
     )
     return float(value)
+
+
+# =============================================================================
+# Pitch-basis diagnostics: why no relaxation smooths in a Legendre-modal basis
+# =============================================================================
+#
+# Everything below is *measurement*, not a solver path.  It exists so the
+# negative result in this module's docstring -- that the multigrid family cannot
+# be made to work on a Legendre-modal pitch discretization -- is reproducible
+# from the repository rather than asserted, and so a future lane can re-measure
+# it on its own deck before spending a week on the alternative.
+
+
+# Backward-biased (wind blowing from smaller index) first-derivative stencils,
+# as offsets in units of the grid spacing.  ``up*`` are the textbook one-sided
+# and upwind-biased schemes; ``wide*`` skip near neighbours to buy diagonal
+# dominance at the same formal order -- the same trade Leonard's QUICK family
+# makes for boundedness (B. P. Leonard, Comput. Methods Appl. Mech. Eng. 19, 59
+# (1979)).  ``ctr2`` is the centered scheme SFINCS and dkx actually use on the
+# angles (``thetaDerivativeScheme`` 1), included as the zero-dissipation
+# reference.
+UPWIND_STENCILS: dict[str, tuple[int, ...]] = {
+    "up1": (-1, 0),
+    "up2": (-2, -1, 0),
+    "up3": (-2, -1, 0, 1),
+    "wide2": (-4, -1, 0),
+    "wide4": (-4, -3, -1, 0, 2),
+    "ctr2": (-1, 0, 1),
+}
+
+
+def _stencil_weights(offsets: tuple[int, ...], order: int = 1) -> np.ndarray:
+    """Finite-difference weights of the ``order``-th derivative at ``offsets*h``."""
+    nodes = np.asarray(offsets, dtype=np.float64)
+    vander = np.vander(nodes, nodes.size, increasing=True).T
+    rhs = np.zeros(nodes.size)
+    rhs[order] = float(math.factorial(order))
+    return np.linalg.solve(vander, rhs)
+
+
+def stencil_matrices(
+    n: int, h: float, name: str, *, periodic: bool = True
+) -> tuple[np.ndarray, np.ndarray]:
+    """The ``(backward-biased, forward-biased)`` first-derivative pair of a stencil.
+
+    An upwinded advection ``w df/dx`` uses the backward-biased matrix wherever
+    ``w > 0`` and the forward-biased one wherever ``w <= 0``.  ``periodic=False``
+    reflects the stencil at the ends (an even extension), which is the right
+    closure for the pitch angle: ``f`` is a function of ``xi = cos(alpha)`` and
+    is therefore even about ``alpha = 0`` and ``alpha = pi``, where the mirror
+    advection speed vanishes anyway.
+
+    Args:
+        n: number of grid points.
+        h: uniform spacing.
+        name: key of :data:`UPWIND_STENCILS`.
+        periodic: wrap (angles) rather than reflect (pitch).
+
+    Returns:
+        Two ``(n, n)`` arrays.
+    """
+    offsets = UPWIND_STENCILS[name]
+
+    def build(offs: tuple[int, ...]) -> np.ndarray:
+        w = _stencil_weights(offs, 1) / h
+        mat = np.zeros((n, n))
+        for j, off in enumerate(offs):
+            for i in range(n):
+                k = i + off
+                if periodic:
+                    k %= n
+                else:
+                    if k < 0:
+                        k = -1 - k
+                    if k > n - 1:
+                        k = 2 * n - 1 - k
+                    k = min(max(k, 0), n - 1)
+                mat[i, k] += w[j]
+        return mat
+
+    return build(offsets), build(tuple(-o for o in offsets)[::-1])
+
+
+def line_diagonal_dominance(
+    matrix: np.ndarray, shape: tuple[int, ...], axis: int
+) -> tuple[float, float]:
+    """``(min, median)`` diagonal dominance of the line blocks along ``axis``.
+
+    An alternating line block-Jacobi smoother inverts, for each coordinate in
+    turn, the block of ``matrix`` that runs along that coordinate with all the
+    others frozen.  The relevant question about such a block is whether it is
+    diagonally dominant, ``d = min_i |a_ii| / sum_{j != i} |a_ij|``: a damped
+    Jacobi/block-Jacobi sweep is a smoother when ``d`` is order one and
+    *amplifies* when ``d`` is near zero (Trottenberg et al., section 2.1;
+    Brandt, Math. Comp. **31**, 333 (1977), section 3).
+
+    Args:
+        matrix: dense operator on the flattened ``shape`` grid.
+        shape: grid shape the operator acts on.
+        axis: which axis the line runs along.
+
+    Returns:
+        The minimum and median of ``d`` over all lines and rows.
+    """
+    n_dim = len(shape)
+    m = shape[axis]
+    rest = tuple(s for i, s in enumerate(shape) if i != axis)
+    n_rest = int(np.prod(rest)) if rest else 1
+    blocks = np.moveaxis(
+        matrix.reshape(tuple(shape) + tuple(shape)), (axis, n_dim + axis), (0, 1)
+    ).reshape((m, m, n_rest, n_rest))
+    blocks = np.einsum("abrr->rab", blocks)
+    diag = np.abs(np.einsum("rii->ri", blocks))
+    off = np.abs(blocks).sum(axis=2) - diag
+    finite = off > 1e-14
+    ratio = np.where(finite, diag / np.where(finite, off, 1.0), np.inf)
+    return float(ratio.min()), float(np.median(ratio))
+
+
+def dense_simplified_block(
+    op: KineticOperator, *, species: int = 0, speed: int = 0
+) -> np.ndarray:
+    """Dense ``(Nxi*Ntheta*Nzeta)`` square block of the simplified operator.
+
+    The simplified operator (:func:`simplified_operator`) is uncoupled over
+    ``(species, x)``, so one such block is the whole thing the classical tier-2
+    preconditioner factors, for one speed node of one species.  Index order is
+    ``(L, theta, zeta)`` with ``zeta`` fastest, matching
+    :meth:`KineticOperator.to_block_tridiagonal`.
+
+    Only for analysis and tests -- it materializes ``(Nxi*Ntheta*Nzeta)**2``
+    entries.
+    """
+    blocks = simplified_operator(op).to_block_tridiagonal()
+    lower = np.asarray(blocks.lower[:, species, speed])
+    diag = np.asarray(blocks.diag[:, species, speed])
+    upper = np.asarray(blocks.upper[:, species, speed])
+    n_l, n_tz, _ = diag.shape
+    out = np.zeros((n_l * n_tz, n_l * n_tz))
+    for ell in range(n_l):
+        row = slice(ell * n_tz, (ell + 1) * n_tz)
+        out[row, row] = diag[ell]
+        if ell >= 1:
+            out[row, (ell - 1) * n_tz : ell * n_tz] = lower[ell]
+        if ell + 1 < n_l:
+            out[row, (ell + 1) * n_tz : (ell + 2) * n_tz] = upper[ell]
+    return out
+
+
+@dataclass(frozen=True)
+class PitchCollocationSurrogate:
+    """A finite-difference discretization of the simplified operator on a pitch grid.
+
+    Attributes:
+        matrix: dense ``(Nalpha*Ntheta*Nzeta)`` square operator, index order
+            ``(alpha, theta, zeta)``.
+        to_nodal: ``(Nalpha, Nxi)`` Legendre Vandermonde ``P_L(xi_k)`` -- turns
+            dkx's Legendre coefficients into values on the pitch grid.
+        to_modal: its pseudo-inverse, ``(Nxi, Nalpha)``.
+        shape: ``(Nalpha, Ntheta, Nzeta)``.
+        alpha: the pitch-angle nodes.
+    """
+
+    matrix: np.ndarray
+    to_nodal: np.ndarray
+    to_modal: np.ndarray
+    shape: tuple[int, int, int]
+    alpha: np.ndarray
+
+    def nodal(self, modal: np.ndarray) -> np.ndarray:
+        """Legendre coefficients ``(Nxi, T, Z)`` -> grid values ``(Nalpha, T, Z)``."""
+        n_xi = self.to_nodal.shape[1]
+        v = np.asarray(modal).reshape(n_xi, self.shape[1], self.shape[2])
+        return np.einsum("al,ltz->atz", self.to_nodal, v).reshape(-1)
+
+    def modal(self, nodal: np.ndarray) -> np.ndarray:
+        """Grid values ``(Nalpha, T, Z)`` -> Legendre coefficients ``(Nxi, T, Z)``."""
+        g = np.asarray(nodal).reshape(self.shape)
+        return np.einsum("la,atz->ltz", self.to_modal, g).reshape(-1)
+
+
+def _legendre_vandermonde(xi: np.ndarray, n_l: int) -> np.ndarray:
+    out = np.zeros((xi.size, n_l))
+    out[:, 0] = 1.0
+    if n_l > 1:
+        out[:, 1] = xi
+    for ell in range(1, n_l - 1):
+        out[:, ell + 1] = ((2 * ell + 1) * xi * out[:, ell] - ell * out[:, ell - 1]) / (ell + 1)
+    return out
+
+
+def _uniform_spacing(ddx: np.ndarray, n: int) -> float:
+    """Recover the grid spacing of a centered periodic first-derivative matrix.
+
+    ``uniform_periodic_diff_matrices`` builds circulant matrices; the centered
+    schemes dkx uses have first-neighbour weight ``1/2`` (3-point) or ``2/3``
+    (5-point), so the spacing follows from the ``+1`` entry.
+    """
+    if n == 1:
+        return 1.0
+    row = np.asarray(ddx)[0]
+    n_nonzero = int(np.count_nonzero(np.abs(row) > 1e-13))
+    if n_nonzero == 2:
+        return 0.5 / float(row[1])
+    if n_nonzero == 4:
+        return (2.0 / 3.0) / float(row[1])
+    raise ValueError(
+        "the pitch-collocation surrogate needs a 3- or 5-point centered angular "
+        f"scheme to recover the grid spacing from, got {n_nonzero} nonzero weights"
+    )
+
+
+def pitch_collocation_surrogate(
+    op: KineticOperator,
+    *,
+    species: int = 0,
+    speed: int = 0,
+    n_alpha: int | None = None,
+    angular_stencil: str = "up1",
+    pitch_stencil: str | None = None,
+) -> PitchCollocationSurrogate:
+    r"""Discretize the *same continuum operator* on a pitch-angle collocation grid.
+
+    Per ``(species, speed)`` the simplified operator is, in continuum form,
+
+    .. math::
+
+        K f = a \left[ \xi\, \mathbf{b}\cdot\nabla f
+                       - \frac{1-\xi^2}{2}\,
+                         (\mathbf{b}\cdot\nabla \ln B)\, \partial_\xi f \right]
+              + w^{E}_\theta \partial_\theta f + w^{E}_\zeta \partial_\zeta f
+              + C f ,
+
+    with ``a = x sqrt(That/mHat)`` and ``C`` diagonal in the Legendre index.
+    dkx discretizes it Legendre-*modally* in pitch; this builds the alternative
+    in which pitch is a *grid*, uniform in ``alpha`` with ``xi = cos alpha``
+    (half-index, so the ends where the mirror speed vanishes are not nodes), and
+    the streaming/mirror advection is upwind-differenced in all three of
+    ``(alpha, theta, zeta)``.  ``C`` is carried across exactly, as
+    ``V diag(c_L) V^+`` with ``V`` the Legendre Vandermonde -- dense in pitch but
+    tiny, and it keeps the comparison about the *advection* discretization
+    alone.
+
+    Coupled to dkx's Legendre state by ``V`` and ``V^+``, this is the classical
+    "low-order finite-difference preconditioner for a spectral operator"
+    construction (S. A. Orszag, J. Comput. Phys. **37**, 70 (1980); M. O. Deville
+    & E. H. Mund, J. Comput. Phys. **60**, 517 (1985)).  What it is *for* here is
+    the measurement in this module's docstring: it is the discretization in
+    which an alternating line block-Jacobi smoother converges, and dkx's is not.
+
+    Args:
+        op: the full tier-2 operator (only the simplified part is used).
+        species: species index.
+        speed: speed-node index.
+        n_alpha: pitch-grid size; defaults to ``op.n_xi``.
+        angular_stencil: key of :data:`UPWIND_STENCILS` for ``theta``/``zeta``.
+        pitch_stencil: key for ``alpha``; defaults to ``angular_stencil``.
+
+    Returns:
+        A :class:`PitchCollocationSurrogate`.  Dense: only for analysis on small
+        decks.
+    """
+    simplified = simplified_operator(op)
+    n_theta, n_zeta, n_xi = op.n_theta, op.n_zeta, op.n_xi
+    n_a = int(n_alpha or n_xi)
+
+    a_scale = float(
+        np.asarray(op.x)[speed]
+        * np.sqrt(np.asarray(op.t_hat)[species] / np.asarray(op.m_hat)[species])
+    )
+    b_hat = np.asarray(op.b_hat)
+    v_theta = np.asarray(op.b_hat_sup_theta) / b_hat
+    v_zeta = np.asarray(op.b_hat_sup_zeta) / b_hat
+    b_grad_ln_b = (
+        np.asarray(op.b_hat_sup_theta) * np.asarray(op.db_hat_dtheta)
+        + np.asarray(op.b_hat_sup_zeta) * np.asarray(op.db_hat_dzeta)
+    ) / b_hat**2
+    if op.with_exb:
+        coef_theta, coef_zeta = (np.asarray(c) for c in op._exb_coefficients())
+    else:
+        coef_theta = np.zeros_like(b_hat)
+        coef_zeta = np.zeros_like(b_hat)
+    coll = np.asarray(simplified.pas.coef)[species, speed][:n_xi]
+
+    alpha = np.pi * (2 * np.arange(n_a) + 1) / (2 * n_a)
+    xi = np.cos(alpha)
+    h_alpha = np.pi / n_a
+    h_theta = 2.0 * np.pi / n_theta
+    h_zeta = _uniform_spacing(np.asarray(op.ddzeta), n_zeta)
+
+    # advection velocities; d(alpha)/ds follows from d(xi)/ds and xi = cos alpha
+    w_alpha = a_scale * (np.sin(alpha)[:, None, None] / 2.0) * b_grad_ln_b[None]
+    w_theta = a_scale * xi[:, None, None] * v_theta[None] + coef_theta[None]
+    w_zeta = a_scale * xi[:, None, None] * v_zeta[None] + coef_zeta[None]
+
+    pitch_stencil = pitch_stencil or angular_stencil
+    pairs = {
+        0: stencil_matrices(n_a, h_alpha, pitch_stencil, periodic=False),
+        1: stencil_matrices(n_theta, h_theta, angular_stencil, periodic=True),
+        2: stencil_matrices(n_zeta, h_zeta, angular_stencil, periodic=True),
+    }
+    eye = {0: np.eye(n_a), 1: np.eye(n_theta), 2: np.eye(n_zeta)}
+
+    def lift(axis: int, mat: np.ndarray) -> np.ndarray:
+        factors = [eye[0], eye[1], eye[2]]
+        factors[axis] = mat
+        return np.kron(factors[0], np.kron(factors[1], factors[2]))
+
+    shape = (n_a, n_theta, n_zeta)
+    size = n_a * n_theta * n_zeta
+    matrix = np.zeros((size, size))
+    for axis, field in ((0, w_alpha), (1, w_theta), (2, w_zeta)):
+        flat = np.broadcast_to(field, shape).reshape(-1)
+        back, fwd = pairs[axis]
+        matrix += (flat * (flat > 0))[:, None] * lift(axis, back)
+        matrix += (flat * (flat <= 0))[:, None] * lift(axis, fwd)
+
+    vander = _legendre_vandermonde(xi, n_xi)
+    pinv = np.linalg.pinv(vander)
+    matrix += lift(0, vander @ np.diag(coll) @ pinv)
+    return PitchCollocationSurrogate(
+        matrix=matrix, to_nodal=vander, to_modal=pinv, shape=shape, alpha=alpha
+    )
+
+
+def line_smoother_spectral_radius(
+    matrix: np.ndarray, shape: tuple[int, ...], *, omega: float = 1.0, floor: float = 1e-12
+) -> float:
+    """Spectral radius of an alternating line block-Jacobi error propagator.
+
+    Builds ``S = prod_axes (I - omega M_axis^{-1} A)`` with ``M_axis`` the block
+    diagonal of ``A`` whose blocks run along that axis -- one exact line solve
+    per coordinate, applied multiplicatively, which is the standard remedy for
+    an advection whose direction is not grid-aligned (Trottenberg et al.,
+    sections 5.1 and 7.4) -- and returns ``rho(S)``.
+
+    ``rho(S) < 1`` is necessary for *any* multigrid cycle built on this
+    relaxation: a coarse-grid correction cannot rescue a divergent smoother.
+
+    Dense, ``O(N^3)``: for analysis on small decks only.
+    """
+    size = matrix.shape[0]
+    prop = np.eye(size)
+    for axis in range(len(shape)):
+        m = shape[axis]
+        rest = tuple(s for i, s in enumerate(shape) if i != axis)
+        n_rest = int(np.prod(rest)) if rest else 1
+        blocks = np.moveaxis(
+            matrix.reshape(tuple(shape) + tuple(shape)),
+            (axis, len(shape) + axis),
+            (0, 1),
+        ).reshape((m, m, n_rest, n_rest))
+        blocks = np.einsum("abrr->rab", blocks)
+        blocks = blocks + floor * np.abs(blocks).sum(axis=(1, 2)).max() * np.eye(m)[None]
+        rhs = (matrix @ prop).reshape(tuple(shape) + (size,))
+        rhs = np.moveaxis(rhs, axis, 0).reshape(m, n_rest, size).transpose(1, 0, 2)
+        step = np.linalg.solve(blocks, rhs).transpose(1, 0, 2)
+        step = np.moveaxis(step.reshape((m,) + rest + (size,)), 0, axis)
+        prop = prop - omega * step.reshape(size, size)
+    return float(np.abs(np.linalg.eigvals(prop)).max())

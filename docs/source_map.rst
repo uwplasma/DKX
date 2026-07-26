@@ -64,7 +64,10 @@ Physics and numerics:
   preconditioner selected by ``solve(preconditioner="multigrid")``:
   rediscretized coarse operators on coarsened ``(theta, zeta[, xi])`` grids,
   pitch-collocation and Legendre-plane relaxations, and the block-Thomas solve
-  on the coarsest grid.
+  on the coarsest grid; plus the pitch-basis diagnostics
+  (``pitch_collocation_surrogate``, ``line_diagonal_dominance``,
+  ``line_smoother_spectral_radius``) that measure why that route cannot reach
+  tolerance on a Legendre-modal pitch discretization.
 - ``phi1.py``: the Phi1/quasineutrality Newton solve.
 - ``moments.py``: velocity-space moments, flux families, transport matrices,
   NTV, classical transport (``diagnostics.F90``,
