@@ -212,6 +212,51 @@ def test_out_of_range_option_values_are_validation_errors() -> None:
     assert inp.physics.quasineutrality_option == 3
 
 
+def test_widened_upwind_scheme_codes_are_whitelisted_but_never_default() -> None:
+    """The dkx-only 100-block derivative schemes validate; neighbours still fail."""
+    from dkx.phase_space import (
+        _WIDENED_ANGLE_DERIVATIVE_SCHEME_MAP,
+        _WIDENED_MAGNETIC_DRIFT_SCHEME_MAP,
+    )
+
+    default = sfincs_input_from_raw(parse_sfincs_input_text("&general\n/\n"))
+    assert default.other.theta_derivative_scheme == 2  # centered, Fortran parity
+    assert default.other.zeta_derivative_scheme == 2
+    assert default.other.magnetic_drift_derivative_scheme == 3
+
+    for code in _WIDENED_ANGLE_DERIVATIVE_SCHEME_MAP:
+        inp = sfincs_input_from_raw(
+            parse_sfincs_input_text(
+                "&otherNumericalParameters\n"
+                f"  thetaDerivativeScheme = {code}\n  zetaDerivativeScheme = {code}\n/\n"
+            )
+        )
+        assert inp.other.theta_derivative_scheme == code
+        assert inp.other.zeta_derivative_scheme == code
+    for code in _WIDENED_MAGNETIC_DRIFT_SCHEME_MAP:
+        inp = sfincs_input_from_raw(
+            parse_sfincs_input_text(
+                f"&otherNumericalParameters\n  magneticDriftDerivativeScheme = {code}\n/\n"
+            )
+        )
+        assert inp.other.magnetic_drift_derivative_scheme == code
+
+    for bad in (3, -1, 105, -105):
+        with pytest.raises(ValueError, match="thetaDerivativeScheme"):
+            sfincs_input_from_raw(
+                parse_sfincs_input_text(
+                    f"&otherNumericalParameters\n  thetaDerivativeScheme = {bad}\n/\n"
+                )
+            )
+    for bad in (4, -4, 105):
+        with pytest.raises(ValueError, match="magneticDriftDerivativeScheme"):
+            sfincs_input_from_raw(
+                parse_sfincs_input_text(
+                    f"&otherNumericalParameters\n  magneticDriftDerivativeScheme = {bad}\n/\n"
+                )
+            )
+
+
 def test_monoenergetic_example_deck_validates_with_overrides() -> None:
     deck = _require(_EXAMPLE_DECKS[1])
     inp = load_sfincs_input(deck)
