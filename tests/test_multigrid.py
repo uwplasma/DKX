@@ -39,7 +39,6 @@ from dkx.multigrid import (
     line_diagonal_dominance,
     line_smoother_spectral_radius,
     measure_smoothing_factor,
-    multigrid_available,
     periodic_transfer_matrices,
     pitch_collocation_surrogate,
     simplified_operator,
@@ -50,12 +49,6 @@ from dkx.namelist import parse_sfincs_input_text, read_sfincs_input
 from dkx.solve import _resolve_preconditioner, solve
 
 REF = Path(__file__).parent / "ref"
-
-pytestmark = pytest.mark.skipif(
-    not multigrid_available()[0],
-    reason=f"installed solvax has no multigrid API: {multigrid_available()[1]}",
-)
-
 
 def _load_op(name: str) -> KineticOperator:
     return KineticOperator.from_namelist(read_sfincs_input(REF / f"{name}.input.namelist"))

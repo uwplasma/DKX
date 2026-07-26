@@ -27,13 +27,6 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from dkx.multigrid import multigrid_available
-
-_MG_OK, _MG_WHY = multigrid_available()
-requires_multigrid = pytest.mark.skipif(
-    not _MG_OK, reason=f"installed solver library has no multigrid API: {_MG_WHY}"
-)
-
 jax.config.update("jax_enable_x64", True)
 
 from dkx.api import SolverOptions  # noqa: E402
@@ -370,7 +363,6 @@ def build_cycle(grid, **kwargs):
     return op, precond, shapes
 
 
-@requires_multigrid
 @pytest.mark.parametrize("grid", ((16, 8, 16), (32, 16, 32)))
 def test_multigrid_cycle_rate_does_not_degrade_with_resolution(grid):
     """h-independence: the same cycle contracts at the same rate on a finer grid.
@@ -388,7 +380,6 @@ def test_multigrid_cycle_rate_does_not_degrade_with_resolution(grid):
         assert cycle_rate(op, precond, block=ix) < 0.7, ix
 
 
-@requires_multigrid
 def test_multigrid_preconditioning_is_what_makes_the_solve_converge():
     """Same tolerance, same operator: with the cycle it converges, without it does not."""
     nml = deck(nx=2)
@@ -405,13 +396,11 @@ def test_multigrid_preconditioning_is_what_makes_the_solve_converge():
 
 @pytest.mark.parametrize("smoother", ("line", "plane", "upwind"))
 @pytest.mark.parametrize("cycle", ("v", "f"))
-@requires_multigrid
 def test_every_smoother_and_cycle_shape_contracts(smoother, cycle):
     op, precond, _ = build_cycle((16, 8, 16), levels=2, smoother=smoother, cycle=cycle)
     assert cycle_rate(op, precond) < 0.9
 
 
-@requires_multigrid
 def test_widened_stencils_run_with_a_first_order_relaxation():
     """Double discretization: an accurate operator, an upwinded smoother (Brandt 1981)."""
     op, precond, _ = build_cycle((16, 8, 16), levels=2, stencil="up3", relaxation_stencil="up1")
@@ -424,7 +413,6 @@ def test_widened_stencils_run_with_a_first_order_relaxation():
 # ---------------------------------------------------------------------------
 
 
-@requires_multigrid
 def test_agrees_with_the_modal_path_in_the_continuum_limit():
     """Different discretizations of one equation: the *gap* must shrink, not vanish.
 
