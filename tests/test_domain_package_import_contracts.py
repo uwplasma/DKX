@@ -49,6 +49,7 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "bounce_averaged.py": "public physics API",
     "cli.py": "public entry point",
     "collisions.py": "stable physics kernel",
+    "collocation.py": "experimental discretization kernel",
     "compare.py": "public validation API",
     "console.py": "stable support utility",
     "constants.py": "stable physics kernel",
