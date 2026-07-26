@@ -31,13 +31,19 @@ import pytest
 
 from dkx.drift_kinetic import KineticOperator
 from dkx.multigrid import (
+    UPWIND_STENCILS,
     MultigridSettings,
     coarsen_operator,
+    dense_simplified_block,
     hierarchy_shapes,
+    line_diagonal_dominance,
+    line_smoother_spectral_radius,
     measure_smoothing_factor,
     multigrid_available,
     periodic_transfer_matrices,
+    pitch_collocation_surrogate,
     simplified_operator,
+    stencil_matrices,
     xi_transfer_matrices,
 )
 from dkx.namelist import parse_sfincs_input_text, read_sfincs_input
@@ -310,3 +316,129 @@ def test_adjoint_diagnostics_are_recorded_for_the_multigrid_route() -> None:
     )
     assert result.adjoint is not None
     assert result.adjoint.checked
+
+
+# ---------------------------------------------------------------------------
+# Why the multigrid route stalls: the pitch basis.  These pin the structural
+# facts behind the negative result documented in ``dkx/multigrid.py`` and
+# ``docs/performance.rst``, so it stays a measurement rather than a claim.
+# ---------------------------------------------------------------------------
+
+
+def test_widened_upwind_stencils_buy_diagonal_dominance_at_fixed_order() -> None:
+    """The point of the widened stencils: more diagonal weight per unit accuracy.
+
+    A first-derivative stencil's diagonal dominance ``d`` is what decides
+    whether a damped block-Jacobi relaxation built from it smooths.  The
+    textbook upwind-biased schemes lose it as their order rises; skipping near
+    neighbours keeps it.
+    """
+    expected = {
+        "up1": 1.0,  # 1st order, fully one-sided
+        "up2": 0.6,  # 2nd order, textbook
+        "wide2": 0.882,  # 2nd order, widened
+        "up3": 1.0 / 3.0,  # 3rd order, textbook
+        "wide4": 0.619,  # 4th order, widened
+        "ctr2": 0.0,  # centered: the scheme dkx actually uses on the angles
+    }
+    measured = {}
+    for name in expected:
+        back, forward = stencil_matrices(21, 1.0, name, periodic=True)
+        # the forward-biased partner is the mirror image, so it has the same d
+        for mat in (back, forward):
+            diag = np.abs(np.diag(mat))
+            off = np.abs(mat).sum(axis=1) - diag
+            measured.setdefault(name, []).append(float(np.min(diag / off)))
+        assert measured[name][0] == pytest.approx(measured[name][1], abs=1e-12)
+    for name, value in expected.items():
+        assert measured[name][0] == pytest.approx(value, abs=2e-3), name
+    # a widened stencil beats the textbook one of the *same or higher* order
+    assert measured["wide2"] > measured["up2"]
+    assert measured["wide4"] > measured["up3"]
+    # and every stencil in the table is a consistent first derivative
+    for name in UPWIND_STENCILS:
+        back, forward = stencil_matrices(21, 2 * np.pi / 21, name, periodic=True)
+        x = 2 * np.pi * np.arange(21) / 21
+        for mat in (back, forward):
+            np.testing.assert_allclose(mat @ np.ones(21), 0.0, atol=1e-10)
+            assert np.linalg.norm(mat @ np.sin(x) - np.cos(x)) / np.sqrt(21) < 0.35
+
+
+def test_streaming_is_strictly_off_diagonal_in_the_legendre_pitch_index() -> None:
+    """The structural reason no line smoother can work in the modal basis.
+
+    Parallel streaming and the mirror force couple ``L -> L +- 1`` only, so they
+    contribute *nothing* to the ``(L, L)`` block: an angular line relaxation at
+    fixed ``L`` never sees the operator's dominant term, whatever angular
+    stencil it is built from.
+    """
+    from dataclasses import replace
+
+    simplified = simplified_operator(_load_op("quick_2species_FPCollisions_noEr"))
+    stripped = replace(
+        simplified,
+        with_exb=False,
+        pas=replace(simplified.pas, coef=jnp.zeros_like(simplified.pas.coef)),
+    )
+    for ell in (0, 1, simplified.n_xi // 2, simplified.n_xi - 1):
+        blocks = stripped.legendre_blocks(ell)
+        assert float(jnp.max(jnp.abs(blocks.diag))) == 0.0
+    assert float(jnp.max(jnp.abs(stripped.legendre_blocks(1).upper))) > 0.0
+    assert float(jnp.max(jnp.abs(stripped.legendre_blocks(1).lower))) > 0.0
+
+
+def test_line_smoothers_diverge_in_the_legendre_basis_and_converge_on_a_pitch_grid() -> None:
+    """``rho(S) < 1`` is necessary for any cycle, and the modal basis has no such S.
+
+    Same continuum operator, same geometry, same deck: only the pitch
+    discretization differs.
+    """
+    op = _load_op("quick_2species_FPCollisions_noEr")
+    modal = dense_simplified_block(op, species=0, speed=1)
+    modal_shape = (op.n_xi, op.n_theta, op.n_zeta)
+    rho_modal = line_smoother_spectral_radius(modal, modal_shape)
+    assert rho_modal > 1.5, rho_modal
+
+    upwind = pitch_collocation_surrogate(op, species=0, speed=1, angular_stencil="up1")
+    rho_upwind = line_smoother_spectral_radius(upwind.matrix, upwind.shape)
+    assert rho_upwind < 1.0, rho_upwind
+
+    # and it is the upwinding, not the change of basis: the same collocation
+    # grid with centered differences has a divergent relaxation too.
+    centered = pitch_collocation_surrogate(op, species=0, speed=1, angular_stencil="ctr2")
+    assert line_smoother_spectral_radius(centered.matrix, centered.shape) > 1.0
+
+    # the upwind pitch line is diagonally dominant; the centered one is not
+    assert line_diagonal_dominance(upwind.matrix, upwind.shape, 0)[0] > (
+        line_diagonal_dominance(centered.matrix, centered.shape, 0)[0]
+    )
+
+
+def test_pitch_collocation_surrogate_discretizes_the_same_operator() -> None:
+    """The surrogate is the same continuum operator, not a different problem."""
+    op = _load_op("quick_2species_FPCollisions_noEr")
+    surrogate = pitch_collocation_surrogate(
+        op, species=0, speed=1, angular_stencil="ctr2"
+    )
+    assert surrogate.shape == (op.n_xi, op.n_theta, op.n_zeta)
+
+    # the modal <-> nodal transform is an exact round trip at Nalpha = Nxi
+    rng = np.random.default_rng(0)
+    v = rng.normal(size=op.n_xi * op.n_theta * op.n_zeta)
+    np.testing.assert_allclose(surrogate.modal(surrogate.nodal(v)), v, atol=1e-10)
+
+    # the dense modal block agrees with the matrix-free simplified operator
+    modal = dense_simplified_block(op, species=0, speed=1)
+    f = rng.normal(size=op.f_shape)
+    reference = np.asarray(simplified_operator(op).apply_f(jnp.asarray(f)))[0, 1]
+    got = modal @ f[0, 1].reshape(-1)
+    np.testing.assert_allclose(got, reference.reshape(-1), rtol=1e-9, atol=1e-11)
+
+    # on a field the coarse angular grid resolves, the two discretizations of
+    # the same continuum operator agree to their truncation error
+    theta = 2 * np.pi * np.arange(op.n_theta) / op.n_theta
+    smooth = np.zeros((op.n_xi, op.n_theta, op.n_zeta))
+    smooth[1] = np.cos(theta)[:, None]
+    a = surrogate.nodal(modal @ smooth.reshape(-1))
+    b = surrogate.matrix @ surrogate.nodal(smooth.reshape(-1))
+    assert np.linalg.norm(a - b) / np.linalg.norm(a) < 0.25
