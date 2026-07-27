@@ -92,8 +92,8 @@ Plain ``jax.grad`` through that kernel tapes the generated sweeps, so the
 **reverse** pass costs :math:`O(N_\xi\cdot m^2)` per subsystem and gives back
 the block-count independence exactly where gradient-based transport and profile
 inversion need it. ``solve(..., tier1_adjoint_window=w)`` restores it by routing
-through ``solvax``'s structure-preserving custom VJP for generated blocks
-(requires ``solvax >= 0.8.7``): the right-hand-side gradient is an exactly
+through ``solvax``'s structure-preserving custom VJP for generated blocks:
+the right-hand-side gradient is an exactly
 *generated* truncated solve of the transposed operator, and the coefficient
 gradients are pulled back through the block assembly's own derivative on the
 leading ``keep + w`` blocks. Reverse mode then runs at

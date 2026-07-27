@@ -1365,12 +1365,3 @@ def test_truncated_bounded_adjoint_is_subsystem_batch_invariant() -> None:
     g_batched = jax.grad(lambda s: loss(s, b))(one)
     np.testing.assert_allclose(float(g_batched), float(g_serial), rtol=1e-12)
 
-
-def test_truncated_bounded_adjoint_requires_recent_solvax() -> None:
-    import dkx.solve as solve_mod
-
-    if solve_mod._TRUNCATED_FN_ACCEPTS_PARAMS:
-        pytest.skip("installed solvax supports params; error path not reachable")
-    op = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
-    with pytest.raises(RuntimeError, match="solvax >= 0.8.7"):
-        solve(op, op.rhs(), method="block_tridiagonal_truncated", tier1_adjoint_window=2)
