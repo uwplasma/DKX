@@ -893,6 +893,9 @@ def n_xi_for_x_ramp(
     points need fewer pitch modes, so the number of retained modes ramps up
     with x. Option 0 keeps all ``n_xi`` modes everywhere.
 
+    Option 1 is the SFINCS *default*, so this ramp is what a deck that says
+    nothing about ``Nxi_for_x_option`` actually gets.
+
     Args:
       x: Speed-grid nodes, shape ``(n_x,)``.
       n_xi: Maximum number of Legendre modes (namelist ``Nxi``).
@@ -911,14 +914,20 @@ def n_xi_for_x_ramp(
     if option == 0:
         out[:] = n_xi
     elif option == 1:
+        # createGrids.F90 carries two ramps here and the 0.1-floor one is
+        # commented out; the live line is the plain linear ramp from 0 to
+        # ``n_xi`` as x goes 0 -> 2.  Option 3 below keeps the commented-out
+        # variant available under its own number.
         for j in range(n_x):
-            temp = n_xi * (0.1 + 0.9 * x_np[j] / 2.0)
-            out[j] = max(4, n_l, min(int(temp), n_xi))
+            temp = n_xi * (x_np[j] / 2.0)
+            out[j] = max(3, n_l, min(int(temp), n_xi))
     elif option == 2:
         for j in range(n_x):
             temp = n_xi * (0.1 + 0.9 * ((x_np[j] / 2.0) ** 2))
-            out[j] = max(4, n_l, min(int(temp), n_xi))
+            out[j] = max(3, n_l, min(int(temp), n_xi))
     elif option == 3:
+        # dkx extension (``createGrids.F90`` stops at 2): the 0.1-floor linear
+        # ramp, uncapped.
         for j in range(n_x):
             temp = n_xi * (0.1 + 0.9 * x_np[j] / 2.0)
             out[j] = max(3, n_l, int(temp))
