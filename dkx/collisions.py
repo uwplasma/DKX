@@ -1407,17 +1407,46 @@ class ImprovedSugamaV3Operator:
     mat: jnp.ndarray  # (S,S,L,X,X)
     n_xi_for_x: jnp.ndarray  # (X,) int32
     mask_xi: jnp.ndarray  # (X, L)
+    # The same operator, kept apart as ``test`` plus a rank-K correction:
+    # ``mat[a,b,L,i,j] = delta_ab test[a,L,i,j]
+    #                    + sum_c columns[a,i,L,c] extraction[b,j,L,c]``.
+    # ``test`` is species-diagonal and dense only in ``x``, so a velocity-space
+    # block smoother inverts it directly; the field-particle back-reaction is
+    # the part that couples species and carries the conservation laws, and it
+    # is low rank (``K = 2 S``, of which L=1 uses ``S`` and L >= 2 uses none).
+    # Splitting them is what lets a relaxation see a local operator while the
+    # conserving terms are still applied exactly
+    # (:func:`solvax.precond.low_rank_corrected`).
+    # ``apply`` uses ``mat`` alone, so these stay optional: a caller assembling
+    # an operator by hand (or an older pickle) simply has no split to offer.
+    test: jnp.ndarray | None = None  # (S,L,X,X)
+    columns: jnp.ndarray | None = None  # (S,X,L,K)
+    extraction: jnp.ndarray | None = None  # (S,X,L,K)
 
     def tree_flatten(self):
-        children = (self.mat, self.n_xi_for_x, self.mask_xi)
+        children = (
+            self.mat,
+            self.n_xi_for_x,
+            self.mask_xi,
+            self.test,
+            self.columns,
+            self.extraction,
+        )
         aux = None
         return children, aux
 
     @classmethod
     def tree_unflatten(cls, aux, children):
         del aux
-        mat, n_xi_for_x, mask_xi = children
-        return cls(mat=mat, n_xi_for_x=n_xi_for_x, mask_xi=mask_xi)
+        mat, n_xi_for_x, mask_xi, test, columns, extraction = children
+        return cls(
+            mat=mat,
+            n_xi_for_x=n_xi_for_x,
+            mask_xi=mask_xi,
+            test=test,
+            columns=columns,
+            extraction=extraction,
+        )
 
 
 def make_improved_sugama_v3_operator(
@@ -1530,38 +1559,54 @@ def make_improved_sugama_v3_operator(
                 blk[range(n_x), range(n_x)] += nu_n_f * pitch_factor_l[ell_i] * nu_d_ab[ia, ib]
                 test_ab_l[ia, ib, ell_i] = blk
 
-    mat = np.zeros((n_species, n_species, n_xi_int, n_x, n_x), dtype=np.float64)
-    # Test-particle part is diagonal in the species index (acts on f_a).
-    for ia in range(n_species):
-        mat[ia, ia, :, :, :] += test_ab_l[ia, :, :, :, :].sum(axis=0)
+    # ---- field-particle factors, as a rank-K correction over (species, x) ----
+    # Every field term is one outer product per species pair, so the whole
+    # back-reaction factors with the rank index running over species:
+    # F[(a,i),(b,j),L] = sum_c columns[a,i,L,c] extraction[b,j,L,c].
+    # K = 2 S covers L=0 (particle + energy); L=1 uses S of the slots
+    # (momentum) and L >= 2 carries no field term at all.
+    rank = 2 * n_species
+    columns = np.zeros((n_species, n_x, n_xi_int, rank), dtype=np.float64)
+    extraction = np.zeros((n_species, n_x, n_xi_int, rank), dtype=np.float64)
 
-    # ---- L=1 parallel-momentum field term ----
+    # L=1 parallel momentum: U = r_a, V = kappa_cb tau_bc.
     if n_xi_int > 1:
         test_l1 = test_ab_l[:, :, 1, :, :]  # (S,S,X,X)
         r_mom = np.einsum("abij,j->ai", test_l1, phi)  # response r_a (S,X)
         tau_mom = np.einsum("i,abij->abj", w_mom, test_l1)  # tau_ab (S,S,X)
         r_dot = w_mom @ r_mom.T  # (S,) = p . r_a
-        for ia in range(n_species):
+        for ic in range(n_species):
+            columns[ic, :, 1, ic] = r_mom[ic]
             for ib in range(n_species):
-                kappa = -float(p_mom[ib]) / (float(p_mom[ia]) * float(r_dot[ia]))
-                mat[ia, ib, 1, :, :] += kappa * np.outer(r_mom[ia], tau_mom[ib, ia])
+                kappa = -float(p_mom[ib]) / (float(p_mom[ic]) * float(r_dot[ic]))
+                extraction[ib, :, 1, ic] = kappa * tau_mom[ib, ic]
 
-    # ---- L=0 particle-number + kinetic-energy field term ----
+    # L=0 particle number (U = h1, species-diagonal) and kinetic energy (U = h2).
     test_l0 = test_ab_l[:, :, 0, :, :]  # (S,S,X,X)
     nu_part = np.einsum("i,abij->abj", w_part, test_l0)  # nu_ab (S,S,X)
     eps_energy = np.einsum("i,abij->abj", w_energy, test_l0)  # eps_ab (S,S,X)
     mu_energy = eps_energy - (e_h1 / n1) * nu_part  # residual energy functional (S,S,X)
-    for ia in range(n_species):
-        # particle-number restoration (diagonal in species, driven by f_a).
-        mat[ia, ia, 0, :, :] += -(1.0 / n1) * np.outer(h1, nu_part[ia].sum(axis=0))
+    for ic in range(n_species):
+        columns[ic, :, 0, ic] = h1
+        extraction[ic, :, 0, ic] = -(1.0 / n1) * nu_part[ic].sum(axis=0)
+        columns[ic, :, 0, n_species + ic] = h2
         for ib in range(n_species):
-            lam = -float(p_energy[ib]) / (float(p_energy[ia]) * e2)
-            mat[ia, ib, 0, :, :] += lam * np.outer(h2, mu_energy[ib, ia])
+            lam = -float(p_energy[ib]) / (float(p_energy[ic]) * e2)
+            extraction[ib, :, 0, n_species + ic] = lam * mu_energy[ib, ic]
+
+    # Test-particle part is diagonal in the species index (acts on f_a).
+    test = np.einsum("abLij->aLij", test_ab_l)
+
+    mat = np.einsum("ab,aLij->abLij", np.eye(n_species), test)
+    mat += np.einsum("aiLc,bjLc->abLij", columns, extraction)
 
     return ImprovedSugamaV3Operator(
         mat=jnp.asarray(mat),
         n_xi_for_x=jnp.asarray(n_xi_for_x, dtype=jnp.int32),
         mask_xi=_mask_xi(jnp.asarray(n_xi_for_x, dtype=jnp.int32), n_xi_int),
+        test=jnp.asarray(test),
+        columns=jnp.asarray(columns),
+        extraction=jnp.asarray(extraction),
     )
 
 
