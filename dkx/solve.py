@@ -62,7 +62,6 @@ and the PETSc ``Pmat`` idiom of production SFINCS.
 from __future__ import annotations
 
 import functools
-import inspect
 import os
 import time
 from dataclasses import dataclass, field, replace
@@ -75,7 +74,6 @@ _jax_config.update("jax_enable_x64", True)
 import jax  # noqa: E402
 import jax.numpy as jnp  # noqa: E402
 import numpy as np  # noqa: E402
-from jax.scipy.linalg import lu_factor, lu_solve  # noqa: E402
 
 # solvax is a core dependency (installed automatically with dkx), but
 # keep this module importable without it and raise a clear error on first use
@@ -105,25 +103,6 @@ except ImportError as _solvax_exc:
     _SOLVAX_IMPORT_ERROR = _solvax_exc
 
 from dkx.drift_kinetic import KineticOperator  # noqa: E402
-
-
-# The nonzero-border-block ``d_block`` argument of
-# :func:`solvax.operators.schur_projected_precond` was upstreamed to solvax
-# (uwplasma/SOLVAX#20). Prefer it when the installed solvax exposes it; otherwise
-# fall back to the local ``_bordered_schur_precond`` so this module also works
-# against solvax releases that predate that argument.
-_SCHUR_ACCEPTS_D_BLOCK = schur_projected_precond is not None and (
-    "d_block" in inspect.signature(schur_projected_precond).parameters
-)
-
-# The structure-preserving generated-block bounded adjoint
-# (``params``/``adjoint_window``) was upstreamed to solvax (uwplasma/SOLVAX#35,
-# released in 0.8.7). Probe for it the same way as ``d_block`` above; the
-# truncated tier-1 kernel raises an actionable error when the option is
-# requested against an older solvax rather than silently taping.
-_TRUNCATED_FN_ACCEPTS_PARAMS = block_thomas_truncated_fn is not None and (
-    "params" in inspect.signature(block_thomas_truncated_fn).parameters
-)
 
 
 def _require_solvax() -> None:
@@ -191,8 +170,7 @@ _SOLVE_CPU_MAX_TIER2_DEFAULT = 0
 # Tier-2 preconditioner routes of ``solve(preconditioner=...)``.  ``"coarse"``
 # is the historical default (exact block-Thomas of the SFINCS-simplified
 # operator); ``"multigrid"`` swaps its inner f-block inverse for the
-# semicoarsened V-cycle of :mod:`dkx.multigrid` and needs a solvax newer than
-# the pinned release (:func:`dkx.multigrid.multigrid_available`).
+# semicoarsened V-cycle of :mod:`dkx.multigrid`.
 _TIER2_PRECONDITIONERS = ("coarse", "multigrid", "none")
 
 
@@ -1080,45 +1058,6 @@ def _materialize_full_border(
     return b_cols, c_rows, d_block
 
 
-def _bordered_schur_precond(
-    a_inv: Callable[[jnp.ndarray], jnp.ndarray],
-    b_cols: jnp.ndarray,
-    c_rows: jnp.ndarray,
-    d_block: jnp.ndarray,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """Preconditioner for ``[[A, B], [C, D]]`` from an approximate ``A^{-1}``.
-
-    Generalizes ``solvax.operators.schur_projected_precond`` to a *nonzero*
-    border-border block ``D`` (the Phi1 quasineutrality border; that function
-    hard-codes ``D=0``).  Forms the small dense Schur complement
-    ``S = D - C a_inv(B)`` once (``p`` coarse ``a_inv`` solves of the columns of
-    ``B`` plus one ``p x p`` LU) and returns the exact inverse of the bordered
-    system with ``A^{-1}`` replaced by ``a_inv`` throughout::
-
-        y = S^{-1} (r_y - C a_inv(r_x)),    x = a_inv(r_x - B y).
-
-    With ``a_inv`` exact the preconditioned operator is the identity; with the
-    coarse (SFINCS-simplified, null-space-pinned) ``a_inv`` the border -- and in
-    particular the Phi1/lambda coupling -- is still eliminated exactly through
-    the projected Schur system, so a preconditioner built for the f-block ``A``
-    preconditions the full Phi1-augmented system.  Reduces algebraically to
-    ``schur_projected_precond`` when ``D=0`` (the constraint-only case).  Each
-    application costs two ``a_inv`` calls plus one small LU triangular solve.
-    """
-    fs = c_rows.shape[1]
-    ainv_b = jax.vmap(a_inv, in_axes=1, out_axes=1)(b_cols)  # (f_size, p)
-    schur = d_block - c_rows @ ainv_b  # (p, p)
-    schur_lu = lu_factor(schur)
-
-    def precond(r: jnp.ndarray) -> jnp.ndarray:
-        r_x, r_y = r[:fs], r[fs:]
-        y = lu_solve(schur_lu, r_y - c_rows @ a_inv(r_x))
-        x = a_inv(r_x - b_cols @ y)
-        return jnp.concatenate([x, y])
-
-    return precond
-
-
 # Invertibility floor of the coarse f-block, relative to the operator's own band
 # magnitude.  1e-8 is tiny enough to leave a real diagonal -- and the tightly
 # clustered preconditioning it gives -- untouched, yet keeps an all-zero-diagonal
@@ -1193,7 +1132,7 @@ def build_coarse_preconditioner(
     ``[Phi1(theta,zeta) | lambda | sources]`` with a *nonzero* border-border
     block ``D`` (the QN adiabatic Phi1 diagonal, the ``+lambda`` coupling, and
     the ``<Phi1>=0`` row).  That full border is eliminated exactly with the
-    generalized bordered Schur complement (:func:`_bordered_schur_precond`) --
+    generalized bordered Schur complement --
     the coarse f-block solve plus a dense ``~Ntheta*Nzeta`` Schur solve -- so
     the coarse preconditioner is Phi1-aware and the Newton inner Krylov solve
     converges in far fewer iterations (:func:`dkx.phi1.solve_phi1`).
@@ -1319,14 +1258,8 @@ def build_coarse_preconditioner(
         # Phi1/lambda border block (``D``) are all probed exactly from the
         # Jacobian JVP, so only the f-block is approximated (GCROT corrects it).
         b_cols, c_rows, d_block = _materialize_full_border(op)
-        if _SCHUR_ACCEPTS_D_BLOCK:
-            precond = schur_projected_precond(a_inv, b_cols, c_rows, d_block=d_block)
-            precond_t = schur_projected_precond(
-                a_inv_t, c_rows.T, b_cols.T, d_block=d_block.T
-            )
-        else:
-            precond = _bordered_schur_precond(a_inv, b_cols, c_rows, d_block)
-            precond_t = _bordered_schur_precond(a_inv_t, c_rows.T, b_cols.T, d_block.T)
+        precond = schur_projected_precond(a_inv, b_cols, c_rows, d_block=d_block)
+        precond_t = schur_projected_precond(a_inv_t, c_rows.T, b_cols.T, d_block=d_block.T)
         return precond, precond_t
     if op.extra_size == 0:
         return a_inv, a_inv_t
@@ -1682,7 +1615,7 @@ def _solve_tier1_truncated(
     would be inconsistent and silently corrupt gradients.  Two consistent
     reverse-mode paths exist instead.  The default tapes the generated sweeps
     (exact, but the tape grows with ``n_xi``: ``O(n_xi * m^2)`` per
-    subsystem).  With ``adjoint_window=w`` (requires solvax >= 0.8.7) the
+    subsystem).  With ``adjoint_window=w`` the
     solve uses solvax's structure-preserving custom VJP for generated blocks:
     the right-hand-side gradient is an exactly *generated* truncated solve of
     the transposed operator, and the coefficient gradients are pulled back
@@ -1695,12 +1628,6 @@ def _solve_tier1_truncated(
     taped gradient exactly (solvax pins full-window bitwise equality).
     """
     _require_solvax()
-    if adjoint_window is not None and not _TRUNCATED_FN_ACCEPTS_PARAMS:
-        raise RuntimeError(
-            "adjoint_window requires solvax >= 0.8.7 "
-            "(block_thomas_truncated_fn params support); installed solvax "
-            "predates it. Upgrade solvax or omit adjoint_window."
-        )
     n_s, n_x, n_xi, n_t, n_z = op.f_shape
     n_tz = n_t * n_z
     batch = n_s * n_x
@@ -1731,7 +1658,7 @@ def _solve_tier1_truncated(
 
         def truncated_solve(rhs_cols: jnp.ndarray) -> jnp.ndarray:
             if adjoint_window is not None:
-                # Structure-preserving bounded adjoint (solvax >= 0.8.7): the
+                # Structure-preserving bounded adjoint: the
                 # differentiable coefficients travel as an explicit params
                 # pytree, and reverse mode runs at O((keep + w) * m^2) per
                 # subsystem instead of taping the full n_blocks sweep.
@@ -2418,9 +2345,7 @@ def solve(
                 of preconditioner quality — on the measured NCSX
                 full-Fokker-Planck ladder it does *not* reach the tier-2
                 tolerance, and ``docs/performance.rst`` records both the table
-                and the diagnosis — so it stays opt-in.  Needs a ``solvax``
-                newer than the pinned release
-                (:func:`dkx.multigrid.multigrid_available`).
+                and the diagnosis — so it stays opt-in.
             ``"none"``
                 unpreconditioned GCROT.
 
@@ -2456,7 +2381,7 @@ def solve(
             per-subsystem arithmetic — the knob trades memory for batched
             parallel work.  Ignored by the non-truncated tiers.
         tier1_adjoint_window: opt-in bounded reverse mode for the truncated
-            tier-1 kernel (requires solvax >= 0.8.7).  ``None`` (default)
+            tier-1 kernel.  ``None`` (default)
             keeps the taped gradient — bit-identical behavior to previous
             releases.  An integer ``w`` selects solvax's structure-preserving
             custom VJP: ``jax.grad`` through the truncated solve then runs at
