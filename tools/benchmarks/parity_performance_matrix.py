@@ -137,6 +137,42 @@ json.dump({
 """
 
 
+_EQUILIBRIUM_KEY = re.compile(
+    r'^(\s*equilibriumFile\s*=\s*["\'])([^"\']+)(["\'])', re.MULTILINE | re.IGNORECASE
+)
+
+
+def _absolutize_equilibrium(deck: Path, source_dir: Path) -> None:
+    """Rewrite a relative ``equilibriumFile`` against the deck's original home.
+
+    Each case runs in a scratch copy, which breaks the ``../../../..`` paths
+    upstream's decks use.  SFINCS reports a missing equilibrium on stdout and
+    still **exits zero**, so an unrewritten path does not fail loudly -- it
+    produces a fast, tiny, meaningless "run".  Rewriting up front is what keeps
+    such a case from being recorded as a Fortran win.
+    """
+    text = deck.read_text()
+
+    def replace(match: re.Match) -> str:
+        path = Path(match.group(2))
+        if path.is_absolute():
+            return match.group(0)
+        return match.group(1) + str((source_dir / path).resolve()) + match.group(3)
+
+    updated = _EQUILIBRIUM_KEY.sub(replace, text)
+    if updated != text:
+        deck.write_text(updated)
+
+
+def _fortran_succeeded(work: Path, result: dict) -> bool:
+    """A Fortran run counts only if it produced output.
+
+    The return code alone is not evidence: SFINCS exits zero after an
+    equilibrium-file or geometry error.  The output file is the real signal.
+    """
+    return result.get("returncode") == 0 and (work / "sfincsOutput.h5").exists()
+
+
 def _read_h5(path: Path) -> dict:
     import h5py
 
@@ -234,6 +270,7 @@ def run_case(
             for n_ranks in ranks:
                 work = root / f"fortran_{n_ranks}"
                 shutil.copytree(example_dir, work)
+                _absolutize_equilibrium(work / "input.namelist", example_dir)
                 command = (
                     [str(fortran_binary)]
                     if n_ranks == 1
@@ -244,16 +281,18 @@ def run_case(
                 # exporting them into the parent would shadow the BLAS that this
                 # process's own numpy is linked against.
                 result = _run_measured(launcher + command, work, timeout_s)
-                if result.get("returncode") == 0:
-                    produced = work / "sfincsOutput.h5"
-                    if produced.exists():
-                        shutil.copy(produced, root / f"fortran_{n_ranks}.h5")
+                result["succeeded"] = _fortran_succeeded(work, result)
+                if result["succeeded"]:
+                    shutil.copy(work / "sfincsOutput.h5", root / f"fortran_{n_ranks}.h5")
+                else:
+                    result["failure_tail"] = result.get("stdout_tail", "")[-600:]
                 record["fortran"][str(n_ranks)] = {
                     k: v for k, v in result.items() if k != "stdout_tail"
                 }
 
         work = root / "dkx"
         shutil.copytree(example_dir, work)
+        _absolutize_equilibrium(work / "input.namelist", example_dir)
         env = {"JAX_ENABLE_X64": "True"}
         if equilibria:
             env["DKX_EQUILIBRIA_DIRS"] = equilibria
