@@ -137,6 +137,46 @@ PAS_DKES_ER_TEXT = """
 """
 
 
+_FP_KRONECKER_TEXT = """
+&general
+/
+&geometryParameters
+  geometryScheme = 4
+/
+&speciesParameters
+  Zs = 1
+  mHats = 1
+  nHats = 1.0d+0
+  THats = 1.0d+0
+  dNHatdrHats = -0.5
+  dTHatdrHats = -2.0
+/
+&physicsParameters
+  Delta = 4.5694d-3
+  alpha = 1d+0
+  nu_n = 8.3d-3
+  Er = 0.0
+  collisionOperator = 0
+  includeXDotTerm = .false.
+  includeElectricFieldTermInXiDot = .false.
+/
+&resolutionParameters
+  Ntheta = 5
+  Nzeta = 5
+  Nxi = 4
+  Nx = 4
+  solverTolerance = 1d-11
+/
+&otherNumericalParameters
+  Nxi_for_x_option = 0
+/
+&preconditionerOptions
+/
+&export_f
+/
+"""
+
+
 def _load(name: str):
     return read_sfincs_input(REF / f"{name}.input.namelist")
 
@@ -499,3 +539,83 @@ def test_constraint_scheme_3_4_operator_differs_from_scheme1() -> None:
     assert np.max(np.abs(y[3] - y[1])) > 1e-3
     assert np.max(np.abs(y[4] - y[1])) > 1e-3
     assert np.max(np.abs(y[4] - y[3])) > 1e-3
+
+
+# ---------------------------------------------------------------------------
+# Fokker-Planck: the Kronecker structure a direct tier needs
+# ---------------------------------------------------------------------------
+
+
+def _dense_f_block(op) -> np.ndarray:
+    """The f-block of a one-species operator as ``(X, L, TZ, X, L, TZ)``."""
+    n_species, n_x, n_xi, n_theta, n_zeta = op.f_shape
+    assert n_species == 1
+    size = n_x * n_xi * n_theta * n_zeta
+    basis = jnp.eye(size).reshape((size, *op.f_shape))
+    columns = jax.vmap(lambda u: op.apply_f(u).reshape(-1))(basis)
+    return np.asarray(columns).T.reshape(
+        n_x, n_xi, n_theta * n_zeta, n_x, n_xi, n_theta * n_zeta
+    )
+
+
+@pytest.mark.parametrize("er", ("0.0", "-1.5"))
+def test_fokker_planck_block_is_a_kronecker_sum_in_speed_and_angle(er: str) -> None:
+    r"""``diag_L = C_{x,L} (x) I_TZ`` and ``offdiag_L = diag(x) (x) S_L``, exactly.
+
+    This is the structure that decides whether a *direct* tier is affordable
+    for Fokker-Planck decks.  ``legendre_blocks`` refuses them because the
+    collision operator couples ``(species, x)`` densely inside each Legendre
+    index, which would turn the block-Thomas block size from ``TZ`` into
+    ``Nx*TZ`` -- an ``Nx^2`` cost multiplier.
+
+    But the coupling is not arbitrarily dense.  Two facts hold to machine
+    precision, and together they say the operator is a Kronecker sum:
+
+    1. Every *speed-off-diagonal* coupling is a multiple of the identity in
+       ``(theta, zeta)``: collisions act on ``x`` alone, so they contribute
+       ``C_x (x) I``.
+    2. Every *Legendre-off-diagonal* block (streaming and the mirror force)
+       is the same ``theta/zeta`` matrix scaled by the speed ``x_i``: those
+       terms are proportional to the particle speed, so they contribute
+       ``diag(x) (x) S``.
+
+    Consequence: scaling the system by ``diag(x)^{-1}`` makes the
+    Legendre coupling independent of ``x``, which is what lets the dense
+    speed coupling be carried at the cost of the pitch-angle-scattering
+    factorization instead of ``Nx^2`` times it.
+
+    Both facts survive a finite ``Er``: the ``ExB`` drift is independent of
+    speed and diagonal in the Legendre index, so it lands entirely on the
+    part of the block that neither statement constrains.
+    """
+    text = _FP_KRONECKER_TEXT.replace("Er = 0.0", f"Er = {er}")
+    op = KineticOperator.from_namelist(parse_sfincs_input_text(text))
+    assert op.fp is not None  # the whole point: a Fokker-Planck deck
+    block = _dense_f_block(op)
+    n_x, n_xi = block.shape[0], block.shape[1]
+    speeds = np.asarray(op.x)
+
+    for ell in range(n_xi):
+        for i in range(n_x):
+            for j in range(n_x):
+                if i == j:
+                    continue
+                coupling = block[i, ell, :, j, ell, :]
+                scale = max(float(np.max(np.abs(coupling))), 1e-300)
+                off_diagonal = coupling - np.diag(np.diag(coupling))
+                assert float(np.max(np.abs(off_diagonal))) / scale < 1e-13, (
+                    f"speed coupling at L={ell}, x {i}<-{j} is not a multiple of I"
+                )
+
+    for ell in range(n_xi - 1):
+        reference = block[0, ell, :, 0, ell + 1, :]
+        support = np.abs(reference) > 1e-12 * max(float(np.max(np.abs(reference))), 1e-300)
+        if not support.any():
+            continue
+        for i in range(n_x):
+            candidate = block[i, ell, :, i, ell + 1, :]
+            expected = (speeds[i] / speeds[0]) * reference
+            scale = max(float(np.max(np.abs(candidate))), 1e-300)
+            assert float(np.max(np.abs(candidate - expected))) / scale < 1e-13, (
+                f"streaming block at L={ell}->{ell + 1}, x={i} is not x-proportional"
+            )
