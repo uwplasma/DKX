@@ -381,5 +381,10 @@ def test_test_particle_part_alone_does_not_conserve_momentum() -> None:
     full = np.einsum("abij,bj->ai", np.asarray(op.mat)[:, :, 1], f)
     test_only = np.einsum("aij,aj->ai", np.asarray(op.test)[:, 1], f)
 
-    assert abs(float((weight * full).sum())) < 1e-12
-    assert abs(float((weight * test_only).sum())) > 1e-6
+    # The moment is a signed sum of O(1e6) contributions, so the statement is
+    # about cancellation *relative to the terms being cancelled*, not about an
+    # absolute size: the summation order alone moves an absolute residual by
+    # orders of magnitude between architectures.
+    scale = float(np.abs(weight * full).sum())
+    assert abs(float((weight * full).sum())) / scale < 1e-14
+    assert abs(float((weight * test_only).sum())) / scale > 1e-3
