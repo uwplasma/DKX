@@ -304,3 +304,87 @@ def test_pytree_roundtrip_and_jit() -> None:
         np.asarray(apply_improved_sugama_v3(op, f)),
         rtol=0.0, atol=0.0,
     )
+
+
+# ---------------------------------------------------------------------------
+# test-particle / field-particle split
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("z", "m", "n", "t"),
+    (
+        ([1.0], [1.0], [1.0], [1.0]),
+        ([1.0, -1.0], [1.0, 5.446e-4], [1.0, 1.2], [1.0, 0.8]),
+        ([1.0, 6.0, -1.0], [1.0, 12.0, 5.446e-4], [1.0, 0.05, 1.3], [1.0, 1.0, 0.9]),
+    ),
+)
+def test_split_reassembles_the_operator_exactly(z, m, n, t) -> None:
+    """``mat`` is the split, not an approximation of it.
+
+    The whole value of the decomposition is that nothing is dropped: a
+    preconditioner may relax on ``test`` alone, but the operator it is
+    preconditioning is still exactly ``test`` plus the field back-reaction.
+    """
+    op, *_ = _build(z, m, n, t, n_x=6, n_xi=5)
+    n_species = len(z)
+    reassembled = np.einsum(
+        "ab,aLij->abLij", np.eye(n_species), np.asarray(op.test)
+    ) + np.einsum("aiLc,bjLc->abLij", np.asarray(op.columns), np.asarray(op.extraction))
+    np.testing.assert_allclose(
+        np.asarray(op.mat), reassembled, rtol=0.0, atol=0.0
+    )
+
+
+def test_field_part_is_low_rank_and_confined_to_the_conserved_moments() -> None:
+    """Rank ``S`` at L=1, ``2S`` at L=0, and nothing above.
+
+    Only the particle (L=0), energy (L=0) and parallel-momentum (L=1) moments
+    have a back-reaction, so every higher Legendre block is pure
+    test-particle: species-diagonal and local in the pitch index.  That is the
+    structural fact a velocity-space block smoother exploits.
+    """
+    z, m, n, t = [1.0, -1.0], [1.0, 5.446e-4], [1.0, 1.2], [1.0, 0.8]
+    op, *_ = _build(z, m, n, t, n_x=6, n_xi=5)
+    n_species, n_x, n_xi, _ = np.asarray(op.columns).shape[0], 6, 5, None
+
+    columns = np.asarray(op.columns)
+    extraction = np.asarray(op.extraction)
+    for ell in range(n_xi):
+        field = np.einsum("aic,bjc->aibj", columns[:, :, ell], extraction[:, :, ell])
+        flat = field.reshape(n_species * n_x, n_species * n_x)
+        singular = np.linalg.svd(flat, compute_uv=False)
+        rank = int((singular > 1e-9 * max(singular[0], 1e-300)).sum())
+        if ell == 0:
+            assert 0 < rank <= 2 * n_species
+        elif ell == 1:
+            assert 0 < rank <= n_species
+        else:
+            assert rank == 0
+            np.testing.assert_allclose(flat, 0.0, rtol=0.0, atol=0.0)
+
+
+def test_test_particle_part_alone_does_not_conserve_momentum() -> None:
+    """The split is meaningful: conservation lives entirely in the field part.
+
+    Dropping the low-rank piece is exactly what a plain relaxation would do if
+    it were handed the whole operator, and it costs parallel-momentum
+    conservation -- the property the bootstrap current depends on.
+    """
+    z, m, n, t = [1.0, -1.0], [1.0, 5.446e-4], [1.0, 1.2], [1.0, 0.8]
+    op, x, w, t_hats, m_hats = _build(z, m, n, t, n_x=8, n_xi=6)
+
+    rng = np.random.default_rng(0)
+    f = rng.standard_normal((len(z), 8))  # one L=1 profile per species
+    weight = w * (x**3) * (t_hats**2 / m_hats)[:, None]
+
+    full = np.einsum("abij,bj->ai", np.asarray(op.mat)[:, :, 1], f)
+    test_only = np.einsum("aij,aj->ai", np.asarray(op.test)[:, 1], f)
+
+    # The moment is a signed sum of O(1e6) contributions, so the statement is
+    # about cancellation *relative to the terms being cancelled*, not about an
+    # absolute size: the summation order alone moves an absolute residual by
+    # orders of magnitude between architectures.
+    scale = float(np.abs(weight * full).sum())
+    assert abs(float((weight * full).sum())) / scale < 1e-14
+    assert abs(float((weight * test_only).sum())) / scale > 1e-3
