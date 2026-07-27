@@ -525,26 +525,52 @@ def test_rosenbluth_potential_grid_size_rules() -> None:
 
 @pytest.mark.parametrize("option", [0, 1, 2, 3])
 def test_n_xi_for_x_ramp_options(option: int) -> None:
+    """The reference is ``createGrids.F90`` itself, transcribed here.
+
+    An earlier version of this test built its reference from another dkx
+    module, so it could only ever confirm that dkx agreed with dkx.  It did:
+    both carried the ramp that is *commented out* in the Fortran source
+    (``0.1 + 0.9 x/2`` with a floor of 4) rather than the live one
+    (``x/2`` with a floor of 3).  Since option 1 is the SFINCS default, every
+    deck that says nothing about ``Nxi_for_x_option`` was silently solved on a
+    different pitch-resolution ramp than Fortran uses.
+
+    Transcribing the Fortran arithmetic directly is what makes this a parity
+    test rather than a self-consistency one.
+    """
     x = np.asarray(phase_space.make_speed_grid(n_x=7, k=0.0).x)
     n_xi, n_l = 16, 4
-    # Reference: the loop in discretization/v3.py grids_from_namelist.
     ref = np.zeros((7,), dtype=int)
     if option == 0:
+        # case (0): Nxi_for_x = Nxi
         ref[:] = n_xi
     elif option == 1:
+        # case (1): temp = Nxi*(0.0 + 1.0*x(j)/2)
+        #           Nxi_for_x(j) = max(3, NL, min(int(temp), Nxi))
         for j in range(7):
-            temp = n_xi * (0.1 + 0.9 * x[j] / 2.0)
-            ref[j] = max(4, n_l, min(int(temp), n_xi))
+            ref[j] = max(3, n_l, min(int(n_xi * (x[j] / 2.0)), n_xi))
     elif option == 2:
+        # case (2): temp = Nxi*(0.1 + 0.9*((x(j)/2)**2))
         for j in range(7):
-            temp = n_xi * (0.1 + 0.9 * ((x[j] / 2.0) ** 2))
-            ref[j] = max(4, n_l, min(int(temp), n_xi))
+            ref[j] = max(3, n_l, min(int(n_xi * (0.1 + 0.9 * ((x[j] / 2.0) ** 2))), n_xi))
     else:
+        # dkx extension: the commented-out linear ramp, uncapped.
         for j in range(7):
-            temp = n_xi * (0.1 + 0.9 * x[j] / 2.0)
-            ref[j] = max(3, n_l, int(temp))
+            ref[j] = max(3, n_l, int(n_xi * (0.1 + 0.9 * x[j] / 2.0)))
     out = phase_space.n_xi_for_x_ramp(x=x, n_xi=n_xi, n_l=n_l, option=option)
     assert out.tolist() == ref.tolist()
+
+
+def test_default_nxi_ramp_matches_the_fortran_values_on_a_production_grid() -> None:
+    """Pin option 1 against numbers read off ``createGrids.F90`` by hand.
+
+    The self-consistency trap above is easy to fall back into, so this holds a
+    concrete expected array for a real deck's grid: ``Nxi=48``, ``Nx=5``,
+    the speeds of the default ``geometryScheme4_2species_PAS_noEr`` case.
+    """
+    speeds = np.array([0.1002, 0.4828, 1.0609, 1.7797, 2.6698])
+    out = phase_space.n_xi_for_x_ramp(x=speeds, n_xi=48, n_l=4, option=1)
+    assert out.tolist() == [4, 11, 25, 42, 48]
 
 
 def _v3_namelist(
