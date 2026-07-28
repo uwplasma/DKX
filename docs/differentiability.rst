@@ -260,7 +260,7 @@ demonstrated in ``examples/autodiff/vmex_to_boozer_sfincs_pipeline.py``. See
 :doc:`optimization` and :doc:`vmex_workflow` for the full workflow.
 
 Cost against a non-differentiable reference
-------------------------------------------
+-------------------------------------------
 
 A finite-difference gradient of :math:`N` parameters costs :math:`2N`
 converged solves with central differences.  Implicit differentiation costs one
