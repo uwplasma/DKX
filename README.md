@@ -125,6 +125,33 @@ database mode, batched GPU scans, a bounce-averaged 1/ν surrogate) — lives in
 
 *Reproduce with the drivers in [`examples/parity/`](examples/parity/).*
 
+### Interpreting a difference
+
+Two codes agree only to the accuracy each one reaches. For left-preconditioned
+Krylov methods PETSc's default convergence test measures the *preconditioned*
+residual rather than the true one (`KSPSetNormType`), and SFINCS preconditions
+with a separately assembled simplified operator — so on some decks a run
+reports success at its requested `solverTolerance` while the returned state
+still leaves a large true residual.
+
+![Reference true residual against the cross-code difference in output moments](docs/_static/figures/paper_benchmarks/reference_convergence.png)
+
+Measured from SFINCS's own matrix, right-hand side and state vector, with no
+DKX quantity involved. Across 17 linear decks from upstream's example suite,
+every large cross-code difference comes with a large reference residual. On
+`geometryScheme4_2species_PAS_noEr` the reference's own true residual is
+`5.4e-2` where DKX solves the same system — matrix agreeing to `8.5e-15`, RHS
+to `5.0e-15` — to `3.1e-13`.
+
+This is not specific to SFINCS; a preconditioned-norm test is standard and
+usually adequate. The practical point is that a reference's own residual is
+worth checking before a disagreement is attributed to the code under test.
+
+*Reproduce with `python tools/benchmarks/parity_performance_matrix.py
+--fortran-residual ...` then `python
+examples/paper_benchmarks/reference_convergence.py --results ...`; details in
+[docs/performance.rst](docs/performance.rst).*
+
 ## Fast on CPU and GPU
 
 ![Runtime and peak memory: dkx vs SFINCS Fortran v3 on the 744k-unknown HSX PAS case](docs/_static/figures/readme/tier1_hsx_runtime_memory.png)
