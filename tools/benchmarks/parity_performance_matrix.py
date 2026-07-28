@@ -182,8 +182,14 @@ def _read_h5(path: Path) -> dict:
     return out
 
 
-def compare_outputs(fortran_h5: Path, dkx_h5: Path) -> dict:
-    """Max relative difference per compared key, scaled by the larger magnitude."""
+def compare_outputs(fortran_h5: Path, dkx_h5: Path, n_species: int = 1) -> dict:
+    """Max relative difference per compared key, scaled by the larger magnitude.
+
+    ``n_species`` is what makes nonlinear (``Phi1``) runs comparable: both
+    codes write one row per Newton iteration and they need not take the same
+    number of iterations, so the arrays differ in length even when the answers
+    agree.  The converged answer is the last row of each.
+    """
     import numpy as np
 
     if not (fortran_h5.exists() and dkx_h5.exists()):
@@ -199,10 +205,17 @@ def compare_outputs(fortran_h5: Path, dkx_h5: Path) -> dict:
             continue
         a = np.atleast_1d(np.asarray(reference[key], dtype=np.float64)).ravel()
         b = np.atleast_1d(np.asarray(candidate[key], dtype=np.float64)).ravel()
-        # Fortran writes one row per Newton iteration for some keys; compare the
-        # converged (last) state against dkx's single converged answer.
-        if a.size != b.size and a.size % max(b.size, 1) == 0:
-            a = a[-b.size:]
+        # Both codes write one row per Newton iteration for some keys, and a
+        # nonlinear run need not converge in the same number of iterations in
+        # both.  Compare the converged row: the last ``n_species`` entries.
+        if a.size != b.size:
+            # Per-species keys carry ``n_species`` values per iteration;
+            # species-summed ones (FSABjHat) carry a single value.  Take the
+            # first row width that divides both lengths.
+            for row in (n_species, 1):
+                if row and a.size % row == 0 and b.size % row == 0:
+                    a, b = a[-row:], b[-row:]
+                    break
         if a.size != b.size:
             report[key] = {"error": f"shape {a.size} vs {b.size}"}
             continue
@@ -308,7 +321,9 @@ def run_case(
 
         reference = root / "fortran_1.h5"
         record["parity"] = (
-            compare_outputs(reference, work / "dkxOutput.h5")
+            compare_outputs(
+                reference, work / "dkxOutput.h5", int(record.get("n_species", 1))
+            )
             if reference.exists()
             else {"error": "no fortran reference"}
         )
