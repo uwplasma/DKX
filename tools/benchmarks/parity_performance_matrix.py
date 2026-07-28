@@ -164,6 +164,71 @@ def _absolutize_equilibrium(deck: Path, source_dir: Path) -> None:
         deck.write_text(updated)
 
 
+_BINARY_DUMP_KEY = "saveMatricesAndVectorsInBinary"
+
+
+def _request_binary_dump(deck: Path) -> None:
+    """Ask SFINCS to write its matrix, rhs and state vector alongside the run."""
+    text = deck.read_text()
+    # Only an *active* setting counts.  Several upstream decks ship the key
+    # commented out ("!  saveMatricesAndVectorsInBinary = .t."), and treating
+    # that as already-enabled silently skips the dump.
+    active = re.search(
+        rf"^\s*{_BINARY_DUMP_KEY}\s*=", text, re.MULTILINE | re.IGNORECASE
+    )
+    if active is not None:
+        return
+    deck.write_text(re.sub(r"^(&general\s*)$", rf"\g<1>\n  {_BINARY_DUMP_KEY} = .true.",
+                           text, count=1, flags=re.MULTILINE | re.IGNORECASE))
+
+
+def fortran_true_residual(work: Path, *, linear: bool) -> float | None:
+    """``||A x - b|| / ||b||`` from SFINCS's *own* matrix, state and rhs.
+
+    Only meaningful for a **linear** run.  With ``Phi1``/quasineutrality the
+    problem is a Newton iteration: the dumped ``iteration_000`` matrix is the
+    Jacobian at the initial guess while the reported state comes from a later
+    step, so the combination is not a residual of anything.  Left unguarded it
+    reports values like 1.8 on decks whose outputs agree to 1e-12.
+
+    For linear runs, a disagreement between the two codes is not evidence about
+    dkx until this is known.  PETSc's Krylov convergence test measures the *preconditioned*
+    residual, and SFINCS preconditions with a simplified matrix, so a run can
+    report success at ``solverTolerance = 1d-12`` while leaving a true residual
+    of several percent -- measured at 7.5e-2 on
+    ``geometryScheme4_2species_PAS_noEr``, where it produced a 28% error in the
+    bootstrap current that looked exactly like a dkx parity bug.
+
+    Sparse throughout: the 83k-unknown case has 1.5M nonzeros and must never be
+    densified.
+    """
+    if not linear:
+        return None
+
+    import numpy as np
+    from scipy.sparse import csr_matrix
+
+    from dkx.validation.fortran import read_petsc_mat_aij, read_petsc_vec
+
+    matrix = work / "sfincsBinary_iteration_000_whichMatrix_3"
+    state = work / "sfincsBinary_iteration_000_stateVector"
+    residual = work / "sfincsBinary_iteration_000_residual"
+    if not (matrix.exists() and state.exists() and residual.exists()):
+        return None
+    try:
+        aij = read_petsc_mat_aij(matrix)
+        operator = csr_matrix((aij.data, aij.col_ind, aij.row_ptr), shape=aij.shape)
+        x = np.asarray(read_petsc_vec(state).values)
+        # The dumped residual is evaluated at x = 0, so it is -b.
+        b = -np.asarray(read_petsc_vec(residual).values)
+        norm_b = float(np.linalg.norm(b))
+        if norm_b == 0.0:
+            return None
+        return float(np.linalg.norm(operator @ x - b) / norm_b)
+    except Exception:  # pragma: no cover - a malformed dump must not kill the sweep
+        return None
+
+
 def _fortran_succeeded(work: Path, result: dict) -> bool:
     """A Fortran run counts only if it produced output.
 
@@ -265,6 +330,7 @@ def run_case(
     timeout_s: float,
     equilibria: str | None,
     launcher: list[str],
+    fortran_residual: bool,
 ) -> dict:
     """One deck through both codes, in isolated copies of the example directory."""
     deck = example_dir / "input.namelist"
@@ -284,6 +350,8 @@ def run_case(
                 work = root / f"fortran_{n_ranks}"
                 shutil.copytree(example_dir, work)
                 _absolutize_equilibrium(work / "input.namelist", example_dir)
+                if fortran_residual:
+                    _request_binary_dump(work / "input.namelist")
                 command = (
                     [str(fortran_binary)]
                     if n_ranks == 1
@@ -295,6 +363,10 @@ def run_case(
                 # process's own numpy is linked against.
                 result = _run_measured(launcher + command, work, timeout_s)
                 result["succeeded"] = _fortran_succeeded(work, result)
+                if fortran_residual and result["succeeded"]:
+                    result["true_residual"] = fortran_true_residual(
+                        work, linear=not record.get("includePhi1", False)
+                    )
                 if result["succeeded"]:
                     shutil.copy(work / "sfincsOutput.h5", root / f"fortran_{n_ranks}.h5")
                 else:
@@ -343,6 +415,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--only", nargs="*", default=None, help="case-name substrings")
     parser.add_argument("--equilibria", default=os.environ.get("DKX_EQUILIBRIA_DIRS"))
     parser.add_argument(
+        "--fortran-residual", action="store_true",
+        help="dump SFINCS's matrix/state/rhs and record its own true residual, so a "
+             "reference that converged only in the preconditioned norm is not mistaken "
+             "for a dkx parity failure (costs disk: 1.5M nonzeros on an 83k deck)",
+    )
+    parser.add_argument(
         "--fortran-launcher", default="",
         help="command prefix isolating the Fortran toolchain, e.g. "
              "'micromamba run -n sfincs-fortran'",
@@ -380,6 +458,7 @@ def main(argv: list[str] | None = None) -> int:
                 ranks=args.ranks, reps=args.reps,
                 timeout_s=args.timeout_s, equilibria=args.equilibria,
                 launcher=args.fortran_launcher.split() if args.fortran_launcher else [],
+                fortran_residual=args.fortran_residual,
             )
             handle.write(json.dumps(record) + "\n")
             handle.flush()
