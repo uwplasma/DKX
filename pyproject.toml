@@ -18,14 +18,14 @@ dependencies = [
   # solvax (PyPI) owns the structured linear-algebra solver tiers (block-Thomas
   # elimination, recycled GCROT, implicit differentiation) that every canonical
   # solve uses; it is a core dependency, not optional.
-  "solvax>=0.9.1",
+  "solvax>=0.10.0",
 ]
 
 [project.optional-dependencies]
 # Retained as a no-op alias so existing `pip install dkx[structured]`
 # invocations keep working; solvax is now a core dependency (see above).
 structured = [
-  "solvax>=0.9.1",
+  "solvax>=0.10.0",
 ]
 dev = [
   "pytest",
