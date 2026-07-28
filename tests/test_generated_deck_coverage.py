@@ -109,3 +109,46 @@ def test_generated_deck_runs_end_to_end(case: Case, tmp_path: Path) -> None:
     run = driver(deck, out_path=tmp_path / "out.h5", emit=None)
     assert (tmp_path / "out.h5").exists()
     assert run.solve_result.converged
+
+
+# ---------------------------------------------------------------------------
+# Phi1 switch defaults
+# ---------------------------------------------------------------------------
+
+
+def test_phi1_switch_defaults_match_fortran_and_each_other() -> None:
+    """``includePhi1InKineticEquation`` defaults TRUE, in both places dkx stores it.
+
+    ``version3/globalVariables.F90`` sets ``includePhi1InKineticEquation =
+    .true.`` (line 152) and ``includePhi1InCollisionOperator = .false.``
+    (line 150).  dkx held both values in two places and they disagreed:
+    :class:`dkx.inputs.SfincsInput` had the kinetic switch right, while the
+    operator builder defaulted it to ``False``.  Any deck that enabled ``Phi1``
+    without naming the switch therefore dropped the Phi1-in-kinetic coupling,
+    an ``O(Phi1^2)`` error -- measured at 23% on the electron flow of a
+    two-species deck, and invisible to every fixture because they all name the
+    switch explicitly.
+
+    Asserting the two dkx defaults against each other *and* against the Fortran
+    values is what makes this a parity check rather than a restatement.
+    """
+    from dkx.drift_kinetic import KineticOperator
+    from dkx.namelist import parse_sfincs_input_text
+
+    # A deck that enables Phi1 and says nothing about the coupling switches.
+    text = render(
+        Case(
+            geometry=1, collision=0, er=0.0, phi1=True,
+            rhs_mode=1, nxi_ramp=0, species=2, resolution="tiny",
+        )
+    )
+    assert "includePhi1InKineticEquation" not in text  # the deck stays silent
+    operator = KineticOperator.from_namelist(parse_sfincs_input_text(text))
+    assert operator.include_phi1_in_kinetic is True, (
+        "includePhi1InKineticEquation must default TRUE (globalVariables.F90:152)"
+    )
+    # The collision coupling is carried by the ``fp_phi1`` operator, which stays
+    # unbuilt while the switch is off.
+    assert operator.fp_phi1 is None, (
+        "includePhi1InCollisionOperator must default FALSE (globalVariables.F90:150)"
+    )
