@@ -2155,7 +2155,14 @@ def kinetic_operator_build_from_namelist(nml: Any) -> KineticOperatorBuild:
     # (the QN block + Phi1 unknown + lambda row) is off, but the Phi1-in-kinetic /
     # Phi1-in-collision term coefficients still evaluate at the external field.
     include_phi1 = include_phi1_input and not read_external_phi1
-    include_phi1_in_kinetic = include_phi1_input and _get_bool(phys, "includePhi1InKineticEquation", False)
+    # Default TRUE, matching version3/globalVariables.F90:152 (and dkx's own
+    # SfincsInput field, which already carried the right default).  Defaulting
+    # it off silently dropped the Phi1-in-kinetic coupling from every deck that
+    # enabled Phi1 without naming this switch, which costs O(Phi1^2): the term
+    # is Phi1 times f, and f itself carries an O(Phi1) response.
+    include_phi1_in_kinetic = include_phi1_input and _get_bool(
+        phys, "includePhi1InKineticEquation", True
+    )
     include_phi1_in_collision = include_phi1_input and _get_bool(phys, "includePhi1InCollisionOperator", False)
     if include_phi1_in_collision and not include_phi1_in_kinetic:
         raise NotImplementedError(
