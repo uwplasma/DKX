@@ -162,6 +162,61 @@ Memory findings
   744k case the truncated route needs ~0.3 GB where a full-band tier-1 factor
   would need ~91 GB.
 
+Interpreting a cross-code difference
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Two codes solving the same discretized system can only be expected to agree to
+the accuracy each one actually reaches, and that accuracy is not always the
+number in the input file.
+
+SFINCS solves its linear system with PETSc.  For left-preconditioned Krylov
+methods PETSc's default convergence test measures the *preconditioned* residual
+:math:`\|M^{-1}(Ax-b)\|` rather than the true residual :math:`\|Ax-b\|`
+(``KSPSetNormType``, ``KSP_NORM_PRECONDITIONED``).  SFINCS preconditions with a
+simplified operator assembled separately from the full one, so on some decks
+the two norms differ substantially and a run reports success at its requested
+``solverTolerance`` while the returned state still leaves a large true
+residual.
+
+This is measurable from SFINCS's own binary output alone -- its matrix, its
+right-hand side, its state vector -- with no ``dkx`` quantity involved:
+
+.. math::
+
+   \frac{\|Ax-b\|}{\|b\|}, \qquad
+   A = \texttt{whichMatrix\_3}, \;
+   x = \texttt{stateVector}, \;
+   b = -\,\texttt{residual}.
+
+.. figure:: _static/figures/paper_benchmarks/reference_convergence.png
+   :alt: Reference true residual against the cross-code difference in output moments, 17 linear upstream decks.
+   :align: center
+   :width: 90%
+
+   Seventeen linear decks from upstream's example suite.  Regenerate with
+   ``python examples/paper_benchmarks/reference_convergence.py --results ...``
+   on a sweep produced by ``tools/benchmarks/parity_performance_matrix.py
+   --fortran-residual``.
+
+On ``geometryScheme4_2species_PAS_noEr`` the reference's own true residual is
+``5.4e-2`` while ``dkx`` solves the same system -- matrix agreeing to
+``8.5e-15`` on random matvecs, right-hand side to ``5.0e-15`` -- to
+``3.1e-13``.  The two codes' bootstrap currents differ by 28%.
+
+The residual bounds how closely two solutions can agree in the *state vector*.
+It is not a bound on the output moments: those are contractions of the state,
+so a residual can cancel out of them or be amplified by them, and the measured
+points fall on both sides of equality.  What the data does show is that every
+large cross-code difference here comes with a large reference residual.
+
+None of this is specific to SFINCS -- a preconditioned-norm convergence test is
+standard practice and usually adequate.  The practical consequence for anyone
+comparing against a reference implementation is narrower: check the reference's
+own residual before attributing a disagreement to the code under test.
+``tools/benchmarks/parity_performance_matrix.py --fortran-residual`` records it
+alongside every comparison, and a case whose reference residual exceeds the
+requested tolerance is evidence about the reference, not about ``dkx``.
+
 Solver-noise finding
 ~~~~~~~~~~~~~~~~~~~~
 
