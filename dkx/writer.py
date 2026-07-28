@@ -138,20 +138,30 @@ def _u_hat(geom: FluxSurfaceGeometry) -> np.ndarray:
     return np.asarray(np.fft.ifft2(scale * f).real, dtype=np.float64)
 
 
+#: Geometry schemes whose field is analytic, so ``sfincsOutput.h5`` carries
+#: zeros for ``gpsiHatpsiHat``/``diotadpsiHat``.  Every scheme that is not read
+#: from a Boozer ``.bc`` file: ``geometry.F90`` sets ``nearbyRadiiGiven`` true
+#: only for 11 and 12, and scheme 5 (VMEC) recomputes the metric from the wout
+#: below.  Scheme 3 was missing here, which sent it into the VMEC branch and
+#: made it demand an ``equilibriumFile`` that its analytic model does not have.
+ANALYTIC_GEOMETRY_SCHEMES = frozenset({1, 2, 3, 4, 13})
+
+
 def _geometry_extras(
     *, inp: SfincsInput, grids: Grids, geom: FluxSurfaceGeometry, radial: RadialCoordinates
 ) -> tuple[np.ndarray, float]:
     """``(gpsiHatpsiHat, diotadpsiHat)`` for the supported geometry schemes.
 
-    Analytic schemes (1/2/4/13) store zeros, matching v3.  Boozer ``.bc`` and
+    Analytic schemes (1/2/3/4/13) store zeros, matching v3.  Boozer ``.bc`` and
     VMEC schemes recompute the |grad psiHat|^2 metric with the canonical geometry
     constructors and the iota radial derivative from the bracketing surfaces.
     """
     scheme = inp.geometry.geometry_scheme
     zeros = np.zeros_like(np.asarray(geom.b_hat, dtype=np.float64))
-    if scheme in {1, 2, 4, 13}:
-        # geometryScheme=13 is analytic (nearbyRadiiGiven=.false. in geometry.F90):
-        # no nearby surfaces, so the |grad psiHat|^2 metric and diota/dpsiHat are 0.
+    if scheme in ANALYTIC_GEOMETRY_SCHEMES:
+        # geometry.F90 sets ``nearbyRadiiGiven = .false.`` for every scheme but
+        # 11 and 12, so there are no bracketing surfaces to difference: the
+        # |grad psiHat|^2 metric and diota/dpsiHat are written as zeros.
         return zeros, 0.0
 
     raw = inp.raw
