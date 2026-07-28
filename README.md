@@ -198,6 +198,24 @@ iterations so each evaluation is a few seconds.
 *Reproduce with `python examples/optimization/optimize_QA_bootstrap.py` (needs
 the optional `vmex` + `booz_xform_jax` companions).*
 
+### What the gradient costs
+
+![Gradient wall time against parameter count, and agreement across four configurations](docs/_static/figures/paper_benchmarks/gradient_cost_scaling.png)
+
+A central finite difference of `N` parameters costs `2N` converged solves.
+Implicit differentiation costs one transposed solve whatever `N` is. Measured
+against SFINCS finite differences on four upstream decks — one and two species,
+pitch-angle and Fokker-Planck collisions, zero and finite `Er` — the gradients
+agree to **4.7e-10 … 4.8e-07**.
+
+The timings sit at `N = 2` and `N = 4`, where the scaling argument is *least*
+favourable: the measured wall-time ratio is only 1.4×–7.1×, because four solves
+is the same order as one forward plus one adjoint. The claim is the slope, not
+the intercept — profile and geometry optimization run at `N` in the tens.
+
+*Reproduce with `python tools/benchmarks/ad_vs_fortran_fd.py` per deck, then
+`python examples/paper_benchmarks/gradient_cost_scaling.py --results ...`.*
+
 ## Monoenergetic (ICNTS) benchmarks
 
 ![ICNTS monoenergetic transport coefficients on W7-X vs SFINCS Fortran v3](docs/_static/figures/paper_benchmarks/monoenergetic_icnts_w7x.png)
