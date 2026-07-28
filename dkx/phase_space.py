@@ -896,6 +896,12 @@ def n_xi_for_x_ramp(
     Option 1 is the SFINCS *default*, so this ramp is what a deck that says
     nothing about ``Nxi_for_x_option`` actually gets.
 
+    The reference is ``fortran/version3/createGrids.F90`` -- the variant this
+    package ports and the one the ``version3`` binary is built from.  Other
+    trees in the SFINCS repository (``fortran/Fourier`` in particular) carry a
+    *different* ramp, and reading one of those instead is a live way to
+    "fix" this into disagreement.
+
     Args:
       x: Speed-grid nodes, shape ``(n_x,)``.
       n_xi: Maximum number of Legendre modes (namelist ``Nxi``).
@@ -914,20 +920,16 @@ def n_xi_for_x_ramp(
     if option == 0:
         out[:] = n_xi
     elif option == 1:
-        # createGrids.F90 carries two ramps here and the 0.1-floor one is
-        # commented out; the live line is the plain linear ramp from 0 to
-        # ``n_xi`` as x goes 0 -> 2.  Option 3 below keeps the commented-out
-        # variant available under its own number.
         for j in range(n_x):
-            temp = n_xi * (x_np[j] / 2.0)
-            out[j] = max(3, n_l, min(int(temp), n_xi))
+            temp = n_xi * (0.1 + 0.9 * x_np[j] / 2.0)
+            out[j] = max(4, n_l, min(int(temp), n_xi))
     elif option == 2:
         for j in range(n_x):
             temp = n_xi * (0.1 + 0.9 * ((x_np[j] / 2.0) ** 2))
-            out[j] = max(3, n_l, min(int(temp), n_xi))
+            out[j] = max(4, n_l, min(int(temp), n_xi))
     elif option == 3:
-        # dkx extension (``createGrids.F90`` stops at 2): the 0.1-floor linear
-        # ramp, uncapped.
+        # dkx extension (``version3/createGrids.F90`` stops at 2): the same
+        # linear ramp, uncapped and with the lower floor.
         for j in range(n_x):
             temp = n_xi * (0.1 + 0.9 * x_np[j] / 2.0)
             out[j] = max(3, n_l, int(temp))
