@@ -1365,3 +1365,38 @@ def test_truncated_bounded_adjoint_is_subsystem_batch_invariant() -> None:
     g_batched = jax.grad(lambda s: loss(s, b))(one)
     np.testing.assert_allclose(float(g_batched), float(g_serial), rtol=1e-12)
 
+
+
+def test_tier1_adjoint_window_is_reverse_mode_only() -> None:
+    """The bounded path is a custom_vjp, so forward mode raises through it.
+
+    Not a defect to fix --- JAX cannot push a JVP through a ``custom_vjp`` ---
+    but a restriction a caller has to know, because
+    :func:`dkx.sensitivity.jvp_flux` is forward mode. A study mixing the two
+    must leave ``tier1_adjoint_window`` unset on its forward-mode calls.
+    Pinned here so the docstring cannot drift from the behaviour, and so we
+    notice if JAX ever grows a fallback.
+    """
+    import inspect as _inspect
+
+    from solvax.direct import block_thomas_truncated_fn as _fn
+
+    if "params" not in _inspect.signature(_fn).parameters:
+        pytest.skip("installed solvax predates params/adjoint_window")
+
+    op = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
+    rhs = op.rhs()
+    n_xi = int(op.n_xi)
+    kwargs = dict(method="block_tridiagonal_truncated", tol=1e-10)
+
+    def loss(scale: jnp.ndarray, window: int | None) -> jnp.ndarray:
+        scaled = replace(op, t_hat=op.t_hat * scale)
+        return jnp.sum(solve(scaled, rhs, tier1_adjoint_window=window, **kwargs).x ** 2)
+
+    one = jnp.asarray(1.0)
+    reverse = jax.grad(lambda s: loss(s, None))(one)
+    forward = jax.jacfwd(lambda s: loss(s, None))(one)
+    np.testing.assert_allclose(float(forward), float(reverse), rtol=1e-8)
+
+    with pytest.raises(TypeError, match="forward-mode"):
+        jax.jacfwd(lambda s: loss(s, n_xi))(one)

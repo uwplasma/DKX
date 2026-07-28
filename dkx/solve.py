@@ -2388,8 +2388,18 @@ def solve(
             ``O((keep + w) m^2)`` memory per (species, x) subsystem instead of
             taping the full ``Nxi`` sweep, with an exact right-hand-side
             gradient and ``O(rho^{2w})`` coefficient-gradient error;
-            ``w >= Nxi`` reproduces the taped gradient exactly.  See
-            :func:`_solve_tier1_truncated`.
+            ``w >= Nxi`` reproduces the taped gradient exactly.
+
+            **Reverse mode only.**  The bounded path is a ``jax.custom_vjp``,
+            and JAX cannot push forward-mode autodiff through one, so
+            ``jax.jacfwd`` and ``jax.jvp`` over a solve that sets this option
+            raise ``TypeError: can't apply forward-mode autodiff (jvp) to a
+            custom_vjp function`` rather than falling back.  That matters here
+            because :func:`dkx.sensitivity.jvp_flux` is forward mode: a
+            sensitivity study that mixes the two must leave
+            ``tier1_adjoint_window=None`` on the forward-mode calls.  Choosing
+            the window is therefore a per-call-site decision, not a global
+            switch.  See :func:`_solve_tier1_truncated`.
         device: where to run the solve.  ``"cpu"``/``"gpu"`` force a backend
             and a ``jax.Device`` pins the solve to that device: inputs are
             moved with ``jax.device_put`` and the solution is returned on
