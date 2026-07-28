@@ -525,18 +525,20 @@ def test_rosenbluth_potential_grid_size_rules() -> None:
 
 @pytest.mark.parametrize("option", [0, 1, 2, 3])
 def test_n_xi_for_x_ramp_options(option: int) -> None:
-    """The reference is ``createGrids.F90`` itself, transcribed here.
+    """The reference is ``fortran/version3/createGrids.F90``, transcribed here.
 
-    An earlier version of this test built its reference from another dkx
-    module, so it could only ever confirm that dkx agreed with dkx.  It did:
-    both carried the ramp that is *commented out* in the Fortran source
-    (``0.1 + 0.9 x/2`` with a floor of 4) rather than the live one
-    (``x/2`` with a floor of 3).  Since option 1 is the SFINCS default, every
-    deck that says nothing about ``Nxi_for_x_option`` was silently solved on a
-    different pitch-resolution ramp than Fortran uses.
+    Two ways to get this wrong, both of which have happened:
 
-    Transcribing the Fortran arithmetic directly is what makes this a parity
-    test rather than a self-consistency one.
+    * building the reference from another dkx module, which only confirms that
+      dkx agrees with dkx;
+    * transcribing from the wrong SFINCS tree.  ``fortran/Fourier`` carries a
+      *different* ramp (``x/2``, floor 3) from the ``version3`` variant this
+      package ports (``0.1 + 0.9 x/2``, floor 4), and "correcting" dkx to the
+      Fourier one moves it away from the binary's actual behaviour.
+
+    :func:`test_default_nxi_ramp_matches_the_fortran_h5_output` pins the same
+    thing against numbers SFINCS itself wrote, which no source-reading mistake
+    can talk its way past.
     """
     x = np.asarray(phase_space.make_speed_grid(n_x=7, k=0.0).x)
     n_xi, n_l = 16, 4
@@ -545,32 +547,34 @@ def test_n_xi_for_x_ramp_options(option: int) -> None:
         # case (0): Nxi_for_x = Nxi
         ref[:] = n_xi
     elif option == 1:
-        # case (1): temp = Nxi*(0.0 + 1.0*x(j)/2)
-        #           Nxi_for_x(j) = max(3, NL, min(int(temp), Nxi))
+        # case (1): temp = Nxi*(0.1 + 0.9*x(j)/2)
+        #           Nxi_for_x(j) = max(4, NL, min(int(temp), Nxi))
         for j in range(7):
-            ref[j] = max(3, n_l, min(int(n_xi * (x[j] / 2.0)), n_xi))
+            ref[j] = max(4, n_l, min(int(n_xi * (0.1 + 0.9 * x[j] / 2.0)), n_xi))
     elif option == 2:
         # case (2): temp = Nxi*(0.1 + 0.9*((x(j)/2)**2))
         for j in range(7):
-            ref[j] = max(3, n_l, min(int(n_xi * (0.1 + 0.9 * ((x[j] / 2.0) ** 2))), n_xi))
+            ref[j] = max(4, n_l, min(int(n_xi * (0.1 + 0.9 * ((x[j] / 2.0) ** 2))), n_xi))
     else:
-        # dkx extension: the commented-out linear ramp, uncapped.
+        # dkx extension: the same linear ramp, uncapped, lower floor.
         for j in range(7):
             ref[j] = max(3, n_l, int(n_xi * (0.1 + 0.9 * x[j] / 2.0)))
     out = phase_space.n_xi_for_x_ramp(x=x, n_xi=n_xi, n_l=n_l, option=option)
     assert out.tolist() == ref.tolist()
 
 
-def test_default_nxi_ramp_matches_the_fortran_values_on_a_production_grid() -> None:
-    """Pin option 1 against numbers read off ``createGrids.F90`` by hand.
+def test_default_nxi_ramp_matches_the_fortran_h5_output() -> None:
+    """Pin option 1 against what SFINCS *wrote*, not against what its source says.
 
-    The self-consistency trap above is easy to fall back into, so this holds a
-    concrete expected array for a real deck's grid: ``Nxi=48``, ``Nx=5``,
-    the speeds of the default ``geometryScheme4_2species_PAS_noEr`` case.
+    These are the ``Nxi_for_x`` values read out of the ``sfincsOutput.h5`` of a
+    real ``version3`` run of ``geometryScheme4_2species_PAS_noEr`` (``Nxi=48``,
+    ``Nx=5``, ``NL=4``).  Pinning the binary's own output is the only form of
+    this test that survives reading the wrong source tree, which is exactly how
+    it was broken once already.
     """
     speeds = np.array([0.1002, 0.4828, 1.0609, 1.7797, 2.6698])
     out = phase_space.n_xi_for_x_ramp(x=speeds, n_xi=48, n_l=4, option=1)
-    assert out.tolist() == [4, 11, 25, 42, 48]
+    assert out.tolist() == [6, 15, 27, 43, 48]
 
 
 def _v3_namelist(
