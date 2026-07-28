@@ -259,6 +259,44 @@ starts and finite-difference-verified gradients; the geometry link on its own is
 demonstrated in ``examples/autodiff/vmex_to_boozer_sfincs_pipeline.py``. See
 :doc:`optimization` and :doc:`vmex_workflow` for the full workflow.
 
+Cost against a non-differentiable reference
+-------------------------------------------
+
+A finite-difference gradient of :math:`N` parameters costs :math:`2N`
+converged solves with central differences.  Implicit differentiation costs one
+transposed solve whatever :math:`N` is, because the adjoint is defined by the
+linear equation at the converged solution rather than by differentiating the
+iteration.
+
+.. figure:: _static/figures/paper_benchmarks/gradient_cost_scaling.png
+   :alt: Gradient wall time against parameter count, and agreement across four configurations.
+   :align: center
+   :width: 95%
+
+   Four upstream decks spanning one and two species, pitch-angle and
+   Fokker-Planck collisions, and zero and finite ``Er``.  The objective is
+   ``FSABjHat``; the parameters are the per-species density and temperature
+   gradient drives.  Regenerate with
+   ``python examples/paper_benchmarks/gradient_cost_scaling.py --results ...``.
+
+The measurements sit at :math:`N = 2` and :math:`N = 4`, where the scaling
+argument is *least* favourable: four solves is the same order as one forward
+plus one adjoint, and the measured wall-time ratio is only 1.4x to 7.1x.  The
+claim is about the slope rather than the intercept.  Finite differences used
+exactly :math:`2N` solves in every case; profile and geometry optimization run
+at :math:`N` in the tens, where that slope dominates.
+
+Agreement with the finite-difference gradient is ``4.7e-10`` to ``4.8e-07``
+across the four configurations.  Finite differences have no exact answer to
+converge to -- the step size trades truncation error against solver noise --
+so ``tools/benchmarks/ad_vs_fortran_fd.py`` sweeps the step and reports the
+error floor rather than one lucky value.
+
+The decks are restricted to those whose *reference* solve is well converged in
+the true residual (see :doc:`performance`): a finite-difference gradient built
+from an under-converged reference measures that reference's noise rather than
+its derivative.
+
 Worked examples
 ---------------
 
