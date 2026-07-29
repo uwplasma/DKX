@@ -930,6 +930,100 @@ than the classical block-Thomas wherever the classical one fits in memory.  The
 scope of the multigrid route is therefore unchanged: opt-in, for the grids where
 the exact factorization does not fit.
 
+A cheaper elimination order for the same exact inverse
+------------------------------------------------------
+
+The multigrid study above changes *how well* the simplified operator is
+inverted.  There is a second option that changes neither the operator nor the
+exactness of the inverse, only the order in which unknowns are eliminated.
+
+The blocks the classical route factors are not dense in the operator.
+:meth:`~dkx.drift_kinetic.KineticOperator.legendre_blocks` builds each one as
+``alpha(theta, zeta) (D_theta (x) I) + beta(theta, zeta) (I (x) D_zeta) +
+diagonal`` with the 3- or 5-point centred stencils of ``createGrids.F90``, so
+about 9 of 1121 entries per row are nonzero on a ``19 x 59`` surface.
+Eliminating ``L`` first is what fills them in: the Schur complement
+``D_l - L_l D_{l-1}^{-1} U_{l-1}`` is dense even when every input block is
+banded.
+
+The Fortran reference does not eliminate in that order.  It assembles the same
+simplified preconditioner as one sparse PETSc matrix and hands it to
+MUMPS/SuperLU_DIST, which is free to choose a fill-reducing ordering.
+:mod:`dkx.sparse_precond` does the same in ``dkx``: assemble the operator in
+CSR from the coefficients ``legendre_blocks`` already uses, factor it on the
+host with SuperLU, apply it through ``jax.pure_callback``.  Selected with
+``solve(preconditioner="sparse")``.
+
+Two properties make it usable.  The ``(species, x)`` subsystems are uncoupled
+in the simplified operator, so this is ``Nspecies * Nx`` independent
+factorizations rather than one; and a preconditioner is never differentiated --
+the tier-2 implicit-diff wrapper differentiates the *solution*, and the
+preconditioner enters only the forward and transposed linear solves -- so a
+host callback is admissible here in a way it is not on the solve path.  It
+cannot run with traced operator leaves, and says so rather than falling back
+silently.
+
+The one term that would destroy the sparsity is the rank-one ``l = 0``
+null-space pin, which is a dense outer product on a single diagonal block; it
+is applied by an exact Sherman-Morrison correction around the factorization
+instead of being assembled into it.  Everything else -- the collision
+reduction, the invertibility floor, the ``Nxi_for_x`` mask pins, the bordered
+constraint and ``Phi1`` elimination -- is shared with the classical route, so
+the two are the same linear map to factorization round-off.
+``tests/test_sparse_precond.py`` pins that on pitch-angle scattering, full
+Fokker-Planck, the improved Sugama model and a ``Phi1``-in-collision deck.
+
+Measured structurally (nonzeros do not depend on the machine or its load;
+reproduce with ``tools/benchmarks/tier2_sparse_fill.py``):
+
+.. list-table:: What the elimination order costs, per deck
+   :header-rows: 1
+
+   * - deck
+     - ``Ntheta*Nzeta``
+     - classical bands
+     - classical factor work
+     - assembled nonzeros
+     - SuperLU factors
+   * - ``tokamak_2species_PAS_withEr_fullTrajectories``
+     - 21
+     - 0.01 GB
+     - 0.4 Gflop
+     - 21% of dense
+     - 0.003 GB
+   * - ``geometryScheme4_2species_withEr_fullTrajectories``
+     - 247
+     - 0.65 GB
+     - 7 Gflop
+     - 2.8% of dense
+     - 0.09 GB
+   * - ``sfincsPaperFigure3_geometryScheme11_PAS_2Species_fullTrajectories``
+     - 1121
+     - 16.85 GB
+     - 845 Gflop
+     - 0.69% of dense
+     - 1.57 GB
+   * - ``filteredW7XNetCDF_2species_magneticDrifts_withEr``
+     - 1265
+     - 42.92 GB
+     - 2429 Gflop
+     - 0.62% of dense
+     - 5.97 GB
+
+The exact inverse of the same operator costs 1.57 GB of factors instead of
+16.85 GB of bands on the ``sfincsPaperFigure3`` deck, and 5.97 GB instead of
+42.92 GB on the W7-X magnetic-drift deck -- a factor of 11 and 7.  The crossover
+is where the angular grid is small: at ``Ntheta*Nzeta = 21`` the assembly is a
+fifth of the dense bands and there is nothing to win.
+
+**What is not measured here is wall time.**  Fill bounds the work but does not
+fix it, and the callback round-trip per Krylov iteration has a cost of its own
+that a shared machine cannot measure honestly.  The route is therefore opt-in,
+and the default stays ``"coarse"`` until a controlled timing study lands.  The
+gap that motivates it is real and measured: on the ``sfincsPaperFigure3``
+two-species full-trajectory deck the Fortran reference's main solve takes 47 s
+against 312 s for tier 2 with the classical preconditioner.
+
 Compile time vs steady state
 ----------------------------
 
