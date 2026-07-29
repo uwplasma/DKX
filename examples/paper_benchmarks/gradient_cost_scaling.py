@@ -58,10 +58,9 @@ FIG_PATH = (
     / "gradient_cost_scaling.png"
 )
 
-#: How far to project the finite-difference cost line.  Beyond the measured
-#: points this is arithmetic on the measured per-solve cost, not a measurement,
-#: and the figure says so.
-PROJECT_TO = 24
+#: Cost is measured at every ``k`` up to each deck's parameter count; beyond
+#: that the fitted slope is extended, and the figure marks where data stops.
+PROJECT_TO = 12
 
 
 def load(directory: Path) -> list[dict]:
@@ -78,50 +77,68 @@ def load(directory: Path) -> list[dict]:
                 "fd_s": float(summary["fortran_wall_s"]),
                 "fd_solves": int(summary["fortran_solves"]),
                 "agreement": float(summary["best_agreement_rel"]),
+                # Measured cost of differentiating the first k parameters.
+                "cumulative_s": [
+                    float(v) for v in report["fortran_fd"][0].get("cumulative_s", [])
+                ],
             }
         )
     return sorted(rows, key=lambda r: (r["n"], r["case"]))
 
 
 def plot(rows: list[dict], path: Path) -> None:
-    """Wall time against parameter count, with the finite-difference slope."""
-    n = np.array([r["n"] for r in rows], dtype=float)
-    ad = np.array([r["ad_s"] for r in rows])
-    fd = np.array([r["fd_s"] for r in rows])
-
+    """Measured gradient cost against the number of parameters differentiated."""
     fig, (left, right) = plt.subplots(
         1, 2, figsize=(11.0, 4.4), constrained_layout=True,
         gridspec_kw={"width_ratios": [1.25, 1.0]},
     )
 
-    # Cost per solve, averaged over the measured cases, drives the projection.
-    per_solve = float(np.mean(fd / np.array([r["fd_solves"] for r in rows])))
-    grid = np.arange(1, PROJECT_TO + 1)
-    left.plot(grid, 2.0 * grid * per_solve, color="#c05621", lw=1.4, ls=(0, (5, 4)),
-              zorder=1, label=f"finite differences, $2N$ solves (projected at "
-                             f"{per_solve:.1f} s/solve)")
-    left.axhline(float(np.mean(ad)), color="#2b6cb0", lw=1.4, ls=(0, (5, 4)),
-                 zorder=1, label="implicit differentiation, one adjoint (mean)")
-    left.scatter(n, fd, s=64, color="#c05621", marker="s", zorder=3,
-                 edgecolor="white", linewidth=0.9, label="finite differences, measured")
-    left.scatter(n, ad, s=64, color="#2b6cb0", zorder=3,
-                 edgecolor="white", linewidth=0.9, label="implicit diff., measured")
+    # Every finite-difference point below is measured: the tool records the wall
+    # time of the two solves each parameter needs, so the cost of a k-parameter
+    # gradient is a partial sum rather than an extrapolation.
+    slopes = []
+    for row in rows:
+        cumulative = row["cumulative_s"]
+        if not cumulative:
+            continue
+        k = np.arange(1, len(cumulative) + 1)
+        left.plot(k, cumulative, color="#c05621", lw=1.2, marker="s", ms=6,
+                  mec="white", mew=0.8, zorder=3, alpha=0.9)
+        left.plot(k, np.full_like(k, row["ad_s"], dtype=float), color="#2b6cb0",
+                  lw=1.2, marker="o", ms=6, mec="white", mew=0.8, zorder=3, alpha=0.9)
+        slopes.append(cumulative[-1] / len(cumulative))
 
-    left.axvspan(float(n.max()) + 0.5, PROJECT_TO + 0.5, color="0.94", zorder=0)
-    left.annotate("projected", (PROJECT_TO * 0.72, left.get_ylim()[1] * 0.06),
+    slope = float(np.mean(slopes))
+    ad_mean = float(np.mean([r["ad_s"] for r in rows]))
+    measured_to = max(len(r["cumulative_s"]) for r in rows)
+    grid = np.arange(measured_to, PROJECT_TO + 1)
+    left.plot(grid, slope * grid, color="#c05621", lw=1.3, ls=(0, (5, 4)), zorder=1)
+    left.plot(grid, np.full_like(grid, ad_mean, dtype=float), color="#2b6cb0",
+              lw=1.3, ls=(0, (5, 4)), zorder=1)
+    left.axvspan(measured_to, PROJECT_TO + 0.5, color="0.94", zorder=0)
+    top = PROJECT_TO * slope * 1.05
+    left.annotate("measured", (measured_to / 2.0, top * 0.40), fontsize=9,
+                  color="0.35", ha="center")
+    left.annotate(f"fitted slope, {slope:.1f} s/parameter",
+                  (measured_to + (PROJECT_TO - measured_to) * 0.5, top * 0.28),
                   fontsize=8.5, color="0.4", ha="center")
-    left.set_xlabel("number of parameters $N$")
-    left.set_ylabel("wall time for one gradient [s]")
+
+    left.plot([], [], color="#c05621", lw=1.2, marker="s", ms=6,
+              label="finite differences ($2k$ solves)")
+    left.plot([], [], color="#2b6cb0", lw=1.2, marker="o", ms=6,
+              label="implicit differentiation (one adjoint)")
+    left.set_xlabel("parameters differentiated, $k$")
+    left.set_ylabel("wall time for the gradient [s]")
     left.set_xlim(0.5, PROJECT_TO + 0.5)
-    left.set_title("Cost scales with $N$ only for finite differences", fontsize=11)
+    left.set_ylim(0, PROJECT_TO * slope * 1.05)
+    left.set_title("Cost grows with $k$ only for finite differences", fontsize=11)
     left.grid(True, alpha=0.22, lw=0.6)
-    left.legend(fontsize=8, loc="upper left", framealpha=0.95)
+    left.legend(fontsize=8.5, loc="upper left", framealpha=0.95)
 
     agreement = np.array([r["agreement"] for r in rows])
     order = np.argsort(agreement)
     labels = [rows[i]["case"].replace("tokamak_", "").replace("Collisions", "")[:30]
               for i in order]
-    # Markers, not bars: on a log axis a bar's length carries no meaning.
     positions = np.arange(len(order))
     right.hlines(positions, 1e-11, agreement[order], color="0.85", lw=1.0, zorder=1)
     right.scatter(agreement[order], positions, s=62, color="#2b6cb0", zorder=3,
