@@ -1,6 +1,6 @@
 """Classical and neoclassical impurity transport: a mixed-collisionality benchmark.
 
-Roadmap item 4 of ``plan_final.md``.  For a bulk hydrogenic plasma plus a
+For a bulk hydrogenic plasma plus a
 high-Z trace impurity this script assembles the classical and neoclassical
 impurity-transport diagnostics:
 

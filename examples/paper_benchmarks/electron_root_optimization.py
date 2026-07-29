@@ -1,7 +1,7 @@
 """Differentiable ambipolar-Er / electron-root optimization workflow.
 
-Roadmap item 3 of ``plan_final.md``: productize ``d(ambipolar Er)/d(shape or
-profile)`` through the implicit ambipolar root, with robust multi-root
+Productizes ``d(ambipolar Er)/d(shape or profile)`` through the implicit
+ambipolar root, with robust multi-root
 resolution, ion / electron branch classification, and graceful handling of the
 branch transition (near-degenerate roots) at the electron-root onset.
 
@@ -612,7 +612,7 @@ def make_figure(scurve: dict, bif: dict, diff: dict) -> None:
 def build_record(scurve: dict, bif: dict, diff: dict) -> dict:
     return {
         "benchmark": "differentiable ambipolar-Er / electron-root optimization workflow",
-        "roadmap_item": "plan_final.md Research Roadmap item 3",
+        "roadmap_item": "differentiable electron-root / ambipolar-Er optimization",
         "references": [
             "H. Maassberg, C.D. Beidler & E.E. Simmet, Plasma Phys. Control. Fusion 41, 1135 (1999)",
             "Yu. Turkin et al., Phys. Plasmas 18, 022505 (2011)",
