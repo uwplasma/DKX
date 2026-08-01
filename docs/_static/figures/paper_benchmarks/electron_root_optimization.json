@@ -1,6 +1,6 @@
 {
  "benchmark": "differentiable ambipolar-Er / electron-root optimization workflow",
- "roadmap_item": "plan_final.md Research Roadmap item 3",
+ "roadmap_item": "differentiable electron-root / ambipolar-Er optimization",
  "references": [
   "H. Maassberg, C.D. Beidler & E.E. Simmet, Plasma Phys. Control. Fusion 41, 1135 (1999)",
   "Yu. Turkin et al., Phys. Plasmas 18, 022505 (2011)",
