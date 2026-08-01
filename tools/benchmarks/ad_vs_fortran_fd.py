@@ -181,6 +181,7 @@ def fortran_fd_gradient(
     deck = example_dir / "input.namelist"
     text = deck.read_text()
     gradient: list[float] = []
+    per_parameter: list[float] = []
     n_solves = 0
     start = time.perf_counter()
     for name in names:
@@ -191,8 +192,10 @@ def fortran_fd_gradient(
             plus, minus = list(values), list(values)
             plus[index] += h
             minus[index] -= h
+            mark = time.perf_counter()
             high = _run_fortran(example_dir, _write_vector(text, name, plus), binary, launcher)
             low = _run_fortran(example_dir, _write_vector(text, name, minus), binary, launcher)
+            per_parameter.append(round(time.perf_counter() - mark, 3))
             n_solves += 2
             gradient.append((high - low) / (2.0 * h))
     return {
@@ -200,6 +203,14 @@ def fortran_fd_gradient(
         "grad_wrt_namelist": gradient,
         "wall_s": round(time.perf_counter() - start, 2),
         "n_solves": n_solves,
+        # Wall time of the two solves each parameter needed.  Summing prefixes
+        # of this gives the *measured* cost of a k-parameter gradient, so the
+        # scaling is data rather than an extrapolation from one point.
+        "per_parameter_s": per_parameter,
+        # Cumulative cost of differentiating the first k parameters, k = 1..N.
+        "cumulative_s": [
+            round(sum(per_parameter[: k + 1]), 3) for k in range(len(per_parameter))
+        ],
     }
 
 
