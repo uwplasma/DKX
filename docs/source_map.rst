@@ -73,6 +73,9 @@ Physics and numerics:
   ``L`` first — CSR assembly, host SuperLU, and the Sherman-Morrison
   correction that keeps the dense ``l = 0`` pin out of the sparsity pattern.
   Selected by ``solve(preconditioner="sparse")``.
+- ``vmec_ascii.py``: the LIBSTELL text form of a VMEC ``wout``, which
+  upstream accepts for ``geometryScheme 5`` alongside NetCDF;
+  ``magnetic_geometry.read_vmec_wout`` routes here by file signature.
 - ``phi1.py``: the Phi1/quasineutrality Newton solve.
 - ``moments.py``: velocity-space moments, flux families, transport matrices,
   NTV, classical transport (``diagnostics.F90``,
