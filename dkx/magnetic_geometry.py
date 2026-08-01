@@ -1630,12 +1630,11 @@ def read_vmec_wout(path: str | Path) -> VmecWout:
     # capability.  See uwplasma/DKX#30.
     magic = p.open("rb").read(4)
     if not (magic.startswith(b"CDF") or magic == b"\x89HDF"):
-        raise NotImplementedError(
-            f"{p.name} is not a NetCDF VMEC wout file (leading bytes {magic!r}). "
-            "The LIBSTELL ASCII wout format that upstream also accepts for "
-            "geometryScheme 5 is not implemented; point equilibriumFile at the "
-            "NetCDF form of the same equilibrium (wout_*.nc)."
-        )
+        # LIBSTELL text form.  Imported lazily: dkx.vmec_ascii imports VmecWout
+        # from here, so a module-level import would be circular.
+        from dkx.vmec_ascii import read_vmec_wout_ascii  # noqa: PLC0415
+
+        return read_vmec_wout_ascii(p)
 
     with netcdf_file(p, "r", mmap=False) as f:
         def var(name: str) -> np.ndarray:

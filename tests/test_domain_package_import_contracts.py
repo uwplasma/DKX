@@ -77,6 +77,7 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "solve.py": "stable solver kernel",
     "solver_trace.py": "stable support utility",
     "species.py": "stable physics kernel",
+    "vmec_ascii.py": "stable geometry kernel",
     "validity.py": "public physics API",
     "variational.py": "stable physics kernel",
     "writer.py": "public API",

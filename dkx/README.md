@@ -21,6 +21,7 @@ packages remain: `validation/` and `workflows/`.
 | `constants.py`, `species.py` | Normalizations, radial-coordinate Jacobians, species pytrees, collisionality. |
 | `phase_space.py`, `xgrid.py` | Theta/zeta grids and derivative matrices, Legendre pitch machinery, speed grids (`xgrid.py` is the polynomial x-grid kernel the collision operators consume), Nxi-for-x ramps. |
 | `magnetic_geometry.py` | All supported geometry schemes, VMEC/Boozer readers, differentiable Fourier path. |
+| `vmec_ascii.py` | The LIBSTELL text form of a VMEC `wout`, which upstream accepts for `geometryScheme 5` alongside NetCDF (`read_wout_text` in `read_wout_mod.F`). `read_vmec_wout` routes here by file signature, so callers never choose. Covers VMEC VERSION <= 8.0, where every record after the version line is list-directed and the Nyquist tables are inline; later versions and the ANIMEC/FLOW variants are refused by name rather than mis-parsed. |
 | `collisions.py` | Pitch-angle scattering and full Fokker-Planck with Rosenbluth terms. |
 | `drift_kinetic.py` | The `KineticOperator`: term assembly, matrix-free apply, analytic Legendre blocks, RHS drives, bordered constraints. |
 | `solve.py` | Three-tier policy (structured block elimination, preconditioned recycled Krylov, host direct referee) on the `solvax` library (a core dependency); implicit differentiation. |
