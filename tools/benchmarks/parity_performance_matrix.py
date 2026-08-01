@@ -402,6 +402,39 @@ def run_case(
     return record
 
 
+def preflight_fortran(binary: Path | None, launcher: list[str]) -> str | None:
+    """Reason the Fortran reference cannot run, or ``None`` if it can.
+
+    A sweep is hours long and its whole value is the comparison, so a reference
+    that cannot start must stop the run *now* rather than at the end.  The
+    failure this exists for is silent: ``micromamba run`` resolves its
+    environment against ``MAMBA_ROOT_PREFIX``, which an interactive shell sets
+    and a ``nohup``-ed one does not, so every case fails in 0.02 s against a
+    nonexistent prefix and the sweep completes with 38 well-formed records and
+    no reference in any of them.
+    """
+    if binary is None:
+        return None  # dkx-only sweep: nothing to check
+    if not binary.exists():
+        return f"--fortran-binary {binary} does not exist"
+    probe = [*launcher, str(binary), "-help"]
+    try:
+        # PETSc's option banner is not valid UTF-8, so decode defensively: the
+        # probe only needs to see whether the launcher itself failed.
+        result = subprocess.run(
+            probe, capture_output=True, timeout=120, check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return f"cannot launch {' '.join(probe)}: {exc}"
+    blob = (result.stdout + result.stderr).decode("utf-8", errors="replace")
+    if "prefix does not exist" in blob or "critical libmamba" in blob:
+        return (
+            f"the launcher cannot resolve its environment: {blob.strip().splitlines()[0]}\n"
+            "  (export MAMBA_ROOT_PREFIX=$HOME/micromamba before a non-interactive run)"
+        )
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--examples", type=Path, required=True)
@@ -426,6 +459,12 @@ def main(argv: list[str] | None = None) -> int:
              "'micromamba run -n sfincs-fortran'",
     )
     args = parser.parse_args(argv)
+
+    launcher = args.fortran_launcher.split() if args.fortran_launcher else []
+    reason = preflight_fortran(args.fortran_binary, launcher)
+    if reason is not None:
+        print(f"refusing to start: {reason}", file=sys.stderr)
+        return 2
 
     done = set()
     if args.out.exists():
