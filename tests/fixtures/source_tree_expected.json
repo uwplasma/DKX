@@ -38,6 +38,7 @@
     "species.py",
     "validity.py",
     "variational.py",
+    "vmec_ascii.py",
     "writer.py",
     "xgrid.py"
   ],
@@ -80,6 +81,7 @@
     "species.py",
     "validity.py",
     "variational.py",
+    "vmec_ascii.py",
     "writer.py",
     "xgrid.py"
   ],
