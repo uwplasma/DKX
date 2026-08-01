@@ -1,8 +1,7 @@
 # dkx Source Layout
 
 This directory contains the importable `dkx` package. The architecture
-is the canonical stack of flat, physics-named root modules
-(`plan_final.md`, "Source Structure Rules"): one input file plus one geometry
+is the canonical stack of flat, physics-named root modules: one input file plus one geometry
 runs through `inputs -> drift_kinetic -> solve -> moments -> writer/console`,
 and the public API/CLI route every supported case through that chain. The
 legacy pipeline (the transitional `problems/`, `operators/`, `solvers/`,
@@ -82,7 +81,7 @@ tiers and the flat root modules own the entire supported surface.
 - Keep package depth shallow: one folder below `dkx/`, no nested
   packages.
 - Stable file names describe physics or numerics — no version suffixes or
-  experiment names (`plan_final.md`, "Source Structure Rules").
+  experiment names.
 - No env-var-only solver routes in stable code; opt-in switches are namelist
   or API arguments with documented semantics.
 - Keep large validation data out of the git clone and wheel; large equilibria
@@ -102,9 +101,10 @@ outputs, XLA profiles, or large equilibrium files inside `dkx/`.
 
 ## Contributor Workflow
 
-1. Start from the slice queue in `../plan_final.md`; delete or extract before
-   moving code.
-2. Update the source-tree manifest, this file, and the plan in the same
-   commit as any module addition, rename, or deletion.
+1. Delete or extract before moving code: a slice that only relocates lines
+   leaves two owners of the same behaviour.
+2. Update the source-tree manifest and this file in the same commit as any
+   module addition, rename, or deletion; `tests/test_source_tree_consolidation.py`
+   and `tests/test_domain_package_import_contracts.py` enforce both.
 3. Run focused tests plus the import/compile guards before committing; full
    suite at slice milestones.

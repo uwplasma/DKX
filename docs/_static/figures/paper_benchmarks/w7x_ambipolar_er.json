@@ -1,6 +1,6 @@
 {
  "benchmark": "W7-X standard-configuration ambipolar-Er experimental case",
- "roadmap_item": "plan_final.md Research Roadmap item 1 (W7-X ambipolar-Er experimental case)",
+ "roadmap_item": "W7-X ambipolar-Er experimental case",
  "case_type": "REAL published discharge (data validation); profiles + reference E_r digitized (approximate) from the paper figures",
  "citation": "N.A. Pablant et al., Phys. Plasmas 25, 022508 (2018), https://doi.org/10.1063/1.5018326 (W7-X program 20160309.010, 2.0 MW, t=300 ms)",
  "references": [
