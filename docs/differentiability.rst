@@ -279,12 +279,20 @@ iteration.
    gradient drives.  Regenerate with
    ``python examples/paper_benchmarks/gradient_cost_scaling.py --results ...``.
 
-The measurements sit at :math:`N = 2` and :math:`N = 4`, where the scaling
-argument is *least* favourable: four solves is the same order as one forward
-plus one adjoint, and the measured wall-time ratio is only 1.4x to 7.1x.  The
-claim is about the slope rather than the intercept.  Finite differences used
-exactly :math:`2N` solves in every case; profile and geometry optimization run
-at :math:`N` in the tens, where that slope dominates.
+The cost is measured at *every* :math:`k`, not extrapolated from one point:
+the harness records the wall time of the two solves each parameter needs, so
+the cost of a :math:`k`-parameter gradient is a partial sum.  On the
+two-species decks that gives four measured points, and they are linear --
+``2.86, 5.71, 8.56, 11.37`` seconds -- against a flat one-adjoint cost.  The
+fitted slope is ``3.1`` s/parameter.
+
+The absolute ratio at these :math:`k` is modest, and deliberately so: at
+:math:`k = 4` a finite difference needs eight solves, the same order as one
+forward plus one adjoint, so the measured wall-time ratio is only 1.4x to
+7.1x.  The claim is the slope rather than the intercept.  Profile and geometry
+optimization run at :math:`k` in the tens, where the slope dominates; the
+figure shades that range and marks the line there as fitted rather than
+measured.
 
 Agreement with the finite-difference gradient is ``4.7e-10`` to ``4.8e-07``
 across the four configurations.  Finite differences have no exact answer to
