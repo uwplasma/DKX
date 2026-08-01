@@ -47,6 +47,14 @@ class SolverOptions:
         differentiable: wrap the solution in an implicit-function-theorem
             ``linear_solve`` so ``jax.grad`` flows through (tiers 1/2).
         use_preconditioner: tier-2 coarse-operator preconditioner on/off.
+        preconditioner: which tier-2 preconditioner to build —
+            ``"coarse"`` (dense block-Thomas over ``L``), ``"multigrid"``
+            (:mod:`dkx.multigrid`), ``"sparse"`` (:mod:`dkx.sparse_precond`,
+            the same operator inverted exactly in a fill-reducing order), or
+            ``"none"``.  ``None`` keeps whatever ``use_preconditioner``
+            selects, so existing callers are unaffected.  A preconditioner
+            cannot change the answer — only the iteration count, the wall
+            time, and whether the solve fits in memory at all.
         device: JAX device for the solve (a platform string such as ``"cpu"``
             or ``"gpu"``, or a concrete ``jax.Device``); ``None`` keeps the
             operator's placement.
@@ -72,6 +80,7 @@ class SolverOptions:
     max_restarts: int = 200
     differentiable: bool = False
     use_preconditioner: bool = True
+    preconditioner: str | None = None
     device: Any = None
     memory_budget_gb: float | None = None
     cores: int | None = None
@@ -87,6 +96,9 @@ class SolverOptions:
             "max_restarts": int(self.max_restarts),
             "differentiable": bool(self.differentiable),
             "use_preconditioner": bool(self.use_preconditioner),
+            "preconditioner": (
+                None if self.preconditioner is None else str(self.preconditioner)
+            ),
             "device": self.device,
             "tier1_memory_budget_gb": (
                 None if self.memory_budget_gb is None else float(self.memory_budget_gb)
