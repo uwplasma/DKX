@@ -167,11 +167,14 @@ _SOLVE_CPU_MAX_TIER2_ENV = "DKX_SOLVE_CPU_MAX_SIZE_TIER2"
 _SOLVE_CPU_MAX_TIER1_DEFAULT = 0
 _SOLVE_CPU_MAX_TIER2_DEFAULT = 0
 
-# Tier-2 preconditioner routes of ``solve(preconditioner=...)``.  ``"coarse"``
-# is the historical default (exact block-Thomas of the SFINCS-simplified
-# operator); ``"multigrid"`` swaps its inner f-block inverse for the
-# semicoarsened V-cycle of :mod:`dkx.multigrid`.
-_TIER2_PRECONDITIONERS = ("coarse", "multigrid", "none")
+# Tier-2 preconditioner routes of ``solve(preconditioner=...)``.  All three
+# invert the *same* SFINCS-simplified operator and differ only in how.
+# ``"coarse"`` is the historical default (exact block-Thomas over L with dense
+# ``Ntheta*Nzeta`` blocks); ``"multigrid"`` swaps its inner f-block inverse for
+# the semicoarsened V-cycle of :mod:`dkx.multigrid`; ``"sparse"`` keeps the
+# inverse exact but eliminates in a fill-reducing order on the host
+# (:mod:`dkx.sparse_precond`), which is what the Fortran reference does.
+_TIER2_PRECONDITIONERS = ("coarse", "multigrid", "sparse", "none")
 
 
 # =============================================================================
@@ -1857,11 +1860,18 @@ def build_tier2_preconditioner(
     :func:`dkx.multigrid.build_multigrid_preconditioner`, which approximates
     the inverse of that *same* operator with a semicoarsened multigrid V-cycle
     and so is affordable where the cubic-in-``Ntheta*Nzeta`` factorization is
-    not.  Both eliminate the bordered constraint / ``Phi1`` rows identically,
-    and neither changes the solution: they change how fast tier 2 reaches it.
+    not; ``"sparse"`` is :func:`dkx.sparse_precond.build_sparse_preconditioner`,
+    which keeps the inverse exact but eliminates in a fill-reducing order on the
+    host instead of eliminating ``L`` first, so the angular stencils stay sparse.
+    All three eliminate the bordered constraint / ``Phi1`` rows identically, and
+    none changes the solution: they change how fast tier 2 reaches it.
     """
     if kind == "coarse":
         return build_coarse_preconditioner(op, drop_l_coupling=drop_l_coupling)
+    if kind == "sparse":
+        from dkx.sparse_precond import build_sparse_preconditioner  # noqa: PLC0415
+
+        return build_sparse_preconditioner(op, drop_l_coupling=drop_l_coupling)
     from dkx.multigrid import build_multigrid_preconditioner  # noqa: PLC0415
 
     return build_multigrid_preconditioner(op, drop_l_coupling=drop_l_coupling)
@@ -2346,6 +2356,16 @@ def solve(
                 full-Fokker-Planck ladder it does *not* reach the tier-2
                 tolerance, and ``docs/performance.rst`` records both the table
                 and the diagnosis — so it stays opt-in.
+            ``"sparse"``
+                the same simplified operator, inverted *exactly* but in a
+                fill-reducing elimination order
+                (:mod:`dkx.sparse_precond`): the angular blocks carry the 3- or
+                5-point ``createGrids.F90`` stencils, and eliminating ``L``
+                first is what fills them in, so ``dkx`` assembles the operator
+                in CSR and factors it with host SuperLU — which is what the
+                Fortran reference does with MUMPS.  Same map as ``"coarse"`` to
+                factorization round-off; it cannot run with traced operator
+                leaves, since the assembly reads values on the host.
             ``"none"``
                 unpreconditioned GCROT.
 

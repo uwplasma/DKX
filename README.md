@@ -129,10 +129,8 @@ database mode, batched GPU scans, a bounce-averaged 1/ν surrogate) — lives in
 
 Two codes agree only to the accuracy each one reaches. For left-preconditioned
 Krylov methods PETSc's default convergence test measures the *preconditioned*
-residual rather than the true one (`KSPSetNormType`), and SFINCS preconditions
-with a separately assembled simplified operator — so on some decks a run
-reports success at its requested `solverTolerance` while the returned state
-still leaves a large true residual.
+residual rather than the true one (`KSPSetNormType`), so a run can report
+success at its requested `solverTolerance` while leaving a large true residual.
 
 ![Reference true residual against the cross-code difference in output moments](docs/_static/figures/paper_benchmarks/reference_convergence.png)
 
@@ -146,11 +144,9 @@ to `5.0e-15` — to `3.1e-13`.
 This is not specific to SFINCS; a preconditioned-norm test is standard and
 usually adequate. The practical point is that a reference's own residual is
 worth checking before a disagreement is attributed to the code under test.
-
-*Reproduce with `python tools/benchmarks/parity_performance_matrix.py
---fortran-residual ...` then `python
-examples/paper_benchmarks/reference_convergence.py --results ...`; details in
-[docs/performance.rst](docs/performance.rst).*
+Reproduce with `parity_performance_matrix.py --fortran-residual` then
+`reference_convergence.py`; details in
+[docs/performance.rst](docs/performance.rst).
 
 ## Fast on CPU and GPU
 
@@ -202,19 +198,14 @@ the optional `vmex` + `booz_xform_jax` companions).*
 
 ![Gradient wall time against parameter count, and agreement across four configurations](docs/_static/figures/paper_benchmarks/gradient_cost_scaling.png)
 
-A central finite difference of `N` parameters costs `2N` converged solves.
-Implicit differentiation costs one transposed solve whatever `N` is. Measured
-against SFINCS finite differences on four upstream decks — one and two species,
-pitch-angle and Fokker-Planck collisions, zero and finite `Er` — the gradients
-agree to **4.7e-10 … 4.8e-07**.
-
-The timings sit at `N = 2` and `N = 4`, where the scaling argument is *least*
-favourable: the measured wall-time ratio is only 1.4×–7.1×, because four solves
-is the same order as one forward plus one adjoint. The claim is the slope, not
-the intercept — profile and geometry optimization run at `N` in the tens.
-
-*Reproduce with `python tools/benchmarks/ad_vs_fortran_fd.py` per deck, then
-`python examples/paper_benchmarks/gradient_cost_scaling.py --results ...`.*
+A central finite difference of `k` parameters costs `2k` converged solves;
+implicit differentiation costs one transposed solve whatever `k` is. Measured
+against SFINCS finite differences on four upstream decks (one and two species,
+pitch-angle and Fokker-Planck collisions, zero and finite `Er`), the gradients
+agree to **4.7e-10 … 4.8e-07**, and the finite-difference cost is linear in `k`
+(`2.86, 5.71, 8.56, 11.37` s) against a flat one-adjoint cost. At these small
+`k` the wall-time ratio is only 1.4×–7.1× — the claim is the slope, not the
+intercept. See [docs/differentiability.rst](docs/differentiability.rst).
 
 ## Monoenergetic (ICNTS) benchmarks
 
