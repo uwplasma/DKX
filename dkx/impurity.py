@@ -1,6 +1,6 @@
 """Classical impurity transport: algebraic fluxes, screening, charge-state scans.
 
-Roadmap item 4 of ``plan_final.md``.  The *classical* (Pfirsch-Schlueter-independent)
+The *classical* (Pfirsch-Schlueter-independent)
 radial particle and heat fluxes of a magnetized multi-species plasma are purely
 local and algebraic: they follow from the Braginskii inter-species friction
 moments evaluated with the leading-order Maxwellians and a single flux-surface
