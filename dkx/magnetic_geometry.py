@@ -1622,6 +1622,21 @@ def read_vmec_wout(path: str | Path) -> VmecWout:
     if not p.exists():
         p = resolve_existing_path(path).path.resolve()
 
+    # A VMEC ``wout`` comes in two forms and upstream reads both: LIBSTELL's
+    # ``read_wout_file`` (``geometry.F90:96``) auto-detects ASCII or NetCDF.
+    # This reader handles NetCDF only, and without this check the ASCII form
+    # surfaces as a scipy "not a valid NetCDF 3 file" ``TypeError`` from inside
+    # the parser, which reads like a corrupt file rather than a missing
+    # capability.  See uwplasma/DKX#30.
+    magic = p.open("rb").read(4)
+    if not (magic.startswith(b"CDF") or magic == b"\x89HDF"):
+        raise NotImplementedError(
+            f"{p.name} is not a NetCDF VMEC wout file (leading bytes {magic!r}). "
+            "The LIBSTELL ASCII wout format that upstream also accepts for "
+            "geometryScheme 5 is not implemented; point equilibriumFile at the "
+            "NetCDF form of the same equilibrium (wout_*.nc)."
+        )
+
     with netcdf_file(p, "r", mmap=False) as f:
         def var(name: str) -> np.ndarray:
             if name not in f.variables:
