@@ -68,6 +68,11 @@ Physics and numerics:
   (``pitch_collocation_surrogate``, ``line_diagonal_dominance``,
   ``line_smoother_spectral_radius``) that measure why that route cannot reach
   tolerance on a Legendre-modal pitch discretization.
+- ``sparse_precond.py``: the same simplified operator as ``multigrid.py``, but
+  inverted exactly in a fill-reducing elimination order instead of eliminating
+  ``L`` first — CSR assembly, host SuperLU, and the Sherman-Morrison
+  correction that keeps the dense ``l = 0`` pin out of the sparsity pattern.
+  Selected by ``solve(preconditioner="sparse")``.
 - ``phi1.py``: the Phi1/quasineutrality Newton solve.
 - ``moments.py``: velocity-space moments, flux families, transport matrices,
   NTV, classical transport (``diagnostics.F90``,
