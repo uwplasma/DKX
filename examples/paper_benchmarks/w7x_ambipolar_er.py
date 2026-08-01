@@ -1,7 +1,6 @@
 """W7-X ambipolar-Er experimental case (methods-paper benchmark, pillar 5).
 
-Roadmap item 1 of ``plan_final.md`` lists "one W7-X ambipolar-Er experimental
-case" among the methods-paper benchmark pieces.  This script computes the
+This script computes the
 neoclassical ambipolar radial electric field ``E_r(rho)`` of the W7-X standard
 configuration from *measured* plasma profiles of a published discharge and
 compares it against the published measured and neoclassically-predicted
@@ -691,7 +690,7 @@ def build_record(surfaces: list[dict], conv: dict) -> dict:
     diffs = [c["difference"] for c in comparison]
     return {
         "benchmark": "W7-X standard-configuration ambipolar-Er experimental case",
-        "roadmap_item": "plan_final.md Research Roadmap item 1 (W7-X ambipolar-Er experimental case)",
+        "roadmap_item": "W7-X ambipolar-Er experimental case",
         "case_type": "REAL published discharge (data validation); profiles + reference E_r "
         "digitized (approximate) from the paper figures",
         "citation": CITATION,

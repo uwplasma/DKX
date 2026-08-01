@@ -5,9 +5,8 @@ Finds the radial electric field ``E_r`` that zeroes the radial current
     J_r(E_r) = sum_a Z_a Gamma_a(E_r) = 0,
 
 by driving the canonical ``inputs -> drift_kinetic -> solve -> moments`` stack
-at a sequence of ``E_r`` values.  This is the ``er.py`` slice of ``plan_final.md``
-item 4: it replaces the legacy in-process Brent owner ``problems/ambipolar.py``
-and adds a differentiable ambipolar root.
+at a sequence of ``E_r`` values.  It replaces the legacy in-process Brent owner
+``problems/ambipolar.py`` and adds a differentiable ambipolar root.
 
 Fortran counterpart (``ambipolarSolver.F90``): ``updateEr`` sets
 ``dPhiHatdpsiHat = ddrHat2ddpsiHat * (-Er)`` and defines the radial current as

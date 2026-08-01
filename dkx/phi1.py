@@ -6,7 +6,7 @@ quasineutrality (``Ntheta*Nzeta`` charge-neutrality rows plus one ``<Phi1>=0``
 constraint row -- the "lambda" row), and it couples back into the kinetic
 equation (``includePhi1InKineticEquation``).  SFINCS Fortran solves this with a
 Newton (PETSc ``SNES``) loop wrapping the linear kernel; this module is the
-``phi1.py`` slice of ``plan_final.md`` item 5.
+``dkx`` owner of that solve.
 
 Public entry points:
 

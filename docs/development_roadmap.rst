@@ -8,9 +8,9 @@ and parallel-scaling cases. The code-health roadmap is to keep those
 capabilities in a compact domain-organized package without changing validated
 physics behavior.
 
-The authoritative branch checklist lives in the repository root as
-``plan_final.md``. This page summarizes stable development principles and does
-not define a competing sequence of work.
+This page states the development principles that outlive any one branch. The
+sequence of work itself is tracked in the repository's issues and pull
+requests, where it can be argued with; a checklist in a file cannot be.
 
 Goals
 -----
