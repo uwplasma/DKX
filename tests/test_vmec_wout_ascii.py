@@ -19,7 +19,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from dkx.magnetic_geometry import read_vmec_wout, read_vmec_wout_ascii
+from dkx.magnetic_geometry import read_vmec_wout
+from dkx.vmec_ascii import read_vmec_wout_ascii
 
 # Small enough to write out by hand, big enough to have a half/full mesh
 # distinction and more than one Fourier mode.
