@@ -1,7 +1,7 @@
 {
   "version": "2026-05-26-v1",
   "release_tag": "sfincs-jax-data-v1",
-  "release_url": "https://github.com/uwplasma/sfincs_jax/releases/download/sfincs-jax-data-v1",
+  "release_url": "https://github.com/uwplasma/DKX/releases/download/sfincs-jax-data-v1",
   "asset": "sfincs_jax_equilibria_2026-05-26-v1.tar.gz",
   "archive_sha256": "1ec5012ca353a0ab17edcecb3a016f3c7fbde40f37e051f38b5b6de01440a955",
   "files": [

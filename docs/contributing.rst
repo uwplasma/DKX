@@ -45,3 +45,23 @@ At minimum, contributors should run:
 
 If a change touches performance-sensitive logic, also run the relevant benchmark or
 example-case gate and update the documented results when needed.
+
+
+Figures
+-------
+
+A figure in the README or the docs is a claim, and a reader who cannot
+regenerate it cannot check it.  ``docs/figure_provenance.json`` maps every
+displayed figure to the checked-in script that produces it, and
+``tests/test_figure_provenance.py`` enforces the mapping:
+
+* a figure added to the docs without a provenance entry fails the suite;
+* an entry naming a script that does not exist fails the suite;
+* the number of figures with no identifiable generator is a **ratchet** -- it
+  may fall and may not rise, so a new figure has to arrive with its generator
+  even though sixteen older ones are still unresolved.
+
+To add a figure: write the script that produces it under ``examples/`` or
+``tools/``, add the entry, then reference the file from the page.  To pay down
+the ratchet: identify the generator for one of the unresolved entries, fill it
+in, and lower ``unresolved_budget`` by one.
