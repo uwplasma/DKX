@@ -98,9 +98,11 @@
       "artifacts.py",
       "data_fetch.py",
       "fortran.py",
+      "lanes.py",
       "panels.py",
       "policy.py",
-      "release.py"
+      "release.py",
+      "series.py"
     ],
     "workflows": [
       "geometry_adapters.py",
