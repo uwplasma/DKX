@@ -1,0 +1,188 @@
+{
+ "schema_version": 1,
+ "purpose": "Every figure shown in the README or the docs, and the checked-in script that produces it. A figure a reader cannot regenerate is a claim they cannot check, so this file is enforced by tests/test_figure_provenance.py rather than kept by hand.",
+ "unresolved_budget": 16,
+ "figures": {
+  "docs/_static/figures/docs/ambipolar_er_roots.png": {
+   "generator": null,
+   "unresolved": "no checked-in script names this figure"
+  },
+  "docs/_static/figures/docs/bmag_contour_w7x.png": {
+   "generator": null,
+   "unresolved": "no checked-in script names this figure"
+  },
+  "docs/_static/figures/docs/transport_coeff_vs_collisionality.png": {
+   "generator": null,
+   "unresolved": "no checked-in script names this figure"
+  },
+  "docs/_static/figures/finite_beta_vmex_sfincs_bootstrap_er.png": {
+   "generator": "examples/vmex_finite_beta/finite_beta_vmec_to_sfincs.py"
+  },
+  "docs/_static/figures/finite_beta_vmex_sfincs_convergence_scan.png": {
+   "generator": "examples/vmex_finite_beta/plot_convergence_scan.py"
+  },
+  "docs/_static/figures/gpu_anatomy_memory.png": {
+   "generator": "tools/benchmarks/gpu_anatomy_figure.py"
+  },
+  "docs/_static/figures/magdrift_bhat.png": {
+   "generator": null,
+   "unresolved": "no checked-in script names this figure"
+  },
+  "docs/_static/figures/optimization/qa_nfp2_bootstrap_current_comparison.png": {
+   "generator": "examples/optimization/qa_nfp2_bootstrap_current_comparison.py"
+  },
+  "docs/_static/figures/optimization/qa_nfp2_dkx_optimization_lane.png": {
+   "generator": "examples/optimization/qa_nfp2_dkx_objectives.py"
+  },
+  "docs/_static/figures/optimization/qa_nfp2_dkx_promotion_comparison_w7x_reduced_real.png": {
+   "generator": null,
+   "unresolved": "no checked-in script names this figure"
+  },
+  "docs/_static/figures/optimization/qa_nfp2_dkx_promotion_scan.png": {
+   "generator": "examples/optimization/evaluate_dkx_promotion_scan.py"
+  },
+  "docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_convergence_ladder.png": {
+   "generator": null,
+   "unresolved": "no checked-in script names this figure"
+  },
+  "docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_promotion_comparison.png": {
+   "generator": null,
+   "unresolved": "no checked-in script names this figure"
+  },
+  "docs/_static/figures/paper/dkx_autodiff_gradient_check.png": {
+   "generator": "examples/publication_figures/generate_autodiff_sensitivity_validation.py"
+  },
+  "docs/_static/figures/paper/dkx_autodiff_sensitivity_map.png": {
+   "generator": "examples/publication_figures/generate_autodiff_sensitivity_validation.py"
+  },
+  "docs/_static/figures/paper/dkx_er_trajectory_sweep_stellarator_fast_reference.png": {
+   "generator": "examples/publication_figures/generate_er_trajectory_sweep.py"
+  },
+  "docs/_static/figures/paper/dkx_er_trajectory_sweep_tokamak_reference.png": {
+   "generator": "examples/publication_figures/generate_er_trajectory_sweep.py"
+  },
+  "docs/_static/figures/paper/dkx_fig1_lhd_collisionality.png": {
+   "generator": "examples/publication_figures/generate_sfincs_paper_figs.py"
+  },
+  "docs/_static/figures/paper/dkx_fig1_lhd_collisionality_reaudit_fast.png": {
+   "generator": "examples/publication_figures/generate_sfincs_paper_figs.py"
+  },
+  "docs/_static/figures/paper/dkx_fig2_w7x_collisionality.png": {
+   "generator": "examples/publication_figures/generate_sfincs_paper_figs.py"
+  },
+  "docs/_static/figures/paper/dkx_fig2_w7x_collisionality_reaudit_fast.png": {
+   "generator": "examples/publication_figures/generate_sfincs_paper_figs.py"
+  },
+  "docs/_static/figures/paper/dkx_fig3_simakov_helander.png": {
+   "generator": "examples/publication_figures/generate_sfincs_paper_figs.py"
+  },
+  "docs/_static/figures/paper/dkx_fortran_suite_benchmark_summary.png": {
+   "generator": "examples/publication_figures/generate_fortran_suite_benchmark_summary.py"
+  },
+  "docs/_static/figures/paper/dkx_high_collisionality_trend_proxy.png": {
+   "generator": "dkx/validation/artifacts.py"
+  },
+  "docs/_static/figures/paper/dkx_publication_validation_dashboard.png": {
+   "generator": "examples/publication_figures/generate_validation_dashboard.py"
+  },
+  "docs/_static/figures/paper/dkx_simakov_helander_limit_audit.png": {
+   "generator": null,
+   "unresolved": "no checked-in script names this figure"
+  },
+  "docs/_static/figures/paper/dkx_w7x_high_nu_performance.png": {
+   "generator": "examples/publication_figures/generate_w7x_high_nu_performance.py"
+  },
+  "docs/_static/figures/paper_benchmarks/bootstrap_consistency_kinetic_loop.png": {
+   "generator": "examples/paper_benchmarks/bootstrap_consistency_kinetic_loop.py"
+  },
+  "docs/_static/figures/paper_benchmarks/cross_code_matrix.png": {
+   "generator": "examples/paper_benchmarks/cross_code_matrix.py"
+  },
+  "docs/_static/figures/paper_benchmarks/gradient_cost_scaling.png": {
+   "generator": "examples/paper_benchmarks/gradient_cost_scaling.py"
+  },
+  "docs/_static/figures/paper_benchmarks/impurity_transport.png": {
+   "generator": "examples/paper_benchmarks/impurity_transport.py"
+  },
+  "docs/_static/figures/paper_benchmarks/monoenergetic_icnts_w7x.png": {
+   "generator": "examples/paper_benchmarks/monoenergetic_icnts_w7x.py"
+  },
+  "docs/_static/figures/paper_benchmarks/reference_convergence.png": {
+   "generator": "examples/paper_benchmarks/reference_convergence.py"
+  },
+  "docs/_static/figures/paper_benchmarks/shaing_callen_convergence.png": {
+   "generator": "examples/paper_benchmarks/shaing_callen_convergence.py"
+  },
+  "docs/_static/figures/paper_benchmarks/w7x_ambipolar_er.png": {
+   "generator": "examples/paper_benchmarks/w7x_ambipolar_er.py"
+  },
+  "docs/_static/figures/readme/canonical_parity.png": {
+   "generator": "tools/benchmarks/readme_figures.py"
+  },
+  "docs/_static/figures/readme/optimize_QA_bootstrap.png": {
+   "generator": "examples/optimization/optimize_QH_bootstrap.py"
+  },
+  "docs/_static/figures/readme/tier1_hsx_runtime_memory.png": {
+   "generator": "tools/benchmarks/readme_figures.py"
+  },
+  "docs/_static/figures/readme/w7x_showcase.png": {
+   "generator": "tools/benchmarks/readme_showcase_w7x.py"
+  },
+  "docs/_static/figures/transport_compile_runtime_cache_2x2.png": {
+   "generator": null,
+   "unresolved": "no checked-in script names this figure"
+  },
+  "docs/_static/figures/utils/bootstrap_current_vs_collisionality.png": {
+   "generator": null,
+   "unresolved": "no checked-in script names this figure"
+  },
+  "docs/_static/figures/utils/monoenergetic_transport_coeffs.png": {
+   "generator": null,
+   "unresolved": "no checked-in script names this figure"
+  },
+  "docs/_static/figures/utils/sfincsPlotF.png": {
+   "generator": null,
+   "unresolved": "no checked-in script names this figure"
+  },
+  "docs/_static/figures/utils/sfincsPlot_fig1.png": {
+   "generator": null,
+   "unresolved": "no checked-in script names this figure"
+  },
+  "docs/_static/figures/utils/sfincsScanPlot_1.png": {
+   "generator": "dkx/cli.py"
+  },
+  "docs/_static/figures/utils/sfincsScanPlot_2.png": {
+   "generator": "dkx/ambipolar.py"
+  },
+  "docs/_static/figures/utils/sfincsScanPlot_21.png": {
+   "generator": "dkx/ambipolar.py"
+  },
+  "docs/_static/figures/utils/sfincsScanPlot_3.png": {
+   "generator": "dkx/ambipolar.py"
+  },
+  "docs/_static/figures/utils/sfincsScanPlot_4.png": {
+   "generator": "dkx/ambipolar.py"
+  },
+  "docs/_static/figures/utils/sfincsScanPlot_5.png": {
+   "generator": "dkx/ambipolar.py"
+  },
+  "docs/_static/figures/utils/sfincsScanPlot_combine.png": {
+   "generator": "dkx/ambipolar.py"
+  },
+  "docs/_static/figures/vmex_finite_beta/qs_paper_dkx_redl_comparison.png": {
+   "generator": "examples/vmex_finite_beta/compare_qs_paper_dkx_redl.py"
+  },
+  "docs/_static/figures/vmex_finite_beta/qs_paper_qa_same_resolution_11surface.png": {
+   "generator": null,
+   "unresolved": "no checked-in script names this figure"
+  },
+  "docs/_static/figures/vmex_finite_beta/qs_paper_qh_dkx_redl_comparison.png": {
+   "generator": null,
+   "unresolved": "no checked-in script names this figure"
+  },
+  "docs/_static/figures/vmex_finite_beta/qs_paper_qh_same_resolution_11surface.png": {
+   "generator": null,
+   "unresolved": "no checked-in script names this figure"
+  }
+ }
+}

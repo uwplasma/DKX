@@ -284,7 +284,7 @@ the recommended first stop for new workflows.
 
 Some geometry examples reference public W7-X/HSX/QI equilibrium fixtures by
 basename. Those multi-megabyte files are fetched from the
-``sfincs-jax-data-v1`` release into the local `dkx` data cache on first
+``dkx-data-v1`` release into the local `dkx` data cache on first
 use. To prefetch them before running examples, use:
 
 .. code-block:: bash
