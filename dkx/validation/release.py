@@ -8,11 +8,8 @@ avoids a collection of small root-level scripts.
 from __future__ import annotations
 
 import argparse
-from collections import Counter
-from dataclasses import asdict, dataclass
 import json
 import os
-from pathlib import Path
 import re
 import shutil
 import subprocess
@@ -20,7 +17,11 @@ import sys
 import tempfile
 import threading
 import time
-from typing import Any, Iterable
+from collections import Counter
+from collections.abc import Iterable
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Any
 
 import h5py
 import jax
@@ -28,7 +29,6 @@ from jax import profiler as jax_profiler
 
 from dkx.io import localize_equilibrium_file_in_place
 from dkx.validation.artifacts import check_research_lane_completion_file
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_VALIDATION_MANIFEST = REPO_ROOT / "examples" / "publication_figures" / "validation_manifest.json"
@@ -1919,11 +1919,11 @@ def _run_write_output(
     the solve path, so these flags no longer alter the workload.
     """
     del compute_solution, compute_transport_matrix, differentiable
-    from dkx.run import run_from_namelist  # noqa: PLC0415
+    from dkx.run import run_from_namelist
 
     if equilibrium_file or wout_path:
-        from dkx.input_compat import with_equilibrium_override  # noqa: PLC0415
-        from dkx.namelist import read_sfincs_input  # noqa: PLC0415
+        from dkx.input_compat import with_equilibrium_override
+        from dkx.namelist import read_sfincs_input
 
         nml = with_equilibrium_override(
             nml=read_sfincs_input(input_path),
