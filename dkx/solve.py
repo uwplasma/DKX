@@ -140,6 +140,19 @@ __all__ = [
 _TIER1_BUDGET_GB_DEFAULT = 8.0
 _TIER1_BUDGET_ENV = "DKX_TIER1_MEMORY_BUDGET_GB"
 
+# Multiple of physical RAM the ``"coarse"`` tier-2 preconditioner's dense bands
+# may claim before :func:`_check_coarse_preconditioner_fits` refuses.  Set at
+# 1.0 -- "the arrays alone do not fit in RAM" -- because that needs no tuning
+# and the measured outcomes separate cleanly on either side of it: on the
+# 2026-08-01 upstream campaign (24 GB machine) every deck up to 16.9 GB of
+# bands completed and every deck from 42.9 GB was killed, so anything in that
+# gap is equivalent and this end of it cannot produce a false refusal.  JAX
+# does not hold all three bands live at once, which is why 16.9 GB of bands
+# peaks at 11.7 GB resident and a fraction well below 1 would reject a deck
+# that works.
+_TIER2_GUARD_FRACTION = 1.0
+_TIER2_GUARD_ENV = "DKX_TIER2_MEMORY_GUARD"
+
 # RHSMode 1/2/3 drives (radial gradient on L=0,2; inductive E_parallel on L=1)
 # and every RHSMode 1/2/3 output moment (fluxes, flows, sources, FSA
 # constraints) live on the lowest three Legendre modes, so keeping three
@@ -1850,6 +1863,67 @@ def _resolve_preconditioner(preconditioner: str | None, use_preconditioner: bool
     return name
 
 
+def coarse_preconditioner_band_bytes(op: KineticOperator) -> float:
+    """Bytes the ``"coarse"`` tier-2 preconditioner allocates for its bands.
+
+    Three dense ``(Ntheta*Nzeta)`` blocks per ``(species, x, L)``.  This is an
+    exact allocation size, not an estimate: the arrays are materialized before
+    any factorization runs.
+    """
+    n_s, n_x, n_xi, n_t, n_z = op.f_shape
+    return 3.0 * n_s * n_x * n_xi * (n_t * n_z) ** 2 * 8.0
+
+
+def _host_memory_bytes() -> float | None:
+    """Physical RAM, or ``None`` when it cannot be read on this platform."""
+    try:
+        pages = os.sysconf("SC_PHYS_PAGES")
+        return float(pages) * float(os.sysconf("SC_PAGE_SIZE"))
+    except (ValueError, OSError, AttributeError):
+        return None
+
+
+def _check_coarse_preconditioner_fits(op: KineticOperator) -> None:
+    """Refuse a coarse preconditioner that cannot fit, before allocating it.
+
+    Measured on the 2026-08-01 upstream campaign: five decks were killed by
+    the OS 55-90 s into the solve, at 13-15 GB resident on a 24 GB machine,
+    having produced nothing.  The band size is known exactly up
+    front (:func:`coarse_preconditioner_band_bytes`) -- 42.9 GB on
+    ``filteredW7XNetCDF_2species_magneticDrifts_withEr`` -- so spending ninety
+    seconds to arrive at a kill is avoidable, and a kill is the least
+    debuggable failure there is: no traceback, no partial output, and a
+    ``returncode`` that looks like any other crash.
+
+    The same operator inverted in a fill-reducing order needs 5.97 GB of
+    SuperLU factors on that deck (``tools/benchmarks/tier2_sparse_fill.py``),
+    so the message names ``preconditioner="sparse"`` rather than only reporting
+    the problem.  ``DKX_TIER2_MEMORY_GUARD=off`` disables the check for anyone
+    who knows their machine better than ``sysconf`` does.
+    """
+    if os.environ.get(_TIER2_GUARD_ENV, "").strip().lower() in {"off", "0", "false"}:
+        return
+    total = _host_memory_bytes()
+    if total is None:
+        return
+    needed = coarse_preconditioner_band_bytes(op)
+    if needed <= _TIER2_GUARD_FRACTION * total:
+        return
+    raise MemoryError(
+        f"the coarse tier-2 preconditioner would allocate "
+        f"{needed / 2**30:.1f} GB of dense (Ntheta*Nzeta) bands "
+        f"({op.n_theta}x{op.n_zeta} angular grid, Nxi={op.n_xi}, "
+        f"{op.n_species} species, Nx={op.n_x}) on a machine with "
+        f"{total / 2**30:.1f} GB of RAM. Without this check the process is "
+        f"killed part way through with no output.\n"
+        f"  preconditioner='sparse' inverts the same operator exactly in a "
+        f"fill-reducing order and needs a fraction of that;\n"
+        f"  preconditioner='multigrid' is cheaper still but does not reach "
+        f"tolerance on this physics (docs/performance.rst);\n"
+        f"  DKX_TIER2_MEMORY_GUARD=off disables this check."
+    )
+
+
 def build_tier2_preconditioner(
     op: KineticOperator, kind: str, *, drop_l_coupling: bool = False
 ) -> tuple[Callable[[jnp.ndarray], jnp.ndarray], Callable[[jnp.ndarray], jnp.ndarray]]:
@@ -1867,6 +1941,7 @@ def build_tier2_preconditioner(
     none changes the solution: they change how fast tier 2 reaches it.
     """
     if kind == "coarse":
+        _check_coarse_preconditioner_fits(op)
         return build_coarse_preconditioner(op, drop_l_coupling=drop_l_coupling)
     if kind == "sparse":
         from dkx.sparse_precond import build_sparse_preconditioner  # noqa: PLC0415
