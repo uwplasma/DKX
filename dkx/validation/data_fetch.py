@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import os
-from pathlib import Path
+import sys
 import tarfile
 import tempfile
+from pathlib import Path
 from urllib.request import urlopen
-import argparse
-import sys
-
 
 _MANIFEST_PATH = Path(__file__).with_name("equilibria_manifest.json")
 

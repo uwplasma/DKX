@@ -98,6 +98,8 @@
       "artifacts.py",
       "data_fetch.py",
       "fortran.py",
+      "panels.py",
+      "policy.py",
       "release.py"
     ],
     "workflows": [
