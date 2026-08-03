@@ -49,7 +49,7 @@ Release-hosted equilibrium fixtures
 The package intentionally does not store multi-megabyte public VMEC/Boozer
 fixtures in the git history or wheel. Examples and compatibility tests that need
 the W7-X, HSX, or QI equilibrium files resolve them by basename and fetch the
-``sfincs-jax-data-v1`` GitHub release asset into a user cache on first use.
+``dkx-data-v1`` GitHub release asset into a user cache on first use.
 
 The default cache root is ``~/.cache/dkx/data``. To prefetch the release
 data explicitly, run:
