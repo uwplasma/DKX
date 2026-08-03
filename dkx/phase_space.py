@@ -34,10 +34,6 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 
-from jax import config as _jax_config
-
-_jax_config.update("jax_enable_x64", True)
-
 import jax.numpy as jnp  # noqa: E402
 import numpy as np  # noqa: E402
 from scipy.integrate import quad  # noqa: E402
@@ -64,7 +60,6 @@ __all__ = [
     "xdot_diff_matrices",
 ]
 
-
 # ----------------------------------------------------------------------------
 # 1. Uniform periodic grids for theta and zeta (uniformDiffMatrices.F90)
 # ----------------------------------------------------------------------------
@@ -90,7 +85,6 @@ _MAGNETIC_DRIFT_SCHEME_MAP = {
     -2: (110, 100),
     -3: (130, 120),
 }
-
 
 # ----------------------------------------------------------------------------
 # 1a. Widened upwind stencils (dkx extension to uniformDiffMatrices.F90)
@@ -171,7 +165,6 @@ _WIDENED_MAGNETIC_DRIFT_SCHEME_MAP = {
     -104: (230, 220),
 }
 
-
 def widened_upwind_stencil(
     *, order: int, wind_sign: float = 1.0
 ) -> tuple[tuple[int, ...], tuple[float, ...]]:
@@ -208,7 +201,6 @@ def widened_upwind_stencil(
     mirrored = sorted(zip((-o for o in offsets), (-c for c in coefficients)))
     return tuple(o for o, _ in mirrored), tuple(c for _, c in mirrored)
 
-
 def stencil_diagonal_dominance(
     offsets: Sequence[int], coefficients: Sequence[float]
 ) -> float:
@@ -241,7 +233,6 @@ def stencil_diagonal_dominance(
         return math.inf
     return diagonal / off_diagonal
 
-
 def _periodic_stencil_rows(
     *, n: int, dx: float, offsets: Sequence[int], coefficients: Sequence[float]
 ) -> np.ndarray:
@@ -251,7 +242,6 @@ def _periodic_stencil_rows(
     for offset, coefficient in zip(offsets, coefficients):
         out[rows, (rows + int(offset)) % n] += float(coefficient) / dx
     return out
-
 
 def widened_upwind_periodic_diff_matrix(
     *,
@@ -310,7 +300,6 @@ def widened_upwind_periodic_diff_matrix(
     if np.any(signs == 0.0):
         raise ValueError("wind_sign must be nonzero at every grid point")
     return jnp.asarray(np.where(signs[:, None] > 0.0, plus, minus))
-
 
 def uniform_periodic_diff_matrices(
     *,
@@ -538,11 +527,9 @@ def uniform_periodic_diff_matrices(
 
     return jnp.asarray(x), jnp.asarray(weights), jnp.asarray(ddx), jnp.asarray(d2dx2)
 
-
 #: Internal uniformDiffMatrices scheme numbers for aperiodic grids with a node
 #: at both x_min and x_max, as used by the speed (x) coordinate.
 _APERIODIC_SCHEMES = frozenset({12, 32, 42, 52, 62, 82, 92, 102, 112})
-
 
 def uniform_aperiodic_diff_matrices(
     *,
@@ -763,7 +750,6 @@ def uniform_aperiodic_diff_matrices(
 
     return x, weights, ddx, d2dx2
 
-
 def chebyshev_grid(
     *, n: int, x_min: float, x_max: float
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -823,11 +809,9 @@ def chebyshev_grid(
 
     return x, weights, d
 
-
 # ----------------------------------------------------------------------------
 # 2. Legendre pitch (xi) machinery (createGrids.F90 / populateMatrix.F90)
 # ----------------------------------------------------------------------------
-
 
 def legendre_coupling_lower(n_xi: int) -> np.ndarray:
     """Legendre streaming coupling ``l / (2l - 1)`` from mode l to l-1.
@@ -845,7 +829,6 @@ def legendre_coupling_lower(n_xi: int) -> np.ndarray:
     ell = np.arange(int(n_xi), dtype=np.float64)
     return np.where(ell > 0, ell / (2.0 * ell - 1.0), 0.0)
 
-
 def legendre_coupling_upper(n_xi: int) -> np.ndarray:
     """Legendre streaming coupling ``(l + 1) / (2l + 3)`` from mode l to l+1.
 
@@ -859,7 +842,6 @@ def legendre_coupling_upper(n_xi: int) -> np.ndarray:
     """
     ell = np.arange(int(n_xi), dtype=np.float64)
     return (ell + 1.0) / (2.0 * ell + 3.0)
-
 
 def lorentz_eigenvalues(n_xi: int) -> np.ndarray:
     """Eigenvalues ``l (l + 1)`` of the Lorentz pitch-angle-scattering operator.
@@ -878,7 +860,6 @@ def lorentz_eigenvalues(n_xi: int) -> np.ndarray:
     """
     ell = np.arange(int(n_xi), dtype=np.float64)
     return ell * (ell + 1.0)
-
 
 def n_xi_for_x_ramp(
     *,
@@ -937,17 +918,14 @@ def n_xi_for_x_ramp(
         raise ValueError(f"Invalid Nxi_for_x_option={option}")
     return out
 
-
 # ----------------------------------------------------------------------------
 # 3. Speed (x) grid: Landreman-Ernst polynomial collocation (xGrid.F90)
 # ----------------------------------------------------------------------------
-
 
 def speed_weight(x: np.ndarray, k: float) -> np.ndarray:
     """Weight function ``exp(-x^2) * x^k`` of the SFINCS speed grid (xGrid.F90)."""
     x = np.asarray(x, dtype=np.float64)
     return np.exp(-(x * x)) * (x**k)
-
 
 def _speed_weight_d1_over_weight(x: np.ndarray, k: float) -> np.ndarray:
     """(d/dx weight) / weight, matching v3 ``polynomialDiffMatrices.F90``."""
@@ -957,7 +935,6 @@ def _speed_weight_d1_over_weight(x: np.ndarray, k: float) -> np.ndarray:
     out[mask0] = 0.0
     out[~mask0] = k / x[~mask0] - 2.0 * x[~mask0]
     return out
-
 
 def _speed_weight_d2_over_weight(x: np.ndarray, k: float) -> np.ndarray:
     """(d^2/dx^2 weight) / weight, matching v3 ``polynomialDiffMatrices.F90``."""
@@ -969,7 +946,6 @@ def _speed_weight_d2_over_weight(x: np.ndarray, k: float) -> np.ndarray:
         x[~mask0] * x[~mask0]
     )
     return out
-
 
 @dataclass(frozen=True)
 class SpeedGrid:
@@ -1007,13 +983,11 @@ class SpeedGrid:
         w = np.exp(-(self.x * self.x)) * (self.x**k)
         return self.gaussian_weights / w
 
-
 def _integrate_split(f, *, finite_bound: float = 10.0) -> float:
     """Integrate f on [0, inf), semi-infinite part first, matching v3 ordering."""
     a2, _ = quad(f, finite_bound, np.inf, epsabs=0.0, epsrel=1e-13, limit=5000)
     a1, _ = quad(f, 0.0, finite_bound, epsabs=0.0, epsrel=1e-13, limit=5000)
     return float(a2 + a1)
-
 
 def _evaluate_orthogonal_polynomial(x: float, *, j: int, a: np.ndarray, b: np.ndarray) -> float:
     """Evaluate p_j(x) by the 3-term recurrence (xGrid.F90:evaluatePolynomial)."""
@@ -1026,7 +1000,6 @@ def _evaluate_orthogonal_polynomial(x: float, *, j: int, a: np.ndarray, b: np.nd
         y = (x - float(a[ii])) * pj - float(b[ii]) * pj_minus1
         pj_minus1, pj = pj, y
     return float(y)
-
 
 @lru_cache(maxsize=32)
 def _make_speed_grid_cached(
@@ -1112,7 +1085,6 @@ def _make_speed_grid_cached(
         x0=float(x0),
     )
 
-
 def make_speed_grid(
     *,
     n_x: int,
@@ -1147,7 +1119,6 @@ def make_speed_grid(
     return _make_speed_grid_cached(
         int(n_x), float(k), bool(include_point_at_x0), float(x0), float(finite_bound)
     )
-
 
 def speed_grid_diff_matrices(x: np.ndarray, *, k: float) -> tuple[np.ndarray, np.ndarray]:
     """Collocation differentiation matrices on the (nonuniform) speed grid.
@@ -1205,7 +1176,6 @@ def speed_grid_diff_matrices(x: np.ndarray, *, k: float) -> tuple[np.ndarray, np
     np.fill_diagonal(d2dx2, y2[-1, :])
 
     return ddx, d2dx2
-
 
 def xdot_diff_matrices(
     *,
@@ -1338,7 +1308,6 @@ def xdot_diff_matrices(
 
     raise ValueError(f"Invalid xDotDerivativeScheme={scheme}")
 
-
 def polynomial_interpolation_matrix(
     *,
     xk: np.ndarray,
@@ -1409,7 +1378,6 @@ def polynomial_interpolation_matrix(
             mat[i, j] *= factor
     return mat
 
-
 def rosenbluth_potential_grid_size(
     *,
     x: np.ndarray,
@@ -1447,11 +1415,9 @@ def rosenbluth_potential_grid_size(
     x_max_not_too_small = max(float(x_np[-1]), float(x_max))
     return int(math.ceil(x_max_not_too_small * float(n_x_potentials_per_vth)))
 
-
 # ----------------------------------------------------------------------------
 # 4. Grids container (createGrids.F90)
 # ----------------------------------------------------------------------------
-
 
 @dataclass(frozen=True)
 class Grids:
@@ -1538,14 +1504,12 @@ class Grids:
         """Lorentz pitch-angle-scattering eigenvalues ``l(l+1)``."""
         return lorentz_eigenvalues(self.n_xi)
 
-
 def _angle_derivative_scheme(namelist_scheme: int) -> int | None:
     """thetaDerivativeScheme / zetaDerivativeScheme -> internal scheme, or None."""
     scheme = _ANGLE_DERIVATIVE_SCHEME_MAP.get(namelist_scheme)
     if scheme is not None:
         return scheme
     return _WIDENED_ANGLE_DERIVATIVE_SCHEME_MAP.get(namelist_scheme)
-
 
 def _upwinded_pair(
     *, n: int, x_max: float, magnetic_drift_derivative_scheme: int, ddx_centered: jnp.ndarray
@@ -1568,7 +1532,6 @@ def _upwinded_pair(
         n=n, x_min=0.0, x_max=x_max, scheme=scheme_minus
     )
     return ddx_plus, ddx_minus
-
 
 def make_grids(
     *,

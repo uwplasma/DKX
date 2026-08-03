@@ -66,10 +66,6 @@ from typing import Any
 
 import numpy as np
 
-from jax import config as _jax_config
-
-_jax_config.update("jax_enable_x64", True)
-
 import jax.numpy as jnp  # noqa: E402
 
 from .collisions import nu_d_hat_pitch_angle_scattering_v3  # noqa: E402
@@ -94,7 +90,6 @@ __all__ = [
 _FT_LARGE_ASPECT = 1.46
 _FRICTION_PREFACTOR = 3.0 * np.sqrt(np.pi) / 4.0
 
-
 @dataclass(frozen=True)
 class ParallelViscosity:
     """Energy-convolved parallel viscosity coefficients, per species.
@@ -111,7 +106,6 @@ class ParallelViscosity:
     uncorrected: Any
     corrected: Any
     restoring_factor: Any
-
 
 @dataclass(frozen=True)
 class MomentumCorrectionResult:
@@ -137,7 +131,6 @@ class MomentumCorrectionResult:
     friction_matrix: Any
     viscosity: ParallelViscosity
 
-
 def _as_species_arrays(z_s, m_hats, n_hats, t_hats):
     z = jnp.atleast_1d(jnp.asarray(z_s, dtype=jnp.float64))
     m = jnp.atleast_1d(jnp.asarray(m_hats, dtype=jnp.float64))
@@ -146,7 +139,6 @@ def _as_species_arrays(z_s, m_hats, n_hats, t_hats):
     if not (z.shape == m.shape == n.shape == t.shape):
         raise ValueError("z_s, m_hats, n_hats, t_hats must share the (S,) shape.")
     return z, m, n, t
-
 
 def parallel_friction_matrix(
     *,
@@ -197,7 +189,6 @@ def parallel_friction_matrix(
         / denom
     )
     return gamma
-
 
 def _physical_d31_d33(
     db: MonoenergeticDatabase,
@@ -264,7 +255,6 @@ def _physical_d31_d33(
         jnp.stack(nud_rows),
     )
 
-
 def _quadrature(db: MonoenergeticDatabase, x, x_weights, n_x, x_max):
     if x is None or x_weights is None:
         if (x is None) != (x_weights is None):
@@ -276,7 +266,6 @@ def _quadrature(db: MonoenergeticDatabase, x, x_weights, n_x, x_max):
         x_q = jnp.asarray(x, dtype=jnp.float64)
         w_q = jnp.asarray(x_weights, dtype=jnp.float64)
     return x_q, w_q
-
 
 def parallel_viscosity(
     db: MonoenergeticDatabase,
@@ -339,7 +328,6 @@ def parallel_viscosity(
     mc = n * jnp.sum(quad[None, :] * base * factor, axis=1)
     return ParallelViscosity(uncorrected=m0, corrected=mc, restoring_factor=m0 / mc)
 
-
 def momentum_restoring_factor(
     db: MonoenergeticDatabase,
     *,
@@ -361,7 +349,6 @@ def momentum_restoring_factor(
         db, z_s=z_s, m_hats=m_hats, n_hats=n_hats, t_hats=t_hats, nu_n=nu_n,
         x=x, x_weights=x_weights, n_x=n_x, x_max=x_max,
     ).restoring_factor  # fmt: skip
-
 
 def solve_corrected_flows(
     uncorrected_flows: Any,
@@ -414,7 +401,6 @@ def solve_corrected_flows(
         friction_matrix=gamma,
         viscosity=viscosity,
     )
-
 
 def momentum_corrected_bootstrap(
     db: MonoenergeticDatabase,
@@ -486,7 +472,6 @@ def momentum_corrected_bootstrap(
         v_unc = jnp.atleast_1d(jnp.asarray(uncorrected_flows, dtype=jnp.float64))
 
     return solve_corrected_flows(v_unc, viscosity=visc, friction_matrix=gamma, z_s=z)
-
 
 def _uncorrected_flows_from_forces(
     db: MonoenergeticDatabase,

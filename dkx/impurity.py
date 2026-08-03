@@ -70,10 +70,6 @@ from __future__ import annotations
 
 from typing import NamedTuple
 
-from jax import config as _jax_config
-
-_jax_config.update("jax_enable_x64", True)
-
 import jax.numpy as jnp  # noqa: E402
 from jax import lax  # noqa: E402
 
@@ -91,11 +87,9 @@ __all__ = [
     "classical_impurity_flux_over_charge_states",
 ]
 
-
 # ---------------------------------------------------------------------------
 # Geometry: the single flux-surface scalar the classical flux depends on
 # ---------------------------------------------------------------------------
-
 
 def classical_geometry_factor(
     *,
@@ -137,11 +131,9 @@ def classical_geometry_factor(
     vprime = jnp.sum(w)
     return jnp.sum(w * gpsipsi / (b_hat * b_hat)) / vprime
 
-
 # ---------------------------------------------------------------------------
 # The classical multi-species flux, reduced to the geometry scalar G
 # ---------------------------------------------------------------------------
-
 
 def classical_species_fluxes(
     *,
@@ -222,7 +214,6 @@ def classical_species_fluxes(
     hf_a = hf_a + 1.25 * t_hat * pf_a
     return pf_a, hf_a
 
-
 def _classical_species_fluxes_from_set(
     species: SpeciesSet,
     *,
@@ -242,11 +233,9 @@ def _classical_species_fluxes_from_set(
         nu_n=nu_n,
     )
 
-
 # ---------------------------------------------------------------------------
 # Building a bulk-plus-impurity deck
 # ---------------------------------------------------------------------------
-
 
 def build_impurity_plasma(
     bulk: SpeciesSet,
@@ -322,15 +311,12 @@ def build_impurity_plasma(
         dt_hat_dpsi_hat=_append(bulk.dt_hat_dpsi_hat, dt_imp),
     )
 
-
 # ---------------------------------------------------------------------------
 # Impurity flux, decomposition, and classical diffusion coefficient
 # ---------------------------------------------------------------------------
 
-
 def _resolve_index(index: int, n_species: int) -> int:
     return index + n_species if index < 0 else index
-
 
 class ImpurityClassicalFlux(NamedTuple):
     """Classical impurity transport summary (all quantities ``psiHat``-projected).
@@ -354,7 +340,6 @@ class ImpurityClassicalFlux(NamedTuple):
     all_heat_fluxes: jnp.ndarray
     impurity_strength: jnp.ndarray
     impurity_index: int
-
 
 def classical_diffusion_coefficient(
     species: SpeciesSet,
@@ -383,7 +368,6 @@ def classical_diffusion_coefficient(
         geometry_factor=geometry_factor, delta=delta, nu_n=nu_n,
     )  # fmt: skip
     return -pf[idx]
-
 
 def classical_impurity_flux(
     species: SpeciesSet,
@@ -420,11 +404,9 @@ def classical_impurity_flux(
         impurity_index=idx,
     )
 
-
 # ---------------------------------------------------------------------------
 # Temperature-screening diagnostic
 # ---------------------------------------------------------------------------
-
 
 class TemperatureScreening(NamedTuple):
     """Ion-temperature screening diagnostic for a classical impurity flux.
@@ -456,7 +438,6 @@ class TemperatureScreening(NamedTuple):
     density_pinch_flux: jnp.ndarray
     screening_flux: jnp.ndarray
     screens: jnp.ndarray
-
 
 def temperature_screening_diagnostic(
     species: SpeciesSet,
@@ -519,11 +500,9 @@ def temperature_screening_diagnostic(
         screens=screens,
     )
 
-
 # ---------------------------------------------------------------------------
 # vmap over charge states
 # ---------------------------------------------------------------------------
-
 
 def classical_impurity_flux_over_charge_states(
     bulk: SpeciesSet,
@@ -568,7 +547,6 @@ def classical_impurity_flux_over_charge_states(
         return res.particle_flux, res.heat_flux, res.diffusion_coefficient
 
     return lax.map(lambda zm: one(zm[0], zm[1]), jnp.stack([charges, masses], axis=1))
-
 
 def _build_impurity_plasma_traced(
     bulk: SpeciesSet,

@@ -88,10 +88,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from jax import config as _jax_config
-
-_jax_config.update("jax_enable_x64", True)
-
 import jax.numpy as jnp  # noqa: E402
 
 __all__ = [
@@ -107,7 +103,6 @@ __all__ = [
     "local_validity_report",
     "thermal_gyroradius_hat",
 ]
-
 
 class Regime(str, Enum):
     """Neoclassical radial-transport regime of a flux surface.
@@ -126,14 +121,12 @@ class Regime(str, Enum):
     SQRT_NU = "sqrt-nu"
     SUPERBANANA_PLATEAU = "superbanana-plateau"
 
-
 class ValidityFlag(str, Enum):
     """Traffic-light verdict for a local-validity diagnostic."""
 
     PASS = "pass"
     MARGINAL = "marginal"
     FAIL = "fail"
-
 
 @dataclass(frozen=True)
 class RegimeThresholds:
@@ -173,9 +166,7 @@ class RegimeThresholds:
     fow_pass: float = 0.1
     fow_marginal: float = 0.3
 
-
 DEFAULT_THRESHOLDS = RegimeThresholds()
-
 
 @dataclass(frozen=True)
 class LocalValidityReport:
@@ -214,11 +205,9 @@ class LocalValidityReport:
     overall_flag: ValidityFlag
     notes: tuple[str, ...] = field(default_factory=tuple)
 
-
 # =============================================================================
 # Differentiable scalar ratios
 # =============================================================================
-
 
 def thermal_gyroradius_hat(
     *, delta: Any, z: Any, m_hat: Any, t_hat: Any, b0_over_bbar: Any, x: Any = 1.0
@@ -237,7 +226,6 @@ def thermal_gyroradius_hat(
     x = jnp.asarray(x, dtype=jnp.float64)
     return delta * x * jnp.sqrt(m_hat * t_hat) / (z * b0)
 
-
 def banana_orbit_width_hat(*, rho_hat: Any, iota: Any, eps_t: Any) -> jnp.ndarray:
     """Trapped-particle banana / orbit width ``w_b = rho_hat/(|iota| sqrt(eps_t))``.
 
@@ -251,7 +239,6 @@ def banana_orbit_width_hat(*, rho_hat: Any, iota: Any, eps_t: Any) -> jnp.ndarra
     eps_t = jnp.asarray(eps_t, dtype=jnp.float64)
     return rho_hat / (iota * jnp.sqrt(eps_t))
 
-
 def finite_orbit_width_parameter(*, orbit_width_hat: Any, grad_scale_length_hat: Any) -> jnp.ndarray:
     """Finite-orbit-width parameter ``delta_FOW = w_b / L``.
 
@@ -263,7 +250,6 @@ def finite_orbit_width_parameter(*, orbit_width_hat: Any, grad_scale_length_hat:
     w_b = jnp.asarray(orbit_width_hat, dtype=jnp.float64)
     length = jnp.asarray(grad_scale_length_hat, dtype=jnp.float64)
     return w_b / length
-
 
 def exb_collision_ratio(*, v_e: Any, iota: Any, nu_star: Any) -> jnp.ndarray:
     """E x B precession over de-trapping collisions ``k_ExB = v_E/(|iota| nu_star)``.
@@ -278,7 +264,6 @@ def exb_collision_ratio(*, v_e: Any, iota: Any, nu_star: Any) -> jnp.ndarray:
     nu_star = jnp.abs(jnp.asarray(nu_star, dtype=jnp.float64))
     return v_e / (iota * nu_star)
 
-
 def drift_resonance_ratio(*, v_e: Any, g_hat: Any, delta: Any) -> jnp.ndarray:
     """E x B over magnetic precession ``k_res = v_E |GHat|/Delta`` (reference speed).
 
@@ -291,11 +276,9 @@ def drift_resonance_ratio(*, v_e: Any, g_hat: Any, delta: Any) -> jnp.ndarray:
     delta = jnp.asarray(delta, dtype=jnp.float64)
     return v_e * g_hat / delta
 
-
 # =============================================================================
 # Regime classification (host-side)
 # =============================================================================
-
 
 def classify_collisionality_regime(
     *,
@@ -344,7 +327,6 @@ def classify_collisionality_regime(
         return Regime.SUPERBANANA_PLATEAU
     return Regime.SQRT_NU
 
-
 def _fow_flag(delta_fow: float, thresholds: RegimeThresholds) -> ValidityFlag:
     value = abs(float(delta_fow))
     if value < thresholds.fow_pass:
@@ -353,16 +335,13 @@ def _fow_flag(delta_fow: float, thresholds: RegimeThresholds) -> ValidityFlag:
         return ValidityFlag.MARGINAL
     return ValidityFlag.FAIL
 
-
 def _worst(flags: tuple[ValidityFlag, ...]) -> ValidityFlag:
     order = {ValidityFlag.PASS: 0, ValidityFlag.MARGINAL: 1, ValidityFlag.FAIL: 2}
     return max(flags, key=lambda flag: order[flag])
 
-
 # =============================================================================
 # The assembled report
 # =============================================================================
-
 
 def local_validity_report(
     *,
