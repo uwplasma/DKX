@@ -97,10 +97,6 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from jax import config as _jax_config
-
-_jax_config.update("jax_enable_x64", True)
-
 import jax  # noqa: E402
 import jax.numpy as jnp  # noqa: E402
 import numpy as np  # noqa: E402
@@ -163,11 +159,9 @@ __all__ = [
     "kinetic_operator_from_namelist",
 ]
 
-
 # =============================================================================
 # Small namelist-access helpers (same conventions as readInput.F90 defaults).
 # =============================================================================
-
 
 def _get_int(group: dict, key: str, default: int) -> int:
     v = group.get(key.upper(), default)
@@ -175,20 +169,17 @@ def _get_int(group: dict, key: str, default: int) -> int:
         v = v[0] if v else default
     return int(v)
 
-
 def _get_float(group: dict, key: str, default: float) -> float:
     v = group.get(key.upper(), default)
     if isinstance(v, list):
         v = v[0] if v else default
     return float(v)
 
-
 def _get_bool(group: dict, key: str, default: bool = False) -> bool:
     v = group.get(key.upper(), default)
     if isinstance(v, list):
         v = v[0] if v else default
     return bool(v)
-
 
 def _get_str_or_none(group: dict, key: str) -> str | None:
     """A namelist string value, or ``None`` when the key is absent or blank."""
@@ -200,17 +191,14 @@ def _get_str_or_none(group: dict, key: str) -> str | None:
     text = str(v).strip()
     return text or None
 
-
 def _mask_xi(n_xi_for_x: jnp.ndarray, n_xi: int) -> jnp.ndarray:
     """(X, L) float mask of retained Legendre modes (createGrids.F90 Nxi_for_x)."""
     ell = jnp.arange(int(n_xi), dtype=jnp.int32)[None, :]
     return (ell < n_xi_for_x.astype(jnp.int32)[:, None]).astype(jnp.float64)
 
-
 def _ix_min(point_at_x0: bool) -> int:
     """First speed row carrying DKE equations (populateMatrix.F90 ixMin)."""
     return 1 if point_at_x0 else 0
-
 
 class LegendreBlocks(NamedTuple):
     """Dense (theta*zeta) blocks of one Legendre row of the f-block operator.
@@ -225,11 +213,9 @@ class LegendreBlocks(NamedTuple):
     diag: jnp.ndarray
     upper: jnp.ndarray
 
-
 # =============================================================================
 # The operator
 # =============================================================================
-
 
 @jtu.register_pytree_node_class
 @dataclass(frozen=True)
@@ -1799,11 +1785,9 @@ class KineticOperator:
         """
         return kinetic_operator_from_namelist(nml)
 
-
 # =============================================================================
 # Namelist construction (readInput.F90 defaults; createGrids.F90 overrides)
 # =============================================================================
-
 
 def _flux_surface_averages_effective(
     *, grids: Grids, geom: FluxSurfaceGeometry
@@ -1825,7 +1809,6 @@ def _flux_surface_averages_effective(
     g_eff = float(np.sum(w * np.asarray(geom.b_hat_sub_zeta)) / denom)
     i_eff = float(np.sum(w * np.asarray(geom.b_hat_sub_theta)) / denom)
     return b0_eff, g_eff, i_eff
-
 
 def _geometry_and_radial(
     *, nml: Any, grids: Grids, compute_grad_psi_dot_grad_b: bool = False
@@ -1996,7 +1979,6 @@ def _geometry_and_radial(
         f"KineticOperator.from_namelist supports geometryScheme in {{1,2,3,4,5,11,12,13}}; got {scheme}."
     )
 
-
 def _resolve_equilibrium_path(*, nml: Any, geom_params: dict, vmec: bool = False) -> Path:
     eq = effective_equilibrium_file(geom_params=geom_params)
     if eq is None:
@@ -2012,7 +1994,6 @@ def _resolve_equilibrium_path(*, nml: Any, geom_params: dict, vmec: bool = False
             p2 = Path(str(eq).strip().strip('"').strip("'")).with_suffix(".nc")
             return resolve_existing_path(str(p2), base_dir=base_dir, extra_search_dirs=extra).path
         raise
-
 
 def _n_periods_from_namelist(*, nml: Any) -> int:
     """NPeriods for grid construction (createGrids.F90 / geometry.F90)."""
@@ -2037,7 +2018,6 @@ def _n_periods_from_namelist(*, nml: Any) -> int:
     raise NotImplementedError(
         f"KineticOperator.from_namelist supports geometryScheme in {{1,2,3,4,5,11,12,13}}; got {scheme}."
     )
-
 
 def _load_external_phi1(*, nml: Any, phys: dict, grids: Grids) -> jnp.ndarray:
     """Read the FIXED external Phi1(theta,zeta) field for ``readExternalPhi1``.
@@ -2084,7 +2064,6 @@ def _load_external_phi1(*, nml: Any, phys: dict, grids: Grids) -> jnp.ndarray:
             )
     return jnp.asarray(phi1, dtype=jnp.float64)
 
-
 class KineticOperatorBuild(NamedTuple):
     """One operator build together with the grids/geometry it was derived from.
 
@@ -2108,7 +2087,6 @@ class KineticOperatorBuild(NamedTuple):
     geometry: FluxSurfaceGeometry
     radial: RadialCoordinates
 
-
 def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
     """Build a :class:`KineticOperator` from a parsed SFINCS input namelist.
 
@@ -2117,7 +2095,6 @@ def kinetic_operator_from_namelist(nml: Any) -> KineticOperator:
     conversions use the build function to avoid re-deriving them.
     """
     return kinetic_operator_build_from_namelist(nml).operator
-
 
 def kinetic_operator_build_from_namelist(nml: Any) -> KineticOperatorBuild:
     """Build a :class:`KineticOperator` plus its grids/geometry/radial context.
@@ -2534,6 +2511,5 @@ def kinetic_operator_build_from_namelist(nml: Any) -> KineticOperatorBuild:
         **magnetic_drift_arrays,
     )
     return KineticOperatorBuild(operator=op, grids=grids, geometry=geom, radial=radial)
-
 
 apply_kinetic_operator_jit = jax.jit(lambda op, v: op.apply(v))

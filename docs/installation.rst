@@ -93,3 +93,26 @@ you want those examples:
 Optional solver-library adoption studies, including Lineax, Equinox-wrapper, and
 JAXopt comparisons, are research-lane material. They are not required for the
 stable install, stable examples, or default CI.
+
+
+Floating-point precision
+------------------------
+
+``dkx`` requires JAX in float64.  This is a correctness requirement rather than
+a preference: the block eliminations and every SFINCS parity fixture depend on
+it, and single precision changes which results are trustworthy rather than
+merely how accurate they are.
+
+Importing ``dkx`` enables it, once, in ``dkx/__init__.py``.  That is a global
+change to the process, so a caller who shares the interpreter with a library
+tuned for float32 can take the decision back:
+
+.. code-block:: bash
+
+   DKX_NO_X64_SETUP=1 python my_script.py
+
+Opting out of the *setting* does not opt out of the *requirement*.
+:func:`dkx.require_float64` runs on the solve path and raises, naming every way
+to fix it, so a process that opted out cannot silently return single-precision
+answers.  Setting ``JAX_ENABLE_X64=1`` yourself works too and outranks the
+opt-out -- an explicit request from the user is honoured.

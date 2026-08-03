@@ -36,10 +36,6 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable
 
-from jax import config as _jax_config
-
-_jax_config.update("jax_enable_x64", True)
-
 import jax  # noqa: E402
 import jax.numpy as jnp  # noqa: E402
 
@@ -61,11 +57,9 @@ __all__ = [
     "solve_phi1_history",
 ]
 
-
 # ---------------------------------------------------------------------------
 # Result containers
 # ---------------------------------------------------------------------------
-
 
 @dataclass(frozen=True)
 class NewtonIteration:
@@ -76,7 +70,6 @@ class NewtonIteration:
     inner_iterations: int | None
     inner_converged: bool
     step_scale: float
-
 
 @dataclass(frozen=True)
 class Phi1Result:
@@ -112,11 +105,9 @@ class Phi1Result:
     def residual_norms(self) -> tuple[float, ...]:
         return tuple(it.residual_norm for it in self.iterations)
 
-
 # ---------------------------------------------------------------------------
 # Operator construction
 # ---------------------------------------------------------------------------
-
 
 def _as_input(inp: SfincsInput | RawNamelist | str | Path) -> SfincsInput:
     if isinstance(inp, SfincsInput):
@@ -124,7 +115,6 @@ def _as_input(inp: SfincsInput | RawNamelist | str | Path) -> SfincsInput:
     if isinstance(inp, RawNamelist):
         return sfincs_input_from_raw(inp)
     return load_sfincs_input(Path(inp))
-
 
 def operator_from_input(
     inp: SfincsInput | RawNamelist | str | Path | KineticOperator,
@@ -158,7 +148,6 @@ def operator_from_input(
         )
     return op
 
-
 def _inner_restart(op: KineticOperator, restart: int | None, use_preconditioner: bool) -> int:
     """Krylov restart for the inner Newton solve.
 
@@ -190,11 +179,9 @@ def _inner_restart(op: KineticOperator, restart: int | None, use_preconditioner:
         )
     return n + 1
 
-
 # ---------------------------------------------------------------------------
 # Fortran-parity Newton solve (uses solve.solve as the inner linear solve)
 # ---------------------------------------------------------------------------
-
 
 def solve_phi1(
     inp: SfincsInput | RawNamelist | str | Path | KineticOperator,
@@ -263,7 +250,6 @@ def solve_phi1(
     )
     return result
 
-
 def solve_phi1_history(
     inp: SfincsInput | RawNamelist | str | Path | KineticOperator,
     *,
@@ -306,7 +292,6 @@ def solve_phi1_history(
         emit=emit,
         record_history=True,
     )
-
 
 def _newton_solve_phi1(
     op: KineticOperator,
@@ -403,7 +388,6 @@ def _newton_solve_phi1(
     )
     return result, history
 
-
 def _line_search_scale(
     op: KineticOperator, x: jnp.ndarray, step: jnp.ndarray, rnorm0: float
 ) -> float:
@@ -416,11 +400,9 @@ def _line_search_scale(
         scale *= 0.5
     return 1.0  # no improvement found; take the full step and let Newton retry
 
-
 # ---------------------------------------------------------------------------
 # Differentiable Phi1 state (implicit function theorem)
 # ---------------------------------------------------------------------------
-
 
 def phi1_state(
     op: KineticOperator,
