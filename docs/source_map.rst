@@ -99,6 +99,31 @@ Input/output and orchestration:
 - ``plotting.py``: output plotting for the CLI and examples.
 - ``paths.py`` / ``profiling.py``: path resolution and timing/memory probes.
 
+Physics layers built on the canonical stack rather than inside it.  Each is a
+separate owner because each answers a question the drift-kinetic solve does not:
+
+- ``batch.py``: batched multi-surface / multi-``E_r`` solves, with the
+  ``jax.lax.map`` chunk size set from the solver route's own memory model so a
+  scan neither exhausts the device nor serializes to one solve at a time.
+- ``monoenergetic.py``: the ``(nuPrime, EStar)`` monoenergetic database and its
+  Maxwellian energy convolution, in the Beidler et al. benchmark normalization.
+- ``bounce_averaged.py``: the collisionless ``1/nu`` limit -- effective ripple
+  and the trapped-particle bounce integrals -- as a fast differentiable
+  surrogate for the full solve.
+- ``shaing_callen.py``: the collisionless bootstrap-coefficient limit, which
+  anchors the low-collisionality physics tests.
+- ``momentum_correction.py``: the Sugama-Nishimura parallel-momentum correction
+  that restores inter-species momentum conservation lost by a pitch-angle
+  collision operator.
+- ``impurity.py``: classical impurity transport, screening, and the
+  ``vmap``-over-charge-state API.
+- ``variational.py``: entropy-production functionals that bound the
+  monoenergetic coefficient from both sides -- a convergence certificate rather
+  than a convergence claim.
+- ``validity.py``: local-validity diagnostics (finite-orbit-width parameter,
+  ``E x B`` resonance ratios, collisionality-regime classifier) that say when a
+  radially-local answer should not be trusted.
+
 Fortran-to-module correspondence
 --------------------------------
 
