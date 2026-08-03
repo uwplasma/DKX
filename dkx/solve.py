@@ -88,6 +88,7 @@ try:  # noqa: E402
     from solvax.implicit import linear_solve as solvax_linear_solve
     from solvax.krylov import gcrot
     from solvax.native import SpluFactorization
+    from solvax.refine import iterative_refinement
     from solvax.operators import schur_projected_precond
 
     _SOLVAX_IMPORT_ERROR: BaseException | None = None
@@ -152,6 +153,11 @@ _TIER1_BUDGET_ENV = "DKX_TIER1_MEMORY_BUDGET_GB"
 # that works.
 _TIER2_GUARD_FRACTION = 1.0
 _TIER2_GUARD_ENV = "DKX_TIER2_MEMORY_GUARD"
+
+# Defect-correction sweeps after the tier-1 factor solve.  One reproduces the
+# hand-rolled pass this replaced and already reaches O(1e-16) relative residual
+# in float64; the knob exists because the float32-factor variant needs more.
+_TIER1_REFINEMENT_SWEEPS = 1
 
 # RHSMode 1/2/3 drives (radial gradient on L=0,2; inductive E_parallel on L=1)
 # and every RHSMode 1/2/3 output moment (fluxes, flows, sources, FSA
@@ -1408,18 +1414,30 @@ def _solve_tier1(
     t1 = time.perf_counter()
 
     def _solve_refined(b: jnp.ndarray, *, transpose: bool = False) -> jnp.ndarray:
-        """Factor solve plus one iterative-refinement step.
+        """Factor solve plus iterative refinement (defect correction).
 
         The block-Thomas elimination is backward-stable but its rounding can
         leave the true relative residual a small multiple of eps above the
-        strict production gate; one refinement pass
-        ``x += solve(b - A x)`` (one extra apply and substitution on the
-        existing factors) takes it to O(1e-16).
+        strict production gate; refinement ``x += solve(b - A x)`` (one extra
+        apply and substitution on the existing factors per sweep) takes it to
+        O(1e-16).
+
+        :func:`solvax.refine.iterative_refinement` owns the recurrence.  It is
+        the same fixed point as the hand-rolled single pass this replaces --
+        one sweep reproduces it exactly -- and it is where the float32-factor
+        variant lives (``solvax.refine.as_low_precision``), which is the
+        documented route to a GPU that runs FP64 at 1/32 rate.  Reusable
+        numerical kernels belong upstream in ``solvax`` rather than here.
         """
         apply = _transposed_apply(op) if transpose else op.apply
         apply2d = apply if b.ndim == 1 else jax.vmap(apply, in_axes=1, out_axes=1)
-        x = t1_solver.solve(b, transpose=transpose)
-        return x + t1_solver.solve(b - apply2d(x), transpose=transpose)
+        x, _residual_norms = iterative_refinement(
+            apply2d,
+            b,
+            lambda r: t1_solver.solve(r, transpose=transpose),
+            iterations=_TIER1_REFINEMENT_SWEEPS,
+        )
+        return x
 
     if differentiable:
         apply_t = _transposed_apply(op)
@@ -1895,11 +1913,17 @@ def _check_coarse_preconditioner_fits(op: KineticOperator) -> None:
     debuggable failure there is: no traceback, no partial output, and a
     ``returncode`` that looks like any other crash.
 
-    The same operator inverted in a fill-reducing order needs 5.97 GB of
-    SuperLU factors on that deck (``tools/benchmarks/tier2_sparse_fill.py``),
-    so the message names ``preconditioner="sparse"`` rather than only reporting
-    the problem.  ``DKX_TIER2_MEMORY_GUARD=off`` disables the check for anyone
-    who knows their machine better than ``sysconf`` does.
+    The message does not recommend a way out, because measurement says there
+    is not one at this size.  ``preconditioner="sparse"`` stores far less --
+    5.97 GB of SuperLU factors against 42.9 GB of bands on that deck
+    (``tools/benchmarks/tier2_sparse_fill.py``) -- but run on the five decks
+    that trigger this guard it was killed on three and timed out on two
+    (``tools/benchmarks/tier2_sparse_vs_coarse.py``), so pointing users at it
+    would trade a fast failure for a slow one.  ``multigrid`` fits and does not
+    reach tolerance on this physics.  What remains is coarser resolution or a
+    larger machine, and the message says so.
+    ``DKX_TIER2_MEMORY_GUARD=off`` disables the check for anyone who knows
+    their machine better than ``sysconf`` does.
     """
     if os.environ.get(_TIER2_GUARD_ENV, "").strip().lower() in {"off", "0", "false"}:
         return
@@ -1916,11 +1940,13 @@ def _check_coarse_preconditioner_fits(op: KineticOperator) -> None:
         f"{op.n_species} species, Nx={op.n_x}) on a machine with "
         f"{total / 2**30:.1f} GB of RAM. Without this check the process is "
         f"killed part way through with no output.\n"
-        f"  preconditioner='sparse' inverts the same operator exactly in a "
-        f"fill-reducing order and needs a fraction of that;\n"
-        f"  preconditioner='multigrid' is cheaper still but does not reach "
-        f"tolerance on this physics (docs/performance.rst);\n"
-        f"  DKX_TIER2_MEMORY_GUARD=off disables this check."
+        f"No tier-2 preconditioner runs this deck on this machine:\n"
+        f"  'sparse' stores far less but was measured killed or timed out on "
+        f"all five decks this size (tools/benchmarks/tier2_sparse_vs_coarse.py);\n"
+        f"  'multigrid' fits but does not reach tolerance on this physics "
+        f"(docs/performance.rst);\n"
+        f"reduce Ntheta/Nzeta or Nxi, or run where the bands fit. "
+        f"DKX_TIER2_MEMORY_GUARD=off disables this check."
     )
 
 
