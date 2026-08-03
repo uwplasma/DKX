@@ -28,10 +28,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-from jax import config as _jax_config
-
-_jax_config.update("jax_enable_x64", True)
-
 import jax.numpy as jnp  # noqa: E402
 from jax import tree_util as jtu  # noqa: E402
 from jax.scipy.special import erf  # noqa: E402
@@ -45,7 +41,6 @@ from dkx.constants import (  # noqa: E402
     RadialGradients,
     SQRT_PI_V3,
 )
-
 
 @jtu.register_pytree_node_class
 @dataclass(frozen=True)
@@ -125,7 +120,6 @@ class SpeciesSet:
         sum_b = jnp.sum((z2[None, :, None] * self.n_hat[None, :, None]) * term, axis=1)  # (S,X)
         return prefac[:, None] * z2[:, None] * sum_b
 
-
 def _chandrasekhar(x: jnp.ndarray) -> jnp.ndarray:
     """Chandrasekhar function Psi(x) = (erf(x) - (2/sqrt(pi)) x exp(-x^2)) / (2 x^2).
 
@@ -142,7 +136,6 @@ def _chandrasekhar(x: jnp.ndarray) -> jnp.ndarray:
     series = ((2.0 / 3.0) * x - (2.0 / 5.0) * x * x2 + (1.0 / 7.0) * x * x2 * x2) / sqrt_pi
     return jnp.where(small, series, num / den)
 
-
 @dataclass(frozen=True)
 class AdiabaticSpecies:
     """The optional adiabatic species (``withAdiabatic``; globalVariables.F90 line 97).
@@ -156,14 +149,12 @@ class AdiabaticSpecies:
     n_hat: float = DEFAULT_ADIABATIC_N_HAT
     t_hat: float = DEFAULT_ADIABATIC_T_HAT
 
-
 def _as_1d_array(value: Any, default: float) -> jnp.ndarray:
     if value is None:
         value = [default]
     elif not isinstance(value, list):
         value = [value]
     return jnp.asarray(value, dtype=jnp.float64)
-
 
 def infer_gradient_coordinate(
     *, geom_params: Mapping[str, Any], species_params: Mapping[str, Any], default: int = 4
@@ -187,7 +178,6 @@ def infer_gradient_coordinate(
         if any(species_params.get(k, None) is not None for k in keys):
             return code
     return int(default)
-
 
 def species_set_from_namelist(
     nml: Any,
@@ -243,7 +233,6 @@ def species_set_from_namelist(
         dn_hat_dpsi_hat=jnp.asarray(radial.to_d_dpsi_hat(dn_in, coordinate=coord), dtype=jnp.float64),
         dt_hat_dpsi_hat=jnp.asarray(radial.to_d_dpsi_hat(dt_in, coordinate=coord), dtype=jnp.float64),
     )
-
 
 def adiabatic_species_from_namelist(nml: Any) -> AdiabaticSpecies | None:
     """Return the adiabatic species if ``withAdiabatic`` is set, else ``None``.

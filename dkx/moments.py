@@ -43,10 +43,6 @@ from dataclasses import dataclass
 from functools import partial
 from typing import Any, NamedTuple
 
-from jax import config as _jax_config
-
-_jax_config.update("jax_enable_x64", True)
-
 import jax  # noqa: E402
 import jax.numpy as jnp  # noqa: E402
 from jax import lax  # noqa: E402
@@ -66,9 +62,7 @@ __all__ = [
     "classical_fluxes", "flux_coordinate_variants",
 ]  # fmt: skip
 
-
 # ---- Input containers: state-vector layout, grids, geometry, species -------
-
 
 @dataclass(frozen=True)
 class StateLayout:
@@ -142,7 +136,6 @@ class StateLayout:
             include_phi1=bool(op.include_phi1), constraint_scheme=int(op.constraint_scheme),
         )  # fmt: skip
 
-
 class VelocityGrid(NamedTuple):
     """Speed-grid nodes/weights and per-x Legendre mode counts (``Nxi_for_x``)."""
 
@@ -158,12 +151,10 @@ class VelocityGrid(NamedTuple):
             n_xi_for_x=jnp.asarray(op.fblock.collisionless.n_xi_for_x, dtype=jnp.int32),
         )
 
-
 _FLUX_SURFACE_OP_FIELDS = (
     "theta_weights", "zeta_weights", "b_hat", "d_hat", "db_hat_dtheta", "db_hat_dzeta",
     "b_hat_sub_theta", "b_hat_sub_zeta", "fsab_hat2",
 )  # fmt: skip
-
 
 class FluxSurface(NamedTuple):
     """Flux-surface geometry arrays used by the moment integrals."""
@@ -182,7 +173,6 @@ class FluxSurface(NamedTuple):
     def from_operator(op: Any) -> "FluxSurface":
         return FluxSurface(*(jnp.asarray(getattr(op, name), dtype=jnp.float64) for name in _FLUX_SURFACE_OP_FIELDS))
 
-
 class SpeciesParams(NamedTuple):
     """Per-species charge, mass, density, temperature ("Hat" normalized)."""
 
@@ -197,9 +187,7 @@ class SpeciesParams(NamedTuple):
             *(jnp.asarray(getattr(op, n), dtype=jnp.float64) for n in ("z_s", "m_hat", "t_hat", "n_hat"))
         )
 
-
 # ---- Quadrature helpers (diagnostics.F90 accumulation orders) --------------
-
 
 def _sum_x(w_x: jnp.ndarray, values_sxtz: jnp.ndarray, *, strict: bool = False) -> jnp.ndarray:
     """``sum_x w_x[x] * values[:, x, :, :]``; ``strict`` uses the Fortran x-loop order."""
@@ -215,7 +203,6 @@ def _sum_x(w_x: jnp.ndarray, values_sxtz: jnp.ndarray, *, strict: bool = False) 
         return lax.fori_loop(0, n_x, body, acc0)
     return jnp.einsum("x,sxtz->stz", w_x, values_sxtz, precision=lax.Precision.HIGHEST)
 
-
 def _sum_tz(w_t: jnp.ndarray, w_z: jnp.ndarray, values_stz: jnp.ndarray) -> jnp.ndarray:
     """Flux-surface quadrature ``sum_t sum_z w_t w_z values[:, t, z]`` -> (S,)."""
     return jnp.einsum(
@@ -225,7 +212,6 @@ def _sum_tz(w_t: jnp.ndarray, w_z: jnp.ndarray, values_stz: jnp.ndarray) -> jnp.
         jnp.asarray(values_stz, dtype=jnp.float64),
         precision=lax.Precision.HIGHEST,
     )
-
 
 def _sum_tz_sx(w_t: jnp.ndarray, w_z: jnp.ndarray, values_sxtz: jnp.ndarray, *, strict: bool = False) -> jnp.ndarray:
     """``sum_t sum_z w_t w_z values[:, x, t, z]`` -> (S, X)."""
@@ -244,15 +230,12 @@ def _sum_tz_sx(w_t: jnp.ndarray, w_z: jnp.ndarray, values_sxtz: jnp.ndarray, *, 
         return lax.fori_loop(0, int(values_sxtz.shape[2]), body_t, acc0)
     return jnp.einsum("t,z,sxtz->sx", w_t, w_z, values_sxtz, precision=lax.Precision.HIGHEST)
 
-
 # ---- Flux-surface scalars and the leading-order Maxwellian -----------------
-
 
 def vprime_hat(surface: FluxSurface) -> jnp.ndarray:
     """``VPrimeHat = sum_ij w_theta_i w_zeta_j / DHat_ij`` (geometry.F90 computeBIntegrals)."""
     inv_d = jnp.asarray(1.0 / surface.d_hat, dtype=jnp.float64)
     return _sum_tz(surface.theta_weights, surface.zeta_weights, inv_d[None, :, :])[0]
-
 
 def flux_surface_b_integrals(surface: FluxSurface) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     """Return ``(B0OverBBar, GHat, IHat)`` computed from arrays (computeBIntegrals).
@@ -268,7 +251,6 @@ def flux_surface_b_integrals(surface: FluxSurface) -> tuple[jnp.ndarray, jnp.nda
     g_hat = jnp.sum(w2d * surface.b_hat_sub_zeta) / denom
     i_hat = jnp.sum(w2d * surface.b_hat_sub_theta) / denom
     return b0, g_hat, i_hat
-
 
 def maxwellian_f0_l0(
     species: SpeciesParams,
@@ -299,13 +281,11 @@ def maxwellian_f0_l0(
     )  # (S,T,Z)
     return pref[:, :, None, None] * exp_phi1[:, None, :, :]
 
-
 def _factor_vm(surface: FluxSurface) -> jnp.ndarray:
     """Magnetic-drift geometric factor ``(B_theta dB/dzeta - B_zeta dB/dtheta)/BHat^3``."""
     return (surface.b_hat_sub_theta * surface.db_hat_dzeta - surface.b_hat_sub_zeta * surface.db_hat_dtheta) / (
         surface.b_hat * surface.b_hat * surface.b_hat
     )
-
 
 def _l_masks(n_xi_for_x: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     n = jnp.asarray(n_xi_for_x, dtype=jnp.int32)
@@ -316,9 +296,7 @@ def _l_masks(n_xi_for_x: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray, jnp.nda
         (n > 3).astype(jnp.float64),
     )
 
-
 # ---- vm (magnetic-drift) flux moments — the RHSMode=2/3 diagnostics subset ----
-
 
 class VmFluxMoments(NamedTuple):
     """Magnetic-drift flux moments of one solved state (diagnostics.F90 subset).
@@ -340,7 +318,6 @@ class VmFluxMoments(NamedTuple):
     particle_flux_vm_psi_hat_vs_x: jnp.ndarray  # (X,S)
     heat_flux_vm_psi_hat_vs_x: jnp.ndarray  # (X,S)
     fsab_flow_vs_x: jnp.ndarray  # (X,S)
-
 
 def vm_flux_moments(
     layout: StateLayout,
@@ -364,7 +341,6 @@ def vm_flux_moments(
     )
     return _vm_core(layout, pre, surface, f0_l0, x_full, flow_via_b_over_d=False)
 
-
 def vm_flux_moments_batch(
     layout: StateLayout,
     vgrid: VelocityGrid,
@@ -386,7 +362,6 @@ def vm_flux_moments_batch(
 
     return vmap(_one, in_axes=0, out_axes=0)(x_full_stack)
 
-
 class _VmPrecomputed(NamedTuple):
     """Geometry/species factors precomputed eagerly for the batched vm diagnostics.
 
@@ -405,7 +380,6 @@ class _VmPrecomputed(NamedTuple):
     heat_flux_factor_vm: jnp.ndarray  # (S,)
     flow_factor: jnp.ndarray  # (S,)
     b_over_d: jnp.ndarray  # (T,Z)
-
 
 def _vm_precompute(
     vgrid: VelocityGrid, surface: FluxSurface, species: SpeciesParams, delta: jnp.ndarray | float
@@ -432,7 +406,6 @@ def _vm_precompute(
         flow_factor=4.0 * jnp.pi * (t * t) / (3.0 * m * m),
         b_over_d=jnp.asarray(surface.b_hat / surface.d_hat, dtype=jnp.float64),
     )
-
 
 def _vm_core(
     layout: StateLayout,
@@ -504,7 +477,6 @@ def _vm_core(
         fsab_flow_vs_x=jnp.transpose(fsab_flow_vs_x, (1, 0)),
     )
 
-
 @partial(jax.jit, static_argnums=(0,))
 def _vm_flux_moments_batch_precomputed_jit(
     layout: StateLayout,
@@ -526,7 +498,6 @@ def _vm_flux_moments_batch_precomputed_jit(
 
     return vmap(_one, in_axes=0, out_axes=0)(x_full_stack)
 
-
 def _vm_flux_moments_batch_precomputed(
     layout: StateLayout,
     vgrid: VelocityGrid,
@@ -540,7 +511,6 @@ def _vm_flux_moments_batch_precomputed(
     """Batch entry for the output-field table: eager precompute + jitted vmap."""
     pre = _vm_precompute(vgrid, surface, species, delta)
     return _vm_flux_moments_batch_precomputed_jit(layout, pre, vgrid, surface, species, x_full_stack, alpha, phi1_hat)
-
 
 @partial(jax.jit, static_argnums=(0,))
 def _vm_flux_moments_batch_plain_jit(
@@ -558,9 +528,7 @@ def _vm_flux_moments_batch_plain_jit(
         layout, vgrid, surface, species, x_full_stack, delta=delta, alpha=alpha, phi1_hat=phi1_hat
     )
 
-
 # ---- RHSMode=1 per-species output table ------------------------------------
-
 
 def rhsmode1_moments(
     layout: StateLayout,
@@ -779,9 +747,7 @@ def rhsmode1_moments(
     out["NTV"] = jnp.zeros((layout.n_species,), dtype=jnp.float64)
     return out
 
-
 # ---- vE (ExB-drift) flux moments — Phi1 runs (diagnostics.F90 vE family) ----
-
 
 class ElectricDriftFluxMoments(NamedTuple):
     """vE/vE0 flux moments of one Phi1 iterate (diagnostics.F90 ExB family)."""
@@ -798,7 +764,6 @@ class ElectricDriftFluxMoments(NamedTuple):
     heat_flux_ve0_psi_hat: jnp.ndarray  # (S,)
     momentum_flux_ve_psi_hat: jnp.ndarray  # (S,)
     momentum_flux_ve0_psi_hat: jnp.ndarray  # (S,)
-
 
 def electric_drift_flux_moments(
     layout: StateLayout,
@@ -874,7 +839,6 @@ def electric_drift_flux_moments(
         momentum_flux_ve0_psi_hat=jnp.einsum("tz,stz->s", w2d, mf_before0),
     )
 
-
 def combined_drift_fluxes(
     *,
     flux_vm_psi_hat: jnp.ndarray,
@@ -884,14 +848,11 @@ def combined_drift_fluxes(
     """Total-drift flux variants ``(vd1, vd) = (vm + vE0, vm + vE)`` (diagnostics.F90)."""
     return flux_vm_psi_hat + flux_ve0_psi_hat, flux_vm_psi_hat + flux_ve_psi_hat
 
-
 def heat_flux_without_phi1(*, heat_flux_vm_psi_hat: jnp.ndarray, heat_flux_ve0_psi_hat: jnp.ndarray) -> jnp.ndarray:
     """``heatFlux_withoutPhi1 = heatFlux_vm + (5/3) heatFlux_vE0`` (diagnostics.F90)."""
     return heat_flux_vm_psi_hat + (5.0 / 3.0) * heat_flux_ve0_psi_hat
 
-
 # ---- NTV torque ------------------------------------------------------------
-
 
 def ntv_kernel(
     surface: FluxSurface,
@@ -911,7 +872,6 @@ def ntv_kernel(
         (jnp.asarray(u_hat, dtype=jnp.float64) - g_hat * inv_fsa_b2) * (iota * surface.db_hat_dtheta + surface.db_hat_dzeta)
         + iota * (1.0 / (b * b)) * (g_hat * surface.db_hat_dtheta - i_hat * surface.db_hat_dzeta)
     )
-
 
 def ntv_moments(
     layout: StateLayout,
@@ -946,9 +906,7 @@ def ntv_moments(
     )
     return before, jnp.einsum("tz,stz->s", weights_2d, before)
 
-
 # ---- RHSMode=2/3 transport matrix (monoenergetic and Onsager forms) --------
-
 
 def transport_matrix_size(rhs_mode: int) -> int:
     """3 for RHSMode=2 (Onsager), 2 for RHSMode=3 (monoenergetic/DKES)."""
@@ -957,7 +915,6 @@ def transport_matrix_size(rhs_mode: int) -> int:
     if int(rhs_mode) == 3:
         return 2
     raise ValueError("transport matrix is only defined for RHSMode=2 or RHSMode=3.")
-
 
 def _effective_flux_functions(
     surface: FluxSurface,
@@ -972,7 +929,6 @@ def _effective_flux_functions(
     g = jnp.where(jnp.abs(g_hat) < 1e-30, g_eff, g_hat)
     i = jnp.where(jnp.abs(i_hat) < 1e-30, i_eff, i_hat)
     return b0, g, i
-
 
 def transport_matrix_from_flux_arrays(
     *,
@@ -1087,7 +1043,6 @@ def transport_matrix_from_flux_arrays(
     )
     return jnp.stack([col1, col2, col3], axis=1)
 
-
 def _states_to_stack(layout: StateLayout, state_vectors: Any, n: int) -> jnp.ndarray:
     """Accept ``{whichRHS: vec}`` (1-based) or an ``(N,total)`` array."""
     if isinstance(state_vectors, dict):
@@ -1102,7 +1057,6 @@ def _states_to_stack(layout: StateLayout, state_vectors: Any, n: int) -> jnp.nda
     if stack.shape != (n, layout.total_size):
         raise ValueError(f"expected state stack of shape {(n, layout.total_size)}, got {stack.shape}")
     return stack
-
 
 def transport_matrix_from_state_vectors(
     layout: StateLayout,
@@ -1140,7 +1094,6 @@ def transport_matrix_from_state_vectors(
         heat_flux_vm_psi_hat=jnp.transpose(diag.heat_flux_vm_psi_hat, (1, 0)),
         fsab_flow=jnp.transpose(diag.fsab_flow, (1, 0)),
     )
-
 
 def transport_moments_table(
     layout: StateLayout,
@@ -1209,9 +1162,7 @@ def transport_moments_table(
         out["sources"] = sources
     return out
 
-
 # ---- Classical transport (classicalTransport.F90) --------------------------
-
 
 def classical_fluxes(
     *,
@@ -1296,9 +1247,7 @@ def classical_fluxes(
     hf_a = hf_a + 1.25 * t_hat * pf_a
     return pf_a, hf_a
 
-
 # ---- Radial-coordinate flux variants (radialCoordinates.F90) ---------------
-
 
 class RadialFluxVariants(NamedTuple):
     """One psiHat-projected flux expressed in all four v3 radial coordinates."""
@@ -1307,7 +1256,6 @@ class RadialFluxVariants(NamedTuple):
     psi_n: jnp.ndarray
     r_hat: jnp.ndarray
     r_n: jnp.ndarray
-
 
 def flux_coordinate_variants(values_psi_hat: jnp.ndarray, coords: RadialCoordinates) -> RadialFluxVariants:
     """Express a flux (moment of ``vdrift . grad psiHat``) in psiN/rHat/rN.

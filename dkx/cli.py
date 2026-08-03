@@ -14,10 +14,8 @@ import numpy as np
 from .input_compat import with_equilibrium_override
 from .namelist import read_sfincs_input
 
-
 def _now() -> float:
     return time.perf_counter()
-
 
 def _emit(msg: str, *, level: int, args: argparse.Namespace) -> None:
     """Simple structured stdout logging for the CLI.
@@ -32,7 +30,6 @@ def _emit(msg: str, *, level: int, args: argparse.Namespace) -> None:
         return
     if verbose >= level:
         print(msg, flush=True)
-
 
 def _emit_namelist_summary(*, nml, args: argparse.Namespace) -> None:
     geom = nml.group("geometryParameters")
@@ -64,7 +61,6 @@ def _emit_namelist_summary(*, nml, args: argparse.Namespace) -> None:
     )
     _emit(f" solverTolerance={_g(res, 'solverTolerance', '?')}", level=2, args=args)
 
-
 def _emit_runtime_info(*, args: argparse.Namespace) -> None:
     """Emit basic runtime info helpful for benchmarking and bug reports."""
     try:
@@ -75,7 +71,6 @@ def _emit_runtime_info(*, args: argparse.Namespace) -> None:
         _emit(f" jax_enable_x64={bool(_jnp.array(0.0).dtype == _jnp.float64)}", level=3, args=args)
     except Exception:  # noqa: BLE001
         return
-
 
 def _emit_parallel_runtime_info(*, args: argparse.Namespace) -> None:
     def _env(name: str, default: str = "") -> str:
@@ -123,14 +118,12 @@ def _emit_parallel_runtime_info(*, args: argparse.Namespace) -> None:
             args=args,
         )
 
-
 def _nml_with_cli_equilibrium_override(nml, args: argparse.Namespace):
     return with_equilibrium_override(
         nml=nml,
         equilibrium_file=getattr(args, "equilibrium_file", None),
         wout_path=getattr(args, "wout_path", None),
     )
-
 
 @contextlib.contextmanager
 def _canonical_namelist_path(*, nml, input_path: Path, args: argparse.Namespace):
@@ -172,7 +165,6 @@ def _canonical_namelist_path(*, nml, input_path: Path, args: argparse.Namespace)
         except OSError:
             pass
 
-
 def _add_equilibrium_override_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--equilibrium-file",
@@ -184,7 +176,6 @@ def _add_equilibrium_override_args(parser: argparse.ArgumentParser) -> None:
         default=None,
         help="Compatibility alias for --equilibrium-file, commonly used for geometryScheme=5 VMEC runs.",
     )
-
 
 def _add_common_cli_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
@@ -221,7 +212,6 @@ def _add_common_cli_args(parser: argparse.ArgumentParser) -> None:
     )
     parser.set_defaults(fortran_stdout=None)
 
-
 def _add_parallel_cli_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--transport-workers",
@@ -247,7 +237,6 @@ def _add_parallel_cli_args(parser: argparse.ArgumentParser) -> None:
         default=None,
         help="Coordinator port when --coordinator-address omits it.",
     )
-
 
 def _cmd_solve_v3(args: argparse.Namespace) -> int:
     t0 = _now()
@@ -314,7 +303,6 @@ def _cmd_solve_v3(args: argparse.Namespace) -> int:
     _emit(f" elapsed_s={_now()-t0:.3f}", level=1, args=args)
     return 0
 
-
 def _cmd_run_fortran(args: argparse.Namespace) -> int:
     t0 = _now()
     from .validation.fortran import run_sfincs_fortran  # noqa: PLC0415
@@ -330,7 +318,6 @@ def _cmd_run_fortran(args: argparse.Namespace) -> int:
     _emit(f" wrote sfincsOutput.h5 -> {output_path}", level=0, args=args)
     _emit(f" elapsed_s={_now()-t0:.3f}", level=1, args=args)
     return 0
-
 
 def _cmd_write_output(args: argparse.Namespace) -> int:
     t0 = _now()
@@ -416,7 +403,6 @@ def _cmd_write_output(args: argparse.Namespace) -> int:
     _emit(f" elapsed_s={_now()-t0:.3f}", level=1, args=args)
     return 0
 
-
 def _cmd_transport_matrix_v3(args: argparse.Namespace) -> int:
     """RHSMode=2/3 transport-matrix runs on the canonical stack (:mod:`dkx.run`)."""
     t0 = _now()
@@ -462,7 +448,6 @@ def _cmd_transport_matrix_v3(args: argparse.Namespace) -> int:
     _emit(f" elapsed_s={_now()-t0:.3f}", level=1, args=args)
     return 0
 
-
 def _cmd_monoenergetic_database(args: argparse.Namespace) -> int:
     """Scan (nuPrime, EStar) and write the monoenergetic-coefficient database."""
     t0 = _now()
@@ -504,7 +489,6 @@ def _cmd_monoenergetic_database(args: argparse.Namespace) -> int:
     _emit(f" elapsed_s={_now()-t0:.3f}", level=1, args=args)
     return 0
 
-
 def _cmd_dump_h5(args: argparse.Namespace) -> int:
     from .io import read_sfincs_h5  # noqa: PLC0415
 
@@ -517,14 +501,12 @@ def _cmd_dump_h5(args: argparse.Namespace) -> int:
     Path(args.out_json).write_text(json.dumps(out, indent=2, sort_keys=True))
     return 0
 
-
 def _default_plot_output_path(input_h5: Path) -> Path:
     input_h5 = Path(input_h5)
     stem = input_h5.stem
     if stem.endswith(".sfincsOutput"):
         stem = stem[: -len(".sfincsOutput")]
     return input_h5.with_name(f"{stem}_summary.pdf")
-
 
 def _cmd_plot_output(args: argparse.Namespace) -> int:
     t0 = _now()
@@ -540,7 +522,6 @@ def _cmd_plot_output(args: argparse.Namespace) -> int:
     _emit(f" wrote plot -> {plot_path}", level=0, args=args)
     _emit(f" elapsed_s={_now()-t0:.3f}", level=1, args=args)
     return 0
-
 
 def _cmd_compare_h5(args: argparse.Namespace) -> int:
     from .compare import compare_sfincs_outputs  # noqa: PLC0415
@@ -567,7 +548,6 @@ def _cmd_compare_h5(args: argparse.Namespace) -> int:
         if len(bad) > 50:
             print(f"... {len(bad) - 50} more failing keys omitted")
     return 0 if not bad else 2
-
 
 def _cmd_scan_er(args: argparse.Namespace) -> int:
     t0 = _now()
@@ -602,7 +582,6 @@ def _cmd_scan_er(args: argparse.Namespace) -> int:
     _emit(f" elapsed_s={_now()-t0:.3f}", level=1, args=args)
     return 0
 
-
 def _cmd_ambipolar_solve(args: argparse.Namespace) -> int:
     t0 = _now()
     from .ambipolar import solve_ambipolar_from_scan_dir  # noqa: PLC0415
@@ -630,7 +609,6 @@ def _cmd_ambipolar_solve(args: argparse.Namespace) -> int:
     _emit(f" wrote {Path(args.scan_dir).resolve() / 'ambipolarSolutions.json'}", level=2, args=args)
     _emit(f" elapsed_s={_now()-t0:.3f}", level=1, args=args)
     return 0
-
 
 def _cmd_ambipolar(args: argparse.Namespace) -> int:
     t0 = _now()
@@ -708,7 +686,6 @@ def _cmd_ambipolar(args: argparse.Namespace) -> int:
     _emit(f" elapsed_s={_now()-t0:.3f}", level=1, args=args)
     return 0 if result.converged else 2
 
-
 def _apply_cores_setting(cores: int | None) -> None:
     """Record the requested solver thread count in the process environment.
 
@@ -736,12 +713,10 @@ def _apply_cores_setting(cores: int | None) -> None:
         os.environ.setdefault("OMP_NUM_THREADS", str(cores_val))
         os.environ.setdefault("OPENBLAS_NUM_THREADS", str(cores_val))
 
-
 def _apply_runtime_env_defaults() -> None:
     # Avoid large eager GPU preallocation in CLI workflows so solver/benchmark
     # runs coexist better with other accelerator jobs by default.
     os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
-
 
 def _apply_parallel_runtime_settings(args: argparse.Namespace) -> None:
     transport_workers = getattr(args, "transport_workers", None)
@@ -767,7 +742,6 @@ def _apply_parallel_runtime_settings(args: argparse.Namespace) -> None:
         if coordinator_port is not None:
             os.environ["DKX_COORDINATOR_PORT"] = str(int(coordinator_port))
         initialize_distributed_runtime_from_env()
-
 
 def _normalize_default_argv(argv: list[str]) -> list[str]:
     if not argv:
@@ -866,7 +840,6 @@ def _normalize_default_argv(argv: list[str]) -> list[str]:
         return argv
     return [*global_args, "write-output", "--input", input_path, *rest]
 
-
 def _maybe_reexec_for_early_runtime(argv: list[str]) -> None:
     """Re-exec with early runtime env so thread pinning/bootstrap take effect.
 
@@ -910,7 +883,6 @@ def _maybe_reexec_for_early_runtime(argv: list[str]) -> None:
     env["DKX_CLI_BOOTSTRAPPED"] = "1"
     os.execvpe(sys.executable, [sys.executable, "-m", "dkx", *argv], env)
 
-
 def _merge_global_cli_args(argv: list[str], args: argparse.Namespace) -> argparse.Namespace:
     """Preserve global CLI flags regardless of whether they appear before or after the subcommand.
 
@@ -937,7 +909,6 @@ def _merge_global_cli_args(argv: list[str], args: argparse.Namespace) -> argpars
     ):
         setattr(args, name, getattr(pre_args, name))
     return args
-
 
 def main(argv: list[str] | None = None) -> int:
     """Run the dkx command-line interface."""
@@ -1254,7 +1225,6 @@ def main(argv: list[str] | None = None) -> int:
     else:
         os.environ.setdefault("DKX_FORTRAN_STDOUT", "1" if not getattr(args, "quiet", False) else "0")
     return int(args.func(args))
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

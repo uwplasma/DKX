@@ -165,12 +165,22 @@ if _disable_cache not in {"1", "true", "yes", "on"}:
         os.environ.setdefault("JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS", "0")
         os.environ.setdefault("JAX_PERSISTENT_CACHE_MIN_ENTRY_SIZE_BYTES", "0")
 
-# SFINCS parity fixtures and most scientific use-cases rely on float64 accuracy.
-# Set this as early as possible on package import.
+# float64 is a correctness requirement, not a preference: the block
+# eliminations and the parity fixtures both depend on it, and a solver that
+# quietly ran in single precision would be worse than one that refused to
+# start.  This is the *only* place in the package that sets it -- sixteen other
+# modules used to do it at module scope, which made a global, invisible,
+# import-order-dependent change to any process that merely touched dkx.
+#
+# ``DKX_NO_X64_SETUP=1`` opts out, for a caller who manages JAX precision
+# themselves.  Opting out does not opt into wrong answers:
+# :func:`require_float64` is called by the solve entry points and raises with
+# the fix in the message.
 try:
     from jax import config as _jax_config  # noqa: PLC0415
 
-    _jax_config.update("jax_enable_x64", True)
+    if os.environ.get("DKX_NO_X64_SETUP", "").strip() not in {"1", "true", "yes"}:
+        _jax_config.update("jax_enable_x64", True)
     # Enable the persistent compilation cache via the current jax config API.
     # The JAX_COMPILATION_CACHE_DIR env var set above only takes effect if jax
     # reads its config for the first time here; when the user imported jax
@@ -251,7 +261,29 @@ def __dir__() -> list[str]:
     return sorted(set(globals()) | set(_LAZY_EXPORTS))
 
 
+
+def require_float64() -> None:
+    """Raise unless JAX is in float64 mode.
+
+    Importing :mod:`dkx` enables it; a caller who set ``DKX_NO_X64_SETUP`` has
+    taken that job on, and this is where they find out if they dropped it.  The
+    check is a dtype probe rather than a config read because the config can be
+    set and then overridden, and what matters is the dtype arrays actually get.
+    """
+    import jax.numpy as _jnp  # noqa: PLC0415
+
+    if _jnp.zeros(1).dtype != _jnp.float64:
+        raise RuntimeError(
+            "dkx requires JAX float64: the block eliminations and every parity "
+            "fixture depend on it, and single precision changes which results "
+            "are trustworthy rather than merely how accurate they are. "
+            "Enable it with jax.config.update('jax_enable_x64', True) before "
+            "the first array is created, or JAX_ENABLE_X64=1 in the "
+            "environment, or unset DKX_NO_X64_SETUP and let dkx set it."
+        )
+
 __all__ = [
+    "require_float64",
     "BenchmarkReport",
     "GeometryState",
     "GridState",

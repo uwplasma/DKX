@@ -106,10 +106,6 @@ from typing import Any, Callable, Iterable, NamedTuple
 
 import numpy as np
 
-from jax import config as _jax_config
-
-_jax_config.update("jax_enable_x64", True)
-
 import jax.numpy as jnp  # noqa: E402
 
 from .collisions import (  # noqa: E402
@@ -147,7 +143,6 @@ DATABASE_SCHEMA = "dkx.monoenergetic_database.v1"
 
 _FT_LARGE_ASPECT = 1.46  # 1 - f_c = 1.46 sqrt(eps_t), Beidler et al. 2011.
 
-
 class DStarPoint(NamedTuple):
     """The four normalized monoenergetic coefficients at one (nuPrime, EStar).
 
@@ -165,7 +160,6 @@ class DStarPoint(NamedTuple):
     d31_star: jnp.ndarray
     d33_star: jnp.ndarray
     nu_star: jnp.ndarray
-
 
 @dataclass(frozen=True)
 class MonoenergeticDatabase:
@@ -245,7 +239,6 @@ class MonoenergeticDatabase:
             / float(self.x0)
         )
 
-
 @dataclass(frozen=True)
 class ThermalTransportMatrices:
     """Energy-convolved thermal transport matrices, one per species.
@@ -288,11 +281,9 @@ class ThermalTransportMatrices:
     def l33(self) -> Any:
         return self.l_matrix[:, 2, 2]
 
-
 # =============================================================================
 # transportMatrix -> normalized monoenergetic coefficients
 # =============================================================================
-
 
 def monoenergetic_dstar_from_transport_matrix(
     transport_matrix: Any,
@@ -401,11 +392,9 @@ def monoenergetic_dstar_from_transport_matrix(
         nu_star=nu_star,
     )
 
-
 # =============================================================================
 # The (nuPrime, EStar) scan
 # =============================================================================
-
 
 def _operator_at(
     op: KineticOperator,
@@ -456,7 +445,6 @@ def _operator_at(
         dphi_hat_dpsi_hat_kinetic=jnp.asarray(dphi, dtype=jnp.float64),
         with_exb=bool(dphi != 0.0),
     )
-
 
 def monoenergetic_database_from_operator(
     op: KineticOperator,
@@ -611,7 +599,6 @@ def monoenergetic_database_from_operator(
         deck_text=deck_text,
     )
 
-
 def _mono_raw_namelist(inp: SfincsInput, raw: Any) -> Any:
     """The deck's raw namelist with the RHSMode=3 monoenergetic forcing applied."""
     groups = {name: dict(values) for name, values in raw.groups.items()}
@@ -627,7 +614,6 @@ def _mono_raw_namelist(inp: SfincsInput, raw: Any) -> Any:
     groups.setdefault("othernumericalparameters", {})["NXI_FOR_X_OPTION"] = 0
     return replace(raw, groups=groups)
 
-
 def _grids_for_mono(inp: SfincsInput, raw: Any) -> Any:
     """Monoenergetic grids for the deck (RHSMode=3 forcing: ``Nx=1``)."""
     from .run import _grids_from_input  # noqa: PLC0415 - avoid import cycle at module load
@@ -636,7 +622,6 @@ def _grids_for_mono(inp: SfincsInput, raw: Any) -> Any:
     gen = replace(inp.general, rhs_mode=3)
     other = replace(inp.other, n_xi_for_x_option=0)
     return _grids_from_input(replace(inp, resolution=res, general=gen, other=other), raw)
-
 
 def monoenergetic_database(
     input_namelist: str | Path,
@@ -697,16 +682,13 @@ def monoenergetic_database(
         emit=emit,
     )
 
-
 def _effective_r_hat(radial: RadialCoordinates, b0_over_bbar: float) -> float:
     """Benchmark effective radius ``sqrt(2 psiHat / B0)`` of the surface."""
     return float(np.sqrt(2.0 * abs(float(radial.psi_hat)) / abs(float(b0_over_bbar))))
 
-
 # =============================================================================
 # Energy convolution: thermal transport matrices
 # =============================================================================
-
 
 def _bilinear(
     grid_x: jnp.ndarray, grid_y: jnp.ndarray, table: jnp.ndarray, x: jnp.ndarray, y: jnp.ndarray
@@ -745,7 +727,6 @@ def _bilinear(
         + v11 * fx * fy
     )
 
-
 def _dstar_lookup(
     db: MonoenergeticDatabase, nu_prime: jnp.ndarray, e_star: jnp.ndarray
 ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
@@ -773,7 +754,6 @@ def _dstar_lookup(
     d13 = _bilinear(log_nu, er_grid, jnp.asarray(db.d13_star, dtype=jnp.float64), q_nu, q_er)
     d31 = _bilinear(log_nu, er_grid, jnp.asarray(db.d31_star, dtype=jnp.float64), q_nu, q_er)
     return d11, d13, d31, d33
-
 
 def energy_convolution(
     db: MonoenergeticDatabase,
@@ -903,11 +883,9 @@ def energy_convolution(
         l_matrix=jnp.stack(matrices), x=x_q, x_weights=w_q
     )
 
-
 # =============================================================================
 # Save / load (compact npz database format)
 # =============================================================================
-
 
 def save_database(path: str | Path, db: MonoenergeticDatabase, *, overwrite: bool = True) -> Path:
     """Write a database to ``.npz`` (grids, coefficients, metadata, deck).
@@ -947,7 +925,6 @@ def save_database(path: str | Path, db: MonoenergeticDatabase, *, overwrite: boo
     }
     write_sfincs_npz(path=path, data=data, fortran_layout=False, overwrite=overwrite)
     return path
-
 
 def load_database(path: str | Path) -> MonoenergeticDatabase:
     """Read a database written by :func:`save_database`."""
