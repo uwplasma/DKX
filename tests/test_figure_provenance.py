@@ -93,3 +93,38 @@ def test_the_unresolved_count_only_falls():
 @pytest.mark.parametrize("key", ["schema_version", "purpose", "figures"])
 def test_manifest_shape(key: str):
     assert key in _manifest()
+
+
+def _evidence_figures() -> set[str]:
+    """Figures cited as evidence in a tracked completion record.
+
+    ``dkx.validation.release`` existence-checks these paths, so they are
+    load-bearing even though no page displays them.
+    """
+    cited = set()
+    for record in (REPO_ROOT / "docs" / "_static").glob("*.json"):
+        text = record.read_text()
+        for path in (REPO_ROOT / "docs" / "_static" / "figures").rglob("*.png"):
+            if path.name in text:
+                cited.add(str(path.relative_to(REPO_ROOT)))
+    return cited
+
+
+def test_no_figure_is_committed_without_a_consumer():
+    """A committed figure is shown by a page or cited as evidence — or it is weight.
+
+    Thirty-three figures were carried with neither: superseded plots, outputs of
+    scripts that still regenerate them on demand, and snapshots of runs nobody
+    links to.  Storing regenerable output that nothing displays costs the
+    repository's size budget and tells a reader nothing.
+    """
+    committed = {
+        str(path.relative_to(REPO_ROOT))
+        for path in (REPO_ROOT / "docs" / "_static" / "figures").rglob("*.png")
+    }
+    orphaned = committed - _referenced_figures() - _evidence_figures()
+    assert not orphaned, (
+        "committed but neither displayed nor cited as evidence: "
+        f"{sorted(orphaned)} — display it, cite it, or delete it and let the "
+        "script regenerate it"
+    )
