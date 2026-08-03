@@ -60,11 +60,14 @@ def test_a_deck_that_fits_is_allowed(monkeypatch):
     _check_coarse_preconditioner_fits(_small_op())  # must not raise
 
 
-def test_a_deck_whose_bands_exceed_ram_is_refused_with_the_way_out(monkeypatch):
-    """Refusal names the route that does fit, not only the problem.
+def test_the_refusal_states_the_size_and_the_options(monkeypatch):
+    """The message has to leave the user somewhere to go.
 
-    A guard that reports a number and stops is a worse experience than the
-    kill it replaces, because the user still has to work out what to do.
+    It deliberately does *not* recommend the sparse route.  That route stores
+    far less, but measured on the five decks that trigger this guard it was
+    killed on three and timed out on two, so recommending it would trade a
+    fast failure for a slow one.  A guard that sends users down a road that
+    also fails is worse than the kill it replaces.
     """
     monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
     op = _small_op()
@@ -72,9 +75,24 @@ def test_a_deck_whose_bands_exceed_ram_is_refused_with_the_way_out(monkeypatch):
     with pytest.raises(MemoryError) as excinfo:
         _check_coarse_preconditioner_fits(op)
     message = str(excinfo.value)
-    assert "preconditioner='sparse'" in message
+    assert f"{op.n_theta}x{op.n_zeta}" in message  # the size that did not fit
+    assert "reduce Ntheta/Nzeta or Nxi" in message  # what actually works
     assert "DKX_TIER2_MEMORY_GUARD=off" in message
-    assert f"{op.n_theta}x{op.n_zeta}" in message
+
+
+def test_the_refusal_does_not_recommend_a_route_that_also_fails(monkeypatch):
+    """Regression guard on the correction itself.
+
+    The first version of this message told users to switch to
+    ``preconditioner='sparse'``; the experiment that followed found it rescues
+    none of the five decks.  Re-adding that recommendation without new
+    measurement should fail here.
+    """
+    monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
+    monkeypatch.setattr("dkx.solve._host_memory_bytes", lambda: 1.0)
+    with pytest.raises(MemoryError) as excinfo:
+        _check_coarse_preconditioner_fits(_small_op())
+    assert "'sparse' stores far less but was measured killed" in str(excinfo.value)
 
 
 def test_the_guard_gates_the_coarse_build(monkeypatch):
