@@ -173,11 +173,20 @@ reference is the conda PETSc 3.23 + MUMPS 5.8.2 build of SFINCS v3.
   electron `FSABFlow` scatters 51% across its 1/2/4/8-rank runs (Krylov solver
   noise), while DKX matches the closest Fortran run to 2e-10.
 
-Scope: this is **one measured 744k-unknown HSX PAS case**; further cases are
-promoted here as each vertical slice lands with its own evidence. Full tables,
-provenance, and known issues: [docs/performance.rst](docs/performance.rst);
-regenerate with `python tools/benchmarks/tier1_hsx_head_to_head.py` and
-`python tools/benchmarks/readme_figures.py`.
+The above is **one measured 744k-unknown HSX PAS case** — a pitch-angle DKES deck,
+i.e. one where DKX has a structured direct solver. Across **all 38 upstream
+decks**, that distinction, not problem size, decides the outcome:
+
+![Speed-up and peak memory against problem size across the whole upstream suite](docs/_static/figures/paper_benchmarks/cross_code_matrix.png)
+
+Block elimination (tier 1) is faster on **9 of 9**; preconditioned Krylov
+(tier 2) on 7 of 23. The losses sit exactly where the block-tridiagonal-in-`L`
+structure breaks — Fokker-Planck collisions, magnetic drifts, the `Er`
+`xDot`/`xiDot` terms, the `Phi1` Newton iteration. Two facts run the other way,
+stated because the sweep settles them: DKX is **lighter on only 3 of 32** decks (a
+~0.5 GB JAX runtime floor sinks the small end), and **6 did not complete at all**
+against 38 of 38 for the reference. Median agreement `4.1e-06`. Full tables and
+provenance: [docs/performance.rst](docs/performance.rst).
 
 ## Differentiable optimization
 
