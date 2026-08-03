@@ -47,10 +47,6 @@ from __future__ import annotations
 
 from typing import Any, NamedTuple
 
-from jax import config as _jax_config
-
-_jax_config.update("jax_enable_x64", True)
-
 import jax.numpy as jnp  # noqa: E402
 
 from .collisions import apply_pitch_angle_scattering_v3  # noqa: E402
@@ -64,7 +60,6 @@ from .moments import (  # noqa: E402
 )
 
 __all__ = ["MonoenergeticD11Bounds", "d11_bounds_supported", "monoenergetic_d11_bounds"]
-
 
 class MonoenergeticD11Bounds(NamedTuple):
     """Variational upper/lower bounds bracketing the RHSMode=3 ``transportMatrix[0][0]``.
@@ -82,7 +77,6 @@ class MonoenergeticD11Bounds(NamedTuple):
     upper: jnp.ndarray
     gap: jnp.ndarray
 
-
 def d11_bounds_supported(op: Any) -> bool:
     """True when :func:`monoenergetic_d11_bounds` applies to this operator."""
     return (
@@ -98,7 +92,6 @@ def d11_bounds_supported(op: Any) -> bool:
         and not op.point_at_x0
     )
 
-
 def _check_supported(op: Any) -> None:
     if op.rhs_mode != 3:
         raise ValueError("monoenergetic_d11_bounds requires an RHSMode=3 operator.")
@@ -113,7 +106,6 @@ def _check_supported(op: Any) -> None:
         )
     if op.point_at_x0:
         raise ValueError("monoenergetic_d11_bounds does not support a speed-grid point at x=0.")
-
 
 def _entropy_weight(op: Any) -> jnp.ndarray:
     """Entropy inner-product weight ``W(s,x,l,theta,zeta)``.
@@ -135,7 +127,6 @@ def _entropy_weight(op: Any) -> jnp.ndarray:
         * w_tz[None, None, None, :, :]
         * jnp.ones((op.n_species, 1, 1, 1, 1), dtype=jnp.float64)
     )
-
 
 def _d11_prefactor(
     op: Any,
@@ -168,7 +159,6 @@ def _d11_prefactor(
         * t_hat**1.5
         / (op.delta**2 * g_hat**2 * vp * n_hat * m_hat**3.5)
     )
-
 
 def monoenergetic_d11_bounds(
     op: Any,
