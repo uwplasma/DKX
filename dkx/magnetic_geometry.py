@@ -38,10 +38,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, Iterator
 
-from jax import config as _jax_config
-
-_jax_config.update("jax_enable_x64", True)
-
 import jax.numpy as jnp  # noqa: E402
 import numpy as np  # noqa: E402
 
@@ -62,11 +58,9 @@ __all__ = [
 
 _MU0 = 4.0 * math.pi * 1e-7
 
-
 # =============================================================================
 # Container
 # =============================================================================
-
 
 @dataclass(frozen=True)
 class FluxSurfaceGeometry:
@@ -145,7 +139,6 @@ class FluxSurfaceGeometry:
     # ``from_vmec`` are module-level functions bound as classmethods at the
     # end of this file (keeping the dataclass body a pure data contract).
 
-
 def _geometry_from_boozer_bhat(
     *,
     n_periods: int,
@@ -204,11 +197,9 @@ def _geometry_from_boozer_bhat(
         **fields,
     )
 
-
 # =============================================================================
 # Fourier evaluation of BHat (shared by the analytic schemes and scheme 13)
 # =============================================================================
-
 
 def _harmonics_bhat_jax(
     *,
@@ -249,7 +240,6 @@ def _harmonics_bhat_jax(
     db_hat_dzeta = jnp.sum(amp3 * dzeta_basis, axis=0)
     return b_hat, db_hat_dtheta, db_hat_dzeta
 
-
 def _grid_mode_mask(
     *,
     n_theta: int,
@@ -277,7 +267,6 @@ def _grid_mode_mask(
     at_n_nyq = (n == 0) | (jnp.abs(n.astype(jnp.float64)) == (n_zeta / 2.0))
     return include & ~((~parity) & at_m_nyq & at_n_nyq)
 
-
 # =============================================================================
 # Analytic schemes 1-4 and namelist spectra (scheme 13)
 # =============================================================================
@@ -294,7 +283,6 @@ _SCHEME_CONSTANTS = {
     3: dict(n_periods=10, iota=0.4692, b0_over_bbar=1.0, g_hat=1.0 * 3.6024, i_hat=0.0, table=_SCHEME3_TABLE),
     4: dict(n_periods=5, iota=0.8700, b0_over_bbar=3.089, g_hat=-17.885, i_hat=0.0, table=_SCHEME4_TABLE),
 }
-
 
 def _from_scheme(
     cls,
@@ -368,7 +356,6 @@ def _from_scheme(
         db_hat_dtheta=db_dtheta,
         db_hat_dzeta=db_dzeta,
     )
-
 
 def _from_fourier(
     cls,
@@ -445,11 +432,9 @@ def _from_fourier(
         db_hat_dzeta=db_dzeta,
     )
 
-
 # =============================================================================
 # Boozer .bc files (geometryScheme 11/12): reader
 # =============================================================================
-
 
 @dataclass(frozen=True)
 class BoozerBcHeader:
@@ -459,7 +444,6 @@ class BoozerBcHeader:
     psi_a_hat: float
     a_hat: float
     turkin_sign: int
-
 
 @dataclass(frozen=True)
 class BoozerBcSurface:
@@ -480,13 +464,11 @@ class BoozerBcSurface:
     z_amp: np.ndarray  # (H,) float64
     dz_amp: np.ndarray  # (H,) float64
 
-
 def _parse_bc_header_line(line: str) -> tuple[list[int], list[float]]:
     parts = line.split()
     if len(parts) < 6:
         raise ValueError(f"Unexpected .bc header line (too short): {line!r}")
     return [int(x) for x in parts[:4]], [float(x.replace("D", "E").replace("d", "E")) for x in parts[4:]]
-
 
 def _try_parse_floats(tokens: list[str], count: int) -> list[float] | None:
     if len(tokens) < count:
@@ -499,7 +481,6 @@ def _try_parse_floats(tokens: list[str], count: int) -> list[float] | None:
             return None
     return out
 
-
 def _try_parse_ints(tokens: list[str], count: int) -> list[int] | None:
     if len(tokens) < count:
         return None
@@ -510,7 +491,6 @@ def _try_parse_ints(tokens: list[str], count: int) -> list[int] | None:
         except ValueError:
             return None
     return out
-
 
 def _iter_bc_surfaces(
     *, fh: IO[str], geometry_scheme: int, n_periods: int, psi_a_hat: float
@@ -613,7 +593,6 @@ def _iter_bc_surfaces(
             dz_amp=np.asarray(dz_list, dtype=np.float64),
         )
 
-
 # --- Vectorized .bc parsing --------------------------------------------------
 #
 # ``read_boozer_bc`` reads the whole file once: the Fortran ``d``/``D``
@@ -644,7 +623,6 @@ _BC_ROW_DTYPE = {
 _BcBlock = tuple[
     bool, float, float, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray
 ]
-
 
 def _bc_block_slow(lines: list[str], *, geometry_scheme: int) -> _BcBlock:
     """Per-line parse of one surface's numeric block (v3 list-directed rules)."""
@@ -709,7 +687,6 @@ def _bc_block_slow(lines: list[str], *, geometry_scheme: int) -> _BcBlock:
         np.asarray(dz_list, dtype=np.float64),
     )
 
-
 def _bc_block_from_rows(rows: np.ndarray, *, geometry_scheme: int) -> _BcBlock:
     """Vectorized equivalent of ``_bc_block_slow`` for a uniform numeric table."""
     m = rows["m"]
@@ -752,7 +729,6 @@ def _bc_block_from_rows(rows: np.ndarray, *, geometry_scheme: int) -> _BcBlock:
         np.column_stack([dzsin[keep], dzcos[keep]]).ravel(),
     )
 
-
 def _parse_bc_block(
     text: str,
     arr: np.ndarray,
@@ -783,7 +759,6 @@ def _parse_bc_block(
                 return _bc_block_from_rows(rows, geometry_scheme=geometry_scheme)
     lines = [text[int(line_starts[j]) : int(line_ends[j])] for j in range(i0, i1)]
     return _bc_block_slow(lines, geometry_scheme=geometry_scheme)
-
 
 def _parse_bc_text(
     text: str, buf: bytes, *, geometry_scheme: int, path: Path
@@ -885,7 +860,6 @@ def _parse_bc_text(
         i = block_end
     return header, tuple(surfaces)
 
-
 def _parse_bc_stream(
     fh: IO[str], *, geometry_scheme: int, path: Path
 ) -> tuple[BoozerBcHeader, tuple[BoozerBcSurface, ...]]:
@@ -920,7 +894,6 @@ def _parse_bc_stream(
     )
     return header, surfaces
 
-
 # Memoized .bc parses keyed by file identity (device/inode/mtime/size) and
 # geometry scheme.  Parsing a large .bc text file is a leading host-side cost
 # of a cold start, and the same equilibrium is read by grid construction,
@@ -931,7 +904,6 @@ _BC_PARSE_CACHE: dict[
     tuple[int, int, int, int, int], tuple[BoozerBcHeader, tuple[BoozerBcSurface, ...]]
 ] = {}
 _BC_PARSE_CACHE_MAX = 4
-
 
 def read_boozer_bc(
     path: str | Path, *, geometry_scheme: int
@@ -979,7 +951,6 @@ def read_boozer_bc(
     _BC_PARSE_CACHE[cache_key] = (header, surfaces)
     return header, surfaces
 
-
 def _bracketing_surfaces(
     surfaces: tuple[BoozerBcSurface, ...], r_n_wish: float
 ) -> tuple[BoozerBcSurface, BoozerBcSurface]:
@@ -1001,7 +972,6 @@ def _bracketing_surfaces(
         raise ValueError(f"Failed to locate surfaces bracketing rN_wish={r_n_wish}")
     return old, new
 
-
 def selected_r_n_from_bc(
     *, path: str | Path, geometry_scheme: int, r_n_wish: float, vmec_radial_option: int = 1
 ) -> float:
@@ -1022,11 +992,9 @@ def selected_r_n_from_bc(
     radial_weight = (s_new - s_wish) / (s_new - s_old)
     return float(math.sqrt(max(radial_weight * s_old + (1.0 - radial_weight) * s_new, 0.0)))
 
-
 # =============================================================================
 # Boozer .bc files: geometry construction
 # =============================================================================
-
 
 def _harmonics_bhat_np(
     *,
@@ -1074,7 +1042,6 @@ def _harmonics_bhat_np(
         dzeta_factor = float(n_periods) * nc
         dbdzeta = dbdzeta + np.sum(bc * np.where(pc, dzeta_factor * sin_a, -dzeta_factor * cos_a), axis=0)
     return out, dbdtheta, dbdzeta
-
 
 def _u_and_bsubpsi(
     *,
@@ -1173,7 +1140,6 @@ def _u_and_bsubpsi(
                     else:
                         b_sub_psi += (d_dzeta_amp / float(n) / float(n_periods)) * cos2d
     return b_sub_psi, db_sub_psi_dtheta, db_sub_psi_dzeta
-
 
 def _from_boozer(
     cls,
@@ -1332,7 +1298,6 @@ def _from_boozer(
         grad_psi_dot_grad_b_over_gpsipsi=grad_psi_dot_grad_b,
     )
 
-
 def _boozer_rzd_series(
     *,
     theta: np.ndarray,
@@ -1428,7 +1393,6 @@ def _boozer_rzd_series(
         d2z_dt2, d2z_dtz, d2z_dz2,
         d2dz_dt2, d2dz_dtz, d2dz_dz2,
     )  # fmt: skip
-
 
 def _boozer_psi_metrics(
     *,
@@ -1548,11 +1512,9 @@ def _boozer_psi_metrics(
     ) - float(p_prime_hat) / b_hat
     return gpsipsi, grad_psi_dot_grad_b
 
-
 # =============================================================================
 # VMEC wout files (geometryScheme 5): reader and radial interpolation
 # =============================================================================
-
 
 @dataclass(frozen=True)
 class VmecWout:
@@ -1604,7 +1566,6 @@ class VmecWout:
     rmns: np.ndarray | None = None  # (mnmax, ns) full mesh
     zmnc: np.ndarray | None = None  # (mnmax, ns) full mesh
     lmnc: np.ndarray | None = None  # (mnmax, ns) half mesh
-
 
 def read_vmec_wout(path: str | Path) -> VmecWout:
     """Read a VMEC ``wout_*.nc`` file.
@@ -1693,11 +1654,9 @@ def read_vmec_wout(path: str | Path) -> VmecWout:
         raise ValueError("Expected the first VMEC mode to be (0,0).")
     return out
 
-
 def psi_a_hat_from_wout(w: VmecWout) -> float:
     """``psiAHat = phi(ns) / (2 pi)`` as in v3."""
     return float(w.phi[-1]) / (2.0 * math.pi)
-
 
 @dataclass(frozen=True)
 class VmecRadialInterpolation:
@@ -1710,7 +1669,6 @@ class VmecRadialInterpolation:
     psi_n: float
     psi_n_full: np.ndarray  # (ns,)
     psi_n_half: np.ndarray  # (ns-1,)
-
 
 def vmec_radial_interpolation(*, w: VmecWout, psi_n_wish: float, vmec_radial_option: int) -> VmecRadialInterpolation:
     """v3's radius selection and interpolation index/weight logic (scheme 5)."""
@@ -1762,7 +1720,6 @@ def vmec_radial_interpolation(*, w: VmecWout, psi_n_wish: float, vmec_radial_opt
         psi_n_half=psi_n_half,
     )
 
-
 def _scale_factors(*, m: np.ndarray, n_over_nfp: np.ndarray, helicity_n: int, helicity_l: int, ripple_scale: float) -> np.ndarray:
     """v3 ``setScaleFactor``: keep the quasisymmetric family, scale the rest by rippleScale."""
     n = np.asarray(n_over_nfp, dtype=np.int64)
@@ -1772,7 +1729,6 @@ def _scale_factors(*, m: np.ndarray, n_over_nfp: np.ndarray, helicity_n: int, he
     else:
         scaled = ((n != 0) & (n * int(helicity_l) != m * int(helicity_n))) | (n == 0)
     return np.where(scaled, float(ripple_scale), 1.0)
-
 
 def _finite_diff_full_from_half(arr_half: np.ndarray, dpsi: float) -> np.ndarray:
     """v3 finite-difference: half-mesh table -> radial derivative on the full mesh.
@@ -1788,7 +1744,6 @@ def _finite_diff_full_from_half(arr_half: np.ndarray, dpsi: float) -> np.ndarray
         out[:, 0] = out[:, 1]
         out[:, ns - 1] = out[:, ns - 2]
     return out
-
 
 def _vmec_included_modes(
     *,
@@ -1843,7 +1798,6 @@ def _vmec_included_modes(
     if idx.size == 0:
         raise ValueError("No VMEC modes were included (min_Bmn_to_load too large?).")
     return idx, scale_all
-
 
 def _from_vmec(
     cls,
@@ -2125,7 +2079,6 @@ def _from_vmec(
         grad_psi_dot_grad_b_over_gpsipsi=grad_psi_dot_grad_b,
     )
 
-
 def _gpsipsi_vmec(
     *,
     w: VmecWout,
@@ -2279,7 +2232,6 @@ def _gpsipsi_vmec(
     denom = g_tt * g_zz - g_tz * g_tz
     gpsipsi = 1.0 / (g_pp + (g_pt * (g_tz * g_pz - g_pt * g_zz) + g_pz * (g_pt * g_tz - g_tt * g_pz)) / denom)
     return gpsipsi, (g_tt, g_tz, g_zz, g_pt, g_pz)
-
 
 # Bind constructors (defined as module-level functions to keep the dataclass
 # body focused on the data contract):

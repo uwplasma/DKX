@@ -90,10 +90,6 @@ from typing import Any
 
 import numpy as np
 
-from jax import config as _jax_config
-
-_jax_config.update("jax_enable_x64", True)
-
 import jax  # noqa: E402
 import jax.numpy as jnp  # noqa: E402
 
@@ -104,11 +100,9 @@ __all__ = [
     "effective_ripple",
 ]
 
-
 # =============================================================================
 # Container
 # =============================================================================
-
 
 @dataclass(frozen=True)
 class BounceAveragedTransport:
@@ -135,11 +129,9 @@ class BounceAveragedTransport:
     grad_psi_avg: jnp.ndarray
     r_major: jnp.ndarray
 
-
 # =============================================================================
 # Spectral field-line evaluation
 # =============================================================================
-
 
 def _mode_indices(n_theta: int, n_zeta: int, m_keep: int, n_keep: int):
     """Static indices/mode numbers of the kept low ``(m, n)`` band of the FFT grid."""
@@ -150,7 +142,6 @@ def _mode_indices(n_theta: int, n_zeta: int, m_keep: int, n_keep: int):
     nn = nn.ravel()
     keep = (np.abs(mm) <= m_keep) & (np.abs(nn) <= n_keep)
     return np.where(keep)[0], mm[keep].astype(float), nn[keep].astype(float)
-
 
 def _line_spectrum(b_hat, n_periods, iota, alpha0, m_keep, n_keep):
     """Band-limited along-field-line spectrum of ``|B|`` at label ``alpha0``.
@@ -170,7 +161,6 @@ def _line_spectrum(b_hat, n_periods, iota, alpha0, m_keep, n_keep):
     w_j = m_j * iota + nph_j
     return c_j, m_j, nph_j, w_j
 
-
 def _eval_line(c_j, m_j, nph_j, w_j, z):
     """Spectral ``|B|`` and its ``theta``/``zeta`` partials along the line at ``z``."""
     e = jnp.exp(1j * z[..., None] * w_j)
@@ -178,7 +168,6 @@ def _eval_line(c_j, m_j, nph_j, w_j, z):
     db_dtheta = jnp.real(e @ (1j * m_j * c_j))
     db_dzeta = jnp.real(e @ (1j * nph_j * c_j))
     return b, db_dtheta, db_dzeta
-
 
 def _geometry_fields(geometry):
     """Extract ``(b_hat, g_hat, i_hat, iota, n_periods, b0)`` from a geometry."""
@@ -189,7 +178,6 @@ def _geometry_fields(geometry):
     b0 = jnp.asarray(geometry.b0_over_bbar, dtype=jnp.float64)
     return b_hat, g_hat, i_hat, iota, int(geometry.n_periods), b0
 
-
 def _default_bandwidth(n_theta: int, n_zeta: int, m_keep, n_keep):
     if m_keep is None:
         m_keep = min(n_theta // 2, 12)
@@ -197,11 +185,9 @@ def _default_bandwidth(n_theta: int, n_zeta: int, m_keep, n_keep):
         n_keep = min(n_zeta // 2, 8)
     return int(m_keep), int(n_keep)
 
-
 # =============================================================================
 # Differentiable bounce primitive: the deepest well
 # =============================================================================
-
 
 def deep_well_bounce_integrals(
     geometry: Any,
@@ -247,7 +233,6 @@ def deep_well_bounce_integrals(
         b_hat, g_hat, i_hat, iota, n_periods, jnp.asarray(reflect_fraction, dtype=jnp.float64),
         int(n_scan), int(n_periods_scan), int(n_quad), m_keep, n_keep,
     )  # fmt: skip
-
 
 @functools.partial(jax.jit, static_argnums=(4, 6, 7, 8, 9, 10))
 def _deep_well(b_hat, g_hat, i_hat, iota, n_periods, reflect_fraction,
@@ -306,11 +291,9 @@ def _deep_well(b_hat, g_hat, i_hat, iota, n_periods, reflect_fraction,
     drift_int = jnp.sum(wq * jac * root * d_psi * meas)
     return j_inv, drift_int / j_inv
 
-
 # =============================================================================
 # The 1/nu effective-ripple functional
 # =============================================================================
-
 
 @functools.partial(jax.jit, static_argnums=(4, 7, 8, 9, 10, 11, 12, 13))
 def _gamma_c_line(b_hat, g_hat, i_hat, iota, n_periods, b0, alpha0,
@@ -408,7 +391,6 @@ def _gamma_c_line(b_hat, g_hat, i_hat, iota, n_periods, b0, alpha0,
     integ = jax.vmap(per_rho)(rho)
     return jnp.trapezoid(integ, rho) / l_norm, b_min, b_max
 
-
 @functools.partial(jax.jit, static_argnums=(4, 6, 7, 8, 9, 10, 11, 12, 13))
 def _gamma_c(b_hat, g_hat, i_hat, iota, n_periods, b0,
             m_keep, n_keep, npi, ppp, n_rho, n_q, w_max, n_lines):  # fmt: skip
@@ -424,7 +406,6 @@ def _gamma_c(b_hat, g_hat, i_hat, iota, n_periods, b0,
 
     gcs, bmins, bmaxs = jax.vmap(one)(alphas)
     return jnp.mean(gcs), jnp.min(bmins), jnp.max(bmaxs)
-
 
 def bounce_averaged_transport(
     geometry: Any,
@@ -500,12 +481,10 @@ def bounce_averaged_transport(
         r_major=r_major,
     )
 
-
 def effective_ripple(geometry: Any, **kwargs) -> jnp.ndarray:
     """Convenience wrapper returning only ``epsilon_eff`` (see
     :func:`bounce_averaged_transport`)."""
     return bounce_averaged_transport(geometry, **kwargs).epsilon_eff
-
 
 def _resolve_grad_psi_avg(geometry, grad_psi_avg, r_eff, b0):
     """``<|grad psi|>`` from an explicit value, the geometry metric, or LAR.

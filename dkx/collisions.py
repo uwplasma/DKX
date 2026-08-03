@@ -6,10 +6,6 @@ import math
 import os
 from dataclasses import dataclass
 
-from jax import config as _jax_config
-
-_jax_config.update("jax_enable_x64", True)
-
 import jax  # noqa: E402
 import jax.numpy as jnp  # noqa: E402
 import numpy as np  # noqa: E402
@@ -20,10 +16,8 @@ from scipy.integrate import quad  # noqa: E402
 
 from dkx.xgrid import XGrid, make_x_grid  # noqa: E402
 
-
 _V3_PI = 3.14159265358979
 _V3_SQRTPI = 1.77245385090552
-
 
 def _erf_np(x: np.ndarray) -> np.ndarray:
     """Use libm-based erf for closer parity with Fortran's intrinsic."""
@@ -32,7 +26,6 @@ def _erf_np(x: np.ndarray) -> np.ndarray:
         return x
     vec = np.vectorize(math.erf, otypes=[np.float64])
     return vec(x)
-
 
 def _psi_chandra(x: jnp.ndarray) -> jnp.ndarray:
     """Chandrasekhar function Ψ(x).
@@ -53,7 +46,6 @@ def _psi_chandra(x: jnp.ndarray) -> jnp.ndarray:
     x2 = x * x
     series = ((2.0 / 3.0) * x - (2.0 / 5.0) * x * x2 + (1.0 / 7.0) * x * x2 * x2) / sqrt_pi
     return jnp.where(small, series, num / den)
-
 
 def nu_d_hat_pitch_angle_scattering_v3(
     *,
@@ -96,7 +88,6 @@ def nu_d_hat_pitch_angle_scattering_v3(
     prefac = (3.0 * jnp.asarray(_V3_SQRTPI, dtype=jnp.float64) / 4.0) / t32m  # (S,)
     sum_b = jnp.sum((z2[None, :, None] * n_hats[None, :, None]) * term, axis=1)  # (S,X)
     return prefac[:, None] * z2[:, None] * sum_b
-
 
 def polynomial_interpolation_matrix_np(
     *,
@@ -159,7 +150,6 @@ def polynomial_interpolation_matrix_np(
             mat[i, j] *= factor
     return mat
 
-
 def _poly_coeffs_monomial(xg: XGrid) -> list[np.ndarray]:
     """Return monomial coefficients for the orthogonal polynomials used by v3 `xGrid`.
 
@@ -200,14 +190,12 @@ def _poly_coeffs_monomial(xg: XGrid) -> list[np.ndarray]:
         coeffs.append(out)
     return coeffs
 
-
 def _monomial_int_lower(xb: float, n: int) -> float:
     """∫_0^xb t^n e^{-t^2} dt (n >= 0)."""
     if n < 0:
         raise ValueError("lower monomial integral is only used for n >= 0 in v3")
     a = 0.5 * (n + 1.0)
     return float(0.5 * sp_special.gamma(a) * sp_special.gammainc(a, xb * xb))
-
 
 def _monomial_int_upper(xb: float, n: int) -> float:
     """∫_xb^∞ t^n e^{-t^2} dt for any integer ``n`` used by v3.
@@ -268,7 +256,6 @@ def _monomial_int_upper(xb: float, n: int) -> float:
         current = next_a
     return float(0.5 * upper_gamma)
 
-
 def _evaluate_polynomial_v3(x: float, *, j: int, a: np.ndarray, b: np.ndarray) -> float:
     """Evaluate v3's orthogonal polynomial p_j(x) using the 3-term recurrence.
 
@@ -283,7 +270,6 @@ def _evaluate_polynomial_v3(x: float, *, j: int, a: np.ndarray, b: np.ndarray) -
         y = (x - float(a[ii])) * pj - float(b[ii]) * pj_minus1
         pj_minus1, pj = pj, y
     return float(y)
-
 
 def _rosenbluth_potential_terms_v3_np_quadpack(
     *,
@@ -434,10 +420,8 @@ def _rosenbluth_potential_terms_v3_np_quadpack(
 
     return terms
 
-
 ROSENBLUTH_METHODS: tuple[str, ...] = ("quadpack", "analytic", "hybrid")
 """Accepted ``rosenbluth_method`` values, in order of increasing Fortran divergence."""
-
 
 def resolve_rosenbluth_method(method: str | None) -> str:
     """Normalize and validate a Rosenbluth-quadrature selector.
@@ -470,7 +454,6 @@ def resolve_rosenbluth_method(method: str | None) -> str:
             "argument, or the DKX_ROSENBLUTH_METHOD override)."
         )
     return resolved
-
 
 def rosenbluth_potential_terms_v3_np(
     *,
@@ -654,7 +637,6 @@ def rosenbluth_potential_terms_v3_np(
 
     return terms
 
-
 @jtu.register_pytree_node_class
 @dataclass(frozen=True)
 class PitchAngleScatteringV3Operator:
@@ -691,7 +673,6 @@ class PitchAngleScatteringV3Operator:
             mask_xi=mask_xi,
         )
 
-
 def make_pitch_angle_scattering_v3_operator(
     *,
     x: jnp.ndarray,
@@ -721,11 +702,9 @@ def make_pitch_angle_scattering_v3_operator(
         mask_xi=mask,
     )
 
-
 def _mask_xi(n_xi_for_x: jnp.ndarray, n_xi_max: int) -> jnp.ndarray:
     ell = jnp.arange(n_xi_max, dtype=jnp.int32)[None, :]
     return ell < n_xi_for_x[:, None]
-
 
 def apply_pitch_angle_scattering_v3(op: PitchAngleScatteringV3Operator, f: jnp.ndarray) -> jnp.ndarray:
     """Apply v3 pitch-angle scattering collisions to `f`.
@@ -760,9 +739,7 @@ def apply_pitch_angle_scattering_v3(op: PitchAngleScatteringV3Operator, f: jnp.n
     out = coef[:, :, :, None, None] * f
     return out * mask[None, :, :, None, None]
 
-
 apply_pitch_angle_scattering_v3_jit = jax.jit(apply_pitch_angle_scattering_v3, static_argnums=())
-
 
 @jtu.register_pytree_node_class
 @dataclass(frozen=True)
@@ -791,7 +768,6 @@ class FokkerPlanckV3Operator:
         del aux
         mat, n_xi_for_x, mask_xi = children
         return cls(mat=mat, n_xi_for_x=n_xi_for_x, mask_xi=mask_xi)
-
 
 def make_fokker_planck_v3_operator(
     *,
@@ -977,7 +953,6 @@ def make_fokker_planck_v3_operator(
         mask_xi=_mask_xi(jnp.asarray(n_xi_for_x, dtype=jnp.int32), int(n_xi)),
     )
 
-
 def apply_fokker_planck_v3(op: FokkerPlanckV3Operator, f: jnp.ndarray) -> jnp.ndarray:
     """Apply the v3 `collisionOperator=0` collision operator to `f` (no Phi1)."""
     if f.ndim != 5:
@@ -997,9 +972,7 @@ def apply_fokker_planck_v3(op: FokkerPlanckV3Operator, f: jnp.ndarray) -> jnp.nd
         mask = op.mask_xi.astype(y.dtype)
     return y * mask[None, :, :, None, None]
 
-
 apply_fokker_planck_v3_jit = jax.jit(apply_fokker_planck_v3, static_argnums=())
-
 
 @jtu.register_pytree_node_class
 @dataclass(frozen=True)
@@ -1085,7 +1058,6 @@ class FokkerPlanckV3Phi1Operator:
             k_rosen=k_rosen,
             n_xi_for_x=n_xi_for_x,
         )
-
 
 def make_fokker_planck_v3_phi1_operator(
     *,
@@ -1220,7 +1192,6 @@ def make_fokker_planck_v3_phi1_operator(
         n_xi_for_x=jnp.asarray(n_xi_for_x, dtype=jnp.int32),
     )
 
-
 def apply_fokker_planck_v3_phi1(op: FokkerPlanckV3Phi1Operator, f: jnp.ndarray, *, phi1_hat: jnp.ndarray) -> jnp.ndarray:
     """Apply the v3 `collisionOperator=0` collision operator including Phi1 in collisions."""
     if f.ndim != 5:
@@ -1274,9 +1245,7 @@ def apply_fokker_planck_v3_phi1(op: FokkerPlanckV3Phi1Operator, f: jnp.ndarray, 
     mask = _mask_xi(op.n_xi_for_x.astype(jnp.int32), n_xi).astype(y_out.dtype)  # (X,L)
     return y_out * mask[None, :, :, None, None]
 
-
 apply_fokker_planck_v3_phi1_jit = jax.jit(apply_fokker_planck_v3_phi1, static_argnums=())
-
 
 # ---------------------------------------------------------------------------
 # Improved Sugama linearized model collision operator (collisionOperator = 3).
@@ -1311,7 +1280,6 @@ apply_fokker_planck_v3_phi1_jit = jax.jit(apply_fokker_planck_v3_phi1, static_ar
 # operator whose moment functional cancels the test-particle moment functional
 # algebraically -- the essence of the moment approach.
 # ---------------------------------------------------------------------------
-
 
 def _improved_sugama_pair_kernels(
     *,
@@ -1390,7 +1358,6 @@ def _improved_sugama_pair_kernels(
             ce_ab[ia, ib, :, :] = ce
     return nu_d_ab, ce_ab
 
-
 @jtu.register_pytree_node_class
 @dataclass(frozen=True)
 class ImprovedSugamaV3Operator:
@@ -1447,7 +1414,6 @@ class ImprovedSugamaV3Operator:
             columns=columns,
             extraction=extraction,
         )
-
 
 def make_improved_sugama_v3_operator(
     *,
@@ -1609,7 +1575,6 @@ def make_improved_sugama_v3_operator(
         extraction=jnp.asarray(extraction),
     )
 
-
 def apply_improved_sugama_v3(op: ImprovedSugamaV3Operator, f: jnp.ndarray) -> jnp.ndarray:
     """Apply the improved Sugama model collision operator to ``f``.
 
@@ -1633,6 +1598,5 @@ def apply_improved_sugama_v3(op: ImprovedSugamaV3Operator, f: jnp.ndarray) -> jn
     else:
         mask = op.mask_xi.astype(y.dtype)
     return y * mask[None, :, :, None, None]
-
 
 apply_improved_sugama_v3_jit = jax.jit(apply_improved_sugama_v3, static_argnums=())

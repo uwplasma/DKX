@@ -353,9 +353,6 @@ from dataclasses import dataclass, replace
 from typing import Callable
 
 import numpy as np
-from jax import config as _jax_config
-
-_jax_config.update("jax_enable_x64", True)
 
 import jax  # noqa: E402
 import jax.numpy as jnp  # noqa: E402
@@ -391,12 +388,10 @@ __all__ = [
     "xi_transfer_matrices",
 ]
 
-
 # Relative floor added to every diagonal block so a collisionless, drift-free
 # coarse f-block (whose diagonal is EXACTLY zero) still factors; mirrors
 # ``dkx.solve.build_coarse_preconditioner``.
 _DIAGONAL_FLOOR = 1e-8
-
 
 @dataclass(frozen=True)
 class MultigridSettings:
@@ -472,11 +467,9 @@ class MultigridSettings:
     plane_pin: float = 1.0
     absolute_reaction: bool = True
 
-
 # =============================================================================
 # The simplified (SFINCS ``preconditionerOptions``) operator, as an operator
 # =============================================================================
-
 
 def _collision_diagonal(op: KineticOperator) -> jnp.ndarray | None:
     """``(S, X, L)`` self-species x-diagonal reduction of the dense collisions."""
@@ -490,7 +483,6 @@ def _collision_diagonal(op: KineticOperator) -> jnp.ndarray | None:
         extra = _collision_phi1_diagonal(op)
         total = extra if total is None else total + extra
     return total
-
 
 def simplified_operator(
     op: KineticOperator, *, drop_l_coupling: bool = False
@@ -568,11 +560,9 @@ def simplified_operator(
         )
     return simplified
 
-
 # =============================================================================
 # Grid transfers
 # =============================================================================
-
 
 def periodic_transfer_matrices(
     n_fine: int, n_coarse: int
@@ -623,7 +613,6 @@ def periodic_transfer_matrices(
     restrict = prolong.T / prolong.sum(axis=0)[:, None]
     return jnp.asarray(restrict), jnp.asarray(prolong)
 
-
 def xi_transfer_matrices(l_fine: int, l_coarse: int) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Legendre p-coarsening transfers: spectral truncation and zero-padding.
 
@@ -647,7 +636,6 @@ def xi_transfer_matrices(l_fine: int, l_coarse: int) -> tuple[jnp.ndarray, jnp.n
     restrict = jnp.eye(l_fine, dtype=jnp.float64)[:l_coarse, :]
     return restrict, restrict.T
 
-
 def _separable_transfer(
     matrices: dict[int, jnp.ndarray],
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
@@ -666,7 +654,6 @@ def _separable_transfer(
 
     return apply
 
-
 def _next_odd(n: int, minimum: int) -> int | None:
     """Next coarser odd size of a periodic axis, or ``None`` when it must stop.
 
@@ -681,7 +668,6 @@ def _next_odd(n: int, minimum: int) -> int | None:
     if coarse % 2 == 0:
         coarse -= 1
     return coarse if coarse >= minimum else None
-
 
 def hierarchy_shapes(
     op: KineticOperator, settings: MultigridSettings = MultigridSettings()
@@ -713,7 +699,6 @@ def hierarchy_shapes(
         )
     return tuple(shapes)
 
-
 # =============================================================================
 # Rediscretization on a coarse grid
 # =============================================================================
@@ -723,7 +708,6 @@ def hierarchy_shapes(
 #: The centered first derivative has no diagonal entry, so the half-width --
 #: not the nonzero count -- is what identifies the scheme.
 _STENCIL_BY_RADIUS = {1: (0, 0.5), 2: (10, 2.0 / 3.0)}
-
 
 def _angular_stencil(dd: jnp.ndarray) -> tuple[int, float]:
     """``(scheme, spacing)`` of a uniform periodic first-derivative matrix.
@@ -752,7 +736,6 @@ def _angular_stencil(dd: jnp.ndarray) -> tuple[int, float]:
     spacing = float(lead / row[1])
     return scheme, spacing
 
-
 def _coarse_diff_matrix(dd: jnp.ndarray, n_fine: int, n_coarse: int) -> jnp.ndarray:
     """Rediscretize a periodic derivative matrix on a coarser uniform grid."""
     if n_coarse == n_fine:
@@ -763,7 +746,6 @@ def _coarse_diff_matrix(dd: jnp.ndarray, n_fine: int, n_coarse: int) -> jnp.ndar
         n=n_coarse, x_min=0.0, x_max=span, scheme=scheme
     )
     return coarse
-
 
 def coarsen_operator(
     level: KineticOperator, n_theta: int, n_zeta: int, n_xi: int
@@ -847,11 +829,9 @@ def coarsen_operator(
         **fields,
     )
 
-
 # =============================================================================
 # Level operator: pinned matvec + null-space pin
 # =============================================================================
-
 
 def _band_scale(level: KineticOperator) -> jnp.ndarray:
     """``(S, X)`` magnitude of the level operator's streaming/mirror band."""
@@ -868,7 +848,6 @@ def _band_scale(level: KineticOperator) -> jnp.ndarray:
     return (
         jnp.sqrt(level.t_hat / level.m_hat)[:, None] * level.x[None, :] * stream * couple
     )
-
 
 def _shift(level: KineticOperator, weight: float) -> jnp.ndarray:
     """``(S, X)`` regularizing diagonal shift ``delta`` of the level operator.
@@ -913,7 +892,6 @@ def _shift(level: KineticOperator, weight: float) -> jnp.ndarray:
     scale = jnp.where(scale > 0.0, scale, jnp.where(band > 0.0, band, 1.0))
     return float(weight) * scale
 
-
 def _level_matvec(
     level: KineticOperator, weight: float
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
@@ -936,7 +914,6 @@ def _level_matvec(
         return level.apply_f(active) + shift * active + f * (1.0 - mask)
 
     return matvec
-
 
 def _coarse_solve(
     level: KineticOperator, weight: float
@@ -972,11 +949,9 @@ def _coarse_solve(
 
     return solve
 
-
 # =============================================================================
 # Smoother
 # =============================================================================
-
 
 def _streaming_eigenbasis(level: KineticOperator) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """``(V, V^-1, lambda)`` diagonalizing the Legendre ``xi``-multiplication matrix.
@@ -1002,7 +977,6 @@ def _streaming_eigenbasis(level: KineticOperator) -> tuple[np.ndarray, np.ndarra
     v = scale[:, None] * vectors
     v_inv = vectors.T / scale[None, :]
     return v, v_inv, values
-
 
 def _advection_bands(
     wind: jnp.ndarray, dd: jnp.ndarray, stencil: str
@@ -1053,7 +1027,6 @@ def _advection_bands(
         raise ValueError(f"unknown stencil {stencil!r}; expected 'upwind' or 'centered'")
     return wind * float(row[-1]), wind * float(row[0]), wind * float(row[1])
 
-
 def _plane_angle(level: KineticOperator) -> int:
     """Which angle the ``"legendre_plane"`` smoother resolves exactly: 3 or 4.
 
@@ -1072,7 +1045,6 @@ def _plane_angle(level: KineticOperator) -> int:
     strength_theta = float(jnp.max(jnp.abs(level.b_hat_sup_theta / level.b_hat))) / h_theta
     strength_zeta = float(jnp.max(jnp.abs(level.b_hat_sup_zeta / level.b_hat))) / h_zeta
     return 3 if strength_theta > strength_zeta else 4
-
 
 def _legendre_plane_blocks(
     level: KineticOperator, axis: int, weight: float, pin: float
@@ -1195,7 +1167,6 @@ def _legendre_plane_blocks(
     flat = (n_s * n_x * n_other, n_xi, n_plane, n_plane)
     return tuple(a.reshape(flat) for a in (lower, diag, upper))
 
-
 def _legendre_plane_solve(
     level: KineticOperator, axis: int, weight: float, pin: float = 1.0
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
@@ -1217,7 +1188,6 @@ def _legendre_plane_solve(
         return jnp.transpose(y, backward)
 
     return solve
-
 
 def _level_smoother(level: KineticOperator, settings: MultigridSettings, weight: float):
     """The relaxation sweep of one level.
@@ -1395,17 +1365,14 @@ def _level_smoother(level: KineticOperator, settings: MultigridSettings, weight:
         )
     return alternating_smoother(parts) if len(parts) > 1 else parts[0]
 
-
 # =============================================================================
 # Assembly
 # =============================================================================
-
 
 def _levels(op: KineticOperator, settings: MultigridSettings):
     """Rediscretized level operators, finest first (the coarsest one last)."""
     shapes = hierarchy_shapes(op, settings)
     return tuple(coarsen_operator(op, *shape) for shape in shapes)
-
 
 def build_multigrid_f_inverse(
     op: KineticOperator,
@@ -1467,7 +1434,6 @@ def build_multigrid_f_inverse(
 
     return a_inv, shapes
 
-
 def build_multigrid_preconditioner(
     op: KineticOperator,
     *,
@@ -1526,7 +1492,6 @@ def build_multigrid_preconditioner(
         schur_projected_precond(a_inv_t, c_rows.T, b_cols.T),
     )
 
-
 def measure_smoothing_factor(
     op: KineticOperator,
     *,
@@ -1559,7 +1524,6 @@ def measure_smoothing_factor(
     )
     return float(value)
 
-
 # =============================================================================
 # Pitch-basis diagnostics: why no relaxation smooths in a Legendre-modal basis
 # =============================================================================
@@ -1569,7 +1533,6 @@ def measure_smoothing_factor(
 # be made to work on a Legendre-modal pitch discretization -- is reproducible
 # from the repository rather than asserted, and so a future lane can re-measure
 # it on its own deck before spending a week on the alternative.
-
 
 # Backward-biased (wind blowing from smaller index) first-derivative stencils,
 # as offsets in units of the grid spacing.  ``up*`` are the textbook one-sided
@@ -1588,7 +1551,6 @@ UPWIND_STENCILS: dict[str, tuple[int, ...]] = {
     "ctr2": (-1, 0, 1),
 }
 
-
 def _stencil_weights(offsets: tuple[int, ...], order: int = 1) -> np.ndarray:
     """Finite-difference weights of the ``order``-th derivative at ``offsets*h``."""
     nodes = np.asarray(offsets, dtype=np.float64)
@@ -1596,7 +1558,6 @@ def _stencil_weights(offsets: tuple[int, ...], order: int = 1) -> np.ndarray:
     rhs = np.zeros(nodes.size)
     rhs[order] = float(math.factorial(order))
     return np.linalg.solve(vander, rhs)
-
 
 def stencil_matrices(
     n: int, h: float, name: str, *, periodic: bool = True
@@ -1640,7 +1601,6 @@ def stencil_matrices(
 
     return build(offsets), build(tuple(-o for o in offsets)[::-1])
 
-
 def line_diagonal_dominance(
     matrix: np.ndarray, shape: tuple[int, ...], axis: int
 ) -> tuple[float, float]:
@@ -1676,7 +1636,6 @@ def line_diagonal_dominance(
     ratio = np.where(finite, diag / np.where(finite, off, 1.0), np.inf)
     return float(ratio.min()), float(np.median(ratio))
 
-
 def dense_simplified_block(
     op: KineticOperator, *, species: int = 0, speed: int = 0
 ) -> np.ndarray:
@@ -1705,7 +1664,6 @@ def dense_simplified_block(
         if ell + 1 < n_l:
             out[row, (ell + 1) * n_tz : (ell + 2) * n_tz] = upper[ell]
     return out
-
 
 @dataclass(frozen=True)
 class PitchCollocationSurrogate:
@@ -1738,7 +1696,6 @@ class PitchCollocationSurrogate:
         g = np.asarray(nodal).reshape(self.shape)
         return np.einsum("la,atz->ltz", self.to_modal, g).reshape(-1)
 
-
 def _legendre_vandermonde(xi: np.ndarray, n_l: int) -> np.ndarray:
     out = np.zeros((xi.size, n_l))
     out[:, 0] = 1.0
@@ -1747,7 +1704,6 @@ def _legendre_vandermonde(xi: np.ndarray, n_l: int) -> np.ndarray:
     for ell in range(1, n_l - 1):
         out[:, ell + 1] = ((2 * ell + 1) * xi * out[:, ell] - ell * out[:, ell - 1]) / (ell + 1)
     return out
-
 
 def _uniform_spacing(ddx: np.ndarray, n: int) -> float:
     """Recover the grid spacing of a centered periodic first-derivative matrix.
@@ -1768,7 +1724,6 @@ def _uniform_spacing(ddx: np.ndarray, n: int) -> float:
         "the pitch-collocation surrogate needs a 3- or 5-point centered angular "
         f"scheme to recover the grid spacing from, got {n_nonzero} nonzero weights"
     )
-
 
 def pitch_collocation_surrogate(
     op: KineticOperator,
@@ -1881,7 +1836,6 @@ def pitch_collocation_surrogate(
     return PitchCollocationSurrogate(
         matrix=matrix, to_nodal=vander, to_modal=pinv, shape=shape, alpha=alpha
     )
-
 
 def line_smoother_spectral_radius(
     matrix: np.ndarray, shape: tuple[int, ...], *, omega: float = 1.0, floor: float = 1e-12
