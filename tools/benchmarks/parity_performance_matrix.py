@@ -466,6 +466,16 @@ def main(argv: list[str] | None = None) -> int:
         print(f"refusing to start: {reason}", file=sys.stderr)
         return 2
 
+    # A sweep runs for hours, so something always ends up waiting on it.  Clear
+    # the sentinel at the start and write it at the end, so a waiter can poll a
+    # *file*: `until [ -f sweep.jsonl.done ]; do sleep 60; done`.  Waiting on a
+    # process instead is a trap -- `pgrep -f parity_performance_matrix` matches
+    # the waiting shell's own command line, so the loop waits on itself and
+    # never exits.  That cost a day of wall clock on 2026-08-01, with the sweep
+    # sitting complete the whole time.
+    sentinel = args.out.with_suffix(args.out.suffix + ".done")
+    sentinel.unlink(missing_ok=True)
+
     done = set()
     if args.out.exists():
         for line in args.out.read_text().splitlines():
@@ -509,6 +519,31 @@ def main(argv: list[str] | None = None) -> int:
                 f"/{dkx.get('peak_rss_gb')}GB",
                 file=sys.stderr,
             )
+
+    records = [
+        json.loads(line)
+        for line in args.out.read_text().splitlines()
+        if line.strip()
+    ]
+    summary = {
+        "cases": len(records),
+        "fortran_ok": sum(
+            1 for r in records
+            if ((r.get("fortran") or {}).get("1") or {}).get("succeeded")
+        ),
+        "dkx_ok": sum(1 for r in records if (r.get("dkx") or {}).get("warm_s")),
+        "comparable": sum(
+            1 for r in records
+            if any(isinstance(v, float) for v in (r.get("parity") or {}).values())
+        ),
+    }
+    sentinel.write_text(json.dumps(summary, indent=2) + "\n")
+    print(
+        f"sweep complete: {summary['cases']} cases, "
+        f"fortran ok {summary['fortran_ok']}, dkx ok {summary['dkx_ok']}, "
+        f"comparable {summary['comparable']} -> {sentinel}",
+        file=sys.stderr,
+    )
     return 0
 
 
