@@ -66,6 +66,72 @@ batching over (species, ``x``, surfaces/``Er``) or fp32 factors with fp64
 refinement. Scope: this is one measured 744k-unknown HSX PAS case; further
 cases are promoted as each vertical slice lands with its own evidence.
 
+**Read that number together with the whole-suite sweep below.** It is a
+pitch-angle-scattering DKES-trajectory deck, which is to say one where ``dkx``
+has a structured direct solver. That is the group it represents, and the sweep
+shows the group is not the whole suite.
+
+The whole upstream suite, both codes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Every deck in ``fortran/version3/examples`` run end to end through both codes
+(38 decks; geometry schemes 1/2/4/5/11 plus the filtered W7-X netCDF
+equilibria, pitch-angle and Fokker-Planck collisions, zero and finite ``Er``,
+``Phi1`` on and off, tangential magnetic drifts, one to three species, 651 to
+1.9M unknowns).  Reproduce with
+``tools/benchmarks/parity_performance_matrix.py``; plot with
+``examples/paper_benchmarks/cross_code_matrix.py``.
+
+.. figure:: _static/figures/paper_benchmarks/cross_code_matrix.png
+   :alt: Speed-up and peak memory against problem size for dkx and SFINCS Fortran v3 across the upstream example suite.
+   :align: center
+   :width: 95%
+
+   Warm ``dkx`` solve against the Fortran binary's wall time, coloured by which
+   solver ``dkx`` could use.
+
+Taken as one number the sweep is 16 of 32 completed decks faster, which reads
+as a coin flip and explains nothing.  Split by solver route it is not a coin
+flip:
+
+.. list-table:: Outcome by solver route
+   :header-rows: 1
+
+   * - route
+     - faster than SFINCS
+     - what it is
+   * - block elimination (tier 1)
+     - **9 of 9**
+     - exact structured direct solve over the Legendre index
+   * - preconditioned Krylov (tier 2)
+     - 7 of 23
+     - GCROT under the coarse-operator preconditioner
+
+The losses are not spread thinly over the suite.  They sit exactly where the
+block-tridiagonal-in-``L`` structure is broken -- full Fokker-Planck collisions,
+tangential magnetic drifts, the ``E_r`` ``xDot``/``xiDot`` terms, and the
+``Phi1`` Newton iteration -- which is the same list as the physics ``dkx`` is
+uniquely good at.  Every one of those decks is locked out of tier 1 and has to
+go through tier 2, and tier 2 is where the reference is usually faster.
+
+Two more facts the sweep settles, both against ``dkx``:
+
+* *Memory is the weak axis.*  ``dkx`` is lighter on **3 of the 32** decks it
+  completed.  Below ~10k unknowns the JAX runtime floor (~0.5 GB, paid on every
+  solve however small) is already larger than the whole Fortran process, which
+  runs those decks in 0.1-0.2 GB.  Above ~1M the tier-2 preconditioner's dense
+  ``(Ntheta*Nzeta)`` bands dominate.
+* *Six decks did not complete at all,* against 38 of 38 for the reference.  Five
+  were killed by the operating system while the tier-2 preconditioner allocated
+  its bands, which is the failure
+  :func:`dkx.solve._check_coarse_preconditioner_fits` exists to refuse up front
+  rather than die part way through.  The sixth wanted the LIBSTELL text form of
+  a VMEC ``wout``, read by :mod:`dkx.vmec_ascii`.
+
+Physics agreement across the sweep is a median relative difference of
+``4.1e-06`` on the shared output moments, with the outliers explained
+case by case in "Interpreting a cross-code difference" above.
+
 Fortran strong-scaling baseline (same case, same machine)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
