@@ -1913,11 +1913,17 @@ def _check_coarse_preconditioner_fits(op: KineticOperator) -> None:
     debuggable failure there is: no traceback, no partial output, and a
     ``returncode`` that looks like any other crash.
 
-    The same operator inverted in a fill-reducing order needs 5.97 GB of
-    SuperLU factors on that deck (``tools/benchmarks/tier2_sparse_fill.py``),
-    so the message names ``preconditioner="sparse"`` rather than only reporting
-    the problem.  ``DKX_TIER2_MEMORY_GUARD=off`` disables the check for anyone
-    who knows their machine better than ``sysconf`` does.
+    The message does not recommend a way out, because measurement says there
+    is not one at this size.  ``preconditioner="sparse"`` stores far less --
+    5.97 GB of SuperLU factors against 42.9 GB of bands on that deck
+    (``tools/benchmarks/tier2_sparse_fill.py``) -- but run on the five decks
+    that trigger this guard it was killed on three and timed out on two
+    (``tools/benchmarks/tier2_sparse_vs_coarse.py``), so pointing users at it
+    would trade a fast failure for a slow one.  ``multigrid`` fits and does not
+    reach tolerance on this physics.  What remains is coarser resolution or a
+    larger machine, and the message says so.
+    ``DKX_TIER2_MEMORY_GUARD=off`` disables the check for anyone who knows
+    their machine better than ``sysconf`` does.
     """
     if os.environ.get(_TIER2_GUARD_ENV, "").strip().lower() in {"off", "0", "false"}:
         return
@@ -1934,11 +1940,13 @@ def _check_coarse_preconditioner_fits(op: KineticOperator) -> None:
         f"{op.n_species} species, Nx={op.n_x}) on a machine with "
         f"{total / 2**30:.1f} GB of RAM. Without this check the process is "
         f"killed part way through with no output.\n"
-        f"  preconditioner='sparse' inverts the same operator exactly in a "
-        f"fill-reducing order and needs a fraction of that;\n"
-        f"  preconditioner='multigrid' is cheaper still but does not reach "
-        f"tolerance on this physics (docs/performance.rst);\n"
-        f"  DKX_TIER2_MEMORY_GUARD=off disables this check."
+        f"No tier-2 preconditioner runs this deck on this machine:\n"
+        f"  'sparse' stores far less but was measured killed or timed out on "
+        f"all five decks this size (tools/benchmarks/tier2_sparse_vs_coarse.py);\n"
+        f"  'multigrid' fits but does not reach tolerance on this physics "
+        f"(docs/performance.rst);\n"
+        f"reduce Ntheta/Nzeta or Nxi, or run where the bands fit. "
+        f"DKX_TIER2_MEMORY_GUARD=off disables this check."
     )
 
 
