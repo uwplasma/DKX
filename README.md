@@ -298,7 +298,7 @@ Full documentation — installation, quickstart, the equations solved, namelist
 and output references, API, and measured performance/validation notes — at
 [sfincs-jax.readthedocs.io](https://sfincs-jax.readthedocs.io/).
 
-## Known issues
+## Implementation notes
 
 - `Nxi_for_x` ramps embed the truncated degrees of freedom as identity-pinned
   rows in the matrix-free operator (the Fortran code packs them out of its
