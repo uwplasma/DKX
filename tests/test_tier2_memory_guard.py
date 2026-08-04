@@ -1,31 +1,45 @@
-"""The coarse tier-2 preconditioner refuses to allocate what cannot fit.
+"""The coarse tier-2 preconditioner generates what it cannot afford to store.
 
 Its dense ``(Ntheta*Nzeta)`` bands are sized exactly by the grid, so a solve
-that cannot fit them is knowable before any work happens.  Without the check
-the process is killed by the OS part way through and produces nothing: no
-traceback, no partial output, and a return code indistinguishable from any
-other crash.  On the 2026-08-01 upstream campaign that cost five decks 55-90 s
-each before dying.
+that cannot fit them is knowable before any work happens.  Five upstream decks
+need 42.9-53.3 GB of them on a 24 GB machine; left to allocate, the process is
+killed by the OS part way through and produces nothing -- no traceback, no
+partial output, and a return code indistinguishable from any other crash.  On
+the 2026-08-01 upstream campaign that cost those decks 55-90 s each before
+dying.
 
-Threshold and its evidence live in
-:func:`dkx.solve._check_coarse_preconditioner_fits`; these tests pin the
-behaviour, not the constant.
+The route out is not a smaller preconditioner but a generated one: the same
+simplified operator, the same pins, eliminated by
+``solvax.direct.block_thomas_checkpointed_fn``, which builds each block row on
+demand and materializes no band.  It is much slower per Krylov application
+because it returns a solution rather than reusable factors, so it is taken
+only where the bands do not fit.
+
+Threshold and its evidence live in :func:`dkx.solve._coarse_bands_fit`; these
+tests pin the behaviour, not the constant.
 """
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import replace
 from pathlib import Path
 
+import jax.numpy as jnp
+import numpy as np
 import pytest
 
 from dkx.drift_kinetic import KineticOperator
-from dkx.namelist import read_sfincs_input
+from dkx.namelist import parse_sfincs_input_text, read_sfincs_input
 from dkx.solve import (
-    _check_coarse_preconditioner_fits,
+    _coarse_bands_fit,
+    _coarse_generated_fallback_message,
+    _coarse_generated_peak_bytes,
     _host_memory_bytes,
+    build_coarse_preconditioner,
     build_tier2_preconditioner,
     coarse_preconditioner_band_bytes,
+    solve,
 )
 
 REF = Path(__file__).parent / "ref"
@@ -35,6 +49,29 @@ def _small_op() -> KineticOperator:
     return KineticOperator.from_namelist(
         read_sfincs_input(REF / "er_xdot_1species_tiny.input.namelist")
     )
+
+
+def _load_op(name: str) -> KineticOperator:
+    return KineticOperator.from_namelist(read_sfincs_input(REF / f"{name}.input.namelist"))
+
+
+def _ramped_op() -> KineticOperator:
+    """The tiny PAS fixture rescaled so ``Nxi_for_x_option=1`` gives a real ramp.
+
+    The identity rows the ramp's truncated ``(x, l)`` pairs need are one of the
+    two pins that make the coarse chain invertible, so the generated route has
+    to reproduce them exactly and this deck is where that shows.
+    """
+    text = (
+        (REF / "pas_1species_PAS_noEr_tiny_scheme1.input.namelist")
+        .read_text()
+        .replace("Nxi = 4", "Nxi = 16")
+        .replace("Nx = 3", "Nx = 5")
+        .replace("Nxi_for_x_option = 0", "Nxi_for_x_option = 1")
+    )
+    op = KineticOperator.from_namelist(parse_sfincs_input_text(text))
+    assert int(np.min(np.asarray(op.n_xi_for_x))) < op.n_xi
+    return op
 
 
 def test_band_size_is_the_exact_allocation():
@@ -54,78 +91,264 @@ def test_band_size_grows_quadratically_in_the_angular_grid():
     assert ratio == pytest.approx(4.0)
 
 
-def test_a_deck_that_fits_is_allowed(monkeypatch):
-    """The guard must be silent wherever the classical route works."""
+def test_generating_the_rows_stores_an_order_of_magnitude_less():
+    """The reason the fallback exists at all, stated as the two sizes.
+
+    The bands hold ``3 Nxi`` dense blocks per subsystem; the checkpointed
+    elimination holds ``Nxi/cs + 3 cs`` with ``cs ~ sqrt(Nxi)``, which is what
+    turns 53.3 GB into something a 24 GB machine can run.
+    """
+    op = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
+    tall = replace(op, n_xi=400)
+    per_subsystem = coarse_preconditioner_band_bytes(tall) / (tall.n_species * tall.n_x)
+    assert _coarse_generated_peak_bytes(tall) < 0.1 * per_subsystem
+
+
+def test_a_deck_that_fits_keeps_the_dense_route(monkeypatch):
+    """The fallback must stay out of the way wherever the fast route works."""
     monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
-    _check_coarse_preconditioner_fits(_small_op())  # must not raise
+    assert _coarse_bands_fit(_small_op())
 
 
-def test_the_refusal_states_the_size_and_the_options(monkeypatch):
-    """The message has to leave the user somewhere to go.
+def test_a_deck_that_does_not_fit_is_routed_to_the_generated_one(monkeypatch):
+    """And it must divert wherever the bands would be allocated into a kill."""
+    monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
+    monkeypatch.setattr("dkx.solve._host_memory_bytes", lambda: 1.0)
+    assert not _coarse_bands_fit(_small_op())
 
-    It deliberately does *not* recommend the sparse route.  That route stores
-    far less, but measured on the five decks that trigger this guard it was
-    killed on three and timed out on two, so recommending it would trade a
-    fast failure for a slow one.  A guard that sends users down a road that
-    also fails is worse than the kill it replaces.
+
+def test_the_warning_states_the_size_and_the_cost(monkeypatch):
+    """A solve that silently got an order of magnitude slower is a bug report.
+
+    The message has to say what did not fit, what runs instead, and how to get
+    the fast route back.
     """
     monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
     op = _small_op()
     monkeypatch.setattr("dkx.solve._host_memory_bytes", lambda: 1.0)
-    with pytest.raises(MemoryError) as excinfo:
-        _check_coarse_preconditioner_fits(op)
-    message = str(excinfo.value)
+    message = _coarse_generated_fallback_message(op)
     assert f"{op.n_theta}x{op.n_zeta}" in message  # the size that did not fit
-    assert "reduce Ntheta/Nzeta or Nxi" in message  # what actually works
+    assert "block_thomas_checkpointed_fn" in message  # what runs instead
+    assert "It completes; it is not fast." in message  # what to expect of it
+    assert "reduce Ntheta/Nzeta or Nxi" in message  # how to get the fast route back
     assert "DKX_TIER2_MEMORY_GUARD=off" in message
 
 
-def test_the_refusal_does_not_recommend_a_route_that_also_fails(monkeypatch):
-    """Regression guard on the correction itself.
+def test_the_warning_does_not_recommend_a_route_that_also_fails(monkeypatch):
+    """Regression guard on the correction the message already carries.
 
-    The first version of this message told users to switch to
+    An early version of this message told users to switch to
     ``preconditioner='sparse'``; the experiment that followed found it rescues
-    none of the five decks.  Re-adding that recommendation without new
-    measurement should fail here.
+    none of the five decks — killed on three, timed out on two.  The generated
+    fallback did not change that measurement, so re-adding the recommendation
+    without new measurement should still fail here.
     """
     monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
     monkeypatch.setattr("dkx.solve._host_memory_bytes", lambda: 1.0)
-    with pytest.raises(MemoryError) as excinfo:
-        _check_coarse_preconditioner_fits(_small_op())
-    assert "'sparse' stores far less but was measured killed" in str(excinfo.value)
+    message = _coarse_generated_fallback_message(_small_op())
+    assert "'sparse' stores far less but was measured killed" in message
 
 
-def test_the_guard_gates_the_coarse_build(monkeypatch):
-    """It fires through the route callers actually take."""
+def test_the_oversized_deck_builds_and_warns(monkeypatch):
+    """It fires through the route callers actually take, and it produces a solver."""
     monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
     monkeypatch.setattr("dkx.solve._host_memory_bytes", lambda: 1.0)
-    with pytest.raises(MemoryError):
-        build_tier2_preconditioner(_small_op(), "coarse")
+    with pytest.warns(RuntimeWarning, match="block_thomas_checkpointed_fn"):
+        precond, precond_t = build_tier2_preconditioner(_small_op(), "coarse")
+    assert callable(precond) and callable(precond_t)
 
 
 def test_the_sparse_route_is_not_gated(monkeypatch):
-    """Gating the alternative the message recommends would be a trap."""
+    """The other tier-2 routes stay reachable whatever the bands cost."""
     pytest.importorskip("scipy.sparse.linalg")
     monkeypatch.setattr("dkx.solve._host_memory_bytes", lambda: 1.0)
     precond, _ = build_tier2_preconditioner(_small_op(), "sparse")
     assert callable(precond)
 
 
-def test_the_guard_can_be_switched_off(monkeypatch):
+def test_the_routing_can_be_switched_off(monkeypatch):
     """Someone who knows their machine better than ``sysconf`` keeps control."""
     monkeypatch.setattr("dkx.solve._host_memory_bytes", lambda: 1.0)
     monkeypatch.setenv("DKX_TIER2_MEMORY_GUARD", "off")
-    _check_coarse_preconditioner_fits(_small_op())  # must not raise
+    assert _coarse_bands_fit(_small_op())
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        build_coarse_preconditioner(_small_op())  # the dense route, unwarned
 
 
-def test_unknown_host_memory_does_not_block_a_solve(monkeypatch):
-    """A platform that cannot report its RAM must not lose the solver."""
+def test_unknown_host_memory_does_not_cost_the_fast_route(monkeypatch):
+    """A platform that cannot report its RAM must not be demoted on a guess."""
     monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
     monkeypatch.setattr("dkx.solve._host_memory_bytes", lambda: None)
-    _check_coarse_preconditioner_fits(_small_op())  # must not raise
+    assert _coarse_bands_fit(_small_op())
 
 
 def test_host_memory_is_readable_here():
-    """Guards the assumption the check rests on, on the platforms we run."""
+    """Guards the assumption the routing rests on, on the platforms we run."""
     total = _host_memory_bytes()
     assert total is None or total > 2**30
+
+
+# ---------------------------------------------------------------------------
+# The two routes must be the same linear map.  The coarse chain is near-singular
+# by construction -- its ``l = 0`` block annihilates a distribution constant on
+# the flux surface, which is why the rank-one pin exists -- so two exact
+# factorizations of it differ along that direction, and comparing their outputs
+# on the singular deck would measure the conditioning rather than the code.  The
+# equivalence is therefore stated twice: directly on the preconditioner outputs
+# where the chain is well conditioned, and as a solve *residual* everywhere,
+# which is well posed on every deck.  ``tests/test_multigrid.py`` and
+# ``tests/test_sparse_precond.py`` split their equivalences the same way.
+# ---------------------------------------------------------------------------
+
+AGREEMENT_CASES = {
+    # Each branch of the coarse operator's collision reduction.
+    "pas": lambda: _load_op("pas_1species_PAS_noEr_tiny_scheme1"),
+    "fokker_planck": lambda: _load_op("quick_2species_FPCollisions_noEr"),
+    "phi1_in_collision": lambda: _load_op(
+        "fp_1species_FPCollisions_noEr_tiny_withPhi1_inCollision"
+    ),
+    # The Er term that forces tier 2 in the first place, and the mask pin.
+    "er_xdot": _small_op,
+    "ramped_nxi_for_x": _ramped_op,
+}
+
+
+def _generated(op: KineticOperator, monkeypatch):
+    """The generated route's ``(precond, precond_t)`` for the same operator."""
+    monkeypatch.setattr("dkx.solve._host_memory_bytes", lambda: 1.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        return build_coarse_preconditioner(op)
+
+
+# ``er_xdot`` pairs the Er xiDot term with a per-speed constraint border and is
+# numerically singular -- ``dkx.solve``'s residual guard rejects its adjoint
+# outright, and ``tests/test_sparse_precond.py`` excludes it from
+# solution-vector comparisons for the same reason.  It is covered below by the
+# well-posed statement instead.
+WELL_CONDITIONED = sorted(set(AGREEMENT_CASES) - {"er_xdot"})
+
+
+@pytest.mark.parametrize("case", WELL_CONDITIONED)
+def test_the_two_routes_are_one_map_forward_and_transposed(case: str, monkeypatch):
+    """Generating the rows changes where the blocks come from and nothing else.
+
+    Both routes are exact factorizations of the same pinned coarse operator, so
+    what has to hold is that they act the same on a vector — loosely enough for
+    two genuinely different eliminations of a near-singular chain, tightly
+    enough to catch a dropped mask, an unpinned ``l = 0`` block or a
+    transposition.
+    """
+    op = AGREEMENT_CASES[case]()
+    dense = build_coarse_preconditioner(op)
+    generated = _generated(op, monkeypatch)
+    rng = np.random.default_rng(0)
+    for _ in range(3):
+        v = jnp.asarray(rng.standard_normal(op.total_size))
+        for exact, cheap in zip(dense, generated):
+            a, b = np.asarray(exact(v)), np.asarray(cheap(v))
+            assert np.all(np.isfinite(b))
+            assert np.linalg.norm(a - b) / np.linalg.norm(a) < 1e-8
+
+
+LINEAR_SOLVE_CASES = sorted(set(AGREEMENT_CASES) - {"phi1_in_collision"})
+
+
+@pytest.mark.parametrize("case", LINEAR_SOLVE_CASES)
+def test_the_generated_route_does_not_change_the_answer(case: str, monkeypatch):
+    """A preconditioner may change the iteration count and nothing else.
+
+    Stated as a residual so it stays meaningful on the near-singular decks:
+    what a solver owes is a small residual, and the solution vector is compared
+    only where the operator determines it.
+    """
+    op = AGREEMENT_CASES[case]()
+    rhs = op.rhs()
+    reference = solve(op, rhs, method="gmres", tol=1e-10, preconditioner="coarse")
+    monkeypatch.setattr("dkx.solve._host_memory_bytes", lambda: 1.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        generated = solve(op, rhs, method="gmres", tol=1e-10, preconditioner="coarse")
+    assert reference.converged and generated.converged
+
+    scale = max(1.0, float(jnp.linalg.norm(rhs)))
+    for result in (reference, generated):
+        assert float(jnp.linalg.norm(op.apply(result.x) - rhs)) / scale < 1e-9
+
+
+def test_the_generated_route_is_jit_safe_over_traced_operator_leaves(monkeypatch):
+    """Building it under ``jax.jit`` must compile and agree with the eager build.
+
+    The generated route closes over per-subsystem coefficient arrays and jits
+    its own application — an application otherwise re-traces ``Nxi`` generated
+    block rows per subsystem — so both have to survive the operator leaves
+    arriving as tracers, which is how the differentiable solve and the ``Phi1``
+    Newton loop reach it.  A ramped deck is used because its truncation mask is
+    non-uniform, which is the part that used to host-materialize.
+    """
+    import jax  # noqa: PLC0415
+
+    op = _ramped_op()
+    leaves, treedef = jax.tree_util.tree_flatten(op)
+    v = jnp.asarray(np.linspace(-1.0, 1.0, op.total_size), dtype=jnp.float64)
+    monkeypatch.setattr("dkx.solve._host_memory_bytes", lambda: 1.0)
+
+    def action(values: list) -> jnp.ndarray:
+        precond, _ = build_coarse_preconditioner(jax.tree_util.tree_unflatten(treedef, values))
+        return precond(v)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        jitted = np.asarray(jax.jit(action)(leaves))  # compiles
+        reference = np.asarray(build_coarse_preconditioner(op)[0](v))
+    # Compared in norm, as the dense route's jit-safety test is: XLA is free to
+    # fuse the elimination differently inside jit, and a Krylov method consumes
+    # the applied vector, not its individual components.
+    difference = np.linalg.norm(jitted - reference)
+    assert difference <= 1e-6 * max(1.0, float(np.linalg.norm(reference))), difference
+
+
+def test_the_generated_route_carries_the_transposed_solve(monkeypatch):
+    """The adjoint runs on ``precond_t``, so it needs its own residual.
+
+    ``SolveResult.adjoint`` records ``||A^T y - g|| / ||g||`` recomputed from
+    the operator once the backward pass has executed, which is the transposed
+    statement of the test above: the generated route has to reach the same
+    transposed residual as the dense one, and produce the same gradient.  The
+    scalar is threaded through ``THat`` and the cotangent is a fixed
+    pseudo-random vector — a generic linear functional, which is the hardest
+    case for the adjoint solve and the one a composed objective produces.
+    """
+    import jax  # noqa: PLC0415
+
+    op0 = _load_op("quick_2species_FPCollisions_noEr")
+    w = jnp.asarray(np.random.default_rng(11).standard_normal(op0.total_size))
+    captured: dict[str, object] = {}
+
+    def loss(scale: jnp.ndarray) -> jnp.ndarray:
+        op = replace(op0, t_hat=op0.t_hat * scale)
+        result = solve(
+            op, op.rhs(), method="gmres", tol=1e-10, differentiable=True,
+            preconditioner="coarse",
+        )  # fmt: skip
+        captured["result"] = result
+        return jnp.dot(w, result.x)
+
+    dense_grad = float(jax.grad(loss)(jnp.asarray(1.0)))
+    dense = captured["result"].adjoint
+    assert dense.checked and dense.converged
+    dense_adjoint = dense.worst_relative_residual
+    assert 0.0 < dense_adjoint < 1e-8
+
+    monkeypatch.setattr("dkx.solve._host_memory_bytes", lambda: 1.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        generated_grad = float(jax.grad(loss)(jnp.asarray(1.0)))
+    generated = captured["result"].adjoint
+    assert generated.checked and generated.converged
+    generated_adjoint = generated.worst_relative_residual
+
+    assert 0.0 < generated_adjoint < 1e-8
+    assert abs(generated_adjoint - dense_adjoint) < 1e-8
+    assert abs(generated_grad - dense_grad) <= 1e-6 * max(abs(dense_grad), 1.0)

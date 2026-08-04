@@ -123,10 +123,11 @@ Two more facts the sweep settles, both against ``dkx``:
   ``(Ntheta*Nzeta)`` bands dominate.
 * *Six decks did not complete at all,* against 38 of 38 for the reference.  Five
   were killed by the operating system while the tier-2 preconditioner allocated
-  its bands, which is the failure
-  :func:`dkx.solve._check_coarse_preconditioner_fits` exists to refuse up front
-  rather than die part way through.  The sixth wanted the LIBSTELL text form of
-  a VMEC ``wout``, read by :mod:`dkx.vmec_ascii`.
+  its bands.  Those five are the ones
+  :func:`dkx.solve._coarse_bands_fit` diverts to the generated coarse route
+  ("Running the decks the bands do not fit" below) rather than dying part way
+  through.  The sixth wanted the LIBSTELL text form of a VMEC ``wout``, read by
+  :mod:`dkx.vmec_ascii`.
 
 Physics agreement across the sweep is a median relative difference of
 ``4.1e-06`` on the shared output moments, with the outliers explained
@@ -1089,6 +1090,65 @@ and the default stays ``"coarse"`` until a controlled timing study lands.  The
 gap that motivates it is real and measured: on the ``sfincsPaperFigure3``
 two-species full-trajectory deck the Fortran reference's main solve takes 47 s
 against 312 s for tier 2 with the classical preconditioner.
+
+Running the decks the bands do not fit
+--------------------------------------
+
+Neither of the two routes above rescues the five decks whose bands are 42.9 GB
+(``filteredW7XNetCDF_2species_magneticDrifts_noEr``/``_withEr``) and 53.3 GB
+(the three HSX decks) on a 24 GB machine.  Multigrid fits and does not reach
+tolerance; the fill-reducing route stores far less and was still killed on
+three of the five and timed out on the other two.
+
+The third option changes neither the operator nor the pins, only where the
+blocks live.  ``solvax.direct.block_thomas_checkpointed_fn`` eliminates a
+block-tridiagonal chain from a *generator*: it calls back for one block row at
+a time, keeps one Schur checkpoint per ``cs = ceil(sqrt(Nxi))`` rows plus the
+one segment it is substituting back through, and recomputes the rest.  Peak
+dense storage per ``(species, x)`` subsystem falls from ``3 Nxi`` blocks to
+``Nxi/cs + 3 cs`` -- 0.48 GB instead of 3.58 GB per subsystem on the W7-X
+magnetic-drift decks -- and no band is ever materialized.
+:func:`dkx.solve.build_coarse_preconditioner` generates rows from
+:func:`dkx.solve._coarse_subsystem_block_fn`, which folds in the same collision
+diagonal, the same ``1e-8`` invertibility floor, the same identity rows on the
+``Nxi_for_x``-truncated ``(x, l)`` pairs and the same rank-one ``l = 0`` pin
+that the dense route applies to its bands; with only the floor the chain is
+singular and the solve returns ``nan``, so all three are load-bearing.
+
+**This is not a speedup and must not be reported as one.**  The kernel returns
+a solution, not reusable factors, so it repeats the whole elimination on every
+Krylov application where the dense route reuses one factorization, and it
+generates and eliminates each block row twice.  Measured on
+``geometryScheme4_2species_withEr_fullTrajectories`` (``Nxi = 48``,
+``Ntheta*Nzeta = 247``, 10 subsystems, 10-core Apple M4), where both routes fit
+and are therefore comparable.  Both are timed under ``jax.jit``, so the number
+is the elimination and not Python dispatch (reproduce with
+``tools/benchmarks/tier2_generated_coarse.py``):
+
+.. list-table:: Cost of generating the rows instead of storing them
+   :header-rows: 1
+
+   * - route
+     - build + first application
+     - per warm application
+     - bands stored
+   * - dense (default)
+     - 3.3 s
+     - 0.047 s
+     - 0.65 GB
+   * - generated
+     - 32.9 s
+     - 1.46 s
+     - none
+
+The two routes agree to ``5e-14`` forward and ``9e-14`` transposed on that
+deck, which is what two exact eliminations of the same near-singular chain
+should do.  The routing is therefore automatic and one-directional: the dense
+bands are used whenever they fit within physical RAM, and
+:func:`dkx.solve._coarse_bands_fit` diverts to the generator only when they do
+not, with a warning that states both sizes.  ``DKX_TIER2_MEMORY_GUARD=off``
+forces the dense route back for anyone who knows their machine better than
+``sysconf`` does.
 
 Compile time vs steady state
 ----------------------------
