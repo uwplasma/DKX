@@ -1150,6 +1150,93 @@ not, with a warning that states both sizes.  ``DKX_TIER2_MEMORY_GUARD=off``
 forces the dense route back for anyone who knows their machine better than
 ``sysconf`` does.
 
+Why the coarse chain is not truncated instead
+---------------------------------------------
+
+The generator above buys memory with time because it returns a solution rather
+than reusable factors.  The obvious way to buy memory and keep the factors is
+the lever tier 1 already uses: keep only the lowest ``K`` Legendre blocks, which
+is what runs the 744k HSX case in ``0.3 GB`` where its full-band factorization
+wants ``91 GB``.  Factoring the coarse preconditioner's leading ``K`` blocks
+would store ``O(K m^2)`` with ``m = Ntheta*Nzeta`` instead of ``O(Nxi m^2)``,
+cost ``O(K m^3)`` to factor, and — unlike the generator — be built once and
+reused on every Krylov application.  It does not work, and the measurement is
+recorded here so that the ladder is not climbed a second time.
+
+The two truncations are not the same operation.
+``solvax.direct.block_thomas_truncated_fn`` sweeps *every* block and truncates
+the retained solution, not the elimination, which is precisely why its head is
+exact.  Factoring only the leading ``K`` blocks instead severs the ``L +- 1``
+streaming coupling at ``l = K``, and in the coarse operator that coupling is the
+leading term rather than a perturbation: the Schur complements propagate down
+the whole chain, so every block above ``K`` contributes to the ``l = 0`` inverse
+that carries the density, flow and heat-flux physics.
+
+Measured on ``geometryScheme4_2species_noEr`` (``Nxi = 48``,
+``Ntheta*Nzeta = 247``, 10 subsystems).  Every block above ``K`` is inverted
+*exactly*, one dense factorization each, so the ladder prices the severed
+coupling and nothing else — the most favourable case truncation can be given,
+and deliberately not a memory-lean one.  GCROT iteration counts are
+deterministic and independent of machine load, unlike any wall time (reproduce
+with ``tools/benchmarks/tier2_coarse_truncation.py``):
+
+.. list-table:: Cutting the coarse Legendre chain at l = K
+   :header-rows: 1
+
+   * - blocks kept
+     - GCROT iterations to ``1e-10``
+     - relative residual reached
+   * - 48 (the whole chain)
+     - 26
+     - 4.9e-11
+   * - 47
+     - 133
+     - 7.9e-11
+   * - 44
+     - no convergence in 300
+     - 1.7e-06
+   * - 36
+     - no convergence in 300
+     - 6.9e-02
+   * - 24
+     - no convergence in 300
+     - 4.0e-01
+   * - 3
+     - no convergence in 300
+     - 9.8e-01
+
+Cutting one link of forty-eight costs five times the iterations; cutting four
+ends convergence.  ``tokamak_2species_PASCollisions_withEr_fullTrajectories``
+(``Nxi = 40``) has the same shape with a nonzero ``Er``: 19 iterations for the
+whole chain, 888 at ``K = 39`` — one link cut — and no convergence in 6000 by
+``K = 36``.  Three cheaper tails were measured on that deck and are all
+worse than the exact block-diagonal one above — an identity tail, a tail
+eliminated with diagonal Schur complements, and an exact-head variant whose
+leading factors come from the complete downward sweep and only whose tail
+*solve* is approximated.  None reaches ``1e-10`` at any ``K < Nxi``.  Dropping
+the ``L +- 1`` coupling everywhere (:func:`dkx.solve.build_coarse_preconditioner`
+with ``drop_l_coupling=True``) is the limit of the same family and does not
+converge on that deck either.
+
+The load-bearing conclusion is narrow and worth stating plainly: the coarse
+operator is cheap to *simplify* — self-species x-diagonal collisions, no ``L +- 2``
+terms, no magnetic drifts, all of which tier 2 corrects for in a handful of
+extra iterations — but it is not cheap to *shorten*.  Memory has to come from
+how the chain is stored, not from how much of it is kept.
+
+The same script measures an approximation on that side, which does survive.  Of
+the three ``(Ntheta*Nzeta)`` blocks stored per ``(species, x, l)``, only the
+Schur LU factors are irreducible: the two off-diagonal bands are one shared
+streaming matrix scaled by a Legendre coefficient plus a diagonal, at every
+index, which is exactly what
+:func:`dkx.solve._coarse_subsystem_block_fn` regenerates for the route above.
+Taking the Schur factors to float32 through
+``solvax.direct.block_thomas_factor``'s ``factor_dtype`` costs between nothing
+and 26% of the iterations across four decks — 26 against 26 on the deck above,
+29 against 29 on ``geometryScheme4_2species_withEr_fullTrajectories``, 20
+against 22 on ``filteredW7XNetCDF_2species_noEr``, and 19 against 24 on the
+tokamak deck — with every case still reaching ``1e-10``.
+
 Compile time vs steady state
 ----------------------------
 
