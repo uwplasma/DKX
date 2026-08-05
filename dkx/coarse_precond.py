@@ -807,15 +807,27 @@ def build_coarse_preconditioner(
             ]
 
             def _a_inv(transpose: bool) -> Callable[[jnp.ndarray], jnp.ndarray]:
-                def apply(v: jnp.ndarray) -> jnp.ndarray:
+                # The factors are passed as an ARGUMENT, never closed over.  At
+                # these sizes that is the difference between running and being
+                # killed: closing over them makes the whole Schur LU a
+                # compile-time constant of the jitted application, which XLA then
+                # holds a second copy of.  Measured on
+                # filteredW7XNetCDF_2species_magneticDrifts_noEr, where JAX
+                # reported "15.52GB total" of captured constants and the process
+                # was OOM-killed at 640 s having produced nothing.  As pytree
+                # children they cross the jit boundary by reference instead, and
+                # the generator each factor carries stays static, so the two
+                # applications still share one factorization and one compile.
+                @jax.jit
+                def apply(facs: list, v: jnp.ndarray) -> jnp.ndarray:
                     # Serial over the 5-10 subsystems for the same reason as below.
                     g = v.reshape(batch, n_xi, n_tz)
                     return jnp.stack([
                         block_thomas_solve(fac, g[b], transpose=transpose)
-                        for b, fac in enumerate(factors)
+                        for b, fac in enumerate(facs)
                     ]).reshape(v.shape)
 
-                return jax.jit(apply)
+                return functools.partial(apply, factors)
 
         else:
 
