@@ -60,6 +60,12 @@ Physics and numerics:
 - ``solve.py``: the three-tier solve policy (structured block elimination,
   recycled Krylov with a coarse-operator preconditioner, host direct referee)
   on the external ``solvax`` library; implicit differentiation.
+- ``coarse_precond.py``: the tier-2 coarse preconditioner ``solve.py`` uses by
+  default — the SFINCS-simplified operator, the three pins that make its chain
+  invertible, and the routing between its dense-band, reusable Schur-LU and
+  one-shot storage policies by what fits in memory
+  (``preconditioner.F90``).  ``multigrid.py`` and ``sparse_precond.py`` are its
+  drop-in alternatives and reproduce its pins.
 - ``multigrid.py``: the semicoarsened geometric-multigrid tier-2
   preconditioner selected by ``solve(preconditioner="multigrid")``:
   rediscretized coarse operators on coarsened ``(theta, zeta[, xi])`` grids,
@@ -136,7 +142,7 @@ SFINCS v3 Fortran file           Canonical owner
 ``geometry.F90``                 ``magnetic_geometry.py``
 ``populateMatrix.F90``           ``drift_kinetic.py``, ``collisions.py``
 ``evaluateResidual.F90``         ``drift_kinetic.py``
-``preconditioner.F90``           ``solve.py`` (coarse operator)
+``preconditioner.F90``           ``coarse_precond.py``
 ``solver.F90``                   ``solve.py``
 ``diagnostics.F90``              ``moments.py``, ``writer.py``
 ``classicalTransport.F90``       ``moments.py``

@@ -4,7 +4,7 @@ The tier-2 solver (:func:`dkx.solve.solve` with ``method="gmres"``) is the
 only route open to the physics that has no block-tridiagonal-in-L structure:
 full Fokker-Planck and improved-Sugama collisions, ``Phi1``/quasineutrality,
 tangential magnetic drifts, and the ``E_r`` ``xDot``/``xiDot`` terms.  Its
-classical preconditioner (:func:`dkx.solve.build_coarse_preconditioner`)
+classical preconditioner (:func:`dkx.coarse_precond.build_coarse_preconditioner`)
 strips the operator to the Fortran ``preconditionerOptions`` simplification
 -- block tridiagonal over Legendre index ``L``, uncoupled over
 ``(species, x)`` -- and inverts it *exactly* with a batched block-Thomas
@@ -390,7 +390,7 @@ __all__ = [
 
 # Relative floor added to every diagonal block so a collisionless, drift-free
 # coarse f-block (whose diagonal is EXACTLY zero) still factors; mirrors
-# ``dkx.solve.build_coarse_preconditioner``.
+# ``dkx.coarse_precond.build_coarse_preconditioner``.
 _DIAGONAL_FLOOR = 1e-8
 
 @dataclass(frozen=True)
@@ -432,7 +432,7 @@ class MultigridSettings:
         shift: weight of the uniform diagonal regularization
             (:func:`_shift`), relative to the operator's own diagonal scale.
             The default ``1e-8`` is the invertibility floor of
-            :func:`dkx.solve.build_coarse_preconditioner` and is what a
+            :func:`dkx.coarse_precond.build_coarse_preconditioner` and is what a
             preconditioner may spend: measured on the NCSX ladder, raising it
             to ``0.01`` costs the tier-2 solve 60 iterations instead of 21, and
             ``1.0`` never converges at all.
@@ -473,7 +473,10 @@ class MultigridSettings:
 
 def _collision_diagonal(op: KineticOperator) -> jnp.ndarray | None:
     """``(S, X, L)`` self-species x-diagonal reduction of the dense collisions."""
-    from dkx.solve import _collision_phi1_diagonal, _dense_collision_diagonal  # noqa: PLC0415
+    from dkx.coarse_precond import (  # noqa: PLC0415
+        _collision_phi1_diagonal,
+        _dense_collision_diagonal,
+    )
 
     total = None
     for coll in (op.fp, op.sugama):
@@ -490,7 +493,7 @@ def simplified_operator(
     """The Fortran ``preconditionerOptions`` operator, as a :class:`KineticOperator`.
 
     Identical in content to the block-tridiagonal system
-    :func:`dkx.solve.build_coarse_preconditioner` factors -- the dense
+    :func:`dkx.coarse_precond.build_coarse_preconditioner` factors -- the dense
     ``(species, x)``-coupled Fokker-Planck / improved-Sugama collision
     operators are reduced to their PAS-like self-species x-diagonal, the
     ``E_r`` ``L +- 2`` terms and the tangential magnetic drifts are dropped,
@@ -859,9 +862,9 @@ def _shift(level: KineticOperator, weight: float) -> jnp.ndarray:
     by ExB, and by pitch-angle scattering (``nu l(l+1)/2 = 0`` at ``l = 0``).
     Something must remove it or the coarsest block-Thomas divides by zero.
 
-    :func:`dkx.solve.build_coarse_preconditioner` removes it with a ``1e-8``
+    :func:`dkx.coarse_precond.build_coarse_preconditioner` removes it with a ``1e-8``
     relative diagonal floor plus an *adaptive* rank-one pin of that constant on
-    the ``l = 0`` block (:func:`dkx.solve._l0_pin_gamma`), sized to the same
+    the ``l = 0`` block (:func:`dkx.coarse_precond._l0_pin_gamma`), sized to the same
     ``1e-8`` level and applied only where that block really is singular.  Here
     only the floor is used -- a *uniform* shift ``A + delta I`` -- for two
     measured reasons:
@@ -878,7 +881,7 @@ def _shift(level: KineticOperator, weight: float) -> jnp.ndarray:
       the NCSX ``11 x 21 x 41 x 5`` deck, GCROT needs **21** iterations at
       ``delta = 0``, 60 at ``1e-2`` of the mean collision diagonal, and never
       converges at ``1.0``.  (The *unconditional* full-strength rank-one pin
-      that :func:`dkx.solve.build_coarse_preconditioner` used to apply cost 87
+      that :func:`dkx.coarse_precond.build_coarse_preconditioner` used to apply cost 87
       on the same deck; sizing it by the floor instead is what recovered the
       21.)  The default weight is therefore the ``1e-8`` invertibility floor and
       nothing more -- enough to keep a collisionless, drift-free f-block, whose
@@ -1440,7 +1443,7 @@ def build_multigrid_preconditioner(
     drop_l_coupling: bool = False,
     settings: MultigridSettings = MultigridSettings(),
 ) -> tuple[Callable[[jnp.ndarray], jnp.ndarray], Callable[[jnp.ndarray], jnp.ndarray]]:
-    """Drop-in multigrid replacement for :func:`dkx.solve.build_coarse_preconditioner`.
+    """Drop-in multigrid replacement for :func:`dkx.coarse_precond.build_coarse_preconditioner`.
 
     Same contract, same simplified operator, same exact elimination of the
     bordered constraint / ``Phi1`` rows -- only the inner approximate inverse
@@ -1463,7 +1466,7 @@ def build_multigrid_preconditioner(
         ``(precond, precond_t)`` — approximate inverses of ``K`` and ``K^T``
         on flat ``(total_size,)`` vectors.
     """
-    from dkx.solve import (  # noqa: PLC0415
+    from dkx.coarse_precond import (  # noqa: PLC0415
         _materialize_borders,
         _materialize_full_border,
         schur_projected_precond,
