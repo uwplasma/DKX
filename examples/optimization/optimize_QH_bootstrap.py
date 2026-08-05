@@ -19,6 +19,29 @@ Physics: the seed is the Landreman-Paul reactor-scale precise QH (nfp=4), which
 is already strongly quasi-helical; the optimizer reduces the normalized
 bootstrap current on a mid-radius surface while penalty terms hold aspect ratio,
 mean iota and the two-term QS residual [Landreman & Buller, arXiv:2205.02914].
+
+**How much bootstrap reduction survives holding quasisymmetry.**  Not much, and
+that is the result rather than a shortfall.  Measured over 40 L-BFGS-B
+iterations from the same seed (``<j.B>/sqrt(<B^2>)`` = 7.79e-02, QS = 1.05e-04):
+
+===========================  ==================  ============  ===========
+quasisymmetry penalty        free boundary DOFs  <j.B> change  final QS
+===========================  ==================  ============  ===========
+quadratic, ``W_QS = 1e3``    24                  **-65%**      2.90e-01
+hinge (this module)          24                  -6.4%         6.63e-04
+hinge (this module)          48                  -9.1%         7.78e-04
+===========================  ==================  ============  ===========
+
+The first row is not a better optimum.  A QS residual of 2.90e-01 is a factor of
+2750 above the seed, and a configuration with that residual is not quasi-helical
+-- the optimizer bought the entire 65% by abandoning the symmetry, in one stretch
+between evaluations 56 and 89 after making no progress at all before then.  With
+the symmetry actually held, the achievable reduction is single-digit percent.
+
+Doubling the boundary dimension buys 2.7 percentage points, so this is a property
+of the physics and not of the parameterization: in a quasi-helical field the
+bootstrap current is tightly coupled to the helical symmetry itself, and it
+cannot be removed while the symmetry is kept.  Report the constrained number.
 The kinetic setup is the classic full-trajectory two-species run at
 reactor-core density and temperature with the momentum-conserving full
 linearized Fokker-Planck collision operator (the bootstrap current is a
@@ -97,7 +120,10 @@ NS = 7 if CI else 13
 # publication-quality optimization.
 VMEC_FTOL = 1e-11 if CI else 1e-13
 VMEC_MAX_ITER = 5000
-MAX_MODE = 1 if CI else 2  # boundary RBC/ZBS with m,|n| <= MAX_MODE
+# Boundary RBC/ZBS with m,|n| <= MAX_MODE.  2 gives 24 free coefficients, which
+# is enough to show the trade-off but not enough to escape it: see the header
+# note on how much bootstrap reduction survives holding quasisymmetry.
+MAX_MODE = int(os.environ.get("DKX_QH_MAX_MODE", "1" if CI else "2"))
 MBOZ, NBOZ = (2, 2) if CI else (3, 3)
 
 # Kinetic solve: ions + electrons, full linearized Fokker-Planck collisions,
