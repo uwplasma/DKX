@@ -4,7 +4,7 @@
 Reproduces the measurements the negative result in :mod:`dkx.multigrid` rests
 on.  Everything here works on **one ``(species, speed)`` block** of the
 SFINCS-simplified operator -- the thing
-:func:`dkx.solve.build_coarse_preconditioner` factors exactly -- because that
+:func:`dkx.coarse_precond.build_coarse_preconditioner` factors exactly -- because that
 block is the whole preconditioning problem (the simplified operator is
 uncoupled over ``(species, x)``), and it is small enough to attack with dense
 linear algebra.

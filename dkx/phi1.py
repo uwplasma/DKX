@@ -156,7 +156,7 @@ def _inner_restart(op: KineticOperator, restart: int | None, use_preconditioner:
     matrix-free Jacobian.
 
     With the Phi1-aware coarse preconditioner
-    (:func:`dkx.solve.build_coarse_preconditioner`, which Schur-eliminates
+    (:func:`dkx.coarse_precond.build_coarse_preconditioner`, which Schur-eliminates
     the quasineutrality border) the preconditioned operator clusters tightly
     around the identity, so a *modest* FGMRES cycle converges in a handful of
     iterations at any resolution -- a full-restart basis would waste memory and
@@ -222,7 +222,7 @@ def solve_phi1(
         solve_method: :func:`dkx.solve.solve` method for the inner solve
             (``"gmres"``).
         use_preconditioner: use the Phi1-aware coarse bordered-Schur
-            preconditioner (:func:`dkx.solve.build_coarse_preconditioner`)
+            preconditioner (:func:`dkx.coarse_precond.build_coarse_preconditioner`)
             for the inner linear solve.  On by default -- it Schur-eliminates the
             quasineutrality border so the inner Krylov solve converges in far
             fewer iterations at production resolution.  Set ``False`` for the

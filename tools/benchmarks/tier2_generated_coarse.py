@@ -1,6 +1,6 @@
 """What does generating the coarse preconditioner's rows cost, against storing them?
 
-:func:`dkx.solve.build_coarse_preconditioner` has two routes to the same
+:func:`dkx.coarse_precond.build_coarse_preconditioner` has two routes to the same
 inverse.  The default materializes three dense ``(Ntheta*Nzeta)`` bands over
 every Legendre index and factors them once, so an application is a pair of
 triangular sweeps.  Where those bands exceed physical RAM -- 42.9-53.3 GB on

@@ -73,6 +73,7 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "run.py": "public API",
     "sensitivity.py": "public differentiation API",
     "shaing_callen.py": "stable physics kernel",
+    "coarse_precond.py": "stable solver kernel",
     "sparse_precond.py": "stable solver kernel",
     "solve.py": "stable solver kernel",
     "solver_trace.py": "stable support utility",

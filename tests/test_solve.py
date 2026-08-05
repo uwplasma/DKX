@@ -30,10 +30,9 @@ import scipy.linalg as sla
 
 from dkx.drift_kinetic import KineticOperator
 from dkx.namelist import parse_sfincs_input_text, read_sfincs_input
+from dkx.coarse_precond import _COARSE_DIAGONAL_FLOOR, _l0_pin_gamma
 from dkx.solve import (
     SolveResult,
-    _COARSE_DIAGONAL_FLOOR,
-    _l0_pin_gamma,
     _resolve_subsystem_batch,
     build_coarse_preconditioner,
     materialize_dense,
@@ -1176,7 +1175,11 @@ def test_solve_importable_without_solvax_and_fails_loudly_on_use() -> None:
             "          'solvax.native', 'solvax.operators'):",
             "    sys.modules[m] = None  # poisoned: import raises ImportError",
             "import dkx.solve as solve_mod",
-            "assert solve_mod._SOLVAX_IMPORT_ERROR is not None",
+            # dkx.coarse_precond is the package's one solvax import guard;
+            # dkx.solve re-exports _require_solvax from it rather than keeping
+            # a second copy of the message.
+            "import dkx.coarse_precond as precond_mod",
+            "assert precond_mod._SOLVAX_IMPORT_ERROR is not None",
             "try:",
             "    solve_mod._require_solvax()",
             "except ImportError as exc:",
