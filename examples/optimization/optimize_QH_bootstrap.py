@@ -136,13 +136,31 @@ DTHAT_DRHAT = -T_AXIS * _DS_DRHAT
 
 # Targets and weights (QH: iota is large and negative here).  The kinetic
 # bootstrap term is the optimization driver (its gradient is autodiff-accurate,
-# Step 5); aspect/iota hold the equilibrium and QS is a *soft* constraint --
-# the seed is already precise-QH and the reactor-scale QS host-metric adjoint is
-# FD-noisy, so a heavy QS weight only injects a noisy gradient that fights the
-# (accurate) bootstrap reduction.
+# Step 5) and aspect/iota hold the equilibrium.
+#
+# Quasisymmetry is a *hinge* penalty, not a quadratic one, and that is the whole
+# design.  A plain ``W_QS * qs`` faces a real tension: the seed is already
+# precise-QH and the reactor-scale QS host-metric adjoint is FD-noisy, so a heavy
+# weight injects a noisy gradient that fights the accurate bootstrap reduction --
+# but a light weight does not constrain anything.  Measured with ``W_QS = 1e3``
+# over 40 L-BFGS-B iterations, the optimizer took the second exit: it cut
+# <j.B>/sqrt(<B^2>) from 7.79e-02 to 2.70e-02 (65%) by driving the QS residual
+# from 1.05e-04 to 2.90e-01, a factor of 2750.  A configuration with a QS
+# residual of 0.29 is not quasi-helical, so that is not a low-bootstrap QH
+# stellarator -- it is a stellarator that stopped being QH.  At the end point the
+# QS term was still only 28% of the objective (290 against 729), which is what
+# too small a weight looks like from the inside.
+#
+# The hinge resolves the tension instead of trading one horn for the other: it
+# contributes exactly zero -- value *and* gradient -- while the QS residual stays
+# under QS_TOLERANCE, so no noise enters while the configuration is healthy, and
+# it rises steeply past it.  QS_TOLERANCE is set at roughly twice the seed's own
+# residual, i.e. "stay as quasi-helical as you started, within a factor of two".
 TARGET_ASPECT, TARGET_IOTA = 8.0, -1.25
 QS_SURFACES = np.asarray([0.1, 0.3, 0.5, 0.7, 0.9])
-W_ASPECT, W_IOTA, W_QS, W_KINETIC = 1.0, 100.0, 1.0e3, 1.0e6
+W_ASPECT, W_IOTA, W_KINETIC = 1.0, 100.0, 1.0e6
+QS_TOLERANCE = float(os.environ.get("DKX_QH_QS_TOLERANCE", "2.0e-4"))
+W_QS = float(os.environ.get("DKX_QH_W_QS", "1.0e9"))
 
 # Kinetic figure of merit -- every entry is CI-tested, so switching just works.
 KINETIC_OBJECTIVE = "bootstrap_jbs2"       # (<j.B>/sqrt(<B^2>))^2 -> 0
@@ -289,9 +307,11 @@ def objective(dofs, warm=None):
         op, tol=KIN_TOL, x0=(warm or {}).get("x0"), recycle=(warm or {}).get("recycle"))
     kinetic_term = KINETIC_OBJECTIVES[KINETIC_OBJECTIVE](mom)
     jbs = ob.bootstrap_current(mom)
+    # Hinge: identically zero (value and gradient) below the tolerance.
+    qs_excess = jnp.maximum(qs - QS_TOLERANCE, 0.0)
     total = (W_ASPECT * (aspect - TARGET_ASPECT) ** 2
              + W_IOTA * (iota_mean - TARGET_IOTA) ** 2
-             + W_QS * qs + W_KINETIC * kinetic_term)
+             + W_QS * qs_excess ** 2 + W_KINETIC * kinetic_term)
     sg = jax.lax.stop_gradient
     aux = {"aspect": aspect, "iota": iota_mean, "qs": qs, "jbs": jbs,
            "kinetic_term": kinetic_term, "bmnc_b": sg(bmnc_b),
