@@ -408,7 +408,7 @@
     },
     {
       "path": "dkx/coarse_precond.py",
-      "lines_at_audit": 876,
+      "lines_at_audit": 918,
       "category": "core",
       "action": "retain",
       "public_imports": [],
@@ -427,7 +427,7 @@
         "docs/performance.rst"
       ],
       "retention_reason": "Split out of solve.py, which had no headroom left: the tier-2 coarse preconditioner is a self-contained owner with two drop-in siblings (multigrid.py, sparse_precond.py) that already imported its pins, and it now routes between three storage policies by measured size.",
-      "next_step": "Keep the pins, the row generators and the storage routing here; solve.py should call build_coarse_preconditioner and know nothing else about it.",
+      "next_step": "Keep the pins, the row generators and the storage routing here; solve.py should call build_coarse_preconditioner and know nothing else about it. Raised 876 -> 918 for the generator/data split that keeps the reusable route's blocks off the constant path; the wrapper it replaced was deleted rather than kept, and no further growth is expected here.",
       "review_status": "canonical_owner_post_trim"
     },
     {

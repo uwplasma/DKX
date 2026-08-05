@@ -77,10 +77,10 @@ def pinned_rows(op: KineticOperator):
     if op.fp_phi1 is not None:
         collision = solve_module._collision_phi1_diagonal(op) * mask[None, :, :]
     stripped._check_block_extraction_supported()
-    return solve_module._coarse_generated_block_fns(
-        op, solve_module._truncated_coefficients(stripped), mask, collision,
-        op._fs_average_factor().reshape(-1), False,
-    )
+    coef = solve_module._truncated_coefficients(stripped)
+    c0 = op._fs_average_factor().reshape(-1)
+    data = solve_module._coarse_generated_block_data(op, coef, mask, collision, c0, False)
+    return solve_module._coarse_pinned_block_fns(coef, op.n_xi, *data, False)
 
 
 def coarse_preconditioner(op: KineticOperator, *, keep: int, factor_dtype=None):

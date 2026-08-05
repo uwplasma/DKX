@@ -23,8 +23,10 @@ third of the band state, a sixth with a float32 LU.  The elimination still runs
 exactly once, so the factors are *reusable*: a Krylov application performs
 triangular solves and two block regenerations per row, and no factorization.
 Exact, reusable and iteration-for-iteration identical to the dense route where
-both fit; not yet enough to complete the 42.9-53.3 GB decks, because the factors
-are captured as constants by the outer traced solve (docs/performance.rst).
+both fit.  Its storage claim holds only because the generators are rebuilt from
+traced leaves inside the application: closed over, their ``(Ntheta*Nzeta)``
+blocks become captured constants and the unstored bands reappear
+(docs/performance.rst).
 
 **Checkpointed, one-shot.**  ``solvax.direct.block_thomas_checkpointed_fn``
 retains no band-sized state at all, at the cost of re-eliminating on every
@@ -615,12 +617,9 @@ def _coarse_pinned_block_fns(
 ) -> list[Callable[[jnp.ndarray], tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]]:  # fmt: skip
     """The pinned row generators, rebuilt from whatever arrays are handed in.
 
-    Split out from :func:`_coarse_generated_block_data` so the same generators
-    can be rebuilt *inside* a jitted preconditioner application from traced
-    leaves.  A generator closes over its ``(Ntheta*Nzeta, Ntheta*Nzeta)``
-    ``stream`` and ``exb`` blocks; when those leaves are concrete, every one of
-    them is a compile-time constant of the lowering that regenerates blocks
-    from it, and XLA holds a second copy.  See :func:`build_coarse_preconditioner`.
+    Split from :func:`_coarse_generated_block_data` so the generators can be
+    rebuilt *inside* a jitted application from traced leaves; see
+    :func:`build_coarse_preconditioner` for why that matters.
     """
     return [
         _coarse_subsystem_block_fn(
@@ -678,16 +677,6 @@ def _coarse_generated_block_data(
         jnp.where(scale > 0.0, scale, 1.0).reshape(n_s, n_x), c0,
     ).reshape(-1)  # fmt: skip
     return subs, floor, gamma
-
-def _coarse_generated_block_fns(
-    op: KineticOperator, coef: dict[str, jnp.ndarray], mask: jnp.ndarray,
-    coll_diag: jnp.ndarray | None, c0: jnp.ndarray, drop_l_coupling: bool,
-) -> list[Callable[[jnp.ndarray], tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]]:  # fmt: skip
-    """One pinned row generator per ``(species, x)``, pins sized as on the dense bands."""
-    subs, floor, gamma = _coarse_generated_block_data(
-        op, coef, mask, coll_diag, c0, drop_l_coupling
-    )
-    return _coarse_pinned_block_fns(coef, op.n_xi, subs, floor, gamma, drop_l_coupling)
 
 def build_coarse_preconditioner(
     op: KineticOperator, *, drop_l_coupling: bool = False
@@ -858,28 +847,18 @@ def build_coarse_preconditioner(
             ]
 
             def _a_inv(transpose: bool) -> Callable[[jnp.ndarray], jnp.ndarray]:
-                # Everything the application reads is passed as an ARGUMENT,
-                # never closed over: the Schur LU factors AND the arrays the row
-                # generators rebuild blocks from.  At these sizes that is the
-                # difference between running and being killed --- a concrete
-                # leaf reached from inside a lowering becomes a compile-time
-                # constant of it and XLA holds a second copy.
-                #
-                # The factors alone are not enough.  This route deliberately does
-                # not store the off-diagonal bands, regenerating ``L_k`` and
-                # ``U_k`` inside each substitution sweep instead; but the
-                # generator doing that closes over the ``(TZ, TZ)`` ``stream``
-                # and ``exb`` blocks, and ``GeneratedBlockTridiagFactors`` carries
-                # the generator as a *static* field.  So the bands the route
-                # avoided storing came back as captured constants --- measured on
-                # filteredW7XNetCDF_2species_magneticDrifts_noEr, where JAX
-                # reported "15.52GB total" and the process was OOM-killed at
-                # 640 s having produced nothing.  Rebuilding the generators here,
-                # inside the jit, from traced leaves is what makes the storage
-                # claim true.  Verified on
-                # geometryScheme4_2species_withEr_fullTrajectories, whose captured
-                # constants must be zero and whose 29 iterations to 2.85e-14 must
-                # not move (tests/test_coarse_precond_constants.py).
+                # Both the factors and the arrays the generators rebuild blocks
+                # from are ARGUMENTS, never closed over: a concrete leaf reached
+                # from inside a lowering is a compile-time constant of it, and
+                # XLA holds a second copy.  The factors alone are not enough ---
+                # the generator regenerating the unstored off-diagonals closes
+                # over the (TZ, TZ) stream and exb blocks, and
+                # GeneratedBlockTridiagFactors carries it as a *static* field, so
+                # the bands this route avoided storing came back as constants:
+                # "15.52GB total", OOM-killed at 640 s, on
+                # filteredW7XNetCDF_2species_magneticDrifts_noEr.  Rebuilding the
+                # generators here, from traced leaves, is what makes the storage
+                # claim true (tests/test_coarse_precond_constants.py).
                 @jax.jit
                 def apply(facs: list, gen: tuple, v: jnp.ndarray) -> jnp.ndarray:
                     coef_t, subs_t, floor_t, gamma_t = gen
