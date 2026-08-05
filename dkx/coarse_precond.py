@@ -689,8 +689,9 @@ def build_coarse_preconditioner(
     PAS-like L-diagonal — for Sugama this drops the field-particle
     momentum/energy-restoring coupling, kept only in the full operator GCROT
     solves), the Er L±2 xDot/xiDot terms and the tangential magnetic-drift
-    L±2 terms are dropped, and (optionally, the ``preconditioner_xi=1`` knob)
-    the L±1 streaming coupling is dropped too.
+    L±2 terms are dropped (Fortran's ``preconditioner_xi=1``, unconditional here);
+    ``drop_l_coupling`` severs the dominant L±1 coupling too, a separate and far
+    stronger cut measured at 6000 iterations to 0.77 against 19 with it kept.
     The result is block-tridiagonal over L and uncoupled over (species, x), so
     one batched block-Thomas factorization inverts it exactly; the bordered
     constraint rows of the *full* operator are then eliminated exactly with

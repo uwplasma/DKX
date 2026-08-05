@@ -349,7 +349,7 @@ than falling back.
      - x-diagonal collisions in the preconditioner
    * - ``preconditioner_xi``
      - ``1``
-     - drop L±1 streaming coupling in the preconditioner
+     - drop the L±2 terms in the preconditioner; DKX always does, so inert
    * - ``preconditioner_theta`` / ``preconditioner_zeta``
      - ``0`` / ``0``
      - angular coarsening
@@ -364,6 +364,22 @@ than falling back.
      - reuse the factorization across right-hand sides
 
 These map onto the tier-2 coarse preconditioner in :doc:`numerics`.
+
+.. note::
+
+   ``preconditioner_xi=1`` drops the **L±2** terms, not the L±1 ones — the
+   Fortran call sites read *"Drop the off-by-2 diagonal terms in L if this is
+   the preconditioner"* (``populateMatrix.F90`` lines 625, 772, 872, 933,
+   1046). DKX drops them unconditionally, so the key is accepted for namelist
+   compatibility and changes nothing.
+
+   The L±1 streaming and mirror coupling is a separate, stronger truncation,
+   reachable only through the ``drop_l_coupling`` API argument. It is not what
+   ``preconditioner_xi`` does, and it is expensive: 6000 iterations to a
+   residual of 0.77 where keeping the coupling converges in 19
+   (:doc:`performance`). Streaming and mirror are the dominant terms and are
+   strictly off-diagonal in the Legendre index, so severing them leaves a
+   preconditioner that no longer resembles the operator.
 
 Unsupported inputs
 ------------------
