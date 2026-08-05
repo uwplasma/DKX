@@ -229,6 +229,104 @@ Memory findings
   744k case the truncated route needs ~0.3 GB where a full-band tier-1 factor
   would need ~91 GB.
 
+The small-deck floor, and what it is made of
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``dkx`` is lighter than Fortran SFINCS on only 3 of the 32 decks that complete,
+and roughly half of that deficit sits at the *small* end, where a fixed floor
+of about 0.5 GB exceeds the entire Fortran process (0.1--0.2 GB). Naming the
+floor "JAX overhead" would explain nothing, so it is measured
+(``tools/benchmarks/memory_floor.py``, macOS arm64, JAX 0.11):
+
+.. list-table::
+   :header-rows: 1
+   :widths: 46 18 18
+
+   * - stage (each in a fresh interpreter)
+     - peak RSS
+     - step
+   * - bare Python
+     - 0.019 GB
+     -
+   * - ``import numpy``
+     - 0.028 GB
+     - +0.009
+   * - ``import jax``
+     - 0.112 GB
+     - +0.085
+   * - first JAX operation (backend live)
+     - 0.162 GB
+     - +0.050
+   * - ``import dkx.run``
+     - 0.156 GB
+     - ~0
+   * - build the operator (111 unknowns)
+     - 0.282 GB
+     - +0.126
+   * - solve it
+     - 0.531 GB
+     - +0.248
+
+Two measurements decide how much of this is reachable. Inside the solved
+process, ``jax.live_arrays()`` totals **under 1 MB** and the Python heap peaks
+at **5 MB** (``tracemalloc``). So essentially none of the 0.5 GB is data ``dkx``
+allocates, JAX arrays it holds, or Python objects it builds: it is XLA runtime
+and compiler working memory, which neither instrument can see.
+
+That is also why there is no lever. Three runs of each knob, same deck, same
+machine:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 60 22
+
+   * - knob
+     - peak RSS
+   * - default
+     - 0.531 GB
+   * - ``XLA_PYTHON_CLIENT_PREALLOCATE=false``
+     - 0.531 GB
+   * - ``XLA_PYTHON_CLIENT_ALLOCATOR=platform``
+     - 0.531 GB
+   * - ``JAX_DISABLE_JIT=1``
+     - 0.558 GB
+
+The allocator settings change nothing, to three decimal places and
+reproducibly. Disabling ``jit`` makes the floor *worse*, because op-by-op
+dispatch issues more XLA calls rather than fewer.
+
+Stated plainly: **the small-deck floor is a property of the XLA runtime, not of
+``dkx``, and none of it is presently under our control.** Suggesting an
+allocator flag here would be offering a lever that does not move.
+
+Two consequences are worth stating rather than hiding. The import baseline
+alone --- 0.156 GB with ``dkx`` fully imported and the backend live --- is
+already the same order as an entire small Fortran run, so no amount of trimming
+inside ``dkx`` reaches Fortran's small-deck footprint; closing that gap would
+take a different execution backend, not a tidier ``dkx``. And the floor is a
+constant, not a leak: it is paid once, and past a few thousand unknowns the
+physics dominates it.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 32 22
+
+   * - unknowns
+     - route
+     - peak RSS
+   * - 111
+     - block elimination
+     - 0.527 GB
+   * - 2,804
+     - preconditioned GCROT
+     - 0.741 GB
+   * - 5,208
+     - host sparse-direct
+     - 1.031 GB
+   * - 143,530
+     - preconditioned GCROT
+     - 3.979 GB
+
 Interpreting a cross-code difference
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
