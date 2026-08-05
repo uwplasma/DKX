@@ -159,7 +159,7 @@ def test_preconditioner_reduces_inner_iterations_and_preserves_answer() -> None:
     """The Phi1-aware coarse preconditioner cuts inner Krylov iterations exactly.
 
     Enabling the bordered-Schur coarse preconditioner
-    (:func:`dkx.solve.build_coarse_preconditioner`, which
+    (:func:`dkx.coarse_precond.build_coarse_preconditioner`, which
     Schur-eliminates the Phi1 quasineutrality border in addition to the
     constraint border) must take strictly fewer total inner Krylov iterations
     than the unpreconditioned full-restart solve, and converge to the *same*
