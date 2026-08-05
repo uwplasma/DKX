@@ -595,11 +595,50 @@ def _coarse_subsystem_block_fn(
 
     return block_fn
 
-def _coarse_generated_block_fns(
+def _strip_for_coarse(op: KineticOperator) -> KineticOperator:
+    """The SFINCS-simplified operator the coarse preconditioner is built from.
+
+    Everything that breaks the block-tridiagonal-in-``L`` structure is dropped:
+    the dense collision operators (reduced to an x-diagonal separately), the
+    ``E_r`` ``xDot``/``xiDot`` terms, the tangential magnetic drifts and the
+    ``Phi1`` coupling.  GCROT corrects for all of it.
+    """
+    return replace(
+        op, fp=None, sugama=None, fp_phi1=None, with_er_xidot=False, with_er_xdot=False,
+        with_magnetic_drifts=False, external_phi1_hat=None, include_phi1=False,
+        include_phi1_in_kinetic=False,
+    )  # fmt: skip
+
+def _coarse_pinned_block_fns(
+    coef: dict[str, jnp.ndarray], n_xi: int, subs: list[tuple[jnp.ndarray, ...]],
+    floor: jnp.ndarray, gamma: jnp.ndarray, drop_l_coupling: bool,
+) -> list[Callable[[jnp.ndarray], tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]]:  # fmt: skip
+    """The pinned row generators, rebuilt from whatever arrays are handed in.
+
+    Split out from :func:`_coarse_generated_block_data` so the same generators
+    can be rebuilt *inside* a jitted preconditioner application from traced
+    leaves.  A generator closes over its ``(Ntheta*Nzeta, Ntheta*Nzeta)``
+    ``stream`` and ``exb`` blocks; when those leaves are concrete, every one of
+    them is a compile-time constant of the lowering that regenerates blocks
+    from it, and XLA holds a second copy.  See :func:`build_coarse_preconditioner`.
+    """
+    return [
+        _coarse_subsystem_block_fn(
+            coef, n_xi, sub, drop_l_coupling=drop_l_coupling,
+            floor=floor[b], gamma=gamma[b],
+        )  # fmt: skip
+        for b, sub in enumerate(subs)
+    ]
+
+def _coarse_generated_block_data(
     op: KineticOperator, coef: dict[str, jnp.ndarray], mask: jnp.ndarray,
     coll_diag: jnp.ndarray | None, c0: jnp.ndarray, drop_l_coupling: bool,
-) -> list[Callable[[jnp.ndarray], tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]]:  # fmt: skip
-    """One pinned row generator per ``(species, x)``, pins sized as on the dense bands.
+) -> tuple[list[tuple[jnp.ndarray, ...]], jnp.ndarray, jnp.ndarray]:  # fmt: skip
+    """``(subs, floor, gamma)`` --- every array the pinned row generators close over.
+
+    Returned as data rather than baked into closures so that a caller who needs
+    the generators on the far side of a jit boundary can pass these across as
+    arguments and rebuild them there with :func:`_coarse_pinned_block_fns`.
 
     ``band``, the ``l = 0`` defect and the mean diagonal are reductions over ``L``, not
     storage, so they stream one live block at a time off the unregularized generator.
@@ -638,7 +677,17 @@ def _coarse_generated_block_fns(
         jnp.stack([s[1] for s in raw]).reshape(n_s, n_x), band.reshape(n_s, n_x),
         jnp.where(scale > 0.0, scale, 1.0).reshape(n_s, n_x), c0,
     ).reshape(-1)  # fmt: skip
-    return [rows(sub, floor=floor[b], gamma=gamma[b]) for b, sub in enumerate(subs)]
+    return subs, floor, gamma
+
+def _coarse_generated_block_fns(
+    op: KineticOperator, coef: dict[str, jnp.ndarray], mask: jnp.ndarray,
+    coll_diag: jnp.ndarray | None, c0: jnp.ndarray, drop_l_coupling: bool,
+) -> list[Callable[[jnp.ndarray], tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]]]:  # fmt: skip
+    """One pinned row generator per ``(species, x)``, pins sized as on the dense bands."""
+    subs, floor, gamma = _coarse_generated_block_data(
+        op, coef, mask, coll_diag, c0, drop_l_coupling
+    )
+    return _coarse_pinned_block_fns(coef, op.n_xi, subs, floor, gamma, drop_l_coupling)
 
 def build_coarse_preconditioner(
     op: KineticOperator, *, drop_l_coupling: bool = False
@@ -694,11 +743,7 @@ def build_coarse_preconditioner(
     n_tz = n_t * n_z
     batch = n_s * n_x
 
-    stripped = replace(
-        op, fp=None, sugama=None, fp_phi1=None, with_er_xidot=False, with_er_xdot=False,
-        with_magnetic_drifts=False, external_phi1_hat=None, include_phi1=False,
-        include_phi1_in_kinetic=False,
-    )
+    stripped = _strip_for_coarse(op)
     # Keep the Nxi_for_x truncation mask a jnp array (no host materialization) so the
     # coarse preconditioner stays traceable when the operator leaves are tracers
     # (jit-over-leaves / vmap / the differentiable kernel): the shape is static, only
@@ -786,7 +831,10 @@ def build_coarse_preconditioner(
         # can be applied tens of times per solve or has to be rebuilt each time.
         stripped._check_block_extraction_supported()
         coef = _truncated_coefficients(stripped)
-        pinned = _coarse_generated_block_fns(op, coef, mask, coll_diag, c0, drop_l_coupling)
+        gen_data = _coarse_generated_block_data(
+            op, coef, mask, coll_diag, c0, drop_l_coupling
+        )
+        pinned = _coarse_pinned_block_fns(coef, n_xi, *gen_data, drop_l_coupling)
         reusable = _coarse_factors_fit(op)
         warnings.warn(
             _coarse_reusable_fallback_message(op) if reusable
@@ -810,27 +858,42 @@ def build_coarse_preconditioner(
             ]
 
             def _a_inv(transpose: bool) -> Callable[[jnp.ndarray], jnp.ndarray]:
-                # The factors are passed as an ARGUMENT, never closed over.  At
-                # these sizes that is the difference between running and being
-                # killed: closing over them makes the whole Schur LU a
-                # compile-time constant of the jitted application, which XLA then
-                # holds a second copy of.  Measured on
+                # Everything the application reads is passed as an ARGUMENT,
+                # never closed over: the Schur LU factors AND the arrays the row
+                # generators rebuild blocks from.  At these sizes that is the
+                # difference between running and being killed --- a concrete
+                # leaf reached from inside a lowering becomes a compile-time
+                # constant of it and XLA holds a second copy.
+                #
+                # The factors alone are not enough.  This route deliberately does
+                # not store the off-diagonal bands, regenerating ``L_k`` and
+                # ``U_k`` inside each substitution sweep instead; but the
+                # generator doing that closes over the ``(TZ, TZ)`` ``stream``
+                # and ``exb`` blocks, and ``GeneratedBlockTridiagFactors`` carries
+                # the generator as a *static* field.  So the bands the route
+                # avoided storing came back as captured constants --- measured on
                 # filteredW7XNetCDF_2species_magneticDrifts_noEr, where JAX
-                # reported "15.52GB total" of captured constants and the process
-                # was OOM-killed at 640 s having produced nothing.  As pytree
-                # children they cross the jit boundary by reference instead, and
-                # the generator each factor carries stays static, so the two
-                # applications still share one factorization and one compile.
+                # reported "15.52GB total" and the process was OOM-killed at
+                # 640 s having produced nothing.  Rebuilding the generators here,
+                # inside the jit, from traced leaves is what makes the storage
+                # claim true.  Verified on
+                # geometryScheme4_2species_withEr_fullTrajectories, whose captured
+                # constants must be zero and whose 29 iterations to 2.85e-14 must
+                # not move (tests/test_coarse_precond_constants.py).
                 @jax.jit
-                def apply(facs: list, v: jnp.ndarray) -> jnp.ndarray:
+                def apply(facs: list, gen: tuple, v: jnp.ndarray) -> jnp.ndarray:
+                    coef_t, subs_t, floor_t, gamma_t = gen
+                    rows = _coarse_pinned_block_fns(
+                        coef_t, n_xi, subs_t, floor_t, gamma_t, drop_l_coupling
+                    )
                     # Serial over the 5-10 subsystems for the same reason as below.
                     g = v.reshape(batch, n_xi, n_tz)
                     return jnp.stack([
-                        block_thomas_solve(fac, g[b], transpose=transpose)
-                        for b, fac in enumerate(facs)
+                        block_thomas_solve(replace(fac, block_fn=row), g[b], transpose=transpose)
+                        for b, (fac, row) in enumerate(zip(facs, rows, strict=True))
                     ]).reshape(v.shape)
 
-                return functools.partial(apply, factors)
+                return functools.partial(apply, factors, (coef, *gen_data))
 
         else:
 
