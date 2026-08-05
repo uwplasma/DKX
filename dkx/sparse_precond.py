@@ -1,6 +1,6 @@
 """Sparse-elimination inverse of the SFINCS-simplified operator (tier-2).
 
-:func:`dkx.solve.build_coarse_preconditioner` inverts the simplified operator
+:func:`dkx.coarse_precond.build_coarse_preconditioner` inverts the simplified operator
 *exactly* by a block-Thomas recursion over the Legendre index ``L`` whose
 blocks are ``(Ntheta*Nzeta)`` square and **dense**.  The blocks are not dense in
 the operator -- :meth:`KineticOperator.legendre_blocks` builds each one as
@@ -41,7 +41,7 @@ Three facts make this admissible where a host callback would not otherwise be:
 
 What it does **not** change is the operator being inverted.  Every
 simplification, floor, mask pin and ``l = 0`` null-space pin of
-:func:`~dkx.solve.build_coarse_preconditioner` is reproduced here, so the two
+:func:`~dkx.coarse_precond.build_coarse_preconditioner` is reproduced here, so the two
 routes are the same linear map up to factorization round-off --
 ``tests/test_sparse_precond.py`` pins that agreement.  The ``l = 0`` pin is the
 one term that would destroy sparsity (it is a dense rank-one outer product on
@@ -174,12 +174,12 @@ def _angular_pieces(op: KineticOperator):
 def _diagonal_coefficients(op: KineticOperator) -> np.ndarray:
     """``(S, X, L)`` collision/floor diagonal the coarse route adds to each block.
 
-    Reproduces :func:`dkx.solve.build_coarse_preconditioner`: pitch-angle
+    Reproduces :func:`dkx.coarse_precond.build_coarse_preconditioner`: pitch-angle
     scattering, the self-species x-diagonal reduction of a dense Fokker-Planck
     or improved-Sugama operator, and the probed ``includePhi1InCollisionOperator``
     diagonal, each masked by the ``Nxi_for_x`` truncation.
     """
-    from dkx.solve import (  # noqa: PLC0415  (cycle: solve imports this module lazily)
+    from dkx.coarse_precond import (  # noqa: PLC0415
         _collision_phi1_diagonal,
         _dense_collision_diagonal,
     )
@@ -216,7 +216,7 @@ def _assemble(op, s, ix, stream, mirror, exb, eye, sp, drop_l_coupling):
     """Block-tridiagonal-in-L CSR assembly of one subsystem (shared inner loop).
 
     Returns ``(csr, band, l0_defect, scale)``.  The three scalars are the
-    quantities :func:`dkx.solve.build_coarse_preconditioner` measures to size its
+    quantities :func:`dkx.coarse_precond.build_coarse_preconditioner` measures to size its
     regularization, computed at the same points in the assembly: ``band`` and
     ``l0_defect`` from the raw blocks, ``scale`` from the floored and mask-pinned
     diagonal.  Reproducing them here is what keeps the two routes the same map.
@@ -257,7 +257,7 @@ def _assemble(op, s, ix, stream, mirror, exb, eye, sp, drop_l_coupling):
     # sums are the whole defect -- measured before the floor masks it.
     l0_defect = float(np.abs(np.asarray(blocks[(0, 0)].sum(axis=1)).reshape(-1)).max())
 
-    from dkx.solve import _COARSE_DIAGONAL_FLOOR  # noqa: PLC0415
+    from dkx.coarse_precond import _COARSE_DIAGONAL_FLOOR  # noqa: PLC0415
 
     floor = _COARSE_DIAGONAL_FLOOR * band
     diag_entries = []
@@ -278,13 +278,13 @@ def assemble_simplified(
     """Assemble every ``(species, x)`` subsystem of the simplified operator.
 
     The rank-one ``l = 0`` pin is sized here with the same
-    :func:`dkx.solve._l0_pin_gamma` the coarse route uses, but returned as its
+    :func:`dkx.coarse_precond._l0_pin_gamma` the coarse route uses, but returned as its
     two vectors rather than added in: it is a dense outer product, and
     assembling it would fill the ``l = 0`` block completely.
     """
     import scipy.sparse as sp  # noqa: PLC0415
 
-    from dkx.solve import _l0_pin_gamma  # noqa: PLC0415
+    from dkx.coarse_precond import _l0_pin_gamma  # noqa: PLC0415
 
     stream, mirror, exb, eye = _angular_pieces(op)
     matrices, bands, defects, scales = [], [], [], []
@@ -396,13 +396,13 @@ def build_sparse_f_inverse(
 def build_sparse_preconditioner(
     op: KineticOperator, *, drop_l_coupling: bool = False
 ) -> tuple[Callable[[jnp.ndarray], jnp.ndarray], Callable[[jnp.ndarray], jnp.ndarray]]:
-    """Drop-in sparse replacement for :func:`dkx.solve.build_coarse_preconditioner`.
+    """Drop-in sparse replacement for :func:`dkx.coarse_precond.build_coarse_preconditioner`.
 
     Same simplified operator, same regularization, same exact elimination of the
     bordered constraint / ``Phi1`` rows — only the inner f-block inverse changes
     from a dense block-Thomas factorization to a host sparse LU.
     """
-    from dkx.solve import (  # noqa: PLC0415
+    from dkx.coarse_precond import (  # noqa: PLC0415
         _materialize_borders,
         _materialize_full_border,
         schur_projected_precond,

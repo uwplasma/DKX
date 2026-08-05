@@ -1,6 +1,6 @@
 """How much fill the tier-2 elimination order costs, per deck.
 
-The classical tier-2 preconditioner (:func:`dkx.solve.build_coarse_preconditioner`)
+The classical tier-2 preconditioner (:func:`dkx.coarse_precond.build_coarse_preconditioner`)
 eliminates the Legendre index first, which fills the ``(theta, zeta)`` blocks in
 completely: the Schur complement ``D_l - L_l D_{l-1}^{-1} U_{l-1}`` is dense even
 though every input block carries only the 3- or 5-point ``createGrids.F90``
