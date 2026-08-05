@@ -496,11 +496,17 @@ def simplified_operator(
     :func:`dkx.coarse_precond.build_coarse_preconditioner` factors -- the dense
     ``(species, x)``-coupled Fokker-Planck / improved-Sugama collision
     operators are reduced to their PAS-like self-species x-diagonal, the
-    ``E_r`` ``L +- 2`` terms and the tangential magnetic drifts are dropped,
-    and (with ``drop_l_coupling``, the ``preconditioner_xi=1`` knob) the
-    ``L +- 1`` streaming coupling goes too -- but expressed as a *matrix-free*
-    operator rather than as dense bands, so it can be rediscretized on coarse
-    grids and applied at ``O(f_size)`` cost.
+    ``E_r`` ``L +- 2`` terms and the tangential magnetic drifts are dropped
+    -- and, with ``drop_l_coupling``, the ``L +- 1`` streaming coupling goes
+    too -- but expressed as a *matrix-free* operator rather than as dense
+    bands, so it can be rediscretized on coarse grids and applied at
+    ``O(f_size)`` cost.
+
+    Dropping the ``L +- 2`` terms is what Fortran's ``preconditioner_xi=1``
+    does (``populateMatrix.F90`` lines 625, 772, 872, 933 and 1046: "Drop the
+    off-by-2 diagonal terms in L if this is the preconditioner"), and DKX does
+    it unconditionally.  ``drop_l_coupling`` is a *different*, stronger knob --
+    see its argument note.
 
     The reduced collision diagonal is folded into the ``pas`` slot: pitch-angle
     scattering *is* an arbitrary ``(S, X, L)`` diagonal coefficient, so the
@@ -510,7 +516,15 @@ def simplified_operator(
 
     Args:
         op: the full tier-2 operator.
-        drop_l_coupling: drop the ``L +- 1`` streaming/mirror coupling.
+        drop_l_coupling: drop the ``L +- 1`` streaming and mirror coupling,
+            leaving the simplified operator block-*diagonal* in ``L``.  This is
+            not Fortran's ``preconditioner_xi``, which drops ``L +- 2``; it is
+            strictly more aggressive, and it removes the dominant term.  It is
+            off by default and measured expensive: on the tier-2 truncation
+            study it takes 6000 iterations to a residual of 0.77 where keeping
+            the coupling converges in 19 (``docs/performance.rst``).  Kept as a
+            knob because a multigrid smoother at fixed ``L`` cannot see the
+            coupling anyway.
 
     Returns:
         A PAS-family :class:`KineticOperator` on the same grid.
@@ -1387,7 +1401,9 @@ def build_multigrid_f_inverse(
 
     Args:
         op: the full tier-2 operator.
-        drop_l_coupling: the ``preconditioner_xi=1`` knob.
+        drop_l_coupling: drop the ``L +- 1`` streaming and mirror coupling
+            (see :func:`simplified_operator`).  Not Fortran's
+            ``preconditioner_xi``, which drops ``L +- 2``.
         settings: cycle/hierarchy/smoother knobs.
 
     Returns:
@@ -1459,7 +1475,9 @@ def build_multigrid_preconditioner(
 
     Args:
         op: the full tier-2 operator.
-        drop_l_coupling: the ``preconditioner_xi=1`` knob.
+        drop_l_coupling: drop the ``L +- 1`` streaming and mirror coupling
+            (see :func:`simplified_operator`).  Not Fortran's
+            ``preconditioner_xi``, which drops ``L +- 2``.
         settings: cycle/hierarchy/smoother knobs.
 
     Returns:

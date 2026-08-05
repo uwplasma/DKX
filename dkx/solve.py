@@ -25,8 +25,8 @@ Tier 2 — preconditioned, recycled Krylov (``solvax.krylov.gcrot``)
     coarse operator (the Fortran ``preconditionerOptions`` idiom):
     ``preconditioner_species=1`` (self-collisions only) and
     ``preconditioner_x=1`` (x-diagonal collisions) reduce Fokker-Planck to a
-    PAS-like L-diagonal coefficient; the Er L±2 terms are dropped; optionally
-    ``preconditioner_xi=1`` drops the L±1 streaming coupling.  The bordered
+    PAS-like L-diagonal coefficient; the Er L±2 terms are dropped, which is
+    Fortran's ``preconditioner_xi=1`` applied unconditionally.  The bordered
     constraint rows are eliminated exactly through
     ``solvax.operators.schur_projected_precond``.  The recycle pair (C, U) is
     returned for warm-starting continuation (Er scans, Newton steps); where its
@@ -1885,8 +1885,9 @@ def solve(
             ``use_preconditioner``, so nothing changes silently.  A
             preconditioner cannot change the answer — only the iteration
             count and the wall time.
-        drop_l_coupling_in_precond: the Fortran ``preconditioner_xi=1`` knob
-            (drop the L±1 streaming coupling in the coarse operator).
+        drop_l_coupling_in_precond: sever the L±1 coupling in the coarse
+            operator.  Not Fortran's ``preconditioner_xi``, which drops L±2,
+            and expensive; see :func:`dkx.coarse_precond.build_coarse_preconditioner`.
         restart: FGMRES cycle size ``m``.
         recycle_dim: GCROT recycle directions ``k``.
         max_restarts: tier-2 outer-cycle cap (the tier-3 trigger in auto).
