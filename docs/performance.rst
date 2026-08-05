@@ -124,7 +124,7 @@ Two more facts the sweep settles, both against ``dkx``:
 * *Six decks did not complete at all,* against 38 of 38 for the reference.  Five
   were killed by the operating system while the tier-2 preconditioner allocated
   its bands.  Those five are the ones
-  :func:`dkx.solve._coarse_bands_fit` diverts to the generated coarse route
+  :func:`dkx.coarse_precond._coarse_bands_fit` diverts to the generated coarse route
   ("Running the decks the bands do not fit" below) rather than dying part way
   through.  The sixth wanted the LIBSTELL text form of a VMEC ``wout``, read by
   :mod:`dkx.vmec_ascii`.
@@ -730,7 +730,7 @@ Sugama collisions, ``Phi1``/quasineutrality, tangential magnetic drifts, the
 ambipolar-``E_r`` ``xDot``/``xiDot`` terms -- has no block-tridiagonal-in-L
 structure, so it is locked out of the tier-1 direct path and must go through
 tier 2.  The classical tier-2 preconditioner
-(:func:`dkx.solve.build_coarse_preconditioner`) inverts the SFINCS-simplified
+(:func:`dkx.coarse_precond.build_coarse_preconditioner`) inverts the SFINCS-simplified
 operator *exactly* with a batched block-Thomas factorization whose blocks are
 ``Ntheta*Nzeta`` square, and rebuilds it on **every call**:
 ``O(Nxi Nspecies Nx (Ntheta Nzeta)^3)`` time and
@@ -753,7 +753,7 @@ reproduce with ``tools/benchmarks/tier2_multigrid_ladder.py``):
 .. note::
 
    The coarse route's iteration counts are those of the *adaptive* ``l = 0``
-   null-space pin (:func:`dkx.solve._l0_pin_gamma`).  The simplified ``l = 0``
+   null-space pin (:func:`dkx.coarse_precond._l0_pin_gamma`).  The simplified ``l = 0``
    diagonal block is annihilated by streaming, mirror, ExB and pitch-angle
    scattering on a distribution constant over the flux surface, so that null
    vector has to be removed -- but sizing the rank-one pin that removes it by
@@ -874,7 +874,7 @@ iterations at ``1e-2`` of the mean collision diagonal, no convergence at
 ``1.0``).  Dropping the pin outright is not an option either -- a collisionless,
 drift-free f-block has an *exactly* zero ``l = 0`` diagonal, and the ``Phi1``
 Newton inner solve forces the coarse preconditioner for every deck -- which is
-why the pin is adaptive (:func:`dkx.solve._l0_pin_gamma`).  Measured per deck on
+why the pin is adaptive (:func:`dkx.coarse_precond._l0_pin_gamma`).  Measured per deck on
 this geometry at ``11 x 21 x 41 x 5``, adaptive against unconditional: full
 Fokker-Planck with ``Er`` 21 against 87, improved Sugama with ``Er`` 20 against
 84, and no difference where the pin was already harmless or is genuinely needed
@@ -1101,28 +1101,40 @@ tolerance; the fill-reducing route stores far less and was still killed on
 three of the five and timed out on the other two.
 
 The third option changes neither the operator nor the pins, only where the
-blocks live.  ``solvax.direct.block_thomas_checkpointed_fn`` eliminates a
-block-tridiagonal chain from a *generator*: it calls back for one block row at
-a time, keeps one Schur checkpoint per ``cs = ceil(sqrt(Nxi))`` rows plus the
-one segment it is substituting back through, and recomputes the rest.  Peak
-dense storage per ``(species, x)`` subsystem falls from ``3 Nxi`` blocks to
-``Nxi/cs + 3 cs`` -- 0.48 GB instead of 3.58 GB per subsystem on the W7-X
-magnetic-drift decks -- and no band is ever materialized.
-:func:`dkx.solve.build_coarse_preconditioner` generates rows from
-:func:`dkx.solve._coarse_subsystem_block_fn`, which folds in the same collision
-diagonal, the same ``1e-8`` invertibility floor, the same identity rows on the
-``Nxi_for_x``-truncated ``(x, l)`` pairs and the same rank-one ``l = 0`` pin
-that the dense route applies to its bands; with only the floor the chain is
-singular and the solve returns ``nan``, so all three are load-bearing.
+blocks live, and it comes in two storage policies with very different cost
+models.  Both eliminate the pinned chain from a *generator*
+(:func:`dkx.coarse_precond._coarse_subsystem_block_fn`, which folds in the same
+collision diagonal, the same ``1e-8`` invertibility floor, the same identity
+rows on the ``Nxi_for_x``-truncated ``(x, l)`` pairs and the same rank-one
+``l = 0`` pin the dense route applies to its bands; with only the floor the
+chain is singular and the solve returns ``nan``, so all three are load-bearing),
+and neither ever materializes a band.
 
-**This is not a speedup and must not be reported as one.**  The kernel returns
-a solution, not reusable factors, so it repeats the whole elimination on every
-Krylov application where the dense route reuses one factorization, and it
-generates and eliminates each block row twice.  Measured on
+``solvax.direct.block_thomas_factor_fn(..., store_offdiagonals=False)`` keeps
+the Schur LU factors and drops the two off-diagonal bands, regenerating them one
+block at a time inside each substitution sweep.  Retained state is one
+``(Nxi, m, m)`` array per subsystem instead of three --- a third of the bands,
+exactly ``1/3 + 1/(6m)`` once the pivots are counted, and a sixth with
+``DKX_COARSE_FACTOR_DTYPE=float32``.  Crucially the elimination still runs
+**once**: an application is two triangular solves and two block regenerations
+per row, and no factorization, so the factors amortize over the tens of Krylov
+applications a solve makes.  This is the route the oversized decks take
+(:func:`dkx.coarse_precond._coarse_factors_fit`).
+
+``solvax.direct.block_thomas_checkpointed_fn`` retains no band-sized state at
+all: one Schur checkpoint per ``cs = ceil(sqrt(Nxi))`` rows plus the one segment
+it is substituting back through, ``Nxi/cs + 3 cs`` blocks against ``3 Nxi`` ---
+0.48 GB instead of 3.58 GB per subsystem on the W7-X magnetic-drift decks.  It
+returns a solution rather than reusable factors, so it repeats the entire
+elimination on every application.  **This is not a speedup and must not be
+reported as one.**  It is kept for the one thing the reusable route cannot do:
+chains where even the Schur LU alone does not fit.
+
+What generating the rows costs, measured on
 ``geometryScheme4_2species_withEr_fullTrajectories`` (``Nxi = 48``,
-``Ntheta*Nzeta = 247``, 10 subsystems, 10-core Apple M4), where both routes fit
-and are therefore comparable.  Both are timed under ``jax.jit``, so the number
-is the elimination and not Python dispatch (reproduce with
+``Ntheta*Nzeta = 247``, 10 subsystems, 10-core Apple M4), where every route fits
+and they are therefore comparable.  All are timed under ``jax.jit``, so the
+number is the elimination and not Python dispatch (reproduce with
 ``tools/benchmarks/tier2_generated_coarse.py``):
 
 .. list-table:: Cost of generating the rows instead of storing them
@@ -1136,19 +1148,23 @@ is the elimination and not Python dispatch (reproduce with
      - 3.3 s
      - 0.047 s
      - 0.65 GB
-   * - generated
+   * - checkpointed (one-shot)
      - 32.9 s
      - 1.46 s
      - none
 
 The two routes agree to ``5e-14`` forward and ``9e-14`` transposed on that
 deck, which is what two exact eliminations of the same near-singular chain
-should do.  The routing is therefore automatic and one-directional: the dense
-bands are used whenever they fit within physical RAM, and
-:func:`dkx.solve._coarse_bands_fit` diverts to the generator only when they do
-not, with a warning that states both sizes.  ``DKX_TIER2_MEMORY_GUARD=off``
-forces the dense route back for anyone who knows their machine better than
-``sysconf`` does.
+should do.  The routing is therefore automatic and by measured size alone: the dense bands
+are used whenever they fit within physical RAM
+(:func:`dkx.coarse_precond._coarse_bands_fit`); failing that, the Schur-LU
+factors are used whenever *they* fit
+(:func:`dkx.coarse_precond._coarse_factors_fit`); failing that, the checkpointed
+route runs.  Each transition warns with both sizes and says what it costs.
+``DKX_TIER2_MEMORY_GUARD=off`` forces the dense route back for anyone who knows
+their machine better than ``sysconf`` does, and
+``DKX_COARSE_FACTOR_DTYPE=float32`` halves the Schur LU for a deck that a third
+of the bands still does not fit.
 
 Why the coarse chain is not truncated instead
 ---------------------------------------------
@@ -1325,7 +1341,7 @@ The design choices that produce the numbers above, in one place:
   complement that eliminates the quasineutrality border (the
   :math:`\Phi_1(\theta,\zeta)` / :math:`\lambda` / source rows) exactly through
   the coarse f-block solve plus a small dense Schur solve
-  (:func:`dkx.solve.build_coarse_preconditioner`). On the production PAS
+  (:func:`dkx.coarse_precond.build_coarse_preconditioner`). On the production PAS
   Phi1 case this took the inner Krylov solve from 9198 unpreconditioned
   iterations (about 398 s) to 5 iterations (about 13.5 s), a roughly 29x
   speedup, with answers identical to machine precision and the differentiable

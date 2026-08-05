@@ -9,14 +9,26 @@ the 2026-08-01 upstream campaign that cost those decks 55-90 s each before
 dying.
 
 The route out is not a smaller preconditioner but a generated one: the same
-simplified operator, the same pins, eliminated by
-``solvax.direct.block_thomas_checkpointed_fn``, which builds each block row on
-demand and materializes no band.  It is much slower per Krylov application
-because it returns a solution rather than reusable factors, so it is taken
-only where the bands do not fit.
+simplified operator, the same pins, eliminated from block rows built on demand
+so that no band is materialized.  There are two of those, and which one runs is
+the difference between a preconditioner and a solver.
 
-Threshold and its evidence live in :func:`dkx.solve._coarse_bands_fit`; these
-tests pin the behaviour, not the constant.
+``solvax.direct.block_thomas_factor_fn(..., store_offdiagonals=False)`` keeps
+only the Schur LU --- a third of the bands, a sixth with a float32 LU --- and
+regenerates the two off-diagonal blocks during each substitution sweep.  The
+elimination runs once, so the factors are *reusable* across the tens of Krylov
+applications a solve makes.  This is the route taken wherever those factors fit,
+which on the decks this guard exists for is everywhere.
+
+``solvax.direct.block_thomas_checkpointed_fn`` retains no band-sized state at
+all and re-eliminates on every application, so it is much slower and is taken
+only where even the Schur LU does not fit.  It is not dead: that regime is
+reachable, and it is the one thing the reusable route cannot do.
+
+Thresholds and their evidence live in
+:func:`dkx.coarse_precond._coarse_bands_fit` and
+:func:`dkx.coarse_precond._coarse_factors_fit`; these tests pin the behaviour,
+not the constants.
 """
 
 from __future__ import annotations
@@ -29,20 +41,30 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from dkx.drift_kinetic import KineticOperator
-from dkx.namelist import parse_sfincs_input_text, read_sfincs_input
-from dkx.solve import (
+from dkx.coarse_precond import (
     _coarse_bands_fit,
+    _coarse_factor_dtype,
+    _coarse_factors_fit,
     _coarse_generated_fallback_message,
     _coarse_generated_peak_bytes,
+    _coarse_reusable_fallback_message,
     _host_memory_bytes,
     build_coarse_preconditioner,
-    build_tier2_preconditioner,
     coarse_preconditioner_band_bytes,
-    solve,
+    coarse_preconditioner_factor_bytes,
 )
+from dkx.drift_kinetic import KineticOperator
+from dkx.namelist import parse_sfincs_input_text, read_sfincs_input
+from dkx.solve import build_tier2_preconditioner, solve
 
 REF = Path(__file__).parent / "ref"
+
+# Host sizes that select each route for a given deck.  ``_coarse_bands_fit``
+# compares the band bytes against RAM and ``_coarse_factors_fit`` the Schur-LU
+# bytes, so half the band size sits between them by construction: too small for
+# the bands, ample for a third of them.
+def _ram_for_reusable(op: KineticOperator) -> float:
+    return 0.5 * coarse_preconditioner_band_bytes(op)
 
 
 def _small_op() -> KineticOperator:
@@ -104,6 +126,61 @@ def test_generating_the_rows_stores_an_order_of_magnitude_less():
     assert _coarse_generated_peak_bytes(tall) < 0.1 * per_subsystem
 
 
+def test_keeping_only_the_schur_lu_is_a_third_of_the_bands():
+    """The sizing the reusable route is chosen on: one of three arrays, not three.
+
+    Stated as a ratio rather than a byte count so it pins the storage *policy*.
+    One of the three ``(Nxi, m, m)`` float64 arrays survives, plus the ``(Nxi, m)``
+    int32 pivots both policies keep, so the ratio is ``1/3 + 1/(6m)`` exactly ---
+    which is a third to within 0.05% at a production angular grid and visibly
+    above it on a tiny fixture, and the difference is the pivots rather than
+    slack in the estimate.
+    """
+    op = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
+    tall = replace(op, n_xi=400)
+    m = tall.n_theta * tall.n_zeta
+    ratio = coarse_preconditioner_factor_bytes(tall) / coarse_preconditioner_band_bytes(tall)
+    assert ratio == pytest.approx(1.0 / 3.0 + 1.0 / (6.0 * m))
+
+    # The HSX deck this route exists for: 25x51 angular grid, where it is a third.
+    production = replace(tall, n_theta=25, n_zeta=51)
+    assert coarse_preconditioner_factor_bytes(production) / coarse_preconditioner_band_bytes(
+        production
+    ) == pytest.approx(1.0 / 3.0, rel=5e-4)
+
+
+def test_a_float32_schur_lu_halves_the_factors_again():
+    """The knob that exists for the decks a third is still not enough for.
+
+    Only the LU halves; the int32 pivots are the same either way, so the ratio
+    is ``(m + 1) / (2m + 1)`` --- a half to within 0.02% at a production angular
+    grid, and visibly above it on a tiny fixture.
+    """
+    op = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
+    m = op.n_theta * op.n_zeta
+    ratio = coarse_preconditioner_factor_bytes(
+        op, jnp.float32
+    ) / coarse_preconditioner_factor_bytes(op)
+    assert ratio == pytest.approx((m + 1.0) / (2.0 * m + 1.0))
+
+    production = replace(op, n_theta=25, n_zeta=51)
+    assert coarse_preconditioner_factor_bytes(
+        production, jnp.float32
+    ) / coarse_preconditioner_factor_bytes(production) == pytest.approx(0.5, rel=1e-3)
+
+
+def test_the_factor_precision_knob_rejects_a_value_it_does_not_understand(monkeypatch):
+    """A misspelled precision must not silently become the default.
+
+    It selects how the preconditioner is factored, so a typo that fell through
+    to float64 would be a silent performance and memory difference rather than
+    an error.
+    """
+    monkeypatch.setenv("DKX_COARSE_FACTOR_DTYPE", "float16")
+    with pytest.raises(ValueError, match="not a recognized precision"):
+        _coarse_factor_dtype()
+
+
 def test_a_deck_that_fits_keeps_the_dense_route(monkeypatch):
     """The fallback must stay out of the way wherever the fast route works."""
     monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
@@ -113,8 +190,33 @@ def test_a_deck_that_fits_keeps_the_dense_route(monkeypatch):
 def test_a_deck_that_does_not_fit_is_routed_to_the_generated_one(monkeypatch):
     """And it must divert wherever the bands would be allocated into a kill."""
     monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
-    monkeypatch.setattr("dkx.solve._host_memory_bytes", lambda: 1.0)
+    monkeypatch.setattr("dkx.coarse_precond._host_memory_bytes", lambda: 1.0)
     assert not _coarse_bands_fit(_small_op())
+
+
+def test_a_deck_that_misses_the_bands_by_under_3x_keeps_reusable_factors(monkeypatch):
+    """The routing decision the reusable route exists to make.
+
+    Between the two guards there is a band of machine sizes where the three
+    bands do not fit but a third of them does. A deck landing there must keep
+    reusable factors rather than fall all the way to the one-shot route, because
+    that is the difference between amortizing the elimination over a Krylov
+    solve and repeating it every application.
+    """
+    monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
+    op = _small_op()
+    monkeypatch.setattr("dkx.coarse_precond._host_memory_bytes", lambda: _ram_for_reusable(op))
+    assert not _coarse_bands_fit(op)
+    assert _coarse_factors_fit(op)
+
+
+def test_a_deck_too_small_even_for_the_schur_lu_falls_all_the_way(monkeypatch):
+    """The regime the checkpointed route is kept for, and the only one."""
+    monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
+    monkeypatch.setattr("dkx.coarse_precond._host_memory_bytes", lambda: 1.0)
+    op = _small_op()
+    assert not _coarse_bands_fit(op)
+    assert not _coarse_factors_fit(op)
 
 
 def test_the_warning_states_the_size_and_the_cost(monkeypatch):
@@ -125,7 +227,7 @@ def test_the_warning_states_the_size_and_the_cost(monkeypatch):
     """
     monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
     op = _small_op()
-    monkeypatch.setattr("dkx.solve._host_memory_bytes", lambda: 1.0)
+    monkeypatch.setattr("dkx.coarse_precond._host_memory_bytes", lambda: 1.0)
     message = _coarse_generated_fallback_message(op)
     assert f"{op.n_theta}x{op.n_zeta}" in message  # the size that did not fit
     assert "block_thomas_checkpointed_fn" in message  # what runs instead
@@ -134,41 +236,71 @@ def test_the_warning_states_the_size_and_the_cost(monkeypatch):
     assert "DKX_TIER2_MEMORY_GUARD=off" in message
 
 
-def test_the_warning_does_not_recommend_a_route_that_also_fails(monkeypatch):
+def test_the_reusable_warning_says_what_it_keeps_and_what_it_costs(monkeypatch):
+    """The route most oversized decks take must not read like the one-shot one.
+
+    It has to say what it retains, that the factors are *reused* (which is the
+    whole reason it is preferred), and how to shrink them further.
+    """
+    monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
+    op = _small_op()
+    monkeypatch.setattr("dkx.coarse_precond._host_memory_bytes", lambda: _ram_for_reusable(op))
+    message = _coarse_reusable_fallback_message(op)
+    assert f"{op.n_theta}x{op.n_zeta}" in message  # the size that did not fit
+    assert "store_offdiagonals=False" in message  # what runs instead
+    assert "reused across Krylov applications" in message  # why it is preferred
+    assert "It completes; it is not fast." not in message  # not the one-shot claim
+    assert "DKX_COARSE_FACTOR_DTYPE=float32" in message  # how to shrink it further
+
+
+@pytest.mark.parametrize(
+    "message_fn", [_coarse_generated_fallback_message, _coarse_reusable_fallback_message]
+)
+def test_no_fallback_warning_recommends_a_route_that_also_fails(message_fn, monkeypatch):
     """Regression guard on the correction the message already carries.
 
     An early version of this message told users to switch to
     ``preconditioner='sparse'``; the experiment that followed found it rescues
-    none of the five decks — killed on three, timed out on two.  The generated
-    fallback did not change that measurement, so re-adding the recommendation
-    without new measurement should still fail here.
+    none of the five decks — killed on three, timed out on two.  Neither the
+    generated fallback nor the reusable-factor route changed that measurement,
+    so re-adding the recommendation without new measurement should still fail
+    here — on both messages, since they now share the paragraph.
     """
     monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
-    monkeypatch.setattr("dkx.solve._host_memory_bytes", lambda: 1.0)
-    message = _coarse_generated_fallback_message(_small_op())
-    assert "'sparse' stores far less but was measured killed" in message
+    monkeypatch.setattr("dkx.coarse_precond._host_memory_bytes", lambda: 1.0)
+    assert "'sparse' stores far less but was measured killed" in message_fn(_small_op())
 
 
 def test_the_oversized_deck_builds_and_warns(monkeypatch):
     """It fires through the route callers actually take, and it produces a solver."""
     monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
-    monkeypatch.setattr("dkx.solve._host_memory_bytes", lambda: 1.0)
+    monkeypatch.setattr("dkx.coarse_precond._host_memory_bytes", lambda: 1.0)
     with pytest.warns(RuntimeWarning, match="block_thomas_checkpointed_fn"):
         precond, precond_t = build_tier2_preconditioner(_small_op(), "coarse")
+    assert callable(precond) and callable(precond_t)
+
+
+def test_the_reusable_route_is_what_a_near_miss_deck_builds(monkeypatch):
+    """A deck that misses the bands by under 3x must warn about *that* route."""
+    monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
+    op = _small_op()
+    monkeypatch.setattr("dkx.coarse_precond._host_memory_bytes", lambda: _ram_for_reusable(op))
+    with pytest.warns(RuntimeWarning, match="store_offdiagonals=False"):
+        precond, precond_t = build_tier2_preconditioner(op, "coarse")
     assert callable(precond) and callable(precond_t)
 
 
 def test_the_sparse_route_is_not_gated(monkeypatch):
     """The other tier-2 routes stay reachable whatever the bands cost."""
     pytest.importorskip("scipy.sparse.linalg")
-    monkeypatch.setattr("dkx.solve._host_memory_bytes", lambda: 1.0)
+    monkeypatch.setattr("dkx.coarse_precond._host_memory_bytes", lambda: 1.0)
     precond, _ = build_tier2_preconditioner(_small_op(), "sparse")
     assert callable(precond)
 
 
 def test_the_routing_can_be_switched_off(monkeypatch):
     """Someone who knows their machine better than ``sysconf`` keeps control."""
-    monkeypatch.setattr("dkx.solve._host_memory_bytes", lambda: 1.0)
+    monkeypatch.setattr("dkx.coarse_precond._host_memory_bytes", lambda: 1.0)
     monkeypatch.setenv("DKX_TIER2_MEMORY_GUARD", "off")
     assert _coarse_bands_fit(_small_op())
     with warnings.catch_warnings():
@@ -179,7 +311,7 @@ def test_the_routing_can_be_switched_off(monkeypatch):
 def test_unknown_host_memory_does_not_cost_the_fast_route(monkeypatch):
     """A platform that cannot report its RAM must not be demoted on a guess."""
     monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
-    monkeypatch.setattr("dkx.solve._host_memory_bytes", lambda: None)
+    monkeypatch.setattr("dkx.coarse_precond._host_memory_bytes", lambda: None)
     assert _coarse_bands_fit(_small_op())
 
 
@@ -190,7 +322,7 @@ def test_host_memory_is_readable_here():
 
 
 # ---------------------------------------------------------------------------
-# The two routes must be the same linear map.  The coarse chain is near-singular
+# The three routes must be the same linear map.  The coarse chain is near-singular
 # by construction -- its ``l = 0`` block annihilates a distribution constant on
 # the flux surface, which is why the rank-one pin exists -- so two exact
 # factorizations of it differ along that direction, and comparing their outputs
@@ -214,9 +346,21 @@ AGREEMENT_CASES = {
 }
 
 
-def _generated(op: KineticOperator, monkeypatch):
-    """The generated route's ``(precond, precond_t)`` for the same operator."""
-    monkeypatch.setattr("dkx.solve._host_memory_bytes", lambda: 1.0)
+# The two generated routes, keyed by the RAM size that selects each.  Both are
+# parametrized over everywhere the checkpointed one used to be tested alone: they
+# eliminate the same pinned chain and differ only in what survives it, so a
+# defect in the pins or the mask would show in either.
+FALLBACK_ROUTES = {
+    "reusable_factors": _ram_for_reusable,
+    "checkpointed": lambda op: 1.0,
+}
+
+
+def _generated(op: KineticOperator, monkeypatch, route: str = "checkpointed"):
+    """One generated route's ``(precond, precond_t)`` for the same operator."""
+    monkeypatch.setattr(
+        "dkx.coarse_precond._host_memory_bytes", lambda: FALLBACK_ROUTES[route](op)
+    )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
         return build_coarse_preconditioner(op)
@@ -230,8 +374,11 @@ def _generated(op: KineticOperator, monkeypatch):
 WELL_CONDITIONED = sorted(set(AGREEMENT_CASES) - {"er_xdot"})
 
 
+@pytest.mark.parametrize("route", sorted(FALLBACK_ROUTES))
 @pytest.mark.parametrize("case", WELL_CONDITIONED)
-def test_the_two_routes_are_one_map_forward_and_transposed(case: str, monkeypatch):
+def test_the_two_routes_are_one_map_forward_and_transposed(
+    case: str, route: str, monkeypatch
+):
     """Generating the rows changes where the blocks come from and nothing else.
 
     Both routes are exact factorizations of the same pinned coarse operator, so
@@ -242,7 +389,7 @@ def test_the_two_routes_are_one_map_forward_and_transposed(case: str, monkeypatc
     """
     op = AGREEMENT_CASES[case]()
     dense = build_coarse_preconditioner(op)
-    generated = _generated(op, monkeypatch)
+    generated = _generated(op, monkeypatch, route)
     rng = np.random.default_rng(0)
     for _ in range(3):
         v = jnp.asarray(rng.standard_normal(op.total_size))
@@ -255,8 +402,11 @@ def test_the_two_routes_are_one_map_forward_and_transposed(case: str, monkeypatc
 LINEAR_SOLVE_CASES = sorted(set(AGREEMENT_CASES) - {"phi1_in_collision"})
 
 
+@pytest.mark.parametrize("route", sorted(FALLBACK_ROUTES))
 @pytest.mark.parametrize("case", LINEAR_SOLVE_CASES)
-def test_the_generated_route_does_not_change_the_answer(case: str, monkeypatch):
+def test_the_generated_route_does_not_change_the_answer(
+    case: str, route: str, monkeypatch
+):
     """A preconditioner may change the iteration count and nothing else.
 
     Stated as a residual so it stays meaningful on the near-singular decks:
@@ -266,7 +416,9 @@ def test_the_generated_route_does_not_change_the_answer(case: str, monkeypatch):
     op = AGREEMENT_CASES[case]()
     rhs = op.rhs()
     reference = solve(op, rhs, method="gmres", tol=1e-10, preconditioner="coarse")
-    monkeypatch.setattr("dkx.solve._host_memory_bytes", lambda: 1.0)
+    monkeypatch.setattr(
+        "dkx.coarse_precond._host_memory_bytes", lambda: FALLBACK_ROUTES[route](op)
+    )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
         generated = solve(op, rhs, method="gmres", tol=1e-10, preconditioner="coarse")
@@ -292,7 +444,7 @@ def test_the_generated_route_is_jit_safe_over_traced_operator_leaves(monkeypatch
     op = _ramped_op()
     leaves, treedef = jax.tree_util.tree_flatten(op)
     v = jnp.asarray(np.linspace(-1.0, 1.0, op.total_size), dtype=jnp.float64)
-    monkeypatch.setattr("dkx.solve._host_memory_bytes", lambda: 1.0)
+    monkeypatch.setattr("dkx.coarse_precond._host_memory_bytes", lambda: 1.0)
 
     def action(values: list) -> jnp.ndarray:
         precond, _ = build_coarse_preconditioner(jax.tree_util.tree_unflatten(treedef, values))
@@ -309,7 +461,8 @@ def test_the_generated_route_is_jit_safe_over_traced_operator_leaves(monkeypatch
     assert difference <= 1e-6 * max(1.0, float(np.linalg.norm(reference))), difference
 
 
-def test_the_generated_route_carries_the_transposed_solve(monkeypatch):
+@pytest.mark.parametrize("route", sorted(FALLBACK_ROUTES))
+def test_the_generated_route_carries_the_transposed_solve(route: str, monkeypatch):
     """The adjoint runs on ``precond_t``, so it needs its own residual.
 
     ``SolveResult.adjoint`` records ``||A^T y - g|| / ||g||`` recomputed from
@@ -341,7 +494,9 @@ def test_the_generated_route_carries_the_transposed_solve(monkeypatch):
     dense_adjoint = dense.worst_relative_residual
     assert 0.0 < dense_adjoint < 1e-8
 
-    monkeypatch.setattr("dkx.solve._host_memory_bytes", lambda: 1.0)
+    monkeypatch.setattr(
+        "dkx.coarse_precond._host_memory_bytes", lambda: FALLBACK_ROUTES[route](op0)
+    )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
         generated_grad = float(jax.grad(loss)(jnp.asarray(1.0)))
@@ -352,3 +507,41 @@ def test_the_generated_route_carries_the_transposed_solve(monkeypatch):
     assert 0.0 < generated_adjoint < 1e-8
     assert abs(generated_adjoint - dense_adjoint) < 1e-8
     assert abs(generated_grad - dense_grad) <= 1e-6 * max(abs(dense_grad), 1.0)
+
+
+def test_the_generated_route_solves_a_phi1_deck_to_the_same_state(monkeypatch):
+    """The other border, on the decks that have one.
+
+    A ``Phi1`` operator's border is the whole quasineutrality block with a
+    *nonzero* border-border term, so ``schur_projected_precond`` eliminates
+    something structurally different from the constraint-only border every other
+    case here exercises -- and it wraps the f-block inverse, which is exactly the
+    piece these routes replace.  A preconditioner may change the Krylov path and
+    nothing else, so the Newton solve has to reach the same state to solver
+    tolerance.
+
+    Run on the reusable route only, and deliberately.  What the border cares
+    about is the *interface* of the f-block inverse, which both generated routes
+    present identically, so parametrizing this over both would buy no coverage
+    the equivalence tests above do not already give -- and the checkpointed
+    variant costs 55 s against 14 s here, on a file that is already among the
+    slower ones.  The route tested is the one real decks of this size take.
+    """
+    route = "reusable_factors"
+    from dkx.phi1 import operator_from_input, solve_phi1  # noqa: PLC0415
+
+    op = operator_from_input(REF / "pas_1species_PAS_noEr_tiny_withPhi1_inKinetic_linear.input.namelist")
+    reference = solve_phi1(op, tol=1e-9, use_preconditioner=True)
+    assert reference.converged
+
+    monkeypatch.setattr(
+        "dkx.coarse_precond._host_memory_bytes", lambda: FALLBACK_ROUTES[route](op)
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        generated = solve_phi1(op, tol=1e-9, use_preconditioner=True)
+    assert generated.converged
+    assert float(generated.residual_norm) < 1e-9
+
+    scale = max(1.0, float(np.linalg.norm(np.asarray(reference.x))))
+    assert np.linalg.norm(np.asarray(generated.x) - np.asarray(reference.x)) / scale < 1e-7

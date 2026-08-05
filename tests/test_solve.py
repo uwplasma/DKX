@@ -30,10 +30,9 @@ import scipy.linalg as sla
 
 from dkx.drift_kinetic import KineticOperator
 from dkx.namelist import parse_sfincs_input_text, read_sfincs_input
+from dkx.coarse_precond import _COARSE_DIAGONAL_FLOOR, _l0_pin_gamma
 from dkx.solve import (
     SolveResult,
-    _COARSE_DIAGONAL_FLOOR,
-    _l0_pin_gamma,
     _resolve_subsystem_batch,
     build_coarse_preconditioner,
     materialize_dense,
