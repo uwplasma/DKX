@@ -1155,7 +1155,51 @@ number is the elimination and not Python dispatch (reproduce with
 
 The two routes agree to ``5e-14`` forward and ``9e-14`` transposed on that
 deck, which is what two exact eliminations of the same near-singular chain
-should do.  The routing is therefore automatic and by measured size alone: the dense bands
+should do.
+
+The same deck end to end, as a whole ``run_transport_matrix`` solve rather than
+a per-application microbenchmark, on 12 pinned cores of a 36-core Xeon with two
+other users on the box (load 2.3-3.9 across the timed runs; the checkpointed run
+is excluded because it was still going at 6 minutes and overlapped a test run,
+so its wall time would not have been a clean number):
+
+.. list-table:: Whole solve, ``geometryScheme4_2species_withEr_fullTrajectories``
+   :header-rows: 1
+
+   * - route
+     - GCROT iterations
+     - final residual
+     - wall
+     - peak RSS
+   * - dense (default)
+     - 29
+     - 2.85e-14
+     - 51 s
+     - 4.6 GB
+   * - reusable Schur LU, float64
+     - 29
+     - 2.85e-14
+     - 113 s
+     - 7.7 GB
+   * - reusable Schur LU, float32
+     - 29
+     - 2.86e-14
+     - 83 s
+     - 4.4 GB
+
+The iteration count is the number to read here, and it is *identical* across the
+three: the routes are the same linear map, so the preconditioner changes where
+the blocks are kept and nothing about the Krylov path.  The float32 LU cost no
+extra iterations at all on this deck and reached the same residual, which is the
+evidence for offering it --- and the reason it is still not the default is that
+one deck is not a licence to change everyone's preconditioner precision.
+
+Peak RSS on a deck this small is dominated by compilation rather than by the
+factors (the bands here are 0.65 GB, so a third of them is 0.2 GB and cannot
+account for these figures).  That is why the reusable route can show a *higher*
+peak than dense at this size while being the only thing that fits at production
+size, and it is a further reason the routing is by band size rather than by
+preference.  The routing is therefore automatic and by measured size alone: the dense bands
 are used whenever they fit within physical RAM
 (:func:`dkx.coarse_precond._coarse_bands_fit`); failing that, the Schur-LU
 factors are used whenever *they* fit
