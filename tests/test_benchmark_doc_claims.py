@@ -260,6 +260,43 @@ def test_testing_docs_coverage_gate_matches_ci_workflow() -> None:
     assert f"``{fail_under} -> 85 -> 90 -> 95``" in testing_docs
 
 
+def test_coarse_truncation_table_matches_its_named_generator() -> None:
+    """The tier-2 truncation table must be reproducible from the script it names.
+
+    The rows are GCROT iteration counts, which are deterministic and
+    load-independent, so the claim is checkable rather than a wall time. What
+    this pins is the provenance: the deck, the non-convergence cap and the
+    Krylov settings quoted in the table are the generator's own defaults, so
+    the documented command reproduces the documented numbers.
+    """
+
+    performance = (REPO_ROOT / "docs" / "performance.rst").read_text(encoding="utf-8")
+    generator = REPO_ROOT / "tools" / "benchmarks" / "tier2_coarse_truncation.py"
+    assert generator.exists(), generator
+    source = generator.read_text(encoding="utf-8")
+
+    assert "Why the coarse chain is not truncated instead" in performance
+    assert "tools/benchmarks/tier2_coarse_truncation.py" in performance
+
+    # The measured deck is the generator's default, so --deck is not needed.
+    assert 'default="geometryScheme4_2species_noEr"' in source
+    assert "geometryScheme4_2species_noEr" in performance
+
+    # The ladder: the whole chain, one link cut, four links cut.
+    for row in (
+        "   * - 48 (the whole chain)\n     - 26\n",
+        "   * - 47\n     - 133\n",
+        "   * - 44\n     - no convergence in 300\n",
+    ):
+        assert row in performance, row
+
+    # "no convergence in 300" is max_restarts * the FGMRES cycle size, both of
+    # which the generator sets; the table and the script must not drift apart.
+    assert '"--max-restarts", type=int, default=10' in source
+    assert "m=30, k=8" in source
+    assert "no convergence in 300" in performance
+
+
 def test_required_ci_jobs_stay_within_documented_runtime_budget() -> None:
     """Keep required CI jobs aligned with the sub-ten-minute review budget."""
 
