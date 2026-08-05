@@ -22,6 +22,9 @@ LU, regenerating the off-diagonal blocks during each substitution sweep.  A
 third of the band state, a sixth with a float32 LU.  The elimination still runs
 exactly once, so the factors are *reusable*: a Krylov application performs
 triangular solves and two block regenerations per row, and no factorization.
+Exact, reusable and iteration-for-iteration identical to the dense route where
+both fit; not yet enough to complete the 42.9-53.3 GB decks, because the factors
+are captured as constants by the outer traced solve (docs/performance.rst).
 
 **Checkpointed, one-shot.**  ``solvax.direct.block_thomas_checkpointed_fn``
 retains no band-sized state at all, at the cost of re-eliminating on every

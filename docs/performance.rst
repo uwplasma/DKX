@@ -1199,7 +1199,43 @@ factors (the bands here are 0.65 GB, so a third of them is 0.2 GB and cannot
 account for these figures).  That is why the reusable route can show a *higher*
 peak than dense at this size while being the only thing that fits at production
 size, and it is a further reason the routing is by band size rather than by
-preference.  The routing is therefore automatic and by measured size alone: the dense bands
+preference.
+
+Not yet demonstrated at production scale
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The two decks this route was built for do **not** yet complete with it, and that
+is worth stating plainly rather than leaving to be discovered.
+
+On ``filteredW7XNetCDF_2species_magneticDrifts_noEr`` (42.9 GB of bands, 14.3 GB
+of float64 Schur LU, 7.2 GB in float32), run on a 62 GB machine with one other
+user holding about 10 GB:
+
+* the float64 factorization itself behaves exactly as sized --- resident memory
+  climbs steadily and levels at 15.6 GB, matching the 14.3 GB prediction plus
+  working set --- and the process is then **OOM-killed at about 620 s**, having
+  produced no solution;
+* JAX reports ``A large amount of constants were captured during lowering
+  (15.52GB total)`` immediately before that;
+* the float32 run reaches its predicted 7.2 GB during factorization and then
+  climbs to 38.8 GB resident, at which point it was killed deliberately to avoid
+  putting another user's job at risk.
+
+The cause is not the storage arithmetic, which is correct on both counts. It is
+that the factors are concrete arrays reached from inside the *outer* traced
+solve --- GCROT under ``solvax.implicit.linear_solve``'s
+``custom_linear_solve`` --- so they are captured as compile-time constants of
+that computation and XLA holds a second copy. Passing them as an argument to the
+preconditioner's own ``jit`` removes one level of this and is worth doing on its
+own (it halved the whole-solve wall time on the deck above), but it does not
+reach the outer trace, which is where the 15.52 GB is captured.
+
+Until the factors can be threaded to the outermost jitted computation as
+arguments, the reusable route is the right *storage* policy with the wrong
+*lifetime*: it is demonstrated exact, demonstrated reusable, and demonstrated to
+reproduce the dense route's iteration count and residual on a deck where both
+fit --- and it does not yet make the 42.9 and 53.3 GB decks runnable. Those
+decks still have no completed tier-2 solve.  The routing is therefore automatic and by measured size alone: the dense bands
 are used whenever they fit within physical RAM
 (:func:`dkx.coarse_precond._coarse_bands_fit`); failing that, the Schur-LU
 factors are used whenever *they* fit

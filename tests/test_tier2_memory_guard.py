@@ -17,8 +17,10 @@ the difference between a preconditioner and a solver.
 only the Schur LU --- a third of the bands, a sixth with a float32 LU --- and
 regenerates the two off-diagonal blocks during each substitution sweep.  The
 elimination runs once, so the factors are *reusable* across the tens of Krylov
-applications a solve makes.  This is the route taken wherever those factors fit,
-which on the decks this guard exists for is everywhere.
+applications a solve makes.  This is the route taken wherever those factors fit.
+It is not yet shown to make the 42.9-53.3 GB decks complete --- they are still
+killed, for a reason that is about tracing rather than sizing
+(docs/performance.rst, "Not yet demonstrated at production scale").
 
 ``solvax.direct.block_thomas_checkpointed_fn`` retains no band-sized state at
 all and re-eliminates on every application, so it is much slower and is taken
