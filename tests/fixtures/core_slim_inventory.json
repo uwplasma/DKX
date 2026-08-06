@@ -408,7 +408,7 @@
     },
     {
       "path": "dkx/coarse_precond.py",
-      "lines_at_audit": 1003,
+      "lines_at_audit": 1012,
       "category": "core",
       "action": "retain",
       "public_imports": [],

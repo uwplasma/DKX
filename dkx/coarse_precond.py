@@ -116,9 +116,9 @@ def _transposed_apply(op: KineticOperator) -> Callable[[jnp.ndarray], jnp.ndarra
 # Set at 1.0 -- "the arrays alone do not fit in RAM" -- because that needs no tuning
 # and the measured outcomes separate cleanly on either side: on the 2026-08-01
 # upstream campaign (24 GB machine) every deck up to 16.9 GB of bands completed and
-# every deck from 42.9 GB was killed.  JAX does not hold all three bands live at once
-# (16.9 GB of bands peaks at 11.7 GB resident), so a fraction well below 1 would
-# divert a deck that works onto the slower path.
+# every deck from 42.9 GB was killed.  The transient is charged separately, by
+# _COARSE_BAND_RESIDENT_OVERHEAD, rather than by shrinking this fraction, so that
+# the fraction stays a policy and the overhead stays a measurement.
 _TIER2_GUARD_FRACTION = 1.0
 _TIER2_GUARD_ENV = "DKX_TIER2_MEMORY_GUARD"
 # Precision of the reusable Schur LU factors: "float64" (default) or "float32".
@@ -180,6 +180,15 @@ def _available_memory_bytes() -> float | None:
 #: Resident bytes the reusable route actually costs per byte of stored factors.
 #: Measured on the same deck at float32: 7.2 GB of factors peaked at 8.87 GB RSS.
 _COARSE_RESIDENT_OVERHEAD = 1.25
+#: The same ratio for the *dense band* route, which is not the same number and
+#: must not borrow the one above.  Measured on a 62 GB box: three runs of the
+#: 42.9 GB-band decks each peaked at 58.5-58.9 GB, i.e. **1.37x**, and were
+#: OOM-killed 43 s in because ``42.9 * 1.25 = 53.6`` had passed a ~54 GB budget.
+#: An earlier 24 GB-box note put bands at 0.69x (16.9 GB peaking at 11.7 GB);
+#: that is not reproducible where there is room to materialize, so the guard
+#: takes the conservative measurement.  Bands are three arrays where the factors
+#: are one, so a larger transient than the factor route is what to expect.
+_COARSE_BAND_RESIDENT_OVERHEAD = 1.45
 
 def _coarse_memory_budget() -> float | None:
     """What the preconditioner may claim: available memory, else physical RAM."""
@@ -233,7 +242,7 @@ def _coarse_bands_fit(op: KineticOperator) -> bool:
         return True
     budget = _coarse_memory_budget()
     return budget is None or (
-        coarse_preconditioner_band_bytes(op) * _COARSE_RESIDENT_OVERHEAD
+        coarse_preconditioner_band_bytes(op) * _COARSE_BAND_RESIDENT_OVERHEAD
         <= _TIER2_GUARD_FRACTION * budget
     )
 
