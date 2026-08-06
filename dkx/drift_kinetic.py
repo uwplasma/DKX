@@ -756,11 +756,15 @@ class KineticOperator:
         in the preconditioner rather than dropping them
         (``populateMatrix.F90`` lines 544 and 671, ``whichMatrix==0``).
 
-        It is worth having.  Measured on ``magdrift_1species_tiny`` with dense
-        preconditioners and the same full operator, GCROT takes **6000 iterations
-        to a residual of 9.07e+01 -- no convergence** with the drifts dropped, and
-        **7 iterations** once this diagonal part is present.  (Keeping the ``L +- 2``
-        part too would reach 1, but needs a block-pentadiagonal solve.)
+        Measured through the production tier-2 path on the tiny drift fixtures, the
+        gain is real but modest: 51 -> 30 GCROT iterations on
+        ``magdrift_1species_tiny``, and 0-1 iterations on the other eight drift
+        schemes.  An earlier 6000 -> 7 figure was a harness artifact --- it came
+        from a dense pseudo-inverse of the *unpinned* stripped operator, so it
+        measured the missing ``l = 0`` and mask pins, not the missing drifts.
+        Whether this grows at production resolution is a separate measurement.
+
+        (Keeping the ``L +- 2`` part too needs a block-pentadiagonal solve.)
 
         The ``L`` dependence is separable: every term is a scalar function of ``L``
         times a matrix that does not depend on ``L``.  So this returns the matrices

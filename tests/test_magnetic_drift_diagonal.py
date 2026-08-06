@@ -4,8 +4,15 @@
 part of :meth:`_magnetic_drifts` that lands on the same Legendre row it came
 from.  It exists so the tier-2 coarse preconditioner can carry the drifts the
 way Fortran's ``preconditioner_magnetic_drifts_max_L`` does instead of dropping
-them --- worth 6000 iterations (no convergence) down to 7 on
-``magdrift_1species_tiny``.
+them --- worth 51 -> 30 GCROT iterations on ``magdrift_1species_tiny`` and 0-1
+on the other eight drift schemes, measured through the production path.
+
+An earlier 6000 -> 7 figure for the same change was a harness artifact: it came
+from a dense pseudo-inverse of the *unpinned* stripped operator, so what it
+measured was the missing ``l = 0`` and mask pins, not the missing drifts.  Real
+DKX takes 51 on that deck, not 6000.  Preconditioner experiments that rebuild
+the coarse operator outside :func:`dkx.coarse_precond.build_coarse_preconditioner`
+measure the pins unless they reproduce them.
 
 A preconditioner is allowed to be an approximation of the operator, so a wrong
 block here would not fail loudly; it would just cost iterations, and be blamed

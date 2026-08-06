@@ -365,7 +365,7 @@
   "entries": [
     {
       "path": "dkx/drift_kinetic.py",
-      "lines_at_audit": 2623,
+      "lines_at_audit": 2627,
       "category": "core",
       "action": "retain",
       "public_imports": [],
@@ -408,7 +408,7 @@
     },
     {
       "path": "dkx/coarse_precond.py",
-      "lines_at_audit": 1012,
+      "lines_at_audit": 1091,
       "category": "core",
       "action": "retain",
       "public_imports": [],
