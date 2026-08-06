@@ -627,3 +627,31 @@ def test_the_float32_hint_is_absent_when_already_on_float32(monkeypatch):
     monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: 1.0e15)
     monkeypatch.setenv("DKX_COARSE_FACTOR_DTYPE", "float32")
     assert coarse_precond._coarse_downgrade_hint(op, jnp.float32) == ""
+
+
+def test_the_band_route_carries_its_own_resident_overhead():
+    """Bands are three arrays where the factors are one; one constant cannot serve both.
+
+    Measured on a 62 GB box: the 42.9 GB-band decks each peaked at 58.5-58.9 GB
+    and were OOM-killed 43 s in, because 42.9 * 1.25 = 53.6 had passed a ~54 GB
+    budget.  Borrowing the factor route's overhead for the bands is exactly that
+    bug.
+    """
+    assert (
+        coarse_precond._COARSE_BAND_RESIDENT_OVERHEAD
+        > coarse_precond._COARSE_RESIDENT_OVERHEAD
+    )
+    assert 42.9 * coarse_precond._COARSE_BAND_RESIDENT_OVERHEAD > 58.9, (
+        "the band overhead must cover the 58.9 GB that was actually observed"
+    )
+
+
+def test_the_42gb_bands_are_refused_on_a_62gb_box(monkeypatch):
+    """The exact configuration that was OOM-killed on office."""
+    op = _load_op("quick_2species_FPCollisions_noEr")
+    bands = coarse_precond.coarse_preconditioner_band_bytes(op)
+    # A budget that the raw band size clears but the real transient does not.
+    monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: bands * 1.3)
+    assert not coarse_precond._coarse_bands_fit(op)
+    monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: bands * 1.6)
+    assert coarse_precond._coarse_bands_fit(op)
