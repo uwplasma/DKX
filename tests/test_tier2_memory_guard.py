@@ -55,6 +55,7 @@ from dkx.coarse_precond import (
     coarse_preconditioner_band_bytes,
     coarse_preconditioner_factor_bytes,
 )
+import dkx.coarse_precond as coarse_precond
 from dkx.drift_kinetic import KineticOperator
 from dkx.namelist import parse_sfincs_input_text, read_sfincs_input
 from dkx.solve import build_tier2_preconditioner, solve
@@ -192,7 +193,7 @@ def test_a_deck_that_fits_keeps_the_dense_route(monkeypatch):
 def test_a_deck_that_does_not_fit_is_routed_to_the_generated_one(monkeypatch):
     """And it must divert wherever the bands would be allocated into a kill."""
     monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
-    monkeypatch.setattr("dkx.coarse_precond._host_memory_bytes", lambda: 1.0)
+    monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: 1.0)
     assert not _coarse_bands_fit(_small_op())
 
 
@@ -207,7 +208,7 @@ def test_a_deck_that_misses_the_bands_by_under_3x_keeps_reusable_factors(monkeyp
     """
     monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
     op = _small_op()
-    monkeypatch.setattr("dkx.coarse_precond._host_memory_bytes", lambda: _ram_for_reusable(op))
+    monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: _ram_for_reusable(op))
     assert not _coarse_bands_fit(op)
     assert _coarse_factors_fit(op)
 
@@ -215,7 +216,7 @@ def test_a_deck_that_misses_the_bands_by_under_3x_keeps_reusable_factors(monkeyp
 def test_a_deck_too_small_even_for_the_schur_lu_falls_all_the_way(monkeypatch):
     """The regime the checkpointed route is kept for, and the only one."""
     monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
-    monkeypatch.setattr("dkx.coarse_precond._host_memory_bytes", lambda: 1.0)
+    monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: 1.0)
     op = _small_op()
     assert not _coarse_bands_fit(op)
     assert not _coarse_factors_fit(op)
@@ -229,7 +230,7 @@ def test_the_warning_states_the_size_and_the_cost(monkeypatch):
     """
     monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
     op = _small_op()
-    monkeypatch.setattr("dkx.coarse_precond._host_memory_bytes", lambda: 1.0)
+    monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: 1.0)
     message = _coarse_generated_fallback_message(op)
     assert f"{op.n_theta}x{op.n_zeta}" in message  # the size that did not fit
     assert "block_thomas_checkpointed_fn" in message  # what runs instead
@@ -246,7 +247,7 @@ def test_the_reusable_warning_says_what_it_keeps_and_what_it_costs(monkeypatch):
     """
     monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
     op = _small_op()
-    monkeypatch.setattr("dkx.coarse_precond._host_memory_bytes", lambda: _ram_for_reusable(op))
+    monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: _ram_for_reusable(op))
     message = _coarse_reusable_fallback_message(op)
     assert f"{op.n_theta}x{op.n_zeta}" in message  # the size that did not fit
     assert "store_offdiagonals=False" in message  # what runs instead
@@ -269,14 +270,14 @@ def test_no_fallback_warning_recommends_a_route_that_also_fails(message_fn, monk
     here — on both messages, since they now share the paragraph.
     """
     monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
-    monkeypatch.setattr("dkx.coarse_precond._host_memory_bytes", lambda: 1.0)
+    monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: 1.0)
     assert "'sparse' stores far less but was measured killed" in message_fn(_small_op())
 
 
 def test_the_oversized_deck_builds_and_warns(monkeypatch):
     """It fires through the route callers actually take, and it produces a solver."""
     monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
-    monkeypatch.setattr("dkx.coarse_precond._host_memory_bytes", lambda: 1.0)
+    monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: 1.0)
     with pytest.warns(RuntimeWarning, match="block_thomas_checkpointed_fn"):
         precond, precond_t = build_tier2_preconditioner(_small_op(), "coarse")
     assert callable(precond) and callable(precond_t)
@@ -286,7 +287,7 @@ def test_the_reusable_route_is_what_a_near_miss_deck_builds(monkeypatch):
     """A deck that misses the bands by under 3x must warn about *that* route."""
     monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
     op = _small_op()
-    monkeypatch.setattr("dkx.coarse_precond._host_memory_bytes", lambda: _ram_for_reusable(op))
+    monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: _ram_for_reusable(op))
     with pytest.warns(RuntimeWarning, match="store_offdiagonals=False"):
         precond, precond_t = build_tier2_preconditioner(op, "coarse")
     assert callable(precond) and callable(precond_t)
@@ -295,14 +296,14 @@ def test_the_reusable_route_is_what_a_near_miss_deck_builds(monkeypatch):
 def test_the_sparse_route_is_not_gated(monkeypatch):
     """The other tier-2 routes stay reachable whatever the bands cost."""
     pytest.importorskip("scipy.sparse.linalg")
-    monkeypatch.setattr("dkx.coarse_precond._host_memory_bytes", lambda: 1.0)
+    monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: 1.0)
     precond, _ = build_tier2_preconditioner(_small_op(), "sparse")
     assert callable(precond)
 
 
 def test_the_routing_can_be_switched_off(monkeypatch):
     """Someone who knows their machine better than ``sysconf`` keeps control."""
-    monkeypatch.setattr("dkx.coarse_precond._host_memory_bytes", lambda: 1.0)
+    monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: 1.0)
     monkeypatch.setenv("DKX_TIER2_MEMORY_GUARD", "off")
     assert _coarse_bands_fit(_small_op())
     with warnings.catch_warnings():
@@ -313,7 +314,7 @@ def test_the_routing_can_be_switched_off(monkeypatch):
 def test_unknown_host_memory_does_not_cost_the_fast_route(monkeypatch):
     """A platform that cannot report its RAM must not be demoted on a guess."""
     monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
-    monkeypatch.setattr("dkx.coarse_precond._host_memory_bytes", lambda: None)
+    monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: None)
     assert _coarse_bands_fit(_small_op())
 
 
@@ -361,7 +362,7 @@ FALLBACK_ROUTES = {
 def _generated(op: KineticOperator, monkeypatch, route: str = "checkpointed"):
     """One generated route's ``(precond, precond_t)`` for the same operator."""
     monkeypatch.setattr(
-        "dkx.coarse_precond._host_memory_bytes", lambda: FALLBACK_ROUTES[route](op)
+        "dkx.coarse_precond._coarse_memory_budget", lambda: FALLBACK_ROUTES[route](op)
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
@@ -419,7 +420,7 @@ def test_the_generated_route_does_not_change_the_answer(
     rhs = op.rhs()
     reference = solve(op, rhs, method="gmres", tol=1e-10, preconditioner="coarse")
     monkeypatch.setattr(
-        "dkx.coarse_precond._host_memory_bytes", lambda: FALLBACK_ROUTES[route](op)
+        "dkx.coarse_precond._coarse_memory_budget", lambda: FALLBACK_ROUTES[route](op)
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
@@ -446,7 +447,7 @@ def test_the_generated_route_is_jit_safe_over_traced_operator_leaves(monkeypatch
     op = _ramped_op()
     leaves, treedef = jax.tree_util.tree_flatten(op)
     v = jnp.asarray(np.linspace(-1.0, 1.0, op.total_size), dtype=jnp.float64)
-    monkeypatch.setattr("dkx.coarse_precond._host_memory_bytes", lambda: 1.0)
+    monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: 1.0)
 
     def action(values: list) -> jnp.ndarray:
         precond, _ = build_coarse_preconditioner(jax.tree_util.tree_unflatten(treedef, values))
@@ -497,7 +498,7 @@ def test_the_generated_route_carries_the_transposed_solve(route: str, monkeypatc
     assert 0.0 < dense_adjoint < 1e-8
 
     monkeypatch.setattr(
-        "dkx.coarse_precond._host_memory_bytes", lambda: FALLBACK_ROUTES[route](op0)
+        "dkx.coarse_precond._coarse_memory_budget", lambda: FALLBACK_ROUTES[route](op0)
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
@@ -537,7 +538,7 @@ def test_the_generated_route_solves_a_phi1_deck_to_the_same_state(monkeypatch):
     assert reference.converged
 
     monkeypatch.setattr(
-        "dkx.coarse_precond._host_memory_bytes", lambda: FALLBACK_ROUTES[route](op)
+        "dkx.coarse_precond._coarse_memory_budget", lambda: FALLBACK_ROUTES[route](op)
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
@@ -547,3 +548,82 @@ def test_the_generated_route_solves_a_phi1_deck_to_the_same_state(monkeypatch):
 
     scale = max(1.0, float(np.linalg.norm(np.asarray(reference.x))))
     assert np.linalg.norm(np.asarray(generated.x) - np.asarray(reference.x)) / scale < 1e-7
+
+
+# ---------------------------------------------------------------------------
+# The budget is available memory, not physical RAM
+# ---------------------------------------------------------------------------
+# Sizing against physical RAM admits a factor set the machine cannot actually
+# hold.  Measured on filteredW7XNetCDF_2species_magneticDrifts_noEr: 14.3 GB of
+# float64 factors passes "14.3 <= 24.0" on a 24 GB machine, and then thrashes --
+# six hours, resident set oscillating 3.2-8.0 GB, 8.4 of 9.2 GB of swap in use,
+# nothing produced.  That is a worse failure than the OOM kill this guard exists
+# to prevent, because a kill at least ends.
+
+
+def test_the_budget_prefers_available_memory_over_physical_ram(monkeypatch):
+    monkeypatch.setattr("dkx.coarse_precond._available_memory_bytes", lambda: 4.0e9)
+    monkeypatch.setattr("dkx.coarse_precond._host_memory_bytes", lambda: 64.0e9)
+    assert coarse_precond._coarse_memory_budget() == 4.0e9
+
+
+def test_the_budget_falls_back_to_physical_ram_when_available_is_unreadable(monkeypatch):
+    """A platform that hides the honest number must not lose the guard entirely."""
+    monkeypatch.setattr("dkx.coarse_precond._available_memory_bytes", lambda: None)
+    monkeypatch.setattr("dkx.coarse_precond._host_memory_bytes", lambda: 64.0e9)
+    assert coarse_precond._coarse_memory_budget() == 64.0e9
+
+
+def test_factors_that_only_fit_physical_ram_are_refused(monkeypatch):
+    """The exact shape of the six-hour thrash: fits the box, not the free space."""
+    op = _load_op("quick_2species_FPCollisions_noEr")
+    factors = coarse_precond.coarse_preconditioner_factor_bytes(
+        op, coarse_precond._coarse_factor_dtype()
+    )
+    # Room for the factors themselves but not for what holding them really costs.
+    monkeypatch.setattr(
+        "dkx.coarse_precond._coarse_memory_budget", lambda: factors * 1.05
+    )
+    assert not coarse_precond._coarse_factors_fit(op)
+    monkeypatch.setattr(
+        "dkx.coarse_precond._coarse_memory_budget",
+        lambda: factors * coarse_precond._COARSE_RESIDENT_OVERHEAD * 1.01,
+    )
+    assert coarse_precond._coarse_factors_fit(op)
+
+
+def test_the_resident_overhead_matches_what_was_measured():
+    """7.2 GB of float32 factors peaked at 8.87 GB resident: 1.23x."""
+    assert 1.2 <= coarse_precond._COARSE_RESIDENT_OVERHEAD <= 1.35
+    predicted = 7.2 * coarse_precond._COARSE_RESIDENT_OVERHEAD
+    assert abs(predicted - 8.87) < 0.35, f"predicts {predicted:.2f} GB against 8.87 measured"
+
+
+def test_the_fallback_names_float32_when_that_keeps_reusable_factors(monkeypatch):
+    """Do not describe the one-shot route to someone who can avoid it."""
+    op = _load_op("quick_2species_FPCollisions_noEr")
+    small = coarse_precond.coarse_preconditioner_factor_bytes(op, jnp.float32)
+    monkeypatch.setattr(
+        "dkx.coarse_precond._coarse_memory_budget",
+        lambda: small * coarse_precond._COARSE_RESIDENT_OVERHEAD * 1.5,
+    )
+    monkeypatch.setenv("DKX_COARSE_FACTOR_DTYPE", "float64")
+    message = coarse_precond._coarse_generated_fallback_message(op)
+    assert message.startswith("DKX_COARSE_FACTOR_DTYPE=float32")
+    assert "thrashed for six hours" in message
+
+
+def test_the_float32_hint_is_absent_when_float32_would_not_help_either(monkeypatch):
+    op = _load_op("quick_2species_FPCollisions_noEr")
+    monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: 1.0)
+    monkeypatch.setenv("DKX_COARSE_FACTOR_DTYPE", "float64")
+    assert not coarse_precond._coarse_generated_fallback_message(op).startswith(
+        "DKX_COARSE_FACTOR_DTYPE=float32"
+    )
+
+
+def test_the_float32_hint_is_absent_when_already_on_float32(monkeypatch):
+    op = _load_op("quick_2species_FPCollisions_noEr")
+    monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: 1.0e15)
+    monkeypatch.setenv("DKX_COARSE_FACTOR_DTYPE", "float32")
+    assert coarse_precond._coarse_downgrade_hint(op, jnp.float32) == ""

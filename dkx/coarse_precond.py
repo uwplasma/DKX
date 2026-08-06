@@ -55,6 +55,7 @@ from __future__ import annotations
 import functools
 import math
 import os
+import subprocess
 import warnings
 from dataclasses import replace
 from typing import Callable
@@ -142,6 +143,49 @@ def _host_memory_bytes() -> float | None:
     except (ValueError, OSError, AttributeError):
         return None
 
+def _available_memory_bytes() -> float | None:
+    """Memory the OS can hand out *now*, or ``None`` where it cannot be read.
+
+    Physical RAM is the wrong number to size a preconditioner against, and the
+    difference is not academic: ``filteredW7XNetCDF_2species_magneticDrifts_noEr``
+    wants 14.3 GB of float64 factors, which passes ``14.3 <= 24.0`` on a 24 GB
+    machine and then thrashes, because ~10 GB of that machine was already spoken
+    for.  Measured, it ran **six hours** with its resident set oscillating between
+    3.2 and 8.0 GB and 8.4 of 9.2 GB of swap in use, and produced nothing --- a
+    worse outcome than the OOM kill this guard was written to prevent, because a
+    kill at least ends.
+    """
+    try:  # Linux states it directly, and it is the honest number.
+        with open("/proc/meminfo", encoding="ascii") as handle:
+            for line in handle:
+                if line.startswith("MemAvailable:"):
+                    return float(line.split()[1]) * 1024.0
+    except (OSError, ValueError, IndexError):
+        pass
+    try:  # macOS: free + inactive + speculative are all reclaimable
+        out = subprocess.run(
+            ["vm_stat"], capture_output=True, text=True, check=True, timeout=5
+        ).stdout
+        page = float(os.sysconf("SC_PAGE_SIZE"))
+        wanted = ("Pages free:", "Pages inactive:", "Pages speculative:")
+        pages = sum(
+            float(line.split()[-1].rstrip("."))
+            for line in out.splitlines()
+            if line.startswith(wanted)
+        )
+        return pages * page if pages else None
+    except (OSError, ValueError, IndexError, subprocess.SubprocessError):
+        return None
+
+#: Resident bytes the reusable route actually costs per byte of stored factors.
+#: Measured on the same deck at float32: 7.2 GB of factors peaked at 8.87 GB RSS.
+_COARSE_RESIDENT_OVERHEAD = 1.25
+
+def _coarse_memory_budget() -> float | None:
+    """What the preconditioner may claim: available memory, else physical RAM."""
+    available = _available_memory_bytes()
+    return available if available is not None else _host_memory_bytes()
+
 def coarse_preconditioner_factor_bytes(op: KineticOperator, dtype=jnp.float64) -> float:
     """Bytes the reusable Schur-LU-only factors retain, over every subsystem at once.
 
@@ -179,13 +223,18 @@ def _coarse_bands_fit(op: KineticOperator) -> bool:
     the least debuggable failure there is, and avoidable because
     :func:`coarse_preconditioner_band_bytes` is exact up front.
     ``DKX_TIER2_MEMORY_GUARD=off`` forces the dense route anyway; so does an
-    unreadable RAM size, rather than demoting a working deck on a guess.
+    unreadable memory size, rather than demoting a working deck on a guess.
+
+    The budget is *available* memory, not physical RAM: see
+    :func:`_available_memory_bytes` for the six-hour thrash that measuring
+    against physical RAM admits.
     """
     if os.environ.get(_TIER2_GUARD_ENV, "").strip().lower() in {"off", "0", "false"}:
         return True
-    total = _host_memory_bytes()
-    return total is None or (
-        coarse_preconditioner_band_bytes(op) <= _TIER2_GUARD_FRACTION * total
+    budget = _coarse_memory_budget()
+    return budget is None or (
+        coarse_preconditioner_band_bytes(op) * _COARSE_RESIDENT_OVERHEAD
+        <= _TIER2_GUARD_FRACTION * budget
     )
 
 def _coarse_factor_dtype() -> object:
@@ -217,13 +266,19 @@ def _coarse_factors_fit(op: KineticOperator) -> bool:
     checkpointed route, and keeps reusable factors.  That distinction is the
     whole cost model: a preconditioner is applied tens of times per solve, and
     only this side of the branch amortizes its elimination over them.
+
+    Against *available* memory and with the measured resident overhead, because
+    this is the branch where getting it wrong hurts most: the factors are held
+    for the life of the preconditioner, so a set that does not fit does not get
+    killed, it thrashes (:func:`_available_memory_bytes`).
     """
     if os.environ.get(_TIER2_GUARD_ENV, "").strip().lower() in {"off", "0", "false"}:
         return True
-    total = _host_memory_bytes()
-    return total is None or (
+    budget = _coarse_memory_budget()
+    return budget is None or (
         coarse_preconditioner_factor_bytes(op, _coarse_factor_dtype())
-        <= _TIER2_GUARD_FRACTION * total
+        * _COARSE_RESIDENT_OVERHEAD
+        <= _TIER2_GUARD_FRACTION * budget
     )
 
 def _coarse_route_preamble(op: KineticOperator) -> str:
@@ -270,6 +325,34 @@ def _coarse_reusable_fallback_message(op: KineticOperator) -> str:
         f"factors again, for some extra GCROT iterations (docs/performance.rst)."
     )
 
+def _coarse_downgrade_hint(op: KineticOperator, dtype: object) -> str:
+    """Lead with float32 when that is the difference between reusable and one-shot.
+
+    Falling from reusable factors to the checkpointed route costs an order of
+    magnitude per application, and here that fall is avoidable by halving the
+    factors rather than by changing machine.  Saying so first matters because the
+    alternative --- the message below --- describes a route the caller does not
+    have to take.
+    """
+    if dtype is jnp.float32:
+        return ""
+    budget = _coarse_memory_budget()
+    if budget is None:
+        return ""
+    small = coarse_preconditioner_factor_bytes(op, jnp.float32) * _COARSE_RESIDENT_OVERHEAD
+    if small > _TIER2_GUARD_FRACTION * budget:
+        return ""
+    return (
+        f"DKX_COARSE_FACTOR_DTYPE=float32 would keep the reusable-factor route on "
+        f"this machine ({coarse_preconditioner_factor_bytes(op, jnp.float32) / 2**30:.1f} GB "
+        f"of factors, ~{small / 2**30:.1f} GB resident, against "
+        f"{_coarse_memory_budget() / 2**30:.1f} GB available), and it is very likely "
+        f"what you want: on filteredW7XNetCDF_2species_magneticDrifts_noEr it "
+        f"completed in 2 h 50 min at 1041 iterations to a residual of 1.6e-14, where "
+        f"float64 factors did not fit and thrashed for six hours without finishing. "
+        f"The route described next is the one-shot fallback, which is slower still.\n"
+    )
+
 def _coarse_generated_fallback_message(op: KineticOperator) -> str:
     """Say what the one-shot fallback costs before it starts costing it.
 
@@ -281,6 +364,7 @@ def _coarse_generated_fallback_message(op: KineticOperator) -> str:
     """
     dtype = _coarse_factor_dtype()
     return (
+        f"{_coarse_downgrade_hint(op, dtype)}"
         f"{_coarse_route_preamble(op)}"
         f"and even their Schur LU factors alone would take "
         f"{coarse_preconditioner_factor_bytes(op, dtype) / 2**30:.1f} GB, so the solve "
