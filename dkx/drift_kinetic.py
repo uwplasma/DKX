@@ -744,6 +744,121 @@ class KineticOperator:
 
         return out
 
+    def magnetic_drift_diagonal_parts(self) -> dict[str, jnp.ndarray] | None:
+        """The ``L``-diagonal part of the magnetic drifts, as ``L``-invariant matrices.
+
+        The drift terms couple Legendre row ``L`` to ``L`` and to ``L +- 2``, never
+        to ``L +- 1`` (see :meth:`_magnetic_drifts`), which is why
+        :meth:`to_block_tridiagonal` refuses them outright.  But the ``L``-diagonal
+        half of them *does* fit a block-tridiagonal chain: it adds to ``D_L`` and
+        nothing else.  That half is what the tier-2 coarse preconditioner is missing
+        against Fortran, whose ``preconditioner_magnetic_drifts_max_L`` keeps drifts
+        in the preconditioner rather than dropping them
+        (``populateMatrix.F90`` lines 544 and 671, ``whichMatrix==0``).
+
+Measured through the production tier-2 path.  On the tiny drift fixtures the
+        gain is modest (51 -> 30 GCROT iterations on ``magdrift_1species_tiny``,
+        0-1 elsewhere), but it grows with resolution: on a reduced-resolution
+        W7-X deck carrying the production physics --- Fokker-Planck collisions,
+        magnetic drifts, ``geometryScheme`` 5, 194,404 unknowns --- it is
+        **5838 -> 2163 iterations and 900 s -> 337 s**, a factor of 2.7 on both.
+
+        An earlier 6000 -> 7 figure was a harness artifact --- it came from a
+        dense pseudo-inverse of the *unpinned* stripped operator, so it measured
+        the missing ``l = 0`` and mask pins, not the missing drifts.
+
+        (Keeping the ``L +- 2`` part too needs a block-pentadiagonal solve.)
+
+        The ``L`` dependence is separable: every term is a scalar function of ``L``
+        times a matrix that does not depend on ``L``.  So this returns the matrices
+        once, and :func:`dkx.coarse_precond` combines them per row with the scalar
+        coefficients from :meth:`magnetic_drift_diagonal_coefficients`, instead of
+        materializing an ``(S, X, L, TZ, TZ)`` array the size of a whole band.
+
+        Returns:
+            ``None`` when the operator carries no drifts, else a dict of
+            ``(S, TZ, TZ)`` matrices ``mt1/mt2/mt3`` and ``mz1/mz2/mz3`` (the
+            ``d/dtheta`` and ``d/dzeta`` parts against ``geometricFactor1/2/3``)
+            and an ``(S, TZ)`` vector ``xi`` (the ``d/dxi`` diagonal), all carrying
+            the per-species ``base`` factor but **not** the ``x^2`` speed factor,
+            which the caller applies per ``x``.
+        """
+        if not self.with_magnetic_drifts:
+            return None
+        gf1_t, gf2_t, gf3_t, gf1_z, gf2_z, gf3_z, xi_temp = self._drift_geometric_factors()
+        n_t, n_z = self.n_theta, self.n_zeta
+        tz = n_t * n_z
+        b = self.b_hat
+        base = (
+            self.delta * self.t_hat[:, None, None] * self.d_hat[None, :, :]
+            / (2.0 * self.z_s[:, None, None] * b[None, :, :] ** 3)
+        )  # (S,T,Z)
+        dhat11 = self.d_hat[0, 0]
+        eye_t, eye_z = jnp.eye(n_t), jnp.eye(n_z)
+        out: dict[str, jnp.ndarray] = {}
+
+        def _theta_mat(gf):
+            """(S,TZ,TZ): d/dtheta at fixed zeta, upwind-selected per (s,theta,zeta).
+
+            The upwind selector is built from ``gf1_t`` for *every* factor, not
+            from the factor being multiplied --- that is what
+            :meth:`_magnetic_drifts` does, and using ``gf2``/``gf3`` here instead
+            silently changes the operator wherever they differ in sign.
+            """
+            if gf is None:
+                return jnp.zeros((self.n_species, tz, tz), dtype=jnp.float64)
+            use_plus = (gf1_t[None, :, :] * dhat11 / self.z_s[:, None, None]) > 0
+            d_plus = self.ddtheta_magdrift_plus[None, :, None, :]   # (1,T,1,T)
+            d_minus = self.ddtheta_magdrift_minus[None, :, None, :]
+            d_sel = jnp.where(use_plus[:, :, :, None], d_plus, d_minus)  # (S,T,Z,T)
+            scale = (base * gf[None, :, :])[:, :, :, None]               # (S,T,Z,1)
+            # (S,T,Z,T) -> (S,T,Z,T,Z) diagonal in zeta -> (S,TZ,TZ)
+            full = (scale * d_sel)[:, :, :, :, None] * eye_z[None, None, :, None, :]
+            return full.reshape(self.n_species, tz, tz)
+
+        def _zeta_mat(gf):
+            """(S,TZ,TZ): d/dzeta at fixed theta, upwind-selected per (s,theta,zeta)."""
+            if gf is None:
+                return jnp.zeros((self.n_species, tz, tz), dtype=jnp.float64)
+            use_plus = (gf1_z[None, :, :] * dhat11 / self.z_s[:, None, None]) > 0
+            d_plus = self.ddzeta_magdrift_plus[None, None, :, :]   # (1,1,Z,Z)
+            d_minus = self.ddzeta_magdrift_minus[None, None, :, :]
+            d_sel = jnp.where(use_plus[:, :, :, None], d_plus, d_minus)  # (S,T,Z,Z)
+            scale = (base * gf[None, :, :])[:, :, :, None]
+            # (S,T,Z,Z) = [s, t, z_out, z_in] -> [s, t_out, z_out, t_in, z_in],
+            # NOT [s, t_out, t_in, z_out, z_in]: the flat index is (t, z), so the
+            # theta delta belongs between the two zeta axes, not before them.
+            full = (scale * d_sel)[:, :, :, None, :] * eye_t[None, :, None, :, None]
+            return full.reshape(self.n_species, tz, tz)
+
+        for key, gf in (("mt1", gf1_t), ("mt2", gf2_t), ("mt3", gf3_t)):
+            out[key] = _theta_mat(gf)
+        for key, gf in (("mz1", gf1_z), ("mz2", gf2_z), ("mz3", gf3_z)):
+            out[key] = _zeta_mat(gf)
+        out["xi"] = (
+            jnp.zeros((self.n_species, tz), dtype=jnp.float64)
+            if xi_temp is None
+            else (-base * xi_temp[None, :, :]).reshape(self.n_species, tz)
+        )
+        return out
+
+    @staticmethod
+    def magnetic_drift_diagonal_coefficients(ell: jnp.ndarray) -> dict[str, jnp.ndarray]:
+        """Scalar ``L`` coefficients multiplying :meth:`magnetic_drift_diagonal_parts`.
+
+        ``c1/c2/c3`` are the ``geometricFactor1/2/3`` diagonal coefficients shared by
+        the ``d/dtheta`` and ``d/dzeta`` terms; ``xi`` is the ``d/dxi`` diagonal.
+        Traced ``ell`` is fine --- these are arithmetic, not indexing.
+        """
+        ell = jnp.asarray(ell, dtype=jnp.float64)
+        denom = (2.0 * ell + 3.0) * (2.0 * ell - 1.0)
+        return {
+            "c1": 2.0 * (3.0 * ell * ell + 3.0 * ell - 2.0) / denom,
+            "c2": (2.0 * ell * ell + 2.0 * ell - 1.0) / denom,
+            "c3": -2.0 * ell * (ell + 1.0) / denom,
+            "xi": jnp.where(ell > 0, (ell + 1.0) * ell / ((2.0 * ell - 1.0) * (2.0 * ell + 3.0)), 0.0),
+        }
+
     def _drift_geometric_factors(
         self,
     ) -> tuple[

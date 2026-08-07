@@ -1302,38 +1302,55 @@ preference.
 Not yet demonstrated at production scale
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The two decks this route was built for do **not** yet complete with it, and that
-is worth stating plainly rather than leaving to be discovered.
+Both decks this route was built for complete with it.
 
-On ``filteredW7XNetCDF_2species_magneticDrifts_noEr`` (42.9 GB of bands, 14.3 GB
-of float64 Schur LU, 7.2 GB in float32), run on a 62 GB machine with one other
-user holding about 10 GB:
+The blocker was not the storage arithmetic, which was correct throughout. The
+row generator that rebuilds the unstored off-diagonal blocks closed over its
+``(Ntheta*Nzeta)`` ``stream`` and ``exb`` matrices, and
+``GeneratedBlockTridiagFactors`` carries its generator as a *static* field, so
+those matrices became compile-time constants of the lowering --- JAX reported
+``A large amount of constants were captured during lowering (15.52GB total)``
+and the process was OOM-killed at about 620 s. The bands the route had avoided
+storing came back as constants. Rebuilding the generators inside the jitted
+application from traced leaves fixes it, and
+``tests/test_coarse_precond_constants.py`` holds it fixed.
 
-* the float64 factorization itself behaves exactly as sized --- resident memory
-  climbs steadily and levels at 15.6 GB, matching the 14.3 GB prediction plus
-  working set --- and the process is then **OOM-killed at about 620 s**, having
-  produced no solution;
-* JAX reports ``A large amount of constants were captured during lowering
-  (15.52GB total)`` immediately before that;
-* the float32 run reaches its predicted 7.2 GB during factorization and then
-  climbs to 38.8 GB resident, at which point it was killed deliberately to avoid
-  putting another user's job at risk.
+Measured afterwards on ``filteredW7XNetCDF_2species_magneticDrifts_noEr``
+(42.9 GB of bands, 14.3 GB of float64 Schur LU, 7.2 GB in float32), both runs on
+the same 36-core, 62 GB machine at the same commit:
 
-The cause is not the storage arithmetic, which is correct on both counts. It is
-that the factors are concrete arrays reached from inside the *outer* traced
-solve --- GCROT under ``solvax.implicit.linear_solve``'s
-``custom_linear_solve`` --- so they are captured as compile-time constants of
-that computation and XLA holds a second copy. Passing them as an argument to the
-preconditioner's own ``jit`` removes one level of this and is worth doing on its
-own (it halved the whole-solve wall time on the deck above), but it does not
-reach the outer trace, which is where the 15.52 GB is captured.
+.. list-table::
+   :header-rows: 1
+   :widths: 18 14 14 16 20
 
-Until the factors can be threaded to the outermost jitted computation as
-arguments, the reusable route is the right *storage* policy with the wrong
-*lifetime*: it is demonstrated exact, demonstrated reusable, and demonstrated to
-reproduce the dense route's iteration count and residual on a deck where both
-fit --- and it does not yet make the 42.9 and 53.3 GB decks runnable. Those
-decks still have no completed tier-2 solve.  The routing is therefore automatic and by measured size alone: the dense bands
+   * - factors
+     - iterations
+     - wall
+     - peak RSS
+     - residual
+   * - float32
+     - 1260
+     - 10 h 08 min
+     - 11.19 GB
+     - 1.681e-14
+   * - float64
+     - 1470
+     - 11 h 31 min
+     - 18.26 GB
+     - 1.713e-14
+
+**float32 is better on every axis here**, which inverts the expectation that it
+trades iterations for memory: 14% fewer iterations, 12% less wall time, 39% less
+resident memory, and a marginally smaller residual. The sizing model is accurate
+on both rows (11.19 GB against 8.9 predicted plus the solve's own working set;
+18.26 GB against 17.9 predicted).
+
+Two cautions on reading these numbers. Iteration counts are **not** comparable
+across machines in this campaign --- the same deck and dtype gave 1041 on a
+laptop at an earlier commit against 1260 here, so only same-machine,
+same-commit pairs like the table above mean anything. And ten hours for one
+deck is not a solved runtime problem: the memory problem is solved, and what
+remains is 1260 Krylov iterations where the reference deck takes 29.  The routing is therefore automatic and by measured size alone: the dense bands
 are used whenever they fit within physical RAM
 (:func:`dkx.coarse_precond._coarse_bands_fit`); failing that, the Schur-LU
 factors are used whenever *they* fit
