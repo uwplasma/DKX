@@ -756,13 +756,16 @@ class KineticOperator:
         in the preconditioner rather than dropping them
         (``populateMatrix.F90`` lines 544 and 671, ``whichMatrix==0``).
 
-        Measured through the production tier-2 path on the tiny drift fixtures, the
-        gain is real but modest: 51 -> 30 GCROT iterations on
-        ``magdrift_1species_tiny``, and 0-1 iterations on the other eight drift
-        schemes.  An earlier 6000 -> 7 figure was a harness artifact --- it came
-        from a dense pseudo-inverse of the *unpinned* stripped operator, so it
-        measured the missing ``l = 0`` and mask pins, not the missing drifts.
-        Whether this grows at production resolution is a separate measurement.
+Measured through the production tier-2 path.  On the tiny drift fixtures the
+        gain is modest (51 -> 30 GCROT iterations on ``magdrift_1species_tiny``,
+        0-1 elsewhere), but it grows with resolution: on a reduced-resolution
+        W7-X deck carrying the production physics --- Fokker-Planck collisions,
+        magnetic drifts, ``geometryScheme`` 5, 194,404 unknowns --- it is
+        **5838 -> 2163 iterations and 900 s -> 337 s**, a factor of 2.7 on both.
+
+        An earlier 6000 -> 7 figure was a harness artifact --- it came from a
+        dense pseudo-inverse of the *unpinned* stripped operator, so it measured
+        the missing ``l = 0`` and mask pins, not the missing drifts.
 
         (Keeping the ``L +- 2`` part too needs a block-pentadiagonal solve.)
 

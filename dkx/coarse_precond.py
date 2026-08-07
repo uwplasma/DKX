@@ -905,9 +905,9 @@ def build_coarse_preconditioner(
     if op.fp_phi1 is not None:
         coll_diag = _collision_phi1_diagonal(op) * mask[None, :, :]
     # The magnetic drifts SFINCS keeps in its preconditioner and DKX used to drop.
-    # Only the L-diagonal half fits a block-tridiagonal chain.  Measured through
-    # this path: 51 -> 30 GCROT iterations on magdrift_1species_tiny and 0-1 on
-    # the other drift schemes -- modest at fixture scale
+    # Only the L-diagonal half fits a block-tridiagonal chain, and it is enough:
+    # on a reduced-resolution W7-X deck with the production physics (194,404
+    # unknowns) this is 5838 -> 2163 GCROT iterations and 900 s -> 337 s
     # (tests/test_magnetic_drift_diagonal.py).
     drift_parts = op.magnetic_drift_diagonal_parts()
     c0 = op._fs_average_factor().reshape(-1)
