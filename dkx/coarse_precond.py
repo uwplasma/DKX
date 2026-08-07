@@ -331,7 +331,8 @@ def _coarse_reusable_fallback_message(op: KineticOperator) -> str:
         f"{_coarse_other_routes_note()}\nTo get the dense route back, reduce "
         f"Ntheta/Nzeta or Nxi, or run where the bands fit. DKX_TIER2_MEMORY_GUARD=off "
         f"allocates them here anyway; DKX_COARSE_FACTOR_DTYPE=float32 halves the "
-        f"factors again, for some extra GCROT iterations (docs/performance.rst)."
+        f"factors again, and on the deck this was measured on it was better on every "
+        f"axis --- 14% fewer iterations, 12% less wall time (docs/performance.rst)."
     )
 
 def _coarse_downgrade_hint(op: KineticOperator, dtype: object) -> str:
