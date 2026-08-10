@@ -331,7 +331,8 @@ def _coarse_reusable_fallback_message(op: KineticOperator) -> str:
         f"{_coarse_other_routes_note()}\nTo get the dense route back, reduce "
         f"Ntheta/Nzeta or Nxi, or run where the bands fit. DKX_TIER2_MEMORY_GUARD=off "
         f"allocates them here anyway; DKX_COARSE_FACTOR_DTYPE=float32 halves the "
-        f"factors again, for some extra GCROT iterations (docs/performance.rst)."
+        f"factors again, and on the deck this was measured on it was better on every "
+        f"axis --- 14% fewer iterations, 12% less wall time (docs/performance.rst)."
     )
 
 def _coarse_downgrade_hint(op: KineticOperator, dtype: object) -> str:
@@ -390,6 +391,40 @@ def _coarse_generated_fallback_message(op: KineticOperator) -> str:
         f"Ntheta/Nzeta or Nxi, or run where the bands fit. "
         f"DKX_TIER2_MEMORY_GUARD=off allocates them here anyway."
     )
+
+#: Legendre rows that keep the magnetic drifts in the coarse operator, matching
+#: Fortran's ``preconditioner_magnetic_drifts_max_L`` default
+#: (``globalVariables.F90:212``; the loop bound at ``populateMatrix.F90`` 544/671).
+#: Only the L-diagonal half is carried --- the L+-2 half would make the chain
+#: pentadiagonal, which block-Thomas cannot factor.
+_COARSE_DRIFT_MAX_L = 2
+
+def _drift_diagonal_block(
+    parts: dict[str, jnp.ndarray] | None, x2: jnp.ndarray, s: int | jnp.ndarray,
+    ell: jnp.ndarray, n_tz: int,
+) -> jnp.ndarray | None:  # fmt: skip
+    """The magnetic-drift contribution to one coarse diagonal block ``D_(s,x,L)``.
+
+    ``parts`` is :meth:`KineticOperator.magnetic_drift_diagonal_parts`, whose six
+    matrices do not depend on ``L``; the ``L`` dependence is the scalar
+    coefficients, so a block costs a few scaled adds rather than a stored array.
+    Rows above :data:`_COARSE_DRIFT_MAX_L` get zero, which is what Fortran's
+    ``preconditioner_magnetic_drifts_max_L`` does.
+
+    ``ell`` may be traced, so the row cutoff is a ``where`` and not a branch.
+    """
+    if parts is None:
+        return None
+    c = KineticOperator.magnetic_drift_diagonal_coefficients(ell)
+    keep = jnp.where(ell <= _COARSE_DRIFT_MAX_L, 1.0, 0.0)
+    block = (
+        c["c1"] * (parts["mt1"][s] + parts["mz1"][s])
+        + c["c2"] * (parts["mt2"][s] + parts["mz2"][s])
+        + c["c3"] * (parts["mt3"][s] + parts["mz3"][s])
+    )
+    idx = jnp.arange(n_tz)
+    block = block.at[idx, idx].add(c["xi"] * parts["xi"][s])
+    return (keep * x2) * block
 
 def _truncated_coefficients(op: KineticOperator) -> dict[str, jnp.ndarray]:
     """Compact per-term coefficient matrices for the on-the-fly Legendre blocks.
@@ -663,7 +698,7 @@ def _coarse_subsystem_block_fn(
     solve returns ``nan``), and ``None`` gives the unregularized blocks that size them.
     ``j`` is traced, which is why :meth:`KineticOperator.legendre_blocks` cannot serve.
     """
-    stream, mirror, pas_row, x_val, mask_row, coll_row = sub
+    stream, mirror, pas_row, x_val, mask_row, coll_row, d1, d2, d3, dxi = sub
     params = _truncated_params(
         coef, stream, mirror, pas_row, x_val, jnp.asarray(0.0, dtype=jnp.float64)
     )
@@ -684,6 +719,13 @@ def _coarse_subsystem_block_fn(
         if floor is not None:
             added = added + floor + (1.0 - m_j)
         diag = diag.at[idx, idx].add(added)
+        # Magnetic drifts, L-diagonal half only, up to _COARSE_DRIFT_MAX_L --- the
+        # rows Fortran keeps.  d1/d2/d3/dxi already carry base, the geometric
+        # factors and x^2; only the scalar L coefficients are left.
+        dc = KineticOperator.magnetic_drift_diagonal_coefficients(j)
+        keep = jnp.where(j <= _COARSE_DRIFT_MAX_L, 1.0, 0.0) * m_j
+        diag = diag + keep * (dc["c1"] * d1 + dc["c2"] * d2 + dc["c3"] * d3)
+        diag = diag.at[idx, idx].add(keep * dc["xi"] * dxi)
         if l0_pin is not None:
             diag = diag + jnp.where(j == 0, 1.0, 0.0) * l0_pin
         return lower, diag, upper
@@ -739,10 +781,28 @@ def _coarse_generated_block_data(
     batch = n_s * n_x
     mask_b = jnp.tile(mask, (n_s, 1))  # (B, L)
     zeros = jnp.zeros((batch, n_xi), dtype=jnp.float64)
+    n_tz = op.n_theta * op.n_zeta
+    parts = op.magnetic_drift_diagonal_parts()
+    if parts is None:
+        z_mat = jnp.zeros((batch, n_tz, n_tz), dtype=jnp.float64)
+        d1 = d2 = d3 = z_mat
+        dxi = jnp.zeros((batch, n_tz), dtype=jnp.float64)
+    else:
+        # Fold x^2 and the species index in here, so the generator carries three
+        # (TZ, TZ) matrices per subsystem instead of the six per species plus a
+        # per-row combination --- and so every leaf crosses the jit boundary as
+        # data (see build_coarse_preconditioner on captured constants).
+        x2 = jnp.tile(op.x * op.x, n_s)[:, None, None]  # (B,1,1)
+        rep = lambda m: jnp.repeat(m, n_x, axis=0)  # noqa: E731  (S,..)->(B,..)
+        d1 = x2 * rep(parts["mt1"] + parts["mz1"])
+        d2 = x2 * rep(parts["mt2"] + parts["mz2"])
+        d3 = x2 * rep(parts["mt3"] + parts["mz3"])
+        dxi = x2[:, :, 0] * rep(parts["xi"])
     subs = list(zip(
         jnp.repeat(coef["stream"], n_x, axis=0), jnp.repeat(coef["mirror"], n_x, axis=0),
         coef["pas"].reshape(batch, n_xi), jnp.tile(op.x, n_s), mask_b,
         zeros if coll_diag is None else coll_diag.reshape(batch, n_xi),
+        d1, d2, d3, dxi,
     ))  # fmt: skip
     rows = functools.partial(_coarse_subsystem_block_fn, coef, n_xi,
                              drop_l_coupling=drop_l_coupling)  # fmt: skip
@@ -844,6 +904,12 @@ def build_coarse_preconditioner(
             coll_diag = _dense_collision_diagonal(coll.mat) * mask[None, :, :]
     if op.fp_phi1 is not None:
         coll_diag = _collision_phi1_diagonal(op) * mask[None, :, :]
+    # The magnetic drifts SFINCS keeps in its preconditioner and DKX used to drop.
+    # Only the L-diagonal half fits a block-tridiagonal chain, and it is enough:
+    # on a reduced-resolution W7-X deck with the production physics (194,404
+    # unknowns) this is 5838 -> 2163 GCROT iterations and 900 s -> 337 s
+    # (tests/test_magnetic_drift_diagonal.py).
+    drift_parts = op.magnetic_drift_diagonal_parts()
     c0 = op._fs_average_factor().reshape(-1)
     ones = jnp.ones((n_tz,), dtype=jnp.float64)
 
@@ -853,6 +919,20 @@ def build_coarse_preconditioner(
         eye = jnp.eye(n_tz, dtype=jnp.float64)
         if coll_diag is not None:
             diag = diag + coll_diag[:, :, :, None, None] * eye[None, None, None, :, :]
+        if drift_parts is not None:
+            x2 = op.x * op.x
+            drift = jnp.stack([
+                jnp.stack([
+                    jnp.stack([
+                        _drift_diagonal_block(drift_parts, x2[ix], sp,
+                                              jnp.asarray(ell, jnp.float64), n_tz)
+                        for ell in range(n_xi)
+                    ])
+                    for ix in range(n_x)
+                ])
+                for sp in range(n_s)
+            ])  # (S, X, L, TZ, TZ)
+            diag = diag + drift
         if drop_l_coupling:
             lower, upper = jnp.zeros_like(lower), jnp.zeros_like(upper)
 
