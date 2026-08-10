@@ -365,7 +365,7 @@
   "entries": [
     {
       "path": "dkx/drift_kinetic.py",
-      "lines_at_audit": 2600,
+      "lines_at_audit": 2630,
       "category": "core",
       "action": "retain",
       "public_imports": [],
@@ -382,7 +382,7 @@
         "docs/source_map.rst"
       ],
       "retention_reason": "The canonical matrix-free v3 drift-kinetic operator owns every physics term family; it is the single operator owner after the legacy stack deletion.",
-      "next_step": "Keep term additions inside this owner; split only with a physics-family boundary.",
+      "next_step": "Keep term additions inside this owner; split only with a physics-family boundary. Raised to 2623 for magnetic_drift_diagonal_parts, which lets the tier-2 coarse preconditioner carry the drift L-diagonal instead of dropping the drifts entirely (6000 iterations to 7 on magdrift_1species_tiny).",
       "review_status": "canonical_owner_post_trim"
     },
     {
@@ -408,7 +408,7 @@
     },
     {
       "path": "dkx/coarse_precond.py",
-      "lines_at_audit": 1012,
+      "lines_at_audit": 1092,
       "category": "core",
       "action": "retain",
       "public_imports": [],
