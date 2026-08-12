@@ -61,8 +61,8 @@ QUICK_S_VALUES = "0.3,0.5,0.7"
 PDF_METADATA = {
     "Creator": "dkx",
     "Producer": "dkx",
-    "CreationDate": _dt.datetime(2026, 1, 1, tzinfo=_dt.UTC),
-    "ModDate": _dt.datetime(2026, 1, 1, tzinfo=_dt.UTC),
+    "CreationDate": _dt.datetime(2026, 1, 1, tzinfo=_dt.timezone.utc),
+    "ModDate": _dt.datetime(2026, 1, 1, tzinfo=_dt.timezone.utc),
 }
 
 
