@@ -76,6 +76,7 @@ REQUIRED_CI_JOB_TIMEOUTS = {
     "coverage-report": 10,
     "examples-smoke": 10,
     "external-data-smoke": 10,
+    "python-floor": 10,
     "tests": 5,
 }
 
