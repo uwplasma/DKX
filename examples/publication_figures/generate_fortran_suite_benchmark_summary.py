@@ -51,8 +51,8 @@ DEFAULT_MIN_FORTRAN_RUNTIME_S = 10.0
 PDF_METADATA = {
     "Creator": "dkx",
     "Producer": "dkx",
-    "CreationDate": _dt.datetime(2026, 1, 1, tzinfo=_dt.UTC),
-    "ModDate": _dt.datetime(2026, 1, 1, tzinfo=_dt.UTC),
+    "CreationDate": _dt.datetime(2026, 1, 1, tzinfo=_dt.timezone.utc),
+    "ModDate": _dt.datetime(2026, 1, 1, tzinfo=_dt.timezone.utc),
 }
 CANONICAL_ROWS_KEY = "canonical_rows"
 CANONICAL_CASE_ORDER_KEY = "canonical_case_order"
