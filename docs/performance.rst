@@ -1302,55 +1302,98 @@ preference.
 Not yet demonstrated at production scale
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Both decks this route was built for complete with it.
+Every deck this route was built for completes with it.
 
-The blocker was not the storage arithmetic, which was correct throughout. The
-row generator that rebuilds the unstored off-diagonal blocks closed over its
+Two changes made that true, and they addressed different problems. The
+reusable-factor route fixed the *memory*: its row generator closed over the
 ``(Ntheta*Nzeta)`` ``stream`` and ``exb`` matrices, and
 ``GeneratedBlockTridiagFactors`` carries its generator as a *static* field, so
 those matrices became compile-time constants of the lowering --- JAX reported
 ``A large amount of constants were captured during lowering (15.52GB total)``
-and the process was OOM-killed at about 620 s. The bands the route had avoided
-storing came back as constants. Rebuilding the generators inside the jitted
-application from traced leaves fixes it, and
-``tests/test_coarse_precond_constants.py`` holds it fixed.
+and the process was OOM-killed. The bands the route had avoided storing came
+back as constants. Rebuilding the generators inside the jitted application from
+traced leaves fixes it, and ``tests/test_coarse_precond_constants.py`` holds it
+fixed.
 
-Measured afterwards on ``filteredW7XNetCDF_2species_magneticDrifts_noEr``
-(42.9 GB of bands, 14.3 GB of float64 Schur LU, 7.2 GB in float32), both runs on
-the same 36-core, 62 GB machine at the same commit:
+That left the *runtime*, and the completed campaign localized it precisely.
+Measured on a 36-core, 62 GB machine, float32 reusable factors:
 
-.. list-table::
+.. list-table:: Upstream tier-2 decks whose preconditioner bands do not fit
    :header-rows: 1
-   :widths: 18 14 14 16 20
+   :widths: 40 12 12 14 12
 
-   * - factors
+   * - deck
+     - magnetic drifts
      - iterations
      - wall
      - peak RSS
-     - residual
-   * - float32
-     - 1260
-     - 10 h 08 min
-     - 11.19 GB
-     - 1.681e-14
-   * - float64
-     - 1470
-     - 11 h 31 min
-     - 18.26 GB
-     - 1.713e-14
+   * - ``HSX_PASCollisions_fullTrajectories``
+     - no
+     - 11
+     - 50 min
+     - 13.57 GB
+   * - ``HSX_FPCollisions_DKESTrajectories``
+     - no
+     - 46
+     - 69 min
+     - 13.06 GB
+   * - ``HSX_FPCollisions_fullTrajectories``
+     - no
+     - 49
+     - 71 min
+     - 13.22 GB
+   * - ``filteredW7XNetCDF_2species_magneticDrifts_noEr``
+     - yes
+     - 123
+     - 1 h 56 min
+     - 11.66 GB
+   * - ``filteredW7XNetCDF_2species_magneticDrifts_withEr``
+     - yes
+     - 120
+     - 2 h 17 min
+     - 11.72 GB
 
-**float32 is better on every axis here**, which inverts the expectation that it
-trades iterations for memory: 14% fewer iterations, 12% less wall time, 39% less
-resident memory, and a marginally smaller residual. The sizing model is accurate
-on both rows (11.19 GB against 8.9 predicted plus the solve's own working set;
-18.26 GB against 17.9 predicted).
+Every deck without magnetic drifts converged in at most 49 iterations from the
+start. Both decks *with* them took 1260 and 3384 --- two orders of magnitude,
+with the drift terms as the only structural difference. Those are the terms
+Fortran keeps in its preconditioner (``preconditioner_magnetic_drifts_max_L``)
+and ``dkx`` used to drop. Carrying their ``L``-diagonal half closed the gap:
 
-Two cautions on reading these numbers. Iteration counts are **not** comparable
-across machines in this campaign --- the same deck and dtype gave 1041 on a
-laptop at an earlier commit against 1260 here, so only same-machine,
-same-commit pairs like the table above mean anything. And ten hours for one
-deck is not a solved runtime problem: the memory problem is solved, and what
-remains is 1260 Krylov iterations where the reference deck takes 29.  The routing is therefore automatic and by measured size alone: the dense bands
+.. list-table:: Effect of carrying the magnetic-drift L-diagonal
+   :header-rows: 1
+   :widths: 40 16 16 12
+
+   * - deck
+     - iterations
+     - wall
+     - factor
+   * - ``…magneticDrifts_noEr``
+     - 1260 → 123
+     - 10 h 08 → 1 h 56
+     - 10.2x / 5.2x
+   * - ``…magneticDrifts_withEr``
+     - 3384 → 120
+     - 26 h 07 → 2 h 17
+     - 28.2x / 11.4x
+
+Residuals are unchanged (1.681e-14 → 1.682e-14 and 2.325e-14 → 2.208e-14) and
+the extra storage is 0.3–0.5 GB, matching the ``6 S TZ^2`` prediction. The
+speedup **grows** with resolution --- 1.7x on a tiny fixture at ``Nxi=6``, 2.7x
+on a reduced deck at ``Nxi=40``, 10-28x at the production ``Nxi=100`` --- because
+the more Legendre rows the streaming chain spans, the more a preconditioner
+loses by omitting a term the operator has.
+
+On precision, ``float32`` factors are better on every axis, which inverts the
+expectation that they trade iterations for memory. Same machine, same commit, on
+``…magneticDrifts_noEr`` before the drift diagonal: float32 took 1260 iterations,
+10 h 08 min, 11.19 GB and residual 1.681e-14; float64 took 1470 iterations,
+11 h 31 min, 18.26 GB and residual 1.713e-14.
+
+Two cautions on reading any of these numbers. Iteration counts are **not**
+comparable across machines --- the same deck and dtype gave 1041 on a laptop at
+an earlier commit against 1260 here --- so only same-machine, same-commit pairs
+mean anything. And the sizing model is accurate but not tight: 11.19 GB against
+8.9 GB predicted plus the solve's own working set, 18.26 GB against 17.9 GB.  The routing is therefore automatic and by measured size alone: the dense bands
 are used whenever they fit within physical RAM
 (:func:`dkx.coarse_precond._coarse_bands_fit`); failing that, the Schur-LU
 factors are used whenever *they* fit
