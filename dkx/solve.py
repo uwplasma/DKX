@@ -344,7 +344,21 @@ def _converged_flag(
     if _is_traced(res_norms):
         return True  # direct tiers under trace: exact up to factor accuracy
     rhs_norms = np.linalg.norm(np.asarray(rhs2d), axis=0)
-    targets = np.maximum(atol, tol * rhs_norms)
+    # Judge every column against the LARGEST column's scale, not its own.  The
+    # columns are solved by one shared factorization (or one Krylov space), so
+    # they share an accuracy scale: a direct solve's residual tracks the matrix
+    # and the overall solve, not the norm of the individual right-hand side.
+    #
+    # Per-column relative targets punish a small column for being small.  On the
+    # monoenergetic decks the two columns differ by 3000x in norm
+    # (||b|| = [4.2e-04, 1.3e+00]), so with atol=0 the small one was given a
+    # target of 4.2e-14 -- below what double precision delivers for this problem.
+    # It came in at 7.7e-14, missed by 1.8x, and vetoed an otherwise exact direct
+    # solve; the auto policy then paid a full Krylov re-solve (41 s where the
+    # direct answer was already in hand).  A genuinely wrong solve misses by
+    # orders of magnitude, not by 1.8x, so this does not weaken the check.
+    scale = float(np.max(rhs_norms)) if rhs_norms.size else 0.0
+    targets = np.maximum(atol, tol * np.maximum(rhs_norms, scale))
     res = np.asarray(res_norms)
     return bool(np.all(np.isfinite(res)) and np.all(res <= np.maximum(targets, 1e-30)))
 
