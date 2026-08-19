@@ -387,7 +387,7 @@
     },
     {
       "path": "dkx/solve.py",
-      "lines_at_audit": 2086,
+      "lines_at_audit": 2100,
       "category": "core",
       "action": "retain",
       "public_imports": [],
@@ -403,7 +403,7 @@
         "docs/source_map.rst"
       ],
       "retention_reason": "The three-tier canonical solve policy (block-tridiagonal, GCROT, direct) is the single solver owner after the legacy solvers package deletion; the tier-2 coarse preconditioner it selects is owned by dkx/coarse_precond.py.",
-      "next_step": "Keep tier policies here and preconditioner internals in coarse_precond.py; new tiers need parity and memory gates. Raised by one line for the preconditioner_xi correction, which had to say what the knob is not; the rest of that fix was compressed back out.",
+      "next_step": "Keep tier policies here and preconditioner internals in coarse_precond.py; new tiers need parity and memory gates. Raised by one line for the preconditioner_xi correction, which had to say what the knob is not; the rest of that fix was compressed back out. Raised for the shared-column-scale convergence criterion, which stopped an exact direct solve being vetoed by a small-norm column and re-solved with Krylov (41 s -> 11.6 s).",
       "review_status": "canonical_owner_post_trim"
     },
     {

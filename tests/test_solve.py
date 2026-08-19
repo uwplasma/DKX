@@ -1403,3 +1403,54 @@ def test_tier1_adjoint_window_is_reverse_mode_only() -> None:
 
     with pytest.raises(TypeError, match="forward-mode"):
         jax.jacfwd(lambda s: loss(s, n_xi))(one)
+
+
+# ---------------------------------------------------------------------------
+# Convergence is judged on a shared column scale
+# ---------------------------------------------------------------------------
+def test_a_small_norm_column_is_not_held_to_an_unachievable_target() -> None:
+    """Columns share a factorization, so they share an accuracy scale.
+
+    The monoenergetic decks carry two right-hand sides differing by 3000x in
+    norm.  Judged per-column with atol=0 the small one got a target of 4.2e-14 --
+    below what double precision delivers here -- came in at 7.7e-14, missed by
+    1.8x, and vetoed an exact direct solve.  The auto policy then paid a full
+    Krylov re-solve: 41 s where the direct answer was already in hand.
+    """
+    import numpy as np
+
+    from dkx.solve import _converged_flag
+
+    rhs = np.zeros((10, 2))
+    rhs[:, 0] = 4.23e-04 / np.sqrt(10)   # the small column
+    rhs[:, 1] = 1.277 / np.sqrt(10)
+    assert _converged_flag(np.array([7.66e-14, 2.04e-13]), rhs, 1e-10, 0.0)
+
+
+def test_a_genuinely_bad_solve_is_still_rejected() -> None:
+    """The relaxation must not swallow a real failure.
+
+    A wrong solve misses by orders of magnitude, not by 1.8x, so sharing the
+    column scale costs no diagnostic power.
+    """
+    import numpy as np
+
+    from dkx.solve import _converged_flag
+
+    rhs = np.zeros((10, 2))
+    rhs[:, 0] = 4.23e-04 / np.sqrt(10)
+    rhs[:, 1] = 1.277 / np.sqrt(10)
+    assert not _converged_flag(np.array([1e-3, 2e-13]), rhs, 1e-10, 0.0)
+    assert not _converged_flag(np.array([np.nan, 2e-13]), rhs, 1e-10, 0.0)
+
+
+def test_a_single_column_is_unaffected() -> None:
+    """One column means max(||b||) is its own norm: the old behaviour exactly."""
+    import numpy as np
+
+    from dkx.solve import _converged_flag
+
+    rhs = np.ones((10, 1))
+    norm = float(np.linalg.norm(rhs))
+    assert _converged_flag(np.array([0.9e-10 * norm]), rhs, 1e-10, 0.0)
+    assert not _converged_flag(np.array([1.1e-10 * norm]), rhs, 1e-10, 0.0)
