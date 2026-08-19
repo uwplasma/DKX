@@ -743,6 +743,56 @@ def _apply_parallel_runtime_settings(args: argparse.Namespace) -> None:
             os.environ["DKX_COORDINATOR_PORT"] = str(int(coordinator_port))
         initialize_distributed_runtime_from_env()
 
+def _maybe_handle_plot(argv: list[str]) -> int | None:
+    """``dkx --plot PATH`` / ``dkx PATH`` --- the vmex-style front door.
+
+    Handled before subcommand dispatch, so the common cases need no subcommand:
+    an output file renders its panels, an equilibrium is solved first and then
+    rendered.  Returns ``None`` when this invocation is not one of those, so the
+    existing subcommands are untouched.
+    """
+    from pathlib import Path as _Path  # noqa: PLC0415
+
+    target: str | None = None
+    if "--plot" in argv:
+        i = argv.index("--plot")
+        if i + 1 < len(argv) and not argv[i + 1].startswith("-"):
+            target = argv[i + 1]
+        else:  # `--plot` with the path as the sole positional
+            rest = [a for a in argv if a != "--plot" and not a.startswith("-")]
+            target = rest[0] if rest else None
+        if target is None:
+            print("dkx --plot needs a path: an output file, or an equilibrium.")
+            return 2
+    elif len(argv) == 1 and not argv[0].startswith("-"):
+        cand = _Path(argv[0])
+        # A bare equilibrium path is the `dkx wout_XXX.nc` entry point; anything
+        # else (a namelist, a subcommand) falls through untouched.
+        if cand.is_file() and cand.suffix.lower() in {".nc", ".h5"}:
+            target = argv[0]
+    if target is None:
+        return None
+
+    out = None
+    if "--out" in argv:
+        j = argv.index("--out")
+        if j + 1 < len(argv):
+            out = argv[j + 1]
+    path = _Path(target)
+    if not path.exists():
+        print(f"dkx --plot: no such file: {path}")
+        return 2
+    from dkx.representative import plot_output_file, run_representative  # noqa: PLC0415
+
+    if path.suffix.lower() == ".h5":
+        print(f" dkx --plot {path.name} (output file)")
+        print(f" wrote {plot_output_file(path, out)}")
+    else:
+        print(f" dkx {path.name} — representative run")
+        print(f" wrote {run_representative(path, out_path=out, full='--full' in argv)}")
+    return 0
+
+
 def _normalize_default_argv(argv: list[str]) -> list[str]:
     if not argv:
         return argv
@@ -913,6 +963,9 @@ def _merge_global_cli_args(argv: list[str], args: argparse.Namespace) -> argpars
 def main(argv: list[str] | None = None) -> int:
     """Run the dkx command-line interface."""
     argv = list(sys.argv[1:]) if argv is None else list(argv)
+    rc = _maybe_handle_plot(argv)
+    if rc is not None:
+        return rc
     argv = _normalize_default_argv(argv)
     _maybe_reexec_for_early_runtime(argv)
     parser = argparse.ArgumentParser(prog="dkx")
