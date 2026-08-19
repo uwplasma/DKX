@@ -69,6 +69,7 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "phase_space.py": "stable discretization kernel",
     "phi1.py": "stable solver kernel",
     "plotting.py": "public plotting API",
+    "representative.py": "public plotting API",
     "profiling.py": "stable support utility",
     "run.py": "public API",
     "sensitivity.py": "public differentiation API",
