@@ -784,8 +784,20 @@ def _maybe_handle_plot(argv: list[str]) -> int | None:
         return 2
     from dkx.representative import plot_output_file, run_representative  # noqa: PLC0415
 
-    if path.suffix.lower() == ".h5":
-        print(f" dkx --plot {path.name} (output file)")
+    # Dispatch on CONTENT, not extension: ".nc" is a SFINCS output *or* a VMEC
+    # wout, and guessing from the suffix breaks `dkx --plot sfincsOutput.nc`,
+    # which predates this entry point.
+    def _is_solver_output(candidate) -> bool:
+        try:
+            from dkx.io import read_sfincs_output_file  # noqa: PLC0415
+
+            data = read_sfincs_output_file(candidate)
+        except Exception:
+            return False
+        return any(k in data for k in ("RHSMode", "FSABFlow", "transportMatrix"))
+
+    if _is_solver_output(path):
+        print(f" dkx --plot {path.name} (solver output)")
         print(f" wrote {plot_output_file(path, out)}")
     else:
         print(f" dkx {path.name} — representative run")
