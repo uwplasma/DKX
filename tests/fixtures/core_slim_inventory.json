@@ -674,6 +674,25 @@
       ],
       "retention_reason": "Publication figure regeneration is valuable but not required in the slim user-facing core.",
       "next_step": "Move figure generation campaigns to publication-audits PR and keep checked final figures only if small."
+    },
+    {
+      "path": "dkx/representative.py",
+      "lines_at_audit": 340,
+      "category": "core",
+      "action": "retain",
+      "public_imports": [],
+      "internal_callers": [
+        "dkx/cli.py"
+      ],
+      "tests": [
+        "tests/test_representative.py"
+      ],
+      "docs_examples": [
+        "dkx/README.md"
+      ],
+      "retention_reason": "The dkx wout_*.nc representative run and the dkx --plot publication panels; the one-command entry point a user meets first, kept out of plotting.py so the existing summary surface is untouched.",
+      "next_step": "Keep the panels and the measured default resolution here; plotting.py keeps the raw output summary.",
+      "review_status": "new_owner"
     }
   ]
 }

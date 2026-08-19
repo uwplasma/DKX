@@ -57,6 +57,7 @@ errors raised by `inputs.load_sfincs_input`. There is no legacy fallback.
 | `batch.py` | First-class batched-solve API over the two canonical batch axes — an `E_r` scan on one geometry (`batched_er_scan`) and a batch of flux surfaces sharing discretization (`batched_surface_scan`) — via `jax.vmap` over the varying `KineticOperator` leaves (`batched_solve`). Reuses `solve.py`/the operator read-only, stays differentiable and jit-safe, and auto-chunks with `jax.lax.map` to a memory-budgeted batch size from the tier-1 footprint model (`solve.tier1_peak_memory_bytes`) and the device/host memory. |
 | `sensitivity.py` | JVP/VJP, adjoint, and implicit differentiation helpers. |
 | `plotting.py` | Output plotting used by the CLI and examples. |
+| `representative.py` | The `dkx wout_*.nc` representative run and the `dkx --plot` publication panels, for DKX and Fortran SFINCS output alike. |
 | `compare.py` | HDF5 comparison, frozen-reference parity, benchmark-table utilities. |
 | `io.py`, `namelist.py`, `input_compat.py`, `paths.py` | Output-file reading and generic dict serializers, SFINCS-style namelist parsing, input aliases, data/cache paths. |
 | `profiling.py` | Timers and memory probes. |
