@@ -194,3 +194,80 @@ def test_a_real_namelist_still_parses(tmp_path):
     deck = tmp_path / "input.namelist"
     deck.write_text("&physicsParameters\n  nu_n = 0.01\n/\n")
     assert read_sfincs_input(deck) is not None
+
+
+# ---------------------------------------------------------------------------
+# Radial profiles, named species, and the output file
+# ---------------------------------------------------------------------------
+def test_the_flux_panel_names_species_rather_than_numbering_them():
+    """"species 0" and "species 1" tell a reader nothing about which is which."""
+    from dkx.representative import _species_labels
+
+    assert _species_labels(2, [1.0, -1.0]) == ["ions", "electrons"]
+    assert _species_labels(2, [-1.0, 1.0]) == ["electrons", "ions"]
+    assert _species_labels(2) == ["ions", "electrons"]
+
+
+def test_coincident_ambipolar_fluxes_are_drawn_once_and_explained():
+    """At the root sum_s Z_s Gamma_s = 0, so a Z=+-1 pair has EQUAL fluxes.
+
+    Two identical lines read as a rendering fault.  One labelled line says what
+    is actually true.
+    """
+    from dkx.representative import _panel_radial_fluxes
+
+    shared = [5.0e-9, 4.0e-9, 3.0e-9]
+    profiles = [
+        {"r": r, "particle_flux": [g, g], "heat_flux": [7.0e-8, 1.0e-8]}
+        for r, g in zip((0.3, 0.5, 0.7), shared)
+    ]
+    fig, ax = plt.subplots()
+    try:
+        assert _panel_radial_fluxes(ax, profiles)
+        labels = [line.get_label() for line in ax.get_lines()]
+        assert any("ambipolar" in str(x) for x in labels), labels
+        assert sum("Gamma" in str(x) or "\\Gamma" in str(x) for x in labels) == 1
+    finally:
+        plt.close(fig)
+
+
+def test_distinct_fluxes_are_drawn_separately():
+    """The collapse must not hide a genuine difference between species."""
+    from dkx.representative import _panel_radial_fluxes
+
+    profiles = [
+        {"r": r, "particle_flux": [5.0e-9, 9.0e-9], "heat_flux": [7.0e-8, 1.0e-8]}
+        for r in (0.3, 0.5)
+    ]
+    fig, ax = plt.subplots()
+    try:
+        assert _panel_radial_fluxes(ax, profiles)
+        labels = [str(line.get_label()) for line in ax.get_lines()]
+        assert sum("Gamma" in x for x in labels) == 2, labels
+    finally:
+        plt.close(fig)
+
+
+def test_the_bootstrap_panel_is_a_radial_profile_with_the_field_beside_it():
+    from dkx.representative import _panel_radial_bootstrap
+
+    profiles = [{"r": r, "bootstrap": -6e-3 + r * 1e-3, "er_ambipolar": -1.4 + r}
+                for r in (0.25, 0.5, 0.75)]  # fmt: skip
+    fig, ax = plt.subplots()
+    try:
+        assert _panel_radial_bootstrap(ax, profiles)
+        assert "r/a" in ax.get_xlabel()
+        assert len(ax.figure.axes) == 2, "ambipolar Er needs its own twin axis"
+    finally:
+        plt.close(fig)
+
+
+def test_a_run_always_leaves_the_numbers_behind(tmp_path):
+    """A PNG cannot be re-plotted, re-scaled, or checked against another code."""
+    from dkx.representative import write_representative_output
+
+    scan = [{"nu_prime": 1e-2, "e_star": 0.0, "D11": -1e-3, "D31": -1e-4, "D33": 0.9}]
+    profiles = [{"r": 0.5, "er_ambipolar": -1.1, "bootstrap": -6e-3,
+                 "particle_flux": [5e-9, 5e-9], "heat_flux": [7e-8, 1e-8]}]  # fmt: skip
+    out = write_representative_output(tmp_path / "run.h5", scan=scan, profiles=profiles)
+    assert out.exists() and out.stat().st_size > 0
