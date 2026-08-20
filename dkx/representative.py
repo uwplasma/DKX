@@ -52,10 +52,64 @@ import numpy as np
 #: Convergence-tested default, see the module docstring.
 DEFAULT_RESOLUTION = {"n_theta": 25, "n_zeta": 41, "n_xi": 20}
 
-#: Monoenergetic scan grid.  Five collisionalities over two decades is what a
-#: D11* figure needs to show the plateau and the 1/nu branch; three ``EStar``
-#: values show the electric-field dependence without tripling the runtime.
-DEFAULT_NU_PRIME = (1.0e-2, 3.0e-2, 1.0e-1, 3.0e-1, 1.0e0)
+#: Resolution for the single RHSMode=1 solve behind the bootstrap/flux panels.
+#: Smaller than the monoenergetic grid because it runs once, not 21 times.
+DEFAULT_RESOLUTION_PROFILE = {"n_theta": 21, "n_zeta": 31, "n_xi": 24, "n_x": 5}
+
+#: A deuterium/electron pair at modest collisionality, with the density and
+#: temperature gradients that make the bootstrap current nonzero.  The gradient
+#: keys must match ``inputRadialCoordinateForGradients``: naming ``dNHatdrHats``
+#: while asking for coordinate 3 leaves the gradients at ZERO and the whole
+#: solve returns ~1e-20 -- a run that completes and drives nothing.  Follow the
+#: upstream decks, which omit the key and use ``dNHatdrHats``.  Deliberately
+#: generic: this panel says "here is what this equilibrium does", not "here are
+#: your machine's parameters", and the header records that.
+_PROFILE_TEMPLATE = """&general
+  RHSMode = 1
+/
+&geometryParameters
+  geometryScheme = 5
+  equilibriumFile = "{equilibrium}"
+  VMECRadialOption = 0
+  inputRadialCoordinate = 3
+  rN_wish = 0.5
+/
+&speciesParameters
+  Zs = 1.0d+0 -1.0d+0
+  mHats = 1.0d+0 5.446170214d-4
+  nHats = 1.0d+0 1.0d+0
+  THats = 1.0d+0 1.0d+0
+  dNHatdrHats = -0.5d+0 -0.5d+0
+  dTHatdrHats = -1.0d+0 -1.0d+0
+/
+&physicsParameters
+  Delta = 4.5694d-3
+  alpha = 1.0d+0
+  nu_n = 8.4774d-3
+  Er = 0.0d+0
+  collisionOperator = 1
+/
+&resolutionParameters
+  Ntheta = {n_theta}
+  Nzeta = {n_zeta}
+  Nxi = {n_xi}
+  NL = 4
+  Nx = {n_x}
+  solverTolerance = 1d-8
+/
+&otherNumericalParameters
+/
+&preconditionerOptions
+/
+"""
+
+#: Monoenergetic scan grid, spanning the three collisionality regimes a
+#: neoclassical paper reports: the ``1/nu`` branch at low collisionality, the
+#: plateau, and Pfirsch-Schlueter at high.  Two decades show none of that -- the
+#: upstream decks themselves sit at ``nuPrime`` 1.2e-3 to 1.0, so a grid that
+#: starts at 1e-2 misses the physics that makes a stellarator interesting.
+DEFAULT_NU_PRIME = (1.0e-4, 1.0e-3, 1.0e-2, 1.0e-1, 1.0e0, 1.0e1, 1.0e2)
+#: ``EStar`` values bracketing the upstream decks' 0.0 and 0.2.
 DEFAULT_E_STAR = (0.0, 0.1, 0.3)
 
 
@@ -207,14 +261,20 @@ def _panel_bootstrap(ax, data: dict[str, Any]) -> bool:
     v = _scalar(data, "FSABjHatOverRootFSAB2", "FSABjHat", "FSABjHatOverB0")
     if v is None:
         return False
-    ax.bar(range(len(v)), v, color="tab:blue")
-    ax.axhline(0.0, color="0.5", lw=0.8)
-    ax.set_xlabel("iteration" if len(v) > 1 else "")
-    ax.set_ylabel(r"$\langle j_\parallel B\rangle/\sqrt{\langle B^2\rangle}$")
-    ax.set_title(f"bootstrap current = {v[-1]:+.4e}", fontsize=9)
-    ax.grid(alpha=0.3, axis="y")
     if len(v) == 1:
+        # One converged value: a full-width bar says nothing a number does not.
+        ax.axhline(0.0, color="0.5", lw=0.8)
+        ax.plot([0], v, "o", ms=9, color="tab:blue")
+        ax.set_xlim(-1, 1)
         ax.set_xticks([])
+        ax.text(0.02, 0.06, f"{v[-1]:+.4e}", transform=ax.transAxes, fontsize=11)
+    else:
+        ax.plot(range(len(v)), v, "o-", ms=4, color="tab:blue")
+        ax.axhline(0.0, color="0.5", lw=0.8)
+        ax.set_xlabel("Newton iteration")
+    ax.set_ylabel(r"$\langle j_\parallel B\rangle/\sqrt{\langle B^2\rangle}$")
+    ax.set_title("bootstrap current", fontsize=9)
+    ax.grid(alpha=0.3, axis="y")
     return True
 
 
@@ -257,8 +317,8 @@ def plot_representative(
     plt = _import_matplotlib()
     data = data or {}
     rows = 3 if ambipolar else 2
-    fig = plt.figure(figsize=(13.0, 3.8 * rows))
-    gs = fig.add_gridspec(rows, 3, hspace=0.40, wspace=0.30)
+    fig = plt.figure(figsize=(13.5, 4.0 * rows), constrained_layout=True)
+    gs = fig.add_gridspec(rows, 3)
     axes = {
         "d11": fig.add_subplot(gs[0, 0]), "d31": fig.add_subplot(gs[0, 1]),
         "d33": fig.add_subplot(gs[0, 2]), "modb": fig.add_subplot(gs[1, 0]),
@@ -293,7 +353,7 @@ def plot_representative(
     fig.suptitle(title, fontsize=12)
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path, dpi=140, bbox_inches="tight")
+    fig.savefig(out_path, dpi=140)
     plt.close(fig)
     return out_path.resolve()
 
@@ -340,10 +400,85 @@ def run_representative(
     )
     if emit:
         emit(f"  monoenergetic scan at {DEFAULT_RESOLUTION}")
-    nu = DEFAULT_NU_PRIME if not full else tuple(np.logspace(-2.5, 0.5, 9))
+    nu = DEFAULT_NU_PRIME if not full else tuple(np.logspace(-5, 2, 15))
     scan = monoenergetic_scan(base, nu_prime=nu, emit=emit)
+
+    # The monoenergetic scan alone leaves the whole second row empty: RHSMode=3
+    # produces a transport matrix and nothing else.  |B| comes free from the
+    # geometry, and one RHSMode=1 solve on the same equilibrium supplies the
+    # bootstrap current and the species fluxes.  Without this the figure renders
+    # three "not present in this output" boxes, which is not a representative
+    # run of anything.
+    if emit:
+        emit("  profile solve for |B|, bootstrap and fluxes")
+    data = _profile_data(equilibrium, emit=emit)
+
     out = Path(out_path) if out_path else Path(f"{equilibrium.stem}.panels.png")
-    return plot_representative(out, scan=scan, title=f"DKX representative run — {equilibrium.name}")
+    return plot_representative(
+        out, data=data, scan=scan,
+        title=f"DKX representative run — {equilibrium.name}",
+    )  # fmt: skip
+
+
+def _field_periods(equilibrium: Path) -> int:
+    """Field-period count, read from the wout itself.
+
+    For ``geometryScheme=5`` the namelist's ``NPeriods`` stays at its default of
+    0 and the real value comes from the equilibrium, so neither the input object
+    nor the operator carries it.  Falling back to 1 draws zeta over a full turn
+    on an nfp-period device --- an axis wrong by exactly that factor.
+    """
+    try:
+        import netCDF4  # noqa: PLC0415
+
+        with netCDF4.Dataset(str(equilibrium)) as handle:
+            return max(1, int(handle.variables["nfp"][...]))
+    except Exception:
+        return 1
+
+
+def _profile_data(equilibrium: Path, *, emit: Callable[[str], None] | None = None) -> dict:
+    """Geometry plus one RHSMode=1 solve, for the panels the scan cannot fill.
+
+    Returns ``{}`` rather than raising if the profile solve does not apply to
+    this equilibrium: a missing panel that says so is better than no figure.
+    """
+    from dkx.inputs import parse_sfincs_input_text, sfincs_input_from_raw  # noqa: PLC0415
+    from dkx.run import run_profile  # noqa: PLC0415
+
+    text = _PROFILE_TEMPLATE.format(
+        equilibrium=str(equilibrium), **DEFAULT_RESOLUTION_PROFILE
+    )
+    try:
+        # run_profile takes a path or an SfincsInput; parse_sfincs_input_text
+        # returns a RawNamelist, which it silently mistakes for a path.
+        inp = sfincs_input_from_raw(parse_sfincs_input_text(text))
+        run = _quiet(lambda: run_profile(inp, out_path=None, emit=None))
+    except Exception as exc:  # pragma: no cover - geometry-dependent
+        if emit:
+            emit(f"    profile solve unavailable ({type(exc).__name__}); "
+                 f"|B|/bootstrap/flux panels will say so")  # fmt: skip
+        return {}
+    op, mom = run.operator, run.moments
+    # The operator carries no angle grids, and b_hat here is (n_theta, n_zeta)
+    # -- the OPPOSITE order from the output-file layout the other panel path
+    # sees.  Build the uniform grids explicitly rather than falling back to
+    # arange, which silently labels a publication figure in index units.
+    nfp = _field_periods(equilibrium)
+    data: dict[str, Any] = {
+        "BHat": np.asarray(op.b_hat),
+        "theta": np.linspace(0.0, 2.0 * np.pi, op.n_theta, endpoint=False),
+        "zeta": np.linspace(0.0, 2.0 * np.pi / nfp, op.n_zeta, endpoint=False),
+    }
+    for key in ("FSABjHatOverRootFSAB2", "FSABjHat", "FSABFlow",
+                "particleFlux_vm_psiHat", "heatFlux_vm_psiHat"):  # fmt: skip
+        if key in mom:
+            data[key] = np.asarray(mom[key])
+    if emit:
+        boot = data.get("FSABjHatOverRootFSAB2", data.get("FSABjHat"))
+        if boot is not None:
+            emit(f"    bootstrap <j.B>/sqrt(<B^2>) = {np.asarray(boot).ravel()[-1]:+.4e}")
+    return data
 
 
 # ---------------------------------------------------------------------------
