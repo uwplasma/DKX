@@ -764,12 +764,25 @@ def _maybe_handle_plot(argv: list[str]) -> int | None:
         if target is None:
             print("dkx --plot needs a path: an output file, or an equilibrium.")
             return 2
-    elif len(argv) == 1 and not argv[0].startswith("-"):
-        cand = _Path(argv[0])
-        # A bare equilibrium path is the `dkx wout_XXX.nc` entry point; anything
-        # else (a namelist, a subcommand) falls through untouched.
-        if cand.is_file() and cand.suffix.lower() in {".nc", ".h5"}:
-            target = argv[0]
+    else:
+        # Find a positional .nc/.h5 anywhere in argv, not just as a lone token:
+        # `dkx wout.nc --out fig.png` must work, and requiring len(argv)==1 sent
+        # it to write-output, which reads the netCDF as a namelist and dies on
+        # a UnicodeDecodeError.  Values belonging to option flags are skipped.
+        _OPTS_WITH_VALUE = {"--out", "--equilibrium-file", "--wout", "--cores"}
+        skip_next = False
+        for tok in argv:
+            if skip_next:
+                skip_next = False
+                continue
+            if tok.startswith("-"):
+                skip_next = tok in _OPTS_WITH_VALUE
+                continue
+            cand = _Path(tok)
+            if cand.is_file() and cand.suffix.lower() in {".nc", ".h5"}:
+                target = tok
+                break
+            break  # a positional that is not an equilibrium: leave argv alone
     if target is None:
         return None
 
