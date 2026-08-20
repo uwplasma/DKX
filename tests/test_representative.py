@@ -105,3 +105,38 @@ def test_panels_render_from_a_real_output_file(tmp_path, deck):
         run_profile(src / "input.namelist", out_path=tmp_path / "out.h5", emit=None)
     out = plot_output_file(tmp_path / "out.h5", tmp_path / "panels.png")
     assert out.exists() and out.stat().st_size > 0
+
+
+def test_ambipolar_roots_are_bracketed_not_solved():
+    """The panel reports sign changes, so a reader sees how MANY roots there are.
+
+    A Brent solve from one guess returns a single root and hides whether the
+    device is in the ion-root regime or the ion/unstable/electron triplet --
+    which is the physics the panel exists to show.
+    """
+    from dkx.representative import _ambipolar_roots
+
+    single = [{"er": -4.0, "J_r": 2.4e-08}, {"er": -2.0, "J_r": -5.4e-08}]
+    assert len(_ambipolar_roots(single)) == 1
+    assert -4.0 < _ambipolar_roots(single)[0] < -2.0
+
+    triplet = [{"er": -6.0, "J_r": 1.0}, {"er": -3.0, "J_r": -1.0},
+               {"er": 0.0, "J_r": 1.0}, {"er": 3.0, "J_r": -1.0}]  # fmt: skip
+    assert len(_ambipolar_roots(triplet)) == 3
+
+    assert _ambipolar_roots([{"er": -1.0, "J_r": 1.0}, {"er": 1.0, "J_r": 2.0}]) == []
+
+
+def test_a_nan_current_does_not_invent_a_root():
+    from dkx.representative import _ambipolar_roots
+
+    assert _ambipolar_roots([{"er": -1.0, "J_r": float("nan")},
+                             {"er": 1.0, "J_r": -1.0}]) == []  # fmt: skip
+
+
+def test_the_figure_grows_a_row_for_the_ambipolarity_panel(tmp_path):
+    from dkx.representative import plot_representative
+
+    recs = [{"er": -4.0, "J_r": 2.4e-08}, {"er": -2.0, "J_r": -5.4e-08}]
+    out = plot_representative(tmp_path / "full.png", ambipolar=recs)
+    assert out.exists() and out.stat().st_size > 0
