@@ -200,8 +200,41 @@ def parse_sfincs_input_text(text: str, *, source_path: str | Path | None = None)
     return Namelist(groups=parsed_groups, indexed=parsed_indexed, source_path=source, source_text=text)
 
 
-def read_sfincs_input(path: str | Path) -> Namelist:
-    """Parse a SFINCS `input.namelist` file into groups."""
+#: Leading bytes of the binary formats a user is most likely to hand this
+#: function by mistake, mapped to what they actually are.
+_BINARY_SIGNATURES: tuple[tuple[bytes, str], ...] = (
+    (b"CDF\x01", "a NetCDF classic file"),
+    (b"CDF\x02", "a NetCDF 64-bit-offset file"),
+    (b"\x89HDF\r\n\x1a\n", "an HDF5 file"),
+    (b"\x93NUMPY", "a NumPy .npy file"),
+    (b"PK\x03\x04", "a zip archive (.npz?)"),
+)
 
+
+def read_sfincs_input(path: str | Path) -> Namelist:
+    """Parse a SFINCS `input.namelist` file into groups.
+
+    Binary inputs are named rather than decoded.  A VMEC ``wout`` handed here --
+    which is easy, since it is the other file a DKX user has in the directory --
+    otherwise dies inside ``read_text`` with
+    ``UnicodeDecodeError: 'utf-8' codec can't decode byte 0xc8``, which says
+    nothing about what was wrong or what to do about it.
+    """
     source_path = Path(path).resolve()
-    return parse_sfincs_input_text(source_path.read_text(), source_path=source_path)
+    try:
+        text = source_path.read_text()
+    except UnicodeDecodeError as exc:
+        head = source_path.open("rb").read(8)
+        what = next((name for sig, name in _BINARY_SIGNATURES if head.startswith(sig)), None)
+        if what is None:
+            raise ValueError(
+                f"{source_path} is not a text file, so it cannot be a SFINCS "
+                f"input namelist ({exc})."
+            ) from exc
+        raise ValueError(
+            f"{source_path} is {what}, not a SFINCS input namelist. "
+            f"If it is a VMEC equilibrium, plot it directly with "
+            f"`dkx {source_path.name}`, or point a namelist at it with "
+            f"`equilibriumFile = \"{source_path.name}\"` and geometryScheme = 5."
+        ) from exc
+    return parse_sfincs_input_text(text, source_path=source_path)

@@ -52,10 +52,64 @@ import numpy as np
 #: Convergence-tested default, see the module docstring.
 DEFAULT_RESOLUTION = {"n_theta": 25, "n_zeta": 41, "n_xi": 20}
 
-#: Monoenergetic scan grid.  Five collisionalities over two decades is what a
-#: D11* figure needs to show the plateau and the 1/nu branch; three ``EStar``
-#: values show the electric-field dependence without tripling the runtime.
-DEFAULT_NU_PRIME = (1.0e-2, 3.0e-2, 1.0e-1, 3.0e-1, 1.0e0)
+#: Resolution for the single RHSMode=1 solve behind the bootstrap/flux panels.
+#: Smaller than the monoenergetic grid because it runs once, not 21 times.
+DEFAULT_RESOLUTION_PROFILE = {"n_theta": 21, "n_zeta": 31, "n_xi": 24, "n_x": 5}
+
+#: A deuterium/electron pair at modest collisionality, with the density and
+#: temperature gradients that make the bootstrap current nonzero.  The gradient
+#: keys must match ``inputRadialCoordinateForGradients``: naming ``dNHatdrHats``
+#: while asking for coordinate 3 leaves the gradients at ZERO and the whole
+#: solve returns ~1e-20 -- a run that completes and drives nothing.  Follow the
+#: upstream decks, which omit the key and use ``dNHatdrHats``.  Deliberately
+#: generic: this panel says "here is what this equilibrium does", not "here are
+#: your machine's parameters", and the header records that.
+_PROFILE_TEMPLATE = """&general
+  RHSMode = 1
+/
+&geometryParameters
+  geometryScheme = 5
+  equilibriumFile = "{equilibrium}"
+  VMECRadialOption = 0
+  inputRadialCoordinate = 3
+  rN_wish = 0.5
+/
+&speciesParameters
+  Zs = 1.0d+0 -1.0d+0
+  mHats = 1.0d+0 5.446170214d-4
+  nHats = 1.0d+0 1.0d+0
+  THats = 1.0d+0 1.0d+0
+  dNHatdrHats = -0.5d+0 -0.5d+0
+  dTHatdrHats = -1.0d+0 -1.0d+0
+/
+&physicsParameters
+  Delta = 4.5694d-3
+  alpha = 1.0d+0
+  nu_n = 8.4774d-3
+  Er = 0.0d+0
+  collisionOperator = 1
+/
+&resolutionParameters
+  Ntheta = {n_theta}
+  Nzeta = {n_zeta}
+  Nxi = {n_xi}
+  NL = 4
+  Nx = {n_x}
+  solverTolerance = 1d-8
+/
+&otherNumericalParameters
+/
+&preconditionerOptions
+/
+"""
+
+#: Monoenergetic scan grid, spanning the three collisionality regimes a
+#: neoclassical paper reports: the ``1/nu`` branch at low collisionality, the
+#: plateau, and Pfirsch-Schlueter at high.  Two decades show none of that -- the
+#: upstream decks themselves sit at ``nuPrime`` 1.2e-3 to 1.0, so a grid that
+#: starts at 1e-2 misses the physics that makes a stellarator interesting.
+DEFAULT_NU_PRIME = (1.0e-4, 1.0e-3, 1.0e-2, 1.0e-1, 1.0e0, 1.0e1, 1.0e2)
+#: ``EStar`` values bracketing the upstream decks' 0.0 and 0.2.
 DEFAULT_E_STAR = (0.0, 0.1, 0.3)
 
 
@@ -207,14 +261,20 @@ def _panel_bootstrap(ax, data: dict[str, Any]) -> bool:
     v = _scalar(data, "FSABjHatOverRootFSAB2", "FSABjHat", "FSABjHatOverB0")
     if v is None:
         return False
-    ax.bar(range(len(v)), v, color="tab:blue")
-    ax.axhline(0.0, color="0.5", lw=0.8)
-    ax.set_xlabel("iteration" if len(v) > 1 else "")
-    ax.set_ylabel(r"$\langle j_\parallel B\rangle/\sqrt{\langle B^2\rangle}$")
-    ax.set_title(f"bootstrap current = {v[-1]:+.4e}", fontsize=9)
-    ax.grid(alpha=0.3, axis="y")
     if len(v) == 1:
+        # One converged value: a full-width bar says nothing a number does not.
+        ax.axhline(0.0, color="0.5", lw=0.8)
+        ax.plot([0], v, "o", ms=9, color="tab:blue")
+        ax.set_xlim(-1, 1)
         ax.set_xticks([])
+        ax.text(0.02, 0.06, f"{v[-1]:+.4e}", transform=ax.transAxes, fontsize=11)
+    else:
+        ax.plot(range(len(v)), v, "o-", ms=4, color="tab:blue")
+        ax.axhline(0.0, color="0.5", lw=0.8)
+        ax.set_xlabel("Newton iteration")
+    ax.set_ylabel(r"$\langle j_\parallel B\rangle/\sqrt{\langle B^2\rangle}$")
+    ax.set_title("bootstrap current", fontsize=9)
+    ax.grid(alpha=0.3, axis="y")
     return True
 
 
@@ -245,6 +305,7 @@ def plot_representative(
     data: dict[str, Any] | None = None,
     scan: list[dict[str, Any]] | None = None,
     ambipolar: list[dict[str, Any]] | None = None,
+    profiles: list[dict[str, Any]] | None = None,
     title: str = "DKX representative run",
 ) -> Path:
     """Assemble whichever panels the inputs can support, and say which are missing.
@@ -257,8 +318,8 @@ def plot_representative(
     plt = _import_matplotlib()
     data = data or {}
     rows = 3 if ambipolar else 2
-    fig = plt.figure(figsize=(13.0, 3.8 * rows))
-    gs = fig.add_gridspec(rows, 3, hspace=0.40, wspace=0.30)
+    fig = plt.figure(figsize=(13.5, 4.0 * rows), constrained_layout=True)
+    gs = fig.add_gridspec(rows, 3)
     axes = {
         "d11": fig.add_subplot(gs[0, 0]), "d31": fig.add_subplot(gs[0, 1]),
         "d33": fig.add_subplot(gs[0, 2]), "modb": fig.add_subplot(gs[1, 0]),
@@ -272,8 +333,16 @@ def plot_representative(
         axes["d11"], axes["d31"], axes["d33"], scan or []
     )
     drawn["modB"] = _panel_modB(axes["modb"], data)
-    drawn["bootstrap"] = _panel_bootstrap(axes["boot"], data)
-    drawn["fluxes"] = _panel_fluxes(axes["flux"], data)
+    # Radial profiles win where present: a single point at one surface and a
+    # bar chart indexed by species number are strictly less informative.
+    drawn["bootstrap"] = (
+        _panel_radial_bootstrap(axes["boot"], profiles) if profiles
+        else _panel_bootstrap(axes["boot"], data)
+    )  # fmt: skip
+    drawn["fluxes"] = (
+        _panel_radial_fluxes(axes["flux"], profiles) if profiles
+        else _panel_fluxes(axes["flux"], data)
+    )  # fmt: skip
     if ambipolar:
         drawn["ambipolarity"] = _panel_ambipolarity(axes["ambi"], ambipolar)
 
@@ -293,7 +362,7 @@ def plot_representative(
     fig.suptitle(title, fontsize=12)
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path, dpi=140, bbox_inches="tight")
+    fig.savefig(out_path, dpi=140)
     plt.close(fig)
     return out_path.resolve()
 
@@ -340,10 +409,97 @@ def run_representative(
     )
     if emit:
         emit(f"  monoenergetic scan at {DEFAULT_RESOLUTION}")
-    nu = DEFAULT_NU_PRIME if not full else tuple(np.logspace(-2.5, 0.5, 9))
+    nu = DEFAULT_NU_PRIME if not full else tuple(np.logspace(-5, 2, 15))
     scan = monoenergetic_scan(base, nu_prime=nu, emit=emit)
+
+    # The monoenergetic scan alone leaves the whole second row empty: RHSMode=3
+    # produces a transport matrix and nothing else.  |B| comes free from the
+    # geometry, and one RHSMode=1 solve on the same equilibrium supplies the
+    # bootstrap current and the species fluxes.  Without this the figure renders
+    # three "not present in this output" boxes, which is not a representative
+    # run of anything.
+    if emit:
+        emit("  profile solve for |B|")
+    data = _profile_data(equilibrium, emit=emit)
+    if emit:
+        emit("  radial scan: ambipolar Er, bootstrap and fluxes at the root")
+    profiles = radial_profiles(equilibrium, emit=emit)
+
     out = Path(out_path) if out_path else Path(f"{equilibrium.stem}.panels.png")
-    return plot_representative(out, scan=scan, title=f"DKX representative run — {equilibrium.name}")
+    figure = plot_representative(
+        out, data=data, scan=scan, profiles=profiles,
+        title=f"DKX representative run — {equilibrium.name}",
+    )  # fmt: skip
+    # Always leave the numbers behind, not only the picture: a figure cannot be
+    # re-plotted, re-scaled or checked against another code.
+    written = write_representative_output(
+        out.with_suffix(".h5"), scan=scan, profiles=profiles, data=data,
+        equilibrium=equilibrium,
+    )  # fmt: skip
+    if emit:
+        emit(f" wrote {written}")
+    return figure
+
+
+def _field_periods(equilibrium: Path) -> int:
+    """Field-period count, read from the wout itself.
+
+    For ``geometryScheme=5`` the namelist's ``NPeriods`` stays at its default of
+    0 and the real value comes from the equilibrium, so neither the input object
+    nor the operator carries it.  Falling back to 1 draws zeta over a full turn
+    on an nfp-period device --- an axis wrong by exactly that factor.
+    """
+    try:
+        import netCDF4  # noqa: PLC0415
+
+        with netCDF4.Dataset(str(equilibrium)) as handle:
+            return max(1, int(handle.variables["nfp"][...]))
+    except Exception:
+        return 1
+
+
+def _profile_data(equilibrium: Path, *, emit: Callable[[str], None] | None = None) -> dict:
+    """Geometry plus one RHSMode=1 solve, for the panels the scan cannot fill.
+
+    Returns ``{}`` rather than raising if the profile solve does not apply to
+    this equilibrium: a missing panel that says so is better than no figure.
+    """
+    from dkx.inputs import parse_sfincs_input_text, sfincs_input_from_raw  # noqa: PLC0415
+    from dkx.run import run_profile  # noqa: PLC0415
+
+    text = _PROFILE_TEMPLATE.format(
+        equilibrium=str(equilibrium), **DEFAULT_RESOLUTION_PROFILE
+    )
+    try:
+        # run_profile takes a path or an SfincsInput; parse_sfincs_input_text
+        # returns a RawNamelist, which it silently mistakes for a path.
+        inp = sfincs_input_from_raw(parse_sfincs_input_text(text))
+        run = _quiet(lambda: run_profile(inp, out_path=None, emit=None))
+    except Exception as exc:  # pragma: no cover - geometry-dependent
+        if emit:
+            emit(f"    profile solve unavailable ({type(exc).__name__}); "
+                 f"|B|/bootstrap/flux panels will say so")  # fmt: skip
+        return {}
+    op, mom = run.operator, run.moments
+    # The operator carries no angle grids, and b_hat here is (n_theta, n_zeta)
+    # -- the OPPOSITE order from the output-file layout the other panel path
+    # sees.  Build the uniform grids explicitly rather than falling back to
+    # arange, which silently labels a publication figure in index units.
+    nfp = _field_periods(equilibrium)
+    data: dict[str, Any] = {
+        "BHat": np.asarray(op.b_hat),
+        "theta": np.linspace(0.0, 2.0 * np.pi, op.n_theta, endpoint=False),
+        "zeta": np.linspace(0.0, 2.0 * np.pi / nfp, op.n_zeta, endpoint=False),
+    }
+    for key in ("FSABjHatOverRootFSAB2", "FSABjHat", "FSABFlow",
+                "particleFlux_vm_psiHat", "heatFlux_vm_psiHat"):  # fmt: skip
+        if key in mom:
+            data[key] = np.asarray(mom[key])
+    if emit:
+        boot = data.get("FSABjHatOverRootFSAB2", data.get("FSABjHat"))
+        if boot is not None:
+            emit(f"    bootstrap <j.B>/sqrt(<B^2>) = {np.asarray(boot).ravel()[-1]:+.4e}")
+    return data
 
 
 # ---------------------------------------------------------------------------
@@ -413,3 +569,238 @@ def _panel_ambipolarity(ax, records: list[dict[str, Any]]) -> bool:
     ax.set_title("ambipolarity: roots of $J_r(E_r)$", fontsize=9)
     ax.grid(alpha=0.3)
     return True
+
+
+# ---------------------------------------------------------------------------
+# Radial profiles at the ambipolar root
+# ---------------------------------------------------------------------------
+#: Flux-surface labels for the radial scan.  Five is enough to show a profile's
+#: shape; the cost is one batched E_r scan per surface.
+DEFAULT_SURFACES = (0.25, 0.4, 0.55, 0.7, 0.85)
+
+#: E_r values (kV/m) bracketing the ion root at every surface.
+DEFAULT_ER_BRACKET = (-8.0, -4.0, -2.0, -1.0, -0.4, 0.4, 1.0, 2.0)
+
+
+def _interp_at_root(er: np.ndarray, values: np.ndarray, root: float) -> float:
+    """Linear interpolation of a scanned quantity onto the ambipolar root."""
+    order = np.argsort(er)
+    return float(np.interp(root, np.asarray(er)[order], np.asarray(values)[order]))
+
+
+def radial_profiles(
+    equilibrium: Path,
+    *,
+    surfaces: Sequence[float] = DEFAULT_SURFACES,
+    er_values: Sequence[float] = DEFAULT_ER_BRACKET,
+    emit: Callable[[str], None] | None = None,
+) -> list[dict[str, Any]]:
+    """Ambipolar ``E_r`` and the moments evaluated *at that root*, per surface.
+
+    One batched ``E_r`` scan per surface, because that single call returns the
+    radial current *and* every moment for every ``E_r``.  Evaluating the
+    bootstrap current and the fluxes at the ambipolar root is the physically
+    meaningful thing to report: at ``E_r = 0`` they are not what the device
+    would actually do.
+    """
+    import tempfile  # noqa: PLC0415
+
+    from dkx.api import batched_er_scan  # noqa: PLC0415
+
+    er = np.asarray(er_values, dtype=float)
+    template = _PROFILE_TEMPLATE.format(
+        equilibrium=str(equilibrium), **DEFAULT_RESOLUTION_PROFILE
+    ).replace("rN_wish = 0.5", "rN_wish = {radius}")  # fmt: skip
+
+    out: list[dict[str, Any]] = []
+    with tempfile.TemporaryDirectory() as work:
+        for radius in surfaces:
+            deck = Path(work) / f"in_{radius}.namelist"
+            deck.write_text(template.format(radius=radius))
+            try:
+                scan = _quiet(lambda d=deck: batched_er_scan(d, er))
+            except Exception as exc:  # pragma: no cover - geometry-dependent
+                if emit:
+                    emit(f"    r/a={radius:.2f}: unavailable ({type(exc).__name__})")
+                continue
+            j_r = np.asarray(scan.radial_current, dtype=float).ravel()
+            roots = _ambipolar_roots([{"er": float(e), "J_r": float(j)}
+                                      for e, j in zip(er, j_r)])  # fmt: skip
+            record: dict[str, Any] = {"r": float(radius), "er_scan": er.tolist(),
+                                      "J_r": j_r.tolist(), "roots": roots}  # fmt: skip
+            if roots:
+                # The ion root is the most negative crossing; a device in the
+                # electron-root regime has a positive one too, and reporting
+                # only the first found would hide that.
+                root = min(roots)
+                record["er_ambipolar"] = root
+                mom = scan.moments
+                boot = mom.get("FSABjHatOverRootFSAB2", mom.get("FSABjHat"))
+                if boot is not None:
+                    record["bootstrap"] = _interp_at_root(er, np.asarray(boot).ravel(), root)
+                for key, name in (("particleFlux_vm_psiHat", "particle_flux"),
+                                  ("heatFlux_vm_psiHat", "heat_flux")):  # fmt: skip
+                    if key in mom:
+                        arr = np.asarray(mom[key])
+                        record[name] = [
+                            _interp_at_root(er, arr[:, s], root) for s in range(arr.shape[1])
+                        ]
+            if emit:
+                e_txt = f"{record.get('er_ambipolar', float('nan')):+.3f}"
+                b_txt = f"{record.get('bootstrap', float('nan')):+.4e}"
+                emit(f"    r/a={radius:.2f}  Er_ambipolar={e_txt} kV/m  <j.B>={b_txt}")
+            out.append(record)
+    return out
+
+
+def _species_labels(n: int, charges: Sequence[float] | None = None) -> list[str]:
+    """Name the species, because "0" and "1" tell a reader nothing.
+
+    Sign of the charge is what distinguishes them; the template's ``Zs`` are
+    ``+1`` and ``-1``, so the electron is the negative one.
+    """
+    if charges is not None and len(charges) == n:
+        return ["electrons" if z < 0 else ("ions" if n <= 2 else f"ion Z={z:g}")
+                for z in charges]  # fmt: skip
+    return ["ions", "electrons"][:n] if n <= 2 else [f"species {i}" for i in range(n)]
+
+
+def _panel_radial_bootstrap(ax, profiles: list[dict[str, Any]]) -> bool:
+    """Bootstrap current and ambipolar E_r against radius, on twin axes.
+
+    Both are radial profiles a reader wants together: the bootstrap current is
+    evaluated *at* the ambipolar root, so plotting the root beside it says which
+    field the current belongs to.
+    """
+    pts = [p for p in profiles if "bootstrap" in p]
+    if not pts:
+        return False
+    r = [p["r"] for p in pts]
+    ax.plot(r, [p["bootstrap"] for p in pts], "o-", ms=4, color="tab:blue",
+            label=r"$\langle j_\parallel B\rangle/\sqrt{\langle B^2\rangle}$")  # fmt: skip
+    ax.axhline(0.0, color="0.7", lw=0.8)
+    ax.set_xlabel("$r/a$")
+    ax.set_ylabel(r"$\langle j_\parallel B\rangle/\sqrt{\langle B^2\rangle}$", color="tab:blue")
+    ax.tick_params(axis="y", labelcolor="tab:blue")
+    ax.grid(alpha=0.3)
+
+    twin = ax.twinx()
+    er = [p.get("er_ambipolar", float("nan")) for p in pts]
+    twin.plot(r, er, "s--", ms=4, color="tab:red", label=r"$E_r$ (ambipolar)")
+    twin.set_ylabel(r"$E_r$ [kV/m]", color="tab:red")
+    twin.tick_params(axis="y", labelcolor="tab:red")
+    ax.set_title("bootstrap current and ambipolar $E_r$", fontsize=9)
+    handles = ax.get_lines()[:1] + twin.get_lines()[:1]
+    ax.legend(handles, [h.get_label() for h in handles], fontsize=7, loc="best")
+    return True
+
+
+def _panel_radial_fluxes(ax, profiles: list[dict[str, Any]],
+                         charges: Sequence[float] | None = None) -> bool:  # fmt: skip
+    """Particle and heat flux per species against radius.
+
+    Named species and a radial axis, rather than a bar chart indexed by species
+    number: the convention every neoclassical paper uses, and the only form in
+    which "which one is the electron" is answerable from the figure.  Particle
+    and heat flux differ by orders of magnitude, so the heat flux takes a twin
+    axis rather than being flattened onto one log scale with the other.
+    """
+    pts = [p for p in profiles if "particle_flux" in p or "heat_flux" in p]
+    if not pts:
+        return False
+    r = [p["r"] for p in pts]
+    n = max(len(p.get("particle_flux", p.get("heat_flux", []))) for p in pts)
+    names = _species_labels(n, charges)
+    styles = ("o-", "s-", "^-")
+
+    # At the ambipolar root sum_s Z_s Gamma_s = 0, so for a Z=+-1 pair the two
+    # particle fluxes are EQUAL by construction -- drawing both puts one line
+    # exactly on top of the other, which reads as a rendering fault rather than
+    # as the physics it is.  Draw one, and say why.
+    gammas = [[p["particle_flux"][s] for p in pts if "particle_flux" in p] for s in range(n)]
+    ambipolar_pair = (
+        n == 2 and gammas[0] and gammas[1]
+        and np.allclose(gammas[0], gammas[1], rtol=1e-6, atol=0.0)
+    )  # fmt: skip
+    if ambipolar_pair:
+        ax.plot(r[: len(gammas[0])], gammas[0], "o-", ms=4, color="C0",
+                label=r"$\Gamma_i=\Gamma_e$ (ambipolar)")  # fmt: skip
+    else:
+        for s in range(n):
+            if gammas[s]:
+                ax.plot(r[: len(gammas[s])], gammas[s], styles[s % 3], ms=4,
+                        color=f"C{s}", label=rf"$\Gamma$ {names[s]}")  # fmt: skip
+    ax.set_xlabel("$r/a$")
+    ax.set_ylabel(r"$\Gamma_s$  [particle flux]")
+    ax.grid(alpha=0.3)
+
+    twin = ax.twinx()
+    for s in range(n):
+        q = [p["heat_flux"][s] for p in pts if "heat_flux" in p]
+        if q:
+            twin.plot(r[: len(q)], q, styles[s % 3], ms=4, ls="--", alpha=0.75,
+                      color=f"C{s + n}", label=rf"$Q$ {names[s]}")  # fmt: skip
+    twin.set_ylabel(r"$Q_s$  [heat flux]")
+    ax.set_title("particle and heat flux at the ambipolar root", fontsize=9)
+    handles = ax.get_lines() + twin.get_lines()
+    ax.legend(handles, [h.get_label() for h in handles], fontsize=6, loc="best", ncol=2)
+    return True
+
+
+def write_representative_output(
+    path: str | Path,
+    *,
+    scan: list[dict[str, Any]] | None = None,
+    profiles: list[dict[str, Any]] | None = None,
+    data: dict[str, Any] | None = None,
+    equilibrium: str | Path | None = None,
+) -> Path:
+    """Persist the numbers behind the figure.
+
+    A run that leaves only a PNG cannot be re-plotted, re-scaled, or checked
+    against another code, so ``dkx wout_*.nc`` always writes this alongside it.
+    HDF5 when ``h5py`` is available, JSON otherwise --- the point is that the
+    data survives, not the container.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload: dict[str, Any] = {
+        "equilibrium": str(equilibrium) if equilibrium else "",
+        "resolution_monoenergetic": DEFAULT_RESOLUTION,
+        "resolution_profile": DEFAULT_RESOLUTION_PROFILE,
+    }
+    if scan:
+        for key in ("nu_prime", "e_star", "D11", "D31", "D33"):
+            payload[f"monoenergetic/{key}"] = [r[key] for r in scan]
+    if profiles:
+        payload["profiles/r"] = [p["r"] for p in profiles]
+        for key in ("er_ambipolar", "bootstrap"):
+            payload[f"profiles/{key}"] = [p.get(key, float("nan")) for p in profiles]
+        for key in ("particle_flux", "heat_flux"):
+            rows = [p.get(key) for p in profiles if p.get(key) is not None]
+            if rows:
+                payload[f"profiles/{key}"] = rows
+    if data and "BHat" in data:
+        for key in ("BHat", "theta", "zeta"):
+            if key in data:
+                payload[f"geometry/{key}"] = np.asarray(data[key]).tolist()
+
+    try:
+        import h5py  # noqa: PLC0415
+
+        with h5py.File(path, "w") as handle:
+            for key, value in payload.items():
+                if isinstance(value, str):
+                    handle.attrs[key] = value
+                elif isinstance(value, dict):
+                    for sub, v in value.items():
+                        handle.attrs[f"{key}/{sub}"] = v
+                else:
+                    handle.create_dataset(key, data=np.asarray(value, dtype=float))
+        return path.resolve()
+    except Exception:
+        import json  # noqa: PLC0415
+
+        out = path.with_suffix(".json")
+        out.write_text(json.dumps(payload, indent=1) + "\n")
+        return out.resolve()

@@ -45,9 +45,16 @@ fetched from a GitHub release on first use and cached under `~/.cache/dkx/data`
 ## Quickstart
 
 ```bash
-dkx input.namelist --out sfincsOutput.h5    # solve, write SFINCS-keyed HDF5/NetCDF
-dkx --plot sfincsOutput.h5                  # PDF diagnostics panel
+dkx wout_XXX.nc                          # equilibrium in, publication panels out (~25 s)
+dkx --plot sfincsOutput.h5               # panels from an existing DKX or Fortran run
+dkx input.namelist --out sfincsOutput.h5 # solve one deck, write SFINCS-keyed HDF5/NetCDF
 ```
+
+`dkx wout_XXX.nc` writes `<name>.panels.png`: monoenergetic `D11/D31/D33` vs
+`nuPrime` across the 1/ν, plateau and Pfirsch–Schlüter regimes (a curve per
+`EStar`), `|B|` on the surface, the bootstrap current and the species fluxes, at
+resolutions taken from a convergence scan. `--full` widens the grid; `--plot`
+reads DKX and Fortran SFINCS output alike.
 
 The same solve from Python (mirrors
 [`examples/getting_started/run_tokamak.py`](examples/getting_started/run_tokamak.py),

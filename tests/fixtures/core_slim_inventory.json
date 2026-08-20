@@ -677,7 +677,7 @@
     },
     {
       "path": "dkx/representative.py",
-      "lines_at_audit": 415,
+      "lines_at_audit": 806,
       "category": "core",
       "action": "retain",
       "public_imports": [],
