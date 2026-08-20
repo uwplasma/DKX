@@ -244,6 +244,7 @@ def plot_representative(
     *,
     data: dict[str, Any] | None = None,
     scan: list[dict[str, Any]] | None = None,
+    ambipolar: list[dict[str, Any]] | None = None,
     title: str = "DKX representative run",
 ) -> Path:
     """Assemble whichever panels the inputs can support, and say which are missing.
@@ -255,13 +256,16 @@ def plot_representative(
     """
     plt = _import_matplotlib()
     data = data or {}
-    fig = plt.figure(figsize=(13.0, 7.6))
-    gs = fig.add_gridspec(2, 3, hspace=0.34, wspace=0.30)
+    rows = 3 if ambipolar else 2
+    fig = plt.figure(figsize=(13.0, 3.8 * rows))
+    gs = fig.add_gridspec(rows, 3, hspace=0.40, wspace=0.30)
     axes = {
         "d11": fig.add_subplot(gs[0, 0]), "d31": fig.add_subplot(gs[0, 1]),
         "d33": fig.add_subplot(gs[0, 2]), "modb": fig.add_subplot(gs[1, 0]),
         "boot": fig.add_subplot(gs[1, 1]), "flux": fig.add_subplot(gs[1, 2]),
     }  # fmt: skip
+    if ambipolar:
+        axes["ambi"] = fig.add_subplot(gs[2, 0])
 
     drawn = {}
     drawn["monoenergetic"] = _panel_monoenergetic(
@@ -270,6 +274,8 @@ def plot_representative(
     drawn["modB"] = _panel_modB(axes["modb"], data)
     drawn["bootstrap"] = _panel_bootstrap(axes["boot"], data)
     drawn["fluxes"] = _panel_fluxes(axes["flux"], data)
+    if ambipolar:
+        drawn["ambipolarity"] = _panel_ambipolarity(axes["ambi"], ambipolar)
 
     if not drawn["monoenergetic"]:
         for key in ("d11", "d31", "d33"):
@@ -338,3 +344,72 @@ def run_representative(
     scan = monoenergetic_scan(base, nu_prime=nu, emit=emit)
     out = Path(out_path) if out_path else Path(f"{equilibrium.stem}.panels.png")
     return plot_representative(out, scan=scan, title=f"DKX representative run — {equilibrium.name}")
+
+
+# ---------------------------------------------------------------------------
+# Panels that need more than one solve (opt-in via --full)
+# ---------------------------------------------------------------------------
+#: E_r values (kV/m) for the ambipolarity panel.  Spans the ion root and, on
+#: electron-root devices, the positive branch; a root-find would be cheaper but
+#: a scan is what shows a reader whether the root is unique.
+DEFAULT_ER_SCAN = (-8.0, -5.0, -3.0, -2.0, -1.0, -0.5, 0.5, 1.0, 2.0, 4.0)
+
+
+def ambipolarity_scan(
+    namelist: Any,
+    *,
+    er_values: Sequence[float] = DEFAULT_ER_SCAN,
+    emit: Callable[[str], None] | None = None,
+) -> list[dict[str, Any]]:
+    """Radial current against ``E_r``: the ambipolar condition is ``J_r = 0``.
+
+    One batched ``vmap`` solve over the whole ``E_r`` vector on a shared
+    geometry, so this costs far less than the point count suggests.
+    """
+    from dkx.api import batched_er_scan  # noqa: PLC0415
+
+    result = _quiet(lambda: batched_er_scan(namelist, np.asarray(er_values, dtype=float)))
+    # BatchedSolveResult names it `radial_current`; guessing "J_r" silently
+    # yields an empty scan and an empty panel rather than an error.
+    j_r = np.asarray(result.radial_current, dtype=float).ravel()
+    records = [
+        {"er": float(e), "J_r": float(j)}
+        for e, j in zip(np.asarray(er_values, dtype=float), j_r)
+    ]
+    if emit:
+        for r in records:
+            emit(f"    Er={r['er']:+6.2f} kV/m   J_r={r['J_r']:+.4e}")
+    return records
+
+
+def _ambipolar_roots(records: list[dict[str, Any]]) -> list[float]:
+    """Sign changes of ``J_r(E_r)``, linearly interpolated.
+
+    Reported as *bracketed* roots rather than solved ones: the panel's job is to
+    show how many there are (one ion root, or the ion/unstable/electron triplet),
+    which a Brent solve started from a single guess would hide.
+    """
+    roots: list[float] = []
+    for a, b in zip(records, records[1:]):
+        ja, jb = a["J_r"], b["J_r"]
+        if np.isfinite(ja) and np.isfinite(jb) and ja * jb < 0.0:
+            roots.append(a["er"] + (b["er"] - a["er"]) * ja / (ja - jb))
+    return roots
+
+
+def _panel_ambipolarity(ax, records: list[dict[str, Any]]) -> bool:
+    if not records:
+        return False
+    er = [r["er"] for r in records]
+    jr = [r["J_r"] for r in records]
+    ax.plot(er, jr, "o-", ms=3, color="tab:purple")
+    ax.axhline(0.0, color="0.5", lw=0.8)
+    for root in _ambipolar_roots(records):
+        ax.axvline(root, color="tab:red", ls="--", lw=0.9)
+        ax.annotate(f"{root:+.2f}", (root, 0.0), fontsize=7, color="tab:red",
+                    xytext=(2, 6), textcoords="offset points")  # fmt: skip
+    ax.set_xlabel(r"$E_r$ [kV/m]")
+    ax.set_ylabel(r"$J_r$")
+    ax.set_title("ambipolarity: roots of $J_r(E_r)$", fontsize=9)
+    ax.grid(alpha=0.3)
+    return True
