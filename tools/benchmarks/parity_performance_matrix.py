@@ -66,6 +66,21 @@ COMPARE_KEYS = (
     "transportMatrix",
 )
 
+#: Keys that are NOT a monoenergetic run's output.  RHSMode=3 computes the
+#: transport matrix; the species fluxes are not defined for it, and one code
+#: writing zeros where the other writes a small residue yields a relative
+#: difference of exactly 1.0 -- a total disagreement on a quantity neither code
+#: was asked for.  That artifact set the campaign's headline "worst parity" and
+#: hid the real outlier, so the comparison skips them rather than reporting them.
+MONOENERGETIC_SKIP_KEYS = frozenset({
+    "particleFlux_vm_psiHat",
+    "heatFlux_vm_psiHat",
+    "particleFlux_vd_psiHat",
+    "heatFlux_vd_psiHat",
+    "FSABFlow",
+    "FSABjHat",
+})
+
 
 def _peak_rss_gb(timing_output: str) -> float | None:
     """Peak RSS in GB parsed from ``/usr/bin/time`` verbose output."""
@@ -264,9 +279,21 @@ def compare_outputs(fortran_h5: Path, dkx_h5: Path, n_species: int = 1) -> dict:
     except Exception as exc:  # pragma: no cover - corrupt output
         return {"error": f"{type(exc).__name__}: {exc}"}
 
+    # RHSMode is written by both codes; 3 is monoenergetic.
+    def _mode(d: dict) -> int:
+        v = d.get("RHSMode")
+        try:
+            return int(np.atleast_1d(np.asarray(v)).ravel()[0])
+        except Exception:
+            return 1
+
+    monoenergetic = _mode(reference) == 3 or _mode(candidate) == 3
+
     report: dict = {}
     for key in COMPARE_KEYS:
         if key not in reference or key not in candidate:
+            continue
+        if monoenergetic and key in MONOENERGETIC_SKIP_KEYS:
             continue
         a = np.atleast_1d(np.asarray(reference[key], dtype=np.float64)).ravel()
         b = np.atleast_1d(np.asarray(candidate[key], dtype=np.float64)).ravel()
