@@ -76,16 +76,20 @@ DEFAULT_RESOLUTION = {"n_theta": 25, "n_zeta": 25, "n_xi": 41}
 DEFAULT_RESOLUTION_PROFILE = {"n_theta": 21, "n_zeta": 31, "n_xi": 24, "n_x": 5}
 
 #: Generic fallback plasma, used only when the equilibrium carries no pressure.
-FALLBACK_PLASMA = {"n_hat": 1.0, "t_hat": 1.0, "dn_ds": -0.5, "dt_ds": -1.0}
+FALLBACK_PLASMA = {"n_hat": 1.0, "t_hat": 1.0, "dn_drhat": -0.5, "dt_drhat": -1.0}
 
 #: A deuterium/electron pair at modest collisionality, with the density and
 #: temperature gradients that make the bootstrap current nonzero.  The gradient
-#: keys must match ``inputRadialCoordinateForGradients``, and the key lives in
+#: keys must match ``inputRadialCoordinateForGradients``, and that key lives in
 #: ``&geometryParameters``: a mismatch leaves the gradients at ZERO and the
-#: whole solve returns ~1e-20 -- a run that completes and drives nothing.
-#: Coordinate 1 is ``psiN = s``, which is what the wout tabulates ``presf`` in,
-#: so the profile derivative needs no chain rule and cannot pick up a stray
-#: factor of ``aHat``.
+#: whole solve returns ~1e-20 -- a run that completes and drives nothing.  The
+#: template leaves it at the v3 default of 4, as the upstream decks do, because
+#: **4 is the only code that drives the potential with ``Er``** --- any other
+#: choice raises "Er != 0 with a non-Er inputRadialCoordinateForGradients", and
+#: the ambipolar scan is an ``Er`` scan.  Code 4 takes n and T gradients with
+#: respect to ``rHat``, so :func:`plasma_parameters` owes the chain rule
+#: ``d/drHat = (1/aHat) d/drN``; ``aHat`` is 0.17 on a compact device, so
+#: skipping it understates the drive six-fold.
 #:
 #: ``collisionOperator = 0`` is the full linearized Fokker-Planck operator.
 #: Pitch-angle scattering is cheaper and fine for ``D11``, but the bootstrap
@@ -101,7 +105,6 @@ _PROFILE_TEMPLATE = """&general
   equilibriumFile = "{equilibrium}"
   VMECRadialOption = 0
   inputRadialCoordinate = 3
-  inputRadialCoordinateForGradients = 1
   rN_wish = 0.5
 /
 &speciesParameters
@@ -109,8 +112,8 @@ _PROFILE_TEMPLATE = """&general
   mHats = 1.0d+0 5.446170214d-4
   nHats = {n_hat:.6g} {n_hat:.6g}
   THats = {t_hat:.6g} {t_hat:.6g}
-  dNHatdpsiNs = {dn_ds:.6g} {dn_ds:.6g}
-  dTHatdpsiNs = {dt_ds:.6g} {dt_ds:.6g}
+  dNHatdrHats = {dn_drhat:.6g} {dn_drhat:.6g}
+  dTHatdrHats = {dt_drhat:.6g} {dt_drhat:.6g}
 /
 &physicsParameters
   Delta = 4.5694d-3
@@ -410,10 +413,7 @@ def plot_representative(
     if plasma or resolutions:
         bits = []
         if plasma:
-            bits.append(
-                f"n={plasma['n_hat']:.3g}e20 m$^{{-3}}$, T$_i$=T$_e$={plasma['t_hat']:.3g} keV "
-                f"dn/ds={plasma['dn_ds']:+.3g}, dT/ds={plasma['dt_ds']:+.3g}"
-            )
+            bits.append(plasma_summary(plasma))
         for name, res in (resolutions or {}).items():
             bits.append(f"{name} " + "x".join(str(v) for v in res.values()))
         caption = "   |   ".join(bits)
@@ -556,9 +556,21 @@ def _temperature(p_pa: float, p_axis: float) -> float:
     return DEFAULT_T_AXIS_KEV * ratio**TEMPERATURE_PRESSURE_EXPONENT
 
 
+def plasma_summary(plasma: dict, source: str = "") -> str:
+    """One line naming the plasma and where it came from.
+
+    The log line and the figure caption say the same thing, so they are built
+    here rather than twice.  Two separate f-strings drifted apart across a key
+    rename and broke the run at the last line of a 60-second job, twice.
+    """
+    text = (f"n={plasma['n_hat']:.3g}e20 m^-3, T_i=T_e={plasma['t_hat']:.3g} keV, "
+            f"dn/drHat={plasma['dn_drhat']:+.3g}, dT/drHat={plasma['dt_drhat']:+.3g}")  # fmt: skip
+    return f"{text} ({source})" if source else text
+
+
 def _plasma_keys(plasma: dict) -> dict:
     """Only the keys the namelist template interpolates."""
-    return {k: plasma[k] for k in ("n_hat", "t_hat", "dn_ds", "dt_ds")}
+    return {k: plasma[k] for k in ("n_hat", "t_hat", "dn_drhat", "dt_drhat")}
 
 
 #: Smallest on-axis density (in 1e20 m^-3) the pressure split may produce.
@@ -591,11 +603,12 @@ def plasma_parameters(equilibrium: Path, radius: float = 0.5) -> dict[str, float
     bootstrap current and puts the kinetic curve an order of magnitude under
     the equilibrium's own.
 
-    Gradients are returned as ``d/d psiN`` with ``psiN = s``, matching
-    ``inputRadialCoordinateForGradients = 1``.  That is the coordinate
-    ``presf`` is tabulated in, so no chain rule and no stray ``aHat`` --- one
-    factor of ``aHat`` (0.17 on a compact device) is a six-fold error in the
-    drive.
+    Gradients are returned as ``d/drHat``, matching the deck's
+    ``inputRadialCoordinateForGradients = 4`` (the only code that drives the
+    potential with ``Er``, which the ambipolar scan needs).  ``rHat = aHat rN``
+    with ``aHat = Aminor_p``, so the chain rule ``d/drHat = (1/aHat) d/drN`` is
+    applied here rather than left to the caller: omitting it understates the
+    drive by a factor of ``aHat``, which is 0.17 on a compact device.
 
     Returns ``{}`` when the file carries no usable pressure --- absent, or below
     :data:`VACUUM_DENSITY_FLOOR` --- in which case the caller keeps the generic
@@ -610,9 +623,11 @@ def plasma_parameters(equilibrium: Path, radius: float = 0.5) -> dict[str, float
             if "presf" not in handle.variables:
                 return {}
             pres = np.asarray(handle.variables["presf"][:], dtype=float)
+            a_hat = (float(np.asarray(handle.variables["Aminor_p"][...]).reshape(()))
+                     if "Aminor_p" in handle.variables else 0.0)  # fmt: skip
     except Exception:
         return {}
-    if pres.size < 2 or not np.any(pres > 0.0):
+    if pres.size < 2 or not np.any(pres > 0.0) or not a_hat > 0.0:
         return {}
     s_grid = np.linspace(0.0, 1.0, pres.size)
     p_axis = float(pres[0])
@@ -629,14 +644,18 @@ def plasma_parameters(equilibrium: Path, radius: float = 0.5) -> dict[str, float
     n_20, t_kev = profiles(s0)
     if not np.isfinite(n_20) or n_20 < VACUUM_DENSITY_FLOOR:
         return {}
+    # Difference in rN and divide by aHat, rather than differencing in s: the
+    # deck's gradients are d/drHat and rHat = aHat * rN.
     eps = 1.0e-3
-    lo, hi = max(s0 - eps, 0.0), min(s0 + eps, 1.0)
-    n_lo, t_lo = profiles(lo)
-    n_hi, t_hi = profiles(hi)
+    r_lo, r_hi = max(radius - eps, 0.0), min(radius + eps, 1.0)
+    n_lo, t_lo = profiles(r_lo**2)
+    n_hi, t_hi = profiles(r_hi**2)
+    scale = 1.0 / (a_hat * (r_hi - r_lo))
     return {
         "n_hat": n_20, "t_hat": t_kev,
-        "dn_ds": (n_hi - n_lo) / (hi - lo), "dt_ds": (t_hi - t_lo) / (hi - lo),
+        "dn_drhat": (n_hi - n_lo) * scale, "dt_drhat": (t_hi - t_lo) * scale,
         "p_pa": float(np.interp(s0, s_grid, pres)), "radius": float(radius),
+        "a_hat": a_hat,
     }  # fmt: skip
 
 
@@ -696,6 +715,10 @@ def _no_pressure_reason(equilibrium: Path) -> str:
         with netCDF4.Dataset(str(equilibrium)) as handle:
             if "presf" not in handle.variables:
                 return "the equilibrium carries no pressure profile"
+            if "Aminor_p" not in handle.variables:
+                # Without aHat the d/drHat gradients cannot be formed at all,
+                # and assuming 1.0 would understate the drive silently.
+                return "the equilibrium carries no minor radius"
             peak = float(np.max(np.asarray(handle.variables["presf"][:], dtype=float)))
     except Exception:
         return "the equilibrium's pressure could not be read"
@@ -731,9 +754,7 @@ def _profile_data(equilibrium: Path, *, emit: Callable[[str], None] | None = Non
 
     plasma, derived = resolve_plasma(equilibrium)
     if emit:
-        emit(f"    plasma ({derived}): n={plasma['n_hat']:.3g}e20 m^-3, "
-             f"T={plasma['t_hat']:.3g} keV, dn/ds={plasma['dn_ds']:+.3g}, "
-             f"dT/ds={plasma['dt_ds']:+.3g}")  # fmt: skip
+        emit(f"    plasma: {plasma_summary(plasma, derived)}")
         emit(f"    profile resolution: {DEFAULT_RESOLUTION_PROFILE}")
     text = _PROFILE_TEMPLATE.format(
         equilibrium=str(equilibrium), **DEFAULT_RESOLUTION_PROFILE, **_plasma_keys(plasma)

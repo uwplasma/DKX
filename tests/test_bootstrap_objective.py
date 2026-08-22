@@ -25,16 +25,22 @@ def test_polynomial_matches_numpy_and_its_derivative():
         assert dds == pytest.approx(np.polyval(np.polyder(coefficients[::-1]), s))
 
 
-def test_plasma_at_uses_sfincs_normalization():
-    """nHat is n/1e20 and THat is T/1keV, and the gradients are d/ds."""
+def test_plasma_at_uses_sfincs_normalization_and_the_rhat_chain_rule():
+    """nHat is n/1e20, THat is T/1keV, and the gradients are d/drHat.
+
+    Code 4 wants d/drHat while the profiles are polynomials in s, so the deck
+    owes ``d/drHat = (2 sqrt(s) / aHat) d/ds``.  Dropping it understates the
+    drive by aHat, which is 0.17 on a compact device.
+    """
     term = KineticBootstrapCurrent(_Profiles(), surfaces=[0.4])
-    plasma = term.plasma_at(0.4)
+    a_hat = 0.5
+    plasma = term.plasma_at(0.4, a_hat=a_hat)
     assert plasma["n_hat"] == pytest.approx(3.0 * (1.0 - 0.4**5))
     assert plasma["te_hat"] == pytest.approx(12.0 * (1.0 - 0.4))
     assert plasma["ti_hat"] == pytest.approx(10.0 * (1.0 - 0.4))
     # Both profiles decrease outward, so both gradients are negative.
-    assert plasma["dn_ds"] < 0.0 and plasma["dte_ds"] < 0.0 and plasma["dti_ds"] < 0.0
-    assert plasma["dte_ds"] == pytest.approx(-12.0)
+    assert all(plasma[k] < 0.0 for k in ("dn_drhat", "dte_drhat", "dti_drhat"))
+    assert plasma["dte_drhat"] == pytest.approx(-12.0 * 2.0 * np.sqrt(0.4) / a_hat)
 
 
 def test_namelist_is_a_valid_sfincs_deck(tmp_path):
@@ -44,18 +50,18 @@ def test_namelist_is_a_valid_sfincs_deck(tmp_path):
 
     term = KineticBootstrapCurrent(_Profiles(), surfaces=[0.36])
     deck = tmp_path / "input.namelist"
-    deck.write_text(term.namelist("/nonexistent/wout.nc", 0.36, er=-1.5))
+    deck.write_text(term.namelist("/nonexistent/wout.nc", 0.36, er=-1.5, a_hat=0.5))
     parsed = sfincs_input_from_raw(read_sfincs_input(deck))
     assert parsed.geometry.geometry_scheme == 5
     # rN_wish is sqrt(s), because inputRadialCoordinate = 3 is rN.
     assert float(parsed.geometry.r_n_wish) == pytest.approx(0.6)
     assert float(parsed.physics.er) == pytest.approx(-1.5)
-    # Gradients are d/dpsiN, so the deck must select coordinate 1 -- with the
-    # default of 4 the dNHatdpsiNs entries are ignored and every moment comes
-    # back at ~1e-20 with no error at all.
-    assert int(parsed.geometry.input_radial_coordinate_for_gradients) == 1
-    assert len(parsed.species.d_n_hat_d_psi_ns) == 2
-    assert all(value < 0.0 for value in parsed.species.d_n_hat_d_psi_ns)
+    # Coordinate 4 (the v3 default) is the ONLY one that drives the potential
+    # with Er; anything else raises "Er != 0 with a non-Er
+    # inputRadialCoordinateForGradients", which ambipolar=True would hit.
+    assert int(parsed.geometry.input_radial_coordinate_for_gradients) == 4
+    assert len(parsed.species.d_n_hat_d_r_hats) == 2
+    assert all(value < 0.0 for value in parsed.species.d_n_hat_d_r_hats)
 
 
 def test_residuals_scale_by_the_reference_current(monkeypatch):
@@ -136,5 +142,5 @@ def test_the_default_collision_operator_is_fokker_planck():
     from dkx.bootstrap import DEFAULT_COLLISION_OPERATOR
 
     assert DEFAULT_COLLISION_OPERATOR == 0
-    deck = KineticBootstrapCurrent(_Profiles()).namelist("/w.nc", 0.5, er=0.0)
+    deck = KineticBootstrapCurrent(_Profiles()).namelist("/w.nc", 0.5, er=0.0, a_hat=1.0)
     assert "collisionOperator = 0" in deck

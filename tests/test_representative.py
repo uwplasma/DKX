@@ -400,6 +400,7 @@ def test_a_vacuum_equilibrium_does_not_become_a_1e9_density_plasma(tmp_path):
         handle.createDimension("radius", 5)
         pres = handle.createVariable("presf", "f8", ("radius",))
         pres[:] = np.linspace(1.0e-6, 0.0, 5)
+        handle.createVariable("Aminor_p", "f8", ())[...] = 0.6
 
     assert plasma_parameters(path) == {}
     plasma, source = resolve_plasma(path)
@@ -417,6 +418,7 @@ def test_a_real_pressure_profile_is_still_used(tmp_path):
         handle.createDimension("radius", 5)
         pres = handle.createVariable("presf", "f8", ("radius",))
         pres[:] = np.linspace(5.0e5, 0.0, 5)  # 0.5 MPa on axis
+        handle.createVariable("Aminor_p", "f8", ())[...] = 0.6
 
     plasma, source = resolve_plasma(path)
     assert source == "p(s) from the equilibrium"
@@ -438,11 +440,12 @@ def test_the_pressure_split_gives_the_temperature_a_gradient(tmp_path):
         handle.createDimension("radius", 21)
         pres = handle.createVariable("presf", "f8", ("radius",))
         pres[:] = 7.0e5 * (1.0 - np.linspace(0.0, 1.0, 21) ** 2)
+        handle.createVariable("Aminor_p", "f8", ())[...] = 0.6
 
     plasma = plasma_parameters(path, 0.5)
     # Both profiles fall wherever the pressure falls: the power-law split cannot
     # invent a hollow density the way a linear T against a flat-topped p does.
-    assert plasma["dt_ds"] < 0.0 and plasma["dn_ds"] < 0.0
+    assert plasma["dt_drhat"] < 0.0 and plasma["dn_drhat"] < 0.0
     assert 0.0 < plasma["t_hat"] < DEFAULT_T_AXIS_KEV
     # T ~ p^(1/3) at s = r^2 = 0.25, where p/p(0) = 1 - 0.25^2.
     assert plasma["t_hat"] == pytest.approx(
@@ -450,28 +453,52 @@ def test_the_pressure_split_gives_the_temperature_a_gradient(tmp_path):
 
 
 def test_the_profile_deck_asks_for_the_gradient_coordinate_it_supplies():
-    """dNHatdpsiNs needs inputRadialCoordinateForGradients = 1, in &geometryParameters.
+    """dNHatdrHats needs inputRadialCoordinateForGradients = 4 -- the v3 default.
 
-    With the wrong coordinate the gradients are ignored and every moment comes
-    back at ~1e-20; with the key in &physicsParameters it is not read at all.
-    A d/drHat key fed a d/drN number is a factor of aHat -- 0.17 on a compact
-    device, so a six-fold error in the drive rather than an obvious failure.
+    Two failure modes, neither of which raises.  A key that does not match the
+    coordinate leaves the gradients at ZERO and every moment comes back at
+    ~1e-20.  And a d/drHat key fed a d/drN number is off by aHat -- 0.17 on a
+    compact device, so a six-fold error in the drive.
+
+    Code 4 is also the only one that drives the potential with Er; the
+    ambipolar scan is an Er scan, so no other code is available here.
     """
     from dkx.inputs import sfincs_input_from_raw
     from dkx.namelist import parse_sfincs_input_text
-    from dkx.representative import DEFAULT_RESOLUTION_PROFILE, FALLBACK_PLASMA, _PROFILE_TEMPLATE
-    from dkx.representative import _plasma_keys
+    from dkx.representative import (DEFAULT_RESOLUTION_PROFILE, FALLBACK_PLASMA,
+                                    _PROFILE_TEMPLATE, _plasma_keys)
 
     text = _PROFILE_TEMPLATE.format(
         equilibrium="/w.nc", **DEFAULT_RESOLUTION_PROFILE, **_plasma_keys(dict(FALLBACK_PLASMA)))
     parsed = sfincs_input_from_raw(parse_sfincs_input_text(text))
-    assert int(parsed.geometry.input_radial_coordinate_for_gradients) == 1
-    assert len(parsed.species.d_n_hat_d_psi_ns) == 2
-    assert len(parsed.species.d_t_hat_d_psi_ns) == 2
-    assert all(v < 0.0 for v in parsed.species.d_t_hat_d_psi_ns)
+    assert int(parsed.geometry.input_radial_coordinate_for_gradients) == 4
+    assert len(parsed.species.d_n_hat_d_r_hats) == 2
+    assert len(parsed.species.d_t_hat_d_r_hats) == 2
+    assert all(v < 0.0 for v in parsed.species.d_t_hat_d_r_hats)
     # The bootstrap current is the parallel-momentum moment; PAS has no
     # momentum-restoring term and runs 35-47% high against Redl.
     assert int(parsed.physics.collision_operator) == 0
+
+
+def test_the_gradients_carry_the_aHat_chain_rule(tmp_path):
+    """d/drHat = (1/aHat) d/drN, and aHat comes from the wout, not from 1.0."""
+    netCDF4 = pytest.importorskip("netCDF4")
+    from dkx.representative import plasma_parameters
+
+    def written(a_minor: float):
+        path = tmp_path / f"wout_a{a_minor}.nc"
+        with netCDF4.Dataset(path, "w") as handle:
+            handle.createDimension("radius", 21)
+            handle.createVariable("presf", "f8", ("radius",))[:] = (
+                7.0e5 * (1.0 - np.linspace(0.0, 1.0, 21)))
+            handle.createVariable("Aminor_p", "f8", ())[...] = a_minor
+        return plasma_parameters(path, 0.5)
+
+    wide, narrow = written(1.0), written(0.25)
+    assert narrow["dn_drhat"] == pytest.approx(4.0 * wide["dn_drhat"])
+    assert narrow["dt_drhat"] == pytest.approx(4.0 * wide["dt_drhat"])
+    # The local values themselves do not depend on the minor radius.
+    assert narrow["n_hat"] == pytest.approx(wide["n_hat"])
 
 
 def test_equilibrium_scalars_reads_the_wout_constants_the_units_need(tmp_path):
@@ -496,3 +523,31 @@ def test_equilibrium_scalars_reads_the_wout_constants_the_units_need(tmp_path):
     assert scalars["jdotb"].tolist() == [-1.0, -2.0, -3.0, -4.0]
     assert scalars["jdotb_s"][0] == 0.0 and scalars["jdotb_s"][-1] == 1.0
     assert equilibrium_scalars(tmp_path / "absent.nc") == {}
+
+
+def test_the_plasma_summary_covers_every_key_the_deck_needs(tmp_path):
+    """The log line, the caption and the namelist must agree on the key names.
+
+    Two hand-written f-strings drifted from the template across a key rename and
+    took down a 60-second run at its last line, twice.  One formatter, and a
+    test that walks it with both the fallback and a real equilibrium.
+    """
+    netCDF4 = pytest.importorskip("netCDF4")
+    from dkx.representative import (DEFAULT_RESOLUTION_PROFILE, FALLBACK_PLASMA,
+                                    _PROFILE_TEMPLATE, _plasma_keys, plasma_parameters,
+                                    plasma_summary, resolve_plasma)
+
+    path = tmp_path / "wout_real.nc"
+    with netCDF4.Dataset(path, "w") as handle:
+        handle.createDimension("radius", 21)
+        handle.createVariable("presf", "f8", ("radius",))[:] = (
+            7.0e5 * (1.0 - np.linspace(0.0, 1.0, 21)))
+        handle.createVariable("Aminor_p", "f8", ())[...] = 0.6
+
+    for plasma in (dict(FALLBACK_PLASMA), plasma_parameters(path, 0.5), resolve_plasma(path)[0]):
+        assert plasma, "every branch must yield a usable plasma"
+        summary = plasma_summary(plasma, "source phrase")
+        assert "n=" in summary and "dT/drHat=" in summary and "(source phrase)" in summary
+        # The same dict must fill the namelist without a KeyError.
+        _PROFILE_TEMPLATE.format(
+            equilibrium="/w.nc", **DEFAULT_RESOLUTION_PROFILE, **_plasma_keys(plasma))

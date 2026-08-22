@@ -85,7 +85,6 @@ _TEMPLATE = """&general
   equilibriumFile = "{equilibrium}"
   VMECRadialOption = 0
   inputRadialCoordinate = 3
-  inputRadialCoordinateForGradients = 1
   rN_wish = {r_n:.10g}
 /
 &speciesParameters
@@ -93,8 +92,8 @@ _TEMPLATE = """&general
   mHats = 1.0d+0 5.446170214d-4
   nHats = {n_hat:.10g} {n_hat:.10g}
   THats = {ti_hat:.10g} {te_hat:.10g}
-  dNHatdpsiNs = {dn_ds:.10g} {dn_ds:.10g}
-  dTHatdpsiNs = {dti_ds:.10g} {dte_ds:.10g}
+  dNHatdrHats = {dn_drhat:.10g} {dn_drhat:.10g}
+  dTHatdrHats = {dti_drhat:.10g} {dte_drhat:.10g}
 /
 &physicsParameters
   Delta = 4.5694d-3
@@ -116,6 +115,18 @@ _TEMPLATE = """&general
 &preconditionerOptions
 /
 """
+
+
+def _minor_radius(equilibrium: str | Path) -> float:
+    """``aHat = Aminor_p`` from the wout (``geometry.F90:130``), 1.0 if unreadable."""
+    try:
+        import netCDF4  # noqa: PLC0415
+
+        with netCDF4.Dataset(str(equilibrium)) as handle:
+            value = float(np.asarray(handle.variables["Aminor_p"][...]).reshape(()))
+    except Exception:
+        return 1.0
+    return value if value > 0.0 else 1.0
 
 
 def _polynomial(coefficients: Any, s: float) -> tuple[float, float]:
@@ -172,29 +183,42 @@ class KineticBootstrapCurrent:
 
     # -- plasma and deck ------------------------------------------------------
 
-    def plasma_at(self, s: float) -> dict[str, float]:
+    def plasma_at(self, s: float, *, a_hat: float) -> dict[str, float]:
         """The ``&speciesParameters`` entries for surface ``s``.
 
         SFINCS normalizes to ``nBar = 1e20 m^-3`` and ``TBar = 1 keV``
-        (:mod:`dkx.units`), and ``inputRadialCoordinateForGradients = 1`` makes
-        the gradients ``d/d psiN`` with ``psiN = s`` --- the coordinate the
-        profile polynomials are already written in, so no chain rule is needed.
+        (:mod:`dkx.units`).  The deck leaves
+        ``inputRadialCoordinateForGradients`` at the v3 default of 4, because
+        that is the only code that drives the potential with ``Er`` --- any
+        other choice raises "Er != 0 with a non-Er
+        inputRadialCoordinateForGradients", which ``ambipolar=True`` would hit
+        immediately.  Code 4 wants ``d/drHat``, and the profile polynomials are
+        in ``s``, so the chain rule is
+        ``d/drHat = (1/aHat) d/drN = (2 sqrt(s) / aHat) d/ds``.
         """
         ne, dne = _polynomial(self.profiles.ne_coeffs, s)
         te, dte = _polynomial(self.profiles.Te_coeffs, s)
         ti, dti = _polynomial(self.profiles.Ti_coeffs, s)
+        to_r_hat = 2.0 * float(np.sqrt(max(s, 0.0))) / float(a_hat)
         return {
-            "n_hat": ne / 1.0e20, "dn_ds": dne / 1.0e20,
-            "te_hat": te / 1.0e3, "dte_ds": dte / 1.0e3,
-            "ti_hat": ti / 1.0e3, "dti_ds": dti / 1.0e3,
+            "n_hat": ne / 1.0e20, "dn_drhat": dne / 1.0e20 * to_r_hat,
+            "te_hat": te / 1.0e3, "dte_drhat": dte / 1.0e3 * to_r_hat,
+            "ti_hat": ti / 1.0e3, "dti_drhat": dti / 1.0e3 * to_r_hat,
         }  # fmt: skip
 
-    def namelist(self, equilibrium: str | Path, s: float, *, er: float) -> str:
-        """The full DKX input deck for one surface of one equilibrium."""
+    def namelist(self, equilibrium: str | Path, s: float, *, er: float,
+                 a_hat: float | None = None) -> str:  # fmt: skip
+        """The full DKX input deck for one surface of one equilibrium.
+
+        ``a_hat`` defaults to the equilibrium's own ``Aminor_p``; pass it
+        explicitly only to build a deck without touching the file.
+        """
+        if a_hat is None:
+            a_hat = _minor_radius(equilibrium)
         return _TEMPLATE.format(
             equilibrium=str(equilibrium), r_n=float(np.sqrt(max(s, 0.0))), er=float(er),
             collision_operator=int(self.collision_operator),
-            **self.plasma_at(float(s)), **self.resolution,
+            **self.plasma_at(float(s), a_hat=a_hat), **self.resolution,
         )  # fmt: skip
 
     # -- evaluation -----------------------------------------------------------
@@ -265,12 +289,13 @@ class KineticBootstrapCurrent:
         from dkx.run import run_profile  # noqa: PLC0415
 
         deck = work / f"in_{s:.6f}.namelist"
+        a_hat = _minor_radius(equilibrium)
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 if self.ambipolar:
                     er = np.asarray(self.er_values, dtype=float)
-                    deck.write_text(self.namelist(equilibrium, s, er=0.0))
+                    deck.write_text(self.namelist(equilibrium, s, er=0.0, a_hat=a_hat))
                     scan = batched_er_scan(deck, er)
                     current = np.asarray(scan.radial_current, dtype=float).ravel()
                     root = self._ion_root(er, current)
@@ -280,7 +305,8 @@ class KineticBootstrapCurrent:
                     order = np.argsort(er)
                     value = float(np.interp(root, er[order], j_par[order]))
                 else:
-                    deck.write_text(self.namelist(equilibrium, s, er=self.er_kV_per_m))
+                    deck.write_text(
+                        self.namelist(equilibrium, s, er=self.er_kV_per_m, a_hat=a_hat))
                     # emit=None: run_profile prints a per-run banner by default,
                     # and an optimization makes hundreds of these calls.
                     run = run_profile(deck, emit=None)
