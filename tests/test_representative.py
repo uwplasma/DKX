@@ -9,6 +9,7 @@ would take for zero.
 
 from __future__ import annotations
 
+import tempfile
 import warnings
 from pathlib import Path
 
@@ -551,3 +552,25 @@ def test_the_plasma_summary_covers_every_key_the_deck_needs(tmp_path):
         # The same dict must fill the namelist without a KeyError.
         _PROFILE_TEMPLATE.format(
             equilibrium="/w.nc", **DEFAULT_RESOLUTION_PROFILE, **_plasma_keys(plasma))
+
+
+def test_the_caption_warns_that_the_two_currents_need_not_coincide():
+    """DKX runs an assumed n/T split, not the equilibrium's own profiles.
+
+    On the precise-QA reference the same solver gives DKX/VMEC = 1.04-1.23 with
+    that equilibrium's own T0 = 5 keV profiles and 0.42 with this figure's
+    T0 = 2 keV closure: a factor of 2.7 from the temperature assumption alone.
+    Without the caveat a reader reads that panel as a code disagreement.
+    """
+    from dkx.representative import figure_caption
+
+    plasma = {"n_hat": 9.3, "t_hat": 1.8, "dn_drhat": -49.0, "dt_drhat": -4.8}
+    caption = figure_caption(plasma, "p(s) from the equilibrium",
+                             {"profiles": {"n_theta": 13, "n_zeta": 19}})  # fmt: skip
+    assert "assumed split of p" in caption
+    assert "need not coincide" in caption
+    assert "p(s) from the equilibrium" in caption
+    assert "profiles 13x19" in caption
+    assert caption.count("\n") == 1, "the footer is two lines; the band reserves for two"
+    # No plasma, no claim about one.
+    assert "assumed split" not in figure_caption(None, "", {"mono": {"n_theta": 25}})

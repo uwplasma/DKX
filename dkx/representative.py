@@ -377,6 +377,31 @@ def _panel_fluxes(ax, data: dict[str, Any]) -> bool:
     return True
 
 
+def figure_caption(plasma: dict | None, plasma_source: str = "",
+                   resolutions: dict[str, dict] | None = None) -> str:  # fmt: skip
+    """The two-line footer: what plasma, at what resolution, and how it was got.
+
+    A reader cannot judge a transport number without the ``n``, ``T`` and grid
+    behind it, and the split of pressure into ``n`` and ``T`` is an assumption
+    rather than a measurement --- so the caption says so.  Without that clause
+    the bootstrap panel reads as DKX disagreeing with VMEC, when on the
+    precise-QA reference the same solver gives DKX/VMEC = 1.04-1.23 with that
+    equilibrium's own profiles and 0.42 with this figure's closure.
+    """
+    bits = []
+    if plasma:
+        bits.append(plasma_summary(plasma))
+    for name, res in (resolutions or {}).items():
+        bits.append(f"{name} " + "x".join(str(v) for v in res.values()))
+    caption = "   |   ".join(bits)
+    if plasma:
+        source = plasma_source or (
+            "p(s) from the equilibrium" if "p_pa" in plasma else "generic reference")
+        caption += (f"\nplasma source: {source}   |   n and T are an assumed split of p,"
+                    " so the kinetic and equilibrium currents need not coincide")  # fmt: skip
+    return caption
+
+
 def plot_representative(
     out_path: str | Path,
     *,
@@ -444,16 +469,7 @@ def plot_representative(
     # a transport number without knowing the n, T and grid behind it, and the
     # split of pressure into n and T is an assumption, not a measurement.
     if plasma or resolutions:
-        bits = []
-        if plasma:
-            bits.append(plasma_summary(plasma))
-        for name, res in (resolutions or {}).items():
-            bits.append(f"{name} " + "x".join(str(v) for v in res.values()))
-        caption = "   |   ".join(bits)
-        if plasma:
-            src = plasma_source or (
-                "p(s) from the equilibrium" if "p_pa" in plasma else "generic reference")
-            caption += f"\nplasma source: {src}"
+        caption = figure_caption(plasma, plasma_source, resolutions)
         # Reserve the strip rather than drawing into it: constrained_layout owns
         # the whole canvas, so a bare fig.text lands on top of the bottom row's
         # x-labels.  Older matplotlib has no layout engine to ask; there the
@@ -1112,6 +1128,18 @@ def _panel_radial_bootstrap(ax, profiles: list[dict[str, Any]]) -> bool:
     running a drift-kinetic code on a finite-beta equilibrium.  The bootstrap
     current is evaluated *at* the ambipolar root, so the root belongs on the
     same panel: it says which radial electric field the current is for.
+
+    **The two curves are not expected to coincide, and the reason is stated on
+    the figure.**  DKX runs the assumed ``n``/``T`` split from
+    :func:`plasma_parameters`, not the profiles the equilibrium was actually
+    built with, and the bootstrap current is roughly linear in the temperature.
+    Measured on the precise-QA finite-beta reference at ``s = 0.25/0.5/0.75``:
+    with that equilibrium's own Landreman-Buller-Drevlak profiles
+    (``T_0 = 5`` keV) DKX/VMEC is 1.04, 1.07, 1.23; with this figure's closure
+    (``T_0 = 2`` keV, ``T ~ p^(1/3)``) it is 0.42, 0.41, 0.42.  A factor of 2.7
+    from the assumed temperature alone, with the solver unchanged --- so a gap
+    of that size here is the closure, and a gap at *matched* profiles would be
+    the physics.
     """
     pts = [p for p in profiles if "bootstrap" in p or "bootstrap_kA_m2" in p]
     if not pts:
