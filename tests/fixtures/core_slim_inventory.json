@@ -721,7 +721,8 @@
       "public_imports": [],
       "internal_callers": [],
       "tests": [
-        "tests/test_bootstrap_objective.py"
+        "tests/test_bootstrap_objective.py",
+        "tests/test_examples_bootstrap_dkx.py"
       ],
       "docs_examples": [
         "examples/optimization/QA_optimization_bootstrap_dkx.py",
