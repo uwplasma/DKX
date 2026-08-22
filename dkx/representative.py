@@ -823,7 +823,9 @@ def _profile_data(equilibrium: Path, *, full: bool = False,
         # at reduced resolution beat three boxes saying "not present".  The
         # reduced resolution is reported, because a panel at a resolution the
         # caller did not choose must say so.
-        reduced = {k: max(int(v * 2 / 3), 5 if k == "n_x" else 9)
+        # min(v, ...) so a floor can never make an axis GROW: the default n_x is
+        # 4, and a bare max(., 5) turned the retry grid into a bigger one.
+        reduced = {k: min(v, max(int(v * 2 / 3), 3 if k == "n_x" else 9))
                    for k, v in resolution.items()}  # fmt: skip
         if emit:
             emit(f"    profile solve failed ({type(exc).__name__}); "

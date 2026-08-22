@@ -574,3 +574,60 @@ def test_the_caption_warns_that_the_two_currents_need_not_coincide():
     assert caption.count("\n") == 1, "the footer is two lines; the band reserves for two"
     # No plasma, no claim about one.
     assert "assumed split" not in figure_caption(None, "", {"mono": {"n_theta": 25}})
+
+
+def test_full_threads_the_finer_grid_through_both_solve_stages(monkeypatch, tmp_path):
+    """``--full`` must reach the profile solve and the radial scan, not just the scan.
+
+    The monoenergetic grid is widened in run_representative itself, so it is
+    hard to get wrong; the two profile stages take their resolution from a
+    module constant, and threading a flag to one but not the other would leave
+    ``--full`` quietly half-applied.
+    """
+    from dkx import representative as rep
+
+    seen: dict[str, dict] = {}
+
+    def fake_profile_data(equilibrium, *, full=False, emit=None):
+        seen["profile"] = rep.FULL_RESOLUTION_PROFILE if full else rep.DEFAULT_RESOLUTION_PROFILE
+        return {}
+
+    def fake_radial(equilibrium, *, full=False, emit=None, **kwargs):
+        seen["radial"] = rep.FULL_RESOLUTION_PROFILE if full else rep.DEFAULT_RESOLUTION_PROFILE
+        return []
+
+    monkeypatch.setattr(rep, "_profile_data", fake_profile_data)
+    monkeypatch.setattr(rep, "radial_profiles", fake_radial)
+    monkeypatch.setattr(rep, "monoenergetic_scan", lambda *a, **k: [])
+    monkeypatch.setattr(rep, "resolve_plasma",
+                        lambda eq: (dict(rep.FALLBACK_PLASMA), "generic reference"))  # fmt: skip
+
+    wout = tmp_path / "wout_stub.nc"
+    wout.write_text("")
+    for full, expected in ((False, rep.DEFAULT_RESOLUTION_PROFILE),
+                           (True, rep.FULL_RESOLUTION_PROFILE)):  # fmt: skip
+        rep.run_representative(wout, out_path=tmp_path / f"p{full}.png", full=full, emit=None)
+        assert seen["profile"] == expected, f"profile stage ignored full={full}"
+        assert seen["radial"] == expected, f"radial stage ignored full={full}"
+    assert rep.FULL_RESOLUTION_PROFILE != rep.DEFAULT_RESOLUTION_PROFILE
+
+
+def test_the_out_of_memory_retry_grid_never_grows_an_axis():
+    """A "reduced" grid that increases an axis retries a bigger, slower solve.
+
+    The floors are there so the retry stays solvable, but a bare max() against
+    the default n_x of 4 raised it to 5.
+    """
+    from dkx.representative import DEFAULT_RESOLUTION_PROFILE, FULL_RESOLUTION_PROFILE
+
+    def reduced_of(resolution):
+        return {k: min(v, max(int(v * 2 / 3), 3 if k == "n_x" else 9))
+                for k, v in resolution.items()}  # fmt: skip
+
+    for resolution in (DEFAULT_RESOLUTION_PROFILE, FULL_RESOLUTION_PROFILE):
+        reduced = reduced_of(resolution)
+        assert set(reduced) == set(resolution)
+        for axis, value in reduced.items():
+            assert value <= resolution[axis], f"{axis} grew: {resolution[axis]} -> {value}"
+            assert value >= 3, f"{axis} collapsed to {value}"
+        assert any(reduced[a] < resolution[a] for a in resolution), "nothing was reduced"
