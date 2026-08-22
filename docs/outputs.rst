@@ -136,6 +136,51 @@ When an equilibrium override is supplied, ``dkx`` updates the embedded
 configuration. Use ``dkx.io.read_sfincs_output_file(...)`` to load HDF5,
 NetCDF, or NPZ outputs with the same dictionary interface.
 
+Units: converting the "Hat" outputs to SI
+-----------------------------------------
+
+Every quantity in the output file is dimensionless: SFINCS works with ratios to
+a fixed reference set, the "Bar" quantities.  That set is not a free choice ---
+the ``globalVariables.F90`` defaults ``Delta = 4.5694e-3`` and
+``nu_n = 8.330e-3`` are satisfied simultaneously only by
+
+.. math::
+
+   \bar{n} = 10^{20}\,\mathrm{m^{-3}},\quad \bar{T} = 1\,\mathrm{keV},\quad
+   \bar{m} = m_p,\quad \bar{B} = 1\,\mathrm{T},\quad \bar{R} = 1\,\mathrm{m},
+   \quad \ln\Lambda = 17,
+
+giving :math:`\bar{v} = \sqrt{2\bar{T}/\bar{m}} = 4.377\times10^{5}` m/s.
+:mod:`dkx.units` holds these values and recomputes ``Delta`` and ``nu_n`` from
+them, so the set is pinned by a test rather than asserted in prose.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 42 30 28
+
+   * - output
+     - multiply by
+     - gives
+   * - ``FSABjHatOverRootFSAB2``
+     - ``units.CURRENT_DENSITY``
+     - :math:`\langle j_\parallel B\rangle/\sqrt{\langle B^2\rangle}` [A/m\ :sup:`2`]
+   * - ``FSABjHat``
+     - ``units.PARALLEL_CURRENT``
+     - :math:`\langle j_\parallel B\rangle` [A T/m\ :sup:`2`], the VMEC ``jdotb`` unit
+   * - ``particleFlux_*_rHat``
+     - ``units.PARTICLE_FLUX``
+     - :math:`\langle\Gamma\cdot\nabla r\rangle` [m\ :sup:`-2`\ s\ :sup:`-1`]
+   * - ``heatFlux_*_rHat``
+     - ``units.HEAT_FLUX``
+     - :math:`\langle Q\cdot\nabla r\rangle` [W/m\ :sup:`2`]
+
+The writer stores fluxes in the ``psiHat`` coordinate;
+:func:`dkx.units.flux_psi_hat_to_r_hat` is the ``ddrHat2ddpsiHat`` factor that
+converts one to the other, matching ``diagnostics.F90:703``.  The ``dkx
+wout_*.nc`` representative run applies all of this already: its figure is in
+kA/m\ :sup:`2` and SI flux densities, and its output file records both the
+SFINCS-unit values and the conversion factors used.
+
 Output-variable reference
 -------------------------
 

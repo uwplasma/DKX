@@ -45,7 +45,7 @@ import dataclasses
 import time
 import warnings
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 
@@ -326,6 +326,7 @@ def plot_representative(
     ambipolar: list[dict[str, Any]] | None = None,
     profiles: list[dict[str, Any]] | None = None,
     plasma: dict[str, float] | None = None,
+    plasma_source: str = "",
     resolutions: dict[str, dict] | None = None,
     title: str = "DKX representative run",
 ) -> Path:
@@ -386,7 +387,8 @@ def plot_representative(
     if plasma or resolutions:
         bits = []
         if plasma:
-            src = "from p(s)" if "p_pa" in plasma else "generic"
+            src = plasma_source or (
+                "p(s) from the equilibrium" if "p_pa" in plasma else "generic reference")
             bits.append(
                 f"n={plasma['n_hat']:.3g}e20 m$^{{-3}}$, T$_i$=T$_e$={plasma['t_hat']:.3g} keV "
                 f"({src}, T constant), dn/dr={plasma['dn_dr']:+.3g}"
@@ -442,10 +444,22 @@ def run_representative(
     base = dataclasses.replace(
         base, geometry=dataclasses.replace(base.geometry, equilibrium_file=str(equilibrium))
     )
-    if emit:
-        emit(f"  monoenergetic scan at {DEFAULT_RESOLUTION}")
+    # Each stage is timed and the time is printed.  The three stages differ by
+    # more than an order of magnitude in cost, and on a large device the radial
+    # scan dominates, so a reader deciding whether to trim DEFAULT_SURFACES
+    # needs the split rather than one total at the end.
+    started = time.perf_counter()
+
+    def stage(label: str) -> Callable[[], None]:
+        mark = time.perf_counter()
+        if emit:
+            emit(label)
+        return lambda: (emit(f"    ({time.perf_counter() - mark:.1f} s)") if emit else None)
+
+    done = stage(f"  monoenergetic scan at {DEFAULT_RESOLUTION}")
     nu = DEFAULT_NU_PRIME if not full else tuple(np.logspace(-5, 2, 15))
     scan = monoenergetic_scan(base, nu_prime=nu, emit=emit)
+    done()
 
     # The monoenergetic scan alone leaves the whole second row empty: RHSMode=3
     # produces a transport matrix and nothing else.  |B| comes free from the
@@ -453,17 +467,18 @@ def run_representative(
     # bootstrap current and the species fluxes.  Without this the figure renders
     # three "not present in this output" boxes, which is not a representative
     # run of anything.
-    if emit:
-        emit("  profile solve for |B|")
+    done = stage("  profile solve for |B|")
     data = _profile_data(equilibrium, emit=emit)
-    if emit:
-        emit("  radial scan: ambipolar Er, bootstrap and fluxes at the root")
+    done()
+    done = stage("  radial scan: ambipolar Er, bootstrap and fluxes at the root")
     profiles = radial_profiles(equilibrium, emit=emit)
+    done()
+    plasma, plasma_source = resolve_plasma(equilibrium)
 
     out = Path(out_path) if out_path else Path(f"{equilibrium.stem}.panels.png")
     figure = plot_representative(
         out, data=data, scan=scan, profiles=profiles,
-        plasma=plasma_parameters(equilibrium) or dict(FALLBACK_PLASMA),
+        plasma=plasma, plasma_source=plasma_source,
         resolutions={"monoenergetic": DEFAULT_RESOLUTION,
                      "profiles": DEFAULT_RESOLUTION_PROFILE},
         title=f"DKX representative run — {equilibrium.name}",
@@ -476,6 +491,7 @@ def run_representative(
     )  # fmt: skip
     if emit:
         emit(f" wrote {written}")
+        emit(f" total {time.perf_counter() - started:.1f} s")
     return figure
 
 
@@ -492,6 +508,15 @@ def _plasma_keys(plasma: dict) -> dict:
     return {k: plasma[k] for k in ("n_hat", "t_hat", "dn_dr", "dt_dr")}
 
 
+#: Smallest on-axis density (in 1e20 m^-3) the pressure split may produce.
+#: VMEC writes ``presf`` of order 1e-6 Pa for a *vacuum* run rather than exactly
+#: zero, and the split turns that into n ~ 1e9 m^-3: a collisionless deck that
+#: grinds for tens of minutes and reports transport for a plasma that is not
+#: there.  1e-3 is 1e17 m^-3, the same floor ``vmex`` clamps its Redl profiles
+#: to, and eleven orders of magnitude below any fusion plasma.
+VACUUM_DENSITY_FLOOR = 1.0e-3
+
+
 def plasma_parameters(equilibrium: Path, radius: float = 0.5) -> dict[str, float]:
     """Density and temperature at ``r/a`` from the equilibrium's own pressure.
 
@@ -500,10 +525,11 @@ def plasma_parameters(equilibrium: Path, radius: float = 0.5) -> dict[str, float
     assumption is quasineutral hydrogen with ``T_i = T_e = T``, ``T`` fixed on
     axis at :data:`DEFAULT_T_AXIS_KEV` and constant, so ``n(s) = p(s) / (2 T)``.
 
-    Returns ``{}`` when the file carries no pressure, in which case the caller
-    keeps the generic reference profile and says so.  Reporting numbers derived
-    from an equilibrium the user supplied, without saying how, would be worse
-    than reporting generic ones.
+    Returns ``{}`` when the file carries no usable pressure --- absent, or below
+    :data:`VACUUM_DENSITY_FLOOR` --- in which case the caller keeps the generic
+    reference profile and says so.  Reporting numbers derived from an
+    equilibrium the user supplied, without saying how, would be worse than
+    reporting generic ones.
     """
     try:
         import netCDF4  # noqa: PLC0415
@@ -521,6 +547,8 @@ def plasma_parameters(equilibrium: Path, radius: float = 0.5) -> dict[str, float
     t_kev = DEFAULT_T_AXIS_KEV
     # n [1e20 m^-3] = p / (2 T) with T in Joules.
     n_20 = p_pa / (2.0 * t_kev * 1.0e3 * 1.602176634e-19) / 1.0e20
+    if not np.isfinite(n_20) or n_20 < VACUUM_DENSITY_FLOOR:
+        return {}
     # Logarithmic gradients from the pressure profile itself, at fixed T.
     eps = 1.0e-3
     lo = float(np.interp(max(radius - eps, 0.0) ** 2, s_grid, pres))
@@ -528,6 +556,69 @@ def plasma_parameters(equilibrium: Path, radius: float = 0.5) -> dict[str, float
     dn_dr = (hi - lo) / (2.0 * eps) / (2.0 * t_kev * 1.0e3 * 1.602176634e-19) / 1.0e20
     return {"n_hat": n_20, "t_hat": t_kev, "dn_dr": dn_dr, "dt_dr": 0.0,
             "p_pa": p_pa, "radius": radius}  # fmt: skip
+
+
+def equilibrium_scalars(equilibrium: Path) -> dict[str, Any]:
+    """``psiAHat``, ``aHat`` and the VMEC ``<J.B>`` profile, read from the wout.
+
+    ``psiAHat = phi(ns)/(2 pi)`` and ``aHat = Aminor_p`` are how
+    ``geometry.F90:130`` and :func:`dkx.magnetic_geometry.psi_a_hat_from_wout`
+    define the two flux-surface constants for ``geometryScheme=5``; they set the
+    ``psiHat -> rHat`` factor every dimensional flux needs.  ``jdotb`` is VMEC's
+    own equilibrium parallel current, in A T/m^2 --- the same quantity DKX
+    computes kinetically, so the two can be drawn on one axis.
+
+    Returns ``{}`` if the file cannot be read; every caller treats the
+    dimensional overlay as optional.
+    """
+    try:
+        import netCDF4  # noqa: PLC0415
+
+        with netCDF4.Dataset(str(equilibrium)) as handle:
+            out: dict[str, Any] = {}
+            if "phi" in handle.variables:
+                phi = np.asarray(handle.variables["phi"][:], dtype=float)
+                out["psi_a_hat"] = float(phi[-1]) / (2.0 * np.pi)
+            if "Aminor_p" in handle.variables:
+                out["a_hat"] = float(np.asarray(handle.variables["Aminor_p"][...]).reshape(()))
+            if "jdotb" in handle.variables:
+                jdotb = np.asarray(handle.variables["jdotb"][:], dtype=float)
+                out["jdotb"] = jdotb
+                out["jdotb_s"] = np.linspace(0.0, 1.0, jdotb.size)
+            return out
+    except Exception:
+        return {}
+
+
+def resolve_plasma(equilibrium: Path) -> tuple[dict[str, float], str]:
+    """The plasma to run, and a phrase saying where it came from.
+
+    Three cases, and the caller must be able to tell them apart on the figure:
+    the equilibrium carries a real pressure profile; it carries none; or it
+    carries a *vacuum* one, which is the trap.  A vacuum wout's ``presf`` is
+    ~1e-6 Pa rather than zero, so the split silently yields n ~ 1e9 m^-3 and a
+    collisionless deck --- a 23-minute run on W7-X whose every transport number
+    describes a plasma that is not there.
+    """
+    plasma = plasma_parameters(equilibrium)
+    if plasma:
+        return plasma, "p(s) from the equilibrium"
+    return dict(FALLBACK_PLASMA), f"generic reference; {_no_pressure_reason(equilibrium)}"
+
+
+def _no_pressure_reason(equilibrium: Path) -> str:
+    """Why the equilibrium's own pressure was not usable, in the reader's terms."""
+    try:
+        import netCDF4  # noqa: PLC0415
+
+        with netCDF4.Dataset(str(equilibrium)) as handle:
+            if "presf" not in handle.variables:
+                return "the equilibrium carries no pressure profile"
+            peak = float(np.max(np.asarray(handle.variables["presf"][:], dtype=float)))
+    except Exception:
+        return "the equilibrium's pressure could not be read"
+    return (f"the equilibrium is a vacuum field, p(0)={peak:.3g} Pa"
+            if peak < 1.0 else f"p(0)={peak:.3g} Pa is below the plasma floor")  # fmt: skip
 
 
 def _field_periods(equilibrium: Path) -> int:
@@ -556,8 +647,7 @@ def _profile_data(equilibrium: Path, *, emit: Callable[[str], None] | None = Non
     from dkx.inputs import parse_sfincs_input_text, sfincs_input_from_raw  # noqa: PLC0415
     from dkx.run import run_profile  # noqa: PLC0415
 
-    plasma = plasma_parameters(equilibrium) or dict(FALLBACK_PLASMA)
-    derived = "p(s) from the equilibrium" if "p_pa" in plasma else "generic reference"
+    plasma, derived = resolve_plasma(equilibrium)
     if emit:
         emit(f"    plasma ({derived}): n={plasma['n_hat']:.3g}e20 m^-3, "
              f"T={plasma['t_hat']:.3g} keV, dn/dr={plasma['dn_dr']:+.3g}")  # fmt: skip
@@ -703,6 +793,45 @@ def _interp_at_root(er: np.ndarray, values: np.ndarray, root: float) -> float:
     return float(np.interp(root, np.asarray(er)[order], np.asarray(values)[order]))
 
 
+def _root_fsab2(moments: Mapping[str, Any] | dict[str, Any]) -> float | None:
+    """``sqrt(<B^2>)/BBar`` for this surface, from two moments the scan already has.
+
+    ``FSABjHat / FSABjHatOverRootFSAB2`` is exactly ``sqrt(FSABHat2)`` by the
+    definitions in documentation eq. (194) and (196), and it is a property of
+    the geometry alone, so it is the same at every scanned ``E_r``.  Taking the
+    least-squares slope over the whole scan rather than one ratio keeps the
+    estimate finite when an individual current passes through zero.
+    """
+    num = moments.get("FSABjHat")
+    den = moments.get("FSABjHatOverRootFSAB2")
+    if num is None or den is None:
+        return None
+    num = np.asarray(num, dtype=float).ravel()
+    den = np.asarray(den, dtype=float).ravel()
+    denominator = float(np.dot(den, den))
+    if not np.isfinite(denominator) or denominator <= 0.0:
+        return None
+    slope = float(np.dot(num, den)) / denominator
+    return slope if np.isfinite(slope) and slope > 0.0 else None
+
+
+def _vmec_current_kA_m2(geometry: dict[str, Any], radius: float,
+                        root_fsab2: float) -> float | None:  # fmt: skip
+    """VMEC's own ``<J.B>`` at ``r/a = radius``, in the DKX panel's units.
+
+    The wout ``jdotb`` is ``<J.B>`` in A T/m^2 on the full mesh in ``s``; the
+    DKX curve is ``<j.B>/sqrt(<B^2>)`` in kA/m^2, so dividing by the same
+    ``sqrt(<B^2>)`` puts the equilibrium and the kinetic current on one axis.
+    """
+    if "jdotb" not in geometry or root_fsab2 <= 0.0:
+        return None
+    jdotb = np.asarray(geometry["jdotb"], dtype=float)
+    s_grid = np.asarray(geometry["jdotb_s"], dtype=float)
+    if jdotb.size < 2:
+        return None
+    return float(np.interp(radius**2, s_grid, jdotb)) / root_fsab2 / 1.0e3
+
+
 def radial_profiles(
     equilibrium: Path,
     *,
@@ -721,12 +850,15 @@ def radial_profiles(
     import tempfile  # noqa: PLC0415
 
     from dkx.api import batched_er_scan  # noqa: PLC0415
+    from dkx.units import CURRENT_DENSITY, HEAT_FLUX, PARTICLE_FLUX  # noqa: PLC0415
+    from dkx.units import flux_psi_hat_to_r_hat  # noqa: PLC0415
 
     er = np.asarray(er_values, dtype=float)
     if emit:
         emit(f"    radial-scan resolution: {DEFAULT_RESOLUTION_PROFILE}; "
              f"{len(er)} Er points per surface")  # fmt: skip
-    plasma = plasma_parameters(equilibrium) or dict(FALLBACK_PLASMA)
+    plasma, _derived = resolve_plasma(equilibrium)
+    geometry = equilibrium_scalars(equilibrium)
     template = _PROFILE_TEMPLATE.format(
         equilibrium=str(equilibrium), **DEFAULT_RESOLUTION_PROFILE, **_plasma_keys(plasma)
     ).replace("rN_wish = 0.5", "rN_wish = {radius}")  # fmt: skip
@@ -756,18 +888,42 @@ def radial_profiles(
                 mom = scan.moments
                 boot = mom.get("FSABjHatOverRootFSAB2", mom.get("FSABjHat"))
                 if boot is not None:
-                    record["bootstrap"] = _interp_at_root(er, np.asarray(boot).ravel(), root)
-                for key, name in (("particleFlux_vm_psiHat", "particle_flux"),
-                                  ("heatFlux_vm_psiHat", "heat_flux")):  # fmt: skip
+                    value = _interp_at_root(er, np.asarray(boot).ravel(), root)
+                    record["bootstrap"] = value
+                    # <j.B>/sqrt(<B^2>) carries e nBar vBar (documentation
+                    # eq. 196), so this is the same current in kA/m^2.
+                    record["bootstrap_kA_m2"] = value * CURRENT_DENSITY / 1.0e3
+                root_fsab2 = _root_fsab2(mom)
+                if root_fsab2 is not None:
+                    record["root_fsab2"] = root_fsab2
+                    vmec = _vmec_current_kA_m2(geometry, radius, root_fsab2)
+                    if vmec is not None:
+                        record["jdotb_vmec_kA_m2"] = vmec
+                # Fluxes are computed in the psiHat coordinate; the radial flux
+                # density a reader wants is the rHat one (eq. 175), and the RBar
+                # in its normalization then cancels (see dkx.units).
+                to_r_hat = None
+                if "psi_a_hat" in geometry and "a_hat" in geometry:
+                    to_r_hat = flux_psi_hat_to_r_hat(
+                        psi_a_hat=geometry["psi_a_hat"], a_hat=geometry["a_hat"], r_n=radius
+                    )
+                for key, name, unit in (
+                    ("particleFlux_vm_psiHat", "particle_flux", PARTICLE_FLUX),
+                    ("heatFlux_vm_psiHat", "heat_flux", HEAT_FLUX / 1.0e3),
+                ):  # fmt: skip
                     if key in mom:
                         arr = np.asarray(mom[key])
-                        record[name] = [
+                        values = [
                             _interp_at_root(er, arr[:, s], root) for s in range(arr.shape[1])
                         ]
+                        record[name] = values
+                        if to_r_hat is not None:
+                            record[f"{name}_si"] = [v * to_r_hat * unit for v in values]
             if emit:
                 e_txt = f"{record.get('er_ambipolar', float('nan')):+.3f}"
-                b_txt = f"{record.get('bootstrap', float('nan')):+.4e}"
-                emit(f"    r/a={radius:.2f}  Er_ambipolar={e_txt} kV/m  <j.B>={b_txt}")
+                b_txt = f"{record.get('bootstrap_kA_m2', float('nan')):+.4g}"
+                emit(f"    r/a={radius:.2f}  Er_ambipolar={e_txt} kV/m  "
+                     f"<j.B>/sqrt(<B^2>)={b_txt} kA/m^2")  # fmt: skip
             out.append(record)
     return out
 
@@ -787,19 +943,31 @@ def _species_labels(n: int, charges: Sequence[float] | None = None) -> list[str]
 def _panel_radial_bootstrap(ax, profiles: list[dict[str, Any]]) -> bool:
     """Bootstrap current and ambipolar E_r against radius, on twin axes.
 
-    Both are radial profiles a reader wants together: the bootstrap current is
-    evaluated *at* the ambipolar root, so plotting the root beside it says which
-    field the current belongs to.
+    Three curves a reader wants together.  The kinetic
+    ``<j.B>/sqrt(<B^2>)`` DKX computes is drawn in kA/m^2 (:mod:`dkx.units`);
+    the equilibrium's own current, from the VMEC ``jdotb`` profile divided by
+    the same ``sqrt(<B^2>)``, is drawn beside it, because the difference
+    between the prescribed and the kinetic current is the whole point of
+    running a drift-kinetic code on a finite-beta equilibrium.  The bootstrap
+    current is evaluated *at* the ambipolar root, so the root belongs on the
+    same panel: it says which radial electric field the current is for.
     """
-    pts = [p for p in profiles if "bootstrap" in p]
+    pts = [p for p in profiles if "bootstrap" in p or "bootstrap_kA_m2" in p]
     if not pts:
         return False
+    dimensional = all("bootstrap_kA_m2" in p for p in pts)
+    key = "bootstrap_kA_m2" if dimensional else "bootstrap"
+    label = (r"$\langle j_\parallel B\rangle/\sqrt{\langle B^2\rangle}$"
+             + (" [kA/m$^2$]" if dimensional else " [SFINCS units]"))  # fmt: skip
     r = [p["r"] for p in pts]
-    ax.plot(r, [p["bootstrap"] for p in pts], "o-", ms=4, color="tab:blue",
-            label=r"$\langle j_\parallel B\rangle/\sqrt{\langle B^2\rangle}$")  # fmt: skip
+    ax.plot(r, [p[key] for p in pts], "o-", ms=4, color="tab:blue", label="DKX (kinetic)")
+    vmec = [(p["r"], p["jdotb_vmec_kA_m2"]) for p in pts if "jdotb_vmec_kA_m2" in p]
+    if dimensional and len(vmec) >= 2:
+        ax.plot([v[0] for v in vmec], [v[1] for v in vmec], "^:", ms=4,
+                color="tab:green", label="VMEC equilibrium")  # fmt: skip
     ax.axhline(0.0, color="0.7", lw=0.8)
     ax.set_xlabel("$r/a$")
-    ax.set_ylabel(r"$\langle j_\parallel B\rangle/\sqrt{\langle B^2\rangle}$", color="tab:blue")
+    ax.set_ylabel(label, color="tab:blue")
     ax.tick_params(axis="y", labelcolor="tab:blue")
     ax.grid(alpha=0.3)
 
@@ -809,26 +977,35 @@ def _panel_radial_bootstrap(ax, profiles: list[dict[str, Any]]) -> bool:
     twin.set_ylabel(r"$E_r$ [kV/m]", color="tab:red")
     twin.tick_params(axis="y", labelcolor="tab:red")
     ax.set_title("bootstrap current and ambipolar $E_r$", fontsize=9)
-    handles = ax.get_lines()[:1] + twin.get_lines()[:1]
+    handles = ax.get_lines()[: 2 if (dimensional and len(vmec) >= 2) else 1] + twin.get_lines()[:1]
     ax.legend(handles, [h.get_label() for h in handles], fontsize=7, loc="best")
     return True
 
 
 def _panel_radial_fluxes(ax, profiles: list[dict[str, Any]],
                          charges: Sequence[float] | None = None) -> bool:  # fmt: skip
-    """Particle and heat flux per species against radius.
+    """Particle and heat flux per species against radius, in SI units.
 
     Named species and a radial axis, rather than a bar chart indexed by species
     number: the convention every neoclassical paper uses, and the only form in
-    which "which one is the electron" is answerable from the figure.  Particle
-    and heat flux differ by orders of magnitude, so the heat flux takes a twin
-    axis rather than being flattened onto one log scale with the other.
+    which "which one is the electron" is answerable from the figure.  The
+    values are the radial flux densities ``<Gamma.grad r>`` and ``<Q.grad r>``
+    (:mod:`dkx.units`); they differ by orders of magnitude, so the heat flux
+    takes a twin axis rather than being flattened onto one log scale.
     """
-    pts = [p for p in profiles if "particle_flux" in p or "heat_flux" in p]
+    # Fall back to SFINCS units unless every surface that has fluxes also has
+    # the SI conversion: mixing the two on one axis is worse than either alone.
+    with_flux = [p for p in profiles if "particle_flux" in p or "heat_flux" in p]
+    dimensional = bool(with_flux) and all(
+        "particle_flux_si" in p or "heat_flux_si" in p for p in with_flux
+    )
+    g_key, q_key = ("particle_flux_si", "heat_flux_si") if dimensional else (
+        "particle_flux", "heat_flux")  # fmt: skip
+    pts = [p for p in profiles if g_key in p or q_key in p]
     if not pts:
         return False
     r = [p["r"] for p in pts]
-    n = max(len(p.get("particle_flux", p.get("heat_flux", []))) for p in pts)
+    n = max(len(p.get(g_key, p.get(q_key, []))) for p in pts)
     names = _species_labels(n, charges)
     styles = ("o-", "s-", "^-")
 
@@ -836,7 +1013,7 @@ def _panel_radial_fluxes(ax, profiles: list[dict[str, Any]],
     # particle fluxes are EQUAL by construction -- drawing both puts one line
     # exactly on top of the other, which reads as a rendering fault rather than
     # as the physics it is.  Draw one, and say why.
-    gammas = [[p["particle_flux"][s] for p in pts if "particle_flux" in p] for s in range(n)]
+    gammas = [[p[g_key][s] for p in pts if g_key in p] for s in range(n)]
     ambipolar_pair = (
         n == 2 and gammas[0] and gammas[1]
         and np.allclose(gammas[0], gammas[1], rtol=1e-6, atol=0.0)
@@ -850,18 +1027,20 @@ def _panel_radial_fluxes(ax, profiles: list[dict[str, Any]],
                 ax.plot(r[: len(gammas[s])], gammas[s], styles[s % 3], ms=4,
                         color=f"C{s}", label=rf"$\Gamma$ {names[s]}")  # fmt: skip
     ax.set_xlabel("$r/a$")
-    ax.set_ylabel(r"$\Gamma_s$  [particle flux]")
+    ax.set_ylabel(r"$\langle\Gamma_s\cdot\nabla r\rangle$"
+                  + (" [m$^{-2}$s$^{-1}$]" if dimensional else "  [SFINCS units]"))  # fmt: skip
     ax.grid(alpha=0.3)
 
     twin = ax.twinx()
     for s in range(n):
-        q = [p["heat_flux"][s] for p in pts if "heat_flux" in p]
+        q = [p[q_key][s] for p in pts if q_key in p]
         if q:
             # marker only in the fmt: passing "o-" together with ls="--" makes
             # matplotlib warn that the linestyle is defined twice.
             twin.plot(r[: len(q)], q, marker=styles[s % 3][0], ms=4, ls="--",
                       alpha=0.75, color=f"C{s + n}", label=rf"$Q$ {names[s]}")  # fmt: skip
-    twin.set_ylabel(r"$Q_s$  [heat flux]")
+    twin.set_ylabel(r"$\langle Q_s\cdot\nabla r\rangle$"
+                    + (" [kW/m$^2$]" if dimensional else "  [SFINCS units]"))  # fmt: skip
     ax.set_title("particle and heat flux at the ambipolar root", fontsize=9)
     handles = ax.get_lines() + twin.get_lines()
     ax.legend(handles, [h.get_label() for h in handles], fontsize=6, loc="best", ncol=2)
@@ -885,19 +1064,27 @@ def write_representative_output(
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    from dkx import units  # noqa: PLC0415
+
     payload: dict[str, Any] = {
         "equilibrium": str(equilibrium) if equilibrium else "",
         "resolution_monoenergetic": DEFAULT_RESOLUTION,
         "resolution_profile": DEFAULT_RESOLUTION_PROFILE,
+        # The SI factors behind every "_kA_m2" / "_si" dataset, so the file can
+        # be converted back to SFINCS units without consulting the source.
+        "units": {"current_density_A_per_m2": units.CURRENT_DENSITY,
+                  "particle_flux_per_m2_s": units.PARTICLE_FLUX,
+                  "heat_flux_W_per_m2": units.HEAT_FLUX},
     }
     if scan:
         for key in ("nu_prime", "e_star", "D11", "D31", "D33"):
             payload[f"monoenergetic/{key}"] = [r[key] for r in scan]
     if profiles:
         payload["profiles/r"] = [p["r"] for p in profiles]
-        for key in ("er_ambipolar", "bootstrap"):
+        for key in ("er_ambipolar", "bootstrap", "bootstrap_kA_m2",
+                    "jdotb_vmec_kA_m2", "root_fsab2"):  # fmt: skip
             payload[f"profiles/{key}"] = [p.get(key, float("nan")) for p in profiles]
-        for key in ("particle_flux", "heat_flux"):
+        for key in ("particle_flux", "heat_flux", "particle_flux_si", "heat_flux_si"):
             rows = [p.get(key) for p in profiles if p.get(key) is not None]
             if rows:
                 payload[f"profiles/{key}"] = rows

@@ -289,3 +289,135 @@ def test_a_run_always_leaves_the_numbers_behind(tmp_path):
                  "particle_flux": [5e-9, 5e-9], "heat_flux": [7e-8, 1e-8]}]  # fmt: skip
     out = write_representative_output(tmp_path / "run.h5", scan=scan, profiles=profiles)
     assert out.exists() and out.stat().st_size > 0
+
+
+def test_the_bootstrap_panel_overlays_the_vmec_current_in_kA_per_m2():
+    """The kinetic and equilibrium currents belong on one axis, in real units."""
+    from dkx.representative import _panel_radial_bootstrap
+
+    profiles = [
+        {"r": r, "bootstrap": -6e-3 + r * 1e-3, "bootstrap_kA_m2": -42.0 + r * 7.0,
+         "jdotb_vmec_kA_m2": -35.0 + r * 6.0, "er_ambipolar": -1.4 + r}
+        for r in (0.25, 0.5, 0.75)
+    ]  # fmt: skip
+    fig, ax = plt.subplots()
+    try:
+        assert _panel_radial_bootstrap(ax, profiles)
+        assert "kA/m" in ax.get_ylabel()
+        labels = [str(line.get_label()) for line in ax.get_lines()]
+        assert any("DKX" in x for x in labels), labels
+        assert any("VMEC" in x for x in labels), labels
+    finally:
+        plt.close(fig)
+
+
+def test_the_bootstrap_panel_says_so_when_it_has_no_dimensional_values():
+    """Without the equilibrium scalars the panel must not imply kA/m^2."""
+    from dkx.representative import _panel_radial_bootstrap
+
+    profiles = [{"r": r, "bootstrap": -6e-3, "er_ambipolar": -1.4} for r in (0.3, 0.6)]
+    fig, ax = plt.subplots()
+    try:
+        assert _panel_radial_bootstrap(ax, profiles)
+        assert "kA/m" not in ax.get_ylabel()
+        assert "SFINCS units" in ax.get_ylabel()
+    finally:
+        plt.close(fig)
+
+
+def test_the_flux_panel_uses_si_units_when_every_surface_has_them():
+    from dkx.representative import _panel_radial_fluxes
+
+    profiles = [
+        {"r": r, "particle_flux": [5e-9, 5e-9], "heat_flux": [7e-8, 1e-8],
+         "particle_flux_si": [1.5e18, 1.5e18], "heat_flux_si": [22.0, 3.0]}
+        for r in (0.3, 0.6)
+    ]  # fmt: skip
+    fig, ax = plt.subplots()
+    try:
+        assert _panel_radial_fluxes(ax, profiles)
+        assert "m$^{-2}$s$^{-1}$" in ax.get_ylabel()
+        assert "kW/m" in ax.figure.axes[1].get_ylabel()
+    finally:
+        plt.close(fig)
+
+
+def test_the_flux_panel_falls_back_rather_than_mixing_unit_systems():
+    """One surface without the conversion must not put two systems on one axis."""
+    from dkx.representative import _panel_radial_fluxes
+
+    profiles = [
+        {"r": 0.3, "particle_flux": [5e-9, 5e-9], "heat_flux": [7e-8, 1e-8],
+         "particle_flux_si": [1.5e18, 1.5e18], "heat_flux_si": [22.0, 3.0]},
+        {"r": 0.6, "particle_flux": [4e-9, 4e-9], "heat_flux": [6e-8, 9e-9]},
+    ]  # fmt: skip
+    fig, ax = plt.subplots()
+    try:
+        assert _panel_radial_fluxes(ax, profiles)
+        assert "SFINCS units" in ax.get_ylabel()
+    finally:
+        plt.close(fig)
+
+
+def test_the_output_file_records_the_dimensional_values_and_their_factors(tmp_path):
+    from dkx import units
+    from dkx.representative import write_representative_output
+
+    profiles = [{"r": 0.5, "er_ambipolar": -1.1, "bootstrap": -6e-3,
+                 "bootstrap_kA_m2": -42.0, "jdotb_vmec_kA_m2": -35.0,
+                 "root_fsab2": 2.7, "particle_flux": [5e-9, 5e-9],
+                 "particle_flux_si": [1.5e18, 1.5e18]}]  # fmt: skip
+    out = write_representative_output(tmp_path / "run.h5", profiles=profiles)
+    if out.suffix == ".h5":
+        import h5py
+
+        with h5py.File(out, "r") as handle:
+            assert handle["profiles/bootstrap_kA_m2"][()] == pytest.approx([-42.0])
+            assert handle["profiles/jdotb_vmec_kA_m2"][()] == pytest.approx([-35.0])
+            assert handle.attrs["units/current_density_A_per_m2"] == pytest.approx(
+                units.CURRENT_DENSITY)
+    else:
+        import json
+
+        payload = json.loads(out.read_text())
+        assert payload["profiles/bootstrap_kA_m2"] == pytest.approx([-42.0])
+        assert payload["units"]["current_density_A_per_m2"] == pytest.approx(
+            units.CURRENT_DENSITY)
+
+
+def test_a_vacuum_equilibrium_does_not_become_a_1e9_density_plasma(tmp_path):
+    """VMEC writes p ~ 1e-6 Pa for a vacuum run, not zero.
+
+    Splitting that into n and T yields n ~ 1e9 m^-3: a collisionless deck that
+    grinds for tens of minutes and reports transport for a plasma that is not
+    there.  It cost 23 minutes on W7-X before this guard existed.
+    """
+    netCDF4 = pytest.importorskip("netCDF4")
+    from dkx.representative import FALLBACK_PLASMA, plasma_parameters, resolve_plasma
+
+    path = tmp_path / "wout_vacuum.nc"
+    with netCDF4.Dataset(path, "w") as handle:
+        handle.createDimension("radius", 5)
+        pres = handle.createVariable("presf", "f8", ("radius",))
+        pres[:] = np.linspace(1.0e-6, 0.0, 5)
+
+    assert plasma_parameters(path) == {}
+    plasma, source = resolve_plasma(path)
+    assert plasma == FALLBACK_PLASMA
+    assert "vacuum" in source and "1e-06 Pa" in source
+
+
+def test_a_real_pressure_profile_is_still_used(tmp_path):
+    """The guard must not reject an actual finite-beta equilibrium."""
+    netCDF4 = pytest.importorskip("netCDF4")
+    from dkx.representative import resolve_plasma
+
+    path = tmp_path / "wout_beta.nc"
+    with netCDF4.Dataset(path, "w") as handle:
+        handle.createDimension("radius", 5)
+        pres = handle.createVariable("presf", "f8", ("radius",))
+        pres[:] = np.linspace(5.0e5, 0.0, 5)  # 0.5 MPa on axis
+
+    plasma, source = resolve_plasma(path)
+    assert source == "p(s) from the equilibrium"
+    assert plasma["n_hat"] > 0.1  # 1e20-scale, not 1e-11

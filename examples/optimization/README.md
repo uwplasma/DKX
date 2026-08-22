@@ -35,6 +35,37 @@ smoke run.
 These four scripts and `objectives.py` are exercised at CI resolution by the
 optimization example test suite under the repository ``tests`` directory.
 
+## VMEX optimization with a kinetic bootstrap current
+
+Three scripts that are their `vmex/examples/optimization` counterparts with a
+single objective term replaced: instead of driving the VMEC equilibrium current
+toward the Redl *analytic* bootstrap current, they drive the *kinetic* bootstrap
+current DKX computes on the same equilibrium toward zero.  The Redl term stays
+in the reporter, so both estimates print at every stage.
+
+- `QA_optimization_bootstrap_dkx.py` — nfp=2 quasi-axisymmetric.
+- `QH_optimization_bootstrap_dkx.py` — nfp=4 quasi-helical.
+- `QI_optimization_bootstrap_dkx.py` — nfp=2 quasi-isodynamic, where the
+  substitution matters most: Redl is a fit to quasisymmetric calculations and a
+  QI field is not quasisymmetric.
+
+Adding the term to any other `vmex` optimization script is one import and one
+tuple:
+
+```python
+from dkx.bootstrap import KineticBootstrapCurrent
+
+kinetic = KineticBootstrapCurrent(profiles, surfaces=[0.25, 0.5, 0.75])
+objective_function_terms.append((kinetic, 0.0, 1.0))
+```
+
+`profiles` is the same `vmex.core.bootstrap.KineticProfiles` the Redl term
+takes, so both models describe one plasma.  DKX is a host code, so the problem
+must be built with `derivative_method="finite_difference"`; each residual
+evaluation is one drift-kinetic solve per surface, which is minutes, not
+milliseconds.  Set `DKX_VMEX_ROOT` when `vmex` came from a wheel rather than a
+checkout, and `DKX_EXAMPLES_CI=1` for a smoke run.
+
 Examples:
 - `qa_nfp2_dkx_objectives.py` — fast JAX proxy lane for adding
   neoclassical objectives to QA optimization. It supports bootstrap-current,

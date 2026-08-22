@@ -677,7 +677,7 @@
     },
     {
       "path": "dkx/representative.py",
-      "lines_at_audit": 927,
+      "lines_at_audit": 1053,
       "category": "core",
       "action": "retain",
       "public_imports": [],
@@ -692,6 +692,45 @@
       ],
       "retention_reason": "The dkx wout_*.nc representative run and the dkx --plot publication panels; the one-command entry point a user meets first, kept out of plotting.py so the existing summary surface is untouched.",
       "next_step": "Keep the panels and the measured default resolution here; plotting.py keeps the raw output summary.",
+      "review_status": "new_owner"
+    },
+    {
+      "path": "dkx/units.py",
+      "lines_at_audit": 112,
+      "category": "core",
+      "action": "retain",
+      "public_imports": [],
+      "internal_callers": [
+        "dkx/representative.py"
+      ],
+      "tests": [
+        "tests/test_units.py"
+      ],
+      "docs_examples": [
+        "docs/outputs.rst"
+      ],
+      "retention_reason": "The SFINCS reference set and the Hat-to-SI factors; every dimensional number DKX reports goes through here, and the Delta/nu_n round-trip test is what keeps the reference set from drifting.",
+      "next_step": "Keep the conversions here rather than inline in plotting or examples.",
+      "review_status": "new_owner"
+    },
+    {
+      "path": "dkx/bootstrap.py",
+      "lines_at_audit": 316,
+      "category": "core",
+      "action": "retain",
+      "public_imports": [],
+      "internal_callers": [],
+      "tests": [
+        "tests/test_bootstrap_objective.py"
+      ],
+      "docs_examples": [
+        "examples/optimization/QA_optimization_bootstrap_dkx.py",
+        "examples/optimization/QH_optimization_bootstrap_dkx.py",
+        "examples/optimization/QI_optimization_bootstrap_dkx.py",
+        "docs/optimization.rst"
+      ],
+      "retention_reason": "The kinetic bootstrap current as a VMEX objective term; the single import that turns a vmex/examples/optimization script into a drift-kinetic one, and the only place the deck for that solve is written.",
+      "next_step": "Keep the term and its plot here; the scan/promotion planning lane stays in dkx.workflows.optimization.",
       "review_status": "new_owner"
     }
   ]
