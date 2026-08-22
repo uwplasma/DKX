@@ -12,6 +12,9 @@ matches its upstream template.
 from __future__ import annotations
 
 import ast
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -112,3 +115,40 @@ def test_the_objective_term_construction_matches_the_scripts(tmp_path) -> None:
     assert len(positional) == 1, positional
     # And _term_name reads .name off the instance for the monitor's column.
     assert getattr(term, "name") == "j_boot_dkx"
+
+
+@pytest.mark.slow  # a Picard seed, a finite-difference stage, and a final solve
+def test_the_qa_pairing_runs_end_to_end(tmp_path) -> None:
+    """Parsing is not running.  This is the only check that the chain closes.
+
+    Picard seed -> VmecProblem with a finite-difference Jacobian -> one DKX
+    kinetic solve per residual evaluation -> least_squares -> final solve ->
+    plots.  At DKX_EXAMPLES_CI=1 the ladder is one stage of two evaluations on a
+    single surface at reduced resolution, which is a smoke test of the wiring
+    and emphatically not a converged optimization: with 12 dofs and max_nfev=2
+    the step is dominated by the quasisymmetry and beta terms, so the kinetic
+    current is not expected to fall here.  Measured once at that setting: cost
+    2.2060 -> 0.8593, j_boot_dkx 5.71e-04 -> 7.23e-04.
+    """
+    pytest.importorskip("vmex")
+    vmex_root = Path(pytest.importorskip("vmex").__file__).resolve().parents[1]
+    if not (vmex_root / "examples" / "data").is_dir():
+        pytest.skip("vmex installed without its examples/data seed boundaries")
+
+    script = EX_DIR / "QA_optimization_bootstrap_dkx.py"
+    env = dict(os.environ, DKX_EXAMPLES_CI="1", DKX_VMEX_ROOT=str(vmex_root))
+    done = subprocess.run([sys.executable, "-u", str(script)], cwd=tmp_path, env=env,
+                          capture_output=True, text=True, timeout=3600)  # fmt: skip
+    assert done.returncode == 0, done.stdout[-4000:] + done.stderr[-4000:]
+
+    out = done.stdout
+    assert "[self-consistent seed]" in out and "[final]" in out
+    # Both bootstrap estimates are reported side by side; that is the point of
+    # keeping the Redl term in the reporter.
+    assert "j_boot_dkx" in out and "f_boot_redl" in out
+    costs = [float(line.split()[2]) for line in out.splitlines()
+             if line.strip().startswith(("0 ", "1 ")) and len(line.split()) >= 3]  # fmt: skip
+    assert costs and costs[-1] < costs[0], f"cost did not decrease: {costs}"
+    for name in ("input.QA_bootstrap_dkx_optimized", "wout_QA_bootstrap_dkx_optimized.nc",
+                 "QA_bootstrap_dkx_current.png"):  # fmt: skip
+        assert (tmp_path / name).exists(), name
