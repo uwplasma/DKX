@@ -1,7 +1,7 @@
 """One-command representative run: an equilibrium in, publication panels out.
 
 ``dkx wout_XXX.nc`` solves the small set of cases a neoclassical paper actually
-reports and renders them as one figure, in tens of seconds rather than hours.
+reports and renders them as one figure, in about a minute rather than hours.
 ``dkx --plot FILE`` renders the same panels from an existing output file --- and
 because :mod:`dkx.writer` emits ``sfincsOutput.h5`` in SFINCS's own layout, that
 works on Fortran SFINCS output too, with no separate reader.
@@ -10,14 +10,18 @@ Panels
 ------
 * **monoenergetic** ``D11*``, ``D31*``, ``D33*`` against ``nuPrime``, one curve
   per ``EStar``.  The standard cross-code benchmark figure.
-* **bootstrap** ``<j.B>/sqrt(<B^2>)``, the parallel-momentum moment.
-* **fluxes** particle and heat flux per species.
+* **bootstrap** ``<j.B>/sqrt(<B^2>)`` in kA/m^2 against radius, evaluated at
+  the ambipolar root, with the VMEC equilibrium's own current beside it and the
+  ambipolar ``E_r`` on a twin axis.
+* **fluxes** ``<Gamma.grad r>`` and ``<Q.grad r>`` per species against radius,
+  in SI units (:mod:`dkx.units`), at the ambipolar root.
 * **|B|** on the flux surface, for context on what device produced the numbers.
 
 Default resolution
 ------------------
-``Ntheta=25, Nzeta=41, Nxi=20`` (20,500 DOF), chosen from a measured convergence
-scan against a ``41x71x80`` reference rather than by judgement:
+Monoenergetic ``Ntheta=25, Nzeta=25, Nxi=41``; radial profiles
+``Ntheta=21, Nzeta=31, Nxi=24, Nx=5``.  A convergence scan against a
+``41x71x80`` reference, run at moderate collisionality, gives:
 
 ===========  =====================  ===================
 axis         error at the low end   at the high end
@@ -27,12 +31,23 @@ axis         error at the low end   at the high end
 ``Nxi``      1.10e-07 (12)          5.59e-10 (64)
 ===========  =====================  ===================
 
-``Nxi`` is converged to 1e-07 at the *lowest* value tested, so spending
-resolution there buys nothing; ``Nzeta`` is the expensive axis.  That is the
-opposite of the drift-dominated decks, where ``Nxi`` binds hardest, and it is
-why the default is measured rather than assumed.  At the default the transport
-matrix is within 2.3e-04 of the reference, a solve costs 1.85 s cold and 1.11 s
-warm, and a 5x3 scan fits in about 19 s.
+By that table ``Nxi`` looks free and ``Nzeta`` expensive.  The default
+nevertheless carries ``Nxi >= Nzeta``, because the Legendre resolution is what
+binds at the *low-collisionality* end of :data:`DEFAULT_NU_PRIME`, which the
+scan above did not probe --- it was run at one moderate ``nuPrime``.  Treat the
+table as a floor on the spatial axes, not as permission to cut ``Nxi``.
+
+Cost
+----
+Measured on W7-X standard configuration (10-core M4, float64), the three stages
+are **18.5 s** for the 21-point monoenergetic scan (0.8 s per solve after a
+1.8 s cold compile), **11.1 s** for the ``|B|`` profile solve, and **33.2 s**
+for the radial scan (5 surfaces x 8 ``E_r`` points): **63.5 s** in total.
+
+A *vacuum* equilibrium used to take 23 minutes instead, because VMEC writes
+``presf`` of order 1e-6 Pa rather than zero and the pressure split turned that
+into a collisionless 1e9 m^-3 plasma.  :data:`VACUUM_DENSITY_FLOOR` now catches
+that and :func:`resolve_plasma` says so on the figure.
 
 Monoenergetic runs take ``nuPrime``/``EStar``, **not** ``nu_n``/``Er`` --- the
 upstream decks say so in a comment, and varying ``nu_n`` here changes nothing at
@@ -387,15 +402,29 @@ def plot_representative(
     if plasma or resolutions:
         bits = []
         if plasma:
-            src = plasma_source or (
-                "p(s) from the equilibrium" if "p_pa" in plasma else "generic reference")
             bits.append(
                 f"n={plasma['n_hat']:.3g}e20 m$^{{-3}}$, T$_i$=T$_e$={plasma['t_hat']:.3g} keV "
-                f"({src}, T constant), dn/dr={plasma['dn_dr']:+.3g}"
+                f"(T constant), dn/dr={plasma['dn_dr']:+.3g}"
             )
         for name, res in (resolutions or {}).items():
-            bits.append(f"{name}: " + "x".join(str(v) for v in res.values()))
-        fig.text(0.5, 0.005, "   |   ".join(bits), ha="center", fontsize=7.5, color="0.35")
+            bits.append(f"{name} " + "x".join(str(v) for v in res.values()))
+        caption = "   |   ".join(bits)
+        if plasma:
+            src = plasma_source or (
+                "p(s) from the equilibrium" if "p_pa" in plasma else "generic reference")
+            caption += f"\nplasma source: {src}"
+        # Reserve the strip rather than drawing into it: constrained_layout owns
+        # the whole canvas, so a bare fig.text lands on top of the bottom row's
+        # x-labels.  Older matplotlib has no layout engine to ask; there the
+        # caption goes under the figure and the axes keep their room.
+        band = 0.018 * caption.count("\n") + 0.030
+        engine = getattr(fig, "get_layout_engine", lambda: None)()
+        if engine is not None:
+            # Reserve the title strip as well: rect hands the engine the whole
+            # remaining canvas, and suptitle is not one of the artists it packs.
+            engine.set(rect=(0.0, band, 1.0, 1.0 - _TITLE_BAND / rows))
+        fig.text(0.5, band * 0.5, caption, ha="center", va="center",
+                 fontsize=7.5, color="0.35", linespacing=1.5)  # fmt: skip
     fig.suptitle(title, fontsize=12)
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -428,7 +457,7 @@ def run_representative(
     """Solve the representative set for one equilibrium and plot it.
 
     ``full`` widens the monoenergetic grid; the default keeps the whole run
-    inside the tens-of-seconds budget the module docstring quantifies.
+    inside the one-minute budget the module docstring measures.
     """
     from dkx.inputs import read_sfincs_input, sfincs_input_from_raw  # noqa: PLC0415
 
@@ -747,8 +776,18 @@ def _ambipolar_roots(records: list[dict[str, Any]]) -> list[float]:
     """Sign changes of ``J_r(E_r)``, linearly interpolated.
 
     Reported as *bracketed* roots rather than solved ones: the panel's job is to
-    show how many there are (one ion root, or the ion/unstable/electron triplet),
-    which a Brent solve started from a single guess would hide.
+    show how many there are (one ion root, or the ion/unstable/electron
+    triplet), which a Brent solve started from a single guess would hide.
+
+    The interpolation is linear on purpose, and a smarter one is a regression.
+    ``J_r = sum_s Z_s Gamma_s`` is a *linear* combination of the moments, and
+    linear interpolation is the only scheme that commutes with it: interpolate
+    every moment linearly onto the linearly-interpolated root and
+    ``sum_s Z_s Gamma_s = 0`` holds exactly there, which is why a Z=+-1 pair
+    reports two identical particle fluxes.  A monotone cubic moves the root by
+    under 0.01 kV/m on the decks tried and breaks that identity, so the panel
+    starts drawing two nearly-coincident Gamma curves that differ only by
+    interpolation error.
     """
     roots: list[float] = []
     for a, b in zip(records, records[1:]):
@@ -781,6 +820,9 @@ def _panel_ambipolarity(ax, records: list[dict[str, Any]]) -> bool:
 # ---------------------------------------------------------------------------
 #: Flux-surface labels for the radial scan.  Five is enough to show a profile's
 #: shape; the cost is one batched E_r scan per surface.
+#: Fraction of one panel row reserved for the figure title.
+_TITLE_BAND = 0.10
+
 DEFAULT_SURFACES = (0.25, 0.4, 0.55, 0.7, 0.85)
 
 #: E_r values (kV/m) bracketing the ion root at every surface.
@@ -976,9 +1018,20 @@ def _panel_radial_bootstrap(ax, profiles: list[dict[str, Any]]) -> bool:
     twin.plot(r, er, "s--", ms=4, color="tab:red", label=r"$E_r$ (ambipolar)")
     twin.set_ylabel(r"$E_r$ [kV/m]", color="tab:red")
     twin.tick_params(axis="y", labelcolor="tab:red")
+    # Autoscale would fill the axis with a 6% variation and draw it as a
+    # dramatic zigzag.  Floor the span so a nearly-flat root looks nearly flat;
+    # a genuinely varying one still fills the axis.
+    finite = [v for v in er if np.isfinite(v)]
+    if finite:
+        centre = 0.5 * (max(finite) + min(finite))
+        span = max(max(finite) - min(finite), 0.25 * abs(centre), 0.5)
+        twin.set_ylim(centre - 0.6 * span, centre + 0.6 * span)
     ax.set_title("bootstrap current and ambipolar $E_r$", fontsize=9)
     handles = ax.get_lines()[: 2 if (dimensional and len(vmec) >= 2) else 1] + twin.get_lines()[:1]
-    ax.legend(handles, [h.get_label() for h in handles], fontsize=7, loc="best")
+    # "best" put the box on the Er curve on every device tried; the three curves
+    # here all trend downward, so the upper-left corner is the reliable gap.
+    ax.legend(handles, [h.get_label() for h in handles], fontsize=7,
+              loc="upper left", framealpha=0.9)  # fmt: skip
     return True
 
 

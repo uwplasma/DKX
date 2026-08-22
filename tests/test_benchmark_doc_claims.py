@@ -192,8 +192,10 @@ def test_readme_canonical_benchmark_claims_match_recorded_measurements() -> None
     # claim and number accurate.  Raised again to 327 for the CLI use cases:
     # a user who installs dkx needs to know the three commands that cover
     # almost everything, and burying that in the docs costs more than seven
-    # lines here.
-    assert len(readme.splitlines()) <= 327
+    # lines here.  345 adds the measured `dkx wout` cost split and the
+    # KineticBootstrapCurrent snippet: "one import and one tuple" is a claim
+    # only the snippet can settle, and it is the whole point of the coupling.
+    assert len(readme.splitlines()) <= 345
 
     # The canonical evidence also lands in the performance docs page.
     performance = (REPO_ROOT / "docs" / "performance.rst").read_text()
