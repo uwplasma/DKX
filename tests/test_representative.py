@@ -30,14 +30,32 @@ from dkx.representative import (  # noqa: E402
 REF = Path(__file__).parent / "ref"
 
 
-def test_the_default_resolution_is_the_measured_one():
-    """Pinned to the convergence scan, not to taste.
+def test_nxi_is_at_least_nzeta():
+    """The pitch-angle grid must not be the coarsest axis.
 
-    Nxi is converged to 1e-07 at the lowest value tested while Nzeta is the
-    expensive axis, so a "reasonable-looking" bump to Nxi would cost time and
-    buy nothing.  The scan is in the module docstring.
+    An earlier default of 25/41/20 came from a convergence scan run at a single
+    mid collisionality, where Nxi appeared converged to 1e-07 at the lowest
+    value tested.  That is exactly where the scan is blind: at LOW collisionality
+    the pitch-angle resolution is what limits the answer, and the 1/nu branch is
+    the part of a monoenergetic figure a reader cares about.  A one-collisionality
+    scan cannot see that, so the constraint is pinned as a relation rather than a
+    number.
     """
-    assert DEFAULT_RESOLUTION == {"n_theta": 25, "n_zeta": 41, "n_xi": 20}
+    assert DEFAULT_RESOLUTION["n_xi"] >= DEFAULT_RESOLUTION["n_zeta"]
+    assert DEFAULT_RESOLUTION == {"n_theta": 25, "n_zeta": 25, "n_xi": 41}
+
+
+def test_the_estar_grid_separates_the_regimes():
+    """0, 0.1 and 0.3 put two curves in the same regime.
+
+    Between zero field and E*=0.1 the D11 curves are nearly indistinguishable,
+    so an intermediate point belongs near 1e-3 where the E x B suppression
+    actually begins.
+    """
+    from dkx.representative import DEFAULT_E_STAR
+
+    assert DEFAULT_E_STAR[0] == 0.0
+    assert DEFAULT_E_STAR[1] < 1.0e-2, "intermediate EStar must resolve the onset"
 
 
 def test_modB_labels_the_axis_that_actually_varies():

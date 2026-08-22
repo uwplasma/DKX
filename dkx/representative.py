@@ -50,11 +50,18 @@ from typing import Any, Callable, Sequence
 import numpy as np
 
 #: Convergence-tested default, see the module docstring.
-DEFAULT_RESOLUTION = {"n_theta": 25, "n_zeta": 41, "n_xi": 20}
+#: ``n_xi`` must be at least ``n_zeta``: at low collisionality the pitch-angle
+#: resolution is what limits the answer, and the convergence scan that set the
+#: earlier 25/41/20 was run at a single mid collisionality, where it does not
+#: show.  25/25/41 on the collaborator's advice from a full-range test.
+DEFAULT_RESOLUTION = {"n_theta": 25, "n_zeta": 25, "n_xi": 41}
 
 #: Resolution for the single RHSMode=1 solve behind the bootstrap/flux panels.
 #: Smaller than the monoenergetic grid because it runs once, not 21 times.
 DEFAULT_RESOLUTION_PROFILE = {"n_theta": 21, "n_zeta": 31, "n_xi": 24, "n_x": 5}
+
+#: Generic fallback plasma, used only when the equilibrium carries no pressure.
+FALLBACK_PLASMA = {"n_hat": 1.0, "t_hat": 1.0, "dn_dr": -0.5, "dt_dr": -1.0}
 
 #: A deuterium/electron pair at modest collisionality, with the density and
 #: temperature gradients that make the bootstrap current nonzero.  The gradient
@@ -77,10 +84,10 @@ _PROFILE_TEMPLATE = """&general
 &speciesParameters
   Zs = 1.0d+0 -1.0d+0
   mHats = 1.0d+0 5.446170214d-4
-  nHats = 1.0d+0 1.0d+0
-  THats = 1.0d+0 1.0d+0
-  dNHatdrHats = -0.5d+0 -0.5d+0
-  dTHatdrHats = -1.0d+0 -1.0d+0
+  nHats = {n_hat:.6g} {n_hat:.6g}
+  THats = {t_hat:.6g} {t_hat:.6g}
+  dNHatdrHats = {dn_dr:.6g} {dn_dr:.6g}
+  dTHatdrHats = {dt_dr:.6g} {dt_dr:.6g}
 /
 &physicsParameters
   Delta = 4.5694d-3
@@ -109,8 +116,10 @@ _PROFILE_TEMPLATE = """&general
 #: upstream decks themselves sit at ``nuPrime`` 1.2e-3 to 1.0, so a grid that
 #: starts at 1e-2 misses the physics that makes a stellarator interesting.
 DEFAULT_NU_PRIME = (1.0e-4, 1.0e-3, 1.0e-2, 1.0e-1, 1.0e0, 1.0e1, 1.0e2)
-#: ``EStar`` values bracketing the upstream decks' 0.0 and 0.2.
-DEFAULT_E_STAR = (0.0, 0.1, 0.3)
+#: ``EStar`` values.  The intermediate point belongs at 1e-3, not 0.1: between
+#: zero field and 0.1 the D11 curves are nearly indistinguishable, so a grid of
+#: 0/0.1/0.3 spends two of its three curves in the same regime.
+DEFAULT_E_STAR = (0.0, 1.0e-3, 1.0e-1)
 
 
 def _quiet(fn: Callable[[], Any]) -> Any:
@@ -185,14 +194,24 @@ def _panel_monoenergetic(ax_d11, ax_d31, ax_d33, records: list[dict[str, Any]]) 
         pts = sorted((r for r in records if r["e_star"] == e), key=lambda r: r["nu_prime"])
         nu = [r["nu_prime"] for r in pts]
         for ax, key in ((ax_d11, "D11"), (ax_d31, "D31"), (ax_d33, "D33")):
-            ax.plot(nu, [abs(r[key]) for r in pts], "o-", ms=3, label=f"$E^*$={e:g}")
+            vals = [r[key] if key == "D31" else abs(r[key]) for r in pts]
+            ax.plot(nu, vals, "o-", ms=3, label=f"$E^*$={e:g}")
     for ax, key in ((ax_d11, "D_{11}"), (ax_d31, "D_{31}"), (ax_d33, "D_{33}")):
         ax.set_xscale("log")
-        ax.set_yscale("log")
         ax.set_xlabel(r"$\nu'$")
-        ax.set_ylabel(rf"$|{key}|$")
         ax.grid(alpha=0.3, which="both")
-    ax_d11.legend(fontsize=7)
+        if ax is ax_d31:
+            # D31 is conventionally shown on a LINEAR axis: it changes sign,
+            # and |D31| on a log axis hides the zero crossing entirely -- the
+            # one feature of that coefficient a reader looks for.
+            ax.set_ylabel(rf"${key}$")
+            ax.axhline(0.0, color="0.7", lw=0.8)
+        else:
+            ax.set_yscale("log")
+            ax.set_ylabel(rf"$|{key}|$")
+        # Every panel carries its own legend: a reader looking at D33 should not
+        # have to find the key two panels away.
+        ax.legend(fontsize=7)
     return True
 
 
@@ -306,6 +325,8 @@ def plot_representative(
     scan: list[dict[str, Any]] | None = None,
     ambipolar: list[dict[str, Any]] | None = None,
     profiles: list[dict[str, Any]] | None = None,
+    plasma: dict[str, float] | None = None,
+    resolutions: dict[str, dict] | None = None,
     title: str = "DKX representative run",
 ) -> Path:
     """Assemble whichever panels the inputs can support, and say which are missing.
@@ -359,6 +380,20 @@ def plot_representative(
                            transform=axes[key].transAxes)  # fmt: skip
             axes[key].set_xticks([]); axes[key].set_yticks([])
 
+    # State the plasma and the resolutions on the figure: a reader cannot judge
+    # a transport number without knowing the n, T and grid behind it, and the
+    # split of pressure into n and T is an assumption, not a measurement.
+    if plasma or resolutions:
+        bits = []
+        if plasma:
+            src = "from p(s)" if "p_pa" in plasma else "generic"
+            bits.append(
+                f"n={plasma['n_hat']:.3g}e20 m$^{{-3}}$, T$_i$=T$_e$={plasma['t_hat']:.3g} keV "
+                f"({src}, T constant), dn/dr={plasma['dn_dr']:+.3g}"
+            )
+        for name, res in (resolutions or {}).items():
+            bits.append(f"{name}: " + "x".join(str(v) for v in res.values()))
+        fig.text(0.5, 0.005, "   |   ".join(bits), ha="center", fontsize=7.5, color="0.35")
     fig.suptitle(title, fontsize=12)
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -428,6 +463,9 @@ def run_representative(
     out = Path(out_path) if out_path else Path(f"{equilibrium.stem}.panels.png")
     figure = plot_representative(
         out, data=data, scan=scan, profiles=profiles,
+        plasma=plasma_parameters(equilibrium) or dict(FALLBACK_PLASMA),
+        resolutions={"monoenergetic": DEFAULT_RESOLUTION,
+                     "profiles": DEFAULT_RESOLUTION_PROFILE},
         title=f"DKX representative run — {equilibrium.name}",
     )  # fmt: skip
     # Always leave the numbers behind, not only the picture: a figure cannot be
@@ -439,6 +477,57 @@ def run_representative(
     if emit:
         emit(f" wrote {written}")
     return figure
+
+
+#: Reference temperature (keV) used to split the equilibrium's pressure into a
+#: density and a temperature.  p = n_i T_i + n_e T_e with quasineutrality and
+#: T_i = T_e = T leaves p = 2 n T: one equation, two unknowns.  Fixing T on axis
+#: and letting n carry the profile is the conventional choice, and it is stated
+#: on the figure because it is an assumption, not a measurement.
+DEFAULT_T_AXIS_KEV = 2.0
+
+
+def _plasma_keys(plasma: dict) -> dict:
+    """Only the keys the namelist template interpolates."""
+    return {k: plasma[k] for k in ("n_hat", "t_hat", "dn_dr", "dt_dr")}
+
+
+def plasma_parameters(equilibrium: Path, radius: float = 0.5) -> dict[str, float]:
+    """Density and temperature at ``r/a`` from the equilibrium's own pressure.
+
+    The wout carries ``presf`` in Pascals; a drift-kinetic run needs ``n`` and
+    ``T`` separately, and pressure alone does not determine them.  The stated
+    assumption is quasineutral hydrogen with ``T_i = T_e = T``, ``T`` fixed on
+    axis at :data:`DEFAULT_T_AXIS_KEV` and constant, so ``n(s) = p(s) / (2 T)``.
+
+    Returns ``{}`` when the file carries no pressure, in which case the caller
+    keeps the generic reference profile and says so.  Reporting numbers derived
+    from an equilibrium the user supplied, without saying how, would be worse
+    than reporting generic ones.
+    """
+    try:
+        import netCDF4  # noqa: PLC0415
+
+        with netCDF4.Dataset(str(equilibrium)) as handle:
+            if "presf" not in handle.variables:
+                return {}
+            pres = np.asarray(handle.variables["presf"][:], dtype=float)
+    except Exception:
+        return {}
+    if pres.size < 2 or not np.any(pres > 0.0):
+        return {}
+    s_grid = np.linspace(0.0, 1.0, pres.size)
+    p_pa = float(np.interp(radius**2, s_grid, pres))          # r/a = sqrt(s)
+    t_kev = DEFAULT_T_AXIS_KEV
+    # n [1e20 m^-3] = p / (2 T) with T in Joules.
+    n_20 = p_pa / (2.0 * t_kev * 1.0e3 * 1.602176634e-19) / 1.0e20
+    # Logarithmic gradients from the pressure profile itself, at fixed T.
+    eps = 1.0e-3
+    lo = float(np.interp(max(radius - eps, 0.0) ** 2, s_grid, pres))
+    hi = float(np.interp(min(radius + eps, 1.0) ** 2, s_grid, pres))
+    dn_dr = (hi - lo) / (2.0 * eps) / (2.0 * t_kev * 1.0e3 * 1.602176634e-19) / 1.0e20
+    return {"n_hat": n_20, "t_hat": t_kev, "dn_dr": dn_dr, "dt_dr": 0.0,
+            "p_pa": p_pa, "radius": radius}  # fmt: skip
 
 
 def _field_periods(equilibrium: Path) -> int:
@@ -467,8 +556,14 @@ def _profile_data(equilibrium: Path, *, emit: Callable[[str], None] | None = Non
     from dkx.inputs import parse_sfincs_input_text, sfincs_input_from_raw  # noqa: PLC0415
     from dkx.run import run_profile  # noqa: PLC0415
 
+    plasma = plasma_parameters(equilibrium) or dict(FALLBACK_PLASMA)
+    derived = "p(s) from the equilibrium" if "p_pa" in plasma else "generic reference"
+    if emit:
+        emit(f"    plasma ({derived}): n={plasma['n_hat']:.3g}e20 m^-3, "
+             f"T={plasma['t_hat']:.3g} keV, dn/dr={plasma['dn_dr']:+.3g}")  # fmt: skip
+        emit(f"    profile resolution: {DEFAULT_RESOLUTION_PROFILE}")
     text = _PROFILE_TEMPLATE.format(
-        equilibrium=str(equilibrium), **DEFAULT_RESOLUTION_PROFILE
+        equilibrium=str(equilibrium), **DEFAULT_RESOLUTION_PROFILE, **_plasma_keys(plasma)
     )
     try:
         # run_profile takes a path or an SfincsInput; parse_sfincs_input_text
@@ -476,10 +571,29 @@ def _profile_data(equilibrium: Path, *, emit: Callable[[str], None] | None = Non
         inp = sfincs_input_from_raw(parse_sfincs_input_text(text))
         run = _quiet(lambda: run_profile(inp, out_path=None, emit=None))
     except Exception as exc:  # pragma: no cover - geometry-dependent
+        # An out-of-memory here costs three panels, so retry once at half the
+        # angular resolution rather than giving up: |B| and a bootstrap number
+        # at reduced resolution beat three boxes saying "not present".  The
+        # reduced resolution is reported, because a panel at a resolution the
+        # caller did not choose must say so.
+        reduced = {"n_theta": 15, "n_zeta": 15, "n_xi": 25, "n_x": 5}
         if emit:
-            emit(f"    profile solve unavailable ({type(exc).__name__}); "
-                 f"|B|/bootstrap/flux panels will say so")  # fmt: skip
-        return {}
+            emit(f"    profile solve failed ({type(exc).__name__}); "
+                 f"retrying at {reduced}")  # fmt: skip
+        try:
+            inp = sfincs_input_from_raw(parse_sfincs_input_text(
+                _PROFILE_TEMPLATE.format(equilibrium=str(equilibrium), **reduced,
+                                         **_plasma_keys(plasma))
+            ))  # fmt: skip
+            run = _quiet(lambda: run_profile(inp, out_path=None, emit=None))
+            resolution = reduced
+        except Exception as exc2:
+            if emit:
+                emit(f"    still unavailable ({type(exc2).__name__}); "
+                     f"|B|/bootstrap/flux panels will say so")  # fmt: skip
+            return {}
+    else:
+        resolution = dict(DEFAULT_RESOLUTION_PROFILE)
     op, mom = run.operator, run.moments
     # The operator carries no angle grids, and b_hat here is (n_theta, n_zeta)
     # -- the OPPOSITE order from the output-file layout the other panel path
@@ -487,6 +601,7 @@ def _profile_data(equilibrium: Path, *, emit: Callable[[str], None] | None = Non
     # arange, which silently labels a publication figure in index units.
     nfp = _field_periods(equilibrium)
     data: dict[str, Any] = {
+        "resolution": resolution,
         "BHat": np.asarray(op.b_hat),
         "theta": np.linspace(0.0, 2.0 * np.pi, op.n_theta, endpoint=False),
         "zeta": np.linspace(0.0, 2.0 * np.pi / nfp, op.n_zeta, endpoint=False),
@@ -608,8 +723,12 @@ def radial_profiles(
     from dkx.api import batched_er_scan  # noqa: PLC0415
 
     er = np.asarray(er_values, dtype=float)
+    if emit:
+        emit(f"    radial-scan resolution: {DEFAULT_RESOLUTION_PROFILE}; "
+             f"{len(er)} Er points per surface")  # fmt: skip
+    plasma = plasma_parameters(equilibrium) or dict(FALLBACK_PLASMA)
     template = _PROFILE_TEMPLATE.format(
-        equilibrium=str(equilibrium), **DEFAULT_RESOLUTION_PROFILE
+        equilibrium=str(equilibrium), **DEFAULT_RESOLUTION_PROFILE, **_plasma_keys(plasma)
     ).replace("rN_wish = 0.5", "rN_wish = {radius}")  # fmt: skip
 
     out: list[dict[str, Any]] = []
@@ -738,8 +857,10 @@ def _panel_radial_fluxes(ax, profiles: list[dict[str, Any]],
     for s in range(n):
         q = [p["heat_flux"][s] for p in pts if "heat_flux" in p]
         if q:
-            twin.plot(r[: len(q)], q, styles[s % 3], ms=4, ls="--", alpha=0.75,
-                      color=f"C{s + n}", label=rf"$Q$ {names[s]}")  # fmt: skip
+            # marker only in the fmt: passing "o-" together with ls="--" makes
+            # matplotlib warn that the linestyle is defined twice.
+            twin.plot(r[: len(q)], q, marker=styles[s % 3][0], ms=4, ls="--",
+                      alpha=0.75, color=f"C{s + n}", label=rf"$Q$ {names[s]}")  # fmt: skip
     twin.set_ylabel(r"$Q_s$  [heat flux]")
     ax.set_title("particle and heat flux at the ambipolar root", fontsize=9)
     handles = ax.get_lines() + twin.get_lines()
