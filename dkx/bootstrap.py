@@ -38,7 +38,8 @@ import numpy as np
 
 from dkx.units import PARALLEL_CURRENT
 
-__all__ = ["DEFAULT_ER_BRACKET", "DEFAULT_RESOLUTION", "KineticBootstrapCurrent",
+__all__ = ["DEFAULT_COLLISION_OPERATOR", "DEFAULT_ER_BRACKET", "DEFAULT_RESOLUTION",
+           "KineticBootstrapCurrent",
            "plot_kinetic_bootstrap_current"]  # fmt: skip
 
 #: Grid for one bootstrap-current solve.  Nxi >= Nzeta because the Legendre
@@ -49,6 +50,26 @@ DEFAULT_RESOLUTION: dict[str, int] = {"n_theta": 21, "n_zeta": 31, "n_xi": 32, "
 #: ``E_r`` values (kV/m) bracketing the ion root, used only when the ambipolar
 #: root is requested.
 DEFAULT_ER_BRACKET: tuple[float, ...] = (-8.0, -4.0, -2.0, -1.0, -0.4, 0.4, 1.0, 2.0)
+
+#: The full linearized Fokker-Planck operator, and not a cheaper one.  The
+#: bootstrap current *is* the parallel-momentum moment, which is exactly what
+#: pitch-angle scattering gets wrong: it has no momentum-restoring term.
+#: Measured against Redl on the finite-beta precise-QA equilibrium
+#: ``wout_LandremanPaul2021_QA_beta2p5_bootstrap`` at s = 0.25/0.5/0.75, with
+#: profiles fixed by that equilibrium's own p(0):
+#:
+#: ===========================  ======================  =======
+#: ``collisionOperator``        ratio to Redl           cost
+#: ===========================  ======================  =======
+#: 1 (pitch-angle scattering)   1.47, 1.42, 1.35        29 s
+#: 3 (Sugama)                   0.74, 0.77, 0.80        62 s
+#: **0 (Fokker-Planck)**        **0.93, 0.95, 0.98**    56 s
+#: ===========================  ======================  =======
+#:
+#: Redl is a fit to Fokker-Planck calculations, so 2-7% is the agreement to
+#: expect and 35-47% is a bias, not a physical difference.  Under 2x the cost
+#: buys it.
+DEFAULT_COLLISION_OPERATOR: int = 0
 
 #: Residual scale in A T/m^2: one MA T/m^2, so a residual row *is* the surface's
 #: ``<j.B>`` in the units VMEX plots it in.  Fixed rather than derived from the
@@ -140,7 +161,7 @@ class KineticBootstrapCurrent:
     ambipolar: bool = False
     er_values: Sequence[float] = DEFAULT_ER_BRACKET
     reference_current: float = DEFAULT_REFERENCE_CURRENT
-    collision_operator: int = 1
+    collision_operator: int = DEFAULT_COLLISION_OPERATOR
     verbose: bool = False
 
     name = "j_boot_dkx"

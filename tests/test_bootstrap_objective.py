@@ -123,3 +123,18 @@ def test_evaluate_is_memoized_per_equilibrium_object(monkeypatch, tmp_path):
     second = Equilibrium()
     term.residuals(second)
     assert calls == [0.3, 0.7, 0.3, 0.7]
+
+
+def test_the_default_collision_operator_is_fokker_planck():
+    """PAS has no momentum-restoring term, and <j.B> IS the momentum moment.
+
+    Measured against Redl on a finite-beta precise-QA equilibrium, pitch-angle
+    scattering overestimates the bootstrap current by 35-47% while the full
+    linearized Fokker-Planck operator agrees to 2-7%, for under twice the cost.
+    A cheaper default here would bias every optimization that uses this term.
+    """
+    from dkx.bootstrap import DEFAULT_COLLISION_OPERATOR
+
+    assert DEFAULT_COLLISION_OPERATOR == 0
+    deck = KineticBootstrapCurrent(_Profiles()).namelist("/w.nc", 0.5, er=0.0)
+    assert "collisionOperator = 0" in deck

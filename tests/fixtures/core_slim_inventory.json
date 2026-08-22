@@ -715,7 +715,7 @@
     },
     {
       "path": "dkx/bootstrap.py",
-      "lines_at_audit": 334,
+      "lines_at_audit": 355,
       "category": "core",
       "action": "retain",
       "public_imports": [],

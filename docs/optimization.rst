@@ -174,6 +174,41 @@ quasisymmetric calculations, and a quasi-isodynamic field is not
 quasisymmetric, so there the analytic profile is an extrapolation while the DKX
 profile is a solve of the drift-kinetic equation on the actual geometry.
 
+Cross-check against Redl
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+On a *quasi-axisymmetric* boundary the two should agree, and that is the check
+that the coupling carries the right units, radial coordinate and gradient
+convention.  Measured on the finite-beta precise-QA equilibrium
+``wout_LandremanPaul2021_QA_beta2p5_bootstrap`` (beta = 2.5%) at
+:math:`s = 0.25, 0.5, 0.75`, with ``KineticProfiles`` amplitudes fixed by that
+equilibrium's own :math:`p(0) = 721` kPa and :math:`E_r = 0`:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 36 24
+
+   * - ``collisionOperator``
+     - DKX / Redl
+     - cost (3 surfaces)
+   * - 1, pitch-angle scattering
+     - 1.47, 1.42, 1.35
+     - 29 s
+   * - 3, Sugama
+     - 0.74, 0.77, 0.80
+     - 62 s
+   * - **0, full linearized Fokker-Planck** (default)
+     - **0.93, 0.95, 0.98**
+     - 56 s
+
+Redl is a fit to Fokker-Planck calculations, so 2-7% is the agreement to expect.
+The 35-47% excess from pitch-angle scattering is a bias, not a physical
+difference: the bootstrap current *is* the parallel-momentum moment, and PAS has
+no momentum-restoring term.  That is why
+:data:`dkx.bootstrap.DEFAULT_COLLISION_OPERATOR` is 0 despite costing more.
+Doubling the grid moved the Fokker-Planck numbers by under 3.5%, so the
+comparison is resolution-converged rather than a coincidence of the coarse grid.
+
 Objective Terms
 ---------------
 
