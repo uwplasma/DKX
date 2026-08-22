@@ -421,3 +421,78 @@ def test_a_real_pressure_profile_is_still_used(tmp_path):
     plasma, source = resolve_plasma(path)
     assert source == "p(s) from the equilibrium"
     assert plasma["n_hat"] > 0.1  # 1e20-scale, not 1e-11
+
+
+def test_the_pressure_split_gives_the_temperature_a_gradient(tmp_path):
+    """A constant T zeroes dT/ds, which is most of the bootstrap drive.
+
+    With T fixed the kinetic current comes out an order of magnitude under the
+    equilibrium's own, and the overlay reads as a physics discrepancy instead of
+    an artifact of the assumed profile.
+    """
+    netCDF4 = pytest.importorskip("netCDF4")
+    from dkx.representative import DEFAULT_T_AXIS_KEV, plasma_parameters
+
+    path = tmp_path / "wout_beta.nc"
+    with netCDF4.Dataset(path, "w") as handle:
+        handle.createDimension("radius", 21)
+        pres = handle.createVariable("presf", "f8", ("radius",))
+        pres[:] = 7.0e5 * (1.0 - np.linspace(0.0, 1.0, 21) ** 2)
+
+    plasma = plasma_parameters(path, 0.5)
+    # Both profiles fall wherever the pressure falls: the power-law split cannot
+    # invent a hollow density the way a linear T against a flat-topped p does.
+    assert plasma["dt_ds"] < 0.0 and plasma["dn_ds"] < 0.0
+    assert 0.0 < plasma["t_hat"] < DEFAULT_T_AXIS_KEV
+    # T ~ p^(1/3) at s = r^2 = 0.25, where p/p(0) = 1 - 0.25^2.
+    assert plasma["t_hat"] == pytest.approx(
+        DEFAULT_T_AXIS_KEV * (1.0 - 0.25**2) ** (1.0 / 3.0), rel=1e-3)
+
+
+def test_the_profile_deck_asks_for_the_gradient_coordinate_it_supplies():
+    """dNHatdpsiNs needs inputRadialCoordinateForGradients = 1, in &geometryParameters.
+
+    With the wrong coordinate the gradients are ignored and every moment comes
+    back at ~1e-20; with the key in &physicsParameters it is not read at all.
+    A d/drHat key fed a d/drN number is a factor of aHat -- 0.17 on a compact
+    device, so a six-fold error in the drive rather than an obvious failure.
+    """
+    from dkx.inputs import sfincs_input_from_raw
+    from dkx.namelist import parse_sfincs_input_text
+    from dkx.representative import DEFAULT_RESOLUTION_PROFILE, FALLBACK_PLASMA, _PROFILE_TEMPLATE
+    from dkx.representative import _plasma_keys
+
+    text = _PROFILE_TEMPLATE.format(
+        equilibrium="/w.nc", **DEFAULT_RESOLUTION_PROFILE, **_plasma_keys(dict(FALLBACK_PLASMA)))
+    parsed = sfincs_input_from_raw(parse_sfincs_input_text(text))
+    assert int(parsed.geometry.input_radial_coordinate_for_gradients) == 1
+    assert len(parsed.species.d_n_hat_d_psi_ns) == 2
+    assert len(parsed.species.d_t_hat_d_psi_ns) == 2
+    assert all(v < 0.0 for v in parsed.species.d_t_hat_d_psi_ns)
+    # The bootstrap current is the parallel-momentum moment; PAS has no
+    # momentum-restoring term and runs 35-47% high against Redl.
+    assert int(parsed.physics.collision_operator) == 0
+
+
+def test_equilibrium_scalars_reads_the_wout_constants_the_units_need(tmp_path):
+    """psiAHat, aHat and jdotb: without these there is no dimensional overlay.
+
+    Nothing else in this module imports the function, so a refactor can delete
+    it and every other test still passes -- which is exactly what happened once.
+    """
+    netCDF4 = pytest.importorskip("netCDF4")
+    from dkx.representative import equilibrium_scalars
+
+    path = tmp_path / "wout_scalars.nc"
+    with netCDF4.Dataset(path, "w") as handle:
+        handle.createDimension("radius", 4)
+        handle.createVariable("phi", "f8", ("radius",))[:] = [0.0, 0.5, 1.0, 2.0 * np.pi]
+        handle.createVariable("Aminor_p", "f8", ())[...] = 0.42
+        handle.createVariable("jdotb", "f8", ("radius",))[:] = [-1.0, -2.0, -3.0, -4.0]
+
+    scalars = equilibrium_scalars(path)
+    assert scalars["psi_a_hat"] == pytest.approx(1.0)  # phi(ns) / 2 pi
+    assert scalars["a_hat"] == pytest.approx(0.42)
+    assert scalars["jdotb"].tolist() == [-1.0, -2.0, -3.0, -4.0]
+    assert scalars["jdotb_s"][0] == 0.0 and scalars["jdotb_s"][-1] == 1.0
+    assert equilibrium_scalars(tmp_path / "absent.nc") == {}

@@ -76,16 +76,23 @@ DEFAULT_RESOLUTION = {"n_theta": 25, "n_zeta": 25, "n_xi": 41}
 DEFAULT_RESOLUTION_PROFILE = {"n_theta": 21, "n_zeta": 31, "n_xi": 24, "n_x": 5}
 
 #: Generic fallback plasma, used only when the equilibrium carries no pressure.
-FALLBACK_PLASMA = {"n_hat": 1.0, "t_hat": 1.0, "dn_dr": -0.5, "dt_dr": -1.0}
+FALLBACK_PLASMA = {"n_hat": 1.0, "t_hat": 1.0, "dn_ds": -0.5, "dt_ds": -1.0}
 
 #: A deuterium/electron pair at modest collisionality, with the density and
 #: temperature gradients that make the bootstrap current nonzero.  The gradient
-#: keys must match ``inputRadialCoordinateForGradients``: naming ``dNHatdrHats``
-#: while asking for coordinate 3 leaves the gradients at ZERO and the whole
-#: solve returns ~1e-20 -- a run that completes and drives nothing.  Follow the
-#: upstream decks, which omit the key and use ``dNHatdrHats``.  Deliberately
-#: generic: this panel says "here is what this equilibrium does", not "here are
-#: your machine's parameters", and the header records that.
+#: keys must match ``inputRadialCoordinateForGradients``, and the key lives in
+#: ``&geometryParameters``: a mismatch leaves the gradients at ZERO and the
+#: whole solve returns ~1e-20 -- a run that completes and drives nothing.
+#: Coordinate 1 is ``psiN = s``, which is what the wout tabulates ``presf`` in,
+#: so the profile derivative needs no chain rule and cannot pick up a stray
+#: factor of ``aHat``.
+#:
+#: ``collisionOperator = 0`` is the full linearized Fokker-Planck operator.
+#: Pitch-angle scattering is cheaper and fine for ``D11``, but the bootstrap
+#: current is the parallel-momentum moment and PAS has no momentum-restoring
+#: term: measured against Redl on a finite-beta precise-QA equilibrium it runs
+#: 35-47% high, where Fokker-Planck lands within 2-7%
+#: (:data:`dkx.bootstrap.DEFAULT_COLLISION_OPERATOR`).
 _PROFILE_TEMPLATE = """&general
   RHSMode = 1
 /
@@ -94,6 +101,7 @@ _PROFILE_TEMPLATE = """&general
   equilibriumFile = "{equilibrium}"
   VMECRadialOption = 0
   inputRadialCoordinate = 3
+  inputRadialCoordinateForGradients = 1
   rN_wish = 0.5
 /
 &speciesParameters
@@ -101,15 +109,15 @@ _PROFILE_TEMPLATE = """&general
   mHats = 1.0d+0 5.446170214d-4
   nHats = {n_hat:.6g} {n_hat:.6g}
   THats = {t_hat:.6g} {t_hat:.6g}
-  dNHatdrHats = {dn_dr:.6g} {dn_dr:.6g}
-  dTHatdrHats = {dt_dr:.6g} {dt_dr:.6g}
+  dNHatdpsiNs = {dn_ds:.6g} {dn_ds:.6g}
+  dTHatdpsiNs = {dt_ds:.6g} {dt_ds:.6g}
 /
 &physicsParameters
   Delta = 4.5694d-3
   alpha = 1.0d+0
   nu_n = 8.4774d-3
   Er = 0.0d+0
-  collisionOperator = 1
+  collisionOperator = 0
 /
 &resolutionParameters
   Ntheta = {n_theta}
@@ -404,7 +412,7 @@ def plot_representative(
         if plasma:
             bits.append(
                 f"n={plasma['n_hat']:.3g}e20 m$^{{-3}}$, T$_i$=T$_e$={plasma['t_hat']:.3g} keV "
-                f"(T constant), dn/dr={plasma['dn_dr']:+.3g}"
+                f"dn/ds={plasma['dn_ds']:+.3g}, dT/ds={plasma['dt_ds']:+.3g}"
             )
         for name, res in (resolutions or {}).items():
             bits.append(f"{name} " + "x".join(str(v) for v in res.values()))
@@ -531,10 +539,26 @@ def run_representative(
 #: on the figure because it is an assumption, not a measurement.
 DEFAULT_T_AXIS_KEV = 2.0
 
+#: Exponent splitting the pressure between temperature and density:
+#: ``T ~ p^TEMPERATURE_PRESSURE_EXPONENT`` and therefore ``n ~ p^(1-e)``.
+#: One third gives ``n ~ p^(2/3)``, the conventional mild split.  The exponent
+#: form is what keeps the closure well behaved: both profiles then fall wherever
+#: the pressure falls.  A temperature falling *linearly* against a flat-topped
+#: pressure makes ``n = p/(2T)`` rise off-axis, i.e. invents a hollow density.
+TEMPERATURE_PRESSURE_EXPONENT = 1.0 / 3.0
+
+
+def _temperature(p_pa: float, p_axis: float) -> float:
+    """``T(s) = T_0 (p(s)/p(0))^e`` in keV --- the assumed half of the closure."""
+    if p_axis <= 0.0:
+        return DEFAULT_T_AXIS_KEV
+    ratio = max(float(p_pa) / float(p_axis), 0.0)
+    return DEFAULT_T_AXIS_KEV * ratio**TEMPERATURE_PRESSURE_EXPONENT
+
 
 def _plasma_keys(plasma: dict) -> dict:
     """Only the keys the namelist template interpolates."""
-    return {k: plasma[k] for k in ("n_hat", "t_hat", "dn_dr", "dt_dr")}
+    return {k: plasma[k] for k in ("n_hat", "t_hat", "dn_ds", "dt_ds")}
 
 
 #: Smallest on-axis density (in 1e20 m^-3) the pressure split may produce.
@@ -547,12 +571,31 @@ VACUUM_DENSITY_FLOOR = 1.0e-3
 
 
 def plasma_parameters(equilibrium: Path, radius: float = 0.5) -> dict[str, float]:
-    """Density and temperature at ``r/a`` from the equilibrium's own pressure.
+    r"""Density and temperature at ``r/a`` from the equilibrium's own pressure.
 
     The wout carries ``presf`` in Pascals; a drift-kinetic run needs ``n`` and
-    ``T`` separately, and pressure alone does not determine them.  The stated
-    assumption is quasineutral hydrogen with ``T_i = T_e = T``, ``T`` fixed on
-    axis at :data:`DEFAULT_T_AXIS_KEV` and constant, so ``n(s) = p(s) / (2 T)``.
+    ``T`` separately, and pressure alone does not determine them.  One equation,
+    two unknowns, so the closure is stated rather than hidden: quasineutral
+    hydrogen with ``T_i = T_e = T`` and the pressure split by a power law,
+
+    .. math:: T(s) = T_0 (p(s)/p(0))^{e},
+              \qquad n(s) = p(s) / (2 T(s)) \propto p^{1-e},
+
+    with ``T_0 =`` :data:`DEFAULT_T_AXIS_KEV` and ``e =``
+    :data:`TEMPERATURE_PRESSURE_EXPONENT`.  Only ``T_0`` is free, and the figure
+    states it.
+
+    The temperature must carry a gradient.  A *constant* ``T`` is the simpler
+    closure and it is wrong for this figure: the bootstrap current is driven
+    mostly by ``dT/dr``, so ``dT/ds = 0`` reports a device with almost no
+    bootstrap current and puts the kinetic curve an order of magnitude under
+    the equilibrium's own.
+
+    Gradients are returned as ``d/d psiN`` with ``psiN = s``, matching
+    ``inputRadialCoordinateForGradients = 1``.  That is the coordinate
+    ``presf`` is tabulated in, so no chain rule and no stray ``aHat`` --- one
+    factor of ``aHat`` (0.17 on a compact device) is a six-fold error in the
+    drive.
 
     Returns ``{}`` when the file carries no usable pressure --- absent, or below
     :data:`VACUUM_DENSITY_FLOOR` --- in which case the caller keeps the generic
@@ -572,19 +615,29 @@ def plasma_parameters(equilibrium: Path, radius: float = 0.5) -> dict[str, float
     if pres.size < 2 or not np.any(pres > 0.0):
         return {}
     s_grid = np.linspace(0.0, 1.0, pres.size)
-    p_pa = float(np.interp(radius**2, s_grid, pres))          # r/a = sqrt(s)
-    t_kev = DEFAULT_T_AXIS_KEV
-    # n [1e20 m^-3] = p / (2 T) with T in Joules.
-    n_20 = p_pa / (2.0 * t_kev * 1.0e3 * 1.602176634e-19) / 1.0e20
+    p_axis = float(pres[0])
+
+    def profiles(s: float) -> tuple[float, float]:
+        """``(n [1e20 m^-3], T [keV])`` implied by ``p(s)`` under the closure."""
+        p_pa = float(np.interp(s, s_grid, pres))
+        t_kev = _temperature(p_pa, p_axis)
+        if t_kev <= 0.0:
+            return 0.0, 0.0
+        return p_pa / (2.0 * t_kev * 1.0e3 * 1.602176634e-19) / 1.0e20, t_kev
+
+    s0 = float(np.clip(radius, 0.0, 1.0)) ** 2  # r/a = sqrt(s)
+    n_20, t_kev = profiles(s0)
     if not np.isfinite(n_20) or n_20 < VACUUM_DENSITY_FLOOR:
         return {}
-    # Logarithmic gradients from the pressure profile itself, at fixed T.
     eps = 1.0e-3
-    lo = float(np.interp(max(radius - eps, 0.0) ** 2, s_grid, pres))
-    hi = float(np.interp(min(radius + eps, 1.0) ** 2, s_grid, pres))
-    dn_dr = (hi - lo) / (2.0 * eps) / (2.0 * t_kev * 1.0e3 * 1.602176634e-19) / 1.0e20
-    return {"n_hat": n_20, "t_hat": t_kev, "dn_dr": dn_dr, "dt_dr": 0.0,
-            "p_pa": p_pa, "radius": radius}  # fmt: skip
+    lo, hi = max(s0 - eps, 0.0), min(s0 + eps, 1.0)
+    n_lo, t_lo = profiles(lo)
+    n_hi, t_hi = profiles(hi)
+    return {
+        "n_hat": n_20, "t_hat": t_kev,
+        "dn_ds": (n_hi - n_lo) / (hi - lo), "dt_ds": (t_hi - t_lo) / (hi - lo),
+        "p_pa": float(np.interp(s0, s_grid, pres)), "radius": float(radius),
+    }  # fmt: skip
 
 
 def equilibrium_scalars(equilibrium: Path) -> dict[str, Any]:
@@ -679,7 +732,8 @@ def _profile_data(equilibrium: Path, *, emit: Callable[[str], None] | None = Non
     plasma, derived = resolve_plasma(equilibrium)
     if emit:
         emit(f"    plasma ({derived}): n={plasma['n_hat']:.3g}e20 m^-3, "
-             f"T={plasma['t_hat']:.3g} keV, dn/dr={plasma['dn_dr']:+.3g}")  # fmt: skip
+             f"T={plasma['t_hat']:.3g} keV, dn/ds={plasma['dn_ds']:+.3g}, "
+             f"dT/ds={plasma['dt_ds']:+.3g}")  # fmt: skip
         emit(f"    profile resolution: {DEFAULT_RESOLUTION_PROFILE}")
     text = _PROFILE_TEMPLATE.format(
         equilibrium=str(equilibrium), **DEFAULT_RESOLUTION_PROFILE, **_plasma_keys(plasma)
