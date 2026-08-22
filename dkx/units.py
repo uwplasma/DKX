@@ -104,6 +104,14 @@ def flux_psi_hat_to_r_hat(*, psi_a_hat: float, a_hat: float, r_n: float) -> floa
     Multiply a ``*_psiHat`` flux by this to obtain the ``*_rHat`` one, exactly
     as ``diagnostics.F90:703`` does.  ``r_n = sqrt(psiN)`` is the normalized
     effective minor radius of the surface.
+
+    **The factor carries a sign, and that is the point.**  ``psiAHat`` follows
+    the wout's toroidal-flux orientation: it is ``+0.083`` for the precise-QA
+    reference and ``-0.385`` for W7-X standard configuration.  A flux reported
+    against ``psiHat`` therefore changes sign with a convention rather than with
+    the physics, while the ``rHat`` one is outward-positive on both.  Reporting
+    the ``rHat`` flux is what makes "the particle flux is outward" a statement
+    about the device instead of about the file.
     """
     from dkx.constants import RadialCoordinates  # noqa: PLC0415
 

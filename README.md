@@ -45,7 +45,7 @@ fetched from a GitHub release on first use and cached under `~/.cache/dkx/data`
 ## Quickstart
 
 ```bash
-dkx wout_XXX.nc                          # equilibrium in, publication panels out (~60 s)
+dkx wout_XXX.nc                          # equilibrium in, publication panels out (~45 s)
 dkx --plot sfincsOutput.h5               # panels from an existing DKX or Fortran run
 dkx input.namelist --out sfincsOutput.h5 # solve one deck, write SFINCS-keyed HDF5/NetCDF
 ```
@@ -57,8 +57,10 @@ the ambipolar root, against radius — the bootstrap current in kA/m² beside th
 VMEC equilibrium's own, and the species fluxes in SI units. Density and
 temperature come from the equilibrium's own pressure when it has one, and the
 figure says which. `--full` widens the grid; `--plot` reads DKX and Fortran
-SFINCS output alike. Measured 63.5 s on W7-X (10-core M4): 18.5 s for the
-21-point scan, 11.1 s for the `|B|` solve, 33.2 s for the radial scan.
+SFINCS output alike. Measured on a 10-core M4 with the Fokker–Planck operator
+throughout: 37.3 s on W7-X and 45.8 s on a finite-β precise-QA equilibrium, the
+latter split 16.4 s for the 21-point scan, 6.0 s for the `|B|` solve, and 22.5 s
+for the radial scan's 50 drift-kinetic solves.
 
 The same solve from Python (mirrors
 [`examples/getting_started/run_tokamak.py`](examples/getting_started/run_tokamak.py),

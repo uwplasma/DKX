@@ -195,7 +195,9 @@ def test_readme_canonical_benchmark_claims_match_recorded_measurements() -> None
     # lines here.  345 adds the measured `dkx wout` cost split and the
     # KineticBootstrapCurrent snippet: "one import and one tuple" is a claim
     # only the snippet can settle, and it is the whole point of the coupling.
-    assert len(readme.splitlines()) <= 345
+    # 347 restates that cost for two equilibria, because the vacuum and the
+    # finite-beta cases differ and one number for both would be a guess.
+    assert len(readme.splitlines()) <= 347
 
     # The canonical evidence also lands in the performance docs page.
     performance = (REPO_ROOT / "docs" / "performance.rst").read_text()

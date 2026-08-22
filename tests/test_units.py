@@ -60,3 +60,16 @@ def test_root_fsab2_returns_none_without_the_pair():
     assert _root_fsab2({"FSABjHat": np.array([1.0])}) is None
     assert _root_fsab2({"FSABjHat": np.zeros(3),
                         "FSABjHatOverRootFSAB2": np.zeros(3)}) is None  # fmt: skip
+
+
+def test_the_flux_coordinate_factor_carries_the_wout_orientation_sign():
+    """psiAHat follows the wout's flux orientation; the rHat flux must not.
+
+    psiAHat is +0.083 for the precise-QA reference and -0.385 for W7-X standard
+    configuration, so a flux reported against psiHat changes sign with a file
+    convention.  The rHat conversion flips it back, which is why the panels and
+    the output file report rHat.
+    """
+    right_handed = units.flux_psi_hat_to_r_hat(psi_a_hat=0.0826, a_hat=0.170, r_n=0.5)
+    left_handed = units.flux_psi_hat_to_r_hat(psi_a_hat=-0.3849, a_hat=0.513, r_n=0.5)
+    assert right_handed > 0.0 and left_handed < 0.0

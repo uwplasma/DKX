@@ -39,15 +39,27 @@ table as a floor on the spatial axes, not as permission to cut ``Nxi``.
 
 Cost
 ----
-Measured on W7-X standard configuration (10-core M4, float64), the three stages
-are **18.5 s** for the 21-point monoenergetic scan (0.8 s per solve after a
-1.8 s cold compile), **11.1 s** for the ``|B|`` profile solve, and **33.2 s**
-for the radial scan (5 surfaces x 8 ``E_r`` points): **63.5 s** in total.
+Measured on a 10-core M4 at float64, Fokker-Planck operator throughout:
 
-A *vacuum* equilibrium used to take 23 minutes instead, because VMEC writes
-``presf`` of order 1e-6 Pa rather than zero and the pressure split turned that
-into a collisionless 1e9 m^-3 plasma.  :data:`VACUUM_DENSITY_FLOOR` now catches
-that and :func:`resolve_plasma` says so on the figure.
+=====================================  ========  =========  ========  =======
+case                                   mono      ``|B|``    radial    total
+=====================================  ========  =========  ========  =======
+W7-X standard (vacuum, generic plasma)  16.6 s    2.0 s      17.8 s    37.3 s
+precise-QA beta=2.5% (plasma from p)    16.4 s    6.0 s      22.5 s    45.8 s
+=====================================  ========  =========  ========  =======
+
+The radial column is 5 surfaces x 10 ``E_r`` points --- 50 drift-kinetic solves
+--- and it fits only because of the grid in
+:data:`DEFAULT_RESOLUTION_PROFILE`.  A Fokker-Planck solve costs 25 s rather
+than 1 s at ``21x31x24x5``, which is 20 minutes for the same scan.
+
+Two earlier configurations were slower *and* wrong, which is worth recording.  A
+*vacuum* equilibrium took **23 minutes**: VMEC writes ``presf`` of order 1e-6 Pa
+rather than zero, and the pressure split turned that into a collisionless
+1e9 m^-3 plasma (:data:`VACUUM_DENSITY_FLOOR` now catches it, and
+:func:`resolve_plasma` says so on the figure).  And the 63 s this file used to
+quote was measured with pitch-angle scattering, which is 35-47% high on the
+bootstrap current.
 
 Monoenergetic runs take ``nuPrime``/``EStar``, **not** ``nu_n``/``Er`` --- the
 upstream decks say so in a comment, and varying ``nu_n`` here changes nothing at
@@ -73,7 +85,28 @@ DEFAULT_RESOLUTION = {"n_theta": 25, "n_zeta": 25, "n_xi": 41}
 
 #: Resolution for the single RHSMode=1 solve behind the bootstrap/flux panels.
 #: Smaller than the monoenergetic grid because it runs once, not 21 times.
-DEFAULT_RESOLUTION_PROFILE = {"n_theta": 21, "n_zeta": 31, "n_xi": 24, "n_x": 5}
+DEFAULT_RESOLUTION_PROFILE = {"n_theta": 13, "n_zeta": 19, "n_xi": 13, "n_x": 4}
+
+#: ``--full`` resolution for the same solves.  The two are a measured trade, not
+#: a guess.  On the precise-QA finite-beta reference at ``r/a = 0.25`` with the
+#: Fokker-Planck operator, against a ``21x31x24x5`` reference:
+#:
+#: ===================  =========  ==========  =================  ==========
+#: grid                 unknowns   s / solve   ``<j.B>`` error    root error
+#: ===================  =========  ==========  =================  ==========
+#: ``21x31x24x5``       156,240    25.3        reference          reference
+#: ``15x23x16x5``        55,200     9.26       0.1%               5%
+#: ``13x19x13x4``        25,688     1.00       2.8%               24%
+#: ===================  =========  ==========  =================  ==========
+#:
+#: The default takes the last row because **the root is the sensitive quantity
+#: and nothing reported at it is**: ``<j.B>`` moves 0.6% between ``E_r = -3``
+#: and ``-6`` kV/m, so a 24% error in the root costs under 1% in the current and
+#: the fluxes drawn there.  ``--full`` takes the middle row when the ambipolar
+#: field itself is the number wanted.  The 25x jump between the top two rows is
+#: a solver-route change, not smooth scaling, which is why the default sits
+#: below it rather than halfway.
+FULL_RESOLUTION_PROFILE = {"n_theta": 15, "n_zeta": 23, "n_xi": 16, "n_x": 5}
 
 #: Generic fallback plasma, used only when the equilibrium carries no pressure.
 FALLBACK_PLASMA = {"n_hat": 1.0, "t_hat": 1.0, "dn_drhat": -0.5, "dt_drhat": -1.0}
@@ -505,10 +538,10 @@ def run_representative(
     # three "not present in this output" boxes, which is not a representative
     # run of anything.
     done = stage("  profile solve for |B|")
-    data = _profile_data(equilibrium, emit=emit)
+    data = _profile_data(equilibrium, full=full, emit=emit)
     done()
     done = stage("  radial scan: ambipolar Er, bootstrap and fluxes at the root")
-    profiles = radial_profiles(equilibrium, emit=emit)
+    profiles = radial_profiles(equilibrium, full=full, emit=emit)
     done()
     plasma, plasma_source = resolve_plasma(equilibrium)
 
@@ -517,7 +550,8 @@ def run_representative(
         out, data=data, scan=scan, profiles=profiles,
         plasma=plasma, plasma_source=plasma_source,
         resolutions={"monoenergetic": DEFAULT_RESOLUTION,
-                     "profiles": DEFAULT_RESOLUTION_PROFILE},
+                     "profiles": FULL_RESOLUTION_PROFILE if full
+                     else DEFAULT_RESOLUTION_PROFILE},
         title=f"DKX representative run — {equilibrium.name}",
     )  # fmt: skip
     # Always leave the numbers behind, not only the picture: a figure cannot be
@@ -525,6 +559,7 @@ def run_representative(
     written = write_representative_output(
         out.with_suffix(".h5"), scan=scan, profiles=profiles, data=data,
         equilibrium=equilibrium,
+        resolution_profile=FULL_RESOLUTION_PROFILE if full else DEFAULT_RESOLUTION_PROFILE,
     )  # fmt: skip
     if emit:
         emit(f" wrote {written}")
@@ -743,7 +778,8 @@ def _field_periods(equilibrium: Path) -> int:
         return 1
 
 
-def _profile_data(equilibrium: Path, *, emit: Callable[[str], None] | None = None) -> dict:
+def _profile_data(equilibrium: Path, *, full: bool = False,
+                  emit: Callable[[str], None] | None = None) -> dict:  # fmt: skip
     """Geometry plus one RHSMode=1 solve, for the panels the scan cannot fill.
 
     Returns ``{}`` rather than raising if the profile solve does not apply to
@@ -752,12 +788,13 @@ def _profile_data(equilibrium: Path, *, emit: Callable[[str], None] | None = Non
     from dkx.inputs import parse_sfincs_input_text, sfincs_input_from_raw  # noqa: PLC0415
     from dkx.run import run_profile  # noqa: PLC0415
 
+    resolution = FULL_RESOLUTION_PROFILE if full else DEFAULT_RESOLUTION_PROFILE
     plasma, derived = resolve_plasma(equilibrium)
     if emit:
         emit(f"    plasma: {plasma_summary(plasma, derived)}")
-        emit(f"    profile resolution: {DEFAULT_RESOLUTION_PROFILE}")
+        emit(f"    profile resolution: {resolution}")
     text = _PROFILE_TEMPLATE.format(
-        equilibrium=str(equilibrium), **DEFAULT_RESOLUTION_PROFILE, **_plasma_keys(plasma)
+        equilibrium=str(equilibrium), **resolution, **_plasma_keys(plasma)
     )
     try:
         # run_profile takes a path or an SfincsInput; parse_sfincs_input_text
@@ -770,7 +807,8 @@ def _profile_data(equilibrium: Path, *, emit: Callable[[str], None] | None = Non
         # at reduced resolution beat three boxes saying "not present".  The
         # reduced resolution is reported, because a panel at a resolution the
         # caller did not choose must say so.
-        reduced = {"n_theta": 15, "n_zeta": 15, "n_xi": 25, "n_x": 5}
+        reduced = {k: max(int(v * 2 / 3), 5 if k == "n_x" else 9)
+                   for k, v in resolution.items()}  # fmt: skip
         if emit:
             emit(f"    profile solve failed ({type(exc).__name__}); "
                  f"retrying at {reduced}")  # fmt: skip
@@ -780,14 +818,11 @@ def _profile_data(equilibrium: Path, *, emit: Callable[[str], None] | None = Non
                                          **_plasma_keys(plasma))
             ))  # fmt: skip
             run = _quiet(lambda: run_profile(inp, out_path=None, emit=None))
-            resolution = reduced
         except Exception as exc2:
             if emit:
                 emit(f"    still unavailable ({type(exc2).__name__}); "
                      f"|B|/bootstrap/flux panels will say so")  # fmt: skip
             return {}
-    else:
-        resolution = dict(DEFAULT_RESOLUTION_PROFILE)
     op, mom = run.operator, run.moments
     # The operator carries no angle grids, and b_hat here is (n_theta, n_zeta)
     # -- the OPPOSITE order from the output-file layout the other panel path
@@ -900,8 +935,15 @@ _TITLE_BAND = 0.10
 
 DEFAULT_SURFACES = (0.25, 0.4, 0.55, 0.7, 0.85)
 
-#: E_r values (kV/m) bracketing the ion root at every surface.
-DEFAULT_ER_BRACKET = (-8.0, -4.0, -2.0, -1.0, -0.4, 0.4, 1.0, 2.0)
+#: ``E_r`` values (kV/m) bracketing the ion root at every surface.
+#:
+#: Bounded below at -12 kV/m on purpose.  A Fokker-Planck solve at -25 kV/m on
+#: the precise-QA reference does not converge and returns ``<j.B>`` of +30.7
+#: against -0.13 everywhere else -- at three different grids, with three
+#: different values, so it is a failed solve rather than physics.  Left in the
+#: bracket it manufactures a sign change, and :func:`_ambipolar_roots` reports
+#: the most negative crossing, so that fake root would win.
+DEFAULT_ER_BRACKET = (-12.0, -8.0, -6.0, -4.0, -2.0, -1.0, -0.4, 0.4, 1.0, 2.0)
 
 
 def _interp_at_root(er: np.ndarray, values: np.ndarray, root: float) -> float:
@@ -954,6 +996,7 @@ def radial_profiles(
     *,
     surfaces: Sequence[float] = DEFAULT_SURFACES,
     er_values: Sequence[float] = DEFAULT_ER_BRACKET,
+    full: bool = False,
     emit: Callable[[str], None] | None = None,
 ) -> list[dict[str, Any]]:
     """Ambipolar ``E_r`` and the moments evaluated *at that root*, per surface.
@@ -970,14 +1013,15 @@ def radial_profiles(
     from dkx.units import CURRENT_DENSITY, HEAT_FLUX, PARTICLE_FLUX  # noqa: PLC0415
     from dkx.units import flux_psi_hat_to_r_hat  # noqa: PLC0415
 
+    resolution = FULL_RESOLUTION_PROFILE if full else DEFAULT_RESOLUTION_PROFILE
     er = np.asarray(er_values, dtype=float)
     if emit:
-        emit(f"    radial-scan resolution: {DEFAULT_RESOLUTION_PROFILE}; "
+        emit(f"    radial-scan resolution: {resolution}; "
              f"{len(er)} Er points per surface")  # fmt: skip
     plasma, _derived = resolve_plasma(equilibrium)
     geometry = equilibrium_scalars(equilibrium)
     template = _PROFILE_TEMPLATE.format(
-        equilibrium=str(equilibrium), **DEFAULT_RESOLUTION_PROFILE, **_plasma_keys(plasma)
+        equilibrium=str(equilibrium), **resolution, **_plasma_keys(plasma)
     ).replace("rN_wish = 0.5", "rN_wish = {radius}")  # fmt: skip
 
     out: list[dict[str, Any]] = []
@@ -1182,6 +1226,7 @@ def write_representative_output(
     profiles: list[dict[str, Any]] | None = None,
     data: dict[str, Any] | None = None,
     equilibrium: str | Path | None = None,
+    resolution_profile: dict[str, int] | None = None,
 ) -> Path:
     """Persist the numbers behind the figure.
 
@@ -1197,7 +1242,7 @@ def write_representative_output(
     payload: dict[str, Any] = {
         "equilibrium": str(equilibrium) if equilibrium else "",
         "resolution_monoenergetic": DEFAULT_RESOLUTION,
-        "resolution_profile": DEFAULT_RESOLUTION_PROFILE,
+        "resolution_profile": resolution_profile or DEFAULT_RESOLUTION_PROFILE,
         # The SI factors behind every "_kA_m2" / "_si" dataset, so the file can
         # be converted back to SFINCS units without consulting the source.
         "units": {"current_density_A_per_m2": units.CURRENT_DENSITY,
