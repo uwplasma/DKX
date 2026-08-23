@@ -45,16 +45,22 @@ fetched from a GitHub release on first use and cached under `~/.cache/dkx/data`
 ## Quickstart
 
 ```bash
-dkx wout_XXX.nc                          # equilibrium in, publication panels out (~25 s)
+dkx wout_XXX.nc                          # equilibrium in, publication panels out (~45 s)
 dkx --plot sfincsOutput.h5               # panels from an existing DKX or Fortran run
 dkx input.namelist --out sfincsOutput.h5 # solve one deck, write SFINCS-keyed HDF5/NetCDF
 ```
 
-`dkx wout_XXX.nc` writes `<name>.panels.png`: monoenergetic `D11/D31/D33` vs
-`nuPrime` across the 1/ν, plateau and Pfirsch–Schlüter regimes (a curve per
-`EStar`), `|B|` on the surface, the bootstrap current and the species fluxes, at
-resolutions taken from a convergence scan. `--full` widens the grid; `--plot`
-reads DKX and Fortran SFINCS output alike.
+`dkx wout_XXX.nc` writes `<name>.panels.png` and `<name>.panels.h5`:
+monoenergetic `D11/D31/D33` vs `nuPrime` across the 1/ν, plateau and
+Pfirsch–Schlüter regimes (a curve per `EStar`), `|B|` on the surface, and — at
+the ambipolar root, against radius — the bootstrap current in kA/m² beside the
+VMEC equilibrium's own, and the species fluxes in SI units. Density and
+temperature come from the equilibrium's own pressure when it has one, and the
+figure says which. `--full` widens the grid; `--plot` reads DKX and Fortran
+SFINCS output alike. Measured on a 10-core M4 with the Fokker–Planck operator
+throughout: 37.3 s on W7-X and 45.8 s on a finite-β precise-QA equilibrium, the
+latter split 16.4 s for the 21-point scan, 6.0 s for the `|B|` solve, and 22.5 s
+for the radial scan's 50 drift-kinetic solves.
 
 The same solve from Python (mirrors
 [`examples/getting_started/run_tokamak.py`](examples/getting_started/run_tokamak.py),
@@ -290,6 +296,20 @@ equilibrium → Boozer → kinetic chain.
 
 *Reproduce with `python examples/paper_benchmarks/bootstrap_consistency_kinetic_loop.py`
 (needs the optional `vmex` + `booz_xform_jax` companions).*
+
+To put that inside an optimizer instead of after it, `dkx.bootstrap.KineticBootstrapCurrent`
+is an objective term with the interface `vmex.optimize` expects, so a `vmex`
+optimization becomes drift-kinetic in one import and one tuple:
+
+```python
+from dkx.bootstrap import KineticBootstrapCurrent
+kinetic = KineticBootstrapCurrent(profiles, surfaces=[0.25, 0.5, 0.75])
+objective_function_terms.append((kinetic, 0.0, 1.0))   # target 0: minimize <j.B>
+```
+
+`profiles` is the same `vmex` `KineticProfiles` the Redl term takes.
+`examples/optimization/{QA,QH,QI}_optimization_bootstrap_dkx.py` are the three
+`vmex` bootstrap scripts with exactly that substitution.
 
 ## Examples
 
