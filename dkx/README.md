@@ -58,6 +58,8 @@ errors raised by `inputs.load_sfincs_input`. There is no legacy fallback.
 | `sensitivity.py` | JVP/VJP, adjoint, and implicit differentiation helpers. |
 | `plotting.py` | Output plotting used by the CLI and examples. |
 | `representative.py` | The `dkx wout_*.nc` representative run and the `dkx --plot` publication panels, for DKX and Fortran SFINCS output alike. |
+| `units.py` | The SFINCS reference set and the Hat-to-SI conversions; every dimensional number DKX reports goes through here. |
+| `bootstrap.py` | `KineticBootstrapCurrent`: the kinetic `<j.B>` as a `vmex.optimize` objective term, plus its overlay plot. |
 | `compare.py` | HDF5 comparison, frozen-reference parity, benchmark-table utilities. |
 | `io.py`, `namelist.py`, `input_compat.py`, `paths.py` | Output-file reading and generic dict serializers, SFINCS-style namelist parsing, input aliases, data/cache paths. |
 | `profiling.py` | Timers and memory probes. |

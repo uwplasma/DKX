@@ -127,6 +127,88 @@ directories:
      --qa-result-dir results/qa_opt_bootstrap_current_maxmode3/qa_only \
      --comparison-result-dir results/qa_opt_bootstrap_current_maxmode3/with_jdotb_current_objective
 
+Kinetic Bootstrap Current Inside A VMEX Optimization
+----------------------------------------------------
+
+The second layer above can also be run *inside* the optimizer rather than after
+it, when the bootstrap current is the quantity being designed against.
+:class:`dkx.bootstrap.KineticBootstrapCurrent` is an objective term with the
+interface ``vmex.core.optimize`` expects, so turning an existing
+``vmex/examples/optimization`` script into a drift-kinetic one is one import and
+one tuple:
+
+.. code-block:: python
+
+   from dkx.bootstrap import KineticBootstrapCurrent
+
+   kinetic = KineticBootstrapCurrent(profiles, surfaces=[0.25, 0.5, 0.75])
+   objective_function_terms.append((kinetic, 0.0, 1.0))
+
+``profiles`` is the same ``vmex.core.bootstrap.KineticProfiles`` object the Redl
+term takes --- polynomial coefficients in :math:`s` for
+:math:`n_e`, :math:`T_e` and :math:`T_i` --- so both models describe one plasma.
+The term returns :math:`\langle j_\parallel B\rangle` per surface in
+A T/m\ :sup:`2`, the unit of the VMEC ``jdotb`` profile, divided by a fixed
+``reference_current``; with target 0 the optimizer *minimizes* the kinetic
+bootstrap current.
+
+Two constraints follow from DKX being a host code rather than a traced one:
+
+- the problem must be built with ``derivative_method="finite_difference"``;
+  the implicit lane needs a traceable ``(state, runtime)`` term, which is what
+  ``RedlBootstrapMismatch.residuals_state`` provides and this term cannot.
+- each residual evaluation is one drift-kinetic solve per surface (per
+  ``E_r`` point with ``ambipolar=True``), so the cost is minutes per evaluation.
+  Keep ``surfaces`` short.
+
+The three shipped pairings are
+``examples/optimization/QA_optimization_bootstrap_dkx.py``,
+``QH_optimization_bootstrap_dkx.py`` and ``QI_optimization_bootstrap_dkx.py``,
+each the ``*_optimization_bootstrap.py`` script from the ``vmex`` examples with
+that one term swapped in and the Redl term kept in the reporter for comparison.
+Set ``DKX_VMEX_ROOT`` when ``vmex`` was installed from a wheel rather than a
+checkout.
+
+The substitution matters most for QI: the Redl formulae were fitted to
+quasisymmetric calculations, and a quasi-isodynamic field is not
+quasisymmetric, so there the analytic profile is an extrapolation while the DKX
+profile is a solve of the drift-kinetic equation on the actual geometry.
+
+Cross-check against Redl
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+On a *quasi-axisymmetric* boundary the two should agree, and that is the check
+that the coupling carries the right units, radial coordinate and gradient
+convention.  Measured on the finite-beta precise-QA equilibrium
+``wout_LandremanPaul2021_QA_beta2p5_bootstrap`` (beta = 2.5%) at
+:math:`s = 0.25, 0.5, 0.75`, with ``KineticProfiles`` amplitudes fixed by that
+equilibrium's own :math:`p(0) = 721` kPa and :math:`E_r = 0`:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 36 24
+
+   * - ``collisionOperator``
+     - DKX / Redl
+     - cost (3 surfaces)
+   * - 1, pitch-angle scattering
+     - 1.47, 1.42, 1.35
+     - 29 s
+   * - 3, Sugama
+     - 0.74, 0.77, 0.80
+     - 62 s
+   * - **0, full linearized Fokker-Planck** (default)
+     - **0.93, 0.95, 0.98**
+     - 56 s
+
+Redl is a fit to Fokker-Planck calculations, so 2-7% is the agreement to expect.
+The 35-47% excess from pitch-angle scattering is a bias, not a physical
+difference: the bootstrap current *is* the parallel-momentum moment, and PAS has
+no momentum-restoring term.  That is why
+:data:`dkx.bootstrap.DEFAULT_COLLISION_OPERATOR` is 0 despite costing more.
+Doubling the grid moved the Fokker-Planck numbers by under 3.5%, so the
+comparison is resolution-converged rather than a coincidence of the coarse grid.
+
 Objective Terms
 ---------------
 
