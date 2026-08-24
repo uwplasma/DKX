@@ -11,7 +11,14 @@ from pathlib import Path
 import pytest
 
 MAX_LINES = 20
-EXAMPLES = sorted((Path(__file__).resolve().parents[1] / "examples" / "1_basics").glob("*.py"))
+EXAMPLES_ROOT = Path(__file__).resolve().parents[1] / "examples"
+# The graded folders are the curated ones users are pointed at; the older
+# folders predate this budget and are being retired rather than reformatted.
+EXAMPLES = sorted(
+    path
+    for folder in ("1_basics", "2_equilibria", "3_gradients")
+    for path in (EXAMPLES_ROOT / folder).glob("*.py")
+)
 
 
 @pytest.mark.parametrize("path", EXAMPLES, ids=lambda p: p.name)

@@ -1,27 +1,23 @@
 """d(bootstrap current)/d(temperature), exactly, for the price of one solve.
 
 The solve is differentiable, so ``jax.grad`` gives an exact derivative of any
-output with respect to any input.  The cost is what makes it worth doing: the
-backward pass is one transposed solve reusing the factors already computed, so
-the gradient of N parameters costs about the same as one -- while finite
-differences cost 2N solves and give you a step-size problem for free.
+output with respect to any input.  The backward pass is one transposed solve
+reusing factors already computed, so N parameters cost about what one does --
+against 2N solves for finite differences, plus a step size to choose.
 
 The pattern is three lines: take ``run.operator``, ``dataclasses.replace`` the
-leaf you want to differentiate, and solve with ``differentiable=True``.  The
-operator is a registered JAX pytree, so everything downstream -- drive, matrix
-apply, solve, moment integrals -- is traced.
+leaf you differentiate, solve with ``differentiable=True``.  The operator is a
+JAX pytree, so drive, matrix apply, solve and moments are all traced.
 
-One honesty note: the PAS collision matrices are built when the operator is
-constructed, so replacing ``t_hat`` afterwards does not rebuild them.  Both
-``jax.grad`` and the finite difference below differentiate that same
-fixed-collisionality function, which is what makes them comparable at all.
+One honesty note: the PAS collision matrices are built with the operator, so
+replacing ``t_hat`` does not rebuild them.  Autodiff and the finite difference
+below differentiate the same fixed-collisionality function -- hence comparable.
 
 Expected runtime: ~30 s on a laptop CPU.
 
-Achieved: d<j.B>/dTHat = +1.2755377070e-02 at THat = 1, against
-+1.2755377054e-02 from central differences -- agreement to 1.3e-09, which is
-about where the difference stops being autodiff's and starts being the finite
-difference's own truncation error.
+Achieved: d<j.B>/dTHat = +1.2755377070e-02 against +1.2755377054e-02 from
+central differences -- 1.3e-09 apart, about where the gap stops being
+autodiff's and starts being the finite difference's own truncation error.
 """
 
 from dataclasses import replace

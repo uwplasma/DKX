@@ -1,25 +1,23 @@
 """Solve the equilibrium and the transport in one script: VMEX -> DKX.
 
 ``geometryScheme=5`` reads a VMEC ``wout``, and VMEX produces one in the same
-process -- so a boundary shape goes to neoclassical transport without a file
-being carried between tools by hand.  The boundary here is a rotating ellipse
-written as plain arrays, which is the whole equilibrium: no input deck.
+process -- so a boundary shape reaches neoclassical transport with no file
+carried between tools by hand.  The boundary here is a rotating ellipse
+written as plain arrays: four Fourier coefficients, no input deck.
 
 The trap is ``ncurr=0``.  It means the iota profile is *specified*, via ``ai``,
 not derived from a current -- so ``ai=[0.0]`` builds a stellarator with no
-rotational transform.  VMEC converges happily, DKX runs, and every number is
-meaningless.  ``ai=[0.42, 0.15]`` below gives iota rising 0.42 -> 0.57, which
-the script prints so you can see it is not zero.
+rotational transform.  VMEC converges, DKX runs, every number is meaningless.
+``ai=[0.42, 0.15]`` gives iota rising 0.42 -> 0.57, which the script prints and
+checks so a zero cannot pass silently.
 
-Requires the optional companion ``vmex`` (``pip install vmex``); it skips
-cleanly when absent.
+Requires the optional companion ``vmex`` (``pip install vmex``); skips cleanly
+when it is absent.  Physics: a 3-field-period vacuum rotating ellipse, one
+hydrogen species, pitch-angle scattering, no radial electric field.
 
-Physics: a 3-field-period vacuum rotating ellipse, one hydrogen species,
-pitch-angle scattering, no radial electric field.
+Expected runtime: ~25 s on a laptop CPU -- about 5 s VMEX, 20 s DKX.
 
-Expected runtime: ~25 s on a laptop CPU -- about 5 s of VMEX, 20 s of DKX.
-
-Achieved: VMEX converges, then FSABjHat = -4.183e-02 and
+Achieved: VMEX converges in 300 iterations, then FSABjHat = -4.183e-02 and
 particleFlux_vm_psiHat = +5.886e-05 at rN = 0.5.
 """
 
