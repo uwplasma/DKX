@@ -9,7 +9,7 @@ import numpy as np
 def _load_records(name: str) -> dict[tuple[str, float], dict[str, float | str | None]]:
     path = (
         Path(__file__).resolve().parents[1]
-        / "examples"
+        / "tools"
         / "publication_figures"
         / "artifacts"
         / name

@@ -8,7 +8,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SUMMARY_JSON = (
     REPO_ROOT
-    / "examples"
+    / "tools"
     / "publication_figures"
     / "artifacts"
     / "dkx_fortran_suite_benchmark_summary.json"

@@ -1,6 +1,6 @@
 """CI-sized regression gate for the W7-X ambipolar-Er experimental benchmark.
 
-Runs ``examples/paper_benchmarks/w7x_ambipolar_er.py`` in its CI mode (two flux
+Runs ``tools/paper_benchmarks/w7x_ambipolar_er.py`` in its CI mode (two flux
 surfaces at coarse resolution) into temporary output/figure directories, and
 pins the structural physics the full data-validation benchmark relies on:
 
@@ -36,7 +36,7 @@ import pytest
 pytestmark = pytest.mark.slow
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-EXAMPLE = REPO_ROOT / "examples" / "paper_benchmarks" / "w7x_ambipolar_er.py"
+EXAMPLE = REPO_ROOT / "tools" / "paper_benchmarks" / "w7x_ambipolar_er.py"
 
 # Frozen at the CI (coarse) resolution; see the module docstring.
 CI_CORE_ELECTRON_ER = 6.87

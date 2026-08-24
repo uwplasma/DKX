@@ -21,7 +21,7 @@ implement the remaining two physics features, then delete the gated bulk.
   production importers, top-of-chain; its 3 tests exercise suite tooling, not
   physics parity). CORRECTION: artifacts.py(3346) and release.py(2329) are NOT
   retirable near-term — import-reachability missed that artifacts.py is a live
-  examples/publication_figures dependency (hard-required by REQUIRED_CORE_SLIM
+  tools/publication_figures dependency (hard-required by REQUIRED_CORE_SLIM
   owners), and release.py hosts 6 live `python -m ...release` CLI tools
   (repo-size hygiene gate, production-input generation, write-output-trace,
   readme-audit) imported by 9 mostly-non-slow tests. release.py can only be

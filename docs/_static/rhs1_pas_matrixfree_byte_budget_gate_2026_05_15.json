@@ -2,9 +2,9 @@
   "kind": "rhs1_pas_matrixfree_probe",
   "plan": {
     "artifact_inputs": [
-      "examples/performance/output/pas_tz_lgmres_medium_geometry4_probe.json",
-      "examples/performance/output/pas_tz_floor_hsx_dkes_cpu_lgmres_m20_25x51x100x4.json",
-      "examples/performance/output/pas_tz_floor_geom11_cpu_lgmres_m20_25x51x100x4.json"
+      "tools/performance/output/pas_tz_lgmres_medium_geometry4_probe.json",
+      "tools/performance/output/pas_tz_floor_hsx_dkes_cpu_lgmres_m20_25x51x100x4.json",
+      "tools/performance/output/pas_tz_floor_geom11_cpu_lgmres_m20_25x51x100x4.json"
     ],
     "artifact_probe": {
       "artifacts": [
@@ -47,7 +47,7 @@
           "max_rss_mb_peak": 973.21875,
           "ok_result_count": 2,
           "pas_constraint_size_max": 83122.0,
-          "path": "examples/performance/output/pas_tz_lgmres_medium_geometry4_probe.json",
+          "path": "tools/performance/output/pas_tz_lgmres_medium_geometry4_probe.json",
           "plan_input": "examples/sfincs_examples/geometryScheme4_2species_PAS_noEr/input.namelist",
           "ready_evidence": true,
           "result_count": 2,
@@ -98,7 +98,7 @@
           "max_rss_mb_peak": 2970.109375,
           "ok_result_count": 2,
           "pas_constraint_size_max": 571200.0,
-          "path": "examples/performance/output/pas_tz_floor_hsx_dkes_cpu_lgmres_m20_25x51x100x4.json",
+          "path": "tools/performance/output/pas_tz_floor_hsx_dkes_cpu_lgmres_m20_25x51x100x4.json",
           "plan_input": "examples/sfincs_examples/HSX_PASCollisions_DKESTrajectories/input.namelist",
           "ready_evidence": true,
           "result_count": 2,
@@ -149,7 +149,7 @@
           "max_rss_mb_peak": 3317.296875,
           "ok_result_count": 2,
           "pas_constraint_size_max": 571200.0,
-          "path": "examples/performance/output/pas_tz_floor_geom11_cpu_lgmres_m20_25x51x100x4.json",
+          "path": "tools/performance/output/pas_tz_floor_geom11_cpu_lgmres_m20_25x51x100x4.json",
           "plan_input": "examples/sfincs_examples/sfincsPaperFigure3_geometryScheme11_PASCollisions_2Species_fullTrajectories/input.namelist",
           "ready_evidence": false,
           "result_count": 2,
@@ -968,7 +968,7 @@
             },
             "checked_artifact_evidence": {
               "artifact_paths": [
-                "examples/performance/output/pas_tz_floor_geom11_cpu_lgmres_m20_25x51x100x4.json"
+                "tools/performance/output/pas_tz_floor_geom11_cpu_lgmres_m20_25x51x100x4.json"
               ],
               "ready_artifact_paths": [],
               "reason": "no checked-in artifact with guarded residual/runtime/memory evidence",
@@ -1034,10 +1034,10 @@
             },
             "checked_artifact_evidence": {
               "artifact_paths": [
-                "examples/performance/output/pas_tz_lgmres_medium_geometry4_probe.json"
+                "tools/performance/output/pas_tz_lgmres_medium_geometry4_probe.json"
               ],
               "ready_artifact_paths": [
-                "examples/performance/output/pas_tz_lgmres_medium_geometry4_probe.json"
+                "tools/performance/output/pas_tz_lgmres_medium_geometry4_probe.json"
               ],
               "reason": "checked-in PAS benchmark artifact has guarded residual/runtime/memory evidence",
               "status": "pass"
@@ -1102,10 +1102,10 @@
             },
             "checked_artifact_evidence": {
               "artifact_paths": [
-                "examples/performance/output/pas_tz_floor_hsx_dkes_cpu_lgmres_m20_25x51x100x4.json"
+                "tools/performance/output/pas_tz_floor_hsx_dkes_cpu_lgmres_m20_25x51x100x4.json"
               ],
               "ready_artifact_paths": [
-                "examples/performance/output/pas_tz_floor_hsx_dkes_cpu_lgmres_m20_25x51x100x4.json"
+                "tools/performance/output/pas_tz_floor_hsx_dkes_cpu_lgmres_m20_25x51x100x4.json"
               ],
               "reason": "checked-in PAS benchmark artifact has guarded residual/runtime/memory evidence",
               "status": "pass"

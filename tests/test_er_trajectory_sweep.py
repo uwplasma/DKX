@@ -11,7 +11,7 @@ import numpy as np
 
 def _load_module():
     repo = Path(__file__).resolve().parents[1]
-    path = repo / "examples" / "publication_figures" / "generate_er_trajectory_sweep.py"
+    path = repo / "tools" / "publication_figures" / "generate_er_trajectory_sweep.py"
     spec = importlib.util.spec_from_file_location("generate_er_trajectory_sweep", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

@@ -470,6 +470,61 @@ Unreleased
   and the latest local full suite after the active/dense setup extraction passed
   with ``2659 passed in 551.86 s``.
 
+v2.3.0
+------
+
+A Python-first entry point, a graded examples tree, and four fixes found while
+writing it.
+
+New public API:
+
+- ``dkx.run(case_or_path, **overrides)`` solves one case and returns its
+  moments, whether the case is an ``input.namelist`` or keyword arguments using
+  the Fortran parameter names. An unknown name raises rather than being
+  ignored, so a misspelled override cannot silently do nothing.
+- ``dkx.plot(run_or_path, out=...)`` draws the standard figure in one call, or
+  ``style="summary"`` for the compact page, which is the only style that
+  expands into a multi-page PDF.
+
+Examples are now a graded ladder, numbered by what each folder *requires*
+rather than by difficulty: ``1_basics`` needs nothing but ``dkx``,
+``2_equilibria`` uses real geometry, ``3_gradients`` differentiates through the
+solve. Every script is module-level top to bottom -- no ``main()``, no argument
+parsing -- with its knobs as constants at the top, so it runs unchanged in
+Spyder or a notebook. Each docstring ends with the numbers that script actually
+produced. Parity, benchmark and figure-generation drivers moved to ``tools/``;
+they regenerate checked artifacts and are not reading material.
+
+Fixes:
+
+- The persistent compilation cache is documented as deliberately uncapped. It
+  grows without bound -- 782 MB over 64389 entries on one machine -- and
+  capping it is a worse trade than it looks: ``jax_compilation_cache_max_size``
+  turns on jax's LRU, which writes a sidecar file per entry and does size
+  bookkeeping on every write, costing about 60% (32 s against 20 s on one test
+  module). Deleting the cache directory costs only compile time; a test now
+  pins the decision so the cap is not reintroduced as an obvious improvement.
+- ``dkx.run`` could be shadowed by the ``dkx.run`` *module*: importing anything
+  from it before touching the function left ``dkx.run(case)`` raising
+  ``'module' object is not callable``. Order-dependent and silent, and the
+  autodiff examples hit it. ``dkx.run`` is now always the module and the module
+  is callable, so the call, the attribute access, ``from dkx.run import ...``
+  and ``monkeypatch.setattr("dkx.run.run_profile", ...)`` all work in any
+  import order.
+- ``dkx.plot``'s docstring offered a multi-page PDF from the ``.pdf`` suffix
+  without saying only ``style="summary"`` expands; the default writes one page.
+- The ``|B|`` panels drew theta and zeta on each other's axes when the output
+  file stored them in the opposite order.
+- ``dkx wout_*.nc`` was broken for every pip install. It built its
+  monoenergetic base by reading ``dkx/data/representative.namelist``, falling
+  back to a deck under ``examples/``, and neither ships in the wheel -- so the
+  flagship "point dkx at an equilibrium" path worked only from a source
+  checkout. Reported by a user as ``NotImplementedError: run_transport_matrix
+  supports RHSMode 2 and 3``, which is what a base carrying the default
+  ``RHSMode = 1`` produces three frames later. The deck is a module-level
+  string now, and ``monoenergetic_scan`` rejects a non-RHSMode=3 base where the
+  mistake is rather than in the solver.
+
 v1.1.7
 ------
 

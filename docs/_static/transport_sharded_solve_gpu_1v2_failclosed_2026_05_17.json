@@ -57,7 +57,7 @@
     "timing_semantics": "hot_solve",
     "strategy": "inner_warmup",
     "persistent_compile_cache": true,
-    "compile_cache_dir": "examples/performance/output/sharded_solve_scaling/jax_cache",
+    "compile_cache_dir": "tools/performance/output/sharded_solve_scaling/jax_cache",
     "cache_required": false,
     "global_warmup_runs": 0,
     "per_device_warmup_runs": 0,

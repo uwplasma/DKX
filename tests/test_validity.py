@@ -8,7 +8,7 @@ below are the measured values of the ``geometryScheme = 11``
 ``w7x_standardConfig.bc`` surface at ``r/a = 0.5`` (delta = 4.5694e-3,
 iota = -0.87185, GHat = -16.2, B0OverBBar = 2.7989, eps_t = 0.045306,
 nu_star = 0.9589 * nuPrime), the same surface the merged Shaing-Callen
-convergence benchmark (``examples/paper_benchmarks/shaing_callen_convergence.py``)
+convergence benchmark (``tools/paper_benchmarks/shaing_callen_convergence.py``)
 scans; there the small finite ``EStar = 3e-3`` curve is documented to detach
 from the ``EStar = 0`` curve below ``nuPrime ~ 1e-3`` as the E x B precession
 turns on, which is exactly the marginal band the classifier flags here.  No

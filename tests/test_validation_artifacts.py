@@ -42,7 +42,7 @@ from dkx.validation.data_fetch import external_data_dir, external_data_version
 
 
 def _artifact_dir() -> Path:
-    return Path(__file__).resolve().parents[1] / "examples" / "publication_figures" / "artifacts"
+    return Path(__file__).resolve().parents[1] / "tools" / "publication_figures" / "artifacts"
 
 
 def test_external_data_version_and_dir_follow_manifest_and_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -34,7 +34,7 @@ checks unless they are rerun at production-comparison resolution.
 
 .. code-block:: bash
 
-   python examples/publication_figures/generate_fortran_suite_benchmark_summary.py
+   python tools/publication_figures/generate_fortran_suite_benchmark_summary.py
 
 .. figure:: _static/figures/paper/dkx_fortran_suite_benchmark_summary.png
    :alt: dkx CPU/GPU suite benchmark against SFINCS Fortran v3
@@ -52,7 +52,7 @@ checks unless they are rerun at production-comparison resolution.
    fields, while the public memory bars use profiler active RSS deltas over the
    fixed Python/JAX/XLA baseline; the median active-memory ratios are about
    ``2.89x`` on CPU and ``3.71x`` on GPU. The top runtime and memory cases are recorded in
-   ``examples/publication_figures/artifacts/dkx_fortran_suite_benchmark_summary.json``.
+   ``tools/publication_figures/artifacts/dkx_fortran_suite_benchmark_summary.json``.
 
 Use :doc:`parity` for the scope map and comparison policy, :doc:`performance` for CPU/GPU
 runtime and memory context, and :doc:`fortran_examples` for the exact-input frozen-fixture audit.

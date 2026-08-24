@@ -50,71 +50,71 @@
    "unresolved": "no checked-in script names this figure"
   },
   "docs/_static/figures/paper/dkx_autodiff_gradient_check.png": {
-   "generator": "examples/publication_figures/generate_autodiff_sensitivity_validation.py"
+   "generator": "tools/publication_figures/generate_autodiff_sensitivity_validation.py"
   },
   "docs/_static/figures/paper/dkx_autodiff_sensitivity_map.png": {
-   "generator": "examples/publication_figures/generate_autodiff_sensitivity_validation.py"
+   "generator": "tools/publication_figures/generate_autodiff_sensitivity_validation.py"
   },
   "docs/_static/figures/paper/dkx_er_trajectory_sweep_stellarator_fast_reference.png": {
-   "generator": "examples/publication_figures/generate_er_trajectory_sweep.py"
+   "generator": "tools/publication_figures/generate_er_trajectory_sweep.py"
   },
   "docs/_static/figures/paper/dkx_er_trajectory_sweep_tokamak_reference.png": {
-   "generator": "examples/publication_figures/generate_er_trajectory_sweep.py"
+   "generator": "tools/publication_figures/generate_er_trajectory_sweep.py"
   },
   "docs/_static/figures/paper/dkx_fig1_lhd_collisionality.png": {
-   "generator": "examples/publication_figures/generate_sfincs_paper_figs.py"
+   "generator": "tools/publication_figures/generate_sfincs_paper_figs.py"
   },
   "docs/_static/figures/paper/dkx_fig1_lhd_collisionality_reaudit_fast.png": {
-   "generator": "examples/publication_figures/generate_sfincs_paper_figs.py"
+   "generator": "tools/publication_figures/generate_sfincs_paper_figs.py"
   },
   "docs/_static/figures/paper/dkx_fig2_w7x_collisionality.png": {
-   "generator": "examples/publication_figures/generate_sfincs_paper_figs.py"
+   "generator": "tools/publication_figures/generate_sfincs_paper_figs.py"
   },
   "docs/_static/figures/paper/dkx_fig2_w7x_collisionality_reaudit_fast.png": {
-   "generator": "examples/publication_figures/generate_sfincs_paper_figs.py"
+   "generator": "tools/publication_figures/generate_sfincs_paper_figs.py"
   },
   "docs/_static/figures/paper/dkx_fig3_simakov_helander.png": {
-   "generator": "examples/publication_figures/generate_sfincs_paper_figs.py"
+   "generator": "tools/publication_figures/generate_sfincs_paper_figs.py"
   },
   "docs/_static/figures/paper/dkx_fortran_suite_benchmark_summary.png": {
-   "generator": "examples/publication_figures/generate_fortran_suite_benchmark_summary.py"
+   "generator": "tools/publication_figures/generate_fortran_suite_benchmark_summary.py"
   },
   "docs/_static/figures/paper/dkx_high_collisionality_trend_proxy.png": {
    "generator": "dkx/validation/artifacts.py"
   },
   "docs/_static/figures/paper/dkx_publication_validation_dashboard.png": {
-   "generator": "examples/publication_figures/generate_validation_dashboard.py"
+   "generator": "tools/publication_figures/generate_validation_dashboard.py"
   },
   "docs/_static/figures/paper/dkx_simakov_helander_limit_audit.png": {
    "generator": null,
    "unresolved": "no checked-in script names this figure"
   },
   "docs/_static/figures/paper/dkx_w7x_high_nu_performance.png": {
-   "generator": "examples/publication_figures/generate_w7x_high_nu_performance.py"
+   "generator": "tools/publication_figures/generate_w7x_high_nu_performance.py"
   },
   "docs/_static/figures/paper_benchmarks/bootstrap_consistency_kinetic_loop.png": {
-   "generator": "examples/paper_benchmarks/bootstrap_consistency_kinetic_loop.py"
+   "generator": "tools/paper_benchmarks/bootstrap_consistency_kinetic_loop.py"
   },
   "docs/_static/figures/paper_benchmarks/cross_code_matrix.png": {
-   "generator": "examples/paper_benchmarks/cross_code_matrix.py"
+   "generator": "tools/paper_benchmarks/cross_code_matrix.py"
   },
   "docs/_static/figures/paper_benchmarks/gradient_cost_scaling.png": {
-   "generator": "examples/paper_benchmarks/gradient_cost_scaling.py"
+   "generator": "tools/paper_benchmarks/gradient_cost_scaling.py"
   },
   "docs/_static/figures/paper_benchmarks/impurity_transport.png": {
-   "generator": "examples/paper_benchmarks/impurity_transport.py"
+   "generator": "tools/paper_benchmarks/impurity_transport.py"
   },
   "docs/_static/figures/paper_benchmarks/monoenergetic_icnts_w7x.png": {
-   "generator": "examples/paper_benchmarks/monoenergetic_icnts_w7x.py"
+   "generator": "tools/paper_benchmarks/monoenergetic_icnts_w7x.py"
   },
   "docs/_static/figures/paper_benchmarks/reference_convergence.png": {
-   "generator": "examples/paper_benchmarks/reference_convergence.py"
+   "generator": "tools/paper_benchmarks/reference_convergence.py"
   },
   "docs/_static/figures/paper_benchmarks/shaing_callen_convergence.png": {
-   "generator": "examples/paper_benchmarks/shaing_callen_convergence.py"
+   "generator": "tools/paper_benchmarks/shaing_callen_convergence.py"
   },
   "docs/_static/figures/paper_benchmarks/w7x_ambipolar_er.png": {
-   "generator": "examples/paper_benchmarks/w7x_ambipolar_er.py"
+   "generator": "tools/paper_benchmarks/w7x_ambipolar_er.py"
   },
   "docs/_static/figures/readme/canonical_parity.png": {
    "generator": "tools/benchmarks/readme_figures.py"

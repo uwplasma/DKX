@@ -245,7 +245,7 @@ one-node and multi-host runs.
 
    # High-nu publication pilot with one transport RHS worker per visible GPU
    CUDA_VISIBLE_DEVICES=0,1 \
-   python examples/publication_figures/generate_sfincs_paper_figs.py \
+   python tools/publication_figures/generate_sfincs_paper_figs.py \
      --case lhd \
      --collision-operators 0 \
      --nuprime-min 17.78279101649707 \
@@ -290,7 +290,7 @@ Relevant CLI flags:
   are supported.
 
 For actual scaling measurements, prefer the benchmark scripts in
-``examples/performance`` over ad hoc shell timing. They handle warmup, backend
+``tools/performance`` over ad hoc shell timing. They handle warmup, backend
 selection, cache reuse, and output JSON/figure generation consistently.
 
 At verbosity level ``-v`` or higher, the CLI prints the active parallel

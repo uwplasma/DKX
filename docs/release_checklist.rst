@@ -162,12 +162,12 @@ full-suite solves:
 
 .. code-block:: bash
 
-   python examples/publication_figures/generate_fortran_suite_benchmark_summary.py
+   python tools/publication_figures/generate_fortran_suite_benchmark_summary.py
 
    # Canonical-stack README figures (recorded measured values):
    python tools/benchmarks/readme_figures.py
 
-   python examples/publication_figures/generate_w7x_high_nu_performance.py
+   python tools/publication_figures/generate_w7x_high_nu_performance.py
 
    # Historical PAS fallback campaign scripts live on the research branch.
    # Stable releases should rely on checked solver-policy artifacts unless a

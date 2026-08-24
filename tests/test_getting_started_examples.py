@@ -63,7 +63,7 @@ def test_tutorial_quick_output_and_plot_script() -> None:
 
 def test_output_format_benchmark_example(tmp_path: Path) -> None:
     repo = Path(__file__).resolve().parents[1]
-    script = repo / "examples" / "performance" / "benchmark_output_formats.py"
+    script = repo / "tools" / "performance" / "benchmark_output_formats.py"
     out_json = tmp_path / "output_benchmark.json"
     _run_script(script, "--repeats", "1", "--out-dir", str(tmp_path), "--json", str(out_json))
     text = out_json.read_text(encoding="utf-8")
