@@ -37,6 +37,9 @@ run = dkx.run(DECK, out=OUT_DIR / "plot_summary.sfincsOutput.h5")
 print(f"wrote {dkx.plot(run, out=OUT_DIR / 'plot_summary.png')}")
 print(f"wrote {dkx.plot(run, out=OUT_DIR / 'plot_summary.pdf')}")
 
+# The compact three-panel page instead of the full figure:
+# dkx.plot(run, out=OUT_DIR / "compact.png", style="summary")
+
 # Equivalent, straight from the file -- which is how you plot a run someone
 # else did, including one Fortran SFINCS produced:
 # print(dkx.plot(OUT_DIR / "plot_summary.sfincsOutput.h5", out=OUT_DIR / "again.png"))

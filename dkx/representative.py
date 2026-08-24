@@ -501,7 +501,88 @@ def plot_output_file(path: str | Path, out_path: str | Path | None = None) -> Pa
     path = Path(path)
     data = read_sfincs_output_file(path)
     out = Path(out_path) if out_path else path.with_suffix(".panels.png")
+    # A single solve carries no (nuPrime, EStar) scan, so the representative
+    # layout's whole top row would say "not present" three times.  Give that
+    # space to what a single run does have instead.
+    if not any(key in data for key in ("transportMatrix", "nuPrime")):
+        return plot_single_run(out, data, title=f"DKX panels — {path.name}")
     return plot_representative(out, data=data, title=f"DKX panels — {path.name}")
+
+
+def plot_single_run(out_path: str | Path, data: dict[str, Any],
+                    title: str = "DKX run") -> Path:  # fmt: skip
+    """Six panels for one solved deck: geometry, speed profiles, moments.
+
+    The counterpart of :func:`plot_representative` for a single output file.
+    Same six-panel shape, but the top row carries the run's own summary and its
+    speed-resolved profiles rather than a monoenergetic scan it does not have.
+    """
+    plt = _import_matplotlib()
+    fig = plt.figure(figsize=(13.5, 8.0), constrained_layout=True)
+    gs = fig.add_gridspec(2, 3)
+    axes = [fig.add_subplot(gs[r, c]) for r in (0, 1) for c in (0, 1, 2)]
+
+    _panel_run_summary(axes[0], data)
+    _panel_vs_x(axes[1], data, "FSABFlow_vs_x", r"$\langle B V_\parallel\rangle$")
+    _panel_vs_x(axes[2], data, "particleFlux_vm_psiHat_vs_x", r"$\Gamma$ (magnetic drift)")
+    if not _panel_modB(axes[3], data):
+        axes[3].text(0.5, 0.5, "no |B| in this output", ha="center", va="center",
+                     fontsize=8, color="0.4", transform=axes[3].transAxes)  # fmt: skip
+        axes[3].set_xticks([]); axes[3].set_yticks([])
+    _panel_vs_x(axes[4], data, "heatFlux_vm_psiHat_vs_x", r"$Q$ (magnetic drift)")
+    _panel_bootstrap(axes[5], data)
+
+    fig.suptitle(title, fontsize=12)
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=140)
+    plt.close(fig)
+    return out_path.resolve()
+
+
+def _panel_run_summary(ax, data: dict[str, Any]) -> bool:
+    """The scalars a reader checks first: which case, which grid, did it solve."""
+    rows = []
+    for key, label in (("geometryScheme", "geometryScheme"), ("Ntheta", "Ntheta"),
+                       ("Nzeta", "Nzeta"), ("Nxi", "Nxi"), ("Nx", "Nx"),
+                       ("Delta", "Delta"), ("nu_n", "nu_n"),
+                       ("VPrimeHat", "VPrimeHat"), ("FSABHat2", "FSABHat2"),
+                       ("linearSolverResidualNorm", "residual")):  # fmt: skip
+        if key not in data:
+            continue
+        value = np.asarray(data[key]).ravel()
+        if value.size:
+            item = value[-1]
+            rows.append(f"{label:<16s} {item:.6g}" if abs(item) < 1e5 else
+                        f"{label:<16s} {item:.4e}")  # fmt: skip
+    ax.axis("off")
+    ax.text(0.0, 1.0, "\n".join(rows) or "no scalars in this output",
+            va="top", ha="left", family="monospace", fontsize=9,
+            transform=ax.transAxes)  # fmt: skip
+    ax.set_title("run summary", fontsize=9)
+    return bool(rows)
+
+
+def _panel_vs_x(ax, data: dict[str, Any], key: str, label: str) -> bool:
+    """One speed-resolved profile, one curve per species."""
+    if key not in data or "x" not in data:
+        ax.text(0.5, 0.5, f"{key}\nnot in this output", ha="center", va="center",
+                fontsize=8, color="0.4", transform=ax.transAxes)  # fmt: skip
+        ax.set_xticks([]); ax.set_yticks([])
+        return False
+    x = np.asarray(data["x"], dtype=float).ravel()
+    arr = np.asarray(data[key], dtype=float)
+    arr = arr.reshape(arr.shape[0], -1) if arr.ndim > 1 else arr.reshape(-1, 1)
+    names = _species_labels(arr.shape[1])
+    for column in range(arr.shape[1]):
+        ax.plot(x[: arr.shape[0]], arr[:, column], "o-", ms=3, label=names[column])
+    ax.set_xlabel("$x = v / v_{th}$")
+    ax.set_ylabel(label)
+    ax.grid(alpha=0.3)
+    if arr.shape[1] > 1:
+        ax.legend(fontsize=7)
+    ax.set_title(key, fontsize=9)
+    return True
 
 
 def run_representative(

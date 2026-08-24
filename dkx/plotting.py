@@ -54,6 +54,29 @@ def _add_heatmap(ax, data: dict[str, object], key: str, *, title: str | None = N
     return True
 
 
+
+def _theta_zeta_oriented(b_hat: np.ndarray, data: dict[str, object]) -> np.ndarray:
+    """Return ``BHat`` as ``(theta, zeta)`` whatever order it was stored in.
+
+    The output file stores it ``(zeta, theta)`` (Fortran layout) while the
+    operator hands it over ``(theta, zeta)``, and ``imshow`` puts axis 0 on the
+    vertical.  Labelling without checking is how every axisymmetric figure came
+    out with its variation on the axis marked zeta: the tokamak's Nzeta=1 strip
+    was drawn horizontally and called zeta when it was theta.
+
+    Orientation is decided by matching the array's dimensions against the run's
+    own ``Ntheta``/``Nzeta`` rather than by assuming an order.  When the two are
+    equal there is nothing to disambiguate, and the stored layout is kept.
+    """
+    b_hat = np.asarray(b_hat)
+    if b_hat.ndim != 2:
+        return b_hat
+    n_theta = int(np.asarray(data.get("Ntheta", 0)).reshape(-1)[0]) if "Ntheta" in data else 0
+    n_zeta = int(np.asarray(data.get("Nzeta", 0)).reshape(-1)[0]) if "Nzeta" in data else 0
+    if n_theta and n_zeta and n_theta != n_zeta and b_hat.shape == (n_zeta, n_theta):
+        return b_hat.T
+    return b_hat
+
 def _add_profile(ax, data: dict[str, object], x: np.ndarray, key: str, *, title: str | None = None) -> bool:
     if key not in data:
         return False
@@ -220,8 +243,9 @@ def plot_sfincs_output_summary(
         axes[0].set_ylabel("FSABFlow_vs_x")
         axes[0].grid(True, alpha=0.25)
     else:
-        theta = np.asarray(data.get("theta", np.arange(b_hat.shape[0]))).ravel()
-        axes[0].plot(theta, b_hat[:, 0], lw=1.8)
+        oriented = _theta_zeta_oriented(b_hat, data)
+        theta = np.asarray(data.get("theta", np.arange(oriented.shape[0]))).ravel()
+        axes[0].plot(theta, oriented[:, 0], lw=1.8)
         axes[0].set_title("BHat(theta, zeta=0)")
         axes[0].set_xlabel("theta")
         axes[0].set_ylabel("BHat")
@@ -252,12 +276,14 @@ def plot_sfincs_output_summary(
         )
         axes[1].set_title("Run summary")
 
-    im = axes[2].imshow(b_hat, aspect="auto", origin="lower")
-    axes[2].set_title("BHat(theta, zeta)")
-    axes[2].set_xlabel("zeta index")
-    axes[2].set_ylabel("theta index")
-    axes[2].set_xticks([0, max(0, b_hat.shape[-1] - 1)])
-    axes[2].set_xticklabels(["0", f"{float(zeta[-1]):.2f}"])
+    oriented = _theta_zeta_oriented(b_hat, data)
+    im = axes[2].imshow(oriented, aspect="auto", origin="lower")
+    axes[2].set_title(r"$\hat B(\theta, \zeta)$")
+    axes[2].set_xlabel(r"$\zeta$ index")
+    axes[2].set_ylabel(r"$\theta$ index")
+    if zeta.size and oriented.shape[-1] == zeta.size:
+        axes[2].set_xticks([0, max(0, oriented.shape[-1] - 1)])
+        axes[2].set_xticklabels(["0", f"{float(zeta[-1]):.2f}"])
     fig.colorbar(im, ax=axes[2], fraction=0.046, pad=0.04)
 
     # y=1.03 put the title outside the figure, where constrained_layout does
@@ -269,7 +295,7 @@ def plot_sfincs_output_summary(
     return output_png.resolve()
 
 
-def plot(source, out="dkx_summary.png"):
+def plot(source, out="dkx_panels.png", *, style="panels"):
     """Plot a run or an output file.  One call, one figure, returns its path.
 
     ``source`` is whatever you already have:
@@ -279,8 +305,12 @@ def plot(source, out="dkx_summary.png"):
       layout is the same, so both work;
     - a directory containing one.
 
-    ``out`` picks the format by suffix: ``.png`` for a compact single-page
-    summary, ``.pdf`` for the multi-page diagnostics panel.
+    The figure is the same six-panel one ``dkx --plot`` writes: the
+    monoenergetic coefficients, ``|B|`` on the surface, the bootstrap current
+    and the species fluxes.  ``out`` picks the format by suffix.
+
+    ``style="summary"`` selects the older compact three-panel page instead,
+    and with a ``.pdf`` suffix the multi-page diagnostics book.
 
     For a figure this does not draw, read the numbers off ``run.moments`` and
     use matplotlib directly --- ``examples/1_basics/plot_custom.py`` shows
@@ -290,6 +320,8 @@ def plot(source, out="dkx_summary.png"):
     Args:
         source: a run object, an output-file path, or a directory.
         out: destination path; the suffix selects png or pdf.
+        style: ``"panels"`` (default) for the ``dkx --plot`` figure, or
+            ``"summary"`` for the compact three-panel page.
 
     Returns:
         The :class:`~pathlib.Path` actually written.
@@ -309,7 +341,13 @@ def plot(source, out="dkx_summary.png"):
             if not candidates:
                 raise FileNotFoundError(f"no sfincsOutput file in {path}")
             path = candidates[0]
-        return plot_sfincs_output_summary(input_h5=path, output_png=out)
+        if style == "summary":
+            return plot_sfincs_output_summary(input_h5=path, output_png=out)
+        if style != "panels":
+            raise ValueError(f"style must be 'panels' or 'summary'; got {style!r}")
+        from dkx.representative import plot_output_file  # noqa: PLC0415
+
+        return plot_output_file(path, out)
 
     if hasattr(source, "moments"):
         raise ValueError(
