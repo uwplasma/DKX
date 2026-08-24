@@ -1,9 +1,8 @@
 """Solve the equilibrium and the transport in one script: VMEX -> DKX.
 
-``geometryScheme=5`` reads a VMEC ``wout``, and VMEX produces one in the same
-process -- so a boundary shape reaches neoclassical transport with no file
-carried between tools by hand.  The boundary here is a rotating ellipse
-written as plain arrays: four Fourier coefficients, no input deck.
+``geometryScheme=5`` reads a VMEC ``wout`` and VMEX produces one in the same
+process, so a boundary shape reaches neoclassical transport with no file
+carried between tools.  Here it is a rotating ellipse: four coefficients.
 
 The trap is ``ncurr=0``.  It means the iota profile is *specified*, via ``ai``,
 not derived from a current -- so ``ai=[0.0]`` builds a stellarator with no
