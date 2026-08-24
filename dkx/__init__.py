@@ -176,8 +176,7 @@ if _disable_cache not in {"1", "true", "yes", "on"}:
         # 12 warnings on a single small solve against a legacy cache, and 0
         # against a fresh one.  Starting a new directory is what makes the
         # bound work; the old one simply stops being written to.
-        _CACHE_DIR_NAME = "jax_compilation_cache_v2"
-        _LEGACY_CACHE_DIR_NAME = "jax_compilation_cache"
+        _CACHE_DIR_NAME = "jax_compilation_cache"
 
         cache_override = os.environ.get("DKX_COMPILATION_CACHE_DIR", "").strip()
         if cache_override:
@@ -209,32 +208,6 @@ if _disable_cache not in {"1", "true", "yes", "on"}:
                 default_cache_dir = ""
         if default_cache_dir:
             os.environ["JAX_COMPILATION_CACHE_DIR"] = default_cache_dir
-            # The pre-cap directory is orphaned by the rename above.  It is
-            # only a cache, but it can be large (782 MB / 64k entries on the
-            # machine that prompted the cap), so say so once with the path
-            # instead of leaving it to be found by accident.
-            _legacy = os.path.join(
-                os.path.dirname(default_cache_dir), _LEGACY_CACHE_DIR_NAME
-            )
-            if os.path.isdir(_legacy):
-                try:
-                    _legacy_bytes = sum(
-                        entry.stat().st_size
-                        for entry in os.scandir(_legacy)
-                        if entry.is_file()
-                    )
-                except OSError:
-                    _legacy_bytes = 0
-                if _legacy_bytes > 100 * 1024**2:
-                    import warnings as _warnings  # noqa: PLC0415
-
-                    _warnings.warn(
-                        f"dkx's compilation cache moved to {default_cache_dir}; "
-                        f"the old unbounded one is still on disk "
-                        f"({_legacy_bytes / 1024**3:.1f} GB) and is safe to "
-                        f"delete:  rm -rf {_legacy}",
-                        stacklevel=2,
-                    )
         os.environ.setdefault("JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS", "0")
         os.environ.setdefault("JAX_PERSISTENT_CACHE_MIN_ENTRY_SIZE_BYTES", "0")
 
@@ -280,32 +253,20 @@ try:
             )
         except ValueError:
             pass
-        # Bound the cache.  The thresholds above are deliberately zero so even
-        # tiny kernels are cached, which means every distinct grid a scan
-        # touches leaves an entry behind and nothing ever removes one.  Left
-        # uncapped this reached 782 MB across 64k files on a development
-        # machine -- a slow leak into the user's home directory that no run
-        # ever reports.  A cap makes JAX evict least-recently-used entries
-        # instead.  Set DKX_COMPILATION_CACHE_MAX_BYTES=0 to disable the bound.
-        try:
-            _cache_cap = int(
-                os.environ.get("DKX_COMPILATION_CACHE_MAX_BYTES", str(4 * 1024**3))
-            )
-            if _cache_cap > 0:
-                # jax raises "Please install the `filelock` package to set
-                # jax_compilation_cache_max_size" -- and it raises it later, on
-                # every cache read, not here.  Setting the cap without filelock
-                # therefore disables the cache instead of bounding it, which is
-                # strictly worse than leaving it unbounded.  filelock is a
-                # declared dependency; this guard is for an environment that
-                # somehow lacks it.
-                import filelock  # noqa: F401, PLC0415
-
-                _jax_config.update("jax_compilation_cache_max_size", _cache_cap)
-        except (ValueError, AttributeError, ImportError):
-            # Older jax without the knob: an unbounded cache still works, it
-            # just grows, so this must not stop dkx from importing.
-            pass
+        # The cache is deliberately NOT size-capped.  Setting
+        # jax_compilation_cache_max_size turns on jax's LRU, which writes a
+        # sidecar "-atime" file per entry and does size bookkeeping on every
+        # write.  With the zero thresholds above -- which exist so even small
+        # kernels are cached -- that is measurably expensive: on
+        # tests/test_monoenergetic_database.py, 32 s and 1792 files capped
+        # against 20 s and 896 uncapped, a 60% penalty on every run.  CI proved
+        # it at scale, nine of ten coverage shards crossing a 10-minute timeout
+        # they had been finishing in four to eight.
+        #
+        # So the cache grows without bound.  That is a disk-space cost -- it
+        # reached 782 MB over 64k entries on a development machine -- and the
+        # remedy is to delete the directory, which loses nothing but compile
+        # time.  Paying 60% on every run to avoid it is the worse trade.
 except Exception:
     # Keep import lightweight for tooling that inspects the package without JAX.
     pass

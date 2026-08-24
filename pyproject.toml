@@ -9,9 +9,6 @@ description = "Neoclassical transport solver with CPU/GPU and differentiable JAX
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-  # jax requires filelock before it will honour
-  # jax_compilation_cache_max_size; without it the cap disables the cache.
-  "filelock",
   # numpy>=2.1 is not a new constraint -- it is the one jax already carries,
   # made explicit so the resolver says so.  Left implicit, `pip install dkx`
   # into an environment holding a conda-managed numpy 1.x resolves happily and

@@ -497,15 +497,13 @@ they regenerate checked artifacts and are not reading material.
 
 Fixes:
 
-- The persistent compilation cache was unbounded and had reached 782 MB across
-  64389 entries on a development machine. It is capped at 4 GB
-  (``DKX_COMPILATION_CACHE_MAX_BYTES``, 0 to disable) in a versioned directory,
-  since JAX's LRU cannot manage a directory built without its bookkeeping.
-  Import warns once, with the path, that the old one is safe to delete.
-- ``filelock`` is a new runtime dependency. jax refuses to honour
-  ``jax_compilation_cache_max_size`` without it, and refuses it on every cache
-  read rather than at the point the cap is set -- so bounding the cache in an
-  environment without ``filelock`` disabled the cache instead of bounding it.
+- The persistent compilation cache is documented as deliberately uncapped. It
+  grows without bound -- 782 MB over 64389 entries on one machine -- and
+  capping it is a worse trade than it looks: ``jax_compilation_cache_max_size``
+  turns on jax's LRU, which writes a sidecar file per entry and does size
+  bookkeeping on every write, costing about 60% (32 s against 20 s on one test
+  module). Deleting the cache directory costs only compile time; a test now
+  pins the decision so the cap is not reintroduced as an obvious improvement.
 - ``dkx.run`` could be shadowed by the ``dkx.run`` *module*: importing anything
   from it before touching the function left ``dkx.run(case)`` raising
   ``'module' object is not callable``. Order-dependent and silent, and the
