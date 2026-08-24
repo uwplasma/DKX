@@ -22,6 +22,7 @@ seconds per run. Start with `run_tokamak.py`.
 | `plot_convergence_scan.py` | every resolution axis against the finest grid — the "am I converged?" figure |
 | `plot_ambipolar_er.py` | scanning `J_r(E_r)` for the ambipolar root, and the per-species fluxes |
 | `plot_monoenergetic.py` | `D11`, `D31`, `D33` against collisionality — the benchmark figure |
+| `transport_matrix.py` | the 3×3 matrix, with its Onsager residual as a free error estimate |
 
 Figures land in `output/`.
 
