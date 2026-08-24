@@ -8,7 +8,7 @@ from pathlib import Path
 
 def _load_module():
     repo = Path(__file__).resolve().parents[1]
-    path = repo / "examples" / "publication_figures" / "generate_w7x_high_nu_performance.py"
+    path = repo / "tools" / "publication_figures" / "generate_w7x_high_nu_performance.py"
     spec = importlib.util.spec_from_file_location("generate_w7x_high_nu_performance", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

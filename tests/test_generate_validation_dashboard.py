@@ -8,7 +8,7 @@ from pathlib import Path
 
 def _load_module():
     repo = Path(__file__).resolve().parents[1]
-    path = repo / "examples" / "publication_figures" / "generate_validation_dashboard.py"
+    path = repo / "tools" / "publication_figures" / "generate_validation_dashboard.py"
     spec = importlib.util.spec_from_file_location("generate_validation_dashboard", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -20,7 +20,7 @@ def _load_module():
 def test_generate_validation_dashboard_from_checked_in_artifacts(tmp_path: Path) -> None:
     mod = _load_module()
     repo = Path(__file__).resolve().parents[1]
-    artifact_dir = repo / "examples" / "publication_figures" / "artifacts"
+    artifact_dir = repo / "tools" / "publication_figures" / "artifacts"
     out_dir = tmp_path / "figures"
     summary_json = tmp_path / "summary.json"
 

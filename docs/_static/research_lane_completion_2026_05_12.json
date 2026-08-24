@@ -210,7 +210,7 @@
     },
     {
      "claim": "Validation manifest records release-ready, bounded-proxy, and deferred lanes explicitly.",
-     "path": "examples/publication_figures/validation_manifest.json"
+     "path": "tools/publication_figures/validation_manifest.json"
     },
     {
      "claim": "Benchmark-doc tests prevent stale benchmark ratio, figure, and scope wording from shipping.",

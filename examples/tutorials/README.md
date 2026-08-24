@@ -48,7 +48,7 @@ go.
   field, and bootstrap-current workflows.
 - Use `examples/optimization/` for proxy objectives and kinetic promotion
   scripts.
-- Use `examples/parity/` and `examples/performance/` for validation and
+- Use `tools/parity/` and `tools/performance/` for validation and
   benchmarking rather than first-pass learning.
 
 The notebooks avoid large checked-in outputs. Heavy reference data are fetched

@@ -14,7 +14,7 @@ Machine-readable manifest
 
 The corresponding machine-readable manifest lives in:
 
-- ``examples/publication_figures/validation_manifest.json``
+- ``tools/publication_figures/validation_manifest.json``
 
 That file is the stable spine for:
 
@@ -90,11 +90,11 @@ Literature anchor:
 
 Script:
 
-- ``examples/publication_figures/generate_validation_dashboard.py``
+- ``tools/publication_figures/generate_validation_dashboard.py``
 
 Artifacts:
 
-- ``examples/publication_figures/artifacts/dkx_publication_validation_dashboard_summary.json``
+- ``tools/publication_figures/artifacts/dkx_publication_validation_dashboard_summary.json``
 - ``docs/_static/figures/paper/dkx_publication_validation_dashboard.png``
 - ``docs/_static/figures/paper/dkx_publication_validation_dashboard.pdf``
 
@@ -120,11 +120,11 @@ Literature and reference anchors:
 
 Script:
 
-- ``examples/publication_figures/generate_fortran_suite_benchmark_summary.py``
+- ``tools/publication_figures/generate_fortran_suite_benchmark_summary.py``
 
 Artifacts:
 
-- ``examples/publication_figures/artifacts/dkx_fortran_suite_benchmark_summary.json``
+- ``tools/publication_figures/artifacts/dkx_fortran_suite_benchmark_summary.json``
 - ``docs/_static/figures/paper/dkx_fortran_suite_benchmark_summary.png``
 - ``docs/_static/figures/paper/dkx_fortran_suite_benchmark_summary.pdf``
 
@@ -158,8 +158,8 @@ Literature anchor:
 
 Scripts:
 
-- ``examples/publication_figures/generate_sfincs_paper_figs.py --case lhd``
-- ``examples/publication_figures/generate_sfincs_paper_figs.py --case w7x``
+- ``tools/publication_figures/generate_sfincs_paper_figs.py --case lhd``
+- ``tools/publication_figures/generate_sfincs_paper_figs.py --case w7x``
 
 Artifacts:
 
@@ -188,18 +188,18 @@ Status note:
 Audited full artifacts:
 
 - full LHD summary:
-  ``examples/publication_figures/artifacts/lhd_collisionality_summary.json``
+  ``tools/publication_figures/artifacts/lhd_collisionality_summary.json``
 - full LHD figure:
   ``docs/_static/figures/paper/dkx_fig1_lhd_collisionality.png``
 - full W7-X summary:
-  ``examples/publication_figures/artifacts/w7x_collisionality_summary.json``
+  ``tools/publication_figures/artifacts/w7x_collisionality_summary.json``
 - full W7-X figure:
   ``docs/_static/figures/paper/dkx_fig2_w7x_collisionality.png``
 
 Corrected bounded branch artifacts:
 
 - bounded corrected LHD summary:
-  ``examples/publication_figures/artifacts/lhd_collisionality_reaudit_fast_summary.json``
+  ``tools/publication_figures/artifacts/lhd_collisionality_reaudit_fast_summary.json``
 - bounded corrected LHD figure:
   ``docs/_static/figures/paper/dkx_fig1_lhd_collisionality_reaudit_fast.png``
 
@@ -213,7 +213,7 @@ Corrected bounded branch artifacts:
    final audited paper figure.
 
 - bounded corrected W7-X summary:
-  ``examples/publication_figures/artifacts/w7x_collisionality_reaudit_fast_summary.json``
+  ``tools/publication_figures/artifacts/w7x_collisionality_reaudit_fast_summary.json``
 - bounded corrected W7-X figure:
   ``docs/_static/figures/paper/dkx_fig2_w7x_collisionality_reaudit_fast.png``
 
@@ -236,11 +236,11 @@ Literature anchors:
 
 Current script:
 
-- ``examples/publication_figures/generate_autodiff_sensitivity_validation.py``
+- ``tools/publication_figures/generate_autodiff_sensitivity_validation.py``
 
 Current artifacts:
 
-- ``examples/publication_figures/artifacts/dkx_autodiff_sensitivity_validation_summary.json``
+- ``tools/publication_figures/artifacts/dkx_autodiff_sensitivity_validation_summary.json``
 - ``docs/_static/figures/paper/dkx_autodiff_gradient_check.png``
 - ``docs/_static/figures/paper/dkx_autodiff_gradient_check.pdf``
 - ``docs/_static/figures/paper/dkx_autodiff_sensitivity_map.png``
@@ -299,7 +299,7 @@ Bounded integration lanes
 
 These lanes are useful for integration review, but they are not current-release
 publication claims unless and until they are added to
-``examples/publication_figures/validation_manifest.json`` with explicit
+``tools/publication_figures/validation_manifest.json`` with explicit
 ``release_gate`` metadata.
 
 Open lane board
@@ -440,7 +440,7 @@ Publication target:
 
 Current scaffold:
 
-- ``examples/publication_figures/generate_er_trajectory_sweep.py``
+- ``tools/publication_figures/generate_er_trajectory_sweep.py``
 
 This script already implements the correct upstream trajectory-model switches and
 produces JSON summaries plus 2x2 publication-style figures.
@@ -448,11 +448,11 @@ produces JSON summaries plus 2x2 publication-style figures.
 Current fixed artifacts:
 
 - audited tokamak-like reference summary:
-  ``examples/publication_figures/artifacts/er_sweep_tokamak_reference_summary.json``
+  ``tools/publication_figures/artifacts/er_sweep_tokamak_reference_summary.json``
 - audited tokamak-like reference figure:
   ``docs/_static/figures/paper/dkx_er_trajectory_sweep_tokamak_reference.png``
 - bounded stellarator-like fast summary:
-  ``examples/publication_figures/artifacts/er_sweep_stellarator_fast_reference_summary.json``
+  ``tools/publication_figures/artifacts/er_sweep_stellarator_fast_reference_summary.json``
 - bounded stellarator-like fast figure:
   ``docs/_static/figures/paper/dkx_er_trajectory_sweep_stellarator_fast_reference.png``
 
@@ -496,11 +496,11 @@ Closed branch evidence:
   on seven-point ``\\nu'`` ladders
 - a checked-in trend proxy records high-collisionality tail slopes from those
   corrected artifacts:
-  ``examples/publication_figures/artifacts/dkx_high_collisionality_trend_proxy_summary.json``
+  ``tools/publication_figures/artifacts/dkx_high_collisionality_trend_proxy_summary.json``
 - a checked-in Simakov-Helander normalization audit records the Appendix-B
   geometry ingredients, ``FSABHat2`` recomputation, inverse-``nu`` slope gates, and
   explicit readiness status:
-  ``examples/publication_figures/artifacts/dkx_simakov_helander_limit_audit_summary.json``
+  ``tools/publication_figures/artifacts/dkx_simakov_helander_limit_audit_summary.json``
 
 .. figure:: _static/figures/paper/dkx_high_collisionality_trend_proxy.png
    :alt: High-collisionality trend proxy from checked-in collisionality artifacts
@@ -533,7 +533,7 @@ Post-release acceptance criteria:
 - keep the Simakov-Helander audit artifact in CI as the parent gate for future
   high-collisionality scan work,
 - use
-  ``examples/publication_figures/artifacts/dkx_simakov_helander_high_nu_run_plan.json``
+  ``tools/publication_figures/artifacts/dkx_simakov_helander_high_nu_run_plan.json``
   as the executable high-``nu'`` extension plan; it is generated from the audit
   and pins LHD and W7-X extension commands ending near ``nu'=100``,
 - run each plan entry's ``pilot_command`` first; the first LHD FP pilot at
@@ -579,7 +579,7 @@ Validation goal:
 Stable artifact gate:
 
 - ``dkx.validation.artifacts.build_w7x_ambipolar_root_provenance_panel``
-- ``examples/publication_figures/provenance/w7x_ambipolar_provenance_template.json``
+- ``tools/publication_figures/provenance/w7x_ambipolar_provenance_template.json``
 
 The stable branch keeps the ambipolar solver API, scan/readback tests, and a
 fail-closed provenance panel builder. Long W7-X scan and figure generation is a
@@ -607,7 +607,7 @@ Even with complete provenance, generated summaries remain
 checked in; this prevents an exploratory rerun from being labelled as a closed
 literature comparison.
 Start from
-``examples/publication_figures/provenance/w7x_ambipolar_provenance_template.json``;
+``tools/publication_figures/provenance/w7x_ambipolar_provenance_template.json``;
 it is intentionally incomplete and should be copied/finalized for a specific
 equilibrium/profile reconstruction before any literature-facing W7-X claim.
 
@@ -643,7 +643,7 @@ How this page should evolve
 Each time a new figure lane is implemented, update both:
 
 - this page,
-- and ``examples/publication_figures/validation_manifest.json``.
+- and ``tools/publication_figures/validation_manifest.json``.
 
 That keeps the manuscript-facing validation story synchronized with the code structure
 and the test/benchmark infrastructure.

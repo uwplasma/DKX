@@ -8,7 +8,7 @@ from pathlib import Path
 
 def _load_module():
     repo = Path(__file__).resolve().parents[1]
-    path = repo / "examples" / "publication_figures" / "generate_fortran_suite_benchmark_summary.py"
+    path = repo / "tools" / "publication_figures" / "generate_fortran_suite_benchmark_summary.py"
     spec = importlib.util.spec_from_file_location("generate_fortran_suite_benchmark_summary", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -394,7 +394,7 @@ def test_checked_in_summary_matches_default_suite_reports(tmp_path: Path) -> Non
     repo = Path(__file__).resolve().parents[1]
     checked_in_summary = (
         repo
-        / "examples"
+        / "tools"
         / "publication_figures"
         / "artifacts"
         / "dkx_fortran_suite_benchmark_summary.json"

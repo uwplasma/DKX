@@ -30,7 +30,7 @@ def _repo_root() -> Path:
 
 
 def _manifest() -> list[dict[str, object]]:
-    path = _repo_root() / "examples" / "publication_figures" / "validation_manifest.json"
+    path = _repo_root() / "tools" / "publication_figures" / "validation_manifest.json"
     payload = json.loads(path.read_text())
     assert isinstance(payload, list)
     return payload

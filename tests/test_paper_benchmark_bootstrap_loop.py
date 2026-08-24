@@ -1,6 +1,6 @@
 """CI-sized regression gate for the kinetic-in-the-loop bootstrap benchmark.
 
-Runs ``examples/paper_benchmarks/bootstrap_consistency_kinetic_loop.py`` in
+Runs ``tools/paper_benchmarks/bootstrap_consistency_kinetic_loop.py`` in
 its CI mode (truncated boundary max_mode = 2, ns = 7, two kinetic surfaces at
 toy resolution, three Picard iterations, single-surface gradient quadrature)
 into temporary output directories, and pins the structural physics the full
@@ -42,7 +42,7 @@ pytest.importorskip("vmex.core.bootstrap")
 pytest.importorskip("booz_xform_jax")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-EXAMPLE = REPO_ROOT / "examples" / "paper_benchmarks" / "bootstrap_consistency_kinetic_loop.py"
+EXAMPLE = REPO_ROOT / "tools" / "paper_benchmarks" / "bootstrap_consistency_kinetic_loop.py"
 
 # Frozen at the CI resolution (see module docstring for the measurement).
 CURTOR_ITERATION1_FROZEN = -199850.025

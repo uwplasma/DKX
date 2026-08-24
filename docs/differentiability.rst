@@ -277,7 +277,7 @@ iteration.
    Fokker-Planck collisions, and zero and finite ``Er``.  The objective is
    ``FSABjHat``; the parameters are the per-species density and temperature
    gradient drives.  Regenerate with
-   ``python examples/paper_benchmarks/gradient_cost_scaling.py --results ...``.
+   ``python tools/paper_benchmarks/gradient_cost_scaling.py --results ...``.
 
 The cost is measured at *every* :math:`k`, not extrapolated from one point:
 the harness records the wall time of the two solves each parameter needs, so

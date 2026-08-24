@@ -132,16 +132,16 @@ jobs:
           python examples/getting_started/write_sfincs_output_vmec.py
           python examples/getting_started/plot_sfincs_output.py
           python examples/tutorials/run_quick_output_and_plot.py
-          python examples/parity/write_output_upstream_quick2species_python.py
-          python examples/parity/write_output_upstream_quick2species_cli.py
-          python examples/parity/geometry_scheme4_parity.py
-          python examples/parity/collisionless_operator_matvec_parity.py
+          python tools/parity/write_output_upstream_quick2species_python.py
+          python tools/parity/write_output_upstream_quick2species_cli.py
+          python tools/parity/geometry_scheme4_parity.py
+          python tools/parity/collisionless_operator_matvec_parity.py
           python examples/autodiff/differentiable_geometry_gradients.py
-          python examples/parity/solve_fortran_matrix_with_gmres.py
-          python examples/parity/output_parity_cli_driver.py
-          python examples/parity/output_key_coverage_report.py
+          python tools/parity/solve_fortran_matrix_with_gmres.py
+          python tools/parity/output_parity_cli_driver.py
+          python tools/parity/output_key_coverage_report.py
           python examples/autodiff/matrix_free_residual_and_jvp.py
-          python examples/parity/solve_scheme5_tiny_parity.py
+          python tools/parity/solve_scheme5_tiny_parity.py
           python examples/autodiff/autodiff_sensitivity_nu_n_scheme5.py
 
   external-data-smoke:
