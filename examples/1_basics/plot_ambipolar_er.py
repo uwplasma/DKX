@@ -1,15 +1,14 @@
 """Scan the radial electric field -> find the ambipolar root -> plot both.
 
-The radial electric field is not an input a device gives you; it is set by
-ambipolarity, ``J_r(E_r) = sum_s Z_s Gamma_s = 0``.  ``dkx.batched_er_scan``
-does the scan in one batched call and the crossing is the root; plotting it
-rather than solving from one guess is what tells you whether you have a single
-root or a stellarator's ion/unstable/electron triplet.
+The radial electric field is not an input; it is set by ambipolarity,
+``J_r(E_r) = sum_s Z_s Gamma_s = 0``.  ``dkx.batched_er_scan`` does the scan
+in one batched call and the crossing is the root -- plotting it, rather than
+solving from a guess, shows whether you have one root or a stellarator's three.
 
 Ambipolarity is *charge-weighted*, not an equality of fluxes.  Here (hydrogen
-Z=1, carbon Z=6) the root is where ``Gamma_H = -6 Gamma_C``, so the two curves
-sit nowhere near each other.  Only a Z = +-1 pair gives equal fluxes, and
-taking that as the general rule is the mistake this example prevents.
+Z=1, carbon Z=6) the root is where ``Gamma_H = -6 Gamma_C``, so the curves sit
+nowhere near each other.  Only a Z = +-1 pair gives equal fluxes; taking that
+as the general rule is the mistake this example prevents.
 
 Physics: hydrogen with a carbon impurity, from the bundled SFINCS examples.
 The root is negative -- an ion root -- and the impurity flux runs opposite in
