@@ -470,6 +470,47 @@ Unreleased
   and the latest local full suite after the active/dense setup extraction passed
   with ``2659 passed in 551.86 s``.
 
+v2.3.0
+------
+
+A Python-first entry point, a graded examples tree, and four fixes found while
+writing it.
+
+New public API:
+
+- ``dkx.run(case_or_path, **overrides)`` solves one case and returns its
+  moments, whether the case is an ``input.namelist`` or keyword arguments using
+  the Fortran parameter names. An unknown name raises rather than being
+  ignored, so a misspelled override cannot silently do nothing.
+- ``dkx.plot(run_or_path, out=...)`` draws the standard figure in one call, or
+  ``style="summary"`` for the compact page, which is the only style that
+  expands into a multi-page PDF.
+
+Examples are now a graded ladder, numbered by what each folder *requires*
+rather than by difficulty: ``1_basics`` needs nothing but ``dkx``,
+``2_equilibria`` uses real geometry, ``3_gradients`` differentiates through the
+solve. Every script is module-level top to bottom -- no ``main()``, no argument
+parsing -- with its knobs as constants at the top, so it runs unchanged in
+Spyder or a notebook. Each docstring ends with the numbers that script actually
+produced. Parity, benchmark and figure-generation drivers moved to ``tools/``;
+they regenerate checked artifacts and are not reading material.
+
+Fixes:
+
+- The persistent compilation cache was unbounded and had reached 782 MB across
+  64389 entries on a development machine. It is capped at 4 GB
+  (``DKX_COMPILATION_CACHE_MAX_BYTES``, 0 to disable) in a versioned directory,
+  since JAX's LRU cannot manage a directory built without its bookkeeping.
+  Import warns once, with the path, that the old one is safe to delete.
+- ``dkx.run`` could be shadowed by the ``dkx.run`` *module*: importing anything
+  from it before touching the function left ``dkx.run(case)`` raising
+  ``'module' object is not callable``. Order-dependent and silent, and the
+  autodiff examples hit it.
+- ``dkx.plot``'s docstring offered a multi-page PDF from the ``.pdf`` suffix
+  without saying only ``style="summary"`` expands; the default writes one page.
+- The ``|B|`` panels drew theta and zeta on each other's axes when the output
+  file stored them in the opposite order.
+
 v1.1.7
 ------
 
