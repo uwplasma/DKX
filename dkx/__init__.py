@@ -10,6 +10,8 @@ from __future__ import annotations
 # CLI invocations unless the user explicitly disables it. This improves cold-start
 # performance without requiring environment configuration.
 import os
+import sys as _sys
+import types as _types
 import tempfile
 
 # Suppress low-value XLA/PjRt C++ warning chatter by default. Users can still
@@ -313,6 +315,39 @@ def __getattr__(name: str):
 
 def __dir__() -> list[str]:
     return sorted(set(globals()) | set(_LAZY_EXPORTS))
+
+
+# ``dkx/run.py`` is a module and ``dkx.run`` is a function, and Python binds the
+# submodule onto the package when anything imports it.  So::
+#
+#     import dkx
+#     from dkx.run import profile_moments_from_operator   # autodiff helper
+#     dkx.run(case)          # TypeError: 'module' object is not callable
+#
+# but the same two lines in the other order work.  Order-dependent, silent, and
+# it reads as the package being broken.  Re-resolve such a name on access rather
+# than letting the module keep the slot; the alternative is importing the heavy
+# solve stack eagerly, which costs every ``import dkx`` real time (0.38 s here).
+_SHADOWABLE = frozenset(
+    name
+    for name, (module_name, _attr) in _LAZY_EXPORTS.items()
+    if module_name == f"{__name__}.{name}"
+)
+
+
+class _Package(_types.ModuleType):
+    def __getattribute__(self, name):
+        value = _types.ModuleType.__getattribute__(self, name)
+        if name in _SHADOWABLE and type(value) is _types.ModuleType:
+            import importlib  # noqa: PLC0415
+
+            module_name, attr = _LAZY_EXPORTS[name]
+            value = getattr(importlib.import_module(module_name), attr)
+            object.__setattr__(self, name, value)
+        return value
+
+
+_sys.modules[__name__].__class__ = _Package
 
 
 
