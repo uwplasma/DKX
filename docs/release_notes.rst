@@ -502,10 +502,17 @@ Fixes:
   (``DKX_COMPILATION_CACHE_MAX_BYTES``, 0 to disable) in a versioned directory,
   since JAX's LRU cannot manage a directory built without its bookkeeping.
   Import warns once, with the path, that the old one is safe to delete.
+- ``filelock`` is a new runtime dependency. jax refuses to honour
+  ``jax_compilation_cache_max_size`` without it, and refuses it on every cache
+  read rather than at the point the cap is set -- so bounding the cache in an
+  environment without ``filelock`` disabled the cache instead of bounding it.
 - ``dkx.run`` could be shadowed by the ``dkx.run`` *module*: importing anything
   from it before touching the function left ``dkx.run(case)`` raising
   ``'module' object is not callable``. Order-dependent and silent, and the
-  autodiff examples hit it.
+  autodiff examples hit it. ``dkx.run`` is now always the module and the module
+  is callable, so the call, the attribute access, ``from dkx.run import ...``
+  and ``monkeypatch.setattr("dkx.run.run_profile", ...)`` all work in any
+  import order.
 - ``dkx.plot``'s docstring offered a multi-page PDF from the ``.pdf`` suffix
   without saying only ``style="summary"`` expands; the default writes one page.
 - The ``|B|`` panels drew theta and zeta on each other's axes when the output
