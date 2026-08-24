@@ -295,7 +295,29 @@ def plot_sfincs_output_summary(
     return output_png.resolve()
 
 
-def plot(source, out="dkx_panels.png", *, style="panels"):
+
+def _shown(written: Path) -> Path:
+    """Display an already-written figure, for IDE and notebook users.
+
+    The panel builders save and close their own figure, so there is nothing
+    left to ``plt.show()``.  Re-reading the PNG and showing it is what puts it
+    in Spyder's plots pane, and it costs one imread.
+    """
+    try:
+        image = plt.imread(written)
+    except Exception:  # pragma: no cover - unreadable/exotic format
+        return written
+    figure = plt.figure(figsize=(13.5, 8.0))
+    axis = figure.add_axes((0.0, 0.0, 1.0, 1.0))
+    axis.imshow(image)
+    axis.axis("off")
+    # block=False so a script run from a terminal is not held open by a
+    # window nobody is there to close; Spyder and Jupyter render regardless.
+    plt.show(block=False)
+    return written
+
+
+def plot(source, out="dkx_panels.png", *, style="panels", show=False):
     """Plot a run or an output file.  One call, one figure, returns its path.
 
     ``source`` is whatever you already have:
@@ -322,6 +344,9 @@ def plot(source, out="dkx_panels.png", *, style="panels"):
         out: destination path; the suffix selects png or pdf.
         style: ``"panels"`` (default) for the ``dkx --plot`` figure, or
             ``"summary"`` for the compact three-panel page.
+        show: also display the figure.  For Spyder, Jupyter or any IDE where
+            you want it in the plots pane rather than only on disk; a no-op
+            under a headless backend.
 
     Returns:
         The :class:`~pathlib.Path` actually written.
@@ -342,12 +367,14 @@ def plot(source, out="dkx_panels.png", *, style="panels"):
                 raise FileNotFoundError(f"no sfincsOutput file in {path}")
             path = candidates[0]
         if style == "summary":
-            return plot_sfincs_output_summary(input_h5=path, output_png=out)
+            written = plot_sfincs_output_summary(input_h5=path, output_png=out)
+            return _shown(written) if show else written
         if style != "panels":
             raise ValueError(f"style must be 'panels' or 'summary'; got {style!r}")
         from dkx.representative import plot_output_file  # noqa: PLC0415
 
-        return plot_output_file(path, out)
+        written = plot_output_file(path, out)
+        return _shown(written) if show else written
 
     if hasattr(source, "moments"):
         raise ValueError(

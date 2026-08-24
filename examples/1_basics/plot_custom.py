@@ -25,14 +25,16 @@ Achieved: 177.1 kA/m^2 at nu_n = 1e-3, 166.5 at 1e-2, 3.2 at 1.
 import os
 from pathlib import Path
 
-import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
 
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-import numpy as np  # noqa: E402
+import dkx
+from dkx.units import CURRENT_DENSITY
 
-import dkx  # noqa: E402
-from dkx.units import CURRENT_DENSITY  # noqa: E402
+# The backend is deliberately not forced.  Run this in Spyder or a notebook and
+# the figure appears in the plots pane; run it headless and matplotlib picks a
+# file-only backend by itself.  A script that hard-codes Agg can never show you
+# anything.
 
 # --------------------------- parameters -------------------------------------
 CI = os.environ.get("DKX_CI") == "1"
@@ -77,5 +79,6 @@ right.grid(alpha=0.3)
 figure.suptitle("Circular tokamak: collisionality scan")
 out = OUT_DIR / "plot_custom.png"
 figure.savefig(out, dpi=150)
+plt.show(block=False)  # shows in Spyder/Jupyter; never blocks a batch run
 print(f"peak bootstrap {bootstrap_kA.max():+.3f} kA/m^2 at nu_n = {NU_VALUES[bootstrap_kA.argmax()]:.3g}")
 print(f"wrote {out}")
