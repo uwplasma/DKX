@@ -279,21 +279,6 @@
         "next_action": "Keep as reference inputs; do not add generated outputs. The duplicate examples/upstream tree was deleted from stable examples."
       },
       {
-        "name": "publication_and_performance_examples",
-        "prefix_any": [
-          "tools/publication_figures/",
-          "tools/performance/"
-        ],
-        "decision": "extract-pr",
-        "owner_tags": [
-          "PERF",
-          "EVIDENCE"
-        ],
-        "proof_owner": "research/publication-audits and research/parallel-performance",
-        "line_target": "move long generators/campaigns out of stable examples",
-        "next_action": "Move long publication/performance generators to preservation branches; keep only compact checked figures and their source data when public docs still cite them."
-      },
-      {
         "name": "optimization_examples",
         "prefix": "examples/optimization/",
         "decision": "merge",
@@ -310,8 +295,6 @@
         "prefix": "examples/",
         "exclude_prefix_any": [
           "examples/sfincs_examples/",
-          "tools/publication_figures/",
-          "tools/performance/",
           "examples/optimization/"
         ],
         "decision": "merge",
@@ -677,7 +660,7 @@
     },
     {
       "path": "dkx/representative.py",
-      "lines_at_audit": 1398,
+      "lines_at_audit": 1448,
       "category": "core",
       "action": "retain",
       "public_imports": [],
