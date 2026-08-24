@@ -41,6 +41,9 @@ dev = [
   "pytest-cov",
   "pytest-xdist",
   "pytest-split",
+  # Read back the multi-page PDF that dkx.plot writes, so the page count is a
+  # measurement rather than a claim (tests/test_plot_pdf_paging_*).
+  "pypdf",
 ]
 docs = [
   "sphinx",
