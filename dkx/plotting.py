@@ -331,8 +331,9 @@ def plot(source, out="dkx_panels.png", *, style="panels", show=False):
     monoenergetic coefficients, ``|B|`` on the surface, the bootstrap current
     and the species fluxes.  ``out`` picks the format by suffix.
 
-    ``style="summary"`` selects the older compact three-panel page instead,
-    and with a ``.pdf`` suffix the multi-page diagnostics book.
+    ``style="summary"`` selects the compact three-panel page instead.  Only
+    that style expands with a ``.pdf`` suffix, into a four-page diagnostics
+    book; ``style="panels"`` writes its one figure whatever the suffix.
 
     For a figure this does not draw, read the numbers off ``run.moments`` and
     use matplotlib directly --- ``examples/1_basics/plot_custom.py`` shows
@@ -341,7 +342,8 @@ def plot(source, out="dkx_panels.png", *, style="panels", show=False):
 
     Args:
         source: a run object, an output-file path, or a directory.
-        out: destination path; the suffix selects png or pdf.
+        out: destination path; the suffix selects png or pdf.  A ``.pdf``
+            is multi-page only under ``style="summary"``.
         style: ``"panels"`` (default) for the ``dkx --plot`` figure, or
             ``"summary"`` for the compact three-panel page.
         show: also display the figure.  For Spyder, Jupyter or any IDE where
