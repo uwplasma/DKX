@@ -169,19 +169,29 @@ if _disable_cache not in {"1", "true", "yes", "on"}:
             except OSError:
                 return False
 
+        # Versioned because the cache is bounded now (see the cap below) and
+        # JAX's LRU keeps a sidecar "-atime" file per entry.  A directory
+        # filled in before the cap existed has none, so every eviction pass
+        # tries to touch a file that was never written and warns -- measured,
+        # 12 warnings on a single small solve against a legacy cache, and 0
+        # against a fresh one.  Starting a new directory is what makes the
+        # bound work; the old one simply stops being written to.
+        _CACHE_DIR_NAME = "jax_compilation_cache_v2"
+        _LEGACY_CACHE_DIR_NAME = "jax_compilation_cache"
+
         cache_override = os.environ.get("DKX_COMPILATION_CACHE_DIR", "").strip()
         if cache_override:
             default_cache_dir = cache_override
         else:
             xdg_cache = os.environ.get("XDG_CACHE_HOME", "").strip()
             if xdg_cache:
-                default_cache_dir = os.path.join(xdg_cache, "dkx", "jax_compilation_cache")
+                default_cache_dir = os.path.join(xdg_cache, "dkx", _CACHE_DIR_NAME)
             else:
-                default_cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "dkx", "jax_compilation_cache")
+                default_cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "dkx", _CACHE_DIR_NAME)
         try:
             os.makedirs(default_cache_dir, exist_ok=True)
         except OSError:
-            default_cache_dir = os.path.join(tempfile.gettempdir(), "dkx", "jax_compilation_cache")
+            default_cache_dir = os.path.join(tempfile.gettempdir(), "dkx", _CACHE_DIR_NAME)
             try:
                 os.makedirs(default_cache_dir, exist_ok=True)
             except OSError:
@@ -190,7 +200,7 @@ if _disable_cache not in {"1", "true", "yes", "on"}:
             # Some environments (CI sandboxes, read-only homes) can create the directory but
             # cannot write compilation entries. Fall back to a tempdir cache to avoid noisy
             # warnings and degraded cold-start performance.
-            default_cache_dir = os.path.join(tempfile.gettempdir(), "dkx", "jax_compilation_cache")
+            default_cache_dir = os.path.join(tempfile.gettempdir(), "dkx", _CACHE_DIR_NAME)
             try:
                 os.makedirs(default_cache_dir, exist_ok=True)
             except OSError:
@@ -199,6 +209,32 @@ if _disable_cache not in {"1", "true", "yes", "on"}:
                 default_cache_dir = ""
         if default_cache_dir:
             os.environ["JAX_COMPILATION_CACHE_DIR"] = default_cache_dir
+            # The pre-cap directory is orphaned by the rename above.  It is
+            # only a cache, but it can be large (782 MB / 64k entries on the
+            # machine that prompted the cap), so say so once with the path
+            # instead of leaving it to be found by accident.
+            _legacy = os.path.join(
+                os.path.dirname(default_cache_dir), _LEGACY_CACHE_DIR_NAME
+            )
+            if os.path.isdir(_legacy):
+                try:
+                    _legacy_bytes = sum(
+                        entry.stat().st_size
+                        for entry in os.scandir(_legacy)
+                        if entry.is_file()
+                    )
+                except OSError:
+                    _legacy_bytes = 0
+                if _legacy_bytes > 100 * 1024**2:
+                    import warnings as _warnings  # noqa: PLC0415
+
+                    _warnings.warn(
+                        f"dkx's compilation cache moved to {default_cache_dir}; "
+                        f"the old unbounded one is still on disk "
+                        f"({_legacy_bytes / 1024**3:.1f} GB) and is safe to "
+                        f"delete:  rm -rf {_legacy}",
+                        stacklevel=2,
+                    )
         os.environ.setdefault("JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS", "0")
         os.environ.setdefault("JAX_PERSISTENT_CACHE_MIN_ENTRY_SIZE_BYTES", "0")
 
