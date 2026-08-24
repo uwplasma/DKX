@@ -242,6 +242,23 @@ try:
             )
         except ValueError:
             pass
+        # Bound the cache.  The thresholds above are deliberately zero so even
+        # tiny kernels are cached, which means every distinct grid a scan
+        # touches leaves an entry behind and nothing ever removes one.  Left
+        # uncapped this reached 782 MB across 64k files on a development
+        # machine -- a slow leak into the user's home directory that no run
+        # ever reports.  A cap makes JAX evict least-recently-used entries
+        # instead.  Set DKX_COMPILATION_CACHE_MAX_BYTES=0 to disable the bound.
+        try:
+            _cache_cap = int(
+                os.environ.get("DKX_COMPILATION_CACHE_MAX_BYTES", str(4 * 1024**3))
+            )
+            if _cache_cap > 0:
+                _jax_config.update("jax_compilation_cache_max_size", _cache_cap)
+        except (ValueError, AttributeError):
+            # Older jax without the knob: an unbounded cache still works, it
+            # just grows, so this must not stop dkx from importing.
+            pass
 except Exception:
     # Keep import lightweight for tooling that inspects the package without JAX.
     pass
