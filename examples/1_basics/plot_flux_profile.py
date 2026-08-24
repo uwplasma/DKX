@@ -16,7 +16,10 @@ Two details are what make it correct rather than merely plausible:
     transport is about -- would be wrong everywhere but one surface.
 
 Physics: a single-species tokamak with parabolic n and T, no radial electric
-field.  Fluxes are outward-positive.
+field.  Fluxes are outward-positive.  The n and T curves are the same function
+here, so they genuinely do lie on top of each other in the first panel -- they
+are drawn with different markers and dash patterns so that reads as one shared
+profile rather than as a curve that failed to draw.
 
 Expected runtime: ~40 s on a laptop CPU for seven surfaces.
 
