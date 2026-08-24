@@ -61,6 +61,21 @@
       "category": "capability",
       "role": "Finite-beta VMEC, ambipolar electric field, Redl, and bootstrap-current workflows.",
       "start_here": "vmex_finite_beta/compare_qs_paper_dkx_redl.py"
+    },
+    "1_basics": {
+      "category": "learning",
+      "role": "DKX alone on analytic geometry: no optional dependencies, no equilibrium files, seconds per run.",
+      "start_here": "1_basics/run_tokamak.py"
+    },
+    "2_equilibria": {
+      "category": "learning",
+      "role": "The same solver on real magnetic geometry: VMEC wout and Boozer .bc files.",
+      "start_here": "2_equilibria/README.md"
+    },
+    "3_gradients": {
+      "category": "capability",
+      "role": "Differentiating through the solve, and putting that inside an optimization loop.",
+      "start_here": "3_gradients/README.md"
     }
   },
   "workflows": [
@@ -70,7 +85,14 @@
       "entrypoint": "tutorials/run_quick_output_and_plot.py",
       "command": "python examples/tutorials/run_quick_output_and_plot.py",
       "topic": "getting_started",
-      "keywords": ["cli", "plot", "hdf5", "netcdf", "npz", "diagnostics"],
+      "keywords": [
+        "cli",
+        "plot",
+        "hdf5",
+        "netcdf",
+        "npz",
+        "diagnostics"
+      ],
       "runtime_budget": "seconds",
       "requires_fortran_v3": false
     },
@@ -80,7 +102,13 @@
       "entrypoint": "getting_started/write_and_plot_multiple_formats.py",
       "command": "python examples/getting_started/write_and_plot_multiple_formats.py",
       "topic": "getting_started",
-      "keywords": ["output", "hdf5", "netcdf", "npz", "plot"],
+      "keywords": [
+        "output",
+        "hdf5",
+        "netcdf",
+        "npz",
+        "plot"
+      ],
       "runtime_budget": "seconds",
       "requires_fortran_v3": false
     },
@@ -90,7 +118,12 @@
       "entrypoint": "getting_started/write_sfincs_output_vmec.py",
       "command": "python examples/getting_started/write_sfincs_output_vmec.py",
       "topic": "geometry",
-      "keywords": ["vmec", "wout", "geometry", "scheme5"],
+      "keywords": [
+        "vmec",
+        "wout",
+        "geometry",
+        "scheme5"
+      ],
       "runtime_budget": "seconds",
       "requires_fortran_v3": false
     },
@@ -100,7 +133,13 @@
       "entrypoint": "transport/transport_matrix_rhsmode2_and_rhsmode3.py",
       "command": "python examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py",
       "topic": "transport",
-      "keywords": ["transport", "rhsmode2", "rhsmode3", "coefficients", "matrix"],
+      "keywords": [
+        "transport",
+        "rhsmode2",
+        "rhsmode3",
+        "coefficients",
+        "matrix"
+      ],
       "runtime_budget": "seconds",
       "requires_fortran_v3": false
     },
@@ -110,7 +149,13 @@
       "entrypoint": "autodiff/autodiff_gradient_nu_n_residual.py",
       "command": "python examples/autodiff/autodiff_gradient_nu_n_residual.py",
       "topic": "autodiff",
-      "keywords": ["autodiff", "jax", "gradient", "jvp", "residual"],
+      "keywords": [
+        "autodiff",
+        "jax",
+        "gradient",
+        "jvp",
+        "residual"
+      ],
       "runtime_budget": "seconds",
       "requires_fortran_v3": false
     },
@@ -120,7 +165,14 @@
       "entrypoint": "vmex_finite_beta/compare_qs_paper_dkx_redl.py",
       "command": "python examples/vmex_finite_beta/compare_qs_paper_dkx_redl.py --case QA --quick --jax-vs-redl --solve-method auto",
       "topic": "bootstrap_current",
-      "keywords": ["bootstrap", "redl", "vmec", "finite-beta", "qa", "qh"],
+      "keywords": [
+        "bootstrap",
+        "redl",
+        "vmec",
+        "finite-beta",
+        "qa",
+        "qh"
+      ],
       "runtime_budget": "bounded; use --quick for first run",
       "requires_fortran_v3": false
     },
@@ -130,7 +182,15 @@
       "entrypoint": "performance/benchmark_output_formats.py",
       "command": "python examples/performance/benchmark_output_formats.py --repeats 2",
       "topic": "performance",
-      "keywords": ["performance", "runtime", "memory", "io", "gpu", "cpu", "output"],
+      "keywords": [
+        "performance",
+        "runtime",
+        "memory",
+        "io",
+        "gpu",
+        "cpu",
+        "output"
+      ],
       "runtime_budget": "seconds",
       "requires_fortran_v3": false
     },
@@ -140,7 +200,13 @@
       "entrypoint": "parity/output_parity_vs_fortran_fixture.py",
       "command": "python examples/parity/output_parity_vs_fortran_fixture.py",
       "topic": "validation",
-      "keywords": ["parity", "validation", "fortran", "fixture", "hdf5"],
+      "keywords": [
+        "parity",
+        "validation",
+        "fortran",
+        "fixture",
+        "hdf5"
+      ],
       "runtime_budget": "seconds",
       "requires_fortran_v3": false
     },
@@ -150,7 +216,13 @@
       "entrypoint": "optimization/qa_nfp2_dkx_objectives.py",
       "command": "python examples/optimization/qa_nfp2_dkx_objectives.py --help",
       "topic": "optimization",
-      "keywords": ["optimization", "qa", "qi", "bootstrap", "objectives"],
+      "keywords": [
+        "optimization",
+        "qa",
+        "qi",
+        "bootstrap",
+        "objectives"
+      ],
       "runtime_budget": "seconds for proxy setup; kinetic promotion is explicit",
       "requires_fortran_v3": false
     },
@@ -160,7 +232,13 @@
       "entrypoint": "autodiff/vmex_to_boozer_sfincs_pipeline.py",
       "command": "python examples/autodiff/vmex_to_boozer_sfincs_pipeline.py --help",
       "topic": "autodiff_geometry",
-      "keywords": ["vmex", "booz_xform_jax", "boozer", "autodiff", "geometry"],
+      "keywords": [
+        "vmex",
+        "booz_xform_jax",
+        "boozer",
+        "autodiff",
+        "geometry"
+      ],
       "runtime_budget": "optional dependency workflow",
       "requires_fortran_v3": false
     }

@@ -289,8 +289,9 @@ class SolveResult:
     Attributes:
         x: solution state vector(s), same shape as the ``rhs`` passed in
             (``(n,)`` or ``(n, n_rhs)``).
-        method: solver actually used: ``"block_tridiagonal"`` (tier 1),
-            ``"gcrot"`` (tier 2), or ``"direct"`` (tier 3).
+        method: the implementation that ran --- ``"block_tridiagonal"``,
+            ``"gcrot"``, or ``"direct"``.  For "what did it do", read
+            :attr:`route` instead, which is ``"direct"`` or ``"iterative"``.
         iterations: total Krylov inner iterations across all right-hand sides
             (tier 2), else ``None``.
         residual_norms: true residual norms ``||b - A x||`` per right-hand
@@ -320,6 +321,16 @@ class SolveResult:
     recycle: tuple[jnp.ndarray, jnp.ndarray] | None
     timings: dict[str, float]
     adjoint: AdjointDiagnostics | None = None
+
+    @property
+    def route(self) -> str:
+        """``"direct"`` or ``"iterative"`` --- what the solve did, not how.
+
+        ``method`` names the implementation that ran, which is what the solver
+        trace and the benchmarks need.  A reader of a run wants the shorter
+        answer, and "block_tridiagonal_truncated" is not it.
+        """
+        return "iterative" if self.method in {"gcrot", "gmres"} else "direct"
 
 def _as_columns(rhs: jnp.ndarray) -> tuple[jnp.ndarray, bool]:
     rhs = jnp.asarray(rhs, dtype=jnp.float64)
@@ -1987,10 +1998,16 @@ def solve(
     """
     _require_solvax()
     method = str(method).strip().lower()
+    # "direct" and "iterative" are the names to reach for: they say what the
+    # route does rather than how it is built.  The implementation names stay
+    # accepted because the benchmarks and the solver trace speak them.
+    method = {"iterative": "gmres"}.get(method, method)
     if method not in {
         "auto", "block_tridiagonal", "block_tridiagonal_truncated", "gmres", "direct"
     }:
-        raise ValueError(f"unknown method {method!r}")
+        raise ValueError(
+            f"unknown method {method!r}; use 'auto' (default), 'direct', or 'iterative'"
+        )
     if method == "block_tridiagonal_truncated":
         ok, reason = tier1_available(op)
         if not ok:

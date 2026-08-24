@@ -1,0 +1,31 @@
+! SFINCS-style input.namelist written by dkx (SfincsInput.to_namelist).
+&general
+/
+&geometryParameters
+  geometryScheme = 1
+  epsilon_t = -0.07
+  epsilon_h = 0.0
+  rN_wish = 0.3
+/
+&speciesParameters
+  Zs = 1.0
+  mHats = 1.0
+  nHats = 1.0
+  THats = 1.0
+  dNHatdrHats = -0.5
+  dTHatdrHats = -1.0
+/
+&physicsParameters
+  collisionOperator = 1
+/
+&resolutionParameters
+  Nzeta = 1
+  Nxi = 8
+  Nx = 6
+/
+&otherNumericalParameters
+/
+&preconditionerOptions
+/
+&export_f
+/

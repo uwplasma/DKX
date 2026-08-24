@@ -12,6 +12,9 @@ DOCS_EXAMPLES = REPO_ROOT / "docs" / "examples.rst"
 WORKFLOW_CATALOG = EXAMPLES_ROOT / "workflow_catalog.json"
 
 ALLOWED_EXAMPLE_FOLDERS = {
+    "1_basics",
+    "2_equilibria",
+    "3_gradients",
     "autodiff",
     "data",
     "getting_started",
@@ -29,6 +32,12 @@ ALLOWED_EXAMPLE_FOLDERS = {
 FOLDERS_REQUIRING_README = ALLOWED_EXAMPLE_FOLDERS
 
 FOLDER_CATEGORIES = {
+    # The graded ladder: 1 needs nothing installed, 2 needs an equilibrium
+    # file, 3 differentiates through the solve.  Grading by what a script
+    # *requires* is objective, where "beginner/advanced" is a matter of taste.
+    "1_basics": "learning",
+    "2_equilibria": "learning",
+    "3_gradients": "capability",
     "autodiff": "capability",
     "data": "reference",
     "getting_started": "learning",

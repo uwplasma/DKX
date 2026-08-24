@@ -62,45 +62,41 @@ throughout: 37.3 s on W7-X and 45.8 s on a finite-β precise-QA equilibrium, the
 latter split 16.4 s for the 21-point scan, 6.0 s for the `|B|` solve, and 22.5 s
 for the radial scan's 50 drift-kinetic solves.
 
-The same solve from Python (mirrors
-[`examples/getting_started/run_tokamak.py`](examples/getting_started/run_tokamak.py),
-which also builds the namelist from dicts and plots the result):
+The same solve from Python. No input file, no argument parsing — the
+parameters are the ones a deck carries, passed as keywords
+([`examples/1_basics/run_tokamak.py`](examples/1_basics/run_tokamak.py)):
 
 ```python
-from pathlib import Path
-from dkx.run import run_profile
+import dkx
 
-deck = Path("input.namelist")
-deck.write_text("""\
-&geometryParameters
-  geometryScheme = 1  ! circular tokamak: BHat = 1 + 0.1 cos(theta)
-  inputRadialCoordinate = 3
-  rN_wish = 0.3
-  B0OverBBar = 1.0  GHat = 1.0  IHat = 0.0  iota = 1.31
-  epsilon_t = 0.1  epsilon_h = 0.0  psiAHat = 0.045  aHat = 0.1
-/
-&speciesParameters
-  Zs = 1  mHats = 1.0  nHats = 1.0  THats = 0.5
-  dNHatdrHats = -6.0  dTHatdrHats = -3.0
-/
-&physicsParameters
-  Delta = 4.5694d-3  alpha = 1.0  nu_n = 8.4774d-3
-  Er = 0.0  collisionOperator = 1  ! pitch-angle scattering
-/
-&resolutionParameters
-  Ntheta = 15  Nzeta = 1  Nxi = 8  NL = 4  Nx = 6
-  solverTolerance = 1d-10
-/
-""")
-
-run = run_profile(deck, solve_method="auto", out_path=Path("sfincsOutput.h5"))
+run = dkx.run(
+    geometryScheme=1,          # circular tokamak: BHat = 1 + 0.1 cos(theta)
+    inputRadialCoordinate=3, rN_wish=0.3,
+    B0OverBBar=1.0, GHat=1.0, IHat=0.0, iota=1.31,
+    epsilon_t=0.1, epsilon_h=0.0, psiAHat=0.045, aHat=0.1,
+    Zs=[1.0], mHats=[1.0], nHats=[1.0], THats=[0.5],
+    dNHatdrHats=[-6.0], dTHatdrHats=[-3.0],
+    Ntheta=15, Nzeta=1, Nxi=8, NL=4, Nx=6,
+    Delta=4.5694e-3, alpha=1.0, nu_n=8.4774e-3,
+    Er=0.0, collisionOperator=1,   # 1 = pitch-angle scattering, 0 = Fokker-Planck
+)
 print("particle flux:", float(run.moments["particleFlux_vm_psiHat"][0]))
 print("bootstrap current <j.B>:", float(run.moments["FSABjHat"]))
 ```
 
-`run_profile` prints the Fortran-parity console flow, writes `sfincsOutput.h5`/`.nc`
-keyed by the SFINCS output names, and returns the state, solver statistics, and
-all moments in memory.
+`dkx.run` reads `RHSMode` from the case and dispatches, so the same call covers
+a profile-gradient run and a transport matrix. It also takes an
+`input.namelist` path — `dkx.run("input.namelist")` — and overrides on top of
+one, which is what a convergence scan is:
+
+```python
+dkx.run("input.namelist", Ntheta=25)     # same deck, finer grid
+dkx.run(..., out="sfincsOutput.h5")      # write a file; the suffix picks the format
+```
+
+Results come back in memory: `run.moments` is keyed by the SFINCS output names,
+and `run.solve_result` carries the residual, the iteration count, and whether it
+converged.
 
 ## Parity with SFINCS Fortran v3
 

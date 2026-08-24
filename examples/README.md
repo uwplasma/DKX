@@ -164,6 +164,17 @@ validation or benchmark workflow, or reference data.
 
 ### Folder Map
 
+The numbered folders are a ladder, graded by what a script *requires* rather
+than by how hard it looks: `1_basics` needs nothing installed, `2_equilibria`
+needs an equilibrium file, `3_gradients` differentiates through the solve.
+
+- `1_basics/` (learning): DKX alone on analytic geometry. No optional
+  dependencies, no equilibrium files, seconds per run. Start at
+  `1_basics/run_tokamak.py`.
+- `2_equilibria/` (learning): the same solver on real magnetic geometry —
+  VMEC `wout` and Boozer `.bc` files.
+- `3_gradients/` (capability): `jax.grad` through the solve, and that gradient
+  inside an optimization loop.
 - `tutorials/`: notebook-led learning path plus one fast script that writes
   output files and a diagnostics panel.
 - `getting_started/`: minimal CLI and Python workflows, plotting, file formats,

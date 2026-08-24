@@ -16,6 +16,41 @@ import tempfile
 # override this before importing dkx if they need backend debug logs.
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 
+
+def _check_numpy() -> None:
+    """Fail with the actual problem instead of a NameError from numpy internals.
+
+    ``jax`` requires ``numpy>=2.1``.  Installing dkx into an environment that
+    holds a conda-managed numpy 1.x -- the Anaconda base environment is the
+    common case -- resolves without complaint and then dies on the first
+    ``import jax`` with::
+
+        File numpy/core/getlimits.py, line 606, in smallest_normal
+        NameError: name 'isnan' is not defined
+
+    raised while ``ml_dtypes`` probes ``bfloat16``'s ``finfo``.  That traceback
+    names neither dkx, nor jax, nor numpy's version as the cause, so it costs a
+    user real time.  Checking here is cheap: numpy is imported either way, and
+    this runs before any jax import.
+    """
+    import numpy  # noqa: PLC0415
+
+    major = int(numpy.__version__.split(".", 1)[0])
+    if major < 2:
+        raise ImportError(
+            f"dkx needs numpy>=2.1 (jax's own requirement); found {numpy.__version__}. "
+            "numpy 1.x crashes inside ml_dtypes at 'import jax'. Fix the "
+            "environment with:\n"
+            "    pip install -U 'numpy>=2.1' jax\n"
+            "or, better, install into a clean environment rather than the "
+            "Anaconda base one:\n"
+            "    conda create -n dkx python=3.11 -y && conda activate dkx\n"
+            "    pip install dkx"
+        )
+
+
+_check_numpy()
+
 _distributed_runtime_initialized = False
 
 
@@ -233,6 +268,7 @@ from .inputs import SfincsInput, load_sfincs_input  # noqa: E402
 # Heavy flagship entry points (they import the JAX solve stack) are exported
 # lazily via PEP 562 module __getattr__ so `import dkx` stays cheap.
 _LAZY_EXPORTS = {
+    "run": ("dkx.run", "run"),
     "run_profile": ("dkx.run", "run_profile"),
     "run_transport_matrix": ("dkx.run", "run_transport_matrix"),
     "run_from_namelist": ("dkx.run", "run_from_namelist"),
@@ -309,6 +345,7 @@ __all__ = [
     "run_ambipolar_brent",
     "run_from_namelist",
     "run_monoenergetic_database",
+    "run",
     "run_profile",
     "run_transport_matrix",
     "write_output",

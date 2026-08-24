@@ -1,6 +1,16 @@
 Examples
 ========
 
+The graded ladder
+-----------------
+
+``examples/1_basics/`` is where a new user starts: DKX alone on analytic
+geometry, no optional dependencies and no equilibrium files.
+``examples/2_equilibria/`` runs the same solver on real VMEC and Boozer
+geometry, and ``examples/3_gradients/`` differentiates through the solve.  The
+grading is by what each script requires, which is checkable, rather than by an
+opinion about difficulty.
+
 Canonical examples
 ------------------
 
