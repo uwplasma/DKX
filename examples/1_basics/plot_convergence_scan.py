@@ -1,35 +1,22 @@
 """Am I converged?  Scan every resolution axis and plot the answer.
 
-``scan_resolution.py`` prints one axis.  This is the figure you make before
-trusting a production number: each grid axis varied on its own, everything
-else held fixed, plotted against the value at the finest grid.
-
-Read it as a budget.  The axis whose curve is still moving is the one to
-spend points on; the axes that have flattened are ones you can *cut* to buy
-those points back.  Refining everything at once is how a deck ends up
-expensive without being converged, because the cost is the product of the
-axes and the error is set by the worst of them.
+``scan_resolution.py`` prints one axis; this plots each one against the value
+at the finest grid.  Read it as a budget: refine the axis still moving, cut
+the ones that have flattened.  Cost is the product of the axes while error is
+set by the worst of them, so refining everything at once buys expense rather
+than accuracy.
 
 Physics: the tokamak of ``run_tokamak.py``.  The bootstrap current is the
-diagnostic because it is the most resolution-hungry moment here -- it is a
-narrow feature of the pitch-angle variable, so Nxi binds long after the
-fluxes have settled.
+diagnostic because it is the most resolution-hungry moment here -- a narrow
+feature in pitch angle, so Nxi binds long after the fluxes have settled.
 
-Expected runtime: ~90 s on a laptop CPU; every new grid pays its own JAX
-compilation, which dominates at these sizes.
+Expected runtime: ~90 s on a laptop CPU, dominated by JAX compilation.
 
-Achieved: Nxi is the binding axis by a wide margin.  At the smallest grid
-tried it is 33.7% off, against 2.0% for Ntheta and 0.8% for Nx, and it takes
-Nxi = 24 to come inside 1%.  The default Nxi=8 that ``run_tokamak.py`` uses is
-34% low -- exactly the kind of error this figure exists to catch before it
-reaches a paper.
-
-Nx is worth a second look: its error falls 0.81%, 0.65%, 0.30%, 0.13% but the
-values themselves oscillate rather than approach from one side.  That is
-normal for the spectral speed grid, and it means a single refinement step is
-not evidence of convergence on this axis -- two successive steps that both
-shrink are.  Reading one step as a trend is how an oscillating axis gets
-declared converged early.
+Achieved: Nxi binds by a wide margin -- 33.7% off at its smallest grid against
+2.0% for Ntheta and 0.8% for Nx -- and needs Nxi = 24 to come inside 1%.  The
+default Nxi=8 in ``run_tokamak.py`` is 34% low.  Watch Nx: its error falls
+monotonically but the values oscillate, so one shrinking step is not evidence
+of convergence there; two successive ones are.
 """
 
 import os

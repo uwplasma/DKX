@@ -2,30 +2,23 @@
 
 The radial electric field is not an input a device gives you; it is set by
 ambipolarity, ``J_r(E_r) = sum_s Z_s Gamma_s = 0``.  ``dkx.batched_er_scan``
-solves the whole scan in one batched call, and the crossing is the root.
+does the scan in one batched call and the crossing is the root; plotting it
+rather than solving from one guess is what tells you whether you have a single
+root or a stellarator's ion/unstable/electron triplet.
 
-Three things worth knowing, all visible in the figure:
-  - a stellarator can have three roots (ion, unstable, electron); a tokamak
-    usually has one.  Plotting ``J_r(E_r)`` rather than solving from a single
-    guess is what shows you which case you are in;
-  - the moments come back for *every* ``E_r`` in the scan, so the fluxes and
-    the bootstrap current at the root are an interpolation away, not another
-    solve;
-  - ambipolarity is *charge-weighted*, not an equality of fluxes.  On this
-    deck (hydrogen Z=1 and carbon Z=6) the root is where
-    ``Gamma_H = -6 Gamma_C``, so the two curves are nowhere near each other.
-    Only for a Z = +-1 pair do the fluxes come out equal, and reading that as
-    the general rule is a mistake this example exists to prevent.
+Ambipolarity is *charge-weighted*, not an equality of fluxes.  Here (hydrogen
+Z=1, carbon Z=6) the root is where ``Gamma_H = -6 Gamma_C``, so the two curves
+sit nowhere near each other.  Only a Z = +-1 pair gives equal fluxes, and
+taking that as the general rule is the mistake this example prevents.
 
 Physics: hydrogen with a carbon impurity, from the bundled SFINCS examples.
-The root is negative -- an ion root -- and the impurity flux is opposite in
-sign to the bulk flux, which is the charge weighting doing its work.
+The root is negative -- an ion root -- and the impurity flux runs opposite in
+sign to the bulk flux.
 
 Expected runtime: ~30 s on a laptop CPU for the 13-point scan.
 
-Achieved: one bracketed root near -0.97 kV/m, where Gamma_H = -1.00e-09 and
-Gamma_C = +1.67e-10; the assertion at the bottom checks the charge-weighted
-sum against zero.
+Achieved: one root near -0.97 kV/m, where the script asserts the
+charge-weighted sum rather than claiming it: -1.0e-24 against terms of 1e-09.
 """
 
 import os

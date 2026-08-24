@@ -1,37 +1,22 @@
 """Particle flux, heat flux and bootstrap current across the minor radius.
 
-One surface is a number; a profile is a result.  This is the loop that turns
-DKX into the thing you actually want -- neoclassical transport as a function
-of radius -- and it is a ``for`` loop over ``dkx.run``, nothing more.
+One surface is a number; a profile is a result, and it is a ``for`` loop over
+``dkx.run``.  Two details make it correct rather than merely plausible: the
+psiHat -> rHat conversion depends on radius, so it goes inside the loop; and
+``geometryScheme=1`` is an analytic model whose surface shape is an input, so
+``epsilon_t`` must grow with radius or the torus never widens and the trapped
+fraction is wrong everywhere but one surface.
 
-Two details are what make it correct rather than merely plausible:
+Physics: single-species tokamak, parabolic n and T, no radial electric field,
+fluxes outward-positive.  n and T are the same function here, so those two
+curves genuinely do overlap.
 
-  - the fluxes come out in ``psiHat``, and a flux per unit toroidal flux is
-    not a flux per unit length.  ``dkx.units`` converts, and the conversion
-    depends on radius, so it belongs inside the loop.
-  - ``geometryScheme=1`` is an analytic model, so the *surface* is an input
-    too.  The inverse aspect ratio has to grow with radius; leaving
-    ``epsilon_t`` at its on-axis value would model a torus whose cross-section
-    never widens, and the trapped fraction -- which is what neoclassical
-    transport is about -- would be wrong everywhere but one surface.
+Expected runtime: ~40 s on a laptop CPU for six surfaces.
 
-Physics: a single-species tokamak with parabolic n and T, no radial electric
-field.  Fluxes are outward-positive.  The n and T curves are the same function
-here, so they genuinely do lie on top of each other in the first panel -- they
-are drawn with different markers and dash patterns so that reads as one shared
-profile rather than as a curve that failed to draw.
-
-Expected runtime: ~40 s on a laptop CPU for seven surfaces.
-
-Achieved: all three peak at mid-radius rather than at the edge -- Q near
-r/a = 0.3, Gamma near 0.45, the bootstrap current near 0.6 -- and fall away
-on both sides.  Two effects fight: the gradient that drives the transport
-grows linearly outward, while the n and T it multiplies fall to 35% of their
-axis value by r/a = 0.9.  The product turns over in between.  Guessing
-"largest at the edge, where the gradient is largest" gets this wrong, which
-is the reason to plot a profile instead of extrapolating from one surface.
-
-The turnover radii are a property of these parabolic profiles, not of
+Achieved: all three peak at mid-radius -- Q near r/a = 0.3, Gamma near 0.45,
+the current near 0.6 -- not at the edge.  The gradient grows outward while the
+n and T it multiplies fall to 35% by r/a = 0.9, and the product turns over in
+between.  Those turnover radii belong to these parabolic profiles, not to
 neoclassical theory; change PEAKING and they move.
 """
 

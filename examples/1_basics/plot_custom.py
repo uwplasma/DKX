@@ -1,25 +1,20 @@
 """Build your own figure from ``run.moments``.  The flexible plotting route.
 
-``dkx.plot`` draws the standard panel.  For anything else -- a paper figure, a
-comparison, an axis in units the panel does not use -- read the numbers off
-the run and use matplotlib.  That is the normal way to make a figure, not a
-fallback, and it is why ``run.moments`` is a plain dict of arrays keyed by the
-``sfincsOutput`` names rather than an object you have to interrogate.
-
-This one sweeps collisionality and draws the result in SI units, which is the
-thing the standard panel deliberately does not do: :mod:`dkx.units` holds the
-SFINCS reference set and the conversions, so a bootstrap current in kA/m^2 is
-one multiplication away.
+``dkx.plot`` draws the standard panel; for anything else -- a paper figure, a
+comparison, other units -- read the numbers off the run and use matplotlib.
+That is the normal way, not a fallback, which is why ``run.moments`` is a
+plain dict of arrays keyed by the ``sfincsOutput`` names.  :mod:`dkx.units`
+holds the SFINCS reference set, so SI is one multiplication away.
 
 Physics: the circular tokamak of ``run_tokamak.py`` across three decades of
-``nu_n``.  The bootstrap current is a banana-regime effect, so it is largest
-at the collisionless end and collapses as collisions detrap the particles that
-carry it -- flat below nu_n ~ 3e-3, then falling by a factor of 56 up to
-nu_n = 1.
+``nu_n``.  The bootstrap current is a banana-regime effect, largest at the
+collisionless end and collapsing as collisions detrap the particles that
+carry it.
 
 Expected runtime: ~20 s on a laptop CPU for the seven points.
 
-Achieved: 177.1 kA/m^2 at nu_n = 1e-3, 166.5 at 1e-2, 3.2 at 1.
+Achieved: 177.1 kA/m^2 at nu_n = 1e-3, 166.5 at 1e-2, 3.2 at 1 -- flat below
+nu_n ~ 3e-3, then falling by a factor of 56.
 """
 
 import os

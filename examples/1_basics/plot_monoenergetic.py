@@ -1,31 +1,23 @@
 """Monoenergetic coefficients across collisionality -> the benchmark figure.
 
-``D11``, ``D31`` and ``D33`` against ``nu'``, one curve per ``E*``, is the
-figure every neoclassical code is compared on (the ICNTS benchmark set).  It
-comes from an ``RHSMode=3`` scan, which ``dkx.run_monoenergetic_database``
-does in one call over a grid of ``(nuPrime, EStar)``.
+``D11``, ``D31``, ``D33`` against ``nu'``, one curve per ``E*``, is the figure
+neoclassical codes are compared on (the ICNTS set).  It is an ``RHSMode=3``
+scan, which ``dkx.run_monoenergetic_database`` does in one call.
 
-Conventions this figure follows, and why:
-  - ``D11*`` and ``D33*`` on a log axis, because they span decades;
-  - ``D31*`` on a *linear* axis: it is the coefficient that can change sign,
-    and ``|D31|`` on a log axis hides a zero crossing, which is the one
-    feature of it a reader looks for.  It does not cross zero on this case,
-    but the axis choice is what would let you see it if it did;
-  - every panel carries its own legend, so reading ``D33*`` does not mean
-    hunting for the key two panels away.
+``D31*`` gets a linear axis while the others get log: it is the coefficient
+that can change sign, and ``|D31|`` on a log axis hides a zero crossing --
+the one feature of it a reader looks for.
 
-Physics: the circular tokamak of ``run_tokamak.py`` across six decades of
-collisionality.  These are the *star-normalized* coefficients, so the familiar
-1/nu branch is divided out: ``D11*`` rises monotonically with ``nu'`` at
-``E* = 0``.  The interesting curve is ``E* = 0.1``, where the ExB drift
-detrapping suppresses transport above ``nu' ~ 1`` and turns ``D11*`` over --
-five decades below the zero-field curve by ``nu' = 100``.
+Physics: the tokamak of ``run_tokamak.py`` over six decades.  These are
+*star-normalized*, so the familiar 1/nu branch is divided out and ``D11*``
+rises monotonically at ``E* = 0``.  At ``E* = 0.1`` the ExB detrapping
+suppresses transport above ``nu' ~ 1`` and turns it over.
 
 Expected runtime: ~90 s on a laptop CPU for the 7x3 grid.
 
 Achieved: D11* spans 0.028 to 1.55e+03 at E* = 0, and at E* = 0.1 turns over
-above nu' = 1 to 0.50 by nu' = 100.  D31* falls from 0.56 to ~5e-08 and D33*
-rises from 0.83 to 1 across the same range.
+to 0.50 by nu' = 100 -- five decades below the zero-field curve.  D31* falls
+0.56 -> ~5e-08; D33* rises 0.83 -> 1.
 """
 
 import os

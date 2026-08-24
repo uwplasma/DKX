@@ -1,25 +1,20 @@
 """Define a case in Python -> solve -> read the moments.  Start here.
 
-The whole of DKX's basic workflow is three lines: describe the case, call
-``dkx.run``, read ``run.moments``.  Nothing is written to disk and no input
-file exists -- the parameters below are the same ones an SFINCS
-``input.namelist`` would carry, passed as keywords.  For the file-based route
-instead, see ``run_from_namelist.py``; to vary one of these parameters, see
-``scan_resolution.py``.
+The basic workflow is three lines: describe the case, call ``dkx.run``, read
+``run.moments``.  Nothing touches disk -- these are the parameters an SFINCS
+``input.namelist`` carries, passed as keywords.  For the file route see
+``run_from_namelist.py``; to vary a parameter see ``scan_resolution.py``.
 
-Physics: a concentric circular-cross-section tokamak (``geometryScheme=1``
-with zero helical ripple, so ``Nzeta=1``), one hydrogen species, pitch-angle
-scattering.  In an axisymmetric field neoclassical theory predicts a small
-radial particle flux driven by the density and temperature gradients, and a
-parallel bootstrap current; both are printed below.
+Physics: concentric circular tokamak (``geometryScheme=1``, no helical ripple
+so ``Nzeta=1``), one hydrogen species, pitch-angle scattering.  Both the
+gradient-driven radial particle flux and the bootstrap current are printed.
 
-Expected runtime: ~5 s on a laptop CPU, nearly all of it JAX compilation.  The
-second run in the same process is milliseconds.
+Expected runtime: ~5 s on a laptop CPU, nearly all JAX compilation; a second
+run in the same process is milliseconds.
 
-Achieved: FSABjHat = +2.408e-02, particleFlux_vm_psiHat = +1.268e-06 at the
-resolution set below.  That resolution is chosen to run in seconds, not to be
-converged: ``scan_resolution.py`` shows FSABjHat still moving to +3.630e-02 by
-Nxi=40, so the value here is 34% low.  Run the scan before trusting a number.
+Achieved: FSABjHat = +2.408e-02, particleFlux_vm_psiHat = +1.268e-06.  That
+resolution runs in seconds but is *not* converged -- ``scan_resolution.py``
+takes FSABjHat to +3.630e-02, so this is 34% low.  Scan before trusting it.
 """
 
 import os
