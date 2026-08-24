@@ -77,7 +77,7 @@ so process-launch and JIT-amortization noise does not dominate the bars.
    Example-suite benchmark for rows whose SFINCS Fortran v3 reference runtime is
    at least ``10 s``. Fortran memory is process maximum RSS; JAX memory uses
    profiler RSS deltas over the fixed runtime baseline. Reproduce with
-   ``examples/publication_figures/generate_fortran_suite_benchmark_summary.py``.
+   ``tools/publication_figures/generate_fortran_suite_benchmark_summary.py``.
 
 What this documentation covers
 ------------------------------

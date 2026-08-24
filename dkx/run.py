@@ -19,9 +19,12 @@ modules are imported.
 
 from __future__ import annotations
 
+import dataclasses
 import os
 import time
 from dataclasses import dataclass, replace
+import sys as _sys
+import types as _types
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable
 
@@ -894,3 +897,127 @@ def run_from_namelist(
         solver_trace_path=solver_trace_path,
         emit=emit,
     )
+
+
+def _with_parameters(case: SfincsInput, parameters: dict[str, Any]) -> SfincsInput:
+    """Return ``case`` with SFINCS input parameters overridden by Fortran name.
+
+    Each section declares its Fortran spelling in the field metadata, so the
+    override lands in the section that owns the name rather than requiring the
+    caller to know which one that is.  An unknown name is an error rather than
+    a silent no-op --- a mistyped ``Ntheta`` that quietly did nothing would be
+    a convergence scan that never changed resolution.
+    """
+    owners: dict[str, tuple[str, str]] = {}
+    for section_name in ("general", "geometry", "species", "physics", "resolution",
+                         "other", "preconditioner"):  # fmt: skip
+        section = getattr(case, section_name)
+        for field_info in dataclasses.fields(section):
+            fortran = field_info.metadata.get("nml")
+            if fortran:
+                owners[fortran.lower()] = (section_name, field_info.name)
+
+    updates: dict[str, dict[str, Any]] = {}
+    unknown = []
+    for name, value in parameters.items():
+        owner = owners.get(name.lower())
+        if owner is None:
+            unknown.append(name)
+            continue
+        section_name, attribute = owner
+        updates.setdefault(section_name, {})[attribute] = value
+    if unknown:
+        raise TypeError(
+            f"unknown SFINCS input parameter(s): {', '.join(sorted(unknown))}. "
+            "Names are the Fortran namelist spellings, e.g. Ntheta, Nzeta, rN_wish."
+        )
+    replaced = {name: dataclasses.replace(getattr(case, name), **values)
+                for name, values in updates.items()}  # fmt: skip
+    return dataclasses.replace(case, **replaced)
+
+def run(
+    case: "str | Path | SfincsInput | None" = None,
+    *,
+    out: "str | Path | None" = None,
+    method: str = "auto",
+    tol: float | None = None,
+    emit: Callable[[str], None] | None = None,
+    **parameters: Any,
+) -> "GeometryRun | ProfileRun | TransportRun":
+    """Solve one case and return its result.  The entry point to reach for first.
+
+    Three ways to say what to solve, and they compose:
+
+    - ``run("input.namelist")`` --- an SFINCS deck on disk, exactly as the
+      Fortran code would read it.
+    - ``run(geometryScheme=1, Ntheta=15, ...)`` --- no file at all; the
+      parameters are the ones a deck would carry, passed as keywords.
+    - ``run(deck, Ntheta=25)`` --- a deck with a few parameters overridden,
+      which is what a convergence scan is.
+
+    Which calculation runs is read from the case rather than chosen by the
+    caller: ``RHSMode=1`` gives profile-gradient fluxes and flows,
+    ``RHSMode=2/3`` a transport matrix.  ``out`` writes an ``sfincsOutput``
+    file whose suffix picks the format (``.h5``, ``.nc``, ``.npz``); omit it to
+    keep the run in memory.
+
+    ``method`` selects the linear solve: ``"auto"`` (default) picks a route
+    from the operator's structure, ``"direct"`` forces the structured direct
+    factorization, ``"iterative"`` forces the preconditioned Krylov route.
+
+    Args:
+        case: deck path, an in-memory :class:`~dkx.inputs.SfincsInput`, or
+            ``None`` to build one from ``parameters`` alone.
+        out: output file to write; ``None`` keeps the result in memory only.
+        method: ``"auto"``, ``"direct"`` or ``"iterative"``.
+        tol: relative residual tolerance; ``None`` uses the case's own
+            ``solverTolerance``.
+        emit: sink for the Fortran-parity progress block; ``None`` is silent.
+        **parameters: SFINCS input parameters, overriding the case.
+
+    Returns:
+        A :class:`ProfileRun` (RHSMode=1) or :class:`TransportRun` (RHSMode=2/3).
+        Both carry ``moments`` and, when ``out`` was given, ``output_path``.
+
+    Example:
+        >>> run = dkx.run("input.namelist")            # doctest: +SKIP
+        >>> float(run.moments["FSABjHat"])             # doctest: +SKIP
+    """
+    if case is None and not parameters:
+        raise TypeError(
+            "run() needs a case: a deck path, an SfincsInput, or input parameters "
+            "as keywords, e.g. run(geometryScheme=1, Ntheta=15, ...)"
+        )
+    if case is None:
+        case = SfincsInput.from_params(**parameters)
+    elif parameters:
+        base = case if isinstance(case, SfincsInput) else sfincs_input_from_raw(
+            read_sfincs_input(Path(case)))
+        case = _with_parameters(base, parameters)
+    if out is not None:
+        return run_from_namelist(case, out_path=out, solve_method=method, tol=tol, emit=emit)
+    rhs_mode = int(
+        case.general.rhs_mode if isinstance(case, SfincsInput)
+        else read_sfincs_input(Path(case)).group("general").get("RHSMODE", 1)
+    )
+    driver = run_profile if rhs_mode == 1 else run_transport_matrix
+    kwargs: dict[str, Any] = {"solve_method": method, "emit": emit}
+    if tol is not None:
+        kwargs["tol"] = tol
+    return driver(case, **kwargs)
+
+
+# ``dkx.run`` has to be two things at once: the module that holds run_profile,
+# run_transport_matrix and the moment helpers, and the callable a user reaches
+# for first.  Python binds a submodule onto its package on import, so a plain
+# function export loses the slot the moment anything does `from dkx.run import
+# ...` -- order-dependent, silent, and it reads as the package being broken.
+# Making the module callable settles it in the one place that cannot disagree
+# with itself: `dkx.run(case)`, `dkx.run.run_profile`, `from dkx.run import x`
+# and `monkeypatch.setattr("dkx.run.run_profile", ...)` all work, in any order.
+class _CallableModule(_types.ModuleType):
+    def __call__(self, *args, **kwargs):
+        return run(*args, **kwargs)
+
+
+_sys.modules[__name__].__class__ = _CallableModule

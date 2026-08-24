@@ -1,6 +1,6 @@
 """CI-sized regression gates for the paper-benchmark monoenergetic scans.
 
-Runs tiny versions of the ``examples/paper_benchmarks/monoenergetic_icnts_*``
+Runs tiny versions of the ``tools/paper_benchmarks/monoenergetic_icnts_*``
 cases (2 nuPrime x 1 EStar at reduced resolution) and pins the structural
 physics the full benchmarks rely on:
 
@@ -39,7 +39,7 @@ from pathlib import Path
 
 import numpy as np
 
-EXAMPLES_DIR = Path(__file__).resolve().parents[1] / "examples" / "paper_benchmarks"
+EXAMPLES_DIR = Path(__file__).resolve().parents[1] / "tools" / "paper_benchmarks"
 
 DECK_TEMPLATE = """&general
   RHSMode = 3
@@ -262,7 +262,7 @@ SC_D31_STAR_FROZEN = -2.55865359e-2
 
 
 def test_tiny_shaing_callen_convergence_scan(tmp_path: Path) -> None:
-    """CI-sized version of examples/paper_benchmarks/shaing_callen_convergence.py.
+    """CI-sized version of tools/paper_benchmarks/shaing_callen_convergence.py.
 
     Two-point W7-X nuPrime scan at 17x31x24 pinning the structure the full
     benchmark relies on: D31* changes sign across the scan and moves
@@ -320,7 +320,7 @@ def test_tiny_shaing_callen_convergence_scan(tmp_path: Path) -> None:
 
 
 def test_tiny_gradient_verification_row(tmp_path: Path) -> None:
-    """One cheap AD-vs-FD row from examples/paper_benchmarks/gradient_verification.py.
+    """One cheap AD-vs-FD row from tools/paper_benchmarks/gradient_verification.py.
 
     Reproduces row (b) -- d(FSABjHat)/d(nu_n) through a differentiable
     RHSMode=1 solve -- at loose tolerance (measured rel dev 4.2e-9 on

@@ -517,7 +517,7 @@ def test_release_index_classifies_fortran_suite_summary(tmp_path: Path) -> None:
 def test_checked_in_fortran_suite_summary_is_release_indexed() -> None:
     artifact = (
         Path(__file__).resolve().parents[1]
-        / "examples"
+        / "tools"
         / "publication_figures"
         / "artifacts"
         / "dkx_fortran_suite_benchmark_summary.json"

@@ -247,3 +247,10 @@ __marimo__/
 
 # local review worktrees
 .wt/
+
+# `dkx <equilibrium>` writes its figure and data beside the cwd, so a run from
+# the repo root drops artifacts here.  284 KB of them reached a commit once, on
+# a repository kept under 22 MB on purpose.
+*.panels.png
+*.panels.h5
+*.panels.pdf

@@ -120,8 +120,8 @@ evidence.
 
 Relevant implementation:
 
-- ``examples/performance/benchmark_sharded_solve_scaling.py`` and
-  ``examples/performance/benchmark_sharded_matvec_scaling.py`` generate
+- ``tools/performance/benchmark_sharded_solve_scaling.py`` and
+  ``tools/performance/benchmark_sharded_matvec_scaling.py`` generate
   bounded single-case scaling evidence.
 - The retired transport parallel runtime (preserved on the research branch) prevented cold or
   malformed scaling payloads from becoming release claims, records pure

@@ -9,7 +9,7 @@ import numpy as np
 def _load_rows(name: str) -> list[dict[str, object]]:
     path = (
         Path(__file__).resolve().parents[1]
-        / "examples"
+        / "tools"
         / "publication_figures"
         / "artifacts"
         / name

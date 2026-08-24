@@ -31,7 +31,7 @@ from dkx.io import localize_equilibrium_file_in_place
 from dkx.validation.artifacts import check_research_lane_completion_file
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_VALIDATION_MANIFEST = REPO_ROOT / "examples" / "publication_figures" / "validation_manifest.json"
+DEFAULT_VALIDATION_MANIFEST = REPO_ROOT / "tools" / "publication_figures" / "validation_manifest.json"
 DEFAULT_VALIDATION_DOCS = (REPO_ROOT / "docs" / "validation_matrix.rst",)
 DEFAULT_RESEARCH_MANIFEST = REPO_ROOT / "docs" / "_static" / "research_lane_completion_2026_05_12.json"
 DEFAULT_SIZE_THRESHOLD_MIB = 2.0

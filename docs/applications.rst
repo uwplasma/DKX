@@ -84,7 +84,7 @@ The repository includes simple plotting scripts for users who want to inspect or
 results quickly:
 
 - ``examples/getting_started/plot_sfincs_output.py``
-- ``examples/publication_figures/generate_er_trajectory_sweep.py``
+- ``tools/publication_figures/generate_er_trajectory_sweep.py``
 
 These examples are intentionally lightweight. They are meant to show how to read
 ``sfincsOutput.h5`` and how to turn the stored diagnostics into publication figures or
@@ -107,7 +107,7 @@ The examples directory is organized to mirror those tasks:
 - ``examples/getting_started`` for first runs,
 - ``examples/transport`` for transport coefficients,
 - ``examples/autodiff`` for derivative-aware workflows,
-- ``examples/performance`` for timing and scaling studies.
+- ``tools/performance`` for timing and scaling studies.
 
 Trust and external comparison
 -----------------------------

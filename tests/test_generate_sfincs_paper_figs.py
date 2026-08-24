@@ -12,7 +12,7 @@ import pytest
 
 def _load_module():
     repo = Path(__file__).resolve().parents[1]
-    path = repo / "examples" / "publication_figures" / "generate_sfincs_paper_figs.py"
+    path = repo / "tools" / "publication_figures" / "generate_sfincs_paper_figs.py"
     spec = importlib.util.spec_from_file_location("generate_sfincs_paper_figs", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -207,7 +207,7 @@ def test_summary_metadata_records_case_resolution_and_paths(tmp_path: Path) -> N
     assert metadata["nuprime_min"] == 0.1
     assert metadata["nuprime_max"] == 10.0
     assert metadata["base_input"] == "examples/sfincs_examples/transportMatrix_geometryScheme11/input.namelist"
-    assert metadata["source_script"] == "examples/publication_figures/generate_sfincs_paper_figs.py"
+    assert metadata["source_script"] == "tools/publication_figures/generate_sfincs_paper_figs.py"
     assert metadata["labels_to_collision_operator"] == {"Fokker-Planck": 0, "PAS": 1}
     assert metadata["implicit_solve"] is False
     assert metadata["transport_workers"] == 2

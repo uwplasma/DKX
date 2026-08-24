@@ -130,6 +130,55 @@ FALLBACK_PLASMA = {"n_hat": 1.0, "t_hat": 1.0, "dn_drhat": -0.5, "dt_drhat": -1.
 #: term: measured against Redl on a finite-beta precise-QA equilibrium it runs
 #: 35-47% high, where Fokker-Planck lands within 2-7%
 #: (:data:`dkx.bootstrap.DEFAULT_COLLISION_OPERATOR`).
+#: The monoenergetic base for :func:`run_representative`.
+#:
+#: This is a module-level string on purpose.  It used to be read from
+#: ``dkx/data/representative.namelist``, falling back to a deck under
+#: ``examples/``, and **neither ships in the wheel** -- so ``dkx wout_*.nc``
+#: worked in a source checkout and failed for every pip user.  It failed twice
+#: over: FileNotFoundError when nothing was found, and, when some other
+#: namelist happened to sit at one of those paths, a base carrying the default
+#: ``RHSMode = 1`` that only surfaced as "run_transport_matrix supports RHSMode
+#: 2 and 3" from three frames deeper.
+#:
+#: ``RHSMode = 3`` is the whole point of this deck; :func:`monoenergetic_scan`
+#: checks it rather than trusting it.  ``Nx = 1`` is not a resolution to raise:
+#: monoenergetic coefficients are defined at a single speed.
+_MONOENERGETIC_TEMPLATE = """&general
+  RHSMode = 3
+/
+&geometryParameters
+  geometryScheme = 5
+  equilibriumFile = "{equilibrium}"
+  inputRadialCoordinate = 3
+  rN_wish = 0.5
+  VMECRadialOption = 1
+  min_Bmn_to_load = 0
+/
+&speciesParameters
+/
+&physicsParameters
+  nuPrime = 1.0d+0
+  EStar = 0.2d+0
+  collisionOperator = 1
+  includeXDotTerm = .false.
+  includeElectricFieldTermInXiDot = .false.
+  useDKESExBDrift = .true.
+  includePhi1 = .false.
+/
+&resolutionParameters
+  Ntheta = 17
+  Nzeta = 31
+  Nxi = 24
+  Nx = 1
+  solverTolerance = 1d-6
+/
+&otherNumericalParameters
+/
+&preconditionerOptions
+/
+"""
+
 _PROFILE_TEMPLATE = """&general
   RHSMode = 1
 /
@@ -206,6 +255,13 @@ def monoenergetic_scan(
     base = namelist
     if not hasattr(base, "resolution"):
         base = sfincs_input_from_raw(read_sfincs_input(namelist))
+    if int(base.general.rhs_mode) != 3:
+        raise ValueError(
+            "monoenergetic_scan needs an RHSMode=3 deck; got "
+            f"RHSMode={int(base.general.rhs_mode)}.  Passing an RHSMode=1 deck "
+            "surfaces three frames deeper as 'run_transport_matrix supports "
+            "RHSMode 2 and 3', which does not point back here."
+        )
     res = dict(DEFAULT_RESOLUTION if resolution is None else resolution)
 
     records: list[dict[str, Any]] = []
@@ -501,7 +557,88 @@ def plot_output_file(path: str | Path, out_path: str | Path | None = None) -> Pa
     path = Path(path)
     data = read_sfincs_output_file(path)
     out = Path(out_path) if out_path else path.with_suffix(".panels.png")
+    # A single solve carries no (nuPrime, EStar) scan, so the representative
+    # layout's whole top row would say "not present" three times.  Give that
+    # space to what a single run does have instead.
+    if not any(key in data for key in ("transportMatrix", "nuPrime")):
+        return plot_single_run(out, data, title=f"DKX panels — {path.name}")
     return plot_representative(out, data=data, title=f"DKX panels — {path.name}")
+
+
+def plot_single_run(out_path: str | Path, data: dict[str, Any],
+                    title: str = "DKX run") -> Path:  # fmt: skip
+    """Six panels for one solved deck: geometry, speed profiles, moments.
+
+    The counterpart of :func:`plot_representative` for a single output file.
+    Same six-panel shape, but the top row carries the run's own summary and its
+    speed-resolved profiles rather than a monoenergetic scan it does not have.
+    """
+    plt = _import_matplotlib()
+    fig = plt.figure(figsize=(13.5, 8.0), constrained_layout=True)
+    gs = fig.add_gridspec(2, 3)
+    axes = [fig.add_subplot(gs[r, c]) for r in (0, 1) for c in (0, 1, 2)]
+
+    _panel_run_summary(axes[0], data)
+    _panel_vs_x(axes[1], data, "FSABFlow_vs_x", r"$\langle B V_\parallel\rangle$")
+    _panel_vs_x(axes[2], data, "particleFlux_vm_psiHat_vs_x", r"$\Gamma$ (magnetic drift)")
+    if not _panel_modB(axes[3], data):
+        axes[3].text(0.5, 0.5, "no |B| in this output", ha="center", va="center",
+                     fontsize=8, color="0.4", transform=axes[3].transAxes)  # fmt: skip
+        axes[3].set_xticks([]); axes[3].set_yticks([])
+    _panel_vs_x(axes[4], data, "heatFlux_vm_psiHat_vs_x", r"$Q$ (magnetic drift)")
+    _panel_bootstrap(axes[5], data)
+
+    fig.suptitle(title, fontsize=12)
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=140)
+    plt.close(fig)
+    return out_path.resolve()
+
+
+def _panel_run_summary(ax, data: dict[str, Any]) -> bool:
+    """The scalars a reader checks first: which case, which grid, did it solve."""
+    rows = []
+    for key, label in (("geometryScheme", "geometryScheme"), ("Ntheta", "Ntheta"),
+                       ("Nzeta", "Nzeta"), ("Nxi", "Nxi"), ("Nx", "Nx"),
+                       ("Delta", "Delta"), ("nu_n", "nu_n"),
+                       ("VPrimeHat", "VPrimeHat"), ("FSABHat2", "FSABHat2"),
+                       ("linearSolverResidualNorm", "residual")):  # fmt: skip
+        if key not in data:
+            continue
+        value = np.asarray(data[key]).ravel()
+        if value.size:
+            item = value[-1]
+            rows.append(f"{label:<16s} {item:.6g}" if abs(item) < 1e5 else
+                        f"{label:<16s} {item:.4e}")  # fmt: skip
+    ax.axis("off")
+    ax.text(0.0, 1.0, "\n".join(rows) or "no scalars in this output",
+            va="top", ha="left", family="monospace", fontsize=9,
+            transform=ax.transAxes)  # fmt: skip
+    ax.set_title("run summary", fontsize=9)
+    return bool(rows)
+
+
+def _panel_vs_x(ax, data: dict[str, Any], key: str, label: str) -> bool:
+    """One speed-resolved profile, one curve per species."""
+    if key not in data or "x" not in data:
+        ax.text(0.5, 0.5, f"{key}\nnot in this output", ha="center", va="center",
+                fontsize=8, color="0.4", transform=ax.transAxes)  # fmt: skip
+        ax.set_xticks([]); ax.set_yticks([])
+        return False
+    x = np.asarray(data["x"], dtype=float).ravel()
+    arr = np.asarray(data[key], dtype=float)
+    arr = arr.reshape(arr.shape[0], -1) if arr.ndim > 1 else arr.reshape(-1, 1)
+    names = _species_labels(arr.shape[1])
+    for column in range(arr.shape[1]):
+        ax.plot(x[: arr.shape[0]], arr[:, column], "o-", ms=3, label=names[column])
+    ax.set_xlabel("$x = v / v_{th}$")
+    ax.set_ylabel(label)
+    ax.grid(alpha=0.3)
+    if arr.shape[1] > 1:
+        ax.legend(fontsize=7)
+    ax.set_title(key, fontsize=9)
+    return True
 
 
 def run_representative(
@@ -516,19 +653,13 @@ def run_representative(
     ``full`` widens the monoenergetic grid; the default keeps the whole run
     inside the one-minute budget the module docstring measures.
     """
-    from dkx.inputs import read_sfincs_input, sfincs_input_from_raw  # noqa: PLC0415
+    from dkx.inputs import parse_sfincs_input_text, sfincs_input_from_raw  # noqa: PLC0415
 
     equilibrium = Path(equilibrium)
-    template = Path(__file__).parent / "data" / "representative.namelist"
-    if not template.exists():  # fall back to an upstream monoenergetic deck
-        template = (
-            Path(__file__).resolve().parents[1]
-            / "examples" / "sfincs_examples" / "monoenergetic_geometryScheme5_netCDF"
-            / "input.namelist"
-        )  # fmt: skip
-    base = sfincs_input_from_raw(read_sfincs_input(template))
-    base = dataclasses.replace(
-        base, geometry=dataclasses.replace(base.geometry, equilibrium_file=str(equilibrium))
+    if not equilibrium.is_file():
+        raise FileNotFoundError(f"no such equilibrium file: {equilibrium}")
+    base = sfincs_input_from_raw(
+        parse_sfincs_input_text(_MONOENERGETIC_TEMPLATE.format(equilibrium=str(equilibrium)))
     )
     # Each stage is timed and the time is printed.  The three stages differ by
     # more than an order of magnitude in cost, and on a large device the radial

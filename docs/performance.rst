@@ -80,7 +80,7 @@ equilibria, pitch-angle and Fokker-Planck collisions, zero and finite ``Er``,
 ``Phi1`` on and off, tangential magnetic drifts, one to three species, 651 to
 1.9M unknowns).  Reproduce with
 ``tools/benchmarks/parity_performance_matrix.py``; plot with
-``examples/paper_benchmarks/cross_code_matrix.py``.
+``tools/paper_benchmarks/cross_code_matrix.py``.
 
 .. figure:: _static/figures/paper_benchmarks/cross_code_matrix.png
    :alt: Speed-up and peak memory against problem size for dkx and SFINCS Fortran v3 across the upstream example suite.
@@ -359,7 +359,7 @@ right-hand side, its state vector -- with no ``dkx`` quantity involved:
    :width: 90%
 
    Seventeen linear decks from upstream's example suite.  Regenerate with
-   ``python examples/paper_benchmarks/reference_convergence.py --results ...``
+   ``python tools/paper_benchmarks/reference_convergence.py --results ...``
    on a sweep produced by ``tools/benchmarks/parity_performance_matrix.py
    --fortran-residual``.
 
@@ -811,14 +811,14 @@ parity audit; only the runtime/memory *plot* applies the window.
    ``dkx`` speedup over the Fortran v3 runtime. Fortran memory is process
    maximum RSS; JAX memory uses profiler RSS deltas over the fixed
    Python/JAX/XLA baseline. Reproduce with
-   ``examples/publication_figures/generate_fortran_suite_benchmark_summary.py``.
+   ``tools/publication_figures/generate_fortran_suite_benchmark_summary.py``.
 
 Across the plotted rows the median cold JAX/Fortran wall-clock ratio is about
 ``0.021x`` on CPU and ``0.037x`` on GPU. Median active-memory ratios are about
 ``2.89x`` on CPU and ``3.71x`` on GPU; the full process maximum-RSS ratios, kept
 in the summary JSON audit fields, are about ``4.75x`` on CPU and ``8.80x`` on
 GPU. The numeric summary and the top runtime/memory cases are recorded in
-``examples/publication_figures/artifacts/dkx_fortran_suite_benchmark_summary.json``.
+``tools/publication_figures/artifacts/dkx_fortran_suite_benchmark_summary.json``.
 
 Tier-2 preconditioners: coarse block-Thomas vs multigrid
 --------------------------------------------------------

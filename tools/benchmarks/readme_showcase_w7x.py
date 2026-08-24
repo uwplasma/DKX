@@ -26,7 +26,7 @@ ambipolar radial electric field, with the per-species ``Z_s FSABFlow_s``
 contributions.  The species profiles, resolution, physics switches, and the
 ambipolar ``E_r`` per surface come from the committed benchmark record
 ``docs/_static/figures/paper_benchmarks/w7x_ambipolar_er.json`` (the Pablant
-2018 CERC discharge case, ``examples/paper_benchmarks/w7x_ambipolar_er.py``),
+2018 CERC discharge case, ``tools/paper_benchmarks/w7x_ambipolar_er.py``),
 so panel (c) is the bootstrap-current output of exactly that validated setup.
 The SI conversion ``<j.B> = FSABjHat * vBar * nBar * e`` (kA T m^-2 with
 ``vBar = 437695 m/s``, ``nBar = 1e20 m^-3``) is the one documented in

@@ -170,7 +170,7 @@ markers; use the summary generator to reproduce the table and figure):
 
 .. code-block:: bash
 
-   python examples/publication_figures/generate_fortran_suite_benchmark_summary.py
+   python tools/publication_figures/generate_fortran_suite_benchmark_summary.py
 
 The suite runner that produced the tracked reports was retired with the legacy
 pipeline; the reports are frozen release artifacts. To produce fresh Fortran

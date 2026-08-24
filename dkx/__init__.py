@@ -10,11 +10,48 @@ from __future__ import annotations
 # CLI invocations unless the user explicitly disables it. This improves cold-start
 # performance without requiring environment configuration.
 import os
+import sys as _sys
+import types as _types
 import tempfile
 
 # Suppress low-value XLA/PjRt C++ warning chatter by default. Users can still
 # override this before importing dkx if they need backend debug logs.
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
+
+
+def _check_numpy() -> None:
+    """Fail with the actual problem instead of a NameError from numpy internals.
+
+    ``jax`` requires ``numpy>=2.1``.  Installing dkx into an environment that
+    holds a conda-managed numpy 1.x -- the Anaconda base environment is the
+    common case -- resolves without complaint and then dies on the first
+    ``import jax`` with::
+
+        File numpy/core/getlimits.py, line 606, in smallest_normal
+        NameError: name 'isnan' is not defined
+
+    raised while ``ml_dtypes`` probes ``bfloat16``'s ``finfo``.  That traceback
+    names neither dkx, nor jax, nor numpy's version as the cause, so it costs a
+    user real time.  Checking here is cheap: numpy is imported either way, and
+    this runs before any jax import.
+    """
+    import numpy  # noqa: PLC0415
+
+    major = int(numpy.__version__.split(".", 1)[0])
+    if major < 2:
+        raise ImportError(
+            f"dkx needs numpy>=2.1 (jax's own requirement); found {numpy.__version__}. "
+            "numpy 1.x crashes inside ml_dtypes at 'import jax'. Fix the "
+            "environment with:\n"
+            "    pip install -U 'numpy>=2.1' jax\n"
+            "or, better, install into a clean environment rather than the "
+            "Anaconda base one:\n"
+            "    conda create -n dkx python=3.11 -y && conda activate dkx\n"
+            "    pip install dkx"
+        )
+
+
+_check_numpy()
 
 _distributed_runtime_initialized = False
 
@@ -132,19 +169,28 @@ if _disable_cache not in {"1", "true", "yes", "on"}:
             except OSError:
                 return False
 
+        # Versioned because the cache is bounded now (see the cap below) and
+        # JAX's LRU keeps a sidecar "-atime" file per entry.  A directory
+        # filled in before the cap existed has none, so every eviction pass
+        # tries to touch a file that was never written and warns -- measured,
+        # 12 warnings on a single small solve against a legacy cache, and 0
+        # against a fresh one.  Starting a new directory is what makes the
+        # bound work; the old one simply stops being written to.
+        _CACHE_DIR_NAME = "jax_compilation_cache"
+
         cache_override = os.environ.get("DKX_COMPILATION_CACHE_DIR", "").strip()
         if cache_override:
             default_cache_dir = cache_override
         else:
             xdg_cache = os.environ.get("XDG_CACHE_HOME", "").strip()
             if xdg_cache:
-                default_cache_dir = os.path.join(xdg_cache, "dkx", "jax_compilation_cache")
+                default_cache_dir = os.path.join(xdg_cache, "dkx", _CACHE_DIR_NAME)
             else:
-                default_cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "dkx", "jax_compilation_cache")
+                default_cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "dkx", _CACHE_DIR_NAME)
         try:
             os.makedirs(default_cache_dir, exist_ok=True)
         except OSError:
-            default_cache_dir = os.path.join(tempfile.gettempdir(), "dkx", "jax_compilation_cache")
+            default_cache_dir = os.path.join(tempfile.gettempdir(), "dkx", _CACHE_DIR_NAME)
             try:
                 os.makedirs(default_cache_dir, exist_ok=True)
             except OSError:
@@ -153,7 +199,7 @@ if _disable_cache not in {"1", "true", "yes", "on"}:
             # Some environments (CI sandboxes, read-only homes) can create the directory but
             # cannot write compilation entries. Fall back to a tempdir cache to avoid noisy
             # warnings and degraded cold-start performance.
-            default_cache_dir = os.path.join(tempfile.gettempdir(), "dkx", "jax_compilation_cache")
+            default_cache_dir = os.path.join(tempfile.gettempdir(), "dkx", _CACHE_DIR_NAME)
             try:
                 os.makedirs(default_cache_dir, exist_ok=True)
             except OSError:
@@ -207,6 +253,20 @@ try:
             )
         except ValueError:
             pass
+        # The cache is deliberately NOT size-capped.  Setting
+        # jax_compilation_cache_max_size turns on jax's LRU, which writes a
+        # sidecar "-atime" file per entry and does size bookkeeping on every
+        # write.  With the zero thresholds above -- which exist so even small
+        # kernels are cached -- that is measurably expensive: on
+        # tests/test_monoenergetic_database.py, 32 s and 1792 files capped
+        # against 20 s and 896 uncapped, a 60% penalty on every run.  CI proved
+        # it at scale, nine of ten coverage shards crossing a 10-minute timeout
+        # they had been finishing in four to eight.
+        #
+        # So the cache grows without bound.  That is a disk-space cost -- it
+        # reached 782 MB over 64k entries on a development machine -- and the
+        # remedy is to delete the directory, which loses nothing but compile
+        # time.  Paying 60% on every run to avoid it is the worse trade.
 except Exception:
     # Keep import lightweight for tooling that inspects the package without JAX.
     pass
@@ -233,6 +293,7 @@ from .inputs import SfincsInput, load_sfincs_input  # noqa: E402
 # Heavy flagship entry points (they import the JAX solve stack) are exported
 # lazily via PEP 562 module __getattr__ so `import dkx` stays cheap.
 _LAZY_EXPORTS = {
+    "plot": ("dkx.plotting", "plot"),
     "run_profile": ("dkx.run", "run_profile"),
     "run_transport_matrix": ("dkx.run", "run_transport_matrix"),
     "run_from_namelist": ("dkx.run", "run_from_namelist"),
@@ -246,6 +307,8 @@ _LAZY_EXPORTS = {
 
 
 def __getattr__(name: str):
+    if name == "run":
+        return _lazy_run_module()
     try:
         module_name, attr = _LAZY_EXPORTS[name]
     except KeyError:
@@ -259,6 +322,20 @@ def __getattr__(name: str):
 
 def __dir__() -> list[str]:
     return sorted(set(globals()) | set(_LAZY_EXPORTS))
+
+
+# ``dkx/run.py`` is a module and ``dkx.run(case)`` is a call.  Rather than pick
+# one -- the function breaks ``dkx.run.run_profile`` and every monkeypatch that
+# targets it by path, the module breaks the call -- ``dkx/run.py`` makes itself
+# callable, so ``dkx.run`` is always the module and always invocable.  The name
+# is resolved here rather than listed in _LAZY_EXPORTS because what it yields
+# is the module itself, not an attribute of one.
+def _lazy_run_module():
+    import importlib  # noqa: PLC0415
+
+    module = importlib.import_module(f"{__name__}.run")
+    globals()["run"] = module
+    return module
 
 
 
@@ -309,9 +386,11 @@ __all__ = [
     "run_ambipolar_brent",
     "run_from_namelist",
     "run_monoenergetic_database",
+    "plot",
+    "run",
     "run_profile",
     "run_transport_matrix",
     "write_output",
 ]
 
-__version__ = "2.2.0"
+__version__ = "2.3.0"
