@@ -10,7 +10,7 @@ Generate the SFINCS-paper reproduction figures with
 
 .. code-block:: bash
 
-   python examples/publication_figures/generate_sfincs_paper_figs.py --fast
+   python tools/publication_figures/generate_sfincs_paper_figs.py --fast
 
 Omit ``--fast`` to use the default scan resolution.
 
@@ -18,13 +18,13 @@ Generate the publication validation dashboard with
 
 .. code-block:: bash
 
-   python examples/publication_figures/generate_validation_dashboard.py
+   python tools/publication_figures/generate_validation_dashboard.py
 
 Generate the frozen CPU/GPU Fortran-suite runtime and memory comparison with
 
 .. code-block:: bash
 
-   python examples/publication_figures/generate_fortran_suite_benchmark_summary.py
+   python tools/publication_figures/generate_fortran_suite_benchmark_summary.py
 
 The default figure filters to reference-runtime-window rows whose Fortran v3
 runtime is at least ``10 s``. The summary JSON records which frozen rows are
@@ -36,7 +36,7 @@ Generate the autodiff/sensitivity validation figures with
 
 .. code-block:: bash
 
-   python examples/publication_figures/generate_autodiff_sensitivity_validation.py
+   python tools/publication_figures/generate_autodiff_sensitivity_validation.py
 
 Dashboard
 ~~~~~~~~~
@@ -51,7 +51,7 @@ Dashboard
    trajectory-model sweeps used to verify exact zero-field agreement and finite-field
    separation between DKES, partial, and full trajectory models. The machine-readable
    summary is
-   ``examples/publication_figures/artifacts/dkx_publication_validation_dashboard_summary.json``.
+   ``tools/publication_figures/artifacts/dkx_publication_validation_dashboard_summary.json``.
 
 Fortran v3 suite benchmark
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -75,7 +75,7 @@ Fortran v3 suite benchmark
    ``warm_or_logged_runtime_source_counts``. The machine-readable summary,
    including parity status, runtime/memory ratios, and the excluded sub-``10 s``
    Fortran rows, is
-   ``examples/publication_figures/artifacts/dkx_fortran_suite_benchmark_summary.json``.
+   ``tools/publication_figures/artifacts/dkx_fortran_suite_benchmark_summary.json``.
 
 Autodiff and sensitivity validation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -91,7 +91,7 @@ Autodiff and sensitivity validation
    and adjoint residuals for the solve checks. Panel D shows the solve-count advantage
    of implicit differentiation over centered finite differences as the number of
    parameters grows. The machine-readable summary is
-   ``examples/publication_figures/artifacts/dkx_autodiff_sensitivity_validation_summary.json``.
+   ``tools/publication_figures/artifacts/dkx_autodiff_sensitivity_validation_summary.json``.
 
 .. figure:: _static/figures/paper/dkx_autodiff_sensitivity_map.png
    :alt: Boozer harmonic sensitivity maps for dkx
@@ -138,9 +138,9 @@ publication-audits research branch.
    ``DHat``, tracks the ``L11``/``L12`` inverse-``nu`` slope proxy, and explicitly
    keeps the full Simakov-Helander reproduction closed until wider high-``nu``
    scans are pinned. The machine-readable summary is
-   ``examples/publication_figures/artifacts/dkx_simakov_helander_limit_audit_summary.json``.
+   ``tools/publication_figures/artifacts/dkx_simakov_helander_limit_audit_summary.json``.
    The paired high-``nu'`` run plan is
-   ``examples/publication_figures/artifacts/dkx_simakov_helander_high_nu_run_plan.json``.
+   ``tools/publication_figures/artifacts/dkx_simakov_helander_high_nu_run_plan.json``.
 
 Launch the bounded pilot first so the terminal ETA and residual behavior are
 visible before committing to the full FP/PAS LHD+W7-X extension:
@@ -148,7 +148,7 @@ visible before committing to the full FP/PAS LHD+W7-X extension:
 .. code-block:: bash
 
    CUDA_VISIBLE_DEVICES=0,1 \
-   python examples/publication_figures/generate_sfincs_paper_figs.py \
+   python tools/publication_figures/generate_sfincs_paper_figs.py \
      --case lhd \
      --collision-operators 0 \
      --nuprime-min 17.78279101649707 \
@@ -202,7 +202,7 @@ Generate the W7-X high-``nu'`` performance figure with
 
 .. code-block:: bash
 
-   python examples/publication_figures/generate_w7x_high_nu_performance.py
+   python tools/publication_figures/generate_w7x_high_nu_performance.py
 
 .. figure:: _static/figures/paper/dkx_w7x_high_nu_performance.png
    :alt: W7-X high-nu sparse-helper factor reuse performance
@@ -215,7 +215,7 @@ Generate the W7-X high-``nu'`` performance figure with
    exactly while reducing wall time from about ``33.8 min`` to ``9.7 min`` and
    measured peak RSS from about ``19.9 GB`` to ``15.3 GB``. The machine-readable
    summary is
-   ``examples/publication_figures/artifacts/dkx_w7x_high_nu_performance_summary.json``.
+   ``tools/publication_figures/artifacts/dkx_w7x_high_nu_performance_summary.json``.
 
 Figure 1 (LHD collisionality scan)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

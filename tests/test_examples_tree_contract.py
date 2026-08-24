@@ -1,187 +1,46 @@
+"""What the examples tree has to keep true.
+
+This used to pin the top README's nine section headings and dozens of exact
+entry-point strings, which made the README impossible to simplify without
+editing a test in lockstep -- and the sprawl it enforced was the thing new
+users were getting lost in.  What is left checks properties rather than prose:
+folders are intentional, every folder introduces itself, every script a README
+names exists, nothing generated is tracked, the graded ladder stays complete.
+
+Wording is deliberately not pinned here.  Claims about *measured numbers* are
+pinned, but in the example that produced them, beside the code that re-checks.
+"""
+
 from __future__ import annotations
 
 import json
 import re
-from pathlib import Path
 import subprocess
-
+from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES_ROOT = REPO_ROOT / "examples"
 DOCS_EXAMPLES = REPO_ROOT / "docs" / "examples.rst"
 WORKFLOW_CATALOG = EXAMPLES_ROOT / "workflow_catalog.json"
 
-ALLOWED_EXAMPLE_FOLDERS = {
-    "1_basics",
-    "2_equilibria",
-    "3_gradients",
+# The graded ladder, in order.  Grading is by what a folder *requires* -- 1
+# needs nothing installed, 2 needs real geometry, 3 differentiates through the
+# solve -- because that is objective, where "beginner/advanced" is taste.
+GRADED_FOLDERS = ("1_basics", "2_equilibria", "3_gradients")
+
+# Older topic folders, kept while their content is folded into the ladder.
+LEGACY_FOLDERS = (
     "autodiff",
     "data",
     "getting_started",
     "optimization",
-    "paper_benchmarks",
-    "parity",
-    "performance",
-    "publication_figures",
     "sfincs_examples",
     "transport",
     "tutorials",
     "vmex_finite_beta",
-}
+)
 
-FOLDERS_REQUIRING_README = ALLOWED_EXAMPLE_FOLDERS
-
-FOLDER_CATEGORIES = {
-    # The graded ladder: 1 needs nothing installed, 2 needs an equilibrium
-    # file, 3 differentiates through the solve.  Grading by what a script
-    # *requires* is objective, where "beginner/advanced" is a matter of taste.
-    "1_basics": "learning",
-    "2_equilibria": "learning",
-    "3_gradients": "capability",
-    "autodiff": "capability",
-    "data": "reference",
-    "getting_started": "learning",
-    "optimization": "capability",
-    "paper_benchmarks": "validation",
-    "parity": "validation",
-    "performance": "validation",
-    "publication_figures": "validation",
-    "sfincs_examples": "reference",
-    "transport": "capability",
-    "tutorials": "learning",
-    "vmex_finite_beta": "capability",
-}
-
-REQUIRED_TASK_ENTRYPOINTS = {
-    "list_workflows.py",
-    "tutorials/00_start_here.ipynb",
-    "tutorials/04_geometry_validation_and_performance.ipynb",
-    "tutorials/run_quick_output_and_plot.py",
-    "getting_started/write_sfincs_output_cli.py",
-    "getting_started/write_sfincs_output_python.py",
-    "transport/transport_matrix_rhsmode2_and_rhsmode3.py",
-    "autodiff/implicit_diff_through_gmres_solve_scheme5.py",
-    "vmex_finite_beta/compare_qs_paper_dkx_redl.py",
-    "optimization/qa_nfp2_dkx_objectives.py",
-    "parity/output_parity_vs_fortran_fixture.py",
-    "performance/benchmark_output_formats.py",
-}
-
-CANONICAL_WORKFLOW_ENTRYPOINTS = {
-    "getting_started/build_grids_and_geometry.py",
-    "getting_started/apply_collisionless_operator.py",
-    "getting_started/write_sfincs_output_python.py",
-    "getting_started/write_sfincs_output_vmec.py",
-    "getting_started/write_and_plot_multiple_formats.py",
-    "transport/transport_matrix_rhsmode2_scheme11_and_scheme5.py",
-    "autodiff/implicit_diff_through_gmres_solve_scheme5.py",
-    "vmex_finite_beta/compare_qs_paper_dkx_redl.py",
-    "optimization/QA_optimization_bootstrap_current.py",
-    "parity/collisionless_operator_matvec_parity.py",
-    "performance/benchmark_output_formats.py",
-}
-
-APPLICATION_RECIPE_ENTRYPOINTS = {
-    "tutorials/run_quick_output_and_plot.py",
-    "getting_started/write_and_plot_multiple_formats.py",
-    "getting_started/write_sfincs_output_tokamak.py",
-    "sfincs_examples/tokamak_1species_FPCollisions_noEr/input.namelist",
-    "getting_started/write_sfincs_output_vmec.py",
-    "vmex_finite_beta/finite_beta_vmec_to_sfincs.py",
-    "transport/transport_matrix_rhsmode2_and_rhsmode3.py",
-    "transport/transport_matrix_rhsmode2_scheme11_and_scheme5.py",
-    "vmex_finite_beta/compare_qs_paper_dkx_redl.py",
-    "tutorials/03_bootstrap_redl_and_optimization.ipynb",
-    "optimization/evaluate_dkx_promotion_scan.py",
-    "autodiff/autodiff_gradient_nu_n_residual.py",
-    "autodiff/implicit_diff_through_gmres_solve_scheme5.py",
-    "autodiff/vmex_to_boozer_sfincs_pipeline.py",
-    "tutorials/04_geometry_validation_and_performance.ipynb",
-    "optimization/qa_nfp2_dkx_objectives.py",
-    "optimization/QA_optimization_bootstrap_current.py",
-    "performance/benchmark_output_formats.py",
-    "parity/output_parity_vs_fortran_fixture.py",
-}
-
-ONE_COMMAND_ENTRYPOINTS = {
-    "tutorials/run_quick_output_and_plot.py",
-    "getting_started/write_and_plot_multiple_formats.py",
-    "getting_started/write_sfincs_output_vmec.py",
-    "transport/transport_matrix_rhsmode2_and_rhsmode3.py",
-    "autodiff/autodiff_gradient_nu_n_residual.py",
-    "vmex_finite_beta/compare_qs_paper_dkx_redl.py",
-    "performance/benchmark_output_formats.py",
-    "parity/output_parity_vs_fortran_fixture.py",
-}
-CATALOG_ENTRYPOINTS = ONE_COMMAND_ENTRYPOINTS | {
-    "optimization/qa_nfp2_dkx_objectives.py",
-    "autodiff/vmex_to_boozer_sfincs_pipeline.py",
-}
-
-CATALOG_REQUIRED_KEYWORDS = {
-    "autodiff",
-    "bootstrap",
-    "cpu",
-    "fortran",
-    "gpu",
-    "hdf5",
-    "memory",
-    "netcdf",
-    "optimization",
-    "plot",
-    "redl",
-    "transport",
-    "vmec",
-}
-
-ONE_COMMAND_LABELS = {
-    "Write output files and a diagnostics panel",
-    "Inspect HDF5, NetCDF, NPZ, and plotting",
-    "Load VMEC geometry through",
-    "Compute a RHSMode=2/3 transport matrix",
-    "Differentiate a residual with JAX",
-    "Compare kinetic bootstrap current with Redl",
-    "Time output formats and memory behavior",
-    "Check a frozen Fortran-v3 output fixture",
-}
-
-APPLICATION_RECIPE_LABELS = {
-    "CLI output and diagnostics panel",
-    "Analytic tokamak input",
-    "VMEC `wout_path` input",
-    "RHSMode=2/3 transport matrix",
-    "Bootstrap current vs Redl",
-    "Ambipolar electric-field scan",
-    "Differentiable residual or flux",
-    "VMEC/Boozer/JAX workflow",
-    "QA/QI optimization objective",
-    "CPU/GPU timing and output I/O",
-    "Frozen Fortran-v3 parity check",
-}
-
-DECISION_MAP_LABELS = {
-    "I want to run one case and plot the output.",
-    "I want to learn the file formats and CLI/API basics.",
-    "I need transport coefficients.",
-    "I need gradients or optimization hooks.",
-    "I need bootstrap current or Redl comparisons.",
-    "I need to validate against SFINCS Fortran v3 behavior.",
-    "I need CPU/GPU runtime or memory evidence.",
-    "I recognize an upstream SFINCS input name.",
-}
-
-DECISION_MAP_TARGETS = {
-    "tutorials/run_quick_output_and_plot.py",
-    "getting_started/",
-    "transport/",
-    "autodiff/",
-    "optimization/",
-    "vmex_finite_beta/",
-    "parity/",
-    "publication_figures/",
-    "performance/",
-    "sfincs_examples/",
-}
+ALLOWED_EXAMPLE_FOLDERS = set(GRADED_FOLDERS) | set(LEGACY_FOLDERS)
 
 DISALLOWED_TRACKED_PARTS = {
     "__pycache__",
@@ -202,6 +61,8 @@ DISALLOWED_TRACKED_SUFFIXES = {
 }
 
 MAX_TRACKED_EXAMPLE_BYTES = 2 * 1024 * 1024
+
+# Phrases that date a README the moment anything around them changes.
 README_STALE_FRAGMENTS = (
     "At the moment",
     "What works today",
@@ -214,9 +75,10 @@ README_STALE_FRAGMENTS = (
     "currently ships",
     "now supports",
     "now writes",
-    "new users",
 )
+
 SCRIPT_TOKEN_RE = re.compile(r"`([^`]*?\.py)`")
+
 TUTORIAL_NOTEBOOK_REQUIREMENTS = {
     "00_start_here.ipynb": ("drift-kinetic", "bootstrap current", "optimization"),
     "01_cli_outputs_and_plots.ipynb": ("HDF5", "NetCDF", "diagnostics"),
@@ -242,136 +104,48 @@ def _workflow_catalog() -> dict:
 
 
 def test_examples_top_level_folders_are_intentional() -> None:
+    """A new folder is a decision, so it has to be made here too."""
     folders = {
         path.name
         for path in EXAMPLES_ROOT.iterdir()
-        # "output" holds generated (gitignored, examples/**/output/) artifacts
-        # written by the flat pedagogic example scripts.
+        # "output" holds generated (gitignored, examples/**/output/) artifacts.
         if path.is_dir() and path.name not in {".ipynb_checkpoints", "__pycache__", "output"}
     }
 
     assert folders == ALLOWED_EXAMPLE_FOLDERS
 
 
-def test_workflow_catalog_is_complete_and_first_run_safe() -> None:
-    catalog = _workflow_catalog()
-
-    assert catalog["schema_version"] == 1
-    assert set(catalog["folders"]) == ALLOWED_EXAMPLE_FOLDERS
-    assert "workflow_catalog.json" in (EXAMPLES_ROOT / "README.md").read_text(encoding="utf-8")
-    assert "examples/workflow_catalog.json" in DOCS_EXAMPLES.read_text(encoding="utf-8")
-
-    for folder, metadata in sorted(catalog["folders"].items()):
-        assert metadata["category"] == FOLDER_CATEGORIES[folder]
-        assert metadata["role"]
-        start_path = EXAMPLES_ROOT / metadata["start_here"]
-        assert start_path.exists(), f"{folder}: {metadata['start_here']}"
-        assert metadata["start_here"].split("/", 1)[0] == folder
-
-    assert set(FOLDER_CATEGORIES.values()) == {"capability", "learning", "reference", "validation"}
-
-    workflows = catalog["workflows"]
-    assert {workflow["entrypoint"] for workflow in workflows} == CATALOG_ENTRYPOINTS
-    all_keywords: set[str] = set()
-    for workflow in workflows:
-        assert workflow["id"]
-        assert workflow["goal"]
-        assert workflow["command"].startswith("python examples/")
-        assert workflow["keywords"]
-        all_keywords.update(str(keyword).lower() for keyword in workflow["keywords"])
-        assert workflow["runtime_budget"]
-        assert workflow["requires_fortran_v3"] is False
-        assert (EXAMPLES_ROOT / workflow["entrypoint"]).is_file(), workflow["entrypoint"]
-
-    assert CATALOG_REQUIRED_KEYWORDS <= all_keywords
-
-
-def test_examples_readme_is_a_complete_user_navigation_map() -> None:
+def test_the_graded_ladder_is_complete_and_linked_from_the_top_readme() -> None:
+    """1 -> 2 -> 3 is the path a new user is told to walk; keep it walkable."""
     readme = (EXAMPLES_ROOT / "README.md").read_text(encoding="utf-8")
-    assert "### Learning Path" in readme
-    assert "### One-Command Starts" in readme
-    assert "### Run Budgets And Outputs" in readme
-    assert "### Decision Map" in readme
-    assert "### Choose By Task" in readme
-    assert "### Application Recipes" in readme
-    assert "### Canonical Workflow Catalog" in readme
-    assert "### Top-Level Folder Categories" in readme
-    assert "### Folder Map" in readme
 
-    for folder in sorted(ALLOWED_EXAMPLE_FOLDERS):
-        assert f"`{folder}/`" in readme or f"`{folder}" in readme, folder
-        assert FOLDER_CATEGORIES[folder] in readme, folder
-
-    for folder in sorted(FOLDERS_REQUIRING_README):
-        assert (EXAMPLES_ROOT / folder / "README.md").is_file(), folder
-
-    for entrypoint in sorted(REQUIRED_TASK_ENTRYPOINTS):
-        assert f"`{entrypoint}`" in readme, entrypoint
-        assert (EXAMPLES_ROOT / entrypoint).is_file(), entrypoint
-
-    for label in sorted(ONE_COMMAND_LABELS):
-        assert label in readme, label
-
-    for entrypoint in sorted(ONE_COMMAND_ENTRYPOINTS):
-        assert f"`{entrypoint}`" in readme, entrypoint
-        assert (EXAMPLES_ROOT / entrypoint).is_file(), entrypoint
-
-    for entrypoint in sorted(CANONICAL_WORKFLOW_ENTRYPOINTS):
-        assert f"`{entrypoint}`" in readme, entrypoint
-        assert (EXAMPLES_ROOT / entrypoint).is_file(), entrypoint
-
-    for label in sorted(APPLICATION_RECIPE_LABELS):
-        assert label in readme, label
-
-    for entrypoint in sorted(APPLICATION_RECIPE_ENTRYPOINTS):
-        assert f"`{entrypoint}`" in readme, entrypoint
-        assert (EXAMPLES_ROOT / entrypoint).is_file(), entrypoint
-
-    for label in sorted(DECISION_MAP_LABELS):
-        assert label in readme, label
-
-    for target in sorted(DECISION_MAP_TARGETS):
-        assert f"`{target}`" in readme, target
-        assert (EXAMPLES_ROOT / target.rstrip("/")).exists(), target
+    for folder in GRADED_FOLDERS:
+        directory = EXAMPLES_ROOT / folder
+        assert directory.is_dir(), folder
+        assert (directory / "README.md").is_file(), f"{folder} does not introduce itself"
+        assert list(directory.glob("*.py")), f"{folder} has no scripts"
+        assert folder in readme, f"{folder} is not linked from examples/README.md"
 
 
-def test_docs_examples_page_matches_application_recipe_map() -> None:
-    docs = DOCS_EXAMPLES.read_text(encoding="utf-8")
-    assert "One-command start points" in docs
-    assert "Decision map" in docs
-    assert "Application recipe map" in docs
-    assert "Top-level folder categories" in docs
+def test_every_graded_script_is_listed_in_its_folder_readme() -> None:
+    """An unlisted script is one nobody finds, which is the same as absent."""
+    unlisted: list[str] = []
+    for folder in GRADED_FOLDERS:
+        readme = (EXAMPLES_ROOT / folder / "README.md").read_text(encoding="utf-8")
+        for script in sorted((EXAMPLES_ROOT / folder).glob("*.py")):
+            if script.name not in readme:
+                unlisted.append(f"{folder}/{script.name}")
 
-    for label in sorted(ONE_COMMAND_LABELS):
-        rst_label = label.replace("`", "``")
-        assert rst_label in docs, label
+    assert unlisted == []
 
-    for entrypoint in sorted(ONE_COMMAND_ENTRYPOINTS):
-        docs_path = f"examples/{entrypoint}"
-        assert f"``{docs_path}``" in docs, docs_path
-        assert (EXAMPLES_ROOT / entrypoint).is_file(), entrypoint
 
-    for label in sorted(APPLICATION_RECIPE_LABELS):
-        rst_label = label.replace("`", "``")
-        assert rst_label in docs, label
-
-    for entrypoint in sorted(APPLICATION_RECIPE_ENTRYPOINTS):
-        docs_path = f"examples/{entrypoint}"
-        assert f"``{docs_path}``" in docs, docs_path
-        assert (EXAMPLES_ROOT / entrypoint).is_file(), entrypoint
-
-    for label in sorted(DECISION_MAP_LABELS):
-        rst_label = label.replace("`", "``")
-        assert rst_label in docs, label
-
-    for target in sorted(DECISION_MAP_TARGETS):
-        docs_path = f"examples/{target}"
-        assert f"``{docs_path}``" in docs, docs_path
-        assert (EXAMPLES_ROOT / target.rstrip("/")).exists(), target
-
-    for folder, category in sorted(FOLDER_CATEGORIES.items()):
-        assert f"``examples/{folder}/``" in docs, folder
-        assert category in docs, folder
+def test_every_folder_introduces_itself() -> None:
+    missing = [
+        folder
+        for folder in sorted(ALLOWED_EXAMPLE_FOLDERS)
+        if not (EXAMPLES_ROOT / folder / "README.md").is_file()
+    ]
+    assert missing == []
 
 
 def test_example_readmes_are_standalone_and_reference_existing_scripts() -> None:
@@ -389,7 +163,10 @@ def test_example_readmes_are_standalone_and_reference_existing_scripts() -> None
         for token in SCRIPT_TOKEN_RE.findall(text):
             if " " in token or token.startswith(("/", "http")):
                 continue
-            script_path = (REPO_ROOT / token) if token.startswith("examples/") else (base / token)
+            if token.startswith(("examples/", "tools/")):
+                script_path = REPO_ROOT / token
+            else:
+                script_path = base / token
             if not script_path.is_file():
                 missing_scripts.append(f"{relative_readme}: {token}")
 
@@ -397,9 +174,49 @@ def test_example_readmes_are_standalone_and_reference_existing_scripts() -> None
     assert missing_scripts == []
 
 
+def test_workflow_catalog_points_at_files_that_exist_and_run_unaided() -> None:
+    """The catalog is the terminal route to the same map; keep it honest.
+
+    ``requires_fortran_v3 is False`` is the load-bearing check: the catalog is
+    what a new user searches, and an entry that silently needs a Fortran build
+    they do not have is worse than no entry at all.
+    """
+    catalog = _workflow_catalog()
+
+    assert catalog["schema_version"] == 1
+    assert set(catalog["folders"]) <= ALLOWED_EXAMPLE_FOLDERS
+    assert "workflow_catalog.json" in (EXAMPLES_ROOT / "README.md").read_text(encoding="utf-8")
+
+    for folder, metadata in sorted(catalog["folders"].items()):
+        assert metadata["role"], folder
+        start_path = EXAMPLES_ROOT / metadata["start_here"]
+        assert start_path.exists(), f"{folder}: {metadata['start_here']}"
+        assert metadata["start_here"].split("/", 1)[0] == folder
+
+    for workflow in catalog["workflows"]:
+        entrypoint = workflow["entrypoint"]
+        assert workflow["id"]
+        assert workflow["goal"]
+        assert workflow["command"].startswith("python examples/")
+        assert workflow["keywords"]
+        assert workflow["runtime_budget"]
+        assert workflow["requires_fortran_v3"] is False, entrypoint
+        assert (EXAMPLES_ROOT / entrypoint).is_file(), entrypoint
+
+
+def test_docs_examples_page_names_every_folder() -> None:
+    """Prose docs may say more than the README, but not less."""
+    docs = DOCS_EXAMPLES.read_text(encoding="utf-8")
+    missing = [
+        folder
+        for folder in sorted(ALLOWED_EXAMPLE_FOLDERS)
+        if f"examples/{folder}" not in docs
+    ]
+    assert missing == []
+
+
 def test_examples_do_not_teach_v3_driver_facade_imports() -> None:
     """Examples should teach the public API, not the compatibility shim."""
-
     offenders: list[str] = []
     checked_suffixes = {".md", ".py", ".ipynb"}
     for path in sorted(EXAMPLES_ROOT.rglob("*")):
@@ -451,7 +268,9 @@ def test_tutorial_notebooks_are_pedagogic_and_output_free() -> None:
         joined_markdown = "\n".join("".join(cell.get("source", [])) for cell in markdown_cells)
 
         if len(markdown_cells) < 5 or len(code_cells) < 3:
-            structural_errors.append(f"{notebook_name}: markdown={len(markdown_cells)} code={len(code_cells)}")
+            structural_errors.append(
+                f"{notebook_name}: markdown={len(markdown_cells)} code={len(code_cells)}"
+            )
 
         for term in required_terms:
             if term not in joined_markdown:

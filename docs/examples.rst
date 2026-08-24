@@ -84,12 +84,12 @@ The repository includes a structured `examples/` tree:
 
 - `examples/tutorials/`: notebook-led learning path and a fast output/plot script
 - `examples/getting_started/`: basic API usage (no external reference code required)
-- `examples/parity/`: focused validation scripts against frozen reference fixtures
+- `tools/parity/`: focused validation scripts against frozen reference fixtures
 - `examples/transport/`: `RHSMode=2/3` transport-matrix workflows + upstream scanplot scripts
 - `examples/autodiff/`: autodiff + implicit-diff demonstrations
 - `examples/optimization/`: optimization patterns (may require extras)
-- `examples/performance/`: JIT/performance microbenchmarks
-- `examples/publication_figures/`: publication-style figure generation
+- `tools/performance/`: JIT/performance microbenchmarks
+- `tools/publication_figures/`: publication-style figure generation
 - `examples/vmex_finite_beta/`: finite-beta ``vmex`` to ``dkx`` radial bootstrap-current and ambipolar-``E_r`` workflow
 
 Run from the repo root:
@@ -165,11 +165,11 @@ frozen-reference or benchmark workflow.
      - ``examples/vmex_finite_beta/compare_qs_paper_dkx_redl.py``
      - ``python examples/vmex_finite_beta/compare_qs_paper_dkx_redl.py --case QA --quick --jax-vs-redl --solve-method auto``
    * - Time output formats and memory behavior
-     - ``examples/performance/benchmark_output_formats.py``
-     - ``python examples/performance/benchmark_output_formats.py --repeats 2``
+     - ``tools/performance/benchmark_output_formats.py``
+     - ``python tools/performance/benchmark_output_formats.py --repeats 2``
    * - Check a frozen Fortran-v3 output fixture
-     - ``examples/parity/output_parity_vs_fortran_fixture.py``
-     - ``python examples/parity/output_parity_vs_fortran_fixture.py``
+     - ``tools/parity/output_parity_vs_fortran_fixture.py``
+     - ``python tools/parity/output_parity_vs_fortran_fixture.py``
 
 Fast tutorial, getting-started, and frozen-fixture parity entries are designed
 for seconds-scale laptop CPU runs. VMEC, Redl, optimization, and performance
@@ -205,10 +205,10 @@ folder name.
      - ``examples/vmex_finite_beta/``
      - Owns the VMEC, Redl, ambipolar-root, and bootstrap-current profile scripts.
    * - I need to validate against SFINCS Fortran v3 behavior.
-     - ``examples/parity/`` and ``examples/publication_figures/``
+     - ``tools/parity/`` and ``tools/publication_figures/``
      - Provides frozen fixtures and release-facing comparison plot generators.
    * - I need CPU/GPU runtime or memory evidence.
-     - ``examples/performance/``
+     - ``tools/performance/``
      - Benchmarks output formats, JIT, sharding, transport workers, and optional backends.
    * - I recognize an upstream SFINCS input name.
      - ``examples/sfincs_examples/``
@@ -257,10 +257,10 @@ convergence, or profiling detail.
      - ``examples/optimization/qa_nfp2_dkx_objectives.py``
      - ``examples/optimization/QA_optimization_bootstrap_current.py``
    * - CPU/GPU timing and output I/O
-     - ``examples/performance/benchmark_output_formats.py``
-     - ``examples/performance/benchmark_transport_l11_vs_fortran.py``
+     - ``tools/performance/benchmark_output_formats.py``
+     - ``tools/performance/benchmark_transport_l11_vs_fortran.py``
    * - Frozen Fortran-v3 parity check
-     - ``examples/parity/output_parity_vs_fortran_fixture.py``
+     - ``tools/parity/output_parity_vs_fortran_fixture.py``
      - ``examples/sfincs_examples/`` for retained upstream-style decks
 
 Top-level folder categories
@@ -286,7 +286,7 @@ the recommended first stop for new workflows.
      - ``examples/transport/``, ``examples/autodiff/``, ``examples/optimization/``, ``examples/vmex_finite_beta/``
      - You need a specific physics, optimization, VMEC, Redl, bootstrap-current, or differentiability workflow.
    * - ``validation``
-     - ``examples/parity/``, ``examples/performance/``, ``examples/publication_figures/``, ``examples/paper_benchmarks/``
+     - ``tools/parity/``, ``tools/performance/``, ``tools/publication_figures/``, ``tools/paper_benchmarks/``
      - You need parity checks, runtime/memory evidence, CPU/GPU benchmark drivers, regenerated documentation figures, or methods-paper benchmark cases.
    * - ``reference``
      - ``examples/data/``, ``examples/sfincs_examples/``
@@ -686,7 +686,7 @@ Matrix-free linear solve demo (using frozen PETSc binaries):
 
 .. code-block:: bash
 
-   python examples/parity/solve_fortran_matrix_with_gmres.py
+   python tools/parity/solve_fortran_matrix_with_gmres.py
    python examples/autodiff/autodiff_gradient_nu_n_residual.py
 
 Transport matrices (RHSMode=2/3)

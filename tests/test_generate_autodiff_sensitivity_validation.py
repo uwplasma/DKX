@@ -8,7 +8,7 @@ from pathlib import Path
 
 def _load_module():
     repo = Path(__file__).resolve().parents[1]
-    path = repo / "examples" / "publication_figures" / "generate_autodiff_sensitivity_validation.py"
+    path = repo / "tools" / "publication_figures" / "generate_autodiff_sensitivity_validation.py"
     spec = importlib.util.spec_from_file_location("generate_autodiff_sensitivity_validation", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -22,7 +22,7 @@ def test_generate_autodiff_sensitivity_validation_plot_only_from_checked_artifac
     repo = Path(__file__).resolve().parents[1]
     summary_json = (
         repo
-        / "examples"
+        / "tools"
         / "publication_figures"
         / "artifacts"
         / "dkx_autodiff_sensitivity_validation_summary.json"

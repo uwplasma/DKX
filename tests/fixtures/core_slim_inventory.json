@@ -50,7 +50,7 @@
         "tests/test_transport_parallel_worker_cli.py"
       ],
       "example_paths": [
-        "examples/performance/benchmark_transport_parallel_scaling.py"
+        "tools/performance/benchmark_transport_parallel_scaling.py"
       ],
       "script_paths": [],
       "doc_paths": [
@@ -73,7 +73,7 @@
         "tests/test_validation_figures.py"
       ],
       "example_paths": [
-        "examples/publication_figures"
+        "tools/publication_figures"
       ],
       "script_paths": [],
       "doc_paths": [
@@ -281,8 +281,8 @@
       {
         "name": "publication_and_performance_examples",
         "prefix_any": [
-          "examples/publication_figures/",
-          "examples/performance/"
+          "tools/publication_figures/",
+          "tools/performance/"
         ],
         "decision": "extract-pr",
         "owner_tags": [
@@ -310,8 +310,8 @@
         "prefix": "examples/",
         "exclude_prefix_any": [
           "examples/sfincs_examples/",
-          "examples/publication_figures/",
-          "examples/performance/",
+          "tools/publication_figures/",
+          "tools/performance/",
           "examples/optimization/"
         ],
         "decision": "merge",
@@ -566,7 +566,7 @@
       "internal_callers": [
         "tests/test_benchmark_artifact_policy.py",
         "tests/test_validation_figures.py",
-        "examples/publication_figures/generate_fortran_suite_benchmark_summary.py"
+        "tools/publication_figures/generate_fortran_suite_benchmark_summary.py"
       ],
       "tests": [
         "tests/test_validation_artifacts.py",
@@ -639,7 +639,7 @@
       "next_step": "Keep the Fortran MPI shell wrapper only while documented, otherwise move shell release tooling into docs or delete scripts/ entirely."
     },
     {
-      "path": "examples/performance",
+      "path": "tools/performance",
       "lines_at_audit": 2369,
       "category": "extract-pr",
       "action": "extract",
@@ -657,7 +657,7 @@
       "next_step": "Continue shrinking performance examples toward one output-format workflow plus one documented transport-worker benchmark; remaining long profiling drivers should become package validation tooling or research-lane material."
     },
     {
-      "path": "examples/publication_figures",
+      "path": "tools/publication_figures",
       "lines_at_audit": 3519,
       "category": "extract-pr",
       "action": "extract",

@@ -22,26 +22,6 @@
       "role": "Optimization objectives, candidate screening, and kinetic-promotion helpers.",
       "start_here": "optimization/qa_nfp2_dkx_objectives.py"
     },
-    "paper_benchmarks": {
-      "category": "validation",
-      "role": "Methods-paper benchmark cases with figures, JSON records, and Fortran v3 cross-checks.",
-      "start_here": "paper_benchmarks/monoenergetic_icnts_w7x.py"
-    },
-    "parity": {
-      "category": "validation",
-      "role": "Frozen-reference parity checks against SFINCS Fortran v3 artifacts.",
-      "start_here": "parity/output_parity_vs_fortran_fixture.py"
-    },
-    "performance": {
-      "category": "validation",
-      "role": "JIT, memory, output-format, CPU/GPU, and parallel scaling benchmarks.",
-      "start_here": "performance/benchmark_output_formats.py"
-    },
-    "publication_figures": {
-      "category": "validation",
-      "role": "Documentation and paper-figure regeneration from checked summaries or explicit runs.",
-      "start_here": "publication_figures/README.md"
-    },
     "sfincs_examples": {
       "category": "reference",
       "role": "Vendored upstream SFINCS v3 examples for parity and benchmark audits.",
@@ -174,40 +154,6 @@
         "qh"
       ],
       "runtime_budget": "bounded; use --quick for first run",
-      "requires_fortran_v3": false
-    },
-    {
-      "id": "output_format_benchmark",
-      "goal": "Time output formats and memory behavior.",
-      "entrypoint": "performance/benchmark_output_formats.py",
-      "command": "python examples/performance/benchmark_output_formats.py --repeats 2",
-      "topic": "performance",
-      "keywords": [
-        "performance",
-        "runtime",
-        "memory",
-        "io",
-        "gpu",
-        "cpu",
-        "output"
-      ],
-      "runtime_budget": "seconds",
-      "requires_fortran_v3": false
-    },
-    {
-      "id": "frozen_fortran_fixture",
-      "goal": "Check a frozen Fortran-v3 output fixture.",
-      "entrypoint": "parity/output_parity_vs_fortran_fixture.py",
-      "command": "python examples/parity/output_parity_vs_fortran_fixture.py",
-      "topic": "validation",
-      "keywords": [
-        "parity",
-        "validation",
-        "fortran",
-        "fixture",
-        "hdf5"
-      ],
-      "runtime_budget": "seconds",
       "requires_fortran_v3": false
     },
     {

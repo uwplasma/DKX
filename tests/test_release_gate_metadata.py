@@ -15,7 +15,7 @@ def _repo_root() -> Path:
 
 
 def _manifest_path() -> Path:
-    return _repo_root() / "examples" / "publication_figures" / "validation_manifest.json"
+    return _repo_root() / "tools" / "publication_figures" / "validation_manifest.json"
 
 
 def _manifest() -> list[dict[str, object]]:

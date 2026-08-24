@@ -132,7 +132,7 @@ flow corrections, an extended-collisionality Sugama operator, monoenergetic
 database mode, batched GPU scans, a bounce-averaged 1/ν surrogate) — lives in
 [docs/feature_matrix.rst](docs/feature_matrix.rst).
 
-*Reproduce with the drivers in [`examples/parity/`](examples/parity/).*
+*Reproduce with the drivers in [`tools/parity/`](tools/parity/).*
 
 ### Interpreting a difference
 
@@ -235,7 +235,7 @@ matched-deck SFINCS Fortran v3 cross-check points at solver precision. The
 quasi-helically symmetric HSX case shows the suppressed 1/ν branch that W7-X and
 TJ-II retain.
 
-*Reproduce with `python examples/paper_benchmarks/monoenergetic_icnts_w7x.py`
+*Reproduce with `python tools/paper_benchmarks/monoenergetic_icnts_w7x.py`
 (and the `_tjii` / `_hsx` companions).*
 
 ## Low-collisionality bootstrap convergence
@@ -249,7 +249,7 @@ asymptote — the 1/ν-regime offset does not decay without orbit precession —
 a small finite `EStar` detaches below `nuPrime ~ 1e-3` and flattens back toward
 the asymptote, the E×B-precession dip.
 
-*Reproduce with `python examples/paper_benchmarks/shaing_callen_convergence.py`.*
+*Reproduce with `python tools/paper_benchmarks/shaing_callen_convergence.py`.*
 
 ## Ambipolar Er and electron roots
 
@@ -262,8 +262,8 @@ sign, and follows the physical branch by radial continuity to reproduce the
 electron-root → ion-root crossover near `ρ ~ 0.6`, matching the reference `E_r`
 within the digitization uncertainty (~1.5 kV/m mean difference).
 
-*Reproduce with `python examples/paper_benchmarks/w7x_ambipolar_er.py` and
-`python examples/paper_benchmarks/electron_root_optimization.py`.*
+*Reproduce with `python tools/paper_benchmarks/w7x_ambipolar_er.py` and
+`python tools/paper_benchmarks/electron_root_optimization.py`.*
 
 ## Impurity transport
 
@@ -276,7 +276,7 @@ diagnostic recovers the exact `-Z` density-peaking coefficient and the classical
 1/2 collisional screening coefficient, with an autodiff ion-temperature-gradient
 derivative verified against finite differences.
 
-*Reproduce with `python examples/paper_benchmarks/impurity_transport.py`.*
+*Reproduce with `python tools/paper_benchmarks/impurity_transport.py`.*
 
 ## Kinetic-in-the-loop bootstrap
 
@@ -290,7 +290,7 @@ error the kinetic-in-the-loop iteration removes by construction — and one
 `jax.value_and_grad` differentiates the total bootstrap current through the
 equilibrium → Boozer → kinetic chain.
 
-*Reproduce with `python examples/paper_benchmarks/bootstrap_consistency_kinetic_loop.py`
+*Reproduce with `python tools/paper_benchmarks/bootstrap_consistency_kinetic_loop.py`
 (needs the optional `vmex` + `booz_xform_jax` companions).*
 
 To put that inside an optimizer instead of after it, `dkx.bootstrap.KineticBootstrapCurrent`

@@ -65,10 +65,10 @@ Literature-artifact gates
 Publication-facing validations use the same layered idea, but the unit under test is
 the checked-in scientific artifact rather than a single function. The key files are:
 
-- ``examples/publication_figures/validation_manifest.json``
-- ``examples/publication_figures/artifacts/*.json``
-- ``examples/publication_figures/generate_validation_dashboard.py``
-- ``examples/publication_figures/generate_fortran_suite_benchmark_summary.py``
+- ``tools/publication_figures/validation_manifest.json``
+- ``tools/publication_figures/artifacts/*.json``
+- ``tools/publication_figures/generate_validation_dashboard.py``
+- ``tools/publication_figures/generate_fortran_suite_benchmark_summary.py``
 - ``dkx/validation/artifacts.py``
 
 The dashboard tests are intentionally cheap enough for CI. They do not rerun the full
@@ -309,7 +309,7 @@ The repository includes:
 
 - frozen fixtures in ``tests/ref``,
 - example inputs in ``examples/sfincs_examples``,
-- benchmark scripts in ``examples/performance``,
+- benchmark scripts in ``tools/performance``,
 - and generated figures in ``docs/_static/figures``.
 
 That structure is intended to make claims in the docs reproducible. If a figure or
@@ -322,7 +322,7 @@ Publication-facing validation lanes
 The manuscript-oriented validation lanes are tracked separately from the general
 unit/regression suite:
 
-- ``examples/publication_figures/validation_manifest.json`` is the machine-readable
+- ``tools/publication_figures/validation_manifest.json`` is the machine-readable
   map from literature claim to script and artifact.
 - :doc:`validation_matrix` is the corresponding human-facing documentation page.
 - ``tests/test_validation_manifest_schema.py`` enforces that every lane has explicit
@@ -353,13 +353,13 @@ unit/regression suite:
 
 The ``E_r`` trajectory-model sweep family is a release-facing validation lane:
 
-- script: ``examples/publication_figures/generate_er_trajectory_sweep.py``
+- script: ``tools/publication_figures/generate_er_trajectory_sweep.py``
 - pinned tokamak-like reference artifact:
-  ``examples/publication_figures/artifacts/er_sweep_tokamak_reference_summary.json``
+  ``tools/publication_figures/artifacts/er_sweep_tokamak_reference_summary.json``
 - pinned tokamak-like reference figure:
   ``docs/_static/figures/paper/dkx_er_trajectory_sweep_tokamak_reference.png``
 - pinned stellarator-like fast artifact:
-  ``examples/publication_figures/artifacts/er_sweep_stellarator_fast_reference_summary.json``
+  ``tools/publication_figures/artifacts/er_sweep_stellarator_fast_reference_summary.json``
 - pinned stellarator-like fast figure:
   ``docs/_static/figures/paper/dkx_er_trajectory_sweep_stellarator_fast_reference.png``
 
@@ -390,22 +390,22 @@ audited validation artifacts.
 The audited full artifacts from that lane are checked in:
 
 - summary:
-  ``examples/publication_figures/artifacts/lhd_collisionality_summary.json``
+  ``tools/publication_figures/artifacts/lhd_collisionality_summary.json``
 - figure:
   ``docs/_static/figures/paper/dkx_fig1_lhd_collisionality.png``
 - summary:
-  ``examples/publication_figures/artifacts/w7x_collisionality_summary.json``
+  ``tools/publication_figures/artifacts/w7x_collisionality_summary.json``
 - figure:
   ``docs/_static/figures/paper/dkx_fig2_w7x_collisionality.png``
 
 The bounded fast artifacts remain checked in for branch-level regression work:
 
 - summary:
-  ``examples/publication_figures/artifacts/lhd_collisionality_reaudit_fast_summary.json``
+  ``tools/publication_figures/artifacts/lhd_collisionality_reaudit_fast_summary.json``
 - figure:
   ``docs/_static/figures/paper/dkx_fig1_lhd_collisionality_reaudit_fast.png``
 - summary:
-  ``examples/publication_figures/artifacts/w7x_collisionality_reaudit_fast_summary.json``
+  ``tools/publication_figures/artifacts/w7x_collisionality_reaudit_fast_summary.json``
 - figure:
   ``docs/_static/figures/paper/dkx_fig2_w7x_collisionality_reaudit_fast.png``
 
@@ -444,7 +444,7 @@ gates at the documented production grid.
 The high-collisionality Simakov-Helander lane has a bounded normalization audit:
 
 - artifact:
-  ``examples/publication_figures/artifacts/dkx_simakov_helander_limit_audit_summary.json``
+  ``tools/publication_figures/artifacts/dkx_simakov_helander_limit_audit_summary.json``
 - focused test: ``tests/test_validation_artifacts.py``
 
 This audit checks that the checked-in geometry output fields are sufficient for the

@@ -19,7 +19,7 @@ def _repo_root() -> Path:
 
 
 def _manifest_path() -> Path:
-    return _repo_root() / "examples" / "publication_figures" / "validation_manifest.json"
+    return _repo_root() / "tools" / "publication_figures" / "validation_manifest.json"
 
 
 def _manifest() -> list[dict[str, object]]:
@@ -54,7 +54,7 @@ def test_release_gate_rejects_stale_deferred_lane_paths(tmp_path: Path) -> None:
     lane = _record(records, "w7x_ambipolar_er_validation")
     lane["source_code"] = ["dkx/does_not_exist_deferred_source.py"]
     lane["tests"] = ["tests/test_missing_deferred_validation_gate.py"]
-    lane["scripts"] = ["examples/publication_figures/missing_w7x_validation_script.py --fast"]
+    lane["scripts"] = ["tools/publication_figures/missing_w7x_validation_script.py --fast"]
     lane["artifacts"] = ["docs/_static/figures/paper/missing_w7x_validation_artifact.png"]
     manifest_path = tmp_path / "validation_manifest.json"
     manifest_path.write_text(json.dumps(records), encoding="utf-8")
@@ -71,7 +71,7 @@ def test_release_gate_rejects_stale_deferred_lane_paths(tmp_path: Path) -> None:
     ) in errors
     assert (
         "w7x_ambipolar_er_validation: script path does not exist: "
-        "examples/publication_figures/missing_w7x_validation_script.py"
+        "tools/publication_figures/missing_w7x_validation_script.py"
     ) in errors
     assert (
         "w7x_ambipolar_er_validation: artifacts path does not exist: "

@@ -1,6 +1,6 @@
 """CI-sized regression gate for the electron-root optimization benchmark.
 
-Runs ``examples/paper_benchmarks/electron_root_optimization.py`` in its CI mode
+Runs ``tools/paper_benchmarks/electron_root_optimization.py`` in its CI mode
 (reduced Te/Ti ladder, coarse E_r grids, Nxi=24 scan / Nxi=8 differentiable
 deck) into temporary output/figure directories, and pins the structural physics
 the full benchmark relies on:
@@ -40,7 +40,7 @@ import pytest
 pytestmark = pytest.mark.slow
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-EXAMPLE = REPO_ROOT / "examples" / "paper_benchmarks" / "electron_root_optimization.py"
+EXAMPLE = REPO_ROOT / "tools" / "paper_benchmarks" / "electron_root_optimization.py"
 
 # Frozen at the CI differentiable resolution (Nxi=8, resolution-independent of
 # the coarse scan); see the module docstring for the measurement.
