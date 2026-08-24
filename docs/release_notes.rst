@@ -510,6 +510,15 @@ Fixes:
   without saying only ``style="summary"`` expands; the default writes one page.
 - The ``|B|`` panels drew theta and zeta on each other's axes when the output
   file stored them in the opposite order.
+- ``dkx wout_*.nc`` was broken for every pip install. It built its
+  monoenergetic base by reading ``dkx/data/representative.namelist``, falling
+  back to a deck under ``examples/``, and neither ships in the wheel -- so the
+  flagship "point dkx at an equilibrium" path worked only from a source
+  checkout. Reported by a user as ``NotImplementedError: run_transport_matrix
+  supports RHSMode 2 and 3``, which is what a base carrying the default
+  ``RHSMode = 1`` produces three frames later. The deck is a module-level
+  string now, and ``monoenergetic_scan`` rejects a non-RHSMode=3 base where the
+  mistake is rather than in the solver.
 
 v1.1.7
 ------

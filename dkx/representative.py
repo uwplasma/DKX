@@ -130,6 +130,55 @@ FALLBACK_PLASMA = {"n_hat": 1.0, "t_hat": 1.0, "dn_drhat": -0.5, "dt_drhat": -1.
 #: term: measured against Redl on a finite-beta precise-QA equilibrium it runs
 #: 35-47% high, where Fokker-Planck lands within 2-7%
 #: (:data:`dkx.bootstrap.DEFAULT_COLLISION_OPERATOR`).
+#: The monoenergetic base for :func:`run_representative`.
+#:
+#: This is a module-level string on purpose.  It used to be read from
+#: ``dkx/data/representative.namelist``, falling back to a deck under
+#: ``examples/``, and **neither ships in the wheel** -- so ``dkx wout_*.nc``
+#: worked in a source checkout and failed for every pip user.  It failed twice
+#: over: FileNotFoundError when nothing was found, and, when some other
+#: namelist happened to sit at one of those paths, a base carrying the default
+#: ``RHSMode = 1`` that only surfaced as "run_transport_matrix supports RHSMode
+#: 2 and 3" from three frames deeper.
+#:
+#: ``RHSMode = 3`` is the whole point of this deck; :func:`monoenergetic_scan`
+#: checks it rather than trusting it.  ``Nx = 1`` is not a resolution to raise:
+#: monoenergetic coefficients are defined at a single speed.
+_MONOENERGETIC_TEMPLATE = """&general
+  RHSMode = 3
+/
+&geometryParameters
+  geometryScheme = 5
+  equilibriumFile = "{equilibrium}"
+  inputRadialCoordinate = 3
+  rN_wish = 0.5
+  VMECRadialOption = 1
+  min_Bmn_to_load = 0
+/
+&speciesParameters
+/
+&physicsParameters
+  nuPrime = 1.0d+0
+  EStar = 0.2d+0
+  collisionOperator = 1
+  includeXDotTerm = .false.
+  includeElectricFieldTermInXiDot = .false.
+  useDKESExBDrift = .true.
+  includePhi1 = .false.
+/
+&resolutionParameters
+  Ntheta = 17
+  Nzeta = 31
+  Nxi = 24
+  Nx = 1
+  solverTolerance = 1d-6
+/
+&otherNumericalParameters
+/
+&preconditionerOptions
+/
+"""
+
 _PROFILE_TEMPLATE = """&general
   RHSMode = 1
 /
@@ -206,6 +255,13 @@ def monoenergetic_scan(
     base = namelist
     if not hasattr(base, "resolution"):
         base = sfincs_input_from_raw(read_sfincs_input(namelist))
+    if int(base.general.rhs_mode) != 3:
+        raise ValueError(
+            "monoenergetic_scan needs an RHSMode=3 deck; got "
+            f"RHSMode={int(base.general.rhs_mode)}.  Passing an RHSMode=1 deck "
+            "surfaces three frames deeper as 'run_transport_matrix supports "
+            "RHSMode 2 and 3', which does not point back here."
+        )
     res = dict(DEFAULT_RESOLUTION if resolution is None else resolution)
 
     records: list[dict[str, Any]] = []
@@ -597,19 +653,13 @@ def run_representative(
     ``full`` widens the monoenergetic grid; the default keeps the whole run
     inside the one-minute budget the module docstring measures.
     """
-    from dkx.inputs import read_sfincs_input, sfincs_input_from_raw  # noqa: PLC0415
+    from dkx.inputs import parse_sfincs_input_text, sfincs_input_from_raw  # noqa: PLC0415
 
     equilibrium = Path(equilibrium)
-    template = Path(__file__).parent / "data" / "representative.namelist"
-    if not template.exists():  # fall back to an upstream monoenergetic deck
-        template = (
-            Path(__file__).resolve().parents[1]
-            / "examples" / "sfincs_examples" / "monoenergetic_geometryScheme5_netCDF"
-            / "input.namelist"
-        )  # fmt: skip
-    base = sfincs_input_from_raw(read_sfincs_input(template))
-    base = dataclasses.replace(
-        base, geometry=dataclasses.replace(base.geometry, equilibrium_file=str(equilibrium))
+    if not equilibrium.is_file():
+        raise FileNotFoundError(f"no such equilibrium file: {equilibrium}")
+    base = sfincs_input_from_raw(
+        parse_sfincs_input_text(_MONOENERGETIC_TEMPLATE.format(equilibrium=str(equilibrium)))
     )
     # Each stage is timed and the time is printed.  The three stages differ by
     # more than an order of magnitude in cost, and on a large device the radial
