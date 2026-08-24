@@ -260,7 +260,67 @@ def plot_sfincs_output_summary(
     axes[2].set_xticklabels(["0", f"{float(zeta[-1]):.2f}"])
     fig.colorbar(im, ax=axes[2], fraction=0.046, pad=0.04)
 
-    fig.suptitle(f"SFINCS output summary: {Path(input_h5).name}", y=1.03)
+    # y=1.03 put the title outside the figure, where constrained_layout does
+    # not reserve room for it, so it landed on the subplot titles.  Let the
+    # layout engine place it.
+    fig.suptitle(f"SFINCS output summary: {Path(input_h5).name}")
     fig.savefig(output_png, dpi=200, bbox_inches="tight")
     plt.close(fig)
     return output_png.resolve()
+
+
+def plot(source, out="dkx_summary.png"):
+    """Plot a run or an output file.  One call, one figure, returns its path.
+
+    ``source`` is whatever you already have:
+
+    - the object :func:`dkx.run` returned, when the run was given ``out=``;
+    - a path to an ``sfincsOutput`` file, DKX's or Fortran SFINCS's --- the
+      layout is the same, so both work;
+    - a directory containing one.
+
+    ``out`` picks the format by suffix: ``.png`` for a compact single-page
+    summary, ``.pdf`` for the multi-page diagnostics panel.
+
+    For a figure this does not draw, read the numbers off ``run.moments`` and
+    use matplotlib directly --- ``examples/1_basics/plot_custom.py`` shows
+    that, and it is not a fallback so much as the normal way to make a figure
+    for a paper.
+
+    Args:
+        source: a run object, an output-file path, or a directory.
+        out: destination path; the suffix selects png or pdf.
+
+    Returns:
+        The :class:`~pathlib.Path` actually written.
+    """
+    out = Path(out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    path = getattr(source, "output_path", None) or (
+        source if isinstance(source, (str, Path)) else None)
+    if path is not None:
+        path = Path(path)
+        if path.is_dir():
+            candidates = sorted(
+                p for p in path.iterdir()
+                if p.suffix in {".h5", ".nc", ".npz"} and "sfincsOutput" in p.name
+            )
+            if not candidates:
+                raise FileNotFoundError(f"no sfincsOutput file in {path}")
+            path = candidates[0]
+        return plot_sfincs_output_summary(input_h5=path, output_png=out)
+
+    if hasattr(source, "moments"):
+        raise ValueError(
+            "this run has no output file to plot: pass out=... to dkx.run so the "
+            "solve writes one, e.g.\n"
+            '    run = dkx.run(case, out="sfincsOutput.h5")\n'
+            "    dkx.plot(run)\n"
+            "Plotting cannot reuse the in-memory result because the panels read "
+            "the output file's full dataset, not just the moments."
+        )
+    raise TypeError(
+        "plot() takes the object dkx.run() returned, a path to an sfincsOutput "
+        f"file, or a directory holding one; got {type(source).__name__}"
+    )

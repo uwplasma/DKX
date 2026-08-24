@@ -268,6 +268,7 @@ from .inputs import SfincsInput, load_sfincs_input  # noqa: E402
 # Heavy flagship entry points (they import the JAX solve stack) are exported
 # lazily via PEP 562 module __getattr__ so `import dkx` stays cheap.
 _LAZY_EXPORTS = {
+    "plot": ("dkx.plotting", "plot"),
     "run": ("dkx.run", "run"),
     "run_profile": ("dkx.run", "run_profile"),
     "run_transport_matrix": ("dkx.run", "run_transport_matrix"),
@@ -345,6 +346,7 @@ __all__ = [
     "run_ambipolar_brent",
     "run_from_namelist",
     "run_monoenergetic_database",
+    "plot",
     "run",
     "run_profile",
     "run_transport_matrix",
