@@ -292,8 +292,17 @@ try:
                 os.environ.get("DKX_COMPILATION_CACHE_MAX_BYTES", str(4 * 1024**3))
             )
             if _cache_cap > 0:
+                # jax raises "Please install the `filelock` package to set
+                # jax_compilation_cache_max_size" -- and it raises it later, on
+                # every cache read, not here.  Setting the cap without filelock
+                # therefore disables the cache instead of bounding it, which is
+                # strictly worse than leaving it unbounded.  filelock is a
+                # declared dependency; this guard is for an environment that
+                # somehow lacks it.
+                import filelock  # noqa: F401, PLC0415
+
                 _jax_config.update("jax_compilation_cache_max_size", _cache_cap)
-        except (ValueError, AttributeError):
+        except (ValueError, AttributeError, ImportError):
             # Older jax without the knob: an unbounded cache still works, it
             # just grows, so this must not stop dkx from importing.
             pass
@@ -324,7 +333,6 @@ from .inputs import SfincsInput, load_sfincs_input  # noqa: E402
 # lazily via PEP 562 module __getattr__ so `import dkx` stays cheap.
 _LAZY_EXPORTS = {
     "plot": ("dkx.plotting", "plot"),
-    "run": ("dkx.run", "run"),
     "run_profile": ("dkx.run", "run_profile"),
     "run_transport_matrix": ("dkx.run", "run_transport_matrix"),
     "run_from_namelist": ("dkx.run", "run_from_namelist"),
@@ -338,6 +346,8 @@ _LAZY_EXPORTS = {
 
 
 def __getattr__(name: str):
+    if name == "run":
+        return _lazy_run_module()
     try:
         module_name, attr = _LAZY_EXPORTS[name]
     except KeyError:
@@ -353,37 +363,18 @@ def __dir__() -> list[str]:
     return sorted(set(globals()) | set(_LAZY_EXPORTS))
 
 
-# ``dkx/run.py`` is a module and ``dkx.run`` is a function, and Python binds the
-# submodule onto the package when anything imports it.  So::
-#
-#     import dkx
-#     from dkx.run import profile_moments_from_operator   # autodiff helper
-#     dkx.run(case)          # TypeError: 'module' object is not callable
-#
-# but the same two lines in the other order work.  Order-dependent, silent, and
-# it reads as the package being broken.  Re-resolve such a name on access rather
-# than letting the module keep the slot; the alternative is importing the heavy
-# solve stack eagerly, which costs every ``import dkx`` real time (0.38 s here).
-_SHADOWABLE = frozenset(
-    name
-    for name, (module_name, _attr) in _LAZY_EXPORTS.items()
-    if module_name == f"{__name__}.{name}"
-)
+# ``dkx/run.py`` is a module and ``dkx.run(case)`` is a call.  Rather than pick
+# one -- the function breaks ``dkx.run.run_profile`` and every monkeypatch that
+# targets it by path, the module breaks the call -- ``dkx/run.py`` makes itself
+# callable, so ``dkx.run`` is always the module and always invocable.  The name
+# is resolved here rather than listed in _LAZY_EXPORTS because what it yields
+# is the module itself, not an attribute of one.
+def _lazy_run_module():
+    import importlib  # noqa: PLC0415
 
-
-class _Package(_types.ModuleType):
-    def __getattribute__(self, name):
-        value = _types.ModuleType.__getattribute__(self, name)
-        if name in _SHADOWABLE and type(value) is _types.ModuleType:
-            import importlib  # noqa: PLC0415
-
-            module_name, attr = _LAZY_EXPORTS[name]
-            value = getattr(importlib.import_module(module_name), attr)
-            object.__setattr__(self, name, value)
-        return value
-
-
-_sys.modules[__name__].__class__ = _Package
+    module = importlib.import_module(f"{__name__}.run")
+    globals()["run"] = module
+    return module
 
 
 

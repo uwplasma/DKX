@@ -23,6 +23,8 @@ import dataclasses
 import os
 import time
 from dataclasses import dataclass, replace
+import sys as _sys
+import types as _types
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable
 
@@ -1003,3 +1005,19 @@ def run(
     if tol is not None:
         kwargs["tol"] = tol
     return driver(case, **kwargs)
+
+
+# ``dkx.run`` has to be two things at once: the module that holds run_profile,
+# run_transport_matrix and the moment helpers, and the callable a user reaches
+# for first.  Python binds a submodule onto its package on import, so a plain
+# function export loses the slot the moment anything does `from dkx.run import
+# ...` -- order-dependent, silent, and it reads as the package being broken.
+# Making the module callable settles it in the one place that cannot disagree
+# with itself: `dkx.run(case)`, `dkx.run.run_profile`, `from dkx.run import x`
+# and `monkeypatch.setattr("dkx.run.run_profile", ...)` all work, in any order.
+class _CallableModule(_types.ModuleType):
+    def __call__(self, *args, **kwargs):
+        return run(*args, **kwargs)
+
+
+_sys.modules[__name__].__class__ = _CallableModule
