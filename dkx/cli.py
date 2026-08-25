@@ -813,8 +813,10 @@ def _maybe_handle_plot(argv: list[str]) -> int | None:
         print(f" dkx --plot {path.name} (solver output)")
         print(f" wrote {plot_output_file(path, out)}")
     else:
-        print(f" dkx {path.name} — representative run")
-        print(f" wrote {run_representative(path, out_path=out, full='--full' in argv)}")
+        quick = "--quick" in argv
+        label = " (quick)" if quick else ""
+        print(f" dkx {path.name} — representative run{label}")
+        print(f" wrote {run_representative(path, out_path=out, full='--full' in argv, quick=quick)}")
     return 0
 
 

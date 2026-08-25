@@ -56,7 +56,9 @@ Pfirsch–Schlüter regimes (a curve per `EStar`), `|B|` on the surface, and —
 the ambipolar root, against radius — the bootstrap current in kA/m² beside the
 VMEC equilibrium's own, and the species fluxes in SI units. Density and
 temperature come from the equilibrium's own pressure when it has one, and the
-figure says which. `--full` widens the grid; `--plot` reads DKX and Fortran
+figure says which. `--full` widens the grid and `--quick` cuts it to about a
+quarter of the wall time for a smoke check — the panels still fill, but nothing
+`--quick` prints is a reportable number; `--plot` reads DKX and Fortran
 SFINCS output alike. Measured on a 10-core M4 with the Fokker–Planck operator
 throughout: 37.3 s on W7-X and 45.8 s on a finite-β precise-QA equilibrium, the
 latter split 16.4 s for the 21-point scan, 6.0 s for the `|B|` solve, and 22.5 s
