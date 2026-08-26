@@ -470,6 +470,41 @@ Unreleased
   and the latest local full suite after the active/dense setup extraction passed
   with ``2659 passed in 551.86 s``.
 
+v2.3.1
+------
+
+Fixes both halves of a reported ``scanType=5`` failure (an ``Er`` scan inside a
+radius scan) on a 66004-DOF deck. Tier-2 GCROT stalled at the largest ``|Er|``,
+DKX fell back to the tier-3 host direct solve, and tier 3 refused at once
+because it materializes the operator column by column -- 66004 matvecs and
+32.5 GB at that size. The ``RuntimeError`` propagated out through the scan
+driver and killed every remaining ``Er`` point at that radius: one radius folder
+finished with zero of a hundred outputs, another with three.
+
+- A stalled tier-2 solve now escalates instead of crashing: the ``sparse``
+  preconditioner, then ``multigrid``, then a 4x iteration budget, and tier 3
+  only where tier 3 can actually run. This is the SFINCS v3 strategy -- it
+  preconditions GMRES with a sparse direct LU (MUMPS or SuperLU_dist) of the
+  analytically assembled simplified matrix, and retries automatically on a
+  failed factorization -- and DKX already shipped the analogue without ever
+  trying it. Measured on the starved-tier-2 fixture, the first rung alone
+  recovers the solve. When every rung fails, the error names what was tried,
+  the best residual reached, why tier 3 was skipped, and remedies that help,
+  rather than the old advice to raise ``max_dense_size``, which at this size
+  asked for a 32.5 GB allocation.
+- All six scan types run each point through ``run_scan_point``, which records a
+  failure and continues rather than raising. A failed point gets a
+  ``dkx_FAILED.txt`` holding the traceback, the scan prints a tally of what is
+  missing, and ``sfincsScan`` exits nonzero so a job script still notices.
+  ``KeyboardInterrupt`` is re-raised, so Ctrl-C still stops a scan.
+
+Note that a point that cannot be solved now takes *longer* to fail, because the
+escalation tries several remedies first. That is the right trade for an
+unattended scan, but it is a change in timing.
+
+The escalation has been exercised on a synthetic stall, not yet on the reported
+66004-DOF deck at ``Er15``; whether it rescues that specific case is unverified.
+
 v2.3.0
 ------
 
