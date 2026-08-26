@@ -514,16 +514,23 @@ def test_tier1_refuses_er_xdot_l2_coupling() -> None:
     assert not ok
 
 
-def test_auto_policy_tier3_fallback_on_iteration_cap() -> None:
+def test_auto_policy_recovers_a_starved_tier2_solve() -> None:
     # Starve tier 2 (no preconditioner, tiny restart budget) on the FP
-    # fixture: the auto policy must breach the cap loudly and land on the
-    # tier-3 host direct solve, which still returns the right answer.
+    # fixture: the auto policy must recover and still return the right answer.
+    #
+    # This used to assert result.method == "direct", because a cap breach fell
+    # straight to the tier-3 host solve.  That fallback is a dead end at any
+    # real size -- tier 3 materializes the operator column by column, so a
+    # 66004-DOF deck would need 66004 matvecs -- and a user hit exactly that,
+    # losing a whole radius of an Er scan to the crash.  A stalled Krylov solve
+    # is a preconditioner problem, so the policy now escalates the
+    # preconditioner first and only reaches tier 3 where tier 3 can run.  What
+    # matters is that a starved solve still lands on the correct answer.
     op = _load_op("quick_2species_FPCollisions_noEr")
     rhs = op.rhs()
     result = solve(
         op, rhs, method="auto", tol=1e-10, use_preconditioner=False, max_restarts=2
     )
-    assert result.method == "direct"
     assert result.converged
     x_ref = _dense_solve(op, np.asarray(rhs)[:, None])[:, 0]
     assert _rel_err(np.asarray(result.x), x_ref) < 1e-8
