@@ -10,6 +10,7 @@ entries from ``input.namelist``. The scan scripts assume the output filename is
 import os
 import sys
 import time
+import traceback
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -439,5 +440,70 @@ def run_dkx_in_dir(
         overwrite=overwrite,
         verbose=verbose,
     )
+
+# ---------------------------------------------------------------------------
+# Scan resilience
+# ---------------------------------------------------------------------------
+# A scan point that will not solve used to abort the whole scan.  Reported from
+# a scanType=5 run: tier-2 stalled at the largest |Er| on a 66004-DOF deck, the
+# exception propagated out of run_dkx, and every remaining Er point at that
+# radius was lost -- one radius folder finished with zero of a hundred outputs.
+# The loss was silent too, because the callers chdir into the run directory and
+# chdir back *after* the solve, so a raise also stranded the process there.
+#
+# One point failing is information, not a reason to discard the other ninety
+# nine.  Failures are recorded in the run directory and summarised at the end,
+# so a scan finishes with an honest account of what is missing.
+_scan_failures = []
+
+FAILURE_MARKER = "dkx_FAILED.txt"
+
+
+def run_scan_point(*, input_namelist, output_path, directory=None, **kwargs):
+    """Run one scan point.  Returns True if it produced output.
+
+    Never raises for a solver failure: the point is recorded and the scan goes
+    on.  A KeyboardInterrupt still stops everything, because that is the user
+    asking it to.
+    """
+    from dkx_driver import run_dkx  # local helper in utils
+
+    label = str(directory if directory is not None else Path(input_namelist).parent.name)
+    try:
+        run_dkx(input_namelist=Path(input_namelist), output_path=output_path, **kwargs)
+        return True
+    except KeyboardInterrupt:
+        raise
+    except BaseException as exc:  # noqa: BLE001 - the point of this function
+        detail = traceback.format_exc()
+        _scan_failures.append((label, f"{type(exc).__name__}: {exc}"))
+        marker = Path(output_path).parent / FAILURE_MARKER
+        try:
+            marker.write_text(
+                f"This scan point did not produce {Path(output_path).name}.\n\n{detail}"
+            )
+        except OSError:
+            pass
+        print(f"[sfincsScan] POINT FAILED: {label}: {type(exc).__name__}: {exc}")
+        print(f"[sfincsScan]   recorded in {marker}; continuing with the rest of the scan.")
+        return False
+
+
+def report_scan_failures():
+    """Print the tally.  Returns the number of failed points."""
+    if not _scan_failures:
+        print("[sfincsScan] all scan points produced output.")
+        return 0
+    print("")
+    print(f"[sfincsScan] {len(_scan_failures)} scan point(s) did NOT produce output:")
+    for label, reason in _scan_failures:
+        print(f"[sfincsScan]   {label}: {reason}")
+    print(
+        f"[sfincsScan] Each is marked with a {FAILURE_MARKER} file holding the "
+        "traceback.  The rest of the scan completed, so the plots will simply "
+        "be missing those points rather than being absent entirely."
+    )
+    return len(_scan_failures)
+
 
 print ("Time to run sfincsScan_common: ", time.time() - start_time_common)

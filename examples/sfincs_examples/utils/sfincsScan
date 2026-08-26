@@ -17,6 +17,7 @@ Use ``--yes`` to skip the interactive "launch runs?" prompt.
 
 import argparse
 import os
+import sys
 import inspect
 import math
 from pathlib import Path
@@ -160,4 +161,13 @@ except IOError:
     print ("Unable to run "+scriptName+" even though the file exists.")
     raise
 
+# Report which scan points produced no output.  A scan that quietly finishes
+# short is worse than one that says so: the plots would simply be missing
+# points, and nothing else would tell you which, or why.
+failed = report_scan_failures()
+
 print ("Good bye!")
+if failed:
+    # Nonzero exit so a job script or CI notices, without having lost the
+    # points that did solve.
+    sys.exit(1)
