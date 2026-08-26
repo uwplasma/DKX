@@ -976,6 +976,144 @@ def materialize_dense(
         cols.append(np.asarray(batched(basis)))
     return np.concatenate(cols, axis=1)
 
+
+def _escalate_after_tier2_stall(
+    op: KineticOperator,
+    rhs2d: jnp.ndarray,
+    *,
+    stalled: SolveResult,
+    tol: float,
+    atol: float,
+    x0,
+    recycle,
+    preconditioner: str,
+    drop_l_coupling_in_precond: bool,
+    restart: int,
+    recycle_dim: int,
+    max_restarts: int,
+    check_adjoint: bool,
+    adjoint_residual_factor: float,
+    max_dense_size: int,
+) -> SolveResult:
+    """Work through the remedies a user would otherwise have to know about.
+
+    A stalled Krylov solve is a *preconditioner* problem, not a reason to
+    change solver tier, and this is where DKX used to get it backwards: it
+    announced a fall back to the tier-3 host direct solve, which obtains its
+    matrix by applying the operator to ``n`` identity columns.  At the sizes
+    where tier 2 actually stalls that is hopeless -- a 66004-DOF deck needs
+    66004 matvecs and O(n^2) memory -- so the guard in :func:`_solve_tier3`
+    refused, and a convergence problem surfaced as a hard crash telling the
+    user to raise ``max_dense_size``.  Taking that advice would have tried to
+    allocate 32.5 GB.
+
+    SFINCS Fortran v3 does not have this failure mode, and the reason is worth
+    stating because it dictates the order below.  It assembles the simplified
+    preconditioner matrix *analytically and sparsely*, factorizes it with a
+    sparse direct LU (MUMPS or SuperLU_dist), and preconditions GMRES with
+    that -- so its "direct solve" is a sparse factorization that handles 66004
+    routinely, and GMRES needs few iterations on top of it.  It also retries
+    automatically, doubling the MUMPS working-memory factor on a failed
+    factorization (``solver.F90``: ``mumps_icntl_14 = mumps_icntl_14 * 2``).
+
+    DKX already owns the equivalent of that preconditioner -- ``"sparse"``
+    eliminates in a fill-reducing order and keeps the inverse exact -- and the
+    stall above happened without ever trying it.  So the ladder escalates the
+    preconditioner first, in increasing cost, and only considers tier 3 at a
+    size where tier 3 can actually run.
+
+    Returns the first converged result, or the best (lowest final residual) if
+    none converges, so a caller that can tolerate a loose solve still gets the
+    best available answer along with an honest ``converged=False``.
+    """
+    attempts: list[tuple[str, SolveResult]] = [(f"{preconditioner} preconditioner", stalled)]
+
+    def _residual(result: SolveResult) -> float:
+        norms = np.asarray(result.residual_norms)
+        return float(norms[-1]) if norms.size else float("inf")
+
+    print(
+        f"[dkx.solve] tier-2 Krylov stalled with the {preconditioner} "
+        f"preconditioner (iterations={stalled.iterations}, residual="
+        f"{_residual(stalled):.3e}); escalating rather than giving up."
+    )
+
+    # Rung 1: the strong preconditioner.  This is the SFINCS analogue and the
+    # single most likely fix, because "coarse" eliminates L first, which fills
+    # the angular stencils in, while "sparse" eliminates in a fill-reducing
+    # order and stays sparse.
+    for kind in ("sparse", "multigrid"):
+        if kind == preconditioner:
+            continue
+        try:
+            print(f"[dkx.solve]   retrying tier 2 with the {kind} preconditioner ...")
+            candidate = _solve_tier2(
+                op, rhs2d, tol=tol, atol=atol, x0=x0, recycle=recycle,
+                preconditioner=kind,
+                drop_l_coupling_in_precond=drop_l_coupling_in_precond,
+                restart=restart, recycle_dim=recycle_dim,
+                max_restarts=max_restarts, differentiable=False,
+                check_adjoint=check_adjoint,
+                adjoint_residual_factor=adjoint_residual_factor,
+            )
+        except Exception as exc:  # a preconditioner that cannot build is a rung, not a failure
+            print(f"[dkx.solve]   {kind} preconditioner unavailable: {exc}")
+            continue
+        attempts.append((f"{kind} preconditioner", candidate))
+        if candidate.converged:
+            print(f"[dkx.solve]   converged with the {kind} preconditioner.")
+            return candidate
+
+    # Rung 2: more iterations.  Cheap to ask for, and the remedy when the
+    # preconditioner is adequate but the cap was simply too low for this Er.
+    widened = max(max_restarts * 4, max_restarts + 1)
+    best_kind = max(attempts, key=lambda item: -_residual(item[1]))[0].split()[0]
+    if best_kind not in _TIER2_PRECONDITIONERS:
+        best_kind = preconditioner
+    try:
+        print(
+            f"[dkx.solve]   retrying tier 2 with the {best_kind} preconditioner "
+            f"and {widened} restarts (was {max_restarts}) ..."
+        )
+        candidate = _solve_tier2(
+            op, rhs2d, tol=tol, atol=atol, x0=x0, recycle=recycle,
+            preconditioner=best_kind,
+            drop_l_coupling_in_precond=drop_l_coupling_in_precond,
+            restart=restart, recycle_dim=recycle_dim,
+            max_restarts=widened, differentiable=False,
+            check_adjoint=check_adjoint,
+            adjoint_residual_factor=adjoint_residual_factor,
+        )
+        attempts.append((f"{best_kind} preconditioner, {widened} restarts", candidate))
+        if candidate.converged:
+            print("[dkx.solve]   converged with the widened iteration budget.")
+            return candidate
+    except Exception as exc:
+        print(f"[dkx.solve]   widened retry failed: {exc}")
+
+    # Rung 3: tier 3, but only where it can actually run.  Announcing a
+    # fallback that the size guard will refuse is what produced the original
+    # crash, so the size is checked here rather than discovered downstream.
+    if op.total_size <= max_dense_size:
+        print("[dkx.solve]   falling back to the tier-3 host direct solve ...")
+        return _solve_tier3(op, rhs2d, tol=tol, atol=atol, max_dense_size=max_dense_size)
+
+    best_label, best = min(attempts, key=lambda item: _residual(item[1]))
+    dense_gb = op.total_size**2 * 8 / 1024**3
+    raise RuntimeError(
+        f"the linear solve did not converge at total_size={op.total_size}.\n"
+        f"Tried: {'; '.join(label for label, _ in attempts)}.\n"
+        f"Best final residual {_residual(best):.3e} ({best_label}), tolerance {tol:.1e}.\n"
+        "Tier 3 was not attempted: it materializes the operator column by "
+        f"column, which at this size needs {op.total_size} matvecs and "
+        f"{dense_gb:.1f} GB, so raising max_dense_size would not help.\n"
+        "What usually does help, in order: lower the collisionality-scaled Er "
+        "(stalls cluster at the largest |Er|, where the ExB term dominates); "
+        "raise solverTolerance; or reduce Nxi/Ntheta/Nzeta at the offending "
+        "point.  Pass solver=SolverOptions(...) to control this directly."
+    )
+
+
 def _solve_tier3(
     op: KineticOperator, rhs2d: jnp.ndarray, *, tol: float, atol: float, max_dense_size: int
 ) -> SolveResult:
@@ -2085,13 +2223,23 @@ def solve(
             adjoint_residual_factor=adjoint_residual_factor,
         )
         if method == "auto" and not result.converged and not differentiable:
-            print(
-                "[dkx.solve] tier-2 Krylov breached its iteration cap "
-                f"(iterations={result.iterations}); falling back to the tier-3 "
-                "host direct solve."
-            )
-            result = _solve_tier3(
-                op, rhs2d, tol=tol, atol=atol, max_dense_size=max_dense_size
+            requested = _resolve_preconditioner(preconditioner, use_preconditioner)
+            result = _escalate_after_tier2_stall(
+                op,
+                rhs2d,
+                stalled=result,
+                tol=tol,
+                atol=atol,
+                x0=x0,
+                recycle=recycle,
+                preconditioner=requested,
+                drop_l_coupling_in_precond=drop_l_coupling_in_precond,
+                restart=restart,
+                recycle_dim=recycle_dim,
+                max_restarts=max_restarts,
+                check_adjoint=check_adjoint,
+                adjoint_residual_factor=adjoint_residual_factor,
+                max_dense_size=max_dense_size,
             )
     else:  # direct
         if differentiable:
