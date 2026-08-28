@@ -10,5 +10,5 @@ dkx validate examples/native/w7x_ambipolar_profile.toml
 ```
 
 Generate the same commented format with `dkx schema --format toml`. This folder
-currently demonstrates the native input contract only; native numerical
-dispatch and `Result` output land in the next vertical slice.
+demonstrates the native input contract only. Numerical dispatch and `Result`
+output are outside this example's scope.
