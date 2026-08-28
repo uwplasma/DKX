@@ -133,6 +133,266 @@ def _patch_scalar_in_group(*, txt: str, group: str, key: str, value: float) -> s
     return txt[: start.end()] + group_txt2 + txt[end_pos:]
 
 
+def _can_batch_profile_scan(
+    *,
+    input_namelist: Path,
+    variable: str,
+    compute_transport_matrix: bool,
+    jobs: int,
+    solve_method: str,
+) -> bool:
+    """Whether the compatibility scan can safely share one operator."""
+
+    # The fast path is deliberately narrow. Unsupported cases retain the
+    # scalar runner instead of silently approximating different physics.
+    method = str(solve_method).strip().lower()
+    if (
+        variable != "Er"
+        or compute_transport_matrix
+        or jobs != 1
+        or method
+        not in {
+            "auto",
+            "block_tridiagonal",
+            "block_tridiagonal_truncated",
+            "gmres",
+            "iterative",
+        }
+    ):
+        return False
+    try:
+        from ..inputs import load_sfincs_input  # noqa: PLC0415
+
+        inp = load_sfincs_input(input_namelist)
+    except Exception:  # noqa: BLE001 - scalar path owns legacy validation/errors
+        return False
+    if (
+        inp.general.rhs_mode != 1
+        or inp.physics.include_phi1
+        or inp.geometry.geometry_scheme not in {1, 2, 3, 4, 5, 11, 12, 13}
+    ):
+        return False
+    if inp.raw is None or not any(
+        str(key).upper() == "GEOMETRYSCHEME"
+        for key in inp.raw.groups.get("geometryparameters", {})
+    ):
+        return False
+    return True
+
+
+def _run_er_scan_batched(
+    *,
+    out_dir: Path,
+    template_txt: str,
+    values: list[float],
+    skip_existing: bool,
+    solve_method: str,
+    emit: EmitFn | None,
+    scan_t0: float,
+) -> ScanResult:
+    """Solve a compatible profile Er scan with one shared operator/JIT program."""
+    from types import SimpleNamespace  # noqa: PLC0415
+
+    from ..batch import batched_er_scan  # noqa: PLC0415
+    from ..drift_kinetic import kinetic_operator_build_from_namelist  # noqa: PLC0415
+    from ..er import ErProblem, operator_at_er  # noqa: PLC0415
+    from ..inputs import load_sfincs_input, parse_sfincs_input_text  # noqa: PLC0415
+    from ..moments import classical_fluxes  # noqa: PLC0415
+    from ..run import _ntv_kernel_for  # noqa: PLC0415
+    from ..writer import (  # noqa: PLC0415
+        _geometry_extras,
+        operator_containers,
+        write_profile_output,
+        write_run_solver_trace,
+    )
+
+    records: list[tuple[float, Path, Path, Path, bool]] = []
+    pending: list[tuple[float, Path, Path, Path]] = []
+    for i, value in enumerate(values, start=1):
+        run_dir = out_dir / f"Er{value:.4g}"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        out_path = run_dir / "sfincsOutput.h5"
+        input_path = run_dir / "input.namelist"
+        reused = bool(skip_existing) and out_path.exists()
+        records.append((value, run_dir, out_path, input_path, reused))
+        if reused:
+            if emit is not None:
+                emit(1, f"scan-er: [{i}/{len(values)}] {run_dir.name} already complete; skipping")
+            continue
+        if emit is not None:
+            emit(0, f"scan-er: [{i}/{len(values)}] {run_dir.name} Er={value:.16g} queued")
+        point_txt = _patch_scalar_in_group(
+            txt=template_txt, group="physicsParameters", key="Er", value=value
+        )
+        input_path.write_text(point_txt)
+        localize_equilibrium_file_in_place(input_namelist=input_path, overwrite=False)
+        pending.append((value, run_dir, out_path, input_path))
+
+    if pending:
+        first_input = pending[0][3]
+        first_txt = first_input.read_text()
+        reference_txt = _patch_scalar_in_group(
+            txt=first_txt, group="physicsParameters", key="Er", value=1.0
+        )
+        reference_raw = parse_sfincs_input_text(reference_txt, source_path=first_input)
+        reference_build = kinetic_operator_build_from_namelist(reference_raw)
+        op_base = reference_build.operator
+        dphi_per_er = float(
+            np.asarray(op_base.dphi_hat_dpsi_hat_kinetic).reshape(())
+        )
+        first_typed = load_sfincs_input(first_input)
+        tolerance = float(first_typed.resolution.solver_tolerance)
+        problem = ErProblem(
+            operator=op_base,
+            dphi_per_er=dphi_per_er,
+            z_s=np.asarray(op_base.z_s, dtype=np.float64).reshape((-1,)),
+            er_initial=float(pending[0][0]),
+            er_min=float(min(value for value, *_ in pending)),
+            er_max=float(max(value for value, *_ in pending)),
+            solve_method=str(solve_method),
+            tol=tolerance,
+        )
+        if emit is not None:
+            emit(
+                0,
+                f"scan-er: shared-operator batch n={len(pending)}; one geometry build "
+                "and one compiled scan replace per-point cold starts",
+            )
+        batch_t0 = time.perf_counter()
+        batch = batched_er_scan(
+            problem,
+            np.asarray([value for value, *_ in pending], dtype=np.float64),
+            solve_method=str(solve_method),
+            tol=tolerance,
+            ntv_kernel_tz=_ntv_kernel_for(
+                first_typed, op_base, reference_build.geometry
+            ),
+        )
+        states = np.asarray(batch.states, dtype=np.float64)
+        residuals = np.asarray(batch.residual_norms, dtype=np.float64).reshape((-1,))
+        batch_seconds = float(time.perf_counter() - batch_t0)
+        moment_arrays = {
+            key: np.asarray(value, dtype=np.float64)
+            for key, value in batch.moments.items()
+        }
+        grids = reference_build.grids
+        geom = reference_build.geometry
+        radial = reference_build.radial
+        gpsipsi, diotadpsi_hat = _geometry_extras(
+            inp=first_typed, grids=grids, geom=geom, radial=radial
+        )
+        _, _, surface, species = operator_containers(op_base)
+        classical_particle, classical_heat = classical_fluxes(
+            use_phi1=False,
+            surface=surface,
+            species=species,
+            gpsipsi=gpsipsi,
+            phi1_hat=np.zeros_like(gpsipsi),
+            alpha=op_base.alpha,
+            delta=op_base.delta,
+            nu_n=first_typed.physics.nu_n,
+            dn_hat_dpsi_hat=op_base.dn_hat_dpsi_hat,
+            dt_hat_dpsi_hat=op_base.dt_hat_dpsi_hat,
+        )
+        per_point_seconds = batch_seconds / len(pending)
+        for batch_index, (value, _run_dir, out_path, point_input) in enumerate(pending):
+            inp = load_sfincs_input(point_input)
+            op = operator_at_er(op_base, value, dphi_per_er=dphi_per_er)
+            state = states[batch_index]
+            residual = float(residuals[batch_index])
+            rhs_norm = float(np.linalg.norm(np.asarray(op.rhs(), dtype=np.float64)))
+            converged = bool(np.isfinite(residual) and residual <= tolerance * rhs_norm)
+            if not converged:
+                raise RuntimeError(
+                    "scan-er: shared-operator solve did not converge for "
+                    f"Er={value:.16g} (residual={residual:.6g}, "
+                    f"target={tolerance * rhs_norm:.6g})"
+                )
+            moments = {
+                key: array[batch_index] for key, array in moment_arrays.items()
+            }
+            moments["classicalParticleFlux_psiHat"] = np.asarray(
+                classical_particle, dtype=np.float64
+            )
+            moments["classicalHeatFlux_psiHat"] = np.asarray(
+                classical_heat, dtype=np.float64
+            )
+            write_profile_output(
+                path=out_path,
+                inp=inp,
+                op=op,
+                grids=grids,
+                geom=geom,
+                radial=radial,
+                state_vector=state,
+                elapsed_seconds=per_point_seconds,
+                solver_method=str(batch.method),
+                solver_requested_method=str(solve_method),
+                residual_norm=residual,
+                geometry_extras=(gpsipsi, diotadpsi_hat),
+                moments_table=moments,
+                overwrite=True,
+                fortran_layout=True,
+            )
+            solve_result = SimpleNamespace(
+                x=np.asarray(state).reshape((-1, 1)),
+                method=str(batch.method),
+                iterations=None,
+                residual_norms=np.asarray([residual]),
+                converged=True,
+                timings={"solve": per_point_seconds},
+            )
+            write_run_solver_trace(
+                path=out_path.with_name("sfincsOutput.solver_trace.json"),
+                inp=inp,
+                op=op,
+                solve_result=solve_result,
+                rhs_norm=rhs_norm,
+                solver_tol=tolerance,
+                selected_path="rhsmode1_solution_batched_er",
+                elapsed_seconds=per_point_seconds,
+                input_namelist=point_input,
+                output_path=out_path,
+                compute_solution=True,
+                compute_transport_matrix=False,
+            )
+        if emit is not None:
+            emit(
+                0,
+                f"scan-er: shared-operator batch complete chunks={batch.n_chunks} "
+                f"chunk_size={batch.chunk_size} solve_elapsed={_format_duration(batch_seconds)}",
+            )
+
+    solved_elapsed = [
+        (float(batch_seconds) / len(pending)) if pending else 0.0
+        for _ in pending
+    ]
+    solved_index = 0
+    completed = 0
+    for _value, run_dir, _out_path, _input_path, reused in records:
+        completed += 1
+        point_elapsed = 0.0 if reused else solved_elapsed[solved_index]
+        if not reused:
+            solved_index += 1
+        _emit_scan_progress(
+            emit=emit,
+            completed=completed,
+            total=len(records),
+            run_name=run_dir.name,
+            point_elapsed_s=point_elapsed,
+            total_elapsed_s=float(time.perf_counter() - scan_t0),
+            solved_elapsed_s=solved_elapsed[:solved_index],
+            skipped_existing=reused,
+        )
+    return ScanResult(
+        scan_dir=out_dir,
+        run_dirs=tuple(record[1] for record in records),
+        outputs=tuple(record[2] for record in records),
+        variable="Er",
+        values=tuple(values),
+    )
+
+
 def run_er_scan(
     *,
     input_namelist: Path,
@@ -204,6 +464,23 @@ def run_er_scan(
     outputs: list[Path] = []
     scan_t0 = time.perf_counter()
     solved_elapsed_s: list[float] = []
+    use_batched_profile = _can_batch_profile_scan(
+        input_namelist=input_namelist,
+        variable=var,
+        compute_transport_matrix=bool(compute_transport_matrix),
+        jobs=jobs_val,
+        solve_method=str(solve_method),
+    )
+    if use_batched_profile:
+        return _run_er_scan_batched(
+            out_dir=out_dir,
+            template_txt=template_txt,
+            values=vals,
+            skip_existing=bool(skip_existing),
+            solve_method=str(solve_method),
+            emit=emit,
+            scan_t0=scan_t0,
+        )
     del compute_solution, differentiable  # Canonical runs always solve; solve_method picks the path.
 
     def _run_one(v: float, i: int) -> tuple[Path, Path, float, bool]:

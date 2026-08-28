@@ -127,6 +127,8 @@ def test_batched_er_scan_matches_serial(tmp_path: Path) -> None:
 
     assert result.states.shape[0] == er_values.shape[0]
     assert result.radial_current.shape == er_values.shape
+    assert result.residual_norms.shape == er_values.shape
+    assert np.all(np.isfinite(np.asarray(result.residual_norms)))
 
     for i, er in enumerate(np.asarray(er_values)):
         j_r, gamma, state = er_mod.radial_current(prob, float(er))
