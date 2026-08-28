@@ -1,0 +1,67 @@
+# Complete native schema-v1 profile example. Validation is intentionally
+# independent of whether this illustrative equilibrium has been downloaded.
+schema = 1
+name = "w7x_ambipolar_profile"
+
+[run]
+workflow = "ambipolar_profile"
+precision = "float64"
+device = "auto"
+progress = true
+
+[geometry]
+format = "vmec"
+file = "wout_w7x.nc"
+surfaces = [0.20, 0.35, 0.50, 0.65, 0.80]
+
+[[species]]
+name = "deuterium"
+charge = 1
+mass_amu = 2.014
+density_m3 = [8.0e19, 7.3e19, 6.4e19, 5.2e19, 3.8e19]
+temperature_keV = [1.2, 1.1, 0.95, 0.75, 0.50]
+
+[[species]]
+name = "electron"
+charge = -1
+mass_amu = 5.485799e-4
+density_m3 = [8.0e19, 7.3e19, 6.4e19, 5.2e19, 3.8e19]
+temperature_keV = [2.5, 2.3, 2.0, 1.6, 1.0]
+
+[physics]
+model = "full_local"
+collisions = "linearized_fokker_planck"
+magnetic_drifts = "full"
+phi1 = "off"
+
+[electric_field]
+mode = "ambipolar"
+search_kV_m = [-40.0, 40.0]
+find_all_roots = true
+continue_branches = true
+
+[resolution]
+theta = 31
+zeta = 31
+pitch = 24
+speed = 8
+
+[solver]
+method = "auto"
+relative_tolerance = 1.0e-10
+memory_fraction = 0.75
+reuse = "auto"
+
+[parallel]
+strategy = "auto"
+shard = ["surface", "electric_field"]
+
+[convergence]
+enabled = true
+observables = ["particle_flux", "heat_flux", "bootstrap_current", "electric_field"]
+relative_tolerance = 0.02
+max_refinements = 3
+
+[output]
+file = "outputs/w7x_ambipolar.nc"
+plots = true

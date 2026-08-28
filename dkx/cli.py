@@ -72,6 +72,40 @@ def _emit_runtime_info(*, args: argparse.Namespace) -> None:
     except Exception:  # noqa: BLE001
         return
 
+
+def _cmd_validate_case(args: argparse.Namespace) -> int:
+    """Validate a native case without touching JAX kernels or external files."""
+    from .config import Case, CaseValidationError  # noqa: PLC0415
+
+    try:
+        case = Case.from_file(args.case)
+    except (CaseValidationError, OSError) as exc:
+        print(f"dkx validate failed: {exc}", file=sys.stderr)
+        return 2
+    print(f"valid DKX case: {case.name}")
+    print(f"case_id: {case.case_id}")
+    print(
+        f"workflow: {case.run.workflow}; "
+        f"surfaces: {len(case.geometry.surfaces)}; species: {len(case.species)}"
+    )
+    if case.scan is not None:
+        print(
+            f"scan: {case.scan.case_count} cases "
+            f"(limit {case.scan.max_cases}, resume={str(case.scan.resume).lower()})"
+        )
+    return 0
+
+
+def _cmd_schema(args: argparse.Namespace) -> int:
+    """Print the complete human or machine-readable native Case schema."""
+    from .config import COMMENTED_TOML_EXAMPLE, case_json_schema  # noqa: PLC0415
+
+    if args.format == "toml":
+        print(COMMENTED_TOML_EXAMPLE, end="")
+    else:
+        print(json.dumps(case_json_schema(), indent=2, sort_keys=True))
+    return 0
+
 def _emit_parallel_runtime_info(*, args: argparse.Namespace) -> None:
     def _env(name: str, default: str = "") -> str:
         return os.environ.get(name, default).strip()
@@ -824,6 +858,8 @@ def _normalize_default_argv(argv: list[str]) -> list[str]:
     if not argv:
         return argv
     known_cmds = {
+        "validate",
+        "schema",
         "solve-v3",
         "ambipolar",
         "scan-er",
@@ -999,6 +1035,24 @@ def main(argv: list[str] | None = None) -> int:
     _add_common_cli_args(parser)
     _add_parallel_cli_args(parser)
     sub = parser.add_subparsers(dest="cmd", required=True)
+
+    p_validate = sub.add_parser(
+        "validate",
+        help="Validate a versioned native TOML/JSON Case and print its deterministic ID.",
+    )
+    _add_common_cli_args(p_validate)
+    _add_parallel_cli_args(p_validate)
+    p_validate.add_argument("case", help="Path to a native .toml or .json case.")
+    p_validate.set_defaults(func=_cmd_validate_case)
+
+    p_schema = sub.add_parser(
+        "schema",
+        help="Print the complete native Case example or machine-readable JSON Schema.",
+    )
+    _add_common_cli_args(p_schema)
+    _add_parallel_cli_args(p_schema)
+    p_schema.add_argument("--format", choices=("toml", "json"), default="toml")
+    p_schema.set_defaults(func=_cmd_schema)
 
     p_solve = sub.add_parser("solve-v3", help="Solve a supported v3 linear problem matrix-free and write stateVector.npy.")
     _add_common_cli_args(p_solve)

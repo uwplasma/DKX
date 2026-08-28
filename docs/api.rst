@@ -9,6 +9,12 @@ are indexed below, with links to the pages that document them in depth and to
 Public facade
 -------------
 
+The native high-level input contract is :class:`dkx.Case`; its typed
+submodels and serializers live in :mod:`dkx.config`.
+
+.. automodule:: dkx.config
+   :members: Case, CaseValidationError, RunConfig, GeometryConfig, SpeciesConfig, PhysicsConfig, ElectricFieldConfig, ResolutionConfig, SolverConfig, ParallelConfig, ConvergenceConfig, OutputConfig, ScanAxis, ScanConfig, case_json_schema
+
 .. automodule:: dkx.api
    :members:
 
@@ -28,6 +34,9 @@ Canonical modules
    * - ``dkx.run``
      - ``run_profile`` / ``run_transport_matrix`` orchestration and console flow
      - :doc:`usage`
+   * - ``dkx.config``
+     - Native immutable ``Case``, schema validation, IDs, and scan preflight
+     - :doc:`native_cases`
    * - ``dkx.inputs`` / ``dkx.namelist``
      - Typed ``SfincsInput`` parser and raw namelist reader
      - :doc:`inputs`
