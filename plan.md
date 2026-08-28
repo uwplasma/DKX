@@ -1680,7 +1680,7 @@ Acceptance criteria:
 
 ### Phase P1: make releases and size trustworthy
 
-Status: in progress; PR #67 completed P1.1 and part of P1.3/P1.4/P1.6
+Status: completed for ordinary release artifacts; accepted D012 full-history rewrite remains a coordinated-maintainer action
 
 Work items:
 
@@ -1705,7 +1705,7 @@ Acceptance criteria:
 
 ### Phase P2: introduce native `Case`, `Result`, and CLI contracts
 
-Status: planned
+Status: in progress (`P2.1`, `P2.2`, and the deterministic-ID/bounded-count portion of `P2.3` are the current slice)
 
 Work items:
 
@@ -2139,15 +2139,14 @@ Use one row per merged pull request or consequential failed experiment.
 | 2026-08-28 | P0.1-P0.8 | PR #70, `4fc8cd0` | Merged the authoritative DKX 3 plan and initial evidence registries after 17 green CI/docs checks. | Execute P1 packaging and size contracts; do not begin P2 before the P1 gates are trustworthy. |
 | 2026-08-28 | P1.1, P1.3-P1.4, P1.6 | PR #67, `5d7fd8c` | Merged the installed-wheel gate after 20 green checks. A clean Python 3.11 wheel install, run outside the checkout with offline data, produced six finite nonzero monoenergetic coefficients, two finite ambipolar roots, and a 221095-byte panel figure in 28.9 s on the M2 development host. CI preserved its ten-minute required-job contract by rebalancing the unchanged suite from ten to twelve coverage shards; the former heavy shard completed in 10m56s only during a diagnostic 15-minute run. No scientific tolerance changed. | Complete isolated sdist testing, published-artifact smoke, workflow lint, automated size gates, and single-source versioning. |
 | 2026-08-28 | P1.7-P1.8 history audit | local destructive simulations only; no remote rewrite | A fresh full clone of merged PR #67 is 36025713 bytes: 22378106 bytes of Git data and 13647607 bytes of working tree. Removing only historical blobs above 250 KiB still left 32.35 MiB. A simulated one-commit history was 20475758 bytes and passed D012 by only 495762 bytes; retaining even the latest ten commits without further content removal measured 21181153 bytes and failed. | Keep the full-clone gate visible but non-enforcing in the P1 follow-up. Meeting D012 requires both current-content margin and an explicitly approved coordinated history rewrite; an ordinary PR cannot close it. |
+| 2026-08-28 | P1.2-P1.9 | PR #71, `af0b7b2` | Merged after 21 green checks. Wheel and sdist install in clean environments and run finite science; post-PyPI smoke, checksum-pinned action lint, required-job aggregation, single-source versioning, package-data checks, and exact CI-SHA size measurements are enforced. Hosted measurements: tracked tree 13673224 B, media 3216480 B, wheel 532245 B, sdist 870017 B, installed files 4373541 B; each enforced DKX-owned artifact passes 20 MiB. The exact full clone is 36302007 B and remains visible but non-enforcing. | Begin P2. Do not claim D012 full-history completion or rewrite remote history without a separate coordinated decision. |
+| 2026-08-28 | P2.1-P2.3 start | current native-case PR | Added an immutable typed schema-v1 `Case`, TOML/JSON readers, precise path-aware validation, deterministic semantic IDs, complete commented/schema output, and bounded Cartesian/zipped scan preflight without changing numerical kernels. Warm parse/validation measured 0.431 ms per representative case; median cold import measured 0.325 s on merged main and 0.335 s on this branch. Installed wheel/sdist smoke passed at 542212 B/883602 B. | Review/merge the focused contract PR, then normalize and execute one flagship profile through native `Case` and `Result`. |
 
 ## 22. Current next action
 
-Open the coherent P1 release-contract follow-up: isolated sdist testing,
-post-PyPI smoke, workflow lint and required-job aggregation, automated
-clone/artifact/media size measurements, and single-source version metadata.
-Keep the accepted D012 full-clone target visible as the only blocked size gate;
-do not rewrite remote history without an explicit coordinated maintainer decision.
-
-Do not begin the `src/` migration, native API rewrite, or solver changes before
-P1 is green. Performance baselines and compilation/memory metrics must be
-recorded before P2 changes public data models.
+Complete the first P2 vertical slice: schema-v1 native ``Case``, TOML/JSON
+validation, deterministic IDs, bounded scan preflight, ``dkx validate``, and
+``dkx schema``. Keep this slice independent of numerical kernels and document
+that native execution begins in the following vertical slice. Then normalize
+and execute one flagship profile through native ``Case`` and ``Result`` without
+converting back to a SFINCS namelist.
