@@ -1,0 +1,68 @@
+schema_version = 1
+recorded_at = "2026-08-28"
+required_top_level = [
+  "schema_version",
+  "artifact_id",
+  "timestamp_utc",
+  "repository",
+  "software",
+  "hardware",
+  "case",
+  "model",
+  "resolution",
+  "route",
+  "timing_s",
+  "memory_bytes",
+  "accuracy",
+  "outcome",
+]
+
+[repository]
+required = ["url", "commit", "dirty"]
+
+[software]
+required = ["python", "jax", "jaxlib", "numpy", "solvax"]
+optional = ["cuda", "cudnn", "xla_flags", "environment_hash"]
+
+[hardware]
+required = ["host_id", "platform", "processor", "physical_memory_bytes"]
+optional = ["gpu", "gpu_memory_bytes", "driver", "device_count"]
+
+[case]
+required = ["case_id", "input_sha256", "geometry_sha256", "workload_family"]
+optional = ["reference_code", "reference_commit", "reference_input_sha256"]
+
+[model]
+required = ["equation", "collisions", "trajectories", "species_count", "rhs_count", "differentiable"]
+
+[resolution]
+required = ["unknowns"]
+optional = ["ntheta", "nzeta", "nxi", "nx", "surfaces", "electric_field_points"]
+
+[route]
+required = ["solver", "preconditioner", "precision", "device_strategy"]
+optional = ["restart", "recycle", "chunk_size", "reuse_state"]
+
+[timing_s]
+required = ["complete", "import", "setup", "compile", "first_execute", "warm_execute", "solve", "postprocess", "output"]
+
+[memory_bytes]
+required = ["peak_host"]
+optional = ["peak_device", "resident_host", "transfer_host_to_device", "transfer_device_to_host"]
+
+[accuracy]
+required = ["true_residual"]
+optional = ["conservation_defect", "reference_error", "derivative_error", "root_residual", "variational_gap"]
+
+[outcome]
+required = ["status"]
+allowed_status = ["passed", "failed", "timed_out", "refused_memory", "out_of_memory"]
+required_when_not_passed = ["failure_stage", "failure_reason"]
+
+[protocol]
+warmup_runs = 1
+timed_runs = 5
+statistic = "median"
+report_dispersion = ["minimum", "maximum", "median_absolute_deviation"]
+regression_limit_fraction = 0.10
+notes = "Synchronize devices around timed regions; never compare unmatched equations, tolerances, precision, or hardware."

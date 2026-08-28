@@ -1,0 +1,163 @@
+schema_version = 1
+baseline_commit = "c003ba8e0332509bc07b3a20fddf2b8db2c05ad9"
+recorded_at = "2026-08-28"
+status_values = [
+  "stable",
+  "stable_candidate",
+  "validated_limited",
+  "experimental",
+  "compatibility_only",
+  "deprecated",
+]
+
+[[capability]]
+id = "sfincs_namelist"
+name = "SFINCS namelist input"
+status = "stable_candidate"
+owners = ["dkx/namelist.py", "dkx/inputs.py", "dkx/input_compat.py"]
+evidence = ["tests/test_namelist.py", "tests/test_input_compat.py"]
+gaps = ["DKX 3 native Case conversion and installed-wheel coverage"]
+
+[[capability]]
+id = "sfincs_hdf5"
+name = "SFINCS-compatible HDF5 output"
+status = "stable_candidate"
+owners = ["dkx/writer.py", "dkx/io.py"]
+evidence = ["tests/test_h5_parity.py", "tests/test_output_h5_scheme5_parity.py"]
+gaps = ["adapter must depend on native Result after P2"]
+
+[[capability]]
+id = "pas_local_profile"
+name = "Pitch-angle-scattering local profile solve"
+status = "stable_candidate"
+owners = ["dkx/run.py", "dkx/drift_kinetic.py", "dkx/solve.py"]
+evidence = ["tests/test_run_rhsmode1.py", "tests/test_kinetic_operator_fortran_parity.py"]
+gaps = ["installed-artifact end-to-end gate", "native Case and Result contracts"]
+
+[[capability]]
+id = "full_fokker_planck"
+name = "Full linearized Fokker-Planck collisions"
+status = "stable_candidate"
+owners = ["dkx/collisions.py", "dkx/drift_kinetic.py"]
+evidence = ["tests/test_collisions_improved_sugama.py", "tests/test_collision_physics_gates.py"]
+gaps = ["broader independent multispecies convergence matrix"]
+
+[[capability]]
+id = "monoenergetic"
+name = "Monoenergetic coefficients and databases"
+status = "stable_candidate"
+owners = ["dkx/monoenergetic.py", "dkx/run.py"]
+evidence = ["tests/test_monoenergetic_database.py", "tests/test_paper_benchmark_monoenergetic.py"]
+gaps = ["matched YANCC, MONKES, and DKES evidence"]
+
+[[capability]]
+id = "transport_matrix"
+name = "Thermal transport matrices"
+status = "stable_candidate"
+owners = ["dkx/run.py", "dkx/moments.py", "dkx/writer.py"]
+evidence = ["tests/test_run_transport.py", "tests/test_transport_matrix_write_output_end_to_end.py"]
+gaps = ["native NetCDF schema and installed-wheel gate"]
+
+[[capability]]
+id = "bootstrap_current"
+name = "Kinetic bootstrap current"
+status = "stable_candidate"
+owners = ["dkx/bootstrap.py", "dkx/moments.py"]
+evidence = ["tests/test_bootstrap_objective.py", "tests/test_examples_bootstrap_dkx.py"]
+gaps = ["BOOTSJ comparison matrix", "whole-profile certificate"]
+
+[[capability]]
+id = "ambipolar_roots"
+name = "Ambipolar electric-field roots"
+status = "validated_limited"
+owners = ["dkx/er.py", "dkx/ambipolar.py"]
+evidence = ["tests/test_er_scan_and_ambipolar.py", "tests/test_paper_benchmark_w7x_ambipolar.py"]
+gaps = ["all-root branch continuation", "branch creation/loss events", "PENTA comparison"]
+
+[[capability]]
+id = "phi1"
+name = "Phi1 quasineutrality workflow"
+status = "stable_candidate"
+owners = ["dkx/phi1.py", "dkx/collisions.py"]
+evidence = ["tests/test_phi1.py", "tests/test_rhsmode1_phi1_write_output_end_to_end.py"]
+gaps = ["independent converged geometry and collision-model matrix"]
+
+[[capability]]
+id = "implicit_gradients"
+name = "Implicit linear and ambipolar-root derivatives"
+status = "validated_limited"
+owners = ["dkx/sensitivity.py", "dkx/er.py", "dkx/solve.py", "SOLVAX"]
+evidence = ["tests/test_sensitivity.py", "tests/test_er.py", "tests/test_optimization_comparison.py"]
+gaps = ["installed-wheel JVP/VJP gates", "branch-event nonsmooth warnings", "peak gradient memory baseline"]
+
+[[capability]]
+id = "structured_direct"
+name = "Structured block-elimination solver route"
+status = "validated_limited"
+owners = ["dkx/solve.py", "SOLVAX"]
+evidence = ["tests/test_solve.py", "tests/test_tier1_refinement.py"]
+gaps = ["explicit reuse contract", "complete cold/warm and memory matrix"]
+
+[[capability]]
+id = "recycled_krylov"
+name = "Recycled Krylov and physics preconditioners"
+status = "validated_limited"
+owners = ["dkx/solve.py", "dkx/coarse_precond.py", "SOLVAX"]
+evidence = ["tests/test_solve.py", "tests/test_tier2_memory_guard.py"]
+gaps = ["bounded-memory completion for every stable deck", "matched YANCC study"]
+
+[[capability]]
+id = "batch_scans"
+name = "Batched electric-field and surface scans"
+status = "validated_limited"
+owners = ["dkx/batch.py", "dkx/workflows/scans.py"]
+evidence = ["tests/test_batch.py", "tests/test_scans_progress_and_recycle.py"]
+gaps = ["declarative resume contract", "compilation-family accounting", "missed-root guard under warm starts"]
+
+[[capability]]
+id = "vmex_coupling"
+name = "VMEX geometry and bootstrap objective coupling"
+status = "validated_limited"
+owners = ["dkx/workflows/geometry_adapters.py", "dkx/workflows/optimization.py"]
+evidence = ["tests/test_vmex_workflow.py", "tests/test_finite_beta_vmec_example.py"]
+gaps = ["downstream installed integration test", "profile protocol", "certified optimization campaign"]
+
+[[capability]]
+id = "gpu_single_device"
+name = "Single-device GPU execution"
+status = "validated_limited"
+owners = ["dkx/solve.py", "dkx/batch.py"]
+evidence = ["tests/test_gpu_solver_path_artifacts.py"]
+gaps = ["maintained GPU host unavailable during P0 audit", "fresh matched throughput and memory evidence"]
+
+[[capability]]
+id = "multi_device"
+name = "Multi-device sharding"
+status = "experimental"
+owners = ["dkx/batch.py"]
+evidence = ["tests/test_batch.py"]
+gaps = ["maintained strong and weak scaling lane", "communication accounting"]
+
+[[capability]]
+id = "variational_bounds"
+name = "Variational transport bounds"
+status = "validated_limited"
+owners = ["dkx/variational.py"]
+evidence = ["tests/test_variational_bounds.py"]
+gaps = ["independent-code and literature matrix", "public certificate integration"]
+
+[[capability]]
+id = "bounce_averaged"
+name = "Bounce-averaged reduced model"
+status = "experimental"
+owners = ["dkx/bounce_averaged.py"]
+evidence = ["tests/test_bounce_averaged.py"]
+gaps = ["independent KNOSOS comparison", "validity range", "flagship admission gates"]
+
+[[capability]]
+id = "pitch_collocation"
+name = "Pitch-collocation discretization"
+status = "experimental"
+owners = ["dkx/collocation.py"]
+evidence = ["tests/test_collocation.py"]
+gaps = ["matched full-observable evidence", "end-to-end performance advantage"]
