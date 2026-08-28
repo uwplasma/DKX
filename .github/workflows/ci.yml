@@ -85,7 +85,10 @@ jobs:
           path: coverage-parts
       - name: Combine coverage
         run: |
-          python -m coverage combine $(find coverage-parts -type f -name '.coverage.*' | sort)
+          mapfile -d '' coverage_files < <(
+            find coverage-parts -type f -name '.coverage.*' -print0 | sort -z
+          )
+          python -m coverage combine "${coverage_files[@]}"
           python -m coverage report --fail-under=80
           python -m coverage xml
       - name: Upload coverage
