@@ -69,6 +69,22 @@ installed_owned_passes = true
 full_clone_passes = false
 notes = "The fresh full clone is about 36.46 MiB and exceeds D012; P1 must reduce history/media or revise the enforceable mechanism."
 
+[package_size.p1_release_contract_audit]
+base_commit = "5d7fd8c5f51d251b7377c246cc7cf15291f0738a"
+tracked_worktree_bytes = 13666156
+tracked_media_bytes = 3216480
+wheel_bytes = 532212
+sdist_bytes = 871206
+installed_owned_bytes_including_bytecode = 4374298
+fresh_main_clone_bytes = 36025713
+fresh_main_git_store_bytes = 22378106
+fresh_main_working_tree_bytes = 13647607
+simulated_one_commit_clone_bytes = 20475758
+simulated_ten_commit_clone_bytes = 21181153
+ordinary_artifact_gates_pass = true
+full_clone_passes = false
+notes = "The full-clone failure is structural: Git data alone exceeds D012. The one-commit result is a local simulation, not authorization or a proposed force-push procedure."
+
 [ci]
 main_commit = "c003ba8e0332509bc07b3a20fddf2b8db2c05ad9"
 ci_run_id = 33006224705

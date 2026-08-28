@@ -1680,7 +1680,7 @@ Acceptance criteria:
 
 ### Phase P1: make releases and size trustworthy
 
-Status: in progress; PR #67 implements P1.1 and part of P1.3/P1.4
+Status: in progress; PR #67 completed P1.1 and part of P1.3/P1.4/P1.6
 
 Work items:
 
@@ -2137,15 +2137,16 @@ Use one row per merged pull request or consequential failed experiment.
 | 2026-08-25 | P0 prior-plan reconciliation | historical PR #8 | Located the prior comprehensive `plan_final.md` in merged/closed PR #8. Integrated its vertical-slice, solver-reuse, bounded-memory, scaling, admission-gate, and no-microtranche requirements. No open plan PR was found in the repository search. | Merge `plan.md`, remove conflicting roadmap/test policy, and treat PR #8 as history. |
 | 2026-08-28 | P0.1-P0.8 start | PR #70, `b204851` | Confirmed DKX 2.3.1 drift from the audited 2.3.0 baseline, no competing open planning PR, PR #67 open, and PR #66 closed/superseded. Added the authoritative plan and initial capability, baseline, hardware, and benchmark-schema records without runtime changes. The wheel, sdist, and installed DKX-owned files pass 20 MiB; the 36.46 MiB fresh clone does not. Warning-clean docs pass. The 51m08s serial suite reports 1496 passed, 22 skipped, and two baseline gaps: one reproducible constraintScheme=4 gradient tolerance miss on pristine `main`, and one noisy 5x surrogate timing assertion that passes on repeat. | Review PR #70; identify the official laptop, restore office-GPU access, resolve or explicitly accept the two baseline test gaps, and complete checksum-pinned scientific artifact refresh before merge. |
 | 2026-08-28 | P0.1-P0.8 | PR #70, `4fc8cd0` | Merged the authoritative DKX 3 plan and initial evidence registries after 17 green CI/docs checks. | Execute P1 packaging and size contracts; do not begin P2 before the P1 gates are trustworthy. |
-| 2026-08-28 | P1.1, P1.3-P1.4 | PR #67, `ci/wheel-install-smoke` | Rebased the installed-wheel slice on P0. The focused suite passes 98 tests and actionlint. A clean Python 3.11 wheel install, run outside the checkout with offline data, produced six finite nonzero monoenergetic coefficients, two finite ambipolar roots, and a 221095-byte panel figure in 28.9 s on the M2 development host. No scientific tolerance changed. | Merge after refreshed CI; next add isolated sdist testing, published-artifact smoke, workflow lint, required metadata aggregation, automated size gates, and single-source versioning. |
+| 2026-08-28 | P1.1, P1.3-P1.4, P1.6 | PR #67, `5d7fd8c` | Merged the installed-wheel gate after 20 green checks. A clean Python 3.11 wheel install, run outside the checkout with offline data, produced six finite nonzero monoenergetic coefficients, two finite ambipolar roots, and a 221095-byte panel figure in 28.9 s on the M2 development host. CI preserved its ten-minute required-job contract by rebalancing the unchanged suite from ten to twelve coverage shards; the former heavy shard completed in 10m56s only during a diagnostic 15-minute run. No scientific tolerance changed. | Complete isolated sdist testing, published-artifact smoke, workflow lint, automated size gates, and single-source versioning. |
+| 2026-08-28 | P1.7-P1.8 history audit | local destructive simulations only; no remote rewrite | A fresh full clone of merged PR #67 is 36025713 bytes: 22378106 bytes of Git data and 13647607 bytes of working tree. Removing only historical blobs above 250 KiB still left 32.35 MiB. A simulated one-commit history was 20475758 bytes and passed D012 by only 495762 bytes; retaining even the latest ten commits without further content removal measured 21181153 bytes and failed. | Keep the full-clone gate visible but non-enforcing in the P1 follow-up. Meeting D012 requires both current-content margin and an explicitly approved coordinated history rewrite; an ordinary PR cannot close it. |
 
 ## 22. Current next action
 
-Merge PR #67 after its refreshed wheel-install, coverage, Python-floor, examples,
-external-data, and documentation gates pass. Then complete the remaining P1
-contracts in one coherent follow-up: isolated sdist testing, post-PyPI smoke,
-workflow lint and required-job aggregation, automated clone/artifact/media size
-measurements, size remediation, and single-source version metadata.
+Open the coherent P1 release-contract follow-up: isolated sdist testing,
+post-PyPI smoke, workflow lint and required-job aggregation, automated
+clone/artifact/media size measurements, and single-source version metadata.
+Keep the accepted D012 full-clone target visible as the only blocked size gate;
+do not rewrite remote history without an explicit coordinated maintainer decision.
 
 Do not begin the `src/` migration, native API rewrite, or solver changes before
 P1 is green. Performance baselines and compilation/memory metrics must be

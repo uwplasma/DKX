@@ -4,6 +4,18 @@ Release notes
 Unreleased
 ----------
 
+- Release artifacts now share one literal version in ``dkx/_version.py``.
+  Setuptools reads that value dynamically and the tag check reads the same file
+  without importing JAX during a build.
+- The release gate builds both wheel and source distribution, checks metadata
+  and package data in both archives, installs each into a separate clean
+  environment outside the checkout, and exercises finite scientific results.
+  A versioned size policy measures the wheel, source distribution, installed
+  DKX-owned files, tracked source/media, and a fresh full clone independently.
+- The PyPI workflow downloads the published wheel back from the public index,
+  verifies its version and install location, runs the CLI, and performs a small
+  kinetic solve. Required CI also runs checksum-pinned ``actionlint`` and feeds
+  it into the existing aggregate job.
 - CI never saw either of the two ``dkx wout_*.nc`` packaging breakages, because
   every job ran from a source checkout where the missing files were still on
   disk. A ``wheel-install`` job closes that gap: it builds the wheel, verifies
