@@ -13,14 +13,14 @@ concurrency:
 jobs:
   coverage:
     runs-on: ubuntu-22.04
-    # Shard 6 completed in 9m46s on main (run 33205161037), then the same
-    # tests were cancelled by this 10-minute job ceiling on PR #67 after
-    # 10m17s. Leave runner-variance headroom while retaining a finite guard.
-    timeout-minutes: 15
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        group: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        # The count-only 10-way split left 151 tests in its heavy shard: 9m46s
+        # on main and 10m56s on PR #67. Twelve shards preserve the required
+        # sub-ten-minute job budget without dropping coverage.
+        group: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     env:
       JAX_ENABLE_X64: "True"
       JAX_DISABLE_JIT: "0"
@@ -51,7 +51,7 @@ jobs:
           # worker holding the heavy gradient/scan tests peaks at 5-6 GB. Four
           # of those exceed the 16 GB runner and the agent is OOM-killed, which
           # surfaces as a cancelled job rather than a test failure.
-          python -m pytest -q -n 2 --dist=loadscope --splits 10 --group ${{ matrix.group }} --splitting-algorithm least_duration -m "not slow" --cov=dkx --cov-report=
+          python -m pytest -q -n 2 --dist=loadscope --splits 12 --group ${{ matrix.group }} --splitting-algorithm least_duration -m "not slow" --cov=dkx --cov-report=
       - name: Upload coverage data
         uses: actions/upload-artifact@v7
         with:
