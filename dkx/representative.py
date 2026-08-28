@@ -11,59 +11,16 @@ Panels
 * **monoenergetic** ``D11*``, ``D31*``, ``D33*`` against ``nuPrime``, one curve
   per ``EStar``.  The standard cross-code benchmark figure.
 * **bootstrap** ``<j.B>/sqrt(<B^2>)`` in kA/m^2 against radius, evaluated at
-  the ambipolar root, with the VMEC equilibrium's own current beside it and the
-  ambipolar ``E_r`` on a twin axis.
+  the ambipolar root or, when the fixed scan does not bracket one, the sampled
+  ``E_r`` with smallest ``|J_r|``.  The latter is visibly marked as a sampled
+  point, not a root.  The VMEC equilibrium's own current is drawn beside it.
 * **fluxes** ``<Gamma.grad r>`` and ``<Q.grad r>`` per species against radius,
-  in SI units (:mod:`dkx.units`), at the ambipolar root.
+  in SI units (:mod:`dkx.units`), at that same explicitly labeled field.
 * **|B|** on the flux surface, for context on what device produced the numbers.
 
-Default resolution
-------------------
-Monoenergetic ``Ntheta=25, Nzeta=25, Nxi=41``; radial profiles
-``Ntheta=21, Nzeta=31, Nxi=24, Nx=5``.  A convergence scan against a
-``41x71x80`` reference, run at moderate collisionality, gives:
-
-===========  =====================  ===================
-axis         error at the low end   at the high end
-===========  =====================  ===================
-``Nzeta``    3.59e-02 (15)          1.55e-05 (61)
-``Ntheta``   1.03e-02 (11)          4.00e-04 (31)
-``Nxi``      1.10e-07 (12)          5.59e-10 (64)
-===========  =====================  ===================
-
-By that table ``Nxi`` looks free and ``Nzeta`` expensive.  The default
-nevertheless carries ``Nxi >= Nzeta``, because the Legendre resolution is what
-binds at the *low-collisionality* end of :data:`DEFAULT_NU_PRIME`, which the
-scan above did not probe --- it was run at one moderate ``nuPrime``.  Treat the
-table as a floor on the spatial axes, not as permission to cut ``Nxi``.
-
-Cost
-----
-Measured on a 10-core M4 at float64, Fokker-Planck operator throughout:
-
-=====================================  ========  =========  ========  =======
-case                                   mono      ``|B|``    radial    total
-=====================================  ========  =========  ========  =======
-W7-X standard (vacuum, generic plasma)  16.6 s    2.0 s      17.8 s    37.3 s
-precise-QA beta=2.5% (plasma from p)    16.4 s    6.0 s      22.5 s    45.8 s
-=====================================  ========  =========  ========  =======
-
-The radial column is 5 surfaces x 10 ``E_r`` points --- 50 drift-kinetic solves
---- and it fits only because of the grid in
-:data:`DEFAULT_RESOLUTION_PROFILE`.  A Fokker-Planck solve costs 25 s rather
-than 1 s at ``21x31x24x5``, which is 20 minutes for the same scan.
-
-Two earlier configurations were slower *and* wrong, which is worth recording.  A
-*vacuum* equilibrium took **23 minutes**: VMEC writes ``presf`` of order 1e-6 Pa
-rather than zero, and the pressure split turned that into a collisionless
-1e9 m^-3 plasma (:data:`VACUUM_DENSITY_FLOOR` now catches it, and
-:func:`resolve_plasma` says so on the figure).  And the 63 s this file used to
-quote was measured with pitch-angle scattering, which is 35-47% high on the
-bootstrap current.
-
-Monoenergetic runs take ``nuPrime``/``EStar``, **not** ``nu_n``/``Er`` --- the
-upstream decks say so in a comment, and varying ``nu_n`` here changes nothing at
-all while looking like it worked.
+Resolution and benchmark rationale live with the maintained user guidance in
+:doc:`usage` and :doc:`performance`.  Monoenergetic runs take
+``nuPrime``/``EStar``, not ``nu_n``/``Er``.
 """
 
 from __future__ import annotations
@@ -1215,13 +1172,10 @@ def radial_profiles(
     quick: bool = False,
     emit: Callable[[str], None] | None = None,
 ) -> list[dict[str, Any]]:
-    """Ambipolar ``E_r`` and the moments evaluated *at that root*, per surface.
+    """Ambipolar ``E_r`` and evaluated moments, per surface.
 
-    One batched ``E_r`` scan per surface, because that single call returns the
-    radial current *and* every moment for every ``E_r``.  Evaluating the
-    bootstrap current and the fluxes at the ambipolar root is the physically
-    meaningful thing to report: at ``E_r = 0`` they are not what the device
-    would actually do.
+    Prefer a bracketed root; otherwise retain the sampled point with smallest
+    ``|J_r|`` and mark ``evaluation_is_root=False``.
     """
     import tempfile  # noqa: PLC0415
 
@@ -1263,16 +1217,30 @@ def radial_profiles(
                                       for e, j in zip(er, j_r)])  # fmt: skip
             record: dict[str, Any] = {"r": float(radius), "er_scan": er.tolist(),
                                       "J_r": j_r.tolist(), "roots": roots}  # fmt: skip
+            evaluation_er: float | None = None
             if roots:
                 # The ion root is the most negative crossing; a device in the
                 # electron-root regime has a positive one too, and reporting
                 # only the first found would hide that.
                 root = min(roots)
                 record["er_ambipolar"] = root
+                record["evaluation_status"] = "bracketed_root"
+                record["evaluation_is_root"] = True
+                evaluation_er = root
+            else:
+                finite = np.flatnonzero(np.isfinite(j_r))
+                if finite.size:
+                    closest = int(finite[np.argmin(np.abs(j_r[finite]))])
+                    evaluation_er = float(er[closest])
+                    record["evaluation_status"] = "no_bracketed_root"
+                    record["evaluation_is_root"] = False
+                    record["radial_current_evaluated"] = float(j_r[closest])
+            if evaluation_er is not None:
+                record["er_evaluated"] = evaluation_er
                 mom = scan.moments
                 boot = mom.get("FSABjHatOverRootFSAB2", mom.get("FSABjHat"))
                 if boot is not None:
-                    value = _interp_at_root(er, np.asarray(boot).ravel(), root)
+                    value = _interp_at_root(er, np.asarray(boot).ravel(), evaluation_er)
                     record["bootstrap"] = value
                     # <j.B>/sqrt(<B^2>) carries e nBar vBar (documentation
                     # eq. 196), so this is the same current in kA/m^2.
@@ -1298,15 +1266,18 @@ def radial_profiles(
                     if key in mom:
                         arr = np.asarray(mom[key])
                         values = [
-                            _interp_at_root(er, arr[:, s], root) for s in range(arr.shape[1])
+                            _interp_at_root(er, arr[:, s], evaluation_er)
+                            for s in range(arr.shape[1])
                         ]
                         record[name] = values
                         if to_r_hat is not None:
                             record[f"{name}_si"] = [v * to_r_hat * unit for v in values]
             if emit:
-                e_txt = f"{record.get('er_ambipolar', float('nan')):+.3f}"
+                e_txt = f"{record.get('er_evaluated', float('nan')):+.3f}"
                 b_txt = f"{record.get('bootstrap_kA_m2', float('nan')):+.4g}"
-                emit(f"    r/a={radius:.2f}  Er_ambipolar={e_txt} kV/m  "
+                status = str(record.get("evaluation_status", "unavailable"))
+                emit(f"    r/a={radius:.2f}  Er_evaluated={e_txt} kV/m "
+                     f"status={status}  "
                      f"<j.B>/sqrt(<B^2>)={b_txt} kA/m^2")  # fmt: skip
             out.append(record)
     return out
@@ -1368,8 +1339,10 @@ def _panel_radial_bootstrap(ax, profiles: list[dict[str, Any]]) -> bool:
     ax.grid(alpha=0.3)
 
     twin = ax.twinx()
-    er = [p.get("er_ambipolar", float("nan")) for p in pts]
-    twin.plot(r, er, "s--", ms=4, color="tab:red", label=r"$E_r$ (ambipolar)")
+    all_roots = all(bool(p.get("evaluation_is_root", "er_ambipolar" in p)) for p in pts)
+    er = [p.get("er_ambipolar", p.get("er_evaluated", float("nan"))) for p in pts]
+    er_label = r"$E_r$ (ambipolar)" if all_roots else r"$E_r$ (root / closest scanned)"
+    twin.plot(r, er, "s--", ms=4, color="tab:red", label=er_label)
     twin.set_ylabel(r"$E_r$ [kV/m]", color="tab:red")
     twin.tick_params(axis="y", labelcolor="tab:red")
     # Autoscale would fill the axis with a 6% variation and draw it as a
@@ -1380,7 +1353,17 @@ def _panel_radial_bootstrap(ax, profiles: list[dict[str, Any]]) -> bool:
         centre = 0.5 * (max(finite) + min(finite))
         span = max(max(finite) - min(finite), 0.25 * abs(centre), 0.5)
         twin.set_ylim(centre - 0.6 * span, centre + 0.6 * span)
-    ax.set_title("bootstrap current and ambipolar $E_r$", fontsize=9)
+    title = "bootstrap current and ambipolar $E_r$" if all_roots else (
+        "bootstrap current; open squares use closest scanned $E_r$"
+    )
+    ax.set_title(title, fontsize=9)
+    if not all_roots:
+        twin.scatter(
+            [p["r"] for p in pts if not p.get("evaluation_is_root", True)],
+            [p.get("er_evaluated", float("nan")) for p in pts
+             if not p.get("evaluation_is_root", True)],
+            marker="s", facecolors="none", edgecolors="tab:red", zorder=4,
+        )
     handles = ax.get_lines()[: 2 if (dimensional and len(vmec) >= 2) else 1] + twin.get_lines()[:1]
     # "best" put the box on the Er curve on every device tried; the three curves
     # here all trend downward, so the upper-left corner is the reliable gap.
@@ -1421,8 +1404,9 @@ def _panel_radial_fluxes(ax, profiles: list[dict[str, Any]],
     # exactly on top of the other, which reads as a rendering fault rather than
     # as the physics it is.  Draw one, and say why.
     gammas = [[p[g_key][s] for p in pts if g_key in p] for s in range(n)]
+    all_roots = all(bool(p.get("evaluation_is_root", True)) for p in pts)
     ambipolar_pair = (
-        n == 2 and gammas[0] and gammas[1]
+        all_roots and n == 2 and gammas[0] and gammas[1]
         and np.allclose(gammas[0], gammas[1], rtol=1e-6, atol=0.0)
     )  # fmt: skip
     if ambipolar_pair:
@@ -1448,7 +1432,11 @@ def _panel_radial_fluxes(ax, profiles: list[dict[str, Any]],
                       alpha=0.75, color=f"C{s + n}", label=rf"$Q$ {names[s]}")  # fmt: skip
     twin.set_ylabel(r"$\langle Q_s\cdot\nabla r\rangle$"
                     + (" [kW/m$^2$]" if dimensional else "  [SFINCS units]"))  # fmt: skip
-    ax.set_title("particle and heat flux at the ambipolar root", fontsize=9)
+    ax.set_title(
+        "particle and heat flux at the ambipolar root"
+        if all_roots else "fluxes at roots / explicitly flagged closest scanned $E_r$",
+        fontsize=9,
+    )
     handles = ax.get_lines() + twin.get_lines()
     ax.legend(handles, [h.get_label() for h in handles], fontsize=6, loc="best", ncol=2)
     return True
@@ -1490,9 +1478,20 @@ def write_representative_output(
             payload[f"monoenergetic/{key}"] = [r[key] for r in scan]
     if profiles:
         payload["profiles/r"] = [p["r"] for p in profiles]
-        for key in ("er_ambipolar", "bootstrap", "bootstrap_kA_m2",
-                    "jdotb_vmec_kA_m2", "root_fsab2"):  # fmt: skip
+        for key in ("er_ambipolar", "radial_current_evaluated", "bootstrap",
+                    "bootstrap_kA_m2", "jdotb_vmec_kA_m2", "root_fsab2"):  # fmt: skip
             payload[f"profiles/{key}"] = [p.get(key, float("nan")) for p in profiles]
+        # ``er_evaluated`` was added after ``er_ambipolar``.  Preserve older
+        # callers that provide a root-only profile: a known root is necessarily
+        # the field at which its observables were evaluated.
+        payload["profiles/er_evaluated"] = [
+            p.get("er_evaluated", p.get("er_ambipolar", float("nan")))
+            for p in profiles
+        ]
+        payload["profiles/evaluation_is_root"] = [
+            float(bool(p.get("evaluation_is_root", "er_ambipolar" in p)))
+            for p in profiles
+        ]
         for key in ("particle_flux", "heat_flux", "particle_flux_si", "heat_flux_si"):
             rows = [p.get(key) for p in profiles if p.get(key) is not None]
             if rows:

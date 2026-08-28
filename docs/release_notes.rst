@@ -4,6 +4,13 @@ Release notes
 Unreleased
 ----------
 
+- Representative VMEC profile runs no longer leave electric-field and flux
+  panels blank when the fixed scan range misses an ambipolar root. The output
+  records ``evaluation_is_root``, ``er_evaluated``, the sampled residual
+  current, and the full scan. Observables are displayed at the sampled point
+  with smallest ``|J_r|`` and labeled as closest-scanned rather than as an
+  ambipolar root. Solver progress likewise uses descriptive route names instead
+  of unexplained tier numbers.
 - Compatible single-process RHSMode=1 ``Er`` scans now build geometry and the
   kinetic operator once, solve all electric-field points through the bounded
   batched kernel, and still write the established per-point
