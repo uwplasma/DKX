@@ -1,13 +1,18 @@
 from __future__ import annotations
 
-import re
 from pathlib import Path
+import tomllib
 
 import dkx
 
 
-def test_package_version_matches_pyproject() -> None:
+def test_package_version_has_one_literal_source() -> None:
     pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
-    match = re.search(r'^version = "([^"]+)"$', pyproject.read_text(), re.MULTILINE)
-    assert match is not None
-    assert dkx.__version__ == match.group(1)
+    metadata = tomllib.loads(pyproject.read_text())
+
+    assert "version" not in metadata["project"]
+    assert "version" in metadata["project"]["dynamic"]
+    assert metadata["tool"]["setuptools"]["dynamic"]["version"] == {
+        "attr": "dkx._version.__version__"
+    }
+    assert dkx.__version__ == "2.3.1"

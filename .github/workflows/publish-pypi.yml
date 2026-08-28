@@ -20,25 +20,27 @@ jobs:
       - name: Validate release metadata
         run: |
           python - <<'PY'
+          import ast
           import os
-          import re
-          import tomllib
           from pathlib import Path
 
-          pyproject_version = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
-          init_text = Path("dkx/__init__.py").read_text()
-          match = re.search(r'^__version__ = "([^"]+)"$', init_text, re.MULTILINE)
-          if match is None:
-              raise SystemExit("Could not find dkx.__version__")
-          init_version = match.group(1)
-          if pyproject_version != init_version:
-              raise SystemExit(f"Version mismatch: pyproject={pyproject_version}, __init__={init_version}")
+          tree = ast.parse(Path("dkx/_version.py").read_text())
+          assignments = [
+              node for node in tree.body
+              if isinstance(node, ast.Assign)
+              and any(isinstance(target, ast.Name) and target.id == "__version__" for target in node.targets)
+          ]
+          if len(assignments) != 1:
+              raise SystemExit("dkx/_version.py must contain exactly one __version__ assignment")
+          version = ast.literal_eval(assignments[0].value)
+          if not isinstance(version, str) or not version:
+              raise SystemExit("dkx.__version__ must be a non-empty string literal")
 
           ref_type = os.environ.get("GITHUB_REF_TYPE", "")
           ref_name = os.environ.get("GITHUB_REF_NAME", "")
-          if ref_type == "tag" and ref_name != f"v{pyproject_version}":
-              raise SystemExit(f"Tag {ref_name!r} does not match package version v{pyproject_version}")
-          print(f"validated package version {pyproject_version}")
+          if ref_type == "tag" and ref_name != f"v{version}":
+              raise SystemExit(f"Tag {ref_name!r} does not match package version v{version}")
+          print(f"validated package version {version}")
           PY
       - name: Build distribution
         run: |
