@@ -1,0 +1,117 @@
+schema_version = 1
+artifact_id = "dkx-2.3.1-p0-baseline-2026-08-28"
+recorded_at = "2026-08-28"
+
+[repository]
+url = "https://github.com/uwplasma/DKX"
+plan_audit_commit = "0d5606ce97e93a7d84f068c751abf2e7b2af6af3"
+p0_branch_base_commit = "c003ba8e0332509bc07b3a20fddf2b8db2c05ad9"
+p0_branch_base_version = "2.3.1"
+working_tree_clean_before_p0 = true
+tracked_files = 972
+full_clone_bytes = 38232064
+git_pack_bytes = 22158256
+source_checkout_bytes = 2015232
+test_checkout_bytes = 5922816
+docs_checkout_bytes = 4890624
+examples_checkout_bytes = 1609728
+
+[repository.drift]
+summary = "The planning audit targeted DKX 2.3.0; P0 starts from DKX 2.3.1."
+merged_since_audit = [
+  "PR #68: stalled tier-2 solve escalation",
+  "PR #69: DKX 2.3.1 release",
+]
+open = ["PR #67: clean installed-wheel smoke test (P1.1 candidate)"]
+closed_unmerged = ["PR #66: stale workflow-browser expectation; superseded on main"]
+
+[source]
+python_files = 58
+python_lines = 44931
+test_python_files = 154
+test_python_lines = 37779
+explicit_jit_call_sites = 11
+compilation_family_model = "absent"
+ownership_map = "dkx/README.md"
+legacy_inventory = "tests/fixtures/core_slim_inventory.json"
+
+[public_api]
+canonical_python = ["dkx.run", "dkx.plot", "dkx.RunResult"]
+canonical_cli = ["dkx"]
+compatibility_inputs = ["SFINCS namelist"]
+compatibility_outputs = ["SFINCS HDF5", "NetCDF using SFINCS-compatible names"]
+native_case_model = "absent"
+native_result_schema = "absent"
+
+[dependencies]
+python_floor = "3.10"
+direct_runtime = ["jax", "numpy>=2.1", "scipy", "h5py", "netCDF4", "matplotlib", "solvax>=0.13.0"]
+documentation = ["sphinx", "sphinx-rtd-theme"]
+local_solvax_commit = "d42b7285a388c04fbfbc33cdc17d00bcc51d6a51"
+environment_python = "3.11.14"
+environment_jax = "0.10.2"
+environment_jaxlib = "0.10.2"
+environment_solvax = "0.17.0"
+
+[package_size]
+limit_bytes = 20971520
+wheel_file = "dkx-2.3.1-py3-none-any.whl"
+wheel_bytes = 530476
+wheel_sha256 = "28acc7a4c66839e15e1c2f64bf9d3ab55eb2c4741a2f3d5d48924a8519c99414"
+sdist_file = "dkx-2.3.1.tar.gz"
+sdist_bytes = 863097
+sdist_sha256 = "296ad419e5c22b8c428b9a3051db9b717bc5c003f1abba1c9178dd64a7304b03"
+installed_owned_files = 220
+installed_owned_bytes = 3399007
+wheel_passes = true
+sdist_passes = true
+installed_owned_passes = true
+full_clone_passes = false
+notes = "The fresh full clone is about 36.46 MiB and exceeds D012; P1 must reduce history/media or revise the enforceable mechanism."
+
+[ci]
+main_commit = "c003ba8e0332509bc07b3a20fddf2b8db2c05ad9"
+ci_run_id = 33006224705
+ci_complete_seconds = 542
+ci_conclusion = "success"
+docs_run_id = 33006224762
+docs_complete_seconds = 61
+docs_conclusion = "success"
+
+[validation]
+current_parity_summary = "README.md and docs/parity.rst"
+capability_registry = "validation/capabilities.toml"
+benchmark_schema = "validation/benchmark_schema.toml"
+hardware_registry = "validation/hardware.toml"
+local_full_test_status = "1496 passed, 22 skipped, 2 failed in 3068.06 s"
+local_full_test_command = "python -m pytest -q"
+local_full_test_seconds = 3068.06
+local_docs_status = "passed with warnings treated as errors"
+local_docs_command = "sphinx-build -W -b html docs <temporary-output>"
+scientific_artifact_refresh = "pending"
+notes = "P0 records the current checked-in reference inventory without changing physics. The two full-suite failures are recorded below; later evidence bundles must pin input/output checksums and include unsuccessful external-code runs."
+
+[[known_gap]]
+id = "GAP-P0-001"
+work_item = "P0.5"
+description = "Representative native/SFINCS output, derivative, runtime, and peak-memory artifacts have not yet been regenerated on the official laptop."
+
+[[known_gap]]
+id = "GAP-P0-002"
+work_item = "P0.7"
+description = "The maintained office NVIDIA host was unreachable during the audit, so its exact GPU/driver/runtime inventory is pending."
+
+[[known_gap]]
+id = "GAP-P0-003"
+work_item = "P0.8"
+description = "Compilation families are implicit; the baseline can only count 11 explicit jit call sites until P3 introduces CompilationFamily."
+
+[[known_gap]]
+id = "GAP-P0-004"
+work_item = "P0.5"
+description = "The constraintScheme=4 tier-2 gradient test misses its 1e-5 relative finite-difference tolerance by reaching 2.23055e-5. The failure reproduces unchanged on pristine main at c003ba8."
+
+[[known_gap]]
+id = "GAP-P0-005"
+work_item = "P0.5"
+description = "The bounce-averaged 5x speed assertion is timing-sensitive on the M2 host: it failed twice at 4.24x and 4.91x, passed on pristine main, then passed twice on the P0 branch. No runtime source changed."

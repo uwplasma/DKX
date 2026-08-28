@@ -199,16 +199,16 @@ def test_source_tree_consolidation_target_matches_current_tree() -> None:
     assert expected["temporary_init_only_packages"] == []
 
 
-def test_no_planning_artifacts_in_the_public_repo() -> None:
-    """Planning docs live in a private archive, not the public repository.
+def test_plan_md_is_the_only_authoritative_planning_file() -> None:
+    """Keep one reviewable roadmap without reviving competing plan files."""
 
-    ``plan.md`` / ``plan_final.md`` (development-history planning) and the
-    ``.test_durations`` pytest-split snapshot were moved out of the public
-    tree to keep it light; guard that none of them drift back in.
-    """
-
-    stray_plans = sorted(path.name for path in REPO_ROOT.glob("*plan*.md"))
-    assert stray_plans == [], f"planning docs must not be tracked: {stray_plans}"
+    assert (REPO_ROOT / "plan.md").is_file()
+    competing_plans = sorted(
+        path.name
+        for path in REPO_ROOT.glob("*plan*.md")
+        if path.name != "plan.md"
+    )
+    assert competing_plans == [], f"competing planning files: {competing_plans}"
     assert not (REPO_ROOT / ".test_durations").exists()
 
 
