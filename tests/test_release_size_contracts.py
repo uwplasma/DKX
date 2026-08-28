@@ -48,3 +48,21 @@ def test_collect_rejects_an_unrequested_enforcement(tmp_path: Path) -> None:
             enforced={"wheel"},
             limit_bytes=20,
         )
+
+
+def test_checked_policy_names_every_measurement_and_the_history_blocker() -> None:
+    root = Path(__file__).resolve().parents[1]
+    limit, names, enforced = release_contracts.load_policy(
+        root / "validation/package_size_contract.toml"
+    )
+
+    assert limit == 20 * 1024 * 1024
+    assert names == {
+        "tracked_worktree",
+        "tracked_media",
+        "wheel",
+        "sdist",
+        "installed",
+        "full_clone",
+    }
+    assert enforced == names - {"full_clone"}

@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import tomllib
 
 
 MIB = 1024 * 1024
@@ -85,6 +86,24 @@ def artifact_sizes(dist_dir: Path) -> dict[str, int]:
     return {"wheel": wheels[0].stat().st_size, "sdist": sdists[0].stat().st_size}
 
 
+def load_policy(path: Path) -> tuple[int, set[str], set[str]]:
+    """Load the versioned measurement inventory and its currently enforced gates."""
+
+    policy = tomllib.loads(path.read_text(encoding="utf-8"))
+    if policy.get("schema_version") != 1:
+        raise ValueError(f"unsupported size-policy schema in {path}")
+    measurements = policy.get("measurements")
+    if not isinstance(measurements, dict) or not measurements:
+        raise ValueError(f"size policy has no measurements: {path}")
+    names = set(measurements)
+    enforced = {
+        name
+        for name, settings in measurements.items()
+        if isinstance(settings, dict) and settings.get("enforced") is True
+    }
+    return int(policy["limit_bytes"]), names, enforced
+
+
 def collect_measurements(
     *,
     repository: Path | None,
@@ -121,20 +140,37 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dist-dir", type=Path)
     parser.add_argument("--full-clone", type=Path)
     parser.add_argument("--installed", action="store_true")
-    parser.add_argument("--limit-mib", type=float, default=DEFAULT_LIMIT_MIB)
+    parser.add_argument("--policy", type=Path)
+    parser.add_argument("--limit-mib", type=float)
     parser.add_argument("--enforce", action="append", default=[])
     parser.add_argument("--json-out", type=Path)
     args = parser.parse_args(argv)
 
     try:
+        policy_names: set[str] | None = None
+        if args.policy is not None:
+            limit_bytes, policy_names, policy_enforced = load_policy(args.policy)
+        else:
+            limit_bytes = int(DEFAULT_LIMIT_MIB * MIB)
+            policy_enforced = set()
+        if args.limit_mib is not None:
+            limit_bytes = int(args.limit_mib * MIB)
         measurements = collect_measurements(
             repository=args.repository,
             dist_dir=args.dist_dir,
             full_clone=args.full_clone,
             include_installed=args.installed,
-            enforced=set(args.enforce),
-            limit_bytes=int(args.limit_mib * MIB),
+            enforced=policy_enforced | set(args.enforce),
+            limit_bytes=limit_bytes,
         )
+        measured_names = {item.name for item in measurements}
+        if policy_names is not None and measured_names != policy_names:
+            missing = sorted(policy_names - measured_names)
+            unexpected = sorted(measured_names - policy_names)
+            raise ValueError(
+                f"measurements do not match {args.policy}: missing={missing}, "
+                f"unexpected={unexpected}"
+            )
     except (ValueError, metadata.PackageNotFoundError, subprocess.CalledProcessError) as exc:
         parser.error(str(exc))
 
