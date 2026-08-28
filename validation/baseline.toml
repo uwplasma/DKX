@@ -71,11 +71,11 @@ notes = "The fresh full clone is about 36.46 MiB and exceeds D012; P1 must reduc
 
 [package_size.p1_release_contract_audit]
 base_commit = "5d7fd8c5f51d251b7377c246cc7cf15291f0738a"
-tracked_worktree_bytes = 13666156
+tracked_worktree_bytes = 13672726
 tracked_media_bytes = 3216480
 wheel_bytes = 532212
-sdist_bytes = 871206
-installed_owned_bytes_including_bytecode = 4374298
+sdist_bytes = 871496
+installed_owned_bytes_including_bytecode = 4373999
 fresh_main_clone_bytes = 36025713
 fresh_main_git_store_bytes = 22378106
 fresh_main_working_tree_bytes = 13647607
