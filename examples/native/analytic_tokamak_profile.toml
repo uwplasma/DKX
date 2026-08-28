@@ -1,0 +1,45 @@
+# Small, directly executable native schema-v1 profile (no SFINCS namelist).
+schema = 1
+name = "analytic_tokamak_profile"
+
+[run]
+workflow = "profile"
+progress = true
+
+[geometry]
+format = "analytic"
+file = "tokamak"
+surfaces = [0.09, 0.16, 0.25]
+
+[[species]]
+name = "deuterium"
+charge = 1
+mass_amu = 2.014
+density_m3 = [8.0e19, 7.0e19, 5.8e19]
+temperature_keV = [1.0, 0.8, 0.6]
+
+[physics]
+model = "full_local"
+collisions = "pitch_angle_scattering"
+magnetic_drifts = "dkes"
+phi1 = "off"
+
+[electric_field]
+mode = "prescribed"
+value_kV_m = 0.0
+
+[resolution]
+theta = 9
+zeta = 1
+pitch = 8
+speed = 4
+
+[solver]
+method = "auto"
+relative_tolerance = 1.0e-8
+memory_fraction = 0.75
+reuse = "auto"
+
+[output]
+file = "analytic_tokamak_profile.nc"
+plots = true

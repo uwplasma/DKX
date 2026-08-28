@@ -1,6 +1,6 @@
 # DKX 3 Authoritative Modernization and Performance Plan
 
-Status: P0 planning pull request #70 open for review
+Status: P2 native execution and Result vertical slice in progress
 
 Prepared: 2026-08-25
 
@@ -1705,7 +1705,7 @@ Acceptance criteria:
 
 ### Phase P2: introduce native `Case`, `Result`, and CLI contracts
 
-Status: in progress (`P2.1`, `P2.2`, and the deterministic-ID/bounded-count portion of `P2.3` are the current slice)
+Status: in progress (`P2.1`, `P2.2`, and the deterministic-ID/bounded-count portion of `P2.3` are merged; the first `P2.4`/`P2.7` native profile slice is under review)
 
 Work items:
 
@@ -2141,12 +2141,14 @@ Use one row per merged pull request or consequential failed experiment.
 | 2026-08-28 | P1.7-P1.8 history audit | local destructive simulations only; no remote rewrite | A fresh full clone of merged PR #67 is 36025713 bytes: 22378106 bytes of Git data and 13647607 bytes of working tree. Removing only historical blobs above 250 KiB still left 32.35 MiB. A simulated one-commit history was 20475758 bytes and passed D012 by only 495762 bytes; retaining even the latest ten commits without further content removal measured 21181153 bytes and failed. | Keep the full-clone gate visible but non-enforcing in the P1 follow-up. Meeting D012 requires both current-content margin and an explicitly approved coordinated history rewrite; an ordinary PR cannot close it. |
 | 2026-08-28 | P1.2-P1.9 | PR #71, `af0b7b2` | Merged after 21 green checks. Wheel and sdist install in clean environments and run finite science; post-PyPI smoke, checksum-pinned action lint, required-job aggregation, single-source versioning, package-data checks, and exact CI-SHA size measurements are enforced. Hosted measurements: tracked tree 13673224 B, media 3216480 B, wheel 532245 B, sdist 870017 B, installed files 4373541 B; each enforced DKX-owned artifact passes 20 MiB. The exact full clone is 36302007 B and remains visible but non-enforcing. | Begin P2. Do not claim D012 full-history completion or rewrite remote history without a separate coordinated decision. |
 | 2026-08-28 | P2.1-P2.3 start | current native-case PR | Added an immutable typed schema-v1 `Case`, TOML/JSON readers, precise path-aware validation, deterministic semantic IDs, complete commented/schema output, and bounded Cartesian/zipped scan preflight without changing numerical kernels. Warm parse/validation measured 0.431 ms per representative case; median cold import measured 0.325 s on merged main and 0.335 s on this branch. Installed wheel/sdist smoke passed at 542212 B/883602 B. | Review/merge the focused contract PR, then normalize and execute one flagship profile through native `Case` and `Result`. |
+| 2026-08-28 | P2.1-P2.3 | PR #72, `8bba542` | Merged the immutable native `Case`, schema-v1 TOML/JSON contract, deterministic IDs, bounded scan preflight, and `validate`/`schema` CLI after all 21 required checks passed. | Implement a genuine native normalization/execution path and `Result`; do not serialize `Case` into a compatibility deck. |
+| 2026-08-28 | P2.4/P2.7 analytic profile start | current native-result PR | Added direct `Case -> KineticOperator -> solve -> Result` execution for an analytic prescribed-Er profile, with no namelist serialization/parsing. `Result` owns read-only named arrays, native SI observables, certificates, plotting, and schema-v1 NetCDF save/load. Regression tests forbid both namelist conversion calls and match particle flux, heat flux, and parallel current to the accepted kernel path at 2e-12 relative tolerance. The checked three-surface example measured 7.210 s cold, 3.683 s warm in one cache-disabled process, residual 7.51e-15, 1.053 GB process peak after both runs, 0.024 s output time, and a 47285-byte NetCDF file on the M2 development host. Focused architecture/API tests and warning-clean 47-page docs pass. Isolated artifacts are 551699 B (wheel) and 893802 B (sdist); an out-of-tree wheel run produced finite nonzero flux at residual 6.48e-15 and round-tripped a 47202-byte NetCDF file. | Review this bounded route. Next add native VMEC/Boozer normalization and surface-state reuse; the current native route explicitly rejects ambipolar, scans, full tangential drifts, Phi1, convergence refinement, and explicit sharding/reuse rather than downgrading them. |
 
 ## 22. Current next action
 
-Complete the first P2 vertical slice: schema-v1 native ``Case``, TOML/JSON
-validation, deterministic IDs, bounded scan preflight, ``dkx validate``, and
-``dkx schema``. Keep this slice independent of numerical kernels and document
-that native execution begins in the following vertical slice. Then normalize
-and execute one flagship profile through native ``Case`` and ``Result`` without
-converting back to a SFINCS namelist.
+Complete the first P2 execution slice: review and merge the direct analytic
+profile ``Case`` to immutable ``Result`` route and versioned NetCDF contract.
+Then extend the same normalization boundary to VMEC/Boozer geometry and reuse
+shape-stable compiled/factored state across surfaces before adding ambipolar
+roots and resumable scans. Keep unsupported physics explicit; never convert a
+native ``Case`` back to a SFINCS namelist.

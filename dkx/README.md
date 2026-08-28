@@ -31,6 +31,8 @@ packages remain: `validation/` and `workflows/`.
 | `moments.py` | Velocity-space moments, flux families, transport matrices, NTV, classical transport, keyed by sfincsOutput.h5 names. |
 | `inputs.py`, `console.py` | Typed namelist with Fortran-cited defaults/validation; byte-parity Fortran stdout blocks. |
 | `config.py` | Immutable native `Case`, versioned TOML/JSON validation, deterministic case IDs, declarative scan bounds, and schema generation. |
+| `execution.py` | Direct native `Case` normalization and execution. It constructs grids, geometry, species and operators from physical fields without a namelist round-trip. |
+| `result.py` | Immutable native `Result`: named read-only arrays, plain-text summary, certificate, plotting, and versioned NetCDF save/load. |
 | `run.py` | End-to-end RHSMode 1/2/3 drivers (`run_profile`, `run_transport_matrix`, `run_geometry`) plus the namelist-level dispatch `run_from_namelist`. |
 | `er.py` | Ambipolar radial-electric-field slice: `radial_current`, Fortran-parity Brent `find_ambipolar_er` (bracket expansion + root classification, warm starts/recycling), and the differentiable `ambipolar_er` (`solvax.implicit.root_solve`). |
 | `phi1.py` | Phi1/quasineutrality slice: the nonlinear Newton solve `solve_phi1` (each step linearizes `KineticOperator.residual_phi1` and calls `solve.solve` as the inner linear solve, warm-started), its accepted-iterate history variant `solve_phi1_history` (the writer's per-iteration output), and the differentiable `phi1_state` (`solvax.implicit.root_solve`). Covers `includePhi1InKineticEquation` and `includePhi1InCollisionOperator` (the poloidally varying Fokker-Planck collision operator) with `quasineutralityOption` 1/2. |
