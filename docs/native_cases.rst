@@ -20,7 +20,8 @@ Machine tooling can request JSON Schema instead:
 
    dkx schema --format json > case-v1.schema.json
 
-The checked example is ``examples/native/w7x_ambipolar_profile.toml``. Its
+The checked full-schema example is
+``examples/native/w7x_ambipolar_profile.toml``. Its
 field names carry engineering units where a dimensional value appears, such as
 ``density_m3``, ``temperature_keV``, and ``search_kV_m``. Solver methods use
 physical route names—``structured_direct``, ``recycled_krylov``, and
@@ -49,11 +50,38 @@ zipped axes must have equal lengths. Resume metadata and append-safe result
 storage belong to the native scan/result execution slice and are not simulated
 by the validator.
 
-Current boundary
-----------------
+Native execution and results
+----------------------------
 
-``Case.from_file()``, ``dkx validate``, and ``dkx schema`` are stable input
-contracts. Native ``dkx.run(case)``, ``Result``, NetCDF output, SFINCS
-conversion, and scan execution are the next vertical slices. Until those land,
-existing namelist workflows continue to run through ``dkx.run.run_profile`` and
-the established CLI without a numerical-path change.
+The first directly executable route is an analytic, prescribed-electric-field
+profile. It consumes ``Case`` fields directly: it does not serialize or parse a
+SFINCS namelist while constructing grids, geometry, species, collisions, or the
+operator. Run the checked example from Python:
+
+.. code-block:: python
+
+   import dkx
+
+   case = dkx.Case.from_file("examples/native/analytic_tokamak_profile.toml")
+   result = dkx.run(case)
+   result.print_summary()
+   result.save()                         # the case's [output].file
+   result.plot("profile.png")
+   particle_flux = result.particle_flux_m2_s
+   certificate = result.certificate()
+
+``Result`` copies its named arrays and makes them read-only. The
+``dimensions`` map gives every array's named axes without requiring xarray;
+``save`` writes schema-v1 NetCDF4, and ``Result.load`` reads it through the same
+contract. Files contain the canonical case, normalization, geometry checksum,
+package/runtime/device versions, selected route, residual, iteration and timing
+evidence, and peak host memory.
+
+The executable route supports only ``workflow = "profile"``, built-in
+``format = "analytic"`` geometry, ``magnetic_drifts = "dkes"``, ``phi1 =
+"off"``, a prescribed electric field, and at least two profile surfaces.
+Unsupported native combinations fail with the exact case field and a
+correction; they are not silently downgraded. Native VMEC/Boozer execution,
+ambipolar roots, resumable scan execution, and SFINCS conversion are subsequent
+vertical slices. Existing namelist workflows remain available through
+``dkx.run`` and the established CLI without a numerical-path change.

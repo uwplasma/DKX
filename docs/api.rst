@@ -15,6 +15,11 @@ submodels and serializers live in :mod:`dkx.config`.
 .. automodule:: dkx.config
    :members: Case, CaseValidationError, RunConfig, GeometryConfig, SpeciesConfig, PhysicsConfig, ElectricFieldConfig, ResolutionConfig, SolverConfig, ParallelConfig, ConvergenceConfig, OutputConfig, ScanAxis, ScanConfig, case_json_schema
 
+The native result contract is :class:`dkx.Result`.
+
+.. automodule:: dkx.result
+   :members: Result
+
 .. automodule:: dkx.api
    :members:
 
@@ -36,6 +41,9 @@ Canonical modules
      - :doc:`usage`
    * - ``dkx.config``
      - Native immutable ``Case``, schema validation, IDs, and scan preflight
+     - :doc:`native_cases`
+   * - ``dkx.execution`` / ``dkx.result``
+     - Direct native normalization/execution and named-array NetCDF results
      - :doc:`native_cases`
    * - ``dkx.inputs`` / ``dkx.namelist``
      - Typed ``SfincsInput`` parser and raw namelist reader

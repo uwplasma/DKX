@@ -32,6 +32,7 @@ import numpy as np
 
 from dkx import console
 from dkx.api import SolverOptions
+from dkx.config import Case
 from dkx.constants import RadialCoordinates
 from dkx.drift_kinetic import (
     KineticOperator,
@@ -936,17 +937,21 @@ def _with_parameters(case: SfincsInput, parameters: dict[str, Any]) -> SfincsInp
     return dataclasses.replace(case, **replaced)
 
 def run(
-    case: "str | Path | SfincsInput | None" = None,
+    case: "str | Path | SfincsInput | Case | None" = None,
     *,
     out: "str | Path | None" = None,
     method: str = "auto",
     tol: float | None = None,
     emit: Callable[[str], None] | None = None,
     **parameters: Any,
-) -> "GeometryRun | ProfileRun | TransportRun":
+) -> "GeometryRun | ProfileRun | TransportRun | Result":
     """Solve one case and return its result.  The entry point to reach for first.
 
-    Three ways to say what to solve, and they compose:
+    Native and compatibility inputs share this entry point:
+
+    - ``run(Case.from_file("case.toml"))`` --- the native physical schema,
+      normalized directly into the accepted numerical kernels and returned as
+      an immutable :class:`dkx.Result`.
 
     - ``run("input.namelist")`` --- an SFINCS deck on disk, exactly as the
       Fortran code would read it.
@@ -966,8 +971,9 @@ def run(
     factorization, ``"iterative"`` forces the preconditioned Krylov route.
 
     Args:
-        case: deck path, an in-memory :class:`~dkx.inputs.SfincsInput`, or
-            ``None`` to build one from ``parameters`` alone.
+        case: native :class:`dkx.Case`, deck path, an in-memory
+            :class:`~dkx.inputs.SfincsInput`, or ``None`` to build a
+            compatibility input from ``parameters`` alone.
         out: output file to write; ``None`` keeps the result in memory only.
         method: ``"auto"``, ``"direct"`` or ``"iterative"``.
         tol: relative residual tolerance; ``None`` uses the case's own
@@ -976,8 +982,8 @@ def run(
         **parameters: SFINCS input parameters, overriding the case.
 
     Returns:
-        A :class:`ProfileRun` (RHSMode=1) or :class:`TransportRun` (RHSMode=2/3).
-        Both carry ``moments`` and, when ``out`` was given, ``output_path``.
+        Native inputs return :class:`dkx.Result`. Compatibility inputs return
+        :class:`ProfileRun` (RHSMode=1) or :class:`TransportRun` (RHSMode=2/3).
 
     Example:
         >>> run = dkx.run("input.namelist")            # doctest: +SKIP
@@ -988,6 +994,15 @@ def run(
             "run() needs a case: a deck path, an SfincsInput, or input parameters "
             "as keywords, e.g. run(geometryScheme=1, Ntheta=15, ...)"
         )
+    if isinstance(case, Case):
+        if parameters:
+            raise TypeError(
+                "native Case fields cannot be overridden with SFINCS namelist keywords; "
+                "construct a replaced immutable Case instead"
+            )
+        from dkx.execution import run_case  # noqa: PLC0415
+
+        return run_case(case, out=out, emit=emit)
     if case is None:
         case = SfincsInput.from_params(**parameters)
     elif parameters:

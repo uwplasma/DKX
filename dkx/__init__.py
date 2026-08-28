@@ -308,6 +308,7 @@ from .config import (  # noqa: E402
     SpeciesConfig,
     case_json_schema,
 )
+from .result import RESULT_SCHEMA_VERSION, Result  # noqa: E402
 
 # Heavy flagship entry points (they import the JAX solve stack) are exported
 # lazily via PEP 562 module __getattr__ so `import dkx` stays cheap.
