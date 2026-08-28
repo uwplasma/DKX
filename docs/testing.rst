@@ -153,6 +153,10 @@ The same checks are also represented in the repository CI/CD configuration:
   archive into an isolated cache, then reruns VMEC-path output tests and the
   VMEC getting-started example with ``DKX_OFFLINE=1`` so CI proves that
   public release data is complete and usable without accidental network access,
+- ``wheel-install`` builds the wheel, installs it into a virtualenv holding
+  nothing else, and runs ``dkx <wout> --quick`` from a directory outside the
+  checkout, so the flagship entry point is exercised as an installed artifact
+  rather than as a source tree,
 - ``.github/workflows/docs.yml`` builds the Sphinx documentation,
 - ``.github/workflows/publish-pypi.yml`` handles packaging/release publication.
 
@@ -173,6 +177,35 @@ not included in wheels. The CI contract for those files is:
 This prevents a common packaging regression: a repository can pass pure unit
 tests while the release examples fail because a moved equilibrium file is
 missing, renamed, or no longer checksum-compatible with the embedded manifest.
+
+Installed-artifact gates
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+Every job above runs with the repository as the working directory, which makes
+them blind to one whole class of defect: a runtime file that exists in a
+checkout and not in the wheel. ``dkx wout_*.nc`` shipped broken to pip users
+twice for exactly that reason, with green CI both times: it looked for its
+monoenergetic deck at ``dkx/data/representative.namelist``, a path
+``package-data`` never declared, and fell back to a deck under ``examples/``,
+which no wheel carries either. The contract has two halves:
+
+- ``tests/test_wheel_ships_every_package_file.py`` is the fast half. It fails
+  in the pull request that adds an undeclared non-Python file under ``dkx/``,
+  with no build step, and it carries the list of files that are deliberately
+  excluded because the package never opens them.
+- the ``wheel-install`` job is the slow half. It builds the wheel, checks that
+  every declared ``package-data`` pattern actually survived into the zip,
+  installs the artifact into a virtualenv containing nothing else, asserts the
+  imported ``dkx`` resolves inside ``site-packages`` rather than the checkout,
+  and runs ``dkx <wout> --quick`` from a directory with no repository above it.
+  The equilibrium is decompressed from ``tests/ref`` into the runner's temp
+  directory, and the run is checked for finite monoenergetic coefficients and
+  an ambipolar root at every surface, so a CLI that exits zero without solving
+  anything does not pass.
+
+``--quick`` is a smoke preset, not a physics one: see
+``dkx.representative.QUICK_RESOLUTION`` for the grid it gives up and the one
+axis (``n_x``) it may not.
 
 Coverage audits use the full test suite with package instrumentation:
 
@@ -204,10 +237,11 @@ fixture checksum handling, solver-policy invariants, or a recorded bug boundary.
 test that only calls a function to cover a line is not acceptable.
 
 The required CI jobs are also part of the test contract. Coverage shards,
-coverage-report generation, example smoke tests, release-data smoke tests, and
-optional ecosystem gates are each capped at ten minutes; the final required-job
-aggregator is capped at five minutes. ``tests/test_benchmark_doc_claims.py``
-parses the workflow and fails if these required-job budgets drift upward.
+coverage-report generation, example smoke tests, release-data smoke tests, the
+Python-floor collection, and the wheel-install gate are each capped at ten
+minutes; the final required-job aggregator is capped at five minutes.
+``tests/test_benchmark_doc_claims.py`` parses the workflow and fails if these
+required-job budgets drift upward.
 
 QI device artifacts are route-level evidence, not production claims unless the
 same run satisfies the documented residual, output, runtime, and provenance

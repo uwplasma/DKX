@@ -91,6 +91,18 @@ local_docs_command = "sphinx-build -W -b html docs <temporary-output>"
 scientific_artifact_refresh = "pending"
 notes = "P0 records the current checked-in reference inventory without changing physics. The two full-suite failures are recorded below; later evidence bundles must pin input/output checksums and include unsuccessful external-code runs."
 
+[validation.installed_wheel_pr67]
+status = "passed"
+python = "3.11"
+offline = true
+outside_checkout = true
+complete_seconds = 28.9
+monoenergetic_coefficients = 6
+ambipolar_roots = 2
+figure_bytes = 221095
+host_id = "local-mac-mini-m2"
+notes = "Local rebase verification for PR #67; GitHub wheel-install is the maintained Linux gate."
+
 [[known_gap]]
 id = "GAP-P0-001"
 work_item = "P0.5"

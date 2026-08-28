@@ -576,24 +576,24 @@ def test_the_caption_warns_that_the_two_currents_need_not_coincide():
     assert "assumed split" not in figure_caption(None, "", {"mono": {"n_theta": 25}})
 
 
-def test_full_threads_the_finer_grid_through_both_solve_stages(monkeypatch, tmp_path):
-    """``--full`` must reach the profile solve and the radial scan, not just the scan.
+def test_every_preset_threads_its_grid_through_both_solve_stages(monkeypatch, tmp_path):
+    """A preset must reach the profile solve and the radial scan, not just the scan.
 
-    The monoenergetic grid is widened in run_representative itself, so it is
+    The monoenergetic grid is chosen in run_representative itself, so it is
     hard to get wrong; the two profile stages take their resolution from a
     module constant, and threading a flag to one but not the other would leave
-    ``--full`` quietly half-applied.
+    the preset quietly half-applied.
     """
     from dkx import representative as rep
 
     seen: dict[str, dict] = {}
 
-    def fake_profile_data(equilibrium, *, full=False, emit=None):
-        seen["profile"] = rep.FULL_RESOLUTION_PROFILE if full else rep.DEFAULT_RESOLUTION_PROFILE
+    def fake_profile_data(equilibrium, *, full=False, quick=False, emit=None):
+        seen["profile"] = rep._profile_resolution(full=full, quick=quick)
         return {}
 
-    def fake_radial(equilibrium, *, full=False, emit=None, **kwargs):
-        seen["radial"] = rep.FULL_RESOLUTION_PROFILE if full else rep.DEFAULT_RESOLUTION_PROFILE
+    def fake_radial(equilibrium, *, full=False, quick=False, emit=None, **kwargs):
+        seen["radial"] = rep._profile_resolution(full=full, quick=quick)
         return []
 
     monkeypatch.setattr(rep, "_profile_data", fake_profile_data)
@@ -604,12 +604,98 @@ def test_full_threads_the_finer_grid_through_both_solve_stages(monkeypatch, tmp_
 
     wout = tmp_path / "wout_stub.nc"
     wout.write_text("")
-    for full, expected in ((False, rep.DEFAULT_RESOLUTION_PROFILE),
-                           (True, rep.FULL_RESOLUTION_PROFILE)):  # fmt: skip
-        rep.run_representative(wout, out_path=tmp_path / f"p{full}.png", full=full, emit=None)
-        assert seen["profile"] == expected, f"profile stage ignored full={full}"
-        assert seen["radial"] == expected, f"radial stage ignored full={full}"
-    assert rep.FULL_RESOLUTION_PROFILE != rep.DEFAULT_RESOLUTION_PROFILE
+    presets = (
+        ({}, rep.DEFAULT_RESOLUTION_PROFILE),
+        ({"full": True}, rep.FULL_RESOLUTION_PROFILE),
+        ({"quick": True}, rep.QUICK_RESOLUTION_PROFILE),
+    )
+    for flags, expected in presets:
+        label = "-".join(flags) or "default"
+        rep.run_representative(wout, out_path=tmp_path / f"p{label}.png", emit=None, **flags)
+        assert seen["profile"] == expected, f"profile stage ignored {flags}"
+        assert seen["radial"] == expected, f"radial stage ignored {flags}"
+    grids = [rep.DEFAULT_RESOLUTION_PROFILE, rep.FULL_RESOLUTION_PROFILE,
+             rep.QUICK_RESOLUTION_PROFILE]  # fmt: skip
+    assert len({tuple(sorted(g.items())) for g in grids}) == 3, "two presets share a grid"
+
+
+def test_full_and_quick_together_are_refused():
+    """They pull in opposite directions, so silently picking one is a trap."""
+    from dkx import representative as rep
+
+    with pytest.raises(ValueError, match="opposite presets"):
+        rep._profile_resolution(full=True, quick=True)
+
+
+def test_the_quick_speed_grid_keeps_the_ambipolar_root_alive():
+    """``n_x`` is the one axis ``--quick`` may not cut, and this records why.
+
+    Measured on ``tests/ref/wout_up_down_asymmetric_tokamak.nc``: at ``n_x = 3``
+    the radial current is negative across the whole ``E_r`` bracket, so there is
+    no sign change, no ambipolar root, and the bootstrap and flux panels come
+    out empty. At ``n_x = 4`` with the same angular grid the roots reappear.
+    Cutting the speed grid to buy CI seconds therefore costs half the figure.
+    """
+    from dkx import representative as rep
+
+    assert rep.QUICK_RESOLUTION_PROFILE["n_x"] >= 4
+    # The angular axes are the ones the preset is allowed to cut, and it must
+    # actually cut them or it is not a quick preset at all.
+    for axis in ("n_theta", "n_zeta", "n_xi"):
+        assert rep.QUICK_RESOLUTION_PROFILE[axis] < rep.DEFAULT_RESOLUTION_PROFILE[axis], axis
+
+
+def test_quick_keeps_enough_points_for_every_panel_to_be_a_curve():
+    """One point is a dot, and a one-point axis stops exercising the code path."""
+    from dkx import representative as rep
+
+    assert len(rep.QUICK_NU_PRIME) >= 3, "the D11/D31/D33 panels need a curve"
+    assert len(rep.QUICK_E_STAR) >= 2, "the legend claims one curve per EStar"
+    assert len(rep.QUICK_SURFACES) >= 2, "a radial profile needs two radii"
+    # A bracket that does not span zero cannot contain a sign change.
+    assert min(rep.QUICK_ER_BRACKET) < 0.0 < max(rep.QUICK_ER_BRACKET)
+
+
+def test_quick_reports_the_grid_it_actually_ran(monkeypatch, tmp_path):
+    """The figure caption and the HDF5 must not name the default grid.
+
+    ``write_representative_output`` used to hard-code ``DEFAULT_RESOLUTION`` for
+    the monoenergetic entry, which was true while the only presets shared that
+    grid and became a false label the moment one did not.
+    """
+    from dkx import representative as rep
+
+    captured: dict[str, dict] = {}
+
+    def fake_plot(out, **kwargs):
+        captured["resolutions"] = kwargs["resolutions"]
+        Path(out).write_bytes(b"")
+        return Path(out)
+
+    monkeypatch.setattr(rep, "_profile_data", lambda *a, **k: {})
+    monkeypatch.setattr(rep, "radial_profiles", lambda *a, **k: [])
+    monkeypatch.setattr(rep, "monoenergetic_scan", lambda *a, **k: [])
+    monkeypatch.setattr(rep, "plot_representative", fake_plot)
+    monkeypatch.setattr(rep, "resolve_plasma",
+                        lambda eq: (dict(rep.FALLBACK_PLASMA), "generic reference"))  # fmt: skip
+
+    wout = tmp_path / "wout_stub.nc"
+    wout.write_text("")
+    rep.run_representative(wout, out_path=tmp_path / "q.png", quick=True, emit=None)
+    assert captured["resolutions"]["monoenergetic"] == rep.QUICK_RESOLUTION
+    assert captured["resolutions"]["profiles"] == rep.QUICK_RESOLUTION_PROFILE
+
+    # The HDF5 is the half that was wrong: plot_representative was always given
+    # the grid, write_representative_output substituted the default for it.
+    import h5py
+
+    with h5py.File(tmp_path / "q.h5", "r") as handle:
+        written = {
+            key.split("/", 1)[1]: int(value)
+            for key, value in handle.attrs.items()
+            if key.startswith("resolution_monoenergetic/")
+        }
+    assert written == rep.QUICK_RESOLUTION
 
 
 def test_the_out_of_memory_retry_grid_never_grows_an_axis():

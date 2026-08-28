@@ -108,6 +108,45 @@ DEFAULT_RESOLUTION_PROFILE = {"n_theta": 13, "n_zeta": 19, "n_xi": 13, "n_x": 4}
 #: below it rather than halfway.
 FULL_RESOLUTION_PROFILE = {"n_theta": 15, "n_zeta": 23, "n_xi": 16, "n_x": 5}
 
+#: ``--quick`` resolution and scan sizes: the smallest run that still exercises
+#: every stage of :func:`run_representative`.
+#:
+#: This is a **smoke preset, not a physics one**.  It exists because the
+#: default run costs 64.9 s cold-cache on a 10-core M4 against 16.1 s for this
+#: one (both on ``tests/ref/wout_up_down_asymmetric_tokamak.nc``) --- fine for
+#: a person either way, but the CI job that runs it has to build a wheel and
+#: install it first --- and because the failure that job exists to catch (a
+#: file the package needs that the wheel does not ship) happens while the deck
+#: is being built, long before the grid matters.  Do not report numbers from
+#: it:
+#:
+#: * ``QUICK_NU_PRIME`` starts at 1e-2, so it misses the ``1/nu`` branch that
+#:   :data:`DEFAULT_NU_PRIME` exists to show;
+#: * ``QUICK_ER_BRACKET`` stops at -8 kV/m, so a device whose ion root sits
+#:   below that reports no root at all rather than a wrong one;
+#: * every angular axis is below the convergence floor in the module docstring.
+#:
+#: What it does keep is the shape of the run: an RHSMode=3 scan with more than
+#: one ``EStar`` curve and more than two ``nuPrime`` points per curve, one
+#: RHSMode=1 profile solve, and a batched ``E_r`` scan over more than one
+#: surface.  Cutting any of those to one point turns a panel into a dot and
+#: stops the corresponding code path from running at all.
+#:
+#: ``n_x`` is the exception that is **not** cut, and the measurement is worth
+#: recording.  At ``n_x = 3`` the ``E_r`` scan on the reference tokamak returns
+#: a radial current that is negative across the whole bracket: no sign change,
+#: no ambipolar root, and the bootstrap and flux panels come out empty.  At
+#: ``n_x = 4``, everything else unchanged, the same run finds roots at -1.25
+#: and -1.80 kV/m, and the grid below finds -1.57 and -2.36 against the default
+#: grid's -1.56 and -2.34.  The speed grid is what the root is sensitive to, so
+#: it stays at the default's 4 while the angular axes go to roughly half.
+QUICK_RESOLUTION = {"n_theta": 11, "n_zeta": 13, "n_xi": 16}
+QUICK_RESOLUTION_PROFILE = {"n_theta": 11, "n_zeta": 15, "n_xi": 10, "n_x": 4}
+QUICK_NU_PRIME = (1.0e-2, 1.0e0, 1.0e2)
+QUICK_E_STAR = (0.0, 1.0e-1)
+QUICK_SURFACES = (0.4, 0.7)
+QUICK_ER_BRACKET = (-8.0, -4.0, -2.0, -1.0, -0.4, 0.4, 1.0)
+
 #: Generic fallback plasma, used only when the equilibrium carries no pressure.
 FALLBACK_PLASMA = {"n_hat": 1.0, "t_hat": 1.0, "dn_drhat": -0.5, "dt_drhat": -1.0}
 
@@ -228,6 +267,21 @@ DEFAULT_NU_PRIME = (1.0e-4, 1.0e-3, 1.0e-2, 1.0e-1, 1.0e0, 1.0e1, 1.0e2)
 #: zero field and 0.1 the D11 curves are nearly indistinguishable, so a grid of
 #: 0/0.1/0.3 spends two of its three curves in the same regime.
 DEFAULT_E_STAR = (0.0, 1.0e-3, 1.0e-1)
+
+
+def _profile_resolution(*, full: bool = False, quick: bool = False) -> dict[str, int]:
+    """The RHSMode=1 grid for one preset, and the one place the presets collide.
+
+    ``full`` and ``quick`` pull in opposite directions, so taking both is a
+    caller mistake rather than something to resolve silently.  Raising here
+    rather than in :func:`run_representative` covers the two public stage
+    functions as well, which a caller can drive directly.
+    """
+    if full and quick:
+        raise ValueError("full and quick are opposite presets; pass at most one.")
+    if quick:
+        return QUICK_RESOLUTION_PROFILE
+    return FULL_RESOLUTION_PROFILE if full else DEFAULT_RESOLUTION_PROFILE
 
 
 def _quiet(fn: Callable[[], Any]) -> Any:
@@ -646,12 +700,16 @@ def run_representative(
     *,
     out_path: str | Path | None = None,
     full: bool = False,
+    quick: bool = False,
     emit: Callable[[str], None] | None = print,
 ) -> Path:
     """Solve the representative set for one equilibrium and plot it.
 
     ``full`` widens the monoenergetic grid; the default keeps the whole run
-    inside the one-minute budget the module docstring measures.
+    inside the one-minute budget the module docstring measures.  ``quick``
+    goes the other way, to :data:`QUICK_RESOLUTION` and friends --- a smoke
+    preset whose numbers are not reportable; see that constant for what it
+    gives up.  The two are mutually exclusive.
     """
     from dkx.inputs import parse_sfincs_input_text, sfincs_input_from_raw  # noqa: PLC0415
 
@@ -673,9 +731,17 @@ def run_representative(
             emit(label)
         return lambda: (emit(f"    ({time.perf_counter() - mark:.1f} s)") if emit else None)
 
-    done = stage(f"  monoenergetic scan at {DEFAULT_RESOLUTION}")
-    nu = DEFAULT_NU_PRIME if not full else tuple(np.logspace(-5, 2, 15))
-    scan = monoenergetic_scan(base, nu_prime=nu, emit=emit)
+    profile_resolution = _profile_resolution(full=full, quick=quick)
+    mono_resolution = QUICK_RESOLUTION if quick else DEFAULT_RESOLUTION
+    done = stage(f"  monoenergetic scan at {mono_resolution}")
+    if quick:
+        nu, e_star = QUICK_NU_PRIME, QUICK_E_STAR
+    else:
+        nu = DEFAULT_NU_PRIME if not full else tuple(np.logspace(-5, 2, 15))
+        e_star = DEFAULT_E_STAR
+    scan = monoenergetic_scan(
+        base, nu_prime=nu, e_star=e_star, resolution=mono_resolution, emit=emit
+    )
     done()
 
     # The monoenergetic scan alone leaves the whole second row empty: RHSMode=3
@@ -685,10 +751,10 @@ def run_representative(
     # three "not present in this output" boxes, which is not a representative
     # run of anything.
     done = stage("  profile solve for |B|")
-    data = _profile_data(equilibrium, full=full, emit=emit)
+    data = _profile_data(equilibrium, full=full, quick=quick, emit=emit)
     done()
     done = stage("  radial scan: ambipolar Er, bootstrap and fluxes at the root")
-    profiles = radial_profiles(equilibrium, full=full, emit=emit)
+    profiles = radial_profiles(equilibrium, full=full, quick=quick, emit=emit)
     done()
     plasma, plasma_source = resolve_plasma(equilibrium)
 
@@ -696,9 +762,8 @@ def run_representative(
     figure = plot_representative(
         out, data=data, scan=scan, profiles=profiles,
         plasma=plasma, plasma_source=plasma_source,
-        resolutions={"monoenergetic": DEFAULT_RESOLUTION,
-                     "profiles": FULL_RESOLUTION_PROFILE if full
-                     else DEFAULT_RESOLUTION_PROFILE},
+        resolutions={"monoenergetic": mono_resolution,
+                     "profiles": profile_resolution},
         title=f"DKX representative run — {equilibrium.name}",
     )  # fmt: skip
     # Always leave the numbers behind, not only the picture: a figure cannot be
@@ -706,7 +771,8 @@ def run_representative(
     written = write_representative_output(
         out.with_suffix(".h5"), scan=scan, profiles=profiles, data=data,
         equilibrium=equilibrium,
-        resolution_profile=FULL_RESOLUTION_PROFILE if full else DEFAULT_RESOLUTION_PROFILE,
+        resolution_profile=profile_resolution,
+        resolution_monoenergetic=mono_resolution,
     )  # fmt: skip
     if emit:
         emit(f" wrote {written}")
@@ -925,7 +991,7 @@ def _field_periods(equilibrium: Path) -> int:
         return 1
 
 
-def _profile_data(equilibrium: Path, *, full: bool = False,
+def _profile_data(equilibrium: Path, *, full: bool = False, quick: bool = False,
                   emit: Callable[[str], None] | None = None) -> dict:  # fmt: skip
     """Geometry plus one RHSMode=1 solve, for the panels the scan cannot fill.
 
@@ -935,7 +1001,7 @@ def _profile_data(equilibrium: Path, *, full: bool = False,
     from dkx.inputs import parse_sfincs_input_text, sfincs_input_from_raw  # noqa: PLC0415
     from dkx.run import run_profile  # noqa: PLC0415
 
-    resolution = FULL_RESOLUTION_PROFILE if full else DEFAULT_RESOLUTION_PROFILE
+    resolution = _profile_resolution(full=full, quick=quick)
     plasma, derived = resolve_plasma(equilibrium)
     if emit:
         emit(f"    plasma: {plasma_summary(plasma, derived)}")
@@ -1143,9 +1209,10 @@ def _vmec_current_kA_m2(geometry: dict[str, Any], radius: float,
 def radial_profiles(
     equilibrium: Path,
     *,
-    surfaces: Sequence[float] = DEFAULT_SURFACES,
-    er_values: Sequence[float] = DEFAULT_ER_BRACKET,
+    surfaces: Sequence[float] | None = None,
+    er_values: Sequence[float] | None = None,
     full: bool = False,
+    quick: bool = False,
     emit: Callable[[str], None] | None = None,
 ) -> list[dict[str, Any]]:
     """Ambipolar ``E_r`` and the moments evaluated *at that root*, per surface.
@@ -1162,7 +1229,14 @@ def radial_profiles(
     from dkx.units import CURRENT_DENSITY, HEAT_FLUX, PARTICLE_FLUX  # noqa: PLC0415
     from dkx.units import flux_psi_hat_to_r_hat  # noqa: PLC0415
 
-    resolution = FULL_RESOLUTION_PROFILE if full else DEFAULT_RESOLUTION_PROFILE
+    resolution = _profile_resolution(full=full, quick=quick)
+    # Defaulted through ``None`` rather than in the signature: ``quick`` has to
+    # be able to pick the smaller surface list and bracket, and a signature
+    # default would already have chosen for it.
+    if surfaces is None:
+        surfaces = QUICK_SURFACES if quick else DEFAULT_SURFACES
+    if er_values is None:
+        er_values = QUICK_ER_BRACKET if quick else DEFAULT_ER_BRACKET
     er = np.asarray(er_values, dtype=float)
     if emit:
         emit(f"    radial-scan resolution: {resolution}; "
@@ -1388,6 +1462,7 @@ def write_representative_output(
     data: dict[str, Any] | None = None,
     equilibrium: str | Path | None = None,
     resolution_profile: dict[str, int] | None = None,
+    resolution_monoenergetic: dict[str, int] | None = None,
 ) -> Path:
     """Persist the numbers behind the figure.
 
@@ -1402,7 +1477,7 @@ def write_representative_output(
 
     payload: dict[str, Any] = {
         "equilibrium": str(equilibrium) if equilibrium else "",
-        "resolution_monoenergetic": DEFAULT_RESOLUTION,
+        "resolution_monoenergetic": resolution_monoenergetic or DEFAULT_RESOLUTION,
         "resolution_profile": resolution_profile or DEFAULT_RESOLUTION_PROFILE,
         # The SI factors behind every "_kA_m2" / "_si" dataset, so the file can
         # be converted back to SFINCS units without consulting the source.

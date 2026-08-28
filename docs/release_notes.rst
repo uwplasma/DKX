@@ -4,6 +4,31 @@ Release notes
 Unreleased
 ----------
 
+- CI never saw either of the two ``dkx wout_*.nc`` packaging breakages, because
+  every job ran from a source checkout where the missing files were still on
+  disk. A ``wheel-install`` job closes that gap: it builds the wheel, verifies
+  that every declared ``package-data`` pattern reached the artifact, installs
+  it into a virtualenv holding nothing else, asserts the imported ``dkx``
+  resolves inside ``site-packages``, and runs the CLI against an equilibrium
+  decompressed from ``tests/ref`` into a directory outside the checkout. The
+  run is checked for finite monoenergetic coefficients and an ambipolar root at
+  every surface, so a CLI that exits zero without solving does not pass. Built
+  from the 2.3.0 tree the job fails with the reported ``FileNotFoundError``.
+- ``tests/test_wheel_ships_every_package_file.py`` guards the same class of bug
+  without a build: ``[tool.setuptools.package-data]`` declares one pattern, so
+  any other non-Python file added under ``dkx/`` is excluded from the wheel
+  silently, and this fails in the pull request that adds it.
+- ``dkx <wout> --quick`` runs the representative set on a reduced grid --- 16 s
+  against 65 s cold-cache on a 10-core M4, measured on
+  ``tests/ref/wout_up_down_asymmetric_tokamak.nc`` --- so a run can be checked
+  end to end without the full cost. It is a smoke preset and its numbers are
+  not reportable: the ``nuPrime`` scan starts above the ``1/nu`` branch, the
+  ``E_r`` bracket stops at -8 kV/m, and every angular axis sits below the
+  documented convergence floor. The speed grid ``n_x`` is deliberately left at
+  the default's 4: at 3 the radial current has no sign change anywhere in the
+  bracket, which costs the bootstrap and flux panels entirely. The figure
+  caption and the ``.h5`` report the grid the run actually used, which
+  ``write_representative_output`` previously hard-coded to the default.
 - Added the first domain-package skeletons for the active ``v3_driver.py``
   architecture refactor: input, physics, discretization, operators, problems,
   solvers/preconditioners, parallel, workflows, validation, benchmarks, and
