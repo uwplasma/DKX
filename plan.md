@@ -1,6 +1,6 @@
 # DKX 3 Authoritative Modernization and Performance Plan
 
-Status: maintainer direction accepted; P0 planning branch in progress
+Status: P0 planning pull request #70 open for review
 
 Prepared: 2026-08-25
 
@@ -14,7 +14,7 @@ Target release line: DKX 3.x
 
 Proposed planning branch: `rj/dkx3-plan`
 
-Proposed planning pull request: `RFC: make plan.md the authoritative DKX 3 roadmap`
+Planning pull request: [#70, `RFC: make plan.md the authoritative DKX 3 roadmap`](https://github.com/uwplasma/DKX/pull/70)
 
 ## 0. Authority, scope, and use of this file
 
@@ -2135,11 +2135,11 @@ Use one row per merged pull request or consequential failed experiment.
 | 2026-08-25 | planning audit | no repository change | Audited DKX `0d5606ce`; reviewed current source, tests, docs, examples, packaging, open PRs, SFINCS v3, PETSc, MUMPS, SuperLU_DIST, MONKES, YANCC, and JAX guidance. | Convert the reviewed artifact into the P0 planning PR. |
 | 2026-08-25 | D001-D016 | maintainer decisions | Accepted DKX 3, permanent SFINCS adapters, physical units, native NetCDF, Python 3.11, argparse+Rich, shallow packages, whole-profile flagship, local external-code campaigns, laptop CPU/NVIDIA GPU benchmarks, sub-20-MiB DKX artifacts, and one authoritative plan. | Fill exact hardware and baseline measurements in P0. |
 | 2026-08-25 | P0 prior-plan reconciliation | historical PR #8 | Located the prior comprehensive `plan_final.md` in merged/closed PR #8. Integrated its vertical-slice, solver-reuse, bounded-memory, scaling, admission-gate, and no-microtranche requirements. No open plan PR was found in the repository search. | Merge `plan.md`, remove conflicting roadmap/test policy, and treat PR #8 as history. |
-| 2026-08-28 | P0.1-P0.8 start | `rj/dkx3-plan` from `c003ba8` | Confirmed DKX 2.3.1 drift from the audited 2.3.0 baseline, no competing open planning PR, PR #67 open, and PR #66 closed/superseded. Added the authoritative plan and initial capability, baseline, hardware, and benchmark-schema records without runtime changes. The wheel, sdist, and installed DKX-owned files pass 20 MiB; the 36.46 MiB fresh clone does not. Warning-clean docs pass. The 51m08s serial suite reports 1496 passed, 22 skipped, and two baseline gaps: one reproducible constraintScheme=4 gradient tolerance miss on pristine `main`, and one noisy 5x surrogate timing assertion that passes on repeat. | Open the P0 PR; identify the official laptop, restore office-GPU access, resolve or explicitly accept the two baseline test gaps, and complete checksum-pinned scientific artifact refresh before merge. |
+| 2026-08-28 | P0.1-P0.8 start | PR #70, `b204851` | Confirmed DKX 2.3.1 drift from the audited 2.3.0 baseline, no competing open planning PR, PR #67 open, and PR #66 closed/superseded. Added the authoritative plan and initial capability, baseline, hardware, and benchmark-schema records without runtime changes. The wheel, sdist, and installed DKX-owned files pass 20 MiB; the 36.46 MiB fresh clone does not. Warning-clean docs pass. The 51m08s serial suite reports 1496 passed, 22 skipped, and two baseline gaps: one reproducible constraintScheme=4 gradient tolerance miss on pristine `main`, and one noisy 5x surrogate timing assertion that passes on repeat. | Review PR #70; identify the official laptop, restore office-GPU access, resolve or explicitly accept the two baseline test gaps, and complete checksum-pinned scientific artifact refresh before merge. |
 
 ## 22. Current next action
 
-Open `rj/dkx3-plan` and make the narrow P0 planning pull request. It should contain only:
+Review and merge PR #70 after confirming that it contains only:
 
 - this `plan.md`;
 - removal or replacement of the test that prohibits `plan.md`;
@@ -2147,6 +2147,6 @@ Open `rj/dkx3-plan` and make the narrow P0 planning pull request. It should cont
 - a note that PR #8 is already merged/closed and superseded as a planning authority;
 - the initial capability, baseline, benchmark-hardware, and size-record skeletons if they can be added without changing runtime behavior.
 
-Run the full current test suite and warning-clean documentation build. Do not begin the `src/` migration, API rewrite, or solver changes in the planning pull request.
+Review the recorded full-suite baseline gaps and warning-clean documentation build. Do not begin the `src/` migration, API rewrite, or solver changes in the planning pull request.
 
 After P0 merges, the first implementation priority is P1: make the wheel/source-distribution, published-package, and size contracts trustworthy. Performance baselines and compilation/memory metrics must be recorded before P2 changes public data models.
