@@ -43,6 +43,7 @@ ACTIVE_PACKAGE_EXPORTS = {
 ROOT_MODULE_CLASSIFICATIONS = {
     "__init__.py": "public package facade",
     "__main__.py": "public entry point",
+    "_version.py": "stable package metadata",
     "ambipolar.py": "public workflow API",
     "api.py": "public API",
     "batch.py": "public workflow API",
