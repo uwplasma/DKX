@@ -1680,7 +1680,7 @@ Acceptance criteria:
 
 ### Phase P1: make releases and size trustworthy
 
-Status: next after P0
+Status: in progress; PR #67 implements P1.1 and part of P1.3/P1.4
 
 Work items:
 
@@ -2136,17 +2136,17 @@ Use one row per merged pull request or consequential failed experiment.
 | 2026-08-25 | D001-D016 | maintainer decisions | Accepted DKX 3, permanent SFINCS adapters, physical units, native NetCDF, Python 3.11, argparse+Rich, shallow packages, whole-profile flagship, local external-code campaigns, laptop CPU/NVIDIA GPU benchmarks, sub-20-MiB DKX artifacts, and one authoritative plan. | Fill exact hardware and baseline measurements in P0. |
 | 2026-08-25 | P0 prior-plan reconciliation | historical PR #8 | Located the prior comprehensive `plan_final.md` in merged/closed PR #8. Integrated its vertical-slice, solver-reuse, bounded-memory, scaling, admission-gate, and no-microtranche requirements. No open plan PR was found in the repository search. | Merge `plan.md`, remove conflicting roadmap/test policy, and treat PR #8 as history. |
 | 2026-08-28 | P0.1-P0.8 start | PR #70, `b204851` | Confirmed DKX 2.3.1 drift from the audited 2.3.0 baseline, no competing open planning PR, PR #67 open, and PR #66 closed/superseded. Added the authoritative plan and initial capability, baseline, hardware, and benchmark-schema records without runtime changes. The wheel, sdist, and installed DKX-owned files pass 20 MiB; the 36.46 MiB fresh clone does not. Warning-clean docs pass. The 51m08s serial suite reports 1496 passed, 22 skipped, and two baseline gaps: one reproducible constraintScheme=4 gradient tolerance miss on pristine `main`, and one noisy 5x surrogate timing assertion that passes on repeat. | Review PR #70; identify the official laptop, restore office-GPU access, resolve or explicitly accept the two baseline test gaps, and complete checksum-pinned scientific artifact refresh before merge. |
+| 2026-08-28 | P0.1-P0.8 | PR #70, `4fc8cd0` | Merged the authoritative DKX 3 plan and initial evidence registries after 17 green CI/docs checks. | Execute P1 packaging and size contracts; do not begin P2 before the P1 gates are trustworthy. |
+| 2026-08-28 | P1.1, P1.3-P1.4 | PR #67, `ci/wheel-install-smoke` | Rebased the installed-wheel slice on P0. The focused suite passes 98 tests and actionlint. A clean Python 3.11 wheel install, run outside the checkout with offline data, produced six finite nonzero monoenergetic coefficients, two finite ambipolar roots, and a 221095-byte panel figure in 28.9 s on the M2 development host. No scientific tolerance changed. | Merge after refreshed CI; next add isolated sdist testing, published-artifact smoke, workflow lint, required metadata aggregation, automated size gates, and single-source versioning. |
 
 ## 22. Current next action
 
-Review and merge PR #70 after confirming that it contains only:
+Merge PR #67 after its refreshed wheel-install, coverage, Python-floor, examples,
+external-data, and documentation gates pass. Then complete the remaining P1
+contracts in one coherent follow-up: isolated sdist testing, post-PyPI smoke,
+workflow lint and required-job aggregation, automated clone/artifact/media size
+measurements, size remediation, and single-source version metadata.
 
-- this `plan.md`;
-- removal or replacement of the test that prohibits `plan.md`;
-- a concise update to any current roadmap page so it points here or is historical;
-- a note that PR #8 is already merged/closed and superseded as a planning authority;
-- the initial capability, baseline, benchmark-hardware, and size-record skeletons if they can be added without changing runtime behavior.
-
-Review the recorded full-suite baseline gaps and warning-clean documentation build. Do not begin the `src/` migration, API rewrite, or solver changes in the planning pull request.
-
-After P0 merges, the first implementation priority is P1: make the wheel/source-distribution, published-package, and size contracts trustworthy. Performance baselines and compilation/memory metrics must be recorded before P2 changes public data models.
+Do not begin the `src/` migration, native API rewrite, or solver changes before
+P1 is green. Performance baselines and compilation/memory metrics must be
+recorded before P2 changes public data models.

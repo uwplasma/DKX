@@ -89,3 +89,39 @@ def test_representative_does_not_reach_outside_the_package_for_its_deck() -> Non
     )
     assert 'parents[1]' not in body or '"examples"' not in body
     assert '"data" / "representative.namelist"' not in body
+
+
+def test_the_cli_front_door_passes_quick_through(monkeypatch, tmp_path) -> None:
+    """``dkx <wout> --quick`` is what the wheel-install CI job runs.
+
+    The representative front door is handled before argparse sees anything, so
+    ``--quick`` is matched against the raw argv by hand.  That also means the
+    flag has to survive the positional scan that finds the equilibrium: an
+    option token must not be mistaken for the file, and the file must still be
+    found when the flag comes first.
+    """
+    from dkx import cli, representative
+
+    calls: list[dict] = []
+
+    def fake_run(path, **kwargs):
+        calls.append({"path": Path(path), **kwargs})
+        out = tmp_path / "panels.png"
+        out.write_bytes(b"")
+        return out
+
+    monkeypatch.setattr(representative, "run_representative", fake_run)
+    wout = tmp_path / "wout_stub.nc"
+    wout.write_bytes(b"not really netCDF")
+
+    for argv in ([str(wout), "--quick"], ["--quick", str(wout)]):
+        calls.clear()
+        assert cli.main(list(argv)) == 0, argv
+        assert len(calls) == 1, argv
+        assert calls[0]["path"] == wout, argv
+        assert calls[0]["quick"] is True, argv
+        assert calls[0]["full"] is False, argv
+
+    calls.clear()
+    assert cli.main([str(wout)]) == 0
+    assert calls[0]["quick"] is False, "quick must not be the default"
