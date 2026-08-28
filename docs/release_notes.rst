@@ -4,6 +4,17 @@ Release notes
 Unreleased
 ----------
 
+- Compatible single-process RHSMode=1 ``Er`` scans now build geometry and the
+  kinetic operator once, solve all electric-field points through the bounded
+  batched kernel, and still write the established per-point
+  ``input.namelist``, ``sfincsOutput.h5``, and solver-trace layout. On the
+  three-point scheme-11 regression deck, matched empty-cache CLI runs fell
+  from 7.54 s and 996 MB peak RSS to 4.09 s and 633 MB. A second process using
+  each populated cache fell from 3.05 s and 908 MB to 1.82 s and 539 MB.
+  Particle flux, heat flux, parallel flow/current, and NTV match the former
+  scalar workflow within ``2e-12`` relative tolerance. Process-parallel,
+  transport-matrix, Phi1, non-``Er``, and explicit host-direct scans retain the
+  scalar path.
 - Release artifacts now share one literal version in ``dkx/_version.py``.
   Setuptools reads that value dynamically and the tag check reads the same file
   without importing JAX during a build.

@@ -131,6 +131,10 @@ class BatchedSolveResult:
         radial_current: ``J_r = sum_a Z_a Gamma_a`` per element, shape
             ``(batch,)`` — populated by :func:`batched_er_scan`, ``None``
             otherwise.
+        residual_norms: true ``||A x - b||`` residual norm per batch element.
+            Keeping this diagnostic makes batched production workflows able to
+            enforce the same convergence contract as a sequence of scalar
+            :func:`dkx.solve.solve` calls.
     """
 
     states: jnp.ndarray
@@ -139,14 +143,15 @@ class BatchedSolveResult:
     n_chunks: int
     method: str
     radial_current: jnp.ndarray | None = None
+    residual_norms: jnp.ndarray | None = None
 
 
-# ``states``/``moments``/``radial_current`` are the traced arrays; the chunking
-# metadata and method string are static aux so the whole result is a valid
-# ``jax.jit`` return value.
+# The state, moments, radial current, and residual norms are traced arrays. The
+# chunking metadata and method string are static aux so the whole result is a
+# valid ``jax.jit`` return value.
 jax.tree_util.register_dataclass(
     BatchedSolveResult,
-    data_fields=["states", "moments", "radial_current"],
+    data_fields=["states", "moments", "radial_current", "residual_norms"],
     meta_fields=["chunk_size", "n_chunks", "method"],
 )
 
@@ -422,13 +427,16 @@ def batched_solve(
         )
         state = jnp.reshape(result.x, (-1,))
         moments = profile_moments_from_operator(op_i, state, ntv_kernel_tz=ntv_kernel_tz)
-        return state, dict(moments)
+        residual_norm = jnp.max(jnp.asarray(result.residual_norms, dtype=jnp.float64))
+        return state, dict(moments), residual_norm
 
     if devs is None:
         chunk = auto_chunk_size(
             op, batch, max_batch=max_batch, memory_budget_gb=memory_budget_gb
         )
-        states, moments = jax.lax.map(solve_one, leaves_map, batch_size=chunk)
+        states, moments, residual_norms = jax.lax.map(
+            solve_one, leaves_map, batch_size=chunk
+        )
         n_chunks = -(-batch // chunk)
     else:
         bounds = _shard_bounds(batch, len(devs))
@@ -452,11 +460,12 @@ def batched_solve(
                 jax.lax.map(solve_one, shard_leaves, batch_size=min(chunk, hi - lo))
             )
         gathered = jax.device_get(shards)
-        states = jnp.concatenate([s for s, _ in gathered], axis=0)
+        states = jnp.concatenate([s for s, _, _ in gathered], axis=0)
         moments = {
-            key: jnp.concatenate([m[key] for _, m in gathered], axis=0)
+            key: jnp.concatenate([m[key] for _, m, _ in gathered], axis=0)
             for key in gathered[0][1]
         }
+        residual_norms = jnp.concatenate([r for _, _, r in gathered], axis=0)
         n_chunks = -(-shard_max // chunk)
     return BatchedSolveResult(
         states=states,
@@ -464,6 +473,7 @@ def batched_solve(
         chunk_size=int(chunk),
         n_chunks=int(n_chunks),
         method=str(solve_method),
+        residual_norms=residual_norms,
     )
 
 
@@ -481,6 +491,7 @@ def batched_er_scan(
     differentiable: bool = False,
     max_batch: int | None = None,
     memory_budget_gb: float | None = None,
+    ntv_kernel_tz: Any | None = None,
     devices: Sequence[jax.Device] | str | None = None,
 ) -> BatchedSolveResult:
     """Batched radial current / moments over a vector of ``E_r`` on one geometry.
@@ -501,6 +512,9 @@ def batched_er_scan(
         differentiable: differentiable implicit solves (for ``jax.grad``).
         max_batch, memory_budget_gb: memory-budgeting overrides
             (:func:`auto_chunk_size`).
+        ntv_kernel_tz: optional NTV kernel forwarded to each profile-moment
+            evaluation. Production output workflows use this to retain the
+            same NTV diagnostics as scalar profile runs.
         devices: multi-device split of the scan (see :func:`batched_solve`).
 
     Returns:
@@ -518,6 +532,7 @@ def batched_er_scan(
         differentiable=differentiable,
         max_batch=max_batch,
         memory_budget_gb=memory_budget_gb,
+        ntv_kernel_tz=ntv_kernel_tz,
         devices=devices,
     )
     z_s = jnp.asarray(problem.z_s, dtype=jnp.float64)

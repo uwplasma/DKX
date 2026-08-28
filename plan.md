@@ -1705,7 +1705,7 @@ Acceptance criteria:
 
 ### Phase P2: introduce native `Case`, `Result`, and CLI contracts
 
-Status: in progress (`P2.1`, `P2.2`, and the deterministic-ID/bounded-count portion of `P2.3` are merged; the first `P2.4`/`P2.7` native profile slice is under review)
+Status: in progress (`P2.1`, `P2.2`, the deterministic-ID/bounded-count portion of `P2.3`, and the first analytic `P2.4`/`P2.7` native profile slice are merged)
 
 Work items:
 
@@ -2143,12 +2143,16 @@ Use one row per merged pull request or consequential failed experiment.
 | 2026-08-28 | P2.1-P2.3 start | current native-case PR | Added an immutable typed schema-v1 `Case`, TOML/JSON readers, precise path-aware validation, deterministic semantic IDs, complete commented/schema output, and bounded Cartesian/zipped scan preflight without changing numerical kernels. Warm parse/validation measured 0.431 ms per representative case; median cold import measured 0.325 s on merged main and 0.335 s on this branch. Installed wheel/sdist smoke passed at 542212 B/883602 B. | Review/merge the focused contract PR, then normalize and execute one flagship profile through native `Case` and `Result`. |
 | 2026-08-28 | P2.1-P2.3 | PR #72, `8bba542` | Merged the immutable native `Case`, schema-v1 TOML/JSON contract, deterministic IDs, bounded scan preflight, and `validate`/`schema` CLI after all 21 required checks passed. | Implement a genuine native normalization/execution path and `Result`; do not serialize `Case` into a compatibility deck. |
 | 2026-08-28 | P2.4/P2.7 analytic profile start | current native-result PR | Added direct `Case -> KineticOperator -> solve -> Result` execution for an analytic prescribed-Er profile, with no namelist serialization/parsing. `Result` owns read-only named arrays, native SI observables, certificates, plotting, and schema-v1 NetCDF save/load. Regression tests forbid both namelist conversion calls and match particle flux, heat flux, and parallel current to the accepted kernel path at 2e-12 relative tolerance. The checked three-surface example measured 7.210 s cold, 3.683 s warm in one cache-disabled process, residual 7.51e-15, 1.053 GB process peak after both runs, 0.024 s output time, and a 47285-byte NetCDF file on the M2 development host. Focused architecture/API tests and warning-clean 47-page docs pass. Isolated artifacts are 551699 B (wheel) and 893802 B (sdist); an out-of-tree wheel run produced finite nonzero flux at residual 6.48e-15 and round-tripped a 47202-byte NetCDF file. | Review this bounded route. Next add native VMEC/Boozer normalization and surface-state reuse; the current native route explicitly rejects ambipolar, scans, full tangential drifts, Phi1, convergence refinement, and explicit sharding/reuse rather than downgrading them. |
+| 2026-08-28 | P2.4/P2.7 | PR #73, `86f534b` | Merged direct analytic profile `Case -> Result` execution and schema-v1 NetCDF after all 21 CI/docs checks passed. The route never serializes or parses a SFINCS namelist, matches the accepted profile kernel at 2e-12 relative tolerance, and keeps unsupported physics explicit. | Extend the native boundary to VMEC/Boozer geometry and shape-stable reuse; separately remove the reported compatibility scan-5 startup delay under P5.10. |
+| 2026-08-28 | P5.2/P5.10 start | current scan-startup PR | Routed compatible single-process RHSMode=1 `Er` compatibility scans through one shared geometry/operator and the bounded batched solve while preserving every per-point input, SFINCS HDF5 output, and solver trace. Matched empty-cache three-point scheme-11 CLI runs on merged main and this branch measured 7.54 s/996311040 B peak RSS versus 4.09 s/632520704 B; second-process populated-cache runs measured 3.05 s/907608064 B versus 1.82 s/538705920 B. Particle flux, heat flux, parallel flow/current, and NTV match scalar outputs at 2e-12 relative tolerance; true residuals are now retained by `BatchedSolveResult`. Process-parallel, transport-matrix, Phi1, non-`Er`, and explicit host-direct cases remain on the scalar path. The isolated wheel (554506 B) and sdist (896960 B) pass size gates; a wheel plus locally cloned SOLVAX installed outside the checkout produced three finite nonzero outputs. | Run hosted CI and merge the focused PR before addressing missing-root plotting status and user-facing solver terminology. |
 
 ## 22. Current next action
 
-Complete the first P2 execution slice: review and merge the direct analytic
-profile ``Case`` to immutable ``Result`` route and versioned NetCDF contract.
-Then extend the same normalization boundary to VMEC/Boozer geometry and reuse
-shape-stable compiled/factored state across surfaces before adding ambipolar
-roots and resumable scans. Keep unsupported physics explicit; never convert a
+Complete P5.10's focused compatibility scan-startup slice: retain scientific
+and file-format parity while sharing geometry, operator construction, and
+compilation across a single-process electric-field scan. Then address explicit
+missing-root status in representative plots and replace internal solver-tier
+language in user-facing output. In parallel with those compatibility fixes,
+extend the native normalization boundary to VMEC/Boozer geometry and
+shape-stable surface reuse. Keep unsupported physics explicit; never convert a
 native ``Case`` back to a SFINCS namelist.
