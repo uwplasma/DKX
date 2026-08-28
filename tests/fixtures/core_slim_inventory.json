@@ -102,7 +102,6 @@
           "LICENSE",
           "README.md",
           "plan.md",
-          "plan_final.md",
           "pyproject.toml"
         ],
         "decision": "keep",
@@ -111,8 +110,21 @@
           "EVIDENCE"
         ],
         "proof_owner": "tests/test_source_tree_consolidation.py",
-        "line_target": "keep concise; plan_final.md <= 420 lines",
-        "next_action": "Scrub public prose after source and evidence decisions settle."
+        "line_target": "keep one authoritative plan.md and concise top-level metadata",
+        "next_action": "Keep plan.md authoritative and summarize its execution ledger at releases."
+      },
+      {
+        "name": "planning_validation_registry",
+        "prefix": "validation/",
+        "decision": "keep",
+        "owner_tags": [
+          "EVIDENCE",
+          "PERF",
+          "API"
+        ],
+        "proof_owner": "tests/test_planning_evidence.py",
+        "line_target": "machine-readable capability, baseline, hardware, and benchmark records only",
+        "next_action": "Replace skeleton gaps with checksum-pinned release evidence without adding large artifacts."
       },
       {
         "name": "github_ci_workflows",
