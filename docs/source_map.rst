@@ -94,6 +94,10 @@ Input/output and orchestration:
   Fortran-cited defaults and validation, parsing, alias handling.
 - ``config.py``: immutable native ``Case`` with versioned TOML/JSON readers,
   deterministic semantic IDs, declarative scan bounds, and schema generation.
+- ``execution.py``: native physical normalization and ``Case`` execution;
+  consumes typed fields directly and never serializes a SFINCS namelist.
+- ``result.py``: immutable named-array ``Result``, reviewer certificate, and
+  the versioned native NetCDF reader/writer.
 - ``run.py``: end-to-end RHSMode 1/2/3 drivers and ``run_from_namelist``.
 - ``writer.py``: the canonical ``sfincsOutput`` writer (all formats,
   geometry-only output, export_f, solver-trace sidecars).
