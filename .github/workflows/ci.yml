@@ -85,7 +85,10 @@ jobs:
           path: coverage-parts
       - name: Combine coverage
         run: |
-          python -m coverage combine $(find coverage-parts -type f -name '.coverage.*' | sort)
+          mapfile -d '' coverage_files < <(
+            find coverage-parts -type f -name '.coverage.*' -print0 | sort -z
+          )
+          python -m coverage combine "${coverage_files[@]}"
           python -m coverage report --fail-under=80
           python -m coverage xml
       - name: Upload coverage
@@ -231,6 +234,24 @@ jobs:
             tests/test_generate_fortran_suite_benchmark_summary.py \
             tests/test_finite_beta_vmec_example.py
 
+  workflow-lint:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run the pinned actionlint binary
+        env:
+          ACTIONLINT_VERSION: "1.7.12"
+          ACTIONLINT_SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
+        run: |
+          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl --fail --location --silent --show-error \
+            --output "${RUNNER_TEMP}/${archive}" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${archive}"
+          echo "${ACTIONLINT_SHA256}  ${RUNNER_TEMP}/${archive}" | sha256sum --check
+          tar -xzf "${RUNNER_TEMP}/${archive}" -C "${RUNNER_TEMP}" actionlint
+          "${RUNNER_TEMP}/actionlint" .github/workflows/*.yml
+
   wheel-install:
     # The one job that does not run from a source checkout.
     #
@@ -271,11 +292,12 @@ jobs:
           # all, and reports only "this run likely failed because of a workflow
           # file issue".
           echo "DKX_COMPILATION_CACHE_DIR=${RUNNER_TEMP}/jax_cache" >> "$GITHUB_ENV"
-      - name: Build the wheel
+      - name: Build and check the wheel and source distribution
         run: |
-          python -m pip install --upgrade pip build
-          python -m build --wheel --outdir dist
-      - name: Every declared package-data file is in the artifact
+          python -m pip install --upgrade pip build twine
+          python -m build --outdir dist
+          python -m twine check dist/*
+      - name: Every declared package-data file is in both artifacts
         run: |
           # tests/test_wheel_ships_every_package_file.py is the fast gate: it
           # fails when a file under dkx/ is not declared. This is the slow half
@@ -283,14 +305,22 @@ jobs:
           # made it through setuptools into the zip.
           python - <<'PY'
           import glob
+          import tarfile
           import tomllib
           import zipfile
           from pathlib import Path
 
           wheels = sorted(Path("dist").glob("*.whl"))
-          if len(wheels) != 1:
-              raise SystemExit(f"expected exactly one wheel, found {wheels}")
-          shipped = set(zipfile.ZipFile(wheels[0]).namelist())
+          sdists = sorted(Path("dist").glob("*.tar.gz"))
+          if len(wheels) != 1 or len(sdists) != 1:
+              raise SystemExit(f"expected one wheel and one sdist; found {wheels}, {sdists}")
+          wheel_files = set(zipfile.ZipFile(wheels[0]).namelist())
+          with tarfile.open(sdists[0]) as archive:
+              sdist_files = {
+                  name.split("/", 1)[1]
+                  for name in archive.getnames()
+                  if "/" in name
+              }
 
           config = tomllib.loads(Path("pyproject.toml").read_text())
           package_data = config["tool"]["setuptools"]["package-data"]
@@ -303,10 +333,13 @@ jobs:
           if not expected:
               raise SystemExit("package-data matched no files in the checkout")
 
-          missing = sorted(name for name in expected if name not in shipped)
-          if missing:
-              raise SystemExit(f"declared as package-data but not in {wheels[0].name}: {missing}")
-          print(f"{wheels[0].name} carries all {len(expected)} declared data files")
+          for artifact, shipped in ((wheels[0], wheel_files), (sdists[0], sdist_files)):
+              missing = sorted(name for name in expected if name not in shipped)
+              if missing:
+                  raise SystemExit(
+                      f"declared as package-data but not in {artifact.name}: {missing}"
+                  )
+              print(f"{artifact.name} carries all {len(expected)} declared data files")
           PY
       - name: Install the wheel into a clean virtualenv
         run: |
@@ -381,6 +414,37 @@ jobs:
               raise SystemExit(f"no ambipolar root at one of the surfaces: {er}")
           print(f"D11 {d11.min():+.3e} .. {d11.max():+.3e}; ambipolar Er {er} kV/m")
           PY
+      - name: Install the source distribution outside the checkout
+        run: |
+          python -m venv "${RUNNER_TEMP}/sdistenv"
+          "${RUNNER_TEMP}/sdistenv/bin/python" -m pip install --upgrade pip
+          "${RUNNER_TEMP}/sdistenv/bin/python" -m pip install dist/*.tar.gz
+      - name: Run a finite Python solve from the installed source distribution
+        working-directory: ${{ runner.temp }}/representative
+        run: |
+          "${RUNNER_TEMP}/sdistenv/bin/python" \
+            "${GITHUB_WORKSPACE}/tools/installed_scientific_smoke.py" \
+            --workspace "${GITHUB_WORKSPACE}"
+      - name: Measure every DKX-owned release artifact
+        run: |
+          git clone --quiet \
+            "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" \
+            "${RUNNER_TEMP}/full-clone"
+          git -C "${RUNNER_TEMP}/full-clone" fetch --quiet origin "${GITHUB_REF}"
+          git -C "${RUNNER_TEMP}/full-clone" checkout --quiet --detach "${GITHUB_SHA}"
+          "${RUNNER_TEMP}/wheelenv/bin/python" tools/release_contracts.py \
+            --policy validation/package_size_contract.toml \
+            --repository "${GITHUB_WORKSPACE}" \
+            --dist-dir dist \
+            --installed \
+            --full-clone "${RUNNER_TEMP}/full-clone" \
+            --json-out "${RUNNER_TEMP}/package-sizes.json"
+      - name: Upload the size evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: package-sizes
+          path: ${{ runner.temp }}/package-sizes.json
+          if-no-files-found: error
 
   # NOTE: the former `optional-ecosystem-gates` job was removed. Its only
   # sfincs-specific probe depended on the deleted structured-CSR internals
@@ -397,6 +461,7 @@ jobs:
       - examples-smoke
       - external-data-smoke
       - python-floor
+      - workflow-lint
       - wheel-install
     if: always()
     steps:

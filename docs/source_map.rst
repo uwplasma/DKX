@@ -99,6 +99,7 @@ Input/output and orchestration:
 - ``io.py``: output-file reading plus generic dict serializers.
 - ``solver_trace.py``: the versioned solver-trace schema.
 - ``api.py``, ``cli.py``, ``__main__.py``: the thin public surface.
+- ``_version.py``: the single package and release version source.
 - ``ambipolar.py``: scanplot-compatible ambipolar post-processing.
 - ``sensitivity.py``: JVP/VJP, adjoint, and implicit differentiation helpers.
 - ``compare.py``: HDF5 comparison and parity gates.

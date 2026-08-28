@@ -20,6 +20,25 @@ The validation stack is organized from local to global:
 This layered approach reduces the risk of shipping a numerically correct but operationally
 fragile code, or a fast code that quietly changed the physics.
 
+Installed-artifact gates
+------------------------
+
+Source-tree tests cannot prove that a published package contains its runtime
+data. Required CI therefore builds both release archives and installs them into
+separate clean environments. The wheel runs the representative ``dkx wout``
+workflow; the source distribution runs a finite public-Python kinetic solve.
+Both execute from a directory outside the checkout, and both assert that
+``dkx`` resolves from ``site-packages``. The tagged-release workflow then
+downloads the actual published wheel from PyPI and repeats CLI, version, import,
+and finite-result checks.
+
+``tools/release_contracts.py`` writes machine-readable measurements governed by
+``validation/package_size_contract.toml``. Wheel, source distribution,
+installed DKX-owned files, tracked files, and media are enforced below 20 MiB.
+The full-clone measurement is reported but remains non-enforcing while the Git
+object store itself exceeds 20 MiB; enabling it requires a coordinated history
+rewrite, not an ordinary pull request.
+
 What is compared
 ----------------
 
