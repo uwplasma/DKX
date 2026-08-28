@@ -9,6 +9,8 @@ on:
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release-metadata.outputs.version }}
     permissions:
       contents: read
       id-token: write
@@ -18,6 +20,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Validate release metadata
+        id: release-metadata
         run: |
           python - <<'PY'
           import ast
@@ -40,6 +43,8 @@ jobs:
           ref_name = os.environ.get("GITHUB_REF_NAME", "")
           if ref_type == "tag" and ref_name != f"v{version}":
               raise SystemExit(f"Tag {ref_name!r} does not match package version v{version}")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as stream:
+              print(f"version={version}", file=stream)
           print(f"validated package version {version}")
           PY
       - name: Build distribution
@@ -52,3 +57,107 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           skip-existing: true
+
+  pypi-smoke:
+    name: Test the published PyPI wheel
+    needs: build-and-publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAX_ENABLE_X64: "True"
+      DKX_OFFLINE: "1"
+      VERSION: ${{ needs.build-and-publish.outputs.version }}
+    steps:
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Download the artifact back from PyPI
+        working-directory: ${{ runner.temp }}
+        run: |
+          python -m pip install --upgrade pip
+          for attempt in {1..12}; do
+            if python -m pip download \
+              --no-cache-dir \
+              --no-deps \
+              --only-binary=:all: \
+              --index-url https://pypi.org/simple \
+              "dkx==${VERSION}"; then
+              break
+            fi
+            if [ "${attempt}" -eq 12 ]; then
+              echo "dkx ${VERSION} did not become visible on PyPI" >&2
+              exit 1
+            fi
+            sleep 10
+          done
+          test "$(find . -maxdepth 1 -name 'dkx-*.whl' | wc -l)" -eq 1
+      - name: Install into a clean environment
+        working-directory: ${{ runner.temp }}
+        run: |
+          python -m venv pypi-env
+          pypi-env/bin/python -m pip install --upgrade pip
+          pypi-env/bin/python -m pip install --no-cache-dir dkx-*.whl
+      - name: Exercise the installed CLI and a finite kinetic solve
+        working-directory: ${{ runner.temp }}
+        run: |
+          pypi-env/bin/dkx --help >/dev/null
+          pypi-env/bin/python - <<'PY'
+          from importlib import metadata
+          from pathlib import Path
+          import os
+
+          import numpy as np
+          import dkx
+
+          expected = os.environ["VERSION"]
+          installed = metadata.version("dkx")
+          if installed != expected or dkx.__version__ != expected:
+              raise SystemExit(
+                  f"published version mismatch: expected={expected}, "
+                  f"metadata={installed}, import={dkx.__version__}"
+              )
+          package = Path(dkx.__file__).resolve().parent
+          if "site-packages" not in package.parts:
+              raise SystemExit(f"dkx resolved outside site-packages: {package}")
+
+          result = dkx.run(
+              geometryScheme=1,
+              inputRadialCoordinate=3,
+              rN_wish=0.3,
+              B0OverBBar=1.0,
+              GHat=1.0,
+              IHat=0.0,
+              iota=1.31,
+              epsilon_t=0.1,
+              epsilon_h=0.0,
+              psiAHat=0.045,
+              aHat=0.1,
+              Zs=[1.0],
+              mHats=[1.0],
+              nHats=[1.0],
+              THats=[0.5],
+              dNHatdrHats=[-6.0],
+              dTHatdrHats=[-3.0],
+              Ntheta=9,
+              Nzeta=1,
+              Nxi=6,
+              NL=3,
+              Nx=4,
+              Delta=4.5694e-3,
+              alpha=1.0,
+              nu_n=8.4774e-3,
+              Er=0.0,
+              collisionOperator=1,
+          )
+          particle_flux = float(result.moments["particleFlux_vm_psiHat"][0])
+          bootstrap = float(result.moments["FSABjHat"])
+          if not np.isfinite(particle_flux) or not np.isfinite(bootstrap):
+              raise SystemExit(
+                  f"published kinetic smoke is non-finite: flux={particle_flux}, "
+                  f"FSABjHat={bootstrap}"
+              )
+          print(
+              f"dkx {installed} from {package}; particle flux={particle_flux:+.6e}; "
+              f"FSABjHat={bootstrap:+.6e}"
+          )
+          PY
