@@ -9,6 +9,7 @@ each folder *requires*, not how hard it is — that is objective, where
 | [`1_basics/`](1_basics) | nothing but `dkx` | define a case in Python, solve, read moments, plot. **Start here.** |
 | [`2_equilibria/`](2_equilibria) | real geometry | helical ripple and the 1/ν regime; VMEX → `wout` → DKX in one script |
 | [`3_gradients/`](3_gradients) | `jax.grad` | exact derivatives through the solve, checked against finite differences |
+| [`native/`](native) | native schema v1 | a complete TOML ``Case`` accepted by ``dkx validate``; native numerical dispatch follows in the next vertical slice |
 
 Each script is self-contained top to bottom: no `main()`, no argument parsing.
 The knobs are constants above the `end of parameters` line, so running one in

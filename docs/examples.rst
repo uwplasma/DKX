@@ -82,6 +82,7 @@ Example tree
 
 The repository includes a structured `examples/` tree:
 
+- `examples/native/`: versioned native TOML/JSON ``Case`` validation and schema examples
 - `examples/tutorials/`: notebook-led learning path and a fast output/plot script
 - `examples/getting_started/`: basic API usage (no external reference code required)
 - `tools/parity/`: focused validation scripts against frozen reference fixtures

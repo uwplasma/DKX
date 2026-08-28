@@ -22,6 +22,9 @@ dependencies = [
   "h5py",
   "netCDF4",
   "matplotlib",
+  # Python 3.10 has no stdlib tomllib; native Case.from_file() needs the
+  # compatibility reader at runtime, not only while running tests.
+  "tomli>=1.1.0; python_version < '3.11'",
   # solvax (PyPI) owns the structured linear-algebra solver tiers (block-Thomas
   # elimination, recycled GCROT, implicit differentiation) that every canonical
   # solve uses; it is a core dependency, not optional.  0.13.0 is the floor:
@@ -41,7 +44,6 @@ dev = [
   "pytest-cov",
   "pytest-xdist",
   "pytest-split",
-  "tomli>=1.1.0; python_version < '3.11'",
   # Read back the multi-page PDF that dkx.plot writes, so the page count is a
   # measurement rather than a claim (tests/test_plot_pdf_paging_*).
   "pypdf",
