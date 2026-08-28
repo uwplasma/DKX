@@ -6,6 +6,8 @@ retaining release-gated comparisons against SFINCS Fortran v3 for trust building
 
 from __future__ import annotations
 
+from ._version import __version__
+
 # Enable host-device parallelism and a default JAX compilation cache for repeated
 # CLI invocations unless the user explicitly disables it. This improves cold-start
 # performance without requiring environment configuration.
@@ -392,5 +394,3 @@ __all__ = [
     "run_transport_matrix",
     "write_output",
 ]
-
-__version__ = "2.3.1"

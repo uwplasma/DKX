@@ -53,6 +53,7 @@ errors raised by `inputs.load_sfincs_input`. There is no legacy fallback.
 | Module | Role |
 | --- | --- |
 | `__init__.py` | Public package exports, JAX precision/cache setup. |
+| `_version.py` | Single source of truth for the package and release version. |
 | `ambipolar.py` | Scanplot-compatible ambipolar post-processing (`solve_ambipolar_from_scan_dir`, `radial_current_from_output`) over precomputed scan directories; in-process ambipolar solves live in `er.py`. |
 | `batch.py` | First-class batched-solve API over the two canonical batch axes — an `E_r` scan on one geometry (`batched_er_scan`) and a batch of flux surfaces sharing discretization (`batched_surface_scan`) — via `jax.vmap` over the varying `KineticOperator` leaves (`batched_solve`). Reuses `solve.py`/the operator read-only, stays differentiable and jit-safe, and auto-chunks with `jax.lax.map` to a memory-budgeted batch size from the tier-1 footprint model (`solve.tier1_peak_memory_bytes`) and the device/host memory. |
 | `sensitivity.py` | JVP/VJP, adjoint, and implicit differentiation helpers. |

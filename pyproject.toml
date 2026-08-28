@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dkx"
-version = "2.3.1"
+dynamic = ["version"]
 description = "Neoclassical transport solver with CPU/GPU and differentiable JAX workflows"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -41,6 +41,7 @@ dev = [
   "pytest-cov",
   "pytest-xdist",
   "pytest-split",
+  "tomli>=1.1.0; python_version < '3.11'",
   # Read back the multi-page PDF that dkx.plot writes, so the page count is a
   # measurement rather than a claim (tests/test_plot_pdf_paging_*).
   "pypdf",
@@ -66,10 +67,12 @@ include = ["dkx*"]
 [tool.setuptools.package-data]
 dkx = ["validation/*.json"]
 
+[tool.setuptools.dynamic]
+version = {attr = "dkx._version.__version__"}
+
 [tool.pytest.ini_options]
 addopts = ["--import-mode=prepend"]
 testpaths = ["tests"]
 markers = [
   "slow: heavy end-to-end example/optimization tests; excluded from the fast coverage shards via -m 'not slow' (still run in the full local suite).",
 ]
-

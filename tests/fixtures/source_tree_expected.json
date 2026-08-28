@@ -2,6 +2,7 @@
   "allowed_root_modules": [
     "__init__.py",
     "__main__.py",
+    "_version.py",
     "ambipolar.py",
     "api.py",
     "batch.py",
@@ -49,6 +50,7 @@
   "target_root_modules": [
     "__init__.py",
     "__main__.py",
+    "_version.py",
     "ambipolar.py",
     "api.py",
     "batch.py",

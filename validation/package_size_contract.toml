@@ -1,0 +1,27 @@
+schema_version = 1
+limit_bytes = 20971520
+
+[measurements.tracked_worktree]
+enforced = true
+description = "Tracked working-tree files; diagnostic component of a full clone."
+
+[measurements.tracked_media]
+enforced = true
+description = "Tracked raster, vector, and PDF media across the repository."
+
+[measurements.wheel]
+enforced = true
+description = "The built DKX wheel."
+
+[measurements.sdist]
+enforced = true
+description = "The built DKX source distribution."
+
+[measurements.installed]
+enforced = true
+description = "DKX package and dist-info files after a clean wheel install, including bytecode caches."
+
+[measurements.full_clone]
+enforced = false
+description = "Fresh full clone including working tree and Git object store."
+blocker = "D012 remains accepted, but the current Git object store alone exceeds 20 MiB. Enabling this gate requires an explicitly approved remote history rewrite."
