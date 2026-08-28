@@ -9,7 +9,11 @@ import json
 from pathlib import Path
 import subprocess
 import sys
-import tomllib
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - exercised by the Python 3.10 gate
+    import tomli as tomllib
 
 
 MIB = 1024 * 1024

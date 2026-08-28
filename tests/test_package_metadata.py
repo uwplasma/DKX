@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
-import tomllib
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - exercised by the Python 3.10 gate
+    import tomli as tomllib
 
 import dkx
 
