@@ -80,6 +80,38 @@ Implemented literature reproductions
 
 These lanes already have scripts and figure artifacts in the repository.
 
+Matched full-kinetic SFINCS profile
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The first independent full-Fokker--Planck profile rung uses the exact checked
+``validation/inputs/tokamak_full_fp_{high,ultra}.input.namelist`` decks in both
+DKX and pinned SFINCS v3. The case is an analytic axisymmetric tokamak surface
+with physical density and temperature gradients, full trajectories, zero
+electric field, and the recommended automatic full-FP constraint.
+
+The machine-readable evidence is
+``validation/full_kinetic_sfincs_v1.json``. Re-audit its decks, compact outputs,
+convergence arithmetic, residual gates, and claim boundary with:
+
+.. code-block:: console
+
+   python tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py
+
+The accepted resolution rises from 6,887 to 12,509 unknowns. Bootstrap/parallel
+flow moves ``0.042%`` and heat flux moves ``0.280%``. At the finest rung, the
+largest scaled DKX/SFINCS difference across nonzero scalar and speed-resolved
+observables is ``2.69e-10`` and every completed true residual is below
+``1.82e-11``. Particle flux and NTV vanish by axisymmetric cancellation at the
+checked accuracy, so their gate is the recorded ``1e-12`` absolute scale rather
+than a meaningless relative error.
+
+The reference build is the pinned SFINCS commit with PETSc 3.23.6 and MUMPS
+5.8.1; both MUMPS and SuperLU_DIST are detected at runtime and MUMPS is selected.
+No scientific SFINCS source edits or link stubs are used. Timing and memory are
+retained for reproduction, not for a cross-code performance claim. Multispecies
+and stellarator full-FP physics, finite electric field, Phi1, ambipolar roots,
+and experimental agreement remain separate gates.
+
 Publication validation dashboard
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
