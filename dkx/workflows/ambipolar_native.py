@@ -1009,7 +1009,9 @@ def solve_native_ambipolar_surface(
             raise RuntimeError(
                 "selected-tail diagnostic replay did not satisfy the true-residual gate"
             )
-        replay_tolerance = max(1.0e-12, float(solve_tolerance))
+        # Two independently rounded solves may each use the full requested
+        # tolerance, so their direct comparison has a two-tolerance envelope.
+        replay_tolerance = max(1.0e-12, 2.0 * float(solve_tolerance))
         for actual, expected, label in (
             (diagnostic_particle[0], selected.particle_flux_m2_s, "particle flux"),
             (diagnostic_heat[0], selected.heat_flux_w_m2, "heat flux"),
