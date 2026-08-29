@@ -4,6 +4,16 @@ Release notes
 Unreleased
 ----------
 
+- Added a matched zero-field W7-X SC1 full-kinetic DKX/SFINCS v3 validation
+  rung. Exact high/ultra decks use checksummed Boozer geometry, physical
+  density and temperature gradients, full linearized Fokker--Planck
+  collisions, full trajectories, automatic constraint 1, and a ``1e-12``
+  solver tolerance. The largest high-to-ultra movement is ``0.444%``; retained
+  nonzero scalar and speed-resolved outputs agree within ``1.37e-8``, and all
+  completed true residuals are below ``1.82e-12``. Momentum flux is retained as
+  an explicit near-zero absolute gate. Timing and memory are provenance, not a
+  cross-code performance claim, and this surface comparison is not an
+  ambipolar or experimental certificate.
 - Extended the matched full-kinetic DKX/SFINCS evidence to the pinned
   one-species tokamak case at normalized ``Er = -30``. The checked high/ultra
   rungs use full trajectories and a ``1e-13`` solver tolerance; retained

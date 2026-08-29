@@ -57,6 +57,13 @@ def _spectrum_error(left: list[float], right: list[float]) -> float:
 def _verify_external_results(
     payload: dict[str, Any], results_root: Path, errors: list[str]
 ) -> None:
+    source = payload.get("source", {})
+    equilibrium_checksum = source.get("sfincs_equilibrium_sha256")
+    equilibrium_bytes = source.get("sfincs_equilibrium_bytes")
+    equilibrium_name = None
+    if equilibrium_checksum is not None:
+        equilibrium_name = Path(str(source["sfincs_equilibrium"])).name
+
     for rung in payload["rungs"]:
         rung_id = str(rung["id"])
         paths = {
@@ -73,11 +80,35 @@ def _verify_external_results(
             paths["dkx.warm_output_sha256"] = (
                 results_root / rung_id / "dkx" / "sfincsOutput_warm.h5"
             )
+        for checksum_key, filename in (
+            ("cold_solver_trace_sha256", "dkx-cold-trace.json"),
+            ("warm_solver_trace_sha256", "dkx-warm-trace.json"),
+        ):
+            if checksum_key in rung["dkx"]:
+                paths[f"dkx.{checksum_key}"] = (
+                    results_root / rung_id / "dkx" / filename
+                )
         for key, path in paths.items():
             owner, checksum_key = key.split(".")
             expected = str(rung[owner][checksum_key])
             if not path.exists() or _sha256(path) != expected:
                 errors.append(f"{rung_id}: external {key} checksum mismatch")
+
+        if equilibrium_name is not None:
+            for code in ("sfincs", "dkx"):
+                equilibrium = results_root / rung_id / code / equilibrium_name
+                if not equilibrium.exists() or _sha256(equilibrium) != str(
+                    equilibrium_checksum
+                ):
+                    errors.append(
+                        f"{rung_id}: external {code} equilibrium checksum mismatch"
+                    )
+                elif equilibrium_bytes is not None and equilibrium.stat().st_size != int(
+                    equilibrium_bytes
+                ):
+                    errors.append(
+                        f"{rung_id}: external {code} equilibrium size mismatch"
+                    )
 
 
 def audit(artifact: Path, *, results_root: Path | None = None) -> dict[str, Any]:

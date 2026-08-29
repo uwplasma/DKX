@@ -90,6 +90,35 @@ High-to-ultra movement is at most `0.326%`, and every completed true residual
 is below `5.25e-11`. Axisymmetric intrinsic ambipolarity leaves the summed
 particle flux and NTV at cancellation scale, so they use a `2e-11` absolute
 gate. This is one prescribed finite field, not an Er scan or an ambipolar-root
-validation, and it does not yet validate stellarator full-FP physics.
+validation, and it does not itself validate stellarator full-FP physics.
+
+## Matched stellarator full-kinetic rung
+
+`full_kinetic_sfincs_stellarator_v1.json` closes the next separate gate on the
+checksummed W7-X SC1 Boozer surface at `rN = 0.5`. Both codes use exact
+relative-path decks, physical density and temperature gradients, full
+linearized Fokker--Planck collisions, full trajectories, zero electric field,
+automatic constraint 1, and a `1e-12` solver tolerance. Obtain
+`equilibria/w7x-sc1.bc` from the pinned SFINCS commit and verify the SHA-256
+recorded in the artifact before running either checked deck.
+
+Audit the compact and deck evidence with:
+
+```bash
+python tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py \
+  --artifact validation/full_kinetic_sfincs_stellarator_v1.json
+```
+
+When the external run tree is available, append
+`--results-root ../runtime/evidence/full-fp-stellarator/accepted` to verify the
+raw HDF5, cold/warm outputs, and logs. The largest high-to-ultra movement is
+`0.444%`; the maximum retained scalar/spectral DKX/SFINCS error is `1.37e-8`,
+set by an `8.31e-13` absolute NTV difference, and all completed true residuals
+are below `1.82e-12`. Momentum flux is a near-zero absolute gate. Timing and
+memory are reproduction metadata, not a cross-code performance claim.
+
+This is a one-species, zero-field surface-profile comparison. It is not an Er
+scan, ambipolar root/profile, Phi1, multispecies, experimental, or second
+stellarator-family full-FP validation.
 
 The controlling definitions and acceptance gates are in `../plan.md`.
