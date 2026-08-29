@@ -144,6 +144,7 @@ class Result:
             "ambipolar_selection",
             "ambipolar_refinement",
             "ambipolar_branch_continuation",
+            "ambipolar_solver_attempts",
             "normalization",
             "geometry_sha256",
             "dkx_version",
@@ -224,6 +225,14 @@ class Result:
             print(
                 f"ambipolar branches: {len(branch_ids)} identities; "
                 f"{len(event_kinds)} interior events"
+            )
+        attempt_evidence = self.metadata.get("ambipolar_solver_attempts")
+        if attempt_evidence:
+            print(
+                "ambipolar solver attempts: "
+                f"{attempt_evidence['attempt_count']} total; "
+                f"{attempt_evidence['automatic_true_residual_recovery_count']} "
+                "automatic true-residual recoveries"
             )
         print("arrays: " + ", ".join(sorted(self.arrays)))
         for warning in self.warnings:

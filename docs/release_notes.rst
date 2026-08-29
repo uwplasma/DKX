@@ -4,6 +4,15 @@ Release notes
 Unreleased
 ----------
 
+- Native ambipolar profiles now retain the executed structural route and every
+  linear-solver attempt for each physical electric-field evaluation. When the
+  automatic structured route misses the unchanged true-residual target, only
+  the failed field is retried with one bounded GMRES solve; both attempts,
+  residuals, acceptance flags, and reasons survive in Result/NetCDF. Explicit
+  solver choices remain fail-closed. A five-surface W7-X method case exercises
+  one targeted recovery while retaining all ion, unstable, and electron roots;
+  this is solver/workflow evidence, not an experimental or independent-code
+  ambipolar certificate.
 - Added a matched zero-field W7-X SC1 full-kinetic DKX/SFINCS v3 validation
   rung. Exact high/ultra decks use checksummed Boozer geometry, physical
   density and temperature gradients, full linearized Fokker--Planck

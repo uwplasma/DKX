@@ -461,6 +461,14 @@ def _ambipolar_result_arrays(surface_results, n_species: int):
 
     n_surface = len(surface_results)
     n_evaluation = max(len(result.evaluations) for result in surface_results)
+    n_solver_attempt = max(
+        1,
+        max(
+            len(evaluation.solver_attempts)
+            for result in surface_results
+            for evaluation in result.evaluations
+        ),
+    )
     n_root = max(1, max(len(result.roots) for result in surface_results))
     scan_field = np.full((n_surface, n_evaluation), np.nan)
     scan_current = np.full((n_surface, n_evaluation), np.nan)
@@ -468,6 +476,20 @@ def _ambipolar_result_arrays(surface_results, n_species: int):
     scan_stage = np.full((n_surface, n_evaluation), "", dtype=object)
     scan_reason = np.full((n_surface, n_evaluation), "", dtype=object)
     scan_level = np.full((n_surface, n_evaluation), -1, dtype=np.int64)
+    scan_attempt_count = np.zeros((n_surface, n_evaluation), dtype=np.int64)
+    scan_attempt_requested = np.full(
+        (n_surface, n_evaluation, n_solver_attempt), "", dtype=object
+    )
+    scan_attempt_executed = np.full(
+        (n_surface, n_evaluation, n_solver_attempt), "", dtype=object
+    )
+    scan_attempt_residual = np.full((n_surface, n_evaluation, n_solver_attempt), np.nan)
+    scan_attempt_accepted = np.zeros(
+        (n_surface, n_evaluation, n_solver_attempt), dtype=np.int8
+    )
+    scan_attempt_reason = np.full(
+        (n_surface, n_evaluation, n_solver_attempt), "", dtype=object
+    )
     scan_particle = np.full((n_surface, n_evaluation, n_species), np.nan)
     scan_heat = np.full((n_surface, n_evaluation, n_species), np.nan)
     scan_parallel = np.full((n_surface, n_evaluation), np.nan)
@@ -527,6 +549,25 @@ def _ambipolar_result_arrays(surface_results, n_species: int):
             scan_stage[surface_index, evaluation_index] = evaluation.stage
             scan_reason[surface_index, evaluation_index] = evaluation.reason
             scan_level[surface_index, evaluation_index] = evaluation.refinement_level
+            scan_attempt_count[surface_index, evaluation_index] = len(
+                evaluation.solver_attempts
+            )
+            for attempt_index, attempt in enumerate(evaluation.solver_attempts):
+                scan_attempt_requested[
+                    surface_index, evaluation_index, attempt_index
+                ] = attempt.requested_method
+                scan_attempt_executed[
+                    surface_index, evaluation_index, attempt_index
+                ] = attempt.executed_method
+                scan_attempt_residual[
+                    surface_index, evaluation_index, attempt_index
+                ] = attempt.residual_norm
+                scan_attempt_accepted[
+                    surface_index, evaluation_index, attempt_index
+                ] = attempt.accepted
+                scan_attempt_reason[surface_index, evaluation_index, attempt_index] = (
+                    attempt.reason
+                )
             scan_particle[surface_index, evaluation_index] = (
                 evaluation.particle_flux_m2_s
             )
@@ -579,6 +620,7 @@ def _ambipolar_result_arrays(surface_results, n_species: int):
                 event_root_index[surface_index, event_index, participant] = root_index
     arrays = {
         "evaluation": np.arange(n_evaluation, dtype=np.int64),
+        "solver_attempt": np.arange(n_solver_attempt, dtype=np.int64),
         "root": np.arange(n_root, dtype=np.int64),
         "refinement": np.arange(n_refinement, dtype=np.int64),
         "branch_event": np.arange(n_event, dtype=np.int64),
@@ -590,6 +632,12 @@ def _ambipolar_result_arrays(surface_results, n_species: int):
         "evaluation_stage": scan_stage,
         "evaluation_reason": scan_reason,
         "evaluation_refinement_level": scan_level,
+        "evaluation_solver_attempt_count": scan_attempt_count,
+        "evaluation_solver_attempt_requested_method": scan_attempt_requested,
+        "evaluation_solver_attempt_executed_method": scan_attempt_executed,
+        "evaluation_solver_attempt_residual": scan_attempt_residual,
+        "evaluation_solver_attempt_accepted": scan_attempt_accepted,
+        "evaluation_solver_attempt_reason": scan_attempt_reason,
         "evaluation_particle_flux_m2_s": scan_particle,
         "evaluation_heat_flux_W_m2": scan_heat,
         "evaluation_parallel_current_A_T_m2": scan_parallel,
@@ -630,6 +678,7 @@ def _ambipolar_result_arrays(surface_results, n_species: int):
     }
     dimensions = {
         "evaluation": ("evaluation",),
+        "solver_attempt": ("solver_attempt",),
         "root": ("root",),
         "refinement": ("refinement",),
         "branch_event": ("branch_event",),
@@ -641,6 +690,32 @@ def _ambipolar_result_arrays(surface_results, n_species: int):
         "evaluation_stage": ("surface", "evaluation"),
         "evaluation_reason": ("surface", "evaluation"),
         "evaluation_refinement_level": ("surface", "evaluation"),
+        "evaluation_solver_attempt_count": ("surface", "evaluation"),
+        "evaluation_solver_attempt_requested_method": (
+            "surface",
+            "evaluation",
+            "solver_attempt",
+        ),
+        "evaluation_solver_attempt_executed_method": (
+            "surface",
+            "evaluation",
+            "solver_attempt",
+        ),
+        "evaluation_solver_attempt_residual": (
+            "surface",
+            "evaluation",
+            "solver_attempt",
+        ),
+        "evaluation_solver_attempt_accepted": (
+            "surface",
+            "evaluation",
+            "solver_attempt",
+        ),
+        "evaluation_solver_attempt_reason": (
+            "surface",
+            "evaluation",
+            "solver_attempt",
+        ),
         "evaluation_particle_flux_m2_s": ("surface", "evaluation", "species"),
         "evaluation_heat_flux_W_m2": ("surface", "evaluation", "species"),
         "evaluation_parallel_current_A_T_m2": ("surface", "evaluation"),
@@ -934,6 +1009,24 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
         else float(np.max(residuals))
     )
     route_set = sorted(set(selected_routes))
+    ambipolar_solver_attempts = [
+        attempt
+        for surface_result in ambipolar_surfaces
+        for evaluation in surface_result.evaluations
+        for attempt in evaluation.solver_attempts
+    ]
+    executed_route_counts = {
+        route: sum(
+            attempt.executed_method == route for attempt in ambipolar_solver_attempts
+        )
+        for route in sorted(
+            {attempt.executed_method for attempt in ambipolar_solver_attempts}
+        )
+    }
+    recovery_count = sum(
+        attempt.reason == "automatic_true_residual_recovery"
+        for attempt in ambipolar_solver_attempts
+    )
     metadata = {
         "canonical_case": case.to_dict(),
         "converged": True,
@@ -980,6 +1073,16 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
                     result.refinement_status == "resolved"
                     for result in ambipolar_surfaces
                 ),
+            }
+            if ambipolar_surfaces
+            else None
+        ),
+        "ambipolar_solver_attempts": (
+            {
+                "attempt_count": len(ambipolar_solver_attempts),
+                "executed_route_counts": executed_route_counts,
+                "automatic_true_residual_recovery_count": recovery_count,
+                "policy": "retry only failed automatic-route evaluations with one bounded GMRES solve; explicit methods remain fail-closed",
             }
             if ambipolar_surfaces
             else None

@@ -268,6 +268,12 @@ def test_jit_batched_solve_compiles_and_matches(tmp_path: Path) -> None:
         batch_leaves
     )
 
+    from dkx.solve import _auto_route_structural
+
+    assert eager.method == "auto"
+    assert eager.executed_method == _auto_route_structural(prob.operator)
+    assert jitted.executed_method == eager.executed_method
+
     np.testing.assert_allclose(
         np.asarray(jitted.states), np.asarray(eager.states), rtol=0.0, atol=1e-12
     )
