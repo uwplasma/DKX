@@ -128,6 +128,16 @@ evaluated fields, radial currents, fluxes, residuals, brackets, slopes, and
 root classifications in ``Result``. A profile selects the root nearest zero on
 its first surface and then the root nearest the selected branch on the
 preceding surface.
+
+With ``solver.method = "auto"``, every batch records the structural route that
+actually ran. If an individual field misses the declared true-residual target,
+DKX retries only that field with one memory-bounded GMRES solve. The original
+failed attempt and the recovery attempt remain separately visible through the
+``solver_attempt`` dimension, including requested and executed methods,
+residuals, acceptance flags, and reasons. A recovery that still misses the
+unchanged target raises with both residuals. Explicitly selected solver methods
+remain fail-closed and are never changed automatically.
+
 When no root is bracketed, DKX retains the sampled point with the smallest
 absolute radial current, labels it ``no_bracketed_root``, and never calls it
 ambipolar.
