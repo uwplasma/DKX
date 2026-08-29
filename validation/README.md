@@ -19,6 +19,9 @@ Git; later records refer to them by checksum or stable artifact identifier.
 - `ambipolar_phase_space_axes_v1.json`: separate theta and pitch rungs that
   diagnose pitch as the dominant unresolved direction and reject a blind
   pitch-48 escalation.
+- `ambipolar_pitch_budget_v1.json`: exact full-versus-bounded uniform-pitch
+  route parity plus a bounded pitch-22/26/30 ladder that retains its changing
+  topology and `refinement_exhausted` outcome.
 - `inputs/*`: the exact DKX decks and native cases used by these rungs.
 
 ## Independent cross-code audit
@@ -190,3 +193,33 @@ far outside the gates: `0.205078125 kV/m`, `13.52%` selected particle flux,
 and `14.07%` selected heat flux. The pitch-44 process reached a
 `22,275,409,800 B` footprint, so a brute-force pitch-48 run is not admitted.
 The status remains `refinement_exhausted`; zeta and speed remain untested.
+
+## Bounded uniform-pitch route and ladder
+
+`ambipolar_pitch_budget_v1.json` first checks the memory contract independently
+of phase-space convergence. The exact uniform-pitch-22 case switches from 139
+full-factor solves to 139 memory-bounded structured solves while retaining
+every root and bracket exactly. Selected particle and heat fluxes differ by at
+most `3.58e-11` relative, all retained evaluation fluxes by at most `1.53e-10`,
+and the bounded maximum true residual is `5.28e-14`. Its cold process takes
+`176.33 s`; the retained warm result takes `184.81 s`, so no warm-cache speedup
+is claimed. Peak footprint falls from `31,859,925,880 B` to at most
+`2,923,810,392 B` in the retained bounded runs.
+
+Audit the compact record, or additionally check all external NetCDF files and
+the geometry, with:
+
+```bash
+python tools/paper_benchmarks/audit_ambipolar_pitch_budget.py
+```
+
+The same bounded route then evaluates uniform pitch 22, 26, and 30 on the
+three-surface profile. Root counts change from `[3, 1, 1]` to `[1, 1, 1]` to
+`[1, 3, 1]`; adjacent selected fields move by as much as `9.599609375` and
+`7.7001953125 kV/m`, and selected heat-flux movements reach `55.72%` and
+`45.25%`. Every accepted residual remains below `5.65e-14`, so this is a
+discretization failure rather than a solver failure. The artifact keeps the
+unchanged `0.005 kV/m`, `2%`, and `1e-12` gates, rejects uniform pitch 34 or
+higher, and directs the next diagnostic to isolate speed-node groups at fixed
+bounded work. It does not establish phase-space, zeta, speed, independent-code,
+full-FP, Phi1, experiment, or performance validation.

@@ -766,6 +766,51 @@
     ]
   },
   {
+    "id": "native_w7x_ambipolar_pitch_budget",
+    "status": "implemented",
+    "release_gate": {
+      "claim_status": "regression_scaffold",
+      "blocks_current_release": false,
+      "evidence": "exact uniform22 full-versus-bounded route parity and checked uniform22/26/30 W7-X PAS/DKES topology, residual, timing, and memory evidence",
+      "promotion_gate": "Use the admitted budget propagation to isolate speed-node groups; do not promote phase-space convergence or run another uniform whole profile"
+    },
+    "kind": "profile_validation",
+    "literature": [
+      "https://doi.org/10.1063/1.4870077",
+      "https://github.com/landreman/sfincs"
+    ],
+    "scripts": [
+      "tools/paper_benchmarks/audit_ambipolar_pitch_budget.py"
+    ],
+    "artifacts": [
+      "validation/ambipolar_pitch_budget_v1.json",
+      "validation/inputs/w7x_standard_native_ambipolar_uniform22_full.toml",
+      "validation/inputs/w7x_standard_native_ambipolar_uniform22_bounded.toml",
+      "validation/inputs/w7x_standard_native_ambipolar_uniform26_bounded.toml",
+      "validation/inputs/w7x_standard_native_ambipolar_uniform30_bounded.toml"
+    ],
+    "claims": [
+      "The same native memory budget controls batched chunking and each solver route decision",
+      "Uniform22 bounded structured solves retain every full-factor root and bracket while reducing the measured process footprint by 90.8%",
+      "Uniform pitch 22 to 26 to 30 changes root topology and fails every unchanged movement gate, so higher uniform escalation is not admitted"
+    ],
+    "source_code": [
+      "dkx/batch.py",
+      "dkx/solve.py",
+      "tools/paper_benchmarks/audit_ambipolar_pitch_budget.py"
+    ],
+    "tests": [
+      "tests/test_batch.py",
+      "tests/test_ambipolar_pitch_budget.py"
+    ],
+    "acceptance_gates": [
+      "Verify all four exact TOMLs, pinned geometry, raw native NetCDF results, and compact extraction by checksum",
+      "Require exact uniform22 roots/brackets, 2e-9 route-parity flux tolerance, 1e-12 residual tolerance, and sub-24-GiB bounded footprint",
+      "Retain the unchanged 0.005 kV/m, 2%, and 1e-12 phase-space gates and truthful refinement_exhausted outcome",
+      "Keep zeta, speed, independent-code, experiment, full-Fokker-Planck ambipolar, Phi1, and performance claims explicit"
+    ]
+  },
+  {
     "id": "adjoint_sensitivity_gradient_checks",
     "status": "implemented",
     "release_gate": {

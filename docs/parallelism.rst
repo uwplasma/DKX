@@ -57,8 +57,10 @@ that routes to the memory-lean truncated tier-1 kernel is charged its
 truncated working set, not the full-band factorization peak that route never
 allocates — and the resolved device (or host) memory budget, so only one
 chunk's intermediates are ever live. ``memory_budget_gb`` overrides the
-resolved budget and ``max_batch`` caps the chunk size; the defaults need
-neither.
+resolved budget and is forwarded to each element's solver-route decision as
+well as the outer chunk planner. A tight budget therefore cannot size a small
+chunk and then silently let each element choose an inadmissible full-factor
+route. ``max_batch`` caps the chunk size; the defaults need neither override.
 
 **Measured throughput.** Because ``vmap`` amortizes per-solve dispatch, batching
 beats a serial Python loop even on CPU — about ``9.5x`` for an ``E_r`` scan and

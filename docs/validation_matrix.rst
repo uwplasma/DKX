@@ -239,6 +239,34 @@ therefore rejects a blind pitch48 escalation and retains
 ``refinement_exhausted`` status. It is a bounded diagnosis, not phase-space,
 zeta, speed, independent-code, experiment, or performance validation.
 
+Bounded uniform-pitch route and ladder
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``validation/ambipolar_pitch_budget_v1.json`` separates memory-route admission
+from phase-space admission. Audit it with:
+
+.. code-block:: console
+
+   python tools/paper_benchmarks/audit_ambipolar_pitch_budget.py
+
+For the exact uniform-pitch-22 profile, forwarding the native memory budget to
+each batched solve changes all 139 evaluations from full factors to the
+memory-bounded structured route. Roots and brackets are exact, selected fluxes
+agree within ``3.58e-11`` relative, retained evaluation fluxes within
+``1.53e-10``, and the bounded residual is ``5.28e-14``. The retained bounded
+processes stay below ``2,923,810,392 B`` footprint versus ``31,859,925,880 B``
+for the earlier full-factor process. The populated-cache run is slower than
+the cold run, so no cache-speedup claim is made.
+
+This admitted route makes a bounded uniform pitch-22/26/30 diagnostic possible,
+but it does not make the physics converged. Root counts change
+``[3, 1, 1] -> [1, 1, 1] -> [1, 3, 1]``. Adjacent selected-field movements
+reach ``9.599609375`` and ``7.7001953125 kV/m``; selected heat-flux movements
+reach ``55.72%`` and ``45.25%``. All accepted true residuals remain below
+``5.65e-14``, so the artifact truthfully records ``refinement_exhausted``,
+rejects a uniform pitch-34-or-higher escalation, and leaves speed-node-local,
+zeta, speed, independent-code, experiment, full-FP, and Phi1 gates open.
+
 Publication validation dashboard
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
