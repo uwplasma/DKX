@@ -36,6 +36,18 @@ speed-local truncations at once, resolution studies should record the option
 and the resulting active mode counts rather than describe only the maximum
 pitch order.
 
+For a bounded allocation diagnosis, optional
+``resolution.pitch_modes_by_speed`` replaces the ramp with one explicit active
+mode count per speed node. Counts must be integers, nondecreasing with speed,
+between 4 and ``resolution.pitch``, and must reach the declared pitch maximum
+at the final node. ``pitch_speed_ramp`` must remain at its implicit default
+when this advanced evidence control is present. Omitting the array preserves
+the historical default and every existing case ID. Native Result/NetCDF
+metadata distinguishes ``explicit`` from ``pitch_speed_ramp`` allocation and
+retains the exact counts and their sum. The explicit control changes only the
+active Legendre mask inside the same rectangular operator shape; it is not by
+itself a convergence claim.
+
 Validation and portability
 --------------------------
 

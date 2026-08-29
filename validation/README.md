@@ -25,6 +25,9 @@ Git; later records refer to them by checksum or stable artifact identifier.
 - `ambipolar_pitch_speed_groups_v1.json`: fixed-work uniform, linear-ramp,
   and quadratic-ramp pitch allocations on a common W7-X surface pair,
   retaining the topology changes rather than promoting convergence.
+- `ambipolar_pitch_explicit_groups_v1.json`: exact-total, exact-high-work
+  explicit allocations that isolate low- and intermediate-speed sensitivity
+  while retaining the unresolved root and flux movement.
 - `inputs/*`: the exact DKX decks and native cases used by these rungs.
 
 ## Independent cross-code audit
@@ -255,3 +258,32 @@ convergence. A subsequent bounded two-surface slice must separate low from
 intermediate sensitivity with high-speed work held fixed. Zeta, speed,
 independent-code, experiment, full-FP, Phi1, and performance validation remain
 open.
+
+## Explicit fixed-high-work diagnosis
+
+`ambipolar_pitch_explicit_groups_v1.json` uses the new deterministic
+`resolution.pitch_modes_by_speed` contract to compare the supported linear-36
+allocation `[4,9,17,27,36,36]` with low-heavy `[12,12,16,17,36,36]` and
+intermediate-heavy `[4,4,24,25,36,36]` allocations. Every allocation has
+exactly 129 active modes and exactly 72 modes in the final two speed nodes.
+Audit the compact record, or additionally verify all four raw NetCDF files and
+the pinned Boozer geometry, with:
+
+```bash
+python tools/paper_benchmarks/audit_ambipolar_pitch_explicit_groups.py
+```
+
+All three allocations preserve root counts `[1,3]` on the bounded surface
+pair, so fixing high-speed work removes the topology change seen between the
+supported allocation rules. It does not make the observables converged:
+pairwise selected electric-field, particle-flux, and heat-flux movements reach
+`1.064453125 kV/m`, `9.89%`, and `9.08%`. All 98 solves in each new result use
+the bounded structured route, every accepted residual stays below
+`3.05e-14`, and every measured footprint stays below 4.01 GB. The
+intermediate-heavy cold/warm scientific arrays are exact apart from timing;
+the retained timings support no warm-speedup claim.
+
+The checked outcome remains `refinement_exhausted`. The next bounded pair must
+raise low and intermediate work together while retaining the admitted
+high-speed group. Zeta, speed, independent-code, experiment, full-FP, Phi1,
+and performance validation remain open.

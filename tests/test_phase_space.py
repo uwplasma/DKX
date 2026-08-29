@@ -44,9 +44,30 @@ def assert_exact(new, old) -> None:
 
 
 def test_uniform_periodic_diff_matrices_rejects_dropped_schemes() -> None:
-    for scheme in (1, 2, 3, 11, 12, 13, 21, 30, 42, 52, 81, 92, 101, 112, 121, 131, 201, 240):
+    for scheme in (
+        1,
+        2,
+        3,
+        11,
+        12,
+        13,
+        21,
+        30,
+        42,
+        52,
+        81,
+        92,
+        101,
+        112,
+        121,
+        131,
+        201,
+        240,
+    ):
         with pytest.raises(ValueError):
-            phase_space.uniform_periodic_diff_matrices(n=8, x_min=0.0, x_max=1.0, scheme=scheme)
+            phase_space.uniform_periodic_diff_matrices(
+                n=8, x_min=0.0, x_max=1.0, scheme=scheme
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -84,7 +105,9 @@ def test_widened_upwind_stencil_satisfies_its_moment_conditions(
     order: int, wind_sign: float
 ) -> None:
     """The stencil reproduces d/dx exactly on polynomials up to degree ``order``."""
-    offsets, coefficients = phase_space.widened_upwind_stencil(order=order, wind_sign=wind_sign)
+    offsets, coefficients = phase_space.widened_upwind_stencil(
+        order=order, wind_sign=wind_sign
+    )
     assert len(offsets) == order + 1
     assert len(set(offsets)) == order + 1
     o = np.asarray(offsets, dtype=float)
@@ -100,7 +123,9 @@ def test_widened_upwind_stencil_satisfies_its_moment_conditions(
 def test_widened_upwind_stencil_orientation_is_a_mirror() -> None:
     """The negative-wind stencil is the reflection of the positive-wind one."""
     for order in (3, 4):
-        plus_offsets, plus_coefficients = phase_space.widened_upwind_stencil(order=order)
+        plus_offsets, plus_coefficients = phase_space.widened_upwind_stencil(
+            order=order
+        )
         minus_offsets, minus_coefficients = phase_space.widened_upwind_stencil(
             order=order, wind_sign=-1.0
         )
@@ -111,7 +136,9 @@ def test_widened_upwind_stencil_orientation_is_a_mirror() -> None:
         # The positive-wind stencil leans upstream and puts positive weight on
         # the node itself, which is what makes the operator diagonally dominant.
         assert dict(zip(plus_offsets, plus_coefficients))[0] > 0.0
-        assert sum(1 for o in plus_offsets if o < 0) > sum(1 for o in plus_offsets if o > 0)
+        assert sum(1 for o in plus_offsets if o < 0) > sum(
+            1 for o in plus_offsets if o > 0
+        )
     with pytest.raises(ValueError, match="wind_sign"):
         phase_space.widened_upwind_stencil(order=4, wind_sign=0.0)
     with pytest.raises(ValueError, match="Invalid widened upwind order"):
@@ -158,9 +185,9 @@ def test_widened_upwind_is_more_diagonally_dominant_than_centered() -> None:
             else (None, None)
         )
         if offsets is not None:
-            assert phase_space.stencil_diagonal_dominance(offsets, coefficients) == pytest.approx(
-                measured[scheme], rel=1e-12
-            )
+            assert phase_space.stencil_diagonal_dominance(
+                offsets, coefficients
+            ) == pytest.approx(measured[scheme], rel=1e-12)
     # The point of the widened stencils: strictly more diagonal weight than any
     # centered scheme (which has none) and than the compact upwind stencils of
     # the same or higher order.
@@ -171,7 +198,9 @@ def test_widened_upwind_is_more_diagonally_dominant_than_centered() -> None:
 
 def test_stencil_diagonal_dominance_bounds() -> None:
     # sum_j c_j = 0 caps the ratio at 1, attained only by 2-point upwinding.
-    assert phase_space.stencil_diagonal_dominance((-1, 0), (-1.0, 1.0)) == pytest.approx(1.0)
+    assert phase_space.stencil_diagonal_dominance(
+        (-1, 0), (-1.0, 1.0)
+    ) == pytest.approx(1.0)
     assert phase_space.stencil_diagonal_dominance((-1, 0, 1), (-0.5, 0.0, 0.5)) == 0.0
     assert phase_space.stencil_diagonal_dominance((0,), (0.0,)) == math.inf
     with pytest.raises(ValueError):
@@ -193,7 +222,9 @@ def test_widened_upwind_symbol_is_dissipative_for_the_matching_wind(order: int) 
     assert symbol.real[-1] > 1.0  # strong damping of the grid-Nyquist mode
     wrong = sum(
         c * np.exp(1j * k * o)
-        for o, c in zip(*phase_space.widened_upwind_stencil(order=order, wind_sign=-1.0))
+        for o, c in zip(
+            *phase_space.widened_upwind_stencil(order=order, wind_sign=-1.0)
+        )
     )
     assert wrong.real.max() < 1e-12
 
@@ -242,7 +273,10 @@ def test_widened_upwind_scheme_codes_cannot_collide_with_upstream() -> None:
     assert not set(phase_space._WIDENED_UPWIND_SCHEME_INFO) & set(
         phase_space._ANGLE_DERIVATIVE_SCHEME_MAP.values()
     )
-    assert not set(phase_space._WIDENED_UPWIND_SCHEME_INFO) & phase_space._APERIODIC_SCHEMES
+    assert (
+        not set(phase_space._WIDENED_UPWIND_SCHEME_INFO)
+        & phase_space._APERIODIC_SCHEMES
+    )
     # Namelist codes: v3 uses 0-2 for the angular schemes and -3..3 for the
     # magnetic-drift scheme, so the 100 block is unreachable from upstream.
     for code in phase_space._WIDENED_ANGLE_DERIVATIVE_SCHEME_MAP:
@@ -254,7 +288,9 @@ def test_widened_upwind_scheme_codes_cannot_collide_with_upstream() -> None:
 
 
 def test_make_grids_widened_upwind_is_opt_in_and_never_default() -> None:
-    default = phase_space.make_grids(n_theta=11, n_zeta=11, n_xi=4, n_x=3, n_l=2, n_periods=4)
+    default = phase_space.make_grids(
+        n_theta=11, n_zeta=11, n_xi=4, n_x=3, n_l=2, n_periods=4
+    )
     centered = phase_space.uniform_periodic_diff_matrices(
         n=11, x_min=0.0, x_max=2 * math.pi, scheme=10
     )[2]
@@ -266,7 +302,10 @@ def test_make_grids_widened_upwind_is_opt_in_and_never_default() -> None:
             n=11, x_min=0.0, x_max=2 * math.pi, scheme=120
         )[2],
     )
-    for namelist_code, scheme in phase_space._WIDENED_ANGLE_DERIVATIVE_SCHEME_MAP.items():
+    for (
+        namelist_code,
+        scheme,
+    ) in phase_space._WIDENED_ANGLE_DERIVATIVE_SCHEME_MAP.items():
         grids = phase_space.make_grids(
             n_theta=11,
             n_zeta=11,
@@ -282,7 +321,10 @@ def test_make_grids_widened_upwind_is_opt_in_and_never_default() -> None:
         )[2]
         assert_exact(grids.ddtheta, expected)
         assert _row_diagonal_dominance(np.asarray(grids.ddtheta), 5) > 0.6
-    for namelist_code, (plus, minus) in phase_space._WIDENED_MAGNETIC_DRIFT_SCHEME_MAP.items():
+    for namelist_code, (
+        plus,
+        minus,
+    ) in phase_space._WIDENED_MAGNETIC_DRIFT_SCHEME_MAP.items():
         grids = phase_space.make_grids(
             n_theta=11,
             n_zeta=11,
@@ -304,7 +346,12 @@ def test_make_grids_widened_upwind_is_opt_in_and_never_default() -> None:
             )
     with pytest.raises(ValueError, match="thetaDerivativeScheme"):
         phase_space.make_grids(
-            n_theta=11, n_zeta=11, n_xi=4, n_x=3, n_l=2, n_periods=4,
+            n_theta=11,
+            n_zeta=11,
+            n_xi=4,
+            n_x=3,
+            n_l=2,
+            n_periods=4,
             theta_derivative_scheme=105,
         )
 
@@ -503,7 +550,9 @@ def test_polynomial_interpolation_matrix_matches_collisions_port() -> None:
     alpxk = np.exp(-(xk**2))
     alpx = np.exp(-(xb**2))
     old = polynomial_interpolation_matrix_np(xk=xk, x=xb, alpxk=alpxk, alpx=alpx)
-    new = phase_space.polynomial_interpolation_matrix(xk=xk, x=xb, alpxk=alpxk, alpx=alpx)
+    new = phase_space.polynomial_interpolation_matrix(
+        xk=xk, x=xb, alpxk=alpxk, alpx=alpx
+    )
     assert_exact(new, old)
 
 
@@ -513,9 +562,14 @@ def test_rosenbluth_potential_grid_size_rules() -> None:
     expected = int(math.ceil(max(float(x[-1]), 5.0) * 40.0))
     assert phase_space.rosenbluth_potential_grid_size(x=x, n_x=5) == expected == 200
     assert (
-        phase_space.rosenbluth_potential_grid_size(x=x, n_x=5, x_potentials_grid_scheme=3) == 6
+        phase_space.rosenbluth_potential_grid_size(
+            x=x, n_x=5, x_potentials_grid_scheme=3
+        )
+        == 6
     )
-    assert phase_space.rosenbluth_potential_grid_size(x=x, n_x=5, monoenergetic=True) == 1
+    assert (
+        phase_space.rosenbluth_potential_grid_size(x=x, n_x=5, monoenergetic=True) == 1
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -554,13 +608,57 @@ def test_n_xi_for_x_ramp_options(option: int) -> None:
     elif option == 2:
         # case (2): temp = Nxi*(0.1 + 0.9*((x(j)/2)**2))
         for j in range(7):
-            ref[j] = max(4, n_l, min(int(n_xi * (0.1 + 0.9 * ((x[j] / 2.0) ** 2))), n_xi))
+            ref[j] = max(
+                4, n_l, min(int(n_xi * (0.1 + 0.9 * ((x[j] / 2.0) ** 2))), n_xi)
+            )
     else:
         # dkx extension: the same linear ramp, uncapped, lower floor.
         for j in range(7):
             ref[j] = max(3, n_l, int(n_xi * (0.1 + 0.9 * x[j] / 2.0)))
     out = phase_space.n_xi_for_x_ramp(x=x, n_xi=n_xi, n_l=n_l, option=option)
     assert out.tolist() == ref.tolist()
+
+
+def test_make_grids_accepts_shape_stable_explicit_pitch_allocation() -> None:
+    grids = phase_space.make_grids(
+        n_theta=7,
+        n_zeta=1,
+        n_xi=12,
+        n_x=4,
+        n_l=4,
+        n_periods=1,
+        n_xi_for_x_override=(4, 7, 9, 12),
+    )
+
+    assert grids.n_xi == 12
+    assert grids.n_x == 4
+    np.testing.assert_array_equal(grids.n_xi_for_x, [4, 7, 9, 12])
+
+
+@pytest.mark.parametrize(
+    ("override", "match"),
+    [
+        ((4, 8, 12), "must have 4 entries"),
+        ((4, 8, 7, 12), "must be nondecreasing"),
+        ((4, 7, 9, 11), "must retain n_xi=12"),
+        ((3, 7, 9, 12), "must lie from 4 through 12"),
+        ((4, 7, 9, 13), "must lie from 4 through 12"),
+        ((4, 7, 9.0, 12), "entries must be integers"),
+    ],
+)
+def test_make_grids_rejects_invalid_explicit_pitch_allocation(
+    override, match: str
+) -> None:
+    with pytest.raises(ValueError, match=match):
+        phase_space.make_grids(
+            n_theta=7,
+            n_zeta=1,
+            n_xi=12,
+            n_x=4,
+            n_l=4,
+            n_periods=1,
+            n_xi_for_x_override=override,
+        )
 
 
 def test_default_nxi_ramp_matches_the_fortran_h5_output() -> None:
@@ -653,7 +751,9 @@ def test_grids_container_exposes_legendre_machinery() -> None:
 def test_uniform_aperiodic_diff_matrices_rejects_other_schemes() -> None:
     for scheme in (0, 2, 3, 10, 13, 20, 30, 40, 50, 60, 80, 90, 100, 110, 122, 132):
         with pytest.raises(ValueError):
-            phase_space.uniform_aperiodic_diff_matrices(n=7, x_min=0.0, x_max=1.0, scheme=scheme)
+            phase_space.uniform_aperiodic_diff_matrices(
+                n=7, x_min=0.0, x_max=1.0, scheme=scheme
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -673,7 +773,9 @@ def test_chebyshev_grid_quadrature_and_derivative_exactness(n: int) -> None:
     # The differentiation matrix is exact on polynomials of degree <= n-1
     # (up to rounding relative to the largest derivative values).
     for deg in range(1, n):
-        np.testing.assert_allclose(d @ (x**deg), deg * x ** (deg - 1), rtol=1e-12, atol=1e-9)
+        np.testing.assert_allclose(
+            d @ (x**deg), deg * x ** (deg - 1), rtol=1e-12, atol=1e-9
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -685,7 +787,9 @@ def test_xdot_diff_matrices_scheme_m2_uses_polynomial_subsets() -> None:
     xg = make_x_grid(n=6, k=0.0, include_point_at_x0=False)
     x = np.asarray(xg.x)
     ddx, _ = phase_space.speed_grid_diff_matrices(x, k=0.0)
-    plus, minus = phase_space.xdot_diff_matrices(x=x, ddx=ddx, k=0.0, scheme=-2, x_max=5.0)
+    plus, minus = phase_space.xdot_diff_matrices(
+        x=x, ddx=ddx, k=0.0, scheme=-2, x_max=5.0
+    )
     sub_lo, _ = phase_space.speed_grid_diff_matrices(x[:-1], k=0.0)
     sub_hi, _ = phase_space.speed_grid_diff_matrices(x[1:], k=0.0)
     assert_exact(plus[:-1, :-1], sub_lo)
@@ -698,12 +802,16 @@ def test_xdot_diff_matrices_scheme_11_differentiates_linear_exactly() -> None:
     xg = make_x_grid(n=6, k=0.0, include_point_at_x0=False)
     x = np.asarray(xg.x)
     ddx, _ = phase_space.speed_grid_diff_matrices(x, k=0.0)
-    plus, minus = phase_space.xdot_diff_matrices(x=x, ddx=ddx, k=0.0, scheme=11, x_max=5.0)
+    plus, minus = phase_space.xdot_diff_matrices(
+        x=x, ddx=ddx, k=0.0, scheme=11, x_max=5.0
+    )
     assert_exact(plus, minus)
     np.testing.assert_allclose(plus @ np.ones_like(x), 0.0, rtol=0, atol=1e-12)
     np.testing.assert_allclose(plus @ x, np.ones_like(x), rtol=0, atol=1e-12)
     # Interior rows are exact on quadratics (3-point irregular stencil).
-    np.testing.assert_allclose((plus @ (x * x))[1:-1], 2.0 * x[1:-1], rtol=0, atol=1e-12)
+    np.testing.assert_allclose(
+        (plus @ (x * x))[1:-1], 2.0 * x[1:-1], rtol=0, atol=1e-12
+    )
 
 
 def test_xdot_diff_matrices_scheme_m1_reports_fortran_bug() -> None:
@@ -716,21 +824,39 @@ def test_xdot_diff_matrices_scheme_m1_reports_fortran_bug() -> None:
 def test_make_grids_rejects_invalid_xdot_scheme_combinations() -> None:
     with pytest.raises(ValueError, match="xDotDerivativeScheme"):
         phase_space.make_grids(
-            n_theta=7, n_zeta=1, n_xi=4, n_x=5, n_l=2, n_periods=1,
+            n_theta=7,
+            n_zeta=1,
+            n_xi=4,
+            n_x=5,
+            n_l=2,
+            n_periods=1,
             x_dot_derivative_scheme=12,
         )
     with pytest.raises(ValueError, match="xGridScheme must be either 3 or 4"):
         phase_space.make_grids(
-            n_theta=7, n_zeta=1, n_xi=4, n_x=5, n_l=2, n_periods=1,
-            x_grid_scheme=5, x_dot_derivative_scheme=2,
+            n_theta=7,
+            n_zeta=1,
+            n_xi=4,
+            n_x=5,
+            n_l=2,
+            n_periods=1,
+            x_grid_scheme=5,
+            x_dot_derivative_scheme=2,
         )
 
 
 def test_make_grids_uniform_and_chebyshev_x_grids() -> None:
     # xGridScheme 3/4: uniform on [0, xMax] with n_x+1 points, last dropped.
     g3 = phase_space.make_grids(
-        n_theta=7, n_zeta=1, n_xi=4, n_x=5, n_l=2, n_periods=1,
-        x_grid_scheme=3, x_max=5.0, n_xi_for_x_option=0,
+        n_theta=7,
+        n_zeta=1,
+        n_xi=4,
+        n_x=5,
+        n_l=2,
+        n_periods=1,
+        x_grid_scheme=3,
+        x_max=5.0,
+        n_xi_for_x_option=0,
     )
     assert_exact(g3.x, np.arange(5.0))
     assert_exact(g3.x_weights, np.array([0.5, 1.0, 1.0, 1.0, 1.0]))
@@ -742,14 +868,28 @@ def test_make_grids_uniform_and_chebyshev_x_grids() -> None:
     # xGridScheme 7: Chebyshev with n_x+1 points, last dropped; scheme 8 keeps
     # all n_x points (node at xMax).
     g7 = phase_space.make_grids(
-        n_theta=7, n_zeta=1, n_xi=4, n_x=5, n_l=2, n_periods=1,
-        x_grid_scheme=7, x_max=5.0, n_xi_for_x_option=0,
+        n_theta=7,
+        n_zeta=1,
+        n_xi=4,
+        n_x=5,
+        n_l=2,
+        n_periods=1,
+        x_grid_scheme=7,
+        x_max=5.0,
+        n_xi_for_x_option=0,
     )
     x7_full, _, _ = phase_space.chebyshev_grid(n=6, x_min=0.0, x_max=5.0)
     assert_exact(g7.x, x7_full[:5])
     g8 = phase_space.make_grids(
-        n_theta=7, n_zeta=1, n_xi=4, n_x=5, n_l=2, n_periods=1,
-        x_grid_scheme=8, x_max=5.0, n_xi_for_x_option=0,
+        n_theta=7,
+        n_zeta=1,
+        n_xi=4,
+        n_x=5,
+        n_l=2,
+        n_periods=1,
+        x_grid_scheme=8,
+        x_max=5.0,
+        n_xi_for_x_option=0,
     )
     x8, w8, d8 = phase_space.chebyshev_grid(n=5, x_min=0.0, x_max=5.0)
     assert_exact(g8.x, x8)
@@ -762,7 +902,12 @@ def test_make_grids_xdot_pair_default_is_none() -> None:
     assert g.ddx_xdot_plus is None
     assert g.ddx_xdot_minus is None
     g11 = phase_space.make_grids(
-        n_theta=7, n_zeta=1, n_xi=4, n_x=5, n_l=2, n_periods=1,
+        n_theta=7,
+        n_zeta=1,
+        n_xi=4,
+        n_x=5,
+        n_l=2,
+        n_periods=1,
         x_dot_derivative_scheme=11,
     )
     assert g11.ddx_xdot_plus is not None
