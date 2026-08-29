@@ -281,7 +281,9 @@ def monoenergetic_scan(
             inp = dataclasses.replace(
                 base,
                 resolution=dataclasses.replace(base.resolution, **res),
-                physics=dataclasses.replace(base.physics, nu_prime=float(nu), e_star=float(e)),
+                physics=dataclasses.replace(
+                    base.physics, nu_prime=float(nu), e_star=float(e)
+                ),
             )
             t0 = time.perf_counter()
             run = _quiet(lambda: run_transport_matrix(inp, out_path=None, emit=None))
@@ -317,7 +319,9 @@ def _panel_monoenergetic(ax_d11, ax_d31, ax_d33, records: list[dict[str, Any]]) 
     if not records:
         return False
     for e in sorted({r["e_star"] for r in records}):
-        pts = sorted((r for r in records if r["e_star"] == e), key=lambda r: r["nu_prime"])
+        pts = sorted(
+            (r for r in records if r["e_star"] == e), key=lambda r: r["nu_prime"]
+        )
         nu = [r["nu_prime"] for r in pts]
         for ax, key in ((ax_d11, "D11"), (ax_d31, "D31"), (ax_d33, "D33")):
             vals = [r[key] if key == "D31" else abs(r[key]) for r in pts]
@@ -463,10 +467,52 @@ def figure_caption(plasma: dict | None, plasma_source: str = "",
     caption = "   |   ".join(bits)
     if plasma:
         source = plasma_source or (
-            "p(s) from the equilibrium" if "p_pa" in plasma else "generic reference")
+            "p(s) from the equilibrium" if "p_pa" in plasma else "generic reference"
+        )
         caption += (f"\nplasma source: {source}   |   n and T are an assumed split of p,"
                     " so the kinetic and equilibrium currents need not coincide")  # fmt: skip
     return caption
+
+
+def _profile_panel_absence(profiles: list[dict[str, Any]], name: str) -> str:
+    """Explain why a physical radial panel could not be drawn.
+
+    The categories are deliberately stable output vocabulary: unavailable
+    physical inputs, an unreadable/malformed VMEC profile, a kinetic solve
+    failure, and a completed scan with no observed bracket are materially
+    different outcomes and must not collapse into ``not present``.
+    """
+    if not profiles:
+        return f"{name}: no radial-profile evidence"
+
+    parser_failures = [
+        p for p in profiles if p.get("profile_input_status") == "parser_failure"
+    ]
+    if parser_failures:
+        detail = str(
+            parser_failures[0].get("profile_input_detail", "VMEC profile unreadable")
+        )
+        return f"{name}: VMEC parser failure\n{detail}"
+
+    unavailable = [
+        p for p in profiles if p.get("profile_input_status") == "physics_unavailable"
+    ]
+    if unavailable:
+        detail = str(
+            unavailable[0].get("profile_input_detail", "physical profiles unavailable")
+        )
+        return f"{name}: physical profiles unavailable\n{detail}"
+
+    solve_failures = [
+        p for p in profiles if p.get("evaluation_status") == "solve_failure"
+    ]
+    if solve_failures:
+        kinds = sorted({str(p.get("failure_type", "unknown")) for p in solve_failures})
+        return f"{name}: solve failure\n" + ", ".join(kinds)
+
+    if any(p.get("evaluation_status") == "no_bracketed_root" for p in profiles):
+        return f"{name}: no bracket observed\nand no evaluated moments were retained"
+    return f"{name}: requested observable absent\nfrom completed solves"
 
 
 def plot_representative(
@@ -524,13 +570,20 @@ def plot_representative(
             axes[key].text(0.5, 0.5, "no (nuPrime, EStar) scan\nin this input",
                            ha="center", va="center", fontsize=8, color="0.4",
                            transform=axes[key].transAxes)  # fmt: skip
-            axes[key].set_xticks([]); axes[key].set_yticks([])
+            axes[key].set_xticks([])
+            axes[key].set_yticks([])
     for key, name in (("modb", "modB"), ("boot", "bootstrap"), ("flux", "fluxes")):
         if not drawn[name]:
-            axes[key].text(0.5, 0.5, f"{name}: not present\nin this output",
+            message = (
+                _profile_panel_absence(profiles or [], name)
+                if key in {"boot", "flux"} and profiles
+                else f"{name}: not present\nin this output"
+            )
+            axes[key].text(0.5, 0.5, message,
                            ha="center", va="center", fontsize=8, color="0.4",
                            transform=axes[key].transAxes)  # fmt: skip
-            axes[key].set_xticks([]); axes[key].set_yticks([])
+            axes[key].set_xticks([])
+            axes[key].set_yticks([])
 
     # State the plasma and the resolutions on the figure: a reader cannot judge
     # a transport number without knowing the n, T and grid behind it, and the
@@ -591,11 +644,14 @@ def plot_single_run(out_path: str | Path, data: dict[str, Any],
 
     _panel_run_summary(axes[0], data)
     _panel_vs_x(axes[1], data, "FSABFlow_vs_x", r"$\langle B V_\parallel\rangle$")
-    _panel_vs_x(axes[2], data, "particleFlux_vm_psiHat_vs_x", r"$\Gamma$ (magnetic drift)")
+    _panel_vs_x(
+        axes[2], data, "particleFlux_vm_psiHat_vs_x", r"$\Gamma$ (magnetic drift)"
+    )
     if not _panel_modB(axes[3], data):
         axes[3].text(0.5, 0.5, "no |B| in this output", ha="center", va="center",
                      fontsize=8, color="0.4", transform=axes[3].transAxes)  # fmt: skip
-        axes[3].set_xticks([]); axes[3].set_yticks([])
+        axes[3].set_xticks([])
+        axes[3].set_yticks([])
     _panel_vs_x(axes[4], data, "heatFlux_vm_psiHat_vs_x", r"$Q$ (magnetic drift)")
     _panel_bootstrap(axes[5], data)
 
@@ -635,7 +691,8 @@ def _panel_vs_x(ax, data: dict[str, Any], key: str, label: str) -> bool:
     if key not in data or "x" not in data:
         ax.text(0.5, 0.5, f"{key}\nnot in this output", ha="center", va="center",
                 fontsize=8, color="0.4", transform=ax.transAxes)  # fmt: skip
-        ax.set_xticks([]); ax.set_yticks([])
+        ax.set_xticks([])
+        ax.set_yticks([])
         return False
     x = np.asarray(data["x"], dtype=float).ravel()
     arr = np.asarray(data[key], dtype=float)
@@ -674,7 +731,9 @@ def run_representative(
     if not equilibrium.is_file():
         raise FileNotFoundError(f"no such equilibrium file: {equilibrium}")
     base = sfincs_input_from_raw(
-        parse_sfincs_input_text(_MONOENERGETIC_TEMPLATE.format(equilibrium=str(equilibrium)))
+        parse_sfincs_input_text(
+            _MONOENERGETIC_TEMPLATE.format(equilibrium=str(equilibrium))
+        )
     )
     # Each stage is timed and the time is printed.  The three stages differ by
     # more than an order of magnitude in cost, and on a large device the radial
@@ -686,7 +745,9 @@ def run_representative(
         mark = time.perf_counter()
         if emit:
             emit(label)
-        return lambda: (emit(f"    ({time.perf_counter() - mark:.1f} s)") if emit else None)
+        return lambda: (
+            emit(f"    ({time.perf_counter() - mark:.1f} s)") if emit else None
+        )
 
     profile_resolution = _profile_resolution(full=full, quick=quick)
     mono_resolution = QUICK_RESOLUTION if quick else DEFAULT_RESOLUTION
@@ -864,6 +925,75 @@ def plasma_parameters(equilibrium: Path, radius: float = 0.5) -> dict[str, float
     }  # fmt: skip
 
 
+def _netcdf_text(value: Any) -> str:
+    """Decode the fixed-width character arrays used by VMEC metadata."""
+    array = np.asarray(value)
+    if array.dtype.kind == "S":
+        return b"".join(array.reshape((-1,)).tolist()).decode(errors="replace").strip()
+    if array.dtype.kind == "U":
+        return "".join(array.reshape((-1,)).tolist()).strip()
+    return str(array.reshape(()).item()).strip()
+
+
+def vmec_profile_status(equilibrium: Path) -> dict[str, str]:
+    """Classify VMEC profile input without re-evaluating its parameterization.
+
+    VMEC writes canonical evaluated pressure on ``presf`` regardless of whether
+    the input used ``power_series``, ``sum_atan``, a spline, or another
+    ``pmass_type``. DKX consumes that evaluated profile and retains the input
+    representation only as provenance.
+    """
+    try:
+        import netCDF4  # noqa: PLC0415
+
+        with netCDF4.Dataset(str(equilibrium)) as handle:
+            representation = (
+                _netcdf_text(handle.variables["pmass_type"][:])
+                if "pmass_type" in handle.variables
+                else "not_recorded"
+            )
+            if "presf" not in handle.variables:
+                return {
+                    "status": "physics_unavailable",
+                    "pressure_representation": representation,
+                    "detail": "the equilibrium carries no evaluated presf profile",
+                }
+            pressure = np.asarray(handle.variables["presf"][:], dtype=float)
+            if (
+                pressure.ndim != 1
+                or pressure.size < 2
+                or not np.all(np.isfinite(pressure))
+            ):
+                return {
+                    "status": "parser_failure",
+                    "pressure_representation": representation,
+                    "detail": "presf is not a finite one-dimensional radial profile",
+                }
+            if "Aminor_p" not in handle.variables:
+                return {
+                    "status": "physics_unavailable",
+                    "pressure_representation": representation,
+                    "detail": "the equilibrium carries no minor radius for physical gradients",
+                }
+    except Exception as exc:
+        return {
+            "status": "parser_failure",
+            "pressure_representation": "unreadable",
+            "detail": f"{type(exc).__name__}: {exc}",
+        }
+    if not plasma_parameters(equilibrium):
+        return {
+            "status": "physics_unavailable",
+            "pressure_representation": representation,
+            "detail": _no_pressure_reason(equilibrium),
+        }
+    return {
+        "status": "available",
+        "pressure_representation": representation,
+        "detail": "using VMEC-evaluated presf with an explicit n/T closure",
+    }
+
+
 def equilibrium_scalars(equilibrium: Path) -> dict[str, Any]:
     """``psiAHat``, ``aHat`` and the VMEC ``<J.B>`` profile, read from the wout.
 
@@ -886,7 +1016,9 @@ def equilibrium_scalars(equilibrium: Path) -> dict[str, Any]:
                 phi = np.asarray(handle.variables["phi"][:], dtype=float)
                 out["psi_a_hat"] = float(phi[-1]) / (2.0 * np.pi)
             if "Aminor_p" in handle.variables:
-                out["a_hat"] = float(np.asarray(handle.variables["Aminor_p"][...]).reshape(()))
+                out["a_hat"] = float(
+                    np.asarray(handle.variables["Aminor_p"][...]).reshape(())
+                )
             if "jdotb" in handle.variables:
                 jdotb = np.asarray(handle.variables["jdotb"][:], dtype=float)
                 out["jdotb"] = jdotb
@@ -909,7 +1041,9 @@ def resolve_plasma(equilibrium: Path) -> tuple[dict[str, float], str]:
     plasma = plasma_parameters(equilibrium)
     if plasma:
         return plasma, "p(s) from the equilibrium"
-    return dict(FALLBACK_PLASMA), f"generic reference; {_no_pressure_reason(equilibrium)}"
+    return dict(
+        FALLBACK_PLASMA
+    ), f"generic reference; {_no_pressure_reason(equilibrium)}"
 
 
 def _no_pressure_reason(equilibrium: Path) -> str:
@@ -1014,7 +1148,9 @@ def _profile_data(equilibrium: Path, *, full: bool = False, quick: bool = False,
     if emit:
         boot = data.get("FSABjHatOverRootFSAB2", data.get("FSABjHat"))
         if boot is not None:
-            emit(f"    bootstrap <j.B>/sqrt(<B^2>) = {np.asarray(boot).ravel()[-1]:+.4e}")
+            emit(
+                f"    bootstrap <j.B>/sqrt(<B^2>) = {np.asarray(boot).ravel()[-1]:+.4e}"
+            )
     return data
 
 
@@ -1040,7 +1176,9 @@ def ambipolarity_scan(
     """
     from dkx.api import batched_er_scan  # noqa: PLC0415
 
-    result = _quiet(lambda: batched_er_scan(namelist, np.asarray(er_values, dtype=float)))
+    result = _quiet(
+        lambda: batched_er_scan(namelist, np.asarray(er_values, dtype=float))
+    )
     # BatchedSolveResult names it `radial_current`; guessing "J_r" silently
     # yields an empty scan and an empty panel rather than an error.
     j_r = np.asarray(result.radial_current, dtype=float).ravel()
@@ -1196,6 +1334,7 @@ def radial_profiles(
         emit(f"    radial-scan resolution: {resolution}; "
              f"{len(er)} Er points per surface")  # fmt: skip
     plasma, _derived = resolve_plasma(equilibrium)
+    profile_input = vmec_profile_status(equilibrium)
     geometry = equilibrium_scalars(equilibrium)
     template = _PROFILE_TEMPLATE.format(
         equilibrium=str(equilibrium), **resolution, **_plasma_keys(plasma)
@@ -1210,13 +1349,31 @@ def radial_profiles(
                 scan = _quiet(lambda d=deck: batched_er_scan(d, er))
             except Exception as exc:  # pragma: no cover - geometry-dependent
                 if emit:
-                    emit(f"    r/a={radius:.2f}: unavailable ({type(exc).__name__})")
+                    emit(f"    r/a={radius:.2f}: solve failure ({type(exc).__name__})")
+                out.append(
+                    {
+                        "r": float(radius),
+                        "profile_input_status": profile_input["status"],
+                        "pressure_representation": profile_input[
+                            "pressure_representation"
+                        ],
+                        "profile_input_detail": profile_input["detail"],
+                        "evaluation_status": "solve_failure",
+                        "failure_type": type(exc).__name__,
+                        "failure_detail": str(exc),
+                    }
+                )
                 continue
             j_r = np.asarray(scan.radial_current, dtype=float).ravel()
             roots = _ambipolar_roots([{"er": float(e), "J_r": float(j)}
                                       for e, j in zip(er, j_r)])  # fmt: skip
-            record: dict[str, Any] = {"r": float(radius), "er_scan": er.tolist(),
-                                      "J_r": j_r.tolist(), "roots": roots}  # fmt: skip
+            record: dict[str, Any] = {
+                "r": float(radius), "er_scan": er.tolist(),
+                "J_r": j_r.tolist(), "roots": roots,
+                "profile_input_status": profile_input["status"],
+                "pressure_representation": profile_input["pressure_representation"],
+                "profile_input_detail": profile_input["detail"],
+            }  # fmt: skip
             evaluation_er: float | None = None
             if roots:
                 # The ion root is the most negative crossing; a device in the
@@ -1235,6 +1392,12 @@ def radial_profiles(
                     record["evaluation_status"] = "no_bracketed_root"
                     record["evaluation_is_root"] = False
                     record["radial_current_evaluated"] = float(j_r[closest])
+                else:
+                    record["evaluation_status"] = "solve_failure"
+                    record["failure_type"] = "NonFiniteRadialCurrent"
+                    record["failure_detail"] = (
+                        "the electric-field scan returned no finite radial current"
+                    )
             if evaluation_er is not None:
                 record["er_evaluated"] = evaluation_er
                 mom = scan.moments
@@ -1257,7 +1420,9 @@ def radial_profiles(
                 to_r_hat = None
                 if "psi_a_hat" in geometry and "a_hat" in geometry:
                     to_r_hat = flux_psi_hat_to_r_hat(
-                        psi_a_hat=geometry["psi_a_hat"], a_hat=geometry["a_hat"], r_n=radius
+                        psi_a_hat=geometry["psi_a_hat"],
+                        a_hat=geometry["a_hat"],
+                        r_n=radius,
                     )
                 for key, name, unit in (
                     ("particleFlux_vm_psiHat", "particle_flux", PARTICLE_FLUX),
@@ -1327,7 +1492,9 @@ def _panel_radial_bootstrap(ax, profiles: list[dict[str, Any]]) -> bool:
     label = (r"$\langle j_\parallel B\rangle/\sqrt{\langle B^2\rangle}$"
              + (" [kA/m$^2$]" if dimensional else " [SFINCS units]"))  # fmt: skip
     r = [p["r"] for p in pts]
-    ax.plot(r, [p[key] for p in pts], "o-", ms=4, color="tab:blue", label="DKX (kinetic)")
+    ax.plot(
+        r, [p[key] for p in pts], "o-", ms=4, color="tab:blue", label="DKX (kinetic)"
+    )
     vmec = [(p["r"], p["jdotb_vmec_kA_m2"]) for p in pts if "jdotb_vmec_kA_m2" in p]
     if dimensional and len(vmec) >= 2:
         ax.plot([v[0] for v in vmec], [v[1] for v in vmec], "^:", ms=4,
@@ -1353,18 +1520,29 @@ def _panel_radial_bootstrap(ax, profiles: list[dict[str, Any]]) -> bool:
         centre = 0.5 * (max(finite) + min(finite))
         span = max(max(finite) - min(finite), 0.25 * abs(centre), 0.5)
         twin.set_ylim(centre - 0.6 * span, centre + 0.6 * span)
-    title = "bootstrap current and ambipolar $E_r$" if all_roots else (
-        "bootstrap current; open squares use closest scanned $E_r$"
+    title = (
+        "bootstrap current and ambipolar $E_r$"
+        if all_roots
+        else ("bootstrap current; open squares use closest scanned $E_r$")
     )
     ax.set_title(title, fontsize=9)
     if not all_roots:
         twin.scatter(
             [p["r"] for p in pts if not p.get("evaluation_is_root", True)],
-            [p.get("er_evaluated", float("nan")) for p in pts
-             if not p.get("evaluation_is_root", True)],
-            marker="s", facecolors="none", edgecolors="tab:red", zorder=4,
+            [
+                p.get("er_evaluated", float("nan"))
+                for p in pts
+                if not p.get("evaluation_is_root", True)
+            ],
+            marker="s",
+            facecolors="none",
+            edgecolors="tab:red",
+            zorder=4,
         )
-    handles = ax.get_lines()[: 2 if (dimensional and len(vmec) >= 2) else 1] + twin.get_lines()[:1]
+    handles = (
+        ax.get_lines()[: 2 if (dimensional and len(vmec) >= 2) else 1]
+        + twin.get_lines()[:1]
+    )
     # "best" put the box on the Er curve on every device tried; the three curves
     # here all trend downward, so the upper-left corner is the reliable gap.
     ax.legend(handles, [h.get_label() for h in handles], fontsize=7,
@@ -1434,7 +1612,8 @@ def _panel_radial_fluxes(ax, profiles: list[dict[str, Any]],
                     + (" [kW/m$^2$]" if dimensional else "  [SFINCS units]"))  # fmt: skip
     ax.set_title(
         "particle and heat flux at the ambipolar root"
-        if all_roots else "fluxes at roots / explicitly flagged closest scanned $E_r$",
+        if all_roots
+        else "fluxes at roots / explicitly flagged closest scanned $E_r$",
         fontsize=9,
     )
     handles = ax.get_lines() + twin.get_lines()
@@ -1469,9 +1648,11 @@ def write_representative_output(
         "resolution_profile": resolution_profile or DEFAULT_RESOLUTION_PROFILE,
         # The SI factors behind every "_kA_m2" / "_si" dataset, so the file can
         # be converted back to SFINCS units without consulting the source.
-        "units": {"current_density_A_per_m2": units.CURRENT_DENSITY,
-                  "particle_flux_per_m2_s": units.PARTICLE_FLUX,
-                  "heat_flux_W_per_m2": units.HEAT_FLUX},
+        "units": {
+            "current_density_A_per_m2": units.CURRENT_DENSITY,
+            "particle_flux_per_m2_s": units.PARTICLE_FLUX,
+            "heat_flux_W_per_m2": units.HEAT_FLUX,
+        },
     }
     if scan:
         for key in ("nu_prime", "e_star", "D11", "D31", "D33"):
@@ -1485,13 +1666,21 @@ def write_representative_output(
         # callers that provide a root-only profile: a known root is necessarily
         # the field at which its observables were evaluated.
         payload["profiles/er_evaluated"] = [
-            p.get("er_evaluated", p.get("er_ambipolar", float("nan")))
-            for p in profiles
+            p.get("er_evaluated", p.get("er_ambipolar", float("nan"))) for p in profiles
         ]
         payload["profiles/evaluation_is_root"] = [
             float(bool(p.get("evaluation_is_root", "er_ambipolar" in p)))
             for p in profiles
         ]
+        for key in (
+            "evaluation_status",
+            "profile_input_status",
+            "pressure_representation",
+            "profile_input_detail",
+            "failure_type",
+            "failure_detail",
+        ):
+            payload[f"profiles/{key}"] = [str(p.get(key, "")) for p in profiles]
         for key in ("particle_flux", "heat_flux", "particle_flux_si", "heat_flux_si"):
             rows = [p.get(key) for p in profiles if p.get(key) is not None]
             if rows:
@@ -1512,7 +1701,14 @@ def write_representative_output(
                     for sub, v in value.items():
                         handle.attrs[f"{key}/{sub}"] = v
                 else:
-                    handle.create_dataset(key, data=np.asarray(value, dtype=float))
+                    array = np.asarray(value)
+                    if array.dtype.kind in {"U", "S", "O"}:
+                        string_type = h5py.string_dtype(encoding="utf-8")
+                        handle.create_dataset(
+                            key, data=array.astype(object), dtype=string_type
+                        )
+                    else:
+                        handle.create_dataset(key, data=np.asarray(value, dtype=float))
         return path.resolve()
     except Exception:
         import json  # noqa: PLC0415
