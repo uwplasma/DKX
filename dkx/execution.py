@@ -978,7 +978,9 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
                     if case.electric_field.continue_branches
                     else None
                 ),
-                radial_factor=radial.d_dpsi_hat_to_d_dr_hat,
+                # SFINCS diagnostics multiply a psiHat-directed flux by
+                # d(rHat)/d(psiHat) to report the physical radial flux.
+                radial_factor=radial.d_dr_hat_to_d_dpsi_hat,
                 solve_method=_route_name(case.solver.method),
                 solve_tolerance=case.solver.relative_tolerance,
                 memory_budget_gb=(
@@ -1024,7 +1026,9 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
             )
         state = np.asarray(solved.x, dtype=np.float64).reshape((-1,))
         moments = profile_moments_from_operator(op, state)
-        radial_factor = radial.d_dpsi_hat_to_d_dr_hat
+        # diagnostics.F90 uses d(rHat)/d(psiHat), not its inverse, when
+        # converting particleFlux/heatFlux from psiHat to rHat.
+        radial_factor = radial.d_dr_hat_to_d_dpsi_hat
         particle_flux[index] = (
             np.asarray(moments["particleFlux_vm_psiHat"], dtype=np.float64)
             * radial_factor
