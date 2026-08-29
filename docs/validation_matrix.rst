@@ -112,6 +112,25 @@ retained for reproduction, not for a cross-code performance claim. Multispecies
 and stellarator full-FP physics, finite electric field, Phi1, ambipolar roots,
 and experimental agreement remain separate gates.
 
+Matched finite-Er full-kinetic profile
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The companion ``validation/full_kinetic_sfincs_finite_er_v1.json`` artifact
+uses the pinned upstream one-species full-FP tokamak case at normalized
+``Er = -30``. Both codes use full trajectories, automatic constraint 1, a
+``1e-13`` solver tolerance, and matched angular, pitch, and speed grids. The
+SFINCS matrices grow from 6,887 to 12,509 unknowns; DKX's distinct internal
+representation grows from 10,532 to 18,614. Audit the comparison by passing the
+artifact to the shared command above.
+
+The finest flow/current, momentum flux, heat flux, and speed-resolved outputs
+agree within ``1.88e-9`` scaled error. High-to-ultra movement is at most
+``0.326%``, and all completed true residuals are below ``5.25e-11``.
+Axisymmetric intrinsic ambipolarity makes summed particle flux and NTV
+cancellation-level quantities, so their acceptance gate is ``2e-11`` absolute.
+This is a prescribed-field surface comparison, not an electric-field scan or
+ambipolar-root validation. Stellarator full-FP physics remains outstanding.
+
 Publication validation dashboard
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
