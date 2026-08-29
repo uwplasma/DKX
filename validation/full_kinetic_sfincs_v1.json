@@ -1,0 +1,219 @@
+{
+  "schema": "dkx.full_kinetic_sfincs.v1",
+  "created_utc": "2026-08-29T09:00:00Z",
+  "claim_scope": "matched_zero_field_axisymmetric_full_fokker_planck_surface_profile",
+  "summary": "A matched one-species analytic-tokamak surface with physical density and temperature gradients, full linearized Fokker-Planck collisions, full trajectories, and the recommended automatic constraint is independently solved by pinned SFINCS v3 and DKX on two accepted resolution rungs.",
+  "source": {
+    "dkx_commit": "5d17abd8e9a559402e65b431150a0542bc547177",
+    "dkx_version": "2.3.1",
+    "solvax_version": "0.18.0",
+    "sfincs_commit": "8df5453472e982df0f6ae005243ce38d57a83711",
+    "sfincs_upstream_deck": "fortran/version3/examples/tokamak_1species_FPCollisions_noEr/input.namelist",
+    "sfincs_upstream_deck_sha256": "7167d93f317b82a0f319e14753170704ea02ffffa77da84a97d174d8411f62c7",
+    "sfincs_executable_sha256": "795e4fa339628c33c0c40dcae473ca5614be72198d948cbb5f38ce69de9a4fc6",
+    "sfincs_makefile_sha256": "edcff789ae214e95eceba842b9edf35e538a6a57c92d97e49a879df8124c4650",
+    "sfincs_build_note": "Pinned source with no scientific-source edits, compiled against the recorded MUMPS-enabled conda-forge stack. The makefile is external build configuration. No link stubs are present in this build. Runtime output explicitly reports both mumps and superlu_dist detected and selects mumps."
+  },
+  "environment": {
+    "host": "Mac mini, Apple M4, 10 CPU cores, 24 GB RAM",
+    "os": "macOS arm64",
+    "python": "3.11.15",
+    "jax": "0.9.2",
+    "numpy": "2.4.3",
+    "scipy": "1.17.1",
+    "h5py": "3.16.0",
+    "sfincs_packages": [
+      "petsc=3.23.6=real_hd8b16a4_0",
+      "mumps-mpi=5.8.1=hfadee43_3",
+      "superlu_dist=9.1.0=h89afcdd_0",
+      "mpich=4.3.2=hf5485c1_101",
+      "hdf5=1.14.6=mpi_mpich_h15328f7_7",
+      "netcdf-fortran=4.6.2=mpi_mpich_hf3b1206_4",
+      "libnetcdf=4.10.0=mpi_mpich_h3c31a8f_2",
+      "gfortran=15.3.0=h500d687_4"
+    ],
+    "sfincs_threads": 1,
+    "timing_note": "Times and memory are reproducibility metadata, not a cross-code performance claim. DKX cold measurements use separate initially empty compilation caches; warm measurements use a new process and the populated matching cache."
+  },
+  "equations": {
+    "rhs_mode": 1,
+    "collision_operator": 0,
+    "collision_model": "full_linearized_fokker_planck",
+    "geometry": "analytic_axisymmetric_tokamak",
+    "radial_coordinate": "rN",
+    "rN": 0.3,
+    "electric_field": 0.0,
+    "include_x_dot": true,
+    "include_electric_field_term_in_xi_dot": true,
+    "use_dkes_exb_drift": false,
+    "include_phi1": false,
+    "constraint_input": -1,
+    "constraint_resolved": 1,
+    "species": {
+      "Z": 1.0,
+      "m_hat": 1.0,
+      "n_hat": 1.0,
+      "T_hat": 0.5,
+      "dn_hat_dr_hat": -6.0,
+      "dT_hat_dr_hat": -3.0
+    },
+    "normalization": {
+      "Delta": 0.0045694,
+      "alpha": 1.0,
+      "nu_n": 0.0084774,
+      "psiA_hat": 0.045,
+      "a_hat": 0.1,
+      "G_hat": 1.0,
+      "I_hat": 0.0,
+      "iota": 1.31,
+      "epsilon_t": 0.1
+    },
+    "solver_tolerance": 1e-10
+  },
+  "acceptance": {
+    "max_cross_code_scaled_error": 1e-8,
+    "max_high_to_ultra_scaled_movement": 0.005,
+    "max_near_zero_absolute_value": 1e-12,
+    "max_completed_true_residual": 5e-11,
+    "accepted_nonzero_observables": [
+      "FSABFlow",
+      "heatFlux_vm_psiHat"
+    ],
+    "near_zero_observables": [
+      "particleFlux_vm_psiHat",
+      "NTV"
+    ],
+    "measured_max_cross_code_scaled_error": 2.6843339656885753e-10,
+    "measured_max_high_to_ultra_scaled_movement": 0.002797721820022167,
+    "measured_max_near_zero_absolute_value": 3.625981422302594e-13,
+    "measured_max_completed_true_residual": 1.8153328e-11,
+    "all_gates_pass": true
+  },
+  "rungs": [
+    {
+      "id": "high",
+      "input": "validation/inputs/tokamak_full_fp_high.input.namelist",
+      "input_sha256": "e30288d0d847940942f68b8e05e17b34fb4743d64b8be7d66b8c0c0943070682",
+      "resolution": {
+        "Ntheta": 27,
+        "Nzeta": 1,
+        "Nxi": 39,
+        "Nx": 10,
+        "NL": 4,
+        "matrix_size": 6887
+      },
+      "sfincs": {
+        "completed_true_residual": 1.5667228e-11,
+        "linear_converged_reason": 2,
+        "wall_seconds": 0.30,
+        "solve_seconds": 0.22303199999987555,
+        "maximum_rss_bytes": 150978560,
+        "peak_footprint_bytes": 113673080,
+        "raw_output_sha256": "4f25cb65e2ce6bb03aeef88d361259fc9b8468442f456640d62834f44f79daf8",
+        "raw_log_sha256": "0b6c2ee98258552e8b7e75507f13d08882fbc47c46e747fd323041e8842a0e99",
+        "compact_output_sha256": "92e8515ae27312955f784a1554d9d18e357e80cd5489f5fdd72c0f68631a9c7d",
+        "outputs": {
+          "FSABFlow": 0.03302887921968479,
+          "FSABjHat": 0.03302887921968479,
+          "particleFlux_vm_psiHat": -7.87405842077593e-14,
+          "heatFlux_vm_psiHat": 9.720782064632457e-08,
+          "NTV": 1.6815875431427495e-14,
+          "FSABFlow_vs_x": [9.225117907358421e-09, 1.3382220457557962e-05, 0.0004923131501606756, 0.003756466166618854, 0.010151115003938456, 0.011670138104305653, 0.0057732447043497195, 0.001107178619853912, 6.444123313616805e-05, 5.907917458805728e-07],
+          "particleFlux_vm_psiHat_vs_x": [-1.5526866385338753e-13, -2.134561561486611e-10, -6.992507392579144e-09, -4.946499097458253e-08, -6.792776044195156e-08, 6.013516441102467e-08, 5.440663885090215e-08, 9.622938289039972e-09, 4.3133854291073116e-10, 2.711399445974442e-12],
+          "heatFlux_vm_psiHat_vs_x": [-5.825188325929276e-17, -2.097016908662339e-12, -3.7831575757979177e-10, -8.25154377433479e-09, -2.58820438342493e-08, 4.379583774303499e-08, 6.763605922454387e-08, 1.898380514193006e-08, 1.2938444022701193e-09, 1.2274575858180241e-11]
+        }
+      },
+      "dkx": {
+        "completed_true_residual": 2.12661829e-13,
+        "linear_solver": "gcrot",
+        "cold_wall_seconds": 13.27,
+        "warm_wall_seconds": 4.96,
+        "cold_maximum_rss_bytes": 1205338112,
+        "warm_maximum_rss_bytes": 1044004864,
+        "cold_peak_footprint_bytes": 1024935664,
+        "warm_peak_footprint_bytes": 909084304,
+        "raw_output_sha256": "7d8530ff231f0bbb152590e350c600b907c0dc585ad054226d55bd980790c72a",
+        "cold_log_sha256": "7d5f08299a1d4f49ff2a05d8beacdd5ab01370ef6bbd43957fd4ce64a565c208",
+        "warm_log_sha256": "92d8782f0da525a92293dad4d2e30def4388eaa7292ec58d353f7b2d7c903afe",
+        "compact_output_sha256": "27c9818d1cca7181760c4618e7e3e8ce6a33a4c9ef9296fa79b40f7c3e5dfc4b",
+        "outputs": {
+          "FSABFlow": 0.03302887921842105,
+          "FSABjHat": 0.03302887921842105,
+          "particleFlux_vm_psiHat": -7.87250222726238e-14,
+          "heatFlux_vm_psiHat": 9.72078206559769e-08,
+          "NTV": -1.2919500550532752e-21,
+          "FSABFlow_vs_x": [9.225117906951877e-09, 1.3382220456935659e-05, 0.0004923131501374886, 0.003756466166449516, 0.010151115003508264, 0.011670138103871713, 0.005773244704175398, 0.001107178619821844, 6.444123313617057e-05, 5.907917458080091e-07],
+          "particleFlux_vm_psiHat_vs_x": [-1.552686638481216e-13, -2.134561561430336e-10, -6.99250739239713e-09, -4.9464990972395064e-08, -6.792776043707075e-08, 6.01351644172699e-08, 5.440663885257149e-08, 9.622938289430886e-09, 4.3133854291971124e-10, 2.7113994460929707e-12],
+          "heatFlux_vm_psiHat_vs_x": [-5.825188325731222e-17, -2.097016908607082e-12, -3.7831575756997893e-10, -8.251543773969288e-09, -2.588204383239012e-08, 4.379583774758668e-08, 6.763605922662654e-08, 1.8983805142699135e-08, 1.293844402297096e-09, 1.2274575858718057e-11]
+        }
+      }
+    },
+    {
+      "id": "ultra",
+      "input": "validation/inputs/tokamak_full_fp_ultra.input.namelist",
+      "input_sha256": "df2976937bc1137d59f39b4d1f0812f3277181f334927fee398c2cf0a82af3d7",
+      "resolution": {
+        "Ntheta": 33,
+        "Nzeta": 1,
+        "Nxi": 47,
+        "Nx": 12,
+        "NL": 4,
+        "matrix_size": 12509
+      },
+      "sfincs": {
+        "completed_true_residual": 1.8153328e-11,
+        "linear_converged_reason": 2,
+        "wall_seconds": 0.37,
+        "solve_seconds": 0.28641700000025594,
+        "maximum_rss_bytes": 174096384,
+        "peak_footprint_bytes": 138118056,
+        "raw_output_sha256": "f1a7680753135db93fc0074a4220b585a106be977fdd54de899ab4d8d183ad10",
+        "raw_log_sha256": "4b9cf09d4a1f3c3fb3027173222b7ebd25ff1264d14b71206e580bcd5048a931",
+        "compact_output_sha256": "958f996c2abcaf6059afbdfde4b78eabb76f81062eedbb5d4da8d50046e22d90",
+        "outputs": {
+          "FSABFlow": 0.033015011221436324,
+          "FSABjHat": 0.033015011221436324,
+          "particleFlux_vm_psiHat": 3.6255222831133205e-13,
+          "heatFlux_vm_psiHat": 9.693586020542555e-08,
+          "NTV": 6.644939890117634e-14,
+          "FSABFlow_vs_x": [2.523574507386033e-09, 3.908134080436926e-06, 0.00016402073712708324, 0.0015599456112527004, 0.005805701837127784, 0.010370887464300382, 0.00956221198065291, 0.0044720518271942605, 0.0009849459530947033, 8.884425312854195e-05, 2.480332256990885e-06, 1.0567646015173467e-08],
+          "particleFlux_vm_psiHat_vs_x": [-4.2832973503472493e-14, -6.482707148223141e-11, -2.453256344857034e-09, -2.1263167705863177e-08, -6.731619918440671e-08, -2.6175931615974684e-08, 6.578810669976407e-08, 4.236043126700049e-08, 8.503740948526674e-09, 6.088270118955188e-10, 1.2645838154243394e-11, 3.5542452302847645e-14],
+          "heatFlux_vm_psiHat_vs_x": [-9.566682653759717e-18, -3.853830747636489e-13, -8.222174603273813e-11, -2.2520145009825133e-09, -1.663998336354878e-08, -1.256899150293765e-08, 5.441022239880044e-08, 5.55764670188081e-08, 1.6716141237840414e-08, 1.7257980943316615e-09, 5.0625939498642386e-11, 2.0202229098588608e-13]
+        }
+      },
+      "dkx": {
+        "completed_true_residual": 3.12646695e-13,
+        "linear_solver": "gcrot",
+        "cold_wall_seconds": 13.95,
+        "warm_wall_seconds": 5.29,
+        "cold_maximum_rss_bytes": 1201422336,
+        "warm_maximum_rss_bytes": 1104740352,
+        "cold_peak_footprint_bytes": 1009190664,
+        "warm_peak_footprint_bytes": 932202080,
+        "raw_output_sha256": "3d99a13abd3eb6c19ae40cd2acf3d94973951e4098d41288f6964a44bc575978",
+        "cold_log_sha256": "48f8befaaee163072ca6952cf1e143de291acd25138173e148c998ae05c26674",
+        "warm_log_sha256": "f32a7c6c0ce1fd2f15b56e655dcdbfe5f382f650a1fa46cb3a8886b7a12d9a11",
+        "compact_output_sha256": "804da8aa24576a19e51fda54b535f9e25ac246d955df260a05a6790e21710fb9",
+        "outputs": {
+          "FSABFlow": 0.03301501121762773,
+          "FSABjHat": 0.03301501121762773,
+          "particleFlux_vm_psiHat": 3.625981422302594e-13,
+          "heatFlux_vm_psiHat": 9.693586022998277e-08,
+          "NTV": -1.0730899758688459e-21,
+          "FSABFlow_vs_x": [2.5235745070248053e-09, 3.908134079914199e-06, 0.0001640207371058283, 0.001559945611047648, 0.0058057018363905895, 0.010370887463058873, 0.009562211979569014, 0.004472051826783015, 0.0009849459529915805, 8.88442531243611e-05, 2.480332256374099e-06, 1.0567646027878518e-08],
+          "particleFlux_vm_psiHat_vs_x": [-4.2832973499177007e-14, -6.48270714759938e-11, -2.4532563446149396e-09, -2.1263167703077673e-08, -6.731619917278235e-08, -2.617593159790477e-08, 6.578810670984569e-08, 4.236043126963775e-08, 8.503740948959833e-09, 6.088270119109826e-10, 1.2645838155227545e-11, 3.554245223992738e-14],
+          "heatFlux_vm_psiHat_vs_x": [-9.566682652800427e-18, -3.853830747266111e-13, -8.222174602461049e-11, -2.2520145006879526e-09, -1.663998336067623e-08, -1.2568991494260689e-08, 5.4410222407143016e-08, 5.557646702226754e-08, 1.6716141238693098e-08, 1.7257980943755383e-09, 5.062593950258288e-11, 2.020222906282189e-13]
+        }
+      }
+    }
+  ],
+  "exclusions": [
+    "not_multispecies_validation",
+    "not_stellarator_full_fokker_planck_validation",
+    "not_finite_er_validation",
+    "not_ambipolar_profile_validation",
+    "not_phi1_validation",
+    "not_experimental_validation",
+    "not_cross_code_performance_validation"
+  ]
+}

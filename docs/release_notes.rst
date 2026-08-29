@@ -4,6 +4,18 @@ Release notes
 Unreleased
 ----------
 
+- Added a matched full-kinetic DKX/SFINCS v3 validation rung for a physical
+  one-species analytic-tokamak surface. Both codes use the full linearized
+  Fokker--Planck operator, full trajectories, identical density/temperature
+  gradients and coordinates, zero electric field, the recommended automatic
+  constraint, and a ``1e-10`` linear tolerance. At the finest checked rung the
+  largest scaled error over nonzero scalar and speed-resolved observables is
+  ``2.69e-10``; the high-to-ultra bootstrap/heat-flux movement is at most
+  ``0.280%`` and every completed true residual is below ``1.82e-11``.
+  Axisymmetric particle flux and NTV are explicitly gated as near-zero absolute
+  quantities. The artifact pins the MUMPS-enabled reference build, commits,
+  decks, compact and raw outputs, logs, cold/warm timing, memory, checksums, and
+  exclusions without making a cross-code performance claim.
 - Added a bounded independent zero-field monoenergetic validation rung for a
   DSHAPE tokamak, NCSX, and W7-X EIM. The checked artifact aligns the applied
   Lorentz frequency, local-radius Beidler normalization, reference-field
