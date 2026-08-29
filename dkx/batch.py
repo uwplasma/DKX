@@ -166,7 +166,9 @@ jax.tree_util.register_dataclass(
 # ---------------------------------------------------------------------------
 
 
-def solve_footprint_bytes(op: KineticOperator) -> float:
+def solve_footprint_bytes(
+    op: KineticOperator, *, memory_budget_gb: float | None = None
+) -> float:
     """Estimated peak bytes of one ``method="auto"`` solve of ``op``.
 
     Follows the auto-router's own decision via
@@ -177,10 +179,14 @@ def solve_footprint_bytes(op: KineticOperator) -> float:
     full-band factorization peak, which that route never allocates and which
     overstates a production-shaped solve by ~46x (silently serializing batched
     scans through ``chunk=1``).  Full-band and tier-2 routes keep the
-    conservative full-band peak.  The solved state vector and a fixed runtime
+    conservative full-band peak.  ``memory_budget_gb`` is forwarded to the
+    same auto-router used by the solve so budget-forced truncation and chunk
+    sizing cannot disagree.  The solved state vector and a fixed runtime
     allowance (:data:`_RUNTIME_OVERHEAD_BYTES`) are added on top.
     """
-    route_bytes = float(auto_solve_peak_memory_bytes(op))
+    route_bytes = float(
+        auto_solve_peak_memory_bytes(op, budget_gb=memory_budget_gb)
+    )
     state_bytes = float(op.total_size) * 8.0
     return route_bytes + state_bytes + _RUNTIME_OVERHEAD_BYTES
 
@@ -238,7 +244,7 @@ def auto_chunk_size(
     if batch <= 0:
         raise ValueError("batch must be a positive integer.")
     budget = resolve_memory_budget_bytes(memory_budget_gb)
-    per_solve = solve_footprint_bytes(op)
+    per_solve = solve_footprint_bytes(op, memory_budget_gb=memory_budget_gb)
     chunk = int(budget // per_solve)
     chunk = max(1, chunk)
     if max_batch is not None:
@@ -398,7 +404,9 @@ def batched_solve(
         max_batch: optional hard cap on the chunk size.
         memory_budget_gb: optional memory budget override (GB); defaults to a
             fraction of the device/host memory (:func:`resolve_memory_budget_bytes`).
-            With a multi-device split the budget bounds each device's chunk.
+            The same value controls both the per-element solver route and the
+            batch chunk size. With a multi-device split the budget bounds each
+            device's chunk.
         ntv_kernel_tz: optional NTV geometric kernel forwarded to the moment
             table (see :func:`dkx.run.profile_moments_from_operator`).
         devices: ``None`` (single-device, the default), ``"auto"`` (every local
@@ -433,6 +441,7 @@ def batched_solve(
             method=solve_method,
             tol=tol,
             differentiable=differentiable,
+            tier1_memory_budget_gb=memory_budget_gb,
             emit=None,
         )
         state = jnp.reshape(result.x, (-1,))
@@ -480,7 +489,7 @@ def batched_solve(
         residual_norms = jnp.concatenate([r for _, _, r in gathered], axis=0)
         n_chunks = -(-shard_max // chunk)
     executed_method = (
-        _auto_route_structural(op)
+        _auto_route_structural(op, budget_gb=memory_budget_gb)
         if str(solve_method).strip().lower() == "auto"
         else {"iterative": "gmres"}.get(
             str(solve_method).strip().lower(), str(solve_method).strip().lower()
