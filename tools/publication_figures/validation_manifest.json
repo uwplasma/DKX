@@ -677,6 +677,49 @@
     ]
   },
   {
+    "id": "native_w7x_ambipolar_phase_space_ladder",
+    "status": "implemented",
+    "release_gate": {
+      "claim_status": "regression_scaffold",
+      "blocks_current_release": false,
+      "evidence": "checked coarse/reference/fine five-surface W7-X PAS/DKES ladder with every root and selected SI flux movement, raw-result checksums, residuals, timing, memory, and explicit refinement_exhausted status",
+      "promotion_gate": "Do not promote the native profile as phase-space converged until a bounded follow-on ladder passes the unchanged 0.005 kV/m root and 2% selected-flux movement gates, including zeta and speed evidence"
+    },
+    "kind": "profile_validation",
+    "literature": [
+      "https://doi.org/10.1063/1.4870077",
+      "https://github.com/landreman/sfincs"
+    ],
+    "scripts": [
+      "tools/paper_benchmarks/audit_ambipolar_phase_space_ladder.py"
+    ],
+    "artifacts": [
+      "validation/ambipolar_phase_space_ladder_v1.json",
+      "validation/inputs/w7x_standard_native_ambipolar_profile_coarse.toml",
+      "validation/inputs/w7x_standard_native_ambipolar_profile.toml",
+      "validation/inputs/w7x_standard_native_ambipolar_profile_fine.toml"
+    ],
+    "claims": [
+      "A separate kinetic-grid ladder preserves root counts [1, 1, 3, 1, 1], classifications, branch identities, and selected branches across all three resolutions",
+      "Reference-to-fine movement reaches 1.6259765625 kV/m for roots, 4.08% for selected particle flux, and 7.81% for selected heat flux, so the unchanged gates reject phase-space convergence",
+      "The auditable status is refinement_exhausted; timings and memory are provenance and the fine rung does not refine zeta or speed beyond the reference"
+    ],
+    "source_code": [
+      "dkx/workflows/ambipolar_native.py",
+      "dkx/result.py",
+      "tools/paper_benchmarks/audit_ambipolar_phase_space_ladder.py"
+    ],
+    "tests": [
+      "tests/test_ambipolar_phase_space_ladder.py"
+    ],
+    "acceptance_gates": [
+      "Verify all three physical-unit TOMLs, the pinned W7-X geometry, raw native NetCDF results, and compact extraction by checksum",
+      "Recompute every root electric-field movement and every selected particle/heat-flux movement with deterministic identity alignment",
+      "Require the artifact to retain the unchanged 0.005 kV/m root, 2% selected-flux, and 1e-12 accepted true-residual gates",
+      "Treat accurate refinement_exhausted reporting as evidence integrity, never as scientific admission or permission to relax a numerical gate"
+    ]
+  },
+  {
     "id": "adjoint_sensitivity_gradient_checks",
     "status": "implemented",
     "release_gate": {
