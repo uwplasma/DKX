@@ -28,6 +28,10 @@ Git; later records refer to them by checksum or stable artifact identifier.
 - `ambipolar_pitch_explicit_groups_v1.json`: exact-total, exact-high-work
   explicit allocations that isolate low- and intermediate-speed sensitivity
   while retaining the unresolved root and flux movement.
+- `ambipolar_pitch_combined_v1.json`: bounded follow-up that raises low and
+  intermediate pitch work together, retains the failed intermediate-refinement
+  gates, and records the pinned SFINCS/YANCC/MONKES/PENTA source review that
+  motivated compact per-speed flux diagnostics.
 - `inputs/*`: the exact DKX decks and native cases used by these rungs.
 
 ## Independent cross-code audit

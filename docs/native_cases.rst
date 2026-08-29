@@ -88,9 +88,21 @@ the operator. Run a checked example from Python:
    result = dkx.run(case)
    result.print_summary()
    result.save()                         # the case's [output].file
+
    result.plot("profile.png")
    particle_flux = result.particle_flux_m2_s
    certificate = result.certificate()
+
+For an ambipolar profile, every retained electric-field evaluation also keeps
+the already integrated speed-node contributions
+``evaluation_particle_flux_m2_s_vs_speed`` and
+``evaluation_heat_flux_W_m2_vs_speed`` on named
+``(surface, evaluation, speed, species)`` axes. ``speed_v_th`` is the
+dimensionless node coordinate :math:`v/v_{th}`. Summing either diagnostic over
+``speed`` reproduces the corresponding retained species flux; these compact
+arrays make speed-local convergence failures inspectable without retaining the
+full distribution function. They are diagnostics, not a claim that the speed
+or pitch discretization is converged.
 
 For a VMEC equilibrium, change only the geometry source:
 

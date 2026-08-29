@@ -240,6 +240,14 @@ def test_native_ambipolar_result_preserves_scan_roots_and_selection(
             parallel_current_a_t_m2=4.0 + surface_index,
             residual_norm=1.0e-12,
             stage="root_refinement",
+            particle_flux_m2_s_vs_speed=(
+                np.asarray([0.1, 0.2, 0.3, 0.4])[:, None]
+                * (2.0 + surface_index)
+            ),
+            heat_flux_w_m2_vs_speed=(
+                np.asarray([0.1, 0.2, 0.3, 0.4])[:, None]
+                * (3.0 + surface_index)
+            ),
         )
         coarse = replace(
             evaluation,
@@ -291,11 +299,31 @@ def test_native_ambipolar_result_preserves_scan_roots_and_selection(
     np.testing.assert_array_equal(result.ambipolar_branch_event_count, [1, 0])
     assert result.metadata["ambipolar_branch_continuation"]["event_count"] == 1
     assert result.dimensions["radial_current_A_m2"] == ("surface", "evaluation")
+    assert result.dimensions["evaluation_particle_flux_m2_s_vs_speed"] == (
+        "surface",
+        "evaluation",
+        "speed",
+        "species",
+    )
+    np.testing.assert_allclose(
+        np.nansum(result.evaluation_particle_flux_m2_s_vs_speed, axis=2),
+        result.evaluation_particle_flux_m2_s,
+    )
+    np.testing.assert_allclose(
+        np.nansum(result.evaluation_heat_flux_W_m2_vs_speed, axis=2),
+        result.evaluation_heat_flux_W_m2,
+    )
     assert result.metadata["ambipolar_all_surfaces_bracketed"] is True
     loaded = dkx.Result.load(tmp_path / "ambipolar.nc")
     np.testing.assert_allclose(loaded.ambipolar_root_kV_m[:, 0], [-1.5, -1.25])
     np.testing.assert_array_equal(
         loaded.selected_ambipolar_branch, result.selected_ambipolar_branch
+    )
+    np.testing.assert_allclose(loaded.speed_v_th, result.speed_v_th)
+    np.testing.assert_allclose(
+        loaded.evaluation_particle_flux_m2_s_vs_speed,
+        result.evaluation_particle_flux_m2_s_vs_speed,
+        equal_nan=True,
     )
 
 

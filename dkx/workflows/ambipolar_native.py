@@ -33,6 +33,8 @@ class RootEvaluation:
     parallel_current_a_t_m2: float
     residual_norm: float
     stage: str
+    particle_flux_m2_s_vs_speed: np.ndarray | None = None
+    heat_flux_w_m2_vs_speed: np.ndarray | None = None
     reason: str = "initial_uniform_grid"
     refinement_level: int = 0
     solver_attempts: tuple[SolverAttempt, ...] = ()
@@ -527,7 +529,13 @@ def solve_native_ambipolar_surface(
             "electric_field.search_points, or max_root_iterations"
         )
     species_count = max(1, len(np.atleast_1d(getattr(problem, "z_s", [1.0]))))
-    retained_bytes = evaluation_budget * (512 + 16 * species_count)
+    speed_count = max(
+        1,
+        int(getattr(getattr(problem, "operator", None), "n_x", 1)),
+    )
+    retained_bytes = evaluation_budget * (
+        512 + 16 * species_count + 16 * species_count * speed_count
+    )
     if retained_bytes > float(memory_budget_gb) * (1024**3):
         raise MemoryError(
             "native ambipolar refinement evidence exceeds the memory preflight: "
@@ -554,6 +562,18 @@ def solve_native_ambipolar_surface(
             * float(radial_factor)
             * HEAT_FLUX
         )
+        particle_vs_speed = (
+            np.asarray(
+                batch.moments["particleFlux_vm_psiHat_vs_x"], dtype=np.float64
+            )
+            * float(radial_factor)
+            * PARTICLE_FLUX
+        )
+        heat_vs_speed = (
+            np.asarray(batch.moments["heatFlux_vm_psiHat_vs_x"], dtype=np.float64)
+            * float(radial_factor)
+            * HEAT_FLUX
+        )
         parallel = (
             np.asarray(batch.moments["FSABjHat"], dtype=np.float64) * PARALLEL_CURRENT
         )
@@ -566,7 +586,15 @@ def solve_native_ambipolar_surface(
         residuals = (
             np.asarray(batch.residual_norms, dtype=np.float64).reshape((-1,)).copy()
         )
-        return particle, heat, parallel, radial_current, residuals
+        return (
+            particle,
+            heat,
+            particle_vs_speed,
+            heat_vs_speed,
+            parallel,
+            radial_current,
+            residuals,
+        )
 
     def evaluate(
         values: np.ndarray, stage: str, reason: str, refinement_level: int
@@ -580,9 +608,15 @@ def solve_native_ambipolar_surface(
                 tol=solve_tolerance,
                 memory_budget_gb=memory_budget_gb,
             )
-            particle, heat, parallel, radial_current, residuals = physical_outputs(
-                batch
-            )
+            (
+                particle,
+                heat,
+                particle_vs_speed,
+                heat_vs_speed,
+                parallel,
+                radial_current,
+                residuals,
+            ) = physical_outputs(batch)
             if not np.all(np.isfinite(residuals)):
                 raise RuntimeError(
                     "native ambipolar scan produced a non-finite residual"
@@ -650,6 +684,8 @@ def solve_native_ambipolar_surface(
                     (
                         retry_particle,
                         retry_heat,
+                        retry_particle_vs_speed,
+                        retry_heat_vs_speed,
                         retry_parallel,
                         retry_current,
                         retry_residuals,
@@ -682,6 +718,8 @@ def solve_native_ambipolar_surface(
                     )
                     particle[index] = retry_particle[0]
                     heat[index] = retry_heat[0]
+                    particle_vs_speed[index] = retry_particle_vs_speed[0]
+                    heat_vs_speed[index] = retry_heat_vs_speed[0]
                     parallel[index] = retry_parallel[0]
                     radial_current[index] = retry_current[0]
                     residuals[index] = retry_residual
@@ -710,6 +748,10 @@ def solve_native_ambipolar_surface(
                     parallel_current_a_t_m2=float(parallel[index]),
                     residual_norm=float(residuals[index]),
                     stage=stage,
+                    particle_flux_m2_s_vs_speed=np.asarray(
+                        particle_vs_speed[index]
+                    ),
+                    heat_flux_w_m2_vs_speed=np.asarray(heat_vs_speed[index]),
                     reason=reason,
                     refinement_level=int(refinement_level),
                     solver_attempts=tuple(attempts[index]),
