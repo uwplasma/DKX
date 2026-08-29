@@ -4,6 +4,15 @@ Release notes
 Unreleased
 ----------
 
+- Added a compact, checksummed native whole-profile certificate for the
+  five-surface W7-X PAS/DKES method case. One portable TOML and pinned Boozer
+  checksum reproduce root counts ``[1, 1, 3, 1, 1]``, selected physical
+  electric fields and SI fluxes, adaptive brackets, branch events, and all 222
+  solver attempts. The audit recomputes every compact gate and can additionally
+  verify both external native NetCDF files and geometry. Cold/warm scientific
+  arrays match exactly except timing; this remains workflow evidence, not
+  phase-space-converged, experimental, full-FP, or independent ambipolar
+  validation.
 - Native ambipolar profiles now retain the executed structural route and every
   linear-solver attempt for each physical electric-field evaluation. When the
   automatic structured route misses the unchanged true-residual target, only
