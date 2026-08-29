@@ -1,0 +1,660 @@
+{
+  "schema": "dkx.native_ambipolar_profile.v1",
+  "created_utc": "2026-08-29T11:40:00Z",
+  "claim_scope": "native_w7x_pas_dkes_whole_profile_workflow_certificate",
+  "summary": "A physical-unit five-surface W7-X standard-configuration profile retains every PAS/DKES kinetic evaluation, all ambipolar roots, adaptive brackets, selected fluxes, branch events, and one bounded automatic true-residual recovery in native NetCDF.",
+  "source": {
+    "dkx_commit": "cb1ed04ca7e7f320b9ebbf066157c703a27cde29",
+    "dkx_version": "2.3.1",
+    "solvax_version": "0.18.0",
+    "sfincs_geometry_source_commit": "8df5453472e982df0f6ae005243ce38d57a83711",
+    "input": "validation/inputs/w7x_standard_native_ambipolar_profile.toml",
+    "input_sha256": "f2bfee1f67582c0dd40647c93542a2c0ea3963244e1d5bb79c9824baf16602e7",
+    "geometry": "SFINCS/equilibria/w7x_standardConfig.bc",
+    "geometry_sha256": "81c686e5a5bd8f38d8b1f754ebe2910951f20094bab35d73d2827d9875bb6062",
+    "geometry_bytes": 19416676,
+    "cold_result_sha256": "199fcf0e6c783405808b2d949aac15e7a417bdb062d217f9aa614d13937b8d60",
+    "warm_result_sha256": "a3a790bf15c3e06afd36147b331fcca216478302d892babbc1000272c030470c",
+    "result_bytes": 339225,
+    "compact_profile_sha256": "95e82e4ead8955b371e27aa394db5523c43b222126be97afd7b3ea2387f46127"
+  },
+  "environment": {
+    "host": "Mac mini, Apple M4, 10 CPU cores, 24 GB RAM",
+    "os": "macOS-26.6.2-arm64-arm-64bit",
+    "python": "3.11.15",
+    "jax": "0.9.2",
+    "jaxlib": "0.9.2",
+    "numpy": "2.4.3",
+    "dkx_cores": 8,
+    "timing_note": "Cold uses an initially empty external compilation cache; warm uses a fresh process and the populated matching cache. Warm wall time is 0.15% above cold, so no warm-speedup claim is made."
+  },
+  "case": {
+    "case_id": "f284407a441b7e06c4f3a24a0b46e80676f60e42d66cf6bce84113c1d1f096bf",
+    "workflow": "ambipolar_profile",
+    "geometry_format": "boozer",
+    "surfaces_psi_N": [
+      0.09,
+      0.16,
+      0.25,
+      0.36,
+      0.49
+    ],
+    "species": [
+      {
+        "charge": 1.0,
+        "density_m3": [
+          1.52e+19,
+          1.49e+19,
+          1.44e+19,
+          1.33e+19,
+          1.15e+19
+        ],
+        "mass_amu": 1.007276,
+        "name": "hydrogen",
+        "temperature_keV": [
+          1.1,
+          1.05,
+          0.95,
+          0.78,
+          0.52
+        ]
+      },
+      {
+        "charge": -1.0,
+        "density_m3": [
+          1.52e+19,
+          1.49e+19,
+          1.44e+19,
+          1.33e+19,
+          1.15e+19
+        ],
+        "mass_amu": 0.0005485799,
+        "name": "electron",
+        "temperature_keV": [
+          4.75,
+          3.6,
+          2.5,
+          1.55,
+          0.85
+        ]
+      }
+    ],
+    "physics": {
+      "collisions": "pitch_angle_scattering",
+      "magnetic_drifts": "dkes",
+      "model": "full_local",
+      "phi1": "off"
+    },
+    "electric_field": {
+      "continue_branches": true,
+      "find_all_roots": true,
+      "max_root_iterations": 15,
+      "mode": "ambipolar",
+      "root_tolerance_kV_m": 0.005,
+      "search_kV_m": [
+        -20.0,
+        20.0
+      ],
+      "search_points": 17,
+      "value_kV_m": null
+    },
+    "resolution": {
+      "pitch": 36,
+      "speed": 6,
+      "theta": 15,
+      "zeta": 37
+    },
+    "solver": {
+      "memory_fraction": 0.75,
+      "method": "auto",
+      "relative_tolerance": 1e-09,
+      "reuse": "auto"
+    },
+    "convergence": {
+      "enabled": true,
+      "max_refinements": 1,
+      "observables": [
+        "particle_flux",
+        "heat_flux",
+        "electric_field"
+      ],
+      "relative_tolerance": 0.02
+    }
+  },
+  "measurements": {
+    "cold": {
+      "process_wall_s": 301.64,
+      "dkx_run_total_s": 299.5713892089989,
+      "maximum_rss_bytes": 13588021248,
+      "peak_footprint_bytes": 17728371400
+    },
+    "warm": {
+      "process_wall_s": 302.09,
+      "dkx_run_total_s": 299.7870259580013,
+      "maximum_rss_bytes": 14178992128,
+      "peak_footprint_bytes": 17770117688
+    }
+  },
+  "profile": {
+    "surfaces": [
+      {
+        "surface_index": 0,
+        "psi_N": 0.09,
+        "r_N": 0.3,
+        "status": "bracketed_root",
+        "refinement_status": "resolved",
+        "evaluation_budget": 1023,
+        "root_count": 1,
+        "roots": [
+          {
+            "index": 0,
+            "electric_field_kV_m": 11.3427734375,
+            "radial_current_A_m2": -8.45479161827498e-05,
+            "slope_A_m2_per_kV_m": 0.0422955199961638,
+            "classification": "electron",
+            "bracket_kV_m": [
+              11.3427734375,
+              11.34765625
+            ],
+            "final_bracket_width_kV_m": 0.0048828125,
+            "root_movement_kV_m": 0.0,
+            "observable_relative_movement": 0.0,
+            "branch_id": "electron-000"
+          }
+        ],
+        "selected_root_index": 0,
+        "selected_branch_id": "electron-000",
+        "selection_reason": "nearest_zero_initial",
+        "selected": {
+          "electric_field_kV_m": 11.3427734375,
+          "particle_flux_m2_s": [
+            7.424341842493395e+17,
+            7.429618908354208e+17
+          ],
+          "heat_flux_W_m2": [
+            272.6134795065322,
+            3072.5975450614355
+          ],
+          "parallel_current_A_T_m2": -104035.60260018054,
+          "primal_residual": 1.4600418281458276e-16
+        },
+        "refinement": [
+          {
+            "level": 0,
+            "search_evaluations": 17,
+            "total_evaluations": 26,
+            "root_count": 1,
+            "root_movement_kV_m": null,
+            "observable_relative_movement": null,
+            "max_bracket_width_kV_m": 0.0048828125,
+            "converged": false
+          },
+          {
+            "level": 1,
+            "search_evaluations": 33,
+            "total_evaluations": 41,
+            "root_count": 1,
+            "root_movement_kV_m": 0.0,
+            "observable_relative_movement": 0.0,
+            "max_bracket_width_kV_m": 0.0048828125,
+            "converged": true
+          }
+        ]
+      },
+      {
+        "surface_index": 1,
+        "psi_N": 0.16,
+        "r_N": 0.4,
+        "status": "bracketed_root",
+        "refinement_status": "resolved",
+        "evaluation_budget": 1023,
+        "root_count": 1,
+        "roots": [
+          {
+            "index": 0,
+            "electric_field_kV_m": 11.630859375,
+            "radial_current_A_m2": 4.217481432641369e-05,
+            "slope_A_m2_per_kV_m": 0.040547352658452294,
+            "classification": "electron",
+            "bracket_kV_m": [
+              11.6259765625,
+              11.630859375
+            ],
+            "final_bracket_width_kV_m": 0.0048828125,
+            "root_movement_kV_m": 0.0,
+            "observable_relative_movement": 0.0,
+            "branch_id": "electron-000"
+          }
+        ],
+        "selected_root_index": 0,
+        "selected_branch_id": "electron-000",
+        "selection_reason": "continued_selected_branch",
+        "selected": {
+          "electric_field_kV_m": 11.630859375,
+          "particle_flux_m2_s": [
+            1.0108320434876978e+18,
+            1.0105688090013659e+18
+          ],
+          "heat_flux_W_m2": [
+            377.4038610808286,
+            3102.4717416119297
+          ],
+          "parallel_current_A_T_m2": -70528.76234007553,
+          "primal_residual": 2.482728207868523e-16
+        },
+        "refinement": [
+          {
+            "level": 0,
+            "search_evaluations": 17,
+            "total_evaluations": 26,
+            "root_count": 1,
+            "root_movement_kV_m": null,
+            "observable_relative_movement": null,
+            "max_bracket_width_kV_m": 0.0048828125,
+            "converged": false
+          },
+          {
+            "level": 1,
+            "search_evaluations": 33,
+            "total_evaluations": 41,
+            "root_count": 1,
+            "root_movement_kV_m": 0.0,
+            "observable_relative_movement": 0.0,
+            "max_bracket_width_kV_m": 0.0048828125,
+            "converged": true
+          }
+        ]
+      },
+      {
+        "surface_index": 2,
+        "psi_N": 0.25,
+        "r_N": 0.5,
+        "status": "bracketed_root",
+        "refinement_status": "resolved",
+        "evaluation_budget": 1023,
+        "root_count": 3,
+        "roots": [
+          {
+            "index": 0,
+            "electric_field_kV_m": -0.48828125,
+            "radial_current_A_m2": 0.0002521782956079703,
+            "slope_A_m2_per_kV_m": 0.26939599334709036,
+            "classification": "ion",
+            "bracket_kV_m": [
+              -0.4931640625,
+              -0.48828125
+            ],
+            "final_bracket_width_kV_m": 0.0048828125,
+            "root_movement_kV_m": 0.0,
+            "observable_relative_movement": 0.0,
+            "branch_id": "ion-000"
+          },
+          {
+            "index": 1,
+            "electric_field_kV_m": 0.8837890625,
+            "radial_current_A_m2": 0.00010967617518641787,
+            "slope_A_m2_per_kV_m": -0.11196905552044471,
+            "classification": "unstable",
+            "bracket_kV_m": [
+              0.8837890625,
+              0.888671875
+            ],
+            "final_bracket_width_kV_m": 0.0048828125,
+            "root_movement_kV_m": 0.0,
+            "observable_relative_movement": 0.0,
+            "branch_id": "unstable-000"
+          },
+          {
+            "index": 2,
+            "electric_field_kV_m": 7.4169921875,
+            "radial_current_A_m2": 4.288499682802617e-05,
+            "slope_A_m2_per_kV_m": 0.021908833364495017,
+            "classification": "electron",
+            "bracket_kV_m": [
+              7.412109375,
+              7.4169921875
+            ],
+            "final_bracket_width_kV_m": 0.0048828125,
+            "root_movement_kV_m": 0.0,
+            "observable_relative_movement": 0.0,
+            "branch_id": "electron-000"
+          }
+        ],
+        "selected_root_index": 2,
+        "selected_branch_id": "electron-000",
+        "selection_reason": "continued_selected_branch",
+        "selected": {
+          "electric_field_kV_m": 7.4169921875,
+          "particle_flux_m2_s": [
+            1.0895299327532987e+18,
+            1.0892622656564383e+18
+          ],
+          "heat_flux_W_m2": [
+            449.6301840162833,
+            2350.9510010709323
+          ],
+          "parallel_current_A_T_m2": -69989.37430912846,
+          "primal_residual": 2.8196932667953476e-16
+        },
+        "refinement": [
+          {
+            "level": 0,
+            "search_evaluations": 17,
+            "total_evaluations": 44,
+            "root_count": 3,
+            "root_movement_kV_m": null,
+            "observable_relative_movement": null,
+            "max_bracket_width_kV_m": 0.0048828125,
+            "converged": false
+          },
+          {
+            "level": 1,
+            "search_evaluations": 33,
+            "total_evaluations": 57,
+            "root_count": 3,
+            "root_movement_kV_m": 0.0,
+            "observable_relative_movement": 0.0,
+            "max_bracket_width_kV_m": 0.0048828125,
+            "converged": true
+          }
+        ]
+      },
+      {
+        "surface_index": 3,
+        "psi_N": 0.36,
+        "r_N": 0.6,
+        "status": "bracketed_root",
+        "refinement_status": "resolved",
+        "evaluation_budget": 1023,
+        "root_count": 1,
+        "roots": [
+          {
+            "index": 0,
+            "electric_field_kV_m": -2.8515625,
+            "radial_current_A_m2": 2.632115582319924e-05,
+            "slope_A_m2_per_kV_m": 0.06555709426614972,
+            "classification": "ion",
+            "bracket_kV_m": [
+              -2.8564453125,
+              -2.8515625
+            ],
+            "final_bracket_width_kV_m": 0.0048828125,
+            "root_movement_kV_m": 0.0,
+            "observable_relative_movement": 0.0,
+            "branch_id": "ion-000"
+          }
+        ],
+        "selected_root_index": 0,
+        "selected_branch_id": "ion-000",
+        "selection_reason": "selected_branch_lost_nearest_root",
+        "selected": {
+          "electric_field_kV_m": -2.8515625,
+          "particle_flux_m2_s": [
+            7.691640172137352e+17,
+            7.689997334808143e+17
+          ],
+          "heat_flux_W_m2": [
+            509.65334058286675,
+            1035.2731463682976
+          ],
+          "parallel_current_A_T_m2": -55167.63049982452,
+          "primal_residual": 8.212465551966978e-16
+        },
+        "refinement": [
+          {
+            "level": 0,
+            "search_evaluations": 17,
+            "total_evaluations": 26,
+            "root_count": 1,
+            "root_movement_kV_m": null,
+            "observable_relative_movement": null,
+            "max_bracket_width_kV_m": 0.0048828125,
+            "converged": false
+          },
+          {
+            "level": 1,
+            "search_evaluations": 33,
+            "total_evaluations": 41,
+            "root_count": 1,
+            "root_movement_kV_m": 0.0,
+            "observable_relative_movement": 0.0,
+            "max_bracket_width_kV_m": 0.0048828125,
+            "converged": true
+          }
+        ]
+      },
+      {
+        "surface_index": 4,
+        "psi_N": 0.49,
+        "r_N": 0.7,
+        "status": "bracketed_root",
+        "refinement_status": "resolved",
+        "evaluation_budget": 1023,
+        "root_count": 1,
+        "roots": [
+          {
+            "index": 0,
+            "electric_field_kV_m": -6.7626953125,
+            "radial_current_A_m2": -5.895590456195758e-05,
+            "slope_A_m2_per_kV_m": 0.03267127242700688,
+            "classification": "ion",
+            "bracket_kV_m": [
+              -6.7626953125,
+              -6.7578125
+            ],
+            "final_bracket_width_kV_m": 0.0048828125,
+            "root_movement_kV_m": 0.0,
+            "observable_relative_movement": 0.0,
+            "branch_id": "ion-000"
+          }
+        ],
+        "selected_root_index": 0,
+        "selected_branch_id": "ion-000",
+        "selection_reason": "continued_selected_branch",
+        "selected": {
+          "electric_field_kV_m": -6.7626953125,
+          "particle_flux_m2_s": [
+            2.7801295644182352e+17,
+            2.7838093025514006e+17
+          ],
+          "heat_flux_W_m2": [
+            242.9810176081651,
+            193.5393400303937
+          ],
+          "parallel_current_A_T_m2": -25217.517700247725,
+          "primal_residual": 5.365974684738137e-15
+        },
+        "refinement": [
+          {
+            "level": 0,
+            "search_evaluations": 17,
+            "total_evaluations": 26,
+            "root_count": 1,
+            "root_movement_kV_m": null,
+            "observable_relative_movement": null,
+            "max_bracket_width_kV_m": 0.0048828125,
+            "converged": false
+          },
+          {
+            "level": 1,
+            "search_evaluations": 33,
+            "total_evaluations": 41,
+            "root_count": 1,
+            "root_movement_kV_m": 0.0,
+            "observable_relative_movement": 0.0,
+            "max_bracket_width_kV_m": 0.0048828125,
+            "converged": true
+          }
+        ]
+      }
+    ],
+    "branch_events": [
+      {
+        "surface_index": 0,
+        "kind": "boundary_origin",
+        "branch_ids": [
+          "electron-000"
+        ],
+        "root_indices": [
+          0
+        ],
+        "electric_field_kV_m": 11.3427734375,
+        "detail": "branch first observed at the profile boundary",
+        "nonsmooth": false
+      },
+      {
+        "surface_index": 2,
+        "kind": "creation",
+        "branch_ids": [
+          "ion-000"
+        ],
+        "root_indices": [
+          0
+        ],
+        "electric_field_kV_m": -0.48828125,
+        "detail": "branch first observed between adjacent sampled surfaces",
+        "nonsmooth": true
+      },
+      {
+        "surface_index": 2,
+        "kind": "creation",
+        "branch_ids": [
+          "unstable-000"
+        ],
+        "root_indices": [
+          1
+        ],
+        "electric_field_kV_m": 0.8837890625,
+        "detail": "branch first observed between adjacent sampled surfaces",
+        "nonsmooth": true
+      },
+      {
+        "surface_index": 3,
+        "kind": "loss",
+        "branch_ids": [
+          "unstable-000"
+        ],
+        "root_indices": [],
+        "electric_field_kV_m": 0.8837890625,
+        "detail": "branch no longer matched within the continuation gate",
+        "nonsmooth": true
+      },
+      {
+        "surface_index": 3,
+        "kind": "merger",
+        "branch_ids": [
+          "unstable-000",
+          "ion-000"
+        ],
+        "root_indices": [
+          0
+        ],
+        "electric_field_kV_m": -2.8515625,
+        "detail": "discrete merger candidate: a lost branch approaches a surviving branch within the continuation gate",
+        "nonsmooth": true
+      },
+      {
+        "surface_index": 3,
+        "kind": "loss",
+        "branch_ids": [
+          "electron-000"
+        ],
+        "root_indices": [],
+        "electric_field_kV_m": 2.2667100694444446,
+        "detail": "branch no longer matched within the continuation gate",
+        "nonsmooth": true
+      },
+      {
+        "surface_index": 3,
+        "kind": "merger",
+        "branch_ids": [
+          "electron-000",
+          "ion-000"
+        ],
+        "root_indices": [
+          0
+        ],
+        "electric_field_kV_m": -2.8515625,
+        "detail": "discrete merger candidate: a lost branch approaches a surviving branch within the continuation gate",
+        "nonsmooth": true
+      }
+    ],
+    "attempts": {
+      "attempt_count": 222,
+      "executed_route_counts": {
+        "block_tridiagonal_truncated": 221,
+        "gmres": 1
+      },
+      "automatic_true_residual_recovery_count": 1,
+      "policy": "retry only failed automatic-route evaluations with one bounded GMRES solve; explicit methods remain fail-closed",
+      "maximum_completed_attempt_residual": 8.234475195278555e-13,
+      "maximum_accepted_attempt_residual": 1.9323484429235053e-13,
+      "recoveries": [
+        {
+          "surface_index": 4,
+          "evaluation_index": 24,
+          "electric_field_kV_m": 0.0,
+          "radial_current_A_m2": 0.5364922520320017,
+          "attempts": [
+            {
+              "requested_method": "auto",
+              "executed_method": "block_tridiagonal_truncated",
+              "residual": 8.234475195278555e-13,
+              "accepted": false,
+              "reason": "primary_batch"
+            },
+            {
+              "requested_method": "gmres",
+              "executed_method": "gmres",
+              "residual": 1.9323484429235053e-13,
+              "accepted": true,
+              "reason": "automatic_true_residual_recovery"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "acceptance": {
+    "required_surface_count": 5,
+    "required_root_counts": [
+      1,
+      1,
+      3,
+      1,
+      1
+    ],
+    "max_final_bracket_width_kV_m": 0.005,
+    "max_selected_primal_residual": 1e-12,
+    "max_root_current_bracket_fraction": 1.0,
+    "required_automatic_recovery_count": 1,
+    "required_scientific_array_differences": [],
+    "measured_surface_count": 5,
+    "measured_root_counts": [
+      1,
+      1,
+      3,
+      1,
+      1
+    ],
+    "measured_max_final_bracket_width_kV_m": 0.0048828125,
+    "measured_max_selected_primal_residual": 5.365974684738137e-15,
+    "measured_max_root_current_abs_A_m2": 0.0002521782956079703,
+    "measured_max_root_current_bracket_fraction": 0.4093911893221236,
+    "measured_automatic_recovery_count": 1,
+    "measured_scientific_array_differences": [],
+    "all_surfaces_bracketed": true,
+    "all_refinement_hierarchies_resolved": true,
+    "all_gates_pass": true
+  },
+  "exclusions": [
+    "not_phase_space_convergence_validation",
+    "not_continuous_branch_event_localization",
+    "not_experimental_validation",
+    "not_full_fokker_planck_ambipolar_validation",
+    "not_phi1_validation",
+    "not_independent_cross_code_ambipolar_validation",
+    "not_second_stellarator_family_validation",
+    "not_cross_code_performance_validation"
+  ]
+}

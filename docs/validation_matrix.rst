@@ -157,6 +157,35 @@ reproduction provenance, not a cross-code performance claim. This one-species
 surface comparison is not an Er scan, ambipolar-profile, Phi1, experimental,
 or second-stellarator-family full-FP certificate.
 
+Native whole-profile ambipolar certificate
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``validation/native_ambipolar_profile_v1.json`` records the admitted native
+workflow as a separate evidence lane. The portable checked TOML drives five
+W7-X standard-configuration surfaces with physical hydrogen/electron profiles,
+PAS collisions, DKES drifts, bounded midpoint refinement, all-root search, and
+radial branch continuation. Recompute every compact gate with:
+
+.. code-block:: console
+
+   python tools/paper_benchmarks/audit_native_ambipolar_profile.py
+
+The result retains root counts ``[1, 1, 3, 1, 1]``, seven discrete branch
+events, selected ion/electron fields and SI particle/heat fluxes, and all 222
+solver attempts. One structured evaluation at the outer-surface zero field
+misses its unchanged target; the retained bounded GMRES retry reduces the true
+residual from ``8.23e-13`` to ``1.93e-13``. Every final bracket is
+``0.0048828125 kV/m`` wide and every refinement hierarchy is resolved.
+
+The artifact pins the portable input, geometry, cold/warm native NetCDF,
+compact profile, commit, environment, timing, and process-memory evidence.
+Passing ``--results-root`` additionally verifies the external files and exact
+cold/warm scientific-array identity. The warm process was 0.15% slower, so no
+cache-speedup claim is made. This is a PAS/DKES workflow certificate, not
+phase-space-convergence, continuously localized bifurcations, experiment,
+full-Fokker--Planck or independent ambipolar validation, Phi1, or a second
+stellarator-family claim.
+
 Publication validation dashboard
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
