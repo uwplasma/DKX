@@ -1,0 +1,539 @@
+{
+  "schema": "dkx.ambipolar_pitch_speed_groups.v1",
+  "created_utc": "2026-08-29T17:36:00Z",
+  "claim_scope": "fixed_work_speed_local_pitch_allocation_diagnosis",
+  "summary": "Three supported pitch-by-speed rules retain 129, 132, and 133 active modes but produce different ambipolar root topology on a common two-surface W7-X profile pair.",
+  "source": {
+    "dkx_commit": "6c35aa1c482a2b4dc1e914052dd836852d29ef43",
+    "dkx_version": "2.3.1",
+    "geometry": "SFINCS/equilibria/w7x_standardConfig.bc",
+    "geometry_sha256": "81c686e5a5bd8f38d8b1f754ebe2910951f20094bab35d73d2827d9875bb6062",
+    "geometry_bytes": 19416676,
+    "inputs": {
+      "uniform22": {
+        "path": "validation/inputs/w7x_standard_native_ambipolar_uniform22_bounded.toml",
+        "sha256": "5d51b7c625447d6cbc8b6a882163aa8514929a001b7479588fd55b6569c5dd62"
+      },
+      "linear36": {
+        "path": "validation/inputs/w7x_standard_native_ambipolar_ramp36_triplet.toml",
+        "sha256": "162244b5236e65c74af088f67d495729d2ea19b19efbfdd41add07e4d4fcbe6b"
+      },
+      "quadratic44": {
+        "path": "validation/inputs/w7x_standard_native_ambipolar_quadratic44_pair_bounded.toml",
+        "sha256": "242a2ed0086aeb569d412078c2839480728530b07f91f2efeceb10c5756b4d72"
+      }
+    },
+    "results": {
+      "uniform22": {
+        "sha256": "27dee231b2104333fddadb17fd9dc5680576f1e8ff547ab7c60d28e8b6fe3fb0",
+        "bytes": 251997
+      },
+      "linear36": {
+        "sha256": "e80d259d19009a2694b4de18141a02f0fbe6a816af2cfd7919134dee48439220",
+        "bytes": 251993
+      },
+      "quadratic44": {
+        "sha256": "7a3832faf7e7efd2684e4bfcd78cfc02374e202db45bbee58a3ee03a7d15e54e",
+        "bytes": 219940
+      },
+      "quadratic44_warm": {
+        "sha256": "a739512e603492bf7cb39eb6789aaaaf8cda411a35f174b5d1aff76e3e2dff86",
+        "bytes": 219939
+      }
+    },
+    "compact_sha256": "3ce7f4b51de1b39ddcc48c83ab0e0ee53525ed7f16befde7da0792f4e30f9ba8"
+  },
+  "environment": {
+    "host": "Mac mini, Apple M4, 10 CPU cores, 24 GiB RAM",
+    "os": "macOS-26.6.2-arm64-arm-64bit",
+    "python": "3.11.15",
+    "jax": "0.9.2",
+    "jaxlib": "0.9.2",
+    "numpy": "2.4.3",
+    "timing_note": "The older uniform/linear measurements contain three surfaces; the new quadratic measurement contains the minimum valid pair. Runtime is provenance, not a cross-allocation speed comparison."
+  },
+  "measurements": {
+    "uniform22": {
+      "surface_count": 3,
+      "cache_state": "fresh_process_with_initially_empty_external_cache",
+      "process_wall_s": 176.33,
+      "dkx_total_s": 175.07368329200108,
+      "maximum_rss_bytes": 3093299200,
+      "peak_footprint_bytes": 2830077576
+    },
+    "linear36": {
+      "surface_count": 3,
+      "cache_state": "fresh_process_with_initially_empty_external_cache",
+      "process_wall_s": 184.37,
+      "dkx_total_s": 184.3672281250001,
+      "maximum_rss_bytes": 4556554240,
+      "peak_footprint_bytes": 4130181920
+    },
+    "quadratic44_cold": {
+      "surface_count": 2,
+      "cache_state": "fresh_process_with_initially_empty_external_cache",
+      "process_wall_s": 140.74,
+      "dkx_total_s": 139.13717291699868,
+      "maximum_rss_bytes": 2852945920,
+      "peak_footprint_bytes": 2398850384,
+      "reporting_wrapper_exit": 1,
+      "reporting_wrapper_note": "The result was saved after a successful solve; a post-save reporting lookup used timings instead of timings_s and raised KeyError."
+    },
+    "quadratic44_warm": {
+      "surface_count": 2,
+      "cache_state": "fresh_process_with_populated_external_cache",
+      "process_wall_s": 148.75,
+      "dkx_total_s": 146.8235591249977,
+      "maximum_rss_bytes": 2946809856,
+      "peak_footprint_bytes": 2745945472,
+      "reporting_wrapper_exit": 0
+    }
+  },
+  "rungs": [
+    {
+      "case_id": "1f8551eaf7ce98101667d6fb17623417cdcdc3b5b3fc578a2f22efbaf5c26bdb",
+      "resolution": {
+        "theta": 15,
+        "zeta": 37,
+        "pitch": 22,
+        "speed": 6,
+        "pitch_speed_ramp": 0
+      },
+      "surfaces": [
+        {
+          "surface_index": 0,
+          "psi_N": 0.16,
+          "root_count": 3,
+          "roots": [
+            {
+              "index": 0,
+              "classification": "ion",
+              "branch_id": "ion-000",
+              "selected": true,
+              "electric_field_kV_m": -0.361328125,
+              "particle_flux_m2_s": [
+                3.963541478983485e+17,
+                3.969711098726478e+17
+              ],
+              "heat_flux_W_m2": [
+                341.1920869066788,
+                996.0403170437482
+              ],
+              "parallel_current_A_T_m2": -104048.83330661421,
+              "primal_residual": 1.788220767222289e-15,
+              "final_bracket_width_kV_m": 0.0048828125
+            },
+            {
+              "index": 1,
+              "classification": "unstable",
+              "branch_id": "unstable-000",
+              "selected": false,
+              "electric_field_kV_m": 3.6767578125,
+              "particle_flux_m2_s": [
+                3.396287636310149e+17,
+                3.39637338341323e+17
+              ],
+              "heat_flux_W_m2": [
+                203.60955157619549,
+                888.2826938167402
+              ],
+              "parallel_current_A_T_m2": -106048.32018852228,
+              "primal_residual": 1.5652430071231272e-16,
+              "final_bracket_width_kV_m": 0.0048828125
+            },
+            {
+              "index": 2,
+              "classification": "electron",
+              "branch_id": "electron-000",
+              "selected": false,
+              "electric_field_kV_m": 5.0244140625,
+              "particle_flux_m2_s": [
+                3.170385359900687e+17,
+                3.169868002756478e+17
+              ],
+              "heat_flux_W_m2": [
+                156.8755747773377,
+                843.1159021082352
+              ],
+              "parallel_current_A_T_m2": -108268.72012872505,
+              "primal_residual": 1.1109308875855054e-16,
+              "final_bracket_width_kV_m": 0.0048828125
+            }
+          ],
+          "selected_root_index": 0,
+          "selected_branch_id": "ion-000"
+        },
+        {
+          "surface_index": 1,
+          "psi_N": 0.25,
+          "root_count": 1,
+          "roots": [
+            {
+              "index": 0,
+              "classification": "ion",
+              "branch_id": "ion-000",
+              "selected": true,
+              "electric_field_kV_m": -1.5966796875,
+              "particle_flux_m2_s": [
+                4.35612153379577e+17,
+                4.354379464333072e+17
+              ],
+              "heat_flux_W_m2": [
+                347.96893131494994,
+                799.6426750802856
+              ],
+              "parallel_current_A_T_m2": -148336.27328018297,
+              "primal_residual": 1.007256797832977e-15,
+              "final_bracket_width_kV_m": 0.0048828125
+            }
+          ],
+          "selected_root_index": 0,
+          "selected_branch_id": "ion-000"
+        }
+      ],
+      "attempts": {
+        "attempt_count": 139,
+        "executed_route_counts": {
+          "block_tridiagonal_truncated": 139
+        },
+        "automatic_true_residual_recovery_count": 0,
+        "maximum_accepted_true_residual": 5.275065843043102e-14
+      },
+      "allocation": {
+        "pitch_speed_ramp": 0,
+        "active_pitch_modes_by_speed": [
+          22,
+          22,
+          22,
+          22,
+          22,
+          22
+        ],
+        "active_pitch_mode_sum": 132,
+        "groups": {
+          "low_speed_nodes_0_1": 44,
+          "intermediate_speed_nodes_2_3": 44,
+          "high_speed_nodes_4_5": 44
+        }
+      }
+    },
+    {
+      "case_id": "39edc4cbd3d65a9c08da17126b68e7e70c9d44b496107811c321a85538f3a6ea",
+      "resolution": {
+        "theta": 15,
+        "zeta": 37,
+        "pitch": 36,
+        "speed": 6,
+        "pitch_speed_ramp": 1
+      },
+      "surfaces": [
+        {
+          "surface_index": 0,
+          "psi_N": 0.16,
+          "root_count": 1,
+          "roots": [
+            {
+              "index": 0,
+              "classification": "electron",
+              "branch_id": "electron-000",
+              "selected": true,
+              "electric_field_kV_m": 11.845703125,
+              "particle_flux_m2_s": [
+                1.0146473868281725e+18,
+                1.0151161920018436e+18
+              ],
+              "heat_flux_W_m2": [
+                374.6479037082274,
+                3147.498306541373
+              ],
+              "parallel_current_A_T_m2": -70644.1563410759,
+              "primal_residual": 2.4781246276615346e-16,
+              "final_bracket_width_kV_m": 0.0048828125
+            }
+          ],
+          "selected_root_index": 0,
+          "selected_branch_id": "electron-000"
+        },
+        {
+          "surface_index": 1,
+          "psi_N": 0.25,
+          "root_count": 3,
+          "roots": [
+            {
+              "index": 0,
+              "classification": "ion",
+              "branch_id": "ion-000",
+              "selected": false,
+              "electric_field_kV_m": -0.48828125,
+              "particle_flux_m2_s": [
+                1.7970065754625047e+18,
+                1.7954326023420856e+18
+              ],
+              "heat_flux_W_m2": [
+                1401.8403129226544,
+                4009.175656508875
+              ],
+              "parallel_current_A_T_m2": -92091.80568991511,
+              "primal_residual": 3.1314015806301457e-15,
+              "final_bracket_width_kV_m": 0.0048828125
+            },
+            {
+              "index": 1,
+              "classification": "unstable",
+              "branch_id": "unstable-000",
+              "selected": false,
+              "electric_field_kV_m": 0.8837890625,
+              "particle_flux_m2_s": [
+                1.732602141235196e+18,
+                1.731917596392518e+18
+              ],
+              "heat_flux_W_m2": [
+                1194.4567557515059,
+                3891.7118015544174
+              ],
+              "parallel_current_A_T_m2": -90134.14898565851,
+              "primal_residual": 1.25613090120862e-15,
+              "final_bracket_width_kV_m": 0.0048828125
+            },
+            {
+              "index": 2,
+              "classification": "electron",
+              "branch_id": "electron-000",
+              "selected": true,
+              "electric_field_kV_m": 7.4169921875,
+              "particle_flux_m2_s": [
+                1.0895299327532987e+18,
+                1.0892622656564383e+18
+              ],
+              "heat_flux_W_m2": [
+                449.6301840162833,
+                2350.9510010709323
+              ],
+              "parallel_current_A_T_m2": -69989.37430912846,
+              "primal_residual": 2.8196932667953476e-16,
+              "final_bracket_width_kV_m": 0.0048828125
+            }
+          ],
+          "selected_root_index": 2,
+          "selected_branch_id": "electron-000"
+        }
+      ],
+      "attempts": {
+        "attempt_count": 139,
+        "executed_route_counts": {
+          "block_tridiagonal_truncated": 139
+        },
+        "automatic_true_residual_recovery_count": 0,
+        "maximum_accepted_true_residual": 7.036965635662741e-14
+      },
+      "allocation": {
+        "pitch_speed_ramp": 1,
+        "active_pitch_modes_by_speed": [
+          4,
+          9,
+          17,
+          27,
+          36,
+          36
+        ],
+        "active_pitch_mode_sum": 129,
+        "groups": {
+          "low_speed_nodes_0_1": 13,
+          "intermediate_speed_nodes_2_3": 44,
+          "high_speed_nodes_4_5": 72
+        }
+      }
+    },
+    {
+      "case_id": "f57786e510b5c0c8db181bfe888decf408d3accd1a0bf83adc315cf3141fed5d",
+      "resolution": {
+        "theta": 15,
+        "zeta": 37,
+        "pitch": 44,
+        "speed": 6,
+        "pitch_speed_ramp": 2
+      },
+      "surfaces": [
+        {
+          "surface_index": 0,
+          "psi_N": 0.16,
+          "root_count": 1,
+          "roots": [
+            {
+              "index": 0,
+              "classification": "electron",
+              "branch_id": "electron-000",
+              "selected": true,
+              "electric_field_kV_m": 11.97265625,
+              "particle_flux_m2_s": [
+                1.0807145677681627e+18,
+                1.0808283769102048e+18
+              ],
+              "heat_flux_W_m2": [
+                419.3017526781876,
+                3485.342526445206
+              ],
+              "parallel_current_A_T_m2": -105990.45527917898,
+              "primal_residual": 4.45271568412952e-16,
+              "final_bracket_width_kV_m": 0.0048828125
+            }
+          ],
+          "selected_root_index": 0,
+          "selected_branch_id": "electron-000"
+        },
+        {
+          "surface_index": 1,
+          "psi_N": 0.25,
+          "root_count": 1,
+          "roots": [
+            {
+              "index": 0,
+              "classification": "electron",
+              "branch_id": "electron-000",
+              "selected": true,
+              "electric_field_kV_m": 9.5947265625,
+              "particle_flux_m2_s": [
+                1.250011026908937e+18,
+                1.2503290807496297e+18
+              ],
+              "heat_flux_W_m2": [
+                493.9596604453838,
+                2864.4258146589873
+              ],
+              "parallel_current_A_T_m2": -58994.023116063625,
+              "primal_residual": 4.2646420371929656e-16,
+              "final_bracket_width_kV_m": 0.0048828125
+            }
+          ],
+          "selected_root_index": 0,
+          "selected_branch_id": "electron-000"
+        }
+      ],
+      "attempts": {
+        "attempt_count": 82,
+        "executed_route_counts": {
+          "block_tridiagonal_truncated": 82
+        },
+        "automatic_true_residual_recovery_count": 0,
+        "maximum_accepted_true_residual": 1.4138069393351563e-14
+      },
+      "allocation": {
+        "pitch_speed_ramp": 2,
+        "active_pitch_modes_by_speed": [
+          4,
+          5,
+          11,
+          25,
+          44,
+          44
+        ],
+        "active_pitch_mode_sum": 133,
+        "groups": {
+          "low_speed_nodes_0_1": 9,
+          "intermediate_speed_nodes_2_3": 36,
+          "high_speed_nodes_4_5": 88
+        }
+      }
+    }
+  ],
+  "comparisons": [
+    {
+      "name": "uniform22_to_linear36",
+      "topology_stable": false,
+      "common_root_movements": [],
+      "selected_movements": [
+        {
+          "surface_index": 0,
+          "left_root_count": 3,
+          "right_root_count": 1,
+          "electric_field_movement_kV_m": 12.20703125,
+          "particle_flux_scaled_movement": 0.6093675960302158,
+          "heat_flux_scaled_movement": 0.6835454001758474
+        },
+        {
+          "surface_index": 1,
+          "left_root_count": 1,
+          "right_root_count": 3,
+          "electric_field_movement_kV_m": 9.013671875,
+          "particle_flux_scaled_movement": 0.600245083151859,
+          "heat_flux_scaled_movement": 0.6598641678554664
+        }
+      ],
+      "summary": {
+        "topology_stable": false,
+        "max_selected_electric_field_movement_kV_m": 12.20703125,
+        "max_selected_particle_flux_scaled_movement": 0.6093675960302158,
+        "max_selected_heat_flux_scaled_movement": 0.6835454001758474
+      }
+    },
+    {
+      "name": "linear36_to_quadratic44",
+      "topology_stable": false,
+      "common_root_movements": [
+        {
+          "surface_index": 0,
+          "root_index": 0,
+          "identity_stable": true,
+          "electric_field_movement_kV_m": 0.126953125
+        }
+      ],
+      "selected_movements": [
+        {
+          "surface_index": 0,
+          "left_root_count": 1,
+          "right_root_count": 1,
+          "electric_field_movement_kV_m": 0.126953125,
+          "particle_flux_scaled_movement": 0.061132867928697175,
+          "heat_flux_scaled_movement": 0.10649573650657232
+        },
+        {
+          "surface_index": 1,
+          "left_root_count": 3,
+          "right_root_count": 1,
+          "electric_field_movement_kV_m": 2.177734375,
+          "particle_flux_scaled_movement": 0.12881953845032898,
+          "heat_flux_scaled_movement": 0.1792592466386443
+        }
+      ],
+      "summary": {
+        "topology_stable": false,
+        "max_selected_electric_field_movement_kV_m": 2.177734375,
+        "max_selected_particle_flux_scaled_movement": 0.12881953845032898,
+        "max_selected_heat_flux_scaled_movement": 0.1792592466386443
+      }
+    }
+  ],
+  "quadratic_cold_warm_parity": {
+    "scientific_arrays_exact": true,
+    "ignored_timing_arrays": [
+      "solve_time_s"
+    ],
+    "mismatches": []
+  },
+  "outcome": {
+    "status": "diagnostic_complete",
+    "admission_pass": true,
+    "gates": {
+      "fixed_work_within_four_active_modes": true,
+      "maximum_true_residual_below_1e-12": true,
+      "all_process_footprints_below_24_gib": true,
+      "quadratic_cold_warm_scientific_arrays_exact": true,
+      "allocation_sensitivity_observed": true
+    },
+    "topology_changing_comparisons": [
+      "uniform22_to_linear36",
+      "linear36_to_quadratic44"
+    ],
+    "phase_space_converged": false,
+    "interpretation": "At nearly fixed active-mode work, moving pitch resolution from low toward high speed changes root topology on both retained surfaces. None of the three allocations is admitted as phase-space converged.",
+    "next_action": "Introduce a narrowly scoped explicit six-node allocation diagnostic to separate low from intermediate speed sensitivity while holding high-speed work fixed; keep the two-surface bounded scope."
+  },
+  "exclusions": [
+    "not_phase_space_convergence_validation",
+    "not_cross_allocation_runtime_comparison",
+    "not_speed_or_zeta_convergence_validation",
+    "not_independent_cross_code_ambipolar_validation",
+    "not_full_fokker_planck_or_phi1_validation",
+    "not_experimental_validation"
+  ]
+}

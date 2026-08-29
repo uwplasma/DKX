@@ -22,6 +22,9 @@ Git; later records refer to them by checksum or stable artifact identifier.
 - `ambipolar_pitch_budget_v1.json`: exact full-versus-bounded uniform-pitch
   route parity plus a bounded pitch-22/26/30 ladder that retains its changing
   topology and `refinement_exhausted` outcome.
+- `ambipolar_pitch_speed_groups_v1.json`: fixed-work uniform, linear-ramp,
+  and quadratic-ramp pitch allocations on a common W7-X surface pair,
+  retaining the topology changes rather than promoting convergence.
 - `inputs/*`: the exact DKX decks and native cases used by these rungs.
 
 ## Independent cross-code audit
@@ -223,3 +226,32 @@ unchanged `0.005 kV/m`, `2%`, and `1e-12` gates, rejects uniform pitch 34 or
 higher, and directs the next diagnostic to isolate speed-node groups at fixed
 bounded work. It does not establish phase-space, zeta, speed, independent-code,
 full-FP, Phi1, experiment, or performance validation.
+
+## Fixed-work pitch-by-speed diagnosis
+
+`ambipolar_pitch_speed_groups_v1.json` compares only already-supported
+allocation rules. Uniform pitch 22, linear-ramp pitch 36, and quadratic-ramp
+pitch 44 retain `[22,22,22,22,22,22]`, `[4,9,17,27,36,36]`, and
+`[4,5,11,25,44,44]` modes by speed: 132, 129, and 133 active modes in total.
+Audit the compact record, or additionally supply its four external NetCDF
+files and the pinned Boozer geometry, with:
+
+```bash
+python tools/paper_benchmarks/audit_ambipolar_pitch_speed_groups.py
+```
+
+On the two common surfaces, root counts change `[3,1] -> [1,3] -> [1,1]`.
+Uniform-to-linear holds the intermediate-speed group at exactly 44 modes while
+shifting work from low to high speed; selected electric field and heat flux
+move by as much as `12.20703125 kV/m` and `68.35%`. Linear-to-quadratic still
+changes topology and moves them by `2.177734375 kV/m` and `17.93%`. Every
+accepted true residual is below `7.04e-14`, all measured footprints remain
+below 4.14 GB, and the quadratic cold/warm scientific arrays are exact apart
+from the timing array. The populated-cache process is slower, so no warm
+speedup is claimed.
+
+This closes the supported-rule allocation diagnosis, not phase-space
+convergence. A subsequent bounded two-surface slice must separate low from
+intermediate sensitivity with high-speed work held fixed. Zeta, speed,
+independent-code, experiment, full-FP, Phi1, and performance validation remain
+open.
