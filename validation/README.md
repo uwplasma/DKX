@@ -71,4 +71,25 @@ This rung does not validate multispecies or stellarator full-Fokker--Planck
 physics, finite electric field, Phi1, ambipolar profiles, experiment, or
 cross-code performance.
 
+## Matched finite-Er full-kinetic rung
+
+`full_kinetic_sfincs_finite_er_v1.json` applies the same independent workflow
+to the pinned upstream one-species full-FP tokamak case at normalized
+`Er = -30`. The high and ultra decks use full trajectories, a `1e-13` solver
+tolerance, and the exact MUMPS-enabled SFINCS reference build recorded above.
+Audit the compact evidence with:
+
+```bash
+python tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py \
+  --artifact validation/full_kinetic_sfincs_finite_er_v1.json
+```
+
+At the finest rung, the maximum scaled difference across flow/current,
+momentum flux, heat flux, and the retained speed spectra is `1.88e-9`.
+High-to-ultra movement is at most `0.326%`, and every completed true residual
+is below `5.25e-11`. Axisymmetric intrinsic ambipolarity leaves the summed
+particle flux and NTV at cancellation scale, so they use a `2e-11` absolute
+gate. This is one prescribed finite field, not an Er scan or an ambipolar-root
+validation, and it does not yet validate stellarator full-FP physics.
+
 The controlling definitions and acceptance gates are in `../plan.md`.

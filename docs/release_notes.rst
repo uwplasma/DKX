@@ -4,6 +4,14 @@ Release notes
 Unreleased
 ----------
 
+- Extended the matched full-kinetic DKX/SFINCS evidence to the pinned
+  one-species tokamak case at normalized ``Er = -30``. The checked high/ultra
+  rungs use full trajectories and a ``1e-13`` solver tolerance; retained
+  nonzero scalar and speed-resolved outputs agree within ``1.88e-9``,
+  resolution movement is at most ``0.326%``, and completed true residuals stay
+  below ``5.25e-11``. Intrinsically ambipolar particle flux and NTV use an
+  explicit absolute cancellation gate. The claim remains a single prescribed
+  field, not an Er scan, ambipolar-root, or stellarator full-FP validation.
 - Added a matched full-kinetic DKX/SFINCS v3 validation rung for a physical
   one-species analytic-tokamak surface. Both codes use the full linearized
   Fokker--Planck operator, full trajectories, identical density/temperature
