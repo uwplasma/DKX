@@ -27,6 +27,15 @@ field names carry engineering units where a dimensional value appears, such as
 physical route names—``structured_direct``, ``recycled_krylov``, and
 ``sparse_direct_referee``—instead of numbered tiers.
 
+The optional ``resolution.pitch_speed_ramp`` isolates a subtle convergence
+choice without exposing a namelist route. Values 0, 1, and 2 are the matching
+SFINCS ``Nxi_for_x_option`` rules: 0 retains the declared maximum pitch order
+at every speed node, 1 is the default linear speed ramp, and 2 is the quadratic
+ramp. Because increasing ``resolution.pitch`` under a ramp changes several
+speed-local truncations at once, resolution studies should record the option
+and the resulting active mode counts rather than describe only the maximum
+pitch order.
+
 Validation and portability
 --------------------------
 

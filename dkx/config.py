@@ -103,6 +103,7 @@ class ResolutionConfig:
     zeta: int
     pitch: int
     speed: int
+    pitch_speed_ramp: int = 1
 
 
 @dataclass(frozen=True)
@@ -236,6 +237,11 @@ class Case:
         data = asdict(self)
         data.pop("source_path", None)
         data.pop("_case_id", None)
+        # Option 1 has always been the native execution default.  Omitting it
+        # from canonical content preserves existing schema-v1 case IDs while
+        # non-default ramp choices remain explicit semantic input.
+        if data["resolution"]["pitch_speed_ramp"] == 1:
+            data["resolution"].pop("pitch_speed_ramp")
         if data["scan"] is not None:
             data["scan"]["axis"] = data["scan"].pop("axes")
         return _paths_to_strings(data)
@@ -446,6 +452,7 @@ def case_json_schema() -> dict[str, Any]:
             ),
             "resolution": _object_schema(
                 ["theta", "zeta", "pitch", "speed"],
+                pitch_speed_ramp={"type": "integer", "enum": [0, 1, 2]},
                 **{
                     key: {"type": "integer", "minimum": 1}
                     for key in ("theta", "zeta", "pitch", "speed")
@@ -569,6 +576,8 @@ theta = 31
 zeta = 31
 pitch = 24
 speed = 8
+# SFINCS Nxi_for_x_option: 0 uniform, 1 linear (default), 2 quadratic.
+# pitch_speed_ramp = 1
 
 [solver]
 method = "auto"
@@ -697,12 +706,15 @@ def _parse_electric_field(data: Mapping[str, Any]) -> ElectricFieldConfig:
 
 def _parse_resolution(data: Mapping[str, Any]) -> ResolutionConfig:
     path = "resolution"
-    _reject_unknown(data, path, {"theta", "zeta", "pitch", "speed"})
+    _reject_unknown(
+        data, path, {"theta", "zeta", "pitch", "speed", "pitch_speed_ramp"}
+    )
     return ResolutionConfig(
-        **{
-            key: _integer(data, key, path, required=True)
-            for key in ("theta", "zeta", "pitch", "speed")
-        }
+        theta=_integer(data, "theta", path, required=True),
+        zeta=_integer(data, "zeta", path, required=True),
+        pitch=_integer(data, "pitch", path, required=True),
+        speed=_integer(data, "speed", path, required=True),
+        pitch_speed_ramp=_integer(data, "pitch_speed_ramp", path, default=1),
     )
 
 
@@ -940,6 +952,7 @@ def _validate_case(case: Case) -> None:
                 "an integer >= 1",
                 "Choose a positive phase-space resolution.",
             )
+    _choice("resolution.pitch_speed_ramp", case.resolution.pitch_speed_ramp, (0, 1, 2))
     _choice(
         "solver.method",
         case.solver.method,

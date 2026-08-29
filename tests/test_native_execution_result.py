@@ -95,6 +95,25 @@ def _ambipolar_case():
     )
 
 
+def test_native_grid_honors_explicit_pitch_speed_ramp() -> None:
+    from dkx.execution import _make_grids
+
+    default = _case()
+    uniform = replace(
+        default,
+        resolution=replace(default.resolution, pitch_speed_ramp=0),
+    )
+
+    default_grids = _make_grids(default, n_periods=1)
+    uniform_grids = _make_grids(uniform, n_periods=1)
+
+    assert np.any(np.asarray(default_grids.n_xi_for_x) < default.resolution.pitch)
+    np.testing.assert_array_equal(
+        uniform_grids.n_xi_for_x,
+        np.full(uniform.resolution.speed, uniform.resolution.pitch),
+    )
+
+
 def test_native_case_solves_without_namelist_conversion(monkeypatch, tmp_path) -> None:
     def forbidden(*_args, **_kwargs):
         raise AssertionError("native execution serialized or parsed a SFINCS namelist")
@@ -103,6 +122,12 @@ def test_native_case_solves_without_namelist_conversion(monkeypatch, tmp_path) -
     monkeypatch.setattr("dkx.run.parse_sfincs_input_text", forbidden)
     path = tmp_path / "result.nc"
     result = dkx.run(_case(), out=path)
+
+    assert result.metadata["phase_space"] == {
+        "pitch_speed_ramp": 1,
+        "active_pitch_modes_by_speed": (4, 4, 5, 8),
+        "active_pitch_mode_sum": 21,
+    }
 
     assert isinstance(result, dkx.Result)
     assert path.is_file()
@@ -281,10 +306,17 @@ def test_physical_electric_field_normalization_is_explicit() -> None:
     assert _electric_field_kv_m_to_er_hat(-3.25) == pytest.approx(-3.25)
 
 
-def test_native_normalization_matches_the_accepted_kernel_path() -> None:
+@pytest.mark.parametrize("pitch_speed_ramp", [0, 1])
+def test_native_normalization_matches_the_accepted_kernel_path(
+    pitch_speed_ramp: int,
+) -> None:
     """The new boundary changes names/units, not the numerical answer."""
 
-    case = _case()
+    base = _case()
+    case = replace(
+        base,
+        resolution=replace(base.resolution, pitch_speed_ramp=pitch_speed_ramp),
+    )
     native = dkx.run(case)
     r_hat = 0.5585 * np.sqrt(np.asarray(case.geometry.surfaces))
     n_hat = np.asarray(case.species[0].density_m3) / 1.0e20
@@ -309,7 +341,7 @@ def test_native_normalization_matches_the_accepted_kernel_path() -> None:
         Nx=4,
         collisionOperator=1,
         useDKESExBDrift=True,
-        Nxi_for_x_option=1,
+        Nxi_for_x_option=case.resolution.pitch_speed_ramp,
         xGridScheme=5,
         solverTolerance=1.0e-8,
     )
@@ -402,7 +434,7 @@ def test_native_vmec_reuses_file_and_grids_and_matches_scheme5(
         Nx=case.resolution.speed,
         collisionOperator=1,
         useDKESExBDrift=True,
-        Nxi_for_x_option=1,
+        Nxi_for_x_option=case.resolution.pitch_speed_ramp,
         xGridScheme=5,
         solverTolerance=case.solver.relative_tolerance,
     )
