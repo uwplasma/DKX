@@ -1,0 +1,32 @@
+&general
+  RHSMode = 3
+/
+&geometryParameters
+  geometryScheme = 11
+  equilibriumFile = "NCSX.bc"
+  inputRadialCoordinate = 3
+  rN_wish = 0.5
+  VMECRadialOption = 0
+/
+&speciesParameters
+/
+&physicsParameters
+  nuPrime = 1.0d-2
+  EStar = 0.0d0
+  collisionOperator = 1
+  includeXDotTerm = .false.
+  includeElectricFieldTermInXiDot = .false.
+  useDKESExBDrift = .true.
+  includePhi1 = .false.
+/
+&resolutionParameters
+  Ntheta = 17
+  Nzeta = 37
+  Nxi = 73
+  Nx = 1
+  solverTolerance = 1.0d-10
+/
+&otherNumericalParameters
+/
+&preconditionerOptions
+/

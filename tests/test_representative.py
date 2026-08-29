@@ -9,7 +9,6 @@ would take for zero.
 
 from __future__ import annotations
 
-import tempfile
 import warnings
 from pathlib import Path
 
@@ -181,7 +180,7 @@ def test_a_netcdf_handed_to_the_namelist_reader_is_named(tmp_path):
     message = str(excinfo.value)
     assert "NetCDF" in message
     assert "not a SFINCS input namelist" in message
-    assert "geometryScheme = 5" in message   # tells the user what to do instead
+    assert "geometryScheme = 5" in message  # tells the user what to do instead
 
 
 @pytest.mark.parametrize(
@@ -219,7 +218,7 @@ def test_a_real_namelist_still_parses(tmp_path):
 # Radial profiles, named species, and the output file
 # ---------------------------------------------------------------------------
 def test_the_flux_panel_names_species_rather_than_numbering_them():
-    """"species 0" and "species 1" tell a reader nothing about which is which."""
+    """ "species 0" and "species 1" tell a reader nothing about which is which."""
     from dkx.representative import _species_labels
 
     assert _species_labels(2, [1.0, -1.0]) == ["ions", "electrons"]
@@ -267,6 +266,213 @@ def test_distinct_fluxes_are_drawn_separately():
         plt.close(fig)
 
 
+def test_unbracketed_profile_keeps_closest_scan_observables(monkeypatch, tmp_path):
+    """A missed root is explicit, but it no longer blanks Er and flux panels."""
+    from types import SimpleNamespace
+
+    from dkx import api
+    from dkx import representative as rep
+
+    moments = {
+        "FSABjHat": np.asarray([-4.0, -3.0, -2.0]),
+        "particleFlux_vm_psiHat": np.asarray([[1.0, 4.0], [2.0, 5.0], [3.0, 6.0]]),
+        "heatFlux_vm_psiHat": np.asarray([[10.0, 40.0], [20.0, 50.0], [30.0, 60.0]]),
+    }
+    monkeypatch.setattr(
+        api,
+        "batched_er_scan",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            radial_current=np.asarray([3.0, 1.0, 2.0]), moments=moments
+        ),
+    )
+    monkeypatch.setattr(
+        rep, "resolve_plasma", lambda _path: (dict(rep.FALLBACK_PLASMA), "test")
+    )
+    monkeypatch.setattr(rep, "equilibrium_scalars", lambda _path: {})
+
+    profiles = rep.radial_profiles(
+        tmp_path / "wout.nc", surfaces=[0.5], er_values=[-2.0, 0.0, 2.0]
+    )
+    assert len(profiles) == 1
+    profile = profiles[0]
+    assert profile["evaluation_status"] == "no_bracketed_root"
+    assert profile["evaluation_is_root"] is False
+    assert profile["er_evaluated"] == pytest.approx(0.0)
+    assert profile["radial_current_evaluated"] == pytest.approx(1.0)
+    assert "er_ambipolar" not in profile
+    assert profile["particle_flux"] == pytest.approx([2.0, 5.0])
+    assert profile["heat_flux"] == pytest.approx([20.0, 50.0])
+
+    fig, (boot_ax, flux_ax) = plt.subplots(1, 2)
+    try:
+        assert rep._panel_radial_bootstrap(boot_ax, profiles)
+        assert rep._panel_radial_fluxes(flux_ax, profiles)
+        assert "closest scanned" in boot_ax.get_title()
+        assert "closest scanned" in flux_ax.get_title()
+    finally:
+        plt.close(fig)
+
+    output = rep.write_representative_output(tmp_path / "closest.h5", profiles=profiles)
+    import h5py
+
+    with h5py.File(output, "r") as handle:
+        assert handle["profiles/er_evaluated"][()] == pytest.approx([0.0])
+        assert handle["profiles/radial_current_evaluated"][()] == pytest.approx([1.0])
+        assert handle["profiles/evaluation_is_root"][()] == pytest.approx([0.0])
+        assert handle["profiles/evaluation_status"].asstr()[()].tolist() == [
+            "no_bracketed_root"
+        ]
+
+
+def test_radial_profile_solve_failures_are_retained(monkeypatch, tmp_path):
+    """A failed surface is evidence, not a surface silently missing from the plot."""
+    from dkx import api
+    from dkx import representative as rep
+
+    def fail(*_args, **_kwargs):
+        raise RuntimeError("synthetic kinetic failure")
+
+    monkeypatch.setattr(api, "batched_er_scan", fail)
+    monkeypatch.setattr(
+        rep, "resolve_plasma", lambda _path: (dict(rep.FALLBACK_PLASMA), "test")
+    )
+    monkeypatch.setattr(
+        rep,
+        "vmec_profile_status",
+        lambda _path: {
+            "status": "available",
+            "pressure_representation": "sum_atan",
+            "detail": "canonical test profile",
+        },
+    )
+    monkeypatch.setattr(rep, "equilibrium_scalars", lambda _path: {})
+
+    profiles = rep.radial_profiles(
+        tmp_path / "wout.nc", surfaces=[0.25, 0.75], er_values=[-1.0, 1.0]
+    )
+    assert [p["r"] for p in profiles] == [0.25, 0.75]
+    assert {p["evaluation_status"] for p in profiles} == {"solve_failure"}
+    assert {p["failure_type"] for p in profiles} == {"RuntimeError"}
+    assert all("synthetic kinetic failure" in p["failure_detail"] for p in profiles)
+    assert {p["pressure_representation"] for p in profiles} == {"sum_atan"}
+
+
+@pytest.mark.parametrize(
+    "profile",
+    [
+        "power_series",
+        "gauss_trunc",
+        "two_power",
+        "two_lorentz",
+        "akima_spline",
+        "cubic_spline",
+        "pedestal",
+        "rational",
+        "sum_atan",
+    ],
+)
+def test_wout_pressure_representations_share_the_canonical_presf_contract(
+    tmp_path, profile
+):
+    """The wout reader consumes evaluated ``presf``, never input coefficients.
+
+    This covers every pressure representation in the checked VMEC profile
+    registry, plus ``sum_atan`` files encountered in the supported workflow.
+    The same evaluated profile must yield the same physical closure for all of
+    them; the representation is retained only as provenance.
+    """
+    netCDF4 = pytest.importorskip("netCDF4")
+    from dkx.representative import plasma_parameters, vmec_profile_status
+
+    path = tmp_path / f"wout_{profile}.nc"
+    with netCDF4.Dataset(path, "w") as handle:
+        handle.createDimension("radius", 9)
+        handle.createDimension("profile_name", len(profile))
+        handle.createVariable("presf", "f8", ("radius",))[:] = np.linspace(
+            7.0e5, 0.0, 9
+        )
+        handle.createVariable("Aminor_p", "f8", ())[...] = 0.6
+        handle.createVariable("pmass_type", "S1", ("profile_name",))[:] = np.asarray(
+            list(profile), dtype="S1"
+        )
+
+    status = vmec_profile_status(path)
+    assert status["status"] == "available"
+    assert status["pressure_representation"] == profile
+    plasma = plasma_parameters(path, 0.5)
+    assert plasma["p_pa"] == pytest.approx(5.25e5)
+    assert plasma["n_hat"] > 0.0 and plasma["t_hat"] > 0.0
+
+
+def test_vmec_profile_status_separates_unavailable_physics_from_parser_failure(
+    tmp_path,
+):
+    netCDF4 = pytest.importorskip("netCDF4")
+    from dkx.representative import vmec_profile_status
+
+    unavailable = tmp_path / "wout_without_pressure.nc"
+    with netCDF4.Dataset(unavailable, "w") as handle:
+        handle.createVariable("Aminor_p", "f8", ())[...] = 0.6
+    assert vmec_profile_status(unavailable)["status"] == "physics_unavailable"
+
+    corrupt = tmp_path / "wout_corrupt.nc"
+    corrupt.write_text("this is not netcdf")
+    status = vmec_profile_status(corrupt)
+    assert status["status"] == "parser_failure"
+    assert status["pressure_representation"] == "unreadable"
+
+
+@pytest.mark.parametrize(
+    ("profiles", "phrase"),
+    [
+        (
+            [
+                {
+                    "r": 0.5,
+                    "evaluation_status": "solve_failure",
+                    "failure_type": "LinAlgError",
+                }
+            ],
+            "solve failure",
+        ),
+        (
+            [
+                {
+                    "r": 0.5,
+                    "profile_input_status": "parser_failure",
+                    "profile_input_detail": "bad presf",
+                }
+            ],
+            "VMEC parser failure",
+        ),
+        (
+            [
+                {
+                    "r": 0.5,
+                    "profile_input_status": "physics_unavailable",
+                    "profile_input_detail": "no pressure",
+                }
+            ],
+            "physical profiles unavailable",
+        ),
+        (
+            [
+                {
+                    "r": 0.5,
+                    "profile_input_status": "available",
+                    "evaluation_status": "no_bracketed_root",
+                }
+            ],
+            "no bracket observed",
+        ),
+    ],
+)
+def test_missing_physical_panels_name_the_actual_failure_class(profiles, phrase):
+    from dkx.representative import _profile_panel_absence
+
+    assert phrase in _profile_panel_absence(profiles, "fluxes")
+
+
 def test_the_bootstrap_panel_is_a_radial_profile_with_the_field_beside_it():
     from dkx.representative import _panel_radial_bootstrap
 
@@ -286,7 +492,8 @@ def test_a_run_always_leaves_the_numbers_behind(tmp_path):
     from dkx.representative import write_representative_output
 
     scan = [{"nu_prime": 1e-2, "e_star": 0.0, "D11": -1e-3, "D31": -1e-4, "D33": 0.9}]
-    profiles = [{"r": 0.5, "er_ambipolar": -1.1, "bootstrap": -6e-3,
+    profiles = [{"r": 0.5, "er_ambipolar": -1.1, "er_evaluated": -1.1,
+                 "evaluation_is_root": True, "bootstrap": -6e-3,
                  "particle_flux": [5e-9, 5e-9], "heat_flux": [7e-8, 1e-8]}]  # fmt: skip
     out = write_representative_output(tmp_path / "run.h5", scan=scan, profiles=profiles)
     assert out.exists() and out.stat().st_size > 0
@@ -375,15 +582,19 @@ def test_the_output_file_records_the_dimensional_values_and_their_factors(tmp_pa
         with h5py.File(out, "r") as handle:
             assert handle["profiles/bootstrap_kA_m2"][()] == pytest.approx([-42.0])
             assert handle["profiles/jdotb_vmec_kA_m2"][()] == pytest.approx([-35.0])
+            assert handle["profiles/er_evaluated"][()] == pytest.approx([-1.1])
+            assert handle["profiles/evaluation_is_root"][()] == pytest.approx([1.0])
             assert handle.attrs["units/current_density_A_per_m2"] == pytest.approx(
-                units.CURRENT_DENSITY)
+                units.CURRENT_DENSITY
+            )
     else:
         import json
 
         payload = json.loads(out.read_text())
         assert payload["profiles/bootstrap_kA_m2"] == pytest.approx([-42.0])
         assert payload["units"]["current_density_A_per_m2"] == pytest.approx(
-            units.CURRENT_DENSITY)
+            units.CURRENT_DENSITY
+        )
 
 
 def test_a_vacuum_equilibrium_does_not_become_a_1e9_density_plasma(tmp_path):
@@ -450,7 +661,8 @@ def test_the_pressure_split_gives_the_temperature_a_gradient(tmp_path):
     assert 0.0 < plasma["t_hat"] < DEFAULT_T_AXIS_KEV
     # T ~ p^(1/3) at s = r^2 = 0.25, where p/p(0) = 1 - 0.25^2.
     assert plasma["t_hat"] == pytest.approx(
-        DEFAULT_T_AXIS_KEV * (1.0 - 0.25**2) ** (1.0 / 3.0), rel=1e-3)
+        DEFAULT_T_AXIS_KEV * (1.0 - 0.25**2) ** (1.0 / 3.0), rel=1e-3
+    )
 
 
 def test_the_profile_deck_asks_for_the_gradient_coordinate_it_supplies():
@@ -466,11 +678,18 @@ def test_the_profile_deck_asks_for_the_gradient_coordinate_it_supplies():
     """
     from dkx.inputs import sfincs_input_from_raw
     from dkx.namelist import parse_sfincs_input_text
-    from dkx.representative import (DEFAULT_RESOLUTION_PROFILE, FALLBACK_PLASMA,
-                                    _PROFILE_TEMPLATE, _plasma_keys)
+    from dkx.representative import (
+        DEFAULT_RESOLUTION_PROFILE,
+        FALLBACK_PLASMA,
+        _PROFILE_TEMPLATE,
+        _plasma_keys,
+    )
 
     text = _PROFILE_TEMPLATE.format(
-        equilibrium="/w.nc", **DEFAULT_RESOLUTION_PROFILE, **_plasma_keys(dict(FALLBACK_PLASMA)))
+        equilibrium="/w.nc",
+        **DEFAULT_RESOLUTION_PROFILE,
+        **_plasma_keys(dict(FALLBACK_PLASMA)),
+    )
     parsed = sfincs_input_from_raw(parse_sfincs_input_text(text))
     assert int(parsed.geometry.input_radial_coordinate_for_gradients) == 4
     assert len(parsed.species.d_n_hat_d_r_hats) == 2
@@ -490,8 +709,9 @@ def test_the_gradients_carry_the_aHat_chain_rule(tmp_path):
         path = tmp_path / f"wout_a{a_minor}.nc"
         with netCDF4.Dataset(path, "w") as handle:
             handle.createDimension("radius", 21)
-            handle.createVariable("presf", "f8", ("radius",))[:] = (
-                7.0e5 * (1.0 - np.linspace(0.0, 1.0, 21)))
+            handle.createVariable("presf", "f8", ("radius",))[:] = 7.0e5 * (
+                1.0 - np.linspace(0.0, 1.0, 21)
+            )
             handle.createVariable("Aminor_p", "f8", ())[...] = a_minor
         return plasma_parameters(path, 0.5)
 
@@ -514,7 +734,12 @@ def test_equilibrium_scalars_reads_the_wout_constants_the_units_need(tmp_path):
     path = tmp_path / "wout_scalars.nc"
     with netCDF4.Dataset(path, "w") as handle:
         handle.createDimension("radius", 4)
-        handle.createVariable("phi", "f8", ("radius",))[:] = [0.0, 0.5, 1.0, 2.0 * np.pi]
+        handle.createVariable("phi", "f8", ("radius",))[:] = [
+            0.0,
+            0.5,
+            1.0,
+            2.0 * np.pi,
+        ]
         handle.createVariable("Aminor_p", "f8", ())[...] = 0.42
         handle.createVariable("jdotb", "f8", ("radius",))[:] = [-1.0, -2.0, -3.0, -4.0]
 
@@ -534,24 +759,38 @@ def test_the_plasma_summary_covers_every_key_the_deck_needs(tmp_path):
     test that walks it with both the fallback and a real equilibrium.
     """
     netCDF4 = pytest.importorskip("netCDF4")
-    from dkx.representative import (DEFAULT_RESOLUTION_PROFILE, FALLBACK_PLASMA,
-                                    _PROFILE_TEMPLATE, _plasma_keys, plasma_parameters,
-                                    plasma_summary, resolve_plasma)
+    from dkx.representative import (
+        DEFAULT_RESOLUTION_PROFILE,
+        FALLBACK_PLASMA,
+        _PROFILE_TEMPLATE,
+        _plasma_keys,
+        plasma_parameters,
+        plasma_summary,
+        resolve_plasma,
+    )
 
     path = tmp_path / "wout_real.nc"
     with netCDF4.Dataset(path, "w") as handle:
         handle.createDimension("radius", 21)
-        handle.createVariable("presf", "f8", ("radius",))[:] = (
-            7.0e5 * (1.0 - np.linspace(0.0, 1.0, 21)))
+        handle.createVariable("presf", "f8", ("radius",))[:] = 7.0e5 * (
+            1.0 - np.linspace(0.0, 1.0, 21)
+        )
         handle.createVariable("Aminor_p", "f8", ())[...] = 0.6
 
-    for plasma in (dict(FALLBACK_PLASMA), plasma_parameters(path, 0.5), resolve_plasma(path)[0]):
+    for plasma in (
+        dict(FALLBACK_PLASMA),
+        plasma_parameters(path, 0.5),
+        resolve_plasma(path)[0],
+    ):
         assert plasma, "every branch must yield a usable plasma"
         summary = plasma_summary(plasma, "source phrase")
-        assert "n=" in summary and "dT/drHat=" in summary and "(source phrase)" in summary
+        assert (
+            "n=" in summary and "dT/drHat=" in summary and "(source phrase)" in summary
+        )
         # The same dict must fill the namelist without a KeyError.
         _PROFILE_TEMPLATE.format(
-            equilibrium="/w.nc", **DEFAULT_RESOLUTION_PROFILE, **_plasma_keys(plasma))
+            equilibrium="/w.nc", **DEFAULT_RESOLUTION_PROFILE, **_plasma_keys(plasma)
+        )
 
 
 def test_the_caption_warns_that_the_two_currents_need_not_coincide():
@@ -571,29 +810,31 @@ def test_the_caption_warns_that_the_two_currents_need_not_coincide():
     assert "need not coincide" in caption
     assert "p(s) from the equilibrium" in caption
     assert "profiles 13x19" in caption
-    assert caption.count("\n") == 1, "the footer is two lines; the band reserves for two"
+    assert caption.count("\n") == 1, (
+        "the footer is two lines; the band reserves for two"
+    )
     # No plasma, no claim about one.
     assert "assumed split" not in figure_caption(None, "", {"mono": {"n_theta": 25}})
 
 
-def test_full_threads_the_finer_grid_through_both_solve_stages(monkeypatch, tmp_path):
-    """``--full`` must reach the profile solve and the radial scan, not just the scan.
+def test_every_preset_threads_its_grid_through_both_solve_stages(monkeypatch, tmp_path):
+    """A preset must reach the profile solve and the radial scan, not just the scan.
 
-    The monoenergetic grid is widened in run_representative itself, so it is
+    The monoenergetic grid is chosen in run_representative itself, so it is
     hard to get wrong; the two profile stages take their resolution from a
     module constant, and threading a flag to one but not the other would leave
-    ``--full`` quietly half-applied.
+    the preset quietly half-applied.
     """
     from dkx import representative as rep
 
     seen: dict[str, dict] = {}
 
-    def fake_profile_data(equilibrium, *, full=False, emit=None):
-        seen["profile"] = rep.FULL_RESOLUTION_PROFILE if full else rep.DEFAULT_RESOLUTION_PROFILE
+    def fake_profile_data(equilibrium, *, full=False, quick=False, emit=None):
+        seen["profile"] = rep._profile_resolution(full=full, quick=quick)
         return {}
 
-    def fake_radial(equilibrium, *, full=False, emit=None, **kwargs):
-        seen["radial"] = rep.FULL_RESOLUTION_PROFILE if full else rep.DEFAULT_RESOLUTION_PROFILE
+    def fake_radial(equilibrium, *, full=False, quick=False, emit=None, **kwargs):
+        seen["radial"] = rep._profile_resolution(full=full, quick=quick)
         return []
 
     monkeypatch.setattr(rep, "_profile_data", fake_profile_data)
@@ -604,12 +845,104 @@ def test_full_threads_the_finer_grid_through_both_solve_stages(monkeypatch, tmp_
 
     wout = tmp_path / "wout_stub.nc"
     wout.write_text("")
-    for full, expected in ((False, rep.DEFAULT_RESOLUTION_PROFILE),
-                           (True, rep.FULL_RESOLUTION_PROFILE)):  # fmt: skip
-        rep.run_representative(wout, out_path=tmp_path / f"p{full}.png", full=full, emit=None)
-        assert seen["profile"] == expected, f"profile stage ignored full={full}"
-        assert seen["radial"] == expected, f"radial stage ignored full={full}"
-    assert rep.FULL_RESOLUTION_PROFILE != rep.DEFAULT_RESOLUTION_PROFILE
+    presets = (
+        ({}, rep.DEFAULT_RESOLUTION_PROFILE),
+        ({"full": True}, rep.FULL_RESOLUTION_PROFILE),
+        ({"quick": True}, rep.QUICK_RESOLUTION_PROFILE),
+    )
+    for flags, expected in presets:
+        label = "-".join(flags) or "default"
+        rep.run_representative(
+            wout, out_path=tmp_path / f"p{label}.png", emit=None, **flags
+        )
+        assert seen["profile"] == expected, f"profile stage ignored {flags}"
+        assert seen["radial"] == expected, f"radial stage ignored {flags}"
+    grids = [rep.DEFAULT_RESOLUTION_PROFILE, rep.FULL_RESOLUTION_PROFILE,
+             rep.QUICK_RESOLUTION_PROFILE]  # fmt: skip
+    assert len({tuple(sorted(g.items())) for g in grids}) == 3, (
+        "two presets share a grid"
+    )
+
+
+def test_full_and_quick_together_are_refused():
+    """They pull in opposite directions, so silently picking one is a trap."""
+    from dkx import representative as rep
+
+    with pytest.raises(ValueError, match="opposite presets"):
+        rep._profile_resolution(full=True, quick=True)
+
+
+def test_the_quick_speed_grid_keeps_the_ambipolar_root_alive():
+    """``n_x`` is the one axis ``--quick`` may not cut, and this records why.
+
+    Measured on ``tests/ref/wout_up_down_asymmetric_tokamak.nc``: at ``n_x = 3``
+    the radial current is negative across the whole ``E_r`` bracket, so there is
+    no sign change, no ambipolar root, and the bootstrap and flux panels come
+    out empty. At ``n_x = 4`` with the same angular grid the roots reappear.
+    Cutting the speed grid to buy CI seconds therefore costs half the figure.
+    """
+    from dkx import representative as rep
+
+    assert rep.QUICK_RESOLUTION_PROFILE["n_x"] >= 4
+    # The angular axes are the ones the preset is allowed to cut, and it must
+    # actually cut them or it is not a quick preset at all.
+    for axis in ("n_theta", "n_zeta", "n_xi"):
+        assert (
+            rep.QUICK_RESOLUTION_PROFILE[axis] < rep.DEFAULT_RESOLUTION_PROFILE[axis]
+        ), axis
+
+
+def test_quick_keeps_enough_points_for_every_panel_to_be_a_curve():
+    """One point is a dot, and a one-point axis stops exercising the code path."""
+    from dkx import representative as rep
+
+    assert len(rep.QUICK_NU_PRIME) >= 3, "the D11/D31/D33 panels need a curve"
+    assert len(rep.QUICK_E_STAR) >= 2, "the legend claims one curve per EStar"
+    assert len(rep.QUICK_SURFACES) >= 2, "a radial profile needs two radii"
+    # A bracket that does not span zero cannot contain a sign change.
+    assert min(rep.QUICK_ER_BRACKET) < 0.0 < max(rep.QUICK_ER_BRACKET)
+
+
+def test_quick_reports_the_grid_it_actually_ran(monkeypatch, tmp_path):
+    """The figure caption and the HDF5 must not name the default grid.
+
+    ``write_representative_output`` used to hard-code ``DEFAULT_RESOLUTION`` for
+    the monoenergetic entry, which was true while the only presets shared that
+    grid and became a false label the moment one did not.
+    """
+    from dkx import representative as rep
+
+    captured: dict[str, dict] = {}
+
+    def fake_plot(out, **kwargs):
+        captured["resolutions"] = kwargs["resolutions"]
+        Path(out).write_bytes(b"")
+        return Path(out)
+
+    monkeypatch.setattr(rep, "_profile_data", lambda *a, **k: {})
+    monkeypatch.setattr(rep, "radial_profiles", lambda *a, **k: [])
+    monkeypatch.setattr(rep, "monoenergetic_scan", lambda *a, **k: [])
+    monkeypatch.setattr(rep, "plot_representative", fake_plot)
+    monkeypatch.setattr(rep, "resolve_plasma",
+                        lambda eq: (dict(rep.FALLBACK_PLASMA), "generic reference"))  # fmt: skip
+
+    wout = tmp_path / "wout_stub.nc"
+    wout.write_text("")
+    rep.run_representative(wout, out_path=tmp_path / "q.png", quick=True, emit=None)
+    assert captured["resolutions"]["monoenergetic"] == rep.QUICK_RESOLUTION
+    assert captured["resolutions"]["profiles"] == rep.QUICK_RESOLUTION_PROFILE
+
+    # The HDF5 is the half that was wrong: plot_representative was always given
+    # the grid, write_representative_output substituted the default for it.
+    import h5py
+
+    with h5py.File(tmp_path / "q.h5", "r") as handle:
+        written = {
+            key.split("/", 1)[1]: int(value)
+            for key, value in handle.attrs.items()
+            if key.startswith("resolution_monoenergetic/")
+        }
+    assert written == rep.QUICK_RESOLUTION
 
 
 def test_the_out_of_memory_retry_grid_never_grows_an_axis():
@@ -628,6 +961,10 @@ def test_the_out_of_memory_retry_grid_never_grows_an_axis():
         reduced = reduced_of(resolution)
         assert set(reduced) == set(resolution)
         for axis, value in reduced.items():
-            assert value <= resolution[axis], f"{axis} grew: {resolution[axis]} -> {value}"
+            assert value <= resolution[axis], (
+                f"{axis} grew: {resolution[axis]} -> {value}"
+            )
             assert value >= 3, f"{axis} collapsed to {value}"
-        assert any(reduced[a] < resolution[a] for a in resolution), "nothing was reduced"
+        assert any(reduced[a] < resolution[a] for a in resolution), (
+            "nothing was reduced"
+        )

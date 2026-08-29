@@ -4,6 +4,137 @@ Release notes
 Unreleased
 ----------
 
+- Added a compact, checksummed native whole-profile certificate for the
+  five-surface W7-X PAS/DKES method case. One portable TOML and pinned Boozer
+  checksum reproduce root counts ``[1, 1, 3, 1, 1]``, selected physical
+  electric fields and SI fluxes, adaptive brackets, branch events, and all 222
+  solver attempts. The audit recomputes every compact gate and can additionally
+  verify both external native NetCDF files and geometry. Cold/warm scientific
+  arrays match exactly except timing; this remains workflow evidence, not
+  phase-space-converged, experimental, full-FP, or independent ambipolar
+  validation.
+- Native ambipolar profiles now retain the executed structural route and every
+  linear-solver attempt for each physical electric-field evaluation. When the
+  automatic structured route misses the unchanged true-residual target, only
+  the failed field is retried with one bounded GMRES solve; both attempts,
+  residuals, acceptance flags, and reasons survive in Result/NetCDF. Explicit
+  solver choices remain fail-closed. A five-surface W7-X method case exercises
+  one targeted recovery while retaining all ion, unstable, and electron roots;
+  this is solver/workflow evidence, not an experimental or independent-code
+  ambipolar certificate.
+- Added a matched zero-field W7-X SC1 full-kinetic DKX/SFINCS v3 validation
+  rung. Exact high/ultra decks use checksummed Boozer geometry, physical
+  density and temperature gradients, full linearized Fokker--Planck
+  collisions, full trajectories, automatic constraint 1, and a ``1e-12``
+  solver tolerance. The largest high-to-ultra movement is ``0.444%``; retained
+  nonzero scalar and speed-resolved outputs agree within ``1.37e-8``, and all
+  completed true residuals are below ``1.82e-12``. Momentum flux is retained as
+  an explicit near-zero absolute gate. Timing and memory are provenance, not a
+  cross-code performance claim, and this surface comparison is not an
+  ambipolar or experimental certificate.
+- Extended the matched full-kinetic DKX/SFINCS evidence to the pinned
+  one-species tokamak case at normalized ``Er = -30``. The checked high/ultra
+  rungs use full trajectories and a ``1e-13`` solver tolerance; retained
+  nonzero scalar and speed-resolved outputs agree within ``1.88e-9``,
+  resolution movement is at most ``0.326%``, and completed true residuals stay
+  below ``5.25e-11``. Intrinsically ambipolar particle flux and NTV use an
+  explicit absolute cancellation gate. The claim remains a single prescribed
+  field, not an Er scan, ambipolar-root, or stellarator full-FP validation.
+- Added a matched full-kinetic DKX/SFINCS v3 validation rung for a physical
+  one-species analytic-tokamak surface. Both codes use the full linearized
+  Fokker--Planck operator, full trajectories, identical density/temperature
+  gradients and coordinates, zero electric field, the recommended automatic
+  constraint, and a ``1e-10`` linear tolerance. At the finest checked rung the
+  largest scaled error over nonzero scalar and speed-resolved observables is
+  ``2.69e-10``; the high-to-ultra bootstrap/heat-flux movement is at most
+  ``0.280%`` and every completed true residual is below ``1.82e-11``.
+  Axisymmetric particle flux and NTV are explicitly gated as near-zero absolute
+  quantities. The artifact pins the MUMPS-enabled reference build, commits,
+  decks, compact and raw outputs, logs, cold/warm timing, memory, checksums, and
+  exclusions without making a cross-code performance claim.
+- Added a bounded independent zero-field monoenergetic validation rung for a
+  DSHAPE tokamak, NCSX, and W7-X EIM. The checked artifact aligns the applied
+  Lorentz frequency, local-radius Beidler normalization, reference-field
+  scale, and handedness before comparing ``D11*``, ``D31*``, ``D13*``, and
+  ``D33*``. Live YANCC results and the pinned MONKES table agree with DKX
+  within 6% on all three cases. The artifact pins external commits, inputs,
+  compact outputs, checksums, residuals, resolution, timing, RSS, and
+  exclusions; CI re-audits every checked-in normalization and checksum, while
+  an adjacent pinned YANCC checkout additionally verifies the external inputs.
+  Full-Fokker--Planck, finite-``Er``, ambipolar, experimental, and cross-code
+  performance claims remain outside this rung.
+- Native ``Case`` execution now accepts Boozer ``.bc`` equilibria directly.
+  The reader auto-detects the cosine-only and asymmetric v3 column conventions,
+  reads and parses the file once, reuses the immutable surface tables and one
+  shape-stable phase-space grid across the profile, and stores the source
+  checksum in ``Result``. The native route never serializes a SFINCS namelist or
+  asks users for a numbered geometry scheme. The checked asymmetric case agrees
+  with the established scheme-12 kinetic observables at ``2e-12`` relative
+  tolerance.
+- ``dkx wout_*.nc`` now records VMEC ``pmass_type`` provenance while consuming
+  the canonical evaluated ``presf`` profile, so ``sum_atan``, power-series,
+  spline, and the other checked VMEC pressure representations share one path.
+  Per-surface output and empty panels distinguish unavailable physical profiles,
+  VMEC parser failure, kinetic solve failure, and a completed electric-field
+  scan with no bracket. Failed surfaces remain in the HDF5 evidence. Standard
+  wout files do not preserve separate density/temperature profiles, so the
+  documented explicit pressure split remains visible rather than being
+  presented as recovered equilibrium data.
+- Representative VMEC profile runs no longer leave electric-field and flux
+  panels blank when the fixed scan range misses an ambipolar root. The output
+  records ``evaluation_is_root``, ``er_evaluated``, the sampled residual
+  current, and the full scan. Observables are displayed at the sampled point
+  with smallest ``|J_r|`` and labeled as closest-scanned rather than as an
+  ambipolar root. Solver progress likewise uses descriptive route names instead
+  of unexplained tier numbers.
+- Compatible single-process RHSMode=1 ``Er`` scans now build geometry and the
+  kinetic operator once, solve all electric-field points through the bounded
+  batched kernel, and still write the established per-point
+  ``input.namelist``, ``sfincsOutput.h5``, and solver-trace layout. On the
+  three-point scheme-11 regression deck, matched empty-cache CLI runs fell
+  from 7.54 s and 996 MB peak RSS to 4.09 s and 633 MB. A second process using
+  each populated cache fell from 3.05 s and 908 MB to 1.82 s and 539 MB.
+  Particle flux, heat flux, parallel flow/current, and NTV match the former
+  scalar workflow within ``2e-12`` relative tolerance. Process-parallel,
+  transport-matrix, Phi1, non-``Er``, and explicit host-direct scans retain the
+  scalar path.
+- Release artifacts now share one literal version in ``dkx/_version.py``.
+  Setuptools reads that value dynamically and the tag check reads the same file
+  without importing JAX during a build.
+- The release gate builds both wheel and source distribution, checks metadata
+  and package data in both archives, installs each into a separate clean
+  environment outside the checkout, and exercises finite scientific results.
+  A versioned size policy measures the wheel, source distribution, installed
+  DKX-owned files, tracked source/media, and a fresh full clone independently.
+- The PyPI workflow downloads the published wheel back from the public index,
+  verifies its version and install location, runs the CLI, and performs a small
+  kinetic solve. Required CI also runs checksum-pinned ``actionlint`` and feeds
+  it into the existing aggregate job.
+- CI never saw either of the two ``dkx wout_*.nc`` packaging breakages, because
+  every job ran from a source checkout where the missing files were still on
+  disk. A ``wheel-install`` job closes that gap: it builds the wheel, verifies
+  that every declared ``package-data`` pattern reached the artifact, installs
+  it into a virtualenv holding nothing else, asserts the imported ``dkx``
+  resolves inside ``site-packages``, and runs the CLI against an equilibrium
+  decompressed from ``tests/ref`` into a directory outside the checkout. The
+  run is checked for finite monoenergetic coefficients and an ambipolar root at
+  every surface, so a CLI that exits zero without solving does not pass. Built
+  from the 2.3.0 tree the job fails with the reported ``FileNotFoundError``.
+- ``tests/test_wheel_ships_every_package_file.py`` guards the same class of bug
+  without a build: ``[tool.setuptools.package-data]`` declares one pattern, so
+  any other non-Python file added under ``dkx/`` is excluded from the wheel
+  silently, and this fails in the pull request that adds it.
+- ``dkx <wout> --quick`` runs the representative set on a reduced grid --- 16 s
+  against 65 s cold-cache on a 10-core M4, measured on
+  ``tests/ref/wout_up_down_asymmetric_tokamak.nc`` --- so a run can be checked
+  end to end without the full cost. It is a smoke preset and its numbers are
+  not reportable: the ``nuPrime`` scan starts above the ``1/nu`` branch, the
+  ``E_r`` bracket stops at -8 kV/m, and every angular axis sits below the
+  documented convergence floor. The speed grid ``n_x`` is deliberately left at
+  the default's 4: at 3 the radial current has no sign change anywhere in the
+  bracket, which costs the bootstrap and flux panels entirely. The figure
+  caption and the ``.h5`` report the grid the run actually used, which
+  ``write_representative_output`` previously hard-coded to the default.
 - Added the first domain-package skeletons for the active ``v3_driver.py``
   architecture refactor: input, physics, discretization, operators, problems,
   solvers/preconditioners, parallel, workflows, validation, benchmarks, and

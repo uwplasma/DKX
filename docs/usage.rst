@@ -77,13 +77,17 @@ scripts.  The full typed knob set of :func:`dkx.solve.solve` is
 or ``run_from_namelist``; when given, it supersedes ``solve_method`` and
 ``tol``.  Environment variables keep acting as overrides for knobs left at
 ``None`` (``memory_budget_gb=None`` reads ``DKX_TIER1_MEMORY_BUDGET_GB``).
+Runtime messages use descriptive route names: ``structured direct``,
+``memory-bounded structured direct``, ``recycled iterative``, and ``host
+sparse-direct fallback``. The historical tier numbers remain only in internal
+knob names and detailed implementation documentation.
 One honest exception: the ``cores`` field is carried for provenance only —
 XLA sizes its host threadpool once, before the first JAX device use, so
 thread pinning belongs to the ``DKX_CORES`` environment variable or the CLI
 ``--cores`` flag (see :doc:`parallelism`).  Scan-level throughput knobs live
 outside ``SolverOptions``: batched and multi-device solves
-(``batched_er_scan`` / ``batched_solve`` with ``devices=``) and the tier-1
-``solve(subsystem_batch=...)`` width are documented in :doc:`parallelism`.
+(``batched_er_scan`` / ``batched_solve`` with ``devices=``) and the structured
+direct ``solve(subsystem_batch=...)`` width are documented in :doc:`parallelism`.
 
 Building v3 grids and geometry
 ------------------------------

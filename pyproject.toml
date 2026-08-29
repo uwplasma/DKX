@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dkx"
-version = "2.3.1"
+dynamic = ["version"]
 description = "Neoclassical transport solver with CPU/GPU and differentiable JAX workflows"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -22,6 +22,9 @@ dependencies = [
   "h5py",
   "netCDF4",
   "matplotlib",
+  # Python 3.10 has no stdlib tomllib; native Case.from_file() needs the
+  # compatibility reader at runtime, not only while running tests.
+  "tomli>=1.1.0; python_version < '3.11'",
   # solvax (PyPI) owns the structured linear-algebra solver tiers (block-Thomas
   # elimination, recycled GCROT, implicit differentiation) that every canonical
   # solve uses; it is a core dependency, not optional.  0.13.0 is the floor:
@@ -66,10 +69,12 @@ include = ["dkx*"]
 [tool.setuptools.package-data]
 dkx = ["validation/*.json"]
 
+[tool.setuptools.dynamic]
+version = {attr = "dkx._version.__version__"}
+
 [tool.pytest.ini_options]
 addopts = ["--import-mode=prepend"]
 testpaths = ["tests"]
 markers = [
   "slow: heavy end-to-end example/optimization tests; excluded from the fast coverage shards via -m 'not slow' (still run in the full local suite).",
 ]
-

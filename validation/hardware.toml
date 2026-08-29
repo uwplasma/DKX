@@ -1,0 +1,31 @@
+schema_version = 1
+recorded_at = "2026-08-28"
+
+[[host]]
+id = "local-mac-mini-m2"
+role = "development_cpu"
+official_release_baseline = false
+availability = "available"
+model = "Mac mini Mac14,3"
+processor = "Apple M2"
+cpu_cores = 8
+memory_bytes = 8589934592
+operating_system = "macOS 15.1.1 (24B91)"
+notes = "Useful for P0/P1 development measurements; it is not the named laptop required by D011."
+
+[[host]]
+id = "office-nvidia"
+role = "maintained_gpu"
+official_release_baseline = true
+availability = "unreachable"
+connection = "ssh office"
+last_check = "2026-08-28"
+failure = "TCP connection timed out before host identification"
+notes = "Do not publish new accelerator claims until a bounded matched run records GPU model, memory, driver, JAX, and CUDA versions."
+
+[[host]]
+id = "official-laptop-cpu"
+role = "release_cpu"
+official_release_baseline = true
+availability = "not_identified"
+notes = "D011 requires a named laptop CPU. The current local host is a Mac mini, so exact hardware remains a P0 review input."

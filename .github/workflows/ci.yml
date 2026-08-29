@@ -17,7 +17,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        # The count-only 10-way split left 151 tests in its heavy shard: 9m46s
+        # on main and 10m56s on PR #67. Twelve shards preserve the required
+        # sub-ten-minute job budget without dropping coverage.
+        group: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     env:
       JAX_ENABLE_X64: "True"
       JAX_DISABLE_JIT: "0"
@@ -48,7 +51,7 @@ jobs:
           # worker holding the heavy gradient/scan tests peaks at 5-6 GB. Four
           # of those exceed the 16 GB runner and the agent is OOM-killed, which
           # surfaces as a cancelled job rather than a test failure.
-          python -m pytest -q -n 2 --dist=loadscope --splits 10 --group ${{ matrix.group }} --splitting-algorithm least_duration -m "not slow" --cov=dkx --cov-report=
+          python -m pytest -q -n 2 --dist=loadscope --splits 12 --group ${{ matrix.group }} --splitting-algorithm least_duration -m "not slow" --cov=dkx --cov-report=
       - name: Upload coverage data
         uses: actions/upload-artifact@v7
         with:
@@ -82,7 +85,10 @@ jobs:
           path: coverage-parts
       - name: Combine coverage
         run: |
-          python -m coverage combine $(find coverage-parts -type f -name '.coverage.*' | sort)
+          mapfile -d '' coverage_files < <(
+            find coverage-parts -type f -name '.coverage.*' -print0 | sort -z
+          )
+          python -m coverage combine "${coverage_files[@]}"
           python -m coverage report --fail-under=80
           python -m coverage xml
       - name: Upload coverage
@@ -228,6 +234,218 @@ jobs:
             tests/test_generate_fortran_suite_benchmark_summary.py \
             tests/test_finite_beta_vmec_example.py
 
+  workflow-lint:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run the pinned actionlint binary
+        env:
+          ACTIONLINT_VERSION: "1.7.12"
+          ACTIONLINT_SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
+        run: |
+          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl --fail --location --silent --show-error \
+            --output "${RUNNER_TEMP}/${archive}" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${archive}"
+          echo "${ACTIONLINT_SHA256}  ${RUNNER_TEMP}/${archive}" | sha256sum --check
+          tar -xzf "${RUNNER_TEMP}/${archive}" -C "${RUNNER_TEMP}" actionlint
+          "${RUNNER_TEMP}/actionlint" .github/workflows/*.yml
+
+  wheel-install:
+    # The one job that does not run from a source checkout.
+    #
+    # `dkx wout_*.nc` shipped broken to pip users twice -- 2.1.1 and again in
+    # 2.2.0 -- while CI stayed green both times, because every other job runs
+    # with the repository as the working directory. There, the files the wheel
+    # omits (`examples/`, anything under `dkx/` that package-data does not
+    # declare) are still on disk, so the import that would fail for a user
+    # resolves happily. This job builds the wheel, installs it into a
+    # virtualenv holding nothing else, and runs the console script from a
+    # directory with no repository above it.
+    #
+    # It runs the `--quick` preset: measured cold-cache on a 10-core M4, that
+    # is 16.1 s against 64.9 s for the default, and it still drives all three
+    # solve stages. The failures this job exists to catch happen while the deck
+    # is being built, before the grid is read at all.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    env:
+      JAX_ENABLE_X64: "True"
+      DKX_CI: "1"
+      # A pip user pointing dkx at their own equilibrium downloads nothing, so
+      # prove it: any reach for the release-hosted data archive fails here.
+      DKX_OFFLINE: "1"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: "pyproject.toml"
+      - name: Keep the JAX compilation cache out of the runner's home
+        run: |
+          # A cache that outlives the job would let a later run skip the compile
+          # this one is timed against. Exported here rather than declared in the
+          # job's `env:` block above because `runner` is not one of the contexts
+          # GitHub allows there -- a workflow that does it never starts a job at
+          # all, and reports only "this run likely failed because of a workflow
+          # file issue".
+          echo "DKX_COMPILATION_CACHE_DIR=${RUNNER_TEMP}/jax_cache" >> "$GITHUB_ENV"
+      - name: Build and check the wheel and source distribution
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build --outdir dist
+          python -m twine check dist/*
+      - name: Every declared package-data file is in both artifacts
+        run: |
+          # tests/test_wheel_ships_every_package_file.py is the fast gate: it
+          # fails when a file under dkx/ is not declared. This is the slow half
+          # of the same contract -- that a pattern which IS declared actually
+          # made it through setuptools into the zip.
+          python - <<'PY'
+          import glob
+          import tarfile
+          import tomllib
+          import zipfile
+          from pathlib import Path
+
+          wheels = sorted(Path("dist").glob("*.whl"))
+          sdists = sorted(Path("dist").glob("*.tar.gz"))
+          if len(wheels) != 1 or len(sdists) != 1:
+              raise SystemExit(f"expected one wheel and one sdist; found {wheels}, {sdists}")
+          wheel_files = set(zipfile.ZipFile(wheels[0]).namelist())
+          with tarfile.open(sdists[0]) as archive:
+              sdist_files = {
+                  name.split("/", 1)[1]
+                  for name in archive.getnames()
+                  if "/" in name
+              }
+
+          config = tomllib.loads(Path("pyproject.toml").read_text())
+          package_data = config["tool"]["setuptools"]["package-data"]
+
+          expected: set[str] = set()
+          for package, patterns in package_data.items():
+              root = package.replace(".", "/")
+              for pattern in patterns:
+                  expected.update(glob.glob(f"{root}/{pattern}"))
+          if not expected:
+              raise SystemExit("package-data matched no files in the checkout")
+
+          for artifact, shipped in ((wheels[0], wheel_files), (sdists[0], sdist_files)):
+              missing = sorted(name for name in expected if name not in shipped)
+              if missing:
+                  raise SystemExit(
+                      f"declared as package-data but not in {artifact.name}: {missing}"
+                  )
+              print(f"{artifact.name} carries all {len(expected)} declared data files")
+          PY
+      - name: Install the wheel into a clean virtualenv
+        run: |
+          python -m venv "${RUNNER_TEMP}/wheelenv"
+          "${RUNNER_TEMP}/wheelenv/bin/python" -m pip install --upgrade pip
+          "${RUNNER_TEMP}/wheelenv/bin/python" -m pip install dist/*.whl
+      - name: Stage an equilibrium outside the checkout
+        run: |
+          # tests/ref ships this wout only in its lzma form (the repo is slimmed
+          # to ~22 MB); tests/_golden_cache.py does the same thing for pytest.
+          mkdir -p "${RUNNER_TEMP}/representative"
+          python - <<'PY'
+          import lzma
+          import os
+          from pathlib import Path
+
+          source = Path("tests/ref/wout_up_down_asymmetric_tokamak.nc.xz")
+          target = Path(os.environ["RUNNER_TEMP"], "representative", source.stem)
+          target.write_bytes(lzma.decompress(source.read_bytes()))
+          print(f"staged {target} ({target.stat().st_size} bytes)")
+          PY
+      - name: The installed dkx is the wheel, not the checkout
+        working-directory: ${{ runner.temp }}/representative
+        run: |
+          # Without this the whole job can pass on the source tree by accident,
+          # which is precisely the way the bug stayed hidden.
+          "${RUNNER_TEMP}/wheelenv/bin/python" - <<'PY'
+          import os
+          from pathlib import Path
+
+          import dkx
+
+          package = Path(dkx.__file__).resolve().parent
+          print(f"dkx resolved to {package}")
+          if "site-packages" not in package.parts:
+              raise SystemExit(f"dkx was imported from {package}, not from site-packages")
+          workspace = Path(os.environ["GITHUB_WORKSPACE"]).resolve()
+          if workspace in package.parents:
+              raise SystemExit(f"dkx was imported from the checkout at {package}")
+          PY
+      - name: dkx <wout> end to end from the installed wheel
+        working-directory: ${{ runner.temp }}/representative
+        run: |
+          "${RUNNER_TEMP}/wheelenv/bin/dkx" wout_up_down_asymmetric_tokamak.nc --quick
+      - name: The run produced real numbers, not just files
+        working-directory: ${{ runner.temp }}/representative
+        run: |
+          "${RUNNER_TEMP}/wheelenv/bin/python" - <<'PY'
+          from pathlib import Path
+
+          import h5py
+          import numpy as np
+
+          stem = "wout_up_down_asymmetric_tokamak.panels"
+          figure = Path(f"{stem}.png")
+          if not figure.is_file() or figure.stat().st_size < 50_000:
+              raise SystemExit(f"{figure} is missing or too small to be six panels")
+
+          # 2.2.0 failed with an RHSMode=1 deck three frames deep in the solver,
+          # so checking that the file exists is not enough: the monoenergetic
+          # coefficients are what an RHSMode=3 run produces and an RHSMode=1 one
+          # does not.
+          with h5py.File(f"{stem}.h5", "r") as handle:
+              d11 = np.asarray(handle["monoenergetic/D11"])
+              nu = np.asarray(handle["monoenergetic/nu_prime"])
+              er = np.asarray(handle["profiles/er_ambipolar"])
+          if d11.size < 6 or not np.all(np.isfinite(d11)) or np.all(d11 == 0.0):
+              raise SystemExit(f"monoenergetic D11 is not a solved scan: {d11}")
+          if np.unique(nu).size < 3:
+              raise SystemExit(f"the scan collapsed to {np.unique(nu).size} nuPrime points")
+          if not np.all(np.isfinite(er)):
+              raise SystemExit(f"no ambipolar root at one of the surfaces: {er}")
+          print(f"D11 {d11.min():+.3e} .. {d11.max():+.3e}; ambipolar Er {er} kV/m")
+          PY
+      - name: Install the source distribution outside the checkout
+        run: |
+          python -m venv "${RUNNER_TEMP}/sdistenv"
+          "${RUNNER_TEMP}/sdistenv/bin/python" -m pip install --upgrade pip
+          "${RUNNER_TEMP}/sdistenv/bin/python" -m pip install dist/*.tar.gz
+      - name: Run a finite Python solve from the installed source distribution
+        working-directory: ${{ runner.temp }}/representative
+        run: |
+          "${RUNNER_TEMP}/sdistenv/bin/python" \
+            "${GITHUB_WORKSPACE}/tools/installed_scientific_smoke.py" \
+            --workspace "${GITHUB_WORKSPACE}"
+      - name: Measure every DKX-owned release artifact
+        run: |
+          git clone --quiet \
+            "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" \
+            "${RUNNER_TEMP}/full-clone"
+          git -C "${RUNNER_TEMP}/full-clone" fetch --quiet origin "${GITHUB_REF}"
+          git -C "${RUNNER_TEMP}/full-clone" checkout --quiet --detach "${GITHUB_SHA}"
+          "${RUNNER_TEMP}/wheelenv/bin/python" tools/release_contracts.py \
+            --policy validation/package_size_contract.toml \
+            --repository "${GITHUB_WORKSPACE}" \
+            --dist-dir dist \
+            --installed \
+            --full-clone "${RUNNER_TEMP}/full-clone" \
+            --json-out "${RUNNER_TEMP}/package-sizes.json"
+      - name: Upload the size evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: package-sizes
+          path: ${{ runner.temp }}/package-sizes.json
+          if-no-files-found: error
+
   # NOTE: the former `optional-ecosystem-gates` job was removed. Its only
   # sfincs-specific probe depended on the deleted structured-CSR internals
   # (the retired structured-CSR operator internals), and the remaining lineax/
@@ -243,6 +461,8 @@ jobs:
       - examples-smoke
       - external-data-smoke
       - python-floor
+      - workflow-lint
+      - wheel-install
     if: always()
     steps:
       - name: Check required CI jobs

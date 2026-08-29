@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 import dkx.workflows.scans as scans
+from dkx.io import read_sfincs_h5
 from dkx.namelist import Namelist
 
 
@@ -330,3 +332,64 @@ def test_run_er_scan_rejects_invalid_subset_index(tmp_path: Path) -> None:
             index=2,
             stride=2,
         )
+
+
+def test_shared_operator_scan_matches_scalar_outputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    deck = (
+        Path(__file__).parent
+        / "ref"
+        / "pas_1species_PAS_noEr_tiny_scheme11.input.namelist"
+    )
+    values = [1.0e-3, 0.0, -1.0e-3]
+    with monkeypatch.context() as context:
+        context.setattr(scans, "_can_batch_profile_scan", lambda **_kwargs: False)
+        scalar = scans.run_er_scan(
+            input_namelist=deck,
+            out_dir=tmp_path / "scalar",
+            values=values,
+            compute_solution=True,
+        )
+
+    messages: list[str] = []
+    batched = scans.run_er_scan(
+        input_namelist=deck,
+        out_dir=tmp_path / "batched",
+        values=values,
+        compute_solution=True,
+        emit=lambda _level, message: messages.append(message),
+    )
+    assert any("shared-operator batch n=3" in message for message in messages)
+    keys = (
+        "particleFlux_vm_psiHat",
+        "heatFlux_vm_psiHat",
+        "FSABFlow",
+        "FSABjHat",
+        "NTV",
+    )
+    for scalar_path, batched_path in zip(scalar.outputs, batched.outputs, strict=True):
+        scalar_data = read_sfincs_h5(scalar_path)
+        batched_data = read_sfincs_h5(batched_path)
+        assert scalar_data.keys() == batched_data.keys()
+        for key in keys:
+            np.testing.assert_allclose(
+                np.asarray(batched_data[key], dtype=np.float64),
+                np.asarray(scalar_data[key], dtype=np.float64),
+                rtol=2.0e-12,
+                atol=5.0e-20,
+            )
+
+    batched.outputs[1].unlink()
+    messages.clear()
+    resumed = scans.run_er_scan(
+        input_namelist=deck,
+        out_dir=tmp_path / "batched",
+        values=values,
+        compute_solution=True,
+        skip_existing=True,
+        emit=lambda _level, message: messages.append(message),
+    )
+    assert all(path.exists() for path in resumed.outputs)
+    assert any("shared-operator batch n=1" in message for message in messages)
+    assert sum("reused existing output" in message for message in messages) == 2

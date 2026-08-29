@@ -80,6 +80,165 @@ Implemented literature reproductions
 
 These lanes already have scripts and figure artifacts in the repository.
 
+Matched full-kinetic SFINCS profile
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The first independent full-Fokker--Planck profile rung uses the exact checked
+``validation/inputs/tokamak_full_fp_{high,ultra}.input.namelist`` decks in both
+DKX and pinned SFINCS v3. The case is an analytic axisymmetric tokamak surface
+with physical density and temperature gradients, full trajectories, zero
+electric field, and the recommended automatic full-FP constraint.
+
+The machine-readable evidence is
+``validation/full_kinetic_sfincs_v1.json``. Re-audit its decks, compact outputs,
+convergence arithmetic, residual gates, and claim boundary with:
+
+.. code-block:: console
+
+   python tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py
+
+The accepted resolution rises from 6,887 to 12,509 unknowns. Bootstrap/parallel
+flow moves ``0.042%`` and heat flux moves ``0.280%``. At the finest rung, the
+largest scaled DKX/SFINCS difference across nonzero scalar and speed-resolved
+observables is ``2.69e-10`` and every completed true residual is below
+``1.82e-11``. Particle flux and NTV vanish by axisymmetric cancellation at the
+checked accuracy, so their gate is the recorded ``1e-12`` absolute scale rather
+than a meaningless relative error.
+
+The reference build is the pinned SFINCS commit with PETSc 3.23.6 and MUMPS
+5.8.1; both MUMPS and SuperLU_DIST are detected at runtime and MUMPS is selected.
+No scientific SFINCS source edits or link stubs are used. Timing and memory are
+retained for reproduction, not for a cross-code performance claim. Multispecies
+and stellarator full-FP physics, finite electric field, Phi1, ambipolar roots,
+and experimental agreement remain separate gates.
+
+Matched finite-Er full-kinetic profile
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The companion ``validation/full_kinetic_sfincs_finite_er_v1.json`` artifact
+uses the pinned upstream one-species full-FP tokamak case at normalized
+``Er = -30``. Both codes use full trajectories, automatic constraint 1, a
+``1e-13`` solver tolerance, and matched angular, pitch, and speed grids. The
+SFINCS matrices grow from 6,887 to 12,509 unknowns; DKX's distinct internal
+representation grows from 10,532 to 18,614. Audit the comparison by passing the
+artifact to the shared command above.
+
+The finest flow/current, momentum flux, heat flux, and speed-resolved outputs
+agree within ``1.88e-9`` scaled error. High-to-ultra movement is at most
+``0.326%``, and all completed true residuals are below ``5.25e-11``.
+Axisymmetric intrinsic ambipolarity makes summed particle flux and NTV
+cancellation-level quantities, so their acceptance gate is ``2e-11`` absolute.
+This is a prescribed-field surface comparison, not an electric-field scan or
+ambipolar-root validation. The separate zero-field stellarator full-FP lane is
+recorded below.
+
+Matched stellarator full-kinetic profile
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The companion ``validation/full_kinetic_sfincs_stellarator_v1.json`` artifact
+uses exact relative-path decks on the checksummed W7-X SC1 Boozer surface at
+``rN = 0.5``. Both live codes use physical density and temperature gradients,
+full linearized Fokker--Planck collisions, full trajectories, zero electric
+field, automatic constraint 1, and a ``1e-12`` solver tolerance. SFINCS's
+algebraic systems grow from 54,407 to 98,126 unknowns; DKX's distinct internal
+representation grows from 87,887 to 155,994.
+
+The largest high-to-ultra movement is ``0.444%``. At the finest rung, flow,
+particle and heat flux, NTV, and the retained speed spectra agree within
+``1.37e-8`` scaled error; that maximum is NTV and corresponds to an absolute
+difference of about ``8.31e-13``. All completed true residuals are below
+``1.82e-12``. Momentum flux is retained as a near-zero absolute gate rather
+than assigned an unstable relative error.
+
+The artifact pins the SFINCS commit, MUMPS-enabled build, Boozer source path
+and checksum, exact decks, raw and compact outputs, logs, solver traces,
+cold/warm DKX timing, SFINCS timing, and process memory. These measurements are
+reproduction provenance, not a cross-code performance claim. This one-species
+surface comparison is not an Er scan, ambipolar-profile, Phi1, experimental,
+or second-stellarator-family full-FP certificate.
+
+Native whole-profile ambipolar certificate
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``validation/native_ambipolar_profile_v1.json`` records the admitted native
+workflow as a separate evidence lane. The portable checked TOML drives five
+W7-X standard-configuration surfaces with physical hydrogen/electron profiles,
+PAS collisions, DKES drifts, bounded midpoint refinement, all-root search, and
+radial branch continuation. Recompute every compact gate with:
+
+.. code-block:: console
+
+   python tools/paper_benchmarks/audit_native_ambipolar_profile.py
+
+The result retains root counts ``[1, 1, 3, 1, 1]``, seven discrete branch
+events, selected ion/electron fields and SI particle/heat fluxes, and all 222
+solver attempts. One structured evaluation at the outer-surface zero field
+misses its unchanged target; the retained bounded GMRES retry reduces the true
+residual from ``8.23e-13`` to ``1.93e-13``. Every final bracket is
+``0.0048828125 kV/m`` wide and every refinement hierarchy is resolved.
+
+The artifact pins the portable input, geometry, cold/warm native NetCDF,
+compact profile, commit, environment, timing, and process-memory evidence.
+Passing ``--results-root`` additionally verifies the external files and exact
+cold/warm scientific-array identity. The warm process was 0.15% slower, so no
+cache-speedup claim is made. This is a PAS/DKES workflow certificate, not
+phase-space-convergence, continuously localized bifurcations, experiment,
+full-Fokker--Planck or independent ambipolar validation, Phi1, or a second
+stellarator-family claim.
+
+Bounded ambipolar phase-space ladder
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``validation/ambipolar_phase_space_ladder_v1.json`` records a separate
+coarse/reference/fine kinetic-grid ladder for the same five-surface W7-X
+PAS/DKES profile. Recompute its checksums, every root movement, every selected
+SI particle/heat-flux movement, topology decision, and admission status with:
+
+.. code-block:: console
+
+   python tools/paper_benchmarks/audit_ambipolar_phase_space_ladder.py
+
+The three resolutions are ``(13, 31, 32, 5)``, ``(15, 37, 36, 6)``, and
+``(17, 37, 40, 6)`` in theta, zeta, pitch, and speed. Root counts remain
+``[1, 1, 3, 1, 1]`` with identical classifications, branch identities, and
+selected branches. However, reference-to-fine movement reaches
+``1.6259765625 kV/m`` for an ambipolar root, ``4.08%`` for selected particle
+flux, and ``7.81%`` for selected heat flux. These fail the unchanged
+``0.005 kV/m`` root and ``2%`` observable gates; the maximum accepted true
+residual, ``3.92e-13``, passes its ``1e-12`` gate.
+
+The auditable outcome is ``refinement_exhausted``. This negative result
+prevents promotion of the workflow certificate to phase-space-converged
+validation. The fine rung only refines theta and pitch beyond the reference;
+zeta/speed convergence, independent full-Fokker--Planck ambipolar comparison,
+experiment, and cross-code performance remain separate gates.
+
+Theta/pitch resolution diagnosis
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The follow-on ``validation/ambipolar_phase_space_axes_v1.json`` artifact
+separates theta and pitch instead of combining them. It compares the reference
+``(15, 37, 36, 6)`` resolution against theta-only ``(17, 37, 36, 6)`` and
+pitch-only ``(15, 37, 40, 6)``, then extends the fixed-theta pitch sequence to
+``(15, 37, 44, 6)``. Audit it with:
+
+.. code-block:: console
+
+   python tools/paper_benchmarks/audit_ambipolar_phase_space_axes.py
+
+Theta-only keeps selected particle and heat-flux movement below ``2%`` but
+still moves a root by ``0.1611328125 kV/m``. Pitch40 is the dominant failed
+direction, moving a root by ``1.7333984375 kV/m`` and selected heat flux by
+``9.47%`` relative to the reference. Pitch40-to-pitch44 does not approach the
+gates: maximum root, selected particle-flux, and selected heat-flux movements
+are ``0.205078125 kV/m``, ``13.52%``, and ``14.07%``.
+
+All topology and accepted true-residual checks pass, but the pitch44 process
+reached a ``22,275,409,800 B`` footprint on the 24 GiB host. The artifact
+therefore rejects a blind pitch48 escalation and retains
+``refinement_exhausted`` status. It is a bounded diagnosis, not phase-space,
+zeta, speed, independent-code, experiment, or performance validation.
+
 Publication validation dashboard
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -416,6 +575,42 @@ Promotion gates:
   parity-clean artifacts,
 - and summarize solver-path provenance in release artifacts before using a new
   branch as a documented default.
+
+Pinned independent monoenergetic device-family rung
+---------------------------------------------------
+
+The first independent device-family artifact is
+``validation/independent_cross_code_v1.json``. It compares one axisymmetric
+DSHAPE tokamak surface, NCSX, and W7-X EIM on the equations all participating
+codes actually share: zero-field monoenergetic drift kinetics, Lorentz
+pitch-angle scattering, and DKES trajectories. DSHAPE and NCSX are live YANCC
+comparisons; W7-X EIM uses the pinned MONKES database row at its authored
+``27 x 55 x 140`` resolution.
+
+The comparison does not equate similarly named inputs. It maps physical
+``nu/v`` through DKX's applied ``nuDHat(x0)`` factor, converts the dimensional
+DKES coefficients to the Beidler ``D*`` convention with the *local* surface
+radius, corrects the recorded reference-field convention, and applies the
+explicit handedness map to ``D31*`` and ``D13*``. The checked audit recomputes
+all of this from raw coefficients rather than trusting stored normalized
+values::
+
+   python tools/paper_benchmarks/audit_independent_cross_code_validation.py \
+     --yancc-root ../YANCC
+
+All four coefficients pass the 6% bounded gate: the maximum relative
+differences are 5.51% for DSHAPE, 1.66% for NCSX, and 5.52% for W7-X EIM;
+``D33*`` differs by at most 0.065%. The artifact pins external commits,
+input and compact-output checksums, reference residuals, resolution, hardware,
+wall time, and process peak RSS. The threshold covers the measured
+cross-discretization spread, is fixed by the accepted artifact, and may not be
+relaxed to admit a future regression.
+
+This is deliberately not full-Fokker--Planck, finite-``Er``, ambipolar-profile,
+experimental, or cross-code performance validation. Exact SFINCS Fortran-v3
+discrete compatibility fixtures remain enforced separately; the checked
+full-kinetic DSHAPE SFINCS table is recorded as context only because substituting
+it here would compare different equations.
 
 Closed post-release research lanes
 ----------------------------------

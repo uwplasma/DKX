@@ -180,6 +180,7 @@ _TIER2_PRECONDITIONERS = ("coarse", "multigrid", "sparse", "none")
 # Result container
 # =============================================================================
 
+
 @dataclass(frozen=True)
 class SolveResidualRecord:
     """One differentiable-solve residual measured on the host at execution time.
@@ -220,6 +221,7 @@ class SolveResidualRecord:
         if self.rhs_norm > 0.0:
             return self.residual_norm / self.rhs_norm
         return float("inf") if self.residual_norm > 0.0 else 0.0
+
 
 @dataclass
 class AdjointDiagnostics:
@@ -282,6 +284,7 @@ class AdjointDiagnostics:
         """Whether every recorded solve landed inside its accepted residual."""
         return all(r.within_tolerance for r in self.records)
 
+
 @dataclass(frozen=True)
 class SolveResult:
     """Outcome of :func:`solve`.
@@ -332,6 +335,7 @@ class SolveResult:
         """
         return "iterative" if self.method in {"gcrot", "gmres"} else "direct"
 
+
 def _as_columns(rhs: jnp.ndarray) -> tuple[jnp.ndarray, bool]:
     rhs = jnp.asarray(rhs, dtype=jnp.float64)
     if rhs.ndim == 1:
@@ -340,14 +344,17 @@ def _as_columns(rhs: jnp.ndarray) -> tuple[jnp.ndarray, bool]:
         return rhs, False
     raise ValueError(f"rhs must be (n,) or (n, n_rhs); got shape {rhs.shape}")
 
+
 def _is_traced(*arrays: Any) -> bool:
     return any(isinstance(a, jax.core.Tracer) for a in arrays)
+
 
 def _residual_norms(
     matvec: Callable[[jnp.ndarray], jnp.ndarray], x2d: jnp.ndarray, rhs2d: jnp.ndarray
 ) -> jnp.ndarray:
     res = jax.vmap(matvec, in_axes=1, out_axes=1)(x2d) - rhs2d
     return jnp.linalg.norm(res, axis=0)
+
 
 def _converged_flag(
     res_norms: jnp.ndarray, rhs2d: jnp.ndarray, tol: float, atol: float
@@ -372,6 +379,7 @@ def _converged_flag(
     targets = np.maximum(atol, tol * np.maximum(rhs_norms, scale))
     res = np.asarray(res_norms)
     return bool(np.all(np.isfinite(res)) and np.all(res <= np.maximum(targets, 1e-30)))
+
 
 def _pinned_matvecs(
     op: KineticOperator,
@@ -409,6 +417,7 @@ def _pinned_matvecs(
 
     return matvec, matvec_t
 
+
 # Accepted slack over the residual the caller asked for, before a
 # differentiable solve is declared failed.  The default of :func:`solve`'s
 # ``adjoint_residual_factor``.
@@ -437,6 +446,7 @@ _ADJOINT_NORM_PROBES = 2
 
 _EPS64 = float(np.finfo(np.float64).eps)
 
+
 def _operator_norm_estimate(
     matvec: Callable[[jnp.ndarray], jnp.ndarray], n: int
 ) -> jnp.ndarray:
@@ -453,6 +463,7 @@ def _operator_norm_estimate(
         u = jax.random.rademacher(jax.random.fold_in(key, i), (n,), dtype=jnp.float64)
         est = jnp.maximum(est, jnp.linalg.norm(matvec(u)) / jnp.linalg.norm(u))
     return est
+
 
 def _residual_guard(
     label: str,
@@ -526,8 +537,10 @@ def _residual_guard(
         if ok or not raise_on_failure:
             return
         rel = record.relative_residual
-        formula = "||A^T y - g|| / ||g||" if label.startswith("adjoint") else (
-            "||A x - b|| / ||b||"
+        formula = (
+            "||A^T y - g|| / ||g||"
+            if label.startswith("adjoint")
+            else ("||A x - b|| / ||b||")
         )
         raise RuntimeError(
             f"[dkx.solve] differentiable {label} GCROT solve failed to "
@@ -558,6 +571,7 @@ def _residual_guard(
         )
 
     return guard
+
 
 def _guarded_solve(
     label: str,
@@ -595,9 +609,11 @@ def _guarded_solve(
     )
     return x
 
+
 # =============================================================================
 # Tier 1 — structured direct (block Thomas over Legendre modes)
 # =============================================================================
+
 
 def tier1_available(op: KineticOperator) -> tuple[bool, str]:
     """Check whether the tier-1 structured direct family applies to ``op``.
@@ -627,13 +643,16 @@ def tier1_available(op: KineticOperator) -> tuple[bool, str]:
         return False, "point_at_x0 x-grids give the x=0 constraint row a different form"
     return True, ""
 
+
 def _uniform_nxi_for_x(op: KineticOperator) -> bool:
     """Whether every speed node retains the full Legendre resolution."""
     return int(np.min(np.asarray(op.n_xi_for_x))) >= op.n_xi
 
+
 # =============================================================================
 # Tier 1 memory model and the full-vs-truncated route decision
 # =============================================================================
+
 
 def tier1_full_band_bytes(op: KineticOperator) -> float:
     """Bytes of the full tier-1 Legendre bands (``lower``/``diag``/``upper``).
@@ -656,6 +675,7 @@ def tier1_full_band_bytes(op: KineticOperator) -> float:
     n_blocks_total = float(np.sum(np.asarray(op.n_xi_for_x)))
     return 3.0 * n_blocks_total * float(op.n_species) * m * m * 8.0
 
+
 def tier1_peak_memory_bytes(op: KineticOperator) -> float:
     """Peak-memory estimate of the full tier-1 factorization.
 
@@ -667,6 +687,7 @@ def tier1_peak_memory_bytes(op: KineticOperator) -> float:
     storage — the multiplier used by the validated HSX benchmark.
     """
     return 2.5 * tier1_full_band_bytes(op)
+
 
 def tier1_truncated_peak_memory_bytes(
     op: KineticOperator,
@@ -722,6 +743,7 @@ def tier1_truncated_peak_memory_bytes(
     state_bytes = 4.0 * float(op.total_size) * 8.0
     return 2.0 * (coeff_bytes + stream_broadcast_bytes + sweep_bytes + state_bytes)
 
+
 def tier1_truncated_subsystem_width(
     op: KineticOperator,
     keep_lowest: int = _TIER1_KEEP_LOWEST_DEFAULT,
@@ -742,9 +764,13 @@ def tier1_truncated_subsystem_width(
     budget = resolve_memory_budget_bytes(memory_budget_gb)
     b = max(1, int(op.n_species) * int(op.n_x))
     for width in range(b, 1, -1):
-        if tier1_truncated_peak_memory_bytes(op, keep_lowest, subsystem_batch=width) <= budget:
+        if (
+            tier1_truncated_peak_memory_bytes(op, keep_lowest, subsystem_batch=width)
+            <= budget
+        ):
             return width
     return 1
+
 
 def _resolve_subsystem_batch(
     op: KineticOperator, subsystem_batch: int | str, keep: int
@@ -780,12 +806,14 @@ def _resolve_subsystem_batch(
         raise ValueError(f"subsystem_batch must be >= 1, got {width}")
     return min(width, max(1, int(op.n_species) * int(op.n_x)))
 
+
 def _tier1_budget_bytes(budget_gb: float | None) -> tuple[float, float]:
     """Resolve the truncation budget (bytes, GB) from arg / env / default."""
     if budget_gb is None:
         env = os.environ.get(_TIER1_BUDGET_ENV)
         budget_gb = float(env) if env not in (None, "") else _TIER1_BUDGET_GB_DEFAULT
     return float(budget_gb) * 2.0**30, float(budget_gb)
+
 
 def _truncation_supported(op: KineticOperator, keep: int) -> tuple[bool, str]:
     """Structural check that the truncated tier-1 kernel applies to ``op``.
@@ -797,14 +825,21 @@ def _truncation_supported(op: KineticOperator, keep: int) -> tuple[bool, str]:
     with ``n_blocks = Nxi_for_x[ix]`` per subsystem.
     """
     if op.constraint_scheme not in (0, 2):
-        return False, f"constraintScheme={op.constraint_scheme} border couples Legendre modes"
+        return (
+            False,
+            f"constraintScheme={op.constraint_scheme} border couples Legendre modes",
+        )
     if op.point_at_x0:
         return False, "point_at_x0 x-grids are not handled by the truncated kernel"
     if keep > op.n_xi:
         return False, f"keep_lowest={keep} exceeds Nxi={op.n_xi}"
     if int(np.min(np.asarray(op.n_xi_for_x))) < keep:
-        return False, f"min Nxi_for_x={int(np.min(np.asarray(op.n_xi_for_x)))} < keep_lowest={keep}"
+        return (
+            False,
+            f"min Nxi_for_x={int(np.min(np.asarray(op.n_xi_for_x)))} < keep_lowest={keep}",
+        )
     return True, ""
+
 
 def _rhs_confined_to_lowest_blocks(
     op: KineticOperator, rhs2d: jnp.ndarray, keep: int
@@ -825,6 +860,7 @@ def _rhs_confined_to_lowest_blocks(
         return True
     f = np.asarray(rhs2d)[: op.f_size].reshape(n_s, n_x, n_xi, n_t * n_z, -1)
     return bool(np.max(np.abs(f[:, :, keep:])) == 0.0)
+
 
 @dataclass(frozen=True)
 class Tier1Solver:
@@ -867,7 +903,9 @@ class Tier1Solver:
         b_f = rhs2d[: op.f_size].reshape(n_s, n_x, n_xi, n_tz, n_rhs)
         b_f = b_f.reshape(batch, n_xi, n_tz, n_rhs)
 
-        solve_batched = jax.vmap(lambda f, r: block_thomas_solve(f, r, transpose=transpose))
+        solve_batched = jax.vmap(
+            lambda f, r: block_thomas_solve(f, r, transpose=transpose)
+        )
         y = solve_batched(self.factors, b_f)  # (B, L, TZ, n_rhs)
 
         if op.constraint_scheme == 0:
@@ -878,7 +916,9 @@ class Tier1Solver:
         # Forward:  [[A, b0 e0], [c0^T e0^T, 0]];  transpose swaps b0 <-> c0.
         r_c = rhs2d[op.f_size :].reshape(batch, n_rhs)
         z = self.z_t if transpose else self.z_fwd
-        w_row = self.b0 if transpose else self.c0  # constraint row of the (transposed) system
+        w_row = (
+            self.b0 if transpose else self.c0
+        )  # constraint row of the (transposed) system
         c_y = jnp.einsum("j,bjr->br", w_row, y[:, 0])  # w·y[l=0], (B, n_rhs)
         c_z = jnp.einsum("j,bj->b", w_row, z[:, 0])  # (B,)
         s = self.gamma[:, None] * r_c + (c_y - r_c) / c_z[:, None]
@@ -889,6 +929,7 @@ class Tier1Solver:
             [f.reshape(op.f_size, n_rhs), s.reshape(op.extra_size, n_rhs)], axis=0
         )
         return x[:, 0] if squeeze else x
+
 
 def build_tier1_solver(op: KineticOperator) -> Tier1Solver:
     """Assemble and factor the tier-1 batched bordered block-tridiagonal solver.
@@ -904,7 +945,9 @@ def build_tier1_solver(op: KineticOperator) -> Tier1Solver:
     _require_solvax()
     ok, reason = tier1_available(op)
     if not ok:
-        raise NotImplementedError(f"tier-1 structured direct path unavailable: {reason}")
+        raise NotImplementedError(
+            f"tier-1 structured direct path unavailable: {reason}"
+        )
     if not _uniform_nxi_for_x(op):
         raise NotImplementedError(
             "tier-1 full-band factorization requires uniform Nxi_for_x (the ramped "
@@ -918,7 +961,8 @@ def build_tier1_solver(op: KineticOperator) -> Tier1Solver:
 
     blocks = op.to_block_tridiagonal()  # (L, S, X, TZ, TZ)
     lower, diag, upper = (
-        jnp.transpose(a, (1, 2, 0, 3, 4)).reshape(batch, n_xi, n_tz, n_tz) for a in blocks
+        jnp.transpose(a, (1, 2, 0, 3, 4)).reshape(batch, n_xi, n_tz, n_tz)
+        for a in blocks
     )
 
     b0 = jnp.ones((n_tz,), dtype=jnp.float64)  # source shape on the l=0 rows
@@ -942,11 +986,15 @@ def build_tier1_solver(op: KineticOperator) -> Tier1Solver:
     z_t = jax.vmap(lambda f, r: block_thomas_solve(f, r, transpose=True))(
         factors, e0.at[:, 0, :].set(c0[None, :])
     )
-    return Tier1Solver(op=op, factors=factors, z_fwd=z_fwd, z_t=z_t, gamma=gamma, b0=b0, c0=c0)
+    return Tier1Solver(
+        op=op, factors=factors, z_fwd=z_fwd, z_t=z_t, gamma=gamma, b0=b0, c0=c0
+    )
+
 
 # =============================================================================
 # Tier 3 — host sparse-direct fallback
 # =============================================================================
+
 
 def materialize_dense(
     op: KineticOperator, *, column_chunk: int = 1024, pin_masked_dofs: bool = False
@@ -1026,14 +1074,16 @@ def _escalate_after_tier2_stall(
     none converges, so a caller that can tolerate a loose solve still gets the
     best available answer along with an honest ``converged=False``.
     """
-    attempts: list[tuple[str, SolveResult]] = [(f"{preconditioner} preconditioner", stalled)]
+    attempts: list[tuple[str, SolveResult]] = [
+        (f"{preconditioner} preconditioner", stalled)
+    ]
 
     def _residual(result: SolveResult) -> float:
         norms = np.asarray(result.residual_norms)
         return float(norms[-1]) if norms.size else float("inf")
 
     print(
-        f"[dkx.solve] tier-2 Krylov stalled with the {preconditioner} "
+        f"[dkx.solve] recycled iterative solve stalled with the {preconditioner} "
         f"preconditioner (iterations={stalled.iterations}, residual="
         f"{_residual(stalled):.3e}); escalating rather than giving up."
     )
@@ -1046,17 +1096,28 @@ def _escalate_after_tier2_stall(
         if kind == preconditioner:
             continue
         try:
-            print(f"[dkx.solve]   retrying tier 2 with the {kind} preconditioner ...")
+            print(
+                f"[dkx.solve]   retrying the iterative solve with the {kind} preconditioner ..."
+            )
             candidate = _solve_tier2(
-                op, rhs2d, tol=tol, atol=atol, x0=x0, recycle=recycle,
+                op,
+                rhs2d,
+                tol=tol,
+                atol=atol,
+                x0=x0,
+                recycle=recycle,
                 preconditioner=kind,
                 drop_l_coupling_in_precond=drop_l_coupling_in_precond,
-                restart=restart, recycle_dim=recycle_dim,
-                max_restarts=max_restarts, differentiable=False,
+                restart=restart,
+                recycle_dim=recycle_dim,
+                max_restarts=max_restarts,
+                differentiable=False,
                 check_adjoint=check_adjoint,
                 adjoint_residual_factor=adjoint_residual_factor,
             )
-        except Exception as exc:  # a preconditioner that cannot build is a rung, not a failure
+        except (
+            Exception
+        ) as exc:  # a preconditioner that cannot build is a rung, not a failure
             print(f"[dkx.solve]   {kind} preconditioner unavailable: {exc}")
             continue
         attempts.append((f"{kind} preconditioner", candidate))
@@ -1072,15 +1133,22 @@ def _escalate_after_tier2_stall(
         best_kind = preconditioner
     try:
         print(
-            f"[dkx.solve]   retrying tier 2 with the {best_kind} preconditioner "
+            f"[dkx.solve]   retrying the iterative solve with the {best_kind} preconditioner "
             f"and {widened} restarts (was {max_restarts}) ..."
         )
         candidate = _solve_tier2(
-            op, rhs2d, tol=tol, atol=atol, x0=x0, recycle=recycle,
+            op,
+            rhs2d,
+            tol=tol,
+            atol=atol,
+            x0=x0,
+            recycle=recycle,
             preconditioner=best_kind,
             drop_l_coupling_in_precond=drop_l_coupling_in_precond,
-            restart=restart, recycle_dim=recycle_dim,
-            max_restarts=widened, differentiable=False,
+            restart=restart,
+            recycle_dim=recycle_dim,
+            max_restarts=widened,
+            differentiable=False,
             check_adjoint=check_adjoint,
             adjoint_residual_factor=adjoint_residual_factor,
         )
@@ -1095,8 +1163,10 @@ def _escalate_after_tier2_stall(
     # fallback that the size guard will refuse is what produced the original
     # crash, so the size is checked here rather than discovered downstream.
     if op.total_size <= max_dense_size:
-        print("[dkx.solve]   falling back to the tier-3 host direct solve ...")
-        return _solve_tier3(op, rhs2d, tol=tol, atol=atol, max_dense_size=max_dense_size)
+        print("[dkx.solve]   falling back to the host sparse-direct solve ...")
+        return _solve_tier3(
+            op, rhs2d, tol=tol, atol=atol, max_dense_size=max_dense_size
+        )
 
     best_label, best = min(attempts, key=lambda item: _residual(item[1]))
     dense_gb = op.total_size**2 * 8 / 1024**3
@@ -1104,7 +1174,7 @@ def _escalate_after_tier2_stall(
         f"the linear solve did not converge at total_size={op.total_size}.\n"
         f"Tried: {'; '.join(label for label, _ in attempts)}.\n"
         f"Best final residual {_residual(best):.3e} ({best_label}), tolerance {tol:.1e}.\n"
-        "Tier 3 was not attempted: it materializes the operator column by "
+        "The host sparse-direct fallback was not attempted: it materializes the operator column by "
         f"column, which at this size needs {op.total_size} matvecs and "
         f"{dense_gb:.1f} GB, so raising max_dense_size would not help.\n"
         "What usually does help, in order: lower the collisionality-scaled Er "
@@ -1115,7 +1185,12 @@ def _escalate_after_tier2_stall(
 
 
 def _solve_tier3(
-    op: KineticOperator, rhs2d: jnp.ndarray, *, tol: float, atol: float, max_dense_size: int
+    op: KineticOperator,
+    rhs2d: jnp.ndarray,
+    *,
+    tol: float,
+    atol: float,
+    max_dense_size: int,
 ) -> SolveResult:
     _require_solvax()
     if _is_traced(rhs2d):
@@ -1156,9 +1231,11 @@ def _solve_tier3(
         timings={"build": t1 - t0, "solve": t2 - t1},
     )
 
+
 # =============================================================================
 # Tier drivers
 # =============================================================================
+
 
 def _implicit_solve(
     matvec: Callable[[jnp.ndarray], jnp.ndarray],
@@ -1178,6 +1255,7 @@ def _implicit_solve(
         return t_solve(b) if mv is matvec_t else fwd_solve(b)
 
     return solvax_linear_solve(matvec, rhs_col, solver, transpose_matvec=matvec_t)
+
 
 def _solve_tier1(
     op: KineticOperator,
@@ -1253,9 +1331,11 @@ def _solve_tier1(
         timings={"build": t1 - t0, "solve": t2 - t1},
     )
 
+
 # =============================================================================
 # Tier 1 (truncated) — memory-lean block Thomas over the lowest K Legendre modes
 # =============================================================================
+
 
 def _solve_tier1_truncated(
     op: KineticOperator,
@@ -1358,11 +1438,21 @@ def _solve_tier1_truncated(
                     _truncated_blocks, n_xi=n_xi, shift_border=(cs == 2)
                 )
                 return block_thomas_truncated_fn(
-                    block_fn_pk, n_blocks, rhs_cols, keep,
-                    params=params, adjoint_window=adjoint_window,
+                    block_fn_pk,
+                    n_blocks,
+                    rhs_cols,
+                    keep,
+                    params=params,
+                    adjoint_window=adjoint_window,
                 )
             block_fn = _truncated_block_fn(
-                coef, n_xi, stream, mirror, pas_row, x_val, gamma,
+                coef,
+                n_xi,
+                stream,
+                mirror,
+                pas_row,
+                x_val,
+                gamma,
                 shift_border=(cs == 2),
             )
             return block_thomas_truncated_fn(block_fn, n_blocks, rhs_cols, keep)
@@ -1453,8 +1543,12 @@ def _solve_tier1_truncated(
         parts.append(s_b.reshape(op.extra_size, n_rhs))
     x2d = jnp.concatenate(parts, axis=0)
 
-    res = _truncated_partial_residual(op, coef, stream_b, mirror_b, pas_b, x_b, f_low_b, s_b, rhs_low_b, r_c_b, keep)
-    x2d, res = jax.block_until_ready((x2d, res))  # real residual/assembly time, not dispatch
+    res = _truncated_partial_residual(
+        op, coef, stream_b, mirror_b, pas_b, x_b, f_low_b, s_b, rhs_low_b, r_c_b, keep
+    )
+    x2d, res = jax.block_until_ready(
+        (x2d, res)
+    )  # real residual/assembly time, not dispatch
     t2 = time.perf_counter()
     return SolveResult(
         x=x2d,
@@ -1465,6 +1559,7 @@ def _solve_tier1_truncated(
         recycle=None,
         timings={"build": t1 - t0, "solve": t2 - t1},
     )
+
 
 def _truncated_partial_residual(
     op: KineticOperator,
@@ -1518,7 +1613,10 @@ def _truncated_partial_residual(
     )  # (B, R)
     return jnp.sqrt(jnp.sum(sq, axis=0))
 
-def _resolve_preconditioner(preconditioner: str | None, use_preconditioner: bool) -> str:
+
+def _resolve_preconditioner(
+    preconditioner: str | None, use_preconditioner: bool
+) -> str:
     """Normalize the tier-2 preconditioner request.
 
     ``preconditioner=None`` keeps the historical ``use_preconditioner`` boolean
@@ -1534,6 +1632,7 @@ def _resolve_preconditioner(preconditioner: str | None, use_preconditioner: bool
             f"{sorted(_TIER2_PRECONDITIONERS)}"
         )
     return name
+
 
 def build_tier2_preconditioner(
     op: KineticOperator, kind: str, *, drop_l_coupling: bool = False
@@ -1560,6 +1659,7 @@ def build_tier2_preconditioner(
     from dkx.multigrid import build_multigrid_preconditioner  # noqa: PLC0415
 
     return build_multigrid_preconditioner(op, drop_l_coupling=drop_l_coupling)
+
 
 def _solve_tier2(
     op: KineticOperator,
@@ -1591,14 +1691,18 @@ def _solve_tier2(
         # jit/grad tracing, where block_until_ready is a no-op on tracers and
         # the probe would only add dead nodes to the trace.
         if not traced:
-            jax.block_until_ready(precond(jnp.zeros((op.total_size,), dtype=jnp.float64)))
+            jax.block_until_ready(
+                precond(jnp.zeros((op.total_size,), dtype=jnp.float64))
+            )
     t1 = time.perf_counter()
 
     x0_2d = None
     if x0 is not None:
         x0_2d, _ = _as_columns(x0)
         if x0_2d.shape != rhs2d.shape:
-            raise ValueError(f"x0 shape {x0_2d.shape} must match rhs shape {rhs2d.shape}")
+            raise ValueError(
+                f"x0 shape {x0_2d.shape} must match rhs shape {rhs2d.shape}"
+            )
 
     # Pinned matvecs: identical to op.apply on the physical subspace, identity
     # on the Nxi_for_x-truncated DOFs, so the system (and in particular its
@@ -1657,8 +1761,14 @@ def _solve_tier2(
                 index: int = j,
             ) -> jnp.ndarray:
                 s = gcrot(
-                    mv, rhs_col, precond=pc, m=restart, k=recycle_dim,
-                    rtol=tol, atol=atol, max_restarts=max_restarts,
+                    mv,
+                    rhs_col,
+                    precond=pc,
+                    m=restart,
+                    k=recycle_dim,
+                    rtol=tol,
+                    atol=atol,
+                    max_restarts=max_restarts,
                 )
                 return _guarded_solve(
                     label,
@@ -1682,7 +1792,9 @@ def _solve_tier2(
             cols.append(_implicit_solve(matvec, matvec_t, b, fwd_solve, t_solve))
         else:
             cols.append(sol.x)
-    x_stacked = jax.block_until_ready(jnp.stack(cols, axis=1))  # real solve time, not dispatch
+    x_stacked = jax.block_until_ready(
+        jnp.stack(cols, axis=1)
+    )  # real solve time, not dispatch
     t2 = time.perf_counter()
     return SolveResult(
         x=x_stacked,
@@ -1695,9 +1807,11 @@ def _solve_tier2(
         adjoint=diagnostics,
     )
 
+
 # =============================================================================
 # The auto-policy entry point
 # =============================================================================
+
 
 def _auto_route_structural(
     op: KineticOperator,
@@ -1730,6 +1844,7 @@ def _auto_route_structural(
         return "block_tridiagonal_truncated"
     return "gmres"
 
+
 def auto_solve_peak_memory_bytes(
     op: KineticOperator,
     budget_gb: float | None = None,
@@ -1753,12 +1868,14 @@ def auto_solve_peak_memory_bytes(
         return tier1_truncated_peak_memory_bytes(op, keep_lowest=keep_lowest)
     return tier1_peak_memory_bytes(op)
 
+
 def _auto_route(
     op: KineticOperator,
     rhs2d: jnp.ndarray,
     budget_gb: float | None,
     keep_lowest: int,
     subsystem_batch: int | str = "auto",
+    emit: Callable[[str], None] | None = print,
 ) -> str:
     """Pick the tier for ``method="auto"`` and print a Fortran-style one-liner.
 
@@ -1776,11 +1893,12 @@ def _auto_route(
     peak_gb = peak / 2.0**30
     uniform = _uniform_nxi_for_x(op)
     if uniform and peak <= budget_bytes:
-        print(
-            f"[dkx.solve] tier-1 route: full factorization; "
-            f"peak estimate {peak_gb:.2f} GB <= budget {budget_gb_val:.1f} GB "
-            f"(bands {bands / 2.0**30:.2f} GB x2.5)."
-        )
+        if emit is not None:
+            emit(
+                f"[dkx.solve] structured direct route: full factorization; "
+                f"peak estimate {peak_gb:.2f} GB <= budget {budget_gb_val:.1f} GB "
+                f"(bands {bands / 2.0**30:.2f} GB x2.5)."
+            )
         return "block_tridiagonal"
 
     keep = min(keep_lowest, op.n_xi)
@@ -1802,13 +1920,14 @@ def _auto_route(
         trunc_gb = (
             tier1_truncated_peak_memory_bytes(op, keep, subsystem_batch=width) / 2.0**30
         )
-        print(
-            f"[dkx.solve] tier-1 route: truncated block-Thomas "
-            f"(keep_lowest={keep}); {because}, "
-            f"solving the lowest {keep} Legendre blocks "
-            f"with subsystem batch width {width} of {n_sub} "
-            f"(working-set estimate {trunc_gb:.2f} GB)."
-        )
+        if emit is not None:
+            emit(
+                f"[dkx.solve] memory-bounded structured direct route: "
+                f"truncated block-Thomas (keep_lowest={keep}); {because}, "
+                f"solving the lowest {keep} Legendre blocks "
+                f"with subsystem batch width {width} of {n_sub} "
+                f"(working-set estimate {trunc_gb:.2f} GB)."
+            )
         return "block_tridiagonal_truncated"
 
     why = sup_reason if not sup_ok else "RHS/output needs Legendre modes l >= keep"
@@ -1817,11 +1936,13 @@ def _auto_route(
         if not uniform
         else f"full-band estimate {peak_gb:.2f} GB > budget {budget_gb_val:.1f} GB"
     )
-    print(
-        f"[dkx.solve] tier-1 route: {blocker} but truncation is invalid "
-        f"({why}); falling back to tier-2 GCROT."
-    )
+    if emit is not None:
+        emit(
+            f"[dkx.solve] structured direct route unavailable: {blocker} and "
+            f"truncation is invalid ({why}); using the recycled iterative solve."
+        )
     return "gmres"
+
 
 def _env_size(name: str, default: int) -> int:
     raw = os.environ.get(name, "").strip()
@@ -1832,6 +1953,7 @@ def _env_size(name: str, default: int) -> int:
     except ValueError:
         return default
 
+
 def _cpu_device_or_none() -> "jax.Device | None":
     """The first host-CPU device, or ``None`` when the CPU backend is absent
     (e.g. ``JAX_PLATFORMS=cuda`` initializes only the CUDA platform)."""
@@ -1839,6 +1961,7 @@ def _cpu_device_or_none() -> "jax.Device | None":
         return jax.local_devices(backend="cpu")[0]
     except RuntimeError:
         return None
+
 
 def _single_device_of(arr: jnp.ndarray) -> "jax.Device | None":
     """The unique device holding ``arr``, or ``None`` (sharded/unknown)."""
@@ -1849,6 +1972,7 @@ def _single_device_of(arr: jnp.ndarray) -> "jax.Device | None":
     if len(devices) != 1:
         return None
     return next(iter(devices))
+
 
 def _resolve_solve_device(
     device: "str | jax.Device | None",
@@ -1913,6 +2037,7 @@ def _resolve_solve_device(
         return cpu
     return None
 
+
 def solve(
     op: KineticOperator,
     rhs: jnp.ndarray,
@@ -1937,6 +2062,7 @@ def solve(
     subsystem_batch: int | str = "auto",
     tier1_adjoint_window: int | None = None,
     device: str | jax.Device | None = None,
+    emit: Callable[[str], None] | None = print,
 ) -> SolveResult:
     """Solve ``K x = rhs`` with the plan-§2.3 three-tier auto-policy.
 
@@ -2110,6 +2236,9 @@ def solve(
             balance differs.  ``"default"`` disables all movement.  Under
             ``jit``/``grad`` tracing the knob is inert (arrays cannot move
             mid-trace), so jitted callers are unaffected.
+        emit: route-status sink. The default prints one physical route
+            description; ``None`` suppresses routine route presentation while
+            retaining exceptions and convergence failures.
 
     Auto-policy tier-1 routing (``method="auto"``, :func:`tier1_available` true):
 
@@ -2141,7 +2270,11 @@ def solve(
     # accepted because the benchmarks and the solver trace speak them.
     method = {"iterative": "gmres"}.get(method, method)
     if method not in {
-        "auto", "block_tridiagonal", "block_tridiagonal_truncated", "gmres", "direct"
+        "auto",
+        "block_tridiagonal",
+        "block_tridiagonal_truncated",
+        "gmres",
+        "direct",
     }:
         raise ValueError(
             f"unknown method {method!r}; use 'auto' (default), 'direct', or 'iterative'"
@@ -2153,16 +2286,25 @@ def solve(
         keep = min(tier1_keep_lowest, op.n_xi)
         sup_ok, sup_reason = _truncation_supported(op, keep)
         if not sup_ok:
-            raise NotImplementedError(f"tier-1 truncated path unavailable: {sup_reason}")
+            raise NotImplementedError(
+                f"tier-1 truncated path unavailable: {sup_reason}"
+            )
     require_float64()
     rhs2d, squeeze = _as_columns(rhs)
     if rhs2d.shape[0] != op.total_size:
-        raise ValueError(f"rhs has {rhs2d.shape[0]} rows; operator expects {op.total_size}")
+        raise ValueError(
+            f"rhs has {rhs2d.shape[0]} rows; operator expects {op.total_size}"
+        )
 
     chosen = method
     if method == "auto":
         chosen = _auto_route(
-            op, rhs2d, tier1_memory_budget_gb, tier1_keep_lowest, subsystem_batch
+            op,
+            rhs2d,
+            tier1_memory_budget_gb,
+            tier1_keep_lowest,
+            subsystem_batch,
+            emit,
         )
 
     target_device = _resolve_solve_device(
@@ -2182,11 +2324,17 @@ def solve(
 
     if chosen in ("block_tridiagonal", "block_tridiagonal_truncated"):
         if chosen == "block_tridiagonal":
-            result = _solve_tier1(op, rhs2d, tol=tol, atol=atol, differentiable=differentiable)
+            result = _solve_tier1(
+                op, rhs2d, tol=tol, atol=atol, differentiable=differentiable
+            )
         else:
             keep = min(tier1_keep_lowest, op.n_xi)
             result = _solve_tier1_truncated(
-                op, rhs2d, keep=keep, tol=tol, atol=atol,
+                op,
+                rhs2d,
+                keep=keep,
+                tol=tol,
+                atol=atol,
                 subsystem_batch=subsystem_batch,
                 adjoint_window=tier1_adjoint_window,
             )
@@ -2244,7 +2392,9 @@ def solve(
     else:  # direct
         if differentiable:
             raise RuntimeError("tier-3 (method='direct') is non-differentiable.")
-        result = _solve_tier3(op, rhs2d, tol=tol, atol=atol, max_dense_size=max_dense_size)
+        result = _solve_tier3(
+            op, rhs2d, tol=tol, atol=atol, max_dense_size=max_dense_size
+        )
 
     if home_device is not None:
         # Return the solution (and warm-start state) on the device that held

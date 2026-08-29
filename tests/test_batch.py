@@ -127,6 +127,8 @@ def test_batched_er_scan_matches_serial(tmp_path: Path) -> None:
 
     assert result.states.shape[0] == er_values.shape[0]
     assert result.radial_current.shape == er_values.shape
+    assert result.residual_norms.shape == er_values.shape
+    assert np.all(np.isfinite(np.asarray(result.residual_norms)))
 
     for i, er in enumerate(np.asarray(er_values)):
         j_r, gamma, state = er_mod.radial_current(prob, float(er))
@@ -265,6 +267,12 @@ def test_jit_batched_solve_compiles_and_matches(tmp_path: Path) -> None:
     jitted = jax.jit(lambda leaves: batch_mod.batched_solve(prob.operator, leaves))(
         batch_leaves
     )
+
+    from dkx.solve import _auto_route_structural
+
+    assert eager.method == "auto"
+    assert eager.executed_method == _auto_route_structural(prob.operator)
+    assert jitted.executed_method == eager.executed_method
 
     np.testing.assert_allclose(
         np.asarray(jitted.states), np.asarray(eager.states), rtol=0.0, atol=1e-12

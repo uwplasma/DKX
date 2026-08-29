@@ -82,7 +82,7 @@ so process-launch and JIT-amortization noise does not dominate the bars.
 What this documentation covers
 ------------------------------
 
-- getting started: :doc:`installation`, :doc:`usage`, :doc:`examples`
+- getting started: :doc:`installation`, :doc:`usage`, :doc:`native_cases`, :doc:`examples`
 - physics and numerics: :doc:`physics_models`, :doc:`system_equations`,
   :doc:`geometry`, :doc:`method`, :doc:`numerics`, :doc:`differentiability`,
   :doc:`capabilities`
@@ -102,6 +102,7 @@ What this documentation covers
    optimization
    examples
    usage
+   native_cases
    inputs
    outputs
    normalizations

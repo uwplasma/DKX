@@ -468,38 +468,301 @@
   },
   {
     "id": "monkes_monoenergetic_overlap",
-    "status": "deferred_post_release",
+    "status": "implemented",
     "release_gate": {
-      "claim_status": "closed_deferred",
+      "claim_status": "regression_scaffold",
       "blocks_current_release": false,
-      "evidence": "documented target with no checked-in cross-code comparison artifact",
-      "closed_or_deferred_reason": "Closed for the tagged release as post-release cross-code validation until shared-model normalizations and artifacts are pinned",
-      "promotion_gate": "Promote only after exact shared-model comparisons and qualitative trend checks are separated in machine-readable artifacts"
+      "evidence": "checked machine-readable DSHAPE/NCSX/W7-X zero-field PAS/DKES artifact with audited normalizations, input/output checksums, residuals, timing, memory, and a 6% four-coefficient gate",
+      "promotion_gate": "Keep the claim bounded to the matched monoenergetic PAS/DKES equations until full-Fokker-Planck profile, finite-Er, and ambipolar comparisons are independently pinned"
     },
     "kind": "cross_code_validation",
     "literature": [
       "https://arxiv.org/abs/2312.12248",
       "https://arxiv.org/abs/1908.11615"
     ],
-    "scripts": [],
-    "artifacts": [],
+    "scripts": [
+      "tools/paper_benchmarks/audit_independent_cross_code_validation.py"
+    ],
+    "artifacts": [
+      "validation/independent_cross_code_v1.json",
+      "validation/inputs/dshape_mdke.input.namelist",
+      "validation/inputs/ncsx_mdke.input.namelist",
+      "validation/inputs/w7x_eim_mdke.input.namelist"
+    ],
     "claims": [
-      "Monoenergetic coefficients and low-collisionality trends should overlap with MONKES on shared model subsets",
-      "KNOSOS-style low-collisionality ordering should be respected when exact model overlap is not available",
-      "This lane is closed for the tagged release as a post-release cross-code target because shared-model normalizations must be pinned before claiming overlap"
+      "At zero electric field on exactly matched monoenergetic PAS/DKES equations, all four Beidler-normalized coefficients agree within 6% for a DSHAPE tokamak, NCSX, and W7-X EIM",
+      "DSHAPE and NCSX use live YANCC solves; W7-X EIM uses the pinned MONKES database row and a compact spectrum derived from the checksummed booz_xform source",
+      "The implemented rung is not full-Fokker-Planck, ambipolar-profile, finite-electric-field, experimental, or cross-code performance validation"
     ],
     "source_code": [
-      "dkx/run.py",
-      "dkx/solve.py"
+      "dkx/validation/artifacts.py",
+      "tools/paper_benchmarks/audit_independent_cross_code_validation.py"
     ],
     "tests": [
-      "tests/test_run_transport.py",
-      "tests/test_kinetic_operator_fortran_parity.py"
+      "tests/test_independent_cross_code_validation.py"
     ],
     "acceptance_gates": [
-      "Separate exact shared-model comparisons from qualitative low-collisionality trend checks",
-      "Pin all compared coefficients, normalizations, and geometry inputs in machine-readable artifacts",
-      "Use MONKES/KNOSOS only as cross-code evidence where the modeled equations and normalizations are explicitly aligned"
+      "Recompute nuPrime from the applied Lorentz frequency including nuDHat(x0), rather than equating the input numbers",
+      "Use the local surface radius in the Beidler bootstrap normalization and preserve the explicit cross-code orientation map",
+      "Pin external-code commits and verify input and compact-output checksums, true reference residuals, and every stored relative error",
+      "Keep every D11*, D31*, D13*, and D33* relative error at or below 6% without extending the claim to unmatched equations"
+    ]
+  },
+  {
+    "id": "sfincs_full_kinetic_tokamak_profile",
+    "status": "implemented",
+    "release_gate": {
+      "claim_status": "release_ready",
+      "blocks_current_release": false,
+      "evidence": "checked high/ultra full-Fokker-Planck tokamak profile artifact from matched live DKX and pinned SFINCS v3 solves with true-residual, convergence, spectrum, checksum, timing, and memory evidence",
+      "promotion_gate": "Keep this claim to the matched zero-field one-species axisymmetric profile; finite Er has a separate lane, while multispecies, stellarator, Phi1, and ambipolar comparisons remain separate gates"
+    },
+    "kind": "cross_code_validation",
+    "literature": [
+      "https://doi.org/10.1063/1.4870077",
+      "https://github.com/landreman/sfincs"
+    ],
+    "scripts": [
+      "tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py"
+    ],
+    "artifacts": [
+      "validation/full_kinetic_sfincs_v1.json",
+      "validation/inputs/tokamak_full_fp_high.input.namelist",
+      "validation/inputs/tokamak_full_fp_ultra.input.namelist"
+    ],
+    "claims": [
+      "Live DKX and pinned SFINCS v3 solve the same zero-field one-species analytic-tokamak profile with full linearized Fokker-Planck collisions, full trajectories, physical density and temperature gradients, and the recommended automatic constraint",
+      "At the accepted finest rung, nonzero scalar and speed-resolved observables agree within 2.69e-10 scaled error; the high-to-ultra bootstrap and heat-flux movement is at most 0.28%",
+      "Axisymmetric particle flux and NTV are gated as near-zero absolute quantities; this lane is not a multispecies, stellarator, finite-Er, Phi1, ambipolar, experimental, or performance-comparison claim"
+    ],
+    "source_code": [
+      "dkx/collisions.py",
+      "dkx/run.py",
+      "tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py"
+    ],
+    "tests": [
+      "tests/test_full_kinetic_sfincs_validation.py"
+    ],
+    "acceptance_gates": [
+      "Both codes use the exact checked decks, matched collision operator, trajectories, coordinates, profiles, constraint, and 1e-10 solver tolerance",
+      "Every completed true residual remains at or below 5e-11 and all nonzero scalar and speed-resolved cross-code errors remain at or below 1e-8",
+      "High-to-ultra bootstrap and heat-flux movement stays below 0.5%, while cancellation-level particle flux and NTV remain below 1e-12 absolute",
+      "Pinned commits, MUMPS-enabled reference build, raw and compact outputs, logs, cold/warm timing, memory, inputs, and exclusions remain checksum-auditable"
+    ]
+  },
+  {
+    "id": "sfincs_full_kinetic_finite_er_tokamak",
+    "status": "implemented",
+    "release_gate": {
+      "claim_status": "release_ready",
+      "blocks_current_release": false,
+      "evidence": "checked high/ultra prescribed finite-Er full-Fokker-Planck tokamak artifact from matched live DKX and pinned SFINCS v3 solves",
+      "promotion_gate": "Keep the claim to one prescribed finite field until an Er scan, ambipolar roots, and stellarator full-FP cases are independently pinned"
+    },
+    "kind": "cross_code_validation",
+    "literature": [
+      "https://doi.org/10.1063/1.4870077",
+      "https://github.com/landreman/sfincs"
+    ],
+    "scripts": [
+      "tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py"
+    ],
+    "artifacts": [
+      "validation/full_kinetic_sfincs_finite_er_v1.json",
+      "validation/inputs/tokamak_full_fp_finite_er_high.input.namelist",
+      "validation/inputs/tokamak_full_fp_finite_er_ultra.input.namelist"
+    ],
+    "claims": [
+      "Live DKX and pinned SFINCS v3 solve the same one-species analytic-tokamak profile at normalized Er=-30 with full linearized Fokker-Planck collisions and full trajectories",
+      "At the accepted finest rung, retained nonzero scalar and speed-resolved observables agree within 1.88e-9 scaled error and high-to-ultra movement is at most 0.326%",
+      "Axisymmetric particle flux and NTV are absolute cancellation gates; this is not an Er scan, ambipolar-root, stellarator, experimental, or performance-comparison claim"
+    ],
+    "source_code": [
+      "dkx/collisions.py",
+      "dkx/run.py",
+      "tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py"
+    ],
+    "tests": [
+      "tests/test_full_kinetic_sfincs_finite_er_validation.py"
+    ],
+    "acceptance_gates": [
+      "Both codes use exact checked finite-Er decks, matched full-FP collisions, full trajectories, profiles, coordinates, constraint, and 1e-13 tolerance",
+      "Every completed true residual stays below 1e-10 and all retained nonzero cross-code errors stay below 1e-8",
+      "High-to-ultra flow, momentum-flux, and heat-flux movement stays below 0.5%, while intrinsically ambipolar particle flux and NTV stay below 2e-11 absolute",
+      "Pinned commits, MUMPS-enabled build, raw and compact outputs, logs, timing, memory, inputs, and exclusions remain checksum-auditable"
+    ]
+  },
+  {
+    "id": "sfincs_full_kinetic_stellarator_profile",
+    "status": "implemented",
+    "release_gate": {
+      "claim_status": "release_ready",
+      "blocks_current_release": false,
+      "evidence": "checked high/ultra zero-field W7-X SC1 full-Fokker-Planck artifact from matched live DKX and pinned SFINCS v3 solves",
+      "promotion_gate": "Keep this claim to the pinned one-species W7-X SC1 surface until stellarator finite-Er, ambipolar-profile, multispecies, Phi1, experimental, and a second stellarator-family full-FP case are independently pinned"
+    },
+    "kind": "cross_code_validation",
+    "literature": [
+      "https://doi.org/10.1063/1.4870077",
+      "https://github.com/landreman/sfincs"
+    ],
+    "scripts": [
+      "tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py"
+    ],
+    "artifacts": [
+      "validation/full_kinetic_sfincs_stellarator_v1.json",
+      "validation/inputs/w7x_sc1_full_fp_high.input.namelist",
+      "validation/inputs/w7x_sc1_full_fp_ultra.input.namelist"
+    ],
+    "claims": [
+      "Live DKX and pinned SFINCS v3 solve the same zero-field one-species W7-X SC1 surface with physical profiles, full linearized Fokker-Planck collisions, full trajectories, and the pinned Boozer-geometry checksum",
+      "At the accepted finest rung, retained nonzero scalar and speed-resolved observables agree within 1.37e-8 scaled error and high-to-ultra movement is at most 0.444%",
+      "Momentum flux is an absolute cancellation gate; this surface lane is not a stellarator finite-Er, ambipolar-profile, Phi1, experimental, second-family, or performance-comparison claim"
+    ],
+    "source_code": [
+      "dkx/collisions.py",
+      "dkx/run.py",
+      "tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py"
+    ],
+    "tests": [
+      "tests/test_full_kinetic_sfincs_stellarator_validation.py"
+    ],
+    "acceptance_gates": [
+      "Both codes use exact checked relative-path decks, matched W7-X SC1 Boozer geometry checksum, full-FP collisions, full trajectories, physical profiles, coordinates, automatic constraint, and 1e-12 tolerance",
+      "Every completed true residual stays below 1e-10 and every retained nonzero scalar or spectrum cross-code error stays below 2e-8",
+      "High-to-ultra flow, particle-flux, heat-flux, and NTV movement stays below 0.5%, while cancellation-level momentum flux stays below 1e-18 absolute",
+      "Pinned commits, MUMPS-enabled build, geometry, raw and compact outputs, logs, solver traces, timing, memory, exact inputs, and exclusions remain checksum-auditable"
+    ]
+  },
+  {
+    "id": "native_w7x_ambipolar_profile_certificate",
+    "status": "implemented",
+    "release_gate": {
+      "claim_status": "regression_scaffold",
+      "blocks_current_release": false,
+      "evidence": "checked five-surface native W7-X PAS/DKES whole-profile artifact with all roots, fluxes, adaptive brackets, branch events, solver attempts, cold/warm timing, memory, and input/geometry/result checksums",
+      "promotion_gate": "Keep this as a native workflow certificate until phase-space convergence, continuous event localization, independent full-Fokker--Planck ambipolar comparison, experiment, and a second stellarator family are pinned"
+    },
+    "kind": "profile_validation",
+    "literature": [
+      "https://doi.org/10.1063/1.4870077",
+      "https://github.com/landreman/sfincs"
+    ],
+    "scripts": [
+      "tools/paper_benchmarks/audit_native_ambipolar_profile.py"
+    ],
+    "artifacts": [
+      "validation/native_ambipolar_profile_v1.json",
+      "validation/inputs/w7x_standard_native_ambipolar_profile.toml"
+    ],
+    "claims": [
+      "One physical-unit TOML drives a native five-surface W7-X standard-configuration PAS/DKES ambipolar workflow without SFINCS namelist conversion",
+      "The native result retains root counts [1, 1, 3, 1, 1], selected fields, particle and heat fluxes, branch identities and events, bounded refinement evidence, and all 222 solver attempts",
+      "One failed automatic structured evaluation is recovered with a bounded scalar GMRES solve at the unchanged target; this workflow certificate is not independent full-Fokker--Planck, experimental, or cross-code ambipolar validation"
+    ],
+    "source_code": [
+      "dkx/workflows/ambipolar_native.py",
+      "dkx/execution.py",
+      "dkx/result.py",
+      "tools/paper_benchmarks/audit_native_ambipolar_profile.py"
+    ],
+    "tests": [
+      "tests/test_native_ambipolar_profile_certificate.py"
+    ],
+    "acceptance_gates": [
+      "Verify the exact portable TOML, pinned W7-X geometry, cold/warm native NetCDF files, and compact extraction by checksum",
+      "Require every surface to retain a bracketed root and resolved refinement hierarchy with final brackets no wider than 0.005 kV/m",
+      "Retain all root alternatives, selected SI fluxes, branch events, and both failed/recovered solver attempts; cold/warm scientific arrays must match exactly",
+      "Keep phase-space convergence, continuous event localization, experiment, full-Fokker--Planck ambipolar comparison, and a second stellarator family explicit"
+    ]
+  },
+  {
+    "id": "native_w7x_ambipolar_phase_space_ladder",
+    "status": "implemented",
+    "release_gate": {
+      "claim_status": "regression_scaffold",
+      "blocks_current_release": false,
+      "evidence": "checked coarse/reference/fine five-surface W7-X PAS/DKES ladder with every root and selected SI flux movement, raw-result checksums, residuals, timing, memory, and explicit refinement_exhausted status",
+      "promotion_gate": "Do not promote the native profile as phase-space converged until a bounded follow-on ladder passes the unchanged 0.005 kV/m root and 2% selected-flux movement gates, including zeta and speed evidence"
+    },
+    "kind": "profile_validation",
+    "literature": [
+      "https://doi.org/10.1063/1.4870077",
+      "https://github.com/landreman/sfincs"
+    ],
+    "scripts": [
+      "tools/paper_benchmarks/audit_ambipolar_phase_space_ladder.py"
+    ],
+    "artifacts": [
+      "validation/ambipolar_phase_space_ladder_v1.json",
+      "validation/inputs/w7x_standard_native_ambipolar_profile_coarse.toml",
+      "validation/inputs/w7x_standard_native_ambipolar_profile.toml",
+      "validation/inputs/w7x_standard_native_ambipolar_profile_fine.toml"
+    ],
+    "claims": [
+      "A separate kinetic-grid ladder preserves root counts [1, 1, 3, 1, 1], classifications, branch identities, and selected branches across all three resolutions",
+      "Reference-to-fine movement reaches 1.6259765625 kV/m for roots, 4.08% for selected particle flux, and 7.81% for selected heat flux, so the unchanged gates reject phase-space convergence",
+      "The auditable status is refinement_exhausted; timings and memory are provenance and the fine rung does not refine zeta or speed beyond the reference"
+    ],
+    "source_code": [
+      "dkx/workflows/ambipolar_native.py",
+      "dkx/result.py",
+      "tools/paper_benchmarks/audit_ambipolar_phase_space_ladder.py"
+    ],
+    "tests": [
+      "tests/test_ambipolar_phase_space_ladder.py"
+    ],
+    "acceptance_gates": [
+      "Verify all three physical-unit TOMLs, the pinned W7-X geometry, raw native NetCDF results, and compact extraction by checksum",
+      "Recompute every root electric-field movement and every selected particle/heat-flux movement with deterministic identity alignment",
+      "Require the artifact to retain the unchanged 0.005 kV/m root, 2% selected-flux, and 1e-12 accepted true-residual gates",
+      "Treat accurate refinement_exhausted reporting as evidence integrity, never as scientific admission or permission to relax a numerical gate"
+    ]
+  },
+  {
+    "id": "native_w7x_ambipolar_phase_space_axes",
+    "status": "implemented",
+    "release_gate": {
+      "claim_status": "regression_scaffold",
+      "blocks_current_release": false,
+      "evidence": "checked reference/theta17/pitch40/pitch44 W7-X PAS/DKES diagnosis with every root and selected flux movement, raw checksums, residuals, timing, memory, and explicit refinement_exhausted status",
+      "promotion_gate": "Investigate pitch discretization or a cheaper per-surface strategy before another high-order profile; do not run pitch48 blindly or promote phase-space convergence"
+    },
+    "kind": "profile_validation",
+    "literature": [
+      "https://doi.org/10.1063/1.4870077",
+      "https://github.com/landreman/sfincs"
+    ],
+    "scripts": [
+      "tools/paper_benchmarks/audit_ambipolar_phase_space_axes.py"
+    ],
+    "artifacts": [
+      "validation/ambipolar_phase_space_axes_v1.json",
+      "validation/inputs/w7x_standard_native_ambipolar_profile.toml",
+      "validation/inputs/w7x_standard_native_ambipolar_profile_theta17.toml",
+      "validation/inputs/w7x_standard_native_ambipolar_profile_pitch40.toml",
+      "validation/inputs/w7x_standard_native_ambipolar_profile_pitch44.toml"
+    ],
+    "claims": [
+      "Theta-only keeps selected particle and heat-flux movements below 2% but fails the 0.005 kV/m root-movement gate",
+      "Pitch is the dominant failed direction and pitch40-to-pitch44 remains outside every movement gate rather than approaching convergence",
+      "The pitch44 process reaches a 22275409800-byte footprint on the 24 GiB host, so pitch48 brute force is not admitted"
+    ],
+    "source_code": [
+      "dkx/workflows/ambipolar_native.py",
+      "dkx/result.py",
+      "tools/paper_benchmarks/audit_ambipolar_phase_space_ladder.py",
+      "tools/paper_benchmarks/audit_ambipolar_phase_space_axes.py"
+    ],
+    "tests": [
+      "tests/test_ambipolar_phase_space_ladder.py",
+      "tests/test_ambipolar_phase_space_axes.py"
+    ],
+    "acceptance_gates": [
+      "Verify all four exact TOMLs, pinned geometry, raw NetCDF results, and compact extraction by checksum",
+      "Recompute every deterministic root and selected particle/heat-flux comparison for the theta and pitch directions",
+      "Retain the unchanged 0.005 kV/m, 2%, and 1e-12 gates and truthful refinement_exhausted outcome",
+      "Keep zeta, speed, independent-code, experiment, full-Fokker-Planck ambipolar, and performance claims explicit"
     ]
   },
   {

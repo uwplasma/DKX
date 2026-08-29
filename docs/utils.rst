@@ -139,6 +139,19 @@ Scan launchers (run ``dkx``)
 ``sfincsScan_21`` / ``sfincsScan_22``
   Run‑spec scans driven by ``runspec.dat`` (single runs or nested ``E_r`` scans).
 
+DKX automatically uses a shared-operator batch for compatible single-process
+RHSMode=1 ``Er`` scans. Geometry discovery, operator construction, and JAX
+compilation happen once for the electric-field vector; every point still gets
+the conventional directory, input deck, HDF5 output, and solver trace expected
+by the upstream plotting tools. The progress stream reports
+``shared-operator batch`` when this route is active.
+
+Use ``--jobs 1`` (the default) for this low-startup route. ``--jobs`` greater
+than one intentionally retains process isolation and therefore starts a JAX
+runtime in every worker; that can cost more than it saves for scan type 5.
+Transport-matrix, Phi1, normalized ``dPhiHatd*`` coordinates, and explicit
+host-direct solves also retain the established per-point path.
+
 Run-spec files (``runspec.dat``)
 --------------------------------
 

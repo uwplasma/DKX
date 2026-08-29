@@ -2,6 +2,11 @@
   "schema_version": 1,
   "purpose": "Machine-readable navigation map for public dkx examples.",
   "folders": {
+    "native": {
+      "category": "learning",
+      "role": "Versioned native TOML/JSON Case validation and schema examples.",
+      "start_here": "native/w7x_ambipolar_profile.toml"
+    },
     "autodiff": {
       "category": "capability",
       "role": "JAX gradients, JVP/VJP examples, and implicit differentiation.",

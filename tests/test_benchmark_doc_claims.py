@@ -77,6 +77,8 @@ REQUIRED_CI_JOB_TIMEOUTS = {
     "examples-smoke": 10,
     "external-data-smoke": 10,
     "python-floor": 10,
+    "workflow-lint": 5,
+    "wheel-install": 10,
     "tests": 5,
 }
 

@@ -199,21 +199,21 @@ def test_source_tree_consolidation_target_matches_current_tree() -> None:
     assert expected["temporary_init_only_packages"] == []
 
 
-def test_no_planning_artifacts_in_the_public_repo() -> None:
-    """Planning docs live in a private archive, not the public repository.
+def test_plan_md_is_the_only_authoritative_planning_file() -> None:
+    """Keep one reviewable roadmap without reviving competing plan files."""
 
-    ``plan.md`` / ``plan_final.md`` (development-history planning) and the
-    ``.test_durations`` pytest-split snapshot were moved out of the public
-    tree to keep it light; guard that none of them drift back in.
-    """
-
-    stray_plans = sorted(path.name for path in REPO_ROOT.glob("*plan*.md"))
-    assert stray_plans == [], f"planning docs must not be tracked: {stray_plans}"
+    assert (REPO_ROOT / "plan.md").is_file()
+    competing_plans = sorted(
+        path.name
+        for path in REPO_ROOT.glob("*plan*.md")
+        if path.name != "plan.md"
+    )
+    assert competing_plans == [], f"competing planning files: {competing_plans}"
     assert not (REPO_ROOT / ".test_durations").exists()
 
 
 def test_core_slim_inventory_covers_large_phase_a_owners() -> None:
-    """Make Phase A actionable before any broad source deletion happens."""
+    """Keep the Phase A extraction map valid without freezing source shape."""
 
     payload = _core_slim_inventory()
     assert payload["schema_version"] == 1
@@ -285,9 +285,6 @@ def test_core_slim_inventory_covers_large_phase_a_owners() -> None:
         repo_path = REPO_ROOT / path
         if category in {"core", "compat", "test-fixture"}:
             assert repo_path.exists(), path
-        if repo_path.is_file() and repo_path.suffix == ".py":
-            current_lines = len(repo_path.read_text(encoding="utf-8").splitlines())
-            assert current_lines <= int(entry["lines_at_audit"]), path
         for key in ("tests", "docs_examples", "internal_callers"):
             for referenced in entry[key]:
                 referenced_path = REPO_ROOT / str(referenced)

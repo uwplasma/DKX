@@ -33,8 +33,9 @@ code:
 - ``dkx/validation`` for frozen-reference loading, Fortran/PETSc
   fixture readers, release-data manifests, validation artifacts, and the
   release/benchmark command-line tooling.
-- ``dkx/workflows`` for scan orchestration (``scans.py``), optimization
-  support (``optimization.py``), and JAX-native geometry adapters for external
+- ``dkx/workflows`` for scan orchestration (``scans.py``), native all-root
+  ambipolar profile execution (``ambipolar_native.py``), optimization support
+  (``optimization.py``), and JAX-native geometry adapters for external
   equilibrium producers (``geometry_adapters.py``).
 
 Canonical root modules
@@ -57,7 +58,7 @@ Physics and numerics:
 - ``drift_kinetic.py``: the matrix-free ``KineticOperator`` — streaming,
   mirror, ExB, Er xDot/xiDot, tangential magnetic drifts, collisions, sources,
   constraints, RHS drives (``populateMatrix.F90``, ``evaluateResidual.F90``).
-- ``solve.py``: the three-tier solve policy (structured block elimination,
+- ``solve.py``: the solve-route policy (structured block elimination,
   recycled Krylov with a coarse-operator preconditioner, host direct referee)
   on the external ``solvax`` library; implicit differentiation.
 - ``coarse_precond.py``: the tier-2 coarse preconditioner ``solve.py`` uses by
@@ -86,12 +87,22 @@ Physics and numerics:
 - ``moments.py``: velocity-space moments, flux families, transport matrices,
   NTV, classical transport (``diagnostics.F90``,
   ``classicalTransport.F90``).
-- ``er.py``: ambipolar radial-electric-field root solves.
+- ``er.py``: the canonical radial-current equation and single-surface
+  ambipolar root algorithms; ``workflows/ambipolar_native.py`` owns physical
+  profile scans, bounded adaptive midpoint/refinement evidence, all-root
+  classification, predictive radial branch identity, discrete branch-event
+  evidence, and branch-aware selection for native ``Case`` execution.
 
 Input/output and orchestration:
 
 - ``inputs.py`` / ``namelist.py`` / ``input_compat.py``: typed namelist with
   Fortran-cited defaults and validation, parsing, alias handling.
+- ``config.py``: immutable native ``Case`` with versioned TOML/JSON readers,
+  deterministic semantic IDs, declarative scan bounds, and schema generation.
+- ``execution.py``: native physical normalization and ``Case`` execution;
+  consumes typed fields directly and never serializes a SFINCS namelist.
+- ``result.py``: immutable named-array ``Result``, reviewer certificate, and
+  the versioned native NetCDF reader/writer.
 - ``run.py``: end-to-end RHSMode 1/2/3 drivers and ``run_from_namelist``.
 - ``writer.py``: the canonical ``sfincsOutput`` writer (all formats,
   geometry-only output, export_f, solver-trace sidecars).
@@ -99,6 +110,7 @@ Input/output and orchestration:
 - ``io.py``: output-file reading plus generic dict serializers.
 - ``solver_trace.py``: the versioned solver-trace schema.
 - ``api.py``, ``cli.py``, ``__main__.py``: the thin public surface.
+- ``_version.py``: the single package and release version source.
 - ``ambipolar.py``: scanplot-compatible ambipolar post-processing.
 - ``sensitivity.py``: JVP/VJP, adjoint, and implicit differentiation helpers.
 - ``compare.py``: HDF5 comparison and parity gates.
