@@ -180,27 +180,26 @@ def test_alternative_kinetic_objectives_evaluate(example) -> None:
 def test_boozer_bridge_matches_host_wout_engine(example) -> None:
     """The traceable VMEC->Boozer tables reproduce the host reference path."""
     from booz_xform_jax import Booz_xform
-    from vmex.core import solver as vmec_solver
     from vmex.core.wout import wout_from_state
 
     g = example
     params0, inp0 = g["params0"], g["inp0"]
     j = int(g["S_KINETIC_ROW"])
 
-    # The example's cfg hot-restarts every solve for optimizer speed; a parity
-    # check wants a *fresh cold* solve of this exact boundary, since a warm
-    # restart from the optimizer loop's last (far-away) boundary leaves the
-    # equilibrium a ftol-noise level (~1e-4..1e-3) off the reference host solve.
+    # The example's cfg hot-restarts every solve for optimizer speed; use a
+    # fresh config so this boundary does not inherit the optimizer endpoint.
+    # solve_implicit additionally root-refines the converged host state for a
+    # consistent IFT linearization.  Feed that SAME state through the host
+    # wout engine below: comparing against a second, unrefined solver endpoint
+    # measures the host stopping displacement (~1e-5), not bridge parity.
     cfg = g["vmec_implicit"].make_config(
         inp0, adjoint_tol=1e-6, adjoint_maxiter=40)
     state = g["vmec_implicit"].solve_implicit(params0, cfg)
     rt = g["vmec_implicit"].runtime_from_params(params0, cfg)
     tabs = g["boozer_input_tables"](state, rt, j)
 
-    res = vmec_solver.solve(inp0, cfg.resolution, ftol=cfg.ftol,
-                            max_iterations=cfg.max_iterations, mode="cli")
-    wout = wout_from_state(inp=inp0, state=res.state, fsqr=res.fsqr,
-                           fsqz=res.fsqz, fsql=res.fsql)
+    wout = wout_from_state(
+        inp=inp0, state=state, fsqr=0.0, fsqz=0.0, fsql=0.0)
 
     xm_nyq = np.asarray(wout.xm_nyq, dtype=int)
     xn_nyq = np.asarray(wout.xn_nyq, dtype=int)
