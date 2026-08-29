@@ -186,6 +186,33 @@ phase-space-convergence, continuously localized bifurcations, experiment,
 full-Fokker--Planck or independent ambipolar validation, Phi1, or a second
 stellarator-family claim.
 
+Bounded ambipolar phase-space ladder
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``validation/ambipolar_phase_space_ladder_v1.json`` records a separate
+coarse/reference/fine kinetic-grid ladder for the same five-surface W7-X
+PAS/DKES profile. Recompute its checksums, every root movement, every selected
+SI particle/heat-flux movement, topology decision, and admission status with:
+
+.. code-block:: console
+
+   python tools/paper_benchmarks/audit_ambipolar_phase_space_ladder.py
+
+The three resolutions are ``(13, 31, 32, 5)``, ``(15, 37, 36, 6)``, and
+``(17, 37, 40, 6)`` in theta, zeta, pitch, and speed. Root counts remain
+``[1, 1, 3, 1, 1]`` with identical classifications, branch identities, and
+selected branches. However, reference-to-fine movement reaches
+``1.6259765625 kV/m`` for an ambipolar root, ``4.08%`` for selected particle
+flux, and ``7.81%`` for selected heat flux. These fail the unchanged
+``0.005 kV/m`` root and ``2%`` observable gates; the maximum accepted true
+residual, ``3.92e-13``, passes its ``1e-12`` gate.
+
+The auditable outcome is ``refinement_exhausted``. This negative result
+prevents promotion of the workflow certificate to phase-space-converged
+validation. The fine rung only refines theta and pitch beyond the reference;
+zeta/speed convergence, independent full-Fokker--Planck ambipolar comparison,
+experiment, and cross-code performance remain separate gates.
+
 Publication validation dashboard
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
