@@ -11,7 +11,9 @@ Git; later records refer to them by checksum or stable artifact identifier.
 - `benchmark_schema.toml`: fields required of comparable benchmark rows.
 - `independent_cross_code_v1.json`: the accepted, bounded DSHAPE/NCSX/W7-X
   monoenergetic PAS/DKES cross-code rung.
-- `inputs/*.namelist`: the exact DKX decks used by that rung.
+- `native_ambipolar_profile_v1.json`: compact native five-surface W7-X
+  PAS/DKES whole-profile workflow certificate.
+- `inputs/*`: the exact DKX decks and native cases used by these rungs.
 
 ## Independent cross-code audit
 
@@ -120,5 +122,25 @@ memory are reproduction metadata, not a cross-code performance claim.
 This is a one-species, zero-field surface-profile comparison. It is not an Er
 scan, ambipolar root/profile, Phi1, multispecies, experimental, or second
 stellarator-family full-FP validation.
+
+## Native whole-profile ambipolar certificate
+
+`native_ambipolar_profile_v1.json` pins the portable physical-unit TOML, W7-X
+standard-configuration Boozer checksum, merged DKX commit, compact five-surface
+profile, cold/warm native NetCDF checksums, environment, timing, and memory.
+Audit the checked compact evidence with:
+
+```bash
+python tools/paper_benchmarks/audit_native_ambipolar_profile.py
+```
+
+When the staged raw run tree is available, append
+`--results-root ../runtime/evidence/native-ambipolar-profile-v1` to verify both
+NetCDF files, the external geometry, the compact extraction, and cold/warm
+scientific-array identity. The admitted PAS/DKES method case retains all roots,
+selected SI fluxes, adaptive evidence, branch events, and both attempts at its
+one recovered field. It is not phase-space-converged, continuously localized,
+experimental, full-FP, Phi1, independent cross-code ambipolar, or second-family
+stellarator validation.
 
 The controlling definitions and acceptance gates are in `../plan.md`.

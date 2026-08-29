@@ -1,0 +1,67 @@
+schema = 1
+name = "w7x_standard_native_ambipolar_profile"
+
+[run]
+workflow = "ambipolar_profile"
+precision = "float64"
+device = "cpu"
+progress = true
+
+[geometry]
+format = "boozer"
+file = "w7x_standardConfig.bc"
+surfaces = [0.09, 0.16, 0.25, 0.36, 0.49]
+
+[[species]]
+name = "hydrogen"
+charge = 1
+mass_amu = 1.007276
+density_m3 = [1.52e19, 1.49e19, 1.44e19, 1.33e19, 1.15e19]
+temperature_keV = [1.10, 1.05, 0.95, 0.78, 0.52]
+
+[[species]]
+name = "electron"
+charge = -1
+mass_amu = 5.485799e-4
+density_m3 = [1.52e19, 1.49e19, 1.44e19, 1.33e19, 1.15e19]
+temperature_keV = [4.75, 3.60, 2.50, 1.55, 0.85]
+
+[physics]
+model = "full_local"
+collisions = "pitch_angle_scattering"
+magnetic_drifts = "dkes"
+phi1 = "off"
+
+[electric_field]
+mode = "ambipolar"
+search_kV_m = [-20.0, 20.0]
+find_all_roots = true
+continue_branches = true
+search_points = 17
+root_tolerance_kV_m = 0.005
+max_root_iterations = 15
+
+[resolution]
+theta = 15
+zeta = 37
+pitch = 36
+speed = 6
+
+[solver]
+method = "auto"
+relative_tolerance = 1.0e-9
+memory_fraction = 0.75
+reuse = "auto"
+
+[parallel]
+strategy = "auto"
+
+[convergence]
+enabled = true
+observables = ["particle_flux", "heat_flux", "electric_field"]
+relative_tolerance = 0.02
+max_refinements = 1
+
+[output]
+file = "w7x_standard_native_ambipolar_profile.nc"
+plots = true

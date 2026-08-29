@@ -635,6 +635,48 @@
     ]
   },
   {
+    "id": "native_w7x_ambipolar_profile_certificate",
+    "status": "implemented",
+    "release_gate": {
+      "claim_status": "regression_scaffold",
+      "blocks_current_release": false,
+      "evidence": "checked five-surface native W7-X PAS/DKES whole-profile artifact with all roots, fluxes, adaptive brackets, branch events, solver attempts, cold/warm timing, memory, and input/geometry/result checksums",
+      "promotion_gate": "Keep this as a native workflow certificate until phase-space convergence, continuous event localization, independent full-Fokker--Planck ambipolar comparison, experiment, and a second stellarator family are pinned"
+    },
+    "kind": "profile_validation",
+    "literature": [
+      "https://doi.org/10.1063/1.4870077",
+      "https://github.com/landreman/sfincs"
+    ],
+    "scripts": [
+      "tools/paper_benchmarks/audit_native_ambipolar_profile.py"
+    ],
+    "artifacts": [
+      "validation/native_ambipolar_profile_v1.json",
+      "validation/inputs/w7x_standard_native_ambipolar_profile.toml"
+    ],
+    "claims": [
+      "One physical-unit TOML drives a native five-surface W7-X standard-configuration PAS/DKES ambipolar workflow without SFINCS namelist conversion",
+      "The native result retains root counts [1, 1, 3, 1, 1], selected fields, particle and heat fluxes, branch identities and events, bounded refinement evidence, and all 222 solver attempts",
+      "One failed automatic structured evaluation is recovered with a bounded scalar GMRES solve at the unchanged target; this workflow certificate is not independent full-Fokker--Planck, experimental, or cross-code ambipolar validation"
+    ],
+    "source_code": [
+      "dkx/workflows/ambipolar_native.py",
+      "dkx/execution.py",
+      "dkx/result.py",
+      "tools/paper_benchmarks/audit_native_ambipolar_profile.py"
+    ],
+    "tests": [
+      "tests/test_native_ambipolar_profile_certificate.py"
+    ],
+    "acceptance_gates": [
+      "Verify the exact portable TOML, pinned W7-X geometry, cold/warm native NetCDF files, and compact extraction by checksum",
+      "Require every surface to retain a bracketed root and resolved refinement hierarchy with final brackets no wider than 0.005 kV/m",
+      "Retain all root alternatives, selected SI fluxes, branch events, and both failed/recovered solver attempts; cold/warm scientific arrays must match exactly",
+      "Keep phase-space convergence, continuous event localization, experiment, full-Fokker--Planck ambipolar comparison, and a second stellarator family explicit"
+    ]
+  },
+  {
     "id": "adjoint_sensitivity_gradient_checks",
     "status": "implemented",
     "release_gate": {
