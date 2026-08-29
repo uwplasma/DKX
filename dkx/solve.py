@@ -1033,7 +1033,7 @@ def _escalate_after_tier2_stall(
         return float(norms[-1]) if norms.size else float("inf")
 
     print(
-        f"[dkx.solve] tier-2 Krylov stalled with the {preconditioner} "
+        f"[dkx.solve] recycled iterative solve stalled with the {preconditioner} "
         f"preconditioner (iterations={stalled.iterations}, residual="
         f"{_residual(stalled):.3e}); escalating rather than giving up."
     )
@@ -1046,7 +1046,7 @@ def _escalate_after_tier2_stall(
         if kind == preconditioner:
             continue
         try:
-            print(f"[dkx.solve]   retrying tier 2 with the {kind} preconditioner ...")
+            print(f"[dkx.solve]   retrying the iterative solve with the {kind} preconditioner ...")
             candidate = _solve_tier2(
                 op, rhs2d, tol=tol, atol=atol, x0=x0, recycle=recycle,
                 preconditioner=kind,
@@ -1072,7 +1072,7 @@ def _escalate_after_tier2_stall(
         best_kind = preconditioner
     try:
         print(
-            f"[dkx.solve]   retrying tier 2 with the {best_kind} preconditioner "
+            f"[dkx.solve]   retrying the iterative solve with the {best_kind} preconditioner "
             f"and {widened} restarts (was {max_restarts}) ..."
         )
         candidate = _solve_tier2(
@@ -1095,7 +1095,7 @@ def _escalate_after_tier2_stall(
     # fallback that the size guard will refuse is what produced the original
     # crash, so the size is checked here rather than discovered downstream.
     if op.total_size <= max_dense_size:
-        print("[dkx.solve]   falling back to the tier-3 host direct solve ...")
+        print("[dkx.solve]   falling back to the host sparse-direct solve ...")
         return _solve_tier3(op, rhs2d, tol=tol, atol=atol, max_dense_size=max_dense_size)
 
     best_label, best = min(attempts, key=lambda item: _residual(item[1]))
@@ -1104,7 +1104,7 @@ def _escalate_after_tier2_stall(
         f"the linear solve did not converge at total_size={op.total_size}.\n"
         f"Tried: {'; '.join(label for label, _ in attempts)}.\n"
         f"Best final residual {_residual(best):.3e} ({best_label}), tolerance {tol:.1e}.\n"
-        "Tier 3 was not attempted: it materializes the operator column by "
+        "The host sparse-direct fallback was not attempted: it materializes the operator column by "
         f"column, which at this size needs {op.total_size} matvecs and "
         f"{dense_gb:.1f} GB, so raising max_dense_size would not help.\n"
         "What usually does help, in order: lower the collisionality-scaled Er "
@@ -1777,7 +1777,7 @@ def _auto_route(
     uniform = _uniform_nxi_for_x(op)
     if uniform and peak <= budget_bytes:
         print(
-            f"[dkx.solve] tier-1 route: full factorization; "
+            f"[dkx.solve] structured direct route: full factorization; "
             f"peak estimate {peak_gb:.2f} GB <= budget {budget_gb_val:.1f} GB "
             f"(bands {bands / 2.0**30:.2f} GB x2.5)."
         )
@@ -1803,7 +1803,7 @@ def _auto_route(
             tier1_truncated_peak_memory_bytes(op, keep, subsystem_batch=width) / 2.0**30
         )
         print(
-            f"[dkx.solve] tier-1 route: truncated block-Thomas "
+            f"[dkx.solve] memory-bounded structured direct route: truncated block-Thomas "
             f"(keep_lowest={keep}); {because}, "
             f"solving the lowest {keep} Legendre blocks "
             f"with subsystem batch width {width} of {n_sub} "
@@ -1818,8 +1818,8 @@ def _auto_route(
         else f"full-band estimate {peak_gb:.2f} GB > budget {budget_gb_val:.1f} GB"
     )
     print(
-        f"[dkx.solve] tier-1 route: {blocker} but truncation is invalid "
-        f"({why}); falling back to tier-2 GCROT."
+        f"[dkx.solve] structured direct route unavailable: {blocker} and truncation is invalid "
+        f"({why}); using the recycled iterative solve."
     )
     return "gmres"
 

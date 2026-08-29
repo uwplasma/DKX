@@ -267,6 +267,65 @@ def test_distinct_fluxes_are_drawn_separately():
         plt.close(fig)
 
 
+def test_unbracketed_profile_keeps_closest_scan_observables(monkeypatch, tmp_path):
+    """A missed root is explicit, but it no longer blanks Er and flux panels."""
+    from types import SimpleNamespace
+
+    from dkx import api
+    from dkx import representative as rep
+
+    moments = {
+        "FSABjHat": np.asarray([-4.0, -3.0, -2.0]),
+        "particleFlux_vm_psiHat": np.asarray(
+            [[1.0, 4.0], [2.0, 5.0], [3.0, 6.0]]
+        ),
+        "heatFlux_vm_psiHat": np.asarray(
+            [[10.0, 40.0], [20.0, 50.0], [30.0, 60.0]]
+        ),
+    }
+    monkeypatch.setattr(
+        api,
+        "batched_er_scan",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            radial_current=np.asarray([3.0, 1.0, 2.0]), moments=moments
+        ),
+    )
+    monkeypatch.setattr(
+        rep, "resolve_plasma", lambda _path: (dict(rep.FALLBACK_PLASMA), "test")
+    )
+    monkeypatch.setattr(rep, "equilibrium_scalars", lambda _path: {})
+
+    profiles = rep.radial_profiles(
+        tmp_path / "wout.nc", surfaces=[0.5], er_values=[-2.0, 0.0, 2.0]
+    )
+    assert len(profiles) == 1
+    profile = profiles[0]
+    assert profile["evaluation_status"] == "no_bracketed_root"
+    assert profile["evaluation_is_root"] is False
+    assert profile["er_evaluated"] == pytest.approx(0.0)
+    assert profile["radial_current_evaluated"] == pytest.approx(1.0)
+    assert "er_ambipolar" not in profile
+    assert profile["particle_flux"] == pytest.approx([2.0, 5.0])
+    assert profile["heat_flux"] == pytest.approx([20.0, 50.0])
+
+    fig, (boot_ax, flux_ax) = plt.subplots(1, 2)
+    try:
+        assert rep._panel_radial_bootstrap(boot_ax, profiles)
+        assert rep._panel_radial_fluxes(flux_ax, profiles)
+        assert "closest scanned" in boot_ax.get_title()
+        assert "closest scanned" in flux_ax.get_title()
+    finally:
+        plt.close(fig)
+
+    output = rep.write_representative_output(tmp_path / "closest.h5", profiles=profiles)
+    import h5py
+
+    with h5py.File(output, "r") as handle:
+        assert handle["profiles/er_evaluated"][()] == pytest.approx([0.0])
+        assert handle["profiles/radial_current_evaluated"][()] == pytest.approx([1.0])
+        assert handle["profiles/evaluation_is_root"][()] == pytest.approx([0.0])
+
+
 def test_the_bootstrap_panel_is_a_radial_profile_with_the_field_beside_it():
     from dkx.representative import _panel_radial_bootstrap
 
@@ -286,7 +345,8 @@ def test_a_run_always_leaves_the_numbers_behind(tmp_path):
     from dkx.representative import write_representative_output
 
     scan = [{"nu_prime": 1e-2, "e_star": 0.0, "D11": -1e-3, "D31": -1e-4, "D33": 0.9}]
-    profiles = [{"r": 0.5, "er_ambipolar": -1.1, "bootstrap": -6e-3,
+    profiles = [{"r": 0.5, "er_ambipolar": -1.1, "er_evaluated": -1.1,
+                 "evaluation_is_root": True, "bootstrap": -6e-3,
                  "particle_flux": [5e-9, 5e-9], "heat_flux": [7e-8, 1e-8]}]  # fmt: skip
     out = write_representative_output(tmp_path / "run.h5", scan=scan, profiles=profiles)
     assert out.exists() and out.stat().st_size > 0
@@ -375,6 +435,8 @@ def test_the_output_file_records_the_dimensional_values_and_their_factors(tmp_pa
         with h5py.File(out, "r") as handle:
             assert handle["profiles/bootstrap_kA_m2"][()] == pytest.approx([-42.0])
             assert handle["profiles/jdotb_vmec_kA_m2"][()] == pytest.approx([-35.0])
+            assert handle["profiles/er_evaluated"][()] == pytest.approx([-1.1])
+            assert handle["profiles/evaluation_is_root"][()] == pytest.approx([1.0])
             assert handle.attrs["units/current_density_A_per_m2"] == pytest.approx(
                 units.CURRENT_DENSITY)
     else:
