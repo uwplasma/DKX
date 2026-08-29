@@ -1,9 +1,10 @@
 # Native Case format
 
 The folder contains schema-v1 cases with physical field names and explicit
-engineering units. The analytic prescribed-field, analytic ambipolar, and VMEC
-prescribed-field profiles are directly executable. The higher-resolution W7-X
-case demonstrates the later full-drift, convergence, and sharding contract.
+engineering units. The analytic prescribed-field, adaptively refined analytic
+ambipolar, and VMEC prescribed-field profiles are directly executable. The
+higher-resolution W7-X case demonstrates the later full-drift and sharding
+contract.
 
 ```console
 dkx validate examples/native/w7x_ambipolar_profile.toml

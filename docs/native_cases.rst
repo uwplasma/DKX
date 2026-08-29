@@ -114,11 +114,36 @@ When no root is bracketed, DKX retains the sampled point with the smallest
 absolute radial current, labels it ``no_bracketed_root``, and never calls it
 ambipolar.
 
-``find_all_roots`` means every sign-changing bracket resolved by the declared
-coarse grid; a finite grid cannot prove that an even number of crossings was
-not hidden between adjacent samples. Increase ``search_points`` and use a
-convergence rung before making a branch-absence claim. Adaptive missed-root
-detection and branch creation/loss certificates remain a P8 promotion gate.
+Enable the existing convergence contract to insert every interval midpoint in
+a deterministic bounded hierarchy:
+
+.. code-block:: toml
+
+   [convergence]
+   enabled = true
+   observables = ["particle_flux", "heat_flux", "electric_field"]
+   relative_tolerance = 0.02
+   max_refinements = 2
+
+Every added kinetic solve records ``evaluation_reason`` and
+``evaluation_refinement_level``. Each rung records its search and total solve
+counts, discovered root count, root movement, requested-observable movement,
+and maximum final bracket width. The preflight records a conservative retained
+evaluation budget and rejects work or evidence storage beyond its fixed work
+and requested memory bounds before allocating the hierarchy.
+
+The bounded hierarchy runs through the configured ``max_refinements`` so an
+early stable root cannot prevent a finer declared rung from exposing another
+pair of crossings. ``ambipolar_refinement_status`` is ``resolved`` only when
+the final two rungs retain the same nonzero root count and meet the declared
+root, observable, and bracket-width tolerances. ``refinement_exhausted`` means
+roots were observed but the final evidence did not stabilize.
+``no_bracket_observed`` means the finite hierarchy observed no sign-changing
+bracket. It is not a proof that no root exists: an even number of crossings can
+remain hidden between the finest adjacent samples. ``find_all_roots`` therefore
+means every bracket exposed by the declared finite hierarchy, not every
+mathematically possible root. Branch creation/loss certificates remain the
+next P8 promotion gate.
 
 ``Result`` copies its named arrays and makes them read-only. The
 ``dimensions`` map gives every array's named axes without requiring xarray;
@@ -133,6 +158,6 @@ field or ``workflow = "ambipolar_profile"`` with a bounded search, ``format =
 "off"``, and at least two profile surfaces.
 Unsupported native combinations fail with the exact case field and a
 correction; they are not silently downgraded. Native Boozer execution,
-resumable scan execution, convergence refinement, and SFINCS conversion are
-subsequent vertical slices. Existing namelist workflows remain available through
-``dkx.run`` and the established CLI without a numerical-path change.
+resumable scan execution, phase-space convergence rungs, and SFINCS conversion
+are subsequent vertical slices. Existing namelist workflows remain available
+through ``dkx.run`` and the established CLI without a numerical-path change.
