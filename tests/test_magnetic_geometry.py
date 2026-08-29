@@ -19,9 +19,59 @@ import pytest
 import jax
 import jax.numpy as jnp
 
-from dkx.magnetic_geometry import FluxSurfaceGeometry, read_vmec_wout, _u_and_bsubpsi
+from dkx.magnetic_geometry import (
+    FluxSurfaceGeometry,
+    _u_and_bsubpsi,
+    read_native_boozer,
+    read_vmec_wout,
+)
 
 _NONSTELSYM_WOUT = Path(__file__).parent / "ref" / "wout_up_down_asymmetric_tokamak.nc"
+
+
+def test_native_boozer_reader_detects_both_checked_column_conventions(
+    tmp_path, monkeypatch
+) -> None:
+    scheme12_path = (
+        Path(__file__).parent / "ref" / "nonStelSym_tiny_geometryScheme12.bc"
+    )
+    original_read_bytes = Path.read_bytes
+    read_count = 0
+
+    def counted_read_bytes(path):
+        nonlocal read_count
+        if path.resolve() == scheme12_path.resolve():
+            read_count += 1
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", counted_read_bytes)
+    scheme12 = read_native_boozer(scheme12_path)
+    assert read_count == 1
+    assert scheme12.geometry_scheme == 12
+    assert len(scheme12.surfaces) == 2
+    assert any(np.any(~surface.parity) for surface in scheme12.surfaces)
+
+    scheme11_path = tmp_path / "tiny_scheme11.bc"
+    scheme11_path.write_text(
+        """CC native scheme-11 detector fixture
+1 1 2 2 1.0 0.5
+columns
+s = 0.16
+0.16 0.4 5000000.0 100000.0 -1000.0
+units
+0 0 1.0 0.0 0.0 1.0
+1 0 0.1 0.1 0.0 0.05
+s = 0.36
+0.36 0.5 5100000.0 110000.0 -900.0
+units
+0 0 1.1 0.0 0.0 1.05
+1 0 0.12 0.12 0.0 0.04
+"""
+    )
+    scheme11 = read_native_boozer(scheme11_path)
+    assert scheme11.geometry_scheme == 11
+    assert len(scheme11.surfaces) == 2
+    assert all(np.all(surface.parity) for surface in scheme11.surfaces)
 
 # Stellarator-asymmetric (lasym=T) complementary-parity tables read by
 # ``read_vmec_wout``; ``None`` for stellarator-symmetric wout files.

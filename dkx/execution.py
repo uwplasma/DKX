@@ -74,13 +74,6 @@ def _validate_native_slice(case: Case) -> None:
             "profile or ambipolar_profile",
             "Use a supported native profile workflow.",
         )
-    if case.geometry.format == "boozer":
-        _unsupported(
-            "geometry.format",
-            case.geometry.format,
-            "analytic or vmec",
-            "Use a built-in analytic geometry or a VMEC wout file; native Boozer execution needs a dedicated reader.",
-        )
     if case.geometry.format == "analytic":
         _analytic_scheme(case)
     if case.physics.magnetic_drifts != "dkes":
@@ -210,6 +203,17 @@ def _prepare_geometry(case: Case) -> _GeometryState:
             a_hat=a_hat,
         )
 
+    if case.geometry.format == "boozer":
+        from dkx.magnetic_geometry import read_native_boozer  # noqa: PLC0415
+
+        data = read_native_boozer(case.geometry_path)
+        return _GeometryState(
+            source=data,
+            n_periods=int(data.header.n_periods),
+            psi_a_hat=float(data.header.psi_a_hat),
+            a_hat=float(data.header.a_hat),
+        )
+
     from dkx.magnetic_geometry import (  # noqa: PLC0415
         psi_a_hat_from_wout,
         read_vmec_wout,
@@ -256,6 +260,14 @@ def _geometry_context(
     if case.geometry.format == "analytic":
         geometry = FluxSurfaceGeometry.from_scheme(
             int(geometry_state.source), theta=grids.theta, zeta=grids.zeta
+        )
+    elif case.geometry.format == "boozer":
+        geometry = FluxSurfaceGeometry.from_boozer_data(
+            geometry_state.source,
+            theta=grids.theta,
+            zeta=grids.zeta,
+            r_n_wish=r_n,
+            vmec_radial_option=0,
         )
     else:
         geometry = FluxSurfaceGeometry.from_vmec(
@@ -980,7 +992,9 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
             "psi_a_hat": geometry_state.psi_a_hat,
         },
         "geometry_sha256": _sha256(
-            case.geometry_path if case.geometry.format == "vmec" else case.geometry.file
+            case.geometry_path
+            if case.geometry.format in {"vmec", "boozer"}
+            else case.geometry.file
         ),
         "dkx_version": __version__,
         "python_version": platform.python_version(),

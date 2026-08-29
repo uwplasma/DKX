@@ -53,11 +53,11 @@ by the validator.
 Native execution and results
 ----------------------------
 
-The directly executable route accepts built-in analytic geometry or a VMEC
-``wout`` for prescribed-electric-field and ambipolar profiles. It consumes
-``Case`` fields directly: it does not serialize or parse a SFINCS namelist
-while constructing grids, geometry, species, collisions, or the operator. Run
-a checked example from Python:
+The directly executable route accepts built-in analytic geometry, a VMEC
+``wout``, or a Boozer ``.bc`` file for prescribed-electric-field and ambipolar
+profiles. It consumes ``Case`` fields directly: it does not serialize or parse
+a SFINCS namelist while constructing grids, geometry, species, collisions, or
+the operator. Run a checked example from Python:
 
 .. code-block:: python
 
@@ -86,6 +86,24 @@ all surfaces because their array shapes are identical; each surface still gets
 its own radially interpolated magnetic geometry and operator coefficients.
 ``value_kV_m`` is explicitly normalized using the pinned 1 keV and 1 m SFINCS
 reference set (for which the numerical conversion to ``ErHat`` is one).
+
+For a Boozer equilibrium, use the physical source format rather than a numbered
+SFINCS geometry route:
+
+.. code-block:: toml
+
+   [geometry]
+   format = "boozer"
+   file = "my_device.bc"
+   surfaces = [0.20, 0.30]
+
+The native reader auto-detects the six-column cosine-only and ten-column
+asymmetric v3 conventions at the file boundary. It reads and parses the source
+once, then reuses the immutable Fourier tables for every surface. Native cases
+therefore never require ``geometryScheme = 11`` or ``12`` and never convert the
+``Case`` back into a SFINCS deck. At least two tabulated surfaces are required
+for the radial derivatives used by the kinetic operator. The exact source
+SHA-256 is retained in the Result.
 
 For native ambipolar execution, select the workflow and give physical search
 controls:
@@ -184,10 +202,10 @@ evidence, and peak host memory.
 
 The executable route supports ``workflow = "profile"`` with a prescribed
 field or ``workflow = "ambipolar_profile"`` with a bounded search, ``format =
-"analytic"`` or ``"vmec"`` geometry, ``magnetic_drifts = "dkes"``, ``phi1 =
-"off"``, and at least two profile surfaces.
+"analytic"``, ``"vmec"``, or ``"boozer"`` geometry, ``magnetic_drifts =
+"dkes"``, ``phi1 = "off"``, and at least two profile surfaces.
 Unsupported native combinations fail with the exact case field and a
-correction; they are not silently downgraded. Native Boozer execution,
-resumable scan execution, phase-space convergence rungs, and SFINCS conversion
-are subsequent vertical slices. Existing namelist workflows remain available
-through ``dkx.run`` and the established CLI without a numerical-path change.
+correction; they are not silently downgraded. Resumable scan execution,
+phase-space convergence rungs, and SFINCS conversion are subsequent vertical
+slices. Existing namelist workflows remain available through ``dkx.run`` and
+the established CLI without a numerical-path change.

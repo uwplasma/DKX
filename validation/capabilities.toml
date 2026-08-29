@@ -15,8 +15,8 @@ id = "native_case_result"
 name = "Native Case execution and Result/NetCDF contract"
 status = "validated_limited"
 owners = ["dkx/config.py", "dkx/execution.py", "dkx/result.py", "dkx/run.py", "dkx/workflows/ambipolar_native.py"]
-evidence = ["tests/test_case_config.py", "tests/test_native_execution_result.py", "tests/test_native_ambipolar.py", "examples/native/analytic_tokamak_profile.toml", "examples/native/analytic_ambipolar_profile.toml", "examples/native/vmec_profile.toml"]
-gaps = ["native Boozer route", "resumable declarative scan execution", "transport-matrix Result", "SFINCS conversion adapters"]
+evidence = ["tests/test_case_config.py", "tests/test_magnetic_geometry.py", "tests/test_native_execution_result.py", "tests/test_native_ambipolar.py", "examples/native/analytic_tokamak_profile.toml", "examples/native/analytic_ambipolar_profile.toml", "examples/native/vmec_profile.toml", "examples/native/boozer_profile.toml"]
+gaps = ["resumable declarative scan execution", "transport-matrix Result", "SFINCS conversion adapters"]
 
 [[capability]]
 id = "sfincs_namelist"
@@ -40,7 +40,7 @@ name = "Pitch-angle-scattering local profile solve"
 status = "stable_candidate"
 owners = ["dkx/run.py", "dkx/drift_kinetic.py", "dkx/solve.py"]
 evidence = ["tests/test_run_rhsmode1.py", "tests/test_kinetic_operator_fortran_parity.py"]
-gaps = ["native VMEC/Boozer profile route", "native installed-artifact end-to-end gate"]
+gaps = ["native installed-artifact end-to-end gate"]
 
 [[capability]]
 id = "full_fokker_planck"
