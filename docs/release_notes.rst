@@ -4,6 +4,17 @@ Release notes
 Unreleased
 ----------
 
+- Added a bounded independent zero-field monoenergetic validation rung for a
+  DSHAPE tokamak, NCSX, and W7-X EIM. The checked artifact aligns the applied
+  Lorentz frequency, local-radius Beidler normalization, reference-field
+  scale, and handedness before comparing ``D11*``, ``D31*``, ``D13*``, and
+  ``D33*``. Live YANCC results and the pinned MONKES table agree with DKX
+  within 6% on all three cases. The artifact pins external commits, inputs,
+  compact outputs, checksums, residuals, resolution, timing, RSS, and
+  exclusions; CI re-audits every checked-in normalization and checksum, while
+  an adjacent pinned YANCC checkout additionally verifies the external inputs.
+  Full-Fokker--Planck, finite-``Er``, ambipolar, experimental, and cross-code
+  performance claims remain outside this rung.
 - Native ``Case`` execution now accepts Boozer ``.bc`` equilibria directly.
   The reader auto-detects the cosine-only and asymmetric v3 column conventions,
   reads and parses the file once, reuses the immutable surface tables and one

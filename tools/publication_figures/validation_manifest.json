@@ -468,38 +468,44 @@
   },
   {
     "id": "monkes_monoenergetic_overlap",
-    "status": "deferred_post_release",
+    "status": "implemented",
     "release_gate": {
-      "claim_status": "closed_deferred",
+      "claim_status": "regression_scaffold",
       "blocks_current_release": false,
-      "evidence": "documented target with no checked-in cross-code comparison artifact",
-      "closed_or_deferred_reason": "Closed for the tagged release as post-release cross-code validation until shared-model normalizations and artifacts are pinned",
-      "promotion_gate": "Promote only after exact shared-model comparisons and qualitative trend checks are separated in machine-readable artifacts"
+      "evidence": "checked machine-readable DSHAPE/NCSX/W7-X zero-field PAS/DKES artifact with audited normalizations, input/output checksums, residuals, timing, memory, and a 6% four-coefficient gate",
+      "promotion_gate": "Keep the claim bounded to the matched monoenergetic PAS/DKES equations until full-Fokker-Planck profile, finite-Er, and ambipolar comparisons are independently pinned"
     },
     "kind": "cross_code_validation",
     "literature": [
       "https://arxiv.org/abs/2312.12248",
       "https://arxiv.org/abs/1908.11615"
     ],
-    "scripts": [],
-    "artifacts": [],
+    "scripts": [
+      "tools/paper_benchmarks/audit_independent_cross_code_validation.py"
+    ],
+    "artifacts": [
+      "validation/independent_cross_code_v1.json",
+      "validation/inputs/dshape_mdke.input.namelist",
+      "validation/inputs/ncsx_mdke.input.namelist",
+      "validation/inputs/w7x_eim_mdke.input.namelist"
+    ],
     "claims": [
-      "Monoenergetic coefficients and low-collisionality trends should overlap with MONKES on shared model subsets",
-      "KNOSOS-style low-collisionality ordering should be respected when exact model overlap is not available",
-      "This lane is closed for the tagged release as a post-release cross-code target because shared-model normalizations must be pinned before claiming overlap"
+      "At zero electric field on exactly matched monoenergetic PAS/DKES equations, all four Beidler-normalized coefficients agree within 6% for a DSHAPE tokamak, NCSX, and W7-X EIM",
+      "DSHAPE and NCSX use live YANCC solves; W7-X EIM uses the pinned MONKES database row and a compact spectrum derived from the checksummed booz_xform source",
+      "The implemented rung is not full-Fokker-Planck, ambipolar-profile, finite-electric-field, experimental, or cross-code performance validation"
     ],
     "source_code": [
-      "dkx/run.py",
-      "dkx/solve.py"
+      "dkx/validation/artifacts.py",
+      "tools/paper_benchmarks/audit_independent_cross_code_validation.py"
     ],
     "tests": [
-      "tests/test_run_transport.py",
-      "tests/test_kinetic_operator_fortran_parity.py"
+      "tests/test_independent_cross_code_validation.py"
     ],
     "acceptance_gates": [
-      "Separate exact shared-model comparisons from qualitative low-collisionality trend checks",
-      "Pin all compared coefficients, normalizations, and geometry inputs in machine-readable artifacts",
-      "Use MONKES/KNOSOS only as cross-code evidence where the modeled equations and normalizations are explicitly aligned"
+      "Recompute nuPrime from the applied Lorentz frequency including nuDHat(x0), rather than equating the input numbers",
+      "Use the local surface radius in the Beidler bootstrap normalization and preserve the explicit cross-code orientation map",
+      "Pin external-code commits and verify input and compact-output checksums, true reference residuals, and every stored relative error",
+      "Keep every D11*, D31*, D13*, and D33* relative error at or below 6% without extending the claim to unmatched equations"
     ]
   },
   {

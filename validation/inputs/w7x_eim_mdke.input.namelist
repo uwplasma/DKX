@@ -1,0 +1,114 @@
+&general
+  RHSMode = 3
+/
+&geometryParameters
+  geometryScheme = 13
+  inputRadialCoordinate = 3
+  rN_wish = 4.4721359549995796e-1
+  Nperiods = 5
+  iota = -8.620511711942287e-1
+  GHat = 1.4087580278729147e1
+  IHat = -7.96549783597949e-18
+  psiAHat = 3.1951949246212824e-1
+  aHat = 5.126806415799839e-1
+  boozer_bmnc(0,0) = 2.4312718128250173e+00
+  boozer_bmnc(0,-1) = 1.1161908401907140e-01
+  boozer_bmnc(0,-2) = 1.5828703481034372e-04
+  boozer_bmnc(0,-3) = 1.6041982301884809e-03
+  boozer_bmnc(0,-4) = 6.0909180585877543e-03
+  boozer_bmnc(0,-5) = 1.4905131928476902e-03
+  boozer_bmnc(0,-6) = -2.5156309421836678e-04
+  boozer_bmnc(0,-7) = 7.6171628169152938e-05
+  boozer_bmnc(1,6) = -3.4801807927618458e-05
+  boozer_bmnc(1,5) = 1.5169125672569511e-04
+  boozer_bmnc(1,4) = 1.2136390891612213e-04
+  boozer_bmnc(1,3) = -1.6144732863284381e-03
+  boozer_bmnc(1,2) = 3.6070897616233989e-03
+  boozer_bmnc(1,1) = 5.5180599486449036e-03
+  boozer_bmnc(1,0) = -4.1161445115047934e-02
+  boozer_bmnc(1,-1) = -9.5058926811930386e-02
+  boozer_bmnc(1,-2) = 3.2732593756373968e-03
+  boozer_bmnc(1,-3) = -2.9859294917815890e-03
+  boozer_bmnc(1,-4) = 9.0210846009015466e-04
+  boozer_bmnc(1,-5) = -6.9437637319686926e-04
+  boozer_bmnc(2,6) = -1.8375110286861376e-04
+  boozer_bmnc(2,5) = -5.4649689482736134e-04
+  boozer_bmnc(2,4) = 9.7850232149441821e-05
+  boozer_bmnc(2,3) = 5.0261304116674445e-04
+  boozer_bmnc(2,2) = 4.0108130326036424e-05
+  boozer_bmnc(2,1) = -2.4598396737201531e-03
+  boozer_bmnc(2,0) = -3.7828506142886104e-03
+  boozer_bmnc(2,-1) = 2.0633584136044848e-03
+  boozer_bmnc(2,-2) = -2.5481628841727313e-04
+  boozer_bmnc(2,-3) = 1.2221666404925631e-03
+  boozer_bmnc(2,-4) = 1.1308351623602722e-04
+  boozer_bmnc(2,-5) = 5.7189358058317601e-04
+  boozer_bmnc(2,-6) = -3.1875218173878580e-04
+  boozer_bmnc(2,-8) = -3.7743154102954038e-05
+  boozer_bmnc(3,6) = -3.3573700782330418e-05
+  boozer_bmnc(3,5) = -3.8539484741388141e-05
+  boozer_bmnc(3,4) = -1.1437944394069223e-04
+  boozer_bmnc(3,3) = -1.0675097804710715e-04
+  boozer_bmnc(3,2) = -3.9584561102521331e-04
+  boozer_bmnc(3,1) = -3.6710784464439260e-04
+  boozer_bmnc(3,0) = 2.1470933296269986e-04
+  boozer_bmnc(3,-1) = 6.7851739012531943e-04
+  boozer_bmnc(3,-2) = -2.8530386320431088e-03
+  boozer_bmnc(3,-3) = 1.2640544351301250e-03
+  boozer_bmnc(3,-4) = -3.8128981448849010e-04
+  boozer_bmnc(3,-6) = 1.8312121692908300e-04
+  boozer_bmnc(3,-7) = -2.8865639512085115e-05
+  boozer_bmnc(3,-8) = 2.4847108813064724e-05
+  boozer_bmnc(4,5) = -5.5098314684133860e-05
+  boozer_bmnc(4,4) = -8.3396836848308395e-05
+  boozer_bmnc(4,1) = -1.0329660323182133e-04
+  boozer_bmnc(4,0) = 4.1680815045169430e-04
+  boozer_bmnc(4,-1) = 3.8595609746262458e-04
+  boozer_bmnc(4,-2) = 2.6979874693937615e-04
+  boozer_bmnc(4,-3) = 4.2564506615160681e-04
+  boozer_bmnc(4,-4) = -1.2970439421535835e-04
+  boozer_bmnc(4,-5) = -1.1481246627475836e-04
+  boozer_bmnc(4,-6) = -6.8090404870956538e-05
+  boozer_bmnc(5,1) = -5.4061400165698473e-05
+  boozer_bmnc(5,0) = 7.1421549572634098e-05
+  boozer_bmnc(5,-1) = 2.0064339399976624e-04
+  boozer_bmnc(5,-2) = 2.4544611348861084e-04
+  boozer_bmnc(5,-3) = 1.3761679357408079e-04
+  boozer_bmnc(5,-4) = 1.0456428916874476e-04
+  boozer_bmnc(5,-5) = 6.3794403135574720e-05
+  boozer_bmnc(5,-6) = 5.3951152680658968e-05
+  boozer_bmnc(6,1) = -2.9754635618228312e-05
+  boozer_bmnc(6,0) = -9.4138684727510896e-05
+  boozer_bmnc(6,-1) = 1.0260383723215125e-04
+  boozer_bmnc(6,-2) = 2.4660954981309768e-04
+  boozer_bmnc(6,-3) = 1.6054601468466892e-04
+  boozer_bmnc(6,-4) = 5.9671721357801778e-05
+  boozer_bmnc(7,-2) = 4.8423201061258341e-05
+  boozer_bmnc(7,-3) = 9.6382948756115405e-05
+  boozer_bmnc(7,-4) = 5.9402479482166012e-05
+  boozer_bmnc(7,-5) = 5.2954264488891205e-05
+  boozer_bmnc(8,-1) = -2.4321434189305748e-05
+  boozer_bmnc(8,-3) = 3.7526503398392272e-05
+/
+&speciesParameters
+/
+&physicsParameters
+  nuPrime = 1.1098461238458954e-1
+  EStar = 0.0d0
+  collisionOperator = 1
+  includeXDotTerm = .false.
+  includeElectricFieldTermInXiDot = .false.
+  useDKESExBDrift = .true.
+  includePhi1 = .false.
+/
+&resolutionParameters
+  Ntheta = 27
+  Nzeta = 55
+  Nxi = 140
+  Nx = 1
+  solverTolerance = 1.0d-10
+/
+&otherNumericalParameters
+/
+&preconditionerOptions
+/
