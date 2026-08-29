@@ -457,7 +457,9 @@ def _total_host_memory_bytes() -> int:
         return max(_peak_host_memory_bytes(), 1024**3)
 
 
-def _ambipolar_result_arrays(surface_results, n_species: int):
+def _ambipolar_result_arrays(
+    surface_results, n_species: int, speed_nodes: np.ndarray | None = None
+):
     """Pad ragged scan/root evidence into named NetCDF-friendly dimensions."""
 
     n_surface = len(surface_results)
@@ -493,6 +495,24 @@ def _ambipolar_result_arrays(surface_results, n_species: int):
     )
     scan_particle = np.full((n_surface, n_evaluation, n_species), np.nan)
     scan_heat = np.full((n_surface, n_evaluation, n_species), np.nan)
+    speed_diagnostics = [
+        evaluation
+        for result in surface_results
+        for evaluation in result.evaluations
+        if evaluation.particle_flux_m2_s_vs_speed is not None
+        and evaluation.heat_flux_w_m2_vs_speed is not None
+    ]
+    n_speed = (
+        int(np.asarray(speed_diagnostics[0].particle_flux_m2_s_vs_speed).shape[0])
+        if speed_diagnostics
+        else 0
+    )
+    scan_particle_vs_speed = np.full(
+        (n_surface, n_evaluation, n_speed, n_species), np.nan
+    )
+    scan_heat_vs_speed = np.full(
+        (n_surface, n_evaluation, n_speed, n_species), np.nan
+    )
     scan_parallel = np.full((n_surface, n_evaluation), np.nan)
     root_field = np.full((n_surface, n_root), np.nan)
     root_current = np.full((n_surface, n_root), np.nan)
@@ -573,6 +593,14 @@ def _ambipolar_result_arrays(surface_results, n_species: int):
                 evaluation.particle_flux_m2_s
             )
             scan_heat[surface_index, evaluation_index] = evaluation.heat_flux_w_m2
+            if evaluation.particle_flux_m2_s_vs_speed is not None:
+                scan_particle_vs_speed[surface_index, evaluation_index] = (
+                    evaluation.particle_flux_m2_s_vs_speed
+                )
+            if evaluation.heat_flux_w_m2_vs_speed is not None:
+                scan_heat_vs_speed[surface_index, evaluation_index] = (
+                    evaluation.heat_flux_w_m2_vs_speed
+                )
             scan_parallel[surface_index, evaluation_index] = (
                 evaluation.parallel_current_a_t_m2
             )
@@ -776,6 +804,43 @@ def _ambipolar_result_arrays(surface_results, n_species: int):
         "ambipolar_branch_event_count": ("surface",),
         "ambipolar_nonsmooth_event": ("surface",),
     }
+    if n_speed:
+        nodes = (
+            np.asarray(speed_nodes, dtype=np.float64)
+            if speed_nodes is not None
+            else np.arange(n_speed, dtype=np.float64)
+        )
+        if nodes.shape != (n_speed,):
+            raise ValueError(
+                "native ambipolar speed coordinate does not match retained "
+                f"diagnostics: expected {(n_speed,)}, got {nodes.shape}"
+            )
+        arrays.update(
+            {
+                "speed": np.arange(n_speed, dtype=np.int64),
+                "speed_v_th": nodes,
+                "evaluation_particle_flux_m2_s_vs_speed": scan_particle_vs_speed,
+                "evaluation_heat_flux_W_m2_vs_speed": scan_heat_vs_speed,
+            }
+        )
+        dimensions.update(
+            {
+                "speed": ("speed",),
+                "speed_v_th": ("speed",),
+                "evaluation_particle_flux_m2_s_vs_speed": (
+                    "surface",
+                    "evaluation",
+                    "speed",
+                    "species",
+                ),
+                "evaluation_heat_flux_W_m2_vs_speed": (
+                    "surface",
+                    "evaluation",
+                    "speed",
+                    "species",
+                ),
+            }
+        )
     return arrays, dimensions
 
 
@@ -1000,7 +1065,9 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
     }
     if ambipolar_surfaces:
         ambipolar_arrays, ambipolar_dimensions = _ambipolar_result_arrays(
-            ambipolar_surfaces, len(case.species)
+            ambipolar_surfaces,
+            len(case.species),
+            speed_nodes=np.asarray(retained_operator.x, dtype=np.float64),
         )
         arrays.update(ambipolar_arrays)
         dimensions.update(ambipolar_dimensions)
