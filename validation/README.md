@@ -13,6 +13,9 @@ Git; later records refer to them by checksum or stable artifact identifier.
   monoenergetic PAS/DKES cross-code rung.
 - `native_ambipolar_profile_v1.json`: compact native five-surface W7-X
   PAS/DKES whole-profile workflow certificate.
+- `ambipolar_phase_space_ladder_v1.json`: bounded coarse/reference/fine W7-X
+  PAS/DKES kinetic-grid ladder that truthfully records exhausted convergence
+  gates rather than promoting the reference profile.
 - `inputs/*`: the exact DKX decks and native cases used by these rungs.
 
 ## Independent cross-code audit
@@ -144,3 +147,24 @@ experimental, full-FP, Phi1, independent cross-code ambipolar, or second-family
 stellarator validation.
 
 The controlling definitions and acceptance gates are in `../plan.md`.
+
+## Bounded ambipolar phase-space ladder
+
+`ambipolar_phase_space_ladder_v1.json` separates kinetic-grid resolution from
+the electric-field midpoint hierarchy. Its three checked physical-unit TOMLs
+use `(theta, zeta, pitch, speed)` resolutions `(13, 31, 32, 5)`,
+`(15, 37, 36, 6)`, and `(17, 37, 40, 6)` on the same five-surface W7-X
+PAS/DKES profile. Audit the compact arithmetic with:
+
+```bash
+python tools/paper_benchmarks/audit_ambipolar_phase_space_ladder.py
+```
+
+All rungs preserve root counts `[1, 1, 3, 1, 1]`, classifications, branch
+identities, and selected branches. The reference-to-fine comparison still
+moves one root by `1.6259765625 kV/m`, selected particle flux by `4.08%`, and
+selected heat flux by `7.81%`. Those values exceed the unchanged `0.005 kV/m`
+and `2%` gates even though every accepted true residual is below `3.92e-13`.
+The recorded outcome is therefore `refinement_exhausted`, not phase-space
+convergence. The fine rung does not refine zeta or speed beyond the reference,
+so it cannot support a hidden full-grid convergence claim.
