@@ -88,6 +88,9 @@ class ElectricFieldConfig:
     search_kV_m: tuple[float, float] | None = None
     find_all_roots: bool = True
     continue_branches: bool = True
+    search_points: int = 9
+    root_tolerance_kV_m: float = 1.0e-3
+    max_root_iterations: int = 20
 
     def __post_init__(self) -> None:
         if self.search_kV_m is not None:
@@ -201,7 +204,9 @@ class Case:
     def __post_init__(self) -> None:
         object.__setattr__(self, "species", tuple(self.species))
         if self.source_path is not None:
-            object.__setattr__(self, "source_path", Path(self.source_path).expanduser().resolve())
+            object.__setattr__(
+                self, "source_path", Path(self.source_path).expanduser().resolve()
+            )
         _validate_case(self)
         canonical = json.dumps(
             self.to_dict(), sort_keys=True, separators=(",", ":"), allow_nan=False
@@ -278,9 +283,19 @@ class Case:
             data,
             "$",
             {
-                "schema", "name", "run", "geometry", "species", "physics",
-                "electric_field", "resolution", "solver", "parallel",
-                "convergence", "output", "scan",
+                "schema",
+                "name",
+                "run",
+                "geometry",
+                "species",
+                "physics",
+                "electric_field",
+                "resolution",
+                "solver",
+                "parallel",
+                "convergence",
+                "output",
+                "scan",
             },
         )
         schema = _integer(data, "schema", "$", required=True)
@@ -296,18 +311,16 @@ class Case:
         electric_field = _parse_electric_field(
             _table(data, "electric_field", "$", required=True)
         )
-        resolution = _parse_resolution(
-            _table(data, "resolution", "$", required=True)
-        )
+        resolution = _parse_resolution(_table(data, "resolution", "$", required=True))
         solver = _parse_solver(_table(data, "solver", "$", required=True))
         parallel = _parse_parallel(_table(data, "parallel", "$", default={}))
-        convergence = _parse_convergence(
-            _table(data, "convergence", "$", default={})
-        )
+        convergence = _parse_convergence(_table(data, "convergence", "$", default={}))
         output = _parse_output(_table(data, "output", "$", default={}))
         scan_raw = data.get("scan")
         scan = None if scan_raw is None else _parse_scan(_as_table(scan_raw, "scan"))
-        source = None if source_path is None else Path(source_path).expanduser().resolve()
+        source = (
+            None if source_path is None else Path(source_path).expanduser().resolve()
+        )
         return cls(
             schema=schema,
             name=name,
@@ -344,70 +357,164 @@ def migrate_case_data(raw: Mapping[str, Any]) -> dict[str, Any]:
 def case_json_schema() -> dict[str, Any]:
     """Return the machine-readable JSON Schema for native schema version 1."""
 
-    positive_numbers = {"type": "array", "minItems": 1, "items": {"type": "number", "exclusiveMinimum": 0}}
+    positive_numbers = {
+        "type": "array",
+        "minItems": 1,
+        "items": {"type": "number", "exclusiveMinimum": 0},
+    }
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "$id": "https://github.com/uwplasma/DKX/schemas/case-v1.json",
         "title": "DKX native Case",
         "type": "object",
         "additionalProperties": False,
-        "required": ["schema", "name", "run", "geometry", "species", "physics", "electric_field", "resolution", "solver"],
+        "required": [
+            "schema",
+            "name",
+            "run",
+            "geometry",
+            "species",
+            "physics",
+            "electric_field",
+            "resolution",
+            "solver",
+        ],
         "properties": {
             "schema": {"const": SCHEMA_VERSION},
             "name": {"type": "string", "minLength": 1},
             "run": _object_schema(
                 ["workflow"],
-                workflow={"enum": ["profile", "ambipolar_profile", "transport_matrix", "monoenergetic"]},
-                precision={"enum": ["float64"]}, device={"type": "string", "minLength": 1}, progress={"type": "boolean"},
+                workflow={
+                    "enum": [
+                        "profile",
+                        "ambipolar_profile",
+                        "transport_matrix",
+                        "monoenergetic",
+                    ]
+                },
+                precision={"enum": ["float64"]},
+                device={"type": "string", "minLength": 1},
+                progress={"type": "boolean"},
             ),
             "geometry": _object_schema(
                 ["format", "file", "surfaces"],
-                format={"enum": ["vmec", "boozer", "analytic"]}, file={"type": "string", "minLength": 1},
-                surfaces={"type": "array", "minItems": 1, "uniqueItems": True, "items": {"type": "number", "minimum": 0, "maximum": 1}},
+                format={"enum": ["vmec", "boozer", "analytic"]},
+                file={"type": "string", "minLength": 1},
+                surfaces={
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": True,
+                    "items": {"type": "number", "minimum": 0, "maximum": 1},
+                },
             ),
             "species": {
-                "type": "array", "minItems": 1,
+                "type": "array",
+                "minItems": 1,
                 "items": _object_schema(
                     ["name", "charge", "mass_amu", "density_m3", "temperature_keV"],
-                    name={"type": "string", "minLength": 1}, charge={"type": "number", "not": {"const": 0}},
-                    mass_amu={"type": "number", "exclusiveMinimum": 0}, density_m3=positive_numbers,
+                    name={"type": "string", "minLength": 1},
+                    charge={"type": "number", "not": {"const": 0}},
+                    mass_amu={"type": "number", "exclusiveMinimum": 0},
+                    density_m3=positive_numbers,
                     temperature_keV=positive_numbers,
                 ),
             },
             "physics": _object_schema(
-                [], model={"enum": ["full_local"]}, collisions={"enum": ["linearized_fokker_planck", "pitch_angle_scattering"]},
-                magnetic_drifts={"enum": ["full", "dkes"]}, phi1={"enum": ["off", "kinetic", "full"]},
+                [],
+                model={"enum": ["full_local"]},
+                collisions={
+                    "enum": ["linearized_fokker_planck", "pitch_angle_scattering"]
+                },
+                magnetic_drifts={"enum": ["full", "dkes"]},
+                phi1={"enum": ["off", "kinetic", "full"]},
             ),
             "electric_field": _object_schema(
-                ["mode"], mode={"enum": ["prescribed", "ambipolar"]}, value_kV_m={"type": "number"},
-                search_kV_m={"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "number"}},
-                find_all_roots={"type": "boolean"}, continue_branches={"type": "boolean"},
+                ["mode"],
+                mode={"enum": ["prescribed", "ambipolar"]},
+                value_kV_m={"type": "number"},
+                search_kV_m={
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "items": {"type": "number"},
+                },
+                find_all_roots={"type": "boolean"},
+                continue_branches={"type": "boolean"},
+                search_points={"type": "integer", "minimum": 3},
+                root_tolerance_kV_m={"type": "number", "exclusiveMinimum": 0},
+                max_root_iterations={"type": "integer", "minimum": 1},
             ),
             "resolution": _object_schema(
                 ["theta", "zeta", "pitch", "speed"],
-                **{key: {"type": "integer", "minimum": 1} for key in ("theta", "zeta", "pitch", "speed")},
+                **{
+                    key: {"type": "integer", "minimum": 1}
+                    for key in ("theta", "zeta", "pitch", "speed")
+                },
             ),
             "solver": _object_schema(
-                [], method={"enum": ["auto", "structured_direct", "recycled_krylov", "sparse_direct_referee"]},
-                relative_tolerance={"type": "number", "exclusiveMinimum": 0, "maximum": 1},
-                memory_fraction={"type": "number", "exclusiveMinimum": 0, "maximum": 1}, reuse={"enum": ["auto", "on", "off"]},
+                [],
+                method={
+                    "enum": [
+                        "auto",
+                        "structured_direct",
+                        "recycled_krylov",
+                        "sparse_direct_referee",
+                    ]
+                },
+                relative_tolerance={
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1,
+                },
+                memory_fraction={"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+                reuse={"enum": ["auto", "on", "off"]},
             ),
             "parallel": _object_schema(
-                [], strategy={"enum": ["auto", "serial", "batch"]},
-                shard={"type": "array", "uniqueItems": True, "items": {"enum": ["surface", "electric_field", "species"]}},
+                [],
+                strategy={"enum": ["auto", "serial", "batch"]},
+                shard={
+                    "type": "array",
+                    "uniqueItems": True,
+                    "items": {"enum": ["surface", "electric_field", "species"]},
+                },
             ),
             "convergence": _object_schema(
-                [], enabled={"type": "boolean"}, observables={"type": "array", "uniqueItems": True, "items": {"type": "string", "minLength": 1}},
-                relative_tolerance={"type": "number", "exclusiveMinimum": 0, "maximum": 1}, max_refinements={"type": "integer", "minimum": 0},
+                [],
+                enabled={"type": "boolean"},
+                observables={
+                    "type": "array",
+                    "uniqueItems": True,
+                    "items": {"type": "string", "minLength": 1},
+                },
+                relative_tolerance={
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1,
+                },
+                max_refinements={"type": "integer", "minimum": 0},
             ),
-            "output": _object_schema([], file={"type": "string", "minLength": 1}, plots={"type": "boolean"}),
+            "output": _object_schema(
+                [], file={"type": "string", "minLength": 1}, plots={"type": "boolean"}
+            ),
             "scan": _object_schema(
-                ["axis"], combine={"enum": ["cartesian", "zipped"]}, resume={"type": "boolean"},
-                output={"type": "string", "minLength": 1}, max_cases={"type": "integer", "minimum": 1},
-                axis={"type": "array", "minItems": 1, "items": _object_schema(
-                    ["path", "values"], path={"type": "string", "minLength": 1},
-                    values={"type": "array", "minItems": 1, "items": {"type": "number"}},
-                )},
+                ["axis"],
+                combine={"enum": ["cartesian", "zipped"]},
+                resume={"type": "boolean"},
+                output={"type": "string", "minLength": 1},
+                max_cases={"type": "integer", "minimum": 1},
+                axis={
+                    "type": "array",
+                    "minItems": 1,
+                    "items": _object_schema(
+                        ["path", "values"],
+                        path={"type": "string", "minLength": 1},
+                        values={
+                            "type": "array",
+                            "minItems": 1,
+                            "items": {"type": "number"},
+                        },
+                    ),
+                },
             ),
         },
     }
@@ -453,6 +560,9 @@ mode = "ambipolar"
 search_kV_m = [-40.0, 40.0]
 find_all_roots = true
 continue_branches = true
+search_points = 9
+root_tolerance_kV_m = 0.001
+max_root_iterations = 20
 
 [resolution]
 theta = 31
@@ -516,7 +626,9 @@ def _parse_geometry(data: Mapping[str, Any]) -> GeometryConfig:
 
 def _parse_species(data: Mapping[str, Any], index: int) -> SpeciesConfig:
     path = f"species[{index}]"
-    _reject_unknown(data, path, {"name", "charge", "mass_amu", "density_m3", "temperature_keV"})
+    _reject_unknown(
+        data, path, {"name", "charge", "mass_amu", "density_m3", "temperature_keV"}
+    )
     return SpeciesConfig(
         name=_string(data, "name", path, required=True),
         charge=_number(data, "charge", path, required=True),
@@ -531,7 +643,9 @@ def _parse_physics(data: Mapping[str, Any]) -> PhysicsConfig:
     _reject_unknown(data, path, {"model", "collisions", "magnetic_drifts", "phi1"})
     return PhysicsConfig(
         model=_string(data, "model", path, default="full_local"),
-        collisions=_string(data, "collisions", path, default="linearized_fokker_planck"),
+        collisions=_string(
+            data, "collisions", path, default="linearized_fokker_planck"
+        ),
         magnetic_drifts=_string(data, "magnetic_drifts", path, default="full"),
         phi1=_string(data, "phi1", path, default="off"),
     )
@@ -539,30 +653,64 @@ def _parse_physics(data: Mapping[str, Any]) -> PhysicsConfig:
 
 def _parse_electric_field(data: Mapping[str, Any]) -> ElectricFieldConfig:
     path = "electric_field"
-    _reject_unknown(data, path, {"mode", "value_kV_m", "search_kV_m", "find_all_roots", "continue_branches"})
+    _reject_unknown(
+        data,
+        path,
+        {
+            "mode",
+            "value_kV_m",
+            "search_kV_m",
+            "find_all_roots",
+            "continue_branches",
+            "search_points",
+            "root_tolerance_kV_m",
+            "max_root_iterations",
+        },
+    )
     search = None
     if "search_kV_m" in data:
         values = _number_tuple(data, "search_kV_m", path, required=True)
         if len(values) != 2:
-            _fail(f"{path}.search_kV_m", values, "exactly [minimum, maximum]", "Supply two finite bounds.")
+            _fail(
+                f"{path}.search_kV_m",
+                values,
+                "exactly [minimum, maximum]",
+                "Supply two finite bounds.",
+            )
         search = (values[0], values[1])
-    value = None if "value_kV_m" not in data else _number(data, "value_kV_m", path, required=True)
+    value = (
+        None
+        if "value_kV_m" not in data
+        else _number(data, "value_kV_m", path, required=True)
+    )
     return ElectricFieldConfig(
-        mode=_string(data, "mode", path, default="prescribed"), value_kV_m=value,
-        search_kV_m=search, find_all_roots=_boolean(data, "find_all_roots", path, default=True),
+        mode=_string(data, "mode", path, default="prescribed"),
+        value_kV_m=value,
+        search_kV_m=search,
+        find_all_roots=_boolean(data, "find_all_roots", path, default=True),
         continue_branches=_boolean(data, "continue_branches", path, default=True),
+        search_points=_integer(data, "search_points", path, default=9),
+        root_tolerance_kV_m=_number(data, "root_tolerance_kV_m", path, default=1.0e-3),
+        max_root_iterations=_integer(data, "max_root_iterations", path, default=20),
     )
 
 
 def _parse_resolution(data: Mapping[str, Any]) -> ResolutionConfig:
     path = "resolution"
     _reject_unknown(data, path, {"theta", "zeta", "pitch", "speed"})
-    return ResolutionConfig(**{key: _integer(data, key, path, required=True) for key in ("theta", "zeta", "pitch", "speed")})
+    return ResolutionConfig(
+        **{
+            key: _integer(data, key, path, required=True)
+            for key in ("theta", "zeta", "pitch", "speed")
+        }
+    )
 
 
 def _parse_solver(data: Mapping[str, Any]) -> SolverConfig:
     path = "solver"
-    _reject_unknown(data, path, {"method", "relative_tolerance", "memory_fraction", "reuse"})
+    _reject_unknown(
+        data, path, {"method", "relative_tolerance", "memory_fraction", "reuse"}
+    )
     return SolverConfig(
         method=_string(data, "method", path, default="auto"),
         relative_tolerance=_number(data, "relative_tolerance", path, default=1.0e-10),
@@ -582,7 +730,9 @@ def _parse_parallel(data: Mapping[str, Any]) -> ParallelConfig:
 
 def _parse_convergence(data: Mapping[str, Any]) -> ConvergenceConfig:
     path = "convergence"
-    _reject_unknown(data, path, {"enabled", "observables", "relative_tolerance", "max_refinements"})
+    _reject_unknown(
+        data, path, {"enabled", "observables", "relative_tolerance", "max_refinements"}
+    )
     return ConvergenceConfig(
         enabled=_boolean(data, "enabled", path, default=False),
         observables=_string_tuple(data, "observables", path, default=()),
@@ -609,98 +759,250 @@ def _parse_scan(data: Mapping[str, Any]) -> ScanConfig:
         axis_path = f"scan.axis[{index}]"
         table = _as_table(item, axis_path)
         _reject_unknown(table, axis_path, {"path", "values"})
-        axes.append(ScanAxis(
-            path=_string(table, "path", axis_path, required=True),
-            values=_number_tuple(table, "values", axis_path, required=True),
-        ))
+        axes.append(
+            ScanAxis(
+                path=_string(table, "path", axis_path, required=True),
+                values=_number_tuple(table, "values", axis_path, required=True),
+            )
+        )
     return ScanConfig(
         combine=_string(data, "combine", path, default="cartesian"),
         resume=_boolean(data, "resume", path, default=True),
         output=Path(_string(data, "output", path, default="dkx_scan.nc")),
-        axes=tuple(axes), max_cases=_integer(data, "max_cases", path, default=DEFAULT_MAX_SCAN_CASES),
+        axes=tuple(axes),
+        max_cases=_integer(data, "max_cases", path, default=DEFAULT_MAX_SCAN_CASES),
     )
 
 
 def _validate_case(case: Case) -> None:
     _choice("schema", case.schema, (SCHEMA_VERSION,))
     if not case.name.strip():
-        _fail("name", case.name, "a non-empty string", "Give the case a descriptive name.")
-    _choice("run.workflow", case.run.workflow, ("profile", "ambipolar_profile", "transport_matrix", "monoenergetic"))
+        _fail(
+            "name", case.name, "a non-empty string", "Give the case a descriptive name."
+        )
+    _choice(
+        "run.workflow",
+        case.run.workflow,
+        ("profile", "ambipolar_profile", "transport_matrix", "monoenergetic"),
+    )
     _choice("run.precision", case.run.precision, ("float64",))
     if not case.run.device.strip():
-        _fail("run.device", case.run.device, "a device name or 'auto'", "Use device = 'auto' for portable cases.")
+        _fail(
+            "run.device",
+            case.run.device,
+            "a device name or 'auto'",
+            "Use device = 'auto' for portable cases.",
+        )
     _is_boolean("run.progress", case.run.progress)
     _choice("geometry.format", case.geometry.format, ("vmec", "boozer", "analytic"))
     if not str(case.geometry.file):
-        _fail("geometry.file", case.geometry.file, "a non-empty path", "Supply the geometry source path.")
+        _fail(
+            "geometry.file",
+            case.geometry.file,
+            "a non-empty path",
+            "Supply the geometry source path.",
+        )
     if not case.geometry.surfaces:
-        _fail("geometry.surfaces", case.geometry.surfaces, "one or more normalized surfaces", "Supply values from 0 through 1.")
+        _fail(
+            "geometry.surfaces",
+            case.geometry.surfaces,
+            "one or more normalized surfaces",
+            "Supply values from 0 through 1.",
+        )
     for index, surface in enumerate(case.geometry.surfaces):
         _bounded(f"geometry.surfaces[{index}]", surface, 0.0, 1.0)
     if len(set(case.geometry.surfaces)) != len(case.geometry.surfaces):
-        _fail("geometry.surfaces", case.geometry.surfaces, "unique values", "Remove duplicate surfaces.")
+        _fail(
+            "geometry.surfaces",
+            case.geometry.surfaces,
+            "unique values",
+            "Remove duplicate surfaces.",
+        )
     if not case.species:
-        _fail("species", case.species, "one or more species", "Add at least one [[species]] table.")
+        _fail(
+            "species",
+            case.species,
+            "one or more species",
+            "Add at least one [[species]] table.",
+        )
     names: set[str] = set()
     n_surfaces = len(case.geometry.surfaces)
     for index, species in enumerate(case.species):
         prefix = f"species[{index}]"
         if not species.name.strip() or species.name in names:
-            _fail(f"{prefix}.name", species.name, "a unique non-empty name", "Use a distinct physical species name.")
+            _fail(
+                f"{prefix}.name",
+                species.name,
+                "a unique non-empty name",
+                "Use a distinct physical species name.",
+            )
         names.add(species.name)
         if species.charge == 0:
-            _fail(f"{prefix}.charge", species.charge, "a nonzero charge in elementary-charge units", "Use a signed ion charge or -1 for electrons.")
+            _fail(
+                f"{prefix}.charge",
+                species.charge,
+                "a nonzero charge in elementary-charge units",
+                "Use a signed ion charge or -1 for electrons.",
+            )
         _positive(f"{prefix}.mass_amu", species.mass_amu)
-        for field_name, values in (("density_m3", species.density_m3), ("temperature_keV", species.temperature_keV)):
+        for field_name, values in (
+            ("density_m3", species.density_m3),
+            ("temperature_keV", species.temperature_keV),
+        ):
             if len(values) != n_surfaces:
-                _fail(f"{prefix}.{field_name}", values, f"{n_surfaces} values (one per geometry surface)", "Add or remove profile entries to match geometry.surfaces.")
+                _fail(
+                    f"{prefix}.{field_name}",
+                    values,
+                    f"{n_surfaces} values (one per geometry surface)",
+                    "Add or remove profile entries to match geometry.surfaces.",
+                )
             for value_index, value in enumerate(values):
                 _positive(f"{prefix}.{field_name}[{value_index}]", value)
     _choice("physics.model", case.physics.model, ("full_local",))
-    _choice("physics.collisions", case.physics.collisions, ("linearized_fokker_planck", "pitch_angle_scattering"))
+    _choice(
+        "physics.collisions",
+        case.physics.collisions,
+        ("linearized_fokker_planck", "pitch_angle_scattering"),
+    )
     _choice("physics.magnetic_drifts", case.physics.magnetic_drifts, ("full", "dkes"))
     _choice("physics.phi1", case.physics.phi1, ("off", "kinetic", "full"))
-    _choice("electric_field.mode", case.electric_field.mode, ("prescribed", "ambipolar"))
-    if case.electric_field.mode == "prescribed" and case.electric_field.value_kV_m is None:
-        _fail("electric_field.value_kV_m", None, "a finite number when mode = 'prescribed'", "Add value_kV_m or select mode = 'ambipolar'.")
-    if case.electric_field.value_kV_m is not None and not math.isfinite(case.electric_field.value_kV_m):
-        _fail("electric_field.value_kV_m", case.electric_field.value_kV_m, "a finite number", "Use a finite electric field in kV/m.")
+    _choice(
+        "electric_field.mode", case.electric_field.mode, ("prescribed", "ambipolar")
+    )
+    if (
+        case.electric_field.mode == "prescribed"
+        and case.electric_field.value_kV_m is None
+    ):
+        _fail(
+            "electric_field.value_kV_m",
+            None,
+            "a finite number when mode = 'prescribed'",
+            "Add value_kV_m or select mode = 'ambipolar'.",
+        )
+    if case.electric_field.value_kV_m is not None and not math.isfinite(
+        case.electric_field.value_kV_m
+    ):
+        _fail(
+            "electric_field.value_kV_m",
+            case.electric_field.value_kV_m,
+            "a finite number",
+            "Use a finite electric field in kV/m.",
+        )
     if case.electric_field.mode == "ambipolar":
         bounds = case.electric_field.search_kV_m
-        if bounds is None or not all(math.isfinite(value) for value in bounds) or bounds[0] >= bounds[1]:
-            _fail("electric_field.search_kV_m", bounds, "[minimum, maximum] with minimum < maximum", "Supply a finite ambipolar search bracket.")
+        if (
+            bounds is None
+            or not all(math.isfinite(value) for value in bounds)
+            or bounds[0] >= bounds[1]
+        ):
+            _fail(
+                "electric_field.search_kV_m",
+                bounds,
+                "[minimum, maximum] with minimum < maximum",
+                "Supply a finite ambipolar search bracket.",
+            )
     _is_boolean("electric_field.find_all_roots", case.electric_field.find_all_roots)
-    _is_boolean("electric_field.continue_branches", case.electric_field.continue_branches)
+    _is_boolean(
+        "electric_field.continue_branches", case.electric_field.continue_branches
+    )
+    if (
+        isinstance(case.electric_field.search_points, bool)
+        or not isinstance(case.electric_field.search_points, int)
+        or case.electric_field.search_points < 3
+    ):
+        _fail(
+            "electric_field.search_points",
+            case.electric_field.search_points,
+            "an integer >= 3",
+            "Use at least three coarse electric-field samples.",
+        )
+    _positive(
+        "electric_field.root_tolerance_kV_m",
+        case.electric_field.root_tolerance_kV_m,
+    )
+    if (
+        isinstance(case.electric_field.max_root_iterations, bool)
+        or not isinstance(case.electric_field.max_root_iterations, int)
+        or case.electric_field.max_root_iterations < 1
+    ):
+        _fail(
+            "electric_field.max_root_iterations",
+            case.electric_field.max_root_iterations,
+            "an integer >= 1",
+            "Allow at least one bracket-refinement iteration.",
+        )
     for name in ("theta", "zeta", "pitch", "speed"):
         value = getattr(case.resolution, name)
         if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-            _fail(f"resolution.{name}", value, "an integer >= 1", "Choose a positive phase-space resolution.")
-    _choice("solver.method", case.solver.method, ("auto", "structured_direct", "recycled_krylov", "sparse_direct_referee"))
+            _fail(
+                f"resolution.{name}",
+                value,
+                "an integer >= 1",
+                "Choose a positive phase-space resolution.",
+            )
+    _choice(
+        "solver.method",
+        case.solver.method,
+        ("auto", "structured_direct", "recycled_krylov", "sparse_direct_referee"),
+    )
     _positive("solver.relative_tolerance", case.solver.relative_tolerance, upper=1.0)
     _positive("solver.memory_fraction", case.solver.memory_fraction, upper=1.0)
     _choice("solver.reuse", case.solver.reuse, ("auto", "on", "off"))
     _choice("parallel.strategy", case.parallel.strategy, ("auto", "serial", "batch"))
     for index, shard in enumerate(case.parallel.shard):
-        _choice(f"parallel.shard[{index}]", shard, ("surface", "electric_field", "species"))
+        _choice(
+            f"parallel.shard[{index}]", shard, ("surface", "electric_field", "species")
+        )
     if len(set(case.parallel.shard)) != len(case.parallel.shard):
-        _fail("parallel.shard", case.parallel.shard, "unique shard axes", "Remove duplicate axes.")
+        _fail(
+            "parallel.shard",
+            case.parallel.shard,
+            "unique shard axes",
+            "Remove duplicate axes.",
+        )
     _is_boolean("convergence.enabled", case.convergence.enabled)
     if len(set(case.convergence.observables)) != len(case.convergence.observables):
-        _fail("convergence.observables", case.convergence.observables, "unique observable names", "Remove duplicate observables.")
-    _positive("convergence.relative_tolerance", case.convergence.relative_tolerance, upper=1.0)
-    if isinstance(case.convergence.max_refinements, bool) or not isinstance(case.convergence.max_refinements, int) or case.convergence.max_refinements < 0:
-        _fail("convergence.max_refinements", case.convergence.max_refinements, "an integer >= 0", "Use zero to disable refinements.")
+        _fail(
+            "convergence.observables",
+            case.convergence.observables,
+            "unique observable names",
+            "Remove duplicate observables.",
+        )
+    _positive(
+        "convergence.relative_tolerance", case.convergence.relative_tolerance, upper=1.0
+    )
+    if (
+        isinstance(case.convergence.max_refinements, bool)
+        or not isinstance(case.convergence.max_refinements, int)
+        or case.convergence.max_refinements < 0
+    ):
+        _fail(
+            "convergence.max_refinements",
+            case.convergence.max_refinements,
+            "an integer >= 0",
+            "Use zero to disable refinements.",
+        )
     _is_boolean("output.plots", case.output.plots)
     if case.scan is not None:
         _choice("scan.combine", case.scan.combine, ("cartesian", "zipped"))
         _is_boolean("scan.resume", case.scan.resume)
         if not case.scan.axes:
-            _fail("scan.axis", case.scan.axes, "one or more scan axes", "Add at least one [[scan.axis]] table.")
+            _fail(
+                "scan.axis",
+                case.scan.axes,
+                "one or more scan axes",
+                "Add at least one [[scan.axis]] table.",
+            )
         paths: set[str] = set()
         lengths: set[int] = set()
         for index, axis in enumerate(case.scan.axes):
             if not axis.path.strip() or axis.path in paths:
-                _fail(f"scan.axis[{index}].path", axis.path, "a unique non-empty schema path", "Use a distinct field path for every axis.")
+                _fail(
+                    f"scan.axis[{index}].path",
+                    axis.path,
+                    "a unique non-empty schema path",
+                    "Use a distinct field path for every axis.",
+                )
             if not _is_supported_scan_path(axis.path, names):
                 _fail(
                     f"scan.axis[{index}].path",
@@ -710,18 +1012,47 @@ def _validate_case(case: Case) -> None:
                 )
             paths.add(axis.path)
             if not axis.values:
-                _fail(f"scan.axis[{index}].values", axis.values, "one or more finite values", "Add explicit scan values.")
+                _fail(
+                    f"scan.axis[{index}].values",
+                    axis.values,
+                    "one or more finite values",
+                    "Add explicit scan values.",
+                )
             lengths.add(len(axis.values))
         if case.scan.combine == "zipped" and len(lengths) > 1:
-            _fail("scan.axis", tuple(sorted(lengths)), "equal value counts for a zipped scan", "Make all zipped axes the same length or use combine = 'cartesian'.")
-        if isinstance(case.scan.max_cases, bool) or not isinstance(case.scan.max_cases, int) or case.scan.max_cases < 1:
-            _fail("scan.max_cases", case.scan.max_cases, "an integer >= 1", "Set a positive launch bound.")
+            _fail(
+                "scan.axis",
+                tuple(sorted(lengths)),
+                "equal value counts for a zipped scan",
+                "Make all zipped axes the same length or use combine = 'cartesian'.",
+            )
+        if (
+            isinstance(case.scan.max_cases, bool)
+            or not isinstance(case.scan.max_cases, int)
+            or case.scan.max_cases < 1
+        ):
+            _fail(
+                "scan.max_cases",
+                case.scan.max_cases,
+                "an integer >= 1",
+                "Set a positive launch bound.",
+            )
         if case.scan.case_count > case.scan.max_cases:
-            _fail("scan.axis", case.scan.case_count, f"at most scan.max_cases ({case.scan.max_cases}) cases", "Reduce axis values or raise max_cases deliberately after checking memory and runtime.")
+            _fail(
+                "scan.axis",
+                case.scan.case_count,
+                f"at most scan.max_cases ({case.scan.max_cases}) cases",
+                "Reduce axis values or raise max_cases deliberately after checking memory and runtime.",
+            )
 
 
 def _object_schema(required: list[str], **properties: Any) -> dict[str, Any]:
-    return {"type": "object", "additionalProperties": False, "required": required, "properties": properties}
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": required,
+        "properties": properties,
+    }
 
 
 def _paths_to_strings(value: Any) -> Any:
@@ -743,11 +1074,17 @@ def _semantic_path(value: str | Path) -> Path:
 def _is_supported_scan_path(path: str, species_names: set[str]) -> bool:
     if path in {
         "electric_field.value_kV_m",
-        "resolution.theta", "resolution.zeta", "resolution.pitch", "resolution.speed",
-        "solver.relative_tolerance", "solver.memory_fraction",
+        "resolution.theta",
+        "resolution.zeta",
+        "resolution.pitch",
+        "resolution.speed",
+        "solver.relative_tolerance",
+        "solver.memory_fraction",
     }:
         return True
-    match = re.fullmatch(r"species\[([^\]]+)\]\.(density_scale|temperature_scale)", path)
+    match = re.fullmatch(
+        r"species\[([^\]]+)\]\.(density_scale|temperature_scale)", path
+    )
     return match is not None and match.group(1) in species_names
 
 
@@ -756,7 +1093,12 @@ def _reject_unknown(data: Mapping[str, Any], path: str, allowed: set[str]) -> No
     if unknown:
         key = unknown[0]
         where = key if path == "$" else f"{path}.{key}"
-        _fail(where, data[key], f"one of {sorted(allowed)!r}", "Remove the field or correct its spelling.")
+        _fail(
+            where,
+            data[key],
+            f"one of {sorted(allowed)!r}",
+            "Remove the field or correct its spelling.",
+        )
 
 
 def _as_table(value: Any, path: str) -> Mapping[str, Any]:
@@ -765,15 +1107,29 @@ def _as_table(value: Any, path: str) -> Mapping[str, Any]:
     return value
 
 
-def _table(data: Mapping[str, Any], key: str, path: str, *, required: bool = False, default: Any = None) -> Mapping[str, Any]:
+def _table(
+    data: Mapping[str, Any],
+    key: str,
+    path: str,
+    *,
+    required: bool = False,
+    default: Any = None,
+) -> Mapping[str, Any]:
     if key not in data:
         if required:
-            _fail(key if path == "$" else f"{path}.{key}", None, "a table/object", f"Add the [{key}] table.")
+            _fail(
+                key if path == "$" else f"{path}.{key}",
+                None,
+                "a table/object",
+                f"Add the [{key}] table.",
+            )
         return default
     return _as_table(data[key], key if path == "$" else f"{path}.{key}")
 
 
-def _sequence(data: Mapping[str, Any], key: str, path: str, *, required: bool = False) -> Sequence[Any]:
+def _sequence(
+    data: Mapping[str, Any], key: str, path: str, *, required: bool = False
+) -> Sequence[Any]:
     where = key if path == "$" else f"{path}.{key}"
     if key not in data:
         if required:
@@ -785,7 +1141,14 @@ def _sequence(data: Mapping[str, Any], key: str, path: str, *, required: bool = 
     return value
 
 
-def _string(data: Mapping[str, Any], key: str, path: str, *, required: bool = False, default: str = "") -> str:
+def _string(
+    data: Mapping[str, Any],
+    key: str,
+    path: str,
+    *,
+    required: bool = False,
+    default: str = "",
+) -> str:
     where = key if path == "$" else f"{path}.{key}"
     if key not in data:
         if required:
@@ -800,23 +1163,51 @@ def _string(data: Mapping[str, Any], key: str, path: str, *, required: bool = Fa
 def _boolean(data: Mapping[str, Any], key: str, path: str, *, default: bool) -> bool:
     value = data.get(key, default)
     if not isinstance(value, bool):
-        _fail(f"{path}.{key}", value, "true or false", "Use an unquoted TOML/JSON boolean.")
+        _fail(
+            f"{path}.{key}",
+            value,
+            "true or false",
+            "Use an unquoted TOML/JSON boolean.",
+        )
     return value
 
 
-def _number(data: Mapping[str, Any], key: str, path: str, *, required: bool = False, default: float = 0.0) -> float:
+def _number(
+    data: Mapping[str, Any],
+    key: str,
+    path: str,
+    *,
+    required: bool = False,
+    default: float = 0.0,
+) -> float:
     where = f"{path}.{key}"
     if key not in data:
         if required:
             _fail(where, None, "a finite number", f"Add {where}.")
         return default
     value = data[key]
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
-        _fail(where, value, "a finite number", "Use a finite integer or floating-point value.")
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(float(value))
+    ):
+        _fail(
+            where,
+            value,
+            "a finite number",
+            "Use a finite integer or floating-point value.",
+        )
     return float(value)
 
 
-def _integer(data: Mapping[str, Any], key: str, path: str, *, required: bool = False, default: int = 0) -> int:
+def _integer(
+    data: Mapping[str, Any],
+    key: str,
+    path: str,
+    *,
+    required: bool = False,
+    default: int = 0,
+) -> int:
     where = key if path == "$" else f"{path}.{key}"
     if key not in data:
         if required:
@@ -828,31 +1219,54 @@ def _integer(data: Mapping[str, Any], key: str, path: str, *, required: bool = F
     return value
 
 
-def _number_tuple(data: Mapping[str, Any], key: str, path: str, *, required: bool = False) -> tuple[float, ...]:
+def _number_tuple(
+    data: Mapping[str, Any], key: str, path: str, *, required: bool = False
+) -> tuple[float, ...]:
     values = _sequence(data, key, path, required=required)
     result = []
     for index, value in enumerate(values):
-        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
-            _fail(f"{path}.{key}[{index}]", value, "a finite number", "Replace it with a finite numeric value.")
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(float(value))
+        ):
+            _fail(
+                f"{path}.{key}[{index}]",
+                value,
+                "a finite number",
+                "Replace it with a finite numeric value.",
+            )
         result.append(float(value))
     return tuple(result)
 
 
-def _string_tuple(data: Mapping[str, Any], key: str, path: str, *, default: tuple[str, ...]) -> tuple[str, ...]:
+def _string_tuple(
+    data: Mapping[str, Any], key: str, path: str, *, default: tuple[str, ...]
+) -> tuple[str, ...]:
     if key not in data:
         return default
     values = _sequence(data, key, path)
     result = []
     for index, value in enumerate(values):
         if not isinstance(value, str) or not value.strip():
-            _fail(f"{path}.{key}[{index}]", value, "a non-empty string", "Use a quoted descriptive value.")
+            _fail(
+                f"{path}.{key}[{index}]",
+                value,
+                "a non-empty string",
+                "Use a quoted descriptive value.",
+            )
         result.append(value)
     return tuple(result)
 
 
 def _choice(path: str, value: Any, choices: tuple[Any, ...]) -> None:
     if value not in choices:
-        _fail(path, value, f"one of {choices!r}", f"Choose {', '.join(map(repr, choices))}.")
+        _fail(
+            path,
+            value,
+            f"one of {choices!r}",
+            f"Choose {', '.join(map(repr, choices))}.",
+        )
 
 
 def _is_boolean(path: str, value: Any) -> None:
@@ -861,14 +1275,32 @@ def _is_boolean(path: str, value: Any) -> None:
 
 
 def _positive(path: str, value: float, *, upper: float | None = None) -> None:
-    if not math.isfinite(float(value)) or value <= 0 or (upper is not None and value > upper):
-        expected = "a finite number > 0" if upper is None else f"a finite number in (0, {upper}]"
-        _fail(path, value, expected, "Choose a value in the stated physical or numerical range.")
+    if (
+        not math.isfinite(float(value))
+        or value <= 0
+        or (upper is not None and value > upper)
+    ):
+        expected = (
+            "a finite number > 0"
+            if upper is None
+            else f"a finite number in (0, {upper}]"
+        )
+        _fail(
+            path,
+            value,
+            expected,
+            "Choose a value in the stated physical or numerical range.",
+        )
 
 
 def _bounded(path: str, value: float, lower: float, upper: float) -> None:
     if not math.isfinite(float(value)) or value < lower or value > upper:
-        _fail(path, value, f"a finite number in [{lower}, {upper}]", "Choose a normalized radial surface in range.")
+        _fail(
+            path,
+            value,
+            f"a finite number in [{lower}, {upper}]",
+            "Choose a normalized radial surface in range.",
+        )
 
 
 def _fail(path: str, value: Any, expected: str, correction: str) -> None:
@@ -876,8 +1308,22 @@ def _fail(path: str, value: Any, expected: str, correction: str) -> None:
 
 
 __all__ = [
-    "COMMENTED_TOML_EXAMPLE", "Case", "CaseValidationError", "ConvergenceConfig",
-    "ElectricFieldConfig", "GeometryConfig", "OutputConfig", "ParallelConfig",
-    "PhysicsConfig", "ResolutionConfig", "RunConfig", "SCHEMA_VERSION", "ScanAxis",
-    "ScanConfig", "SolverConfig", "SpeciesConfig", "case_json_schema", "migrate_case_data",
+    "COMMENTED_TOML_EXAMPLE",
+    "Case",
+    "CaseValidationError",
+    "ConvergenceConfig",
+    "ElectricFieldConfig",
+    "GeometryConfig",
+    "OutputConfig",
+    "ParallelConfig",
+    "PhysicsConfig",
+    "ResolutionConfig",
+    "RunConfig",
+    "SCHEMA_VERSION",
+    "ScanAxis",
+    "ScanConfig",
+    "SolverConfig",
+    "SpeciesConfig",
+    "case_json_schema",
+    "migrate_case_data",
 ]

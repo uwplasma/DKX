@@ -67,12 +67,12 @@ def _analytic_scheme(case: Case) -> int:
 
 
 def _validate_native_slice(case: Case) -> None:
-    if case.run.workflow != "profile":
+    if case.run.workflow not in {"profile", "ambipolar_profile"}:
         _unsupported(
             "run.workflow",
             case.run.workflow,
-            "profile",
-            "Use workflow = 'profile' for this first native execution route.",
+            "profile or ambipolar_profile",
+            "Use a supported native profile workflow.",
         )
     if case.geometry.format == "boozer":
         _unsupported(
@@ -97,14 +97,17 @@ def _validate_native_slice(case: Case) -> None:
             "off",
             "Set phi1 = 'off' for this route.",
         )
-    if case.electric_field.mode != "prescribed":
+    expected_field_mode = (
+        "ambipolar" if case.run.workflow == "ambipolar_profile" else "prescribed"
+    )
+    if case.electric_field.mode != expected_field_mode:
         _unsupported(
             "electric_field.mode",
             case.electric_field.mode,
-            "prescribed",
-            "Supply value_kV_m and use prescribed mode; native root continuation is a separate workflow.",
+            expected_field_mode,
+            f"Use mode = '{expected_field_mode}' with workflow = '{case.run.workflow}'.",
         )
-    if case.electric_field.value_kV_m is None:
+    if expected_field_mode == "prescribed" and case.electric_field.value_kV_m is None:
         _unsupported(
             "electric_field.value_kV_m",
             None,
@@ -260,6 +263,8 @@ def _make_operator(
     dt_dr_hat: np.ndarray,
     grids,
     geometry_state: _GeometryState,
+    electric_field_kv_m: float | None = None,
+    force_exb_structure: bool = False,
 ):
     import jax.numpy as jnp  # noqa: PLC0415
 
@@ -325,7 +330,14 @@ def _make_operator(
         )
         constraint_scheme = 1
 
-    er_hat = _electric_field_kv_m_to_er_hat(case.electric_field.value_kV_m)
+    field_kv_m = (
+        case.electric_field.value_kV_m
+        if electric_field_kv_m is None
+        else electric_field_kv_m
+    )
+    if field_kv_m is None:
+        raise ValueError("an electric-field value is required to build the operator")
+    er_hat = _electric_field_kv_m_to_er_hat(field_kv_m)
     dphi = radial.d_dr_hat_to_d_dpsi_hat * (-er_hat)
     fsab_hat2 = geometry.fsab_hat2(
         theta_weights=grids.theta_weights, zeta_weights=grids.zeta_weights
@@ -340,7 +352,7 @@ def _make_operator(
         constraint_scheme=constraint_scheme,
         point_at_x0=False,
         use_dkes_exb=True,
-        with_exb=er_hat != 0.0,
+        with_exb=force_exb_structure or er_hat != 0.0,
         with_er_xidot=False,
         with_er_xdot=False,
         x=grids.x,
@@ -413,6 +425,108 @@ def _total_host_memory_bytes() -> int:
         return max(_peak_host_memory_bytes(), 1024**3)
 
 
+def _ambipolar_result_arrays(surface_results, n_species: int):
+    """Pad ragged scan/root evidence into named NetCDF-friendly dimensions."""
+
+    n_surface = len(surface_results)
+    n_evaluation = max(len(result.evaluations) for result in surface_results)
+    n_root = max(1, max(len(result.roots) for result in surface_results))
+    scan_field = np.full((n_surface, n_evaluation), np.nan)
+    scan_current = np.full((n_surface, n_evaluation), np.nan)
+    scan_residual = np.full((n_surface, n_evaluation), np.nan)
+    scan_stage = np.full((n_surface, n_evaluation), "", dtype=object)
+    scan_particle = np.full((n_surface, n_evaluation, n_species), np.nan)
+    scan_heat = np.full((n_surface, n_evaluation, n_species), np.nan)
+    scan_parallel = np.full((n_surface, n_evaluation), np.nan)
+    root_field = np.full((n_surface, n_root), np.nan)
+    root_current = np.full((n_surface, n_root), np.nan)
+    root_slope = np.full((n_surface, n_root), np.nan)
+    root_type = np.full((n_surface, n_root), "", dtype=object)
+    root_bracket = np.full((n_surface, n_root, 2), np.nan)
+    root_count = np.zeros((n_surface,), dtype=np.int64)
+    selected_root = np.full((n_surface,), -1, dtype=np.int64)
+    status = np.empty((n_surface,), dtype=object)
+    chunk_size = np.empty((n_surface,), dtype=np.int64)
+    batch_chunks = np.empty((n_surface,), dtype=np.int64)
+    for surface_index, result in enumerate(surface_results):
+        status[surface_index] = result.status
+        root_count[surface_index] = len(result.roots)
+        selected_root[surface_index] = (
+            -1 if result.selected_root is None else result.selected_root
+        )
+        chunk_size[surface_index] = result.batch_chunk_size
+        batch_chunks[surface_index] = result.batch_chunks
+        for evaluation_index, evaluation in enumerate(result.evaluations):
+            scan_field[surface_index, evaluation_index] = evaluation.electric_field_kv_m
+            scan_current[surface_index, evaluation_index] = (
+                evaluation.radial_current_a_m2
+            )
+            scan_residual[surface_index, evaluation_index] = evaluation.residual_norm
+            scan_stage[surface_index, evaluation_index] = evaluation.stage
+            scan_particle[surface_index, evaluation_index] = (
+                evaluation.particle_flux_m2_s
+            )
+            scan_heat[surface_index, evaluation_index] = evaluation.heat_flux_w_m2
+            scan_parallel[surface_index, evaluation_index] = (
+                evaluation.parallel_current_a_t_m2
+            )
+        for root_index, root in enumerate(result.roots):
+            root_field[surface_index, root_index] = root.electric_field_kv_m
+            root_current[surface_index, root_index] = root.radial_current_a_m2
+            root_slope[surface_index, root_index] = root.slope_a_m2_per_kv_m
+            root_type[surface_index, root_index] = root.root_type
+            root_bracket[surface_index, root_index] = root.bracket_kv_m
+    arrays = {
+        "evaluation": np.arange(n_evaluation, dtype=np.int64),
+        "root": np.arange(n_root, dtype=np.int64),
+        "bracket_endpoint": np.asarray(["minimum", "maximum"], dtype=object),
+        "evaluation_electric_field_kV_m": scan_field,
+        "radial_current_A_m2": scan_current,
+        "evaluation_primal_residual": scan_residual,
+        "evaluation_stage": scan_stage,
+        "evaluation_particle_flux_m2_s": scan_particle,
+        "evaluation_heat_flux_W_m2": scan_heat,
+        "evaluation_parallel_current_A_T_m2": scan_parallel,
+        "ambipolar_root_kV_m": root_field,
+        "ambipolar_root_current_A_m2": root_current,
+        "ambipolar_root_slope_A_m2_per_kV_m": root_slope,
+        "ambipolar_root_type": root_type,
+        "ambipolar_root_bracket_kV_m": root_bracket,
+        "ambipolar_root_count": root_count,
+        "selected_ambipolar_root": selected_root,
+        "ambipolar_status": status,
+        "electric_field_batch_chunk_size": chunk_size,
+        "electric_field_batch_chunks": batch_chunks,
+    }
+    dimensions = {
+        "evaluation": ("evaluation",),
+        "root": ("root",),
+        "bracket_endpoint": ("bracket_endpoint",),
+        "evaluation_electric_field_kV_m": ("surface", "evaluation"),
+        "radial_current_A_m2": ("surface", "evaluation"),
+        "evaluation_primal_residual": ("surface", "evaluation"),
+        "evaluation_stage": ("surface", "evaluation"),
+        "evaluation_particle_flux_m2_s": ("surface", "evaluation", "species"),
+        "evaluation_heat_flux_W_m2": ("surface", "evaluation", "species"),
+        "evaluation_parallel_current_A_T_m2": ("surface", "evaluation"),
+        "ambipolar_root_kV_m": ("surface", "root"),
+        "ambipolar_root_current_A_m2": ("surface", "root"),
+        "ambipolar_root_slope_A_m2_per_kV_m": ("surface", "root"),
+        "ambipolar_root_type": ("surface", "root"),
+        "ambipolar_root_bracket_kV_m": (
+            "surface",
+            "root",
+            "bracket_endpoint",
+        ),
+        "ambipolar_root_count": ("surface",),
+        "selected_ambipolar_root": ("surface",),
+        "ambipolar_status": ("surface",),
+        "electric_field_batch_chunk_size": ("surface",),
+        "electric_field_batch_chunks": ("surface",),
+    }
+    return arrays, dimensions
+
+
 def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
     """Execute the supported native profile route and return a native Result."""
 
@@ -446,12 +560,15 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
     solve_seconds = np.empty((surfaces.size,), dtype=np.float64)
     retained_operator = None
     selected_routes: list[str] = []
+    ambipolar_surfaces = []
+    previous_root_kv_m: float | None = None
 
     progress = emit if emit is not None else (print if case.run.progress else None)
     solved = None
     for index, surface in enumerate(surfaces):
         if progress is not None:
             progress(f"surface {index + 1}/{len(surfaces)}: psi_N={surface:.6g}")
+        ambipolar = case.run.workflow == "ambipolar_profile"
         op, _grids, _geometry, radial = _make_operator(
             case,
             surface_index=index,
@@ -461,7 +578,61 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
             dt_dr_hat=dt_dr_hat,
             grids=grids,
             geometry_state=geometry_state,
+            electric_field_kv_m=1.0 if ambipolar else None,
+            force_exb_structure=ambipolar,
         )
+        if ambipolar:
+            from dkx.er import ErProblem  # noqa: PLC0415
+            from dkx.workflows.ambipolar_native import (  # noqa: PLC0415
+                solve_native_ambipolar_surface,
+            )
+
+            bounds = case.electric_field.search_kV_m
+            assert bounds is not None
+            problem = ErProblem(
+                operator=op,
+                dphi_per_er=float(np.asarray(op.dphi_hat_dpsi_hat_kinetic).reshape(())),
+                z_s=np.asarray(op.z_s, dtype=np.float64).reshape((-1,)),
+                er_initial=0.0,
+                er_min=float(bounds[0]),
+                er_max=float(bounds[1]),
+                solve_method=_route_name(case.solver.method),
+                tol=case.solver.relative_tolerance,
+            )
+            surface_result = solve_native_ambipolar_surface(
+                problem,
+                electric_field_bounds_kv_m=bounds,
+                search_points=case.electric_field.search_points,
+                root_tolerance_kv_m=case.electric_field.root_tolerance_kV_m,
+                max_root_iterations=case.electric_field.max_root_iterations,
+                find_all_roots=case.electric_field.find_all_roots,
+                previous_root_kv_m=(
+                    previous_root_kv_m
+                    if case.electric_field.continue_branches
+                    else None
+                ),
+                radial_factor=radial.d_dpsi_hat_to_d_dr_hat,
+                solve_method=_route_name(case.solver.method),
+                solve_tolerance=case.solver.relative_tolerance,
+                memory_budget_gb=(
+                    case.solver.memory_fraction * _total_host_memory_bytes() / (1024**3)
+                ),
+            )
+            ambipolar_surfaces.append(surface_result)
+            selected = surface_result.selected
+            particle_flux[index] = selected.particle_flux_m2_s
+            heat_flux[index] = selected.heat_flux_w_m2
+            current[index] = selected.parallel_current_a_t_m2
+            residuals[index] = selected.residual_norm
+            iterations[index] = len(surface_result.evaluations)
+            solve_seconds[index] = surface_result.solve_seconds
+            selected_routes.append(problem.solve_method)
+            if surface_result.selected_root is not None:
+                previous_root_kv_m = surface_result.roots[
+                    surface_result.selected_root
+                ].electric_field_kv_m
+            retained_operator = op
+            continue
         solve_start = time.perf_counter()
         solved = solve(
             op,
@@ -505,8 +676,18 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
         if out is not None
         else (case.base_directory / case.output.file).resolve()
     )
-    assert solved is not None
-    device = solved.x.device
+    if solved is not None:
+        device = solved.x.device
+    else:
+        device = jax.devices()[0]
+    selected_electric_field = (
+        np.asarray(
+            [result.selected.electric_field_kv_m for result in ambipolar_surfaces],
+            dtype=np.float64,
+        )
+        if ambipolar_surfaces
+        else np.full((surfaces.size,), case.electric_field.value_kV_m)
+    )
     arrays = {
         "surface": surfaces,
         "r_N": r_n,
@@ -515,9 +696,7 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
         "mass_amu": np.asarray([species.mass_amu for species in case.species]),
         "density_m3": density_m3,
         "temperature_keV": temperature_keV,
-        "electric_field_kV_m": np.full(
-            (surfaces.size,), case.electric_field.value_kV_m
-        ),
+        "electric_field_kV_m": selected_electric_field,
         "particle_flux_m2_s": particle_flux,
         "heat_flux_W_m2": heat_flux,
         "parallel_current_A_T_m2": current,
@@ -541,14 +720,37 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
         "solver_iterations": ("surface",),
         "solve_time_s": ("surface",),
     }
+    if ambipolar_surfaces:
+        ambipolar_arrays, ambipolar_dimensions = _ambipolar_result_arrays(
+            ambipolar_surfaces, len(case.species)
+        )
+        arrays.update(ambipolar_arrays)
+        dimensions.update(ambipolar_dimensions)
+    reported_residual = (
+        float(np.nanmax(arrays["evaluation_primal_residual"]))
+        if ambipolar_surfaces
+        else float(np.max(residuals))
+    )
     route_set = sorted(set(selected_routes))
     metadata = {
         "canonical_case": case.to_dict(),
         "converged": True,
         "solver_route": route_set[0] if len(route_set) == 1 else route_set,
         "route_reason": "selected from operator structure and requested native solver method",
-        "residual_norm": float(np.max(residuals)),
+        "residual_norm": reported_residual,
         "iterations": int(np.sum(iterations)),
+        "ambipolar_all_surfaces_bracketed": (
+            all(result.status == "bracketed_root" for result in ambipolar_surfaces)
+            if ambipolar_surfaces
+            else None
+        ),
+        "ambipolar_selection": (
+            "nearest previous selected root; nearest zero on the first surface"
+            if ambipolar_surfaces and case.electric_field.continue_branches
+            else "root nearest zero on each surface"
+            if ambipolar_surfaces
+            else None
+        ),
         "normalization": {
             "density_m3": 1.0e20,
             "temperature_keV": 1.0,
