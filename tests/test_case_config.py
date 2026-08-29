@@ -80,6 +80,24 @@ def test_json_and_reordered_mapping_have_same_semantic_id(tmp_path: Path) -> Non
     assert a.source_path != b.source_path
 
 
+def test_default_pitch_speed_ramp_preserves_case_id_and_nondefault_is_semantic() -> None:
+    implicit = _mapping()
+    explicit = _mapping()
+    explicit["resolution"]["pitch_speed_ramp"] = 1
+    uniform = _mapping()
+    uniform["resolution"]["pitch_speed_ramp"] = 0
+
+    default_case = Case.from_mapping(implicit)
+    explicit_case = Case.from_mapping(explicit)
+    uniform_case = Case.from_mapping(uniform)
+
+    assert default_case.resolution.pitch_speed_ramp == 1
+    assert default_case.case_id == explicit_case.case_id
+    assert "pitch_speed_ramp" not in default_case.to_dict()["resolution"]
+    assert uniform_case.case_id != default_case.case_id
+    assert uniform_case.to_dict()["resolution"]["pitch_speed_ramp"] == 0
+
+
 def test_direct_construction_freezes_nested_sequences_and_normalizes_paths() -> None:
     surfaces = [0.25, 0.75]
     densities = [1e19, 8e18]
@@ -133,6 +151,11 @@ def test_direct_construction_freezes_nested_sequences_and_normalizes_paths() -> 
             lambda data: data["electric_field"].update(max_root_iterations=0),
             "electric_field.max_root_iterations",
             "one bracket-refinement iteration",
+        ),
+        (
+            lambda data: data["resolution"].update(pitch_speed_ramp=3),
+            "resolution.pitch_speed_ramp",
+            "one of",
         ),
         (
             lambda data: data["run"].update(workflo="profile"),

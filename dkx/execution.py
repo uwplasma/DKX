@@ -245,7 +245,7 @@ def _make_grids(case: Case, *, n_periods: int):
         x_grid_k=0.0,
         x_max=5.0,
         x_dot_derivative_scheme=0,
-        n_xi_for_x_option=1,
+        n_xi_for_x_option=case.resolution.pitch_speed_ramp,
         monoenergetic=False,
     )
 
@@ -1093,6 +1093,13 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
             "mass_kg": _PROTON_MASS_KG,
             "a_hat": geometry_state.a_hat,
             "psi_a_hat": geometry_state.psi_a_hat,
+        },
+        "phase_space": {
+            "pitch_speed_ramp": case.resolution.pitch_speed_ramp,
+            "active_pitch_modes_by_speed": np.asarray(
+                grids.n_xi_for_x, dtype=np.int64
+            ).tolist(),
+            "active_pitch_mode_sum": int(np.sum(grids.n_xi_for_x)),
         },
         "geometry_sha256": _sha256(
             case.geometry_path
