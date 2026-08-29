@@ -1,0 +1,59 @@
+{
+  "schema": "dkx.ambipolar_joint_pitch_speed.v1",
+  "created_utc": "2026-08-29T20:05:00Z",
+  "claim_scope": "bounded_common_field_joint_pitch_speed_diagnosis",
+  "summary": "A speed-6 to speed-8 comparison at the same SFINCS pitch-ramp rule and ceiling, followed by a pitch-44 to pitch-52 comparison at speed 8. Both observable gates fail. Full-state modal-tail evidence is retained on a small uniform analytic route; the memory-lean truncated W7-X route explicitly reports the tail unavailable because it zero-pads eliminated modes.",
+  "source": {
+    "dkx_base_commit": "b2fdee6e6568d93762cbacbe9a3dd3104487e5bd",
+    "implementation_commit": "5248f62",
+    "geometry_sha256": "81c686e5a5bd8f38d8b1f754ebe2910951f20094bab35d73d2827d9875bb6062",
+    "reference_sources": {
+      "sfincs": {"commit": "8df5453472e982df0f6ae005243ce38d57a83711", "paths": ["fortran/version3/createGrids.F90", "doc/manual/version3/resolution.tex"]},
+      "yancc": {"commit": "6f399a21ecfcc03008e466bb09811a330321b9be", "paths": ["docs/performance.rst", "yancc/smoothers.py", "tests/test_smoothers.py"]},
+      "monkes": {"commit": "fb5c302efeb191b9a36818bc4ce337623c865938", "paths": ["sources/libraries/DKE_BTD_Solution_Legendre.f90", "doc/MONKES_manual/chapters/Usage.tex"]},
+      "stellopt": {"commit": "9177f58c986aa20186f6b8db360fe81cf53137e0", "paths": ["PENTA/Sources/penta.f90", "BOOTSJ/Sources"]}
+    },
+    "inputs": {
+      "analytic_uniform": {"path": "validation/inputs/analytic_ambipolar_uniform_tail_probe.toml", "sha256": "fee682c165435e008d0336372448fc635f439420f7c56560284eb19d15f227ec", "bytes": 1015},
+      "nx6_pitch44": {"path": "validation/inputs/w7x_standard_native_ambipolar_joint_nx6_pitch44_probe.toml", "sha256": "728dbc242c08616a60b1a8387d3de7d7cdc06634f684876f12d35028ced8071e", "bytes": 1136},
+      "nx8_pitch44": {"path": "validation/inputs/w7x_standard_native_ambipolar_joint_nx8_pitch44_probe.toml", "sha256": "f733c79e1217243a902d12612f89d7dc8839431c6e90d3c0f1cfd3a446a6f724", "bytes": 1136},
+      "nx8_pitch52": {"path": "validation/inputs/w7x_standard_native_ambipolar_joint_nx8_pitch52_probe.toml", "sha256": "6063716012c1d9e4b75c6cb3258e4a91468f32c1cc742802b3f1a31fc1a03442", "bytes": 1136}
+    },
+    "external_results": {
+      "analytic_uniform": {"file": "analytic-uniform-tail.nc", "sha256": "7ea22c285edd9d51132dc7d557cb560906c03e9cf7081b6aa034d38a288ec702", "bytes": 215994},
+      "nx6_pitch44": {"file": "joint_nx6_pitch44_probe.nc", "sha256": "69d62680ad0adc0cc72600524ee763f288f2695baabeb32744d05c28343d0670", "bytes": 205744},
+      "nx8_pitch44": {"file": "joint_nx8_pitch44_probe.nc", "sha256": "b1388c47b19c420fcd130a4cab79a2300ba6c87a78b08d830745ffe8397c4d4c", "bytes": 206101},
+      "nx8_pitch52": {"file": "joint_nx8_pitch52_probe.nc", "sha256": "f267cd55d6779dba84fd7147552b87cc83112503bbcca02621e576c3c3b6362d", "bytes": 206095}
+    }
+  },
+  "environment": {"host": "Mac mini, Apple M4, 10 CPU cores, 24 GiB RAM", "python": "3.11.15", "jax": "0.9.2", "numpy": "2.4.3"},
+  "analytic_full_state_oracle": {
+    "case_id": "2ca5a6d5af37ab7dc728e559337f4f3c716f793fc6afb01a3170e1a668d44da9",
+    "route": "block_tridiagonal",
+    "diagnostic_status": "retained_full_state_relative_l2",
+    "tail_max_by_speed_species": [[2.4288657782539645e-12], [0.001625877516150894], [0.03260629742590215], [0.051219192488040896]],
+    "roots_kV_m": [-1.8359375, -1.875],
+    "maximum_accepted_true_residual": 1.491190738022751e-14,
+    "solve_s": 10.84644641700288,
+    "total_s": 11.761190958997759,
+    "peak_host_memory_bytes": 1250623488
+  },
+  "common_surface": {"surface_index": 1, "psi_N": 0.25, "electric_field_kV_m": 8.55},
+  "rungs": [
+    {"name": "nx6_pitch44", "case_id": "c30ad04c3d584695931a5c513c5496e99c56165af796421bb5c6409af0080577", "speed": 6, "pitch": 44, "allocation": [5,12,21,33,44,44], "particle_flux_m2_s": [1.0860311931362203e18,1.3609940927592097e18], "heat_flux_W_m2": [450.86235497653064,3074.384103402241], "radial_current_A_m2": -0.04405391329928409, "maximum_accepted_true_residual": 7.057499115521936e-16, "attempt_count": 6, "solve_s": 11.211612749997585, "total_s": 12.458917582996946, "peak_host_memory_bytes": 910295040, "diagnostic_status": "unavailable_on_zero_padded_truncated_state"},
+    {"name": "nx8_pitch44", "case_id": "8bae0d1f3cb514b2794341b2464b375a5029c8eae10f48852d2c5ef88ecf9567", "speed": 8, "pitch": 44, "allocation": [5,9,16,25,35,44,44,44], "particle_flux_m2_s": [1.1119861205359066e18,1.3995284691339246e18], "heat_flux_W_m2": [464.18985754513926,3133.3935616469917], "radial_current_A_m2": -0.0460693632209227, "maximum_accepted_true_residual": 7.43595829810549e-16, "attempt_count": 6, "solve_s": 14.933059000999492, "total_s": 16.21610066699941, "peak_host_memory_bytes": 950304768, "diagnostic_status": "unavailable_on_zero_padded_truncated_state"},
+    {"name": "nx8_pitch52", "case_id": "1d42379eaff1ac26a2be549a5f5d8920787084f9f4b1db52c13fe7fc7819dcf1", "speed": 8, "pitch": 52, "allocation": [6,11,19,30,42,52,52,52], "particle_flux_m2_s": [1.0636176143424746e18,1.5085083472473357e18], "heat_flux_W_m2": [476.9477859065042,3537.921552703558], "radial_current_A_m2": -0.07127935369433033, "maximum_accepted_true_residual": 6.611692304814012e-16, "attempt_count": 6, "solve_s": 17.268810499997926, "total_s": 18.52891224999621, "peak_host_memory_bytes": 943669248, "diagnostic_status": "unavailable_on_zero_padded_truncated_state"}
+  ],
+  "comparisons": [
+    {"name": "speed6_to_speed8_at_pitch44", "particle_flux_scaled_movement": 0.027533828160395516, "heat_flux_scaled_movement": 0.02871131790576147, "radial_current_absolute_change_A_m2": 0.002015449921638608},
+    {"name": "pitch44_to_pitch52_at_speed8", "particle_flux_scaled_movement": 0.07224347038733533, "heat_flux_scaled_movement": 0.1143405768133666, "radial_current_absolute_change_A_m2": 0.025209990473407634}
+  ],
+  "outcome": {
+    "status": "diagnostic_complete",
+    "phase_space_converged": false,
+    "gates": {"speed_particle_below_2_percent": false, "speed_heat_below_2_percent": false, "pitch_particle_below_2_percent": false, "pitch_heat_below_2_percent": false, "all_true_residuals_below_1e-12": true, "all_peak_host_memory_below_2_gib": true},
+    "interpretation": "Speed convergence narrowly fails at pitch 44, and increasing the pitch ceiling at speed 8 fails more strongly. The narrow electric-field window observes no bracket and is not a root campaign. The production truncated route cannot expose a true modal tail from its zero-padded returned state.",
+    "next_action": "Add an opt-in bounded reverse-tail reconstruction or another independently certified conditioning diagnostic before escalating the W7-X resolution again."
+  },
+  "exclusions": ["not_phase_space_convergence_validation", "not_full_profile_root_validation", "not_cross_allocation_performance_comparison", "not_independent_cross_code_ambipolar_validation", "not_full_fokker_planck_or_phi1_validation"]
+}
