@@ -417,6 +417,42 @@ Promotion gates:
 - and summarize solver-path provenance in release artifacts before using a new
   branch as a documented default.
 
+Pinned independent monoenergetic device-family rung
+---------------------------------------------------
+
+The first independent device-family artifact is
+``validation/independent_cross_code_v1.json``. It compares one axisymmetric
+DSHAPE tokamak surface, NCSX, and W7-X EIM on the equations all participating
+codes actually share: zero-field monoenergetic drift kinetics, Lorentz
+pitch-angle scattering, and DKES trajectories. DSHAPE and NCSX are live YANCC
+comparisons; W7-X EIM uses the pinned MONKES database row at its authored
+``27 x 55 x 140`` resolution.
+
+The comparison does not equate similarly named inputs. It maps physical
+``nu/v`` through DKX's applied ``nuDHat(x0)`` factor, converts the dimensional
+DKES coefficients to the Beidler ``D*`` convention with the *local* surface
+radius, corrects the recorded reference-field convention, and applies the
+explicit handedness map to ``D31*`` and ``D13*``. The checked audit recomputes
+all of this from raw coefficients rather than trusting stored normalized
+values::
+
+   python tools/paper_benchmarks/audit_independent_cross_code_validation.py \
+     --yancc-root ../YANCC
+
+All four coefficients pass the 6% bounded gate: the maximum relative
+differences are 5.51% for DSHAPE, 1.66% for NCSX, and 5.52% for W7-X EIM;
+``D33*`` differs by at most 0.065%. The artifact pins external commits,
+input and compact-output checksums, reference residuals, resolution, hardware,
+wall time, and process peak RSS. The threshold covers the measured
+cross-discretization spread, is fixed by the accepted artifact, and may not be
+relaxed to admit a future regression.
+
+This is deliberately not full-Fokker--Planck, finite-``Er``, ambipolar-profile,
+experimental, or cross-code performance validation. Exact SFINCS Fortran-v3
+discrete compatibility fixtures remain enforced separately; the checked
+full-kinetic DSHAPE SFINCS table is recorded as context only because substituting
+it here would compare different equations.
+
 Closed post-release research lanes
 ----------------------------------
 
