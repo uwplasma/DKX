@@ -331,6 +331,10 @@ def test_native_ambipolar_real_solver_brackets_and_roundtrips(tmp_path, capsys) 
     result = dkx.run(_ambipolar_case(), out=tmp_path / "real-ambipolar.nc")
 
     assert "[dkx.solve]" not in capsys.readouterr().out
+    assert result.metadata["legendre_tail_diagnostic"] == (
+        "unavailable_on_zero_padded_truncated_state"
+    )
+    assert "evaluation_legendre_tail_relative_l2" not in result.arrays
     np.testing.assert_array_equal(result.ambipolar_root_count, [1, 1])
     np.testing.assert_array_equal(result.ambipolar_status, ["bracketed_root"] * 2)
     np.testing.assert_array_equal(result.ambipolar_refinement_status, ["resolved"] * 2)

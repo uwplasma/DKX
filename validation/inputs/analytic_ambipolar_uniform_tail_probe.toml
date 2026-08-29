@@ -1,0 +1,61 @@
+schema = 1
+name = "analytic_ambipolar_profile"
+
+[run]
+workflow = "ambipolar_profile"
+precision = "float64"
+device = "auto"
+progress = true
+
+[geometry]
+format = "analytic"
+file = "tokamak"
+surfaces = [0.09, 0.16]
+
+[[species]]
+name = "deuterium"
+charge = 1
+mass_amu = 2.014
+density_m3 = [8.0e19, 7.0e19]
+temperature_keV = [1.0, 0.8]
+
+[physics]
+model = "full_local"
+collisions = "pitch_angle_scattering"
+magnetic_drifts = "dkes"
+phi1 = "off"
+
+[electric_field]
+mode = "ambipolar"
+search_kV_m = [-5.0, 5.0]
+find_all_roots = true
+continue_branches = true
+search_points = 5
+root_tolerance_kV_m = 0.05
+max_root_iterations = 8
+
+[resolution]
+theta = 9
+zeta = 1
+pitch = 8
+speed = 4
+pitch_speed_ramp = 0
+
+[solver]
+method = "auto"
+relative_tolerance = 1.0e-8
+memory_fraction = 0.75
+reuse = "auto"
+
+[parallel]
+strategy = "auto"
+
+[convergence]
+enabled = true
+observables = ["particle_flux", "heat_flux", "electric_field"]
+relative_tolerance = 0.02
+max_refinements = 1
+
+[output]
+file = "outputs/analytic_ambipolar.nc"
+plots = true
