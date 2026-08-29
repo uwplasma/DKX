@@ -114,6 +114,43 @@ def test_native_grid_honors_explicit_pitch_speed_ramp() -> None:
     )
 
 
+def test_native_grid_honors_explicit_pitch_modes_by_speed() -> None:
+    from dkx.execution import _make_grids
+
+    base = _case()
+    explicit = replace(
+        base,
+        resolution=replace(
+            base.resolution,
+            pitch_modes_by_speed=(4, 5, 7, base.resolution.pitch),
+        ),
+    )
+
+    grids = _make_grids(explicit, n_periods=1)
+
+    np.testing.assert_array_equal(grids.n_xi_for_x, [4, 5, 7, 8])
+
+
+def test_native_result_records_explicit_pitch_allocation(tmp_path) -> None:
+    base = _case()
+    case = replace(
+        base,
+        resolution=replace(
+            base.resolution,
+            pitch_modes_by_speed=(4, 5, 7, base.resolution.pitch),
+        ),
+    )
+
+    result = dkx.run(case, out=tmp_path / "explicit-pitch.nc")
+
+    assert result.metadata["phase_space"] == {
+        "pitch_speed_ramp": None,
+        "pitch_allocation_source": "explicit",
+        "active_pitch_modes_by_speed": (4, 5, 7, 8),
+        "active_pitch_mode_sum": 24,
+    }
+
+
 def test_native_case_solves_without_namelist_conversion(monkeypatch, tmp_path) -> None:
     def forbidden(*_args, **_kwargs):
         raise AssertionError("native execution serialized or parsed a SFINCS namelist")
@@ -125,6 +162,7 @@ def test_native_case_solves_without_namelist_conversion(monkeypatch, tmp_path) -
 
     assert result.metadata["phase_space"] == {
         "pitch_speed_ramp": 1,
+        "pitch_allocation_source": "pitch_speed_ramp",
         "active_pitch_modes_by_speed": (4, 4, 5, 8),
         "active_pitch_mode_sum": 21,
     }

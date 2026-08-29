@@ -80,7 +80,9 @@ def test_json_and_reordered_mapping_have_same_semantic_id(tmp_path: Path) -> Non
     assert a.source_path != b.source_path
 
 
-def test_default_pitch_speed_ramp_preserves_case_id_and_nondefault_is_semantic() -> None:
+def test_default_pitch_speed_ramp_preserves_case_id_and_nondefault_is_semantic() -> (
+    None
+):
     implicit = _mapping()
     explicit = _mapping()
     explicit["resolution"]["pitch_speed_ramp"] = 1
@@ -96,6 +98,20 @@ def test_default_pitch_speed_ramp_preserves_case_id_and_nondefault_is_semantic()
     assert "pitch_speed_ramp" not in default_case.to_dict()["resolution"]
     assert uniform_case.case_id != default_case.case_id
     assert uniform_case.to_dict()["resolution"]["pitch_speed_ramp"] == 0
+
+
+def test_explicit_pitch_modes_are_immutable_semantic_content() -> None:
+    default_case = Case.from_mapping(_mapping())
+    explicit = _mapping()
+    explicit["resolution"]["pitch"] = 8
+    explicit["resolution"]["speed"] = 4
+    explicit["resolution"]["pitch_modes_by_speed"] = [4, 5, 7, 8]
+
+    case = Case.from_mapping(explicit)
+
+    assert case.resolution.pitch_modes_by_speed == (4, 5, 7, 8)
+    assert case.to_dict()["resolution"]["pitch_modes_by_speed"] == [4, 5, 7, 8]
+    assert case.case_id != default_case.case_id
 
 
 def test_direct_construction_freezes_nested_sequences_and_normalizes_paths() -> None:
@@ -156,6 +172,37 @@ def test_direct_construction_freezes_nested_sequences_and_normalizes_paths() -> 
             lambda data: data["resolution"].update(pitch_speed_ramp=3),
             "resolution.pitch_speed_ramp",
             "one of",
+        ),
+        (
+            lambda data: data["resolution"].update(
+                pitch=8, speed=4, pitch_modes_by_speed=[4, 6, 8]
+            ),
+            "resolution.pitch_modes_by_speed",
+            "one active pitch-mode count",
+        ),
+        (
+            lambda data: data["resolution"].update(
+                pitch=8, speed=4, pitch_modes_by_speed=[4, 7, 6, 8]
+            ),
+            "resolution.pitch_modes_by_speed",
+            "Increase or retain",
+        ),
+        (
+            lambda data: data["resolution"].update(
+                pitch=8, speed=4, pitch_modes_by_speed=[4, 5, 6, 7]
+            ),
+            "resolution.pitch_modes_by_speed[-1]",
+            "Retain the declared maximum",
+        ),
+        (
+            lambda data: data["resolution"].update(
+                pitch=8,
+                speed=4,
+                pitch_speed_ramp=0,
+                pitch_modes_by_speed=[4, 5, 7, 8],
+            ),
+            "resolution.pitch_speed_ramp",
+            "Remove pitch_speed_ramp",
         ),
         (
             lambda data: data["run"].update(workflo="profile"),
