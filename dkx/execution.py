@@ -121,6 +121,16 @@ def _validate_native_slice(case: Case) -> None:
             "false for a prescribed-field profile",
             "Use convergence refinement with workflow = 'ambipolar_profile'; phase-space rung expansion remains a separate dkx.converge workflow.",
         )
+    if (
+        case.convergence.retain_legendre_tail
+        and case.run.workflow != "ambipolar_profile"
+    ):
+        _unsupported(
+            "convergence.retain_legendre_tail",
+            True,
+            "false for a prescribed-field profile",
+            "Selected-tail retention is currently available with workflow = 'ambipolar_profile'.",
+        )
     if case.convergence.enabled:
         supported_observables = {
             "electric_field",
@@ -517,7 +527,16 @@ def _ambipolar_result_arrays(
         for evaluation in result.evaluations
         if evaluation.legendre_tail_relative_l2 is not None
     ]
+    tail_bound_diagnostics = [
+        evaluation
+        for result in surface_results
+        for evaluation in result.evaluations
+        if evaluation.legendre_tail_relative_l2_upper_bound is not None
+    ]
     scan_legendre_tail = np.full((n_surface, n_evaluation, n_speed, n_species), np.nan)
+    scan_legendre_tail_upper_bound = np.full(
+        (n_surface, n_evaluation, n_speed, n_species), np.nan
+    )
     scan_parallel = np.full((n_surface, n_evaluation), np.nan)
     root_field = np.full((n_surface, n_root), np.nan)
     root_current = np.full((n_surface, n_root), np.nan)
@@ -609,6 +628,10 @@ def _ambipolar_result_arrays(
             if evaluation.legendre_tail_relative_l2 is not None:
                 scan_legendre_tail[surface_index, evaluation_index] = (
                     evaluation.legendre_tail_relative_l2
+                )
+            if evaluation.legendre_tail_relative_l2_upper_bound is not None:
+                scan_legendre_tail_upper_bound[surface_index, evaluation_index] = (
+                    evaluation.legendre_tail_relative_l2_upper_bound
                 )
             scan_parallel[surface_index, evaluation_index] = (
                 evaluation.parallel_current_a_t_m2
@@ -858,6 +881,16 @@ def _ambipolar_result_arrays(
                 "speed",
                 "species",
             )
+        if tail_bound_diagnostics:
+            arrays["evaluation_legendre_tail_relative_l2_upper_bound"] = (
+                scan_legendre_tail_upper_bound
+            )
+            dimensions["evaluation_legendre_tail_relative_l2_upper_bound"] = (
+                "surface",
+                "evaluation",
+                "speed",
+                "species",
+            )
     return arrays, dimensions
 
 
@@ -955,6 +988,7 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
                 convergence_observables=case.convergence.observables,
                 convergence_relative_tolerance=case.convergence.relative_tolerance,
                 max_refinements=case.convergence.max_refinements,
+                retain_legendre_tail=case.convergence.retain_legendre_tail,
             )
             ambipolar_surfaces.append(surface_result)
             selected = surface_result.selected
@@ -1117,6 +1151,11 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
         for surface_result in ambipolar_surfaces
         for evaluation in surface_result.evaluations
     )
+    legendre_tail_upper_bound_retained = any(
+        evaluation.legendre_tail_relative_l2_upper_bound is not None
+        for surface_result in ambipolar_surfaces
+        for evaluation in surface_result.evaluations
+    )
     metadata = {
         "canonical_case": case.to_dict(),
         "converged": True,
@@ -1180,6 +1219,8 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
         "legendre_tail_diagnostic": (
             "retained_full_state_relative_l2"
             if legendre_tail_retained
+            else "retained_selected_tail_relative_l2_upper_bound"
+            if legendre_tail_upper_bound_retained
             else "unavailable_on_zero_padded_truncated_state"
             if ambipolar_surfaces
             else "not_requested"

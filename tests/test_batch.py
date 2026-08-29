@@ -352,6 +352,45 @@ def test_batch_memory_budget_controls_route_and_preserves_moments(tmp_path: Path
     )
 
 
+def test_truncated_batch_retains_selected_tail_upper_bound(tmp_path: Path) -> None:
+    import jax
+
+    jax.config.update("jax_enable_x64", True)
+    import jax.numpy as jnp
+
+    from dkx import batch as batch_mod
+    from dkx import er as er_mod
+    from dkx.moments import legendre_tail_relative_l2_batch
+    from dkx.writer import operator_containers
+
+    prob = er_mod.prepare(_write(tmp_path, _pas_deck()), er_bracket=(-5.0, 5.0))
+    er_values = jnp.asarray([-0.5, 0.5], dtype=jnp.float64)
+    full = batch_mod.batched_er_scan(prob, er_values, memory_budget_gb=64.0)
+    omitted = batch_mod.batched_er_scan(prob, er_values, memory_budget_gb=1e-6)
+    retained = batch_mod.batched_er_scan(
+        prob,
+        er_values,
+        memory_budget_gb=1e-6,
+        retain_legendre_tail=True,
+    )
+
+    assert omitted.legendre_tail_relative_l2_upper_bound is None
+    bound = np.asarray(retained.legendre_tail_relative_l2_upper_bound)
+    exact = np.asarray(
+        legendre_tail_relative_l2_batch(
+            *operator_containers(prob.operator)[:3], full.states
+        )
+    )
+    assert bound.shape == exact.shape == (2, prob.operator.n_x, prob.operator.n_species)
+    assert np.all(np.isfinite(bound))
+    assert np.all(bound + 1e-13 >= exact)
+    assert batch_mod.solve_footprint_bytes(
+        prob.operator,
+        memory_budget_gb=1e-6,
+        retain_legendre_tail=True,
+    ) > batch_mod.solve_footprint_bytes(prob.operator, memory_budget_gb=1e-6)
+
+
 def test_solve_footprint_models_the_truncated_route(tmp_path: Path) -> None:
     """A production-shaped op is charged the truncated working set, not the bands.
 

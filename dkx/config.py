@@ -136,6 +136,7 @@ class ConvergenceConfig:
     observables: tuple[str, ...] = ()
     relative_tolerance: float = 0.02
     max_refinements: int = 3
+    retain_legendre_tail: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "observables", tuple(self.observables))
@@ -251,6 +252,10 @@ class Case:
             data["resolution"].pop("pitch_speed_ramp")
         if data["resolution"]["pitch_modes_by_speed"] is None:
             data["resolution"].pop("pitch_modes_by_speed")
+        # Tail reconstruction is opt-in. Omitting the false default preserves
+        # every existing schema-v1 case ID.
+        if not data["convergence"]["retain_legendre_tail"]:
+            data["convergence"].pop("retain_legendre_tail")
         if data["scan"] is not None:
             data["scan"]["axis"] = data["scan"].pop("axes")
         return _paths_to_strings(data)
@@ -513,6 +518,7 @@ def case_json_schema() -> dict[str, Any]:
                     "maximum": 1,
                 },
                 max_refinements={"type": "integer", "minimum": 0},
+                retain_legendre_tail={"type": "boolean"},
             ),
             "output": _object_schema(
                 [], file={"type": "string", "minLength": 1}, plots={"type": "boolean"}
@@ -610,6 +616,8 @@ enabled = true
 observables = ["particle_flux", "heat_flux", "bootstrap_current", "electric_field"]
 relative_tolerance = 0.02
 max_refinements = 3
+# Opt-in exact selected-tail sweep and rigorous relative-L2 upper bound.
+# retain_legendre_tail = false
 
 [output]
 file = "outputs/w7x_ambipolar.nc"
@@ -773,13 +781,24 @@ def _parse_parallel(data: Mapping[str, Any]) -> ParallelConfig:
 def _parse_convergence(data: Mapping[str, Any]) -> ConvergenceConfig:
     path = "convergence"
     _reject_unknown(
-        data, path, {"enabled", "observables", "relative_tolerance", "max_refinements"}
+        data,
+        path,
+        {
+            "enabled",
+            "observables",
+            "relative_tolerance",
+            "max_refinements",
+            "retain_legendre_tail",
+        },
     )
     return ConvergenceConfig(
         enabled=_boolean(data, "enabled", path, default=False),
         observables=_string_tuple(data, "observables", path, default=()),
         relative_tolerance=_number(data, "relative_tolerance", path, default=0.02),
         max_refinements=_integer(data, "max_refinements", path, default=3),
+        retain_legendre_tail=_boolean(
+            data, "retain_legendre_tail", path, default=False
+        ),
     )
 
 
@@ -1049,6 +1068,10 @@ def _validate_case(case: Case) -> None:
             "Remove duplicate axes.",
         )
     _is_boolean("convergence.enabled", case.convergence.enabled)
+    _is_boolean(
+        "convergence.retain_legendre_tail",
+        case.convergence.retain_legendre_tail,
+    )
     if len(set(case.convergence.observables)) != len(case.convergence.observables):
         _fail(
             "convergence.observables",

@@ -328,13 +328,34 @@ def test_native_ambipolar_result_preserves_scan_roots_and_selection(
 
 
 def test_native_ambipolar_real_solver_brackets_and_roundtrips(tmp_path, capsys) -> None:
-    result = dkx.run(_ambipolar_case(), out=tmp_path / "real-ambipolar.nc")
+    case = _ambipolar_case()
+    case = replace(
+        case,
+        convergence=replace(case.convergence, retain_legendre_tail=True),
+    )
+    result = dkx.run(case, out=tmp_path / "real-ambipolar.nc")
 
     assert "[dkx.solve]" not in capsys.readouterr().out
     assert result.metadata["legendre_tail_diagnostic"] == (
-        "unavailable_on_zero_padded_truncated_state"
+        "retained_selected_tail_relative_l2_upper_bound"
     )
     assert "evaluation_legendre_tail_relative_l2" not in result.arrays
+    assert "evaluation_legendre_tail_relative_l2_upper_bound" in result.arrays
+    assert "selected_tail_diagnostic_replay" in set(
+        result.evaluation_solver_attempt_reason.reshape(-1)
+    )
+    retained_tail = result.evaluation_legendre_tail_relative_l2_upper_bound
+    assert np.count_nonzero(np.isfinite(retained_tail)) == 2 * 4
+    for surface_index, selected_field in enumerate(result.electric_field_kV_m):
+        evaluation_index = int(
+            np.nanargmin(
+                np.abs(
+                    result.evaluation_electric_field_kV_m[surface_index]
+                    - selected_field
+                )
+            )
+        )
+        assert np.all(np.isfinite(retained_tail[surface_index, evaluation_index]))
     np.testing.assert_array_equal(result.ambipolar_root_count, [1, 1])
     np.testing.assert_array_equal(result.ambipolar_status, ["bracketed_root"] * 2)
     np.testing.assert_array_equal(result.ambipolar_refinement_status, ["resolved"] * 2)
@@ -359,6 +380,11 @@ def test_native_ambipolar_real_solver_brackets_and_roundtrips(tmp_path, capsys) 
     assert np.all(root_residual < 0.02 * scan_scale)
     loaded = dkx.Result.load(tmp_path / "real-ambipolar.nc")
     np.testing.assert_allclose(loaded.electric_field_kV_m, result.electric_field_kV_m)
+    np.testing.assert_allclose(
+        loaded.evaluation_legendre_tail_relative_l2_upper_bound,
+        retained_tail,
+        equal_nan=True,
+    )
 
 
 def test_result_arrays_and_contract_are_immutable() -> None:
@@ -574,6 +600,12 @@ def test_native_convergence_controls_are_ambipolar_and_observable_specific() -> 
     )
     with pytest.raises(dkx.CaseValidationError, match="ambipolar_profile"):
         dkx.run(prescribed)
+    prescribed_tail = replace(
+        _case(),
+        convergence=replace(_case().convergence, retain_legendre_tail=True),
+    )
+    with pytest.raises(dkx.CaseValidationError, match="retain_legendre_tail"):
+        dkx.run(prescribed_tail)
 
     ambipolar = _ambipolar_case()
     ambipolar = replace(

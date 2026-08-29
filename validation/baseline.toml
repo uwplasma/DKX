@@ -45,7 +45,7 @@ native_result_schema = "absent"
 
 [dependencies]
 python_floor = "3.10"
-direct_runtime = ["jax", "numpy>=2.1", "scipy", "h5py", "netCDF4", "matplotlib", "solvax>=0.13.0"]
+direct_runtime = ["jax", "numpy>=2.1", "scipy", "h5py", "netCDF4", "matplotlib", "solvax>=0.19.0"]
 documentation = ["sphinx", "sphinx-rtd-theme"]
 local_solvax_commit = "d42b7285a388c04fbfbc33cdc17d00bcc51d6a51"
 environment_python = "3.11.14"

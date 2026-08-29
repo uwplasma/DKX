@@ -155,6 +155,7 @@ def test_native_ambipolar_speed_diagnostics_have_named_axes(monkeypatch):
             replace(
                 evaluation,
                 legendre_tail_relative_l2=np.full((2, 2), 0.125),
+                legendre_tail_relative_l2_upper_bound=np.full((2, 2), 0.25),
             )
             for evaluation in result.evaluations
         ),
@@ -183,6 +184,12 @@ def test_native_ambipolar_speed_diagnostics_have_named_axes(monkeypatch):
         "speed",
         "species",
     )
+    assert dimensions["evaluation_legendre_tail_relative_l2_upper_bound"] == (
+        "surface",
+        "evaluation",
+        "speed",
+        "species",
+    )
     np.testing.assert_allclose(arrays["speed_v_th"], [0.5, 1.5])
     np.testing.assert_allclose(
         np.sum(arrays["evaluation_particle_flux_m2_s_vs_speed"], axis=2),
@@ -193,6 +200,9 @@ def test_native_ambipolar_speed_diagnostics_have_named_axes(monkeypatch):
         arrays["evaluation_heat_flux_W_m2"],
     )
     np.testing.assert_allclose(arrays["evaluation_legendre_tail_relative_l2"], 0.125)
+    np.testing.assert_allclose(
+        arrays["evaluation_legendre_tail_relative_l2_upper_bound"], 0.25
+    )
 
 
 def test_radial_branch_identity_crossing_loss_merger_and_selection_are_retained(

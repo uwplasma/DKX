@@ -42,6 +42,7 @@ from dkx.solve import (
     tier1_peak_memory_bytes,
     tier1_truncated_peak_memory_bytes,
     tier1_truncated_subsystem_width,
+    tier1_truncated_tail_blocks,
 )
 
 REF = Path(__file__).parent / "ref"
@@ -239,6 +240,34 @@ def test_truncated_matches_full_lowest_blocks_and_moments(name: str, which) -> N
         a, b = m_full[key], m_trunc[key]
         rel = np.abs(a - b) / np.maximum(np.abs(a), 1e-300)
         assert rel.max() < 1e-10, f"{key}: {rel.max():.3e}"
+
+
+def test_truncated_selected_tail_matches_full_constrained_solution() -> None:
+    op = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
+    assert op.constraint_scheme == 2
+    rhs = op.rhs()
+    full = solve(op, rhs, method="block_tridiagonal")
+    trunc = solve(op, rhs, method="block_tridiagonal_truncated")
+    selected = np.asarray(tier1_truncated_tail_blocks(op, rhs, trunc.x))[..., 0]
+    expected = np.asarray(full.x)[: op.f_size].reshape(op.f_shape)
+    expected = expected[:, :, -2:].reshape(selected.shape)
+    np.testing.assert_allclose(selected, expected, rtol=1e-11, atol=1e-14)
+
+
+def test_ramped_truncated_selected_tail_matches_independent_full_state() -> None:
+    op = _ramped_pas_op()
+    rhs = op.rhs()
+    trunc = solve(op, rhs, method="block_tridiagonal_truncated")
+    selected = np.asarray(tier1_truncated_tail_blocks(op, rhs, trunc.x))[..., 0]
+    reference = solve(op, rhs, method="gmres", tol=1e-12)
+    f_ref = np.asarray(reference.x)[: op.f_size].reshape(op.f_shape)
+    for ix, active in enumerate(np.asarray(op.n_xi_for_x)):
+        np.testing.assert_allclose(
+            selected[:, ix],
+            f_ref[:, ix, int(active) - 2 : int(active)].reshape(selected[:, ix].shape),
+            rtol=2e-10,
+            atol=1e-14,
+        )
 
 
 def test_gradient_through_truncated_route_matches_finite_differences() -> None:
