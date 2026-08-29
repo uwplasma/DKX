@@ -267,6 +267,34 @@ reach ``55.72%`` and ``45.25%``. All accepted true residuals remain below
 rejects a uniform pitch-34-or-higher escalation, and leaves speed-node-local,
 zeta, speed, independent-code, experiment, full-FP, and Phi1 gates open.
 
+Fixed-work pitch-by-speed diagnosis
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``validation/ambipolar_pitch_speed_groups_v1.json`` compares the supported
+uniform-22, linear-ramp-36, and quadratic-ramp-44 rules on two common W7-X
+surfaces. Their active pitch counts by the six speed nodes are
+``[22,22,22,22,22,22]``, ``[4,9,17,27,36,36]``, and
+``[4,5,11,25,44,44]``: 132, 129, and 133 modes. Audit the checksums,
+extraction, comparisons, and gates with:
+
+.. code-block:: console
+
+   python tools/paper_benchmarks/audit_ambipolar_pitch_speed_groups.py
+
+Root counts change ``[3,1] -> [1,3] -> [1,1]``. Uniform-to-linear keeps the
+intermediate-speed group fixed at 44 modes while selected electric field and
+heat flux move by up to ``12.20703125 kV/m`` and ``68.35%``. The next
+linear-to-quadratic redistribution also changes topology and moves those
+quantities by ``2.177734375 kV/m`` and ``17.93%``. All accepted residuals stay
+below ``7.04e-14`` and all measured footprints below 4.14 GB. The quadratic
+cold/warm scientific arrays are exact except for their timing field; the warm
+run is slower and supports no cache-speedup claim.
+
+The diagnostic is complete but phase-space convergence is false. The next
+bounded pair must hold high-speed work fixed while separating low from
+intermediate sensitivity. Zeta, speed, independent-code, experiment, full-FP,
+Phi1, and performance gates remain open.
+
 Publication validation dashboard
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
