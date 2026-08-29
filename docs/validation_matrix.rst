@@ -295,6 +295,33 @@ bounded pair must hold high-speed work fixed while separating low from
 intermediate sensitivity. Zeta, speed, independent-code, experiment, full-FP,
 Phi1, and performance gates remain open.
 
+Explicit fixed-high-work pitch diagnosis
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``validation/ambipolar_pitch_explicit_groups_v1.json`` compares three exact
+six-speed-node allocations with the same 129 active modes and the same 72
+high-speed modes: supported linear-36 ``[4,9,17,27,36,36]``, low-heavy
+``[12,12,16,17,36,36]``, and intermediate-heavy
+``[4,4,24,25,36,36]``. Audit the compact record and, when staged externally,
+all raw results and the pinned geometry with:
+
+.. code-block:: console
+
+   python tools/paper_benchmarks/audit_ambipolar_pitch_explicit_groups.py
+
+All three allocations preserve root counts ``[1,3]`` on the bounded surface
+pair. Pairwise selected electric-field, particle-flux, and heat-flux movements
+nevertheless reach ``1.064453125 kV/m``, ``9.89%``, and ``9.08%``. Every new
+evaluation uses the bounded structured route, accepted residuals stay below
+``3.05e-14``, and measured footprints stay below 4.01 GB. The retained
+intermediate-heavy replay is scientifically exact except for timing, but no
+warm-speedup claim is supported.
+
+The outcome is ``refinement_exhausted``, not phase-space convergence. The next
+bounded diagnostic must raise low and intermediate work together while holding
+the high-speed group fixed. Zeta, speed, independent-code, experiment,
+full-FP, Phi1, and performance gates remain open.
+
 Publication validation dashboard
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

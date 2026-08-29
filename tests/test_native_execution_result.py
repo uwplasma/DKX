@@ -151,6 +151,28 @@ def test_native_result_records_explicit_pitch_allocation(tmp_path) -> None:
     }
 
 
+def test_explicit_default_pitch_allocation_preserves_science(tmp_path) -> None:
+    base = _case()
+    explicit = replace(
+        base,
+        name="native_tokamak_profile_explicit_default_pitch",
+        resolution=replace(
+            base.resolution,
+            pitch_modes_by_speed=(4, 4, 5, base.resolution.pitch),
+        ),
+    )
+
+    default_result = dkx.run(base, out=tmp_path / "default-pitch.nc")
+    explicit_result = dkx.run(explicit, out=tmp_path / "explicit-default-pitch.nc")
+
+    assert default_result.arrays.keys() == explicit_result.arrays.keys()
+    for name in default_result.arrays:
+        if name != "solve_time_s":
+            np.testing.assert_array_equal(
+                explicit_result.arrays[name], default_result.arrays[name]
+            )
+
+
 def test_native_case_solves_without_namelist_conversion(monkeypatch, tmp_path) -> None:
     def forbidden(*_args, **_kwargs):
         raise AssertionError("native execution serialized or parsed a SFINCS namelist")
