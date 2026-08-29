@@ -100,6 +100,22 @@ def test_default_pitch_speed_ramp_preserves_case_id_and_nondefault_is_semantic()
     assert uniform_case.to_dict()["resolution"]["pitch_speed_ramp"] == 0
 
 
+def test_default_tail_retention_preserves_case_id_and_opt_in_is_semantic() -> None:
+    implicit = Case.from_mapping(_mapping())
+    explicit_false_mapping = _mapping()
+    explicit_false_mapping["convergence"] = {"retain_legendre_tail": False}
+    enabled_mapping = _mapping()
+    enabled_mapping["convergence"] = {"retain_legendre_tail": True}
+
+    explicit_false = Case.from_mapping(explicit_false_mapping)
+    enabled = Case.from_mapping(enabled_mapping)
+
+    assert implicit.case_id == explicit_false.case_id
+    assert "retain_legendre_tail" not in implicit.to_dict()["convergence"]
+    assert enabled.case_id != implicit.case_id
+    assert enabled.to_dict()["convergence"]["retain_legendre_tail"] is True
+
+
 def test_explicit_pitch_modes_are_immutable_semantic_content() -> None:
     default_case = Case.from_mapping(_mapping())
     explicit = _mapping()

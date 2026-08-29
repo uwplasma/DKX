@@ -53,7 +53,12 @@ import jax
 import jax.numpy as jnp
 
 from .drift_kinetic import KineticOperator
-from .solve import _auto_route_structural, auto_solve_peak_memory_bytes, solve
+from .solve import (
+    _auto_route_structural,
+    auto_solve_peak_memory_bytes,
+    solve,
+    tier1_truncated_tail_blocks,
+)
 
 # ---------------------------------------------------------------------------
 # Leaf classification and memory-budget defaults
@@ -139,6 +144,9 @@ class BatchedSolveResult:
             Keeping this diagnostic makes batched production workflows able to
             enforce the same convergence contract as a sequence of scalar
             :func:`dkx.solve.solve` calls.
+        legendre_tail_relative_l2_upper_bound: selected-tail upper bound with
+            shape ``(batch, speed, species)`` when explicitly retained on the
+            truncated structured route; ``None`` otherwise.
     """
 
     states: jnp.ndarray
@@ -149,14 +157,21 @@ class BatchedSolveResult:
     executed_method: str
     radial_current: jnp.ndarray | None = None
     residual_norms: jnp.ndarray | None = None
+    legendre_tail_relative_l2_upper_bound: jnp.ndarray | None = None
 
 
-# The state, moments, radial current, and residual norms are traced arrays. The
-# chunking metadata and method string are static aux so the whole result is a
-# valid ``jax.jit`` return value.
+# The state, moments, radial current, residual norms, and optional tail bound
+# are traced arrays. The chunking metadata and method string are static aux so
+# the whole result is a valid ``jax.jit`` return value.
 jax.tree_util.register_dataclass(
     BatchedSolveResult,
-    data_fields=["states", "moments", "radial_current", "residual_norms"],
+    data_fields=[
+        "states",
+        "moments",
+        "radial_current",
+        "residual_norms",
+        "legendre_tail_relative_l2_upper_bound",
+    ],
     meta_fields=["chunk_size", "n_chunks", "method", "executed_method"],
 )
 
@@ -167,7 +182,10 @@ jax.tree_util.register_dataclass(
 
 
 def solve_footprint_bytes(
-    op: KineticOperator, *, memory_budget_gb: float | None = None
+    op: KineticOperator,
+    *,
+    memory_budget_gb: float | None = None,
+    retain_legendre_tail: bool = False,
 ) -> float:
     """Estimated peak bytes of one ``method="auto"`` solve of ``op``.
 
@@ -188,7 +206,15 @@ def solve_footprint_bytes(
         auto_solve_peak_memory_bytes(op, budget_gb=memory_budget_gb)
     )
     state_bytes = float(op.total_size) * 8.0
-    return route_bytes + state_bytes + _RUNTIME_OVERHEAD_BYTES
+    tail_bytes = 0.0
+    if retain_legendre_tail and _auto_route_structural(
+        op, budget_gb=memory_budget_gb
+    ) == "block_tridiagonal_truncated":
+        m = op.n_theta * op.n_zeta
+        # Conservative allowance for one serial subsystem's Schur/transfer-map
+        # sweep, plus selected blocks for every (species, speed) chain.
+        tail_bytes = float(4 * 5 * m * m + op.n_species * op.n_x * 2 * m) * 8.0
+    return route_bytes + state_bytes + tail_bytes + _RUNTIME_OVERHEAD_BYTES
 
 
 def _device_memory_bytes() -> float | None:
@@ -234,6 +260,7 @@ def auto_chunk_size(
     *,
     max_batch: int | None = None,
     memory_budget_gb: float | None = None,
+    retain_legendre_tail: bool = False,
 ) -> int:
     """Largest chunk whose peak stays within the memory budget (>= 1, <= batch).
 
@@ -244,7 +271,11 @@ def auto_chunk_size(
     if batch <= 0:
         raise ValueError("batch must be a positive integer.")
     budget = resolve_memory_budget_bytes(memory_budget_gb)
-    per_solve = solve_footprint_bytes(op, memory_budget_gb=memory_budget_gb)
+    per_solve = solve_footprint_bytes(
+        op,
+        memory_budget_gb=memory_budget_gb,
+        retain_legendre_tail=retain_legendre_tail,
+    )
     chunk = int(budget // per_solve)
     chunk = max(1, chunk)
     if max_batch is not None:
@@ -363,6 +394,7 @@ def batched_solve(
     memory_budget_gb: float | None = None,
     ntv_kernel_tz: Any | None = None,
     devices: Sequence[jax.Device] | str | None = None,
+    retain_legendre_tail: bool = False,
 ) -> BatchedSolveResult:
     """Solve a batch of kinetic problems sharing ``op``'s discretization.
 
@@ -414,6 +446,8 @@ def batched_solve(
             explicit sequence of ``jax.Device`` objects to split the batch
             across.  Fewer than two resolved devices, or a batch smaller than
             the device count, degrades to the single-device path unchanged.
+        retain_legendre_tail: on the truncated structured route, perform the
+            opt-in selected-tail sweep and retain its relative-L2 upper bound.
 
     Returns:
         A :class:`BatchedSolveResult` with batched ``states`` and ``moments``.
@@ -423,6 +457,16 @@ def batched_solve(
     _validate_batch_leaves(op, batch_leaves)
     batch = _batch_size_of(batch_leaves)
     leaves_map = dict(batch_leaves)
+    executed_method = (
+        _auto_route_structural(op, budget_gb=memory_budget_gb)
+        if str(solve_method).strip().lower() == "auto"
+        else {"iterative": "gmres"}.get(
+            str(solve_method).strip().lower(), str(solve_method).strip().lower()
+        )
+    )
+    retain_selected_tail = bool(retain_legendre_tail) and (
+        executed_method == "block_tridiagonal_truncated"
+    )
 
     devs = _resolve_devices(devices, batch)
     if devs is not None and any(
@@ -449,13 +493,32 @@ def batched_solve(
             op_i, state, ntv_kernel_tz=ntv_kernel_tz
         )
         residual_norm = jnp.max(jnp.asarray(result.residual_norms, dtype=jnp.float64))
-        return state, dict(moments), residual_norm
+        tail_bound = jnp.zeros((op.n_x, op.n_species), dtype=jnp.float64)
+        if retain_selected_tail:
+            from .moments import (  # noqa: PLC0415
+                legendre_tail_relative_l2_upper_bound_batch,
+            )
+            from .writer import operator_containers  # noqa: PLC0415
+
+            selected = tier1_truncated_tail_blocks(
+                op_i, op_i.rhs(), result.x, keep_highest=2
+            )[..., 0]
+            tail_bound = legendre_tail_relative_l2_upper_bound_batch(
+                *operator_containers(op_i)[:3],
+                state[None, :],
+                selected[None, ...],
+            )[0]
+        return state, dict(moments), residual_norm, tail_bound
 
     if devs is None:
         chunk = auto_chunk_size(
-            op, batch, max_batch=max_batch, memory_budget_gb=memory_budget_gb
+            op,
+            batch,
+            max_batch=max_batch,
+            memory_budget_gb=memory_budget_gb,
+            retain_legendre_tail=retain_selected_tail,
         )
-        states, moments, residual_norms = jax.lax.map(
+        states, moments, residual_norms, tail_bounds = jax.lax.map(
             solve_one, leaves_map, batch_size=chunk
         )
         n_chunks = -(-batch // chunk)
@@ -466,7 +529,11 @@ def batched_solve(
         # its own chunks' intermediates, so the chunk is sized from the budget
         # of a single device and the largest shard.
         chunk = auto_chunk_size(
-            op, shard_max, max_batch=max_batch, memory_budget_gb=memory_budget_gb
+            op,
+            shard_max,
+            max_batch=max_batch,
+            memory_budget_gb=memory_budget_gb,
+            retain_legendre_tail=retain_selected_tail,
         )
         shards = []
         for dev, (lo, hi) in zip(devs, bounds):
@@ -481,20 +548,14 @@ def batched_solve(
                 jax.lax.map(solve_one, shard_leaves, batch_size=min(chunk, hi - lo))
             )
         gathered = jax.device_get(shards)
-        states = jnp.concatenate([s for s, _, _ in gathered], axis=0)
+        states = jnp.concatenate([s for s, _, _, _ in gathered], axis=0)
         moments = {
-            key: jnp.concatenate([m[key] for _, m, _ in gathered], axis=0)
+            key: jnp.concatenate([m[key] for _, m, _, _ in gathered], axis=0)
             for key in gathered[0][1]
         }
-        residual_norms = jnp.concatenate([r for _, _, r in gathered], axis=0)
+        residual_norms = jnp.concatenate([r for _, _, r, _ in gathered], axis=0)
+        tail_bounds = jnp.concatenate([t for _, _, _, t in gathered], axis=0)
         n_chunks = -(-shard_max // chunk)
-    executed_method = (
-        _auto_route_structural(op, budget_gb=memory_budget_gb)
-        if str(solve_method).strip().lower() == "auto"
-        else {"iterative": "gmres"}.get(
-            str(solve_method).strip().lower(), str(solve_method).strip().lower()
-        )
-    )
     return BatchedSolveResult(
         states=states,
         moments=dict(moments),
@@ -503,6 +564,9 @@ def batched_solve(
         method=str(solve_method),
         executed_method=executed_method,
         residual_norms=residual_norms,
+        legendre_tail_relative_l2_upper_bound=(
+            tail_bounds if retain_selected_tail else None
+        ),
     )
 
 
@@ -522,6 +586,7 @@ def batched_er_scan(
     memory_budget_gb: float | None = None,
     ntv_kernel_tz: Any | None = None,
     devices: Sequence[jax.Device] | str | None = None,
+    retain_legendre_tail: bool = False,
 ) -> BatchedSolveResult:
     """Batched radial current / moments over a vector of ``E_r`` on one geometry.
 
@@ -545,6 +610,8 @@ def batched_er_scan(
             evaluation. Production output workflows use this to retain the
             same NTV diagnostics as scalar profile runs.
         devices: multi-device split of the scan (see :func:`batched_solve`).
+        retain_legendre_tail: opt-in selected-tail upper bound on the truncated
+            route.
 
     Returns:
         A :class:`BatchedSolveResult` with ``radial_current`` populated.
@@ -563,6 +630,7 @@ def batched_er_scan(
         memory_budget_gb=memory_budget_gb,
         ntv_kernel_tz=ntv_kernel_tz,
         devices=devices,
+        retain_legendre_tail=retain_legendre_tail,
     )
     z_s = jnp.asarray(problem.z_s, dtype=jnp.float64)
     gamma = jnp.asarray(result.moments["particleFlux_vm_psiHat"])  # (batch, n_species)
@@ -636,6 +704,7 @@ def batched_surface_scan(
     memory_budget_gb: float | None = None,
     ntv_kernel_tz: Any | None = None,
     devices: Sequence[jax.Device] | str | None = None,
+    retain_legendre_tail: bool = False,
 ) -> BatchedSolveResult:
     """Batched solve / moments over a sequence of flux-surface operators.
 
@@ -653,6 +722,8 @@ def batched_surface_scan(
         max_batch, memory_budget_gb: memory-budgeting overrides.
         ntv_kernel_tz: optional NTV kernel forwarded to the moment table.
         devices: multi-device split of the batch (see :func:`batched_solve`).
+        retain_legendre_tail: opt-in selected-tail upper bound on the truncated
+            route.
 
     Returns:
         A :class:`BatchedSolveResult` with batched ``states`` and ``moments``.
@@ -672,6 +743,7 @@ def batched_surface_scan(
         memory_budget_gb=memory_budget_gb,
         ntv_kernel_tz=ntv_kernel_tz,
         devices=devices,
+        retain_legendre_tail=retain_legendre_tail,
     )
 
 

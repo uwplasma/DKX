@@ -60,6 +60,8 @@ __all__ = [
     "transport_matrix_size", "transport_matrix_from_flux_arrays",
     "transport_matrix_from_state_vectors", "transport_moments_table",
     "classical_fluxes", "flux_coordinate_variants",
+    "legendre_tail_relative_l2", "legendre_tail_relative_l2_batch",
+    "legendre_tail_relative_l2_upper_bound_batch",
 ]  # fmt: skip
 
 # ---- Input containers: state-vector layout, grids, geometry, species -------
@@ -368,6 +370,97 @@ def legendre_tail_relative_l2(
     return legendre_tail_relative_l2_batch(
         layout, vgrid, surface, state[None, :], tail_modes=tail_modes
     )[0]
+
+
+def legendre_tail_relative_l2_upper_bound_batch(
+    layout: StateLayout,
+    vgrid: VelocityGrid,
+    surface: FluxSurface,
+    low_state_stack: jnp.ndarray,
+    tail_blocks_stack: jnp.ndarray,
+    *,
+    keep_lowest: int = 3,
+) -> jnp.ndarray:
+    """Bound the full-state Legendre-tail ratio from selected exact blocks.
+
+    ``low_state_stack`` contains exact low modes and zero padding from the
+    truncated structured solver. ``tail_blocks_stack`` contains the exact
+    final active modes reconstructed by its selected-tail sweep, with shape
+    ``(state, species, speed, tail, theta*zeta)``. The denominator uses the
+    union of these known low and tail modes. Since the omitted middle-mode
+    energy is nonnegative, the returned ratio is an upper bound on the same
+    tail-over-full-state ratio computed by :func:`legendre_tail_relative_l2_batch`.
+
+    This remains supporting truncation evidence, not a convergence proof;
+    observable movement under a resolution increase is the admission gate.
+    """
+    keep = int(keep_lowest)
+    if keep < 1 or keep > layout.n_xi:
+        raise ValueError(f"keep_lowest must be in [1,{layout.n_xi}]")
+    states = jnp.asarray(low_state_stack, dtype=jnp.float64)
+    tails = jnp.asarray(tail_blocks_stack, dtype=jnp.float64)
+    expected_tail_prefix = (states.shape[0], layout.n_species, layout.n_x)
+    expected_tz = layout.n_theta * layout.n_zeta
+    if states.ndim != 2 or states.shape[1] != layout.total_size:
+        raise ValueError(
+            f"low_state_stack must have shape (N,{layout.total_size}), got {states.shape}"
+        )
+    if (
+        tails.ndim != 5
+        or tails.shape[:3] != expected_tail_prefix
+        or tails.shape[4] != expected_tz
+    ):
+        raise ValueError(
+            "tail_blocks_stack must have shape "
+            f"(N,{layout.n_species},{layout.n_x},K,{expected_tz}), got {tails.shape}"
+        )
+    tail_modes = int(tails.shape[3])
+    if tail_modes < 1:
+        raise ValueError("tail_blocks_stack must retain at least one tail mode")
+    active_count = jnp.asarray(vgrid.n_xi_for_x, dtype=jnp.int32)
+
+    f = states[:, : layout.f_size].reshape((states.shape[0], *layout.f_shape))
+    low = f[:, :, :, :keep].reshape(
+        states.shape[0], layout.n_species, layout.n_x, keep, expected_tz
+    )
+    scale = jnp.maximum(
+        jnp.max(jnp.abs(low), axis=(3, 4), keepdims=True),
+        jnp.max(jnp.abs(tails), axis=(3, 4), keepdims=True),
+    )
+    low_scaled = jnp.where(scale > 0.0, low / scale, 0.0)
+    tail_scaled = jnp.where(scale > 0.0, tails / scale, 0.0)
+    surface_weight = (
+        surface.theta_weights[:, None] * surface.zeta_weights[None, :]
+    ).reshape((-1,)) / jnp.abs(surface.d_hat).reshape((-1,))
+
+    low_ell = jnp.arange(keep, dtype=jnp.int32)[None, :]
+    low_active = low_ell < active_count[:, None]
+    low_legendre_weight = 2.0 / (2.0 * low_ell.astype(jnp.float64) + 1.0)
+    low_energy = jnp.einsum(
+        "nsxlt,t,xl->nsxl",
+        low_scaled * low_scaled,
+        surface_weight,
+        low_legendre_weight * low_active,
+    )
+
+    tail_ell = active_count[:, None] - tail_modes + jnp.arange(
+        tail_modes, dtype=jnp.int32
+    )[None, :]
+    tail_legendre_weight = 2.0 / (2.0 * tail_ell.astype(jnp.float64) + 1.0)
+    tail_energy_by_mode = jnp.einsum(
+        "nsxlt,t,xl->nsxl",
+        tail_scaled * tail_scaled,
+        surface_weight,
+        tail_legendre_weight,
+    )
+    numerator = jnp.sum(tail_energy_by_mode, axis=-1)
+    nonoverlap_tail = tail_ell >= keep
+    known_total = jnp.sum(low_energy, axis=-1) + jnp.sum(
+        jnp.where(nonoverlap_tail[None, None, :, :], tail_energy_by_mode, 0.0),
+        axis=-1,
+    )
+    ratio = jnp.where(known_total > 0.0, jnp.sqrt(numerator / known_total), 0.0)
+    return jnp.transpose(ratio, (0, 2, 1))
 
 # ---- vm (magnetic-drift) flux moments — the RHSMode=2/3 diagnostics subset ----
 

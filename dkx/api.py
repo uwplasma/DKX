@@ -586,6 +586,7 @@ def batched_er_scan(
     differentiable: bool = False,
     max_batch: int | None = None,
     memory_budget_gb: float | None = None,
+    retain_legendre_tail: bool = False,
 ) -> Any:
     """Batched ``E_r`` scan on one geometry (stable public facade).
 
@@ -607,6 +608,8 @@ def batched_er_scan(
         solve_method, tol: forwarded to the solve.
         differentiable: differentiable implicit solves (for ``jax.grad``).
         max_batch, memory_budget_gb: optional memory-budgeting overrides.
+        retain_legendre_tail: retain the selected-tail relative-L2 upper bound
+            when the memory-lean truncated route executes.
 
     Returns:
         A :class:`dkx.batch.BatchedSolveResult` (``radial_current``
@@ -634,6 +637,7 @@ def batched_er_scan(
         differentiable=differentiable,
         max_batch=max_batch,
         memory_budget_gb=memory_budget_gb,
+        retain_legendre_tail=retain_legendre_tail,
     )
 
 
@@ -645,6 +649,7 @@ def batched_surface_scan(
     differentiable: bool = False,
     max_batch: int | None = None,
     memory_budget_gb: float | None = None,
+    retain_legendre_tail: bool = False,
 ) -> Any:
     """Batched solve over a batch of flux surfaces (stable public facade).
 
@@ -660,6 +665,8 @@ def batched_surface_scan(
             (:class:`SolveInputs` / namelist path) built into one per surface.
         solve_method, tol, differentiable: forwarded to the solve.
         max_batch, memory_budget_gb: optional memory-budgeting overrides.
+        retain_legendre_tail: retain the selected-tail relative-L2 upper bound
+            when the memory-lean truncated route executes.
 
     Returns:
         A :class:`dkx.batch.BatchedSolveResult` with batched states and
@@ -683,6 +690,7 @@ def batched_surface_scan(
         differentiable=differentiable,
         max_batch=max_batch,
         memory_budget_gb=memory_budget_gb,
+        retain_legendre_tail=retain_legendre_tail,
     )
 
 
