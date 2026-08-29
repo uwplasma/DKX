@@ -48,7 +48,14 @@ def audit(artifact: Path, *, results_root: Path | None = None) -> dict[str, Any]
         case = dkx.Case.from_file(path)
         if case.case_id != case_ids[name]:
             errors.append(f"input case ID mismatch: {name}")
-        if case.geometry.format == "boozer" and not case.geometry_path.is_file():
+        # Compact CI checks the tracked decks without cloning the reference-code
+        # workspace.  Require the sibling geometry only for the optional raw-result
+        # audit, where the external files and their originating input must coexist.
+        if (
+            results_root is not None
+            and case.geometry.format == "boozer"
+            and not case.geometry_path.is_file()
+        ):
             errors.append(f"fresh-workspace geometry path is not executable: {name}")
 
     pairs = (
