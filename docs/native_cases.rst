@@ -53,10 +53,11 @@ by the validator.
 Native execution and results
 ----------------------------
 
-The first directly executable route is an analytic, prescribed-electric-field
-profile. It consumes ``Case`` fields directly: it does not serialize or parse a
-SFINCS namelist while constructing grids, geometry, species, collisions, or the
-operator. Run the checked example from Python:
+The directly executable route accepts built-in analytic geometry or a VMEC
+``wout`` for a prescribed-electric-field profile. It consumes ``Case`` fields
+directly: it does not serialize or parse a SFINCS namelist while constructing
+grids, geometry, species, collisions, or the operator. Run a checked example
+from Python:
 
 .. code-block:: python
 
@@ -70,6 +71,22 @@ operator. Run the checked example from Python:
    particle_flux = result.particle_flux_m2_s
    certificate = result.certificate()
 
+For a VMEC equilibrium, change only the geometry source:
+
+.. code-block:: toml
+
+   [geometry]
+   format = "vmec"
+   file = "wout_my_device.nc"
+   surfaces = [0.16, 0.25, 0.36]
+
+The file is resolved through ``Case.geometry_path``, read once per profile, and
+its exact SHA-256 is stored in the result. One phase-space grid is reused across
+all surfaces because their array shapes are identical; each surface still gets
+its own radially interpolated magnetic geometry and operator coefficients.
+``value_kV_m`` is explicitly normalized using the pinned 1 keV and 1 m SFINCS
+reference set (for which the numerical conversion to ``ErHat`` is one).
+
 ``Result`` copies its named arrays and makes them read-only. The
 ``dimensions`` map gives every array's named axes without requiring xarray;
 ``save`` writes schema-v1 NetCDF4, and ``Result.load`` reads it through the same
@@ -77,11 +94,11 @@ contract. Files contain the canonical case, normalization, geometry checksum,
 package/runtime/device versions, selected route, residual, iteration and timing
 evidence, and peak host memory.
 
-The executable route supports only ``workflow = "profile"``, built-in
-``format = "analytic"`` geometry, ``magnetic_drifts = "dkes"``, ``phi1 =
+The executable route supports only ``workflow = "profile"``, ``format =
+"analytic"`` or ``"vmec"`` geometry, ``magnetic_drifts = "dkes"``, ``phi1 =
 "off"``, a prescribed electric field, and at least two profile surfaces.
 Unsupported native combinations fail with the exact case field and a
-correction; they are not silently downgraded. Native VMEC/Boozer execution,
+correction; they are not silently downgraded. Native Boozer execution,
 ambipolar roots, resumable scan execution, and SFINCS conversion are subsequent
 vertical slices. Existing namelist workflows remain available through
 ``dkx.run`` and the established CLI without a numerical-path change.
