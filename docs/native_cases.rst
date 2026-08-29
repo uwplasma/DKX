@@ -142,8 +142,38 @@ roots were observed but the final evidence did not stabilize.
 bracket. It is not a proof that no root exists: an even number of crossings can
 remain hidden between the finest adjacent samples. ``find_all_roots`` therefore
 means every bracket exposed by the declared finite hierarchy, not every
-mathematically possible root. Branch creation/loss certificates remain the
-next P8 promotion gate.
+mathematically possible root. Independent dense-surface validation remains a
+promotion gate for the discrete branch evidence below.
+
+Radial branch evidence
+----------------------
+
+After every surface has completed root discovery, DKX assigns each retained
+root a stable ``ambipolar_root_branch_id``. The tracker predicts each existing
+branch from its two most recent radial points and uses a global minimum-cost
+assignment, admitted only within one quarter of the declared electric-field
+search span. The first observation at the profile boundary is labeled
+``boundary_origin`` rather than a physical creation. Interior unmatched roots
+and branches are labeled ``creation`` and ``loss``. A lost branch that
+approaches a survivor within the continuation gate also retains a ``merger``
+event whose detail explicitly calls it a *discrete merger candidate*.
+
+DKX additionally records branch-order ``crossing`` and
+``classification_transition`` events between adjacent sampled surfaces. These
+are discrete profile observations, not claims that the continuous bifurcation
+location has been resolved. Every event retains its participating branch IDs,
+root indices, electric field, explanatory detail, and nonsmooth flag. The
+``ambipolar_nonsmooth_event`` surface mask and Result warning identify intervals
+where branch-local derivatives are nonsmooth or undefined.
+
+Selection is separate from discovery: every alternative root and branch stays
+in the Result. With ``continue_branches = true``, the first available surface
+selects the root nearest zero and later surfaces retain that branch ID. If the
+selected branch is lost, the nearest root to its previous electric field is
+selected and ``ambipolar_selection_reason`` records the fallback. With
+continuation disabled, each surface selects its root nearest zero while branch
+evidence remains visible. The electric-field plot overlays every branch on the
+selected profile.
 
 ``Result`` copies its named arrays and makes them read-only. The
 ``dimensions`` map gives every array's named axes without requiring xarray;
