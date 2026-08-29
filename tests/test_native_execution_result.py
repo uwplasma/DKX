@@ -62,6 +62,15 @@ def _vmec_case():
     )
 
 
+def _boozer_case():
+    return dkx.Case.from_file(
+        Path(__file__).resolve().parents[1]
+        / "examples"
+        / "native"
+        / "boozer_profile.toml"
+    )
+
+
 def _ambipolar_case():
     base = _case()
     return replace(
@@ -454,8 +463,95 @@ def test_native_convergence_controls_are_ambipolar_and_observable_specific() -> 
         dkx.run(ambipolar)
 
 
-def test_boozer_native_route_is_explicitly_unsupported() -> None:
-    case = _case()
-    case = replace(case, geometry=replace(case.geometry, format="boozer"))
-    with pytest.raises(dkx.CaseValidationError, match="dedicated reader"):
-        dkx.run(case)
+def test_native_boozer_reuses_parsed_data_and_matches_scheme12(monkeypatch) -> None:
+    """The native Boozer path reads once and agrees with the accepted kernel."""
+    import dkx.magnetic_geometry as magnetic_geometry
+    import dkx.phase_space as phase_space
+
+    case = _boozer_case()
+    original_read = magnetic_geometry.read_native_boozer
+    original_make_grids = phase_space.make_grids
+    original_to_namelist = dkx.inputs.SfincsInput.to_namelist
+    original_parse = dkx.run.parse_sfincs_input_text
+    calls = {"read": 0, "grids": 0}
+
+    def counted_read(*args, **kwargs):
+        calls["read"] += 1
+        return original_read(*args, **kwargs)
+
+    def counted_make_grids(*args, **kwargs):
+        calls["grids"] += 1
+        return original_make_grids(*args, **kwargs)
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("native Boozer execution used a SFINCS namelist adapter")
+
+    monkeypatch.setattr(magnetic_geometry, "read_native_boozer", counted_read)
+    monkeypatch.setattr(phase_space, "make_grids", counted_make_grids)
+    monkeypatch.setattr("dkx.inputs.SfincsInput.to_namelist", forbidden)
+    monkeypatch.setattr("dkx.run.parse_sfincs_input_text", forbidden)
+    native = dkx.run(case)
+
+    assert calls == {"read": 1, "grids": 1}
+    assert (
+        native.metadata["geometry_sha256"]
+        == hashlib.sha256(case.geometry_path.read_bytes()).hexdigest()
+    )
+    assert np.max(native.primal_residual) < case.solver.relative_tolerance
+
+    monkeypatch.setattr(magnetic_geometry, "read_native_boozer", original_read)
+    monkeypatch.setattr(phase_space, "make_grids", original_make_grids)
+    monkeypatch.setattr(dkx.inputs.SfincsInput, "to_namelist", original_to_namelist)
+    monkeypatch.setattr(dkx.run, "parse_sfincs_input_text", original_parse)
+    r_n = np.sqrt(np.asarray(case.geometry.surfaces))
+    r_hat = native.metadata["normalization"]["a_hat"] * r_n
+    n_hat = np.asarray(case.species[0].density_m3) / 1.0e20
+    t_hat = np.asarray(case.species[0].temperature_keV)
+    mass_hat = case.species[0].mass_amu * 1.66053906892e-27 / 1.67262192369e-27
+    legacy = dkx.run(
+        geometryScheme=12,
+        equilibriumFile=str(case.geometry_path),
+        inputRadialCoordinate=3,
+        rN_wish=float(r_n[-1]),
+        VMECRadialOption=0,
+        Zs=[1.0],
+        mHats=[mass_hat],
+        nHats=[n_hat[-1]],
+        THats=[t_hat[-1]],
+        dNHatdrHats=[np.gradient(n_hat, r_hat)[-1]],
+        dTHatdrHats=[np.gradient(t_hat, r_hat)[-1]],
+        Ntheta=case.resolution.theta,
+        Nzeta=case.resolution.zeta,
+        Nxi=case.resolution.pitch,
+        NL=min(4, case.resolution.pitch),
+        Nx=case.resolution.speed,
+        collisionOperator=1,
+        useDKESExBDrift=True,
+        Nxi_for_x_option=1,
+        xGridScheme=5,
+        solverTolerance=case.solver.relative_tolerance,
+    )
+    radial = RadialCoordinates(
+        psi_a_hat=native.metadata["normalization"]["psi_a_hat"],
+        a_hat=native.metadata["normalization"]["a_hat"],
+        r_n=float(r_n[-1]),
+    )
+    np.testing.assert_allclose(
+        native.particle_flux_m2_s[-1],
+        np.asarray(legacy.moments["particleFlux_vm_psiHat"])
+        * radial.d_dpsi_hat_to_d_dr_hat
+        * PARTICLE_FLUX,
+        rtol=2.0e-12,
+    )
+    np.testing.assert_allclose(
+        native.heat_flux_W_m2[-1],
+        np.asarray(legacy.moments["heatFlux_vm_psiHat"])
+        * radial.d_dpsi_hat_to_d_dr_hat
+        * HEAT_FLUX,
+        rtol=2.0e-12,
+    )
+    np.testing.assert_allclose(
+        native.parallel_current_A_T_m2[-1],
+        np.asarray(legacy.moments["FSABjHat"]) * PARALLEL_CURRENT,
+        rtol=2.0e-12,
+    )

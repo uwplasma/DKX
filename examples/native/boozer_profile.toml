@@ -1,0 +1,45 @@
+# Native schema-v1 Boozer profile. The relative path is resolved beside this file.
+schema = 1
+name = "native_boozer_profile"
+
+[run]
+workflow = "profile"
+progress = true
+
+[geometry]
+format = "boozer"
+file = "../../tests/ref/nonStelSym_tiny_geometryScheme12.bc"
+surfaces = [0.20, 0.30]
+
+[[species]]
+name = "deuterium"
+charge = 1
+mass_amu = 2.014
+density_m3 = [8.0e19, 7.0e19]
+temperature_keV = [1.0, 0.8]
+
+[physics]
+model = "full_local"
+collisions = "pitch_angle_scattering"
+magnetic_drifts = "dkes"
+phi1 = "off"
+
+[electric_field]
+mode = "prescribed"
+value_kV_m = 0.0
+
+[resolution]
+theta = 5
+zeta = 5
+pitch = 8
+speed = 4
+
+[solver]
+method = "auto"
+relative_tolerance = 1.0e-10
+memory_fraction = 0.75
+reuse = "auto"
+
+[output]
+file = "native_boozer_profile.nc"
+plots = true

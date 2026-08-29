@@ -4,6 +4,14 @@ Release notes
 Unreleased
 ----------
 
+- Native ``Case`` execution now accepts Boozer ``.bc`` equilibria directly.
+  The reader auto-detects the cosine-only and asymmetric v3 column conventions,
+  reads and parses the file once, reuses the immutable surface tables and one
+  shape-stable phase-space grid across the profile, and stores the source
+  checksum in ``Result``. The native route never serializes a SFINCS namelist or
+  asks users for a numbered geometry scheme. The checked asymmetric case agrees
+  with the established scheme-12 kinetic observables at ``2e-12`` relative
+  tolerance.
 - ``dkx wout_*.nc`` now records VMEC ``pmass_type`` provenance while consuming
   the canonical evaluated ``presf`` profile, so ``sum_atan``, power-series,
   spline, and the other checked VMEC pressure representations share one path.

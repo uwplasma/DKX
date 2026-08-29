@@ -2,9 +2,9 @@
 
 The folder contains schema-v1 cases with physical field names and explicit
 engineering units. The analytic prescribed-field, adaptively refined analytic
-ambipolar, and VMEC prescribed-field profiles are directly executable. The
-higher-resolution W7-X case demonstrates the later full-drift and sharding
-contract.
+ambipolar, VMEC prescribed-field, and Boozer prescribed-field profiles are
+directly executable. The higher-resolution W7-X case demonstrates the later
+full-drift and sharding contract.
 
 The ambipolar example retains all roots and adaptive evaluations. Its native
 Result also assigns radial branch IDs, records selection reasons and any
@@ -20,12 +20,16 @@ result = dkx.run(dkx.Case.from_file("examples/native/vmec_profile.toml"))
 result.save()
 PY
 
+dkx run examples/native/boozer_profile.toml
 dkx run examples/native/analytic_ambipolar_profile.toml
 ```
 
-All executable native cases bypass the SFINCS namelist adapter. The VMEC case reads
-its `wout` once and reuses one shape-stable phase-space grid across all three
-surfaces. Replace its checked fixture path with any VMEC `wout_*.nc`; relative
-paths are resolved beside the TOML file, not from the shell's current directory.
+All executable native cases bypass the SFINCS namelist adapter. The VMEC case
+reads its `wout` once. The Boozer case reads and parses its `.bc` once,
+auto-detects the checked cosine-only or asymmetric column convention, and does
+not expose a SFINCS geometry-scheme number in the native case. Both reuse one
+shape-stable phase-space grid across their surfaces. Replace the checked fixture
+paths with a VMEC `wout_*.nc` or Boozer `.bc`; relative paths are resolved beside
+the TOML file, not from the shell's current directory.
 
 Generate the same commented format with `dkx schema --format toml`.

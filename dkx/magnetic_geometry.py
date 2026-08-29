@@ -44,6 +44,7 @@ import numpy as np  # noqa: E402
 from .paths import resolve_existing_path  # noqa: E402
 
 __all__ = [
+    "BoozerBcData",
     "BoozerBcHeader",
     "BoozerBcSurface",
     "FluxSurfaceGeometry",
@@ -51,6 +52,7 @@ __all__ = [
     "VmecRadialInterpolation",
     "psi_a_hat_from_wout",
     "read_boozer_bc",
+    "read_native_boozer",
     "read_vmec_wout",
     "selected_r_n_from_bc",
     "vmec_radial_interpolation",
@@ -463,6 +465,16 @@ class BoozerBcSurface:
     r_amp: np.ndarray  # (H,) float64
     z_amp: np.ndarray  # (H,) float64
     dz_amp: np.ndarray  # (H,) float64
+
+
+@dataclass(frozen=True)
+class BoozerBcData:
+    """A parsed Boozer file plus its detected v3 column convention."""
+
+    geometry_scheme: int
+    header: BoozerBcHeader
+    surfaces: tuple[BoozerBcSurface, ...]
+
 
 def _parse_bc_header_line(line: str) -> tuple[list[int], list[float]]:
     parts = line.split()
@@ -932,8 +944,23 @@ def read_boozer_bc(
     if cached is not None:
         return cached
 
-    with p.open("rb") as f:
-        raw = f.read()
+    try:
+        raw = p.read_bytes()
+    except OSError as exc:
+        raise ValueError(f"Could not read Boozer equilibrium {str(p)!r}: {exc}") from exc
+    header, surfaces = _parse_boozer_bytes(
+        raw, geometry_scheme=geometry_scheme, path=p
+    )
+    while len(_BC_PARSE_CACHE) >= _BC_PARSE_CACHE_MAX:
+        _BC_PARSE_CACHE.pop(next(iter(_BC_PARSE_CACHE)))
+    _BC_PARSE_CACHE[cache_key] = (header, surfaces)
+    return header, surfaces
+
+
+def _parse_boozer_bytes(
+    raw: bytes, *, geometry_scheme: int, path: Path
+) -> tuple[BoozerBcHeader, tuple[BoozerBcSurface, ...]]:
+    """Parse bytes already read from a Boozer file without reopening it."""
     if b"\r" in raw:  # universal-newline translation, as text-mode reads apply
         raw = raw.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
     if b"d" in raw or b"D" in raw:
@@ -941,15 +968,85 @@ def read_boozer_bc(
     try:
         text = raw.decode("ascii")
     except UnicodeDecodeError:
-        # Non-ASCII content: keep the reference readline-based parser.
-        with p.open("r") as f:
-            header, surfaces = _parse_bc_stream(f, geometry_scheme=geometry_scheme, path=p)
-    else:
-        header, surfaces = _parse_bc_text(text, raw, geometry_scheme=geometry_scheme, path=p)
-    while len(_BC_PARSE_CACHE) >= _BC_PARSE_CACHE_MAX:
-        _BC_PARSE_CACHE.pop(next(iter(_BC_PARSE_CACHE)))
-    _BC_PARSE_CACHE[cache_key] = (header, surfaces)
-    return header, surfaces
+        # Non-ASCII comments do not affect the list-directed numeric grammar.
+        # Preserve the reference stream parser without reopening the file.
+        text = raw.decode("utf-8", errors="replace")
+        return _parse_bc_stream(
+            io.StringIO(text), geometry_scheme=geometry_scheme, path=path
+        )
+    return _parse_bc_text(text, raw, geometry_scheme=geometry_scheme, path=path)
+
+
+def _detect_boozer_geometry_scheme(text: str, *, path: Path) -> int:
+    """Detect cosine-only scheme 11 versus asymmetric scheme 12 columns."""
+    header_seen = False
+    surface_seen = False
+    surface_header_seen = False
+    skip_units = False
+    for line in text.splitlines():
+        tokens = line.split()
+        if not header_seen:
+            try:
+                _parse_bc_header_line(line)
+            except Exception:  # noqa: BLE001 - headings precede the numeric header
+                continue
+            header_seen = True
+            continue
+        if not surface_seen:
+            if "s" in line:
+                surface_seen = True
+            continue
+        if not surface_header_seen:
+            if _try_parse_floats(tokens, 5) is not None:
+                surface_header_seen = True
+                skip_units = True
+            continue
+        if skip_units:
+            skip_units = False
+            continue
+        if _try_parse_ints(tokens, 2) is None:
+            continue
+        values = tokens[2:]
+        if len(values) >= 8 and _try_parse_floats(values, 8) is not None:
+            return 12
+        if len(values) >= 4 and _try_parse_floats(values, 4) is not None:
+            return 11
+    raise ValueError(
+        f"Could not detect Boozer .bc column convention in {str(path)!r}; "
+        "expected a scheme-11 six-column or scheme-12 ten-column Fourier row."
+    )
+
+
+def read_native_boozer(path: str | Path) -> BoozerBcData:
+    """Read a native Boozer source with its column convention auto-detected.
+
+    Native ``Case`` inputs name a physical format rather than a SFINCS geometry
+    scheme. Detection is therefore confined to this file boundary; the parsed
+    immutable tables are reused for every requested surface.
+    """
+    resolved = Path(path).expanduser()
+    if not resolved.exists():
+        resolved = resolve_existing_path(resolved).path
+    try:
+        raw = resolved.read_bytes()
+    except OSError as exc:
+        raise ValueError(
+            f"Could not read Boozer equilibrium {str(resolved)!r}: {exc}"
+        ) from exc
+    text = raw.decode("ascii", errors="replace")
+    geometry_scheme = _detect_boozer_geometry_scheme(text, path=resolved)
+    header, surfaces = _parse_boozer_bytes(
+        raw, geometry_scheme=geometry_scheme, path=resolved
+    )
+    if len(surfaces) < 2:
+        raise ValueError(
+            f"Boozer equilibrium {str(resolved)!r} has {len(surfaces)} surface(s); "
+            "at least two are required for radial derivatives."
+        )
+    return BoozerBcData(
+        geometry_scheme=geometry_scheme, header=header, surfaces=surfaces
+    )
+
 
 def _bracketing_surfaces(
     surfaces: tuple[BoozerBcSurface, ...], r_n_wish: float
@@ -1141,19 +1238,18 @@ def _u_and_bsubpsi(
                         b_sub_psi += (d_dzeta_amp / float(n) / float(n_periods)) * cos2d
     return b_sub_psi, db_sub_psi_dtheta, db_sub_psi_dzeta
 
-def _from_boozer(
+def _from_boozer_data(
     cls,
-    path: str | Path,
+    data: BoozerBcData,
     *,
     theta: jnp.ndarray,
     zeta: jnp.ndarray,
     r_n_wish: float,
     vmec_radial_option: int = 1,
-    geometry_scheme: int = 11,
     compute_gpsipsi: bool = False,
     compute_grad_psi_dot_grad_b: bool = False,
 ) -> FluxSurfaceGeometry:
-    """Boozer geometry from a ``.bc`` equilibrium file (geometryScheme 11/12).
+    """Boozer geometry from parsed native ``.bc`` data.
 
     Follows the sign switches and nearby-surface interpolation of v3
     ``geometry.F90``: the two surfaces bracketing ``r_n_wish`` supply radial
@@ -1161,7 +1257,8 @@ def _from_boozer(
     the toroidal-direction sign switch is applied to ``GHat`` and ``iota``.
     The file read is not differentiable; the returned arrays are JAX arrays.
     """
-    header, surfaces = read_boozer_bc(path, geometry_scheme=int(geometry_scheme))
+    geometry_scheme = int(data.geometry_scheme)
+    header, surfaces = data.header, data.surfaces
     surf_old, surf_new = _bracketing_surfaces(surfaces, float(r_n_wish))
 
     r_old, r_new = float(surf_old.r_n), float(surf_new.r_n)
@@ -1296,6 +1393,35 @@ def _from_boozer(
         p_prime_hat=float(p_prime_hat),
         diota_dpsi_hat=float(diotadpsi_hat),
         grad_psi_dot_grad_b_over_gpsipsi=grad_psi_dot_grad_b,
+    )
+
+
+def _from_boozer(
+    cls,
+    path: str | Path,
+    *,
+    theta: jnp.ndarray,
+    zeta: jnp.ndarray,
+    r_n_wish: float,
+    vmec_radial_option: int = 1,
+    geometry_scheme: int = 11,
+    compute_gpsipsi: bool = False,
+    compute_grad_psi_dot_grad_b: bool = False,
+) -> FluxSurfaceGeometry:
+    """Compatibility constructor for an explicitly numbered SFINCS scheme."""
+    header, surfaces = read_boozer_bc(path, geometry_scheme=int(geometry_scheme))
+    data = BoozerBcData(
+        geometry_scheme=int(geometry_scheme), header=header, surfaces=surfaces
+    )
+    return _from_boozer_data(
+        cls,
+        data,
+        theta=theta,
+        zeta=zeta,
+        r_n_wish=r_n_wish,
+        vmec_radial_option=vmec_radial_option,
+        compute_gpsipsi=compute_gpsipsi,
+        compute_grad_psi_dot_grad_b=compute_grad_psi_dot_grad_b,
     )
 
 def _boozer_rzd_series(
@@ -2238,4 +2364,5 @@ def _gpsipsi_vmec(
 FluxSurfaceGeometry.from_scheme = classmethod(_from_scheme)
 FluxSurfaceGeometry.from_fourier = classmethod(_from_fourier)
 FluxSurfaceGeometry.from_boozer = classmethod(_from_boozer)
+FluxSurfaceGeometry.from_boozer_data = classmethod(_from_boozer_data)
 FluxSurfaceGeometry.from_vmec = classmethod(_from_vmec)
