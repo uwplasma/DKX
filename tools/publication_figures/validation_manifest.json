@@ -495,7 +495,7 @@
       "The implemented rung is not full-Fokker-Planck, ambipolar-profile, finite-electric-field, experimental, or cross-code performance validation"
     ],
     "source_code": [
-      "dkx/validation/independent.py",
+      "dkx/validation/artifacts.py",
       "tools/paper_benchmarks/audit_independent_cross_code_validation.py"
     ],
     "tests": [

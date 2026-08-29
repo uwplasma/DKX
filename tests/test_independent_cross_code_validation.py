@@ -7,7 +7,7 @@ import sys
 
 import pytest
 
-from dkx.validation.independent import (
+from dkx.validation.artifacts import (
     coefficient_relative_errors,
     dkes_to_beidler,
     nu_prime_for_nu_over_v,
