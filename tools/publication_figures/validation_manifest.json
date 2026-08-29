@@ -593,6 +593,48 @@
     ]
   },
   {
+    "id": "sfincs_full_kinetic_stellarator_profile",
+    "status": "implemented",
+    "release_gate": {
+      "claim_status": "release_ready",
+      "blocks_current_release": false,
+      "evidence": "checked high/ultra zero-field W7-X SC1 full-Fokker-Planck artifact from matched live DKX and pinned SFINCS v3 solves",
+      "promotion_gate": "Keep this claim to the pinned one-species W7-X SC1 surface until stellarator finite-Er, ambipolar-profile, multispecies, Phi1, experimental, and a second stellarator-family full-FP case are independently pinned"
+    },
+    "kind": "cross_code_validation",
+    "literature": [
+      "https://doi.org/10.1063/1.4870077",
+      "https://github.com/landreman/sfincs"
+    ],
+    "scripts": [
+      "tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py"
+    ],
+    "artifacts": [
+      "validation/full_kinetic_sfincs_stellarator_v1.json",
+      "validation/inputs/w7x_sc1_full_fp_high.input.namelist",
+      "validation/inputs/w7x_sc1_full_fp_ultra.input.namelist"
+    ],
+    "claims": [
+      "Live DKX and pinned SFINCS v3 solve the same zero-field one-species W7-X SC1 surface with physical profiles, full linearized Fokker-Planck collisions, full trajectories, and the pinned Boozer-geometry checksum",
+      "At the accepted finest rung, retained nonzero scalar and speed-resolved observables agree within 1.37e-8 scaled error and high-to-ultra movement is at most 0.444%",
+      "Momentum flux is an absolute cancellation gate; this surface lane is not a stellarator finite-Er, ambipolar-profile, Phi1, experimental, second-family, or performance-comparison claim"
+    ],
+    "source_code": [
+      "dkx/collisions.py",
+      "dkx/run.py",
+      "tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py"
+    ],
+    "tests": [
+      "tests/test_full_kinetic_sfincs_stellarator_validation.py"
+    ],
+    "acceptance_gates": [
+      "Both codes use exact checked relative-path decks, matched W7-X SC1 Boozer geometry checksum, full-FP collisions, full trajectories, physical profiles, coordinates, automatic constraint, and 1e-12 tolerance",
+      "Every completed true residual stays below 1e-10 and every retained nonzero scalar or spectrum cross-code error stays below 2e-8",
+      "High-to-ultra flow, particle-flux, heat-flux, and NTV movement stays below 0.5%, while cancellation-level momentum flux stays below 1e-18 absolute",
+      "Pinned commits, MUMPS-enabled build, geometry, raw and compact outputs, logs, solver traces, timing, memory, exact inputs, and exclusions remain checksum-auditable"
+    ]
+  },
+  {
     "id": "adjoint_sensitivity_gradient_checks",
     "status": "implemented",
     "release_gate": {

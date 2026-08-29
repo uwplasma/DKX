@@ -129,7 +129,33 @@ agree within ``1.88e-9`` scaled error. High-to-ultra movement is at most
 Axisymmetric intrinsic ambipolarity makes summed particle flux and NTV
 cancellation-level quantities, so their acceptance gate is ``2e-11`` absolute.
 This is a prescribed-field surface comparison, not an electric-field scan or
-ambipolar-root validation. Stellarator full-FP physics remains outstanding.
+ambipolar-root validation. The separate zero-field stellarator full-FP lane is
+recorded below.
+
+Matched stellarator full-kinetic profile
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The companion ``validation/full_kinetic_sfincs_stellarator_v1.json`` artifact
+uses exact relative-path decks on the checksummed W7-X SC1 Boozer surface at
+``rN = 0.5``. Both live codes use physical density and temperature gradients,
+full linearized Fokker--Planck collisions, full trajectories, zero electric
+field, automatic constraint 1, and a ``1e-12`` solver tolerance. SFINCS's
+algebraic systems grow from 54,407 to 98,126 unknowns; DKX's distinct internal
+representation grows from 87,887 to 155,994.
+
+The largest high-to-ultra movement is ``0.444%``. At the finest rung, flow,
+particle and heat flux, NTV, and the retained speed spectra agree within
+``1.37e-8`` scaled error; that maximum is NTV and corresponds to an absolute
+difference of about ``8.31e-13``. All completed true residuals are below
+``1.82e-12``. Momentum flux is retained as a near-zero absolute gate rather
+than assigned an unstable relative error.
+
+The artifact pins the SFINCS commit, MUMPS-enabled build, Boozer source path
+and checksum, exact decks, raw and compact outputs, logs, solver traces,
+cold/warm DKX timing, SFINCS timing, and process memory. These measurements are
+reproduction provenance, not a cross-code performance claim. This one-species
+surface comparison is not an Er scan, ambipolar-profile, Phi1, experimental,
+or second-stellarator-family full-FP certificate.
 
 Publication validation dashboard
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
