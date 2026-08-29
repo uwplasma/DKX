@@ -1009,12 +1009,46 @@ def solve_native_ambipolar_surface(
             raise RuntimeError(
                 "selected-tail diagnostic replay did not satisfy the true-residual gate"
             )
+        replay_tolerance = max(1.0e-12, float(solve_tolerance))
         for actual, expected, label in (
             (diagnostic_particle[0], selected.particle_flux_m2_s, "particle flux"),
             (diagnostic_heat[0], selected.heat_flux_w_m2, "heat flux"),
+            (
+                diagnostic_parallel[0],
+                selected.parallel_current_a_t_m2,
+                "parallel current",
+            ),
             (diagnostic_current[0], selected.radial_current_a_m2, "radial current"),
         ):
-            if not np.allclose(actual, expected, rtol=1.0e-12, atol=1.0e-12):
+            if not np.allclose(
+                actual,
+                expected,
+                rtol=replay_tolerance,
+                atol=replay_tolerance,
+            ):
+                raise RuntimeError(
+                    f"selected-tail diagnostic replay changed the accepted {label}"
+                )
+        for actual, expected, label in (
+            (
+                diagnostic_particle_vs_speed[0],
+                selected.particle_flux_m2_s_vs_speed,
+                "speed-resolved particle flux",
+            ),
+            (
+                diagnostic_heat_vs_speed[0],
+                selected.heat_flux_w_m2_vs_speed,
+                "speed-resolved heat flux",
+            ),
+        ):
+            delta_norm = np.linalg.norm(
+                np.asarray(actual) - np.asarray(expected), axis=0
+            )
+            reference_norm = np.linalg.norm(np.asarray(expected), axis=0)
+            if np.any(
+                delta_norm
+                > replay_tolerance * np.maximum(reference_norm, np.finfo(float).tiny)
+            ):
                 raise RuntimeError(
                     f"selected-tail diagnostic replay changed the accepted {label}"
                 )
@@ -1027,12 +1061,6 @@ def solve_native_ambipolar_surface(
         )
         diagnosed = replace(
             selected,
-            particle_flux_m2_s=np.asarray(diagnostic_particle[0]),
-            heat_flux_w_m2=np.asarray(diagnostic_heat[0]),
-            parallel_current_a_t_m2=float(diagnostic_parallel[0]),
-            residual_norm=float(diagnostic_residual[0]),
-            particle_flux_m2_s_vs_speed=np.asarray(diagnostic_particle_vs_speed[0]),
-            heat_flux_w_m2_vs_speed=np.asarray(diagnostic_heat_vs_speed[0]),
             legendre_tail_relative_l2=(
                 None if diagnostic_tail is None else np.asarray(diagnostic_tail[0])
             ),

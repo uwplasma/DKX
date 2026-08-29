@@ -329,6 +329,7 @@ def test_native_ambipolar_result_preserves_scan_roots_and_selection(
 
 def test_native_ambipolar_real_solver_brackets_and_roundtrips(tmp_path, capsys) -> None:
     case = _ambipolar_case()
+    baseline = dkx.run(case)
     case = replace(
         case,
         convergence=replace(case.convergence, retain_legendre_tail=True),
@@ -344,6 +345,20 @@ def test_native_ambipolar_real_solver_brackets_and_roundtrips(tmp_path, capsys) 
     assert "selected_tail_diagnostic_replay" in set(
         result.evaluation_solver_attempt_reason.reshape(-1)
     )
+    for name in (
+        "electric_field_kV_m",
+        "particle_flux_m2_s",
+        "heat_flux_W_m2",
+        "parallel_current_A_T_m2",
+        "radial_current_A_m2",
+        "primal_residual",
+        "evaluation_particle_flux_m2_s_vs_speed",
+        "evaluation_heat_flux_W_m2_vs_speed",
+    ):
+        np.testing.assert_array_equal(
+            np.asarray(result.arrays[name]),
+            np.asarray(baseline.arrays[name]),
+        )
     retained_tail = result.evaluation_legendre_tail_relative_l2_upper_bound
     assert np.count_nonzero(np.isfinite(retained_tail)) == 2 * 4
     for surface_index, selected_field in enumerate(result.electric_field_kV_m):
