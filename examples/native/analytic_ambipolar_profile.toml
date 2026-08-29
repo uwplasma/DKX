@@ -50,7 +50,10 @@ reuse = "auto"
 strategy = "auto"
 
 [convergence]
-enabled = false
+enabled = true
+observables = ["particle_flux", "heat_flux", "electric_field"]
+relative_tolerance = 0.02
+max_refinements = 1
 
 [output]
 file = "outputs/analytic_ambipolar.nc"
