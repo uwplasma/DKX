@@ -1,0 +1,1412 @@
+{
+  "schema": "dkx.ambipolar_phase_space_axes.v1",
+  "created_utc": "2026-08-29T13:02:00Z",
+  "claim_scope": "bounded_w7x_pas_dkes_theta_pitch_nonconvergence_diagnosis",
+  "summary": "Separate theta and pitch rungs identify pitch as the dominant failed resolution direction; pitch36-to-40-to-44 does not approach the unchanged root and selected-flux gates.",
+  "source": {
+    "dkx_commit": "a042bd58e95a86667185945ab85327241f47eb16",
+    "dkx_version": "2.3.1",
+    "geometry": "SFINCS/equilibria/w7x_standardConfig.bc",
+    "geometry_sha256": "81c686e5a5bd8f38d8b1f754ebe2910951f20094bab35d73d2827d9875bb6062",
+    "geometry_bytes": 19416676,
+    "inputs": {
+      "reference": {
+        "path": "validation/inputs/w7x_standard_native_ambipolar_profile.toml",
+        "sha256": "f2bfee1f67582c0dd40647c93542a2c0ea3963244e1d5bb79c9824baf16602e7"
+      },
+      "theta17": {
+        "path": "validation/inputs/w7x_standard_native_ambipolar_profile_theta17.toml",
+        "sha256": "54bd4cbd96f9d7c006b6562b08bf2a975ee5c280e8a66d85e5a6ad810f8db7c5"
+      },
+      "pitch40": {
+        "path": "validation/inputs/w7x_standard_native_ambipolar_profile_pitch40.toml",
+        "sha256": "9a1db51a76aad53651c31fbaf691026155815f0774f533fc9f2cf5c3cd99dbfa"
+      },
+      "pitch44": {
+        "path": "validation/inputs/w7x_standard_native_ambipolar_profile_pitch44.toml",
+        "sha256": "f068be8783aee89e185c07f7977b236a5360f996a15d94788adb97c3d552fce1"
+      }
+    },
+    "results": {
+      "reference": {
+        "sha256": "199fcf0e6c783405808b2d949aac15e7a417bdb062d217f9aa614d13937b8d60",
+        "bytes": 339225
+      },
+      "theta17": {
+        "sha256": "a025d13c20f3b0c629a86f154606c76294e2832281ca2c35510b25d529ca5e84",
+        "bytes": 339217
+      },
+      "pitch40": {
+        "sha256": "1e6b026eb4879df0fb48d31e7823c32ba61f4121f08babda53d9eefba01d837d",
+        "bytes": 296195
+      },
+      "pitch44": {
+        "sha256": "8f3ae6eb515d6a1ffc95009216689948243bf8c6faba1d6cf35745b4f6df0994",
+        "bytes": 339275
+      }
+    },
+    "compact_axes_sha256": "fc31fcc972c8c43b5b721d7ba99aa32e0477868ef7f1c47903aecf70e5a84712"
+  },
+  "environment": {
+    "host": "Mac mini, Apple M4, 10 CPU cores, 24 GB RAM",
+    "os": "macOS-26.6.2-arm64-arm-64bit",
+    "python": "3.11.15",
+    "jax": "0.9.2",
+    "jaxlib": "0.9.2",
+    "numpy": "2.4.3",
+    "dkx_cores": 8,
+    "cache_state": "fresh_process_with_initially_empty_external_cache",
+    "timing_note": "Timings and memory are provenance, not a performance claim."
+  },
+  "measurements": {
+    "reference": {
+      "process_wall_s": 301.64,
+      "command_stopwatch_s": 299.5713892089989,
+      "maximum_rss_bytes": 13588021248,
+      "peak_footprint_bytes": 17728371400
+    },
+    "theta17": {
+      "process_wall_s": 405.03,
+      "command_stopwatch_s": 403.1844017500007,
+      "maximum_rss_bytes": 13031489536,
+      "peak_footprint_bytes": 21386708200
+    },
+    "pitch40": {
+      "process_wall_s": 326.91,
+      "command_stopwatch_s": 325.23692429199946,
+      "maximum_rss_bytes": 6147063808,
+      "peak_footprint_bytes": 5633497568
+    },
+    "pitch44": {
+      "process_wall_s": 395.7,
+      "command_stopwatch_s": 393.843974833002,
+      "maximum_rss_bytes": 13231325184,
+      "peak_footprint_bytes": 22275409800
+    }
+  },
+  "rungs": [
+    {
+      "case_id": "f284407a441b7e06c4f3a24a0b46e80676f60e42d66cf6bce84113c1d1f096bf",
+      "resolution": {
+        "theta": 15,
+        "zeta": 37,
+        "pitch": 36,
+        "speed": 6
+      },
+      "surfaces": [
+        {
+          "surface_index": 0,
+          "psi_N": 0.09,
+          "root_count": 1,
+          "roots": [
+            {
+              "index": 0,
+              "classification": "electron",
+              "branch_id": "electron-000",
+              "selected": true,
+              "electric_field_kV_m": 11.3427734375,
+              "particle_flux_m2_s": [
+                7.424341842493395e+17,
+                7.429618908354208e+17
+              ],
+              "heat_flux_W_m2": [
+                272.6134795065322,
+                3072.5975450614355
+              ],
+              "parallel_current_A_T_m2": -104035.60260018054,
+              "primal_residual": 1.4600418281458276e-16,
+              "final_bracket_width_kV_m": 0.0048828125
+            }
+          ],
+          "selected_root_index": 0,
+          "selected_branch_id": "electron-000"
+        },
+        {
+          "surface_index": 1,
+          "psi_N": 0.16,
+          "root_count": 1,
+          "roots": [
+            {
+              "index": 0,
+              "classification": "electron",
+              "branch_id": "electron-000",
+              "selected": true,
+              "electric_field_kV_m": 11.630859375,
+              "particle_flux_m2_s": [
+                1.0108320434876978e+18,
+                1.0105688090013659e+18
+              ],
+              "heat_flux_W_m2": [
+                377.4038610808286,
+                3102.4717416119297
+              ],
+              "parallel_current_A_T_m2": -70528.76234007553,
+              "primal_residual": 2.482728207868523e-16,
+              "final_bracket_width_kV_m": 0.0048828125
+            }
+          ],
+          "selected_root_index": 0,
+          "selected_branch_id": "electron-000"
+        },
+        {
+          "surface_index": 2,
+          "psi_N": 0.25,
+          "root_count": 3,
+          "roots": [
+            {
+              "index": 0,
+              "classification": "ion",
+              "branch_id": "ion-000",
+              "selected": false,
+              "electric_field_kV_m": -0.48828125,
+              "particle_flux_m2_s": [
+                1.7970065754625047e+18,
+                1.7954326023420856e+18
+              ],
+              "heat_flux_W_m2": [
+                1401.8403129226544,
+                4009.175656508875
+              ],
+              "parallel_current_A_T_m2": -92091.80568991511,
+              "primal_residual": 3.1314015806301457e-15,
+              "final_bracket_width_kV_m": 0.0048828125
+            },
+            {
+              "index": 1,
+              "classification": "unstable",
+              "branch_id": "unstable-000",
+              "selected": false,
+              "electric_field_kV_m": 0.8837890625,
+              "particle_flux_m2_s": [
+                1.732602141235196e+18,
+                1.731917596392518e+18
+              ],
+              "heat_flux_W_m2": [
+                1194.4567557515059,
+                3891.7118015544174
+              ],
+              "parallel_current_A_T_m2": -90134.14898565851,
+              "primal_residual": 1.25613090120862e-15,
+              "final_bracket_width_kV_m": 0.0048828125
+            },
+            {
+              "index": 2,
+              "classification": "electron",
+              "branch_id": "electron-000",
+              "selected": true,
+              "electric_field_kV_m": 7.4169921875,
+              "particle_flux_m2_s": [
+                1.0895299327532987e+18,
+                1.0892622656564383e+18
+              ],
+              "heat_flux_W_m2": [
+                449.6301840162833,
+                2350.9510010709323
+              ],
+              "parallel_current_A_T_m2": -69989.37430912846,
+              "primal_residual": 2.8196932667953476e-16,
+              "final_bracket_width_kV_m": 0.0048828125
+            }
+          ],
+          "selected_root_index": 2,
+          "selected_branch_id": "electron-000"
+        },
+        {
+          "surface_index": 3,
+          "psi_N": 0.36,
+          "root_count": 1,
+          "roots": [
+            {
+              "index": 0,
+              "classification": "ion",
+              "branch_id": "ion-000",
+              "selected": true,
+              "electric_field_kV_m": -2.8515625,
+              "particle_flux_m2_s": [
+                7.691640172137352e+17,
+                7.689997334808143e+17
+              ],
+              "heat_flux_W_m2": [
+                509.65334058286675,
+                1035.2731463682976
+              ],
+              "parallel_current_A_T_m2": -55167.63049982452,
+              "primal_residual": 8.212465551966978e-16,
+              "final_bracket_width_kV_m": 0.0048828125
+            }
+          ],
+          "selected_root_index": 0,
+          "selected_branch_id": "ion-000"
+        },
+        {
+          "surface_index": 4,
+          "psi_N": 0.49,
+          "root_count": 1,
+          "roots": [
+            {
+              "index": 0,
+              "classification": "ion",
+              "branch_id": "ion-000",
+              "selected": true,
+              "electric_field_kV_m": -6.7626953125,
+              "particle_flux_m2_s": [
+                2.7801295644182352e+17,
+                2.7838093025514006e+17
+              ],
+              "heat_flux_W_m2": [
+                242.9810176081651,
+                193.5393400303937
+              ],
+              "parallel_current_A_T_m2": -25217.517700247725,
+              "primal_residual": 5.365974684738137e-15,
+              "final_bracket_width_kV_m": 0.0048828125
+            }
+          ],
+          "selected_root_index": 0,
+          "selected_branch_id": "ion-000"
+        }
+      ],
+      "attempts": {
+        "attempt_count": 222,
+        "executed_route_counts": {
+          "block_tridiagonal_truncated": 221,
+          "gmres": 1
+        },
+        "automatic_true_residual_recovery_count": 1,
+        "maximum_accepted_true_residual": 1.9323484429235053e-13
+      }
+    },
+    {
+      "case_id": "ed3b823ad00b00fba8440ffc375bc0e221fd6f168a67f9f25062443b34b11fcd",
+      "resolution": {
+        "theta": 17,
+        "zeta": 37,
+        "pitch": 36,
+        "speed": 6
+      },
+      "surfaces": [
+        {
+          "surface_index": 0,
+          "psi_N": 0.09,
+          "root_count": 1,
+          "roots": [
+            {
+              "index": 0,
+              "classification": "electron",
+              "branch_id": "electron-000",
+              "selected": true,
+              "electric_field_kV_m": 11.337890625,
+              "particle_flux_m2_s": [
+                7.412424789852403e+17,
+                7.4158238418277e+17
+              ],
+              "heat_flux_W_m2": [
+                272.0597215357285,
+                3069.2129759462036
+              ],
+              "parallel_current_A_T_m2": -104081.67031047189,
+              "primal_residual": 2.2304477963784224e-16,
+              "final_bracket_width_kV_m": 0.0048828125
+            }
+          ],
+          "selected_root_index": 0,
+          "selected_branch_id": "electron-000"
+        },
+        {
+          "surface_index": 1,
+          "psi_N": 0.16,
+          "root_count": 1,
+          "roots": [
+            {
+              "index": 0,
+              "classification": "electron",
+              "branch_id": "electron-000",
+              "selected": true,
+              "electric_field_kV_m": 11.54296875,
+              "particle_flux_m2_s": [
+                1.002809152749867e+18,
+                1.0028769654568521e+18
+              ],
+              "heat_flux_W_m2": [
+                376.6061862053939,
+                3068.7113440002186
+              ],
+              "parallel_current_A_T_m2": -67888.63988379251,
+              "primal_residual": 3.4013436372025725e-16,
+              "final_bracket_width_kV_m": 0.0048828125
+            }
+          ],
+          "selected_root_index": 0,
+          "selected_branch_id": "electron-000"
+        },
+        {
+          "surface_index": 2,
+          "psi_N": 0.25,
+          "root_count": 3,
+          "roots": [
+            {
+              "index": 0,
+              "classification": "ion",
+              "branch_id": "ion-000",
+              "selected": false,
+              "electric_field_kV_m": -0.478515625,
+              "particle_flux_m2_s": [
+                1.7983537668552148e+18,
+                1.7955158022231283e+18
+              ],
+              "heat_flux_W_m2": [
+                1402.7036882691152,
+                4018.340178519369
+              ],
+              "parallel_current_A_T_m2": -92608.83403557871,
+              "primal_residual": 2.1316546841978217e-15,
+              "final_bracket_width_kV_m": 0.0048828125
+            },
+            {
+              "index": 1,
+              "classification": "unstable",
+              "branch_id": "unstable-000",
+              "selected": false,
+              "electric_field_kV_m": 0.869140625,
+              "particle_flux_m2_s": [
+                1.733889744402617e+18,
+                1.7322081486381448e+18
+              ],
+              "heat_flux_W_m2": [
+                1197.91931449023,
+                3899.6692215790786
+              ],
+              "parallel_current_A_T_m2": -90661.4931132873,
+              "primal_residual": 1.1568932067901218e-15,
+              "final_bracket_width_kV_m": 0.0048828125
+            },
+            {
+              "index": 2,
+              "classification": "electron",
+              "branch_id": "electron-000",
+              "selected": true,
+              "electric_field_kV_m": 7.255859375,
+              "particle_flux_m2_s": [
+                1.0856457208498701e+18,
+                1.0854208001844588e+18
+              ],
+              "heat_flux_W_m2": [
+                452.604350461941,
+                2333.826525374185
+              ],
+              "parallel_current_A_T_m2": -68352.16552152447,
+              "primal_residual": 2.657659689804925e-16,
+              "final_bracket_width_kV_m": 0.0048828125
+            }
+          ],
+          "selected_root_index": 2,
+          "selected_branch_id": "electron-000"
+        },
+        {
+          "surface_index": 3,
+          "psi_N": 0.36,
+          "root_count": 1,
+          "roots": [
+            {
+              "index": 0,
+              "classification": "ion",
+              "branch_id": "ion-000",
+              "selected": true,
+              "electric_field_kV_m": -2.8662109375,
+              "particle_flux_m2_s": [
+                7.635545078404993e+17,
+                7.627202124766899e+17
+              ],
+              "heat_flux_W_m2": [
+                506.66340446910976,
+                1025.2411530248135
+              ],
+              "parallel_current_A_T_m2": -54633.873181806375,
+              "primal_residual": 6.265476611207082e-16,
+              "final_bracket_width_kV_m": 0.0048828125
+            }
+          ],
+          "selected_root_index": 0,
+          "selected_branch_id": "ion-000"
+        },
+        {
+          "surface_index": 4,
+          "psi_N": 0.49,
+          "root_count": 1,
+          "roots": [
+            {
+              "index": 0,
+              "classification": "ion",
+              "branch_id": "ion-000",
+              "selected": true,
+              "electric_field_kV_m": -6.77734375,
+              "particle_flux_m2_s": [
+                2.7580706514813078e+17,
+                2.758833882234172e+17
+              ],
+              "heat_flux_W_m2": [
+                242.43011765385378,
+                191.06380275613645
+              ],
+              "parallel_current_A_T_m2": -24796.888272828823,
+              "primal_residual": 2.5088990290614973e-15,
+              "final_bracket_width_kV_m": 0.0048828125
+            }
+          ],
+          "selected_root_index": 0,
+          "selected_branch_id": "ion-000"
+        }
+      ],
+      "attempts": {
+        "attempt_count": 222,
+        "executed_route_counts": {
+          "block_tridiagonal_truncated": 221,
+          "gmres": 1
+        },
+        "automatic_true_residual_recovery_count": 1,
+        "maximum_accepted_true_residual": 2.0523108374474378e-13
+      }
+    },
+    {
+      "case_id": "36126135ab48a7184330248d1f4d8179fe7292095f16284b2a590d6084074e16",
+      "resolution": {
+        "theta": 15,
+        "zeta": 37,
+        "pitch": 40,
+        "speed": 6
+      },
+      "surfaces": [
+        {
+          "surface_index": 0,
+          "psi_N": 0.09,
+          "root_count": 1,
+          "roots": [
+            {
+              "index": 0,
+              "classification": "electron",
+              "branch_id": "electron-000",
+              "selected": true,
+              "electric_field_kV_m": 10.9765625,
+              "particle_flux_m2_s": [
+                7.144955249586446e+17,
+                7.150062226161344e+17
+              ],
+              "heat_flux_W_m2": [
+                262.20711723911415,
+                2932.313529850034
+              ],
+              "parallel_current_A_T_m2": -109193.43480880647,
+              "primal_residual": 1.3448108279710422e-16,
+              "final_bracket_width_kV_m": 0.0048828125
+            }
+          ],
+          "selected_root_index": 0,
+          "selected_branch_id": "electron-000"
+        },
+        {
+          "surface_index": 1,
+          "psi_N": 0.16,
+          "root_count": 1,
+          "roots": [
+            {
+              "index": 0,
+              "classification": "electron",
+              "branch_id": "electron-000",
+              "selected": true,
+              "electric_field_kV_m": 11.9091796875,
+              "particle_flux_m2_s": [
+                1.0487196490588404e+18,
+                1.0484574247140625e+18
+              ],
+              "heat_flux_W_m2": [
+                391.0240504558651,
+                3345.171992690607
+              ],
+              "parallel_current_A_T_m2": -102232.31874195897,
+              "primal_residual": 6.274849852695946e-16,
+              "final_bracket_width_kV_m": 0.0048828125
+            }
+          ],
+          "selected_root_index": 0,
+          "selected_branch_id": "electron-000"
+        },
+        {
+          "surface_index": 2,
+          "psi_N": 0.25,
+          "root_count": 3,
+          "roots": [
+            {
+              "index": 0,
+              "classification": "ion",
+              "branch_id": "ion-000",
+              "selected": false,
+              "electric_field_kV_m": -0.4052734375,
+              "particle_flux_m2_s": [
+                1.9760941174240125e+18,
+                1.978362567412516e+18
+              ],
+              "heat_flux_W_m2": [
+                1629.8000012665182,
+                4763.247588483824
+              ],
+              "parallel_current_A_T_m2": -84568.62851408984,
+              "primal_residual": 2.518194286196668e-15,
+              "final_bracket_width_kV_m": 0.0048828125
+            },
+            {
+              "index": 1,
+              "classification": "unstable",
+              "branch_id": "unstable-000",
+              "selected": false,
+              "electric_field_kV_m": 0.60546875,
+              "particle_flux_m2_s": [
+                1.9381790246641073e+18,
+                1.9389037397196388e+18
+              ],
+              "heat_flux_W_m2": [
+                1486.5838100059148,
+                4680.988429630956
+              ],
+              "parallel_current_A_T_m2": -83068.7765662635,
+              "primal_residual": 1.8643781951594592e-15,
+              "final_bracket_width_kV_m": 0.0048828125
+            },
+            {
+              "index": 2,
+              "classification": "electron",
+              "branch_id": "electron-000",
+              "selected": true,
+              "electric_field_kV_m": 9.150390625,
+              "particle_flux_m2_s": [
+                1.0633520983614331e+18,
+                1.063733914915991e+18
+              ],
+              "heat_flux_W_m2": [
+                443.7023813718724,
+                2406.6202036465797
+              ],
+              "parallel_current_A_T_m2": -61985.08633904069,
+              "primal_residual": 1.737894021327202e-16,
+              "final_bracket_width_kV_m": 0.0048828125
+            }
+          ],
+          "selected_root_index": 2,
+          "selected_branch_id": "electron-000"
+        },
+        {
+          "surface_index": 3,
+          "psi_N": 0.36,
+          "root_count": 1,
+          "roots": [
+            {
+              "index": 0,
+              "classification": "ion",
+              "branch_id": "ion-000",
+              "selected": true,
+              "electric_field_kV_m": -2.87109375,
+              "particle_flux_m2_s": [
+                7.97126330237248e+17,
+                7.974531644235892e+17
+              ],
+              "heat_flux_W_m2": [
+                543.9414556933566,
+                1143.5968742942848
+              ],
+              "parallel_current_A_T_m2": -50195.272609632804,
+              "primal_residual": 1.5394620964077771e-15,
+              "final_bracket_width_kV_m": 0.0048828125
+            }
+          ],
+          "selected_root_index": 0,
+          "selected_branch_id": "ion-000"
+        },
+        {
+          "surface_index": 4,
+          "psi_N": 0.49,
+          "root_count": 1,
+          "roots": [
+            {
+              "index": 0,
+              "classification": "ion",
+              "branch_id": "ion-000",
+              "selected": true,
+              "electric_field_kV_m": -7.197265625,
+              "particle_flux_m2_s": [
+                2.8840193838677574e+17,
+                2.884582617558435e+17
+              ],
+              "heat_flux_W_m2": [
+                261.02949540331514,
+                206.63153335445045
+              ],
+              "parallel_current_A_T_m2": -24456.79521869892,
+              "primal_residual": 3.0085318155849424e-15,
+              "final_bracket_width_kV_m": 0.0048828125
+            }
+          ],
+          "selected_root_index": 0,
+          "selected_branch_id": "ion-000"
+        }
+      ],
+      "attempts": {
+        "attempt_count": 221,
+        "executed_route_counts": {
+          "block_tridiagonal_truncated": 221
+        },
+        "automatic_true_residual_recovery_count": 0,
+        "maximum_accepted_true_residual": 2.8153717264012653e-13
+      }
+    },
+    {
+      "case_id": "c116a1f2c3f40e1da01e75ae8aa0ea68b38d08e240e6a7cc052db0453d1a5b3e",
+      "resolution": {
+        "theta": 15,
+        "zeta": 37,
+        "pitch": 44,
+        "speed": 6
+      },
+      "surfaces": [
+        {
+          "surface_index": 0,
+          "psi_N": 0.09,
+          "root_count": 1,
+          "roots": [
+            {
+              "index": 0,
+              "classification": "electron",
+              "branch_id": "electron-000",
+              "selected": true,
+              "electric_field_kV_m": 11.0400390625,
+              "particle_flux_m2_s": [
+                7.251280050653165e+17,
+                7.250260184714641e+17
+              ],
+              "heat_flux_W_m2": [
+                268.5812836832535,
+                2872.7011513535786
+              ],
+              "parallel_current_A_T_m2": -151427.6436282824,
+              "primal_residual": 2.290334331396738e-16,
+              "final_bracket_width_kV_m": 0.0048828125
+            }
+          ],
+          "selected_root_index": 0,
+          "selected_branch_id": "electron-000"
+        },
+        {
+          "surface_index": 1,
+          "psi_N": 0.16,
+          "root_count": 1,
+          "roots": [
+            {
+              "index": 0,
+              "classification": "electron",
+              "branch_id": "electron-000",
+              "selected": true,
+              "electric_field_kV_m": 12.1142578125,
+              "particle_flux_m2_s": [
+                1.1173682115192883e+18,
+                1.1173144257407227e+18
+              ],
+              "heat_flux_W_m2": [
+                419.0033658480805,
+                3496.8983995754124
+              ],
+              "parallel_current_A_T_m2": -99407.75907378462,
+              "primal_residual": 6.456583336446386e-16,
+              "final_bracket_width_kV_m": 0.0048828125
+            }
+          ],
+          "selected_root_index": 0,
+          "selected_branch_id": "electron-000"
+        },
+        {
+          "surface_index": 2,
+          "psi_N": 0.25,
+          "root_count": 3,
+          "roots": [
+            {
+              "index": 0,
+              "classification": "ion",
+              "branch_id": "ion-000",
+              "selected": false,
+              "electric_field_kV_m": -0.3515625,
+              "particle_flux_m2_s": [
+                2.2675657821482834e+18,
+                2.2673799624472253e+18
+              ],
+              "heat_flux_W_m2": [
+                1867.9479022059465,
+                5363.274836678998
+              ],
+              "parallel_current_A_T_m2": -78817.86150505429,
+              "primal_residual": 2.044758927711604e-15,
+              "final_bracket_width_kV_m": 0.0048828125
+            },
+            {
+              "index": 1,
+              "classification": "unstable",
+              "branch_id": "unstable-000",
+              "selected": false,
+              "electric_field_kV_m": 0.52734375,
+              "particle_flux_m2_s": [
+                2.225962643648673e+18,
+                2.2254683019703227e+18
+              ],
+              "heat_flux_W_m2": [
+                1704.5843397281647,
+                5281.578807106084
+              ],
+              "parallel_current_A_T_m2": -77552.13116585133,
+              "primal_residual": 2.5365288181719253e-15,
+              "final_bracket_width_kV_m": 0.0048828125
+            },
+            {
+              "index": 2,
+              "classification": "electron",
+              "branch_id": "electron-000",
+              "selected": true,
+              "electric_field_kV_m": 9.1552734375,
+              "particle_flux_m2_s": [
+                1.2295974783515182e+18,
+                1.2299638921579333e+18
+              ],
+              "heat_flux_W_m2": [
+                516.3563473447084,
+                2767.850368298471
+              ],
+              "parallel_current_A_T_m2": -55210.97538325537,
+              "primal_residual": 6.612279925029194e-16,
+              "final_bracket_width_kV_m": 0.0048828125
+            }
+          ],
+          "selected_root_index": 2,
+          "selected_branch_id": "electron-000"
+        },
+        {
+          "surface_index": 3,
+          "psi_N": 0.36,
+          "root_count": 1,
+          "roots": [
+            {
+              "index": 0,
+              "classification": "ion",
+              "branch_id": "ion-000",
+              "selected": true,
+              "electric_field_kV_m": -2.9736328125,
+              "particle_flux_m2_s": [
+                8.901772011637916e+17,
+                8.906675367638337e+17
+              ],
+              "heat_flux_W_m2": [
+                599.5188460027023,
+                1257.337389842698
+              ],
+              "parallel_current_A_T_m2": -49221.22286137731,
+              "primal_residual": 1.0440865591346318e-15,
+              "final_bracket_width_kV_m": 0.0048828125
+            }
+          ],
+          "selected_root_index": 0,
+          "selected_branch_id": "ion-000"
+        },
+        {
+          "surface_index": 4,
+          "psi_N": 0.49,
+          "root_count": 1,
+          "roots": [
+            {
+              "index": 0,
+              "classification": "ion",
+              "branch_id": "ion-000",
+              "selected": true,
+              "electric_field_kV_m": -7.3388671875,
+              "particle_flux_m2_s": [
+                3.130472548661503e+17,
+                3.125186461847742e+17
+              ],
+              "heat_flux_W_m2": [
+                283.7818745078585,
+                222.24590795819483
+              ],
+              "parallel_current_A_T_m2": -24456.06373493412,
+              "primal_residual": 3.2128918432746887e-15,
+              "final_bracket_width_kV_m": 0.0048828125
+            }
+          ],
+          "selected_root_index": 0,
+          "selected_branch_id": "ion-000"
+        }
+      ],
+      "attempts": {
+        "attempt_count": 223,
+        "executed_route_counts": {
+          "block_tridiagonal_truncated": 221,
+          "gmres": 2
+        },
+        "automatic_true_residual_recovery_count": 2,
+        "maximum_accepted_true_residual": 3.75131427218295e-13
+      }
+    }
+  ],
+  "comparisons": [
+    {
+      "name": "reference_to_theta17",
+      "left": {
+        "theta": 15,
+        "zeta": 37,
+        "pitch": 36,
+        "speed": 6
+      },
+      "right": {
+        "theta": 17,
+        "zeta": 37,
+        "pitch": 36,
+        "speed": 6
+      },
+      "root_movements": [
+        {
+          "surface_index": 0,
+          "root_index": 0,
+          "classification": "electron",
+          "branch_id": "electron-000",
+          "identity_stable": true,
+          "left_electric_field_kV_m": 11.3427734375,
+          "right_electric_field_kV_m": 11.337890625,
+          "electric_field_movement_kV_m": 0.0048828125,
+          "particle_flux_scaled_movement": 0.0018567663694022997,
+          "heat_flux_scaled_movement": 0.0020312934334944825,
+          "parallel_current_scaled_movement": 0.0004426111740321668
+        },
+        {
+          "surface_index": 1,
+          "root_index": 0,
+          "classification": "electron",
+          "branch_id": "electron-000",
+          "identity_stable": true,
+          "left_electric_field_kV_m": 11.630859375,
+          "right_electric_field_kV_m": 11.54296875,
+          "electric_field_movement_kV_m": 0.087890625,
+          "particle_flux_scaled_movement": 0.00793691770014454,
+          "heat_flux_scaled_movement": 0.010881774411963053,
+          "parallel_current_scaled_movement": 0.03743327358493656
+        },
+        {
+          "surface_index": 2,
+          "root_index": 0,
+          "classification": "ion",
+          "branch_id": "ion-000",
+          "identity_stable": true,
+          "left_electric_field_kV_m": -0.48828125,
+          "right_electric_field_kV_m": -0.478515625,
+          "electric_field_movement_kV_m": 0.009765625,
+          "particle_flux_scaled_movement": 0.0007491247926518822,
+          "heat_flux_scaled_movement": 0.0022806735127813577,
+          "parallel_current_scaled_movement": 0.005582926845455823
+        },
+        {
+          "surface_index": 2,
+          "root_index": 1,
+          "classification": "unstable",
+          "branch_id": "unstable-000",
+          "identity_stable": true,
+          "left_electric_field_kV_m": 0.8837890625,
+          "right_electric_field_kV_m": 0.869140625,
+          "electric_field_movement_kV_m": 0.0146484375,
+          "particle_flux_scaled_movement": 0.0007426095987809226,
+          "heat_flux_scaled_movement": 0.002890477427686801,
+          "parallel_current_scaled_movement": 0.005816627429352417
+        },
+        {
+          "surface_index": 2,
+          "root_index": 2,
+          "classification": "electron",
+          "branch_id": "electron-000",
+          "identity_stable": true,
+          "left_electric_field_kV_m": 7.4169921875,
+          "right_electric_field_kV_m": 7.255859375,
+          "electric_field_movement_kV_m": 0.1611328125,
+          "particle_flux_scaled_movement": 0.003565034595803167,
+          "heat_flux_scaled_movement": 0.007284063210567299,
+          "parallel_current_scaled_movement": 0.023392247805685166
+        },
+        {
+          "surface_index": 3,
+          "root_index": 0,
+          "classification": "ion",
+          "branch_id": "ion-000",
+          "identity_stable": true,
+          "left_electric_field_kV_m": -2.8515625,
+          "right_electric_field_kV_m": -2.8662109375,
+          "electric_field_movement_kV_m": 0.0146484375,
+          "particle_flux_scaled_movement": 0.008165829883582245,
+          "heat_flux_scaled_movement": 0.009690189858276564,
+          "parallel_current_scaled_movement": 0.00967519020088855
+        },
+        {
+          "surface_index": 4,
+          "root_index": 0,
+          "classification": "ion",
+          "branch_id": "ion-000",
+          "identity_stable": true,
+          "left_electric_field_kV_m": -6.7626953125,
+          "right_electric_field_kV_m": -6.77734375,
+          "electric_field_movement_kV_m": 0.0146484375,
+          "particle_flux_scaled_movement": 0.008971670686759381,
+          "heat_flux_scaled_movement": 0.012790873803064984,
+          "parallel_current_scaled_movement": 0.016680048862016666
+        }
+      ],
+      "selected_movements": [
+        {
+          "surface_index": 0,
+          "branch_stable": true,
+          "electric_field_movement_kV_m": 0.0048828125,
+          "particle_flux_scaled_movement": 0.0018567663694022997,
+          "heat_flux_scaled_movement": 0.0020312934334944825,
+          "parallel_current_scaled_movement": 0.0004426111740321668
+        },
+        {
+          "surface_index": 1,
+          "branch_stable": true,
+          "electric_field_movement_kV_m": 0.087890625,
+          "particle_flux_scaled_movement": 0.00793691770014454,
+          "heat_flux_scaled_movement": 0.010881774411963053,
+          "parallel_current_scaled_movement": 0.03743327358493656
+        },
+        {
+          "surface_index": 2,
+          "branch_stable": true,
+          "electric_field_movement_kV_m": 0.1611328125,
+          "particle_flux_scaled_movement": 0.003565034595803167,
+          "heat_flux_scaled_movement": 0.007284063210567299,
+          "parallel_current_scaled_movement": 0.023392247805685166
+        },
+        {
+          "surface_index": 3,
+          "branch_stable": true,
+          "electric_field_movement_kV_m": 0.0146484375,
+          "particle_flux_scaled_movement": 0.008165829883582245,
+          "heat_flux_scaled_movement": 0.009690189858276564,
+          "parallel_current_scaled_movement": 0.00967519020088855
+        },
+        {
+          "surface_index": 4,
+          "branch_stable": true,
+          "electric_field_movement_kV_m": 0.0146484375,
+          "particle_flux_scaled_movement": 0.008971670686759381,
+          "heat_flux_scaled_movement": 0.012790873803064984,
+          "parallel_current_scaled_movement": 0.016680048862016666
+        }
+      ],
+      "summary": {
+        "topology_stable": true,
+        "max_all_root_electric_field_movement_kV_m": 0.1611328125,
+        "max_all_root_particle_flux_scaled_movement": 0.008971670686759381,
+        "max_all_root_heat_flux_scaled_movement": 0.012790873803064984,
+        "max_all_root_parallel_current_scaled_movement": 0.03743327358493656,
+        "max_selected_electric_field_movement_kV_m": 0.1611328125,
+        "max_selected_particle_flux_scaled_movement": 0.008971670686759381,
+        "max_selected_heat_flux_scaled_movement": 0.012790873803064984,
+        "max_selected_parallel_current_scaled_movement": 0.03743327358493656
+      }
+    },
+    {
+      "name": "reference_to_pitch40",
+      "left": {
+        "theta": 15,
+        "zeta": 37,
+        "pitch": 36,
+        "speed": 6
+      },
+      "right": {
+        "theta": 15,
+        "zeta": 37,
+        "pitch": 40,
+        "speed": 6
+      },
+      "root_movements": [
+        {
+          "surface_index": 0,
+          "root_index": 0,
+          "classification": "electron",
+          "branch_id": "electron-000",
+          "identity_stable": true,
+          "left_electric_field_kV_m": 11.3427734375,
+          "right_electric_field_kV_m": 10.9765625,
+          "electric_field_movement_kV_m": 0.3662109375,
+          "particle_flux_scaled_movement": 0.0376311596144285,
+          "heat_flux_scaled_movement": 0.04565648873764131,
+          "parallel_current_scaled_movement": 0.047235735533524476
+        },
+        {
+          "surface_index": 1,
+          "root_index": 0,
+          "classification": "electron",
+          "branch_id": "electron-000",
+          "identity_stable": true,
+          "left_electric_field_kV_m": 11.630859375,
+          "right_electric_field_kV_m": 11.9091796875,
+          "electric_field_movement_kV_m": 0.2783203125,
+          "particle_flux_scaled_movement": 0.036137486195998506,
+          "heat_flux_scaled_movement": 0.0725523983845947,
+          "parallel_current_scaled_movement": 0.3101128565997342
+        },
+        {
+          "surface_index": 2,
+          "root_index": 0,
+          "classification": "ion",
+          "branch_id": "ion-000",
+          "identity_stable": true,
+          "left_electric_field_kV_m": -0.48828125,
+          "right_electric_field_kV_m": -0.4052734375,
+          "electric_field_movement_kV_m": 0.0830078125,
+          "particle_flux_scaled_movement": 0.09246533880272666,
+          "heat_flux_scaled_movement": 0.1583104631802219,
+          "parallel_current_scaled_movement": 0.08169214534848813
+        },
+        {
+          "surface_index": 2,
+          "root_index": 1,
+          "classification": "unstable",
+          "branch_id": "unstable-000",
+          "identity_stable": true,
+          "left_electric_field_kV_m": 0.8837890625,
+          "right_electric_field_kV_m": 0.60546875,
+          "electric_field_movement_kV_m": 0.2783203125,
+          "particle_flux_scaled_movement": 0.1067542132633416,
+          "heat_flux_scaled_movement": 0.19650897062658484,
+          "parallel_current_scaled_movement": 0.07838729825384155
+        },
+        {
+          "surface_index": 2,
+          "root_index": 2,
+          "classification": "electron",
+          "branch_id": "electron-000",
+          "identity_stable": true,
+          "left_electric_field_kV_m": 7.4169921875,
+          "right_electric_field_kV_m": 9.150390625,
+          "electric_field_movement_kV_m": 1.7333984375,
+          "particle_flux_scaled_movement": 0.024026723456521158,
+          "heat_flux_scaled_movement": 0.023131694187265555,
+          "parallel_current_scaled_movement": 0.11436433100165318
+        },
+        {
+          "surface_index": 3,
+          "root_index": 0,
+          "classification": "ion",
+          "branch_id": "ion-000",
+          "identity_stable": true,
+          "left_electric_field_kV_m": -2.8515625,
+          "right_electric_field_kV_m": -2.87109375,
+          "electric_field_movement_kV_m": 0.01953125,
+          "particle_flux_scaled_movement": 0.03568037875094704,
+          "heat_flux_scaled_movement": 0.09472195173044166,
+          "parallel_current_scaled_movement": 0.09013180093365673
+        },
+        {
+          "surface_index": 4,
+          "root_index": 0,
+          "classification": "ion",
+          "branch_id": "ion-000",
+          "identity_stable": true,
+          "left_electric_field_kV_m": -6.7626953125,
+          "right_electric_field_kV_m": -7.197265625,
+          "electric_field_movement_kV_m": 0.4345703125,
+          "particle_flux_scaled_movement": 0.03602258016386687,
+          "heat_flux_scaled_movement": 0.06914344207448066,
+          "parallel_current_scaled_movement": 0.03016642996314151
+        }
+      ],
+      "selected_movements": [
+        {
+          "surface_index": 0,
+          "branch_stable": true,
+          "electric_field_movement_kV_m": 0.3662109375,
+          "particle_flux_scaled_movement": 0.0376311596144285,
+          "heat_flux_scaled_movement": 0.04565648873764131,
+          "parallel_current_scaled_movement": 0.047235735533524476
+        },
+        {
+          "surface_index": 1,
+          "branch_stable": true,
+          "electric_field_movement_kV_m": 0.2783203125,
+          "particle_flux_scaled_movement": 0.036137486195998506,
+          "heat_flux_scaled_movement": 0.0725523983845947,
+          "parallel_current_scaled_movement": 0.3101128565997342
+        },
+        {
+          "surface_index": 2,
+          "branch_stable": true,
+          "electric_field_movement_kV_m": 1.7333984375,
+          "particle_flux_scaled_movement": 0.024026723456521158,
+          "heat_flux_scaled_movement": 0.023131694187265555,
+          "parallel_current_scaled_movement": 0.11436433100165318
+        },
+        {
+          "surface_index": 3,
+          "branch_stable": true,
+          "electric_field_movement_kV_m": 0.01953125,
+          "particle_flux_scaled_movement": 0.03568037875094704,
+          "heat_flux_scaled_movement": 0.09472195173044166,
+          "parallel_current_scaled_movement": 0.09013180093365673
+        },
+        {
+          "surface_index": 4,
+          "branch_stable": true,
+          "electric_field_movement_kV_m": 0.4345703125,
+          "particle_flux_scaled_movement": 0.03602258016386687,
+          "heat_flux_scaled_movement": 0.06914344207448066,
+          "parallel_current_scaled_movement": 0.03016642996314151
+        }
+      ],
+      "summary": {
+        "topology_stable": true,
+        "max_all_root_electric_field_movement_kV_m": 1.7333984375,
+        "max_all_root_particle_flux_scaled_movement": 0.1067542132633416,
+        "max_all_root_heat_flux_scaled_movement": 0.19650897062658484,
+        "max_all_root_parallel_current_scaled_movement": 0.3101128565997342,
+        "max_selected_electric_field_movement_kV_m": 1.7333984375,
+        "max_selected_particle_flux_scaled_movement": 0.0376311596144285,
+        "max_selected_heat_flux_scaled_movement": 0.09472195173044166,
+        "max_selected_parallel_current_scaled_movement": 0.3101128565997342
+      }
+    },
+    {
+      "name": "pitch40_to_pitch44",
+      "left": {
+        "theta": 15,
+        "zeta": 37,
+        "pitch": 40,
+        "speed": 6
+      },
+      "right": {
+        "theta": 15,
+        "zeta": 37,
+        "pitch": 44,
+        "speed": 6
+      },
+      "root_movements": [
+        {
+          "surface_index": 0,
+          "root_index": 0,
+          "classification": "electron",
+          "branch_id": "electron-000",
+          "identity_stable": true,
+          "left_electric_field_kV_m": 10.9765625,
+          "right_electric_field_kV_m": 11.0400390625,
+          "electric_field_movement_kV_m": 0.0634765625,
+          "particle_flux_scaled_movement": 0.014662900939419852,
+          "heat_flux_scaled_movement": 0.023732727600098175,
+          "parallel_current_scaled_movement": 0.27890686143905485
+        },
+        {
+          "surface_index": 1,
+          "root_index": 0,
+          "classification": "electron",
+          "branch_id": "electron-000",
+          "identity_stable": true,
+          "left_electric_field_kV_m": 11.9091796875,
+          "right_electric_field_kV_m": 12.1142578125,
+          "electric_field_movement_kV_m": 0.205078125,
+          "particle_flux_scaled_movement": 0.061627237096676286,
+          "heat_flux_scaled_movement": 0.06677587263668885,
+          "parallel_current_scaled_movement": 0.027628833063091534
+        },
+        {
+          "surface_index": 2,
+          "root_index": 0,
+          "classification": "ion",
+          "branch_id": "ion-000",
+          "identity_stable": true,
+          "left_electric_field_kV_m": -0.4052734375,
+          "right_electric_field_kV_m": -0.3515625,
+          "electric_field_movement_kV_m": 0.0537109375,
+          "particle_flux_scaled_movement": 0.12853945275542641,
+          "heat_flux_scaled_movement": 0.12749172536246245,
+          "parallel_current_scaled_movement": 0.06800118566517166
+        },
+        {
+          "surface_index": 2,
+          "root_index": 1,
+          "classification": "unstable",
+          "branch_id": "unstable-000",
+          "identity_stable": true,
+          "left_electric_field_kV_m": 0.60546875,
+          "right_electric_field_kV_m": 0.52734375,
+          "electric_field_movement_kV_m": 0.078125,
+          "particle_flux_scaled_movement": 0.12928501734101297,
+          "heat_flux_scaled_movement": 0.12789072657854825,
+          "parallel_current_scaled_movement": 0.06641057721623694
+        },
+        {
+          "surface_index": 2,
+          "root_index": 2,
+          "classification": "electron",
+          "branch_id": "electron-000",
+          "identity_stable": true,
+          "left_electric_field_kV_m": 9.150390625,
+          "right_electric_field_kV_m": 9.1552734375,
+          "electric_field_movement_kV_m": 0.0048828125,
+          "particle_flux_scaled_movement": 0.13520309118799181,
+          "heat_flux_scaled_movement": 0.14070508931757897,
+          "parallel_current_scaled_movement": 0.1092861421331717
+        },
+        {
+          "surface_index": 3,
+          "root_index": 0,
+          "classification": "ion",
+          "branch_id": "ion-000",
+          "identity_stable": true,
+          "left_electric_field_kV_m": -2.87109375,
+          "right_electric_field_kV_m": -2.9736328125,
+          "electric_field_movement_kV_m": 0.1025390625,
+          "particle_flux_scaled_movement": 0.10465675293267243,
+          "heat_flux_scaled_movement": 0.09270332480773284,
+          "parallel_current_scaled_movement": 0.019405208849659007
+        },
+        {
+          "surface_index": 4,
+          "root_index": 0,
+          "classification": "ion",
+          "branch_id": "ion-000",
+          "identity_stable": true,
+          "left_electric_field_kV_m": -7.197265625,
+          "right_electric_field_kV_m": -7.3388671875,
+          "electric_field_movement_kV_m": 0.1416015625,
+          "particle_flux_scaled_movement": 0.07872714453257906,
+          "heat_flux_scaled_movement": 0.0801755895932434,
+          "parallel_current_scaled_movement": 2.99092239297842e-05
+        }
+      ],
+      "selected_movements": [
+        {
+          "surface_index": 0,
+          "branch_stable": true,
+          "electric_field_movement_kV_m": 0.0634765625,
+          "particle_flux_scaled_movement": 0.014662900939419852,
+          "heat_flux_scaled_movement": 0.023732727600098175,
+          "parallel_current_scaled_movement": 0.27890686143905485
+        },
+        {
+          "surface_index": 1,
+          "branch_stable": true,
+          "electric_field_movement_kV_m": 0.205078125,
+          "particle_flux_scaled_movement": 0.061627237096676286,
+          "heat_flux_scaled_movement": 0.06677587263668885,
+          "parallel_current_scaled_movement": 0.027628833063091534
+        },
+        {
+          "surface_index": 2,
+          "branch_stable": true,
+          "electric_field_movement_kV_m": 0.0048828125,
+          "particle_flux_scaled_movement": 0.13520309118799181,
+          "heat_flux_scaled_movement": 0.14070508931757897,
+          "parallel_current_scaled_movement": 0.1092861421331717
+        },
+        {
+          "surface_index": 3,
+          "branch_stable": true,
+          "electric_field_movement_kV_m": 0.1025390625,
+          "particle_flux_scaled_movement": 0.10465675293267243,
+          "heat_flux_scaled_movement": 0.09270332480773284,
+          "parallel_current_scaled_movement": 0.019405208849659007
+        },
+        {
+          "surface_index": 4,
+          "branch_stable": true,
+          "electric_field_movement_kV_m": 0.1416015625,
+          "particle_flux_scaled_movement": 0.07872714453257906,
+          "heat_flux_scaled_movement": 0.0801755895932434,
+          "parallel_current_scaled_movement": 2.99092239297842e-05
+        }
+      ],
+      "summary": {
+        "topology_stable": true,
+        "max_all_root_electric_field_movement_kV_m": 0.205078125,
+        "max_all_root_particle_flux_scaled_movement": 0.13520309118799181,
+        "max_all_root_heat_flux_scaled_movement": 0.14070508931757897,
+        "max_all_root_parallel_current_scaled_movement": 0.27890686143905485,
+        "max_selected_electric_field_movement_kV_m": 0.205078125,
+        "max_selected_particle_flux_scaled_movement": 0.13520309118799181,
+        "max_selected_heat_flux_scaled_movement": 0.14070508931757897,
+        "max_selected_parallel_current_scaled_movement": 0.27890686143905485
+      }
+    }
+  ],
+  "outcome": {
+    "status": "refinement_exhausted",
+    "admission_pass": false,
+    "limits": {
+      "max_all_root_electric_field_movement_kV_m": 0.005,
+      "max_selected_particle_flux_scaled_movement": 0.02,
+      "max_selected_heat_flux_scaled_movement": 0.02,
+      "max_accepted_true_residual": 1e-12
+    },
+    "measured_max_accepted_true_residual": 3.75131427218295e-13,
+    "theta17_vs_reference": {
+      "status": "refinement_exhausted",
+      "admission_pass": false,
+      "gates": {
+        "topology_stable": true,
+        "all_root_electric_field_movement": false,
+        "selected_particle_flux_movement": true,
+        "selected_heat_flux_movement": true,
+        "accepted_true_residual": true
+      },
+      "failed_gates": [
+        "all_root_electric_field_movement"
+      ]
+    },
+    "pitch40_vs_reference": {
+      "status": "refinement_exhausted",
+      "admission_pass": false,
+      "gates": {
+        "topology_stable": true,
+        "all_root_electric_field_movement": false,
+        "selected_particle_flux_movement": false,
+        "selected_heat_flux_movement": false,
+        "accepted_true_residual": true
+      },
+      "failed_gates": [
+        "all_root_electric_field_movement",
+        "selected_particle_flux_movement",
+        "selected_heat_flux_movement"
+      ]
+    },
+    "pitch44_vs_pitch40": {
+      "status": "refinement_exhausted",
+      "admission_pass": false,
+      "gates": {
+        "topology_stable": true,
+        "all_root_electric_field_movement": false,
+        "selected_particle_flux_movement": false,
+        "selected_heat_flux_movement": false,
+        "accepted_true_residual": true
+      },
+      "failed_gates": [
+        "all_root_electric_field_movement",
+        "selected_particle_flux_movement",
+        "selected_heat_flux_movement"
+      ]
+    },
+    "diagnosis": {
+      "dominant_failed_direction": "pitch",
+      "theta_max_root_movement_kV_m": 0.1611328125,
+      "pitch40_max_root_movement_kV_m": 1.7333984375,
+      "theta_max_selected_flux_scaled_movement": 0.012790873803064984,
+      "pitch40_max_selected_flux_scaled_movement": 0.09472195173044166,
+      "pitch40_to_pitch44_approaches_gate": false,
+      "pitch48_bruteforce_admitted": false,
+      "reason": "Pitch40-to-pitch44 movements remain above every scientific gate and several observables move farther from the reference; the pitch44 process reached a 22275409800-byte footprint on the 24 GiB host."
+    }
+  },
+  "exclusions": [
+    "not_phase_space_convergence_validation",
+    "not_zeta_or_speed_convergence_validation",
+    "not_independent_cross_code_ambipolar_validation",
+    "not_full_fokker_planck_ambipolar_validation",
+    "not_experimental_validation",
+    "not_cross_code_performance_validation"
+  ]
+}

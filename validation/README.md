@@ -16,6 +16,9 @@ Git; later records refer to them by checksum or stable artifact identifier.
 - `ambipolar_phase_space_ladder_v1.json`: bounded coarse/reference/fine W7-X
   PAS/DKES kinetic-grid ladder that truthfully records exhausted convergence
   gates rather than promoting the reference profile.
+- `ambipolar_phase_space_axes_v1.json`: separate theta and pitch rungs that
+  diagnose pitch as the dominant unresolved direction and reject a blind
+  pitch-48 escalation.
 - `inputs/*`: the exact DKX decks and native cases used by these rungs.
 
 ## Independent cross-code audit
@@ -168,3 +171,22 @@ and `2%` gates even though every accepted true residual is below `3.92e-13`.
 The recorded outcome is therefore `refinement_exhausted`, not phase-space
 convergence. The fine rung does not refine zeta or speed beyond the reference,
 so it cannot support a hidden full-grid convergence claim.
+
+## Theta/pitch resolution diagnosis
+
+`ambipolar_phase_space_axes_v1.json` retains four exact rungs: the
+`(15, 37, 36, 6)` reference, theta-only `(17, 37, 36, 6)`, pitch-only
+`(15, 37, 40, 6)`, and the next pitch rung `(15, 37, 44, 6)`. Audit every
+root, selected flux, checksum, residual, timing, and memory field with:
+
+```bash
+python tools/paper_benchmarks/audit_ambipolar_phase_space_axes.py
+```
+
+Theta-only keeps selected particle and heat-flux movement below `2%`, but its
+maximum root movement is still `0.1611328125 kV/m`. Pitch-only moves a root by
+`1.7333984375 kV/m` and selected heat flux by `9.47%`. Pitch 40 to 44 remains
+far outside the gates: `0.205078125 kV/m`, `13.52%` selected particle flux,
+and `14.07%` selected heat flux. The pitch-44 process reached a
+`22,275,409,800 B` footprint, so a brute-force pitch-48 run is not admitted.
+The status remains `refinement_exhausted`; zeta and speed remain untested.
