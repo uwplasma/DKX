@@ -318,6 +318,40 @@ def test_auto_chunk_size_respects_budget_and_max_batch(tmp_path: Path) -> None:
         batch_mod.auto_chunk_size(op, 4, max_batch=0)
 
 
+def test_batch_memory_budget_controls_route_and_preserves_moments(tmp_path: Path) -> None:
+    """The batch budget must reach each solve, not only size the outer chunk."""
+
+    import jax
+
+    jax.config.update("jax_enable_x64", True)
+    import jax.numpy as jnp
+
+    from dkx import batch as batch_mod
+    from dkx import er as er_mod
+
+    prob = er_mod.prepare(_write(tmp_path, _pas_deck()), er_bracket=(-5.0, 5.0))
+    er_values = jnp.asarray([-0.5, 0.5], dtype=jnp.float64)
+
+    full = batch_mod.batched_er_scan(prob, er_values, memory_budget_gb=64.0)
+    bounded = batch_mod.batched_er_scan(prob, er_values, memory_budget_gb=1e-6)
+
+    assert full.executed_method == "block_tridiagonal"
+    assert bounded.executed_method == "block_tridiagonal_truncated"
+    assert bounded.chunk_size == 1
+    np.testing.assert_allclose(
+        np.asarray(bounded.radial_current),
+        np.asarray(full.radial_current),
+        rtol=0.0,
+        atol=1e-12,
+    )
+    np.testing.assert_allclose(
+        np.asarray(bounded.moments["particleFlux_vm_psiHat"]),
+        np.asarray(full.moments["particleFlux_vm_psiHat"]),
+        rtol=0.0,
+        atol=1e-12,
+    )
+
+
 def test_solve_footprint_models_the_truncated_route(tmp_path: Path) -> None:
     """A production-shaped op is charged the truncated working set, not the bands.
 
