@@ -11,7 +11,7 @@ import pytest
 
 import dkx
 from dkx.constants import RadialCoordinates
-from dkx.units import HEAT_FLUX, PARALLEL_CURRENT, PARTICLE_FLUX
+from dkx.units import HEAT_FLUX, PARALLEL_CURRENT, PARTICLE_FLUX, flux_psi_hat_to_r_hat
 
 
 def _case():
@@ -479,7 +479,13 @@ def test_native_normalization_matches_the_accepted_kernel_path(
         solverTolerance=1.0e-8,
     )
     radial = RadialCoordinates(psi_a_hat=0.15596, a_hat=0.5585, r_n=0.4)
-    factor = radial.d_dpsi_hat_to_d_dr_hat
+    factor = flux_psi_hat_to_r_hat(
+        psi_a_hat=radial.psi_a_hat,
+        a_hat=radial.a_hat,
+        r_n=radial.r_n,
+    )
+    assert factor == radial.d_dr_hat_to_d_dpsi_hat
+    assert factor != radial.d_dpsi_hat_to_d_dr_hat
     np.testing.assert_allclose(
         native.particle_flux_m2_s[-1],
         np.asarray(legacy.moments["particleFlux_vm_psiHat"]) * factor * PARTICLE_FLUX,
@@ -579,14 +585,14 @@ def test_native_vmec_reuses_file_and_grids_and_matches_scheme5(
     np.testing.assert_allclose(
         native.particle_flux_m2_s[-1],
         np.asarray(legacy.moments["particleFlux_vm_psiHat"])
-        * radial.d_dpsi_hat_to_d_dr_hat
+        * radial.d_dr_hat_to_d_dpsi_hat
         * PARTICLE_FLUX,
         rtol=2.0e-12,
     )
     np.testing.assert_allclose(
         native.heat_flux_W_m2[-1],
         np.asarray(legacy.moments["heatFlux_vm_psiHat"])
-        * radial.d_dpsi_hat_to_d_dr_hat
+        * radial.d_dr_hat_to_d_dpsi_hat
         * HEAT_FLUX,
         rtol=2.0e-12,
     )
@@ -710,14 +716,14 @@ def test_native_boozer_reuses_parsed_data_and_matches_scheme12(monkeypatch) -> N
     np.testing.assert_allclose(
         native.particle_flux_m2_s[-1],
         np.asarray(legacy.moments["particleFlux_vm_psiHat"])
-        * radial.d_dpsi_hat_to_d_dr_hat
+        * radial.d_dr_hat_to_d_dpsi_hat
         * PARTICLE_FLUX,
         rtol=2.0e-12,
     )
     np.testing.assert_allclose(
         native.heat_flux_W_m2[-1],
         np.asarray(legacy.moments["heatFlux_vm_psiHat"])
-        * radial.d_dpsi_hat_to_d_dr_hat
+        * radial.d_dr_hat_to_d_dpsi_hat
         * HEAT_FLUX,
         rtol=2.0e-12,
     )
