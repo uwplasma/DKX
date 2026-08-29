@@ -25,7 +25,9 @@ def _frozen_arrays(values: Mapping[str, Any]) -> Mapping[str, np.ndarray]:
 
 def _frozen_value(value: Any) -> Any:
     if isinstance(value, Mapping):
-        return MappingProxyType({str(key): _frozen_value(item) for key, item in value.items()})
+        return MappingProxyType(
+            {str(key): _frozen_value(item) for key, item in value.items()}
+        )
     if isinstance(value, (list, tuple)):
         return tuple(_frozen_value(item) for item in value)
     return value
@@ -133,15 +135,33 @@ class Result:
         """Return the compact numerical/provenance record used for review."""
 
         keys = (
-            "converged", "solver_route", "route_reason", "residual_norm",
-            "iterations", "normalization", "geometry_sha256", "dkx_version",
-            "python_version", "jax_version", "jaxlib_version", "platform",
-            "precision", "device", "timings_s", "peak_host_memory_bytes",
+            "converged",
+            "solver_route",
+            "route_reason",
+            "residual_norm",
+            "iterations",
+            "ambipolar_all_surfaces_bracketed",
+            "ambipolar_selection",
+            "normalization",
+            "geometry_sha256",
+            "dkx_version",
+            "python_version",
+            "jax_version",
+            "jaxlib_version",
+            "platform",
+            "precision",
+            "device",
+            "timings_s",
+            "peak_host_memory_bytes",
         )
         return {
             "schema_version": self.schema_version,
             "case_id": self.case_id,
-            **{key: _jsonable(self.metadata[key]) for key in keys if key in self.metadata},
+            **{
+                key: _jsonable(self.metadata[key])
+                for key in keys
+                if key in self.metadata
+            },
             "warnings": list(self.warnings),
         }
 
@@ -154,7 +174,16 @@ class Result:
         print(f"DKX result: {self.case_name} ({self.case_id[:12]})")
         print(f"workflow: {self.workflow}")
         print(f"converged: {converged}; residual: {residual}")
-        print(f"solver: {self.metadata.get('solver_route', 'unknown')}; total time: {total} s")
+        print(
+            f"solver: {self.metadata.get('solver_route', 'unknown')}; total time: {total} s"
+        )
+        if "ambipolar_status" in self.arrays:
+            statuses = [str(value) for value in self.arrays["ambipolar_status"]]
+            bracketed = sum(value == "bracketed_root" for value in statuses)
+            print(
+                f"ambipolar roots: {bracketed}/{len(statuses)} surfaces bracketed; "
+                "unbracketed surfaces retain the closest scanned point"
+            )
         print("arrays: " + ", ".join(sorted(self.arrays)))
         for warning in self.warnings:
             print(f"warning: {warning}")
@@ -164,7 +193,9 @@ class Result:
 
         target = Path(path) if path is not None else self.output_path
         if target is None:
-            raise ValueError("save() needs a path because this Result has no output_path")
+            raise ValueError(
+                "save() needs a path because this Result has no output_path"
+            )
         target = target.expanduser().resolve()
         if target.suffix.lower() != ".nc":
             raise ValueError("native Result.save() writes .nc files; use a .nc suffix")
@@ -179,13 +210,17 @@ class Result:
             for dim, size in zip(self.dimensions[name], array.shape):
                 old = sizes.setdefault(dim, int(size))
                 if old != int(size):
-                    raise ValueError(f"dimension {dim!r} has inconsistent sizes {old} and {size}")
+                    raise ValueError(
+                        f"dimension {dim!r} has inconsistent sizes {old} and {size}"
+                    )
         with Dataset(str(target), "w", format="NETCDF4") as handle:
             handle.setncattr("dkx_result_schema", int(self.schema_version))
             handle.setncattr("case_id", self.case_id)
             handle.setncattr("case_name", self.case_name)
             handle.setncattr("workflow", self.workflow)
-            handle.setncattr("metadata_json", json.dumps(_jsonable(self.metadata), sort_keys=True))
+            handle.setncattr(
+                "metadata_json", json.dumps(_jsonable(self.metadata), sort_keys=True)
+            )
             handle.setncattr("warnings_json", json.dumps(list(self.warnings)))
             for dim, size in sizes.items():
                 handle.createDimension(dim, size)
@@ -223,21 +258,37 @@ class Result:
             raise ValueError("Result has no auto-plot observables")
         surface = np.asarray(self.arrays.get("surface", self.arrays.get("r_N")))
         figure, axes = plt.subplots(
-            len(selected), 1, sharex=True, figsize=(7.2, 2.5 * len(selected)), squeeze=False
+            len(selected),
+            1,
+            sharex=True,
+            figsize=(7.2, 2.5 * len(selected)),
+            squeeze=False,
         )
         species = [str(value) for value in self.arrays.get("species", [])]
         for axis, (name, label) in zip(axes[:, 0], selected):
             value = np.asarray(self.arrays[name])
             if value.ndim == 2:
                 for index in range(value.shape[1]):
-                    axis.plot(surface, value[:, index], marker="o", label=species[index])
+                    axis.plot(
+                        surface, value[:, index], marker="o", label=species[index]
+                    )
                 axis.legend(frameon=False)
             else:
                 axis.plot(surface, value, marker="o")
             axis.set_ylabel(label)
             axis.grid(alpha=0.25)
         axes[-1, 0].set_xlabel(r"normalized toroidal flux $\psi_N$")
-        figure.suptitle(self.case_name)
+        title = self.case_name
+        if "ambipolar_status" in self.arrays:
+            statuses = np.asarray(self.arrays["ambipolar_status"]).astype(str)
+            missing = np.flatnonzero(statuses != "bracketed_root")
+            if missing.size:
+                locations = ", ".join(f"{surface[index]:.4g}" for index in missing)
+                title += (
+                    f"\nno bracketed root at $\\psi_N$={locations}; "
+                    "showing closest scanned values"
+                )
+        figure.suptitle(title)
         figure.tight_layout()
         if path is None:
             return figure
@@ -261,9 +312,13 @@ class Result:
                     f"result schema {version} needs an explicit migration; "
                     f"this DKX reads schema {RESULT_SCHEMA_VERSION}"
                 )
-            arrays = {name: np.asarray(variable[:]) for name, variable in handle.variables.items()}
+            arrays = {
+                name: np.asarray(variable[:])
+                for name, variable in handle.variables.items()
+            }
             dimensions = {
-                name: tuple(variable.dimensions) for name, variable in handle.variables.items()
+                name: tuple(variable.dimensions)
+                for name, variable in handle.variables.items()
             }
             metadata = json.loads(handle.getncattr("metadata_json"))
             warnings = tuple(json.loads(handle.getncattr("warnings_json")))

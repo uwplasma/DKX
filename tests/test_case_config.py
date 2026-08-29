@@ -83,10 +83,15 @@ def test_json_and_reordered_mapping_have_same_semantic_id(tmp_path: Path) -> Non
 def test_direct_construction_freezes_nested_sequences_and_normalizes_paths() -> None:
     surfaces = [0.25, 0.75]
     densities = [1e19, 8e18]
-    geometry = GeometryConfig(format="vmec", file="geometry/../wout.nc", surfaces=surfaces)  # type: ignore[arg-type]
+    geometry = GeometryConfig(
+        format="vmec", file="geometry/../wout.nc", surfaces=surfaces
+    )  # type: ignore[arg-type]
     species = SpeciesConfig(
-        name="ion", charge=1, mass_amu=2,
-        density_m3=densities, temperature_keV=[1.0, 0.8],  # type: ignore[arg-type]
+        name="ion",
+        charge=1,
+        mass_amu=2,
+        density_m3=densities,
+        temperature_keV=[1.0, 0.8],  # type: ignore[arg-type]
     )
     surfaces.append(0.9)
     densities[0] = 0
@@ -99,13 +104,46 @@ def test_direct_construction_freezes_nested_sequences_and_normalizes_paths() -> 
 @pytest.mark.parametrize(
     ("mutation", "path", "correction"),
     [
-        (lambda data: data["geometry"].update(surfaces=[1.2]), "geometry.surfaces[0]", "normalized radial surface"),
-        (lambda data: data["species"][0].update(density_m3=[1e19]), "species[0].density_m3", "match geometry.surfaces"),
-        (lambda data: data["solver"].update(method="tier_1"), "solver.method", "structured_direct"),
-        (lambda data: data["run"].update(workflo="profile"), "run.workflo", "correct its spelling"),
+        (
+            lambda data: data["geometry"].update(surfaces=[1.2]),
+            "geometry.surfaces[0]",
+            "normalized radial surface",
+        ),
+        (
+            lambda data: data["species"][0].update(density_m3=[1e19]),
+            "species[0].density_m3",
+            "match geometry.surfaces",
+        ),
+        (
+            lambda data: data["solver"].update(method="tier_1"),
+            "solver.method",
+            "structured_direct",
+        ),
+        (
+            lambda data: data["electric_field"].update(search_points=2),
+            "electric_field.search_points",
+            "three coarse electric-field samples",
+        ),
+        (
+            lambda data: data["electric_field"].update(root_tolerance_kV_m=0.0),
+            "electric_field.root_tolerance_kV_m",
+            "stated physical or numerical range",
+        ),
+        (
+            lambda data: data["electric_field"].update(max_root_iterations=0),
+            "electric_field.max_root_iterations",
+            "one bracket-refinement iteration",
+        ),
+        (
+            lambda data: data["run"].update(workflo="profile"),
+            "run.workflo",
+            "correct its spelling",
+        ),
     ],
 )
-def test_validation_errors_name_path_value_expectation_and_correction(mutation, path, correction) -> None:
+def test_validation_errors_name_path_value_expectation_and_correction(
+    mutation, path, correction
+) -> None:
     data = _mapping()
     mutation(data)
     with pytest.raises(CaseValidationError) as caught:
@@ -132,7 +170,9 @@ def test_scan_preflight_counts_cartesian_and_bounds_launch() -> None:
     assert case.scan.case_count == 6
 
     data["scan"]["max_cases"] = 5
-    with pytest.raises(CaseValidationError, match=r"scan\.axis.*at most scan\.max_cases"):
+    with pytest.raises(
+        CaseValidationError, match=r"scan\.axis.*at most scan\.max_cases"
+    ):
         Case.from_mapping(data)
 
 
@@ -165,6 +205,10 @@ def test_schema_outputs_are_complete_and_machine_readable(capsys) -> None:
     assert schema["properties"]["schema"] == {"const": 1}
     assert "species" in schema["required"]
     assert schema["properties"]["scan"]["properties"]["axis"]["minItems"] == 1
+    assert (
+        schema["properties"]["electric_field"]["properties"]["search_points"]["minimum"]
+        == 3
+    )
     assert "[[species]]" in COMMENTED_TOML_EXAMPLE
 
     assert cli.main(["schema", "--format", "json", "--quiet"]) == 0
@@ -172,7 +216,9 @@ def test_schema_outputs_are_complete_and_machine_readable(capsys) -> None:
     assert rendered["$id"].endswith("case-v1.json")
 
 
-def test_validate_cli_reports_case_id_and_scan_preflight(tmp_path: Path, capsys) -> None:
+def test_validate_cli_reports_case_id_and_scan_preflight(
+    tmp_path: Path, capsys
+) -> None:
     data = _mapping()
     data["scan"] = {
         "axis": [{"path": "electric_field.value_kV_m", "values": [-1, 0, 1]}]

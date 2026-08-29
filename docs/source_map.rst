@@ -33,8 +33,9 @@ code:
 - ``dkx/validation`` for frozen-reference loading, Fortran/PETSc
   fixture readers, release-data manifests, validation artifacts, and the
   release/benchmark command-line tooling.
-- ``dkx/workflows`` for scan orchestration (``scans.py``), optimization
-  support (``optimization.py``), and JAX-native geometry adapters for external
+- ``dkx/workflows`` for scan orchestration (``scans.py``), native all-root
+  ambipolar profile execution (``ambipolar_native.py``), optimization support
+  (``optimization.py``), and JAX-native geometry adapters for external
   equilibrium producers (``geometry_adapters.py``).
 
 Canonical root modules
@@ -57,7 +58,7 @@ Physics and numerics:
 - ``drift_kinetic.py``: the matrix-free ``KineticOperator`` — streaming,
   mirror, ExB, Er xDot/xiDot, tangential magnetic drifts, collisions, sources,
   constraints, RHS drives (``populateMatrix.F90``, ``evaluateResidual.F90``).
-- ``solve.py``: the three-tier solve policy (structured block elimination,
+- ``solve.py``: the solve-route policy (structured block elimination,
   recycled Krylov with a coarse-operator preconditioner, host direct referee)
   on the external ``solvax`` library; implicit differentiation.
 - ``coarse_precond.py``: the tier-2 coarse preconditioner ``solve.py`` uses by
@@ -86,7 +87,10 @@ Physics and numerics:
 - ``moments.py``: velocity-space moments, flux families, transport matrices,
   NTV, classical transport (``diagnostics.F90``,
   ``classicalTransport.F90``).
-- ``er.py``: ambipolar radial-electric-field root solves.
+- ``er.py``: the canonical radial-current equation and single-surface
+  ambipolar root algorithms; ``workflows/ambipolar_native.py`` owns physical
+  profile scans, all-root evidence, classification, and branch-nearest
+  selection for native ``Case`` execution.
 
 Input/output and orchestration:
 

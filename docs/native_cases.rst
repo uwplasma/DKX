@@ -54,10 +54,10 @@ Native execution and results
 ----------------------------
 
 The directly executable route accepts built-in analytic geometry or a VMEC
-``wout`` for a prescribed-electric-field profile. It consumes ``Case`` fields
-directly: it does not serialize or parse a SFINCS namelist while constructing
-grids, geometry, species, collisions, or the operator. Run a checked example
-from Python:
+``wout`` for prescribed-electric-field and ambipolar profiles. It consumes
+``Case`` fields directly: it does not serialize or parse a SFINCS namelist
+while constructing grids, geometry, species, collisions, or the operator. Run
+a checked example from Python:
 
 .. code-block:: python
 
@@ -87,6 +87,39 @@ its own radially interpolated magnetic geometry and operator coefficients.
 ``value_kV_m`` is explicitly normalized using the pinned 1 keV and 1 m SFINCS
 reference set (for which the numerical conversion to ``ErHat`` is one).
 
+For native ambipolar execution, select the workflow and give physical search
+controls:
+
+.. code-block:: toml
+
+   [run]
+   workflow = "ambipolar_profile"
+
+   [electric_field]
+   mode = "ambipolar"
+   search_kV_m = [-5.0, 5.0]
+   search_points = 5
+   root_tolerance_kV_m = 0.05
+   max_root_iterations = 8
+   find_all_roots = true
+   continue_branches = true
+
+Each surface performs one memory-bounded coarse electric-field batch, refines
+every sign-changing bracket with real kinetic solves, and preserves all
+evaluated fields, radial currents, fluxes, residuals, brackets, slopes, and
+root classifications in ``Result``. A profile selects the root nearest zero on
+its first surface and then the root nearest the selected branch on the
+preceding surface.
+When no root is bracketed, DKX retains the sampled point with the smallest
+absolute radial current, labels it ``no_bracketed_root``, and never calls it
+ambipolar.
+
+``find_all_roots`` means every sign-changing bracket resolved by the declared
+coarse grid; a finite grid cannot prove that an even number of crossings was
+not hidden between adjacent samples. Increase ``search_points`` and use a
+convergence rung before making a branch-absence claim. Adaptive missed-root
+detection and branch creation/loss certificates remain a P8 promotion gate.
+
 ``Result`` copies its named arrays and makes them read-only. The
 ``dimensions`` map gives every array's named axes without requiring xarray;
 ``save`` writes schema-v1 NetCDF4, and ``Result.load`` reads it through the same
@@ -94,11 +127,12 @@ contract. Files contain the canonical case, normalization, geometry checksum,
 package/runtime/device versions, selected route, residual, iteration and timing
 evidence, and peak host memory.
 
-The executable route supports only ``workflow = "profile"``, ``format =
+The executable route supports ``workflow = "profile"`` with a prescribed
+field or ``workflow = "ambipolar_profile"`` with a bounded search, ``format =
 "analytic"`` or ``"vmec"`` geometry, ``magnetic_drifts = "dkes"``, ``phi1 =
-"off"``, a prescribed electric field, and at least two profile surfaces.
+"off"``, and at least two profile surfaces.
 Unsupported native combinations fail with the exact case field and a
 correction; they are not silently downgraded. Native Boozer execution,
-ambipolar roots, resumable scan execution, and SFINCS conversion are subsequent
-vertical slices. Existing namelist workflows remain available through
+resumable scan execution, convergence refinement, and SFINCS conversion are
+subsequent vertical slices. Existing namelist workflows remain available through
 ``dkx.run`` and the established CLI without a numerical-path change.
