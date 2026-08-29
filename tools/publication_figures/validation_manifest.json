@@ -902,6 +902,54 @@
     ]
   },
   {
+    "id": "native_w7x_ambipolar_joint_speed_zeta_tail",
+    "status": "implemented",
+    "release_gate": {
+      "claim_status": "regression_scaffold",
+      "blocks_current_release": false,
+      "evidence": "checked fixed-pitch 2x2 speed/zeta common-field matrix with selected-tail, residual, cold/warm, and memory evidence",
+      "promotion_gate": "Obtain a matched fixed-field independent-code reference before increasing the DKX phase-space grid"
+    },
+    "kind": "profile_validation",
+    "literature": [
+      "https://github.com/landreman/sfincs",
+      "https://github.com/f0uriest/yancc",
+      "https://github.com/JavierEscoto/MONKES"
+    ],
+    "scripts": [
+      "tools/paper_benchmarks/audit_ambipolar_joint_speed_zeta_tail.py"
+    ],
+    "artifacts": [
+      "validation/ambipolar_joint_speed_zeta_tail_v1.json",
+      "validation/inputs/w7x_standard_native_ambipolar_joint_nx8_pitch52_tail_bound_probe.toml",
+      "validation/inputs/w7x_standard_native_ambipolar_nx8_zeta45_pitch52_tail_probe.toml",
+      "validation/inputs/w7x_standard_native_ambipolar_nx10_zeta37_pitch52_tail_probe.toml",
+      "validation/inputs/w7x_standard_native_ambipolar_nx10_zeta45_pitch52_tail_probe.toml"
+    ],
+    "claims": [
+      "At fixed pitch 52, speed 8 to 10 moves common-field particle and heat flux by as much as 7.55% and 6.56%",
+      "Zeta 37 to 45 moves common-field particle and heat flux by as much as 9.32% and 9.41%",
+      "Selected-tail bounds remain finite but non-monotone, all residuals remain below 1.23e-15, and phase-space convergence remains false"
+    ],
+    "source_code": [
+      "dkx/workflows/ambipolar_native.py",
+      "dkx/moments.py",
+      "tools/paper_benchmarks/audit_ambipolar_joint_speed_zeta_tail.py"
+    ],
+    "tests": [
+      "tests/test_ambipolar_joint_speed_zeta_tail.py",
+      "tests/test_ambipolar_selected_tail_bound.py",
+      "tests/test_native_execution_result.py"
+    ],
+    "acceptance_gates": [
+      "Verify all four exact TOMLs, the pinned geometry, and all eight cold/warm native NetCDF results by checksum",
+      "Require the common 8.55 kV/m sample and independently recompute every stored speed/zeta flux movement",
+      "Require 1e-12 residual tolerance, sub-3-GiB RSS, and exact cold/warm scientific arrays apart from timing",
+      "Keep no-bracket status, non-monotone tail evidence, and phase_space_converged=false explicit",
+      "Do not promote a whole-profile, performance, full-Fokker-Planck, Phi1, experiment, or independent-code claim"
+    ]
+  },
+  {
     "id": "adjoint_sensitivity_gradient_checks",
     "status": "implemented",
     "release_gate": {

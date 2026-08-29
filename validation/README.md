@@ -39,6 +39,9 @@ Git; later records refer to them by checksum or stable artifact identifier.
 - `ambipolar_joint_pitch_speed_v1.json`: speed-6/8 and pitch-44/52 common-field
   probes with route-aware modal-tail evidence. Full states retain the compact
   L2 tail; zero-padded truncated states explicitly mark it unavailable.
+- `ambipolar_joint_speed_zeta_tail_v1.json`: a fixed-pitch 2x2 speed/zeta
+  matrix with selected-tail upper bounds, exact cold/warm reproducibility, and
+  an explicit failed phase-space-convergence outcome.
 - `inputs/*`: the exact DKX decks and native cases used by these rungs.
 
 ## Independent cross-code audit
@@ -298,3 +301,29 @@ The checked outcome remains `refinement_exhausted`. The next bounded pair must
 raise low and intermediate work together while retaining the admitted
 high-speed group. Zeta, speed, independent-code, experiment, full-FP, Phi1,
 and performance validation remain open.
+
+## Joint speed/zeta selected-tail diagnosis
+
+`ambipolar_joint_speed_zeta_tail_v1.json` completes the smallest fixed-pitch
+2x2 matrix at speed 8/10 and zeta 37/45. It holds the two W7-X surfaces, three
+sampled electric fields, pitch ceiling 52, profiles, physics, and solver policy
+fixed. Audit the compact record, or additionally verify all eight cold/warm
+NetCDF results and the adjacent pinned geometry, with:
+
+```bash
+python tools/paper_benchmarks/audit_ambipolar_joint_speed_zeta_tail.py \
+  --results-root ../runtime/evidence/joint-speed-zeta-v1
+```
+
+At the common `8.55 kV/m` field, speed refinement changes particle and heat
+fluxes by as much as 7.55% and 6.56%; zeta refinement changes them by as much
+as 9.32% and 9.41%. Every accepted true residual stays below `1.23e-15`, every
+process stays below 2.29 GB RSS, and each cold/warm scientific result is exact
+apart from timing. Selected-tail upper bounds remain finite from 7.96% to
+9.71%, but decrease on one zeta refinement, so they are not promoted as a
+standalone convergence oracle.
+
+The narrow field window observes no bracket by design. This artifact records
+`phase_space_converged=false`, admits no full-profile escalation, and directs
+the next slice to a matched fixed-field YANCC/SFINCS or MONKES reference before
+another DKX grid increase.

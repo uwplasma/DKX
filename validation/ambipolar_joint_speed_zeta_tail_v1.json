@@ -1,0 +1,79 @@
+{
+  "schema": "dkx.ambipolar_joint_speed_zeta_tail.v1",
+  "created_utc": "2026-08-29T22:11:20Z",
+  "claim_scope": "bounded_common_field_joint_speed_zeta_tail_diagnosis",
+  "summary": "A fixed-pitch 2x2 speed/zeta matrix at two W7-X surfaces and the common sampled field 8.55 kV/m. Both axes fail the unchanged 2% particle- and heat-flux gates. Selected-tail upper bounds remain finite but are not monotone with zeta, so they are conditioning evidence rather than a convergence oracle.",
+  "source": {
+    "dkx_base_commit": "9eb8edee7f5648332dce01e1e1974e65f6feeccd",
+    "implementation_commit": "83473f5",
+    "geometry_sha256": "81c686e5a5bd8f38d8b1f754ebe2910951f20094bab35d73d2827d9875bb6062",
+    "geometry_bytes": 19416676,
+    "reference_sources": {
+      "sfincs": {"commit": "8df5453472e982df0f6ae005243ce38d57a83711", "paths": ["fortran/version3/scan.F90", "fortran/version3/createGrids.F90", "doc/manual/version3/resolution.tex"]},
+      "yancc": {"commit": "6f399a21ecfcc03008e466bb09811a330321b9be", "paths": ["docs/performance.rst", "docs/loading_fields.rst", "tests/test_velocity_grids.py"]},
+      "monkes": {"commit": "fb5c302efeb191b9a36818bc4ce337623c865938", "paths": ["sources/libraries/DKE_BTD_Solution_Legendre_MFree.f90", "doc/MONKES_manual/chapters/Usage.tex"]},
+      "stellopt": {"commit": "9177f58c986aa20186f6b8db360fe81cf53137e0", "paths": ["PENTA/Sources/penta_subroutines.f90", "BOOTSJ/Sources"]}
+    },
+    "inputs": {
+      "nx8_zeta37": {"path": "validation/inputs/w7x_standard_native_ambipolar_joint_nx8_pitch52_tail_bound_probe.toml", "sha256": "4e5298001f47c659ea5e48e99723d992017d1b69989e2514542a99eba49fdbff", "bytes": 1186},
+      "nx8_zeta45": {"path": "validation/inputs/w7x_standard_native_ambipolar_nx8_zeta45_pitch52_tail_probe.toml", "sha256": "1cc5712163d59ba8aa2ef9736f83eab473c3592a3fb76b8517968081bfeaaeae", "bytes": 1176},
+      "nx10_zeta37": {"path": "validation/inputs/w7x_standard_native_ambipolar_nx10_zeta37_pitch52_tail_probe.toml", "sha256": "1446dd92c06372767bf5f2fecb9bf4f1cb6a19d00d8b234ab84025d53ff98aec", "bytes": 1179},
+      "nx10_zeta45": {"path": "validation/inputs/w7x_standard_native_ambipolar_nx10_zeta45_pitch52_tail_probe.toml", "sha256": "de4fc4ae5b3a12fdd60ad0d394ee929a46afeeb11e44f462300ed6bc3fd8beaf", "bytes": 1179}
+    },
+    "external_results": {
+      "nx8_zeta37": {"cold": {"file": "nx8_zeta37.nc", "sha256": "6d58a4ff8b3e5c6e5ce6cdf3146e972532285a8efb23f5c511e86bc81caac601", "bytes": 211515}, "warm": {"file": "nx8_zeta37_warm.nc", "sha256": "caf1b5fb2158d81fa1aed1cd32df8b7816eb54faa82ed759f95ebdb35711a16f", "bytes": 211514}},
+      "nx8_zeta45": {"cold": {"file": "nx8_zeta45.nc", "sha256": "caf3403190d21ba744ca2b5801d4a1d2a0fce1d5eceb576e28623958785e5586", "bytes": 211497}, "warm": {"file": "nx8_zeta45_warm.nc", "sha256": "ef88eca0c455c41f5a04314f1578dcd6ec9c077727333602d3fb4c06dabaf674", "bytes": 211498}},
+      "nx10_zeta37": {"cold": {"file": "nx10_zeta37.nc", "sha256": "5891bea6cf7e838f34ed181d1f95347a47c0151f30bdf6f00e73be4de8366950", "bytes": 211936}, "warm": {"file": "nx10_zeta37_warm.nc", "sha256": "d1d2e02e1b716f40b3e30119ad0664430c8664cf505e0d26c30f5547716a08d0", "bytes": 211936}},
+      "nx10_zeta45": {"cold": {"file": "nx10_zeta45.nc", "sha256": "5de4c382217fa32901e11528fe896c090333c40a820affed8d6a1fd2e06f5201", "bytes": 211951}, "warm": {"file": "nx10_zeta45_warm.nc", "sha256": "c7a4b063c8f1e5f6cdd46ff2a5ff41a6bf217971a95be4647fc90909be8c9da4", "bytes": 211949}}
+    }
+  },
+  "environment": {"host": "Mac mini, Apple M4, 10 CPU cores, 24 GiB RAM", "python": "3.11.15", "jax": "0.9.2", "numpy": "2.4.3", "scipy": "1.17.1"},
+  "common_sample": {"surface_indices": [0, 1], "psi_N": [0.16, 0.25], "electric_field_kV_m": 8.55},
+  "rungs": [
+    {
+      "name": "nx8_zeta37", "case_id": "0adba8ad6f7a981a371d261c90fd3ab2434fd5ee27c6a0f69cd1d83ee351d8a0", "speed": 8, "zeta": 37, "pitch": 52, "allocation": [6, 11, 19, 30, 42, 52, 52, 52],
+      "particle_flux_m2_s": [[6.807312440660344e17, 1.7506123600341732e18], [1.0636176143424746e18, 1.5085083472473357e18]],
+      "heat_flux_W_m2": [[301.63246797134514, 5554.50810047951], [476.9477859065042, 3537.921552703558]],
+      "maximum_selected_tail_bound": 0.08899451323082261, "maximum_accepted_true_residual": 6.611692304814012e-16, "accepted_attempt_count": 8,
+      "cold": {"wall_s": 39.80, "solve_s": 38.393691790995945, "maximum_rss_bytes": 1358987264, "peak_footprint_bytes": 987465600},
+      "warm": {"wall_s": 33.33, "solve_s": 31.963922292008647, "maximum_rss_bytes": 1230929920, "peak_footprint_bytes": 1033389856}
+    },
+    {
+      "name": "nx8_zeta45", "case_id": "d2c9a5faeefdaa085d0ac2452f88c7e7091e0f6c7fdbd0d1f24bcc979814c657", "speed": 8, "zeta": 45, "pitch": 52, "allocation": [6, 11, 19, 30, 42, 52, 52, 52],
+      "particle_flux_m2_s": [[6.758476348705583e17, 1.685083907071172e18], [1.0349219538623676e18, 1.3679623909827139e18]],
+      "heat_flux_W_m2": [[294.9413613617398, 5355.13379417624], [451.40365890520934, 3204.993827403514]],
+      "maximum_selected_tail_bound": 0.08804217562824512, "maximum_accepted_true_residual": 1.0673031891719682e-15, "accepted_attempt_count": 8,
+      "cold": {"wall_s": 61.03, "solve_s": 58.59817012399435, "maximum_rss_bytes": 2178138112, "peak_footprint_bytes": 1767492128},
+      "warm": {"wall_s": 56.49, "solve_s": 54.9016900409988, "maximum_rss_bytes": 2101493760, "peak_footprint_bytes": 1909361136}
+    },
+    {
+      "name": "nx10_zeta37", "case_id": "250fa9240a5803ee3b4781e5136812532b3e3f2152137490d62f289c706c0baa", "speed": 10, "zeta": 37, "pitch": 52, "allocation": [6, 9, 16, 24, 34, 45, 52, 52, 52, 52],
+      "particle_flux_m2_s": [[7.217540380426772e17, 1.880661299008485e18], [1.1290370600835446e18, 1.5904398898623867e18]],
+      "heat_flux_W_m2": [[321.26208128917983, 5769.688164533065], [505.17745701600927, 3631.8122524683617]],
+      "maximum_selected_tail_bound": 0.09706466953208268, "maximum_accepted_true_residual": 7.158702747669767e-16, "accepted_attempt_count": 8,
+      "cold": {"wall_s": 45.36, "solve_s": 43.53007699899899, "maximum_rss_bytes": 1318830080, "peak_footprint_bytes": 909985616},
+      "warm": {"wall_s": 44.58, "solve_s": 42.68967833300121, "maximum_rss_bytes": 1313669120, "peak_footprint_bytes": 1211434952}
+    },
+    {
+      "name": "nx10_zeta45", "case_id": "b80ba415531d8e2e33d77b6ae30092cf186ae2ac7fbdf8cdc1bdbf64a689e43c", "speed": 10, "zeta": 45, "pitch": 52, "allocation": [6, 9, 16, 24, 34, 45, 52, 52, 52, 52],
+      "particle_flux_m2_s": [[7.152348029816511e17, 1.8226551481304366e18], [1.1071467497000244e18, 1.4547122181039465e18]],
+      "heat_flux_W_m2": [[314.11870942370587, 5583.21046726806], [483.07005498308627, 3305.633272634453]],
+      "maximum_selected_tail_bound": 0.07956477905172915, "maximum_accepted_true_residual": 1.224086742089018e-15, "accepted_attempt_count": 8,
+      "cold": {"wall_s": 73.24, "solve_s": 71.54592725000111, "maximum_rss_bytes": 2281226240, "peak_footprint_bytes": 1885702784},
+      "warm": {"wall_s": 72.97, "solve_s": 71.0418062089957, "maximum_rss_bytes": 2234417152, "peak_footprint_bytes": 1990249040}
+    }
+  ],
+  "comparisons": [
+    {"name": "speed8_to_speed10_at_zeta37", "particle_flux_scaled_movement": 0.06915064346933487, "heat_flux_scaled_movement": 0.06110155683192925},
+    {"name": "speed8_to_speed10_at_zeta45", "particle_flux_scaled_movement": 0.07547848050157832, "heat_flux_scaled_movement": 0.06555238883309722},
+    {"name": "zeta37_to_zeta45_at_speed8", "particle_flux_scaled_movement": 0.09316882900985224, "heat_flux_scaled_movement": 0.09410263069446302},
+    {"name": "zeta37_to_zeta45_at_speed10", "particle_flux_scaled_movement": 0.0853397054636149, "heat_flux_scaled_movement": 0.08981163043662874}
+  ],
+  "outcome": {
+    "status": "diagnostic_complete", "phase_space_converged": false, "whole_profile_escalation_admitted": false,
+    "gates": {"all_particle_movements_below_2_percent": false, "all_heat_movements_below_2_percent": false, "all_true_residuals_below_1e-12": true, "all_peak_rss_below_3_gib": true, "cold_warm_science_exact_except_timing": true},
+    "interpretation": "Speed and zeta are both unresolved at fixed pitch 52. The direction and scale are stable across the other axis, while the selected-tail bound is finite but non-monotone with zeta. The deliberately narrow electric-field window observes no bracket and is not an ambipolar-root campaign.",
+    "next_action": "Run a matched fixed-field cross-code reference before increasing the DKX grid; prioritize a small YANCC/SFINCS or MONKES case with independently converged observables."
+  },
+  "exclusions": ["not_phase_space_convergence_validation", "not_full_profile_root_validation", "not_cross_code_validation", "not_full_fokker_planck_or_phi1_validation", "not_performance_promotion"]
+}
