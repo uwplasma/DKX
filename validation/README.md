@@ -32,6 +32,10 @@ Git; later records refer to them by checksum or stable artifact identifier.
   intermediate pitch work together, retains the failed intermediate-refinement
   gates, and records the pinned SFINCS/YANCC/MONKES/PENTA source review that
   motivated compact per-speed flux diagnostics.
+- `ambipolar_speed_local_pitch_v1.json`: five narrow common-field probes that
+  localize the initial change to one intermediate-speed node, then retain the
+  failed pitch-36 ceiling and pitch-44 high-speed-tail gates without claiming
+  full-profile or phase-space convergence.
 - `inputs/*`: the exact DKX decks and native cases used by these rungs.
 
 ## Independent cross-code audit

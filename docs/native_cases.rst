@@ -104,6 +104,14 @@ arrays make speed-local convergence failures inspectable without retaining the
 full distribution function. They are diagnostics, not a claim that the speed
 or pitch discretization is converged.
 
+The checked ``validation/ambipolar_speed_local_pitch_v1.json`` example shows
+the intended use: compare identical physical fields before paying for another
+root campaign, identify which speed nodes dominate an allocation change, and
+keep a failed ceiling test as ``phase_space_converged=false``. Because the
+collision operator couples speed nodes, a higher pitch ceiling can expose
+changes at neighboring high-speed nodes; a single-node diagnosis therefore
+does not license a single-axis convergence claim.
+
 For a VMEC equilibrium, change only the geometry source:
 
 .. code-block:: toml

@@ -1,0 +1,48 @@
+{
+  "schema": "dkx.ambipolar_speed_local_pitch.v1",
+  "created_utc": "2026-08-29T19:45:00Z",
+  "claim_scope": "common_field_speed_local_pitch_diagnosis",
+  "summary": "Five narrow W7-X probes at a common 8.55 kV/m evaluation localize the pitch sensitivity first to speed node 3, then show that raising the pitch ceiling exposes unresolved high-speed contributions. No rung is phase-space converged.",
+  "source": {
+    "dkx_commit": "30cb93eca96d524504ea5cac6b1c8d4b76b8fbc0",
+    "geometry_sha256": "81c686e5a5bd8f38d8b1f754ebe2910951f20094bab35d73d2827d9875bb6062",
+    "inputs": {
+      "combined": {"path": "validation/inputs/w7x_standard_native_ambipolar_combined_speed_probe.toml", "sha256": "f39a4098174ff6c997eb3f52fad3410e231a030f1a3b3d53b68090a8fc1be78c", "bytes": 1182},
+      "intermediate28": {"path": "validation/inputs/w7x_standard_native_ambipolar_intermediate28_speed_probe.toml", "sha256": "2b19eee03d692663f539b9fe7b3663bc7c5e6ca2b492261b2a947a49b1a9fc22", "bytes": 1194},
+      "node3_33": {"path": "validation/inputs/w7x_standard_native_ambipolar_node3_33_speed_probe.toml", "sha256": "81fa0da516ac2f67a06909fbef985e4a5855d7f9afccae31643a03f84533b90e", "bytes": 1185},
+      "node3_36": {"path": "validation/inputs/w7x_standard_native_ambipolar_node3_36_speed_probe.toml", "sha256": "bddf3fa3e73dc0c2a7f62834533e447cb8a9bb18002baec1b6f19cd8de8230b6", "bytes": 1183},
+      "pitch44": {"path": "validation/inputs/w7x_standard_native_ambipolar_pitch44_targeted_speed_probe.toml", "sha256": "361ef17f3e9b9edc170622456bf83fe334231c6a09f9a1fd5d505e52c46dbb9d", "bytes": 1190}
+    },
+    "external_results": {
+      "combined": {"file": "combined_speed_probe.nc", "sha256": "7f4487d4304dd037562894cd5709717983728d3c4cd636986b8d050f7435b5d6", "bytes": 206916},
+      "intermediate28": {"file": "intermediate28_speed_probe.nc", "sha256": "395ca05663153c018cb15b05c6350fce154529a4edc21cc03c2f696ceb0e74df", "bytes": 206672},
+      "node3_33": {"file": "node3_heavy_speed_probe.nc", "sha256": "119ada8c7365147d27188fd4d4b3372b587254e6bc65635cd911e70bc35e9b6a", "bytes": 205722},
+      "node3_36": {"file": "node3_max_speed_probe.nc", "sha256": "69e672d8d438b1c41f4bad899a8ead48ba08e7837d305d6b9e5e8afa6add561d", "bytes": 205720},
+      "pitch44": {"file": "pitch44_targeted_speed_probe.nc", "sha256": "19242a5aca43965c0db9b587ca30d9759fcbf0fed3701e3faa6a65a8ce65f3fd", "bytes": 205726}
+    }
+  },
+  "environment": {"host": "Mac mini, Apple M4, 10 CPU cores, 24 GiB RAM", "python": "3.11.15", "jax": "0.9.2", "numpy": "2.4.3"},
+  "speed_v_th": [0.07860065941309768, 0.3867394102706303, 0.8664294716820439, 1.4656980496635161, 2.1727077969389983, 3.036820169322867],
+  "common_surface": {"surface_index": 1, "psi_N": 0.25, "electric_field_kV_m": 8.55},
+  "rungs": [
+    {"name": "combined", "case_id": "abb2dee0e3188b1d62c32ad9a4dfc6c860bda19e107daee92d2e6a4074fff4fc", "allocation": [12,12,24,25,36,36], "attempt_count": 11, "maximum_accepted_true_residual": 3.647121737974888e-16, "particle_flux_m2_s": [1.084853456072714e18,1.072428576924115e18], "heat_flux_W_m2": [422.22111997030913,2295.985349700587], "radial_current_A_m2": 0.0019906851052159296, "solve_s": 19.487420626006497, "total_s": 20.015222791997076, "peak_host_memory_bytes": 1077493760},
+    {"name": "intermediate28", "case_id": "c4d587838c0eb5f0635befa70d4da672e04b908251da4ab8e0714f8da928c3c8", "allocation": [12,12,28,29,36,36], "attempt_count": 11, "maximum_accepted_true_residual": 3.8138320421509115e-16, "particle_flux_m2_s": [1.0453792217136813e18,1.0562061975475206e18], "heat_flux_W_m2": [409.1752917406817,2282.379593080274], "radial_current_A_m2": -0.0017346727697860203, "solve_s": 19.980404959002044, "total_s": 20.15909937499964, "peak_host_memory_bytes": 1635074048},
+    {"name": "node3_33", "case_id": "1c6b1fbb5cf04ddb29cb88fa5672f300403d0f35e9541712f3169b782b79231e", "allocation": [12,12,24,33,36,36], "attempt_count": 6, "maximum_accepted_true_residual": 3.2894587433808654e-16, "particle_flux_m2_s": [1.015988931504555e18,1.0477455152866021e18], "heat_flux_W_m2": [399.7037028738078,2274.7461352468954], "radial_current_A_m2": -0.005087965651125921, "solve_s": 10.269194667002012, "total_s": 10.694715999998152, "peak_host_memory_bytes": 844185600},
+    {"name": "node3_36", "case_id": "f9207bc5625dfd0d6c8f9b08a99c212827cf95ccda02ea5efcd85086031a2daa", "allocation": [12,12,24,36,36,36], "attempt_count": 6, "maximum_accepted_true_residual": 3.282715157968995e-16, "particle_flux_m2_s": [9.186090320028963e17,1.0150867663339133e18], "heat_flux_W_m2": [367.8622892048419,2246.6440228354795], "radial_current_A_m2": -0.015457437164641534, "solve_s": 10.12944141600019, "total_s": 10.564147584002058, "peak_host_memory_bytes": 839057408},
+    {"name": "pitch44", "case_id": "083085018a43b123fa93ab68a7866a78f1da79aa58fbafd6bba363d37d532688", "allocation": [12,12,24,40,44,44], "attempt_count": 6, "maximum_accepted_true_residual": 7.036212031897319e-16, "particle_flux_m2_s": [9.999786266063551e17,1.3376749729320847e18], "heat_flux_W_m2": [423.43298474269085,3050.81845282703], "radial_current_A_m2": -0.05410491954702556, "solve_s": 10.884575834003044, "total_s": 11.558540707999782, "peak_host_memory_bytes": 855080960}
+  ],
+  "comparisons": [
+    {"name": "combined_to_intermediate28", "particle_flux_scaled_movement": 0.036386697335079404, "heat_flux_scaled_movement": 0.03089809489052756, "radial_current_absolute_change_A_m2": 0.0037253578750019497, "node3_absolute_delta_share": {"particle": [0.9840339079296387,0.9611024559704358], "heat": [0.9943621881254058,0.986054603335756]}},
+    {"name": "combined_to_node3_33", "particle_flux_scaled_movement": 0.06347818148402821, "heat_flux_scaled_movement": 0.05333086392761398, "radial_current_absolute_change_A_m2": 0.007078650756341851},
+    {"name": "node3_33_to_node3_36", "particle_flux_scaled_movement": 0.09584740195688063, "heat_flux_scaled_movement": 0.07966254362927107, "radial_current_absolute_change_A_m2": 0.010369471513515614},
+    {"name": "node3_36_to_pitch44", "particle_flux_scaled_movement": 0.2411558959581055, "heat_flux_scaled_movement": 0.2635930136211039, "radial_current_absolute_change_A_m2": 0.038647482382384024}
+  ],
+  "outcome": {
+    "status": "diagnostic_complete",
+    "phase_space_converged": false,
+    "gates": {"all_true_residuals_below_1e-12": true, "all_peak_host_memory_below_2_gib": true, "node3_dominates_initial_delta": true, "node3_33_to_36_particle_below_2_percent": false, "node3_33_to_36_heat_below_2_percent": false, "pitch36_to_44_particle_below_2_percent": false, "pitch36_to_44_heat_below_2_percent": false},
+    "interpretation": "The first allocation delta is overwhelmingly localized at speed node 3, but node 3 is not converged at the pitch-36 ceiling. Raising the ceiling to 44 exposes still larger high-speed-node movement, so pitch and speed must be treated as coupled open axes.",
+    "next_action": "Design a bounded joint pitch/speed probe with independent modal-tail or conditioning evidence before any full root/profile campaign."
+  },
+  "exclusions": ["not_phase_space_convergence_validation", "not_full_profile_root_validation", "not_independent_cross_code_ambipolar_validation", "not_cross_allocation_performance_comparison", "not_full_fokker_planck_or_phi1_validation"]
+}
