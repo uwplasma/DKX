@@ -1,6 +1,6 @@
 # DKX 3 Authoritative Modernization and Performance Plan
 
-Status: P2 native execution and Result vertical slice in progress
+Status: P2 native execution and Result vertical slices in progress
 
 Prepared: 2026-08-25
 
@@ -1705,7 +1705,7 @@ Acceptance criteria:
 
 ### Phase P2: introduce native `Case`, `Result`, and CLI contracts
 
-Status: in progress (`P2.1`, `P2.2`, the deterministic-ID/bounded-count portion of `P2.3`, and the first analytic `P2.4`/`P2.7` native profile slice are merged)
+Status: in progress (`P2.1`, `P2.2`, the deterministic-ID/bounded-count portion of `P2.3`, and the analytic `P2.4`/`P2.7` native profile slice are merged; native VMEC profile execution is under review)
 
 Work items:
 
@@ -2146,15 +2146,13 @@ Use one row per merged pull request or consequential failed experiment.
 | 2026-08-28 | P2.4/P2.7 | PR #73, `86f534b` | Merged direct analytic profile `Case -> Result` execution and schema-v1 NetCDF after all 21 CI/docs checks passed. The route never serializes or parses a SFINCS namelist, matches the accepted profile kernel at 2e-12 relative tolerance, and keeps unsupported physics explicit. | Extend the native boundary to VMEC/Boozer geometry and shape-stable reuse; separately remove the reported compatibility scan-5 startup delay under P5.10. |
 | 2026-08-28 | P5.2/P5.10 start | current scan-startup PR | Routed compatible single-process RHSMode=1 `Er` compatibility scans through one shared geometry/operator and the bounded batched solve while preserving every per-point input, SFINCS HDF5 output, and solver trace. Matched empty-cache three-point scheme-11 CLI runs on merged main and this branch measured 7.54 s/996311040 B peak RSS versus 4.09 s/632520704 B; second-process populated-cache runs measured 3.05 s/907608064 B versus 1.82 s/538705920 B. Particle flux, heat flux, parallel flow/current, and NTV match scalar outputs at 2e-12 relative tolerance; true residuals are now retained by `BatchedSolveResult`. Process-parallel, transport-matrix, Phi1, non-`Er`, and explicit host-direct cases remain on the scalar path. The isolated wheel (554506 B) and sdist (896960 B) pass size gates; a wheel plus locally cloned SOLVAX installed outside the checkout produced three finite nonzero outputs. | Run hosted CI and merge the focused PR before addressing missing-root plotting status and user-facing solver terminology. |
 | 2026-08-28 | P5.2/P5.10 | PR #74, `d7e46ab` | Merged shared-operator compatibility `Er` scans after all 21 required checks passed. The accepted route preserves scalar science/output parity and partial resume while reducing matched empty-cache runtime 45.8% and peak RSS 36.5%; populated-cache runtime fell 40.3% and RSS 40.6%. | Make missing-root profile status explicit and replace user-facing solver-tier jargon. |
-| 2026-08-28 | P2.6/P4.4 usability start | current profile-status PR | Representative radial profiles now distinguish a bracketed root from the sampled point with minimum absolute radial current. When no root is bracketed, Er/bootstrap/flux values remain visible but are labeled closest-scanned, never ambipolar; the HDF5 evidence records the evaluated Er, residual current, and root-status flag. Solver progress names the actual route (structured direct, memory-bounded direct, recycled iterative, host sparse-direct) instead of unexplained tier numbers. Synthetic no-root and legacy-root output/plot tests pass; 63 solver tests pass with only the constraintScheme=4 gradient case already recorded as failing identically on the pre-change baseline deselected. Warning-clean 47-page docs and 59 packaging/planning/source-tree guards pass; `representative.py` remains below its audited line ceiling. Isolated artifacts are 554246 B (wheel) and 897213 B (sdist). | Run hosted CI and merge the focused PR, then resume SOLVAX/downstream integration and native VMEC/Boozer surface reuse. |
+| 2026-08-28 | P2.6/P4.4 usability | PR #75, `6391601` | Merged after all 21 required checks passed. Representative radial profiles now distinguish a bracketed root from the sampled point with minimum absolute radial current. When no root is bracketed, Er/bootstrap/flux values remain visible but are labeled closest-scanned, never ambipolar; the HDF5 evidence records the evaluated Er, residual current, and root-status flag. Solver progress names the actual route (structured direct, memory-bounded direct, recycled iterative, host sparse-direct) instead of unexplained tier numbers. Synthetic no-root and legacy-root output/plot tests pass; 63 solver tests pass with only the constraintScheme=4 gradient case already recorded as failing identically on the pre-change baseline deselected. Warning-clean 47-page docs and 59 packaging/planning/source-tree guards pass; `representative.py` remains below its audited line ceiling. Isolated artifacts are 554246 B (wheel) and 897213 B (sdist). | Review the native VMEC profile slice, then resume SOLVAX/downstream integration and native Boozer or ambipolar execution. |
+| 2026-08-28 | P2.4/P2.7/P2.8 VMEC profile start | current native-VMEC PR | Extended direct native profile execution to VMEC without a namelist round-trip. A profile resolves and hashes the real `wout`, reads it once, and constructs one shape-stable phase-space grid for all surfaces while interpolating surface-specific geometry and coefficients. The final surface matches the accepted scheme-5 particle flux, heat flux, and parallel current at 2e-12 relative tolerance; tests spy on the single file read/grid construction and pin the physical kV/m-to-ErHat boundary. The checked three-surface VMEC example measured 5.679 s cold, 0.890 s warm, 1.025 GB process peak, and 8.97e-15 maximum residual on the M2 development host with an empty persistent compilation cache. Focused API/normalization tests (48) and warning-clean 47-page docs pass; isolated artifacts are 554907 B (wheel) and 898940 B (sdist). Boozer, ambipolar, full tangential drifts, Phi1, convergence refinement, and explicit sharding remain explicit errors. | Merge profile-status PR #75 first, then rebase and open this coherent VMEC slice. Next implement a dedicated native Boozer reader or native ambipolar continuation, not a compatibility conversion. |
 
 ## 22. Current next action
 
-Complete P5.10's focused compatibility scan-startup slice: retain scientific
-and file-format parity while sharing geometry, operator construction, and
-compilation across a single-process electric-field scan. Then address explicit
-missing-root status in representative plots and replace internal solver-tier
-language in user-facing output. In parallel with those compatibility fixes,
-extend the native normalization boundary to VMEC/Boozer geometry and
-shape-stable surface reuse. Keep unsupported physics explicit; never convert a
-native ``Case`` back to a SFINCS namelist.
+Review the native VMEC profile slice: preserve scheme-5 observable parity while
+reading the equilibrium and building the shape-stable grid once per profile.
+After that, choose the next coherent native vertical slice between a dedicated
+Boozer reader and whole-profile ambipolar continuation. Keep unsupported
+physics explicit; never convert a native ``Case`` back to a SFINCS namelist.
