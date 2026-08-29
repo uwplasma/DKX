@@ -510,9 +510,14 @@ def _ambipolar_result_arrays(
     scan_particle_vs_speed = np.full(
         (n_surface, n_evaluation, n_speed, n_species), np.nan
     )
-    scan_heat_vs_speed = np.full(
-        (n_surface, n_evaluation, n_speed, n_species), np.nan
-    )
+    scan_heat_vs_speed = np.full((n_surface, n_evaluation, n_speed, n_species), np.nan)
+    tail_diagnostics = [
+        evaluation
+        for result in surface_results
+        for evaluation in result.evaluations
+        if evaluation.legendre_tail_relative_l2 is not None
+    ]
+    scan_legendre_tail = np.full((n_surface, n_evaluation, n_speed, n_species), np.nan)
     scan_parallel = np.full((n_surface, n_evaluation), np.nan)
     root_field = np.full((n_surface, n_root), np.nan)
     root_current = np.full((n_surface, n_root), np.nan)
@@ -600,6 +605,10 @@ def _ambipolar_result_arrays(
             if evaluation.heat_flux_w_m2_vs_speed is not None:
                 scan_heat_vs_speed[surface_index, evaluation_index] = (
                     evaluation.heat_flux_w_m2_vs_speed
+                )
+            if evaluation.legendre_tail_relative_l2 is not None:
+                scan_legendre_tail[surface_index, evaluation_index] = (
+                    evaluation.legendre_tail_relative_l2
                 )
             scan_parallel[surface_index, evaluation_index] = (
                 evaluation.parallel_current_a_t_m2
@@ -841,6 +850,14 @@ def _ambipolar_result_arrays(
                 ),
             }
         )
+        if tail_diagnostics:
+            arrays["evaluation_legendre_tail_relative_l2"] = scan_legendre_tail
+            dimensions["evaluation_legendre_tail_relative_l2"] = (
+                "surface",
+                "evaluation",
+                "speed",
+                "species",
+            )
     return arrays, dimensions
 
 
@@ -1095,6 +1112,11 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
         attempt.reason == "automatic_true_residual_recovery"
         for attempt in ambipolar_solver_attempts
     )
+    legendre_tail_retained = any(
+        evaluation.legendre_tail_relative_l2 is not None
+        for surface_result in ambipolar_surfaces
+        for evaluation in surface_result.evaluations
+    )
     metadata = {
         "canonical_case": case.to_dict(),
         "converged": True,
@@ -1154,6 +1176,13 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
             }
             if ambipolar_surfaces
             else None
+        ),
+        "legendre_tail_diagnostic": (
+            "retained_full_state_relative_l2"
+            if legendre_tail_retained
+            else "unavailable_on_zero_padded_truncated_state"
+            if ambipolar_surfaces
+            else "not_requested"
         ),
         "normalization": {
             "density_m3": 1.0e20,

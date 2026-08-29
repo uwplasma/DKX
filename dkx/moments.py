@@ -296,6 +296,79 @@ def _l_masks(n_xi_for_x: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray, jnp.nda
         (n > 3).astype(jnp.float64),
     )
 
+
+def legendre_tail_relative_l2_batch(
+    layout: StateLayout,
+    vgrid: VelocityGrid,
+    surface: FluxSurface,
+    x_full_stack: jnp.ndarray,
+    *,
+    tail_modes: int = 2,
+) -> jnp.ndarray:
+    """Relative spatial-L2 energy in the last active Legendre modes.
+
+    For each solved state, speed node, and species, the numerator contains the
+    final ``tail_modes`` active Legendre coefficients and the denominator all
+    active coefficients. The norm uses the Legendre orthogonality factor
+    ``2/(2*l+1)`` and the absolute flux-surface volume element. The result
+    has axes ``(state, speed, species)`` and is zero when the complete
+    coefficient block is exactly zero.
+
+    This compact quantity is a truncation indicator, not a convergence proof:
+    observable movement under a resolution increase remains the admission
+    gate. Retaining two modes also makes even/odd under-resolution behavior
+    visible, as recommended by the SFINCS convergence guidance.
+    """
+    if int(tail_modes) < 1:
+        raise ValueError("tail_modes must be at least 1")
+    states = jnp.asarray(x_full_stack, dtype=jnp.float64)
+    if states.ndim != 2 or states.shape[1] != layout.total_size:
+        raise ValueError(
+            f"x_full_stack must have shape (N,{layout.total_size}), got {states.shape}"
+        )
+    f = states[:, : layout.f_size].reshape((states.shape[0], *layout.f_shape))
+    ell = jnp.arange(layout.n_xi, dtype=jnp.int32)[None, :]
+    active_count = jnp.asarray(vgrid.n_xi_for_x, dtype=jnp.int32)[:, None]
+    active = ell < active_count
+    tail = active & (ell >= jnp.maximum(active_count - int(tail_modes), 0))
+    legendre_weight = 2.0 / (
+        2.0 * jnp.arange(layout.n_xi, dtype=jnp.float64) + 1.0
+    )
+    surface_weight = (
+        surface.theta_weights[:, None] * surface.zeta_weights[None, :]
+    ) / jnp.abs(surface.d_hat)
+    scale = jnp.max(jnp.abs(f), axis=(3, 4, 5), keepdims=True)
+    scaled = jnp.where(scale > 0.0, f / scale, 0.0)
+    energy = jnp.einsum(
+        "nsxltz,l,tz->nsxl",
+        scaled * scaled,
+        legendre_weight,
+        surface_weight,
+    )
+    total = jnp.sum(jnp.where(active[None, None, :, :], energy, 0.0), axis=-1)
+    tail_energy = jnp.sum(
+        jnp.where(tail[None, None, :, :], energy, 0.0), axis=-1
+    )
+    ratio = jnp.where(total > 0.0, jnp.sqrt(tail_energy / total), 0.0)
+    return jnp.transpose(ratio, (0, 2, 1))
+
+
+def legendre_tail_relative_l2(
+    layout: StateLayout,
+    vgrid: VelocityGrid,
+    surface: FluxSurface,
+    x_full: jnp.ndarray,
+    *,
+    tail_modes: int = 2,
+) -> jnp.ndarray:
+    """Single-state wrapper for :func:`legendre_tail_relative_l2_batch`."""
+    state = jnp.asarray(x_full, dtype=jnp.float64)
+    if state.ndim != 1:
+        raise ValueError(f"x_full must be one-dimensional, got {state.shape}")
+    return legendre_tail_relative_l2_batch(
+        layout, vgrid, surface, state[None, :], tail_modes=tail_modes
+    )[0]
+
 # ---- vm (magnetic-drift) flux moments — the RHSMode=2/3 diagnostics subset ----
 
 class VmFluxMoments(NamedTuple):

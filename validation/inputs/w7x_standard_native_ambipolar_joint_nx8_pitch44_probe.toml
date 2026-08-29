@@ -1,0 +1,64 @@
+schema = 1
+name = "joint_nx8_pitch44_probe"
+
+[run]
+workflow = "ambipolar_profile"
+precision = "float64"
+device = "cpu"
+progress = true
+
+[geometry]
+format = "boozer"
+file = "../../../SFINCS/equilibria/w7x_standardConfig.bc"
+surfaces = [0.16, 0.25]
+
+[[species]]
+name = "hydrogen"
+charge = 1
+mass_amu = 1.007276
+density_m3 = [1.49e19, 1.44e19]
+temperature_keV = [1.05, 0.95]
+
+[[species]]
+name = "electron"
+charge = -1
+mass_amu = 5.485799e-4
+density_m3 = [1.49e19, 1.44e19]
+temperature_keV = [3.60, 2.50]
+
+[physics]
+model = "full_local"
+collisions = "pitch_angle_scattering"
+magnetic_drifts = "dkes"
+phi1 = "off"
+
+[electric_field]
+mode = "ambipolar"
+search_kV_m = [8.4, 8.7]
+find_all_roots = true
+continue_branches = true
+search_points = 3
+root_tolerance_kV_m = 0.005
+max_root_iterations = 8
+
+[resolution]
+theta = 15
+zeta = 37
+pitch = 44
+speed = 8
+
+[solver]
+method = "auto"
+relative_tolerance = 1.0e-9
+memory_fraction = 0.10
+reuse = "auto"
+
+[convergence]
+enabled = false
+observables = ["particle_flux", "heat_flux", "electric_field"]
+relative_tolerance = 0.02
+max_refinements = 0
+
+[output]
+file = "joint_nx8_pitch44_probe.nc"
+plots = false
