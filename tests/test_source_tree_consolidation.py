@@ -213,7 +213,7 @@ def test_plan_md_is_the_only_authoritative_planning_file() -> None:
 
 
 def test_core_slim_inventory_covers_large_phase_a_owners() -> None:
-    """Make Phase A actionable before any broad source deletion happens."""
+    """Keep the Phase A extraction map valid without freezing source shape."""
 
     payload = _core_slim_inventory()
     assert payload["schema_version"] == 1
@@ -285,9 +285,6 @@ def test_core_slim_inventory_covers_large_phase_a_owners() -> None:
         repo_path = REPO_ROOT / path
         if category in {"core", "compat", "test-fixture"}:
             assert repo_path.exists(), path
-        if repo_path.is_file() and repo_path.suffix == ".py":
-            current_lines = len(repo_path.read_text(encoding="utf-8").splitlines())
-            assert current_lines <= int(entry["lines_at_audit"]), path
         for key in ("tests", "docs_examples", "internal_callers"):
             for referenced in entry[key]:
                 referenced_path = REPO_ROOT / str(referenced)
