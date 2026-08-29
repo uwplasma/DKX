@@ -1,0 +1,173 @@
+{
+  "schema": "dkx.native_physical_flux_sfincs.v1",
+  "created_utc": "2026-08-29T23:27:23Z",
+  "claim_scope": "matched_w7x_pas_dkes_fixed_field_native_physical_flux_conversion",
+  "summary": "A pinned SFINCS v3 solve independently certifies the corrected native psiHat-to-rHat physical flux conversion on one thermal two-species W7-X surface at finite electric field. The comparison covers particle flux, heat flux, parallel current, solver residuals, and the exact ramped pitch allocation; it is not a phase-space convergence, ambipolar-root, full-Fokker-Planck, Phi1, experiment, or performance-equivalence claim.",
+  "source": {
+    "dkx_base_commit": "0f11ba2bb0ded34b6708c62543b72c25c6410300",
+    "implementation_commit": "66ac01a42a2ebfee5efd3508d2578af8932f50a8",
+    "sfincs_commit": "8df5453472e982df0f6ae005243ce38d57a83711",
+    "yancc_review_commit": "6f399a21ecfcc03008e466bb09811a330321b9be",
+    "native_input": {
+      "path": "validation/inputs/w7x_standard_native_fixed_er_nx8_zeta37_pitch52.toml",
+      "sha256": "817c75756172686a30c4160fb796b2f04a00f1d334b54772435caae7fe50682d",
+      "bytes": 1051
+    },
+    "sfincs_input": {
+      "path": "validation/inputs/w7x_standard_pas_dkes_fixed_er_nx8_zeta37_pitch52.input.namelist",
+      "sha256": "d46c1deadee93660c3b6389315a54608e8861c5fc05580ab3390ae920a5a3136",
+      "bytes": 1159
+    },
+    "geometry": {
+      "path": "SFINCS/equilibria/w7x_standardConfig.bc",
+      "sha256": "81c686e5a5bd8f38d8b1f754ebe2910951f20094bab35d73d2827d9875bb6062",
+      "bytes": 19416676
+    },
+    "sfincs_executable": {
+      "sha256": "795e4fa339628c33c0c40dcae473ca5614be72198d948cbb5f38ce69de9a4fc6",
+      "bytes": 2041288,
+      "build": "Pinned SFINCS v3 source with the previously certified MUMPS-enabled conda-forge build; no scientific-source edits."
+    }
+  },
+  "environment": {
+    "host": "Mac mini, Apple M4, 10 CPU cores, 24 GiB RAM",
+    "os": "macOS 26.6.2 arm64 (25G83)",
+    "python": "3.11.15",
+    "jax": "0.9.2",
+    "jaxlib": "0.9.2",
+    "numpy": "2.4.3",
+    "scipy": "1.17.1",
+    "h5py": "3.16.0",
+    "netcdf4": "1.7.3",
+    "dkx": "2.3.1",
+    "solvax": "0.19.0",
+    "yancc": "0.0.1"
+  },
+  "case": {
+    "geometry": "W7-X standard configuration",
+    "psi_n": 0.25,
+    "r_n": 0.5,
+    "psi_a_hat": -0.3849358059257492,
+    "a_hat": 0.53697,
+    "electric_field_kV_m": 8.55,
+    "species_order": ["hydrogen", "electron"],
+    "charge_e": [1.0, -1.0],
+    "mass_hat": [1.007276, 0.0005485799],
+    "density_hat": [0.144, 0.144],
+    "temperature_hat": [0.95, 2.5],
+    "density_gradient_dr_hat": [-0.09311507160549008, -0.09311507160549008],
+    "temperature_gradient_dr_hat": [-1.8623014321098015, -20.485315753207818],
+    "collision_operator": "pitch_angle_scattering",
+    "magnetic_drifts": "dkes",
+    "use_dkes_exb_drift": true,
+    "phi1": false,
+    "resolution": {
+      "theta": 15,
+      "zeta": 37,
+      "pitch": 52,
+      "speed": 8,
+      "pitch_speed_ramp": 1,
+      "pitch_modes_by_speed": [6, 11, 19, 30, 42, 52, 52, 52]
+    }
+  },
+  "conversion": {
+    "quantity": "psiHat-directed flux to outward physical rHat flux",
+    "correct_d_dr_hat_to_d_dpsi_hat": -1.3949598653433055,
+    "previous_inverse_d_dpsi_hat_to_d_dr_hat": -0.7168665026458634,
+    "correct_to_previous_ratio": 1.9459130259186133,
+    "previous_max_cross_code_scaled_error": 0.48772925,
+    "source_definition": "dkx.units.flux_psi_hat_to_r_hat and SFINCS diagnostics.F90 use d(rHat)/d(psiHat); native execution previously used its inverse."
+  },
+  "acceptance": {
+    "max_cross_code_scaled_error": 0.005,
+    "max_parallel_current_scaled_error": 0.005,
+    "max_dkx_primal_residual": 1e-12,
+    "max_sfincs_ksp_residual": 1e-12,
+    "measured_max_cross_code_scaled_error": 0.0031635807589954893,
+    "measured_parallel_current_scaled_error": 0.00023297998036849439,
+    "measured_dkx_primal_residual": 6.782320792347775e-16,
+    "measured_sfincs_ksp_residual": 5.766786384497e-15,
+    "all_gates_pass": true
+  },
+  "sfincs": {
+    "raw_output": {
+      "relative_path": "sfincs/sfincsOutput.h5",
+      "sha256": "bf02708e8e2712a3f1fd38bf754c1dd1cba69649d2685052b3807c672ef2c719",
+      "bytes": 619836
+    },
+    "raw_log": {
+      "relative_path": "sfincs/sfincs.log",
+      "sha256": "3218fba3f88d12fba9e0e8d68a29974c6b6ae4f0ec8639c7236bb358b41c79d0",
+      "bytes": 20290
+    },
+    "matrix_shape": [293056, 293056],
+    "matrix_nnz": 7760128,
+    "ksp_iterations": 3,
+    "ksp_final_residual": 5.766786384497e-15,
+    "wall_seconds": 10.48,
+    "maximum_rss_bytes": 4503191552,
+    "particle_flux_psi_hat": [-3.4005724724521614e-08, -4.817913316729488e-08],
+    "heat_flux_psi_hat": [-4.75468956754309e-08, -3.525478167395787e-07],
+    "particle_flux_m2_s": [2.076275836632728e18, 2.941656760311026e18],
+    "heat_flux_W_m2": [930.2412024479809, 6897.495626274952],
+    "parallel_current_A_T_m2": -61307.29668112181
+  },
+  "dkx": {
+    "raw_output": {
+      "relative_path": "dkx/result.nc",
+      "sha256": "1782617b3eff8434f5476972c65aec00f7acffc127b71d3f81612a453ad274cb",
+      "bytes": 48114
+    },
+    "case_id": "2631fbda3d2b4adc282758c8fb3b6264f0058763d6b395acef013b7b991841c0",
+    "solver_route": "truncated_block_thomas",
+    "wall_seconds": 10.85,
+    "solve_seconds_two_surfaces": [5.20068408, 2.44214867],
+    "maximum_rss_bytes": 1041793024,
+    "peak_footprint_bytes": 872105640,
+    "particle_flux_m2_s": [2.0697073703455895e18, 2.9354260426108974e18],
+    "heat_flux_W_m2": [928.0989092785815, 6884.487634058304],
+    "parallel_current_A_T_m2": -61321.58338241441,
+    "primal_residual": 6.782320792347775e-16
+  },
+  "comparison": {
+    "scaled_error_definition": "abs(dkx-sfincs)/max(abs(dkx),abs(sfincs))",
+    "particle_flux_scaled_error": [0.0031635807589954893, 0.0021180981357831782],
+    "heat_flux_scaled_error": [0.0023029437566964854, 0.0018859007560796245],
+    "parallel_current_scaled_error": 0.00023297998036849439,
+    "max_scaled_error": 0.0031635807589954893
+  },
+  "yancc_diagnostic": {
+    "role": "independent full-trajectory conditioning review, not matched PAS/DKES parity",
+    "result": "At fixed theta=15, zeta=37, speed=6, and pitch 97/129, a 1e-9 Krylov tolerance was required before all pitch movements fell below 0.89%. Because solve_dke retains full trajectory terms, those values are excluded from the matched-model acceptance gate.",
+    "best_practices_applied": [
+      "fix physical inputs while refining one axis",
+      "gate transport moments as well as Krylov residuals",
+      "converge pitch before angular and speed axes",
+      "keep compilation caches outside the DKX checkout"
+    ]
+  },
+  "historical_artifact_supersession": {
+    "absolute_physical_flux_values_promoted": false,
+    "reason": "The listed pre-fix native artifacts preserve valid same-surface relative movements, roots, topology, residuals, and timings, but their absolute particle-flux, heat-flux, and radial-current SI magnitudes were produced with the inverse radial factor and require regeneration before promotion.",
+    "artifacts": [
+      "validation/native_ambipolar_profile_v1.json",
+      "validation/ambipolar_phase_space_ladder_v1.json",
+      "validation/ambipolar_phase_space_axes_v1.json",
+      "validation/ambipolar_pitch_budget_v1.json",
+      "validation/ambipolar_pitch_speed_groups_v1.json",
+      "validation/ambipolar_pitch_explicit_groups_v1.json",
+      "validation/ambipolar_pitch_combined_v1.json",
+      "validation/ambipolar_speed_local_pitch_v1.json",
+      "validation/ambipolar_joint_pitch_speed_v1.json",
+      "validation/ambipolar_joint_speed_zeta_tail_v1.json"
+    ]
+  },
+  "claim_exclusions": [
+    "whole-profile phase-space convergence",
+    "ambipolar root agreement",
+    "full Fokker-Planck collisions",
+    "Phi1",
+    "experimental validation",
+    "cross-code performance equivalence"
+  ]
+}
