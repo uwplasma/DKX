@@ -4,8 +4,12 @@ import numpy as np
 
 from dkx.result import Result
 from dkx.workflows.ambipolar_native import (
+    NativeAmbipolarRoot,
+    NativeAmbipolarSurface,
+    RootEvaluation,
     _brackets,
     _evaluation_budget,
+    continue_ambipolar_branches,
     solve_native_ambipolar_surface,
 )
 
@@ -47,6 +51,55 @@ def _solve(**updates):
     return solve_native_ambipolar_surface(**controls)
 
 
+def _branch_surface(fields, root_types):
+    roots = []
+    evaluations = []
+    for field, root_type in zip(fields, root_types):
+        evaluation = RootEvaluation(
+            electric_field_kv_m=float(field),
+            radial_current_a_m2=0.0,
+            particle_flux_m2_s=np.asarray([field + 4.0]),
+            heat_flux_w_m2=np.asarray([2.0 * (field + 4.0)]),
+            parallel_current_a_t_m2=float(field),
+            residual_norm=1.0e-12,
+            stage="root_refinement",
+        )
+        evaluations.append(evaluation)
+        roots.append(
+            NativeAmbipolarRoot(
+                electric_field_kv_m=float(field),
+                radial_current_a_m2=0.0,
+                slope_a_m2_per_kv_m=-1.0 if root_type == "unstable" else 1.0,
+                root_type=root_type,
+                bracket_kv_m=(float(field), float(field)),
+                evaluation=evaluation,
+            )
+        )
+    selected = (
+        evaluations[0]
+        if evaluations
+        else RootEvaluation(
+            electric_field_kv_m=0.0,
+            radial_current_a_m2=1.0,
+            particle_flux_m2_s=np.asarray([0.0]),
+            heat_flux_w_m2=np.asarray([0.0]),
+            parallel_current_a_t_m2=0.0,
+            residual_norm=1.0e-12,
+            stage="coarse_scan",
+        )
+    )
+    return NativeAmbipolarSurface(
+        evaluations=tuple(evaluations) or (selected,),
+        roots=tuple(roots),
+        selected_root=0 if roots else None,
+        selected=selected,
+        status="bracketed_root" if roots else "no_bracketed_root",
+        solve_seconds=0.0,
+        batch_chunk_size=1,
+        batch_chunks=1,
+    )
+
+
 def test_native_ambipolar_refines_all_roots_and_continues_nearest(monkeypatch):
     roots = np.asarray([-1.5, 0.4, 2.2])
 
@@ -73,6 +126,133 @@ def test_native_ambipolar_refines_all_roots_and_continues_nearest(monkeypatch):
     )
     assert len(result.evaluations) > 7
     assert result.batch_chunks > 1
+
+
+def test_radial_branch_identity_crossing_loss_merger_and_selection_are_retained(
+    tmp_path, capsys
+):
+    tracked = continue_ambipolar_branches(
+        [
+            _branch_surface([-2.0, 2.0], ["ion", "electron"]),
+            _branch_surface([-0.5, 0.0, 0.5], ["ion", "unstable", "electron"]),
+            _branch_surface([-1.1, 1.1], ["ion", "electron"]),
+        ],
+        surfaces=np.asarray([0.1, 0.2, 0.3]),
+        electric_field_bounds_kv_m=(-3.0, 3.0),
+        continue_selection=True,
+    )
+
+    first_ids = [root.branch_id for root in tracked[0].roots]
+    assert first_ids == ["ion-000", "electron-000"]
+    assert tracked[0].selection_reason == "nearest_zero_initial"
+    assert tracked[0].selected_branch_id == "ion-000"
+    assert tracked[1].selected_branch_id == "ion-000"
+    assert tracked[1].selection_reason == "continued_selected_branch"
+    assert tracked[1].roots[1].branch_id == "unstable-000"
+    assert {event.kind for event in tracked[1].branch_events} == {"creation"}
+
+    final_by_id = {root.branch_id: root for root in tracked[2].roots}
+    assert final_by_id["electron-000"].electric_field_kv_m == -1.1
+    assert final_by_id["ion-000"].electric_field_kv_m == 1.1
+    assert tracked[2].selected_branch_id == "ion-000"
+    assert tracked[2].selected.electric_field_kv_m == 1.1
+    final_kinds = [event.kind for event in tracked[2].branch_events]
+    assert final_kinds.count("classification_transition") == 2
+    assert set(final_kinds) >= {"loss", "merger", "crossing"}
+    merger = next(event for event in tracked[2].branch_events if event.kind == "merger")
+    assert merger.branch_ids[0] == "unstable-000"
+    assert "discrete merger candidate" in merger.detail
+    crossing = next(
+        event for event in tracked[2].branch_events if event.kind == "crossing"
+    )
+    assert set(crossing.branch_ids) == {"ion-000", "electron-000"}
+    assert all(event.nonsmooth for event in tracked[2].branch_events)
+
+    from dkx.execution import _ambipolar_result_arrays
+
+    arrays, dimensions = _ambipolar_result_arrays(tracked, n_species=1)
+    arrays["surface"] = np.asarray([0.1, 0.2, 0.3])
+    dimensions["surface"] = ("surface",)
+    arrays["electric_field_kV_m"] = np.asarray(
+        [result.selected.electric_field_kv_m for result in tracked]
+    )
+    dimensions["electric_field_kV_m"] = ("surface",)
+    np.testing.assert_array_equal(
+        arrays["selected_ambipolar_branch"],
+        ["ion-000", "ion-000", "ion-000"],
+    )
+    assert arrays["ambipolar_root_branch_id"][2, 1] == "ion-000"
+    assert "crossing" in arrays["ambipolar_branch_event_kind"][2]
+    assert arrays["ambipolar_nonsmooth_event"].tolist() == [0, 1, 1]
+    result = Result(
+        case_id="a" * 64,
+        case_name="branch events",
+        workflow="ambipolar_profile",
+        arrays=arrays,
+        dimensions=dimensions,
+        metadata={"converged": True},
+    )
+    path = result.save(tmp_path / "branch-events.nc")
+    loaded = Result.load(path)
+    np.testing.assert_array_equal(
+        loaded.selected_ambipolar_branch,
+        result.selected_ambipolar_branch,
+    )
+    np.testing.assert_array_equal(
+        loaded.ambipolar_branch_event_kind,
+        result.ambipolar_branch_event_kind,
+    )
+    result.print_summary()
+    assert "3 identities; 6 interior events" in capsys.readouterr().out
+    figure = result.plot()
+    assert "branch event warning" in figure._suptitle.get_text()
+    labels = {
+        line.get_label()
+        for line in figure.axes[-1].lines
+        if not line.get_label().startswith("_")
+    }
+    assert labels >= {"selected branch", "ion-000", "electron-000", "unstable-000"}
+
+
+def test_branch_selection_can_be_disabled_without_hiding_identities():
+    tracked = continue_ambipolar_branches(
+        [
+            _branch_surface([-2.0, 2.0], ["ion", "electron"]),
+            _branch_surface([-0.5, 0.0, 0.5], ["ion", "unstable", "electron"]),
+        ],
+        surfaces=np.asarray([0.1, 0.2]),
+        electric_field_bounds_kv_m=(-3.0, 3.0),
+        continue_selection=False,
+    )
+
+    assert tracked[1].selected.electric_field_kv_m == 0.0
+    assert tracked[1].selected_branch_id == "unstable-000"
+    assert tracked[1].selection_reason == "nearest_zero_continuation_disabled"
+    assert all(root.branch_id for result in tracked for root in result.roots)
+
+    with np.testing.assert_raises_regex(ValueError, "strictly increasing surfaces"):
+        continue_ambipolar_branches(
+            tracked,
+            surfaces=np.asarray([0.2, 0.1]),
+            electric_field_bounds_kv_m=(-3.0, 3.0),
+            continue_selection=True,
+        )
+
+
+def test_branch_loss_to_no_root_keeps_explicit_fallback():
+    tracked = continue_ambipolar_branches(
+        [
+            _branch_surface([-1.0], ["ion"]),
+            _branch_surface([], []),
+        ],
+        surfaces=np.asarray([0.1, 0.2]),
+        electric_field_bounds_kv_m=(-3.0, 3.0),
+        continue_selection=True,
+    )
+
+    assert tracked[1].selected_root is None
+    assert tracked[1].selection_reason == "no_bracket_closest_sample"
+    assert [event.kind for event in tracked[1].branch_events] == ["loss"]
 
 
 def test_native_ambipolar_no_root_keeps_closest_real_evaluation(monkeypatch):
