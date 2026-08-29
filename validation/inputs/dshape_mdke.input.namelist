@@ -1,0 +1,33 @@
+&general
+  RHSMode = 3
+/
+&geometryParameters
+  geometryScheme = 5
+  equilibriumFile = "wout_DSHAPE.nc"
+  inputRadialCoordinate = 3
+  rN_wish = 0.8
+  VMECRadialOption = 0
+  min_Bmn_to_load = 0.0d0
+/
+&speciesParameters
+/
+&physicsParameters
+  nuPrime = 1.0d-1
+  EStar = 0.0d0
+  collisionOperator = 1
+  includeXDotTerm = .false.
+  includeElectricFieldTermInXiDot = .false.
+  useDKESExBDrift = .true.
+  includePhi1 = .false.
+/
+&resolutionParameters
+  Ntheta = 33
+  Nzeta = 1
+  Nxi = 65
+  Nx = 1
+  solverTolerance = 1.0d-10
+/
+&otherNumericalParameters
+/
+&preconditionerOptions
+/
