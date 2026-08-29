@@ -62,6 +62,24 @@ def _vmec_case():
     )
 
 
+def _ambipolar_case():
+    base = _case()
+    return replace(
+        base,
+        name="native_ambipolar_profile",
+        run=replace(base.run, workflow="ambipolar_profile"),
+        electric_field=replace(
+            base.electric_field,
+            mode="ambipolar",
+            value_kV_m=None,
+            search_kV_m=(-5.0, 5.0),
+            search_points=5,
+            root_tolerance_kV_m=0.05,
+            max_root_iterations=8,
+        ),
+    )
+
+
 def test_native_case_solves_without_namelist_conversion(monkeypatch, tmp_path) -> None:
     def forbidden(*_args, **_kwargs):
         raise AssertionError("native execution serialized or parsed a SFINCS namelist")
@@ -86,6 +104,101 @@ def test_native_case_solves_without_namelist_conversion(monkeypatch, tmp_path) -
     np.testing.assert_array_equal(loaded.species, ["deuterium"])
     np.testing.assert_allclose(loaded.particle_flux_m2_s, result.particle_flux_m2_s)
     assert result.plot(tmp_path / "profile.png").is_file()
+
+
+def test_native_ambipolar_result_preserves_scan_roots_and_selection(
+    monkeypatch, tmp_path
+) -> None:
+    from dkx.workflows.ambipolar_native import (
+        NativeAmbipolarRoot,
+        NativeAmbipolarSurface,
+        RootEvaluation,
+    )
+
+    base = _case()
+    case = replace(
+        base,
+        name="native_ambipolar_profile",
+        run=replace(base.run, workflow="ambipolar_profile"),
+        electric_field=replace(
+            base.electric_field,
+            mode="ambipolar",
+            value_kV_m=None,
+            search_kV_m=(-4.0, 4.0),
+        ),
+    )
+    calls = []
+
+    def fake_surface(_problem, *, previous_root_kv_m, **_controls):
+        surface_index = len(calls)
+        root_field = -1.5 + 0.25 * surface_index
+        evaluation = RootEvaluation(
+            electric_field_kv_m=root_field,
+            radial_current_a_m2=1.0e-10,
+            particle_flux_m2_s=np.asarray([2.0 + surface_index]),
+            heat_flux_w_m2=np.asarray([3.0 + surface_index]),
+            parallel_current_a_t_m2=4.0 + surface_index,
+            residual_norm=1.0e-12,
+            stage="root_refinement",
+        )
+        coarse = replace(
+            evaluation,
+            electric_field_kv_m=-4.0,
+            radial_current_a_m2=-2.0,
+            stage="coarse_scan",
+        )
+        root = NativeAmbipolarRoot(
+            electric_field_kv_m=root_field,
+            radial_current_a_m2=evaluation.radial_current_a_m2,
+            slope_a_m2_per_kv_m=2.0,
+            root_type="ion",
+            bracket_kv_m=(-2.0, 0.0),
+            evaluation=evaluation,
+        )
+        calls.append(previous_root_kv_m)
+        return NativeAmbipolarSurface(
+            evaluations=(coarse, evaluation),
+            roots=(root,),
+            selected_root=0,
+            selected=evaluation,
+            status="bracketed_root",
+            solve_seconds=0.01,
+            batch_chunk_size=2,
+            batch_chunks=1,
+        )
+
+    monkeypatch.setattr(
+        "dkx.workflows.ambipolar_native.solve_native_ambipolar_surface",
+        fake_surface,
+    )
+    result = dkx.run(case, out=tmp_path / "ambipolar.nc")
+
+    assert calls == [None, -1.5]
+    np.testing.assert_allclose(result.electric_field_kV_m, [-1.5, -1.25])
+    np.testing.assert_allclose(result.particle_flux_m2_s[:, 0], [2.0, 3.0])
+    np.testing.assert_array_equal(result.ambipolar_root_count, [1, 1])
+    np.testing.assert_array_equal(result.ambipolar_status, ["bracketed_root"] * 2)
+    assert result.dimensions["radial_current_A_m2"] == ("surface", "evaluation")
+    assert result.metadata["ambipolar_all_surfaces_bracketed"] is True
+    loaded = dkx.Result.load(tmp_path / "ambipolar.nc")
+    np.testing.assert_allclose(loaded.ambipolar_root_kV_m[:, 0], [-1.5, -1.25])
+
+
+def test_native_ambipolar_real_solver_brackets_and_roundtrips(tmp_path, capsys) -> None:
+    result = dkx.run(_ambipolar_case(), out=tmp_path / "real-ambipolar.nc")
+
+    assert "[dkx.solve]" not in capsys.readouterr().out
+    np.testing.assert_array_equal(result.ambipolar_root_count, [1, 1])
+    np.testing.assert_array_equal(result.ambipolar_status, ["bracketed_root"] * 2)
+    assert np.all(np.isfinite(result.electric_field_kV_m))
+    assert np.all(np.isfinite(result.particle_flux_m2_s))
+    assert np.all(np.isfinite(result.heat_flux_W_m2))
+    assert np.all(result.selected_ambipolar_root == 0)
+    scan_scale = np.nanmax(np.abs(result.radial_current_A_m2), axis=1)
+    root_residual = np.abs(result.ambipolar_root_current_A_m2[:, 0])
+    assert np.all(root_residual < 0.02 * scan_scale)
+    loaded = dkx.Result.load(tmp_path / "real-ambipolar.nc")
+    np.testing.assert_allclose(loaded.electric_field_kV_m, result.electric_field_kV_m)
 
 
 def test_result_arrays_and_contract_are_immutable() -> None:

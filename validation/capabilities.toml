@@ -14,9 +14,9 @@ status_values = [
 id = "native_case_result"
 name = "Native Case execution and Result/NetCDF contract"
 status = "validated_limited"
-owners = ["dkx/config.py", "dkx/execution.py", "dkx/result.py", "dkx/run.py"]
-evidence = ["tests/test_case_config.py", "tests/test_native_execution_result.py", "examples/native/analytic_tokamak_profile.toml"]
-gaps = ["native VMEC and Boozer routes", "ambipolar and resumable scan execution", "transport-matrix Result", "SFINCS conversion adapters"]
+owners = ["dkx/config.py", "dkx/execution.py", "dkx/result.py", "dkx/run.py", "dkx/workflows/ambipolar_native.py"]
+evidence = ["tests/test_case_config.py", "tests/test_native_execution_result.py", "tests/test_native_ambipolar.py", "examples/native/analytic_tokamak_profile.toml", "examples/native/analytic_ambipolar_profile.toml", "examples/native/vmec_profile.toml"]
+gaps = ["native Boozer route", "resumable declarative scan execution", "transport-matrix Result", "SFINCS conversion adapters"]
 
 [[capability]]
 id = "sfincs_namelist"
@@ -78,9 +78,9 @@ gaps = ["BOOTSJ comparison matrix", "whole-profile certificate"]
 id = "ambipolar_roots"
 name = "Ambipolar electric-field roots"
 status = "validated_limited"
-owners = ["dkx/er.py", "dkx/ambipolar.py"]
-evidence = ["tests/test_er_scan_and_ambipolar.py", "tests/test_paper_benchmark_w7x_ambipolar.py"]
-gaps = ["all-root branch continuation", "branch creation/loss events", "PENTA comparison"]
+owners = ["dkx/er.py", "dkx/ambipolar.py", "dkx/workflows/ambipolar_native.py", "dkx/execution.py", "dkx/result.py"]
+evidence = ["tests/test_er_scan_and_ambipolar.py", "tests/test_paper_benchmark_w7x_ambipolar.py", "tests/test_native_ambipolar.py", "tests/test_native_execution_result.py", "examples/native/analytic_ambipolar_profile.toml"]
+gaps = ["adaptive missed-root detection between coarse samples", "branch creation/loss events", "convergence-rung uncertainty", "PENTA comparison"]
 
 [[capability]]
 id = "phi1"
@@ -119,7 +119,7 @@ id = "batch_scans"
 name = "Batched electric-field and surface scans"
 status = "validated_limited"
 owners = ["dkx/batch.py", "dkx/workflows/scans.py"]
-evidence = ["tests/test_batch.py", "tests/test_scans_progress_and_recycle.py"]
+evidence = ["tests/test_batch.py", "tests/test_scans_progress_and_recycle.py", "tests/test_native_ambipolar.py", "tests/test_native_execution_result.py"]
 gaps = ["declarative resume contract", "compilation-family accounting", "missed-root guard under warm starts"]
 
 [[capability]]

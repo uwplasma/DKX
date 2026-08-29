@@ -121,6 +121,7 @@
       "series.py"
     ],
     "workflows": [
+      "ambipolar_native.py",
       "geometry_adapters.py",
       "optimization.py",
       "scans.py"

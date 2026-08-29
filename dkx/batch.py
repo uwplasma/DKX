@@ -263,10 +263,14 @@ def _batch_size_of(batch_leaves: Mapping[str, Any]) -> int:
     return sizes.pop()
 
 
-def _validate_batch_leaves(op: KineticOperator, batch_leaves: Mapping[str, Any]) -> None:
+def _validate_batch_leaves(
+    op: KineticOperator, batch_leaves: Mapping[str, Any]
+) -> None:
     """Reject unknown fields and any discretization leaf (must stay shared)."""
     if not isinstance(batch_leaves, Mapping):
-        raise TypeError("batch_leaves must be a mapping of operator field name -> array.")
+        raise TypeError(
+            "batch_leaves must be a mapping of operator field name -> array."
+        )
     valid = set(KineticOperator._CHILD_FIELDS)
     for name in batch_leaves:
         if name not in valid:
@@ -424,9 +428,12 @@ def batched_solve(
             method=solve_method,
             tol=tol,
             differentiable=differentiable,
+            emit=None,
         )
         state = jnp.reshape(result.x, (-1,))
-        moments = profile_moments_from_operator(op_i, state, ntv_kernel_tz=ntv_kernel_tz)
+        moments = profile_moments_from_operator(
+            op_i, state, ntv_kernel_tz=ntv_kernel_tz
+        )
         residual_norm = jnp.max(jnp.asarray(result.residual_norms, dtype=jnp.float64))
         return state, dict(moments), residual_norm
 

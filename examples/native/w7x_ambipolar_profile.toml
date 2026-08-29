@@ -39,6 +39,9 @@ mode = "ambipolar"
 search_kV_m = [-40.0, 40.0]
 find_all_roots = true
 continue_branches = true
+search_points = 9
+root_tolerance_kV_m = 0.001
+max_root_iterations = 20
 
 [resolution]
 theta = 31
