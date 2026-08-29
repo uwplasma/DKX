@@ -720,6 +720,52 @@
     ]
   },
   {
+    "id": "native_w7x_ambipolar_phase_space_axes",
+    "status": "implemented",
+    "release_gate": {
+      "claim_status": "regression_scaffold",
+      "blocks_current_release": false,
+      "evidence": "checked reference/theta17/pitch40/pitch44 W7-X PAS/DKES diagnosis with every root and selected flux movement, raw checksums, residuals, timing, memory, and explicit refinement_exhausted status",
+      "promotion_gate": "Investigate pitch discretization or a cheaper per-surface strategy before another high-order profile; do not run pitch48 blindly or promote phase-space convergence"
+    },
+    "kind": "profile_validation",
+    "literature": [
+      "https://doi.org/10.1063/1.4870077",
+      "https://github.com/landreman/sfincs"
+    ],
+    "scripts": [
+      "tools/paper_benchmarks/audit_ambipolar_phase_space_axes.py"
+    ],
+    "artifacts": [
+      "validation/ambipolar_phase_space_axes_v1.json",
+      "validation/inputs/w7x_standard_native_ambipolar_profile.toml",
+      "validation/inputs/w7x_standard_native_ambipolar_profile_theta17.toml",
+      "validation/inputs/w7x_standard_native_ambipolar_profile_pitch40.toml",
+      "validation/inputs/w7x_standard_native_ambipolar_profile_pitch44.toml"
+    ],
+    "claims": [
+      "Theta-only keeps selected particle and heat-flux movements below 2% but fails the 0.005 kV/m root-movement gate",
+      "Pitch is the dominant failed direction and pitch40-to-pitch44 remains outside every movement gate rather than approaching convergence",
+      "The pitch44 process reaches a 22275409800-byte footprint on the 24 GiB host, so pitch48 brute force is not admitted"
+    ],
+    "source_code": [
+      "dkx/workflows/ambipolar_native.py",
+      "dkx/result.py",
+      "tools/paper_benchmarks/audit_ambipolar_phase_space_ladder.py",
+      "tools/paper_benchmarks/audit_ambipolar_phase_space_axes.py"
+    ],
+    "tests": [
+      "tests/test_ambipolar_phase_space_ladder.py",
+      "tests/test_ambipolar_phase_space_axes.py"
+    ],
+    "acceptance_gates": [
+      "Verify all four exact TOMLs, pinned geometry, raw NetCDF results, and compact extraction by checksum",
+      "Recompute every deterministic root and selected particle/heat-flux comparison for the theta and pitch directions",
+      "Retain the unchanged 0.005 kV/m, 2%, and 1e-12 gates and truthful refinement_exhausted outcome",
+      "Keep zeta, speed, independent-code, experiment, full-Fokker-Planck ambipolar, and performance claims explicit"
+    ]
+  },
+  {
     "id": "adjoint_sensitivity_gradient_checks",
     "status": "implemented",
     "release_gate": {

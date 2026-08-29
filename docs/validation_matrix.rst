@@ -213,6 +213,32 @@ validation. The fine rung only refines theta and pitch beyond the reference;
 zeta/speed convergence, independent full-Fokker--Planck ambipolar comparison,
 experiment, and cross-code performance remain separate gates.
 
+Theta/pitch resolution diagnosis
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The follow-on ``validation/ambipolar_phase_space_axes_v1.json`` artifact
+separates theta and pitch instead of combining them. It compares the reference
+``(15, 37, 36, 6)`` resolution against theta-only ``(17, 37, 36, 6)`` and
+pitch-only ``(15, 37, 40, 6)``, then extends the fixed-theta pitch sequence to
+``(15, 37, 44, 6)``. Audit it with:
+
+.. code-block:: console
+
+   python tools/paper_benchmarks/audit_ambipolar_phase_space_axes.py
+
+Theta-only keeps selected particle and heat-flux movement below ``2%`` but
+still moves a root by ``0.1611328125 kV/m``. Pitch40 is the dominant failed
+direction, moving a root by ``1.7333984375 kV/m`` and selected heat flux by
+``9.47%`` relative to the reference. Pitch40-to-pitch44 does not approach the
+gates: maximum root, selected particle-flux, and selected heat-flux movements
+are ``0.205078125 kV/m``, ``13.52%``, and ``14.07%``.
+
+All topology and accepted true-residual checks pass, but the pitch44 process
+reached a ``22,275,409,800 B`` footprint on the 24 GiB host. The artifact
+therefore rejects a blind pitch48 escalation and retains
+``refinement_exhausted`` status. It is a bounded diagnosis, not phase-space,
+zeta, speed, independent-code, experiment, or performance validation.
+
 Publication validation dashboard
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
