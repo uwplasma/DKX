@@ -1,0 +1,53 @@
+! W7-X SC1 one-species full-FP physical-profile validation rung.
+
+&general
+  RHSMode = 1
+/
+
+&geometryParameters
+  geometryScheme = 11
+  inputRadialCoordinate = 3
+  rN_wish = 0.5
+  equilibriumFile = "w7x-sc1.bc"
+/
+
+&speciesParameters
+  Zs = 1
+  mHats = 1
+  nHats = 1.0d+0
+  THats = 1.0d+0
+  dNHatdrHats = -3.0d+0
+  dTHatdrHats = -2.0d+0
+/
+
+&physicsParameters
+  Delta = 4.5694d-3
+  alpha = 1.0d+0
+  nu_n = 0.172714565d+0
+  Er = 0.0d+0
+  collisionOperator = 0
+  includeXDotTerm = .true.
+  includeElectricFieldTermInXiDot = .true.
+  useDKESExBDrift = .false.
+  includePhi1 = .false.
+  constraintScheme = -1
+/
+
+&resolutionParameters
+  Ntheta = 15
+  Nzeta = 31
+  Nxi = 27
+  Nx = 7
+  NL = 4
+  solverTolerance = 1d-12
+/
+
+&otherNumericalParameters
+/
+
+&preconditionerOptions
+  preconditioner_x = 1
+/
+
+&export_f
+/
