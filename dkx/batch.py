@@ -53,7 +53,7 @@ import jax
 import jax.numpy as jnp
 
 from .drift_kinetic import KineticOperator
-from .solve import auto_solve_peak_memory_bytes, solve
+from .solve import _auto_route_structural, auto_solve_peak_memory_bytes, solve
 
 # ---------------------------------------------------------------------------
 # Leaf classification and memory-budget defaults
@@ -128,6 +128,10 @@ class BatchedSolveResult:
             the number of sequential chunks on the busiest device
             (``ceil(largest_shard / chunk_size)``).
         method: the ``solve_method`` requested for every element.
+        executed_method: the structural route executed for every element. For
+            ``method="auto"`` this resolves the operator-dependent auto policy
+            to ``block_tridiagonal``, ``block_tridiagonal_truncated``, or
+            ``gmres`` rather than presenting the request as the route.
         radial_current: ``J_r = sum_a Z_a Gamma_a`` per element, shape
             ``(batch,)`` — populated by :func:`batched_er_scan`, ``None``
             otherwise.
@@ -142,6 +146,7 @@ class BatchedSolveResult:
     chunk_size: int
     n_chunks: int
     method: str
+    executed_method: str
     radial_current: jnp.ndarray | None = None
     residual_norms: jnp.ndarray | None = None
 
@@ -152,7 +157,7 @@ class BatchedSolveResult:
 jax.tree_util.register_dataclass(
     BatchedSolveResult,
     data_fields=["states", "moments", "radial_current", "residual_norms"],
-    meta_fields=["chunk_size", "n_chunks", "method"],
+    meta_fields=["chunk_size", "n_chunks", "method", "executed_method"],
 )
 
 
@@ -474,12 +479,20 @@ def batched_solve(
         }
         residual_norms = jnp.concatenate([r for _, _, r in gathered], axis=0)
         n_chunks = -(-shard_max // chunk)
+    executed_method = (
+        _auto_route_structural(op)
+        if str(solve_method).strip().lower() == "auto"
+        else {"iterative": "gmres"}.get(
+            str(solve_method).strip().lower(), str(solve_method).strip().lower()
+        )
+    )
     return BatchedSolveResult(
         states=states,
         moments=dict(moments),
         chunk_size=int(chunk),
         n_chunks=int(n_chunks),
         method=str(solve_method),
+        executed_method=executed_method,
         residual_norms=residual_norms,
     )
 

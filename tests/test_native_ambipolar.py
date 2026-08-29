@@ -18,6 +18,7 @@ def _fake_batch(current_function):
     def solve(_problem, values, **_kwargs):
         fields = np.asarray(values, dtype=np.float64)
         particle = np.stack((fields + 1.0, current_function(fields)), axis=1)
+        requested = str(_kwargs.get("solve_method", "auto"))
         return SimpleNamespace(
             moments={
                 "particleFlux_vm_psiHat": particle,
@@ -28,6 +29,10 @@ def _fake_batch(current_function):
             residual_norms=np.full(fields.shape, 1.0e-12),
             chunk_size=len(fields),
             n_chunks=1,
+            method=requested,
+            executed_method=(
+                "block_tridiagonal_truncated" if requested == "auto" else requested
+            ),
         )
 
     return solve
@@ -440,6 +445,107 @@ def test_native_ambipolar_rejects_nonfinite_or_unconverged_batch(monkeypatch):
     )
     with np.testing.assert_raises_regex(RuntimeError, "did not converge"):
         _solve(problem=SimpleNamespace(operator=FakeOperator(), dphi_per_er=1.0))
+
+
+def test_auto_route_recovers_only_failed_points_and_retains_every_attempt(
+    monkeypatch, tmp_path, capsys
+):
+    class FakeOperator:
+        def rhs(self):
+            return np.asarray([1.0])
+
+    calls = []
+
+    def recover(_problem, values, **kwargs):
+        fields = np.asarray(values, dtype=np.float64)
+        method = str(kwargs["solve_method"])
+        calls.append((method, fields.tolist(), kwargs.get("max_batch")))
+        batch = _fake_batch(lambda field: field)(None, fields, solve_method=method)
+        if method != "gmres":
+            batch.residual_norms[fields == 0.0] = 1.0
+        return batch
+
+    monkeypatch.setattr("dkx.batch.batched_er_scan", recover)
+    monkeypatch.setattr(
+        "dkx.er.operator_at_er", lambda *_args, **_kwargs: FakeOperator()
+    )
+    result = _solve(
+        problem=SimpleNamespace(operator=FakeOperator(), dphi_per_er=1.0),
+        previous_root_kv_m=None,
+    )
+
+    zero = next(
+        evaluation
+        for evaluation in result.evaluations
+        if evaluation.electric_field_kv_m == 0.0
+    )
+    assert [attempt.executed_method for attempt in zero.solver_attempts] == [
+        "block_tridiagonal_truncated",
+        "gmres",
+    ]
+    assert [attempt.accepted for attempt in zero.solver_attempts] == [False, True]
+    assert zero.solver_attempts[1].reason == "automatic_true_residual_recovery"
+    assert ("gmres", [0.0], 1) in calls
+
+    from dkx.execution import _ambipolar_result_arrays
+
+    arrays, dimensions = _ambipolar_result_arrays([result], n_species=2)
+    assert arrays["evaluation_solver_attempt_count"].max() == 2
+    zero_index = np.flatnonzero(arrays["evaluation_electric_field_kV_m"][0] == 0.0)[0]
+    np.testing.assert_array_equal(
+        arrays["evaluation_solver_attempt_executed_method"][0, zero_index],
+        ["block_tridiagonal_truncated", "gmres"],
+    )
+    assert dimensions["evaluation_solver_attempt_residual"] == (
+        "surface",
+        "evaluation",
+        "solver_attempt",
+    )
+    native_result = Result(
+        case_id="b" * 64,
+        case_name="solver attempt evidence",
+        workflow="ambipolar_profile",
+        arrays=arrays,
+        dimensions=dimensions,
+        metadata={
+            "converged": True,
+            "ambipolar_solver_attempts": {
+                "attempt_count": sum(
+                    len(item.solver_attempts) for item in result.evaluations
+                ),
+                "executed_route_counts": {
+                    "block_tridiagonal_truncated": len(result.evaluations),
+                    "gmres": 1,
+                },
+                "automatic_true_residual_recovery_count": 1,
+            },
+        },
+    )
+    loaded = Result.load(native_result.save(tmp_path / "solver-attempts.nc"))
+    np.testing.assert_array_equal(
+        loaded.evaluation_solver_attempt_executed_method,
+        native_result.evaluation_solver_attempt_executed_method,
+    )
+    np.testing.assert_array_equal(
+        loaded.evaluation_solver_attempt_accepted,
+        native_result.evaluation_solver_attempt_accepted,
+    )
+    assert (
+        loaded.certificate()["ambipolar_solver_attempts"]
+        == (native_result.certificate()["ambipolar_solver_attempts"])
+    )
+    native_result.print_summary()
+    assert "1 automatic true-residual recoveries" in capsys.readouterr().out
+
+    with np.testing.assert_raises_regex(RuntimeError, "did not converge"):
+        _solve(
+            problem=SimpleNamespace(operator=FakeOperator(), dphi_per_er=1.0),
+            solve_method="block_tridiagonal",
+            previous_root_kv_m=None,
+        )
+    assert not any(
+        method == "gmres" for method, _fields, _batch in calls[len(calls) - 1 :]
+    )
 
 
 def test_native_result_labels_unbracketed_values_in_summary_and_plot(capsys):

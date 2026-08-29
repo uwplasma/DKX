@@ -12,6 +12,17 @@ _MAX_RETAINED_EVALUATIONS = 100_000
 
 
 @dataclass(frozen=True)
+class SolverAttempt:
+    """One retained linear-solver attempt for a physical-field evaluation."""
+
+    requested_method: str
+    executed_method: str
+    residual_norm: float
+    accepted: bool
+    reason: str
+
+
+@dataclass(frozen=True)
 class RootEvaluation:
     """One solved electric-field point retained for root evidence."""
 
@@ -24,6 +35,7 @@ class RootEvaluation:
     stage: str
     reason: str = "initial_uniform_grid"
     refinement_level: int = 0
+    solver_attempts: tuple[SolverAttempt, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -531,6 +543,31 @@ def solve_native_ambipolar_surface(
     chunks: list[int] = []
     chunk_sizes: list[int] = []
 
+    def physical_outputs(batch):
+        particle = (
+            np.asarray(batch.moments["particleFlux_vm_psiHat"], dtype=np.float64)
+            * float(radial_factor)
+            * PARTICLE_FLUX
+        )
+        heat = (
+            np.asarray(batch.moments["heatFlux_vm_psiHat"], dtype=np.float64)
+            * float(radial_factor)
+            * HEAT_FLUX
+        )
+        parallel = (
+            np.asarray(batch.moments["FSABjHat"], dtype=np.float64) * PARALLEL_CURRENT
+        )
+        radial_current = (
+            np.asarray(batch.radial_current, dtype=np.float64)
+            * float(radial_factor)
+            * PARTICLE_FLUX
+            * ELEMENTARY_CHARGE
+        )
+        residuals = (
+            np.asarray(batch.residual_norms, dtype=np.float64).reshape((-1,)).copy()
+        )
+        return particle, heat, parallel, radial_current, residuals
+
     def evaluate(
         values: np.ndarray, stage: str, reason: str, refinement_level: int
     ) -> list[RootEvaluation]:
@@ -543,33 +580,26 @@ def solve_native_ambipolar_surface(
                 tol=solve_tolerance,
                 memory_budget_gb=memory_budget_gb,
             )
-            particle = (
-                np.asarray(batch.moments["particleFlux_vm_psiHat"], dtype=np.float64)
-                * float(radial_factor)
-                * PARTICLE_FLUX
-            )
-            heat = (
-                np.asarray(batch.moments["heatFlux_vm_psiHat"], dtype=np.float64)
-                * float(radial_factor)
-                * HEAT_FLUX
-            )
-            parallel = (
-                np.asarray(batch.moments["FSABjHat"], dtype=np.float64)
-                * PARALLEL_CURRENT
-            )
-            radial_current = (
-                np.asarray(batch.radial_current, dtype=np.float64)
-                * float(radial_factor)
-                * PARTICLE_FLUX
-                * ELEMENTARY_CHARGE
-            )
-            residuals = np.asarray(batch.residual_norms, dtype=np.float64).reshape(
-                (-1,)
+            particle, heat, parallel, radial_current, residuals = physical_outputs(
+                batch
             )
             if not np.all(np.isfinite(residuals)):
                 raise RuntimeError(
                     "native ambipolar scan produced a non-finite residual"
                 )
+            requested_method = (
+                str(getattr(batch, "method", solve_method)).strip().lower()
+            )
+            executed_method = (
+                str(getattr(batch, "executed_method", requested_method)).strip().lower()
+            )
+            primary_n_chunks = int(batch.n_chunks)
+            primary_chunk_size = int(batch.chunk_size)
+            # The accepted physical arrays are now host-owned. Release the
+            # potentially large batched states before a targeted recovery so
+            # the fallback does not overlap the primary solve's residency.
+            del batch
+            targets: np.ndarray | None = None
             if hasattr(problem, "operator"):
                 from dkx.er import operator_at_er
 
@@ -590,14 +620,87 @@ def solve_native_ambipolar_surface(
                 )
                 targets = float(solve_tolerance) * rhs_norms
                 failed = np.flatnonzero(residuals > targets)
-                if failed.size:
-                    index = int(failed[0])
-                    raise RuntimeError(
-                        "native ambipolar solve did not converge at "
-                        f"electric_field={missing[index]:.8g} kV/m: "
-                        f"residual={residuals[index]:.6g}, "
-                        f"target={targets[index]:.6g}"
+            else:
+                failed = np.asarray([], dtype=np.int64)
+            attempts: list[list[SolverAttempt]] = [
+                [
+                    SolverAttempt(
+                        requested_method=requested_method,
+                        executed_method=executed_method,
+                        residual_norm=float(residuals[index]),
+                        accepted=(
+                            targets is None or residuals[index] <= targets[index]
+                        ),
+                        reason="primary_batch",
                     )
+                ]
+                for index in range(len(missing))
+            ]
+            if failed.size and str(solve_method).strip().lower() == "auto":
+                for failed_index in failed:
+                    index = int(failed_index)
+                    retry = batched_er_scan(
+                        problem,
+                        np.asarray([missing[index]], dtype=np.float64),
+                        solve_method="gmres",
+                        tol=solve_tolerance,
+                        max_batch=1,
+                        memory_budget_gb=memory_budget_gb,
+                    )
+                    (
+                        retry_particle,
+                        retry_heat,
+                        retry_parallel,
+                        retry_current,
+                        retry_residuals,
+                    ) = physical_outputs(retry)
+                    retry_residual = float(retry_residuals[0])
+                    if not np.isfinite(retry_residual):
+                        raise RuntimeError(
+                            "native ambipolar Krylov recovery produced a non-finite "
+                            f"residual at electric_field={missing[index]:.8g} kV/m"
+                        )
+                    assert targets is not None
+                    retry_accepted = retry_residual <= targets[index]
+                    retry_requested_method = (
+                        str(getattr(retry, "method", "gmres")).strip().lower()
+                    )
+                    retry_executed_method = (
+                        str(getattr(retry, "executed_method", "gmres")).strip().lower()
+                    )
+                    retry_n_chunks = int(retry.n_chunks)
+                    retry_chunk_size = int(retry.chunk_size)
+                    del retry
+                    attempts[index].append(
+                        SolverAttempt(
+                            requested_method=retry_requested_method,
+                            executed_method=retry_executed_method,
+                            residual_norm=retry_residual,
+                            accepted=bool(retry_accepted),
+                            reason="automatic_true_residual_recovery",
+                        )
+                    )
+                    particle[index] = retry_particle[0]
+                    heat[index] = retry_heat[0]
+                    parallel[index] = retry_parallel[0]
+                    radial_current[index] = retry_current[0]
+                    residuals[index] = retry_residual
+                    chunks.append(retry_n_chunks)
+                    chunk_sizes.append(retry_chunk_size)
+                failed = np.flatnonzero(residuals > targets)
+            if failed.size:
+                index = int(failed[0])
+                attempt_summary = ", ".join(
+                    f"{attempt.executed_method}:{attempt.residual_norm:.6g}"
+                    for attempt in attempts[index]
+                )
+                assert targets is not None
+                raise RuntimeError(
+                    "native ambipolar solve did not converge at "
+                    f"electric_field={missing[index]:.8g} kV/m: "
+                    f"residual={residuals[index]:.6g}, "
+                    f"target={targets[index]:.6g}, attempts=[{attempt_summary}]"
+                )
             for index, value in enumerate(missing):
                 evaluations[value] = RootEvaluation(
                     electric_field_kv_m=value,
@@ -609,9 +712,10 @@ def solve_native_ambipolar_surface(
                     stage=stage,
                     reason=reason,
                     refinement_level=int(refinement_level),
+                    solver_attempts=tuple(attempts[index]),
                 )
-            chunks.append(int(batch.n_chunks))
-            chunk_sizes.append(int(batch.chunk_size))
+            chunks.append(primary_n_chunks)
+            chunk_sizes.append(primary_chunk_size)
         return [evaluations[float(value)] for value in values]
 
     evaluate(fields, "coarse_scan", "initial_uniform_grid", 0)
