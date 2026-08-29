@@ -89,8 +89,8 @@ Physics and numerics:
   ``classicalTransport.F90``).
 - ``er.py``: the canonical radial-current equation and single-surface
   ambipolar root algorithms; ``workflows/ambipolar_native.py`` owns physical
-  profile scans, all-root evidence, classification, and branch-nearest
-  selection for native ``Case`` execution.
+  profile scans, bounded adaptive midpoint/refinement evidence, all-root
+  classification, and branch-nearest selection for native ``Case`` execution.
 
 Input/output and orchestration:
 

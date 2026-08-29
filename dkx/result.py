@@ -142,6 +142,7 @@ class Result:
             "iterations",
             "ambipolar_all_surfaces_bracketed",
             "ambipolar_selection",
+            "ambipolar_refinement",
             "normalization",
             "geometry_sha256",
             "dkx_version",
@@ -184,6 +185,28 @@ class Result:
                 f"ambipolar roots: {bracketed}/{len(statuses)} surfaces bracketed; "
                 "unbracketed surfaces retain the closest scanned point"
             )
+        if "ambipolar_refinement_status" in self.arrays:
+            refinement_statuses = [
+                str(value) for value in self.arrays["ambipolar_refinement_status"]
+            ]
+            resolved = sum(value == "resolved" for value in refinement_statuses)
+            exhausted = sum(
+                value == "refinement_exhausted" for value in refinement_statuses
+            )
+            no_bracket = sum(
+                value == "no_bracket_observed" for value in refinement_statuses
+            )
+            not_requested = sum(
+                value == "not_requested" for value in refinement_statuses
+            )
+            if not_requested == len(refinement_statuses):
+                print("adaptive evidence: not requested")
+            else:
+                print(
+                    "adaptive evidence: "
+                    f"{resolved} resolved, {exhausted} refinement exhausted, "
+                    f"{no_bracket} no bracket observed, {not_requested} not requested"
+                )
         print("arrays: " + ", ".join(sorted(self.arrays)))
         for warning in self.warnings:
             print(f"warning: {warning}")
@@ -288,6 +311,25 @@ class Result:
                     f"\nno bracketed root at $\\psi_N$={locations}; "
                     "showing closest scanned values"
                 )
+        if "ambipolar_refinement_status" in self.arrays:
+            refinement_statuses = np.asarray(
+                self.arrays["ambipolar_refinement_status"]
+            ).astype(str)
+            exhausted = np.flatnonzero(refinement_statuses == "refinement_exhausted")
+            no_bracket = np.flatnonzero(refinement_statuses == "no_bracket_observed")
+            notes = []
+            if exhausted.size:
+                notes.append(
+                    "refinement exhausted at $\\psi_N$="
+                    + ", ".join(f"{surface[index]:.4g}" for index in exhausted)
+                )
+            if no_bracket.size:
+                notes.append(
+                    "no bracket observed after finite refinement at $\\psi_N$="
+                    + ", ".join(f"{surface[index]:.4g}" for index in no_bracket)
+                )
+            if notes:
+                title += "\n" + "; ".join(notes)
         figure.suptitle(title)
         figure.tight_layout()
         if path is None:

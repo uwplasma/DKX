@@ -121,13 +121,32 @@ def _validate_native_slice(case: Case) -> None:
             "no scan for dkx.run(case)",
             "Remove [scan] for a single run; dkx.scan will own resumable expansion.",
         )
-    if case.convergence.enabled:
+    if case.convergence.enabled and case.run.workflow != "ambipolar_profile":
         _unsupported(
             "convergence.enabled",
             True,
-            "false for dkx.run(case)",
-            "Disable convergence refinement; dkx.converge will own rung expansion and certificates.",
+            "false for a prescribed-field profile",
+            "Use convergence refinement with workflow = 'ambipolar_profile'; phase-space rung expansion remains a separate dkx.converge workflow.",
         )
+    if case.convergence.enabled:
+        supported_observables = {
+            "electric_field",
+            "particle_flux",
+            "heat_flux",
+            "parallel_current",
+            "bootstrap_current",
+            "radial_current",
+        }
+        unsupported_observables = sorted(
+            set(case.convergence.observables) - supported_observables
+        )
+        if unsupported_observables:
+            _unsupported(
+                "convergence.observables",
+                unsupported_observables,
+                f"names drawn from {sorted(supported_observables)}",
+                "Choose native ambipolar observables that are available at every retained electric-field solve.",
+            )
     if case.parallel.strategy == "batch" or case.parallel.shard:
         _unsupported(
             "parallel",
@@ -435,6 +454,8 @@ def _ambipolar_result_arrays(surface_results, n_species: int):
     scan_current = np.full((n_surface, n_evaluation), np.nan)
     scan_residual = np.full((n_surface, n_evaluation), np.nan)
     scan_stage = np.full((n_surface, n_evaluation), "", dtype=object)
+    scan_reason = np.full((n_surface, n_evaluation), "", dtype=object)
+    scan_level = np.full((n_surface, n_evaluation), -1, dtype=np.int64)
     scan_particle = np.full((n_surface, n_evaluation, n_species), np.nan)
     scan_heat = np.full((n_surface, n_evaluation, n_species), np.nan)
     scan_parallel = np.full((n_surface, n_evaluation), np.nan)
@@ -443,11 +464,25 @@ def _ambipolar_result_arrays(surface_results, n_species: int):
     root_slope = np.full((n_surface, n_root), np.nan)
     root_type = np.full((n_surface, n_root), "", dtype=object)
     root_bracket = np.full((n_surface, n_root, 2), np.nan)
+    root_movement = np.full((n_surface, n_root), np.nan)
+    root_observable_movement = np.full((n_surface, n_root), np.nan)
+    root_bracket_width = np.full((n_surface, n_root), np.nan)
     root_count = np.zeros((n_surface,), dtype=np.int64)
     selected_root = np.full((n_surface,), -1, dtype=np.int64)
     status = np.empty((n_surface,), dtype=object)
     chunk_size = np.empty((n_surface,), dtype=np.int64)
     batch_chunks = np.empty((n_surface,), dtype=np.int64)
+    refinement_status = np.empty((n_surface,), dtype=object)
+    evaluation_budget = np.empty((n_surface,), dtype=np.int64)
+    n_refinement = max(len(result.refinement) for result in surface_results)
+    refinement_level = np.full((n_surface, n_refinement), -1, dtype=np.int64)
+    refinement_search_count = np.full((n_surface, n_refinement), -1, dtype=np.int64)
+    refinement_total_count = np.full((n_surface, n_refinement), -1, dtype=np.int64)
+    refinement_root_count = np.full((n_surface, n_refinement), -1, dtype=np.int64)
+    refinement_root_movement = np.full((n_surface, n_refinement), np.nan)
+    refinement_observable_movement = np.full((n_surface, n_refinement), np.nan)
+    refinement_bracket_width = np.full((n_surface, n_refinement), np.nan)
+    refinement_converged = np.zeros((n_surface, n_refinement), dtype=np.int8)
     for surface_index, result in enumerate(surface_results):
         status[surface_index] = result.status
         root_count[surface_index] = len(result.roots)
@@ -456,6 +491,8 @@ def _ambipolar_result_arrays(surface_results, n_species: int):
         )
         chunk_size[surface_index] = result.batch_chunk_size
         batch_chunks[surface_index] = result.batch_chunks
+        refinement_status[surface_index] = result.refinement_status
+        evaluation_budget[surface_index] = result.evaluation_budget
         for evaluation_index, evaluation in enumerate(result.evaluations):
             scan_field[surface_index, evaluation_index] = evaluation.electric_field_kv_m
             scan_current[surface_index, evaluation_index] = (
@@ -463,6 +500,8 @@ def _ambipolar_result_arrays(surface_results, n_species: int):
             )
             scan_residual[surface_index, evaluation_index] = evaluation.residual_norm
             scan_stage[surface_index, evaluation_index] = evaluation.stage
+            scan_reason[surface_index, evaluation_index] = evaluation.reason
+            scan_level[surface_index, evaluation_index] = evaluation.refinement_level
             scan_particle[surface_index, evaluation_index] = (
                 evaluation.particle_flux_m2_s
             )
@@ -476,14 +515,43 @@ def _ambipolar_result_arrays(surface_results, n_species: int):
             root_slope[surface_index, root_index] = root.slope_a_m2_per_kv_m
             root_type[surface_index, root_index] = root.root_type
             root_bracket[surface_index, root_index] = root.bracket_kv_m
+            root_movement[surface_index, root_index] = root.movement_kv_m
+            root_observable_movement[surface_index, root_index] = (
+                root.observable_relative_movement
+            )
+            root_bracket_width[surface_index, root_index] = (
+                root.bracket_kv_m[1] - root.bracket_kv_m[0]
+            )
+        for refinement_index, evidence in enumerate(result.refinement):
+            refinement_level[surface_index, refinement_index] = evidence.level
+            refinement_search_count[surface_index, refinement_index] = (
+                evidence.search_evaluations
+            )
+            refinement_total_count[surface_index, refinement_index] = (
+                evidence.total_evaluations
+            )
+            refinement_root_count[surface_index, refinement_index] = evidence.root_count
+            refinement_root_movement[surface_index, refinement_index] = (
+                evidence.root_movement_kv_m
+            )
+            refinement_observable_movement[surface_index, refinement_index] = (
+                evidence.observable_relative_movement
+            )
+            refinement_bracket_width[surface_index, refinement_index] = (
+                evidence.max_bracket_width_kv_m
+            )
+            refinement_converged[surface_index, refinement_index] = evidence.converged
     arrays = {
         "evaluation": np.arange(n_evaluation, dtype=np.int64),
         "root": np.arange(n_root, dtype=np.int64),
+        "refinement": np.arange(n_refinement, dtype=np.int64),
         "bracket_endpoint": np.asarray(["minimum", "maximum"], dtype=object),
         "evaluation_electric_field_kV_m": scan_field,
         "radial_current_A_m2": scan_current,
         "evaluation_primal_residual": scan_residual,
         "evaluation_stage": scan_stage,
+        "evaluation_reason": scan_reason,
+        "evaluation_refinement_level": scan_level,
         "evaluation_particle_flux_m2_s": scan_particle,
         "evaluation_heat_flux_W_m2": scan_heat,
         "evaluation_parallel_current_A_T_m2": scan_parallel,
@@ -492,20 +560,36 @@ def _ambipolar_result_arrays(surface_results, n_species: int):
         "ambipolar_root_slope_A_m2_per_kV_m": root_slope,
         "ambipolar_root_type": root_type,
         "ambipolar_root_bracket_kV_m": root_bracket,
+        "ambipolar_root_movement_kV_m": root_movement,
+        "ambipolar_root_observable_relative_movement": root_observable_movement,
+        "ambipolar_root_final_bracket_width_kV_m": root_bracket_width,
         "ambipolar_root_count": root_count,
         "selected_ambipolar_root": selected_root,
         "ambipolar_status": status,
         "electric_field_batch_chunk_size": chunk_size,
         "electric_field_batch_chunks": batch_chunks,
+        "ambipolar_refinement_status": refinement_status,
+        "ambipolar_evaluation_budget": evaluation_budget,
+        "ambipolar_refinement_level": refinement_level,
+        "ambipolar_refinement_search_evaluations": refinement_search_count,
+        "ambipolar_refinement_total_evaluations": refinement_total_count,
+        "ambipolar_refinement_root_count": refinement_root_count,
+        "ambipolar_refinement_root_movement_kV_m": refinement_root_movement,
+        "ambipolar_refinement_observable_relative_movement": refinement_observable_movement,
+        "ambipolar_refinement_max_bracket_width_kV_m": refinement_bracket_width,
+        "ambipolar_refinement_converged": refinement_converged,
     }
     dimensions = {
         "evaluation": ("evaluation",),
         "root": ("root",),
+        "refinement": ("refinement",),
         "bracket_endpoint": ("bracket_endpoint",),
         "evaluation_electric_field_kV_m": ("surface", "evaluation"),
         "radial_current_A_m2": ("surface", "evaluation"),
         "evaluation_primal_residual": ("surface", "evaluation"),
         "evaluation_stage": ("surface", "evaluation"),
+        "evaluation_reason": ("surface", "evaluation"),
+        "evaluation_refinement_level": ("surface", "evaluation"),
         "evaluation_particle_flux_m2_s": ("surface", "evaluation", "species"),
         "evaluation_heat_flux_W_m2": ("surface", "evaluation", "species"),
         "evaluation_parallel_current_A_T_m2": ("surface", "evaluation"),
@@ -518,11 +602,30 @@ def _ambipolar_result_arrays(surface_results, n_species: int):
             "root",
             "bracket_endpoint",
         ),
+        "ambipolar_root_movement_kV_m": ("surface", "root"),
+        "ambipolar_root_observable_relative_movement": ("surface", "root"),
+        "ambipolar_root_final_bracket_width_kV_m": ("surface", "root"),
         "ambipolar_root_count": ("surface",),
         "selected_ambipolar_root": ("surface",),
         "ambipolar_status": ("surface",),
         "electric_field_batch_chunk_size": ("surface",),
         "electric_field_batch_chunks": ("surface",),
+        "ambipolar_refinement_status": ("surface",),
+        "ambipolar_evaluation_budget": ("surface",),
+        "ambipolar_refinement_level": ("surface", "refinement"),
+        "ambipolar_refinement_search_evaluations": ("surface", "refinement"),
+        "ambipolar_refinement_total_evaluations": ("surface", "refinement"),
+        "ambipolar_refinement_root_count": ("surface", "refinement"),
+        "ambipolar_refinement_root_movement_kV_m": ("surface", "refinement"),
+        "ambipolar_refinement_observable_relative_movement": (
+            "surface",
+            "refinement",
+        ),
+        "ambipolar_refinement_max_bracket_width_kV_m": (
+            "surface",
+            "refinement",
+        ),
+        "ambipolar_refinement_converged": ("surface", "refinement"),
     }
     return arrays, dimensions
 
@@ -617,6 +720,10 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
                 memory_budget_gb=(
                     case.solver.memory_fraction * _total_host_memory_bytes() / (1024**3)
                 ),
+                convergence_enabled=case.convergence.enabled,
+                convergence_observables=case.convergence.observables,
+                convergence_relative_tolerance=case.convergence.relative_tolerance,
+                max_refinements=case.convergence.max_refinements,
             )
             ambipolar_surfaces.append(surface_result)
             selected = surface_result.selected
@@ -751,6 +858,20 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
             if ambipolar_surfaces
             else None
         ),
+        "ambipolar_refinement": (
+            {
+                "enabled": case.convergence.enabled,
+                "observables": list(case.convergence.observables),
+                "relative_tolerance": case.convergence.relative_tolerance,
+                "max_refinements": case.convergence.max_refinements,
+                "all_surfaces_resolved": all(
+                    result.refinement_status == "resolved"
+                    for result in ambipolar_surfaces
+                ),
+            }
+            if ambipolar_surfaces
+            else None
+        ),
         "normalization": {
             "density_m3": 1.0e20,
             "temperature_keV": 1.0,
@@ -771,6 +892,21 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
         "timings_s": {"solve": float(np.sum(solve_seconds)), "total": total_seconds},
         "peak_host_memory_bytes": _peak_host_memory_bytes(),
     }
+    warnings = []
+    if any(
+        result.refinement_status == "no_bracket_observed"
+        for result in ambipolar_surfaces
+    ):
+        warnings.append(
+            "Finite adaptive sampling observed no sign-changing bracket on one or more surfaces; hidden even-number crossings are not excluded."
+        )
+    if any(
+        result.refinement_status == "refinement_exhausted"
+        for result in ambipolar_surfaces
+    ):
+        warnings.append(
+            "Adaptive ambipolar refinement exhausted its configured levels before root and observable evidence resolved."
+        )
     result = Result(
         case_id=case.case_id,
         case_name=case.name,
@@ -778,6 +914,7 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
         arrays=arrays,
         dimensions=dimensions,
         metadata=metadata,
+        warnings=tuple(warnings),
         output_path=output_path,
         _runtime={"operator": retained_operator},
     )

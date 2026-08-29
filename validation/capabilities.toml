@@ -80,7 +80,7 @@ name = "Ambipolar electric-field roots"
 status = "validated_limited"
 owners = ["dkx/er.py", "dkx/ambipolar.py", "dkx/workflows/ambipolar_native.py", "dkx/execution.py", "dkx/result.py"]
 evidence = ["tests/test_er_scan_and_ambipolar.py", "tests/test_paper_benchmark_w7x_ambipolar.py", "tests/test_native_ambipolar.py", "tests/test_native_execution_result.py", "examples/native/analytic_ambipolar_profile.toml"]
-gaps = ["adaptive missed-root detection between coarse samples", "branch creation/loss events", "convergence-rung uncertainty", "PENTA comparison"]
+gaps = ["branch creation/loss events", "phase-space convergence-rung uncertainty", "PENTA comparison"]
 
 [[capability]]
 id = "phi1"

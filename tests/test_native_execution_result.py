@@ -77,6 +77,12 @@ def _ambipolar_case():
             root_tolerance_kV_m=0.05,
             max_root_iterations=8,
         ),
+        convergence=replace(
+            base.convergence,
+            enabled=True,
+            observables=("particle_flux", "heat_flux", "electric_field"),
+            max_refinements=1,
+        ),
     )
 
 
@@ -190,6 +196,14 @@ def test_native_ambipolar_real_solver_brackets_and_roundtrips(tmp_path, capsys) 
     assert "[dkx.solve]" not in capsys.readouterr().out
     np.testing.assert_array_equal(result.ambipolar_root_count, [1, 1])
     np.testing.assert_array_equal(result.ambipolar_status, ["bracketed_root"] * 2)
+    np.testing.assert_array_equal(result.ambipolar_refinement_status, ["resolved"] * 2)
+    assert np.all(result.ambipolar_refinement_converged[:, -1] == 1)
+    assert np.all(result.ambipolar_refinement_max_bracket_width_kV_m[:, -1] <= 0.05)
+    assert set(np.unique(result.evaluation_reason)) >= {
+        "initial_uniform_grid",
+        "interval_midpoint",
+        "bracket_bisection",
+    }
     assert np.all(np.isfinite(result.electric_field_kV_m))
     assert np.all(np.isfinite(result.particle_flux_m2_s))
     assert np.all(np.isfinite(result.heat_flux_W_m2))
@@ -397,6 +411,27 @@ def test_unsupported_native_route_names_the_field_and_correction() -> None:
     message = str(excinfo.value)
     assert "physics.magnetic_drifts" in message
     assert "dkes" in message
+
+
+def test_native_convergence_controls_are_ambipolar_and_observable_specific() -> None:
+    prescribed = _case()
+    prescribed = replace(
+        prescribed,
+        convergence=replace(prescribed.convergence, enabled=True),
+    )
+    with pytest.raises(dkx.CaseValidationError, match="ambipolar_profile"):
+        dkx.run(prescribed)
+
+    ambipolar = _ambipolar_case()
+    ambipolar = replace(
+        ambipolar,
+        convergence=replace(
+            ambipolar.convergence,
+            observables=("particle_flux", "not_an_observable"),
+        ),
+    )
+    with pytest.raises(dkx.CaseValidationError, match="not_an_observable"):
+        dkx.run(ambipolar)
 
 
 def test_boozer_native_route_is_explicitly_unsupported() -> None:
