@@ -950,6 +950,50 @@
     ]
   },
   {
+    "id": "native_w7x_physical_flux_sfincs",
+    "status": "implemented",
+    "release_gate": {
+      "claim_status": "release_ready",
+      "blocks_current_release": false,
+      "evidence": "checked matched PAS/DKES finite-field W7-X native/SFINCS physical-flux certificate",
+      "promotion_gate": "Keep particle/heat/current parity and both solver residuals below the pinned thresholds"
+    },
+    "kind": "cross_code_validation",
+    "literature": [
+      "https://github.com/landreman/sfincs",
+      "https://github.com/f0uriest/yancc"
+    ],
+    "scripts": [
+      "tools/paper_benchmarks/audit_native_physical_flux_sfincs.py"
+    ],
+    "artifacts": [
+      "validation/native_physical_flux_sfincs_v1.json",
+      "validation/inputs/w7x_standard_native_fixed_er_nx8_zeta37_pitch52.toml",
+      "validation/inputs/w7x_standard_pas_dkes_fixed_er_nx8_zeta37_pitch52.input.namelist"
+    ],
+    "claims": [
+      "Native psiHat fluxes use the SFINCS d(rHat)/d(psiHat) conversion instead of its inverse",
+      "Matched W7-X particle and heat fluxes agree with pinned SFINCS within 0.32%, and parallel current within 0.024%",
+      "The DKX primal residual is below 6.8e-16 and the final SFINCS KSP residual is below 5.8e-15"
+    ],
+    "source_code": [
+      "dkx/execution.py",
+      "dkx/units.py",
+      "tools/paper_benchmarks/audit_native_physical_flux_sfincs.py"
+    ],
+    "tests": [
+      "tests/test_native_execution_result.py",
+      "tests/test_native_physical_flux_sfincs.py",
+      "tests/test_units.py"
+    ],
+    "acceptance_gates": [
+      "Verify both exact inputs and optionally all raw outputs by checksum",
+      "Require 0.5% maximum particle/heat/current cross-code scaled error",
+      "Require 1e-12 DKX primal and SFINCS KSP residual limits",
+      "Keep phase-space, ambipolar-root, full-Fokker-Planck, Phi1, experiment, and performance claims explicit"
+    ]
+  },
+  {
     "id": "adjoint_sensitivity_gradient_checks",
     "status": "implemented",
     "release_gate": {

@@ -327,3 +327,27 @@ The narrow field window observes no bracket by design. This artifact records
 `phase_space_converged=false`, admits no full-profile escalation, and directs
 the next slice to a matched fixed-field YANCC/SFINCS or MONKES reference before
 another DKX grid increase.
+
+## Native physical-flux conversion and matched SFINCS referee
+
+`native_physical_flux_sfincs_v1.json` records the matched finite-field referee
+that exposed and certifies the correction of native physical radial fluxes.
+The native route had multiplied `psiHat`-directed particle and heat fluxes by
+`d(psiHat)/d(rHat)`, the inverse of the SFINCS diagnostic conversion
+`d(rHat)/d(psiHat)`. Audit the compact record, or additionally verify the raw
+SFINCS HDF5/log and native NetCDF results, with:
+
+```bash
+python tools/paper_benchmarks/audit_native_physical_flux_sfincs.py \
+  --results-root ../runtime/evidence/native-physical-flux-sfincs-v1
+```
+
+The independently built SFINCS v3 executable and fixed DKX code solve the same
+two-species W7-X surface at `8.55 kV/m`, with PAS collisions, DKES ExB drift,
+Phi1 off, and the exact ramp `[6, 11, 19, 30, 42, 52, 52, 52]`. Particle and
+heat fluxes agree within 0.32%, parallel current within 0.024%, the DKX primal
+residual is `6.79e-16`, and the final SFINCS KSP residual is `5.77e-15`.
+
+This closes the physical-unit conversion and one matched fixed-field parity
+gate. It does not close whole-profile phase-space convergence, ambipolar-root,
+full-Fokker-Planck, Phi1, experiment, or cross-code performance gates.
