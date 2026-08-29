@@ -246,6 +246,7 @@ def _make_grids(case: Case, *, n_periods: int):
         x_max=5.0,
         x_dot_derivative_scheme=0,
         n_xi_for_x_option=case.resolution.pitch_speed_ramp,
+        n_xi_for_x_override=case.resolution.pitch_modes_by_speed,
         monoenergetic=False,
     )
 
@@ -1095,7 +1096,16 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
             "psi_a_hat": geometry_state.psi_a_hat,
         },
         "phase_space": {
-            "pitch_speed_ramp": case.resolution.pitch_speed_ramp,
+            "pitch_speed_ramp": (
+                case.resolution.pitch_speed_ramp
+                if case.resolution.pitch_modes_by_speed is None
+                else None
+            ),
+            "pitch_allocation_source": (
+                "pitch_speed_ramp"
+                if case.resolution.pitch_modes_by_speed is None
+                else "explicit"
+            ),
             "active_pitch_modes_by_speed": np.asarray(
                 grids.n_xi_for_x, dtype=np.int64
             ).tolist(),

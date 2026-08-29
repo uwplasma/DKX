@@ -104,6 +104,13 @@ class ResolutionConfig:
     pitch: int
     speed: int
     pitch_speed_ramp: int = 1
+    pitch_modes_by_speed: tuple[int, ...] | None = None
+
+    def __post_init__(self) -> None:
+        if self.pitch_modes_by_speed is not None:
+            object.__setattr__(
+                self, "pitch_modes_by_speed", tuple(self.pitch_modes_by_speed)
+            )
 
 
 @dataclass(frozen=True)
@@ -242,6 +249,8 @@ class Case:
         # non-default ramp choices remain explicit semantic input.
         if data["resolution"]["pitch_speed_ramp"] == 1:
             data["resolution"].pop("pitch_speed_ramp")
+        if data["resolution"]["pitch_modes_by_speed"] is None:
+            data["resolution"].pop("pitch_modes_by_speed")
         if data["scan"] is not None:
             data["scan"]["axis"] = data["scan"].pop("axes")
         return _paths_to_strings(data)
@@ -453,6 +462,11 @@ def case_json_schema() -> dict[str, Any]:
             "resolution": _object_schema(
                 ["theta", "zeta", "pitch", "speed"],
                 pitch_speed_ramp={"type": "integer", "enum": [0, 1, 2]},
+                pitch_modes_by_speed={
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {"type": "integer", "minimum": 1},
+                },
                 **{
                     key: {"type": "integer", "minimum": 1}
                     for key in ("theta", "zeta", "pitch", "speed")
@@ -578,6 +592,8 @@ pitch = 24
 speed = 8
 # SFINCS Nxi_for_x_option: 0 uniform, 1 linear (default), 2 quadratic.
 # pitch_speed_ramp = 1
+# Advanced evidence control: one monotone active-mode count per speed node.
+# pitch_modes_by_speed = [4, 8, 16, 24, 24, 24, 24, 24]
 
 [solver]
 method = "auto"
@@ -707,7 +723,16 @@ def _parse_electric_field(data: Mapping[str, Any]) -> ElectricFieldConfig:
 def _parse_resolution(data: Mapping[str, Any]) -> ResolutionConfig:
     path = "resolution"
     _reject_unknown(
-        data, path, {"theta", "zeta", "pitch", "speed", "pitch_speed_ramp"}
+        data,
+        path,
+        {
+            "theta",
+            "zeta",
+            "pitch",
+            "speed",
+            "pitch_speed_ramp",
+            "pitch_modes_by_speed",
+        },
     )
     return ResolutionConfig(
         theta=_integer(data, "theta", path, required=True),
@@ -715,6 +740,11 @@ def _parse_resolution(data: Mapping[str, Any]) -> ResolutionConfig:
         pitch=_integer(data, "pitch", path, required=True),
         speed=_integer(data, "speed", path, required=True),
         pitch_speed_ramp=_integer(data, "pitch_speed_ramp", path, default=1),
+        pitch_modes_by_speed=(
+            _integer_tuple(data, "pitch_modes_by_speed", path)
+            if "pitch_modes_by_speed" in data
+            else None
+        ),
     )
 
 
@@ -953,6 +983,51 @@ def _validate_case(case: Case) -> None:
                 "Choose a positive phase-space resolution.",
             )
     _choice("resolution.pitch_speed_ramp", case.resolution.pitch_speed_ramp, (0, 1, 2))
+    modes = case.resolution.pitch_modes_by_speed
+    if modes is not None:
+        if case.resolution.pitch_speed_ramp != 1:
+            _fail(
+                "resolution.pitch_speed_ramp",
+                case.resolution.pitch_speed_ramp,
+                "the default value 1 when pitch_modes_by_speed is supplied",
+                "Remove pitch_speed_ramp; the explicit allocation replaces the ramp.",
+            )
+        if len(modes) != case.resolution.speed:
+            _fail(
+                "resolution.pitch_modes_by_speed",
+                modes,
+                f"exactly {case.resolution.speed} entries",
+                "Provide one active pitch-mode count for every speed node.",
+            )
+        for index, value in enumerate(modes):
+            if isinstance(value, bool) or not isinstance(value, int):
+                _fail(
+                    f"resolution.pitch_modes_by_speed[{index}]",
+                    value,
+                    "an integer",
+                    "Use whole active-mode counts without quotes.",
+                )
+            if value < 4 or value > case.resolution.pitch:
+                _fail(
+                    f"resolution.pitch_modes_by_speed[{index}]",
+                    value,
+                    f"an integer from 4 through {case.resolution.pitch}",
+                    "Keep the collision-coupling floor and declared pitch maximum.",
+                )
+        if any(right < left for left, right in zip(modes, modes[1:])):
+            _fail(
+                "resolution.pitch_modes_by_speed",
+                modes,
+                "a nondecreasing speed-node allocation",
+                "Increase or retain the active pitch count as speed increases.",
+            )
+        if modes and modes[-1] != case.resolution.pitch:
+            _fail(
+                "resolution.pitch_modes_by_speed[-1]",
+                modes[-1],
+                f"the declared pitch maximum {case.resolution.pitch}",
+                "Retain the declared maximum at the highest-speed node.",
+            )
     _choice(
         "solver.method",
         case.solver.method,
@@ -1250,6 +1325,23 @@ def _number_tuple(
                 "Replace it with a finite numeric value.",
             )
         result.append(float(value))
+    return tuple(result)
+
+
+def _integer_tuple(
+    data: Mapping[str, Any], key: str, path: str, *, required: bool = False
+) -> tuple[int, ...]:
+    values = _sequence(data, key, path, required=required)
+    result = []
+    for index, value in enumerate(values):
+        if isinstance(value, bool) or not isinstance(value, int):
+            _fail(
+                f"{path}.{key}[{index}]",
+                value,
+                "an integer",
+                "Use whole numbers without quotes.",
+            )
+        result.append(value)
     return tuple(result)
 
 
