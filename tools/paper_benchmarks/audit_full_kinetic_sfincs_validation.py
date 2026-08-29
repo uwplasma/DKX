@@ -69,6 +69,10 @@ def _verify_external_results(
             "dkx.cold_log_sha256": results_root / rung_id / "dkx" / "dkx-cold.log",
             "dkx.warm_log_sha256": results_root / rung_id / "dkx" / "dkx-warm.log",
         }
+        if "warm_output_sha256" in rung["dkx"]:
+            paths["dkx.warm_output_sha256"] = (
+                results_root / rung_id / "dkx" / "sfincsOutput_warm.h5"
+            )
         for key, path in paths.items():
             owner, checksum_key = key.split(".")
             expected = str(rung[owner][checksum_key])
@@ -78,6 +82,20 @@ def _verify_external_results(
 
 def audit(artifact: Path, *, results_root: Path | None = None) -> dict[str, Any]:
     payload = json.loads(artifact.read_text(encoding="utf-8"))
+    acceptance = payload["acceptance"]
+    nonzero_scalars = tuple(
+        acceptance.get(
+            "nonzero_scalar_observables",
+            acceptance.get("accepted_nonzero_observables", NONZERO_SCALARS),
+        )
+    )
+    spectra = tuple(acceptance.get("spectrum_observables", SPECTRA))
+    near_zero_scalars = tuple(
+        acceptance.get("near_zero_observables", NEAR_ZERO_SCALARS)
+    )
+    convergence_observables = tuple(
+        acceptance.get("convergence_observables", nonzero_scalars)
+    )
     errors: list[str] = []
     cross_code_errors: list[float] = []
     near_zero_values: list[float] = []
@@ -99,21 +117,21 @@ def audit(artifact: Path, *, results_root: Path | None = None) -> dict[str, Any]
                 errors.append(f"{rung_id}: {code} compact-output checksum mismatch")
             residuals.append(float(rung[code]["completed_true_residual"]))
 
-        for observable in NONZERO_SCALARS:
+        for observable in nonzero_scalars:
             cross_code_errors.append(
                 _scaled_error(
                     float(outputs["sfincs"][observable]),
                     float(outputs["dkx"][observable]),
                 )
             )
-        for observable in SPECTRA:
+        for observable in spectra:
             cross_code_errors.append(
                 _spectrum_error(
                     [float(value) for value in outputs["sfincs"][observable]],
                     [float(value) for value in outputs["dkx"][observable]],
                 )
             )
-        for observable in NEAR_ZERO_SCALARS:
+        for observable in near_zero_scalars:
             near_zero_values.extend(
                 abs(float(outputs[code][observable])) for code in ("sfincs", "dkx")
             )
@@ -128,7 +146,7 @@ def audit(artifact: Path, *, results_root: Path | None = None) -> dict[str, Any]
                 float(by_id["ultra"][code]["outputs"][observable]),
             )
             for code in ("sfincs", "dkx")
-            for observable in NONZERO_SCALARS
+            for observable in convergence_observables
         )
 
     measured = {
@@ -137,7 +155,6 @@ def audit(artifact: Path, *, results_root: Path | None = None) -> dict[str, Any]
         "max_near_zero_absolute_value": max(near_zero_values),
         "max_completed_true_residual": max(residuals),
     }
-    acceptance = payload["acceptance"]
     for key, value in measured.items():
         stored = float(acceptance[f"measured_{key}"])
         if abs(value - stored) > max(5e-16, 2e-12 * abs(stored)):

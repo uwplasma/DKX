@@ -515,7 +515,7 @@
       "claim_status": "release_ready",
       "blocks_current_release": false,
       "evidence": "checked high/ultra full-Fokker-Planck tokamak profile artifact from matched live DKX and pinned SFINCS v3 solves with true-residual, convergence, spectrum, checksum, timing, and memory evidence",
-      "promotion_gate": "Keep the claim to the matched zero-field one-species axisymmetric profile until multispecies, stellarator, finite-Er, Phi1, and ambipolar comparisons are independently pinned"
+      "promotion_gate": "Keep this claim to the matched zero-field one-species axisymmetric profile; finite Er has a separate lane, while multispecies, stellarator, Phi1, and ambipolar comparisons remain separate gates"
     },
     "kind": "cross_code_validation",
     "literature": [
@@ -548,6 +548,48 @@
       "Every completed true residual remains at or below 5e-11 and all nonzero scalar and speed-resolved cross-code errors remain at or below 1e-8",
       "High-to-ultra bootstrap and heat-flux movement stays below 0.5%, while cancellation-level particle flux and NTV remain below 1e-12 absolute",
       "Pinned commits, MUMPS-enabled reference build, raw and compact outputs, logs, cold/warm timing, memory, inputs, and exclusions remain checksum-auditable"
+    ]
+  },
+  {
+    "id": "sfincs_full_kinetic_finite_er_tokamak",
+    "status": "implemented",
+    "release_gate": {
+      "claim_status": "release_ready",
+      "blocks_current_release": false,
+      "evidence": "checked high/ultra prescribed finite-Er full-Fokker-Planck tokamak artifact from matched live DKX and pinned SFINCS v3 solves",
+      "promotion_gate": "Keep the claim to one prescribed finite field until an Er scan, ambipolar roots, and stellarator full-FP cases are independently pinned"
+    },
+    "kind": "cross_code_validation",
+    "literature": [
+      "https://doi.org/10.1063/1.4870077",
+      "https://github.com/landreman/sfincs"
+    ],
+    "scripts": [
+      "tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py"
+    ],
+    "artifacts": [
+      "validation/full_kinetic_sfincs_finite_er_v1.json",
+      "validation/inputs/tokamak_full_fp_finite_er_high.input.namelist",
+      "validation/inputs/tokamak_full_fp_finite_er_ultra.input.namelist"
+    ],
+    "claims": [
+      "Live DKX and pinned SFINCS v3 solve the same one-species analytic-tokamak profile at normalized Er=-30 with full linearized Fokker-Planck collisions and full trajectories",
+      "At the accepted finest rung, retained nonzero scalar and speed-resolved observables agree within 1.88e-9 scaled error and high-to-ultra movement is at most 0.326%",
+      "Axisymmetric particle flux and NTV are absolute cancellation gates; this is not an Er scan, ambipolar-root, stellarator, experimental, or performance-comparison claim"
+    ],
+    "source_code": [
+      "dkx/collisions.py",
+      "dkx/run.py",
+      "tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py"
+    ],
+    "tests": [
+      "tests/test_full_kinetic_sfincs_finite_er_validation.py"
+    ],
+    "acceptance_gates": [
+      "Both codes use exact checked finite-Er decks, matched full-FP collisions, full trajectories, profiles, coordinates, constraint, and 1e-13 tolerance",
+      "Every completed true residual stays below 1e-10 and all retained nonzero cross-code errors stay below 1e-8",
+      "High-to-ultra flow, momentum-flux, and heat-flux movement stays below 0.5%, while intrinsically ambipolar particle flux and NTV stay below 2e-11 absolute",
+      "Pinned commits, MUMPS-enabled build, raw and compact outputs, logs, timing, memory, inputs, and exclusions remain checksum-auditable"
     ]
   },
   {
