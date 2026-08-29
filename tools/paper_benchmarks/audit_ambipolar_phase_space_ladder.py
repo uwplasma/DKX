@@ -7,9 +7,13 @@ import argparse
 import hashlib
 import json
 import subprocess
-import tomllib
 from pathlib import Path
 from typing import Any
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 floor
+    import tomli as tomllib
 
 import numpy as np
 

@@ -5,9 +5,13 @@ from __future__ import annotations
 
 import argparse
 import json
-import tomllib
 from pathlib import Path
 from typing import Any
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 floor
+    import tomli as tomllib
 
 import numpy as np
 
