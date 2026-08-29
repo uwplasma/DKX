@@ -1,0 +1,84 @@
+{
+  "schema": "dkx.ambipolar_selected_tail_bound.v1",
+  "created_utc": "2026-08-29T21:30:00Z",
+  "claim_scope": "bounded_selected_field_legendre_tail_upper_bound",
+  "summary": "The memory-lean truncated route replays only each surface's accepted selected field, reconstructs the exact final two active Legendre modes without a full modal state, and retains a rigorous upper bound on the full-state tail ratio. This is supporting truncation evidence, not phase-space convergence.",
+  "source": {
+    "dkx_base_commit": "890f3ea0f737ffd979eda599855ec0282e22f871",
+    "implementation_commit": "744bf8d125107b8d8929ccc40c9a938b4fdaa8c8",
+    "solvax": {
+      "release": "v0.19.0",
+      "commit": "8799a9b56049b3a22e2085b6b6b007af33b298b4"
+    },
+    "reference_sources": {
+      "sfincs": {
+        "commit": "8df5453472e982df0f6ae005243ce38d57a83711",
+        "paths": ["fortran/version3/createGrids.F90", "doc/manual/version3/resolution.tex"]
+      },
+      "yancc": {
+        "commit": "6f399a21ecfcc03008e466bb09811a330321b9be",
+        "paths": ["docs/performance.rst", "yancc/smoothers.py"]
+      },
+      "monkes": {
+        "commit": "fb5c302efeb191b9a36818bc4ce337623c865938",
+        "paths": ["sources/libraries/DKE_BTD_Solution_Legendre_MFree.f90"]
+      },
+      "stellopt": {
+        "commit": "9177f58c986aa20186f6b8db360fe81cf53137e0",
+        "paths": ["PENTA/Sources/penta.f90", "BOOTSJ/Sources"]
+      }
+    },
+    "input": {
+      "path": "validation/inputs/w7x_standard_native_ambipolar_joint_nx8_pitch52_tail_bound_probe.toml",
+      "sha256": "4e5298001f47c659ea5e48e99723d992017d1b69989e2514542a99eba49fdbff",
+      "bytes": 1186
+    },
+    "external_results": {
+      "cold": {
+        "file": "dkx-tail-pair-cold.nc",
+        "sha256": "4dc5fbfa11eb7bf14a4d40838b004b5847c74de2861fecb06e8f2257c7c0b867",
+        "bytes": 211514
+      },
+      "warm": {
+        "file": "dkx-tail-pair-warm.nc",
+        "sha256": "5dccf74157b4f16e663992a0d7de6edcf03e9929ca30cc4d460af5537749c69f",
+        "bytes": 211516
+      }
+    }
+  },
+  "environment": {
+    "host": "Mac mini, Apple M4, 10 CPU cores, 24 GiB RAM",
+    "python": "3.11.15",
+    "jax": "0.9.2",
+    "numpy": "2.4.3"
+  },
+  "case": {
+    "case_id": "0adba8ad6f7a981a371d261c90fd3ab2434fd5ee27c6a0f69cd1d83ee351d8a0",
+    "route": "block_tridiagonal_truncated",
+    "pitch_modes_by_speed": [6, 11, 19, 30, 42, 52, 52, 52],
+    "ambipolar_status": ["no_bracketed_root", "no_bracketed_root"],
+    "selected_electric_field_kV_m": [8.7, 8.7],
+    "maximum_accepted_true_residual": 6.611692304814012e-16,
+    "diagnostic_status": "retained_selected_tail_relative_l2_upper_bound",
+    "selected_tail_bound_by_surface_speed_species": [
+      [[2.365004850929056e-06, 5.685724880257966e-09], [0.0011696704921714748, 0.004297785517355878], [0.01119065812500538, 0.0880117367206139], [0.027761619890198357, 0.04952269921581054], [0.037906671428361904, 0.03373137035726239], [0.04818184790403341, 0.018339916060313665], [0.06989205239993872, 0.02667928550161682], [0.0858916344408219, 0.035752342562417876]],
+      [[1.4248187933909347e-06, 6.360218037515861e-10], [0.0009549611123437961, 0.001265142027282742], [0.009930445811253475, 0.03893131897021048], [0.025523174339523086, 0.0486127143523175], [0.037780621664036375, 0.03278929220086635], [0.04903138955837566, 0.025730393249725404], [0.07236445000663881, 0.031525828684152525], [0.08899451323082261, 0.04470069453104574]]
+    ],
+    "maximum_tail_bound": 0.08899451323082261,
+    "finite_tail_values": 32,
+    "diagnostic_replays": 2
+  },
+  "performance": {
+    "cold": {"wall_s": 33.65225170800113, "solve_s": 32.10657625000022, "peak_host_memory_bytes": 1323565056},
+    "warm": {"wall_s": 29.049149625003338, "solve_s": 28.849949458010087, "peak_host_memory_bytes": 1597014016},
+    "process_maximum_rss_bytes_after_both_runs": 1597423616,
+    "cold_warm_scientific_arrays_exact_except_timing": true
+  },
+  "outcome": {
+    "status": "diagnostic_complete",
+    "phase_space_converged": false,
+    "whole_profile_escalation_admitted": false,
+    "reason": "The bound makes the truncated route auditable but does not close the previously failed coupled pitch-speed observable gates."
+  },
+  "exclusions": ["exact full-state tail ratio on the W7-X truncated route", "phase-space convergence", "whole-profile escalation", "full-Fokker-Planck collisions", "Phi1", "experimental validation"]
+}

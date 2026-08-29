@@ -36,6 +36,7 @@ class RootEvaluation:
     particle_flux_m2_s_vs_speed: np.ndarray | None = None
     heat_flux_w_m2_vs_speed: np.ndarray | None = None
     legendre_tail_relative_l2: np.ndarray | None = None
+    legendre_tail_relative_l2_upper_bound: np.ndarray | None = None
     reason: str = "initial_uniform_grid"
     refinement_level: int = 0
     solver_attempts: tuple[SolverAttempt, ...] = ()
@@ -500,6 +501,7 @@ def solve_native_ambipolar_surface(
     convergence_observables: tuple[str, ...] = (),
     convergence_relative_tolerance: float = 0.02,
     max_refinements: int = 0,
+    retain_legendre_tail: bool = False,
 ) -> NativeAmbipolarSurface:
     """Scan, refine, classify, and select native ambipolar roots.
 
@@ -523,6 +525,7 @@ def solve_native_ambipolar_surface(
         convergence_enabled=convergence_enabled,
         max_refinements=max_refinements,
     )
+    evaluation_budget += int(bool(retain_legendre_tail))
     if evaluation_budget > _MAX_RETAINED_EVALUATIONS:
         raise ValueError(
             "native ambipolar refinement preflight exceeds 100000 retained "
@@ -594,6 +597,13 @@ def solve_native_ambipolar_surface(
             np.asarray(batch.residual_norms, dtype=np.float64).reshape((-1,)).copy()
         )
         legendre_tail = None
+        legendre_tail_upper_bound = getattr(
+            batch, "legendre_tail_relative_l2_upper_bound", None
+        )
+        if legendre_tail_upper_bound is not None:
+            legendre_tail_upper_bound = np.asarray(
+                legendre_tail_upper_bound, dtype=np.float64
+            )
         executed_route = str(getattr(batch, "executed_method", "")).strip().lower()
         if tail_containers is not None and "truncated" not in executed_route:
             from dkx.moments import legendre_tail_relative_l2_batch
@@ -614,6 +624,7 @@ def solve_native_ambipolar_surface(
             radial_current,
             residuals,
             legendre_tail,
+            legendre_tail_upper_bound,
         )
 
     def evaluate(
@@ -637,6 +648,7 @@ def solve_native_ambipolar_surface(
                 radial_current,
                 residuals,
                 legendre_tail,
+                legendre_tail_upper_bound,
             ) = physical_outputs(batch)
             if not np.all(np.isfinite(residuals)):
                 raise RuntimeError(
@@ -711,6 +723,7 @@ def solve_native_ambipolar_surface(
                         retry_current,
                         retry_residuals,
                         retry_legendre_tail,
+                        retry_legendre_tail_upper_bound,
                     ) = physical_outputs(retry)
                     retry_residual = float(retry_residuals[0])
                     if not np.isfinite(retry_residual):
@@ -747,6 +760,30 @@ def solve_native_ambipolar_surface(
                     residuals[index] = retry_residual
                     if legendre_tail is not None and retry_legendre_tail is not None:
                         legendre_tail[index] = retry_legendre_tail[0]
+                    elif retry_legendre_tail is not None:
+                        legendre_tail = np.full(
+                            (len(missing), *retry_legendre_tail.shape[1:]), np.nan
+                        )
+                        legendre_tail[index] = retry_legendre_tail[0]
+                    if (
+                        legendre_tail_upper_bound is not None
+                        and retry_legendre_tail_upper_bound is not None
+                    ):
+                        legendre_tail_upper_bound[index] = (
+                            retry_legendre_tail_upper_bound[0]
+                        )
+                    elif retry_legendre_tail_upper_bound is not None:
+                        legendre_tail_upper_bound = np.full(
+                            (len(missing), *retry_legendre_tail_upper_bound.shape[1:]),
+                            np.nan,
+                        )
+                        legendre_tail_upper_bound[index] = (
+                            retry_legendre_tail_upper_bound[0]
+                        )
+                    elif legendre_tail_upper_bound is not None:
+                        # The accepted recovery used a full-state route, so its
+                        # exact metric supersedes the primary truncated bound.
+                        legendre_tail_upper_bound[index] = np.nan
                     chunks.append(retry_n_chunks)
                     chunk_sizes.append(retry_chunk_size)
                 failed = np.flatnonzero(residuals > targets)
@@ -777,7 +814,16 @@ def solve_native_ambipolar_surface(
                     legendre_tail_relative_l2=(
                         None
                         if legendre_tail is None
+                        or not np.all(np.isfinite(legendre_tail[index]))
                         else np.asarray(legendre_tail[index])
+                    ),
+                    legendre_tail_relative_l2_upper_bound=(
+                        None
+                        if legendre_tail_upper_bound is None
+                        or not np.all(
+                            np.isfinite(legendre_tail_upper_bound[index])
+                        )
+                        else np.asarray(legendre_tail_upper_bound[index])
                     ),
                     reason=reason,
                     refinement_level=int(refinement_level),
@@ -921,6 +967,122 @@ def solve_native_ambipolar_surface(
             key=lambda item: abs(item.radial_current_a_m2),
         )
         status = "no_bracketed_root"
+
+    if (
+        retain_legendre_tail
+        and selected.legendre_tail_relative_l2 is None
+        and selected.legendre_tail_relative_l2_upper_bound is None
+    ):
+        # Tail evidence is supporting evidence for the accepted physical
+        # outcome, not part of root discovery. Replay only that selected field
+        # instead of multiplying the cost of every coarse/bisection solve.
+        diagnostic_batch = batched_er_scan(
+            problem,
+            np.asarray([selected.electric_field_kv_m], dtype=np.float64),
+            solve_method=solve_method,
+            tol=solve_tolerance,
+            max_batch=1,
+            memory_budget_gb=memory_budget_gb,
+            retain_legendre_tail=True,
+        )
+        (
+            diagnostic_particle,
+            diagnostic_heat,
+            diagnostic_particle_vs_speed,
+            diagnostic_heat_vs_speed,
+            diagnostic_parallel,
+            diagnostic_current,
+            diagnostic_residual,
+            diagnostic_tail,
+            diagnostic_tail_upper_bound,
+        ) = physical_outputs(diagnostic_batch)
+        from dkx.er import operator_at_er
+
+        diagnostic_rhs = operator_at_er(
+            problem.operator,
+            selected.electric_field_kv_m,
+            dphi_per_er=problem.dphi_per_er,
+        ).rhs()
+        if diagnostic_residual[0] > solve_tolerance * np.linalg.norm(
+            np.asarray(diagnostic_rhs, dtype=np.float64)
+        ):
+            raise RuntimeError(
+                "selected-tail diagnostic replay did not satisfy the true-residual gate"
+            )
+        # Two independently rounded solves may each use the full requested
+        # tolerance, so their direct comparison has a two-tolerance envelope.
+        replay_tolerance = max(1.0e-12, 2.0 * float(solve_tolerance))
+        for actual, expected, label in (
+            (diagnostic_particle[0], selected.particle_flux_m2_s, "particle flux"),
+            (diagnostic_heat[0], selected.heat_flux_w_m2, "heat flux"),
+            (
+                diagnostic_parallel[0],
+                selected.parallel_current_a_t_m2,
+                "parallel current",
+            ),
+            (diagnostic_current[0], selected.radial_current_a_m2, "radial current"),
+        ):
+            if not np.allclose(
+                actual,
+                expected,
+                rtol=replay_tolerance,
+                atol=replay_tolerance,
+            ):
+                raise RuntimeError(
+                    f"selected-tail diagnostic replay changed the accepted {label}"
+                )
+        for actual, expected, label in (
+            (
+                diagnostic_particle_vs_speed[0],
+                selected.particle_flux_m2_s_vs_speed,
+                "speed-resolved particle flux",
+            ),
+            (
+                diagnostic_heat_vs_speed[0],
+                selected.heat_flux_w_m2_vs_speed,
+                "speed-resolved heat flux",
+            ),
+        ):
+            delta_norm = np.linalg.norm(
+                np.asarray(actual) - np.asarray(expected), axis=0
+            )
+            reference_norm = np.linalg.norm(np.asarray(expected), axis=0)
+            if np.any(
+                delta_norm
+                > replay_tolerance * np.maximum(reference_norm, np.finfo(float).tiny)
+            ):
+                raise RuntimeError(
+                    f"selected-tail diagnostic replay changed the accepted {label}"
+                )
+        replay_attempt = SolverAttempt(
+            requested_method=str(diagnostic_batch.method),
+            executed_method=str(diagnostic_batch.executed_method),
+            residual_norm=float(diagnostic_residual[0]),
+            accepted=True,
+            reason="selected_tail_diagnostic_replay",
+        )
+        diagnosed = replace(
+            selected,
+            legendre_tail_relative_l2=(
+                None if diagnostic_tail is None else np.asarray(diagnostic_tail[0])
+            ),
+            legendre_tail_relative_l2_upper_bound=(
+                None
+                if diagnostic_tail_upper_bound is None
+                else np.asarray(diagnostic_tail_upper_bound[0])
+            ),
+            solver_attempts=selected.solver_attempts + (replay_attempt,),
+        )
+        evaluations[selected.electric_field_kv_m] = diagnosed
+        roots = [
+            replace(root, evaluation=diagnosed)
+            if root.evaluation.electric_field_kv_m == selected.electric_field_kv_m
+            else root
+            for root in roots
+        ]
+        selected = diagnosed
+        chunks.append(int(diagnostic_batch.n_chunks))
+        chunk_sizes.append(int(diagnostic_batch.chunk_size))
 
     ordered = tuple(evaluations[key] for key in sorted(evaluations))
     return NativeAmbipolarSurface(

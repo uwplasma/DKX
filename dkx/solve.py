@@ -83,6 +83,7 @@ try:  # noqa: E402
     from solvax.direct import (
         BlockTridiagFactors,
         block_thomas_factor,
+        block_thomas_selected_tail_fn,
         block_thomas_solve,
         block_thomas_truncated_fn,
     )
@@ -93,6 +94,7 @@ try:  # noqa: E402
 except ImportError:
     BlockTridiagFactors = None  # type: ignore[assignment, misc]
     block_thomas_factor = None  # type: ignore[assignment]
+    block_thomas_selected_tail_fn = None  # type: ignore[assignment]
     block_thomas_solve = None  # type: ignore[assignment]
     block_thomas_truncated_fn = None  # type: ignore[assignment]
     solvax_linear_solve = None  # type: ignore[assignment]
@@ -125,6 +127,7 @@ __all__ = [
     "tier1_peak_memory_bytes",
     "tier1_truncated_peak_memory_bytes",
     "tier1_truncated_subsystem_width",
+    "tier1_truncated_tail_blocks",
 ]
 
 # Default memory budget above which ``solve(method="auto")`` prefers the
@@ -1559,6 +1562,127 @@ def _solve_tier1_truncated(
         recycle=None,
         timings={"build": t1 - t0, "solve": t2 - t1},
     )
+
+
+def tier1_truncated_tail_blocks(
+    op: KineticOperator,
+    rhs: jnp.ndarray,
+    solution: jnp.ndarray,
+    *,
+    keep_lowest: int = _TIER1_KEEP_LOWEST_DEFAULT,
+    keep_highest: int = 2,
+) -> jnp.ndarray:
+    """Recover exact final Legendre blocks after a truncated tier-1 solve.
+
+    The production truncated solve retains exact low transport modes and the
+    ``constraintScheme=2`` source unknowns.  This opt-in diagnostic performs a
+    second, forward Schur sweep through the same generated blocks and retains
+    only the final ``keep_highest`` modes.  It never materializes full bands or
+    a full modal state; dense workspace is independent of ``Nxi``.
+
+    Returns ``(species, speed, keep_highest, theta*zeta, rhs)``.  The tail is
+    ordered by increasing Legendre index, and each speed subsystem uses its own
+    active ``Nxi_for_x`` count.
+    """
+    _require_solvax()
+    if int(keep_highest) < 1:
+        raise ValueError("keep_highest must be at least 1")
+    ok, reason = _truncation_supported(op, int(keep_lowest))
+    if not ok:
+        raise NotImplementedError(
+            f"tier-1 selected-tail reconstruction unavailable: {reason}"
+        )
+    if int(np.min(np.asarray(op.n_xi_for_x))) < int(keep_highest):
+        raise ValueError("keep_highest exceeds the minimum active Nxi_for_x")
+
+    rhs2d, _ = _as_columns(rhs)
+    solution2d, _ = _as_columns(solution)
+    if rhs2d.shape != solution2d.shape or rhs2d.shape[0] != op.total_size:
+        raise ValueError(
+            "rhs and solution must have matching state-vector shapes, got "
+            f"{rhs2d.shape} and {solution2d.shape}"
+        )
+
+    n_s, n_x, n_xi, n_t, n_z = op.f_shape
+    n_tz = n_t * n_z
+    n_rhs = rhs2d.shape[1]
+    batch = n_s * n_x
+    coef = _truncated_coefficients(op)
+    rhs_f = rhs2d[: op.f_size].reshape(n_s, n_x, n_xi, n_tz, n_rhs)
+    rhs_low_b = rhs_f[:, :, :keep_lowest].reshape(
+        batch, keep_lowest, n_tz, n_rhs
+    )
+    solution_f = solution2d[: op.f_size].reshape(
+        n_s, n_x, n_xi, n_tz, n_rhs
+    )
+    solution_low_b = solution_f[:, :, :keep_lowest].reshape(
+        batch, keep_lowest, n_tz, n_rhs
+    )
+    if op.constraint_scheme == 2:
+        r_c_b = rhs2d[op.f_size :].reshape(batch, n_rhs)
+        source_b = solution2d[op.f_size :].reshape(batch, n_rhs)
+    else:
+        r_c_b = jnp.zeros((batch, n_rhs), dtype=jnp.float64)
+        source_b = jnp.zeros((batch, n_rhs), dtype=jnp.float64)
+
+    def solve_one(inputs, n_blocks: int):
+        stream, mirror, pas_row, x_val, gamma, rhs_low, solution_low, r_c, source = inputs
+        block_fn = _truncated_block_fn(
+            coef,
+            n_xi,
+            stream,
+            mirror,
+            pas_row,
+            x_val,
+            gamma,
+            shift_border=(op.constraint_scheme == 2),
+        )
+        if op.constraint_scheme == 2:
+            shift = source - gamma * r_c
+            rhs_low = rhs_low.at[0].add(-coef["b0"][:, None] * shift[None, :])
+        return block_thomas_selected_tail_fn(
+            block_fn,
+            n_blocks,
+            rhs_low,
+            int(keep_highest),
+            solution_low=solution_low,
+        )
+
+    groups: dict[int, list[int]] = {}
+    for ix, count in enumerate(int(v) for v in np.asarray(op.n_xi_for_x)):
+        groups.setdefault(count, []).append(ix)
+    tails = jnp.zeros(
+        (n_s, n_x, keep_highest, n_tz, n_rhs), dtype=jnp.float64
+    )
+    rhs_low_sx = rhs_low_b.reshape(n_s, n_x, keep_lowest, n_tz, n_rhs)
+    solution_low_sx = solution_low_b.reshape(
+        n_s, n_x, keep_lowest, n_tz, n_rhs
+    )
+    r_c_sx = r_c_b.reshape(n_s, n_x, n_rhs)
+    source_sx = source_b.reshape(n_s, n_x, n_rhs)
+    for n_blocks, ixs in groups.items():
+        count = len(ixs)
+        idx = np.asarray(ixs)
+        inputs = (
+            jnp.repeat(coef["stream"], count, axis=0),
+            jnp.repeat(coef["mirror"], count, axis=0),
+            coef["pas"][:, idx].reshape(n_s * count, n_xi),
+            jnp.tile(op.x[idx], n_s),
+            coef["gamma"][:, idx].reshape(n_s * count),
+            rhs_low_sx[:, idx].reshape(n_s * count, keep_lowest, n_tz, n_rhs),
+            solution_low_sx[:, idx].reshape(
+                n_s * count, keep_lowest, n_tz, n_rhs
+            ),
+            r_c_sx[:, idx].reshape(n_s * count, n_rhs),
+            source_sx[:, idx].reshape(n_s * count, n_rhs),
+        )
+        recovered = jax.lax.map(
+            lambda values, n_blocks=n_blocks: solve_one(values, n_blocks), inputs
+        )
+        tails = tails.at[:, idx].set(
+            recovered.reshape(n_s, count, keep_highest, n_tz, n_rhs)
+        )
+    return tails
 
 
 def _truncated_partial_residual(

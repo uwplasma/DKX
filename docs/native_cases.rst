@@ -120,7 +120,21 @@ a replacement for observable movement under a resolution increase. The
 memory-lean ``block_tridiagonal_truncated`` route returns exact low transport
 moments but deliberately zero-pads eliminated high modes; DKX therefore omits
 the array and records ``unavailable_on_zero_padded_truncated_state`` rather
-than publishing a false zero tail. The checked
+than publishing a false zero tail by default. Set
+``convergence.retain_legendre_tail = true`` to request a second bounded-memory
+selected-tail sweep on that route. DKX then writes
+``evaluation_legendre_tail_relative_l2_upper_bound``: the numerator uses the
+exact final two active modes and the denominator the exact union of the three
+retained low modes and those tail modes. Omitted middle-mode energy is
+nonnegative, so this value rigorously bounds the full-state ratio from above;
+the distinct name and ``retained_selected_tail_relative_l2_upper_bound``
+metadata prevent it from being presented as the exact full-state metric. The
+extra kinetic replay and selected-tail sweep are retained only at each
+surface's accepted selected field; other evaluation rows remain missing rather
+than multiplying every search/bisection solve. The replay is counted in the
+evaluation budget and solver-attempt evidence, and its observables and true
+residual must reproduce the accepted point. Its working set is included in
+memory preflight. This remains supporting evidence only. The checked
 ``validation/ambipolar_joint_pitch_speed_v1.json`` artifact exercises both
 contracts and retains the still-failed speed and pitch gates.
 
