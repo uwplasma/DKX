@@ -112,6 +112,18 @@ collision operator couples speed nodes, a higher pitch ceiling can expose
 changes at neighboring high-speed nodes; a single-node diagnosis therefore
 does not license a single-axis convergence claim.
 
+Full modal states can additionally retain
+``evaluation_legendre_tail_relative_l2`` on the same named axes. The ratio is
+the volume- and Legendre-orthogonality-weighted L2 norm of the final two active
+modes divided by the norm of all active modes. It is supporting evidence, not
+a replacement for observable movement under a resolution increase. The
+memory-lean ``block_tridiagonal_truncated`` route returns exact low transport
+moments but deliberately zero-pads eliminated high modes; DKX therefore omits
+the array and records ``unavailable_on_zero_padded_truncated_state`` rather
+than publishing a false zero tail. The checked
+``validation/ambipolar_joint_pitch_speed_v1.json`` artifact exercises both
+contracts and retains the still-failed speed and pitch gates.
+
 For a VMEC equilibrium, change only the geometry source:
 
 .. code-block:: toml

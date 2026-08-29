@@ -35,6 +35,7 @@ class RootEvaluation:
     stage: str
     particle_flux_m2_s_vs_speed: np.ndarray | None = None
     heat_flux_w_m2_vs_speed: np.ndarray | None = None
+    legendre_tail_relative_l2: np.ndarray | None = None
     reason: str = "initial_uniform_grid"
     refinement_level: int = 0
     solver_attempts: tuple[SolverAttempt, ...] = ()
@@ -534,7 +535,7 @@ def solve_native_ambipolar_surface(
         int(getattr(getattr(problem, "operator", None), "n_x", 1)),
     )
     retained_bytes = evaluation_budget * (
-        512 + 16 * species_count + 16 * species_count * speed_count
+        512 + 16 * species_count + 24 * species_count * speed_count
     )
     if retained_bytes > float(memory_budget_gb) * (1024**3):
         raise MemoryError(
@@ -551,6 +552,14 @@ def solve_native_ambipolar_surface(
     chunks: list[int] = []
     chunk_sizes: list[int] = []
 
+    tail_containers = None
+    if hasattr(problem, "operator"):
+        from dkx.drift_kinetic import KineticOperator
+        from dkx.writer import operator_containers
+
+        if isinstance(problem.operator, KineticOperator):
+            tail_containers = operator_containers(problem.operator)[:3]
+
     def physical_outputs(batch):
         particle = (
             np.asarray(batch.moments["particleFlux_vm_psiHat"], dtype=np.float64)
@@ -563,9 +572,7 @@ def solve_native_ambipolar_surface(
             * HEAT_FLUX
         )
         particle_vs_speed = (
-            np.asarray(
-                batch.moments["particleFlux_vm_psiHat_vs_x"], dtype=np.float64
-            )
+            np.asarray(batch.moments["particleFlux_vm_psiHat_vs_x"], dtype=np.float64)
             * float(radial_factor)
             * PARTICLE_FLUX
         )
@@ -586,6 +593,18 @@ def solve_native_ambipolar_surface(
         residuals = (
             np.asarray(batch.residual_norms, dtype=np.float64).reshape((-1,)).copy()
         )
+        legendre_tail = None
+        executed_route = str(getattr(batch, "executed_method", "")).strip().lower()
+        if tail_containers is not None and "truncated" not in executed_route:
+            from dkx.moments import legendre_tail_relative_l2_batch
+
+            legendre_tail = np.asarray(
+                legendre_tail_relative_l2_batch(
+                    *tail_containers,
+                    batch.states,
+                ),
+                dtype=np.float64,
+            )
         return (
             particle,
             heat,
@@ -594,6 +613,7 @@ def solve_native_ambipolar_surface(
             parallel,
             radial_current,
             residuals,
+            legendre_tail,
         )
 
     def evaluate(
@@ -616,6 +636,7 @@ def solve_native_ambipolar_surface(
                 parallel,
                 radial_current,
                 residuals,
+                legendre_tail,
             ) = physical_outputs(batch)
             if not np.all(np.isfinite(residuals)):
                 raise RuntimeError(
@@ -689,6 +710,7 @@ def solve_native_ambipolar_surface(
                         retry_parallel,
                         retry_current,
                         retry_residuals,
+                        retry_legendre_tail,
                     ) = physical_outputs(retry)
                     retry_residual = float(retry_residuals[0])
                     if not np.isfinite(retry_residual):
@@ -723,6 +745,8 @@ def solve_native_ambipolar_surface(
                     parallel[index] = retry_parallel[0]
                     radial_current[index] = retry_current[0]
                     residuals[index] = retry_residual
+                    if legendre_tail is not None and retry_legendre_tail is not None:
+                        legendre_tail[index] = retry_legendre_tail[0]
                     chunks.append(retry_n_chunks)
                     chunk_sizes.append(retry_chunk_size)
                 failed = np.flatnonzero(residuals > targets)
@@ -748,10 +772,13 @@ def solve_native_ambipolar_surface(
                     parallel_current_a_t_m2=float(parallel[index]),
                     residual_norm=float(residuals[index]),
                     stage=stage,
-                    particle_flux_m2_s_vs_speed=np.asarray(
-                        particle_vs_speed[index]
-                    ),
+                    particle_flux_m2_s_vs_speed=np.asarray(particle_vs_speed[index]),
                     heat_flux_w_m2_vs_speed=np.asarray(heat_vs_speed[index]),
+                    legendre_tail_relative_l2=(
+                        None
+                        if legendre_tail is None
+                        else np.asarray(legendre_tail[index])
+                    ),
                     reason=reason,
                     refinement_level=int(refinement_level),
                     solver_attempts=tuple(attempts[index]),

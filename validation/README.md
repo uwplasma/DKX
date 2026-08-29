@@ -36,6 +36,9 @@ Git; later records refer to them by checksum or stable artifact identifier.
   localize the initial change to one intermediate-speed node, then retain the
   failed pitch-36 ceiling and pitch-44 high-speed-tail gates without claiming
   full-profile or phase-space convergence.
+- `ambipolar_joint_pitch_speed_v1.json`: speed-6/8 and pitch-44/52 common-field
+  probes with route-aware modal-tail evidence. Full states retain the compact
+  L2 tail; zero-padded truncated states explicitly mark it unavailable.
 - `inputs/*`: the exact DKX decks and native cases used by these rungs.
 
 ## Independent cross-code audit

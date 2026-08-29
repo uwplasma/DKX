@@ -1,3 +1,4 @@
+from dataclasses import replace
 from types import SimpleNamespace
 
 import numpy as np
@@ -148,6 +149,16 @@ def test_native_ambipolar_refines_all_roots_and_continues_nearest(monkeypatch):
 def test_native_ambipolar_speed_diagnostics_have_named_axes(monkeypatch):
     monkeypatch.setattr("dkx.batch.batched_er_scan", _fake_batch(lambda x: x))
     result = _solve(search_points=3, find_all_roots=False)
+    result = replace(
+        result,
+        evaluations=tuple(
+            replace(
+                evaluation,
+                legendre_tail_relative_l2=np.full((2, 2), 0.125),
+            )
+            for evaluation in result.evaluations
+        ),
+    )
 
     from dkx.execution import _ambipolar_result_arrays
 
@@ -166,6 +177,12 @@ def test_native_ambipolar_speed_diagnostics_have_named_axes(monkeypatch):
         "speed",
         "species",
     )
+    assert dimensions["evaluation_legendre_tail_relative_l2"] == (
+        "surface",
+        "evaluation",
+        "speed",
+        "species",
+    )
     np.testing.assert_allclose(arrays["speed_v_th"], [0.5, 1.5])
     np.testing.assert_allclose(
         np.sum(arrays["evaluation_particle_flux_m2_s_vs_speed"], axis=2),
@@ -175,6 +192,7 @@ def test_native_ambipolar_speed_diagnostics_have_named_axes(monkeypatch):
         np.sum(arrays["evaluation_heat_flux_W_m2_vs_speed"], axis=2),
         arrays["evaluation_heat_flux_W_m2"],
     )
+    np.testing.assert_allclose(arrays["evaluation_legendre_tail_relative_l2"], 0.125)
 
 
 def test_radial_branch_identity_crossing_loss_merger_and_selection_are_retained(
