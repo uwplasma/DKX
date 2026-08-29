@@ -18,11 +18,14 @@ def _fake_batch(current_function):
     def solve(_problem, values, **_kwargs):
         fields = np.asarray(values, dtype=np.float64)
         particle = np.stack((fields + 1.0, current_function(fields)), axis=1)
+        particle_vs_speed = np.stack((0.25 * particle, 0.75 * particle), axis=1)
         requested = str(_kwargs.get("solve_method", "auto"))
         return SimpleNamespace(
             moments={
                 "particleFlux_vm_psiHat": particle,
                 "heatFlux_vm_psiHat": 2.0 * particle,
+                "particleFlux_vm_psiHat_vs_x": particle_vs_speed,
+                "heatFlux_vm_psiHat_vs_x": 2.0 * particle_vs_speed,
                 "FSABjHat": 3.0 * fields,
             },
             radial_current=current_function(fields),
@@ -131,6 +134,47 @@ def test_native_ambipolar_refines_all_roots_and_continues_nearest(monkeypatch):
     )
     assert len(result.evaluations) > 7
     assert result.batch_chunks > 1
+    for evaluation in result.evaluations:
+        np.testing.assert_allclose(
+            np.sum(evaluation.particle_flux_m2_s_vs_speed, axis=0),
+            evaluation.particle_flux_m2_s,
+        )
+        np.testing.assert_allclose(
+            np.sum(evaluation.heat_flux_w_m2_vs_speed, axis=0),
+            evaluation.heat_flux_w_m2,
+        )
+
+
+def test_native_ambipolar_speed_diagnostics_have_named_axes(monkeypatch):
+    monkeypatch.setattr("dkx.batch.batched_er_scan", _fake_batch(lambda x: x))
+    result = _solve(search_points=3, find_all_roots=False)
+
+    from dkx.execution import _ambipolar_result_arrays
+
+    arrays, dimensions = _ambipolar_result_arrays(
+        [result], n_species=2, speed_nodes=np.asarray([0.5, 1.5])
+    )
+    assert dimensions["evaluation_particle_flux_m2_s_vs_speed"] == (
+        "surface",
+        "evaluation",
+        "speed",
+        "species",
+    )
+    assert dimensions["evaluation_heat_flux_W_m2_vs_speed"] == (
+        "surface",
+        "evaluation",
+        "speed",
+        "species",
+    )
+    np.testing.assert_allclose(arrays["speed_v_th"], [0.5, 1.5])
+    np.testing.assert_allclose(
+        np.sum(arrays["evaluation_particle_flux_m2_s_vs_speed"], axis=2),
+        arrays["evaluation_particle_flux_m2_s"],
+    )
+    np.testing.assert_allclose(
+        np.sum(arrays["evaluation_heat_flux_W_m2_vs_speed"], axis=2),
+        arrays["evaluation_heat_flux_W_m2"],
+    )
 
 
 def test_radial_branch_identity_crossing_loss_merger_and_selection_are_retained(

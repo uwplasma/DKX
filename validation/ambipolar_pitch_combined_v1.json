@@ -1,0 +1,135 @@
+{
+  "schema": "dkx.ambipolar_pitch_combined.v1",
+  "created_utc": "2026-08-29T22:20:00Z",
+  "claim_scope": "bounded_combined_low_intermediate_pitch_diagnosis",
+  "summary": "Raising low- and intermediate-speed pitch work together preserves [1,3] topology but does not establish convergence; a further intermediate refinement moves Er and both flux observables beyond the unchanged gates.",
+  "source": {
+    "dkx_result_commit": "0a793931eccb8dc8c4fd488fe04d642e08fe0cc8",
+    "dkx_merge_commit": "08530e4047fcb78b27456123694eb29c3895766e",
+    "prior_artifact": {
+      "path": "validation/ambipolar_pitch_explicit_groups_v1.json",
+      "sha256": "eb6ae71fec3e2f2527f3c8fd2aaf52e3da97bd61a9372f31464ea7a95e52bb96"
+    },
+    "inputs": {
+      "combined": {
+        "path": "validation/inputs/w7x_standard_native_ambipolar_pitch_combined_pair_bounded.toml",
+        "sha256": "33d0cc555e3d521b42126f9878f3c687b01943fa10360a690a7bddf62699719d",
+        "bytes": 1205
+      },
+      "intermediate28": {
+        "path": "validation/inputs/w7x_standard_native_ambipolar_pitch_intermediate28_pair_bounded.toml",
+        "sha256": "34b7b8d0d74f29c1044fb6dbd6413313df76bc0fb37bd2ac21d8414f2ff5dc0c",
+        "bytes": 1217
+      }
+    },
+    "external_results": {
+      "combined_cold": {
+        "sha256": "4c6993f75da3a656b8514911e4ace614fa27ad9cddc96f5154284295ffff4dec",
+        "bytes": 231305
+      },
+      "combined_warm": {
+        "sha256": "f3e5c1a05173e678d17ac5bf56b2a598736aef9d5f210aeb852c3be4e4703421",
+        "bytes": 231306
+      },
+      "intermediate28_cold": {
+        "sha256": "a7f9193a8647730215b8348b869d93dd30b537addd17c036aed9fea6a7309437",
+        "bytes": 231318
+      }
+    },
+    "inspiration_review": [
+      {
+        "code": "SFINCS",
+        "commit": "8df5453472e982df0f6ae005243ce38d57a83711",
+        "path": "fortran/alpha/createGrids.F90",
+        "use": "speed-local pitch truncation and explicit low-collisionality convergence guidance"
+      },
+      {
+        "code": "YANCC",
+        "commit": "6f399a21ecfcc03008e466bb09811a330321b9be",
+        "path": "yancc/smoothers.py; docs/performance.rst",
+        "use": "pitch-conditioning diagnostics and one-axis-at-a-time convergence practice"
+      },
+      {
+        "code": "MONKES",
+        "commit": "fb5c302efeb191b9a36818bc4ce337623c865938",
+        "path": "sources/libraries/DKE_BTD_Solution_Legendre.f90",
+        "use": "block-tridiagonal Legendre organization and independent resolution scans"
+      },
+      {
+        "code": "STELLOPT/PENTA",
+        "commit": "9177f58c986aa20186f6b8db360fe81cf53137e0",
+        "path": "PENTA/Sources/penta_functions_mod.f90",
+        "use": "all-root bracketing conventions; DKX continues to require actual kinetic bisection solves"
+      }
+    ]
+  },
+  "environment": {
+    "host": "Mac mini, Apple M4, 10 CPU cores, 24 GiB RAM",
+    "os": "macOS-26.6.2-arm64-arm-64bit",
+    "python": "3.11.15",
+    "jax": "0.9.2",
+    "jaxlib": "0.9.2",
+    "numpy": "2.4.3"
+  },
+  "rungs": [
+    {
+      "name": "intermediate_heavy",
+      "case_id": "c14524ad8faac021188f7ea560efb419aa865d21eced9ddb68b915bb94cca1e5",
+      "allocation": [4, 4, 24, 25, 36, 36],
+      "groups": {"low": 8, "intermediate": 49, "high": 72, "total": 129},
+      "root_counts": [1, 3],
+      "selected_electric_field_kV_m": [11.611328125, 8.4814453125],
+      "selected_particle_flux_m2_s": [[1.0266087011532722e18, 1.0263331104856558e18], [1.0784738259458839e18, 1.0784282913305267e18]],
+      "selected_heat_flux_W_m2": [[393.0696463566957, 3072.1223644748316], [421.03596268280967, 2308.044496554182]],
+      "maximum_accepted_true_residual": 3.043669983848449e-14
+    },
+    {
+      "name": "combined",
+      "case_id": "58e7c8c7ae50b89f5aa9cb6a8f0721d291040dfd6875e1a83c6cab3762398153",
+      "allocation": [12, 12, 24, 25, 36, 36],
+      "groups": {"low": 24, "intermediate": 49, "high": 72, "total": 145},
+      "root_counts": [1, 3],
+      "selected_electric_field_kV_m": [11.6015625, 8.466796875],
+      "selected_particle_flux_m2_s": [[1.0270993313249281e18, 1.0270116756190612e18], [1.0790006812753024e18, 1.0793137767323857e18]],
+      "selected_heat_flux_W_m2": [[392.6195152408429, 3074.745167975794], [420.8291761918472, 2310.608747210015]],
+      "maximum_accepted_true_residual": 1.7170847732842002e-14
+    },
+    {
+      "name": "intermediate28",
+      "case_id": "5a8ebba8ac548dadd4ade9eb5f416af399a39ea851bdc42f47c6ad8e114bd2d1",
+      "allocation": [12, 12, 28, 29, 36, 36],
+      "groups": {"low": 24, "intermediate": 57, "high": 72, "total": 153},
+      "root_counts": [1, 3],
+      "selected_electric_field_kV_m": [11.474609375, 8.6181640625],
+      "selected_particle_flux_m2_s": [[1.0270972286520196e18, 1.0273200844636666e18], [1.0507606872480959e18, 1.05076934304304e18]],
+      "selected_heat_flux_W_m2": [[392.8738069493381, 3094.28559893713], [410.51330934396884, 2270.6448159990673]],
+      "maximum_accepted_true_residual": 1.717083207962377e-14
+    }
+  ],
+  "comparisons": [
+    {
+      "name": "intermediate_heavy_to_combined",
+      "topology_stable": true,
+      "maximum_selected_movement": {"electric_field_kV_m": 0.0146484375, "particle_flux_scaled": 0.0008204151757793219, "heat_flux_scaled": 0.0011451688524541483}
+    },
+    {
+      "name": "combined_to_intermediate28",
+      "topology_stable": true,
+      "maximum_selected_movement": {"electric_field_kV_m": 0.1513671875, "particle_flux_scaled": 0.026446835299150654, "heat_flux_scaled": 0.024513193075699564}
+    }
+  ],
+  "measurements": {
+    "combined_cold": {"cache_state": "fresh_process_with_initially_empty_external_cache", "process_wall_s": 184.42, "dkx_solve_s": 179.2035465000081, "dkx_total_s": 181.68451404199732, "maximum_rss_bytes": 3500883968, "peak_footprint_bytes": 3789001000},
+    "combined_warm": {"cache_state": "fresh_process_with_populated_external_cache", "process_wall_s": 230.94, "dkx_solve_s": 227.41926758299815, "dkx_total_s": 227.9217340000032, "maximum_rss_bytes": 3143516160, "peak_footprint_bytes": 4026946000},
+    "intermediate28_cold": {"cache_state": "fresh_process_with_initially_empty_external_cache", "process_wall_s": 201.55, "dkx_solve_s": 198.10825370800012, "dkx_total_s": 199.43324904200563, "maximum_rss_bytes": 4182147072, "peak_footprint_bytes": 3755315712}
+  },
+  "combined_cold_warm_parity": {"scientific_arrays_exact": true, "ignored_timing_arrays": ["solve_time_s"], "mismatches": []},
+  "outcome": {
+    "status": "refinement_exhausted",
+    "phase_space_converged": false,
+    "gates": {"topology_stable": true, "maximum_true_residual_below_1e-12": true, "all_process_footprints_below_24_gib": true, "combined_cold_warm_scientific_arrays_exact": true, "electric_field_movement_below_0_005_kV_m": false, "particle_flux_movement_below_0_02": false, "heat_flux_movement_below_0_02": false},
+    "interpretation": "The combined rung nearly matches the prior intermediate-heavy fluxes, but increasing the intermediate pair from 24/25 to 28/29 produces larger movement and fails every observable gate. This is discretization sensitivity, not a linear-solver failure.",
+    "next_action": "Retain compact per-speed flux contributions in native results, then use them to localize the sensitive speed nodes before another bounded resolution rung."
+  },
+  "exclusions": ["not_phase_space_convergence_validation", "not_speed_or_zeta_convergence_validation", "not_independent_cross_code_ambipolar_validation", "not_full_fokker_planck_or_phi1_validation", "not_experimental_validation", "not_cross_allocation_performance_comparison"]
+}
