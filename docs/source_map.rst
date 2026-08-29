@@ -90,7 +90,8 @@ Physics and numerics:
 - ``er.py``: the canonical radial-current equation and single-surface
   ambipolar root algorithms; ``workflows/ambipolar_native.py`` owns physical
   profile scans, bounded adaptive midpoint/refinement evidence, all-root
-  classification, and branch-nearest selection for native ``Case`` execution.
+  classification, predictive radial branch identity, discrete branch-event
+  evidence, and branch-aware selection for native ``Case`` execution.
 
 Input/output and orchestration:
 

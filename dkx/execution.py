@@ -467,8 +467,11 @@ def _ambipolar_result_arrays(surface_results, n_species: int):
     root_movement = np.full((n_surface, n_root), np.nan)
     root_observable_movement = np.full((n_surface, n_root), np.nan)
     root_bracket_width = np.full((n_surface, n_root), np.nan)
+    root_branch_id = np.full((n_surface, n_root), "", dtype=object)
     root_count = np.zeros((n_surface,), dtype=np.int64)
     selected_root = np.full((n_surface,), -1, dtype=np.int64)
+    selected_branch = np.full((n_surface,), "", dtype=object)
+    selection_reason = np.full((n_surface,), "", dtype=object)
     status = np.empty((n_surface,), dtype=object)
     chunk_size = np.empty((n_surface,), dtype=np.int64)
     batch_chunks = np.empty((n_surface,), dtype=np.int64)
@@ -483,12 +486,22 @@ def _ambipolar_result_arrays(surface_results, n_species: int):
     refinement_observable_movement = np.full((n_surface, n_refinement), np.nan)
     refinement_bracket_width = np.full((n_surface, n_refinement), np.nan)
     refinement_converged = np.zeros((n_surface, n_refinement), dtype=np.int8)
+    n_event = max(1, max(len(result.branch_events) for result in surface_results))
+    event_kind = np.full((n_surface, n_event), "", dtype=object)
+    event_branch_id = np.full((n_surface, n_event, 2), "", dtype=object)
+    event_root_index = np.full((n_surface, n_event, 2), -1, dtype=np.int64)
+    event_field = np.full((n_surface, n_event), np.nan)
+    event_detail = np.full((n_surface, n_event), "", dtype=object)
+    event_nonsmooth = np.zeros((n_surface, n_event), dtype=np.int8)
+    event_count = np.zeros((n_surface,), dtype=np.int64)
     for surface_index, result in enumerate(surface_results):
         status[surface_index] = result.status
         root_count[surface_index] = len(result.roots)
         selected_root[surface_index] = (
             -1 if result.selected_root is None else result.selected_root
         )
+        selected_branch[surface_index] = result.selected_branch_id
+        selection_reason[surface_index] = result.selection_reason
         chunk_size[surface_index] = result.batch_chunk_size
         batch_chunks[surface_index] = result.batch_chunks
         refinement_status[surface_index] = result.refinement_status
@@ -522,6 +535,7 @@ def _ambipolar_result_arrays(surface_results, n_species: int):
             root_bracket_width[surface_index, root_index] = (
                 root.bracket_kv_m[1] - root.bracket_kv_m[0]
             )
+            root_branch_id[surface_index, root_index] = root.branch_id
         for refinement_index, evidence in enumerate(result.refinement):
             refinement_level[surface_index, refinement_index] = evidence.level
             refinement_search_count[surface_index, refinement_index] = (
@@ -541,10 +555,22 @@ def _ambipolar_result_arrays(surface_results, n_species: int):
                 evidence.max_bracket_width_kv_m
             )
             refinement_converged[surface_index, refinement_index] = evidence.converged
+        event_count[surface_index] = len(result.branch_events)
+        for event_index, event in enumerate(result.branch_events):
+            event_kind[surface_index, event_index] = event.kind
+            event_field[surface_index, event_index] = event.electric_field_kv_m
+            event_detail[surface_index, event_index] = event.detail
+            event_nonsmooth[surface_index, event_index] = event.nonsmooth
+            for participant, branch_id in enumerate(event.branch_ids):
+                event_branch_id[surface_index, event_index, participant] = branch_id
+            for participant, root_index in enumerate(event.root_indices):
+                event_root_index[surface_index, event_index, participant] = root_index
     arrays = {
         "evaluation": np.arange(n_evaluation, dtype=np.int64),
         "root": np.arange(n_root, dtype=np.int64),
         "refinement": np.arange(n_refinement, dtype=np.int64),
+        "branch_event": np.arange(n_event, dtype=np.int64),
+        "branch_event_participant": np.asarray(["primary", "secondary"], dtype=object),
         "bracket_endpoint": np.asarray(["minimum", "maximum"], dtype=object),
         "evaluation_electric_field_kV_m": scan_field,
         "radial_current_A_m2": scan_current,
@@ -563,8 +589,11 @@ def _ambipolar_result_arrays(surface_results, n_species: int):
         "ambipolar_root_movement_kV_m": root_movement,
         "ambipolar_root_observable_relative_movement": root_observable_movement,
         "ambipolar_root_final_bracket_width_kV_m": root_bracket_width,
+        "ambipolar_root_branch_id": root_branch_id,
         "ambipolar_root_count": root_count,
         "selected_ambipolar_root": selected_root,
+        "selected_ambipolar_branch": selected_branch,
+        "ambipolar_selection_reason": selection_reason,
         "ambipolar_status": status,
         "electric_field_batch_chunk_size": chunk_size,
         "electric_field_batch_chunks": batch_chunks,
@@ -578,11 +607,21 @@ def _ambipolar_result_arrays(surface_results, n_species: int):
         "ambipolar_refinement_observable_relative_movement": refinement_observable_movement,
         "ambipolar_refinement_max_bracket_width_kV_m": refinement_bracket_width,
         "ambipolar_refinement_converged": refinement_converged,
+        "ambipolar_branch_event_kind": event_kind,
+        "ambipolar_branch_event_branch_id": event_branch_id,
+        "ambipolar_branch_event_root_index": event_root_index,
+        "ambipolar_branch_event_electric_field_kV_m": event_field,
+        "ambipolar_branch_event_detail": event_detail,
+        "ambipolar_branch_event_nonsmooth": event_nonsmooth,
+        "ambipolar_branch_event_count": event_count,
+        "ambipolar_nonsmooth_event": np.any(event_nonsmooth, axis=1).astype(np.int8),
     }
     dimensions = {
         "evaluation": ("evaluation",),
         "root": ("root",),
         "refinement": ("refinement",),
+        "branch_event": ("branch_event",),
+        "branch_event_participant": ("branch_event_participant",),
         "bracket_endpoint": ("bracket_endpoint",),
         "evaluation_electric_field_kV_m": ("surface", "evaluation"),
         "radial_current_A_m2": ("surface", "evaluation"),
@@ -605,8 +644,11 @@ def _ambipolar_result_arrays(surface_results, n_species: int):
         "ambipolar_root_movement_kV_m": ("surface", "root"),
         "ambipolar_root_observable_relative_movement": ("surface", "root"),
         "ambipolar_root_final_bracket_width_kV_m": ("surface", "root"),
+        "ambipolar_root_branch_id": ("surface", "root"),
         "ambipolar_root_count": ("surface",),
         "selected_ambipolar_root": ("surface",),
+        "selected_ambipolar_branch": ("surface",),
+        "ambipolar_selection_reason": ("surface",),
         "ambipolar_status": ("surface",),
         "electric_field_batch_chunk_size": ("surface",),
         "electric_field_batch_chunks": ("surface",),
@@ -626,6 +668,25 @@ def _ambipolar_result_arrays(surface_results, n_species: int):
             "refinement",
         ),
         "ambipolar_refinement_converged": ("surface", "refinement"),
+        "ambipolar_branch_event_kind": ("surface", "branch_event"),
+        "ambipolar_branch_event_branch_id": (
+            "surface",
+            "branch_event",
+            "branch_event_participant",
+        ),
+        "ambipolar_branch_event_root_index": (
+            "surface",
+            "branch_event",
+            "branch_event_participant",
+        ),
+        "ambipolar_branch_event_electric_field_kV_m": (
+            "surface",
+            "branch_event",
+        ),
+        "ambipolar_branch_event_detail": ("surface", "branch_event"),
+        "ambipolar_branch_event_nonsmooth": ("surface", "branch_event"),
+        "ambipolar_branch_event_count": ("surface",),
+        "ambipolar_nonsmooth_event": ("surface",),
     }
     return arrays, dimensions
 
@@ -777,6 +838,28 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
         selected_routes.append(str(solved.method))
         retained_operator = op
 
+    if ambipolar_surfaces:
+        from dkx.workflows.ambipolar_native import (  # noqa: PLC0415
+            continue_ambipolar_branches,
+        )
+
+        bounds = case.electric_field.search_kV_m
+        assert bounds is not None
+        ambipolar_surfaces = list(
+            continue_ambipolar_branches(
+                ambipolar_surfaces,
+                surfaces=surfaces,
+                electric_field_bounds_kv_m=bounds,
+                continue_selection=case.electric_field.continue_branches,
+            )
+        )
+        for index, surface_result in enumerate(ambipolar_surfaces):
+            selected = surface_result.selected
+            particle_flux[index] = selected.particle_flux_m2_s
+            heat_flux[index] = selected.heat_flux_w_m2
+            current[index] = selected.parallel_current_a_t_m2
+            residuals[index] = selected.residual_norm
+
     total_seconds = time.perf_counter() - total_start
     output_path = (
         Path(out).expanduser().resolve()
@@ -852,9 +935,26 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
             else None
         ),
         "ambipolar_selection": (
-            "nearest previous selected root; nearest zero on the first surface"
+            "continue the selected branch identity; nearest zero on the first surface and nearest prior field after branch loss"
             if ambipolar_surfaces and case.electric_field.continue_branches
             else "root nearest zero on each surface"
+            if ambipolar_surfaces
+            else None
+        ),
+        "ambipolar_branch_continuation": (
+            {
+                "method": "linear radial prediction with global minimum-cost matching",
+                "continuation_gate_fraction_of_search_span": 0.25,
+                "event_evidence": "discrete adjacent-surface observations, not continuously resolved bifurcations",
+                "event_count": sum(
+                    len(result.branch_events) for result in ambipolar_surfaces
+                ),
+                "nonsmooth_event_count": sum(
+                    event.nonsmooth
+                    for result in ambipolar_surfaces
+                    for event in result.branch_events
+                ),
+            }
             if ambipolar_surfaces
             else None
         ),
@@ -906,6 +1006,14 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
     ):
         warnings.append(
             "Adaptive ambipolar refinement exhausted its configured levels before root and observable evidence resolved."
+        )
+    if any(
+        event.nonsmooth
+        for result in ambipolar_surfaces
+        for event in result.branch_events
+    ):
+        warnings.append(
+            "Discrete ambipolar branch creation, loss, merger, crossing, or classification-transition evidence was observed; branch-local derivatives are nonsmooth or undefined across the flagged interval."
         )
     result = Result(
         case_id=case.case_id,

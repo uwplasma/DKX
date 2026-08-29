@@ -143,6 +143,7 @@ class Result:
             "ambipolar_all_surfaces_bracketed",
             "ambipolar_selection",
             "ambipolar_refinement",
+            "ambipolar_branch_continuation",
             "normalization",
             "geometry_sha256",
             "dkx_version",
@@ -207,6 +208,23 @@ class Result:
                     f"{resolved} resolved, {exhausted} refinement exhausted, "
                     f"{no_bracket} no bracket observed, {not_requested} not requested"
                 )
+        if "ambipolar_root_branch_id" in self.arrays:
+            branch_ids = {
+                str(value)
+                for value in np.asarray(self.arrays["ambipolar_root_branch_id"]).flat
+                if str(value)
+            }
+            event_kinds = [
+                str(value)
+                for value in np.asarray(
+                    self.arrays.get("ambipolar_branch_event_kind", [])
+                ).flat
+                if str(value) and str(value) != "boundary_origin"
+            ]
+            print(
+                f"ambipolar branches: {len(branch_ids)} identities; "
+                f"{len(event_kinds)} interior events"
+            )
         print("arrays: " + ", ".join(sorted(self.arrays)))
         for warning in self.warnings:
             print(f"warning: {warning}")
@@ -297,7 +315,44 @@ class Result:
                     )
                 axis.legend(frameon=False)
             else:
-                axis.plot(surface, value, marker="o")
+                axis.plot(
+                    surface,
+                    value,
+                    marker="o",
+                    label="selected branch" if name == "electric_field_kV_m" else None,
+                )
+                if (
+                    name == "electric_field_kV_m"
+                    and "ambipolar_root_kV_m" in self.arrays
+                    and "ambipolar_root_branch_id" in self.arrays
+                ):
+                    root_fields = np.asarray(self.arrays["ambipolar_root_kV_m"])
+                    root_branch_ids = np.asarray(
+                        self.arrays["ambipolar_root_branch_id"]
+                    ).astype(str)
+                    branch_ids = sorted(
+                        {branch for branch in root_branch_ids.flat if branch}
+                    )
+                    for branch_id in branch_ids:
+                        branch_field = np.full(surface.shape, np.nan)
+                        for surface_index in range(surface.size):
+                            matches = np.flatnonzero(
+                                root_branch_ids[surface_index] == branch_id
+                            )
+                            if matches.size:
+                                branch_field[surface_index] = root_fields[
+                                    surface_index, int(matches[0])
+                                ]
+                        axis.plot(
+                            surface,
+                            branch_field,
+                            linestyle="--",
+                            marker=".",
+                            alpha=0.75,
+                            label=branch_id,
+                        )
+                    if branch_ids:
+                        axis.legend(frameon=False, ncol=2)
             axis.set_ylabel(label)
             axis.grid(alpha=0.25)
         axes[-1, 0].set_xlabel(r"normalized toroidal flux $\psi_N$")
@@ -330,6 +385,14 @@ class Result:
                 )
             if notes:
                 title += "\n" + "; ".join(notes)
+        if "ambipolar_nonsmooth_event" in self.arrays:
+            nonsmooth = np.flatnonzero(
+                np.asarray(self.arrays["ambipolar_nonsmooth_event"], dtype=bool)
+            )
+            if nonsmooth.size:
+                title += "\nbranch event warning at $\\psi_N$=" + ", ".join(
+                    f"{surface[index]:.4g}" for index in nonsmooth
+                )
         figure.suptitle(title)
         figure.tight_layout()
         if path is None:

@@ -184,10 +184,25 @@ def test_native_ambipolar_result_preserves_scan_roots_and_selection(
     np.testing.assert_allclose(result.particle_flux_m2_s[:, 0], [2.0, 3.0])
     np.testing.assert_array_equal(result.ambipolar_root_count, [1, 1])
     np.testing.assert_array_equal(result.ambipolar_status, ["bracketed_root"] * 2)
+    np.testing.assert_array_equal(
+        result.ambipolar_root_branch_id[:, 0], ["ion-000", "ion-000"]
+    )
+    np.testing.assert_array_equal(
+        result.selected_ambipolar_branch, ["ion-000", "ion-000"]
+    )
+    np.testing.assert_array_equal(
+        result.ambipolar_selection_reason,
+        ["nearest_zero_initial", "continued_selected_branch"],
+    )
+    np.testing.assert_array_equal(result.ambipolar_branch_event_count, [1, 0])
+    assert result.metadata["ambipolar_branch_continuation"]["event_count"] == 1
     assert result.dimensions["radial_current_A_m2"] == ("surface", "evaluation")
     assert result.metadata["ambipolar_all_surfaces_bracketed"] is True
     loaded = dkx.Result.load(tmp_path / "ambipolar.nc")
     np.testing.assert_allclose(loaded.ambipolar_root_kV_m[:, 0], [-1.5, -1.25])
+    np.testing.assert_array_equal(
+        loaded.selected_ambipolar_branch, result.selected_ambipolar_branch
+    )
 
 
 def test_native_ambipolar_real_solver_brackets_and_roundtrips(tmp_path, capsys) -> None:
@@ -208,6 +223,11 @@ def test_native_ambipolar_real_solver_brackets_and_roundtrips(tmp_path, capsys) 
     assert np.all(np.isfinite(result.particle_flux_m2_s))
     assert np.all(np.isfinite(result.heat_flux_W_m2))
     assert np.all(result.selected_ambipolar_root == 0)
+    np.testing.assert_array_equal(
+        result.selected_ambipolar_branch, ["ion-000", "ion-000"]
+    )
+    assert np.all(result.ambipolar_nonsmooth_event == 0)
+    assert "ambipolar_branch_continuation" in result.certificate()
     scan_scale = np.nanmax(np.abs(result.radial_current_A_m2), axis=1)
     root_residual = np.abs(result.ambipolar_root_current_A_m2[:, 0])
     assert np.all(root_residual < 0.02 * scan_scale)

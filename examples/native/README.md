@@ -6,6 +6,11 @@ ambipolar, and VMEC prescribed-field profiles are directly executable. The
 higher-resolution W7-X case demonstrates the later full-drift and sharding
 contract.
 
+The ambipolar example retains all roots and adaptive evaluations. Its native
+Result also assigns radial branch IDs, records selection reasons and any
+creation/loss/merger/crossing/classification events, and flags nonsmooth event
+intervals without hiding alternative roots.
+
 ```console
 dkx validate examples/native/w7x_ambipolar_profile.toml
 python - <<'PY'
