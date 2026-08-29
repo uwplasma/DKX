@@ -4,6 +4,15 @@ Release notes
 Unreleased
 ----------
 
+- ``dkx wout_*.nc`` now records VMEC ``pmass_type`` provenance while consuming
+  the canonical evaluated ``presf`` profile, so ``sum_atan``, power-series,
+  spline, and the other checked VMEC pressure representations share one path.
+  Per-surface output and empty panels distinguish unavailable physical profiles,
+  VMEC parser failure, kinetic solve failure, and a completed electric-field
+  scan with no bracket. Failed surfaces remain in the HDF5 evidence. Standard
+  wout files do not preserve separate density/temperature profiles, so the
+  documented explicit pressure split remains visible rather than being
+  presented as recovered equilibrium data.
 - Representative VMEC profile runs no longer leave electric-field and flux
   panels blank when the fixed scan range misses an ambipolar root. The output
   records ``evaluation_is_root``, ``er_evaluated``, the sampled residual

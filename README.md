@@ -54,9 +54,11 @@ dkx input.namelist --out sfincsOutput.h5 # solve one deck, write SFINCS-keyed HD
 monoenergetic `D11/D31/D33` vs `nuPrime` across the 1/ν, plateau and
 Pfirsch–Schlüter regimes (a curve per `EStar`), `|B|` on the surface, and — at
 the ambipolar root, against radius — the bootstrap current in kA/m² beside the
-VMEC equilibrium's own, and the species fluxes in SI units. Density and
-temperature come from the equilibrium's own pressure when it has one, and the
-figure says which. `--full` widens the grid and `--quick` cuts it to about a
+VMEC equilibrium's own, and species fluxes in SI units. DKX reads evaluated
+`presf` for `sum_atan`, series, spline, and other inputs, retaining `pmass_type` as provenance. A standard `wout` lacks separate density/temperature profiles,
+so the explicit n/T pressure split is labeled. Output and panels distinguish
+unavailable physics, parser or solve failure, and a completed scan with no bracket.
+`--full` widens the grid and `--quick` cuts it to about a
 quarter of the wall time for a smoke check — the panels still fill, but nothing
 `--quick` prints is a reportable number; `--plot` reads DKX and Fortran
 SFINCS output alike. Measured on a 10-core M4 with the Fokker–Planck operator

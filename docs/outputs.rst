@@ -181,6 +181,29 @@ wout_*.nc`` representative run applies all of this already: its figure is in
 kA/m\ :sup:`2` and SI flux densities, and its output file records both the
 SFINCS-unit values and the conversion factors used.
 
+VMEC profile provenance and failure status
+------------------------------------------
+
+``dkx wout_*.nc`` consumes VMEC's canonical, evaluated ``presf`` array.  It
+does not re-evaluate ``am`` or assume a coefficient layout, so ``power_series``,
+``gauss_trunc``, ``two_power``, ``two_lorentz``, ``akima_spline``,
+``cubic_spline``, ``pedestal``, ``rational``, and encountered ``sum_atan``
+metadata all use the same checked path.  The original ``pmass_type`` is retained
+as provenance in ``profiles/pressure_representation``.
+
+A standard VMEC ``wout`` contains total pressure, not the separate density and
+ion/electron temperature profiles from the system that created the equilibrium.
+The representative command therefore applies the documented explicit
+:math:`n/T` closure to ``presf`` and records that choice; it does not claim to
+have recovered unavailable density or temperature parameterizations.
+
+Each radial record stores ``profile_input_status`` and ``evaluation_status``.
+The former distinguishes ``available``, ``physics_unavailable`` (for example,
+no ``presf`` or no physical minor radius), and ``parser_failure``.  The latter
+distinguishes a ``bracketed_root``, ``no_bracketed_root`` with the closest finite
+sample retained, and ``solve_failure`` with its exception class and detail.
+Plots use the same vocabulary instead of rendering an unexplained empty panel.
+
 Output-variable reference
 -------------------------
 

@@ -131,6 +131,14 @@ evidence = ["tests/test_vmex_workflow.py", "tests/test_finite_beta_vmec_example.
 gaps = ["downstream installed integration test", "profile protocol", "certified optimization campaign"]
 
 [[capability]]
+id = "representative_vmec_profile"
+name = "Representative VMEC radial-profile panels"
+status = "validated_limited"
+owners = ["dkx/representative.py"]
+evidence = ["tests/test_representative.py", "tests/ref/wout_up_down_asymmetric_tokamak.nc"]
+gaps = ["standard wout lacks separate density and temperature profiles", "independent converged stellarator profile comparison"]
+
+[[capability]]
 id = "gpu_single_device"
 name = "Single-device GPU execution"
 status = "validated_limited"
