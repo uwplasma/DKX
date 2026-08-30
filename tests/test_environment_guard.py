@@ -59,7 +59,7 @@ def test_the_guard_runs_before_jax_is_imported() -> None:
     import re
 
     source = (__import__("pathlib").Path(__file__).resolve().parents[1]
-              / "dkx" / "runtime.py").read_text(encoding="utf-8")  # fmt: skip
+              / "src" / "dkx" / "runtime.py").read_text(encoding="utf-8")  # fmt: skip
     lines = source.splitlines()
     guard = next(i for i, line in enumerate(lines) if line == "_check_numpy()")
     # A real import statement, not the one quoted in _check_numpy's docstring.

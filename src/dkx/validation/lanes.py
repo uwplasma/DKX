@@ -15,6 +15,7 @@ import math
 from pathlib import Path
 from typing import Protocol
 import numpy as np
+from ..paths import repository_root
 
 
 VALID_LANE_STATUSES = frozenset({"active", "evidence_ready", "closed", "deferred"})
@@ -180,7 +181,8 @@ def validate_research_lane_completion_file(
 
 
 def _default_repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    root = repository_root()
+    return root if root is not None else Path.cwd()
 
 
 def _nonempty_string(value: object) -> str | None:

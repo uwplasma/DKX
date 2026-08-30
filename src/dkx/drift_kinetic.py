@@ -155,6 +155,7 @@ from dkx.collisions import (  # noqa: E402
     resolve_rosenbluth_method,
 )
 from dkx.species import SpeciesSet, species_set_from_namelist  # noqa: E402
+from .paths import repository_root
 
 __all__ = [
     "KineticOperator",
@@ -2104,8 +2105,12 @@ def _resolve_equilibrium_path(*, nml: Any, geom_params: dict, vmec: bool = False
     if eq is None:
         raise ValueError("This geometryScheme requires equilibriumFile in geometryParameters.")
     base_dir = nml.source_path.parent if nml.source_path is not None else None
-    repo_root = Path(__file__).resolve().parents[1]
-    extra = (repo_root / "tests" / "ref", repo_root / "dkx" / "data" / "equilibria")
+    repo_root = repository_root()
+    extra = (
+        (repo_root / "tests" / "ref", repo_root / "src" / "dkx" / "data" / "equilibria")
+        if repo_root is not None
+        else ()
+    )
     try:
         return resolve_existing_path(str(eq), base_dir=base_dir, extra_search_dirs=extra).path
     except FileNotFoundError:
@@ -2157,8 +2162,8 @@ def _load_external_phi1(*, nml: Any, phys: dict, grids: Grids) -> jnp.ndarray:
         raw = raw[0] if raw else "externalPhi1.h5"
     filename = str(raw).strip().strip('"').strip("'")
     base_dir = nml.source_path.parent if nml.source_path is not None else None
-    repo_root = Path(__file__).resolve().parents[1]
-    extra = (repo_root / "tests" / "ref",)
+    repo_root = repository_root()
+    extra = (repo_root / "tests" / "ref",) if repo_root is not None else ()
     path = resolve_existing_path(filename, base_dir=base_dir, extra_search_dirs=extra).path
 
     data = read_sfincs_h5(path)

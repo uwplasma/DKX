@@ -60,10 +60,10 @@ def test_only_one_module_sets_the_global_precision():
     """
     setters = {
         path.relative_to(REPO_ROOT)
-        for path in (REPO_ROOT / "dkx").rglob("*.py")
+        for path in (REPO_ROOT / "src" / "dkx").rglob("*.py")
         if 'update("jax_enable_x64"' in path.read_text()
     }
-    assert setters == {pathlib.Path("dkx/runtime.py")}, setters
+    assert setters == {pathlib.Path("src/dkx/runtime.py")}, setters
 
 
 def test_importing_dkx_decides_nothing():
@@ -159,7 +159,7 @@ def test_the_check_probes_the_dtype_not_the_config_flag():
     The config can be set and later overridden; a flag read would pass while
     the arrays were still single precision.
     """
-    source = (REPO_ROOT / "dkx" / "__init__.py").read_text()
+    source = (REPO_ROOT / "src" / "dkx" / "__init__.py").read_text()
     body = source[source.index("def require_float64"):]
     body = body[: body.index("\ndef ") if "\ndef " in body[1:] else len(body)]
     assert "zeros(1).dtype" in body
@@ -167,7 +167,7 @@ def test_the_check_probes_the_dtype_not_the_config_flag():
 
 def test_the_solve_entry_point_enforces_it():
     """The funnel every solve passes through, so no route escapes the check."""
-    solve_source = (REPO_ROOT / "dkx" / "solve.py").read_text()
+    solve_source = (REPO_ROOT / "src" / "dkx" / "solve.py").read_text()
     assert "require_float64()" in solve_source
 
 

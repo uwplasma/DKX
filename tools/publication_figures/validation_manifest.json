@@ -178,7 +178,7 @@
     ],
     "source_code": [
       "tools/publication_figures/generate_sfincs_paper_figs.py",
-      "dkx/validation/artifacts.py"
+      "src/dkx/validation/artifacts.py"
     ],
     "tests": [
       "tests/test_generate_sfincs_paper_figs.py",
@@ -216,7 +216,7 @@
       "LHD Fokker-Planck L11/L12 tails do not yet reach the asymptotic inverse-nu gate on the checked-in scan, so this implemented artifact is a bounded trend proxy rather than the full analytic-limit reproduction"
     ],
     "source_code": [
-      "dkx/validation/artifacts.py"
+      "src/dkx/validation/artifacts.py"
     ],
     "tests": [
       "tests/test_validation_artifacts.py"
@@ -254,7 +254,7 @@
       "W7-X FP L11/L12 tails satisfy the inverse-nu slope proxy on the current range, while LHD still fails that gate"
     ],
     "source_code": [
-      "dkx/validation/artifacts.py"
+      "src/dkx/validation/artifacts.py"
     ],
     "tests": [
       "tests/test_validation_artifacts.py"
@@ -370,7 +370,7 @@
     ],
     "source_code": [
       "tools/publication_figures/generate_validation_dashboard.py",
-      "dkx/validation/artifacts.py"
+      "src/dkx/validation/artifacts.py"
     ],
     "tests": [
       "tests/test_generate_validation_dashboard.py",
@@ -413,7 +413,7 @@
     ],
     "source_code": [
       "tools/publication_figures/generate_fortran_suite_benchmark_summary.py",
-      "dkx/validation/artifacts.py"
+      "src/dkx/validation/artifacts.py"
     ],
     "tests": [
       "tests/test_generate_fortran_suite_benchmark_summary.py",
@@ -451,9 +451,9 @@
       "This lane is closed for the tagged release as a post-release/nightly validation target because it requires a defensible W7-X profile and equilibrium reconstruction"
     ],
     "source_code": [
-      "dkx/ambipolar.py",
-      "dkx/io.py",
-      "dkx/validation/artifacts.py"
+      "src/dkx/ambipolar.py",
+      "src/dkx/io.py",
+      "src/dkx/validation/artifacts.py"
     ],
     "tests": [
       "tests/test_er_scan_and_ambipolar.py",
@@ -495,7 +495,7 @@
       "The implemented rung is not full-Fokker-Planck, ambipolar-profile, finite-electric-field, experimental, or cross-code performance validation"
     ],
     "source_code": [
-      "dkx/validation/artifacts.py",
+      "src/dkx/validation/artifacts.py",
       "tools/paper_benchmarks/audit_independent_cross_code_validation.py"
     ],
     "tests": [
@@ -536,8 +536,8 @@
       "Axisymmetric particle flux and NTV are gated as near-zero absolute quantities; this lane is not a multispecies, stellarator, finite-Er, Phi1, ambipolar, experimental, or performance-comparison claim"
     ],
     "source_code": [
-      "dkx/collisions.py",
-      "dkx/run.py",
+      "src/dkx/collisions.py",
+      "src/dkx/run.py",
       "tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py"
     ],
     "tests": [
@@ -578,8 +578,8 @@
       "Axisymmetric particle flux and NTV are absolute cancellation gates; this is not an Er scan, ambipolar-root, stellarator, experimental, or performance-comparison claim"
     ],
     "source_code": [
-      "dkx/collisions.py",
-      "dkx/run.py",
+      "src/dkx/collisions.py",
+      "src/dkx/run.py",
       "tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py"
     ],
     "tests": [
@@ -620,8 +620,8 @@
       "Momentum flux is an absolute cancellation gate; this surface lane is not a stellarator finite-Er, ambipolar-profile, Phi1, experimental, second-family, or performance-comparison claim"
     ],
     "source_code": [
-      "dkx/collisions.py",
-      "dkx/run.py",
+      "src/dkx/collisions.py",
+      "src/dkx/run.py",
       "tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py"
     ],
     "tests": [
@@ -661,9 +661,9 @@
       "One failed automatic structured evaluation is recovered with a bounded scalar GMRES solve at the unchanged target; this workflow certificate is not independent full-Fokker--Planck, experimental, or cross-code ambipolar validation"
     ],
     "source_code": [
-      "dkx/workflows/ambipolar_native.py",
-      "dkx/execution.py",
-      "dkx/result.py",
+      "src/dkx/workflows/ambipolar_native.py",
+      "src/dkx/execution.py",
+      "src/dkx/result.py",
       "tools/paper_benchmarks/audit_native_ambipolar_profile.py"
     ],
     "tests": [
@@ -705,8 +705,8 @@
       "The auditable status is refinement_exhausted; timings and memory are provenance and the fine rung does not refine zeta or speed beyond the reference"
     ],
     "source_code": [
-      "dkx/workflows/ambipolar_native.py",
-      "dkx/result.py",
+      "src/dkx/workflows/ambipolar_native.py",
+      "src/dkx/result.py",
       "tools/paper_benchmarks/audit_ambipolar_phase_space_ladder.py"
     ],
     "tests": [
@@ -749,8 +749,8 @@
       "The pitch44 process reaches a 22275409800-byte footprint on the 24 GiB host, so pitch48 brute force is not admitted"
     ],
     "source_code": [
-      "dkx/workflows/ambipolar_native.py",
-      "dkx/result.py",
+      "src/dkx/workflows/ambipolar_native.py",
+      "src/dkx/result.py",
       "tools/paper_benchmarks/audit_ambipolar_phase_space_ladder.py",
       "tools/paper_benchmarks/audit_ambipolar_phase_space_axes.py"
     ],
@@ -794,8 +794,8 @@
       "Uniform pitch 22 to 26 to 30 changes root topology and fails every unchanged movement gate, so higher uniform escalation is not admitted"
     ],
     "source_code": [
-      "dkx/batch.py",
-      "dkx/solve.py",
+      "src/dkx/batch.py",
+      "src/dkx/solve.py",
       "tools/paper_benchmarks/audit_ambipolar_pitch_budget.py"
     ],
     "tests": [
@@ -838,8 +838,8 @@
       "Every accepted residual is below 7.04e-14 and every measured process footprint remains below 4.14 GB, but phase-space convergence is false"
     ],
     "source_code": [
-      "dkx/phase_space.py",
-      "dkx/execution.py",
+      "src/dkx/phase_space.py",
+      "src/dkx/execution.py",
       "tools/paper_benchmarks/audit_ambipolar_pitch_speed_groups.py"
     ],
     "tests": [
@@ -881,9 +881,9 @@
       "Every accepted residual is below 3.05e-14 and every measured process footprint remains below 4.01 GB, but phase-space convergence is false"
     ],
     "source_code": [
-      "dkx/config.py",
-      "dkx/phase_space.py",
-      "dkx/execution.py",
+      "src/dkx/config.py",
+      "src/dkx/phase_space.py",
+      "src/dkx/execution.py",
       "tools/paper_benchmarks/audit_ambipolar_pitch_explicit_groups.py"
     ],
     "tests": [
@@ -931,8 +931,8 @@
       "Selected-tail bounds remain finite but non-monotone, all residuals remain below 1.23e-15, and phase-space convergence remains false"
     ],
     "source_code": [
-      "dkx/workflows/ambipolar_native.py",
-      "dkx/moments.py",
+      "src/dkx/workflows/ambipolar_native.py",
+      "src/dkx/moments.py",
       "tools/paper_benchmarks/audit_ambipolar_joint_speed_zeta_tail.py"
     ],
     "tests": [
@@ -975,8 +975,8 @@
       "The DKX primal residual is below 6.8e-16 and the final SFINCS KSP residual is below 5.8e-15"
     ],
     "source_code": [
-      "dkx/execution.py",
-      "dkx/units.py",
+      "src/dkx/execution.py",
+      "src/dkx/units.py",
       "tools/paper_benchmarks/audit_native_physical_flux_sfincs.py"
     ],
     "tests": [
@@ -1021,8 +1021,8 @@
       "Parallel current remains theta-sensitive through theta 29 and is explicitly refinement-exhausted"
     ],
     "source_code": [
-      "dkx/execution.py",
-      "dkx/workflows/ambipolar_native.py",
+      "src/dkx/execution.py",
+      "src/dkx/workflows/ambipolar_native.py",
       "tools/paper_benchmarks/audit_w7x_fixed_field_resolution_referee.py"
     ],
     "tests": [
@@ -1065,7 +1065,7 @@
       "The replay reproduces the discovery roots and final brackets exactly while labeling its scope explicit_seeded_intervals_only"
     ],
     "source_code": [
-      "dkx/workflows/ambipolar_native.py",
+      "src/dkx/workflows/ambipolar_native.py",
       "tools/paper_benchmarks/audit_w7x_seeded_bracket_discovery.py"
     ],
     "tests": [
@@ -1109,7 +1109,7 @@
       "A four-endpoint cold/warm replay retains strict signs, topology [1,1], and exact scientific arrays except solve timing"
     ],
     "source_code": [
-      "dkx/workflows/ambipolar_native.py",
+      "src/dkx/workflows/ambipolar_native.py",
       "tools/paper_benchmarks/audit_w7x_admitted_grid_seeded_envelope.py"
     ],
     "tests": [
@@ -1152,9 +1152,9 @@
       "Scheme-4 Boozer harmonic sensitivity maps are generated as publication-ready figures; full VMEC-boundary optimization remains outside this bounded validation claim"
     ],
     "source_code": [
-      "dkx/solve.py",
-      "dkx/magnetic_geometry.py",
-      "dkx/validation/artifacts.py",
+      "src/dkx/solve.py",
+      "src/dkx/magnetic_geometry.py",
+      "src/dkx/validation/artifacts.py",
       "tools/publication_figures/generate_autodiff_sensitivity_validation.py"
     ],
     "tests": [

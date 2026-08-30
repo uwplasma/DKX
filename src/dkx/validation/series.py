@@ -19,6 +19,7 @@ import time
 from typing import Any, Iterator
 import numpy as np
 from .lanes import CollisionalityLike
+from ..paths import repository_root
 
 
 TRANSPORT_ELEMENTS: dict[str, tuple[int, int]] = {
@@ -311,7 +312,7 @@ def _repo_stable_path(path: Path) -> str:
     """Return a reproducible path for checked-in validation metadata."""
 
     path = Path(path)
-    repo_root = Path(__file__).resolve().parents[2]
+    repo_root = repository_root() or Path.cwd()
     try:
         return path.resolve().relative_to(repo_root).as_posix()
     except ValueError:

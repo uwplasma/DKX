@@ -24,7 +24,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-PACKAGE = REPO_ROOT / "dkx"
+PACKAGE = REPO_ROOT / "src" / "dkx"
 
 
 def test_the_monoenergetic_template_is_rhsmode_3() -> None:

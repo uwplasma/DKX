@@ -8,7 +8,7 @@ checkout, so every CI job was green.
 The deck is a module-level string now, which fixes that one file.  This module
 guards the *class* of bug.  ``[tool.setuptools.package-data]`` declares exactly
 one pattern, ``dkx = ["validation/*.json"]``, so the next runtime file added
-under ``dkx/`` with any other name or in any other directory is excluded from
+under ``src/dkx/`` with any other name or in any other directory is excluded from
 the wheel by default and silently -- the build prints nothing, and only an
 installed user finds out.
 
@@ -33,24 +33,24 @@ except ModuleNotFoundError:  # pragma: no cover - only on the declared floor
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 
-#: Files under ``dkx/`` that are deliberately absent from the wheel.
+#: Files under ``src/dkx/`` that are deliberately absent from the wheel.
 #:
-#: ``dkx/README.md`` is the package-directory readme: rendered on GitHub and by
+#: ``src/dkx/README.md`` is the package-directory readme: rendered on GitHub and by
 #: the docs build, never opened by the code.  Anything added here has to be
 #: something the package never reads at runtime -- if it is read, it belongs in
 #: ``package-data`` instead, because that is the whole failure this file exists
 #: to stop.
-NOT_SHIPPED = frozenset({"dkx/README.md"})
+NOT_SHIPPED = frozenset({"src/dkx/README.md"})
 
 
 def _tracked_package_files() -> list[str]:
-    """Every git-tracked path under ``dkx/``, as repo-relative POSIX strings.
+    """Every git-tracked path under ``src/dkx/``, as repo-relative POSIX strings.
 
     Asking git rather than walking the tree keeps ``__pycache__``, editable
     installs' ``.egg-info`` and stray local outputs out of the answer.
     """
     out = subprocess.run(
-        ["git", "ls-files", "-z", "--", "dkx"],
+        ["git", "ls-files", "-z", "--", "src/dkx"],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -84,8 +84,16 @@ def _matches(relative: str, pattern: str) -> bool:
     return all(fnmatch.fnmatchcase(r, p) for r, p in zip(rel_parts, pat_parts))
 
 
+#: The src layout puts the package one directory down, but package-data
+#: patterns are relative to the package itself, so the prefix has to come off
+#: before matching.
+SRC_PREFIX = "src/"
+
+
 def declared_by_package_data(path: str) -> bool:
     """Is this repo-relative path covered by a ``package-data`` pattern?"""
+    if path.startswith(SRC_PREFIX):
+        path = path[len(SRC_PREFIX) :]
     for package, patterns in _package_data_patterns().items():
         prefix = package.replace(".", "/") + "/"
         if not path.startswith(prefix):
@@ -97,7 +105,7 @@ def declared_by_package_data(path: str) -> bool:
 
 
 def test_every_tracked_non_python_file_under_dkx_ships_or_is_listed_as_excluded():
-    """The gate itself: no undeclared data file may reach ``dkx/`` unnoticed."""
+    """The gate itself: no undeclared data file may reach ``src/dkx/`` unnoticed."""
     undeclared = [
         path
         for path in _tracked_package_files()
@@ -106,7 +114,7 @@ def test_every_tracked_non_python_file_under_dkx_ships_or_is_listed_as_excluded(
         and not declared_by_package_data(path)
     ]
     assert not undeclared, (
-        "these files live under dkx/ but no [tool.setuptools.package-data] "
+        "these files live under src/dkx/ but no [tool.setuptools.package-data] "
         f"pattern includes them, so the wheel will not carry them: {undeclared}. "
         "Add a pattern, or add the path to NOT_SHIPPED if the package never "
         "opens it at runtime."

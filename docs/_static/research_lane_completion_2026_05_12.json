@@ -144,7 +144,7 @@
     },
     {
      "claim": "JAX geometry adapters isolate optional differentiable geometry handoff utilities.",
-     "path": "dkx/workflows/geometry_adapters.py"
+     "path": "src/dkx/workflows/geometry_adapters.py"
     },
     {
      "claim": "Workflow tests cover optional backend readiness and no-solve provenance.",
@@ -177,7 +177,7 @@
     },
     {
      "claim": "Solver path policy is isolated enough to host future library experiments behind measured residual, runtime, and memory gates.",
-     "path": "dkx/solve.py"
+     "path": "src/dkx/solve.py"
     },
     {
      "claim": "Research-lane documentation keeps optional solver-library evaluations outside stable dependencies until admitted.",

@@ -18,6 +18,7 @@ import numpy as np
 from ..io import localize_equilibrium_file_in_place
 from ..run import run_from_namelist
 from ..namelist import Namelist, read_sfincs_input
+from ..paths import repository_root
 
 
 EmitFn = Callable[[int, str], None]
@@ -602,10 +603,11 @@ def find_upstream_utils_dir(*, override: Path | None = None) -> Path:
             raise FileNotFoundError(f"DKX_UPSTREAM_UTILS_DIR does not exist: {path}")
         return path
 
-    repo_root = Path(__file__).resolve().parents[2]
-    candidate = repo_root / "examples" / "sfincs_examples" / "utils"
-    if candidate.exists():
-        return candidate
+    repo_root = repository_root()
+    if repo_root is not None:
+        candidate = repo_root / "examples" / "sfincs_examples" / "utils"
+        if candidate.exists():
+            return candidate
 
     raise FileNotFoundError(
         "Could not locate upstream v3 utils/ scripts. Set DKX_UPSTREAM_UTILS_DIR or run from a repo checkout."
