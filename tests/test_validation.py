@@ -36,8 +36,14 @@ from dkx.validation.registry import (
     run_entry,
 )
 
-REGISTRY = load_registry()
-ROOT = REGISTRY.root
+# The checkout is resolved from this file, not from the package. dkx.validation
+# .registry can find a checkout when one sits above the package, but under an
+# installed wheel there is none and it says so precisely. A test knows where the
+# repository is; asking the package to guess is the wrong direction, and it is
+# what made this whole module fail collection when coverage first ran against
+# the installed artifact.
+ROOT = Path(__file__).resolve().parents[1]
+REGISTRY = load_registry(ROOT)
 CAPABILITIES = load_capability_ids(ROOT)
 ENTRY_IDS = list(REGISTRY.ids)
 CORRUPTIBLE_IDS = [entry.id for entry in REGISTRY.entries if entry.corruption]

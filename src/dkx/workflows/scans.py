@@ -603,8 +603,12 @@ def find_upstream_utils_dir(*, override: Path | None = None) -> Path:
             raise FileNotFoundError(f"DKX_UPSTREAM_UTILS_DIR does not exist: {path}")
         return path
 
-    repo_root = repository_root()
-    if repo_root is not None:
+    # The checkout above the package when there is one, otherwise the directory
+    # the user is standing in: these are vendored example scripts, and a wheel
+    # does not carry them.
+    for repo_root in (repository_root(), Path.cwd()):
+        if repo_root is None:
+            continue
         candidate = repo_root / "examples" / "sfincs_examples" / "utils"
         if candidate.exists():
             return candidate
