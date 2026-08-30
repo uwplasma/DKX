@@ -319,6 +319,63 @@ def test_validate_cli_reports_case_id_and_scan_preflight(
     assert "scan: 3 cases" in output
 
 
+def test_validate_cli_reports_bounded_ambipolar_work_without_loading_geometry(
+    capsys,
+) -> None:
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "examples/native/analytic_ambipolar_profile.toml"
+    )
+
+    assert cli.main(["validate", str(path), "--quiet"]) == 0
+    output = capsys.readouterr().out
+    assert "hierarchy_points=9" in output
+    assert "max_evaluations_per_surface=153" in output
+    assert "max_profile_evaluations=306" in output
+    assert "190944 B profile (95472 B/surface)" in output
+    assert "runtime not estimated" in output
+
+
+def test_admitted_w7x_profile_preflight_retains_current_claim_boundary(
+    capsys,
+) -> None:
+    path = (
+        REPO_ROOT
+        / "validation/inputs/w7x_standard_native_ambipolar_admitted_flux_preflight.toml"
+    )
+
+    case = Case.from_file(path)
+    assert case.convergence.observables == (
+        "particle_flux",
+        "heat_flux",
+        "electric_field",
+    )
+    assert cli.main(["validate", str(path), "--quiet"]) == 0
+    output = capsys.readouterr().out
+    assert "max_evaluations_per_surface=1023" in output
+    assert "max_profile_evaluations=5115" in output
+    assert "4746720 B profile (949344 B/surface)" in output
+
+
+def test_validate_cli_rejects_unbounded_ambipolar_evidence(
+    tmp_path: Path, capsys
+) -> None:
+    data = _mapping()
+    data["run"] = {"workflow": "ambipolar_profile"}
+    data["electric_field"] = {
+        "mode": "ambipolar",
+        "search_kV_m": [-5.0, 5.0],
+        "search_points": 5,
+        "max_root_iterations": 8,
+    }
+    data["convergence"] = {"enabled": True, "max_refinements": 16}
+    path = tmp_path / "unbounded.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+    assert cli.main(["validate", str(path), "--quiet"]) == 2
+    assert "exceeds 100000 retained evaluations" in capsys.readouterr().err
+
+
 def test_validate_cli_returns_two_for_precise_error(tmp_path: Path, capsys) -> None:
     data = _mapping()
     data["schema"] = 2

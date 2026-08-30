@@ -12,6 +12,17 @@ _MAX_RETAINED_EVALUATIONS = 100_000
 
 
 @dataclass(frozen=True)
+class AmbipolarEvidencePreflight:
+    """Conservative work and retained-evidence bounds for a native case."""
+
+    hierarchy_points: int
+    evaluations_per_surface: int
+    profile_evaluations: int
+    retained_bytes_per_surface: int
+    retained_profile_bytes: int
+
+
+@dataclass(frozen=True)
 class SolverAttempt:
     """One retained linear-solver attempt for a physical-field evaluation."""
 
@@ -151,6 +162,52 @@ def _evaluation_budget(
     brackets_per_level = hierarchy_points if find_all_roots else 1
     budget = hierarchy_points + (levels * brackets_per_level * int(max_root_iterations))
     return hierarchy_points, budget
+
+
+def _retained_evidence_bytes(
+    evaluation_budget: int, species_count: int, speed_count: int
+) -> int:
+    return int(evaluation_budget) * (
+        512 + 16 * int(species_count) + 24 * int(species_count) * int(speed_count)
+    )
+
+
+def preflight_ambipolar_case(case: Any) -> AmbipolarEvidencePreflight:
+    """Bound retained solves and evidence bytes without loading JAX or geometry.
+
+    The solve bound is intentionally conservative: it assumes every hierarchy
+    point could bracket a root on every refinement rung. It is a capacity bound,
+    not a runtime prediction and not a claim that finite sampling finds every
+    possible even-numbered crossing.
+    """
+
+    if case.run.workflow != "ambipolar_profile":
+        raise ValueError("ambipolar preflight requires workflow='ambipolar_profile'")
+    hierarchy_points, evaluations = _evaluation_budget(
+        search_points=case.electric_field.search_points,
+        max_root_iterations=case.electric_field.max_root_iterations,
+        find_all_roots=case.electric_field.find_all_roots,
+        convergence_enabled=case.convergence.enabled,
+        max_refinements=case.convergence.max_refinements,
+    )
+    evaluations += int(case.convergence.retain_legendre_tail)
+    if evaluations > _MAX_RETAINED_EVALUATIONS:
+        raise ValueError(
+            "native ambipolar refinement preflight exceeds 100000 retained "
+            f"evaluations ({evaluations}); reduce convergence.max_refinements, "
+            "electric_field.search_points, or max_root_iterations"
+        )
+    species_count = max(1, len(case.species))
+    speed_count = max(1, int(case.resolution.speed))
+    surface_count = max(1, len(case.geometry.surfaces))
+    retained_bytes = _retained_evidence_bytes(evaluations, species_count, speed_count)
+    return AmbipolarEvidencePreflight(
+        hierarchy_points=hierarchy_points,
+        evaluations_per_surface=evaluations,
+        profile_evaluations=evaluations * surface_count,
+        retained_bytes_per_surface=retained_bytes,
+        retained_profile_bytes=retained_bytes * surface_count,
+    )
 
 
 def _observable(evaluation: RootEvaluation, name: str) -> np.ndarray:
@@ -537,8 +594,8 @@ def solve_native_ambipolar_surface(
         1,
         int(getattr(getattr(problem, "operator", None), "n_x", 1)),
     )
-    retained_bytes = evaluation_budget * (
-        512 + 16 * species_count + 24 * species_count * speed_count
+    retained_bytes = _retained_evidence_bytes(
+        evaluation_budget, species_count, speed_count
     )
     if retained_bytes > float(memory_budget_gb) * (1024**3):
         raise MemoryError(
@@ -820,9 +877,7 @@ def solve_native_ambipolar_surface(
                     legendre_tail_relative_l2_upper_bound=(
                         None
                         if legendre_tail_upper_bound is None
-                        or not np.all(
-                            np.isfinite(legendre_tail_upper_bound[index])
-                        )
+                        or not np.all(np.isfinite(legendre_tail_upper_bound[index]))
                         else np.asarray(legendre_tail_upper_bound[index])
                     ),
                     reason=reason,
@@ -1101,6 +1156,7 @@ def solve_native_ambipolar_surface(
 
 
 __all__ = [
+    "AmbipolarEvidencePreflight",
     "BranchEvent",
     "NativeAmbipolarRoot",
     "NativeAmbipolarSurface",
@@ -1108,5 +1164,6 @@ __all__ = [
     "RootEvaluation",
     "_evaluation_budget",
     "continue_ambipolar_branches",
+    "preflight_ambipolar_case",
     "solve_native_ambipolar_surface",
 ]
