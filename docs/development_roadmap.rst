@@ -2,26 +2,30 @@ Development Roadmap
 ===================
 
 The authoritative DKX 3 roadmap is the repository-root ``plan.md``. It records
-the accepted product and scientific contracts, implementation phases,
-performance and validation gates, pull-request sequence, and execution ledger.
-This documentation page is only a navigation pointer; it does not define a
-second roadmap.
+the accepted product and scientific contracts, the research-grade verification
+and validation standard, the target public API and source architecture, the
+ordered implementation phases, the pull-request sequence, and the definition of
+done. This documentation page is only a navigation pointer; it does not define
+a second roadmap.
 
-The previous ``plan_final.md`` from merged pull request #8 is historical. Its
-durable requirements are reconciled into ``plan.md``: coherent vertical
+Earlier roadmaps -- ``plan_final.md`` from merged pull request #8 and the
+2200-line execution diary that ``plan.md`` replaced on 2026-08-30 -- are
+historical. Their durable requirements are carried forward: coherent vertical
 slices, one canonical owner per behavior, reusable solver state,
-bounded-memory elimination, measured CPU/GPU scaling, and scientific admission
-gates. Old branch names and campaign checklists are not current direction.
+bounded-memory elimination, measured CPU/GPU scaling, and explicit scientific
+admission gates. Old branch names, phase letters, and campaign checklists are
+not current direction.
 
 Machine-readable planning evidence lives under ``validation/``:
 
 - ``capabilities.toml`` records capability status and evidence gaps;
-- ``baseline.toml`` pins the DKX 2.3.1 starting tree, package sizes, CI timing,
-  source/API inventory, and known drift from the originally audited commit;
+- ``baseline.toml`` pins the audited tree, package sizes, CI state, coverage,
+  source and public-API inventory, and the known local test gaps;
 - ``hardware.toml`` identifies measured hardware and unavailable lanes;
 - ``benchmark_schema.toml`` defines the minimum record for later performance
   comparisons.
 
-Until the planning pull request merges, runtime, API, solver, and physics
-changes remain out of scope. The first implementation phase after merge is P1:
-clean wheel/source-distribution tests and enforceable size contracts.
+The current phase is Phase A of ``plan.md``: replace the plan and freeze an
+exact current-state inventory without changing runtime, API, or physics. The
+next phase is Phase B, which consolidates the validation registry, the audit
+runners, and the test tree before any new resolution campaign starts.
