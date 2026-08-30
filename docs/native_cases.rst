@@ -7,12 +7,24 @@ for generated inputs. Both formats pass through one validation boundary and
 produce a deterministic SHA-256 case ID that is independent of table/key order
 and the case file's location.
 
-Start from the complete commented template:
+Start from the complete commented template, then run it:
 
 .. code-block:: console
 
    dkx schema --format toml > case.toml
    dkx validate case.toml
+   dkx run case.toml --out result.nc
+   dkx inspect result.nc
+
+``dkx run`` executes the case and prints the solver route, the achieved true
+residual, and the wall time; ``--out`` writes the versioned NetCDF ``Result``,
+and omitting it runs without saving rather than guessing a path. ``dkx inspect``
+reads a saved ``Result`` back and lists its arrays without recomputing them.
+
+``inspect`` prints no units column. A native ``Result`` does not yet carry
+per-variable units metadata, so an empty column would suggest the metadata is
+present and blank rather than absent; array names carry the unit by convention
+(``heat_flux_W_m2``).
 
 Machine tooling can request JSON Schema instead:
 
