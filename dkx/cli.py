@@ -93,6 +93,28 @@ def _cmd_validate_case(args: argparse.Namespace) -> int:
             f"scan: {case.scan.case_count} cases "
             f"(limit {case.scan.max_cases}, resume={str(case.scan.resume).lower()})"
         )
+    if case.run.workflow == "ambipolar_profile":
+        from .workflows.ambipolar_native import (  # noqa: PLC0415
+            preflight_ambipolar_case,
+        )
+
+        try:
+            preflight = preflight_ambipolar_case(case)
+        except ValueError as exc:
+            print(f"dkx validate failed: {exc}", file=sys.stderr)
+            return 2
+        print(
+            "ambipolar preflight: "
+            f"hierarchy_points={preflight.hierarchy_points}; "
+            f"max_evaluations_per_surface={preflight.evaluations_per_surface}; "
+            f"max_profile_evaluations={preflight.profile_evaluations}"
+        )
+        print(
+            "retained evidence upper bound: "
+            f"{preflight.retained_profile_bytes} B profile "
+            f"({preflight.retained_bytes_per_surface} B/surface); "
+            "runtime not estimated"
+        )
     return 0
 
 

@@ -71,6 +71,32 @@ zipped axes must have equal lengths. Resume metadata and append-safe result
 storage belong to the native scan/result execution slice and are not simulated
 by the validator.
 
+Ambipolar work preflight
+------------------------
+
+For ``workflow = "ambipolar_profile"``, ``dkx validate`` also reports the
+final adaptive hierarchy size, a conservative maximum number of retained
+kinetic evaluations per surface and profile, and the corresponding retained
+evidence bytes. This calculation reads only the versioned case: it does not
+load geometry, initialize JAX, or launch a solve. Cases whose configured bound
+exceeds 100,000 retained evaluations per surface fail validation with the same
+actionable reduction advice as execution.
+
+The evaluation count is a capacity bound, not a runtime estimate. It assumes
+every hierarchy point could bracket a root on every refinement rung, so a
+normal run should use fewer evaluations. Conversely, no finite hierarchy can
+prove the absence of an even number of hidden crossings. Use the preflight to
+bound a campaign before launch, then retain the actual evaluation reasons,
+refinement levels, brackets, and exhaustion status in the Result.
+
+The checked
+``validation/inputs/w7x_standard_native_ambipolar_admitted_flux_preflight.toml``
+case applies this contract to the five-surface W7-X transport-flux grid admitted
+by the fixed-field resolution referee. Its bound is 1,023 evaluations per
+surface, 5,115 for the profile, and 4,746,720 retained-evidence bytes. This is a
+launch bound only: the input deliberately excludes bootstrap current from its
+convergence observables because the high-zeta current grid is not yet admitted.
+
 Native execution and results
 ----------------------------
 
