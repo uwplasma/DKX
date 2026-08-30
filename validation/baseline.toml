@@ -370,7 +370,7 @@ campaign_summary_json_files = 20
 audit_scripts = 17
 paper_benchmark_scripts = 30
 audit_script_directory = "tools/paper_benchmarks"
-one_summary_one_script_one_test = true
+one_summary_one_script_one_test = false
 capability_entries = 21
 capability_registry_baseline_commit = "c003ba8e0332509bc07b3a20fddf2b8db2c05ad9"
 capabilities_in_plan_section_12_without_a_registry_entry = [
@@ -382,132 +382,8 @@ capabilities_in_plan_section_12_without_a_registry_entry = [
   "collocation/multigrid alternate route (multigrid half only)",
 ]
 notes = "Each of the 20 campaign summaries has its own audit script and its own test module, and 17 of the 30 tools/paper_benchmarks scripts exist only to audit one summary. The registry still carries the 2026-08-28 baseline commit and does not name every capability plan.md section 12 tracks. plan.md Phase B replaces all of this with one registry and one generic runner; Phase A only records the state."
-artifacts_without_a_named_generator = [
-  "validation/full_kinetic_sfincs_finite_er_v1.json",
-  "validation/full_kinetic_sfincs_stellarator_v1.json",
-  "validation/w7x_admitted_grid_uniform_probe_no_go_v1.json",
-]
-
-[[validation.artifact]]
-file = "validation/ambipolar_joint_pitch_speed_v1.json"
-bytes = 6956
-tests = ["tests/test_ambipolar_joint_pitch_speed.py"]
-generator = ["tools/paper_benchmarks/audit_ambipolar_joint_pitch_speed.py"]
-
-[[validation.artifact]]
-file = "validation/ambipolar_joint_speed_zeta_tail_v1.json"
-bytes = 8826
-tests = ["tests/test_ambipolar_joint_speed_zeta_tail.py", "tests/test_native_physical_flux_sfincs.py"]
-generator = ["tools/paper_benchmarks/audit_ambipolar_joint_speed_zeta_tail.py"]
-
-[[validation.artifact]]
-file = "validation/ambipolar_phase_space_axes_v1.json"
-bytes = 49858
-tests = ["tests/test_ambipolar_phase_space_axes.py"]
-generator = ["tools/paper_benchmarks/audit_ambipolar_phase_space_axes.py"]
-
-[[validation.artifact]]
-file = "validation/ambipolar_phase_space_ladder_v1.json"
-bytes = 35171
-tests = ["tests/test_ambipolar_phase_space_ladder.py"]
-generator = ["tools/paper_benchmarks/audit_ambipolar_phase_space_ladder.py"]
-
-[[validation.artifact]]
-file = "validation/ambipolar_pitch_budget_v1.json"
-bytes = 22411
-tests = ["tests/test_ambipolar_pitch_budget.py"]
-generator = ["tools/paper_benchmarks/audit_ambipolar_pitch_budget.py"]
-
-[[validation.artifact]]
-file = "validation/ambipolar_pitch_combined_v1.json"
-bytes = 7576
-tests = ["tests/test_ambipolar_pitch_combined.py"]
-generator = ["tools/paper_benchmarks/audit_ambipolar_pitch_combined.py"]
-
-[[validation.artifact]]
-file = "validation/ambipolar_pitch_explicit_groups_v1.json"
-bytes = 22390
-tests = ["tests/test_ambipolar_pitch_explicit_groups.py"]
-generator = ["tools/paper_benchmarks/audit_ambipolar_pitch_explicit_groups.py"]
-
-[[validation.artifact]]
-file = "validation/ambipolar_pitch_speed_groups_v1.json"
-bytes = 17957
-tests = ["tests/test_ambipolar_pitch_speed_groups.py"]
-generator = ["tools/paper_benchmarks/audit_ambipolar_pitch_speed_groups.py"]
-
-[[validation.artifact]]
-file = "validation/ambipolar_selected_tail_bound_v1.json"
-bytes = 4414
-tests = ["tests/test_ambipolar_selected_tail_bound.py"]
-generator = ["tools/paper_benchmarks/audit_ambipolar_selected_tail_bound.py"]
-
-[[validation.artifact]]
-file = "validation/ambipolar_speed_local_pitch_v1.json"
-bytes = 7292
-tests = ["tests/test_ambipolar_speed_local_pitch.py"]
-generator = ["tools/paper_benchmarks/audit_ambipolar_speed_local_pitch.py"]
-
-[[validation.artifact]]
-file = "validation/full_kinetic_sfincs_finite_er_v1.json"
-bytes = 12670
-tests = ["tests/test_full_kinetic_sfincs_finite_er_validation.py"]
-generator = []
-
-[[validation.artifact]]
-file = "validation/full_kinetic_sfincs_stellarator_v1.json"
-bytes = 13757
-tests = ["tests/test_full_kinetic_sfincs_stellarator_validation.py"]
-generator = []
-
-[[validation.artifact]]
-file = "validation/full_kinetic_sfincs_v1.json"
-bytes = 12044
-tests = ["tests/test_full_kinetic_sfincs_validation.py"]
-generator = ["tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py"]
-
-[[validation.artifact]]
-file = "validation/independent_cross_code_v1.json"
-bytes = 12503
-tests = ["tests/test_independent_cross_code_validation.py"]
-generator = ["tools/paper_benchmarks/audit_independent_cross_code_validation.py"]
-
-[[validation.artifact]]
-file = "validation/native_ambipolar_profile_v1.json"
-bytes = 20154
-tests = ["tests/test_native_ambipolar_profile_certificate.py", "tests/test_native_physical_flux_sfincs.py"]
-generator = ["tools/paper_benchmarks/audit_native_ambipolar_profile.py"]
-
-[[validation.artifact]]
-file = "validation/native_physical_flux_sfincs_v1.json"
-bytes = 7850
-tests = ["tests/test_native_physical_flux_sfincs.py"]
-generator = ["tools/paper_benchmarks/audit_native_physical_flux_sfincs.py"]
-
-[[validation.artifact]]
-file = "validation/w7x_admitted_grid_seeded_envelope_v1.json"
-bytes = 5975
-tests = ["tests/test_w7x_admitted_grid_seeded_envelope.py"]
-generator = ["tools/paper_benchmarks/audit_w7x_admitted_grid_seeded_envelope.py"]
-
-[[validation.artifact]]
-file = "validation/w7x_admitted_grid_uniform_probe_no_go_v1.json"
-bytes = 2119
-tests = ["tests/test_seeded_ambipolar_promotion.py"]
-generator = []
-
-[[validation.artifact]]
-file = "validation/w7x_fixed_field_resolution_referee_v1.json"
-bytes = 30976
-tests = ["tests/test_w7x_fixed_field_resolution_referee.py"]
-generator = ["tools/paper_benchmarks/audit_w7x_fixed_field_resolution_referee.py"]
-
-[[validation.artifact]]
-file = "validation/w7x_seeded_bracket_discovery_v1.json"
-bytes = 5066
-tests = ["tests/test_w7x_seeded_bracket_discovery.py"]
-generator = ["tools/paper_benchmarks/audit_w7x_seeded_bracket_discovery.py"]
-
+artifact_map = "validation/registry.toml"
+artifacts_without_a_named_generator = []
 
 [[known_gap]]
 id = "GAP-A-001"
@@ -527,7 +403,8 @@ description = "A fresh clone from origin is 36.46 MiB against the 20 MiB target.
 [[known_gap]]
 id = "GAP-A-004"
 phase = "A"
-description = "Three validation summaries have no named generator script: full_kinetic_sfincs_finite_er_v1.json, full_kinetic_sfincs_stellarator_v1.json, and w7x_admitted_grid_uniform_probe_no_go_v1.json. plan.md section 4.4 requires every claim to name its generating command."
+status = "closed"
+description = "The Phase A audit reported three summaries with no named generator. Two of them, full_kinetic_sfincs_finite_er_v1.json and full_kinetic_sfincs_stellarator_v1.json, were a false positive: the shared audit_full_kinetic_sfincs_validation.py audits all three full-kinetic artifacts and is invoked with --artifact, so a filename grep did not see it. Only w7x_admitted_grid_uniform_probe_no_go_v1.json truly had none. Phase B added audit_w7x_admitted_grid_uniform_probe_no_go.py and validation/registry.toml now records a command for every entry."
 
 [[known_gap]]
 id = "GAP-A-005"
@@ -537,4 +414,5 @@ description = "validation/capabilities.toml still carries baseline_commit c003ba
 [[known_gap]]
 id = "GAP-A-006"
 phase = "A"
-description = "Published performance claims in README.md, docs/performance.rst, docs/index.rst, docs/differentiability.rst, and docs/release_notes.rst cite a MacBook with an Apple M4, about 10 cores and 24 GB. No such host exists in validation/hardware.toml and it is not the audited laptop. Every performance number carried forward into DKX 3 must be re-measured on a registered host."
+status = "partly_closed"
+description = "Published performance claims in README.md, docs/performance.rst, docs/index.rst, docs/differentiability.rst, and docs/release_notes.rst cite a MacBook with an Apple M4, about 10 cores and 24 GB. Phase B identified that host from the artifacts' own environment blocks and registered it as campaign-mac-mini-m4: a Mac mini Mac16,10, not a MacBook. The registry now names it per entry. What remains open is the docs prose, which still calls it a MacBook, and the fact that no performance number has been re-measured on official-laptop-cpu."
