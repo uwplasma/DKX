@@ -42,7 +42,7 @@
       "purpose": "Preserve sharded, multi-worker, multi-GPU, and long profiling campaigns outside the stable core; the legacy in-repo owners were deleted with the legacy pipeline.",
       "core_extracted_paths": [],
       "source_paths": [
-        "dkx/problems/transport_parallel_runtime.py"
+        "src/dkx/problems/transport_parallel_runtime.py"
       ],
       "test_paths": [
         "tests/test_benchmark_transport_parallel_scaling.py",
@@ -65,7 +65,7 @@
       "purpose": "Preserve historical benchmark campaigns, publication figures, Zenodo audits, and long-run validation scripts outside the stable core.",
       "core_extracted_paths": [],
       "source_paths": [
-        "dkx/validation/artifacts.py"
+        "src/dkx/validation/artifacts.py"
       ],
       "test_paths": [
         "tests/test_benchmark_artifact_policy.py",
@@ -140,7 +140,7 @@
       },
       {
         "name": "package_source",
-        "prefix": "dkx/",
+        "prefix": "src/dkx/",
         "decision": "merge",
         "owner_tags": [
           "PHYSICS",
@@ -359,21 +359,21 @@
   },
   "entries": [
     {
-      "path": "dkx/drift_kinetic.py",
+      "path": "src/dkx/drift_kinetic.py",
       "lines_at_audit": 2630,
       "category": "core",
       "action": "retain",
       "public_imports": [],
       "internal_callers": [
-        "dkx/run.py",
-        "dkx/solve.py"
+        "src/dkx/run.py",
+        "src/dkx/solve.py"
       ],
       "tests": [
         "tests/test_drift_kinetic.py",
         "tests/test_kinetic_operator_fortran_parity.py"
       ],
       "docs_examples": [
-        "dkx/README.md",
+        "src/dkx/README.md",
         "docs/source_map.rst"
       ],
       "retention_reason": "The canonical matrix-free v3 drift-kinetic operator owns every physics term family; it is the single operator owner after the legacy stack deletion.",
@@ -381,20 +381,20 @@
       "review_status": "canonical_owner_post_trim"
     },
     {
-      "path": "dkx/solve.py",
+      "path": "src/dkx/solve.py",
       "lines_at_audit": 2265,
       "category": "core",
       "action": "retain",
       "public_imports": [],
       "internal_callers": [
-        "dkx/run.py",
-        "dkx/phi1.py"
+        "src/dkx/run.py",
+        "src/dkx/phi1.py"
       ],
       "tests": [
         "tests/test_solve.py"
       ],
       "docs_examples": [
-        "dkx/README.md",
+        "src/dkx/README.md",
         "docs/source_map.rst"
       ],
       "retention_reason": "The three-tier canonical solve policy (block-tridiagonal, GCROT, direct) is the single solver owner after the legacy solvers package deletion; the tier-2 coarse preconditioner it selects is owned by dkx/coarse_precond.py.",
@@ -402,22 +402,22 @@
       "review_status": "canonical_owner_post_trim"
     },
     {
-      "path": "dkx/coarse_precond.py",
+      "path": "src/dkx/coarse_precond.py",
       "lines_at_audit": 1092,
       "category": "core",
       "action": "retain",
       "public_imports": [],
       "internal_callers": [
-        "dkx/solve.py",
-        "dkx/multigrid.py",
-        "dkx/sparse_precond.py"
+        "src/dkx/solve.py",
+        "src/dkx/multigrid.py",
+        "src/dkx/sparse_precond.py"
       ],
       "tests": [
         "tests/test_tier2_memory_guard.py",
         "tests/test_solve.py"
       ],
       "docs_examples": [
-        "dkx/README.md",
+        "src/dkx/README.md",
         "docs/source_map.rst",
         "docs/performance.rst"
       ],
@@ -426,19 +426,19 @@
       "review_status": "canonical_owner_post_trim"
     },
     {
-      "path": "dkx/multigrid.py",
+      "path": "src/dkx/multigrid.py",
       "lines_at_audit": 2000,
       "category": "core",
       "action": "retain",
       "public_imports": [],
       "internal_callers": [
-        "dkx/solve.py"
+        "src/dkx/solve.py"
       ],
       "tests": [
         "tests/test_multigrid.py"
       ],
       "docs_examples": [
-        "dkx/README.md",
+        "src/dkx/README.md",
         "docs/performance.rst"
       ],
       "retention_reason": "Sole owner of the semicoarsened multigrid tier-2 preconditioner: hierarchy planning, rediscretized coarse operators, transfers and relaxations behind solve(preconditioner='multigrid'), plus the pitch-basis diagnostics that record why that route cannot reach tolerance on a Legendre-modal discretization.",
@@ -446,20 +446,20 @@
       "review_status": "canonical_owner_post_trim"
     },
     {
-      "path": "dkx/writer.py",
+      "path": "src/dkx/writer.py",
       "lines_at_audit": 1700,
       "category": "core",
       "action": "retain",
       "public_imports": [],
       "internal_callers": [
-        "dkx/run.py"
+        "src/dkx/run.py"
       ],
       "tests": [
         "tests/test_run_rhsmode1.py",
         "tests/test_run_transport.py"
       ],
       "docs_examples": [
-        "dkx/README.md",
+        "src/dkx/README.md",
         "docs/source_map.rst"
       ],
       "retention_reason": "The canonical sfincsOutput writer owns every emitted dataset family; it replaced the legacy outputs package writer pipeline at the purge.",
@@ -467,21 +467,21 @@
       "review_status": "canonical_owner_post_trim"
     },
     {
-      "path": "dkx/magnetic_geometry.py",
+      "path": "src/dkx/magnetic_geometry.py",
       "lines_at_audit": 2400,
       "category": "core",
       "action": "retain",
       "public_imports": [],
       "internal_callers": [
-        "dkx/drift_kinetic.py",
-        "dkx/writer.py"
+        "src/dkx/drift_kinetic.py",
+        "src/dkx/writer.py"
       ],
       "tests": [
         "tests/test_magnetic_geometry.py",
         "tests/test_vmec_wout_conventions.py"
       ],
       "docs_examples": [
-        "dkx/README.md",
+        "src/dkx/README.md",
         "docs/source_map.rst"
       ],
       "retention_reason": "The consolidated flux-surface geometry owner covers analytic, VMEC, Boozer, and Fourier constructors; it replaced the legacy geometry package.",
@@ -489,21 +489,21 @@
       "review_status": "canonical_owner_post_trim"
     },
     {
-      "path": "dkx/moments.py",
+      "path": "src/dkx/moments.py",
       "lines_at_audit": 1500,
       "category": "core",
       "action": "retain",
       "public_imports": [],
       "internal_callers": [
-        "dkx/run.py",
-        "dkx/writer.py"
+        "src/dkx/run.py",
+        "src/dkx/writer.py"
       ],
       "tests": [
         "tests/test_kinetic_operator_fortran_parity.py",
         "tests/test_classical_transport_physics_gates.py"
       ],
       "docs_examples": [
-        "dkx/README.md",
+        "src/dkx/README.md",
         "docs/source_map.rst"
       ],
       "retention_reason": "The canonical moment/diagnostic integrals (fluxes, flows, NTV, classical transport, transport matrices) are the single output-physics owner.",
@@ -511,13 +511,13 @@
       "review_status": "canonical_owner_post_trim"
     },
     {
-      "path": "dkx/validation/release.py",
+      "path": "src/dkx/validation/release.py",
       "lines_at_audit": 2600,
       "category": "core",
       "action": "trim",
       "public_imports": [],
       "internal_callers": [
-        "dkx/validation/artifacts.py"
+        "src/dkx/validation/artifacts.py"
       ],
       "tests": [
         "tests/test_release_gate_metadata.py"
@@ -530,7 +530,7 @@
       "review_status": "canonical_owner_post_trim"
     },
     {
-      "path": "dkx/problems/transport_parallel_runtime.py",
+      "path": "src/dkx/problems/transport_parallel_runtime.py",
       "lines_at_audit": 3531,
       "category": "extract-pr",
       "action": "extract",
@@ -538,7 +538,7 @@
       "reduction_target_lines": 0,
       "public_imports": [],
       "internal_callers": [
-        "dkx/problems/transport_solve.py"
+        "src/dkx/problems/transport_solve.py"
       ],
       "tests": [
         "tests/test_transport_parallel_runtime.py",
@@ -551,7 +551,7 @@
       "next_step": "Extract long-run worker/sharded paths; keep only any proven simple CPU/GPU backend defaults."
     },
     {
-      "path": "dkx/validation/artifacts.py",
+      "path": "src/dkx/validation/artifacts.py",
       "lines_at_audit": 837,
       "category": "core",
       "action": "retain",
@@ -671,32 +671,32 @@
       "next_step": "Move figure generation campaigns to publication-audits PR and keep checked final figures only if small."
     },
     {
-      "path": "dkx/representative.py",
+      "path": "src/dkx/representative.py",
       "lines_at_audit": 1523,
       "category": "core",
       "action": "retain",
       "public_imports": [],
       "internal_callers": [
-        "dkx/cli.py"
+        "src/dkx/cli.py"
       ],
       "tests": [
         "tests/test_representative.py"
       ],
       "docs_examples": [
-        "dkx/README.md"
+        "src/dkx/README.md"
       ],
       "retention_reason": "The dkx wout_*.nc representative run and the dkx --plot publication panels; the one-command entry point a user meets first, kept out of plotting.py so the existing summary surface is untouched.",
       "next_step": "Keep the panels and the measured default resolution here; plotting.py keeps the raw output summary.",
       "review_status": "new_owner"
     },
     {
-      "path": "dkx/units.py",
+      "path": "src/dkx/units.py",
       "lines_at_audit": 120,
       "category": "core",
       "action": "retain",
       "public_imports": [],
       "internal_callers": [
-        "dkx/representative.py"
+        "src/dkx/representative.py"
       ],
       "tests": [
         "tests/test_units.py"
@@ -709,7 +709,7 @@
       "review_status": "new_owner"
     },
     {
-      "path": "dkx/bootstrap.py",
+      "path": "src/dkx/bootstrap.py",
       "lines_at_audit": 381,
       "category": "core",
       "action": "retain",

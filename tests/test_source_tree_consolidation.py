@@ -8,7 +8,7 @@ import subprocess
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-PACKAGE_ROOT = REPO_ROOT / "dkx"
+PACKAGE_ROOT = REPO_ROOT / "src" / "dkx"
 SCRIPT_ROOT = REPO_ROOT / "scripts"
 EXPECTED_TREE = REPO_ROOT / "tests" / "fixtures" / "source_tree_expected.json"
 CORE_SLIM_INVENTORY = REPO_ROOT / "tests" / "fixtures" / "core_slim_inventory.json"
@@ -61,13 +61,13 @@ INVENTORY_DECISIONS = {
     "extract-pr",
 }
 REQUIRED_CORE_SLIM_SOURCE_OWNERS = {
-    "dkx/drift_kinetic.py",
-    "dkx/solve.py",
-    "dkx/writer.py",
-    "dkx/magnetic_geometry.py",
-    "dkx/moments.py",
-    "dkx/validation/artifacts.py",
-    "dkx/validation/release.py",
+    "src/dkx/drift_kinetic.py",
+    "src/dkx/solve.py",
+    "src/dkx/writer.py",
+    "src/dkx/magnetic_geometry.py",
+    "src/dkx/moments.py",
+    "src/dkx/validation/artifacts.py",
+    "src/dkx/validation/release.py",
 }
 REQUIRED_CORE_SLIM_NONPACKAGE_OWNERS = {
     "examples",

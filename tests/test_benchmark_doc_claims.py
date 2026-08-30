@@ -18,7 +18,7 @@ FIGURE_ROOT = REPO_ROOT / "docs" / "_static" / "figures" / "paper"
 BENCHMARK_STEM = "dkx_fortran_suite_benchmark_summary"
 PUBLIC_STANDALONE_DOCS = [
     REPO_ROOT / "README.md",
-    REPO_ROOT / "dkx" / "README.md",
+    REPO_ROOT / "src" / "dkx" / "README.md",
     REPO_ROOT / "examples" / "README.md",
     REPO_ROOT / "docs" / "index.rst",
     REPO_ROOT / "docs" / "installation.rst",
@@ -241,7 +241,7 @@ def test_public_docs_are_standalone_not_development_log() -> None:
 def test_rejected_benchmark_history_fragments_are_not_in_public_docs_tree() -> None:
     docs_to_scan = [
         REPO_ROOT / "README.md",
-        REPO_ROOT / "dkx" / "README.md",
+        REPO_ROOT / "src" / "dkx" / "README.md",
         REPO_ROOT / "examples" / "README.md",
     ]
     docs_to_scan.extend(

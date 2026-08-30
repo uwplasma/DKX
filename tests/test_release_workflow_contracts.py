@@ -23,7 +23,7 @@ def test_publish_workflow_tests_the_artifact_downloaded_from_pypi() -> None:
 def test_publish_workflow_uses_the_single_version_source() -> None:
     workflow = (ROOT / ".github/workflows/publish-pypi.yml").read_text()
 
-    assert 'Path("dkx/_version.py")' in workflow
+    assert 'Path("src/dkx/_version.py")' in workflow
     assert '["project"]["version"]' not in workflow
     assert 'Path("dkx/__init__.py")' not in workflow
 

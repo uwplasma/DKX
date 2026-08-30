@@ -105,7 +105,7 @@ def test_deleted_legacy_packages_have_no_source_in_this_tree() -> None:
     another checkout cannot mask a reintroduction in this tree.
     """
 
-    root = Path(__file__).resolve().parents[1] / "dkx"
+    root = Path(__file__).resolve().parents[1] / "src" / "dkx"
     for module_name in DELETED_LEGACY_PACKAGES:
         rel = module_name.removeprefix("dkx.").replace(".", "/")
         assert not (root / rel).exists(), module_name
@@ -146,7 +146,7 @@ def test_workflow_optimization_aliases_resolve_to_owner() -> None:
 def test_root_modules_are_explicitly_classified() -> None:
     """Every remaining package-root module has an owner class; no strays."""
 
-    root = Path(__file__).resolve().parents[1] / "dkx"
+    root = Path(__file__).resolve().parents[1] / "src" / "dkx"
     actual = {path.name for path in root.glob("*.py")}
     expected = set(ROOT_MODULE_CLASSIFICATIONS)
     assert actual == expected, (

@@ -63,8 +63,11 @@ Issues = "https://github.com/uwplasma/DKX/issues"
 dkx = "dkx.cli:main"
 
 [tool.setuptools.packages.find]
-where = ["."]
+where = ["src"]
 include = ["dkx*"]
+
+[tool.setuptools.package-dir]
+"" = "src"
 
 [tool.setuptools.package-data]
 dkx = ["validation/*.json"]

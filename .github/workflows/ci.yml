@@ -226,7 +226,7 @@ jobs:
     # `dkx wout_*.nc` shipped broken to pip users twice -- 2.1.1 and again in
     # 2.2.0 -- while CI stayed green both times, because every other job runs
     # with the repository as the working directory. There, the files the wheel
-    # omits (`examples/`, anything under `dkx/` that package-data does not
+    # omits (`examples/`, anything under `src/dkx/` that package-data does not
     # declare) are still on disk, so the import that would fail for a user
     # resolves happily. This job builds the wheel, installs it into a
     # virtualenv holding nothing else, and runs the console script from a
@@ -268,7 +268,7 @@ jobs:
       - name: Every declared package-data file is in both artifacts
         run: |
           # tests/test_wheel_ships_every_package_file.py is the fast gate: it
-          # fails when a file under dkx/ is not declared. This is the slow half
+          # fails when a file under src/dkx/ is not declared. This is the slow half
           # of the same contract -- that a pattern which IS declared actually
           # made it through setuptools into the zip.
           python - <<'PY'
@@ -293,15 +293,25 @@ jobs:
           config = tomllib.loads(Path("pyproject.toml").read_text())
           package_data = config["tool"]["setuptools"]["package-data"]
 
-          expected: set[str] = set()
+          # package-data patterns are relative to the package, and the two
+          # artifacts disagree about where the package sits: a wheel flattens it
+          # to the top level, while an sdist preserves the checkout's src/
+          # layout. Comparing one set of names against both would pass for the
+          # wheel and fail for the sdist, so each is checked in its own shape.
+          checkout: set[str] = set()
           for package, patterns in package_data.items():
               root = package.replace(".", "/")
               for pattern in patterns:
-                  expected.update(glob.glob(f"{root}/{pattern}"))
-          if not expected:
+                  checkout.update(glob.glob(f"src/{root}/{pattern}"))
+          if not checkout:
               raise SystemExit("package-data matched no files in the checkout")
 
-          for artifact, shipped in ((wheels[0], wheel_files), (sdists[0], sdist_files)):
+          installed = {name[len("src/"):] for name in checkout}
+
+          for artifact, shipped, expected in (
+              (wheels[0], wheel_files, installed),
+              (sdists[0], sdist_files, checkout),
+          ):
               missing = sorted(name for name in expected if name not in shipped)
               if missing:
                   raise SystemExit(
