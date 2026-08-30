@@ -27,14 +27,14 @@ jobs:
           import os
           from pathlib import Path
 
-          tree = ast.parse(Path("dkx/_version.py").read_text())
+          tree = ast.parse(Path("src/dkx/_version.py").read_text())
           assignments = [
               node for node in tree.body
               if isinstance(node, ast.Assign)
               and any(isinstance(target, ast.Name) and target.id == "__version__" for target in node.targets)
           ]
           if len(assignments) != 1:
-              raise SystemExit("dkx/_version.py must contain exactly one __version__ assignment")
+              raise SystemExit("src/dkx/_version.py must contain exactly one __version__ assignment")
           version = ast.literal_eval(assignments[0].value)
           if not isinstance(version, str) or not version:
               raise SystemExit("dkx.__version__ must be a non-empty string literal")

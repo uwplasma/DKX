@@ -100,3 +100,29 @@ def resolve_existing_path(
         return ResolveResult(path=found, tried=tuple(tried))
 
     raise FileNotFoundError(f"Unable to resolve existing path for {raw!r}. Tried: {tried}")
+
+
+#: Marker that identifies a DKX source checkout. Chosen because it is the one
+#: file that must exist at the root of a checkout and never inside the
+#: installed package.
+_CHECKOUT_MARKER = "pyproject.toml"
+
+
+def repository_root() -> Path | None:
+    """Return the DKX checkout that contains this package, or None.
+
+    Six call sites used to spell this as ``Path(__file__).resolve().parents[N]``
+    with N hand-counted from the module's depth. Moving the package under
+    ``src/`` made every one of them off by one, silently: they still returned a
+    directory, just the wrong one, so the failure surfaced as "could not find
+    examples/" rather than as a path bug. Searching for a marker cannot go
+    stale that way.
+
+    Returns None when DKX is installed from a wheel with no checkout above it,
+    which is the normal case for a pip user; callers must handle that rather
+    than assume a repository is present.
+    """
+    for candidate in Path(__file__).resolve().parents:
+        if (candidate / _CHECKOUT_MARKER).is_file():
+            return candidate
+    return None

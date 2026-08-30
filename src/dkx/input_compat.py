@@ -8,6 +8,7 @@ from typing import Any, Mapping
 
 from .namelist import Namelist, read_sfincs_input
 from .paths import resolve_existing_path
+from .paths import repository_root
 
 
 def _group_get(group: Mapping[str, Any], *keys: str) -> Any | None:
@@ -113,8 +114,12 @@ def _resolve_equilibrium_file_from_namelist(*, nml: Namelist) -> Path:
     if equilibrium_file is None:
         raise ValueError("Missing geometryParameters.equilibriumFile")
     base_dir = nml.source_path.parent if nml.source_path is not None else None
-    repo_root = Path(__file__).resolve().parents[1]
-    extra = (repo_root / "tests" / "ref", repo_root / "dkx" / "data" / "equilibria")
+    repo_root = repository_root()
+    extra = (
+        (repo_root / "tests" / "ref", repo_root / "src" / "dkx" / "data" / "equilibria")
+        if repo_root is not None
+        else ()
+    )
     geometry_scheme = int(_group_get(geom_params, "geometryScheme") or -1)
 
     raw = str(equilibrium_file).strip().strip('"').strip("'")

@@ -1,6 +1,8 @@
 # dkx Source Layout
 
-This directory contains the importable `dkx` package. The architecture
+This directory contains the importable `dkx` package. It lives under `src/`
+so that a test run from the repository root imports the *installed* package
+rather than the source tree sitting in the working directory. The architecture
 is the canonical stack of flat, physics-named root modules: one input file plus one geometry
 runs through `inputs -> drift_kinetic -> solve -> moments -> writer/console`,
 and the public API/CLI route every supported case through that chain. The

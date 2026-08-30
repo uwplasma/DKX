@@ -80,7 +80,7 @@
    "generator": "tools/publication_figures/generate_fortran_suite_benchmark_summary.py"
   },
   "docs/_static/figures/paper/dkx_high_collisionality_trend_proxy.png": {
-   "generator": "dkx/validation/artifacts.py"
+   "generator": "src/dkx/validation/artifacts.py"
   },
   "docs/_static/figures/paper/dkx_publication_validation_dashboard.png": {
    "generator": "tools/publication_figures/generate_validation_dashboard.py"
@@ -149,25 +149,25 @@
    "unresolved": "no checked-in script names this figure"
   },
   "docs/_static/figures/utils/sfincsScanPlot_1.png": {
-   "generator": "dkx/cli.py"
+   "generator": "src/dkx/cli.py"
   },
   "docs/_static/figures/utils/sfincsScanPlot_2.png": {
-   "generator": "dkx/ambipolar.py"
+   "generator": "src/dkx/ambipolar.py"
   },
   "docs/_static/figures/utils/sfincsScanPlot_21.png": {
-   "generator": "dkx/ambipolar.py"
+   "generator": "src/dkx/ambipolar.py"
   },
   "docs/_static/figures/utils/sfincsScanPlot_3.png": {
-   "generator": "dkx/ambipolar.py"
+   "generator": "src/dkx/ambipolar.py"
   },
   "docs/_static/figures/utils/sfincsScanPlot_4.png": {
-   "generator": "dkx/ambipolar.py"
+   "generator": "src/dkx/ambipolar.py"
   },
   "docs/_static/figures/utils/sfincsScanPlot_5.png": {
-   "generator": "dkx/ambipolar.py"
+   "generator": "src/dkx/ambipolar.py"
   },
   "docs/_static/figures/utils/sfincsScanPlot_combine.png": {
-   "generator": "dkx/ambipolar.py"
+   "generator": "src/dkx/ambipolar.py"
   },
   "docs/_static/figures/vmex_finite_beta/qs_paper_dkx_redl_comparison.png": {
    "generator": "examples/vmex_finite_beta/compare_qs_paper_dkx_redl.py"

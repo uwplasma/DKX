@@ -23,7 +23,7 @@ def test_package_version_has_one_literal_source() -> None:
     }
 
     assignments: list[tuple[Path, ast.Assign]] = []
-    for path in (root / "dkx").rglob("*.py"):
+    for path in (root / "src" / "dkx").rglob("*.py"):
         tree = ast.parse(path.read_text())
         assignments.extend(
             (path, node)
@@ -35,6 +35,6 @@ def test_package_version_has_one_literal_source() -> None:
             )
         )
     assert [path.relative_to(root).as_posix() for path, _ in assignments] == [
-        "dkx/_version.py"
+        "src/dkx/_version.py"
     ]
     assert dkx.__version__ == ast.literal_eval(assignments[0][1].value)

@@ -226,7 +226,7 @@ jobs:
     # `dkx wout_*.nc` shipped broken to pip users twice -- 2.1.1 and again in
     # 2.2.0 -- while CI stayed green both times, because every other job runs
     # with the repository as the working directory. There, the files the wheel
-    # omits (`examples/`, anything under `dkx/` that package-data does not
+    # omits (`examples/`, anything under `src/dkx/` that package-data does not
     # declare) are still on disk, so the import that would fail for a user
     # resolves happily. This job builds the wheel, installs it into a
     # virtualenv holding nothing else, and runs the console script from a
@@ -268,7 +268,7 @@ jobs:
       - name: Every declared package-data file is in both artifacts
         run: |
           # tests/test_wheel_ships_every_package_file.py is the fast gate: it
-          # fails when a file under dkx/ is not declared. This is the slow half
+          # fails when a file under src/dkx/ is not declared. This is the slow half
           # of the same contract -- that a pattern which IS declared actually
           # made it through setuptools into the zip.
           python - <<'PY'
