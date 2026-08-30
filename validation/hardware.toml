@@ -1,17 +1,28 @@
 schema_version = 1
-recorded_at = "2026-08-28"
+recorded_at = "2026-08-30"
+audited_commit = "c958a947505ba31f4e6f80c6fde983ab1db05b71"
+
+# Named measurement hosts for DKX 3. Phase A of plan.md requires the exact
+# laptop CPU and accelerator hardware to be recorded rather than described.
+# `availability` states what this audit observed, not what a host is expected
+# to be: a host that could not be contacted is never recorded as available.
 
 [[host]]
-id = "local-mac-mini-m2"
-role = "development_cpu"
-official_release_baseline = false
+id = "official-laptop-cpu"
+role = "release_cpu"
+official_release_baseline = true
 availability = "available"
-model = "Mac mini Mac14,3"
-processor = "Apple M2"
-cpu_cores = 8
-memory_bytes = 8589934592
-operating_system = "macOS 15.1.1 (24B91)"
-notes = "Useful for P0/P1 development measurements; it is not the named laptop required by D011."
+model = "MacBook Pro Mac15,11"
+processor = "Apple M3 Max"
+cpu_cores = 14
+cpu_performance_cores = 10
+cpu_efficiency_cores = 4
+memory_bytes = 38654705664
+operating_system = "macOS 14.4.1 (23E224)"
+kernel = "Darwin 23.4.0"
+python = "3.11.14"
+last_check = "2026-08-30"
+notes = "Observed directly during the Phase A audit; this is the named laptop the locked product decision requires. All local Phase A measurements in baseline.toml were taken here."
 
 [[host]]
 id = "office-nvidia"
@@ -19,13 +30,20 @@ role = "maintained_gpu"
 official_release_baseline = true
 availability = "unreachable"
 connection = "ssh office"
-last_check = "2026-08-28"
-failure = "TCP connection timed out before host identification"
-notes = "Do not publish new accelerator claims until a bounded matched run records GPU model, memory, driver, JAX, and CUDA versions."
+last_check = "2026-08-30"
+failure = "TCP connection to plasmaworkstation.physics.wisc.edu timed out before host identification"
+expected_accelerator = "2x NVIDIA RTX A4000"
+notes = "The expected accelerator is recorded from the maintained host configuration, not from this audit. Do not publish accelerator claims until a bounded matched run records GPU model, memory, driver, JAX, and CUDA versions from the host itself."
 
 [[host]]
-id = "official-laptop-cpu"
-role = "release_cpu"
-official_release_baseline = true
-availability = "not_identified"
-notes = "D011 requires a named laptop CPU. The current local host is a Mac mini, so exact hardware remains a P0 review input."
+id = "local-mac-mini-m2"
+role = "development_cpu"
+official_release_baseline = false
+availability = "unverified"
+model = "Mac mini Mac14,3"
+processor = "Apple M2"
+cpu_cores = 8
+memory_bytes = 8589934592
+operating_system = "macOS 15.1.1 (24B91)"
+last_check = "2026-08-28"
+notes = "Recorded by the 2026-08-28 audit. It is a different machine from official-laptop-cpu and was not reachable or observed on 2026-08-30, so its availability is unverified rather than available."

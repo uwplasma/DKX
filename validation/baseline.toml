@@ -1,145 +1,540 @@
 schema_version = 1
-artifact_id = "dkx-2.3.1-p0-baseline-2026-08-28"
-recorded_at = "2026-08-28"
+artifact_id = "dkx-2.3.1-phase-a-inventory-2026-08-30"
+recorded_at = "2026-08-30"
+plan = "plan.md"
+plan_phase = "A"
+measurement_host = "official-laptop-cpu"
+
+# Phase A of plan.md freezes an exact current-state inventory. Every number
+# below was measured on the audited commit; nothing here changes runtime, API,
+# or physics. Values that could not be observed are recorded as known gaps
+# rather than estimated.
 
 [repository]
 url = "https://github.com/uwplasma/DKX"
-plan_audit_commit = "0d5606ce97e93a7d84f068c751abf2e7b2af6af3"
-p0_branch_base_commit = "c003ba8e0332509bc07b3a20fddf2b8db2c05ad9"
-p0_branch_base_version = "2.3.1"
-working_tree_clean_before_p0 = true
-tracked_files = 972
-full_clone_bytes = 38232064
-git_pack_bytes = 22158256
-source_checkout_bytes = 2015232
-test_checkout_bytes = 5922816
-docs_checkout_bytes = 4890624
-examples_checkout_bytes = 1609728
+audited_commit = "c958a947505ba31f4e6f80c6fde983ab1db05b71"
+audited_version = "2.3.1"
+audited_branch = "main"
+previous_audit_commit = "c003ba8e0332509bc07b3a20fddf2b8db2c05ad9"
+previous_audit_date = "2026-08-28"
+commits_since_previous_audit = 44
+open_pull_requests = 0
+open_issues = 0
+tracked_files = 1109
+full_clone_bytes = 38227419
+git_store_bytes = 23436283
+working_tree_bytes = 14791136
+tracked_media_bytes = 3216480
+clone_command = "git clone https://github.com/uwplasma/DKX"
+notes = "Cloning the local development checkout instead of the remote reports about 88 MiB because that checkout carries extra refs and reflogs. The enforceable number is the fresh clone from origin recorded here."
 
-[repository.drift]
-summary = "The planning audit targeted DKX 2.3.0; P0 starts from DKX 2.3.1."
-merged_since_audit = [
-  "PR #68: stalled tier-2 solve escalation",
-  "PR #69: DKX 2.3.1 release",
-]
-open = ["PR #67: clean installed-wheel smoke test (P1.1 candidate)"]
-closed_unmerged = ["PR #66: stale workflow-browser expectation; superseded on main"]
+[repository.branch_protection]
+audited_at = "2026-08-30"
+enforce_admins = true
+required_status_checks = false
+required_pull_request_reviews = false
+required_signatures = false
+required_linear_history = false
+allow_force_pushes = true
+allow_deletions = false
+restrictions = "push restricted to rogeriojorge"
+finding = "Twenty-one hosted checks pass on the audited commit, but none of them is a required status check. Green CI is currently advisory, not enforced."
 
 [source]
-python_files = 58
-python_lines = 44931
-test_python_files = 154
-test_python_lines = 37779
-explicit_jit_call_sites = 11
-compilation_family_model = "absent"
+python_files = 63
+python_lines = 51230
+files_over_1200_lines = 15
+files_over_1800_lines = 7
+largest_files = [
+  "dkx/drift_kinetic.py:2630",
+  "dkx/solve.py:2539",
+  "dkx/magnetic_geometry.py:2368",
+  "dkx/validation/release.py:2347",
+  "dkx/workflows/optimization.py:2021",
+  "dkx/multigrid.py:1895",
+  "dkx/phase_space.py:1865",
+]
+budget_files = 35
+budget_lines = 45000
+budget_files_exceeded_by = 28
+budget_lines_exceeded_by = 6230
+layout = "repository-root dkx/, not src/dkx"
 ownership_map = "dkx/README.md"
-legacy_inventory = "tests/fixtures/core_slim_inventory.json"
+
+[source.import_side_effects]
+imports_jax_backend = true
+heavy_modules_imported = ["jax", "jaxlib", "numpy"]
+environment_variables_mutated = [
+  "TF_CPP_MIN_LOG_LEVEL",
+  "NPROC",
+  "_DKX_NPROC_DEFAULTED",
+  "JAX_COMPILATION_CACHE_DIR",
+  "JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS",
+  "JAX_PERSISTENT_CACHE_MIN_ENTRY_SIZE_BYTES",
+  "TPU_SKIP_MDS_QUERY",
+]
+creates_cache_directory = true
+cache_directory = "${HOME}/.cache/dkx/jax_compilation_cache"
+import_wall_seconds = 0.463
+bare_interpreter_wall_seconds = 0.042
+requirement = "plan.md section 6.4 requires an inert import; none of the seven mutations above is currently avoidable by a library user."
+
+[tests]
+collected = 1721
+selected_for_pull_request_gate = 1700
+slow_marked_deselected = 21
+test_python_files = 182
+test_python_lines = 42713
+target_test_modules = 12
+dated_or_campaign_directories = [
+  "tests/gpu_solver_path_cases_2026-04-28",
+  "tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas",
+  "tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak",
+]
+
+[tests.local_run]
+host = "official-laptop-cpu"
+environment = "clean virtual environment, wheel-installed dependencies, CI environment variables"
+gate_command = "python -m pytest -q -n 4 --dist=loadscope -m 'not slow'"
+gate_passed = 1675
+gate_skipped = 27
+gate_failed = 0
+gate_seconds = 577.77
+slow_command = "python -m pytest -q -n 2 --dist=loadscope -m slow"
+slow_passed = 17
+slow_skipped = 6
+slow_failed = 0
+slow_seconds = 159.56
+total_passed = 1692
+total_skipped = 33
+total_failed = 0
+docs_command = "sphinx -W -b html docs <temporary-output>"
+docs_result = "build succeeded, warning-clean"
+previously_recorded_failures_not_reproduced = [
+  "GAP-P0-004 constraintScheme=4 tier-2 gradient finite-difference tolerance",
+  "GAP-P0-005 bounce-averaged surrogate speed assertion",
+]
+notes = "The 2026-08-28 baseline recorded two local failures on local-mac-mini-m2 with jax 0.10.2 and solvax 0.17.0. Neither reproduces here on official-laptop-cpu with solvax 0.20.0. GAP-P0-005 was already described as timing-sensitive, so a faster host is a plausible reason rather than a fix; the assertion remains a wall-clock threshold and is a flakiness risk on slower machines."
+
+[coverage]
+hosted_gate_percent = 80
+hosted_measured_line_percent = 90
+hosted_statements = 20266
+hosted_missing_statements = 1937
+hosted_shards = 13
+hosted_branch_coverage_measured = false
+hosted_run_id = 33292524627
+target_percent = 100
+ratchet = [90, 95, 98, 100]
+local_command = "python -m pytest -q -n 4 --dist=loadscope -m 'not slow' --cov=dkx --cov-branch"
+local_statements = 20266
+local_covered_lines = 18335
+local_missing_lines = 1931
+local_excluded_lines = 45
+local_line_percent = 90.47
+local_branches = 6124
+local_covered_branches = 4794
+local_missing_branches = 1330
+local_partial_branches = 950
+local_branch_percent = 78.28
+local_combined_percent = 87.64
+gap_to_target_statements = 1931
+gap_to_target_branches = 1330
+lowest_covered_modules = [
+  "dkx/bootstrap.py:56.4",
+  "dkx/validation/release.py:63.8",
+  "dkx/representative.py:76.0",
+  "dkx/multigrid.py:78.6",
+  "dkx/er.py:80.8",
+  "dkx/magnetic_geometry.py:81.0",
+]
+notes = "Hosted CI measures lines only and reports 90%. Adding branch coverage locally on the same selection gives 78.28% branch coverage and 87.64% combined. plan.md section 7.1 requires 100% line and branch coverage of stable reachable code, so the branch number, not the hosted line number, is the real distance to the target."
 
 [public_api]
-canonical_python = ["dkx.run", "dkx.plot", "dkx.RunResult"]
-canonical_cli = ["dkx"]
-compatibility_inputs = ["SFINCS namelist"]
-compatibility_outputs = ["SFINCS HDF5", "NetCDF using SFINCS-compatible names"]
-native_case_model = "absent"
-native_result_schema = "absent"
+module_exports = 46
+resolvable_public_names = 56
+names_exported_without_all = ["RESULT_SCHEMA_VERSION", "Result"]
+names_in_all_but_not_dir = ["run", "__version__"]
+leaked_internal_names = [
+  "annotations",
+  "api",
+  "cache_override",
+  "config",
+  "default_cache_dir",
+  "inputs",
+  "os",
+  "result",
+  "tempfile",
+  "xdg_cache",
+]
+run_is_callable_module = true
+run_module_class = "dkx.run._CallableModule"
+canonical_python_workflow_executes = true
+canonical_python_workflow_check = "dkx.Case.from_file(examples/native/analytic_tokamak_profile.toml) -> dkx.run(case) returns dkx.result.Result with print_summary, save, and plot. No runtime is recorded here because the check ran on a contended host; performance baselines belong to plan.md Phase G."
+
+[public_api.native]
+symbols = [
+  "Case",
+  "CaseValidationError",
+  "ConvergenceConfig",
+  "ElectricFieldConfig",
+  "GeometryConfig",
+  "OutputConfig",
+  "ParallelConfig",
+  "PhysicsConfig",
+  "RESULT_SCHEMA_VERSION",
+  "ResolutionConfig",
+  "Result",
+  "RunConfig",
+  "ScanAxis",
+  "ScanConfig",
+  "SolverConfig",
+  "SpeciesConfig",
+  "case_json_schema",
+  "run",
+]
+
+[public_api.compatibility]
+symbols = [
+  "SfincsInput",
+  "load_sfincs_input",
+  "monoenergetic_database",
+  "read_output",
+  "run_ambipolar_brent",
+  "run_from_namelist",
+  "run_monoenergetic_database",
+  "run_profile",
+  "run_transport_matrix",
+  "write_output",
+]
+note = "Every public run_* entry point except run() takes a SFINCS namelist path or SolveInputs. plan.md section 5.2 moves these under dkx.compat.sfincs."
+
+[public_api.expert]
+symbols = [
+  "GeometryState",
+  "GridState",
+  "OperatorState",
+  "OutputSchema",
+  "PreconditionerState",
+  "SolverOptions",
+  "SolverResult",
+  "ambipolar_er",
+  "batched_er_scan",
+  "batched_solve",
+  "build_impurity_plasma",
+  "classical_impurity_flux",
+  "find_ambipolar_er",
+  "plot",
+]
+
+[public_api.duplicate_facade]
+symbols = ["BenchmarkReport", "SolveInputs", "TransportResult"]
+action = "plan.md section 5.3 retires or merges these into Case/Result."
+
+[public_api.runtime]
+symbols = ["initialize_distributed_runtime_from_env", "require_float64"]
+action = "plan.md section 5.3 moves these behind an explicit dkx.runtime.configure()."
+
+[cli]
+program = "dkx"
+subcommands = 14
+native_subcommands = ["schema", "validate"]
+compatibility_subcommands = [
+  "ambipolar",
+  "ambipolar-solve",
+  "compare-h5",
+  "dump-h5",
+  "monoenergetic-database",
+  "plot-output",
+  "postprocess-upstream",
+  "run-fortran",
+  "scan-er",
+  "solve-v3",
+  "transport-matrix-v3",
+  "write-output",
+]
+implicit_forms = ["dkx INPUT.namelist --out OUTPUT", "dkx --plot PATH"]
+target_subcommands = [
+  "doctor",
+  "schema",
+  "validate",
+  "run",
+  "scan",
+  "roots",
+  "converge",
+  "plot",
+  "inspect",
+  "convert",
+  "compare",
+]
+finding = "There is no CLI command that executes a native Case. Native execution is Python-only; validate and schema are the only native commands."
+
+[examples]
+tracked_files = 202
+directories = [
+  "1_basics",
+  "2_equilibria",
+  "3_gradients",
+  "autodiff",
+  "data",
+  "getting_started",
+  "native",
+  "optimization",
+  "sfincs_examples",
+  "transport",
+  "tutorials",
+  "vmex_finite_beta",
+]
+sfincs_examples_files = 113
+native_toml_examples = 5
+native_python_examples = 0
+target_directories = 9
+finding = "Native TOML cases exist without paired native Python scripts, and the SFINCS example gallery is the largest example tree."
+
+[docs]
+tracked_files = 172
+toctree_entries = 39
+theme = "sphinx_rtd_theme with alabaster fallback"
+target_theme = "furo + myst-parser"
+readme_lines = 347
+target_readme_lines = 250
+landing_page_identity = "namelist-first SFINCS-in-JAX"
+documentation_url = "https://sfincs-jax.readthedocs.io/"
+non_user_pages_in_navigation = [
+  "development_roadmap",
+  "release_checklist",
+  "research_lanes",
+  "paper_figures",
+  "upstream_docs",
+  "fortran_examples",
+]
 
 [dependencies]
-python_floor = "3.10"
+declared_python_floor = "3.10"
+accepted_python_floor = "3.11"
 direct_runtime = ["jax", "numpy>=2.1", "scipy", "h5py", "netCDF4", "matplotlib", "solvax>=0.19.0"]
+conditional_runtime = ["tomli>=1.1.0; python_version < '3.11'"]
 documentation = ["sphinx", "sphinx-rtd-theme"]
-local_solvax_commit = "d42b7285a388c04fbfbc33cdc17d00bcc51d6a51"
+missing_for_plan = ["rich", "myst-parser", "furo"]
+no_op_extras = ["structured"]
 environment_python = "3.11.14"
 environment_jax = "0.10.2"
 environment_jaxlib = "0.10.2"
-environment_solvax = "0.17.0"
+environment_numpy = "2.4.6"
+environment_scipy = "1.17.1"
+environment_solvax = "0.20.0"
+environment_sphinx = "9.0.4"
+local_solvax_commit = "5a49926"
 
 [package_size]
 limit_bytes = 20971520
+policy = "validation/package_size_contract.toml"
 wheel_file = "dkx-2.3.1-py3-none-any.whl"
-wheel_bytes = 530476
-wheel_sha256 = "28acc7a4c66839e15e1c2f64bf9d3ab55eb2c4741a2f3d5d48924a8519c99414"
+wheel_bytes = 584569
+wheel_sha256 = "393c011659cfb8c92180d2d6961b949a4c8b25511578aff879391b5014d3fb79"
 sdist_file = "dkx-2.3.1.tar.gz"
-sdist_bytes = 863097
-sdist_sha256 = "296ad419e5c22b8c428b9a3051db9b717bc5c003f1abba1c9178dd64a7304b03"
-installed_owned_files = 220
-installed_owned_bytes = 3399007
+sdist_bytes = 953403
+sdist_sha256 = "a417e0a23c2f900c73ecd865dbd45f18692c84e67dbc4fec5a49d4e9bf32d147"
+wheel_owned_files = 64
+wheel_owned_uncompressed_bytes = 2124679
+installed_owned_bytes = 4897258
+tracked_worktree_bytes = 14791136
+tracked_media_bytes = 3216480
 wheel_passes = true
 sdist_passes = true
 installed_owned_passes = true
 full_clone_passes = false
-notes = "The fresh full clone is about 36.46 MiB and exceeds D012; P1 must reduce history/media or revise the enforceable mechanism."
-
-[package_size.p1_release_contract_audit]
-base_commit = "5d7fd8c5f51d251b7377c246cc7cf15291f0738a"
-tracked_worktree_bytes = 13672726
-tracked_media_bytes = 3216480
-wheel_bytes = 532212
-sdist_bytes = 871496
-installed_owned_bytes_including_bytecode = 4373999
-fresh_main_clone_bytes = 36025713
-fresh_main_git_store_bytes = 22378106
-fresh_main_working_tree_bytes = 13647607
-simulated_one_commit_clone_bytes = 20475758
-simulated_ten_commit_clone_bytes = 21181153
-ordinary_artifact_gates_pass = true
-full_clone_passes = false
-notes = "The full-clone failure is structural: Git data alone exceeds D012. The one-commit result is a local simulation, not authorization or a proposed force-push procedure."
+twine_check = "passed"
+notes = "installed_owned_bytes is the DKX package plus dist-info after a clean wheel install, including bytecode, as validation/package_size_contract.toml defines it. The fresh clone is 36.46 MiB; its Git object store alone is 22.35 MiB, so the full-clone gate cannot pass without an approved history rewrite."
 
 [ci]
-main_commit = "c003ba8e0332509bc07b3a20fddf2b8db2c05ad9"
-ci_run_id = 33006224705
-ci_complete_seconds = 542
-ci_conclusion = "success"
-docs_run_id = 33006224762
-docs_complete_seconds = 61
-docs_conclusion = "success"
+workflows = ["ci.yml", "docs.yml", "production-benchmark-inputs.yml", "publish-pypi.yml"]
+ci_jobs = ["coverage", "coverage-report", "examples-smoke", "external-data-smoke", "python-floor", "workflow-lint", "wheel-install", "tests"]
+checks_on_audited_commit = 21
+checks_conclusion = "success"
+ci_run_id = 33292524627
+ci_complete_seconds = 525
+docs_run_id = 33292524626
+docs_complete_seconds = 54
+python_floor_job_version = "3.10"
+coverage_shards = 13
+target_coverage_shards = "4-6"
 
 [validation]
-current_parity_summary = "README.md and docs/parity.rst"
 capability_registry = "validation/capabilities.toml"
-benchmark_schema = "validation/benchmark_schema.toml"
 hardware_registry = "validation/hardware.toml"
-local_full_test_status = "1496 passed, 22 skipped, 2 failed in 3068.06 s"
-local_full_test_command = "python -m pytest -q"
-local_full_test_seconds = 3068.06
-local_docs_status = "passed with warnings treated as errors"
-local_docs_command = "sphinx-build -W -b html docs <temporary-output>"
-scientific_artifact_refresh = "pending"
-notes = "P0 records the current checked-in reference inventory without changing physics. The two full-suite failures are recorded below; later evidence bundles must pin input/output checksums and include unsuccessful external-code runs."
+benchmark_schema = "validation/benchmark_schema.toml"
+package_size_contract = "validation/package_size_contract.toml"
+tracked_files = 77
+campaign_summary_json_files = 20
+audit_scripts = 17
+paper_benchmark_scripts = 30
+audit_script_directory = "tools/paper_benchmarks"
+one_summary_one_script_one_test = true
+capability_entries = 21
+capability_registry_baseline_commit = "c003ba8e0332509bc07b3a20fddf2b8db2c05ad9"
+capabilities_in_plan_section_12_without_a_registry_entry = [
+  "radial branch continuation and events",
+  "W7-X admitted roots",
+  "tangential magnetic drifts",
+  "momentum correction",
+  "impurity transport",
+  "collocation/multigrid alternate route (multigrid half only)",
+]
+notes = "Each of the 20 campaign summaries has its own audit script and its own test module, and 17 of the 30 tools/paper_benchmarks scripts exist only to audit one summary. The registry still carries the 2026-08-28 baseline commit and does not name every capability plan.md section 12 tracks. plan.md Phase B replaces all of this with one registry and one generic runner; Phase A only records the state."
+artifacts_without_a_named_generator = [
+  "validation/full_kinetic_sfincs_finite_er_v1.json",
+  "validation/full_kinetic_sfincs_stellarator_v1.json",
+  "validation/w7x_admitted_grid_uniform_probe_no_go_v1.json",
+]
 
-[validation.installed_wheel_pr67]
-status = "passed"
-python = "3.11"
-offline = true
-outside_checkout = true
-complete_seconds = 28.9
-monoenergetic_coefficients = 6
-ambipolar_roots = 2
-figure_bytes = 221095
-host_id = "local-mac-mini-m2"
-notes = "Local rebase verification for PR #67; GitHub wheel-install is the maintained Linux gate."
+[[validation.artifact]]
+file = "validation/ambipolar_joint_pitch_speed_v1.json"
+bytes = 6956
+tests = ["tests/test_ambipolar_joint_pitch_speed.py"]
+generator = ["tools/paper_benchmarks/audit_ambipolar_joint_pitch_speed.py"]
+
+[[validation.artifact]]
+file = "validation/ambipolar_joint_speed_zeta_tail_v1.json"
+bytes = 8826
+tests = ["tests/test_ambipolar_joint_speed_zeta_tail.py", "tests/test_native_physical_flux_sfincs.py"]
+generator = ["tools/paper_benchmarks/audit_ambipolar_joint_speed_zeta_tail.py"]
+
+[[validation.artifact]]
+file = "validation/ambipolar_phase_space_axes_v1.json"
+bytes = 49858
+tests = ["tests/test_ambipolar_phase_space_axes.py"]
+generator = ["tools/paper_benchmarks/audit_ambipolar_phase_space_axes.py"]
+
+[[validation.artifact]]
+file = "validation/ambipolar_phase_space_ladder_v1.json"
+bytes = 35171
+tests = ["tests/test_ambipolar_phase_space_ladder.py"]
+generator = ["tools/paper_benchmarks/audit_ambipolar_phase_space_ladder.py"]
+
+[[validation.artifact]]
+file = "validation/ambipolar_pitch_budget_v1.json"
+bytes = 22411
+tests = ["tests/test_ambipolar_pitch_budget.py"]
+generator = ["tools/paper_benchmarks/audit_ambipolar_pitch_budget.py"]
+
+[[validation.artifact]]
+file = "validation/ambipolar_pitch_combined_v1.json"
+bytes = 7576
+tests = ["tests/test_ambipolar_pitch_combined.py"]
+generator = ["tools/paper_benchmarks/audit_ambipolar_pitch_combined.py"]
+
+[[validation.artifact]]
+file = "validation/ambipolar_pitch_explicit_groups_v1.json"
+bytes = 22390
+tests = ["tests/test_ambipolar_pitch_explicit_groups.py"]
+generator = ["tools/paper_benchmarks/audit_ambipolar_pitch_explicit_groups.py"]
+
+[[validation.artifact]]
+file = "validation/ambipolar_pitch_speed_groups_v1.json"
+bytes = 17957
+tests = ["tests/test_ambipolar_pitch_speed_groups.py"]
+generator = ["tools/paper_benchmarks/audit_ambipolar_pitch_speed_groups.py"]
+
+[[validation.artifact]]
+file = "validation/ambipolar_selected_tail_bound_v1.json"
+bytes = 4414
+tests = ["tests/test_ambipolar_selected_tail_bound.py"]
+generator = ["tools/paper_benchmarks/audit_ambipolar_selected_tail_bound.py"]
+
+[[validation.artifact]]
+file = "validation/ambipolar_speed_local_pitch_v1.json"
+bytes = 7292
+tests = ["tests/test_ambipolar_speed_local_pitch.py"]
+generator = ["tools/paper_benchmarks/audit_ambipolar_speed_local_pitch.py"]
+
+[[validation.artifact]]
+file = "validation/full_kinetic_sfincs_finite_er_v1.json"
+bytes = 12670
+tests = ["tests/test_full_kinetic_sfincs_finite_er_validation.py"]
+generator = []
+
+[[validation.artifact]]
+file = "validation/full_kinetic_sfincs_stellarator_v1.json"
+bytes = 13757
+tests = ["tests/test_full_kinetic_sfincs_stellarator_validation.py"]
+generator = []
+
+[[validation.artifact]]
+file = "validation/full_kinetic_sfincs_v1.json"
+bytes = 12044
+tests = ["tests/test_full_kinetic_sfincs_validation.py"]
+generator = ["tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py"]
+
+[[validation.artifact]]
+file = "validation/independent_cross_code_v1.json"
+bytes = 12503
+tests = ["tests/test_independent_cross_code_validation.py"]
+generator = ["tools/paper_benchmarks/audit_independent_cross_code_validation.py"]
+
+[[validation.artifact]]
+file = "validation/native_ambipolar_profile_v1.json"
+bytes = 20154
+tests = ["tests/test_native_ambipolar_profile_certificate.py", "tests/test_native_physical_flux_sfincs.py"]
+generator = ["tools/paper_benchmarks/audit_native_ambipolar_profile.py"]
+
+[[validation.artifact]]
+file = "validation/native_physical_flux_sfincs_v1.json"
+bytes = 7850
+tests = ["tests/test_native_physical_flux_sfincs.py"]
+generator = ["tools/paper_benchmarks/audit_native_physical_flux_sfincs.py"]
+
+[[validation.artifact]]
+file = "validation/w7x_admitted_grid_seeded_envelope_v1.json"
+bytes = 5975
+tests = ["tests/test_w7x_admitted_grid_seeded_envelope.py"]
+generator = ["tools/paper_benchmarks/audit_w7x_admitted_grid_seeded_envelope.py"]
+
+[[validation.artifact]]
+file = "validation/w7x_admitted_grid_uniform_probe_no_go_v1.json"
+bytes = 2119
+tests = ["tests/test_seeded_ambipolar_promotion.py"]
+generator = []
+
+[[validation.artifact]]
+file = "validation/w7x_fixed_field_resolution_referee_v1.json"
+bytes = 30976
+tests = ["tests/test_w7x_fixed_field_resolution_referee.py"]
+generator = ["tools/paper_benchmarks/audit_w7x_fixed_field_resolution_referee.py"]
+
+[[validation.artifact]]
+file = "validation/w7x_seeded_bracket_discovery_v1.json"
+bytes = 5066
+tests = ["tests/test_w7x_seeded_bracket_discovery.py"]
+generator = ["tools/paper_benchmarks/audit_w7x_seeded_bracket_discovery.py"]
+
 
 [[known_gap]]
-id = "GAP-P0-001"
-work_item = "P0.5"
-description = "Representative native/SFINCS output, derivative, runtime, and peak-memory artifacts have not yet been regenerated on the official laptop."
+id = "GAP-A-001"
+phase = "A"
+description = "The maintained office NVIDIA host (ssh office) timed out during the audit, so no GPU model, driver, CUDA, or JAX inventory could be observed. validation/hardware.toml records the expected accelerator as configuration, not as measurement."
 
 [[known_gap]]
-id = "GAP-P0-002"
-work_item = "P0.7"
-description = "The maintained office NVIDIA host was unreachable during the audit, so its exact GPU/driver/runtime inventory is pending."
+id = "GAP-A-002"
+phase = "A"
+description = "Branch protection on main declares no required status checks and no required reviews. Twenty-one green checks on the audited commit are advisory. plan.md section 3.4 requires this to be verified and enforced."
 
 [[known_gap]]
-id = "GAP-P0-003"
-work_item = "P0.8"
-description = "Compilation families are implicit; the baseline can only count 11 explicit jit call sites until P3 introduces CompilationFamily."
+id = "GAP-A-003"
+phase = "A"
+description = "A fresh clone from origin is 36.46 MiB against the 20 MiB target. The Git object store alone is 22.35 MiB, so no working-tree reduction can close the gap; only an explicitly approved history rewrite can, and that is Phase I work."
 
 [[known_gap]]
-id = "GAP-P0-004"
-work_item = "P0.5"
-description = "The constraintScheme=4 tier-2 gradient test misses its 1e-5 relative finite-difference tolerance by reaching 2.23055e-5. The failure reproduces unchanged on pristine main at c003ba8."
+id = "GAP-A-004"
+phase = "A"
+description = "Three validation summaries have no named generator script: full_kinetic_sfincs_finite_er_v1.json, full_kinetic_sfincs_stellarator_v1.json, and w7x_admitted_grid_uniform_probe_no_go_v1.json. plan.md section 4.4 requires every claim to name its generating command."
 
 [[known_gap]]
-id = "GAP-P0-005"
-work_item = "P0.5"
-description = "The bounce-averaged 5x speed assertion is timing-sensitive on the M2 host: it failed twice at 4.24x and 4.91x, passed on pristine main, then passed twice on the P0 branch. No runtime source changed."
+id = "GAP-A-005"
+phase = "A"
+description = "validation/capabilities.toml still carries baseline_commit c003ba8e from 2026-08-28 and does not name every capability tracked by plan.md section 12. Phase B rebuilds the registry rather than patching it here."
+
+[[known_gap]]
+id = "GAP-A-006"
+phase = "A"
+description = "Published performance claims in README.md, docs/performance.rst, docs/index.rst, docs/differentiability.rst, and docs/release_notes.rst cite a MacBook with an Apple M4, about 10 cores and 24 GB. No such host exists in validation/hardware.toml and it is not the audited laptop. Every performance number carried forward into DKX 3 must be re-measured on a registered host."

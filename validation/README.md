@@ -1,12 +1,16 @@
 # DKX 3 planning evidence
 
 These machine-readable records freeze the DKX 2.3.1 starting point for the
-DKX 3 roadmap. They are planning and release evidence, not runtime package
-data. Large outputs, profiler traces, and external-code builds stay outside
-Git; later records refer to them by checksum or stable artifact identifier.
+DKX 3 roadmap defined in the repository-root `plan.md`. They are planning and
+release evidence, not runtime package data. Large outputs, profiler traces, and
+external-code builds stay outside Git; later records refer to them by checksum
+or stable artifact identifier.
 
 - `capabilities.toml`: initial capability status and evidence gaps.
-- `baseline.toml`: repository, package, API, CI, and evidence baseline.
+- `baseline.toml`: the Phase A current-state inventory -- repository and
+  branch protection, source and import side effects, tests and coverage,
+  public API and CLI status, examples, docs, dependencies, package sizes, CI,
+  every validation artifact with its generator and tests, and the known gaps.
 - `hardware.toml`: named measurement hosts and availability.
 - `benchmark_schema.toml`: fields required of comparable benchmark rows.
 - `independent_cross_code_v1.json`: the accepted, bounded DSHAPE/NCSX/W7-X
