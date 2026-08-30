@@ -115,6 +115,12 @@ def _cmd_validate_case(args: argparse.Namespace) -> int:
             f"({preflight.retained_bytes_per_surface} B/surface); "
             "runtime not estimated"
         )
+        if preflight.search_strategy == "seeded_brackets":
+            print(
+                "seeded bracket scope: "
+                f"endpoint_counts={list(preflight.search_points_by_surface)}; "
+                "explicit intervals only; unsampled crossings not excluded"
+            )
     return 0
 
 

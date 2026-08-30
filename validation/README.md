@@ -376,3 +376,16 @@ Parallel current is deliberately not promoted. Theta 15 to 19, 19 to 23, and
 particle and heat fluxes. The certificate therefore records
 `parallel_current_status = "refinement_exhausted"` and does not admit a
 whole-profile, ambipolar-root, or bootstrap-current claim.
+
+## Admitted-grid uniform launch no-go
+
+`w7x_admitted_grid_uniform_probe_no_go_v1.json` records the bounded two-surface
+launch attempted after the fixed-field transport grid was admitted. The case
+passed the retained-evidence preflight, but the reusable dense coarse bands
+would require 87.2 GB and their Schur factors 29.1 GB on the 24 GiB host. The
+memory guard correctly selected checkpointed row-on-demand elimination; after
+2551.33 s it had completed no surface and reached 10.21 GB maximum RSS and
+21.88 GB peak process footprint, so the exact process was stopped without a
+result. This is an operational route no-go, not a numerical failure or no-root
+claim. The next route uses independently reviewed low-cost discovery followed
+by explicitly scoped high-resolution seeded-bracket promotion.
