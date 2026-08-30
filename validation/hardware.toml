@@ -47,3 +47,15 @@ memory_bytes = 8589934592
 operating_system = "macOS 15.1.1 (24B91)"
 last_check = "2026-08-28"
 notes = "Recorded by the 2026-08-28 audit. It is a different machine from official-laptop-cpu and was not reachable or observed on 2026-08-30, so its availability is unverified rather than available."
+
+[[host]]
+id = "campaign-mac-mini-m4"
+role = "evidence_generation"
+official_release_baseline = false
+availability = "unverified"
+model = "Mac mini Mac16,10"
+processor = "Apple M4"
+cpu_cores = 10
+memory_bytes = 25769803776
+last_check = "2026-08-30"
+notes = "The host that generated every registered artifact in validation/registry.toml, read out of the artifacts' own environment blocks rather than from prose. It is a third machine, distinct from official-laptop-cpu and local-mac-mini-m2, and it was not reachable during this audit. README.md and docs/performance.rst describe this machine as a MacBook; the artifacts say Mac mini, and the artifacts are the machine-written record."

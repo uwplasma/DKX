@@ -1,0 +1,652 @@
+# DKX 3 validation registry.
+#
+# One entry per registered evidence artifact. plan.md section 7.8 makes this file
+# the single place that binds a claim to its capability, its inputs, its
+# generating command, the artifact it produced, and the limits of what the
+# artifact establishes. `dkx.validation.registry` is the one generic runner that
+# checks every entry; tests/test_validation.py is the one test module that
+# consumes it. Do not add a per-campaign registry, runner, or test module.
+#
+# status vocabulary
+#   accepted          the claim passes its declared gates and is usable evidence
+#   accepted_limited  the claim passes inside an explicitly narrower scope
+#   diagnostic        the run localizes or bounds a problem without admitting a claim
+#   negative_result   the run rules a route or resolution out; kept so it is not retried
+#
+# `capability` must name an entry in capabilities.toml. `claim_scope` must equal
+# the artifact's own claim_scope. `limitations` must equal the artifact's own
+# exclusions. `artifact_sha256` seals the artifact against silent edits.
+
+schema_version = 1
+recorded_at = "2026-08-30"
+registry_commit = "835dfddfea6348c9ff03610afcb36c9fd664c876"
+status_values = ["accepted", "accepted_limited", "diagnostic", "negative_result"]
+
+[[entry]]
+id = "ambipolar_joint_pitch_speed"
+capability = "ambipolar_roots"
+status = "diagnostic"
+claim_scope = "bounded_common_field_joint_pitch_speed_diagnosis"
+claim = "A speed-6 to speed-8 comparison at the same SFINCS pitch-ramp rule and ceiling, followed by a pitch-44 to pitch-52 comparison at speed 8. Both observable gates fail. Full-state modal-tail evidence is retained on a small uniform analytic route; the memory-lean truncated W7-X route explicitly reports the tail unavailable because it zero-pads eliminated modes."
+artifact = "validation/ambipolar_joint_pitch_speed_v1.json"
+artifact_sha256 = "be126820638043eb2b847ae1d278da953702c47db01afda2ac2c5755bd33ac8f"
+artifact_schema = "dkx.ambipolar_joint_pitch_speed.v1"
+audit_script = "tools/paper_benchmarks/audit_ambipolar_joint_pitch_speed.py"
+command = "python tools/paper_benchmarks/audit_ambipolar_joint_pitch_speed.py --artifact validation/ambipolar_joint_pitch_speed_v1.json"
+inputs = [
+  "validation/inputs/analytic_ambipolar_uniform_tail_probe.toml",
+  "validation/inputs/w7x_standard_native_ambipolar_joint_nx6_pitch44_probe.toml",
+  "validation/inputs/w7x_standard_native_ambipolar_joint_nx8_pitch44_probe.toml",
+  "validation/inputs/w7x_standard_native_ambipolar_joint_nx8_pitch52_probe.toml",
+]
+dkx_commit = "b2fdee6e6568d93762cbacbe9a3dd3104487e5bd"
+generated_on_host = "campaign-mac-mini-m4"
+generated_on_host_recorded = "Mac mini, Apple M4, 10 CPU cores, 24 GiB RAM"
+external_commits = { implementation = "5248f62", monkes = "fb5c302efeb191b9a36818bc4ce337623c865938", sfincs = "8df5453472e982df0f6ae005243ce38d57a83711", stellopt = "9177f58c986aa20186f6b8db360fe81cf53137e0", yancc = "6f399a21ecfcc03008e466bb09811a330321b9be" }
+limitations = [
+  "not_phase_space_convergence_validation",
+  "not_full_profile_root_validation",
+  "not_cross_allocation_performance_comparison",
+  "not_independent_cross_code_ambipolar_validation",
+  "not_full_fokker_planck_or_phi1_validation",
+]
+
+[[entry]]
+id = "ambipolar_joint_speed_zeta_tail"
+capability = "ambipolar_roots"
+status = "diagnostic"
+claim_scope = "bounded_common_field_joint_speed_zeta_tail_diagnosis"
+claim = "A fixed-pitch 2x2 speed/zeta matrix at two W7-X surfaces and the common sampled field 8.55 kV/m. Both axes fail the unchanged 2% particle- and heat-flux gates. Selected-tail upper bounds remain finite but are not monotone with zeta, so they are conditioning evidence rather than a convergence oracle."
+artifact = "validation/ambipolar_joint_speed_zeta_tail_v1.json"
+artifact_sha256 = "95b66c0a6acc4a330d3de02e4035e9965f0026764239e880328b59f46ab29ae5"
+artifact_schema = "dkx.ambipolar_joint_speed_zeta_tail.v1"
+audit_script = "tools/paper_benchmarks/audit_ambipolar_joint_speed_zeta_tail.py"
+command = "python tools/paper_benchmarks/audit_ambipolar_joint_speed_zeta_tail.py --artifact validation/ambipolar_joint_speed_zeta_tail_v1.json"
+inputs = [
+  "validation/inputs/w7x_standard_native_ambipolar_joint_nx8_pitch52_tail_bound_probe.toml",
+  "validation/inputs/w7x_standard_native_ambipolar_nx10_zeta37_pitch52_tail_probe.toml",
+  "validation/inputs/w7x_standard_native_ambipolar_nx10_zeta45_pitch52_tail_probe.toml",
+  "validation/inputs/w7x_standard_native_ambipolar_nx8_zeta45_pitch52_tail_probe.toml",
+]
+dkx_commit = "9eb8edee7f5648332dce01e1e1974e65f6feeccd"
+generated_on_host = "campaign-mac-mini-m4"
+generated_on_host_recorded = "Mac mini, Apple M4, 10 CPU cores, 24 GiB RAM"
+external_commits = { implementation = "83473f5", monkes = "fb5c302efeb191b9a36818bc4ce337623c865938", sfincs = "8df5453472e982df0f6ae005243ce38d57a83711", stellopt = "9177f58c986aa20186f6b8db360fe81cf53137e0", yancc = "6f399a21ecfcc03008e466bb09811a330321b9be" }
+limitations = [
+  "not_phase_space_convergence_validation",
+  "not_full_profile_root_validation",
+  "not_cross_code_validation",
+  "not_full_fokker_planck_or_phi1_validation",
+  "not_performance_promotion",
+]
+
+[[entry]]
+id = "ambipolar_phase_space_axes"
+capability = "ambipolar_roots"
+status = "negative_result"
+claim_scope = "bounded_w7x_pas_dkes_theta_pitch_nonconvergence_diagnosis"
+claim = "Separate theta and pitch rungs identify pitch as the dominant failed resolution direction; pitch36-to-40-to-44 does not approach the unchanged root and selected-flux gates."
+artifact = "validation/ambipolar_phase_space_axes_v1.json"
+artifact_sha256 = "34fecc8b0a63e896866ccc6e90761b5430ddfa1128eebbdeb33c6b99277c150c"
+artifact_schema = "dkx.ambipolar_phase_space_axes.v1"
+audit_script = "tools/paper_benchmarks/audit_ambipolar_phase_space_axes.py"
+command = "python tools/paper_benchmarks/audit_ambipolar_phase_space_axes.py --artifact validation/ambipolar_phase_space_axes_v1.json"
+inputs = [
+  "validation/inputs/w7x_standard_native_ambipolar_profile.toml",
+  "validation/inputs/w7x_standard_native_ambipolar_profile_pitch40.toml",
+  "validation/inputs/w7x_standard_native_ambipolar_profile_pitch44.toml",
+  "validation/inputs/w7x_standard_native_ambipolar_profile_theta17.toml",
+]
+dkx_commit = "a042bd58e95a86667185945ab85327241f47eb16"
+generated_on_host = "campaign-mac-mini-m4"
+generated_on_host_recorded = "Mac mini, Apple M4, 10 CPU cores, 24 GB RAM"
+limitations = [
+  "not_phase_space_convergence_validation",
+  "not_zeta_or_speed_convergence_validation",
+  "not_independent_cross_code_ambipolar_validation",
+  "not_full_fokker_planck_ambipolar_validation",
+  "not_experimental_validation",
+  "not_cross_code_performance_validation",
+]
+
+[entry.corruption]
+path = "comparisons.-1.selected_movements.0.heat_flux_scaled_movement"
+operation = "set"
+value = 0.0
+expected_errors = [
+  "compact axes checksum mismatch",
+  "stored axis comparison arithmetic mismatch",
+]
+
+
+[[entry]]
+id = "ambipolar_phase_space_ladder"
+capability = "ambipolar_roots"
+status = "negative_result"
+claim_scope = "bounded_w7x_pas_dkes_phase_space_nonconvergence_evidence"
+claim = "A bounded coarse/reference/fine kinetic-grid ladder preserves the all-root topology but exhausts the configured root and selected-flux movement gates; it is evidence against promotion, not a convergence certificate."
+artifact = "validation/ambipolar_phase_space_ladder_v1.json"
+artifact_sha256 = "52e7834e05d65a1e1f964c6e158599f1fbe02ac2f264a565ec59240c26e9717a"
+artifact_schema = "dkx.ambipolar_phase_space_ladder.v1"
+audit_script = "tools/paper_benchmarks/audit_ambipolar_phase_space_ladder.py"
+command = "python tools/paper_benchmarks/audit_ambipolar_phase_space_ladder.py --artifact validation/ambipolar_phase_space_ladder_v1.json"
+inputs = [
+  "validation/inputs/w7x_standard_native_ambipolar_profile.toml",
+  "validation/inputs/w7x_standard_native_ambipolar_profile_coarse.toml",
+  "validation/inputs/w7x_standard_native_ambipolar_profile_fine.toml",
+]
+dkx_commit = "92d1823a09ed9e59a6497e0965e7a04896ffc208"
+generated_on_host = "campaign-mac-mini-m4"
+generated_on_host_recorded = "Mac mini, Apple M4, 10 CPU cores, 24 GB RAM"
+limitations = [
+  "not_phase_space_convergence_validation",
+  "not_independent_cross_code_ambipolar_validation",
+  "not_full_fokker_planck_ambipolar_validation",
+  "not_experimental_validation",
+  "not_phi1_validation",
+  "not_cross_code_performance_validation",
+  "fine_rung_does_not_refine_zeta_or_speed_beyond_reference",
+]
+
+[entry.corruption]
+path = "comparisons.-1.root_movements.0.electric_field_movement_kV_m"
+operation = "set"
+value = 0.0
+expected_errors = [
+  "compact ladder checksum mismatch",
+  "stored comparison arithmetic mismatch",
+]
+
+
+[[entry]]
+id = "ambipolar_pitch_budget"
+capability = "ambipolar_roots"
+status = "negative_result"
+claim_scope = "bounded_uniform_pitch_route_parity_and_nonconvergence"
+claim = "The native batch memory budget now controls both chunking and each solver route. It preserves the uniform22 roots and observables while cutting process footprint, but uniform22-to-26-to-30 changes root topology and fails every phase-space movement gate."
+artifact = "validation/ambipolar_pitch_budget_v1.json"
+artifact_sha256 = "36c9a76084893503dacc260567651491dee20030742d74a383030fab7dcf2412"
+artifact_schema = "dkx.ambipolar_pitch_budget.v1"
+audit_script = "tools/paper_benchmarks/audit_ambipolar_pitch_budget.py"
+command = "python tools/paper_benchmarks/audit_ambipolar_pitch_budget.py --artifact validation/ambipolar_pitch_budget_v1.json"
+inputs = [
+  "validation/inputs/w7x_standard_native_ambipolar_uniform22_bounded.toml",
+  "validation/inputs/w7x_standard_native_ambipolar_uniform22_full.toml",
+  "validation/inputs/w7x_standard_native_ambipolar_uniform26_bounded.toml",
+  "validation/inputs/w7x_standard_native_ambipolar_uniform30_bounded.toml",
+]
+dkx_commit = ""
+generated_on_host = "campaign-mac-mini-m4"
+generated_on_host_recorded = "Mac mini, Apple M4, 10 CPU cores, 24 GiB RAM"
+external_commits = { bounded_dkx = "f08fd7a1c802b0d860a2d694924d33fd2e52cec0", prior_full_dkx = "2df599f" }
+limitations = [
+  "not_phase_space_convergence_validation",
+  "not_speed_or_zeta_convergence_validation",
+  "not_independent_cross_code_ambipolar_validation",
+  "not_full_fokker_planck_or_phi1_validation",
+  "not_experimental_validation",
+  "not_cross_code_performance_validation",
+]
+
+[entry.corruption]
+path = "comparisons.0.selected_movements.0.heat_flux_scaled_movement"
+operation = "set"
+value = 0.0
+expected_errors = [
+  "compact checksum mismatch",
+  "stored comparison arithmetic mismatch",
+]
+
+
+[[entry]]
+id = "ambipolar_pitch_combined"
+capability = "ambipolar_roots"
+status = "negative_result"
+claim_scope = "bounded_combined_low_intermediate_pitch_diagnosis"
+claim = "Raising low- and intermediate-speed pitch work together preserves [1,3] topology but does not establish convergence; a further intermediate refinement moves Er and both flux observables beyond the unchanged gates."
+artifact = "validation/ambipolar_pitch_combined_v1.json"
+artifact_sha256 = "5bdead533dbc517a23caae294ff0e18a8079ff8d362a1d2e9771f40c2698c13d"
+artifact_schema = "dkx.ambipolar_pitch_combined.v1"
+audit_script = "tools/paper_benchmarks/audit_ambipolar_pitch_combined.py"
+command = "python tools/paper_benchmarks/audit_ambipolar_pitch_combined.py --artifact validation/ambipolar_pitch_combined_v1.json"
+inputs = [
+  "validation/inputs/w7x_standard_native_ambipolar_pitch_combined_pair_bounded.toml",
+  "validation/inputs/w7x_standard_native_ambipolar_pitch_intermediate28_pair_bounded.toml",
+]
+dkx_commit = ""
+generated_on_host = "campaign-mac-mini-m4"
+generated_on_host_recorded = "Mac mini, Apple M4, 10 CPU cores, 24 GiB RAM"
+limitations = [
+  "not_phase_space_convergence_validation",
+  "not_speed_or_zeta_convergence_validation",
+  "not_independent_cross_code_ambipolar_validation",
+  "not_full_fokker_planck_or_phi1_validation",
+  "not_experimental_validation",
+  "not_cross_allocation_performance_comparison",
+]
+
+[[entry]]
+id = "ambipolar_pitch_explicit_groups"
+capability = "ambipolar_roots"
+status = "diagnostic"
+claim_scope = "fixed_high_work_low_intermediate_pitch_diagnosis"
+claim = "Three 129-mode allocations hold the high-speed group at exactly 72 modes. Root topology stays [1,3], but roots and selected fluxes remain sensitive to low/intermediate redistribution."
+artifact = "validation/ambipolar_pitch_explicit_groups_v1.json"
+artifact_sha256 = "eb6ae71fec3e2f2527f3c8fd2aaf52e3da97bd61a9372f31464ea7a95e52bb96"
+artifact_schema = "dkx.ambipolar_pitch_explicit_groups.v1"
+audit_script = "tools/paper_benchmarks/audit_ambipolar_pitch_explicit_groups.py"
+command = "python tools/paper_benchmarks/audit_ambipolar_pitch_explicit_groups.py --artifact validation/ambipolar_pitch_explicit_groups_v1.json"
+inputs = [
+  "validation/inputs/w7x_standard_native_ambipolar_pitch_intermediate_heavy_pair_bounded.toml",
+  "validation/inputs/w7x_standard_native_ambipolar_pitch_low_heavy_pair_bounded.toml",
+  "validation/inputs/w7x_standard_native_ambipolar_ramp36_triplet.toml",
+]
+dkx_commit = "0a793931eccb8dc8c4fd488fe04d642e08fe0cc8"
+generated_on_host = "campaign-mac-mini-m4"
+generated_on_host_recorded = "Mac mini, Apple M4, 10 CPU cores, 24 GiB RAM"
+limitations = [
+  "not_phase_space_convergence_validation",
+  "not_cross_allocation_runtime_comparison",
+  "not_speed_or_zeta_convergence_validation",
+  "not_independent_cross_code_ambipolar_validation",
+  "not_full_fokker_planck_or_phi1_validation",
+  "not_experimental_validation",
+]
+
+[[entry]]
+id = "ambipolar_pitch_speed_groups"
+capability = "ambipolar_roots"
+status = "diagnostic"
+claim_scope = "fixed_work_speed_local_pitch_allocation_diagnosis"
+claim = "Three supported pitch-by-speed rules retain 129, 132, and 133 active modes but produce different ambipolar root topology on a common two-surface W7-X profile pair."
+artifact = "validation/ambipolar_pitch_speed_groups_v1.json"
+artifact_sha256 = "a1fc82b06d63499abd567f05433772260c9e92c4dc21b9d159b91aca70708511"
+artifact_schema = "dkx.ambipolar_pitch_speed_groups.v1"
+audit_script = "tools/paper_benchmarks/audit_ambipolar_pitch_speed_groups.py"
+command = "python tools/paper_benchmarks/audit_ambipolar_pitch_speed_groups.py --artifact validation/ambipolar_pitch_speed_groups_v1.json"
+inputs = [
+  "validation/inputs/w7x_standard_native_ambipolar_quadratic44_pair_bounded.toml",
+  "validation/inputs/w7x_standard_native_ambipolar_ramp36_triplet.toml",
+  "validation/inputs/w7x_standard_native_ambipolar_uniform22_bounded.toml",
+]
+dkx_commit = "6c35aa1c482a2b4dc1e914052dd836852d29ef43"
+generated_on_host = "campaign-mac-mini-m4"
+generated_on_host_recorded = "Mac mini, Apple M4, 10 CPU cores, 24 GiB RAM"
+limitations = [
+  "not_phase_space_convergence_validation",
+  "not_cross_allocation_runtime_comparison",
+  "not_speed_or_zeta_convergence_validation",
+  "not_independent_cross_code_ambipolar_validation",
+  "not_full_fokker_planck_or_phi1_validation",
+  "not_experimental_validation",
+]
+
+[[entry]]
+id = "ambipolar_selected_tail_bound"
+capability = "structured_direct"
+status = "diagnostic"
+claim_scope = "bounded_selected_field_legendre_tail_upper_bound"
+claim = "The memory-lean truncated route replays only each surface's accepted selected field, reconstructs the exact final two active Legendre modes without a full modal state, and retains a rigorous upper bound on the full-state tail ratio. This is supporting truncation evidence, not phase-space convergence."
+artifact = "validation/ambipolar_selected_tail_bound_v1.json"
+artifact_sha256 = "35e7109d440a8c8d3d0b5d1a29f5ff99ffd383cf2763864e9a315a017e4d0940"
+artifact_schema = "dkx.ambipolar_selected_tail_bound.v1"
+audit_script = "tools/paper_benchmarks/audit_ambipolar_selected_tail_bound.py"
+command = "python tools/paper_benchmarks/audit_ambipolar_selected_tail_bound.py --artifact validation/ambipolar_selected_tail_bound_v1.json"
+inputs = []
+dkx_commit = "890f3ea0f737ffd979eda599855ec0282e22f871"
+generated_on_host = "campaign-mac-mini-m4"
+generated_on_host_recorded = "Mac mini, Apple M4, 10 CPU cores, 24 GiB RAM"
+external_commits = { implementation = "744bf8d125107b8d8929ccc40c9a938b4fdaa8c8", monkes = "fb5c302efeb191b9a36818bc4ce337623c865938", sfincs = "8df5453472e982df0f6ae005243ce38d57a83711", stellopt = "9177f58c986aa20186f6b8db360fe81cf53137e0", yancc = "6f399a21ecfcc03008e466bb09811a330321b9be" }
+limitations = [
+  "exact full-state tail ratio on the W7-X truncated route",
+  "phase-space convergence",
+  "whole-profile escalation",
+  "full-Fokker-Planck collisions",
+  "Phi1",
+  "experimental validation",
+]
+
+[[entry]]
+id = "ambipolar_speed_local_pitch"
+capability = "ambipolar_roots"
+status = "diagnostic"
+claim_scope = "common_field_speed_local_pitch_diagnosis"
+claim = "Five narrow W7-X probes at a common 8.55 kV/m evaluation localize the pitch sensitivity first to speed node 3, then show that raising the pitch ceiling exposes unresolved high-speed contributions. No rung is phase-space converged."
+artifact = "validation/ambipolar_speed_local_pitch_v1.json"
+artifact_sha256 = "85f09dc91cff5435156db3f70c6a48b5749eb71d44195a18715267a50ba11f4c"
+artifact_schema = "dkx.ambipolar_speed_local_pitch.v1"
+audit_script = "tools/paper_benchmarks/audit_ambipolar_speed_local_pitch.py"
+command = "python tools/paper_benchmarks/audit_ambipolar_speed_local_pitch.py --artifact validation/ambipolar_speed_local_pitch_v1.json"
+inputs = [
+  "validation/inputs/w7x_standard_native_ambipolar_combined_speed_probe.toml",
+  "validation/inputs/w7x_standard_native_ambipolar_intermediate28_speed_probe.toml",
+  "validation/inputs/w7x_standard_native_ambipolar_node3_33_speed_probe.toml",
+  "validation/inputs/w7x_standard_native_ambipolar_node3_36_speed_probe.toml",
+  "validation/inputs/w7x_standard_native_ambipolar_pitch44_targeted_speed_probe.toml",
+]
+dkx_commit = "30cb93eca96d524504ea5cac6b1c8d4b76b8fbc0"
+generated_on_host = "campaign-mac-mini-m4"
+generated_on_host_recorded = "Mac mini, Apple M4, 10 CPU cores, 24 GiB RAM"
+limitations = [
+  "not_phase_space_convergence_validation",
+  "not_full_profile_root_validation",
+  "not_independent_cross_code_ambipolar_validation",
+  "not_cross_allocation_performance_comparison",
+  "not_full_fokker_planck_or_phi1_validation",
+]
+
+[[entry]]
+id = "full_kinetic_sfincs_finite_er"
+capability = "full_fokker_planck"
+status = "accepted"
+claim_scope = "matched_finite_er_axisymmetric_full_fokker_planck_surface_profile"
+claim = "A matched one-species analytic-tokamak surface at nonzero radial electric field uses physical density and temperature gradients, full linearized Fokker-Planck collisions, full trajectories, and the recommended automatic constraint in pinned SFINCS v3 and DKX on two accepted resolution rungs."
+artifact = "validation/full_kinetic_sfincs_finite_er_v1.json"
+artifact_sha256 = "278f47129ca8785fee7213c3642c1d0d1d83bf7996a6b3f15d7a432bacd4818f"
+artifact_schema = "dkx.full_kinetic_sfincs_finite_er.v1"
+audit_script = "tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py"
+command = "python tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py --artifact validation/full_kinetic_sfincs_finite_er_v1.json"
+inputs = []
+dkx_commit = "cccccc376c95662884cf6e0dd6478a1974ed4f64"
+generated_on_host = "campaign-mac-mini-m4"
+generated_on_host_recorded = "Mac mini, Apple M4, 10 CPU cores, 24 GB RAM"
+external_commits = { sfincs = "8df5453472e982df0f6ae005243ce38d57a83711" }
+limitations = [
+  "not_multispecies_validation",
+  "not_stellarator_full_fokker_planck_validation",
+  "not_er_scan_validation",
+  "not_ambipolar_profile_validation",
+  "not_phi1_validation",
+  "not_experimental_validation",
+  "not_cross_code_performance_validation",
+]
+
+[[entry]]
+id = "full_kinetic_sfincs_stellarator"
+capability = "full_fokker_planck"
+status = "accepted"
+claim_scope = "matched_zero_field_stellarator_full_fokker_planck_surface_profile"
+claim = "A matched one-species W7-X SC1 surface at zero radial electric field uses physical density and temperature gradients, full linearized Fokker-Planck collisions, full trajectories, and the recommended automatic constraint in pinned SFINCS v3 and DKX on two accepted resolution rungs."
+artifact = "validation/full_kinetic_sfincs_stellarator_v1.json"
+artifact_sha256 = "ab154a30db7ac4b7ad19053018f5b6a7244023012163f949240e77302210108b"
+artifact_schema = "dkx.full_kinetic_sfincs_stellarator.v1"
+audit_script = "tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py"
+command = "python tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py --artifact validation/full_kinetic_sfincs_stellarator_v1.json"
+inputs = []
+dkx_commit = "8eaedd40b56eabc8ea8dd995ee096fd6ddeabcda"
+generated_on_host = "campaign-mac-mini-m4"
+generated_on_host_recorded = "Mac mini, Apple M4, 10 CPU cores, 24 GB RAM"
+external_commits = { sfincs = "8df5453472e982df0f6ae005243ce38d57a83711" }
+limitations = [
+  "not_multispecies_validation",
+  "not_finite_er_validation",
+  "not_er_scan_validation",
+  "not_ambipolar_profile_validation",
+  "not_phi1_validation",
+  "not_experimental_validation",
+  "not_cross_code_performance_validation",
+  "not_second_stellarator_family_full_fokker_planck_validation",
+]
+
+[[entry]]
+id = "full_kinetic_sfincs"
+capability = "full_fokker_planck"
+status = "accepted"
+claim_scope = "matched_zero_field_axisymmetric_full_fokker_planck_surface_profile"
+claim = "A matched one-species analytic-tokamak surface with physical density and temperature gradients, full linearized Fokker-Planck collisions, full trajectories, and the recommended automatic constraint is independently solved by pinned SFINCS v3 and DKX on two accepted resolution rungs."
+artifact = "validation/full_kinetic_sfincs_v1.json"
+artifact_sha256 = "a07fbcd03025939e336e5f85949d5c4584721b221bcca5e1588239d1b40f7185"
+artifact_schema = "dkx.full_kinetic_sfincs.v1"
+audit_script = "tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py"
+command = "python tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py --artifact validation/full_kinetic_sfincs_v1.json"
+inputs = []
+dkx_commit = "5d17abd8e9a559402e65b431150a0542bc547177"
+generated_on_host = "campaign-mac-mini-m4"
+generated_on_host_recorded = "Mac mini, Apple M4, 10 CPU cores, 24 GB RAM"
+external_commits = { sfincs = "8df5453472e982df0f6ae005243ce38d57a83711" }
+limitations = [
+  "not_multispecies_validation",
+  "not_stellarator_full_fokker_planck_validation",
+  "not_finite_er_validation",
+  "not_ambipolar_profile_validation",
+  "not_phi1_validation",
+  "not_experimental_validation",
+  "not_cross_code_performance_validation",
+]
+
+[entry.corruption]
+path = "rungs.1.dkx.outputs.FSABFlow"
+operation = "scale"
+value = 1.01
+expected_errors = [
+  "ultra: dkx compact-output checksum mismatch",
+]
+
+
+[[entry]]
+id = "independent_cross_code"
+capability = "monoenergetic"
+status = "accepted_limited"
+claim_scope = "matched_zero_field_mdke_pas_dkes_only"
+claim = "Matched zero-field monoenergetic DKES-normalized coefficients on bounded DSHAPE, NCSX, and W7-X cases agree with the independent references inside a 6% relative tolerance. Every case passes; the rung is bounded and covers pitch-angle scattering with DKES trajectories only."
+artifact = "validation/independent_cross_code_v1.json"
+artifact_sha256 = "7dff9c9f6c8d0ffb030421b8de2b206e9d3c8372e5e50c4d1a96b43f1703ca26"
+artifact_schema = "dkx.independent_cross_code.v1"
+audit_script = "tools/paper_benchmarks/audit_independent_cross_code_validation.py"
+command = "python tools/paper_benchmarks/audit_independent_cross_code_validation.py --artifact validation/independent_cross_code_v1.json"
+inputs = []
+dkx_commit = "ef58bf99c3042b4e7157096d8925701eea485df1"
+generated_on_host = "campaign-mac-mini-m4"
+generated_on_host_recorded = "Apple M4, 24 GiB"
+limitations = [
+  "not_full_fokker_planck",
+  "not_ambipolar_profile_validation",
+  "not_experimental_validation",
+  "not_a_finite_electric_field_comparison",
+  "not_a_cross_code_performance_ranking",
+]
+
+[[entry]]
+id = "native_ambipolar_profile"
+capability = "ambipolar_roots"
+status = "accepted_limited"
+claim_scope = "native_w7x_pas_dkes_whole_profile_workflow_certificate"
+claim = "A physical-unit five-surface W7-X standard-configuration profile retains every PAS/DKES kinetic evaluation, all ambipolar roots, adaptive brackets, selected fluxes, branch events, and one bounded automatic true-residual recovery in native NetCDF."
+artifact = "validation/native_ambipolar_profile_v1.json"
+artifact_sha256 = "c3f1d46b972c76b3088be36afe7914219a85e544e6ec48b6e04e73a513981d74"
+artifact_schema = "dkx.native_ambipolar_profile.v1"
+audit_script = "tools/paper_benchmarks/audit_native_ambipolar_profile.py"
+command = "python tools/paper_benchmarks/audit_native_ambipolar_profile.py --artifact validation/native_ambipolar_profile_v1.json"
+inputs = []
+dkx_commit = "cb1ed04ca7e7f320b9ebbf066157c703a27cde29"
+generated_on_host = "campaign-mac-mini-m4"
+generated_on_host_recorded = "Mac mini, Apple M4, 10 CPU cores, 24 GB RAM"
+external_commits = { sfincs_geometry_source = "8df5453472e982df0f6ae005243ce38d57a83711" }
+limitations = [
+  "not_phase_space_convergence_validation",
+  "not_continuous_branch_event_localization",
+  "not_experimental_validation",
+  "not_full_fokker_planck_ambipolar_validation",
+  "not_phi1_validation",
+  "not_independent_cross_code_ambipolar_validation",
+  "not_second_stellarator_family_validation",
+  "not_cross_code_performance_validation",
+]
+
+[entry.corruption]
+path = "profile.surfaces.0.roots.0.electric_field_kV_m"
+operation = "set"
+value = 0.0
+expected_errors = [
+  "compact profile checksum mismatch",
+]
+
+
+[[entry]]
+id = "native_physical_flux_sfincs"
+capability = "native_case_result"
+status = "accepted"
+claim_scope = "matched_w7x_pas_dkes_fixed_field_native_physical_flux_conversion"
+claim = "A pinned SFINCS v3 solve independently certifies the corrected native psiHat-to-rHat physical flux conversion on one thermal two-species W7-X surface at finite electric field. The comparison covers particle flux, heat flux, parallel current, solver residuals, and the exact ramped pitch allocation; it is not a phase-space convergence, ambipolar-root, full-Fokker-Planck, Phi1, experiment, or performance-equivalence claim."
+artifact = "validation/native_physical_flux_sfincs_v1.json"
+artifact_sha256 = "3959462b0eb31920a63db9f2314c560b44867d19874dc06e1502ec2f8c4d9b7a"
+artifact_schema = "dkx.native_physical_flux_sfincs.v1"
+audit_script = "tools/paper_benchmarks/audit_native_physical_flux_sfincs.py"
+command = "python tools/paper_benchmarks/audit_native_physical_flux_sfincs.py --artifact validation/native_physical_flux_sfincs_v1.json"
+inputs = []
+dkx_commit = "0f11ba2bb0ded34b6708c62543b72c25c6410300"
+generated_on_host = "campaign-mac-mini-m4"
+generated_on_host_recorded = "Mac mini, Apple M4, 10 CPU cores, 24 GiB RAM"
+external_commits = { implementation = "66ac01a42a2ebfee5efd3508d2578af8932f50a8", sfincs = "8df5453472e982df0f6ae005243ce38d57a83711", yancc_review = "6f399a21ecfcc03008e466bb09811a330321b9be" }
+limitations = [
+  "whole-profile phase-space convergence",
+  "ambipolar root agreement",
+  "full Fokker-Planck collisions",
+  "Phi1",
+  "experimental validation",
+  "cross-code performance equivalence",
+]
+
+[entry.corruption]
+path = "conversion.correct_d_dr_hat_to_d_dpsi_hat"
+operation = "scale"
+value = 0.5
+expected_errors = [
+  "correct radial factor mismatch",
+]
+
+
+[[entry]]
+id = "w7x_admitted_grid_seeded_envelope"
+capability = "ambipolar_roots"
+status = "accepted_limited"
+claim_scope = "two_surface_admitted_transport_grid_explicit_seeded_intervals"
+claim = "Two W7-X standard surfaces at the fixed-field-admitted transport grid resolve their explicitly seeded intervals, with a maximum primal residual of 3.0e-14 and cold and warm replays agreeing outside timing. The result is interval-scoped: it makes no global all-root claim and does not exclude unsampled crossings."
+artifact = "validation/w7x_admitted_grid_seeded_envelope_v1.json"
+artifact_sha256 = "2ff960e450ad28c59faceab62427a593889008be6486e075a6df18395dc93209"
+artifact_schema = "dkx.w7x_admitted_grid_seeded_envelope.v1"
+audit_script = "tools/paper_benchmarks/audit_w7x_admitted_grid_seeded_envelope.py"
+command = "python tools/paper_benchmarks/audit_w7x_admitted_grid_seeded_envelope.py validation/w7x_admitted_grid_seeded_envelope_v1.json"
+inputs = [
+  "validation/inputs/w7x_standard_native_ambipolar_admitted_seeded_envelopes.toml",
+  "validation/inputs/w7x_standard_native_ambipolar_admitted_seeded_extension.toml",
+  "validation/inputs/w7x_standard_native_ambipolar_admitted_seeded_final.toml",
+]
+dkx_commit = "8c2010477d67c44e3d34a75592e35fbb90d685c7"
+generated_on_host = "campaign-mac-mini-m4"
+generated_on_host_recorded = "Apple Mac16,10, 24 GiB"
+limitations = [
+  "global exclusion of unsampled crossings",
+  "five-surface whole-profile convergence",
+  "parallel-current or bootstrap-current convergence",
+  "full Fokker-Planck collisions",
+  "Phi1",
+  "experimental validation",
+  "second stellarator family",
+  "cross-code performance equivalence",
+]
+
+[[entry]]
+id = "w7x_admitted_grid_uniform_probe_no_go"
+capability = "ambipolar_roots"
+status = "negative_result"
+claim_scope = "bounded_launch_diagnosis_only"
+claim = "A uniform 17-point all-root search at the admitted high-resolution W7-X grid was stopped after 2551 s and a 21.9 GB peak process footprint with zero surfaces completed. The memory guard behaved correctly and no numerical failure is claimed; the route is operationally infeasible on this host, which is why later work promotes explicit intervals instead."
+artifact = "validation/w7x_admitted_grid_uniform_probe_no_go_v1.json"
+artifact_sha256 = "e670c9b4cf18e3fb3803f650c4d4589e45602937968172da0888335f9e7efc1b"
+artifact_schema = "dkx.w7x_admitted_grid_uniform_probe_no_go.v1"
+audit_script = "tools/paper_benchmarks/audit_w7x_admitted_grid_uniform_probe_no_go.py"
+command = "python tools/paper_benchmarks/audit_w7x_admitted_grid_uniform_probe_no_go.py --artifact validation/w7x_admitted_grid_uniform_probe_no_go_v1.json"
+inputs = []
+dkx_commit = "d929ddf9739c232a5633d9df2888b9d7929f6e20"
+generated_on_host = "campaign-mac-mini-m4"
+generated_on_host_recorded = "Apple Mac16,10, 24 GiB"
+limitations = [
+  "no-root evidence",
+  "ambipolar root or flux result",
+  "whole-profile convergence",
+  "bootstrap-current convergence",
+  "solver numerical failure",
+  "cross-code performance equivalence",
+]
+
+[entry.corruption]
+path = "outcome.uniform_high_grid_launch_admitted"
+operation = "set"
+value = true
+expected_errors = [
+  "uniform_high_grid_launch_admitted must be false",
+]
+
+
+[[entry]]
+id = "w7x_fixed_field_resolution_referee"
+capability = "native_case_result"
+status = "accepted_limited"
+claim_scope = "bounded_fixed_field_pas_dkes_phase_space_and_cross_code_referee"
+claim = "At the W7-X standard rN=0.5 surface and Er=8.55 kV/m, an independently converged SFINCS pitch ladder and matched DKX solve certify cross-code parity. DKX one-axis refinements admit fixed-field particle/heat flux at theta15/zeta85/pitch150/speed8, including a joint pitch180 check, but parallel current remains theta-sensitive through theta29, so no whole-profile or bootstrap-current convergence claim is promoted."
+artifact = "validation/w7x_fixed_field_resolution_referee_v1.json"
+artifact_sha256 = "98d3d3023c122b0b42f0763e976eb937a336d3e6896bcb57244915b1b4f61356"
+artifact_schema = "dkx.w7x_fixed_field_resolution_referee.v1"
+audit_script = "tools/paper_benchmarks/audit_w7x_fixed_field_resolution_referee.py"
+command = "python tools/paper_benchmarks/audit_w7x_fixed_field_resolution_referee.py --artifact validation/w7x_fixed_field_resolution_referee_v1.json"
+inputs = [
+  "validation/inputs/w7x_standard_native_fixed_er_nx8_zeta85_pitch150.toml",
+  "validation/inputs/w7x_standard_pas_dkes_fixed_er_nx8_zeta37_pitch120.input.namelist",
+  "validation/inputs/w7x_standard_pas_dkes_fixed_er_nx8_zeta37_pitch150.input.namelist",
+  "validation/inputs/w7x_standard_pas_dkes_fixed_er_nx8_zeta37_pitch52.input.namelist",
+  "validation/inputs/w7x_standard_pas_dkes_fixed_er_nx8_zeta37_pitch70.input.namelist",
+  "validation/inputs/w7x_standard_pas_dkes_fixed_er_nx8_zeta37_pitch90.input.namelist",
+]
+dkx_commit = "706748dc5752cc1b2f01c0b4c2950074733da0fe"
+generated_on_host = "campaign-mac-mini-m4"
+generated_on_host_recorded = "Mac mini, Apple M4, 10 CPU cores, 24 GiB RAM"
+external_commits = { monkes = "fb5c302efeb191b9a36818bc4ce337623c865938", sfincs = "8df5453472e982df0f6ae005243ce38d57a83711", stellopt = "9177f58c986aa20186f6b8db360fe81cf53137e0", yancc = "6f399a21ecfcc03008e466bb09811a330321b9be" }
+limitations = [
+  "whole-profile phase-space convergence",
+  "ambipolar root agreement",
+  "parallel-current or bootstrap-current convergence",
+  "full Fokker-Planck collisions",
+  "Phi1",
+  "experimental validation",
+  "second stellarator family",
+  "cross-code performance equivalence",
+  "README headline performance",
+]
+
+[entry.corruption]
+path = "outcome.parallel_current_theta_converged"
+operation = "set"
+value = true
+expected_errors = [
+  "parallel_current_theta_converged",
+]
+
+
+[[entry]]
+id = "w7x_seeded_bracket_discovery"
+capability = "ambipolar_roots"
+status = "accepted_limited"
+claim_scope = "bounded_low_resolution_discovery_and_seed_endpoint_replay"
+claim = "A bounded 33-point low-resolution discovery hierarchy proposes candidate ambipolar intervals, and every candidate is independently replayed to a strict sign change at a maximum primal residual of 3.4e-14. Discovery is not promotion: topology and brackets still have to be retested at the admitted theta15/zeta85/pitch150/speed8 grid."
+artifact = "validation/w7x_seeded_bracket_discovery_v1.json"
+artifact_sha256 = "419bb6b09e63155e1cf3ed82a2e99536cea0c7013dcaa6e3c2786ca8c6e4934d"
+artifact_schema = "dkx.w7x_seeded_bracket_discovery.v1"
+audit_script = "tools/paper_benchmarks/audit_w7x_seeded_bracket_discovery.py"
+command = "python tools/paper_benchmarks/audit_w7x_seeded_bracket_discovery.py validation/w7x_seeded_bracket_discovery_v1.json"
+inputs = []
+dkx_commit = "757a2b9b84078668c7d7131aec992b875d8ff437"
+generated_on_host = "campaign-mac-mini-m4"
+generated_on_host_recorded = "Apple Mac16,10, 24 GiB"
+limitations = [
+  "admitted-grid ambipolar roots",
+  "whole-profile convergence",
+  "global exclusion of unsampled crossings",
+  "parallel-current or bootstrap-current convergence",
+  "full Fokker-Planck collisions",
+  "Phi1",
+  "experimental validation",
+  "second stellarator family",
+  "cross-code performance equivalence",
+]
+

@@ -1,16 +1,37 @@
-# DKX 3 planning evidence
+# DKX 3 planning and validation evidence
 
-These machine-readable records freeze the DKX 2.3.1 starting point for the
-DKX 3 roadmap defined in the repository-root `plan.md`. They are planning and
-release evidence, not runtime package data. Large outputs, profiler traces, and
-external-code builds stay outside Git; later records refer to them by checksum
-or stable artifact identifier.
+`registry.toml` is the single index of registered evidence. Every artifact in
+this directory has one entry there naming its capability, its status, the claim
+it makes, the inputs and command that produced it, the checksum that seals it,
+and the limits of what it establishes. One runner checks them all::
 
+    python -m dkx.validation.registry
+
+`tests/test_validation.py` is the one test module that consumes the registry.
+Do not add a per-campaign registry, runner, or test module: add an entry.
+
+Status vocabulary for a registry entry:
+
+- `accepted`: the claim passes its declared gates and is usable evidence.
+- `accepted_limited`: the claim passes inside an explicitly narrower scope.
+- `diagnostic`: the run localizes or bounds a problem without admitting a claim.
+- `negative_result`: the run rules a route or resolution out. These are kept
+  deliberately, so a route that has already been shown to be infeasible is not
+  retried.
+
+The remaining files freeze the DKX 2.3.1 starting point for the DKX 3 roadmap
+defined in the repository-root `plan.md`. They are planning and release
+evidence, not runtime package data. Large outputs, profiler traces, and
+external-code builds stay outside Git; records refer to them by checksum or
+stable artifact identifier.
+
+- `registry.toml`: every registered evidence artifact and its claim boundary.
 - `capabilities.toml`: initial capability status and evidence gaps.
 - `baseline.toml`: the Phase A current-state inventory -- repository and
   branch protection, source and import side effects, tests and coverage,
   public API and CLI status, examples, docs, dependencies, package sizes, CI,
-  every validation artifact with its generator and tests, and the known gaps.
+  and the known gaps. The artifact-to-generator map it used to carry now lives
+  in `registry.toml`.
 - `hardware.toml`: named measurement hosts and availability.
 - `benchmark_schema.toml`: fields required of comparable benchmark rows.
 - `independent_cross_code_v1.json`: the accepted, bounded DSHAPE/NCSX/W7-X

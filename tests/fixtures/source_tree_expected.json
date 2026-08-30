@@ -117,6 +117,7 @@
       "lanes.py",
       "panels.py",
       "policy.py",
+      "registry.py",
       "release.py",
       "series.py"
     ],

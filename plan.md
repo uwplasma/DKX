@@ -1568,7 +1568,7 @@ DKX 3 is complete only when all of the following are true.
 
 Recorded on 2026-08-30 at `main = c958a947505ba31f4e6f80c6fde983ab1db05b71`, release version `2.3.1`. Every number below is measured; the machine-readable form is `validation/baseline.toml` and the measurement host is `official-laptop-cpu` in `validation/hardware.toml`.
 
-**Hosted state.** 21 checks, all green. CI run `33292524627` completes in 525 s; the docs build in 54 s. No open pull requests and no open issues. Branch protection exists but declares **no required status checks and no required reviews**, so green CI is currently advisory rather than enforced.
+**Hosted state.** 21 checks, all green. CI run `33292524627` completes in 525 s; the docs build in 54 s. No open pull requests and no open issues at audit. Branch protection was advisory at audit and is now enforced: `main` takes changes only through a pull request, one approving review is required, and eight checks are required. Admin bypass and force push are deliberately retained so the sole maintainer can merge without self-approval.
 
 **Size.** Fresh clone from origin 36.46 MiB (Git object store 22.35 MiB, working tree 14.11 MiB); wheel 0.56 MiB; sdist 0.91 MiB; installed DKX-owned files 4.67 MiB; `twine check` passes. Only the full clone misses the 20 MiB target, and its Git object store alone already exceeds it. Cloning the local development checkout instead of the remote reports about 88 MiB; that number is an artifact of extra local refs and is not the contract figure.
 
@@ -1578,7 +1578,7 @@ Recorded on 2026-08-30 at `main = c958a947505ba31f4e6f80c6fde983ab1db05b71`, rel
 
 **Tests and coverage.** 1,721 tests collected; the pull-request gate selects 1,700 and defers 21 `slow` tests. A clean-environment local run is green end to end: the gate selection gives 1,675 passed, 27 skipped, 0 failed in 578 s at `-n 4`, and the deferred `slow` selection gives 17 passed, 6 skipped, 0 failed in 160 s. The two failures the 2026-08-28 baseline recorded on the Mac mini do not reproduce here; one of them is a wall-clock threshold and remains a flakiness risk on slower hosts. Hosted CI measures lines only and reports **90%** against an **80%** gate across 13 shards. Measuring branches locally on the same selection gives **90.47% line, 78.28% branch, 87.64% combined** over 20,266 statements and 6,124 branches. The branch number, not the hosted line number, is the real distance to the section 7.1 target. The lowest-covered modules are `dkx/bootstrap.py` (56.4%), `dkx/validation/release.py` (63.8%), and `dkx/representative.py` (76.0%).
 
-**Evidence.** 20 campaign summaries under `validation/`, each with its own audit script and its own test module; 17 of the 30 `tools/paper_benchmarks` scripts exist only to audit one summary. Three summaries have no named generator script at all. The capability registry holds 21 entries but still carries the 2026-08-28 baseline commit and does not name every capability that section 12 tracks. `tests/` holds 182 files and 42,713 lines across three dated campaign directories.
+**Evidence.** 20 campaign summaries under `validation/`. As of the first Phase B slice they are indexed by `validation/registry.toml` and checked by one runner, `dkx.validation.registry`, from one test module, `tests/test_validation.py`; the nineteen per-campaign modules are gone and every entry names a reproducible command. What is not yet done: the 20 summaries are still 20 files rather than a few capability summaries, 17 of the 30 `tools/paper_benchmarks` scripts still exist to audit exactly one of them, the capability registry still carries the 2026-08-28 baseline commit, and `tests/` still holds three dated campaign directories that `dkx/validation/release.py` reads.
 
 **Docs and examples.** 172 documentation files, 39 top-level navigation entries including roadmap, research-lane, release-checklist, and upstream pages; `sphinx-rtd-theme` with an `alabaster` fallback; the landing page is still namelist-first and the documentation URL still says `sfincs-jax`. The docs build is warning-clean under `-W`. 202 example files across 12 directories, 113 of them SFINCS decks; 5 native TOML cases and **0** paired native Python scripts.
 
@@ -1586,11 +1586,16 @@ Recorded on 2026-08-30 at `main = c958a947505ba31f4e6f80c6fde983ab1db05b71`, rel
 
 **Science.** Unchanged by this audit: two admitted-grid W7-X seeded roots near `12.681640625` and `11.533203125 kV/m`, explicit interval-only scope; high-zeta parallel-current convergence is not admitted; the broad uniform all-root route remains an operational no-go.
 
-**Principal engineering blockers.** Duplicated native/legacy public surfaces, import-time runtime mutation, source/test/evidence fragmentation, an 80% line-only coverage gate with no branch gate, unenforced branch protection, legacy-first docs and examples, no native CLI run path, and a full-clone size that cannot pass without a history rewrite.
+**Principal engineering blockers.** Duplicated native/legacy public surfaces, import-time runtime mutation, an 80% line-only coverage gate with no branch gate, legacy-first docs and examples, no native CLI run path, and a full-clone size that cannot pass without a history rewrite. Evidence fragmentation is partly addressed: the registry and its runner exist, the summary and audit-script counts are not yet reduced.
 
 ### Immediate next action
 
-The plan-only pull request that replaces `plan.md` and records this inventory is `plan/current-state-handoff`. After it merges, begin **Phase B evidence/test consolidation**. Do not begin another root-resolution campaign until the common registry and runner exist.
+`plan/current-state-handoff` (PR #107) replaced `plan.md` and recorded this inventory; `validation/consolidate-registry` is the first Phase B slice and adds the common registry and runner. The next two steps, in order:
+
+1. finish Phase B by moving the dated `tests/` campaign directories and raw suite outputs to release assets, rewiring `dkx/validation/release.py` to read them from the registry, and reducing the 20 summaries and 17 single-purpose audit scripts;
+2. then `package/python311-src-runtime`, followed by the native API work that gives the CLI a way to execute a `Case`.
+
+Do not begin another root-resolution campaign before step 1 lands.
 
 The first implementation success metric is not another W7-X number. It is a smaller repository with fewer test/evidence files, preserved scientific assertions, a measured coverage baseline, and a clear route to the DKX 3 installed-package/API refactor.
 
@@ -1602,6 +1607,8 @@ Keep only one row per merged PR or consequential failed hypothesis.
 | --- | --- | --- | --- |
 | 2026-08-30 | Full current-state audit and replacement handoff plan prepared at `c958a947`. | Reviewed current and historical commits/PRs, plan ledger, source owners, native API, CI, docs, examples, tests/evidence, SFINCS/PETSc/MUMPS/SuperLU_DIST/MONKES/YANCC/KNOSOS methods, JAX guidance, and research-software V&V practices. | Merge plan-only current-state PR, then consolidate evidence/tests. |
 | 2026-08-30 | Phase A executed: `plan.md` replaced and the exact current-state inventory recorded at `c958a947`. | `validation/baseline.toml` (repository, branch protection, source, import side effects, tests, coverage, public API, CLI, examples, docs, dependencies, package size, CI, and the 20 validation artifacts with their generators); `validation/hardware.toml` (named laptop observed, office GPU unreachable). Local run green end to end: 1692 passed / 33 skipped / 0 failed; warning-clean `sphinx -W` build. | Merge, enforce required status checks, then start Phase B. |
+| 2026-08-30 | Branch protection enforced on `main`: one required approving review, eight required status checks, pull requests only. Admin bypass and force push are retained so the maintainer can merge without self-approval. | GitHub branch-protection API; `validation/baseline.toml` `[repository.branch_protection]`. | Closes GAP-A-002. |
+| 2026-08-30 | Phase B, first slice: `validation/registry.toml` plus the one generic runner `dkx.validation.registry` replace nineteen per-campaign test modules with `tests/test_validation.py`. Added the missing `audit_w7x_admitted_grid_uniform_probe_no_go.py` so all 20 entries name a command. | 20/20 registry entries pass, including 8 declared corruption probes; test modules 182 -> 163; test lines 42,713 -> 42,284; the new runner is 98% covered. | Second Phase B slice: move the dated `tests/` campaign directories and raw suite outputs to release assets, then reduce the summary count itself. |
 
 Future agents append concise rows here and update **Current checkpoint**. Detailed command logs belong in PR descriptions or registered artifacts, not in this file.
 
