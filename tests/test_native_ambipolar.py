@@ -146,6 +146,58 @@ def test_native_ambipolar_refines_all_roots_and_continues_nearest(monkeypatch):
         )
 
 
+def test_seeded_brackets_refine_only_explicit_intervals(monkeypatch):
+    all_roots = np.asarray([-2.0, -0.5, 1.0])
+
+    def current(field):
+        return np.prod(np.asarray(field)[..., None] - all_roots, axis=-1)
+
+    monkeypatch.setattr("dkx.batch.batched_er_scan", _fake_batch(current))
+    result = _solve(
+        electric_field_bounds_kv_m=(-3.0, 2.0),
+        seed_brackets_kv_m=((-2.25, -1.75), (0.75, 1.25)),
+        previous_root_kv_m=None,
+    )
+
+    np.testing.assert_allclose(
+        [root.electric_field_kv_m for root in result.roots],
+        [-2.0, 1.0],
+        rtol=0.0,
+        atol=1.0e-5,
+    )
+    assert result.status == "bracketed_root"
+    assert result.search_strategy == "seeded_brackets"
+    assert result.search_scope == "explicit_seeded_intervals_only"
+    assert result.evaluation_budget == 64
+    assert len(result.evaluations) <= result.evaluation_budget
+    assert (
+        sum(
+            evaluation.reason == "seeded_bracket_endpoint"
+            for evaluation in result.evaluations
+        )
+        == 4
+    )
+
+    from dkx.execution import _ambipolar_result_arrays
+
+    arrays, dimensions = _ambipolar_result_arrays([result], n_species=2)
+    assert arrays["ambipolar_search_strategy"][0] == "seeded_brackets"
+    assert arrays["ambipolar_search_scope"][0] == "explicit_seeded_intervals_only"
+    assert dimensions["ambipolar_search_scope"] == ("surface",)
+
+
+def test_seeded_brackets_report_partial_and_total_failures(monkeypatch):
+    monkeypatch.setattr("dkx.batch.batched_er_scan", _fake_batch(lambda x: x))
+    partial = _solve(seed_brackets_kv_m=((-1.0, 1.0), (2.0, 3.0)))
+    failed = _solve(seed_brackets_kv_m=((1.0, 2.0),))
+
+    assert len(partial.roots) == 1
+    assert partial.status == "seeded_bracket_partial_failure"
+    assert failed.roots == ()
+    assert failed.status == "seeded_bracket_failed"
+    assert failed.selected.electric_field_kv_m == 1.0
+
+
 def test_native_ambipolar_speed_diagnostics_have_named_axes(monkeypatch):
     monkeypatch.setattr("dkx.batch.batched_er_scan", _fake_batch(lambda x: x))
     result = _solve(search_points=3, find_all_roots=False)

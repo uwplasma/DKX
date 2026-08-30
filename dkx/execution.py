@@ -556,6 +556,8 @@ def _ambipolar_result_arrays(
     batch_chunks = np.empty((n_surface,), dtype=np.int64)
     refinement_status = np.empty((n_surface,), dtype=object)
     evaluation_budget = np.empty((n_surface,), dtype=np.int64)
+    search_strategy = np.empty((n_surface,), dtype=object)
+    search_scope = np.empty((n_surface,), dtype=object)
     n_refinement = max(len(result.refinement) for result in surface_results)
     refinement_level = np.full((n_surface, n_refinement), -1, dtype=np.int64)
     refinement_search_count = np.full((n_surface, n_refinement), -1, dtype=np.int64)
@@ -585,6 +587,8 @@ def _ambipolar_result_arrays(
         batch_chunks[surface_index] = result.batch_chunks
         refinement_status[surface_index] = result.refinement_status
         evaluation_budget[surface_index] = result.evaluation_budget
+        search_strategy[surface_index] = result.search_strategy
+        search_scope[surface_index] = result.search_scope
         for evaluation_index, evaluation in enumerate(result.evaluations):
             scan_field[surface_index, evaluation_index] = evaluation.electric_field_kv_m
             scan_current[surface_index, evaluation_index] = (
@@ -720,6 +724,8 @@ def _ambipolar_result_arrays(
         "electric_field_batch_chunks": batch_chunks,
         "ambipolar_refinement_status": refinement_status,
         "ambipolar_evaluation_budget": evaluation_budget,
+        "ambipolar_search_strategy": search_strategy,
+        "ambipolar_search_scope": search_scope,
         "ambipolar_refinement_level": refinement_level,
         "ambipolar_refinement_search_evaluations": refinement_search_count,
         "ambipolar_refinement_total_evaluations": refinement_total_count,
@@ -802,6 +808,8 @@ def _ambipolar_result_arrays(
         "electric_field_batch_chunks": ("surface",),
         "ambipolar_refinement_status": ("surface",),
         "ambipolar_evaluation_budget": ("surface",),
+        "ambipolar_search_strategy": ("surface",),
+        "ambipolar_search_scope": ("surface",),
         "ambipolar_refinement_level": ("surface", "refinement"),
         "ambipolar_refinement_search_evaluations": ("surface", "refinement"),
         "ambipolar_refinement_total_evaluations": ("surface", "refinement"),
@@ -991,6 +999,12 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
                 convergence_relative_tolerance=case.convergence.relative_tolerance,
                 max_refinements=case.convergence.max_refinements,
                 retain_legendre_tail=case.convergence.retain_legendre_tail,
+                seed_brackets_kv_m=(
+                    case.electric_field.seed_brackets_kV_m[index]
+                    if case.electric_field.search_strategy == "seeded_brackets"
+                    and case.electric_field.seed_brackets_kV_m is not None
+                    else None
+                ),
             )
             ambipolar_surfaces.append(surface_result)
             selected = surface_result.selected
@@ -1172,6 +1186,17 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
             if ambipolar_surfaces
             else None
         ),
+        "ambipolar_search": (
+            {
+                "strategy": case.electric_field.search_strategy,
+                "scope": sorted(
+                    {result.search_scope for result in ambipolar_surfaces}
+                ),
+                "unsampled_crossings_excluded": False,
+            }
+            if ambipolar_surfaces
+            else None
+        ),
         "ambipolar_selection": (
             "continue the selected branch identity; nearest zero on the first surface and nearest prior field after branch loss"
             if ambipolar_surfaces and case.electric_field.continue_branches
@@ -1268,6 +1293,13 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
         "peak_host_memory_bytes": _peak_host_memory_bytes(),
     }
     warnings = []
+    if any(
+        result.search_scope == "explicit_seeded_intervals_only"
+        for result in ambipolar_surfaces
+    ):
+        warnings.append(
+            "Ambipolar promotion searched only explicit seeded intervals; unsampled crossings outside those intervals are not excluded."
+        )
     if any(
         result.refinement_status == "no_bracket_observed"
         for result in ambipolar_surfaces

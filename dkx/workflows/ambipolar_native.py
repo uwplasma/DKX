@@ -20,6 +20,8 @@ class AmbipolarEvidencePreflight:
     profile_evaluations: int
     retained_bytes_per_surface: int
     retained_profile_bytes: int
+    search_strategy: str = "uniform"
+    search_points_by_surface: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -112,6 +114,8 @@ class NativeAmbipolarSurface:
     branch_events: tuple[BranchEvent, ...] = ()
     selected_branch_id: str = ""
     selection_reason: str = "not_assigned"
+    search_strategy: str = "uniform"
+    search_scope: str = "global_uniform_domain"
 
 
 def _classify_root(electric_field_kv_m: float, slope: float) -> str:
@@ -183,14 +187,34 @@ def preflight_ambipolar_case(case: Any) -> AmbipolarEvidencePreflight:
 
     if case.run.workflow != "ambipolar_profile":
         raise ValueError("ambipolar preflight requires workflow='ambipolar_profile'")
-    hierarchy_points, evaluations = _evaluation_budget(
-        search_points=case.electric_field.search_points,
-        max_root_iterations=case.electric_field.max_root_iterations,
-        find_all_roots=case.electric_field.find_all_roots,
-        convergence_enabled=case.convergence.enabled,
-        max_refinements=case.convergence.max_refinements,
-    )
-    evaluations += int(case.convergence.retain_legendre_tail)
+    strategy = case.electric_field.search_strategy
+    if strategy == "seeded_brackets":
+        seeds = case.electric_field.seed_brackets_kV_m
+        if seeds is None:
+            raise ValueError("seeded bracket preflight requires seed_brackets_kV_m")
+        search_points_by_surface = tuple(
+            len({float(value) for bracket in surface for value in bracket})
+            for surface in seeds
+        )
+        evaluations_by_surface = tuple(
+            points
+            + len(surface) * int(case.electric_field.max_root_iterations)
+            + int(case.convergence.retain_legendre_tail)
+            for points, surface in zip(search_points_by_surface, seeds)
+        )
+        hierarchy_points = max(search_points_by_surface)
+    else:
+        hierarchy_points, evaluations = _evaluation_budget(
+            search_points=case.electric_field.search_points,
+            max_root_iterations=case.electric_field.max_root_iterations,
+            find_all_roots=case.electric_field.find_all_roots,
+            convergence_enabled=case.convergence.enabled,
+            max_refinements=case.convergence.max_refinements,
+        )
+        evaluations += int(case.convergence.retain_legendre_tail)
+        search_points_by_surface = (hierarchy_points,) * len(case.geometry.surfaces)
+        evaluations_by_surface = (evaluations,) * len(case.geometry.surfaces)
+    evaluations = max(evaluations_by_surface)
     if evaluations > _MAX_RETAINED_EVALUATIONS:
         raise ValueError(
             "native ambipolar refinement preflight exceeds 100000 retained "
@@ -199,14 +223,18 @@ def preflight_ambipolar_case(case: Any) -> AmbipolarEvidencePreflight:
         )
     species_count = max(1, len(case.species))
     speed_count = max(1, int(case.resolution.speed))
-    surface_count = max(1, len(case.geometry.surfaces))
-    retained_bytes = _retained_evidence_bytes(evaluations, species_count, speed_count)
+    retained_by_surface = tuple(
+        _retained_evidence_bytes(value, species_count, speed_count)
+        for value in evaluations_by_surface
+    )
     return AmbipolarEvidencePreflight(
         hierarchy_points=hierarchy_points,
         evaluations_per_surface=evaluations,
-        profile_evaluations=evaluations * surface_count,
-        retained_bytes_per_surface=retained_bytes,
-        retained_profile_bytes=retained_bytes * surface_count,
+        profile_evaluations=sum(evaluations_by_surface),
+        retained_bytes_per_surface=max(retained_by_surface),
+        retained_profile_bytes=sum(retained_by_surface),
+        search_strategy=strategy,
+        search_points_by_surface=search_points_by_surface,
     )
 
 
@@ -486,7 +514,11 @@ def continue_ambipolar_branches(
                     result,
                     selected_root=None,
                     selected_branch_id="",
-                    selection_reason="no_bracket_closest_sample",
+                    selection_reason=(
+                        "seeded_bracket_failed_closest_endpoint"
+                        if result.search_strategy == "seeded_brackets"
+                        else "no_bracket_closest_sample"
+                    ),
                 )
             )
             selected_branch_id = ""
@@ -559,6 +591,7 @@ def solve_native_ambipolar_surface(
     convergence_relative_tolerance: float = 0.02,
     max_refinements: int = 0,
     retain_legendre_tail: bool = False,
+    seed_brackets_kv_m: tuple[tuple[float, float], ...] | None = None,
 ) -> NativeAmbipolarSurface:
     """Scan, refine, classify, and select native ambipolar roots.
 
@@ -566,7 +599,9 @@ def solve_native_ambipolar_surface(
     sign-changing interval is then refined with bracketed bisection. Every
     candidate is a real kinetic solve; no interpolated point is reported as a
     root. Nearby surfaces select the root nearest ``previous_root_kv_m`` while
-    preserving every root in the returned evidence.
+    preserving every root in the returned evidence. When
+    ``seed_brackets_kv_m`` is supplied, only those explicit intervals are
+    searched and the returned scope does not exclude unsampled crossings.
     """
 
     import time
@@ -575,13 +610,49 @@ def solve_native_ambipolar_surface(
     from dkx.units import ELEMENTARY_CHARGE, HEAT_FLUX, PARALLEL_CURRENT, PARTICLE_FLUX
 
     started = time.perf_counter()
-    _, evaluation_budget = _evaluation_budget(
-        search_points=search_points,
-        max_root_iterations=max_root_iterations,
-        find_all_roots=find_all_roots,
-        convergence_enabled=convergence_enabled,
-        max_refinements=max_refinements,
-    )
+    seeded = seed_brackets_kv_m is not None
+    if seeded:
+        seed_brackets = tuple(
+            (float(bracket[0]), float(bracket[1])) for bracket in seed_brackets_kv_m
+        )
+        lower, upper = map(float, electric_field_bounds_kv_m)
+        if not seed_brackets:
+            raise ValueError("seeded ambipolar search requires at least one bracket")
+        if convergence_enabled:
+            raise ValueError(
+                "seeded ambipolar promotion cannot run the global refinement hierarchy"
+            )
+        if not find_all_roots:
+            raise ValueError("seeded ambipolar promotion requires find_all_roots=True")
+        previous_right = -np.inf
+        for left, right in seed_brackets:
+            if (
+                not np.isfinite(left)
+                or not np.isfinite(right)
+                or left >= right
+                or left < lower
+                or right > upper
+                or left < previous_right
+            ):
+                raise ValueError(
+                    "seeded ambipolar brackets must be finite, increasing, ordered, "
+                    "non-overlapping, and inside electric_field_bounds_kv_m"
+                )
+            previous_right = right
+        fields = np.asarray(
+            sorted({value for bracket in seed_brackets for value in bracket}),
+            dtype=np.float64,
+        )
+        evaluation_budget = len(fields) + len(seed_brackets) * int(max_root_iterations)
+    else:
+        seed_brackets = ()
+        _, evaluation_budget = _evaluation_budget(
+            search_points=search_points,
+            max_root_iterations=max_root_iterations,
+            find_all_roots=find_all_roots,
+            convergence_enabled=convergence_enabled,
+            max_refinements=max_refinements,
+        )
     evaluation_budget += int(bool(retain_legendre_tail))
     if evaluation_budget > _MAX_RETAINED_EVALUATIONS:
         raise ValueError(
@@ -602,12 +673,13 @@ def solve_native_ambipolar_surface(
             "native ambipolar refinement evidence exceeds the memory preflight: "
             f"estimated={retained_bytes} B, budget={float(memory_budget_gb) * (1024**3):.0f} B"
         )
-    fields = np.linspace(
-        float(electric_field_bounds_kv_m[0]),
-        float(electric_field_bounds_kv_m[1]),
-        int(search_points),
-        dtype=np.float64,
-    )
+    if not seeded:
+        fields = np.linspace(
+            float(electric_field_bounds_kv_m[0]),
+            float(electric_field_bounds_kv_m[1]),
+            int(search_points),
+            dtype=np.float64,
+        )
     evaluations: dict[float, RootEvaluation] = {}
     chunks: list[int] = []
     chunk_sizes: list[int] = []
@@ -888,7 +960,12 @@ def solve_native_ambipolar_surface(
             chunk_sizes.append(primary_chunk_size)
         return [evaluations[float(value)] for value in values]
 
-    evaluate(fields, "coarse_scan", "initial_uniform_grid", 0)
+    evaluate(
+        fields,
+        "seeded_bracket_scan" if seeded else "coarse_scan",
+        "seeded_bracket_endpoint" if seeded else "initial_uniform_grid",
+        0,
+    )
     roots: list[NativeAmbipolarRoot] = []
     previous_roots: tuple[NativeAmbipolarRoot, ...] | None = None
     refinement: list[RefinementEvidence] = []
@@ -910,7 +987,22 @@ def solve_native_ambipolar_surface(
             [evaluation.radial_current_a_m2 for evaluation in search],
             dtype=np.float64,
         )
-        bracket_indices = _brackets(fields, currents)
+        if seeded:
+            field_indices = {float(value): index for index, value in enumerate(fields)}
+            bracket_indices = []
+            for left, right in seed_brackets:
+                left_index = field_indices[left]
+                right_index = field_indices[right]
+                left_current = evaluations[left].radial_current_a_m2
+                right_current = evaluations[right].radial_current_a_m2
+                if left_current == 0.0:
+                    bracket_indices.append((left_index, left_index))
+                elif right_current == 0.0:
+                    bracket_indices.append((right_index, right_index))
+                elif left_current * right_current < 0.0:
+                    bracket_indices.append((left_index, right_index))
+        else:
+            bracket_indices = _brackets(fields, currents)
         if not find_all_roots and bracket_indices:
             bracket_indices = bracket_indices[:1]
 
@@ -965,6 +1057,17 @@ def solve_native_ambipolar_surface(
                 )
             )
 
+        if seeded:
+            unique_roots: dict[float, NativeAmbipolarRoot] = {}
+            for root in level_roots:
+                key = root.evaluation.electric_field_kv_m
+                prior = unique_roots.get(key)
+                width = root.bracket_kv_m[1] - root.bracket_kv_m[0]
+                if prior is None or width < (
+                    prior.bracket_kv_m[1] - prior.bracket_kv_m[0]
+                ):
+                    unique_roots[key] = root
+            level_roots = list(unique_roots.values())
         roots, root_movement, observable_movement = _compare_roots(
             level_roots, previous_roots, observables
         )
@@ -1011,7 +1114,11 @@ def solve_native_ambipolar_surface(
             key=lambda index: abs(roots[index].electric_field_kv_m - target),
         )
         selected = roots[selected_root].evaluation
-        status = "bracketed_root"
+        status = (
+            "seeded_bracket_partial_failure"
+            if seeded and len(roots) < len(seed_brackets)
+            else "bracketed_root"
+        )
     else:
         selected = min(
             (
@@ -1021,7 +1128,7 @@ def solve_native_ambipolar_surface(
             ),
             key=lambda item: abs(item.radial_current_a_m2),
         )
-        status = "no_bracketed_root"
+        status = "seeded_bracket_failed" if seeded else "no_bracketed_root"
 
     if (
         retain_legendre_tail
@@ -1152,6 +1259,10 @@ def solve_native_ambipolar_surface(
         refinement=tuple(refinement),
         refinement_status=refinement_status,
         evaluation_budget=evaluation_budget,
+        search_strategy="seeded_brackets" if seeded else "uniform",
+        search_scope=(
+            "explicit_seeded_intervals_only" if seeded else "global_uniform_domain"
+        ),
     )
 
 

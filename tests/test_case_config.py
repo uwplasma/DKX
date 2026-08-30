@@ -116,6 +116,13 @@ def test_default_tail_retention_preserves_case_id_and_opt_in_is_semantic() -> No
     assert enabled.to_dict()["convergence"]["retain_legendre_tail"] is True
 
 
+def test_default_uniform_search_preserves_historical_canonical_content() -> None:
+    case = Case.from_mapping(_mapping())
+
+    assert "search_strategy" not in case.to_dict()["electric_field"]
+    assert "seed_brackets_kV_m" not in case.to_dict()["electric_field"]
+
+
 def test_explicit_pitch_modes_are_immutable_semantic_content() -> None:
     default_case = Case.from_mapping(_mapping())
     explicit = _mapping()
@@ -295,6 +302,9 @@ def test_schema_outputs_are_complete_and_machine_readable(capsys) -> None:
         schema["properties"]["electric_field"]["properties"]["search_points"]["minimum"]
         == 3
     )
+    assert schema["properties"]["electric_field"]["properties"]["search_strategy"] == {
+        "enum": ["uniform", "seeded_brackets"]
+    }
     assert "[[species]]" in COMMENTED_TOML_EXAMPLE
 
     assert cli.main(["schema", "--format", "json", "--quiet"]) == 0
@@ -355,6 +365,73 @@ def test_admitted_w7x_profile_preflight_retains_current_claim_boundary(
     assert "max_evaluations_per_surface=1023" in output
     assert "max_profile_evaluations=5115" in output
     assert "4746720 B profile (949344 B/surface)" in output
+
+
+def test_seeded_bracket_case_is_immutable_bounded_and_interval_scoped(
+    tmp_path: Path, capsys
+) -> None:
+    data = _mapping()
+    data["run"] = {"workflow": "ambipolar_profile"}
+    data["electric_field"] = {
+        "mode": "ambipolar",
+        "search_kV_m": [-5.0, 10.0],
+        "search_strategy": "seeded_brackets",
+        "seed_brackets_kV_m": [[[1.0, 2.0]], [[-1.0, 0.0], [0.0, 2.0], [6.0, 9.0]]],
+        "max_root_iterations": 4,
+    }
+    path = tmp_path / "seeded.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+    case = Case.from_file(path)
+    assert case.electric_field.seed_brackets_kV_m == (
+        ((1.0, 2.0),),
+        ((-1.0, 0.0), (0.0, 2.0), (6.0, 9.0)),
+    )
+    assert case.case_id != Case.from_mapping(_mapping()).case_id
+    assert cli.main(["validate", str(path), "--quiet"]) == 0
+    output = capsys.readouterr().out
+    assert "hierarchy_points=5" in output
+    assert "max_evaluations_per_surface=17" in output
+    assert "max_profile_evaluations=23" in output
+    assert "endpoint_counts=[2, 5]" in output
+    assert "explicit intervals only; unsampled crossings not excluded" in output
+
+
+@pytest.mark.parametrize(
+    "change, match",
+    [
+        (lambda field: field.pop("seed_brackets_kV_m"), "seed_brackets_kV_m"),
+        (
+            lambda field: field.update(seed_brackets_kV_m=[[[1.0, 2.0]]]),
+            "exactly 2",
+        ),
+        (
+            lambda field: field.update(
+                seed_brackets_kV_m=[[[1.0, 3.0], [2.0, 4.0]], [[1.0, 2.0]]]
+            ),
+            "non-overlapping",
+        ),
+        (
+            lambda field: field.update(
+                seed_brackets_kV_m=[[[-6.0, -4.0]], [[1.0, 2.0]]]
+            ),
+            "inside search_kV_m",
+        ),
+        (lambda field: field.update(find_all_roots=False), "find_all_roots"),
+    ],
+)
+def test_seeded_bracket_validation_rejects_unsafe_contract(change, match) -> None:
+    data = _mapping()
+    data["run"] = {"workflow": "ambipolar_profile"}
+    data["electric_field"] = {
+        "mode": "ambipolar",
+        "search_kV_m": [-5.0, 10.0],
+        "search_strategy": "seeded_brackets",
+        "seed_brackets_kV_m": [[[1.0, 2.0]], [[1.0, 2.0]]],
+    }
+    change(data["electric_field"])
+    with pytest.raises(CaseValidationError, match=match):
+        Case.from_mapping(data)
 
 
 def test_validate_cli_rejects_unbounded_ambipolar_evidence(

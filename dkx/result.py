@@ -141,6 +141,7 @@ class Result:
             "residual_norm",
             "iterations",
             "ambipolar_all_surfaces_bracketed",
+            "ambipolar_search",
             "ambipolar_selection",
             "ambipolar_refinement",
             "ambipolar_branch_continuation",
@@ -182,11 +183,24 @@ class Result:
         )
         if "ambipolar_status" in self.arrays:
             statuses = [str(value) for value in self.arrays["ambipolar_status"]]
-            bracketed = sum(value == "bracketed_root" for value in statuses)
+            bracketed = (
+                int(np.count_nonzero(self.arrays["ambipolar_root_count"]))
+                if "ambipolar_root_count" in self.arrays
+                else sum(
+                    value
+                    in {"bracketed_root", "seeded_bracket_partial_failure"}
+                    for value in statuses
+                )
+            )
             print(
                 f"ambipolar roots: {bracketed}/{len(statuses)} surfaces bracketed; "
                 "unbracketed surfaces retain the closest scanned point"
             )
+        if "ambipolar_search_scope" in self.arrays:
+            scopes = sorted(
+                {str(value) for value in self.arrays["ambipolar_search_scope"]}
+            )
+            print(f"ambipolar search scope: {', '.join(scopes)}")
         if "ambipolar_refinement_status" in self.arrays:
             refinement_statuses = [
                 str(value) for value in self.arrays["ambipolar_refinement_status"]
@@ -368,12 +382,27 @@ class Result:
         title = self.case_name
         if "ambipolar_status" in self.arrays:
             statuses = np.asarray(self.arrays["ambipolar_status"]).astype(str)
-            missing = np.flatnonzero(statuses != "bracketed_root")
+            root_counts = (
+                np.asarray(self.arrays["ambipolar_root_count"])
+                if "ambipolar_root_count" in self.arrays
+                else np.isin(
+                    statuses,
+                    ["bracketed_root", "seeded_bracket_partial_failure"],
+                ).astype(np.int64)
+            )
+            missing = np.flatnonzero(root_counts == 0)
             if missing.size:
                 locations = ", ".join(f"{surface[index]:.4g}" for index in missing)
                 title += (
                     f"\nno bracketed root at $\\psi_N$={locations}; "
                     "showing closest scanned values"
+                )
+            partial = np.flatnonzero(statuses == "seeded_bracket_partial_failure")
+            if partial.size:
+                locations = ", ".join(f"{surface[index]:.4g}" for index in partial)
+                title += (
+                    "\none or more seeded brackets failed at "
+                    f"$\\psi_N$={locations}"
                 )
         if "ambipolar_refinement_status" in self.arrays:
             refinement_statuses = np.asarray(
@@ -394,6 +423,11 @@ class Result:
                 )
             if notes:
                 title += "\n" + "; ".join(notes)
+        if "ambipolar_search_scope" in self.arrays and np.any(
+            np.asarray(self.arrays["ambipolar_search_scope"]).astype(str)
+            == "explicit_seeded_intervals_only"
+        ):
+            title += "\nseeded intervals only; unsampled crossings not excluded"
         if "ambipolar_nonsmooth_event" in self.arrays:
             nonsmooth = np.flatnonzero(
                 np.asarray(self.arrays["ambipolar_nonsmooth_event"], dtype=bool)

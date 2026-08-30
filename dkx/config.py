@@ -91,10 +91,21 @@ class ElectricFieldConfig:
     search_points: int = 9
     root_tolerance_kV_m: float = 1.0e-3
     max_root_iterations: int = 20
+    search_strategy: str = "uniform"
+    seed_brackets_kV_m: tuple[tuple[tuple[float, float], ...], ...] | None = None
 
     def __post_init__(self) -> None:
         if self.search_kV_m is not None:
             object.__setattr__(self, "search_kV_m", tuple(self.search_kV_m))
+        if self.seed_brackets_kV_m is not None:
+            object.__setattr__(
+                self,
+                "seed_brackets_kV_m",
+                tuple(
+                    tuple(tuple(bracket) for bracket in surface)
+                    for surface in self.seed_brackets_kV_m
+                ),
+            )
 
 
 @dataclass(frozen=True)
@@ -256,6 +267,13 @@ class Case:
         # every existing schema-v1 case ID.
         if not data["convergence"]["retain_legendre_tail"]:
             data["convergence"].pop("retain_legendre_tail")
+        # Uniform discovery is the historical schema-v1 behavior. Omitting
+        # both defaults preserves every existing case ID; seeded promotion is
+        # explicit semantic content and therefore remains canonical.
+        if data["electric_field"]["search_strategy"] == "uniform":
+            data["electric_field"].pop("search_strategy")
+        if data["electric_field"]["seed_brackets_kV_m"] is None:
+            data["electric_field"].pop("seed_brackets_kV_m")
         if data["scan"] is not None:
             data["scan"]["axis"] = data["scan"].pop("axes")
         return _paths_to_strings(data)
@@ -463,6 +481,21 @@ def case_json_schema() -> dict[str, Any]:
                 search_points={"type": "integer", "minimum": 3},
                 root_tolerance_kV_m={"type": "number", "exclusiveMinimum": 0},
                 max_root_iterations={"type": "integer", "minimum": 1},
+                search_strategy={"enum": ["uniform", "seeded_brackets"]},
+                seed_brackets_kV_m={
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                            "type": "array",
+                            "minItems": 2,
+                            "maxItems": 2,
+                            "items": {"type": "number"},
+                        },
+                    },
+                },
             ),
             "resolution": _object_schema(
                 ["theta", "zeta", "pitch", "speed"],
@@ -698,6 +731,8 @@ def _parse_electric_field(data: Mapping[str, Any]) -> ElectricFieldConfig:
             "search_points",
             "root_tolerance_kV_m",
             "max_root_iterations",
+            "search_strategy",
+            "seed_brackets_kV_m",
         },
     )
     search = None
@@ -716,6 +751,47 @@ def _parse_electric_field(data: Mapping[str, Any]) -> ElectricFieldConfig:
         if "value_kV_m" not in data
         else _number(data, "value_kV_m", path, required=True)
     )
+    seeds = None
+    if "seed_brackets_kV_m" in data:
+        parsed_surfaces = []
+        for surface_index, surface in enumerate(
+            _sequence(data, "seed_brackets_kV_m", path, required=True)
+        ):
+            if isinstance(surface, (str, bytes)) or not isinstance(surface, Sequence):
+                _fail(
+                    f"{path}.seed_brackets_kV_m[{surface_index}]",
+                    surface,
+                    "an array of [left, right] brackets",
+                    "Provide one bracket array per geometry surface.",
+                )
+            parsed_brackets = []
+            for bracket_index, bracket in enumerate(surface):
+                where = f"{path}.seed_brackets_kV_m[{surface_index}][{bracket_index}]"
+                if isinstance(bracket, (str, bytes)) or not isinstance(
+                    bracket, Sequence
+                ):
+                    _fail(
+                        where,
+                        bracket,
+                        "exactly [left, right]",
+                        "Provide two finite bracket endpoints.",
+                    )
+                values = tuple(bracket)
+                if len(values) != 2 or any(
+                    isinstance(item, bool)
+                    or not isinstance(item, (int, float))
+                    or not math.isfinite(float(item))
+                    for item in values
+                ):
+                    _fail(
+                        where,
+                        bracket,
+                        "exactly two finite numbers",
+                        "Provide a finite increasing bracket.",
+                    )
+                parsed_brackets.append((float(values[0]), float(values[1])))
+            parsed_surfaces.append(tuple(parsed_brackets))
+        seeds = tuple(parsed_surfaces)
     return ElectricFieldConfig(
         mode=_string(data, "mode", path, default="prescribed"),
         value_kV_m=value,
@@ -725,6 +801,8 @@ def _parse_electric_field(data: Mapping[str, Any]) -> ElectricFieldConfig:
         search_points=_integer(data, "search_points", path, default=9),
         root_tolerance_kV_m=_number(data, "root_tolerance_kV_m", path, default=1.0e-3),
         max_root_iterations=_integer(data, "max_root_iterations", path, default=20),
+        search_strategy=_string(data, "search_strategy", path, default="uniform"),
+        seed_brackets_kV_m=seeds,
     )
 
 
@@ -962,6 +1040,83 @@ def _validate_case(case: Case) -> None:
                 "[minimum, maximum] with minimum < maximum",
                 "Supply a finite ambipolar search bracket.",
             )
+    _choice(
+        "electric_field.search_strategy",
+        case.electric_field.search_strategy,
+        ("uniform", "seeded_brackets"),
+    )
+    seeds = case.electric_field.seed_brackets_kV_m
+    if case.electric_field.search_strategy == "uniform" and seeds is not None:
+        _fail(
+            "electric_field.seed_brackets_kV_m",
+            seeds,
+            "omitted when search_strategy = 'uniform'",
+            "Remove seed_brackets_kV_m or select search_strategy = 'seeded_brackets'.",
+        )
+    if case.electric_field.search_strategy == "seeded_brackets":
+        if (
+            case.run.workflow != "ambipolar_profile"
+            or case.electric_field.mode != "ambipolar"
+        ):
+            _fail(
+                "electric_field.search_strategy",
+                case.electric_field.search_strategy,
+                "seeded_brackets only for an ambipolar_profile workflow",
+                "Select workflow = 'ambipolar_profile' and electric_field.mode = 'ambipolar'.",
+            )
+        if seeds is None or len(seeds) != len(case.geometry.surfaces):
+            _fail(
+                "electric_field.seed_brackets_kV_m",
+                seeds,
+                f"exactly {len(case.geometry.surfaces)} non-empty surface arrays",
+                "Provide one bracket array per geometry surface.",
+            )
+        if case.convergence.enabled:
+            _fail(
+                "convergence.enabled",
+                case.convergence.enabled,
+                "false for seeded bracket promotion",
+                "Converge the global discovery grid first; seeded promotion only refines explicit brackets.",
+            )
+        if not case.electric_field.find_all_roots:
+            _fail(
+                "electric_field.find_all_roots",
+                case.electric_field.find_all_roots,
+                "true for seeded bracket promotion",
+                "Retain and refine every explicitly supplied branch bracket.",
+            )
+        assert seeds is not None
+        bounds = case.electric_field.search_kV_m
+        assert bounds is not None
+        for surface_index, surface_brackets in enumerate(seeds):
+            if not surface_brackets:
+                _fail(
+                    f"electric_field.seed_brackets_kV_m[{surface_index}]",
+                    surface_brackets,
+                    "at least one bracket",
+                    "Provide every previously discovered branch bracket.",
+                )
+            previous_right = -math.inf
+            for bracket_index, (left, right) in enumerate(surface_brackets):
+                where = (
+                    f"electric_field.seed_brackets_kV_m[{surface_index}]"
+                    f"[{bracket_index}]"
+                )
+                if left >= right or left < bounds[0] or right > bounds[1]:
+                    _fail(
+                        where,
+                        (left, right),
+                        f"an increasing bracket inside search_kV_m={bounds}",
+                        "Order the endpoints and keep them inside the declared search domain.",
+                    )
+                if left < previous_right:
+                    _fail(
+                        where,
+                        (left, right),
+                        "ordered non-overlapping brackets",
+                        "Sort the brackets and remove overlaps.",
+                    )
+                previous_right = right
     _is_boolean("electric_field.find_all_roots", case.electric_field.find_all_roots)
     _is_boolean(
         "electric_field.continue_branches", case.electric_field.continue_branches
