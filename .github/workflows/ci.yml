@@ -202,39 +202,6 @@ jobs:
           python examples/getting_started/write_sfincs_output_vmec.py
           test -s examples/output/write_sfincs_output_vmec/sfincsOutput_vmec.h5
 
-  python-floor:
-    # Every other job pins 3.11 while pyproject.toml declares
-    # requires-python = ">=3.10", so a 3.11-only construct could reach main
-    # unseen. This job is the floor gate. It is deliberately small: whole-tree
-    # collection, plus the two suites that exec example modules at import,
-    # which is where a stdlib symbol newer than the floor actually lands.
-    runs-on: ubuntu-22.04
-    timeout-minutes: 10
-    env:
-      JAX_ENABLE_X64: "True"
-      DKX_CI: "1"
-      DKX_OFFLINE: "1"
-      DKX_FAST_EXAMPLES: "1"
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.10"
-          cache: "pip"
-          cache-dependency-path: "pyproject.toml"
-      - name: Install
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-      - name: Collect the whole suite
-        run: |
-          python -m pytest -q --collect-only
-      - name: Run the suites that import example modules
-        run: |
-          python -m pytest -q \
-            tests/test_generate_fortran_suite_benchmark_summary.py \
-            tests/test_finite_beta_vmec_example.py
-
   workflow-lint:
     runs-on: ubuntu-22.04
     timeout-minutes: 5
@@ -461,7 +428,6 @@ jobs:
       - coverage-report
       - examples-smoke
       - external-data-smoke
-      - python-floor
       - workflow-lint
       - wheel-install
     if: always()

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import os
+
 from dataclasses import FrozenInstanceError, is_dataclass
-import importlib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -168,7 +169,20 @@ def test_solver_options_is_a_frozen_contract_with_solve_kwargs() -> None:
     assert "cores" not in kwargs  # honest: threads are pinned pre-import (DKX_CORES/--cores)
 
 
-def test_import_env_controls_solver_threads_and_compilation_cache(
+def _reconfigure() -> None:
+    """Re-apply dkx.runtime.configure() as if the process had just started.
+
+    The knobs below used to be applied by ``import dkx`` and were re-triggered
+    with importlib.reload(). They are now applied by an idempotent
+    ``configure()``, so the way to re-run them is to clear the flag that makes
+    it idempotent. `import dkx` itself no longer touches any of this (plan.md
+    section 6.4), which is why these tests no longer reload the package.
+    """
+    dkx.runtime._configured = False
+    dkx.runtime.configure()
+
+
+def test_runtime_env_controls_solver_threads_and_compilation_cache(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -185,17 +199,16 @@ def test_import_env_controls_solver_threads_and_compilation_cache(
     monkeypatch.delenv("JAX_COMPILATION_CACHE_DIR", raising=False)
     monkeypatch.setenv("XLA_FLAGS", "")
 
-    reloaded = importlib.reload(dkx)
+    _reconfigure()
 
-    assert reloaded is dkx
     # --cores/DKX_CORES pins the XLA host threadpool (NPROC) and the host
     # BLAS pools; it must NOT force host devices or touch XLA_FLAGS.
-    assert dkx.os.environ["NPROC"] == "2"
-    assert dkx.os.environ["OMP_NUM_THREADS"] == "2"
-    assert dkx.os.environ["OPENBLAS_NUM_THREADS"] == "2"
-    assert "DKX_CPU_DEVICES" not in dkx.os.environ
-    assert dkx.os.environ["XLA_FLAGS"] == ""
-    assert dkx.os.environ["JAX_COMPILATION_CACHE_DIR"] == str(cache_dir)
+    assert os.environ["NPROC"] == "2"
+    assert os.environ["OMP_NUM_THREADS"] == "2"
+    assert os.environ["OPENBLAS_NUM_THREADS"] == "2"
+    assert "DKX_CPU_DEVICES" not in os.environ
+    assert os.environ["XLA_FLAGS"] == ""
+    assert os.environ["JAX_COMPILATION_CACHE_DIR"] == str(cache_dir)
     assert cache_dir.is_dir()
 
     monkeypatch.delenv("DKX_CORES", raising=False)
@@ -203,12 +216,10 @@ def test_import_env_controls_solver_threads_and_compilation_cache(
     monkeypatch.delenv("DKX_COMPILATION_CACHE_DIR", raising=False)
     monkeypatch.delenv("JAX_COMPILATION_CACHE_DIR", raising=False)
     monkeypatch.setenv("DKX_DISABLE_COMPILATION_CACHE", "1")
-    importlib.reload(dkx)
+    _reconfigure()
 
 
-def test_import_default_thread_clamp_and_zero_opt_out(monkeypatch: pytest.MonkeyPatch) -> None:
-    import os as os_mod
-
+def test_runtime_default_thread_clamp_and_zero_opt_out(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DKX_DISABLE_COMPILATION_CACHE", "1")
 
     # No DKX_CORES and no NPROC: the import clamps the threadpool to
@@ -216,16 +227,16 @@ def test_import_default_thread_clamp_and_zero_opt_out(monkeypatch: pytest.Monkey
     monkeypatch.delenv("DKX_CORES", raising=False)
     monkeypatch.delenv("NPROC", raising=False)
     monkeypatch.delenv("_DKX_NPROC_DEFAULTED", raising=False)
-    importlib.reload(dkx)
-    assert dkx.os.environ["NPROC"] == str(min(8, os_mod.cpu_count() or 1))
-    assert dkx.os.environ["_DKX_NPROC_DEFAULTED"] == "1"
+    _reconfigure()
+    assert os.environ["NPROC"] == str(min(8, os.cpu_count() or 1))
+    assert os.environ["_DKX_NPROC_DEFAULTED"] == "1"
 
     # A user-set NPROC always wins over the default clamp.
     monkeypatch.delenv("_DKX_NPROC_DEFAULTED", raising=False)
     monkeypatch.setenv("NPROC", "3")
-    importlib.reload(dkx)
-    assert dkx.os.environ["NPROC"] == "3"
-    assert "_DKX_NPROC_DEFAULTED" not in dkx.os.environ
+    _reconfigure()
+    assert os.environ["NPROC"] == "3"
+    assert "_DKX_NPROC_DEFAULTED" not in os.environ
 
     # DKX_CORES=0 means "let XLA size the threadpool": it removes a
     # dkx-defaulted clamp (e.g. inherited across the CLI re-exec) but
@@ -233,16 +244,16 @@ def test_import_default_thread_clamp_and_zero_opt_out(monkeypatch: pytest.Monkey
     monkeypatch.setenv("DKX_CORES", "0")
     monkeypatch.setenv("NPROC", "8")
     monkeypatch.setenv("_DKX_NPROC_DEFAULTED", "1")
-    importlib.reload(dkx)
-    assert "NPROC" not in dkx.os.environ
+    _reconfigure()
+    assert "NPROC" not in os.environ
     monkeypatch.setenv("NPROC", "5")
-    importlib.reload(dkx)
-    assert dkx.os.environ["NPROC"] == "5"
+    _reconfigure()
+    assert os.environ["NPROC"] == "5"
 
     monkeypatch.delenv("DKX_CORES", raising=False)
 
 
-def test_import_env_explicit_cpu_devices_forces_host_device_count(
+def test_runtime_env_explicit_cpu_devices_forces_host_device_count(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("DKX_CORES", raising=False)
@@ -250,29 +261,29 @@ def test_import_env_explicit_cpu_devices_forces_host_device_count(
     monkeypatch.setenv("DKX_DISABLE_COMPILATION_CACHE", "1")
     monkeypatch.setenv("XLA_FLAGS", "")
 
-    importlib.reload(dkx)
+    _reconfigure()
 
-    assert "--xla_force_host_platform_device_count=2" in dkx.os.environ["XLA_FLAGS"]
+    assert "--xla_force_host_platform_device_count=2" in os.environ["XLA_FLAGS"]
 
 
-def test_import_env_invalid_cpu_controls_are_fail_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_runtime_env_invalid_cpu_controls_are_fail_closed(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DKX_CORES", "not-an-int")
     monkeypatch.setenv("DKX_CPU_DEVICES", "not-an-int")
     monkeypatch.setenv("DKX_DISABLE_COMPILATION_CACHE", "1")
     monkeypatch.setenv("XLA_FLAGS", "")
     monkeypatch.delenv("NPROC", raising=False)
 
-    importlib.reload(dkx)
+    _reconfigure()
 
-    assert dkx.os.environ["XLA_FLAGS"] == ""
-    assert "NPROC" not in dkx.os.environ
+    assert os.environ["XLA_FLAGS"] == ""
+    assert "NPROC" not in os.environ
 
 
 def test_distributed_runtime_env_bootstrap_is_safe_and_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(dkx, "_distributed_runtime_initialized", True)
+    monkeypatch.setattr(dkx.runtime, "_distributed_runtime_initialized", True)
     assert dkx.initialize_distributed_runtime_from_env() is True
 
-    monkeypatch.setattr(dkx, "_distributed_runtime_initialized", False)
+    monkeypatch.setattr(dkx.runtime, "_distributed_runtime_initialized", False)
     monkeypatch.delenv("DKX_DISTRIBUTED", raising=False)
     assert dkx.initialize_distributed_runtime_from_env() is False
 
@@ -287,7 +298,7 @@ def test_distributed_runtime_env_bootstrap_parses_and_calls_jax(monkeypatch: pyt
     def fake_initialize(**kwargs):
         calls.append(kwargs)
 
-    monkeypatch.setattr(dkx, "_distributed_runtime_initialized", False)
+    monkeypatch.setattr(dkx.runtime, "_distributed_runtime_initialized", False)
     monkeypatch.setattr(jax_distributed, "initialize", fake_initialize)
     monkeypatch.setenv("DKX_DISTRIBUTED", "true")
     monkeypatch.setenv("DKX_COORDINATOR_ADDRESS", "127.0.0.1")
@@ -312,17 +323,17 @@ def test_distributed_runtime_env_bootstrap_fails_closed(monkeypatch: pytest.Monk
     def fake_initialize(**_kwargs):
         raise RuntimeError("backend unavailable")
 
-    monkeypatch.setattr(dkx, "_distributed_runtime_initialized", False)
+    monkeypatch.setattr(dkx.runtime, "_distributed_runtime_initialized", False)
     monkeypatch.setattr(jax_distributed, "initialize", fake_initialize)
     monkeypatch.setenv("DKX_DISTRIBUTED", "yes")
     monkeypatch.setenv("DKX_COORDINATOR_ADDRESS", "127.0.0.1")
 
     assert dkx.initialize_distributed_runtime_from_env() is False
-    assert dkx._distributed_runtime_initialized is False
+    assert dkx.runtime._distributed_runtime_initialized is False
 
     monkeypatch.setenv("DKX_COORDINATOR_PORT", "not-an-int")
     assert dkx.initialize_distributed_runtime_from_env() is False
-    assert dkx._distributed_runtime_initialized is False
+    assert dkx.runtime._distributed_runtime_initialized is False
 
 
 def test_public_write_output_facade_routes_solve_inputs(monkeypatch: pytest.MonkeyPatch) -> None:

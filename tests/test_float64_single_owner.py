@@ -12,6 +12,13 @@ the precision of every other JAX library in the process.  See uwplasma/DKX#22.
 These tests pin the arrangement that replaced it: one owner, an opt-out for
 callers who manage precision themselves, and a loud check on the solve path so
 opting out cannot silently produce float32 answers.
+
+The owner moved once more in Phase C. It used to be ``dkx/__init__.py``, which
+meant merely importing the package decided precision for the whole process.
+It is now ``dkx/runtime.py``, applied by ``configure()``, which the CLI
+bootstrap and every module that imports the JAX backend call. So the trigger is
+reaching for the solve stack rather than importing the package, and the
+precision a solve runs at is unchanged.
 """
 
 from __future__ import annotations
@@ -56,14 +63,58 @@ def test_only_one_module_sets_the_global_precision():
         for path in (REPO_ROOT / "dkx").rglob("*.py")
         if 'update("jax_enable_x64"' in path.read_text()
     }
-    assert setters == {pathlib.Path("dkx/__init__.py")}, setters
+    assert setters == {pathlib.Path("dkx/runtime.py")}, setters
 
 
-def test_importing_dkx_gives_float64_by_default():
-    """The convenience the previous arrangement provided is kept."""
-    result = _run("import jax.numpy as jnp, dkx; print(jnp.zeros(1).dtype)")
+def test_importing_dkx_decides_nothing():
+    """``import dkx`` is inert: it must not choose the process precision.
+
+    This is the half of the contract Phase C added. Deciding a process-global
+    JAX setting as a side effect of an import is the behaviour the whole module
+    is about; doing it from one file rather than sixteen made it survivable,
+    not correct.
+    """
+    result = _run(
+        "import dkx, sys; print('jax' in sys.modules)"
+    )
+    assert result.returncode == 0, result.stderr[-2000:]
+    assert "False" in result.stdout
+
+
+def test_reaching_for_the_solve_stack_gives_float64_by_default():
+    """The convenience the previous arrangement provided is kept.
+
+    A user who writes ``import dkx`` and then solves gets exactly the float64
+    they got before; what changed is that the import alone no longer does it.
+    """
+    result = _run("import dkx.run, jax.numpy as jnp; print(jnp.zeros(1).dtype)")
     assert result.returncode == 0, result.stderr[-2000:]
     assert "float64" in result.stdout
+
+
+def test_configure_is_idempotent_and_reports_itself():
+    result = _run(
+        "import dkx\n"
+        "print('before', dkx.runtime.is_configured())\n"
+        "dkx.runtime.configure()\n"
+        "dkx.runtime.configure()\n"
+        "print('after', dkx.runtime.is_configured())\n"
+    )
+    assert result.returncode == 0, result.stderr[-2000:]
+    assert "before False" in result.stdout
+    assert "after True" in result.stdout
+
+
+def test_a_caller_can_refuse_the_precision_change_in_the_call():
+    """``configure(jax_x64=False)`` is the in-process form of the opt-out."""
+    result = _run(
+        "import dkx\n"
+        "dkx.runtime.configure(jax_x64=False)\n"
+        "import jax.numpy as jnp\n"
+        "print(jnp.zeros(1).dtype)\n"
+    )
+    assert result.returncode == 0, result.stderr[-2000:]
+    assert "float32" in result.stdout
 
 
 def test_a_caller_can_opt_out():
@@ -73,7 +124,7 @@ def test_a_caller_can_opt_out():
     alongside a library tuned for float32 should be able to say no.
     """
     result = _run(
-        "import jax.numpy as jnp, dkx; print(jnp.zeros(1).dtype)",
+        "import dkx.run, jax.numpy as jnp; print(jnp.zeros(1).dtype)",
         DKX_NO_X64_SETUP="1",
     )
     assert result.returncode == 0, result.stderr[-2000:]
@@ -88,6 +139,7 @@ def test_opting_out_does_not_opt_into_wrong_answers():
     single-precision solve, which is the worse of the two.
     """
     result = _run(
+        "import dkx.run\n"
         "import dkx\n"
         "try:\n"
         "    dkx.require_float64()\n"
@@ -142,7 +194,7 @@ def test_an_explicit_user_request_outranks_the_opt_out():
         "JAX_ENABLE_X64": "1",
     })
     result = subprocess.run(
-        [sys.executable, "-c", "import jax.numpy as jnp, dkx; print(jnp.zeros(1).dtype)"],
+        [sys.executable, "-c", "import dkx.run, jax.numpy as jnp; print(jnp.zeros(1).dtype)"],
         capture_output=True, text=True, env=env, timeout=300, check=False,
     )
     assert result.returncode == 0, result.stderr[-2000:]

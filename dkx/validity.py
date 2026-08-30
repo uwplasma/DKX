@@ -88,6 +88,11 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+# The JAX backend is imported below; dkx/runtime.py explains why this is here.
+from .runtime import configure as _configure_runtime
+
+_configure_runtime()
+
 import jax.numpy as jnp  # noqa: E402
 
 __all__ = [

@@ -70,6 +70,11 @@ from __future__ import annotations
 
 from typing import NamedTuple
 
+# The JAX backend is imported below; dkx/runtime.py explains why this is here.
+from .runtime import configure as _configure_runtime
+
+_configure_runtime()
+
 import jax.numpy as jnp  # noqa: E402
 from jax import lax  # noqa: E402
 

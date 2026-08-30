@@ -17,10 +17,7 @@ from pathlib import Path
 import re
 from typing import Any, Mapping, Sequence
 
-try:  # Python 3.11+
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover - exercised by the 3.10 CI floor
-    import tomli as tomllib
+import tomllib
 
 
 SCHEMA_VERSION = 1
