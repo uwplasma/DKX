@@ -1,0 +1,1031 @@
+{
+  "acceptance": {
+    "max_cross_code_scaled_error": 0.005,
+    "max_dkx_primal_residual": 1e-12,
+    "max_observable_scaled_movement": 0.02,
+    "max_sfincs_ksp_residual": 1e-12
+  },
+  "case": {
+    "collision_operator": "pitch_angle_scattering",
+    "electric_field_kV_m": 8.55,
+    "geometry": "W7-X standard",
+    "phi1": false,
+    "psi_N": 0.25,
+    "r_N": 0.5,
+    "radial_flux_factor": -1.3949598653433042,
+    "solver_tolerance": 1e-09,
+    "species_order": [
+      "hydrogen",
+      "electron"
+    ],
+    "use_dkes_exb_drift": true
+  },
+  "claim_exclusions": [
+    "whole-profile phase-space convergence",
+    "ambipolar root agreement",
+    "parallel-current or bootstrap-current convergence",
+    "full Fokker-Planck collisions",
+    "Phi1",
+    "experimental validation",
+    "second stellarator family",
+    "cross-code performance equivalence",
+    "README headline performance"
+  ],
+  "claim_scope": "bounded_fixed_field_pas_dkes_phase_space_and_cross_code_referee",
+  "comparisons": {
+    "dkx_pitch_at_admitted_zeta": {
+      "heat_flux_max_scaled_movement": 0.00790179876261794,
+      "label": "dkx_pitch_150_to_180_at_zeta85",
+      "parallel_current_scaled_movement": 0.017372379619891826,
+      "particle_flux_max_scaled_movement": 0.005826278815842644
+    },
+    "dkx_pitch_at_admitted_zeta_initial": {
+      "heat_flux_max_scaled_movement": 0.02018225622396936,
+      "label": "dkx_pitch_120_to_150_at_zeta85",
+      "parallel_current_scaled_movement": 0.01745190172602512,
+      "particle_flux_max_scaled_movement": 0.014900547733160286
+    },
+    "dkx_sfincs_pitch150_zeta37_parity": {
+      "heat_flux_scaled_error": [
+        0.001660610835324424,
+        0.0019970001583878134
+      ],
+      "maximum_scaled_error": 0.0026879401726477422,
+      "parallel_current_scaled_error": 0.00015627816887779766,
+      "particle_flux_scaled_error": [
+        0.0026879401726477422,
+        0.002217757296392217
+      ]
+    },
+    "dkx_speed": {
+      "heat_flux_max_scaled_movement": 0.0007304669271624258,
+      "label": "dkx_speed_8_to_10_at_pitch150_zeta85",
+      "parallel_current_scaled_movement": 0.004551072478233803,
+      "particle_flux_max_scaled_movement": 0.0006738840286413176
+    },
+    "dkx_theta": [
+      {
+        "heat_flux_max_scaled_movement": 0.00435638552378355,
+        "label": "dkx_theta_15_to_19",
+        "parallel_current_scaled_movement": 0.07348729102013953,
+        "particle_flux_max_scaled_movement": 0.0026648762994889125
+      },
+      {
+        "heat_flux_max_scaled_movement": 0.010522634786901847,
+        "label": "dkx_theta_19_to_23",
+        "parallel_current_scaled_movement": 0.07152639354985472,
+        "particle_flux_max_scaled_movement": 0.009132702497002527
+      },
+      {
+        "heat_flux_max_scaled_movement": 0.005487398841107102,
+        "label": "dkx_theta_23_to_29",
+        "parallel_current_scaled_movement": 0.05461983795921107,
+        "particle_flux_max_scaled_movement": 0.004225237454709112
+      }
+    ],
+    "dkx_zeta": [
+      {
+        "heat_flux_max_scaled_movement": 0.10045573629092353,
+        "label": "dkx_zeta_37_to_45",
+        "parallel_current_scaled_movement": 0.07370444282503547,
+        "particle_flux_max_scaled_movement": 0.09988846990656587
+      },
+      {
+        "heat_flux_max_scaled_movement": 0.03817199999442869,
+        "label": "dkx_zeta_45_to_61",
+        "parallel_current_scaled_movement": 0.05406195081261787,
+        "particle_flux_max_scaled_movement": 0.027388725834916333
+      },
+      {
+        "heat_flux_max_scaled_movement": 0.02120418410722628,
+        "label": "dkx_zeta_61_to_85",
+        "parallel_current_scaled_movement": 0.02453432519975045,
+        "particle_flux_max_scaled_movement": 0.01853810717049483
+      },
+      {
+        "heat_flux_max_scaled_movement": 0.0172043527446118,
+        "label": "dkx_zeta_85_to_109",
+        "parallel_current_scaled_movement": 0.0061310889383892975,
+        "particle_flux_max_scaled_movement": 0.016628809777770842
+      }
+    ],
+    "sfincs_pitch": [
+      {
+        "heat_flux_max_scaled_movement": 0.16661537578268468,
+        "label": "sfincs_pitch_52_to_70",
+        "parallel_current_scaled_movement": 0.10985186580371657,
+        "particle_flux_max_scaled_movement": 0.16113462782099394
+      },
+      {
+        "heat_flux_max_scaled_movement": 0.0774424778856393,
+        "label": "sfincs_pitch_70_to_90",
+        "parallel_current_scaled_movement": 0.024565151423255147,
+        "particle_flux_max_scaled_movement": 0.06236200444649278
+      },
+      {
+        "heat_flux_max_scaled_movement": 0.02397675693235692,
+        "label": "sfincs_pitch_90_to_120",
+        "parallel_current_scaled_movement": 0.006029796415936966,
+        "particle_flux_max_scaled_movement": 0.016885215730413607
+      },
+      {
+        "heat_flux_max_scaled_movement": 0.001431121026064818,
+        "label": "sfincs_pitch_120_to_150",
+        "parallel_current_scaled_movement": 0.0019098177215565294,
+        "particle_flux_max_scaled_movement": 0.0010030752797436048
+      }
+    ]
+  },
+  "created_utc": "2026-08-30T00:40:00Z",
+  "dkx_rungs": [
+    {
+      "heat_flux_W_m2": [
+        [
+          1084.8423237261309,
+          21723.164686233755
+        ],
+        [
+          1076.8860916639435,
+          9186.417004405528
+        ]
+      ],
+      "maximum_primal_residual": 6.883543362486716e-15,
+      "maximum_rss_bytes": 1109917696,
+      "name": "pitch150_zeta37",
+      "parallel_current_A_T_m2": [
+        -81812.50057494482,
+        -53020.54379378331
+      ],
+      "particle_flux_m2_s": [
+        [
+          2.2786449169661793e+18,
+          6.698573565590724e+18
+        ],
+        [
+          2.2755246770759916e+18,
+          3.799547899082259e+18
+        ]
+      ],
+      "peak_memory_footprint_bytes": 938903232,
+      "raw_log": {
+        "bytes": 1559,
+        "relative_path": "dkx-pitch150/dkx.log",
+        "sha256": "9edd58de4ca4e740ef89096b36aa178af27f8216131bc28c80414d95390a0c4d"
+      },
+      "raw_output": {
+        "bytes": 48146,
+        "relative_path": "dkx-pitch150/result.nc",
+        "sha256": "99bb45e57877d05203d03d4c02fb4445645095b6456b490e3002c29848057321"
+      },
+      "resolution": {
+        "pitch": 150,
+        "speed": 8,
+        "theta": 15,
+        "zeta": 37
+      },
+      "runtime_input": {
+        "bytes": 1077,
+        "relative_path": "dkx-pitch150/input.toml",
+        "sha256": "65172d4cce23c3541510843e10df4e02e9e9b5e87edb867590c567f93f39fbe0"
+      },
+      "wall_seconds": 16.21
+    },
+    {
+      "heat_flux_W_m2": [
+        [
+          1047.8021558567045,
+          20986.71786720462
+        ],
+        [
+          1037.4782670762568,
+          8263.58872035251
+        ]
+      ],
+      "maximum_primal_residual": 9.388151722138608e-15,
+      "maximum_rss_bytes": 1213956096,
+      "name": "pitch150_zeta45",
+      "parallel_current_A_T_m2": [
+        -82485.53967311035,
+        -57239.337253744874
+      ],
+      "particle_flux_m2_s": [
+        [
+          2.2388175716291512e+18,
+          6.455916593379427e+18
+        ],
+        [
+          2.233023074493427e+18,
+          3.420016873106225e+18
+        ]
+      ],
+      "peak_memory_footprint_bytes": 1041467120,
+      "raw_log": {
+        "bytes": 1561,
+        "relative_path": "dkx-pitch150-zeta45/dkx.log",
+        "sha256": "80b0a5feee5fbe903725394a0b2f8813deb137cbbcf9b39ced5629a9b4a4bbc8"
+      },
+      "raw_output": {
+        "bytes": 48148,
+        "relative_path": "dkx-pitch150-zeta45/result.nc",
+        "sha256": "2510cf8be0a0326058caafd145532d51d5ffcd5721b7668adf0c3dd65981a1d8"
+      },
+      "resolution": {
+        "pitch": 150,
+        "speed": 8,
+        "theta": 15,
+        "zeta": 45
+      },
+      "runtime_input": {
+        "bytes": 1077,
+        "relative_path": "dkx-pitch150-zeta45/input.toml",
+        "sha256": "37d815e5b68d01e328c97e4c1c36738ca4f766167d7f0defa5d171f067500381"
+      },
+      "wall_seconds": 25.59
+    },
+    {
+      "heat_flux_W_m2": [
+        [
+          1061.8040216015931,
+          20294.090515430136
+        ],
+        [
+          1078.6525938839868,
+          8482.106764996824
+        ]
+      ],
+      "maximum_primal_residual": 6.615461737866033e-15,
+      "maximum_rss_bytes": 1406795776,
+      "name": "pitch150_zeta61",
+      "parallel_current_A_T_m2": [
+        -78026.21048455042,
+        -57470.01479283446
+      ],
+      "particle_flux_m2_s": [
+        [
+          2.2617701956564613e+18,
+          6.301083459123104e+18
+        ],
+        [
+          2.2867234150470502e+18,
+          3.5163245213685827e+18
+        ]
+      ],
+      "peak_memory_footprint_bytes": 1241810840,
+      "raw_log": {
+        "bytes": 1559,
+        "relative_path": "dkx-pitch150-zeta61/dkx.log",
+        "sha256": "77645a7633df3c9cb06c2f8b47f32e8890571ccf2b6587a58998381ff464c0c1"
+      },
+      "raw_output": {
+        "bytes": 48145,
+        "relative_path": "dkx-pitch150-zeta61/result.nc",
+        "sha256": "3e55d6d71391fbc7351b8094bc694ae8027aefd10f88ef6dd56733e4fffa3077"
+      },
+      "resolution": {
+        "pitch": 150,
+        "speed": 8,
+        "theta": 15,
+        "zeta": 61
+      },
+      "runtime_input": {
+        "bytes": 1077,
+        "relative_path": "dkx-pitch150-zeta61/input.toml",
+        "sha256": "d49ee6e56d9ad7741936c08203ff2f2ae6db54b0dc9efd9b344ba68fd21dd34b"
+      },
+      "wall_seconds": 54.22
+    },
+    {
+      "heat_flux_W_m2": [
+        [
+          1046.8773164472095,
+          19503.643092416747
+        ],
+        [
+          1055.1895743623538,
+          8183.582329394164
+        ]
+      ],
+      "maximum_primal_residual": 1.3955385215055095e-14,
+      "maximum_rss_bytes": 1805139968,
+      "name": "pitch120_zeta85",
+      "parallel_current_A_T_m2": [
+        -78592.72418049854,
+        -59191.63828215063
+      ],
+      "particle_flux_m2_s": [
+        [
+          2.2466952274664727e+18,
+          6.101055960839156e+18
+        ],
+        [
+          2.258917084382042e+18,
+          3.413750113608399e+18
+        ]
+      ],
+      "peak_memory_footprint_bytes": 1641187536,
+      "raw_log": {
+        "bytes": 1560,
+        "relative_path": "dkx-pitch120-zeta85/dkx.log",
+        "sha256": "8305af721558ad0ea4f67741ea48a1e55b481873d0f5a0a6f902033bae54e1a1"
+      },
+      "raw_output": {
+        "bytes": 48144,
+        "relative_path": "dkx-pitch120-zeta85/result.nc",
+        "sha256": "cee3a7342f978b842427d1cab37b0898bfbea59396ccf597b4075673e11548a1"
+      },
+      "resolution": {
+        "pitch": 120,
+        "speed": 8,
+        "theta": 15,
+        "zeta": 85
+      },
+      "runtime_input": {
+        "bytes": 1077,
+        "relative_path": "dkx-pitch120-zeta85/input.toml",
+        "sha256": "f5d08ce589e05a91c04a6b6e8001053531dd793d70fd113ffcbac922a3bb101a"
+      },
+      "wall_seconds": 119.26
+    },
+    {
+      "heat_flux_W_m2": [
+        [
+          1053.733825067417,
+          19905.378542394454
+        ],
+        [
+          1060.35491173765,
+          8302.250611534682
+        ]
+      ],
+      "maximum_primal_residual": 2.2784860210797664e-14,
+      "maximum_rss_bytes": 1833779200,
+      "name": "pitch150_zeta85",
+      "parallel_current_A_T_m2": [
+        -79988.6787410825,
+        -58594.46598798638
+      ],
+      "particle_flux_m2_s": [
+        [
+          2.2523945288255974e+18,
+          6.193340120938903e+18
+        ],
+        [
+          2.2635467558950395e+18,
+          3.451138520545213e+18
+        ]
+      ],
+      "peak_memory_footprint_bytes": 1668516072,
+      "raw_log": {
+        "bytes": 1560,
+        "relative_path": "dkx-pitch150-zeta85/dkx.log",
+        "sha256": "7842315541a7fbc1201c00ac375e4a3a41fcfe1d77f9deb9050d87734490aa74"
+      },
+      "raw_output": {
+        "bytes": 48149,
+        "relative_path": "dkx-pitch150-zeta85/result.nc",
+        "sha256": "c33abd22bcf3183cd2ff5728644f7fd5dae71695e304313bce771421f1b05111"
+      },
+      "resolution": {
+        "pitch": 150,
+        "speed": 8,
+        "theta": 15,
+        "zeta": 85
+      },
+      "runtime_input": {
+        "bytes": 1077,
+        "relative_path": "dkx-pitch150-zeta85/input.toml",
+        "sha256": "514858002e10f4931b28cda2e9f9d44962fff16c1d187b2eae94e3fd391c0b96"
+      },
+      "wall_seconds": 136.81
+    },
+    {
+      "heat_flux_W_m2": [
+        [
+          1056.4535533986555,
+          19630.545035663054
+        ],
+        [
+          1055.8418152950678,
+          8159.415763439671
+        ]
+      ],
+      "maximum_primal_residual": 7.09488572758851e-14,
+      "maximum_rss_bytes": 2393505792,
+      "name": "pitch150_zeta109",
+      "parallel_current_A_T_m2": [
+        -79871.38577506335,
+        -58955.93003849787
+      ],
+      "particle_flux_m2_s": [
+        [
+          2.2560649465897544e+18,
+          6.118366489561648e+18
+        ],
+        [
+          2.2592272881025533e+18,
+          3.393750194570329e+18
+        ]
+      ],
+      "peak_memory_footprint_bytes": 2216397416,
+      "raw_log": {
+        "bytes": 1558,
+        "relative_path": "dkx-pitch150-zeta109/dkx.log",
+        "sha256": "bf577f70d6d74b313b852e63d908546391aab8633c1db47bcfb222958011da54"
+      },
+      "raw_output": {
+        "bytes": 48147,
+        "relative_path": "dkx-pitch150-zeta109/result.nc",
+        "sha256": "e6a2d294200cc719489119eec34a3d71179605adae17804afc4561d28a473f58"
+      },
+      "resolution": {
+        "pitch": 150,
+        "speed": 8,
+        "theta": 15,
+        "zeta": 109
+      },
+      "runtime_input": {
+        "bytes": 1079,
+        "relative_path": "dkx-pitch150-zeta109/input.toml",
+        "sha256": "2868f5ed02185d90389a487295f0c0e4306e4983f3a09f88fa19090edf304798"
+      },
+      "wall_seconds": 283.1
+    },
+    {
+      "heat_flux_W_m2": [
+        [
+          1052.964107358173,
+          19897.8698468449
+        ],
+        [
+          1060.2963408394564,
+          8303.91781536527
+        ]
+      ],
+      "maximum_primal_residual": 1.8015270519005424e-14,
+      "maximum_rss_bytes": 2083422208,
+      "name": "speed10_pitch150_zeta85",
+      "parallel_current_A_T_m2": [
+        -79846.49241758678,
+        -58327.79832645165
+      ],
+      "particle_flux_m2_s": [
+        [
+          2.2508766761264228e+18,
+          6.189966684738138e+18
+        ],
+        [
+          2.2638959960431657e+18,
+          3.4512456966343163e+18
+        ]
+      ],
+      "peak_memory_footprint_bytes": 1919158696,
+      "raw_log": {
+        "bytes": 1558,
+        "relative_path": "dkx-speed10-pitch150-zeta85/dkx.log",
+        "sha256": "59605b45b622a9addf907f0907b65f7d591bced84c57f46d67f6931bec0b3445"
+      },
+      "raw_output": {
+        "bytes": 48157,
+        "relative_path": "dkx-speed10-pitch150-zeta85/result.nc",
+        "sha256": "ef995efa0836f034af3b7853be4c22937a8cee99d7d794f9ada4f834bca47c26"
+      },
+      "resolution": {
+        "pitch": 150,
+        "speed": 10,
+        "theta": 15,
+        "zeta": 85
+      },
+      "runtime_input": {
+        "bytes": 1079,
+        "relative_path": "dkx-speed10-pitch150-zeta85/input.toml",
+        "sha256": "e7b7298e8a57f5dba55a2d695a22dd5a8721b4f77b8f440f6084f83d4666c3bd"
+      },
+      "wall_seconds": 177.42
+    },
+    {
+      "heat_flux_W_m2": [
+        [
+          1058.344381208893,
+          19978.866651092198
+        ],
+        [
+          1060.7066957574186,
+          8337.788475758542
+        ]
+      ],
+      "maximum_primal_residual": 2.0767048946927916e-14,
+      "maximum_rss_bytes": 2400976896,
+      "name": "theta19_pitch150_zeta85",
+      "parallel_current_A_T_m2": [
+        -74110.52742812013,
+        -54953.526025871506
+      ],
+      "particle_flux_m2_s": [
+        [
+          2.2561886082144404e+18,
+          6.209888706174451e+18
+        ],
+        [
+          2.264737196618436e+18,
+          3.4569345751590036e+18
+        ]
+      ],
+      "peak_memory_footprint_bytes": 2235419240,
+      "raw_log": {
+        "bytes": 1561,
+        "relative_path": "dkx-theta19-pitch150-zeta85/dkx.log",
+        "sha256": "4bb88a38d2965cb60a38107190d96f0a2eca22ad12e2b0e7769e17e09c91f848"
+      },
+      "raw_output": {
+        "bytes": 48156,
+        "relative_path": "dkx-theta19-pitch150-zeta85/result.nc",
+        "sha256": "e3a6a479e8979b3894916ec11a48733a51fa25e97b4abab8ce6306269c31abbf"
+      },
+      "resolution": {
+        "pitch": 150,
+        "speed": 8,
+        "theta": 19,
+        "zeta": 85
+      },
+      "runtime_input": {
+        "bytes": 1085,
+        "relative_path": "dkx-theta19-pitch150-zeta85/input.toml",
+        "sha256": "d88f76cf62fa3953d8504c6210b782de495700badd228eb834c128cb7734f2ae"
+      },
+      "wall_seconds": 275.49
+    },
+    {
+      "heat_flux_W_m2": [
+        [
+          1065.3455408386544,
+          20010.802473846677
+        ],
+        [
+          1067.7089699092176,
+          8426.457005373619
+        ]
+      ],
+      "maximum_primal_residual": 5.0139641607073454e-14,
+      "maximum_rss_bytes": 3103784960,
+      "name": "theta23_pitch150_zeta85",
+      "parallel_current_A_T_m2": [
+        -68809.6686771091,
+        -52676.26421642618
+      ],
+      "particle_flux_m2_s": [
+        [
+          2.2649984877885924e+18,
+          6.217420756699977e+18
+        ],
+        [
+          2.270929568286845e+18,
+          3.488796717653855e+18
+        ]
+      ],
+      "peak_memory_footprint_bytes": 2924432528,
+      "raw_log": {
+        "bytes": 1560,
+        "relative_path": "dkx-theta23-pitch150-zeta85/dkx.log",
+        "sha256": "4057696666658316ee5ff3d87cc6b6cd7ff38b4c212904cff2db797a97eacb6c"
+      },
+      "raw_output": {
+        "bytes": 48156,
+        "relative_path": "dkx-theta23-pitch150-zeta85/result.nc",
+        "sha256": "76072e2557d8e2fde939036996bbd4d1c95f1cef92d7f6b1811ae7f5fb241f9d"
+      },
+      "resolution": {
+        "pitch": 150,
+        "speed": 8,
+        "theta": 23,
+        "zeta": 85
+      },
+      "runtime_input": {
+        "bytes": 1085,
+        "relative_path": "dkx-theta23-pitch150-zeta85/input.toml",
+        "sha256": "dc15a70939e4a06397e942d71d620ae3e2a6223208b9b20dd3a2a6a8663bb398"
+      },
+      "wall_seconds": 470.03
+    },
+    {
+      "heat_flux_W_m2": [
+        [
+          1069.442986521294,
+          19911.60285052408
+        ],
+        [
+          1064.2827257878446,
+          8380.217674967693
+        ]
+      ],
+      "maximum_primal_residual": 8.800806903592555e-14,
+      "maximum_rss_bytes": 4467146752,
+      "name": "theta29_pitch150_zeta85",
+      "parallel_current_A_T_m2": [
+        -65302.3116615841,
+        -49799.09520062839
+      ],
+      "particle_flux_m2_s": [
+        [
+          2.2680096310499779e+18,
+          6.192781487196417e+18
+        ],
+        [
+          2.2652252978212882e+18,
+          3.474055723090558e+18
+        ]
+      ],
+      "peak_memory_footprint_bytes": 4291399784,
+      "raw_log": {
+        "bytes": 1560,
+        "relative_path": "dkx-theta29-pitch150-zeta85/dkx.log",
+        "sha256": "572f68588325ef222d4e13c430f54085d0606a482c77ac18ad5b9d9fc2c5cf25"
+      },
+      "raw_output": {
+        "bytes": 48153,
+        "relative_path": "dkx-theta29-pitch150-zeta85/result.nc",
+        "sha256": "58002f7864613f1b5bf760ddbbd1250cd578822caf23275f3e9bd0da5a40b9cb"
+      },
+      "resolution": {
+        "pitch": 150,
+        "speed": 8,
+        "theta": 29,
+        "zeta": 85
+      },
+      "runtime_input": {
+        "bytes": 1085,
+        "relative_path": "dkx-theta29-pitch150-zeta85/input.toml",
+        "sha256": "87d99f0dab00904297634bdaa187951a94f6739ee632b88614d1e37a558d0121"
+      },
+      "wall_seconds": 983.34
+    },
+    {
+      "heat_flux_W_m2": [
+        [
+          1055.1612752728993,
+          20063.919597442793
+        ],
+        [
+          1061.2292565292548,
+          8334.141215487653
+        ]
+      ],
+      "maximum_primal_residual": 2.5032445888585968e-14,
+      "maximum_rss_bytes": 1930526720,
+      "name": "pitch180_zeta85",
+      "parallel_current_A_T_m2": [
+        -78599.08504869885,
+        -58287.72598090892
+      ],
+      "particle_flux_m2_s": [
+        [
+          2.253455590556785e+18,
+          6.229635715538763e+18
+        ],
+        [
+          2.2642443008497357e+18,
+          3.460734004871189e+18
+        ]
+      ],
+      "peak_memory_footprint_bytes": 1765230872,
+      "raw_log": {
+        "bytes": 1558,
+        "relative_path": "dkx-pitch180-zeta85/dkx.log",
+        "sha256": "77a38a3f395d8ed5d59efc9a54afd021c5269ec2d6844e2bd46796934130e9c7"
+      },
+      "raw_output": {
+        "bytes": 48147,
+        "relative_path": "dkx-pitch180-zeta85/result.nc",
+        "sha256": "72ce3af327f133d806d373e7f88384bcd4f2ada3762c560f281f13c9b181daa4"
+      },
+      "resolution": {
+        "pitch": 180,
+        "speed": 8,
+        "theta": 15,
+        "zeta": 85
+      },
+      "runtime_input": {
+        "bytes": 1077,
+        "relative_path": "dkx-pitch180-zeta85/input.toml",
+        "sha256": "a0e2d5f609708830376f35834f106c22adfba16b57ec3281c26cddebff8f0056"
+      },
+      "wall_seconds": 171.82
+    }
+  ],
+  "environment": {
+    "dkx": "2.3.1",
+    "host": "Mac mini, Apple M4, 10 CPU cores, 24 GiB RAM",
+    "jax": "0.9.2",
+    "macos": "26.6.2",
+    "numpy": "2.4.3",
+    "python": "3.11.15",
+    "scipy": "1.17.1",
+    "solvax": "0.19.0"
+  },
+  "outcome": {
+    "dkx_pitch_converged_at_zeta85": true,
+    "dkx_speed8_flux_converged_against_speed10": true,
+    "dkx_theta15_flux_converged_against_theta19": true,
+    "dkx_zeta85_flux_converged_against_zeta109": true,
+    "parallel_current_status": "refinement_exhausted",
+    "parallel_current_theta_converged": false,
+    "sfincs_pitch_converged": true,
+    "transport_flux_fixed_field_admitted": true,
+    "whole_profile_admitted": false
+  },
+  "schema": "dkx.w7x_fixed_field_resolution_referee.v1",
+  "sfincs_pitch_rungs": [
+    {
+      "allocation": [
+        6,
+        11,
+        19,
+        30,
+        42,
+        52,
+        52,
+        52
+      ],
+      "heat_flux_W_m2": [
+        930.2412024479798,
+        6897.4956262749465
+      ],
+      "heat_flux_psi_hat": [
+        -4.75468956754309e-08,
+        -3.525478167395787e-07
+      ],
+      "ksp_final_residual": 5.766786384497e-15,
+      "matrix_nnz": 7760128,
+      "matrix_size": 293056,
+      "maximum_rss_bytes": 4503191552,
+      "parallel_current_A_T_m2": -61307.29668112181,
+      "particle_flux_m2_s": [
+        2.0762758366327265e+18,
+        2.941656760311023e+18
+      ],
+      "particle_flux_psi_hat": [
+        -3.4005724724521614e-08,
+        -4.817913316729488e-08
+      ],
+      "pitch": 52,
+      "raw_log": {
+        "bytes": 20290,
+        "relative_path": "sfincs-pitch52/sfincs.log",
+        "sha256": "3218fba3f88d12fba9e0e8d68a29974c6b6ae4f0ec8639c7236bb358b41c79d0"
+      },
+      "raw_output": {
+        "bytes": 619836,
+        "relative_path": "sfincs-pitch52/sfincsOutput.h5",
+        "sha256": "bf02708e8e2712a3f1fd38bf754c1dd1cba69649d2685052b3807c672ef2c719"
+      },
+      "wall_seconds": 10.48
+    },
+    {
+      "allocation": [
+        8,
+        15,
+        26,
+        40,
+        57,
+        70,
+        70,
+        70
+      ],
+      "heat_flux_W_m2": [
+        1059.9281560699212,
+        8276.485341630612
+      ],
+      "heat_flux_psi_hat": [
+        -5.417551203654258e-08,
+        -4.2303134290565884e-07
+      ],
+      "ksp_final_residual": 1.593217714291e-16,
+      "matrix_nnz": 10517000,
+      "matrix_size": 395176,
+      "maximum_rss_bytes": 5073403904,
+      "parallel_current_A_T_m2": -54572.575753318575,
+      "particle_flux_m2_s": [
+        2.2648354454387238e+18,
+        3.5067090118046986e+18
+      ],
+      "particle_flux_psi_hat": [
+        -3.709399750508785e-08,
+        -5.743368932030955e-08
+      ],
+      "pitch": 70,
+      "raw_log": {
+        "bytes": 21268,
+        "relative_path": "sfincs-pitch70/sfincs.log",
+        "sha256": "82f546b0059e0735b7b97c4c9456905012cdb28c553331ce6dc115990f13bd01"
+      },
+      "raw_output": {
+        "bytes": 619836,
+        "relative_path": "sfincs-pitch70/sfincsOutput.h5",
+        "sha256": "75a97322f5f1667c7bb177207fd6aea80550d8532036f69762ce1bea5bc3f176"
+      },
+      "wall_seconds": 16.05
+    },
+    {
+      "allocation": [
+        11,
+        19,
+        33,
+        52,
+        73,
+        90,
+        90,
+        90
+      ],
+      "heat_flux_W_m2": [
+        1075.7049080622214,
+        8971.240430257589
+      ],
+      "heat_flux_psi_hat": [
+        -5.498190029272929e-08,
+        -4.585419692163321e-07
+      ],
+      "ksp_final_residual": 2.48549438294e-14,
+      "matrix_nnz": 13573532,
+      "matrix_size": 508396,
+      "maximum_rss_bytes": 6078922752,
+      "parallel_current_A_T_m2": -53231.99216638124,
+      "particle_flux_m2_s": [
+        2.2791137061193464e+18,
+        3.7399391112927493e+18
+      ],
+      "particle_flux_psi_hat": [
+        -3.732785015302776e-08,
+        -6.125358570436904e-08
+      ],
+      "pitch": 90,
+      "raw_log": {
+        "bytes": 21508,
+        "relative_path": "sfincs-pitch90/sfincs.log",
+        "sha256": "182332623d0d2a11e3bcfa68221cdc759ba8438664380d1cf1fb1346d5d0cabf"
+      },
+      "raw_output": {
+        "bytes": 619836,
+        "relative_path": "sfincs-pitch90/sfincsOutput.h5",
+        "sha256": "185e7edd596094deb12572d75980d708725f3366d159ccce88abcd98b5f09e85"
+      },
+      "wall_seconds": 20.99
+    },
+    {
+      "allocation": [
+        14,
+        26,
+        45,
+        69,
+        97,
+        120,
+        120,
+        120
+      ],
+      "heat_flux_W_m2": [
+        1078.4491745926402,
+        9191.625808070883
+      ],
+      "heat_flux_psi_hat": [
+        -5.512216644529706e-08,
+        -4.6980640314992274e-07
+      ],
+      "ksp_final_residual": 5.587061496811e-15,
+      "matrix_nnz": 18158330,
+      "matrix_size": 678226,
+      "maximum_rss_bytes": 9452142592,
+      "parallel_current_A_T_m2": -52911.01409080321,
+      "particle_flux_m2_s": [
+        2.281483759035798e+18,
+        3.80417339982469e+18
+      ],
+      "particle_flux_psi_hat": [
+        -3.736666742655058e-08,
+        -6.230562970312558e-08
+      ],
+      "pitch": 120,
+      "raw_log": {
+        "bytes": 21868,
+        "relative_path": "sfincs-pitch120/sfincs.log",
+        "sha256": "ab4682587eb306fb0d45a95892005939cfda4da3be003fcab1efbc95c2bccacf"
+      },
+      "raw_output": {
+        "bytes": 619836,
+        "relative_path": "sfincs-pitch120/sfincsOutput.h5",
+        "sha256": "a3ae8c43be846bb60a3847f926c0d5a941c833a57e3002189318995605df53a8"
+      },
+      "wall_seconds": 27.64
+    },
+    {
+      "allocation": [
+        18,
+        33,
+        56,
+        86,
+        122,
+        150,
+        150,
+        150
+      ],
+      "heat_flux_W_m2": [
+        1078.6773549674215,
+        9204.798989445379
+      ],
+      "heat_flux_psi_hat": [
+        -5.513382930052897e-08,
+        -4.7047971656463533e-07
+      ],
+      "ksp_final_residual": 4.030038395463e-15,
+      "matrix_nnz": 22773094,
+      "matrix_size": 849166,
+      "maximum_rss_bytes": 11112513536,
+      "parallel_current_A_T_m2": -53012.257840286315,
+      "particle_flux_m2_s": [
+        2.2816576362968223e+18,
+        3.8079931035723177e+18
+      ],
+      "particle_flux_psi_hat": [
+        -3.736951522845143e-08,
+        -6.236818969244843e-08
+      ],
+      "pitch": 150,
+      "raw_log": {
+        "bytes": 22228,
+        "relative_path": "sfincs-pitch150/sfincs.log",
+        "sha256": "774a1da141d4e534700964698d82b2544e0e11bd49d6c36454562789a32d8331"
+      },
+      "raw_output": {
+        "bytes": 619836,
+        "relative_path": "sfincs-pitch150/sfincsOutput.h5",
+        "sha256": "c5ebcd1aa181ca00ad2c1ab45f532b183b975b89e65b1dac31198d25b3477e4c"
+      },
+      "wall_seconds": 36.47
+    }
+  ],
+  "source": {
+    "dkx_commit": "706748dc5752cc1b2f01c0b4c2950074733da0fe",
+    "geometry": {
+      "bytes": 19416676,
+      "path": "SFINCS/equilibria/w7x_standardConfig.bc",
+      "sha256": "81c686e5a5bd8f38d8b1f754ebe2910951f20094bab35d73d2827d9875bb6062"
+    },
+    "inputs": {
+      "w7x_standard_native_fixed_er_nx8_zeta85_pitch150.toml": {
+        "bytes": 1075,
+        "path": "validation/inputs/w7x_standard_native_fixed_er_nx8_zeta85_pitch150.toml",
+        "sha256": "db6322fdc1ccb6f4d79c42ccf0b132d4efccd474593bb4dd4352e208e5f7cea2"
+      },
+      "w7x_standard_pas_dkes_fixed_er_nx8_zeta37_pitch120.input.namelist": {
+        "bytes": 1160,
+        "path": "validation/inputs/w7x_standard_pas_dkes_fixed_er_nx8_zeta37_pitch120.input.namelist",
+        "sha256": "9fbf1d2e2794ce765bc4607a01d708e29235447cda0088b25160286c3a150b21"
+      },
+      "w7x_standard_pas_dkes_fixed_er_nx8_zeta37_pitch150.input.namelist": {
+        "bytes": 1160,
+        "path": "validation/inputs/w7x_standard_pas_dkes_fixed_er_nx8_zeta37_pitch150.input.namelist",
+        "sha256": "0ddd64b2f81a67d3413dc62266b1dfc2aaff9f4f2497cf8cd798645a0bea3f98"
+      },
+      "w7x_standard_pas_dkes_fixed_er_nx8_zeta37_pitch52.input.namelist": {
+        "bytes": 1159,
+        "path": "validation/inputs/w7x_standard_pas_dkes_fixed_er_nx8_zeta37_pitch52.input.namelist",
+        "sha256": "d46c1deadee93660c3b6389315a54608e8861c5fc05580ab3390ae920a5a3136"
+      },
+      "w7x_standard_pas_dkes_fixed_er_nx8_zeta37_pitch70.input.namelist": {
+        "bytes": 1159,
+        "path": "validation/inputs/w7x_standard_pas_dkes_fixed_er_nx8_zeta37_pitch70.input.namelist",
+        "sha256": "b5bf28eb69a965f3f92bd78c2925f8f76ce8b8b40c0d0e4203b251a12a0c170c"
+      },
+      "w7x_standard_pas_dkes_fixed_er_nx8_zeta37_pitch90.input.namelist": {
+        "bytes": 1159,
+        "path": "validation/inputs/w7x_standard_pas_dkes_fixed_er_nx8_zeta37_pitch90.input.namelist",
+        "sha256": "db7cabd7fc16e5f7ce1912c88dbc281585d563d6e511deb63afb9c0325995150"
+      }
+    },
+    "monkes_commit": "fb5c302efeb191b9a36818bc4ce337623c865938",
+    "reference_source_paths": {
+      "monkes": [
+        "sources/libraries/DKE_BTD_Solution_Legendre_MFree.f90",
+        "doc/MONKES_manual/chapters/Usage.tex"
+      ],
+      "sfincs": [
+        "doc/manual/version3/resolution.tex",
+        "fortran/version3/createGrids.F90",
+        "fortran/version3/diagnostics.F90"
+      ],
+      "stellopt": [
+        "PENTA/Sources/penta_subroutines.f90",
+        "BOOTSJ/Sources"
+      ],
+      "yancc": [
+        "src/yancc/dke.py",
+        "tests/test_velocity_grids.py"
+      ]
+    },
+    "sfincs_commit": "8df5453472e982df0f6ae005243ce38d57a83711",
+    "sfincs_executable": {
+      "bytes": 2041288,
+      "sha256": "795e4fa339628c33c0c40dcae473ca5614be72198d948cbb5f38ce69de9a4fc6"
+    },
+    "stellopt_commit": "9177f58c986aa20186f6b8db360fe81cf53137e0",
+    "yancc_commit": "6f399a21ecfcc03008e466bb09811a330321b9be"
+  },
+  "summary": "At the W7-X standard rN=0.5 surface and Er=8.55 kV/m, an independently converged SFINCS pitch ladder and matched DKX solve certify cross-code parity. DKX one-axis refinements admit fixed-field particle/heat flux at theta15/zeta85/pitch150/speed8, including a joint pitch180 check, but parallel current remains theta-sensitive through theta29, so no whole-profile or bootstrap-current convergence claim is promoted."
+}
