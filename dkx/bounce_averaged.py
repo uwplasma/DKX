@@ -90,6 +90,11 @@ from typing import Any
 
 import numpy as np
 
+# The JAX backend is imported below; dkx/runtime.py explains why this is here.
+from .runtime import configure as _configure_runtime
+
+_configure_runtime()
+
 import jax  # noqa: E402
 import jax.numpy as jnp  # noqa: E402
 

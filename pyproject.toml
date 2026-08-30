@@ -7,7 +7,7 @@ name = "dkx"
 dynamic = ["version"]
 description = "Neoclassical transport solver with CPU/GPU and differentiable JAX workflows"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
   # numpy>=2.1 is not a new constraint -- it is the one jax already carries,
   # made explicit so the resolver says so.  Left implicit, `pip install dkx`
@@ -22,9 +22,10 @@ dependencies = [
   "h5py",
   "netCDF4",
   "matplotlib",
-  # Python 3.10 has no stdlib tomllib; native Case.from_file() needs the
-  # compatibility reader at runtime, not only while running tests.
-  "tomli>=1.1.0; python_version < '3.11'",
+  # Rich owns every user-facing table, progress bar, and error panel the CLI
+  # prints. It is a core dependency, not an extra: `dkx run` without it would
+  # have to carry a second, plainer output path, and two formatters drift.
+  "rich>=13.0",
   # solvax (PyPI) owns the structured linear-algebra solver tiers (block-Thomas
   # elimination, recycled GCROT, implicit differentiation) that every canonical
   # solve uses; it is a core dependency, not optional. 0.19.0 is the floor:
@@ -34,11 +35,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Retained as a no-op alias so existing `pip install dkx[structured]`
-# invocations keep working; solvax is now a core dependency (see above).
-structured = [
-  "solvax>=0.19.0",
-]
+# `structured` is gone. It was an alias for a dependency that has been core
+# since solvax moved into the required list, so installing it changed nothing;
+# pip warns about the unknown extra and installs the same environment.
 dev = [
   "pytest",
   "pytest-cov",
@@ -50,7 +49,8 @@ dev = [
 ]
 docs = [
   "sphinx",
-  "sphinx-rtd-theme",
+  "myst-parser",
+  "furo",
 ]
 
 [project.urls]

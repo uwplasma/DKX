@@ -28,9 +28,9 @@ def _in_a_fresh_process(code: str) -> str:
     return out.stdout.strip().splitlines()[-1]
 
 
-def test_importing_dkx_does_not_cap_the_cache() -> None:
+def test_configuring_the_runtime_does_not_cap_the_cache() -> None:
     capped = _in_a_fresh_process(
-        "import dkx, jax; print(jax.config.jax_compilation_cache_max_size)"
+        "import dkx.run, jax; print(jax.config.jax_compilation_cache_max_size)"
     )
     assert int(capped) <= 0, (
         "dkx must not set jax_compilation_cache_max_size: it enables jax's LRU, "
@@ -39,9 +39,14 @@ def test_importing_dkx_does_not_cap_the_cache() -> None:
 
 
 def test_the_cache_is_still_enabled() -> None:
-    """Not capping is not the same as not caching; the cache must still work."""
+    """Not capping is not the same as not caching; the cache must still work.
+
+    The trigger is reaching for the solve stack, not importing the package:
+    ``import dkx`` is inert now, and the cache directory is one of the seven
+    things it stopped doing (plan.md 6.4).
+    """
     directory = _in_a_fresh_process(
-        "import dkx, os; print(os.environ.get('JAX_COMPILATION_CACHE_DIR', ''))"
+        "import dkx.run, os; print(os.environ.get('JAX_COMPILATION_CACHE_DIR', ''))"
     )
     assert directory.endswith("jax_compilation_cache"), directory
 

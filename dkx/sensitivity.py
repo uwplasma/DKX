@@ -18,6 +18,11 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any
 
+# The JAX backend is imported below; dkx/runtime.py explains why this is here.
+from .runtime import configure as _configure_runtime
+
+_configure_runtime()
+
 import jax
 import jax.numpy as jnp
 

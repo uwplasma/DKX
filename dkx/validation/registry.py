@@ -29,14 +29,10 @@ import importlib.util
 import json
 import sys
 import tempfile
+import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-
-try:  # Python 3.11+
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover - exercised by the 3.10 CI floor
-    import tomli as tomllib
 
 REGISTRY_RELATIVE_PATH = Path("validation/registry.toml")
 CAPABILITIES_RELATIVE_PATH = Path("validation/capabilities.toml")

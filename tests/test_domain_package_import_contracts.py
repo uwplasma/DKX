@@ -77,6 +77,7 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "result.py": "public native result API",
     "profiling.py": "stable support utility",
     "run.py": "public API",
+    "runtime.py": "explicit runtime configuration",
     "sensitivity.py": "public differentiation API",
     "shaing_callen.py": "stable physics kernel",
     "coarse_precond.py": "stable solver kernel",

@@ -15,19 +15,26 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
     "sphinx.ext.mathjax",
+    # MyST is the narrative format plan.md section 8.1 moves to. Enabling the
+    # parser now means Phase F can convert pages one at a time instead of in a
+    # single unreviewable commit; the .rst pages keep building unchanged.
+    "myst_parser",
 ]
 
 templates_path = ["_templates"]
-exclude_patterns: list[str] = []
+# docs/dev/ holds internal ledgers, not user documentation. They were invisible
+# to Sphinx until MyST was enabled because nothing parsed .md; they are excluded
+# rather than added to a toctree, because plan.md section 8.2 keeps campaign
+# diaries out of user navigation. Phase F decides whether they survive at all.
+exclude_patterns: list[str] = ["dev/**"]
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
 
-try:
-    import sphinx_rtd_theme  # type: ignore[import-not-found]
-except Exception:
-    html_theme = "alabaster"
-else:
-    html_theme = "sphinx_rtd_theme"
+# Furo, per plan.md section 8.1. There is deliberately no fallback theme: the
+# docs extra installs it, and silently building with a different theme than the
+# one the pages are designed against is the kind of quiet downgrade the plan
+# forbids. A missing theme should fail the build and say so.
+html_theme = "furo"
 
 # Read the Docs and some locked-down environments can block certain CDNs or inline styles.
 # Pin MathJax to a widely mirrored CDN, and prefer the TeX-only bundle to avoid MathML

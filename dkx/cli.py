@@ -11,6 +11,7 @@ import time
 
 import numpy as np
 
+from . import runtime as _runtime
 from .input_compat import with_equilibrium_override
 from .namelist import read_sfincs_input
 
@@ -1053,6 +1054,11 @@ def _merge_global_cli_args(argv: list[str], args: argparse.Namespace) -> argpars
 
 def main(argv: list[str] | None = None) -> int:
     """Run the dkx command-line interface."""
+    # The CLI bootstrap, as plan.md section 6.4 requires: the runtime is applied
+    # here, once, before anything imports the JAX backend. Doing it first is what
+    # lets --cores reach XLA's threadpool, which reads NPROC when the CPU backend
+    # initialises and never again.
+    _runtime.configure()
     argv = list(sys.argv[1:]) if argv is None else list(argv)
     rc = _maybe_handle_plot(argv)
     if rc is not None:
