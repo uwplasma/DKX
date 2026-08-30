@@ -412,3 +412,27 @@ This evidence is deliberately limited to low-resolution discovery and endpoint
 replay. It does not promote admitted-grid ambipolar roots, prove there are no
 unsampled crossings, or admit whole-profile, bootstrap-current, full-FP, Phi1,
 experimental, second-family, or performance-equivalence claims.
+
+## W7-X admitted-grid seeded envelopes
+
+`w7x_admitted_grid_seeded_envelope_v1.json` promotes the low-cost discovery to
+the fixed-field-admitted theta-15, zeta-85, pitch-150, speed-8 transport grid.
+Audit the compact record and, optionally, all broad-envelope, extension, and
+cold/warm final NetCDF results with:
+
+```bash
+python tools/paper_benchmarks/audit_w7x_admitted_grid_seeded_envelope.py \
+  --results-root ../runtime/evidence/w7x-admitted-grid-seeded-envelope-v1
+```
+
+The broad run resolved the inner-surface root at `12.681640625 kV/m` and
+retained explicit failed signs for the three original outer-surface envelopes.
+A targeted `[11, 14] kV/m` extension found the moved outer root at
+`11.533203125 kV/m`. The final four-endpoint cold/warm replay retained strict
+sign changes, topology `[1, 1]`, exact arrays except solve timing, and residuals
+below `2.99e-14`.
+
+This is an explicit-interval result, not a global all-root search. Unsampled
+crossings, five-surface convergence, bootstrap current, full-FP, Phi1,
+experiment, a second stellarator family, and performance equivalence remain
+outside the claim.
