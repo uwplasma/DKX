@@ -1083,6 +1083,51 @@
     ]
   },
   {
+    "id": "w7x_admitted_grid_seeded_envelope",
+    "status": "implemented",
+    "release_gate": {
+      "claim_status": "bounded_proxy",
+      "blocks_current_release": false,
+      "evidence": "checked two-surface admitted-grid W7-X broad envelopes, targeted extension, and exact cold/warm endpoint replay",
+      "promotion_gate": "Keep the claim explicit-interval-only and require surface-local discovery before extending to the five-surface profile"
+    },
+    "kind": "profile_validation",
+    "literature": [
+      "https://github.com/PrincetonUniversity/STELLOPT",
+      "https://github.com/landreman/sfincs",
+      "https://github.com/JavierEscoto/MONKES",
+      "https://github.com/f0uriest/yancc"
+    ],
+    "scripts": [
+      "tools/paper_benchmarks/audit_w7x_admitted_grid_seeded_envelope.py"
+    ],
+    "artifacts": [
+      "validation/w7x_admitted_grid_seeded_envelope_v1.json",
+      "validation/inputs/w7x_standard_native_ambipolar_admitted_seeded_envelopes.toml",
+      "validation/inputs/w7x_standard_native_ambipolar_admitted_seeded_extension.toml",
+      "validation/inputs/w7x_standard_native_ambipolar_admitted_seeded_final.toml"
+    ],
+    "claims": [
+      "Explicit candidate intervals resolve one admitted-grid root on each of the two inner W7-X surfaces",
+      "The lower outer-surface envelopes retain failed signs and are not presented as missing or interpolated roots",
+      "A four-endpoint cold/warm replay retains strict signs, topology [1,1], and exact scientific arrays except solve timing"
+    ],
+    "source_code": [
+      "dkx/workflows/ambipolar_native.py",
+      "tools/paper_benchmarks/audit_w7x_admitted_grid_seeded_envelope.py"
+    ],
+    "tests": [
+      "tests/test_w7x_admitted_grid_seeded_envelope.py",
+      "tests/test_seeded_ambipolar_promotion.py"
+    ],
+    "acceptance_gates": [
+      "Verify checked inputs and optionally all broad, extension, and final raw files by checksum",
+      "Require strict endpoint signs, exact cold/warm arrays except solve timing, and a 1e-12 maximum primal residual",
+      "Retain explicit failed interval evidence and the explicit_seeded_intervals_only scope",
+      "Do not promote global all-root, five-surface, bootstrap-current, full-FP, Phi1, experiment, second-family, or performance claims"
+    ]
+  },
+  {
     "id": "adjoint_sensitivity_gradient_checks",
     "status": "implemented",
     "release_gate": {
