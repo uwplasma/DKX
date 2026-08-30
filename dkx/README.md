@@ -55,7 +55,8 @@ errors raised by `inputs.load_sfincs_input`. There is no legacy fallback.
 
 | Module | Role |
 | --- | --- |
-| `__init__.py` | Public package exports, JAX precision/cache setup. |
+| `__init__.py` | Public package exports. Deliberately inert: no JAX import, no environment mutation, no cache directory (plan.md 6.4). |
+| `runtime.py` | Explicit runtime configuration -- numpy check, distributed bootstrap, XLA threadpool sizing, compilation cache, and float64 -- applied by `configure()`. Called by the CLI bootstrap and by every module that imports the JAX backend. |
 | `_version.py` | Single source of truth for the package and release version. |
 | `config.py` | Native schema-v1 `Case` and its typed physical/numerical submodels. |
 | `ambipolar.py` | Scanplot-compatible ambipolar post-processing (`solve_ambipolar_from_scan_dir`, `radial_current_from_output`) over precomputed scan directories; in-process ambipolar solves live in `er.py`. |

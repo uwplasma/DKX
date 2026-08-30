@@ -4,16 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
+import tomllib
 
-
-tomllib = pytest.importorskip(
-    "tomllib",
-    reason=(
-        "planning TOML schema checks require Python 3.11; "
-        "DKX 2.3 collection still supports 3.10"
-    ),
-)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 VALIDATION_ROOT = REPO_ROOT / "validation"

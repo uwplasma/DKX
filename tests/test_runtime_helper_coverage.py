@@ -16,21 +16,21 @@ def test_initialize_distributed_runtime_from_env(monkeypatch: pytest.MonkeyPatch
         calls.append(kwargs)
 
     monkeypatch.setattr(jax_distributed, "initialize", _fake_initialize)
-    monkeypatch.setattr(dkx, "_distributed_runtime_initialized", False)
+    monkeypatch.setattr(dkx.runtime, "_distributed_runtime_initialized", False)
 
     monkeypatch.delenv("DKX_DISTRIBUTED", raising=False)
     assert dkx.initialize_distributed_runtime_from_env() is False
 
     monkeypatch.setenv("DKX_DISTRIBUTED", "1")
     monkeypatch.delenv("DKX_COORDINATOR_ADDRESS", raising=False)
-    monkeypatch.setattr(dkx, "_distributed_runtime_initialized", False)
+    monkeypatch.setattr(dkx.runtime, "_distributed_runtime_initialized", False)
     assert dkx.initialize_distributed_runtime_from_env() is False
 
     monkeypatch.setenv("DKX_COORDINATOR_ADDRESS", "127.0.0.1")
     monkeypatch.setenv("DKX_COORDINATOR_PORT", "2345")
     monkeypatch.setenv("DKX_PROCESS_COUNT", "2")
     monkeypatch.setenv("DKX_PROCESS_ID", "1")
-    monkeypatch.setattr(dkx, "_distributed_runtime_initialized", False)
+    monkeypatch.setattr(dkx.runtime, "_distributed_runtime_initialized", False)
     assert dkx.initialize_distributed_runtime_from_env() is True
     assert dkx.initialize_distributed_runtime_from_env() is True
     assert len(calls) == 1

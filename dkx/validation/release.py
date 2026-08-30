@@ -24,6 +24,11 @@ from pathlib import Path
 from typing import Any
 
 import h5py
+# The JAX backend is imported below; dkx/runtime.py explains why this is here.
+from ..runtime import configure as _configure_runtime
+
+_configure_runtime()
+
 import jax
 from jax import profiler as jax_profiler
 

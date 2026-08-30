@@ -48,10 +48,25 @@ def test_numpy_1x_is_refused_with_the_fix_in_the_message(version: str) -> None:
 
 
 def test_the_guard_runs_before_jax_is_imported() -> None:
-    """A numpy check that only fires after `import jax` is no check at all."""
+    """A numpy check that only fires after `import jax` is no check at all.
+
+    The guard moved to ``dkx/runtime.py`` when the runtime was extracted, and
+    it is deliberately the one thing there that still runs at module import
+    rather than inside ``configure()``: deferring it would let `import dkx`
+    succeed on numpy 1.x and fail later inside ml_dtypes, which is the whole
+    bug.
+    """
+    import re
+
     source = (__import__("pathlib").Path(__file__).resolve().parents[1]
-              / "dkx" / "__init__.py").read_text(encoding="utf-8")  # fmt: skip
-    assert source.index("_check_numpy()") < source.index("import jax"), (
+              / "dkx" / "runtime.py").read_text(encoding="utf-8")  # fmt: skip
+    lines = source.splitlines()
+    guard = next(i for i, line in enumerate(lines) if line == "_check_numpy()")
+    # A real import statement, not the one quoted in _check_numpy's docstring.
+    jax_import = next(
+        i for i, line in enumerate(lines) if re.match(r"\s*(import jax|from jax)", line)
+    )
+    assert guard < jax_import, (
         "the numpy guard must run before any jax import, or the cryptic "
         "ml_dtypes traceback wins the race"
     )
