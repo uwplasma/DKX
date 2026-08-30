@@ -75,6 +75,17 @@ dkx = ["validation/*.json"]
 [tool.setuptools.dynamic]
 version = {attr = "dkx._version.__version__"}
 
+# The coverage shards install the package non-editable, so they record paths
+# under site-packages, while the report job only checks the repository out.
+# Without this mapping `coverage combine` keeps the site-packages paths and the
+# report fails with "No source for code". Listing both tells coverage they are
+# the same code and rewrites the shard data onto the checkout.
+[tool.coverage.paths]
+source = [
+  "src/dkx",
+  "*/site-packages/dkx",
+]
+
 [tool.pytest.ini_options]
 addopts = ["--import-mode=prepend"]
 testpaths = ["tests"]

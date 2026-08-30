@@ -36,7 +36,16 @@ from dkx.io import localize_equilibrium_file_in_place
 from dkx.validation.artifacts import check_research_lane_completion_file
 from ..paths import repository_root
 
-REPO_ROOT = repository_root() or Path(__file__).resolve().parents[3]
+#: The checkout these release tools operate on.
+#:
+#: This module is checkout-only tooling that happens to ship inside the package:
+#: it reads tracked files, manifests and docs that exist in a repository and not
+#: in a wheel. When the package sits above a checkout that is the answer. When
+#: it does not -- an installed wheel in site-packages -- the honest fallback is
+#: the current directory, because a release tool is run from the checkout it is
+#: checking. The previous `parents[3]` guess pointed at site-packages itself and
+#: sent `git ls-files` into a directory that is not a repository at all.
+REPO_ROOT = repository_root() or Path.cwd()
 DEFAULT_VALIDATION_MANIFEST = REPO_ROOT / "tools" / "publication_figures" / "validation_manifest.json"
 DEFAULT_VALIDATION_DOCS = (REPO_ROOT / "docs" / "validation_matrix.rst",)
 DEFAULT_RESEARCH_MANIFEST = REPO_ROOT / "docs" / "_static" / "research_lane_completion_2026_05_12.json"
