@@ -34,6 +34,9 @@ stable artifact identifier.
   in `registry.toml`.
 - `hardware.toml`: named measurement hosts and availability.
 - `benchmark_schema.toml`: fields required of comparable benchmark rows.
+- `benchmarks/`: measured benchmark rows conforming to that schema, each naming
+  the host it ran on. A row here is a measurement on a registered host under the
+  declared protocol; a number quoted in the documentation without one is not.
 - `independent_cross_code_v1.json`: the accepted, bounded DSHAPE/NCSX/W7-X
   monoenergetic PAS/DKES cross-code rung.
 - `native_ambipolar_profile_v1.json`: compact native five-surface W7-X

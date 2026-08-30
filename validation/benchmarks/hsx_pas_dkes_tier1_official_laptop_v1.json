@@ -1,0 +1,80 @@
+{
+  "accuracy": {
+    "true_residual": "not captured by this harness"
+  },
+  "artifact_id": "hsx-pas-dkes-tier1-official-laptop-2026-08-30",
+  "case": {
+    "case_id": "HSX_PASCollisions_DKESTrajectories",
+    "geometry_sha256": "hsx3free.bc from the checksum-pinned external data archive",
+    "input_sha256": "recorded-in-deck",
+    "workload_family": "tier1_structured_direct"
+  },
+  "hardware": {
+    "host_id": "official-laptop-cpu",
+    "physical_memory_bytes": 38654705664,
+    "platform": "macOS 14.4.1 (23E224)",
+    "processor": "Apple M3 Max"
+  },
+  "memory_bytes": {
+    "peak_host": 1808056320,
+    "resident_host": 1594884096
+  },
+  "model": {
+    "collisions": "pitch_angle_scattering",
+    "differentiable": false,
+    "equation": "radially local linearized drift kinetic, RHSMode=1",
+    "rhs_count": 1,
+    "species_count": 1,
+    "trajectories": "dkes"
+  },
+  "notes": "Re-measurement of the docs/performance.rst tier-1 head-to-head row on a registered host. Warm solve reproduces the recorded 27.2 s within 3%. Peak process RSS does not reproduce the recorded 0.93 GB: 1.68 GB here, 1.49 GB measured after warmup so the compile is excluded, against a solver working-set estimate that prints 1.19 GB for this route. The Fortran comparison rows were not re-measured; they need a PETSc/MUMPS build that is not available on this host.",
+  "outcome": {
+    "status": "passed"
+  },
+  "protocol": {
+    "maximum": 36.81,
+    "median_absolute_deviation": 0.234,
+    "minimum": 27.72,
+    "statistic": "median",
+    "timed_runs": 5,
+    "warmup_runs": 1
+  },
+  "repository": {
+    "commit": "274a6fa80520647cba39507b7a2feff1387f5fcd",
+    "dirty": true,
+    "url": "https://github.com/uwplasma/DKX"
+  },
+  "resolution": {
+    "ntheta": 25,
+    "nx": 5,
+    "nxi": 100,
+    "nzeta": 51,
+    "unknowns": 744610
+  },
+  "route": {
+    "device_strategy": "single host CPU",
+    "precision": "float64",
+    "preconditioner": "none",
+    "solver": "structured_direct (truncated block-Thomas, keep_lowest=3)"
+  },
+  "schema_version": 1,
+  "software": {
+    "jax": "0.10.2",
+    "jaxlib": "0.10.2",
+    "numpy": "2.4.6",
+    "python": "3.11.14",
+    "solvax": "0.20.0"
+  },
+  "timestamp_utc": "2026-08-30T18:40:00Z",
+  "timing_s": {
+    "compile": null,
+    "complete": 27.97,
+    "first_execute": 36.81,
+    "import": null,
+    "output": null,
+    "postprocess": null,
+    "setup": null,
+    "solve": 27.97,
+    "warm_execute": 27.97
+  }
+}

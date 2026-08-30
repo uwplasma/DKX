@@ -28,12 +28,18 @@ notes = "Observed directly during the Phase A audit; this is the named laptop th
 id = "office-nvidia"
 role = "maintained_gpu"
 official_release_baseline = true
-availability = "unreachable"
+availability = "available"
 connection = "ssh office"
 last_check = "2026-08-30"
-failure = "TCP connection to plasmaworkstation.physics.wisc.edu timed out before host identification"
-expected_accelerator = "2x NVIDIA RTX A4000"
-notes = "The expected accelerator is recorded from the maintained host configuration, not from this audit. Do not publish accelerator claims until a bounded matched run records GPU model, memory, driver, JAX, and CUDA versions from the host itself."
+hostname = "pop-os"
+operating_system = "Pop!_OS 22.04 LTS"
+cpu_cores = 36
+memory_bytes = 66571993088
+gpu = "2x NVIDIA RTX A4000"
+gpu_memory_bytes = 17171480576
+gpu_driver = "580.173.02"
+device_count = 2
+notes = "Observed directly on 2026-08-30; earlier audits recorded it as unreachable. The stellarator_venv there carries jax 0.6.2 with both CUDA devices visible, which is below the floor DKX now needs, so a GPU lane requires its own environment before any accelerator claim is published."
 
 [[host]]
 id = "local-mac-mini-m2"

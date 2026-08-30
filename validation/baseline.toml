@@ -388,7 +388,8 @@ artifacts_without_a_named_generator = []
 [[known_gap]]
 id = "GAP-A-001"
 phase = "A"
-description = "The maintained office NVIDIA host (ssh office) timed out during the audit, so no GPU model, driver, CUDA, or JAX inventory could be observed. validation/hardware.toml records the expected accelerator as configuration, not as measurement."
+status = "closed"
+description = "The maintained office NVIDIA host was unreachable at audit. It was reached on 2026-08-30 and validation/hardware.toml now records the observed inventory: two NVIDIA RTX A4000 at 16 GiB each, driver 580.173.02, Pop!_OS 22.04, 36 CPU cores, 62 GiB RAM. Its existing stellarator_venv carries jax 0.6.2, below the floor DKX needs, so a GPU lane still requires its own environment before any accelerator claim is published."
 
 [[known_gap]]
 id = "GAP-A-002"
@@ -415,4 +416,5 @@ description = "validation/capabilities.toml still carries baseline_commit c003ba
 id = "GAP-A-006"
 phase = "A"
 status = "partly_closed"
-description = "Published performance claims in README.md, docs/performance.rst, docs/index.rst, docs/differentiability.rst, and docs/release_notes.rst cite a MacBook with an Apple M4, about 10 cores and 24 GB. Phase B identified that host from the artifacts' own environment blocks and registered it as campaign-mac-mini-m4: a Mac mini Mac16,10, not a MacBook. The registry now names it per entry. What remains open is the docs prose, which still calls it a MacBook, and the fact that no performance number has been re-measured on official-laptop-cpu."
+description = "Published performance claims cite a MacBook with an Apple M4 that is in no hardware registry; the campaign artifacts recording the same chip call it a Mac mini, registered as campaign-mac-mini-m4. A protocol-conformant re-measurement of the tier-1 HSX PAS/DKES row on official-laptop-cpu is in validation/benchmarks/hsx_pas_dkes_tier1_official_laptop_v1.json: warm solve 27.97 s median against a recorded 27.2 s, which reproduces, and peak process RSS 1.68 GB against a recorded 0.93 GB, which does not. Cross-machine runtime deltas of this size are noise and are not worth documenting; the memory gap is worth resolving only when someone re-measures on the original host or the page states its RSS definition. This is a documentation-provenance gap, not a physics or numerics one, and it should not block plan work."
+
