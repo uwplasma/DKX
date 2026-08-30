@@ -16,8 +16,13 @@ bounded-memory elimination, measured CPU/GPU scaling, and explicit scientific
 admission gates. Old branch names, phase letters, and campaign checklists are
 not current direction.
 
-Machine-readable planning evidence lives under ``validation/``:
+Machine-readable planning and validation evidence lives under ``validation/``:
 
+- ``registry.toml`` is the single index of registered evidence artifacts: one
+  entry per artifact naming its capability, status, claim, inputs, generating
+  command, checksum, and the limits of what it establishes. One runner,
+  ``python -m dkx.validation.registry``, checks them all, and
+  ``tests/test_validation.py`` is the one test module that consumes it;
 - ``capabilities.toml`` records capability status and evidence gaps;
 - ``baseline.toml`` pins the audited tree, package sizes, CI state, coverage,
   source and public-API inventory, and the known local test gaps;
@@ -25,7 +30,9 @@ Machine-readable planning evidence lives under ``validation/``:
 - ``benchmark_schema.toml`` defines the minimum record for later performance
   comparisons.
 
-The current phase is Phase A of ``plan.md``: replace the plan and freeze an
-exact current-state inventory without changing runtime, API, or physics. The
-next phase is Phase B, which consolidates the validation registry, the audit
-runners, and the test tree before any new resolution campaign starts.
+Phase A of ``plan.md`` is complete: the plan is replaced and the current-state
+inventory is frozen in ``baseline.toml``. Phase B is in progress. Its first
+slice added the registry and its runner and replaced nineteen per-campaign test
+modules with one. Its remaining slice moves the dated campaign directories and
+raw suite outputs to release assets and reduces the summary and audit-script
+counts themselves. No new resolution campaign starts before that lands.

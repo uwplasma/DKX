@@ -499,7 +499,7 @@
       "tools/paper_benchmarks/audit_independent_cross_code_validation.py"
     ],
     "tests": [
-      "tests/test_independent_cross_code_validation.py"
+      "tests/test_validation.py"
     ],
     "acceptance_gates": [
       "Recompute nuPrime from the applied Lorentz frequency including nuDHat(x0), rather than equating the input numbers",
@@ -541,7 +541,7 @@
       "tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py"
     ],
     "tests": [
-      "tests/test_full_kinetic_sfincs_validation.py"
+      "tests/test_validation.py"
     ],
     "acceptance_gates": [
       "Both codes use the exact checked decks, matched collision operator, trajectories, coordinates, profiles, constraint, and 1e-10 solver tolerance",
@@ -583,7 +583,7 @@
       "tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py"
     ],
     "tests": [
-      "tests/test_full_kinetic_sfincs_finite_er_validation.py"
+      "tests/test_validation.py"
     ],
     "acceptance_gates": [
       "Both codes use exact checked finite-Er decks, matched full-FP collisions, full trajectories, profiles, coordinates, constraint, and 1e-13 tolerance",
@@ -625,7 +625,7 @@
       "tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py"
     ],
     "tests": [
-      "tests/test_full_kinetic_sfincs_stellarator_validation.py"
+      "tests/test_validation.py"
     ],
     "acceptance_gates": [
       "Both codes use exact checked relative-path decks, matched W7-X SC1 Boozer geometry checksum, full-FP collisions, full trajectories, physical profiles, coordinates, automatic constraint, and 1e-12 tolerance",
@@ -667,7 +667,7 @@
       "tools/paper_benchmarks/audit_native_ambipolar_profile.py"
     ],
     "tests": [
-      "tests/test_native_ambipolar_profile_certificate.py"
+      "tests/test_validation.py"
     ],
     "acceptance_gates": [
       "Verify the exact portable TOML, pinned W7-X geometry, cold/warm native NetCDF files, and compact extraction by checksum",
@@ -710,7 +710,7 @@
       "tools/paper_benchmarks/audit_ambipolar_phase_space_ladder.py"
     ],
     "tests": [
-      "tests/test_ambipolar_phase_space_ladder.py"
+      "tests/test_validation.py"
     ],
     "acceptance_gates": [
       "Verify all three physical-unit TOMLs, the pinned W7-X geometry, raw native NetCDF results, and compact extraction by checksum",
@@ -755,8 +755,7 @@
       "tools/paper_benchmarks/audit_ambipolar_phase_space_axes.py"
     ],
     "tests": [
-      "tests/test_ambipolar_phase_space_ladder.py",
-      "tests/test_ambipolar_phase_space_axes.py"
+      "tests/test_validation.py"
     ],
     "acceptance_gates": [
       "Verify all four exact TOMLs, pinned geometry, raw NetCDF results, and compact extraction by checksum",
@@ -800,8 +799,8 @@
       "tools/paper_benchmarks/audit_ambipolar_pitch_budget.py"
     ],
     "tests": [
-      "tests/test_batch.py",
-      "tests/test_ambipolar_pitch_budget.py"
+      "tests/test_validation.py",
+      "tests/test_batch.py"
     ],
     "acceptance_gates": [
       "Verify all four exact TOMLs, pinned geometry, raw native NetCDF results, and compact extraction by checksum",
@@ -844,7 +843,7 @@
       "tools/paper_benchmarks/audit_ambipolar_pitch_speed_groups.py"
     ],
     "tests": [
-      "tests/test_ambipolar_pitch_speed_groups.py"
+      "tests/test_validation.py"
     ],
     "acceptance_gates": [
       "Verify all three exact TOMLs, pinned geometry, four raw native NetCDF results, and compact extraction by checksum",
@@ -888,10 +887,10 @@
       "tools/paper_benchmarks/audit_ambipolar_pitch_explicit_groups.py"
     ],
     "tests": [
+      "tests/test_validation.py",
       "tests/test_case_config.py",
       "tests/test_phase_space.py",
-      "tests/test_native_execution_result.py",
-      "tests/test_ambipolar_pitch_explicit_groups.py"
+      "tests/test_native_execution_result.py"
     ],
     "acceptance_gates": [
       "Verify all three exact TOMLs, pinned geometry, four raw native NetCDF results, and compact extraction by checksum",
@@ -937,8 +936,7 @@
       "tools/paper_benchmarks/audit_ambipolar_joint_speed_zeta_tail.py"
     ],
     "tests": [
-      "tests/test_ambipolar_joint_speed_zeta_tail.py",
-      "tests/test_ambipolar_selected_tail_bound.py",
+      "tests/test_validation.py",
       "tests/test_native_execution_result.py"
     ],
     "acceptance_gates": [
@@ -982,8 +980,8 @@
       "tools/paper_benchmarks/audit_native_physical_flux_sfincs.py"
     ],
     "tests": [
+      "tests/test_validation.py",
       "tests/test_native_execution_result.py",
-      "tests/test_native_physical_flux_sfincs.py",
       "tests/test_units.py"
     ],
     "acceptance_gates": [
@@ -1028,8 +1026,7 @@
       "tools/paper_benchmarks/audit_w7x_fixed_field_resolution_referee.py"
     ],
     "tests": [
-      "tests/test_w7x_fixed_field_resolution_referee.py",
-      "tests/test_native_physical_flux_sfincs.py"
+      "tests/test_validation.py"
     ],
     "acceptance_gates": [
       "Verify exact checked inputs and optionally every raw result and log by checksum",
@@ -1072,8 +1069,7 @@
       "tools/paper_benchmarks/audit_w7x_seeded_bracket_discovery.py"
     ],
     "tests": [
-      "tests/test_w7x_seeded_bracket_discovery.py",
-      "tests/test_seeded_ambipolar_promotion.py"
+      "tests/test_validation.py"
     ],
     "acceptance_gates": [
       "Verify checked inputs and optionally every external input, log, and NetCDF result by checksum",
@@ -1117,8 +1113,7 @@
       "tools/paper_benchmarks/audit_w7x_admitted_grid_seeded_envelope.py"
     ],
     "tests": [
-      "tests/test_w7x_admitted_grid_seeded_envelope.py",
-      "tests/test_seeded_ambipolar_promotion.py"
+      "tests/test_validation.py"
     ],
     "acceptance_gates": [
       "Verify checked inputs and optionally all broad, extension, and final raw files by checksum",
