@@ -267,6 +267,13 @@ class Case:
         # every existing schema-v1 case ID.
         if not data["convergence"]["retain_legendre_tail"]:
             data["convergence"].pop("retain_legendre_tail")
+        # Uniform discovery is the historical schema-v1 behavior. Omitting
+        # both defaults preserves every existing case ID; seeded promotion is
+        # explicit semantic content and therefore remains canonical.
+        if data["electric_field"]["search_strategy"] == "uniform":
+            data["electric_field"].pop("search_strategy")
+        if data["electric_field"]["seed_brackets_kV_m"] is None:
+            data["electric_field"].pop("seed_brackets_kV_m")
         if data["scan"] is not None:
             data["scan"]["axis"] = data["scan"].pop("axes")
         return _paths_to_strings(data)

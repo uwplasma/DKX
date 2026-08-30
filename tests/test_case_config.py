@@ -116,6 +116,13 @@ def test_default_tail_retention_preserves_case_id_and_opt_in_is_semantic() -> No
     assert enabled.to_dict()["convergence"]["retain_legendre_tail"] is True
 
 
+def test_default_uniform_search_preserves_historical_canonical_content() -> None:
+    case = Case.from_mapping(_mapping())
+
+    assert "search_strategy" not in case.to_dict()["electric_field"]
+    assert "seed_brackets_kV_m" not in case.to_dict()["electric_field"]
+
+
 def test_explicit_pitch_modes_are_immutable_semantic_content() -> None:
     default_case = Case.from_mapping(_mapping())
     explicit = _mapping()
