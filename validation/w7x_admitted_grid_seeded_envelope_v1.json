@@ -1,0 +1,108 @@
+{
+  "schema": "dkx.w7x_admitted_grid_seeded_envelope.v1",
+  "created_utc": "2026-08-30T04:12:00Z",
+  "claim_scope": "two_surface_admitted_transport_grid_explicit_seeded_intervals",
+  "source": {
+    "dkx_commit": "8c2010477d67c44e3d34a75592e35fbb90d685c7",
+    "geometry_sha256": "81c686e5a5bd8f38d8b1f754ebe2910951f20094bab35d73d2827d9875bb6062",
+    "checked_inputs": {
+      "envelopes": {"path": "validation/inputs/w7x_standard_native_ambipolar_admitted_seeded_envelopes.toml", "sha256": "4e2dcd0daa2762318dc719b1f8a1db638af2ab098b9023e512167e8bc1158d0c", "case_id": "a365751f9a8ec8429606f7049434ab0afa50c9b9e24010f10f99ce3b17a2dfa8"},
+      "extension": {"path": "validation/inputs/w7x_standard_native_ambipolar_admitted_seeded_extension.toml", "sha256": "461232115d5a29978818f4c8351e1316e68c32da7e6f1ecb43135f902aa9bdc7", "case_id": "f4f55b042c852bed3a5576737f7914babc681f01ed515c692713284ad7e686d7"},
+      "final": {"path": "validation/inputs/w7x_standard_native_ambipolar_admitted_seeded_final.toml", "sha256": "4318b45c8a9e5c5d87582d7be23933ba37f2a32b93855c8788422bd05d285138", "case_id": "35bfc2f035edd5587d0563a72b7f62094026cbe312de09857a9b9be4a353bb22"}
+    },
+    "external_directory": "runtime/evidence/w7x-admitted-grid-seeded-envelope-v1",
+    "external_files": {
+      "input.toml": "8c695f56bbd31597540a6ec9e9528e3b8047996b1af8ea1dc8a4dff0de80e2bc",
+      "result.nc": "e65f1118de3550c2f3b29d37f626b7bcdec666262ecea7837ca71c78ab04968e",
+      "run.log": "a0f9da406870acf3cd0164447bf3b8e9043e37f10a44b9d0228ef97d5448eece",
+      "extension.toml": "7e9ac1b84ed6305b5f7ae320d5a46508336a1c23b0d9a3724a2d70dc5593be27",
+      "extension.nc": "5c0b4d2a6736f4b9b28609d3ca7cdf6656d77a28fa3d45284f9ba9e8d0b415da",
+      "extension.log": "4970cded0c677df39cb29a8f060131050033da3a89fa46451e7ba436633ff6cf",
+      "final-replay.toml": "1b2488a192623151245f58205931d46c2ead80d30efda049e74bcbed4b5f932c",
+      "final-cold.nc": "a9fde5504cdba7027ce4e1b2a8c49b19f8d88f8f525cdd4a7d21d5217b8cfc18",
+      "final-warm.nc": "478707615f1ee91f00df8094e145a730255f5199c111d163b9e82ccd376613df",
+      "final-replay.log": "a24006efbc9b40bd0018019d58b5f9afac8b054d439775001654a732bd22bd36"
+    },
+    "post_save_log_note": "The broad and final driver logs end with reporting-only AttributeError/TypeError exceptions after their NetCDF results were saved; the audit reads the saved results directly and verifies every claimed array."
+  },
+  "environment": {
+    "host": "Apple Mac16,10, 24 GiB",
+    "python": "3.11.15",
+    "jax": "0.9.2",
+    "numpy": "2.4.3",
+    "scipy": "1.17.1",
+    "solvax": "0.19.0",
+    "dkx": "2.3.1"
+  },
+  "case": {
+    "geometry": "W7-X standard",
+    "surfaces_psi_N": [0.16, 0.25],
+    "resolution": {"theta": 15, "zeta": 85, "pitch": 150, "speed": 8},
+    "collisions": "pitch_angle_scattering",
+    "magnetic_drifts": "dkes",
+    "phi1": "off",
+    "search_scope": "explicit_seeded_intervals_only",
+    "unsampled_crossings_excluded": false
+  },
+  "envelope_run": {
+    "external_case_id": "2e2d95f21e493dfde42ba7ecaabc736974b05a417e31b52e92cd6338fd1dde04",
+    "seed_brackets_kV_m": [[[9.0, 14.0]], [[-2.0, 0.0], [0.0, 3.0], [6.0, 11.0]]],
+    "evaluations": [11, 5],
+    "statuses": ["bracketed_root", "seeded_bracket_failed"],
+    "roots_kV_m": [12.681640625, null],
+    "maximum_primal_residual": 6.48168173987363e-14,
+    "wall_seconds": 2835.73,
+    "solve_seconds": 2831.6350949169864,
+    "maximum_rss_bytes": 11504254976,
+    "peak_process_footprint_bytes": 22656567560,
+    "surface_1_endpoint_currents_A_m2": {"-2.0": -0.7472324634592047, "0.0": -0.1254092696124469, "3.0": -0.4483291126313208, "6.0": -0.3268376679421036, "11.0": -0.03688542075111266}
+  },
+  "extension_run": {
+    "external_case_id": "cc217b233a22c6bcc57efbd6e5eb67705a5484806bc5efc16122d2c5c3e26a98",
+    "seed_brackets_kV_m": [[[12.671875, 12.681640625]], [[11.0, 14.0]]],
+    "evaluations": [2, 11],
+    "roots_kV_m": [12.681640625, 11.533203125],
+    "brackets_kV_m": [[12.671875, 12.681640625], [11.533203125, 11.5390625]],
+    "maximum_primal_residual": 5.006851903609014e-14,
+    "wall_seconds": 829.51,
+    "solve_seconds": 828.2129521669849,
+    "maximum_rss_bytes": 2004058112,
+    "peak_process_footprint_bytes": 1763510768
+  },
+  "final_replay": {
+    "external_case_id": "4ccce7d029b33bc383a0cef0319c241bce7c3deaaaea1d9732b2712506b6da6b",
+    "topology": [1, 1],
+    "roots_kV_m": [12.681640625, 11.533203125],
+    "brackets_kV_m": [[12.671875, 12.681640625], [11.533203125, 11.5390625]],
+    "endpoint_currents_A_m2": [[-0.0014785256530622296, 0.00006457968601364309], [-0.00007472434420383099, 0.00033677642991441104]],
+    "evaluations": [2, 2],
+    "maximum_primal_residual": 2.981240840205699e-14,
+    "particle_flux_m2_s": [[4.007427385709164e18, 4.0070243110128835e18], [2.8704618557906335e18, 2.8709282484630646e18]],
+    "heat_flux_W_m2": [[1606.681963359733, 12934.36737196025], [1186.5643813191707, 6908.509346540442]],
+    "parallel_current_A_T_m2": [-82457.0420772853, -57264.6897771391],
+    "cold_solve_seconds": 272.07354504101386,
+    "warm_solve_seconds": 258.87754533300176,
+    "cold_peak_host_memory_bytes": 1492353024,
+    "warm_peak_host_memory_bytes": 1685864448,
+    "combined_process_wall_seconds": 533.06,
+    "combined_maximum_rss_bytes": 1685864448,
+    "combined_peak_process_footprint_bytes": 1339705408,
+    "cold_warm_arrays_exact_except_solve_time_s": true
+  },
+  "outcome": {
+    "admitted_grid_explicit_intervals_resolved": true,
+    "global_all_root_claim": false,
+    "low_intermediate_surface_1_branches_observed": false,
+    "root_topology_within_promoted_intervals": [1, 1]
+  },
+  "claim_exclusions": [
+    "global exclusion of unsampled crossings",
+    "five-surface whole-profile convergence",
+    "parallel-current or bootstrap-current convergence",
+    "full Fokker-Planck collisions",
+    "Phi1",
+    "experimental validation",
+    "second stellarator family",
+    "cross-code performance equivalence"
+  ]
+}
