@@ -389,3 +389,26 @@ memory guard correctly selected checkpointed row-on-demand elimination; after
 result. This is an operational route no-go, not a numerical failure or no-root
 claim. The next route uses independently reviewed low-cost discovery followed
 by explicitly scoped high-resolution seeded-bracket promotion.
+
+## W7-X bounded bracket discovery and seeded replay
+
+`w7x_seeded_bracket_discovery_v1.json` records the cheapest reviewed
+two-surface discovery grid and a separate real-solve replay of every discovered
+bracket endpoint. Audit the compact record, or additionally verify the
+checksummed external inputs, logs, and NetCDF results, with:
+
+```bash
+python tools/paper_benchmarks/audit_w7x_seeded_bracket_discovery.py \
+  --results-root ../runtime/evidence/w7x-seeded-bracket-discovery-v1
+```
+
+The theta-15, zeta-37, pitch-36, speed-6 discovery retained topology `[1, 3]`
+on the two inner W7-X surfaces in both cold and warm processes. The separate
+seeded run evaluated the eight distinct endpoints, retained a strict current
+sign change in all four intervals, and reproduced the roots and final brackets
+exactly while reducing the measured solve from 98 to 8 kinetic evaluations.
+
+This evidence is deliberately limited to low-resolution discovery and endpoint
+replay. It does not promote admitted-grid ambipolar roots, prove there are no
+unsampled crossings, or admit whole-profile, bootstrap-current, full-FP, Phi1,
+experimental, second-family, or performance-equivalence claims.
