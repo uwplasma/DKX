@@ -351,3 +351,28 @@ residual is `6.79e-16`, and the final SFINCS KSP residual is `5.77e-15`.
 This closes the physical-unit conversion and one matched fixed-field parity
 gate. It does not close whole-profile phase-space convergence, ambipolar-root,
 full-Fokker-Planck, Phi1, experiment, or cross-code performance gates.
+
+## W7-X fixed-field resolution referee
+
+`w7x_fixed_field_resolution_referee_v1.json` extends the matched W7-X
+`8.55 kV/m` case with one-axis phase-space ladders. Audit the compact record,
+or additionally verify all external SFINCS and DKX inputs, logs, HDF5, and
+NetCDF results, with:
+
+```bash
+python tools/paper_benchmarks/audit_w7x_fixed_field_resolution_referee.py \
+  --results-root ../runtime/evidence/w7x-fixed-field-resolution-referee-v1
+```
+
+Pinned SFINCS pitch 120 to 150 moves every retained particle/heat/current
+observable by at most 0.191%. At pitch 150 and zeta 37, DKX agrees with that
+independent high rung within 0.269%. The bounded DKX ladder then admits the
+fixed-field particle and heat fluxes at theta 15, zeta 85, pitch 150, and speed
+8: the joint pitch-180, zeta-109, speed-10, and theta-19 checks each remain
+below the unchanged 2% gate.
+
+Parallel current is deliberately not promoted. Theta 15 to 19, 19 to 23, and
+23 to 29 move it by 7.35%, 7.15%, and 5.46%, respectively, despite converged
+particle and heat fluxes. The certificate therefore records
+`parallel_current_status = "refinement_exhausted"` and does not admit a
+whole-profile, ambipolar-root, or bootstrap-current claim.

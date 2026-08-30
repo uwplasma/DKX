@@ -1,0 +1,57 @@
+! Matched fixed-field referee for the native W7-X speed/zeta diagnosis.
+! The physical profile is the second surface (psi_N=0.25, r_N=0.5) of
+! w7x_standard_native_ambipolar_joint_nx8_pitch52_tail_bound_probe.toml.
+
+&general
+  RHSMode = 1
+/
+
+&geometryParameters
+  geometryScheme = 11
+  equilibriumFile = "../../../SFINCS/equilibria/w7x_standardConfig.bc"
+  inputRadialCoordinate = 3
+  inputRadialCoordinateForGradients = 4
+  rN_wish = 0.5d0
+/
+
+&speciesParameters
+  Zs = 1 -1
+  mHats = 1.007276d0 5.485799d-4
+  nHats = 1.44d-1 1.44d-1
+  THats = 9.5d-1 2.5d0
+  dNHatdrHats = -9.311507160549008d-2 -9.311507160549008d-2
+  dTHatdrHats = -1.8623014321098015d0 -2.0485315753207818d1
+/
+
+&physicsParameters
+  Delta = 4.5694d-3
+  alpha = 1.0d0
+  nu_n = 8.330d-3
+  Er = 8.55d0
+  collisionOperator = 1
+  includeXDotTerm = .false.
+  includeElectricFieldTermInXiDot = .false.
+  useDKESExBDrift = .true.
+  includePhi1 = .false.
+  constraintScheme = 2
+/
+
+&resolutionParameters
+  Ntheta = 15
+  Nzeta = 37
+  Nxi = 120
+  NL = 4
+  Nx = 8
+  solverTolerance = 1d-9
+/
+
+&otherNumericalParameters
+  Nxi_for_x_option = 1
+/
+
+&preconditionerOptions
+  preconditioner_x = 1
+/
+
+&export_f
+/
