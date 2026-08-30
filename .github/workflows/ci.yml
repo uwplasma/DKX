@@ -293,15 +293,25 @@ jobs:
           config = tomllib.loads(Path("pyproject.toml").read_text())
           package_data = config["tool"]["setuptools"]["package-data"]
 
-          expected: set[str] = set()
+          # package-data patterns are relative to the package, and the two
+          # artifacts disagree about where the package sits: a wheel flattens it
+          # to the top level, while an sdist preserves the checkout's src/
+          # layout. Comparing one set of names against both would pass for the
+          # wheel and fail for the sdist, so each is checked in its own shape.
+          checkout: set[str] = set()
           for package, patterns in package_data.items():
               root = package.replace(".", "/")
               for pattern in patterns:
-                  expected.update(glob.glob(f"{root}/{pattern}"))
-          if not expected:
+                  checkout.update(glob.glob(f"src/{root}/{pattern}"))
+          if not checkout:
               raise SystemExit("package-data matched no files in the checkout")
 
-          for artifact, shipped in ((wheels[0], wheel_files), (sdists[0], sdist_files)):
+          installed = {name[len("src/"):] for name in checkout}
+
+          for artifact, shipped, expected in (
+              (wheels[0], wheel_files, installed),
+              (sdists[0], sdist_files, checkout),
+          ):
               missing = sorted(name for name in expected if name not in shipped)
               if missing:
                   raise SystemExit(
