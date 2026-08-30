@@ -1,0 +1,54 @@
+{
+  "schema": "dkx.w7x_admitted_grid_uniform_probe_no_go.v1",
+  "claim_scope": "bounded_launch_diagnosis_only",
+  "source": {
+    "dkx_commit": "d929ddf9739c232a5633d9df2888b9d7929f6e20",
+    "input_sha256": "0191daac9c9deb53e2602265a40a03baf4c210ef04a8d89b257423f6ebbd901f",
+    "log_sha256": "f0bcf21a75c4c5f9597ebb142a1bd6b6123eeb85372d93a32b7ea8c0d0b40da3",
+    "external_directory": "runtime/evidence/w7x-admitted-grid-root-probe-v1"
+  },
+  "case": {
+    "geometry": "W7-X standard",
+    "surfaces": [0.16, 0.25],
+    "electric_field_search_kV_m": [-2.0, 14.0],
+    "search_points": 17,
+    "max_refinements": 1,
+    "max_root_iterations": 12,
+    "resolution": {"theta": 15, "zeta": 85, "pitch": 150, "speed": 8}
+  },
+  "preflight": {
+    "hierarchy_points": 33,
+    "max_evaluations_per_surface": 825,
+    "max_profile_evaluations": 1650,
+    "retained_profile_bytes": 1531200
+  },
+  "measurement": {
+    "host": "Apple Mac16,10, 24 GiB",
+    "wall_seconds": 2551.33,
+    "maximum_rss_bytes": 10205478912,
+    "peak_process_footprint_bytes": 21883225584,
+    "completed_surfaces": 0,
+    "result_written": false,
+    "termination": "operator_stopped_after_bounded_no_go"
+  },
+  "route_diagnosis": {
+    "reusable_dense_coarse_bands_bytes": 87200000000,
+    "schur_lu_factors_bytes": 29100000000,
+    "checkpointed_dense_factors_per_subsystem_bytes": 620000000,
+    "executed_route": "solvax_block_thomas_checkpointed_row_on_demand",
+    "warning": "The memory guard avoided the non-resident reusable route, but repeated row-on-demand elimination made a uniform hierarchy operationally infeasible on this host."
+  },
+  "outcome": {
+    "uniform_high_grid_launch_admitted": false,
+    "numerical_failure_claimed": false,
+    "next_route": "independently verify low-cost discovery brackets, then promote only explicit intervals at the admitted high-resolution transport grid"
+  },
+  "claim_exclusions": [
+    "no-root evidence",
+    "ambipolar root or flux result",
+    "whole-profile convergence",
+    "bootstrap-current convergence",
+    "solver numerical failure",
+    "cross-code performance equivalence"
+  ]
+}

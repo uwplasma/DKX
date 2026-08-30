@@ -266,6 +266,36 @@ means every bracket exposed by the declared finite hierarchy, not every
 mathematically possible root. Independent dense-surface validation remains a
 promotion gate for the discrete branch evidence below.
 
+For an independently discovered set of sign-changing intervals, a second
+stage can promote only those brackets at a more expensive phase-space grid:
+
+.. code-block:: toml
+
+   [electric_field]
+   mode = "ambipolar"
+   search_kV_m = [-5.0, 15.0]
+   search_strategy = "seeded_brackets"
+   seed_brackets_kV_m = [
+     [[-2.0, -1.0], [7.0, 9.0]], # surface 1
+     [[-2.0, -1.0]],             # surface 2
+   ]
+   find_all_roots = true
+
+Every distinct endpoint is one real kinetic solve and every sign-changing
+seed is refined by real bisection solves. The preflight bounds endpoint plus
+bisection work per surface. Seeded promotion deliberately forbids the adaptive
+global hierarchy: first converge and independently review the discovery grid,
+then supply all of its candidate brackets. ``ambipolar_search_scope`` is
+``explicit_seeded_intervals_only`` and unsampled crossings are never excluded.
+A seed that does not bracket a root produces ``seeded_bracket_failed`` or
+``seeded_bracket_partial_failure`` rather than global no-root evidence.
+
+This split follows the useful sign-change/search-range discipline in PENTA's
+``find_Er_roots`` while retaining DKX's stronger evidence boundary: PENTA's
+routine requests a wider search for zero or even crossing counts and refines
+an interpolated radial-flux fit, whereas DKX retains every kinetic endpoint and
+bisection evaluation and never presents interpolation as a solved root.
+
 Radial branch evidence
 ----------------------
 

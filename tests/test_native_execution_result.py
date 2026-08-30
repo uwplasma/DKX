@@ -225,11 +225,13 @@ def test_native_ambipolar_result_preserves_scan_roots_and_selection(
             mode="ambipolar",
             value_kV_m=None,
             search_kV_m=(-4.0, 4.0),
+            search_strategy="seeded_brackets",
+            seed_brackets_kV_m=(((-2.0, 0.0),), ((-2.0, 0.0),)),
         ),
     )
     calls = []
 
-    def fake_surface(_problem, *, previous_root_kv_m, **_controls):
+    def fake_surface(_problem, *, previous_root_kv_m, **controls):
         surface_index = len(calls)
         root_field = -1.5 + 0.25 * surface_index
         evaluation = RootEvaluation(
@@ -263,7 +265,7 @@ def test_native_ambipolar_result_preserves_scan_roots_and_selection(
             bracket_kv_m=(-2.0, 0.0),
             evaluation=evaluation,
         )
-        calls.append(previous_root_kv_m)
+        calls.append((previous_root_kv_m, controls["seed_brackets_kv_m"]))
         return NativeAmbipolarSurface(
             evaluations=(coarse, evaluation),
             roots=(root,),
@@ -273,6 +275,8 @@ def test_native_ambipolar_result_preserves_scan_roots_and_selection(
             solve_seconds=0.01,
             batch_chunk_size=2,
             batch_chunks=1,
+            search_strategy="seeded_brackets",
+            search_scope="explicit_seeded_intervals_only",
         )
 
     monkeypatch.setattr(
@@ -281,11 +285,14 @@ def test_native_ambipolar_result_preserves_scan_roots_and_selection(
     )
     result = dkx.run(case, out=tmp_path / "ambipolar.nc")
 
-    assert calls == [None, -1.5]
+    assert calls == [(None, ((-2.0, 0.0),)), (-1.5, ((-2.0, 0.0),))]
     np.testing.assert_allclose(result.electric_field_kV_m, [-1.5, -1.25])
     np.testing.assert_allclose(result.particle_flux_m2_s[:, 0], [2.0, 3.0])
     np.testing.assert_array_equal(result.ambipolar_root_count, [1, 1])
     np.testing.assert_array_equal(result.ambipolar_status, ["bracketed_root"] * 2)
+    np.testing.assert_array_equal(
+        result.ambipolar_search_scope, ["explicit_seeded_intervals_only"] * 2
+    )
     np.testing.assert_array_equal(
         result.ambipolar_root_branch_id[:, 0], ["ion-000", "ion-000"]
     )
@@ -314,6 +321,12 @@ def test_native_ambipolar_result_preserves_scan_roots_and_selection(
         result.evaluation_heat_flux_W_m2,
     )
     assert result.metadata["ambipolar_all_surfaces_bracketed"] is True
+    assert result.metadata["ambipolar_search"] == {
+        "strategy": "seeded_brackets",
+        "scope": ("explicit_seeded_intervals_only",),
+        "unsampled_crossings_excluded": False,
+    }
+    assert "unsampled crossings outside those intervals" in result.warnings[0]
     loaded = dkx.Result.load(tmp_path / "ambipolar.nc")
     np.testing.assert_allclose(loaded.ambipolar_root_kV_m[:, 0], [-1.5, -1.25])
     np.testing.assert_array_equal(
