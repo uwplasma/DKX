@@ -1,0 +1,104 @@
+{
+  "schema": "dkx.w7x_seeded_bracket_discovery.v1",
+  "created_utc": "2026-08-30T02:48:00Z",
+  "claim_scope": "bounded_low_resolution_discovery_and_seed_endpoint_replay",
+  "source": {
+    "dkx_commit": "757a2b9b84078668c7d7131aec992b875d8ff437",
+    "geometry_sha256": "81c686e5a5bd8f38d8b1f754ebe2910951f20094bab35d73d2827d9875bb6062",
+    "checked_discovery_input": "validation/inputs/w7x_standard_native_ambipolar_discovery_pair.toml",
+    "checked_discovery_input_sha256": "afa8d1295d51e1a7afe14dbb700ae4a1645b343cde02bb1795087eb2126f407f",
+    "checked_seeded_input": "validation/inputs/w7x_standard_native_ambipolar_seeded_replay.toml",
+    "checked_seeded_input_sha256": "21f60e00e340ac893e5cc3c46b4cc82afc6e4c64beac9fa238a0a074920dad53",
+    "external_directory": "runtime/evidence/w7x-seeded-bracket-discovery-v1",
+    "external_files": {
+      "input.toml": "9c479a552b0da6d9200bc8fa8a7addc1dd5bb5744a71b4234d1cc3ca1c2c34b1",
+      "discovery-cold.nc": "2f61b647efbde626d1cd8f2a7897e1268c5bc98cb095f01b361c830e3b7de28d",
+      "discovery-cold.log": "02399c9221307bd8795f24db3934e301482c45840f714ecbc4a2a39f89928b0c",
+      "discovery-warm.nc": "c282e1e35f23fbc85ad2aa2d03702780f6614ff9db6de46cd976ac4d57747ad9",
+      "discovery-warm.log": "fa43417882f2a6ab5935f3625552efac291ec3e751f446640d688f84a83d2db4",
+      "seeded-replay.toml": "357010ba91fcdeef560dc0b52a2c8830b2b4dd7b18e3bdb026b6e18184e3a13b",
+      "seeded-replay.nc": "6c08b344c2e2bf0f74c06577ecc851a6a454bd7a9223bd178b7eedb1f773b481",
+      "seeded-replay.log": "4dd5caa61e4ba8a34877f0e6e120bf672f10a297b6038d3c26c37994817fa4c1"
+    }
+  },
+  "environment": {
+    "host": "Apple Mac16,10, 24 GiB",
+    "python": "3.11.15",
+    "jax": "0.9.2",
+    "numpy": "2.4.3",
+    "scipy": "1.17.1",
+    "solvax": "0.19.0",
+    "dkx": "2.3.1"
+  },
+  "case": {
+    "geometry": "W7-X standard",
+    "surfaces_psi_N": [0.16, 0.25],
+    "resolution": {"theta": 15, "zeta": 37, "pitch": 36, "speed": 6},
+    "search_kV_m": [-20.0, 20.0],
+    "hierarchy_points": 33,
+    "root_tolerance_kV_m": 0.005,
+    "collisions": "pitch_angle_scattering",
+    "magnetic_drifts": "dkes",
+    "phi1": "off"
+  },
+  "discovery": {
+    "external_case_id": "366364866806e6bfc2e586ec2970ba85047f6234f8694183d65f17a4e3ad65b6",
+    "topology": [1, 3],
+    "evaluations": [41, 57],
+    "roots_kV_m": [[11.455078125], [-0.1025390625, 0.1806640625, 8.4326171875]],
+    "brackets_kV_m": [
+      [[11.455078125, 11.4599609375]],
+      [[-0.1025390625, -0.09765625], [0.1806640625, 0.185546875], [8.427734375, 8.4326171875]]
+    ],
+    "refinement_status": ["resolved", "resolved"],
+    "maximum_primal_residual": 3.4004971718431935e-14,
+    "cold": {
+      "wall_seconds": 137.56,
+      "solve_seconds": 135.1000919169892,
+      "maximum_rss_bytes": 3847225344,
+      "peak_process_footprint_bytes": 3460157664
+    },
+    "warm": {
+      "wall_seconds": 132.37,
+      "solve_seconds": 130.61261162500887,
+      "maximum_rss_bytes": 3750363136,
+      "peak_process_footprint_bytes": 3532148888
+    },
+    "cold_warm_science_exact_except_timing": true
+  },
+  "seeded_replay": {
+    "external_case_id": "f8f2b36f69ea167ef8e42d73ec96ab801fb4458d5d8b20531fda9ff54888ee8d",
+    "search_scope": "explicit_seeded_intervals_only",
+    "topology": [1, 3],
+    "evaluations": [2, 6],
+    "evaluation_budgets": [17, 51],
+    "roots_and_brackets_exact": true,
+    "maximum_primal_residual": 8.721582772261183e-15,
+    "wall_seconds": 13.19,
+    "solve_seconds": 12.096395000000484,
+    "maximum_rss_bytes": 1098858496,
+    "peak_process_footprint_bytes": 829343352,
+    "endpoints": [
+      {"surface_index": 0, "bracket_index": 0, "left_kV_m": 11.455078125, "left_current_A_m2": -0.00029878487700061164, "right_kV_m": 11.4599609375, "right_current_A_m2": 0.0003001493595247315},
+      {"surface_index": 1, "bracket_index": 0, "left_kV_m": -0.1025390625, "left_current_A_m2": -0.0002520383559192676, "right_kV_m": -0.09765625, "right_current_A_m2": 0.002483225064027594},
+      {"surface_index": 1, "bracket_index": 1, "left_kV_m": 0.1806640625, "left_current_A_m2": 0.00039889876777622683, "right_kV_m": 0.185546875, "right_current_A_m2": -0.0012723813436013533},
+      {"surface_index": 1, "bracket_index": 2, "left_kV_m": 8.427734375, "left_current_A_m2": -0.00019795933383129723, "right_kV_m": 8.4326171875, "right_current_A_m2": 0.00003711531724049575}
+    ]
+  },
+  "outcome": {
+    "discovery_brackets_replayed": true,
+    "admitted_grid_promotion_ready": false,
+    "reason": "Every low-resolution candidate interval has an independently replayed sign change, but root topology and brackets must still be tested at the fixed-field-admitted theta15/zeta85/pitch150/speed8 grid."
+  },
+  "claim_exclusions": [
+    "admitted-grid ambipolar roots",
+    "whole-profile convergence",
+    "global exclusion of unsampled crossings",
+    "parallel-current or bootstrap-current convergence",
+    "full Fokker-Planck collisions",
+    "Phi1",
+    "experimental validation",
+    "second stellarator family",
+    "cross-code performance equivalence"
+  ]
+}
