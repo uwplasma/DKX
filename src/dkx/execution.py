@@ -61,7 +61,7 @@ def _analytic_scheme(case: Case) -> int:
             "geometry.file",
             str(case.geometry.file),
             "one of tokamak, lhd_standard, lhd_inward, or w7x_standard for analytic geometry",
-            "Use a named built-in analytic equilibrium; VMEC/Boozer native execution is the next route.",
+            "Use a named built-in analytic equilibrium; VMEC/Boozer case execution is the next route.",
         )
         raise AssertionError("unreachable")
 
@@ -903,7 +903,7 @@ def _ambipolar_result_arrays(
 
 
 def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
-    """Execute the supported native profile route and return a native Result."""
+    """Execute the supported native profile route and return a Result."""
 
     _validate_native_slice(case)
     from dkx import __version__  # noqa: PLC0415

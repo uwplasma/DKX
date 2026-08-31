@@ -59,9 +59,9 @@ or, when the flux-surface-varying potential is included,
    f_{sM}\exp\!\left(-\frac{Z_s e \Phi_1}{T_s}\right).
 
 The normalization conventions used for hats and dimensionless drives are summarized in
-:doc:`normalizations`. These conventions matter directly for the coefficients assembled by
-the consolidated :class:`dkx.drift_kinetic.KineticOperator` and the diagnostics
-written by :mod:`dkx.writer`.
+:doc:`normalizations`. They set the coefficients assembled by the consolidated
+:class:`dkx.drift_kinetic.KineticOperator` and the diagnostics written by
+:mod:`dkx.writer`.
 
 Geometry and guiding-center drifts
 ----------------------------------
@@ -94,16 +94,15 @@ SFINCS Fortran v3 supports two collision models, and `dkx` adds a third:
   diagonal-in-:math:`L` operator used for reduced models and benchmark suites.
 - **Full linearized Fokker–Planck (Landau)** (``collisionOperator = 0``):
   implemented via Rosenbluth potentials
-  and dense coupling in the speed coordinate. This is the default for high-fidelity
+  and dense coupling in the speed coordinate. This is the default for
   multispecies studies.
 - **Improved Sugama model operator** (``collisionOperator = 3``): the momentum-
   and energy-conserving improved linearized model operator of Sugama *et al.*
   (2019), a `dkx` research extension beyond Fortran v3 that remains
   accurate into the highly collisional regime.
 
-The linearized FP operator is the most accurate model for neoclassical transport in
-SFINCS and is the basis for the collision-driven preconditioners used in `dkx`.
-[#sfincs2015]_
+The linearized FP operator is also the basis for the collision-driven
+preconditioners used in `dkx`. [#sfincs2015]_
 
 Constraint closure and source/sink terms
 ----------------------------------------
@@ -134,7 +133,7 @@ Phi1 and quasineutrality
 When ``includePhi1 = .true.``, SFINCS solves for the **flux-surface variation of the
 electrostatic potential** :math:`\Phi_1(\theta,\zeta)` via a quasineutrality constraint.
 The resulting potential modifies the kinetic equation and the collision operator
-through poloidal density variations. This physics is especially important for impurity
+through poloidal density variations. This physics is important for impurity
 transport and flows in stellarators. [#phi1_2018]_
 
 Transport coefficients
@@ -168,7 +167,7 @@ geometry-derived scalars in :mod:`dkx.magnetic_geometry`).
 Trajectory-model knobs
 ----------------------
 
-The physical model is intentionally configurable. The most important switches are:
+The trajectory model is configurable through these switches:
 
 - ``magneticDriftScheme`` for magnetic-drift terms,
 - ``useDKESExBDrift`` for DKES-like vs full :math:`E\times B` advection,
@@ -179,8 +178,8 @@ The physical model is intentionally configurable. The most important switches ar
 
 The detailed switch-to-equation map is given in :doc:`system_equations`.
 
-Implementation notes
---------------------
+Related reference pages
+-----------------------
 
 - Term-by-term input switches are documented in :doc:`system_equations`.
 - Discretization details (Legendre modes, :math:`x` grid, angular finite differences)

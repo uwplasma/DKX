@@ -57,14 +57,17 @@ every RHSMode=1 output).
      - 229.5
      - 2.86
 
-With the matched ramp discretization this is 17x faster than 1-rank Fortran
+With the matched ramp discretization ``dkx`` is 17x faster than 1-rank Fortran
 and 8.4x faster than Fortran's best measured parallel floor, at roughly 30% of
-the memory. Ramp-vs-uniform ``Nxi`` differences on the physics outputs are at
-most 0.9% (electrons). GPU time equals M4 CPU time because the Legendre scan
-is serial in ``L`` and the A4000 runs FP64 at 1/32 rate; GPU upside requires
-batching over (species, ``x``, surfaces/``Er``) or fp32 factors with fp64
-refinement. Scope: this is one measured 744k-unknown HSX PAS case; further
-cases are promoted as each vertical slice lands with its own evidence.
+the memory. Three qualifications go with that row:
+
+* Ramp-vs-uniform ``Nxi`` moves the physics outputs by at most 0.9%
+  (electrons).
+* GPU time equals M4 CPU time because the Legendre scan is serial in ``L`` and
+  the A4000 runs FP64 at 1/32 rate. GPU upside requires batching over
+  (species, ``x``, surfaces/``Er``), or fp32 factors with fp64 refinement.
+* Scope is one measured 744k-unknown HSX PAS case. Further cases are promoted
+  as each vertical slice lands with its own evidence.
 
 **Read that number together with the whole-suite sweep below.** It is a
 pitch-angle-scattering DKES-trajectory deck, which is to say one where ``dkx``
@@ -131,7 +134,7 @@ Two more facts the sweep settles, both against ``dkx``:
 
 Physics agreement across the sweep is a median relative difference of
 ``4.1e-06`` on the shared output moments, with the outliers explained
-case by case in "Interpreting a cross-code difference" above.
+case by case under `The reference's own true residual`_ below.
 
 Fortran strong-scaling baseline (same case, same machine)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -172,15 +175,15 @@ practical Fortran floor for this case is about ``230 s``.
 Cross-machine end-to-end time to solution
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-A second, independent sweep measures **end-to-end** wall time (operator
-build + solve + moments + output; ``run_profile`` on the ``dkx`` side,
-the full binary run on the Fortran side) for the two-species production
-variant of the same HSX PAS deck (1,275,010 unknowns) on two machines, with
-a freshly compiled Fortran v3 (conda PETSc 3.25 + MUMPS, MPI) and
-best-of-two repetitions per configuration. The Fortran run is one
-linear solve dominated by the preconditioner factorization plus a handful of
-Krylov applications, so end-to-end time is the honest cross-code metric.
-Reproduce with ``tools/benchmarks/time_to_solution.py``.
+A second, independent sweep measures **end-to-end** wall time: operator build,
+solve, moments and output, via ``run_profile`` on the ``dkx`` side and the full
+binary run on the Fortran side. The deck is the two-species production variant
+of the same HSX PAS case (1,275,010 unknowns), run on two machines against a
+freshly compiled Fortran v3 (conda PETSc 3.25 + MUMPS, MPI), best of two
+repetitions per configuration. The Fortran run is one linear solve dominated by
+the preconditioner factorization plus a handful of Krylov applications, so
+end-to-end time is the honest cross-code metric. Reproduce with
+``tools/benchmarks/time_to_solution.py``.
 
 .. list-table::
    :header-rows: 1
@@ -204,16 +207,17 @@ Reproduce with ``tools/benchmarks/time_to_solution.py``.
    * - ``dkx``, workstation, one CPU process (cold / warm)
      - 6132 / 1998
 
-The MPI scaling shape repeats on both machines: Fortran/MUMPS bottoms out
-around 8 ranks (1.4-2.5x over one rank) and *degrades* beyond — at 32 ranks
-the workstation run is slower than a single rank. One ``dkx`` process
-beats every measured Fortran configuration on the same hardware: 3.1x the
-laptop's best MPI time on CPU, and 13.6x the workstation's best MPI time on
-its GPU. The workstation's CPU path is dominated by the serial Legendre scan
-at that machine's low single-core throughput — on such hardware the GPU is
-the ``dkx`` backend of choice, and batched scans
-(:mod:`dkx.batch`, measured in ``tools/benchmarks/batched_scan.py``)
-are the axis where one process replaces an entire MPI allocation.
+The MPI scaling shape repeats on both machines. Fortran/MUMPS bottoms out
+around 8 ranks (1.4-2.5x over one rank) and *degrades* beyond it. At 32 ranks
+the workstation run is slower than a single rank.
+
+One ``dkx`` process beats every measured Fortran configuration on the same
+hardware: 3.1x the laptop's best MPI time on CPU, and 13.6x the workstation's
+best MPI time on its GPU. The workstation's CPU path is dominated by the serial
+Legendre scan at that machine's low single-core throughput, so on such hardware
+the GPU is the ``dkx`` backend of choice. Batched scans (:mod:`dkx.batch`,
+measured in ``tools/benchmarks/batched_scan.py``) are the axis where one
+process replaces an entire MPI allocation.
 
 Memory findings
 ~~~~~~~~~~~~~~~
@@ -295,17 +299,15 @@ The allocator settings change nothing, to three decimal places and
 reproducibly. Disabling ``jit`` makes the floor *worse*, because op-by-op
 dispatch issues more XLA calls rather than fewer.
 
-Stated plainly: **the small-deck floor is a property of the XLA runtime, not of
-``dkx``, and none of it is presently under our control.** Suggesting an
-allocator flag here would be offering a lever that does not move.
+**The small-deck floor is a property of the XLA runtime, not of ``dkx``, and
+none of it is under our control.**
 
-Two consequences are worth stating rather than hiding. The import baseline
-alone --- 0.156 GB with ``dkx`` fully imported and the backend live --- is
-already the same order as an entire small Fortran run, so no amount of trimming
-inside ``dkx`` reaches Fortran's small-deck footprint; closing that gap would
-take a different execution backend, not a tidier ``dkx``. And the floor is a
-constant, not a leak: it is paid once, and past a few thousand unknowns the
-physics dominates it.
+Two consequences follow. The import baseline is 0.156 GB with ``dkx`` fully
+imported and the backend live, already the same order as an entire small
+Fortran run. No amount of trimming inside ``dkx`` reaches Fortran's small-deck
+footprint; closing that gap would take a different execution backend, not a
+tidier ``dkx``. The floor is also a constant, not a leak. It is paid once, and
+past a few thousand unknowns the physics dominates it.
 
 .. list-table::
    :header-rows: 1
@@ -327,24 +329,24 @@ physics dominates it.
      - preconditioned GCROT
      - 3.979 GB
 
-Interpreting a cross-code difference
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+The reference's own true residual
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Two codes solving the same discretized system can only be expected to agree to
-the accuracy each one actually reaches, and that accuracy is not always the
-number in the input file.
+Two codes solving the same discretized system agree only to the accuracy each
+one actually reaches.  That accuracy is not always the number in the input
+file.
 
 SFINCS solves its linear system with PETSc.  For left-preconditioned Krylov
 methods PETSc's default convergence test measures the *preconditioned* residual
 :math:`\|M^{-1}(Ax-b)\|` rather than the true residual :math:`\|Ax-b\|`
 (``KSPSetNormType``, ``KSP_NORM_PRECONDITIONED``).  SFINCS preconditions with a
-simplified operator assembled separately from the full one, so on some decks
-the two norms differ substantially and a run reports success at its requested
+simplified operator assembled separately from the full one.  On some decks the
+two norms differ substantially.  The run then reports success at its requested
 ``solverTolerance`` while the returned state still leaves a large true
 residual.
 
-This is measurable from SFINCS's own binary output alone -- its matrix, its
-right-hand side, its state vector -- with no ``dkx`` quantity involved:
+SFINCS's own binary output measures this on its own.  It carries the matrix,
+the right-hand side and the state vector, so no ``dkx`` quantity enters:
 
 .. math::
 
@@ -363,24 +365,40 @@ right-hand side, its state vector -- with no ``dkx`` quantity involved:
    on a sweep produced by ``tools/benchmarks/parity_performance_matrix.py
    --fortran-residual``.
 
-On ``geometryScheme4_2species_PAS_noEr`` the reference's own true residual is
-``5.4e-2`` while ``dkx`` solves the same system -- matrix agreeing to
-``8.5e-15`` on random matvecs, right-hand side to ``5.0e-15`` -- to
-``3.1e-13``.  The two codes' bootstrap currents differ by 28%.
+``geometryScheme4_2species_PAS_noEr`` is the sharpest example.  Both codes are
+handed the same system and reach very different accuracies on it.
+
+.. list-table:: ``geometryScheme4_2species_PAS_noEr``
+   :header-rows: 1
+   :widths: 52 24
+
+   * - measured quantity
+     - value
+   * - reference true residual
+     - ``5.4e-2``
+   * - ``dkx`` residual on the same system
+     - ``3.1e-13``
+   * - matrix agreement, random matvecs
+     - ``8.5e-15``
+   * - right-hand-side agreement
+     - ``5.0e-15``
+   * - bootstrap current, difference between the codes
+     - 28%
 
 The residual bounds how closely two solutions can agree in the *state vector*.
-It is not a bound on the output moments: those are contractions of the state,
+It is not a bound on the output moments.  Those are contractions of the state,
 so a residual can cancel out of them or be amplified by them, and the measured
-points fall on both sides of equality.  What the data does show is that every
+points fall on both sides of equality.  The data does show one thing: every
 large cross-code difference here comes with a large reference residual.
 
-None of this is specific to SFINCS -- a preconditioned-norm convergence test is
-standard practice and usually adequate.  The practical consequence for anyone
-comparing against a reference implementation is narrower: check the reference's
-own residual before attributing a disagreement to the code under test.
-``tools/benchmarks/parity_performance_matrix.py --fortran-residual`` records it
-alongside every comparison, and a case whose reference residual exceeds the
-requested tolerance is evidence about the reference, not about ``dkx``.
+A preconditioned-norm convergence test is standard practice and usually
+adequate, in SFINCS and in every other code that uses one.  The rule for anyone
+comparing against a reference implementation is narrow: check the reference's
+own residual before blaming the code under test.
+``tools/benchmarks/parity_performance_matrix.py --fortran-residual`` records
+that residual alongside every comparison.  A case whose reference residual
+exceeds the requested tolerance is evidence about the reference, not about
+``dkx``.
 
 Solver-noise finding
 ~~~~~~~~~~~~~~~~~~~~
@@ -414,9 +432,9 @@ Known issues
   leaves no trace: the physical drive stays in the range of :math:`A`, so the
   forward solve converges to ``1e-15`` and every field of ``SolveResult``
   looks healthy while the gradient is garbage. Operators whose null space the
-  constraint scheme does not span hit this — an ``Er`` ``xiDot`` deck under
-  the per-speed ``constraintScheme=2`` border, for instance, has a smallest
-  singular value ~``4e-19`` against :math:`\|A\| \sim 15`, and its transposed
+  constraint scheme does not span hit this. An ``Er`` ``xiDot`` deck under the
+  per-speed ``constraintScheme=2`` border, for instance, has a smallest
+  singular value ~``4e-19`` against :math:`\|A\| \sim 15`; its transposed
   solve diverges by 50 orders of magnitude against a generic cotangent.
   ``dkx`` recomputes each differentiable solve's *true* residual from the
   operator (never the Krylov method's internal estimate), records it in
@@ -427,9 +445,9 @@ Known issues
   directions are spread across the whole Legendre spectrum rather than
   confined to the source/constraint border, so they cannot be deflated from
   the vectors the constraint scheme knows.
-- **A large adjoint residual is not by itself a wrong gradient.** On a
-  near-singular operator — full Fokker-Planck with ``constraintScheme=1``, a
-  finite ``Er``, uniform ``Nxi_for_x``, condition number ~``6e10`` — a generic
+- **A large adjoint residual is not by itself a wrong gradient.** Take a
+  near-singular operator: full Fokker-Planck with ``constraintScheme=1``, a
+  finite ``Er``, uniform ``Nxi_for_x``, condition number ~``6e10``. A generic
   cotangent excites an almost-null direction, the adjoint solution norm
   reaches ~``7e7``, and no backward-stable method can then drive
   :math:`\|A^T y - g\|` down to ``tol`` times :math:`\|g\|`: GCROT stagnates
@@ -451,14 +469,15 @@ Known issues
 CPU and GPU: where each wins
 ----------------------------
 
-The structured tier-1 path is the one that lets ``dkx`` fit and finish a
-production case; the honest headline is that **a development-MacBook CPU and a
-workstation RTX A4000 land at parity on the direct tier, while the iterative
-and small-system paths favored the MacBook CPU** — note these two backends
-live on *different machines*; the same-host CPU-vs-GPU picture is measured in
-"Same-host CPU/GPU crossover" below and looks very different. The full
-744k-unknown HSX case was re-measured on both backends after the ramp-aware
-truncated kernel became the canonical route:
+The structured tier-1 path is what lets ``dkx`` fit and finish a production
+case. **A development-MacBook CPU and a workstation RTX A4000 land at parity on
+the direct tier, while the iterative and small-system paths favored the MacBook
+CPU.** Those two backends live on *different machines*. The same-host
+CPU-vs-GPU picture is measured in "Same-host CPU/GPU crossover" below and looks
+very different.
+
+The full 744k-unknown HSX case was re-measured on both backends after the
+ramp-aware truncated kernel became the canonical route:
 
 .. list-table:: Post-fix 744k HSX PAS/DKES head-to-head (end-to-end = build + solve)
    :header-rows: 1
@@ -487,14 +506,14 @@ The GPU does **not** help the iterative and small-system paths *relative to a
 fast development CPU*. Full Fokker-Planck GCROT, the :math:`\Phi_1` Newton
 solve, ``value_and_grad``, the ambipolar Brent root, and a one-shot
 monoenergetic solve all ran 2-5x slower on the A4000 than on the development
-MacBook's CPU. A dedicated same-host re-measurement (next section) showed that
-this comparison mixes machines: on the workstation that hosts the A4000, the
-GPU beats *that machine's own 36-core CPU* on essentially every path and size,
-and the tier-1 production solve is FP64-compute-bound on the card (1/32-rate
-FP64), not dispatch-bound. The honest summary is per-machine: a fast laptop
-CPU beats a modest workstation GPU on small and iterative work; on the GPU's
-own host the GPU wins, and batched work — multi-:math:`E_r` or multi-surface
-``vmap`` sweeps — widens that win.
+MacBook's CPU.
+
+That comparison mixes machines. A dedicated same-host re-measurement (next
+section) puts the GPU ahead of *that machine's own 36-core CPU* on essentially
+every path and size, and shows the tier-1 production solve to be
+FP64-compute-bound on the card (1/32-rate FP64) rather than dispatch-bound.
+Batched work, such as multi-:math:`E_r` or multi-surface ``vmap`` sweeps,
+widens that same-host win.
 
 Same-host CPU/GPU crossover (2026-07)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -548,15 +567,35 @@ above the smallest deck measured (6.5k unknowns):
      - 26.0-26.5
      - —
 
-The production point is the full 2-species HSX deck (25x51x100x5 =
-1,275,010 unknowns): workstation CPU end-to-end 2,000.6 s (build 8.8 s, cold
-solve 952 s, warm solve 1,036 s) versus GPU end-to-end 72 s (warm solve
-26.0 s) — a 39x same-host GPU win. Two honesty notes: the workstation CPU
-warm repeat measured *slower* than its cold solve (1,036 s vs 952 s) and the
-224k/336k rungs overlap (45.4 s vs 20.8-33.1 s), i.e. all-core CPU timings
-on this box carry large run-to-run variance (thermal steady state at
-~34-thread load); and the earlier "~1,998 s office CPU warm" figure matches
-this end-to-end total, not the warm solve alone.
+The production point is the full 2-species HSX deck, 25x51x100x5 =
+1,275,010 unknowns. It is a 39x same-host GPU win:
+
+.. list-table:: Production deck, same host (seconds)
+   :header-rows: 1
+   :widths: 26 24 24
+
+   * - Stage
+     - Workstation CPU
+     - Workstation GPU
+   * - build
+     - 8.8
+     - —
+   * - cold solve
+     - 952
+     - —
+   * - warm solve
+     - 1,036
+     - 26.0
+   * - end-to-end
+     - 2,000.6
+     - 72
+
+Two honesty notes. All-core CPU timings on this box carry large run-to-run
+variance, at thermal steady state under ~34-thread load: the workstation CPU
+warm repeat measured *slower* than its cold solve (1,036 s vs 952 s), and the
+224k and 336k rungs overlap (45.4 s vs 20.8-33.1 s). Separately, the earlier
+"~1,998 s office CPU warm" figure matches this end-to-end total, not the warm
+solve alone.
 
 **Tier-2 (GCROT-recycled FGMRES, preconditioned)** — the GPU also won every
 measured size warm; again no same-host crossover down to the smallest
@@ -587,33 +626,72 @@ practical Fokker-Planck deck:
      - 25.2
      - 2.7x
 
-Cold-including-compile favors the CPU at the small end (2.8k: 21.0 s CPU vs
-24.3 s GPU; 11.9k: 19.2 s vs 28.5 s) because GPU compilation is slower — a
-first-run effect the persistent cache removes on repetition.
+Cold-including-compile favors the CPU at the small end, because GPU
+compilation is slower. That is a first-run effect the persistent cache removes
+on repetition.
 
-**Iterative and small-system paths, same host** — ``value_and_grad`` through
-the tier-1 solve (39.3k unknowns): warm 4.21 s CPU vs 3.03 s GPU; the
-ambipolar Brent root (2 species): 92.8 s CPU vs 48.4 s GPU end-to-end. The
-single measured CPU-wins case is the :math:`\Phi_1` Newton solve, whose
-unpreconditioned inner GCROT systems are capped at 6,000 unknowns (3,975
-here): warm re-solve 0.048 s CPU vs 0.159 s GPU (2.6x) and cold 40.3 s vs
-52.2 s. Per-``solve()`` routing of just those inner solves to the CPU did
-*not* recover the win (0.12-0.13 s: the per-iteration Newton residuals stay
-on the GPU and each routed solve pays device transfers plus a one-time CPU
-compile), so small :math:`\Phi_1`-heavy workloads are best run whole-process
-on the CPU (``JAX_PLATFORMS=cpu``).
+.. list-table:: Cold tier-2 solve including compile (seconds)
+   :header-rows: 1
+   :widths: 30 24 24
 
-**Where the GPU time goes (profiler trace).** A ``jax.profiler`` capture of
-the warm 336k tier-1 GPU solve records 31,953 kernel launches with a mean
-kernel duration of 0.086 ms; the device is busy 2.74 s of the 3.18 s device
-span (13.8% idle), and the untraced warm solve is 2.97 s — i.e. the tier-1
-GPU solve is ~90% device compute, *not* host-dispatch-bound: the async
-dispatch pipeline keeps the serial Legendre scan's small kernels queued ahead
-of execution. The top kernels are FP64 dense linear algebra — ``getrf``
-(0.90 s), FP64 tensor-core GEMMs (0.80 s), ``trsm`` (0.45 s) — so the
-production solve sits within ~2.7x of the card's FP64 arithmetic floor
-(~5.5 TFlop at ~0.6 TFLOPS FP64). Faster-FP64 hardware, not lower launch
-latency, is what would speed this path up.
+   * - Unknowns
+     - Workstation CPU
+     - Workstation GPU
+   * - 2.8k
+     - 21.0
+     - 24.3
+   * - 11.9k
+     - 19.2
+     - 28.5
+
+**Iterative and small-system paths, same host.**
+
+.. list-table:: Iterative and small-system paths (seconds)
+   :header-rows: 1
+   :widths: 40 18 18 24
+
+   * - Path
+     - CPU
+     - GPU
+     - Measurement
+   * - ``value_and_grad`` through tier-1 (39.3k unknowns)
+     - 4.21
+     - 3.03
+     - warm
+   * - ambipolar Brent root (2 species)
+     - 92.8
+     - 48.4
+     - end-to-end
+   * - :math:`\Phi_1` Newton solve (3,975 unknowns)
+     - 0.048
+     - 0.159
+     - warm re-solve
+   * - :math:`\Phi_1` Newton solve (3,975 unknowns)
+     - 40.3
+     - 52.2
+     - cold
+
+The :math:`\Phi_1` Newton solve is the single measured CPU-wins case, by 2.6x
+warm. Its unpreconditioned inner GCROT systems are capped at 6,000 unknowns.
+Routing only those inner solves to the CPU per ``solve()`` did *not* recover
+the win: it lands at 0.12-0.13 s, because the per-iteration Newton residuals
+stay on the GPU and each routed solve pays device transfers plus a one-time CPU
+compile. Small :math:`\Phi_1`-heavy workloads are best run whole-process on the
+CPU (``JAX_PLATFORMS=cpu``).
+
+**Where the GPU time goes (profiler trace).** A ``jax.profiler`` capture of the
+warm 336k tier-1 GPU solve records 31,953 kernel launches at a mean kernel
+duration of 0.086 ms. The device is busy 2.74 s of the 3.18 s device span
+(13.8% idle), against an untraced warm solve of 2.97 s. The tier-1 GPU solve is
+therefore ~90% device compute, *not* host-dispatch-bound: the async dispatch
+pipeline keeps the serial Legendre scan's small kernels queued ahead of
+execution.
+
+The top kernels are FP64 dense linear algebra: ``getrf`` (0.90 s), FP64
+tensor-core GEMMs (0.80 s), ``trsm`` (0.45 s). The production solve therefore
+sits within ~2.7x of the card's FP64 arithmetic floor (~5.5 TFlop at
+~0.6 TFLOPS FP64). Faster-FP64 hardware, not lower launch latency, is what
+would speed this path up.
 
 **Device routing knob.** ``solve(device=...)`` gives explicit control:
 ``"cpu"``/``"gpu"``/a ``jax.Device`` move the solve (inputs via
@@ -629,29 +707,45 @@ accelerator: set ``DKX_SOLVE_CPU_MAX_SIZE_TIER2=6000``).
 **Cold starts and the persistent compilation cache.** The cache configured by
 ``dkx.__init__`` (default ``~/.cache/dkx/jax_compilation_cache``,
 min-compile-time and min-entry-size forced to 0, GPU per-fusion autotune cache
-on by JAX default) was audited working cross-process on this host: with a
-populated cache the small-deck GPU cold solve drops 10.8 s -> 1.7 s, the CPU
-cold solve 7.8 s -> 3.0 s, and the :math:`\Phi_1` GPU cold solve 52.2 s ->
-15.0 s; at the production size the CPU cold solve ran at warm speed (952 s vs
-1,036 s warm). First-ever runs on a clean machine still pay full XLA
-compilation (historically ~2,100 s extra on the production CPU case), so cold
--vs-warm expectations are: first run per (shape, backend) compiles; every
-later process reuses the cache and starts at warm speed plus a few seconds of
-cache loading.
+on by JAX default) was audited working cross-process on this host:
+
+.. list-table:: Cold solve, cache unpopulated vs populated (seconds)
+   :header-rows: 1
+   :widths: 40 24 24
+
+   * - Cold solve
+     - Cache unpopulated
+     - Cache populated
+   * - small deck, GPU
+     - 10.8
+     - 1.7
+   * - small deck, CPU
+     - 7.8
+     - 3.0
+   * - :math:`\Phi_1`, GPU
+     - 52.2
+     - 15.0
+
+At the production size the CPU cold solve ran at warm speed: 952 s against
+1,036 s warm. First-ever runs on a clean machine still pay full XLA
+compilation, historically ~2,100 s extra on the production CPU case. The
+cold-vs-warm expectation is therefore: the first run per (shape, backend)
+compiles, and every later process reuses the cache and starts at warm speed
+plus a few seconds of cache loading.
 
 **Cyclic-reduction assessment (evaluation only, not adopted).** Block cyclic
 reduction would replace the serial length-:math:`L` block-Thomas recurrence
 with :math:`\log_2 L` parallel levels, at 2-3x the arithmetic and a working
-set touching all :math:`L` blocks per level. The trace above shows the
-regime it would need — a device idled by the serial scan — does not occur at
-production size: the A4000 is ~86% busy and FP64-throughput-bound, so
-inflating flops 2-3x to shorten the dependency chain would slow the solve
-down, and at small sizes (where the device *is* latency-bound) the absolute
-times are already sub-second and the memory-lean ``lax.map`` batching would
-have to be abandoned to expose the parallelism. Cyclic reduction only makes
-sense on hardware with FP64 headroom (data-center cards) combined with small
-:math:`N_\theta N_\zeta` blocks and long :math:`L` chains — the opposite
-corner from the production decks; it is left unimplemented.
+set touching all :math:`L` blocks per level. The regime it would need is a
+device idled by the serial scan, and the trace above shows that regime does not
+occur at production size: the A4000 is ~86% busy and FP64-throughput-bound, so
+inflating flops 2-3x to shorten the dependency chain would slow the solve down.
+At small sizes the device *is* latency-bound, but the absolute times are
+already sub-second and the memory-lean ``lax.map`` batching would have to be
+abandoned to expose the parallelism. Cyclic reduction only makes sense on
+hardware with FP64 headroom (data-center cards) combined with small
+:math:`N_\theta N_\zeta` blocks and long :math:`L` chains. That is the opposite
+corner from the production decks, so it is left unimplemented.
 
 Measured GPU anatomy and memory headroom (RTX A4000)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -693,14 +787,16 @@ with residuals in ``1e-13 .. 1e-15``.
      - 2.21
      - 157.6
 
-The device peak grows far slower than the unknown count because the truncated
+The device peak grows far slower than the unknown count, because the truncated
 tier-1 kernel only ever materializes its ``O(K m^2)`` working set (the lowest
-Legendre blocks), not the full band: the 2,525,010-unknown solve peaks at
-2.21 GB where the conservative full-band charge for that system is ~208 GB, so
-multi-million-unknown decks fit with large headroom on the 16 GB card — the
-route-aware footprint model (`End-to-end pipeline efficiency`_) is what lets the
-``auto`` policy account for this truncated working set rather than the full-band
-peak. The first over-budget rung above 2,525,010 unknowns is the only measured
+Legendre blocks) rather than the full band. The 2,525,010-unknown solve peaks
+at 2.21 GB where the conservative full-band charge for that system is ~208 GB,
+so multi-million-unknown decks fit with large headroom on the 16 GB card. The
+route-aware footprint model (`End-to-end pipeline efficiency`_) is what lets
+the ``auto`` policy account for this truncated working set rather than the
+full-band peak.
+
+The first over-budget rung above 2,525,010 unknowns is the only measured
 out-of-memory point: its truncated working-set estimate is 26.25 GB, past the
 12.56 GB device budget.
 
@@ -780,15 +876,31 @@ case, via ``tools/benchmarks/profile_production.py``):
      - 31.2 s
      - 3.9 GB
 
-Two lessons stand out. First, promoting the ramp-aware truncated kernel into
-``solve(method="auto")`` is what pulls the mid-size HSX case from the tier-2
-route's ``10.8 GB`` / ``15.4 s`` warm down to ``885 MB`` / ``3.5 s`` warm — 12x
-less memory and roughly 4x faster on the same deck, with the autodiff gradient
-through the ramped route still matching finite differences at rtol ``1e-6``.
-Second, the cold ``232 s`` :math:`\Phi_1` Newton solve (an unpreconditioned,
-restart-capped GCROT inner solve at only 4.5k unknowns) is the top remaining
-runtime target; its warm re-solve is already ``0.04 s``, so the cost is entirely
-first-call iteration count, not steady state.
+Two lessons follow. The first is that promoting the ramp-aware truncated kernel
+into ``solve(method="auto")`` moves the mid-size HSX case off the tier-2 route:
+
+.. list-table:: Mid-size HSX case, warm, by route
+   :header-rows: 1
+   :widths: 40 22 22
+
+   * - Route
+     - Memory
+     - Warm solve
+   * - tier-2
+     - ``10.8 GB``
+     - ``15.4 s``
+   * - ramp-aware truncated tier-1
+     - ``885 MB``
+     - ``3.5 s``
+
+That is 12x less memory and roughly 4x faster on the same deck. The autodiff
+gradient through the ramped route still matches finite differences at rtol
+``1e-6``.
+
+The second is that the cold ``232 s`` :math:`\Phi_1` Newton solve is the top
+remaining runtime target. It is an unpreconditioned, restart-capped GCROT inner
+solve at only 4.5k unknowns, and its warm re-solve is already ``0.04 s``, so
+the cost is entirely first-call iteration count rather than steady state.
 
 Example-suite benchmark
 -----------------------
@@ -813,11 +925,27 @@ parity audit; only the runtime/memory *plot* applies the window.
    Python/JAX/XLA baseline. Reproduce with
    ``tools/publication_figures/generate_fortran_suite_benchmark_summary.py``.
 
-Across the plotted rows the median cold JAX/Fortran wall-clock ratio is about
-``0.021x`` on CPU and ``0.037x`` on GPU. Median active-memory ratios are about
-``2.89x`` on CPU and ``3.71x`` on GPU; the full process maximum-RSS ratios, kept
-in the summary JSON audit fields, are about ``4.75x`` on CPU and ``8.80x`` on
-GPU. The numeric summary and the top runtime/memory cases are recorded in
+Median JAX/Fortran ratios across the plotted rows, to the stated precision:
+
+.. list-table:: Median JAX/Fortran ratios, plotted rows
+   :header-rows: 1
+   :widths: 40 20 20
+
+   * - Ratio
+     - CPU
+     - GPU
+   * - cold wall clock
+     - ``0.021x``
+     - ``0.037x``
+   * - active memory
+     - ``2.89x``
+     - ``3.71x``
+   * - process maximum RSS
+     - ``4.75x``
+     - ``8.80x``
+
+The process maximum-RSS row is kept in the summary JSON audit fields. That
+summary, together with the top runtime and memory cases, is recorded in
 ``tools/publication_figures/artifacts/dkx_fortran_suite_benchmark_summary.json``.
 
 Tier-2 preconditioners: coarse block-Thomas vs multigrid
@@ -929,9 +1057,9 @@ reclaims, i.e. the machine spent its time swapping the bands rather than
 factoring them).  The multigrid route ran the same case to its iteration cap in
 186 s at 5.9 GB.
 
-**The honest result: multigrid makes the large case runnable -- 186 s and half
-the memory where the classical preconditioner does not finish at all -- and it
-does not reach the requested tolerance.**  Where the classical route does fit
+**Multigrid makes the large case runnable, at 186 s and half the memory where
+the classical preconditioner does not finish at all.  It does not reach the
+requested tolerance.**  Where the classical route does fit
 in memory it is strictly better (21 and 24 iterations to ``1e-11`` against a
 600-iteration cap at ``2e-3``).  The reason is measured, not guessed, and it is
 a property of the drift-kinetic operator rather than of the cycle:
@@ -962,21 +1090,42 @@ a property of the drift-kinetic operator rather than of the cycle:
   but 1.023 once ``Nxi`` is halved as well, i.e. worse than doing nothing.
   ``coarsen_xi`` is therefore ``False`` by default.
 
-What the exercise *did* buy, and it is worth recording, is a measurement of how
-much the classical preconditioner's own regularization costs -- which turned out
-to be the larger win.  A full-strength rank-one pin of the constant-on-surface
-null space of the ``l = 0`` block is not free: against no regularization at all
-(only the ``1e-8`` invertibility floor) it costs the 47k case **87 GCROT
-iterations instead of 21**, and a uniform diagonal shift is worse still (60
-iterations at ``1e-2`` of the mean collision diagonal, no convergence at
-``1.0``).  Dropping the pin outright is not an option either -- a collisionless,
-drift-free f-block has an *exactly* zero ``l = 0`` diagonal, and the ``Phi1``
-Newton inner solve forces the coarse preconditioner for every deck -- which is
-why the pin is adaptive (:func:`dkx.coarse_precond._l0_pin_gamma`).  Measured per deck on
-this geometry at ``11 x 21 x 41 x 5``, adaptive against unconditional: full
-Fokker-Planck with ``Er`` 21 against 87, improved Sugama with ``Er`` 20 against
-84, and no difference where the pin was already harmless or is genuinely needed
-(pitch-angle scattering 7 either way, ``Er = 0`` 18 either way).
+What the exercise *did* buy was a measurement of how much the classical
+preconditioner's own regularization costs, and that turned out to be the larger
+win.  A full-strength rank-one pin of the constant-on-surface null space of the
+``l = 0`` block is not free: against no regularization at all (only the ``1e-8``
+invertibility floor) it costs the 47k case **87 GCROT iterations instead of
+21**.  A uniform diagonal shift is worse still, at 60 iterations for ``1e-2`` of
+the mean collision diagonal and no convergence at ``1.0``.
+
+Dropping the pin outright is not an option either.  A collisionless, drift-free
+f-block has an *exactly* zero ``l = 0`` diagonal, and the ``Phi1`` Newton inner
+solve forces the coarse preconditioner for every deck.  That is why the pin is
+adaptive (:func:`dkx.coarse_precond._l0_pin_gamma`).  Measured per deck on this
+geometry at ``11 x 21 x 41 x 5``:
+
+.. list-table:: GCROT iterations, adaptive pin against unconditional pin
+   :header-rows: 1
+   :widths: 44 20 20
+
+   * - deck
+     - adaptive
+     - unconditional
+   * - full Fokker-Planck with ``Er``
+     - 21
+     - 87
+   * - improved Sugama with ``Er``
+     - 20
+     - 84
+   * - pitch-angle scattering
+     - 7
+     - 7
+   * - ``Er = 0``
+     - 18
+     - 18
+
+The last two rows are the decks where the pin was already harmless, or is
+genuinely needed.
 
 Why no smoother exists in a Legendre-modal pitch basis
 -------------------------------------------------------
@@ -1073,14 +1222,15 @@ modal operator preconditioned by each surrogate's *exact* inverse, at
 
 The upwind column also degrades with angular resolution (261 at ``9 x 15``,
 > 400 at ``13 x 21``) where the centered column barely moves (18, 24, 41 at
-``9 x 15 x 17``, ``13 x 21 x 17``, ``17 x 25 x 33``).  Note which axis does the
-damage: upwinding the *pitch* direction alone is nearly free (18 -> 21); it is
-upwinding the *angles*, where dkx's stencils are centered by construction
-(SFINCS ``thetaDerivativeScheme`` 1/2), that costs the order of magnitude.
-Double discretisation -- accurate operator on the fine level, upwinded smoother
-and coarse operators (Brandt 1982; Trottenberg et al. section 7.4) -- does not
-close the gap either: ``rho(TG)`` is 1.46, 1.94 and 2.27 across the same three
-collisionalities, divergent everywhere.
+``9 x 15 x 17``, ``13 x 21 x 17``, ``17 x 25 x 33``).  One axis does the damage.
+Upwinding the *pitch* direction alone is nearly free (18 -> 21).  Upwinding the
+*angles*, where dkx's stencils are centered by construction (SFINCS
+``thetaDerivativeScheme`` 1/2), is what costs the order of magnitude.
+
+Double discretisation does not close the gap either.  With an accurate operator
+on the fine level and upwinded smoother and coarse operators (Brandt 1982;
+Trottenberg et al. section 7.4), ``rho(TG)`` is 1.46, 1.94 and 2.27 across the
+same three collisionalities, divergent everywhere.
 
 **What would be required** is a change to the *discretization*, not to the
 preconditioner: pitch as a collocation grid, so that ``xi`` is a multiplication
@@ -1088,9 +1238,10 @@ operator and ``xi b.grad`` has a diagonal that an upwind angular stencil can
 weight, with the mirror force an upwinded advection in the pitch angle and all
 of ``(alpha, theta, zeta)`` coarsened together.  That changes the answers at
 fixed resolution, breaks the Fortran matrix parity the repository is gated on,
-and requires the Fokker-Planck and improved-Sugama collision operators -- built
-in the Legendre basis, where they are ``L``-diagonal -- to be re-derived on a
-pitch grid where they are dense.  And it buys a preconditioner that is *worse*
+and requires the Fokker-Planck and improved-Sugama collision operators to be
+re-derived on a pitch grid where they are dense.  Those operators are built in
+the Legendre basis, where they are ``L``-diagonal.  And it buys a
+preconditioner that is *worse*
 than the classical block-Thomas wherever the classical one fits in memory.  The
 scope of the multigrid route is therefore unchanged: opt-in, for the grids where
 the exact factorization does not fit.
@@ -1121,12 +1272,11 @@ host with SuperLU, apply it through ``jax.pure_callback``.  Selected with
 
 Two properties make it usable.  The ``(species, x)`` subsystems are uncoupled
 in the simplified operator, so this is ``Nspecies * Nx`` independent
-factorizations rather than one; and a preconditioner is never differentiated --
-the tier-2 implicit-diff wrapper differentiates the *solution*, and the
-preconditioner enters only the forward and transposed linear solves -- so a
-host callback is admissible here in a way it is not on the solve path.  It
-cannot run with traced operator leaves, and says so rather than falling back
-silently.
+factorizations rather than one.  And a preconditioner is never differentiated,
+so a host callback is admissible here in a way it is not on the solve path: the
+tier-2 implicit-diff wrapper differentiates the *solution*, and the
+preconditioner enters only the forward and transposed linear solves.  It cannot
+run with traced operator leaves, and says so rather than falling back silently.
 
 The one term that would destroy the sparsity is the rank-one ``l = 0``
 null-space pin, which is a dense outer product on a single diagonal block; it
@@ -1177,9 +1327,10 @@ reproduce with ``tools/benchmarks/tier2_sparse_fill.py``):
 
 The exact inverse of the same operator costs 1.57 GB of factors instead of
 16.85 GB of bands on the ``sfincsPaperFigure3`` deck, and 5.97 GB instead of
-42.92 GB on the W7-X magnetic-drift deck -- a factor of 11 and 7.  The crossover
-is where the angular grid is small: at ``Ntheta*Nzeta = 21`` the assembly is a
-fifth of the dense bands and there is nothing to win.
+42.92 GB on the W7-X magnetic-drift deck.  That is a factor of 11 and a factor
+of 7.  The crossover is where the angular grid is small: at
+``Ntheta*Nzeta = 21`` the assembly is a fifth of the dense bands and there is
+nothing to win.
 
 **What is not measured here is wall time.**  Fill bounds the work but does not
 fix it, and the callback round-trip per Krylov iteration has a cost of its own
@@ -1211,9 +1362,9 @@ and neither ever materializes a band.
 ``solvax.direct.block_thomas_factor_fn(..., store_offdiagonals=False)`` keeps
 the Schur LU factors and drops the two off-diagonal bands, regenerating them one
 block at a time inside each substitution sweep.  Retained state is one
-``(Nxi, m, m)`` array per subsystem instead of three --- a third of the bands,
-exactly ``1/3 + 1/(6m)`` once the pivots are counted, and a sixth with
-``DKX_COARSE_FACTOR_DTYPE=float32``.  Crucially the elimination still runs
+``(Nxi, m, m)`` array per subsystem instead of three.  That is a third of the
+bands, exactly ``1/3 + 1/(6m)`` once the pivots are counted, and a sixth with
+``DKX_COARSE_FACTOR_DTYPE=float32``.  The elimination still runs
 **once**: an application is two triangular solves and two block regenerations
 per row, and no factorization, so the factors amortize over the tens of Krylov
 applications a solve makes.  This is the route the oversized decks take
@@ -1221,8 +1372,9 @@ applications a solve makes.  This is the route the oversized decks take
 
 ``solvax.direct.block_thomas_checkpointed_fn`` retains no band-sized state at
 all: one Schur checkpoint per ``cs = ceil(sqrt(Nxi))`` rows plus the one segment
-it is substituting back through, ``Nxi/cs + 3 cs`` blocks against ``3 Nxi`` ---
-0.48 GB instead of 3.58 GB per subsystem on the W7-X magnetic-drift decks.  It
+it is substituting back through, ``Nxi/cs + 3 cs`` blocks against ``3 Nxi``.
+On the W7-X magnetic-drift decks that is 0.48 GB per subsystem instead of
+3.58 GB.  It
 returns a solution rather than reusable factors, so it repeats the entire
 elimination on every application.  **This is not a speedup and must not be
 reported as one.**  It is kept for the one thing the reusable route cannot do:
@@ -1289,8 +1441,8 @@ The iteration count is the number to read here, and it is *identical* across the
 three: the routes are the same linear map, so the preconditioner changes where
 the blocks are kept and nothing about the Krylov path.  The float32 LU cost no
 extra iterations at all on this deck and reached the same residual, which is the
-evidence for offering it --- and the reason it is still not the default is that
-one deck is not a licence to change everyone's preconditioner precision.
+evidence for offering it.  It is not the default, because one deck is not a
+licence to change everyone's preconditioner precision.
 
 Peak RSS on a deck this small is dominated by compilation rather than by the
 factors (the bands here are 0.65 GB, so a third of them is 0.2 GB and cannot
@@ -1354,7 +1506,7 @@ Measured on a 36-core, 62 GB machine, float32 reusable factors:
      - 11.72 GB
 
 Every deck without magnetic drifts converged in at most 49 iterations from the
-start. Both decks *with* them took 1260 and 3384 --- two orders of magnitude,
+start. Both decks *with* them took 1260 and 3384, two orders of magnitude more,
 with the drift terms as the only structural difference. Those are the terms
 Fortran keeps in its preconditioner (``preconditioner_magnetic_drifts_max_L``)
 and ``dkx`` used to drop. Carrying their ``L``-diagonal half closed the gap:
@@ -1378,22 +1530,42 @@ and ``dkx`` used to drop. Carrying their ``L``-diagonal half closed the gap:
 
 Residuals are unchanged (1.681e-14 → 1.682e-14 and 2.325e-14 → 2.208e-14) and
 the extra storage is 0.3–0.5 GB, matching the ``6 S TZ^2`` prediction. The
-speedup **grows** with resolution --- 1.7x on a tiny fixture at ``Nxi=6``, 2.7x
-on a reduced deck at ``Nxi=40``, 10-28x at the production ``Nxi=100`` --- because
-the more Legendre rows the streaming chain spans, the more a preconditioner
-loses by omitting a term the operator has.
+speedup **grows** with resolution: 1.7x on a tiny fixture at ``Nxi=6``, 2.7x on
+a reduced deck at ``Nxi=40``, and 10-28x at the production ``Nxi=100``. The more
+Legendre rows the streaming chain spans, the more a preconditioner loses by
+omitting a term the operator has.
 
 On precision, ``float32`` factors are better on every axis, which inverts the
 expectation that they trade iterations for memory. Same machine, same commit, on
-``…magneticDrifts_noEr`` before the drift diagonal: float32 took 1260 iterations,
-10 h 08 min, 11.19 GB and residual 1.681e-14; float64 took 1470 iterations,
-11 h 31 min, 18.26 GB and residual 1.713e-14.
+``…magneticDrifts_noEr`` before the drift diagonal:
+
+.. list-table:: Schur-factor precision, ``…magneticDrifts_noEr``
+   :header-rows: 1
+   :widths: 20 16 18 16 20
+
+   * - factor dtype
+     - iterations
+     - wall
+     - peak RSS
+     - residual
+   * - float32
+     - 1260
+     - 10 h 08 min
+     - 11.19 GB
+     - 1.681e-14
+   * - float64
+     - 1470
+     - 11 h 31 min
+     - 18.26 GB
+     - 1.713e-14
 
 Two cautions on reading any of these numbers. Iteration counts are **not**
-comparable across machines --- the same deck and dtype gave 1041 on a laptop at
-an earlier commit against 1260 here --- so only same-machine, same-commit pairs
-mean anything. And the sizing model is accurate but not tight: 11.19 GB against
-8.9 GB predicted plus the solve's own working set, 18.26 GB against 17.9 GB.  The routing is therefore automatic and by measured size alone: the dense bands
+comparable across machines: the same deck and dtype gave 1041 on a laptop at an
+earlier commit against 1260 here, so only same-machine, same-commit pairs mean
+anything. And the sizing model is accurate but not tight: 11.19 GB against
+8.9 GB predicted plus the solve's own working set, 18.26 GB against 17.9 GB.
+
+The routing is therefore automatic and by measured size alone: the dense bands
 are used whenever they fit within physical RAM
 (:func:`dkx.coarse_precond._coarse_bands_fit`); failing that, the Schur-LU
 factors are used whenever *they* fit
@@ -1462,21 +1634,23 @@ with ``tools/benchmarks/tier2_coarse_truncation.py``):
 Cutting one link of forty-eight costs five times the iterations; cutting four
 ends convergence.  ``tokamak_2species_PASCollisions_withEr_fullTrajectories``
 (``Nxi = 40``) has the same shape with a nonzero ``Er``: 19 iterations for the
-whole chain, 888 at ``K = 39`` — one link cut — and no convergence in 6000 by
-``K = 36``.  Three cheaper tails were measured on that deck and are all
-worse than the exact block-diagonal one above — an identity tail, a tail
-eliminated with diagonal Schur complements, and an exact-head variant whose
-leading factors come from the complete downward sweep and only whose tail
-*solve* is approximated.  None reaches ``1e-10`` at any ``K < Nxi``.  Dropping
+whole chain, 888 at ``K = 39`` with one link cut, and no convergence in 6000 by
+``K = 36``.
+
+Three cheaper tails were measured on that deck and are all worse than the exact
+block-diagonal one above: an identity tail, a tail eliminated with diagonal
+Schur complements, and an exact-head variant whose leading factors come from
+the complete downward sweep and only whose tail *solve* is approximated.  None
+reaches ``1e-10`` at any ``K < Nxi``.  Dropping
 the ``L +- 1`` coupling everywhere (:func:`dkx.solve.build_coarse_preconditioner`
 with ``drop_l_coupling=True``) is the limit of the same family and does not
 converge on that deck either.
 
-The load-bearing conclusion is narrow and worth stating plainly: the coarse
-operator is cheap to *simplify* — self-species x-diagonal collisions, no ``L +- 2``
-terms, no magnetic drifts, all of which tier 2 corrects for in a handful of
-extra iterations — but it is not cheap to *shorten*.  Memory has to come from
-how the chain is stored, not from how much of it is kept.
+The load-bearing conclusion is narrow.  The coarse operator is cheap to
+*simplify*: self-species x-diagonal collisions, no ``L +- 2`` terms and no
+magnetic drifts, all of which tier 2 corrects for in a handful of extra
+iterations.  It is not cheap to *shorten*.  Memory has to come from how the
+chain is stored, not from how much of it is kept.
 
 The same script measures an approximation on that side, which does survive.  Of
 the three ``(Ntheta*Nzeta)`` blocks stored per ``(species, x, l)``, only the
@@ -1486,10 +1660,28 @@ index, which is exactly what
 :func:`dkx.solve._coarse_subsystem_block_fn` regenerates for the route above.
 Taking the Schur factors to float32 through
 ``solvax.direct.block_thomas_factor``'s ``factor_dtype`` costs between nothing
-and 26% of the iterations across four decks — 26 against 26 on the deck above,
-29 against 29 on ``geometryScheme4_2species_withEr_fullTrajectories``, 20
-against 22 on ``filteredW7XNetCDF_2species_noEr``, and 19 against 24 on the
-tokamak deck — with every case still reaching ``1e-10``.
+and 26% of the iterations across four decks, with every case still reaching
+``1e-10``:
+
+.. list-table:: GCROT iterations, float64 against float32 Schur factors
+   :header-rows: 1
+   :widths: 56 16 16
+
+   * - deck
+     - float64
+     - float32
+   * - ``geometryScheme4_2species_noEr``
+     - 26
+     - 26
+   * - ``geometryScheme4_2species_withEr_fullTrajectories``
+     - 29
+     - 29
+   * - ``filteredW7XNetCDF_2species_noEr``
+     - 20
+     - 22
+   * - ``tokamak_2species_PASCollisions_withEr_fullTrajectories``
+     - 19
+     - 24
 
 Compile time vs steady state
 ----------------------------
@@ -1525,28 +1717,73 @@ operator apply, the run-level geometry derivation, the two writer
 geometry-extras passes, and the moment evaluation, and
 :func:`dkx.magnetic_geometry.read_boozer_bc` memoizes each ``.bc`` parse on
 file identity. Building once, rather than re-parsing the 32 MB Boozer ``.bc``
-per consumer, takes the warm end-to-end production run (the 1,275,010-unknown
-HSX PAS deck) from 43.6 s to 26.7 s, and the small reduced deck from 15.6 s to
-2.3 s, with dataset-exact outputs on the six audited decks including the
-production case (a counting regression test in
-``tests/test_run_rhsmode1.py`` pins the one-build behavior). Ambipolar loops,
-monoenergetic scans, and batched scans inherit the memoized parse for free.
+per consumer, shortens the warm end-to-end run:
+
+.. list-table:: Warm end-to-end run, per-consumer build against one build
+   :header-rows: 1
+   :widths: 44 22 22
+
+   * - Deck
+     - Per-consumer build
+     - One build
+   * - production HSX PAS (1,275,010 unknowns)
+     - 43.6 s
+     - 26.7 s
+   * - small reduced deck
+     - 15.6 s
+     - 2.3 s
+
+Outputs are dataset-exact on the six audited decks, the production case
+included, and a counting regression test in ``tests/test_run_rhsmode1.py`` pins
+the one-build behavior. Ambipolar loops, monoenergetic scans, and batched scans
+inherit the memoized parse for free.
 
 **Whole-file vectorized ``.bc`` parse.** The Boozer ``.bc`` reader parses the
 whole file in one vectorized pass, bit-identical to the line-by-line reference
-it falls back to on ragged blocks. The 32 MB ``hsx3free.bc`` parses in 0.38 s
-against 2.22 s line-by-line (5.8x), and ``w7x_standardConfig.bc`` in 0.18 s
-against 1.34 s (7.3x); on the small deck the whole-file parse pulls the cold
-start from 6.19 s to 4.29 s and the operator build from 5.14 s to 2.58 s.
+it falls back to on ragged blocks.
+
+.. list-table:: Boozer ``.bc`` parse, line-by-line against whole-file
+   :header-rows: 1
+   :widths: 38 20 20 16
+
+   * - File
+     - Line-by-line
+     - Whole-file
+     - Speedup
+   * - ``hsx3free.bc`` (32 MB)
+     - 2.22 s
+     - 0.38 s
+     - 5.8x
+   * - ``w7x_standardConfig.bc``
+     - 1.34 s
+     - 0.18 s
+     - 7.3x
+
+On the small deck the whole-file parse pulls the cold start from 6.19 s to
+4.29 s, and the operator build from 5.14 s to 2.58 s.
 
 **Route-aware memory footprint.** The ``auto`` policy's memory estimate models
 the kernel the solve actually executes. A deck that routes to the truncated
 tier-1 block-Thomas kernel is charged its truncated working set, not the
-full-band factorization peak that route never allocates. On the production
-deck that takes the estimate from 53.06 GB (the full-band charge) to 1.68 GB,
-against a measured process peak of ~1.16 GB; the mid deck drops from 6.16 GB
-to 0.73 GB. Charging the full-band peak had capped batched scans at a single
-chunk; the route-aware estimate un-serializes them. At a 19.2 GB budget the
+full-band factorization peak that route never allocates.
+
+.. list-table:: Memory estimate, full-band charge against route-aware charge
+   :header-rows: 1
+   :widths: 34 24 24
+
+   * - Deck
+     - Full-band charge
+     - Route-aware charge
+   * - production
+     - 53.06 GB
+     - 1.68 GB
+   * - mid
+     - 6.16 GB
+     - 0.73 GB
+
+The production deck's measured process peak is ~1.16 GB. Charging the full-band
+peak had capped batched scans at a single chunk; the route-aware estimate
+un-serializes them. At a 19.2 GB budget the
 auto chunk count on the production deck rises from 1 to 11, and a mid-deck
 8-point ``batched_er_scan`` runs in one chunk at 749 MB peak instead of three
 chunks at 2084 MB. The per-solve footprint model is
@@ -1592,8 +1829,9 @@ The design choices that produce the numbers above, in one place:
   autodiff on long chains.
 - **Build once, parse once.** The run pipeline threads a single operator build
   through every consumer and memoizes ``.bc`` parses on file identity, and the
-  ``.bc`` reader parses the whole file in one vectorized pass — the end-to-end
-  and cold-start levers detailed under `End-to-end pipeline efficiency`_.
+  ``.bc`` reader parses the whole file in one vectorized pass. These are the
+  end-to-end and cold-start levers detailed under
+  `End-to-end pipeline efficiency`_.
 - **Route-aware memory estimate.** The ``auto`` policy charges the truncated
   working set the solve actually allocates, not the full-band factorization
   peak, which un-serializes batched scans into memory-budgeted chunks

@@ -6,22 +6,23 @@ suite. The lanes below are intentionally not release blockers; they are the
 algorithmic targets for larger, more memory-limited, and more strongly parallel
 research workloads.
 
-Release decision on the native production-preconditioner lane
--------------------------------------------------------------
+Release decision on the in-house production-preconditioner lane
+---------------------------------------------------------------
 
-The lower-memory native sparse-factor/preconditioner campaign for the largest
+The lower-memory in-house sparse-factor/preconditioner campaign for the largest
 geometry-rich RHSMode=2/3 and full-grid QA/QH RHSMode=1 cases is deferred as
 optimization work. The code contains tested opt-in infrastructure for
 Fortran-reduced direct ``Pmat`` emission, symbolic ordering metadata,
 superblock/nested-dissection factors, and strict setup-time true-residual
 admission. Those pieces are useful research controls, but production
-``geom11`` probes still reject the native nested-dissection path on setup time
-before admission, and full-grid QA/QH still rely on residual-clean active-LU
-fallback when the lower-memory native candidate fails its residual gate.
+``geom11`` probes still reject the in-house nested-dissection path on setup
+time before admission, and full-grid QA/QH still rely on residual-clean
+active-LU fallback when the lower-memory in-house candidate fails its residual
+gate.
 
 This means the release scope is closed on correctness and documentation:
 promoted defaults keep the residual-clean/Fortran-parity paths, while the
-native lower-memory replacement remains nonblocking until a future algorithm
+in-house lower-memory replacement remains nonblocking until a future algorithm
 passes the same residual, runtime, and memory gates. Future work should avoid
 more smoother/restart tuning and instead target a materially different
 separator hierarchy/orderer, matrix-free admitted Schur approximation, or

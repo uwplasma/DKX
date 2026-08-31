@@ -188,17 +188,13 @@ def test_readme_canonical_benchmark_claims_match_recorded_measurements() -> None
         assert artifact.stat().st_size <= 150 * 1024, artifact
         assert f"docs/_static/figures/readme/{name}" in readme, name
 
-    # README stays a compact landing page (the DKX docs/readme policy); the
-    # VMEX-style feature showcase raises the cap while keeping every pinned
-    # claim and number accurate.  Raised again to 327 for the CLI use cases:
-    # a user who installs dkx needs to know the three commands that cover
-    # almost everything, and burying that in the docs costs more than seven
-    # lines here.  345 adds the measured `dkx wout` cost split and the
-    # KineticBootstrapCurrent snippet: "one import and one tuple" is a claim
-    # only the snippet can settle, and it is the whole point of the coupling.
-    # 347 restates that cost for two equilibria, because the vacuum and the
-    # finite-beta cases differ and one number for both would be a guess.
-    assert len(readme.splitlines()) <= 347
+    # plan.md section 8.4 caps the README at about 250 lines. The previous
+    # ceiling had been raised four times -- 327, then 345, then 347 -- each with
+    # a comment explaining why that particular addition was worth it, which is
+    # how a budget becomes a rubber stamp. The rewrite that restored the cap
+    # kept every measured number and both figures above; what it dropped was
+    # prose, not evidence.
+    assert len(readme.splitlines()) <= 250
 
     # The canonical evidence also lands in the performance docs page.
     performance = (REPO_ROOT / "docs" / "performance.rst").read_text()

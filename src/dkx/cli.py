@@ -75,7 +75,7 @@ def _emit_runtime_info(*, args: argparse.Namespace) -> None:
 
 
 def _cmd_validate_case(args: argparse.Namespace) -> int:
-    """Validate a native case without touching JAX kernels or external files."""
+    """Validate a case without touching JAX kernels or external files."""
     from .config import Case, CaseValidationError  # noqa: PLC0415
 
     try:
@@ -126,7 +126,7 @@ def _cmd_validate_case(args: argparse.Namespace) -> int:
 
 
 def _cmd_schema(args: argparse.Namespace) -> int:
-    """Print the complete human or machine-readable native Case schema."""
+    """Print the complete human or machine-readable case schema."""
     from .config import COMMENTED_TOML_EXAMPLE, case_json_schema  # noqa: PLC0415
 
     if args.format == "toml":
@@ -136,11 +136,11 @@ def _cmd_schema(args: argparse.Namespace) -> int:
     return 0
 
 def _cmd_run_case(args: argparse.Namespace) -> int:
-    """Execute a native Case and write its Result.
+    """Execute a case and write its Result.
 
-    This is the command the native API had no CLI path to. Before it, `dkx`
+    This is the command the case API had no CLI path to. Before it, `dkx`
     could validate a Case and print its schema but not run one: every
-    executing subcommand took a SFINCS namelist, so the native workflow was
+    executing subcommand took a SFINCS namelist, so the case workflow was
     Python-only.
     """
     from rich.console import Console  # noqa: PLC0415
@@ -167,7 +167,7 @@ def _cmd_run_case(args: argparse.Namespace) -> int:
     try:
         result = run_case(case, out=out_path, emit=emit)
     except (CaseValidationError, NotImplementedError, ValueError) as exc:
-        # A model the native route does not implement must say so precisely
+        # A model the case route does not implement must say so precisely
         # rather than fall back to something adjacent (plan.md operating rule 11).
         print(f"dkx run failed: {exc}", file=sys.stderr)
         return 2
@@ -197,7 +197,7 @@ def _cmd_run_case(args: argparse.Namespace) -> int:
 
 
 def _cmd_inspect_result(args: argparse.Namespace) -> int:
-    """Print what a saved native Result contains, without recomputing it."""
+    """Print what a saved Result contains, without recomputing it."""
     from rich.console import Console  # noqa: PLC0415
     from rich.table import Table  # noqa: PLC0415
 
@@ -221,7 +221,7 @@ def _cmd_inspect_result(args: argparse.Namespace) -> int:
     header.add_row("converged", "yes" if result.metadata.get("converged") else "no")
     console.print(header)
 
-    # No units column: a native Result carries no per-variable units metadata
+    # No units column: a Result carries no per-variable units metadata
     # yet. plan.md section 5.5 requires it, and until it exists an empty column
     # would imply the metadata is present and blank rather than absent. Names
     # carry the unit by convention (heat_flux_W_m2), which is what a reader has.
@@ -1175,16 +1175,16 @@ def main(argv: list[str] | None = None) -> int:
 
     p_validate = sub.add_parser(
         "validate",
-        help="Validate a versioned native TOML/JSON Case and print its deterministic ID.",
+        help="Validate a versioned case file and print its deterministic ID.",
     )
     _add_common_cli_args(p_validate)
     _add_parallel_cli_args(p_validate)
-    p_validate.add_argument("case", help="Path to a native .toml or .json case.")
+    p_validate.add_argument("case", help="Path to a .toml or .json case file.")
     p_validate.set_defaults(func=_cmd_validate_case)
 
     p_schema = sub.add_parser(
         "schema",
-        help="Print the complete native Case example or machine-readable JSON Schema.",
+        help="Print the complete case example or machine-readable JSON Schema.",
     )
     _add_common_cli_args(p_schema)
     _add_parallel_cli_args(p_schema)
@@ -1193,25 +1193,25 @@ def main(argv: list[str] | None = None) -> int:
 
     p_run = sub.add_parser(
         "run",
-        help="Execute a native TOML/JSON Case and write its NetCDF Result.",
+        help="Execute a case file and write its NetCDF Result.",
     )
     _add_common_cli_args(p_run)
     _add_parallel_cli_args(p_run)
-    p_run.add_argument("case", help="Path to a native .toml or .json case.")
+    p_run.add_argument("case", help="Path to a .toml or .json case file.")
     p_run.add_argument(
         "--out",
         default=None,
-        help="Write the native NetCDF Result here. Omitted, nothing is saved.",
+        help="Write the NetCDF Result here. Omitted, nothing is saved.",
     )
     p_run.set_defaults(func=_cmd_run_case)
 
     p_inspect = sub.add_parser(
         "inspect",
-        help="Print what a saved native NetCDF Result contains.",
+        help="Print what a saved NetCDF Result contains.",
     )
     _add_common_cli_args(p_inspect)
     _add_parallel_cli_args(p_inspect)
-    p_inspect.add_argument("result", help="Path to a native .nc Result.")
+    p_inspect.add_argument("result", help="Path to a DKX .nc result.")
     p_inspect.set_defaults(func=_cmd_inspect_result)
 
     p_solve = sub.add_parser("solve-v3", help="Solve a supported v3 linear problem matrix-free and write stateVector.npy.")

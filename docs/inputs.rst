@@ -1,11 +1,11 @@
 Inputs (namelist) reference
 ===========================
 
-`dkx` reads Fortran-style namelist files, typically named
-``input.namelist``. The input surface is compatible with the mature SFINCS-style
-ecosystem so equilibria, scans, and case descriptions carry over, but this page
-documents the public `dkx` interface in its own right and enumerates every
-parameter the canonical parser recognizes.
+`dkx` reads Fortran-style namelist files, typically named ``input.namelist``.
+The input format is compatible with the SFINCS-style ecosystem, so equilibria,
+scans, and case descriptions carry over. This page documents the public `dkx`
+interface in its own right, and enumerates every parameter the canonical parser
+recognizes.
 
 How the namelist parser works
 -----------------------------
@@ -13,21 +13,20 @@ How the namelist parser works
 The canonical typed parser is :class:`dkx.inputs.SfincsInput`. Group names
 are matched case-insensitively; each supported parameter is a typed field whose
 Python type is inferred from its default (``tuple`` :math:`\to` float array,
-``bool``, ``int``, ``float``, else ``str``). Two behaviors are worth stating up
-front:
+``bool``, ``int``, ``float``, else ``str``). Two parser behaviors:
 
 - **Species arrays** accept indexed assignment (``Zs(2) = 6.0``) and are folded
   into vectors; the species count is the number of ``Zs`` entries.
 - **Unknown keys are not an error.** A key that is not a typed field of a
-  recognized group is dropped from the typed struct but retained in
+  recognized group is dropped from the typed fields but retained in
   ``SfincsInput.raw``; an unknown *group* is likewise retained in ``raw`` but
   never typed. "Supported" below means specifically the typed fields.
 
 The parser has an inverse: :meth:`dkx.inputs.SfincsInput.to_namelist`
-serializes a typed input back to Fortran-readable namelist text (compact —
-non-default fields only — by default, every typed field with
-``include_defaults=True``), and :meth:`~dkx.inputs.SfincsInput.write` puts
-it in a file. Untyped keys retained in ``raw`` and the rank-2
+serializes a typed input back to Fortran-readable namelist text, and
+:meth:`~dkx.inputs.SfincsInput.write` puts it in a file. The default output is
+compact, carrying non-default fields only; ``include_defaults=True`` writes
+every typed field. Untyped keys retained in ``raw`` and the rank-2
 ``boozer_bmnc(m,n)`` spectra survive the round trip. Inputs can also be
 built without a file at all: :meth:`dkx.inputs.SfincsInput.from_params`
 takes the flat Fortran parameter names of the tables below
@@ -305,18 +304,18 @@ How the Rosenbluth potential response matrices are integrated for
 ``collisionOperator = 0`` with ``xGridScheme = 5``/``6``:
 
 ``'quadpack'`` (default)
-   The upstream Fortran v3 algorithm — QUADPACK on every moment, at fixed
+   The upstream Fortran v3 algorithm: QUADPACK on every moment, at fixed
    ``1e-13`` tolerances. This is the parity route.
 
 ``'hybrid'``
-   QUADPACK for :math:`L = 0\ldots3` — bitwise, so the particle, energy, and
-   parallel-momentum conservation moments are untouched — and closed-form
-   moments for :math:`L \ge 4`. The high-:math:`L` blocks are where the
-   near-zero polynomial cancellations and the sharply peaked negative-power
-   upper moments make a fixed QUADPACK tolerance ill-conditioned; the analytic
-   route evaluates them as an incomplete-gamma recurrence with a large-argument
-   continued fraction and accumulates the polynomial moments in extended
-   precision.
+   QUADPACK for :math:`L = 0\ldots3`, and closed-form moments for
+   :math:`L \ge 4`. The QUADPACK half is bitwise, so the particle, energy, and
+   parallel-momentum conservation moments are untouched. The high-:math:`L`
+   blocks are where the near-zero polynomial cancellations and the sharply
+   peaked negative-power upper moments make a fixed QUADPACK tolerance
+   ill-conditioned. The analytic route evaluates them as an incomplete-gamma
+   recurrence with a large-argument continued fraction, and accumulates the
+   polynomial moments in extended precision.
 
 ``'analytic'``
    Closed-form moments at every :math:`L`, including the low-:math:`L` blocks.
@@ -349,7 +348,8 @@ than falling back.
      - x-diagonal collisions in the preconditioner
    * - ``preconditioner_xi``
      - ``1``
-     - drop the L±2 terms in the preconditioner; DKX always does, so inert
+     - drop the L±2 terms in the preconditioner; DKX always does, so this
+       key changes nothing
    * - ``preconditioner_theta`` / ``preconditioner_zeta``
      - ``0`` / ``0``
      - angular coarsening
@@ -367,7 +367,7 @@ These map onto the tier-2 coarse preconditioner in :doc:`numerics`.
 
 .. note::
 
-   ``preconditioner_xi=1`` drops the **L±2** terms, not the L±1 ones — the
+   ``preconditioner_xi=1`` drops the **L±2** terms, not the L±1 ones. The
    Fortran call sites read *"Drop the off-by-2 diagonal terms in L if this is
    the preconditioner"* (``populateMatrix.F90`` lines 625, 772, 872, 933,
    1046). DKX drops them unconditionally, so the key is accepted for namelist
@@ -375,25 +375,26 @@ These map onto the tier-2 coarse preconditioner in :doc:`numerics`.
 
    The L±1 streaming and mirror coupling is a separate, stronger truncation,
    reachable only through the ``drop_l_coupling`` API argument. It is not what
-   ``preconditioner_xi`` does, and it is expensive: 6000 iterations to a
-   residual of 0.77 where keeping the coupling converges in 19
-   (:doc:`performance`). Streaming and mirror are the dominant terms and are
+   ``preconditioner_xi`` does, and it is expensive. Severing the coupling
+   takes 6000 iterations to reach a residual of 0.77, where keeping it
+   converges in 19 (:doc:`performance`). Streaming and mirror are the dominant
+   terms and are
    strictly off-diagonal in the Legendre index, so severing them leaves a
    preconditioner that no longer resembles the operator.
 
 Unsupported inputs
 ------------------
 
-Stated plainly, the remaining gaps against SFINCS Fortran v3 are:
+The remaining gaps against SFINCS Fortran v3 are:
 
 - **MPI multi-node execution** — `dkx` runs single-node (multicore CPU
   or GPU); there is no distributed-memory mode.
 - **Convergence-scan ramp arrays** (``NthetaNumRuns``, ``Nx_min``, ...) — no
   typed fields; retained in ``raw`` only and not acted upon (see above).
 
-Everything else in the Fortran v3 input surface is fully supported on the
-canonical stack (see the README feature matrix for the parity evidence),
-including the ``&export_f`` group (``export_full_f`` / ``export_delta_f``),
+Everything else in the Fortran v3 input format is fully supported on the
+canonical stack; the README feature matrix carries the parity evidence. That
+includes the ``&export_f`` group (``export_full_f`` / ``export_delta_f``),
 ``readExternalPhi1`` (fixed external :math:`\Phi_1` as a linear solve),
 non-stellarator-symmetric (``lasym``) VMEC equilibria, and
 ``magneticDriftScheme`` 0--9.

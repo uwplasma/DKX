@@ -170,7 +170,7 @@ leaked_internal_names = [
 run_is_callable_module = true
 run_module_class = "dkx.run._CallableModule"
 canonical_python_workflow_executes = true
-canonical_python_workflow_check = "dkx.Case.from_file(examples/native/analytic_tokamak_profile.toml) -> dkx.run(case) returns dkx.result.Result with print_summary, save, and plot. No runtime is recorded here because the check ran on a contended host; performance baselines belong to plan.md Phase G."
+canonical_python_workflow_check = "dkx.Case.from_file(examples/cases/analytic_tokamak_profile.toml) -> dkx.run(case) returns dkx.result.Result with print_summary, save, and plot. No runtime is recorded here because the check ran on a contended host; performance baselines belong to plan.md Phase G."
 
 [public_api.native]
 symbols = [

@@ -6,9 +6,9 @@ Usage
    For RHSMode=1/2/3 cases the recommended entry points are the canonical
    drivers (``dkx.run.run_profile`` and the transport-matrix runners)
    shown in the quickstart on :doc:`index` and in :doc:`examples`. This page
-   documents the full CLI and Python surface — the matrix-free operator, the
+   documents the full CLI and Python API: the matrix-free operator, the
    three-tier solve, the output writers, ``Er`` scans, and the ambipolar and
-   transport-matrix runners — including the advanced controls that most scripts
+   transport-matrix runners, including the advanced controls that most scripts
    do not need.
 
 Parsing an input file
@@ -26,7 +26,7 @@ Building an input in Python
 
 An input deck does not have to start as a file.
 :meth:`dkx.inputs.SfincsInput.from_params` builds a typed, validated input
-from flat Fortran parameter names (matched case-insensitively — the same
+from flat Fortran parameter names (matched case-insensitively; the same
 names an ``input.namelist`` uses), and the run drivers accept the object
 directly, so a complete solve needs no files at all:
 
@@ -48,16 +48,19 @@ directly, so a complete solve needs no files at all:
 
 Unknown parameter names raise ``ValueError`` immediately, and the
 validateInput.F90-equivalent checks (including the RHSMode=3 hard overrides)
-run by default.  Serialize any typed input back to a Fortran-readable deck
-with :meth:`~dkx.inputs.SfincsInput.to_namelist` (a string) or
-:meth:`~dkx.inputs.SfincsInput.write` (a file); the compact default writes
-only the fields that differ from the Fortran defaults, and
-``include_defaults=True`` spells out every typed field.  The round trip is
-lossless: re-parsing written text reproduces every typed section field,
-the ``export_f`` group, untyped legacy keys retained in ``.raw``, and the
-rank-2 ``boozer_bmnc(m,n)`` spectra of geometryScheme=13 decks.  When an
-in-memory input reaches an output writer, the serialized text is stored as
-the ``input.namelist`` provenance dataset.  A runnable walkthrough lives at
+run by default.
+
+Serialize any typed input back to a Fortran-readable namelist with
+:meth:`~dkx.inputs.SfincsInput.to_namelist` (a string) or
+:meth:`~dkx.inputs.SfincsInput.write` (a file).  The compact default writes
+only the fields that differ from the Fortran defaults; ``include_defaults=True``
+spells out every typed field.  The round trip is lossless: re-parsing written
+text reproduces every typed section field, the ``export_f`` group, untyped
+legacy keys retained in ``.raw``, and the rank-2 ``boozer_bmnc(m,n)`` spectra
+of geometryScheme=13 decks.
+
+When an in-memory input reaches an output writer, the serialized text is stored
+as the ``input.namelist`` provenance dataset.  A runnable walkthrough lives at
 ``examples/getting_started/build_input_from_python.py``.
 
 ``run_profile``, ``run_transport_matrix``, ``run_from_namelist``, and
@@ -70,20 +73,20 @@ Solver options
 
 The quick ``solve_method``/``tol`` arguments of the run drivers cover most
 scripts.  The full typed knob set of :func:`dkx.solve.solve` is
-:class:`dkx.api.SolverOptions` — ``method``, ``tol``, ``atol``, ``restart``,
-``recycle_dim``, ``max_restarts``, ``differentiable``,
-``use_preconditioner``, ``device``, and ``memory_budget_gb`` — passed as
-``solver=SolverOptions(...)`` to ``run_profile``, ``run_transport_matrix``,
-or ``run_from_namelist``; when given, it supersedes ``solve_method`` and
-``tol``.  Environment variables keep acting as overrides for knobs left at
+:class:`dkx.api.SolverOptions`: ``method``, ``tol``, ``atol``, ``restart``,
+``recycle_dim``, ``max_restarts``, ``differentiable``, ``use_preconditioner``,
+``device``, and ``memory_budget_gb``.  Pass it as ``solver=SolverOptions(...)``
+to ``run_profile``, ``run_transport_matrix``, or ``run_from_namelist``; when
+given, it supersedes ``solve_method`` and ``tol``.  Environment variables keep acting as overrides for knobs left at
 ``None`` (``memory_budget_gb=None`` reads ``DKX_TIER1_MEMORY_BUDGET_GB``).
 Runtime messages use descriptive route names: ``structured direct``,
 ``memory-bounded structured direct``, ``recycled iterative``, and ``host
 sparse-direct fallback``. The historical tier numbers remain only in internal
 knob names and detailed implementation documentation.
-One honest exception: the ``cores`` field is carried for provenance only —
-XLA sizes its host threadpool once, before the first JAX device use, so
-thread pinning belongs to the ``DKX_CORES`` environment variable or the CLI
+
+The ``cores`` field is an exception: it is carried for provenance only.  XLA
+sizes its host threadpool once, before the first JAX device use, so thread
+pinning belongs to the ``DKX_CORES`` environment variable or the CLI
 ``--cores`` flag (see :doc:`parallelism`).  Scan-level throughput knobs live
 outside ``SolverOptions``: batched and multi-device solves
 (``batched_er_scan`` / ``batched_solve`` with ``devices=``) and the structured
@@ -178,9 +181,10 @@ The repository ships a tiny runnable input for quick installation checks:
 The first command solves the input with the default ``auto`` policy and writes
 ``sfincsOutput.h5`` in the current working directory. The second command writes
 ``sfincsOutput_summary.pdf`` next to it unless ``--out`` is given explicitly.
-For normal production use, this is the intended public contract: provide one
-input file, optionally override the equilibrium file, and let ``dkx``
-choose the validated solve path.
+That is the intended public contract for production use: provide one input
+file, optionally override the equilibrium file, and let ``dkx`` choose the
+validated solve path.
+
 Change only the output suffix to write NetCDF4 or NPZ instead:
 
 .. code-block:: bash
@@ -225,8 +229,8 @@ The ``dkx.solve`` policy accepts an explicit ``method`` (CLI
 ``--solve-method``): ``auto`` (the default), ``block_tridiagonal`` and
 ``block_tridiagonal_truncated`` (the tier-1 structured direct solves),
 ``gmres`` (the tier-2 recycled Krylov solve), and ``direct`` (the tier-3 host
-sparse-direct referee). The three-tier ``auto`` policy owns the supported
-surface and routes each deck to the cheapest adequate tier (:doc:`numerics`);
+sparse-direct referee). The three-tier ``auto`` policy covers every supported
+deck and routes each one to the cheapest adequate tier (:doc:`numerics`);
 an unrecognized method name raises an error. These names are intentionally
 advanced API: scripts for general users should omit them and rely on ``auto``.
 
@@ -275,13 +279,13 @@ one-node and multi-host runs.
 
 Relevant CLI flags:
 
-- ``--cores N``: pin the solver threadpool to ``N`` CPU threads (sets
-  ``DKX_CORES``, which is applied as ``NPROC`` — the variable XLA reads for
-  its host threadpool — plus the OpenMP/OpenBLAS pools before JAX
-  initializes).  ``--cores 0`` lets XLA size the threadpool itself; when the
-  flag is omitted the threadpool is clamped to ``min(8, cpu_count)`` — the
-  measured optimum is 4-8 threads, and a full-width pool on a many-core host
-  is several times slower than 8 threads (:doc:`performance`).
+- ``--cores N``: pin the solver threadpool to ``N`` CPU threads.  This sets
+  ``DKX_CORES``, which is applied as ``NPROC``, the variable XLA reads for its
+  host threadpool, plus the OpenMP/OpenBLAS pools before JAX initializes.
+  ``--cores 0`` lets XLA size the threadpool itself.  When the flag is omitted
+  the threadpool is clamped to ``min(8, cpu_count)``: the measured optimum is
+  4-8 threads, and a full-width pool on a many-core host is several times
+  slower than 8 threads (:doc:`performance`).
 - ``--transport-workers``: run independent ``whichRHS`` solves in parallel
   worker processes on the legacy RHSMode=2/3 output path (scan/export_f
   workflows); the canonical ``transport-matrix-v3`` driver solves all drives
@@ -306,7 +310,7 @@ workstation or cluster launch.
 Environment variables
 ---------------------
 
-Defaults are chosen for robust, validated production runs. Solver selection is
+Defaults are chosen for validated production runs. Solver selection is
 governed by ``--solve-method``/``method`` and the ``auto`` three-tier policy
 (:doc:`numerics`), not by environment variables. The variables below are
 runtime, parallel-execution, cache, diagnostic, and parity overrides; the few
@@ -359,7 +363,7 @@ Set these **before** JAX is imported (i.e. before running
   (sets ``--xla_force_host_platform_device_count``), for multi-device CPU
   tests and SPMD experiments. Forced host devices share one threadpool, so
   this does not speed up solves; use ``DKX_CORES`` for thread control.
-- ``DKX_XLA_THREADS``: inert; accepted and ignored. Thread control is
+- ``DKX_XLA_THREADS``: accepted and ignored. Thread control is
   ``DKX_CORES``/``NPROC``.
 
 Multi-host distributed initialization
@@ -452,7 +456,7 @@ Writing output files with `dkx`
    dkx /path/to/input.namelist
 
    # If --cores is omitted and DKX_CORES is unset, the solver threadpool is
-   # clamped to min(8, cpu_count) — the measured 4-8 thread optimum.
+   # clamped to min(8, cpu_count), the measured 4-8 thread optimum.
 
 .. code-block:: bash
 
@@ -469,16 +473,18 @@ The suffix selects the writer: ``.h5``/``.hdf5`` for Fortran-compatible HDF5,
 ``.nc``/``.netcdf`` for NetCDF4, and ``.npz`` for a fast uncompressed NumPy
 archive. The solve and diagnostics are identical across these output formats.
 Add ``--solver-trace solver_trace.json`` when you want a reproducible JSON
-sidecar with backend, selected solve lane, elapsed time, device count, and output
-metadata for profiling or regression reports. RHSMode=1 output files also carry
-the core convergence fields directly: ``linearSolverMethod``,
-``linearSolverResidualNorm``, ``linearSolverResidualTarget``,
-``linearSolverResidualTargetRatio``, ``linearSolverConverged``,
-``linearSolverAccepted``, and ``linearSolverAcceptanceCriterion``. In
-PETSc-compatible constrained-PAS minimum-norm runs, ``linearSolverConverged``
-can be false while ``linearSolverAccepted`` is true; that distinction is
-intentional and prevents true-residual convergence from being conflated with
-Fortran/PETSc-compatible branch acceptance. Sparse-PC runs additionally expose
+sidecar with backend, selected solve path, elapsed time, device count, and
+output metadata for profiling or regression reports.
+
+RHSMode=1 output files also carry the core convergence fields directly:
+``linearSolverMethod``, ``linearSolverResidualNorm``,
+``linearSolverResidualTarget``, ``linearSolverResidualTargetRatio``,
+``linearSolverConverged``, ``linearSolverAccepted``, and
+``linearSolverAcceptanceCriterion``. In PETSc-compatible constrained-PAS
+minimum-norm runs, ``linearSolverConverged`` can be false while
+``linearSolverAccepted`` is true. That distinction is intentional: it prevents
+true-residual convergence from being conflated with Fortran/PETSc-compatible
+branch acceptance. Sparse-PC runs additionally expose
 ``linearSolverMatvecs``, setup/solve/elapsed timings, sparse-pattern build time,
 sparse preconditioner factorization time, and sparse-pattern nonzero counters in
 the same output file.
@@ -604,9 +610,9 @@ This creates subdirectories like ``Er0.1/``, each containing ``input.namelist``,
 ``sfincsOutput.h5``, and ``sfincsOutput.solver_trace.json``.  The scan directory
 also gets a scan-style ``input.namelist`` with ``!ss`` directives so the upstream
 scan plotting scripts can infer the directory list.  The JSON sidecar is the
-auditable record for each point: it stores backend, selected solver lane, active
-size, elapsed time, residual target, residual norm, and memory estimates without
-changing the Fortran-compatible physics output.
+auditable record for each point. It stores backend, selected solve path, active
+size, elapsed time, residual target, residual norm, and memory estimates,
+without changing the Fortran-compatible physics output.
 
 For large scans, you can parallelize scan points:
 

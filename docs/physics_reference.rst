@@ -404,7 +404,7 @@ Moments, fluxes, and transport coefficients
 -------------------------------------------
 
 The physical outputs are velocity-space and flux-surface-average moments of the
-solved :math:`f_{s1}`. All radial fluxes are computed natively on
+solved :math:`f_{s1}`. All radial fluxes are computed first on
 :math:`\nabla\hat\psi` and then converted to the :math:`\psi_N`, :math:`\hat r`,
 :math:`r_N` variants (:doc:`outputs`).
 

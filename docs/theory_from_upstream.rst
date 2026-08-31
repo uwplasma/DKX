@@ -103,11 +103,11 @@ Constraint structure and nullspaces
 
 A recurring theme in the upstream notes is conservation. The linearized collision
 operator must conserve particles, momentum, and energy, and the discrete solve must
-remove nullspaces associated with those conserved quantities. In practice this is why
-SFINCS carries explicit constraints and why different ``constraintScheme`` choices can
-change the algebraic branch even when the physics is equivalent.
+remove nullspaces associated with those conserved quantities. That is why
+SFINCS carries explicit constraints, and why different ``constraintScheme``
+choices can change the algebraic branch even when the physics is equivalent.
 
-The important implementation consequence for ``dkx`` is that validation is not
+The implementation consequence for ``dkx`` is that validation is not
 only about matching matrix entries. It is also about matching:
 
 - which nullspace or gauge is selected,

@@ -1,8 +1,8 @@
 Examples
 ========
 
-The graded ladder
------------------
+How the example folders are graded
+----------------------------------
 
 ``examples/1_basics/`` is where a new user starts: DKX alone on analytic
 geometry, no optional dependencies and no equilibrium files.
@@ -56,7 +56,7 @@ at shrunken resolution (``DKX_CI=1``) in
    temperature and ``Er`` drives through the implicit-differentiation solve
    path, and verifies every gradient against central finite differences.
 
-``examples/optimization/optimize_QA_bootstrap.py`` — flagship optimization
+``examples/optimization/optimize_QA_bootstrap.py`` — gradient-based optimization
    Gradient-based optimization of a quasi-axisymmetric stellarator boundary
    for low bootstrap current: boundary Fourier coefficients ->
    ``vmex`` fixed-boundary equilibrium (implicit-adjoint VJP) ->
@@ -82,7 +82,7 @@ Example tree
 
 The repository includes a structured `examples/` tree:
 
-- `examples/native/`: versioned native TOML/JSON ``Case`` validation and schema examples
+- `examples/cases/`: versioned ``Case`` TOML/JSON validation and schema examples
 - `examples/tutorials/`: notebook-led learning path and a fast output/plot script
 - `examples/getting_started/`: basic API usage (no external reference code required)
 - `tools/parity/`: focused validation scripts against frozen reference fixtures
@@ -324,10 +324,10 @@ The finite-beta example is a single Python script that reads the bundled
 of fixed-boundary iterations, writes a VMEC-style ``wout`` file, and uses that
 file directly in ``dkx`` with ``geometryScheme=5``.  It then scans the
 normalized radial electric field on several flux surfaces, computes ambipolar
-radial-current roots when each scan brackets them, selects a continuous root
-branch, and writes a polished PNG/PDF panel with the radial electric-field
-profile, bootstrap-current radial profile, representative ambipolarity and flux
-scans in ``Er``, and a VMEC magnetic-field contour plot using a ``jet`` colormap.
+radial-current roots when each scan brackets them, and selects a continuous root
+branch.  The PNG/PDF panel it writes carries the radial electric-field profile,
+the bootstrap-current radial profile, representative ambipolarity and flux scans
+in ``Er``, and a VMEC magnetic-field contour plot using a ``jet`` colormap.
 The radial-profile x-axis is normalized toroidal flux,
 :math:`\psi_N = r_N^2`, not the square-root radial label used in the input file.
 
@@ -352,13 +352,15 @@ The radial-profile x-axis is normalized toroidal flux,
 The direct VMEC path does not require a Boozer transform: ``dkx`` consumes
 the generated ``wout`` through the same scheme-5 geometry implementation used by
 file-based VMEC runs.  ``booz_xform_jax`` remains useful for the separate
-differentiable Boozer-spectrum workflow described below.  This finite-beta script
-is a primal transport example: it does not differentiate through the VMEX
-fixed-boundary run, the ``wout`` file boundary, scheme-5 geometry evaluation, the
-SFINCS kinetic solve, or radial postprocessing.  Its summary JSON records that
-boundary in a workflow-contract block, plus radial-profile provenance for the
-``r_N`` surfaces, plotted :math:`\psi_N = r_N^2` values, selected ambipolar branch,
-all bracketed roots, and convergence-overlay status.
+differentiable Boozer-spectrum workflow described below.
+
+This finite-beta script is a primal transport example.  It does not
+differentiate through the VMEX fixed-boundary run, the ``wout`` file boundary,
+scheme-5 geometry evaluation, the SFINCS kinetic solve, or radial
+postprocessing.  Its summary JSON records that boundary in a workflow-contract
+block, plus radial-profile provenance for the ``r_N`` surfaces, plotted
+:math:`\psi_N = r_N^2` values, selected ambipolar branch, all bracketed roots,
+and convergence-overlay status.
 
 By default the radial profile uses ``r_N = 0.15, 0.30, 0.50, 0.70, 0.85`` and
 root-neighborhood ``Er = -9, -7, -5, -3, -1``.  This spans core-to-edge behavior
@@ -370,11 +372,24 @@ ambipolar roots until the local ``Er`` bracket is no wider than ``1.25``.  The
 dashed overlay in the top panels uses the same kinetic-space grid on every
 plotted surface, but refines each bracketed ambipolar root to a local ``Er``
 bracket width of ``0.625``.  The checked documentation figure passes the default
-gate, ``max |Delta Er| <= 0.1`` and ``max |Delta Jbs| <= 5e-4``; the measured
-values are ``max |Delta Er| = 2.1e-4`` and ``max |Delta Jbs| = 6.9e-7`` in the
-cached documentation run.  Use ``--quick`` for the smoke-test resolution, and
-increase ``--r-n-values``, ``--er-values``, and the resolution flags for denser
-production-quality scans.
+gate:
+
+.. list-table:: Documentation-figure gate, cached run
+   :header-rows: 1
+   :widths: 30 22 22
+
+   * - quantity
+     - gate
+     - measured
+   * - ``max |Delta Er|``
+     - ``<= 0.1``
+     - ``2.1e-4``
+   * - ``max |Delta Jbs|``
+     - ``<= 5e-4``
+     - ``6.9e-7``
+
+Use ``--quick`` for the smoke-test resolution, and increase ``--r-n-values``,
+``--er-values``, and the resolution flags for denser scans.
 
 The convergence-scan helper reads the cached ``sfincsOutput.h5`` files from the
 finite-beta example and summarizes which numerical knobs move the ambipolar root
@@ -521,13 +536,26 @@ on 11 surfaces, ``s = 0.10, 0.15, 0.25, 0.30, 0.45, 0.50, 0.60, 0.70, 0.75,
 refinement bars come from independent ``15 x 15 x 21 x 5`` real-space and
 ``13 x 13 x 25 x 6`` velocity-space probes. Fortran bars are one-sided
 refinement deltas against the archived ``25 x 39 x 60 x 7`` Fortran v3 outputs.
-On this same-resolution 11-surface gate, the maximum JAX-vs-Fortran
-difference is ``1.21e-3`` for QA and ``3.54e-3`` for QH. The largest JAX
-refinement bar is ``4.21%`` for QA and ``24.43%`` for QH, so QH is still a
-reduced-grid convergence stress test rather than a production-resolution claim.
 
-For this benchmark script, ``--solve-method auto`` runs in the
-runtime/non-autodiff lane (the script sets ``DKX_IMPLICIT_SOLVE=0``).
+.. list-table:: Same-resolution 11-surface gate
+   :header-rows: 1
+   :widths: 44 20 20
+
+   * - measurement
+     - QA
+     - QH
+   * - maximum JAX-vs-Fortran difference
+     - ``1.21e-3``
+     - ``3.54e-3``
+   * - largest JAX refinement bar
+     - ``4.21%``
+     - ``24.43%``
+
+QH is therefore still a reduced-grid convergence stress test rather than a
+production-resolution claim.
+
+For this benchmark script, ``--solve-method auto`` runs the runtime,
+non-autodiff path (the script sets ``DKX_IMPLICIT_SOLVE=0``).
 The recorded finite-beta QA/QH figures below remain valid measured evidence,
 and reruns use the matrix-free ``auto`` policy. The script refuses to write
 nonconverged production-sized diagnostics.
@@ -552,6 +580,36 @@ nonconverged production-sized diagnostics.
    radius are JAX velocity-space refinement deltas, not a Fortran/JAX
    normalization mismatch.
 
+The two paper-backed diagnostics below run ``dkx`` at the reduced
+``13 x 13 x 21 x 5`` grid against the archived Fortran v3 outputs at
+``25 x 39 x 60 x 7``:
+
+.. list-table:: Paper-backed reduced-grid diagnostics
+   :header-rows: 1
+   :widths: 48 20 20
+
+   * - measurement
+     - QA
+     - QH
+   * - ``dkx`` scan wall time
+     - ``232.5 s``
+     - ``261.1 s``
+   * - ``dkx`` solver-memory estimate
+     - ``109 MB``
+     - ``109 MB``
+   * - archived Fortran v3 wall time
+     - ``696.1 s``
+     - ``655.5 s``
+   * - archived Fortran v3 effective total MUMPS factor memory
+     - ``12.96 GB``
+     - ``12.80 GB``
+   * - maximum difference versus Redl
+     - ``23.95%``
+     - ``15.31%``
+   * - maximum difference versus Fortran
+     - ``6.94%``
+     - ``18.77%``
+
 .. figure:: _static/figures/vmex_finite_beta/qs_paper_dkx_redl_comparison.png
    :alt: DKX and SFINCS Fortran v3 bootstrap-current comparison against the Redl analytic formula.
    :width: 100%
@@ -564,12 +622,9 @@ nonconverged production-sized diagnostics.
    ``13 x 13 x 21 x 5`` on the same 39 archived radial surfaces.  All solves
    selected ``fortran_reduced_pc_gmres`` and reached the true-residual target.
    The right panels compare the total solve wall time over all plotted radii and
-   the peak solver-memory metric over those radii.  QA completed in ``232.5 s``
-   with ``109 MB`` JAX solver-memory estimate, versus ``696.1 s`` and
-   ``12.96 GB`` effective total MUMPS factor memory for the archived Fortran v3
-   run.  Max differences are ``23.95%`` versus Redl and ``6.94%`` versus
-   Fortran, so this is a useful reduced-grid diagnostic while the full
-   same-resolution production parity claim remains a separate gate.
+   the peak solver-memory metric over those radii; the QA column of the table
+   above gives the values.  This is a useful reduced-grid diagnostic while the
+   full same-resolution production parity claim remains a separate gate.
 
 .. figure:: _static/figures/vmex_finite_beta/qs_paper_qh_dkx_redl_comparison.png
    :alt: DKX and SFINCS Fortran v3 QH bootstrap-current comparison against the Redl analytic formula.
@@ -577,15 +632,12 @@ nonconverged production-sized diagnostics.
 
    Paper-backed QH bootstrap-current diagnostic with the same whole-radius
    plotting contract.  The QH run is also residual-clean under ``auto`` /
-   ``fortran_reduced_pc_gmres``.  The JAX scan completed in ``261.1 s`` with
-   ``109 MB`` JAX solver-memory estimate, versus ``655.5 s`` and ``12.80 GB``
-   effective total MUMPS factor memory for the archived Fortran v3 run.  Max
-   differences are ``15.31%`` versus Redl and ``18.77%`` versus Fortran on the
-   reduced JAX grid.  This keeps the QH production-resolution convergence lane
-   open; term-level audits point away from a simple stale-radius
-   geometry, radial-gradient conversion, or current-assembly normalization bug,
-   but the production-resolution convergence gate remains the acceptance
-   criterion.
+   ``fortran_reduced_pc_gmres``.  Its wall time, memory and maximum differences
+   on the reduced JAX grid are in the QH column of the table above.  This keeps
+   the QH production-resolution convergence lane open.  Term-level audits point
+   away from a simple stale-radius geometry, radial-gradient conversion, or
+   current-assembly normalization bug, but the production-resolution convergence
+   gate remains the acceptance criterion.
 
 The plotted quantity is the flux-surface-averaged bootstrap current projected
 along the magnetic field,
@@ -706,7 +758,7 @@ right-hand sides (``whichRHS``) and assembling a matrix from diagnostic moments 
 Upstream postprocessing (utils/)
 --------------------------------
 
-The mature SFINCS ecosystem includes a set of plotting scripts under `utils/`. `dkx` vendors these scripts
+The SFINCS ecosystem includes a set of plotting scripts under `utils/`. `dkx` vendors these scripts
 in `examples/sfincs_examples/utils/` and can run them non-interactively:
 
 .. code-block:: bash
@@ -747,9 +799,9 @@ differentiable geometry and optimization helpers.
 Implicit differentiation through solves
 ---------------------------------------
 
-An important differentiability capability is **implicit differentiation** through a linear solve
-(``A x = b``) without backpropagating through Krylov iterations. `dkx` provides a small helper
-based on `jax.lax.custom_linear_solve` and demonstrates it here:
+**Implicit differentiation** through a linear solve (``A x = b``) avoids
+backpropagating through Krylov iterations. `dkx` provides a small helper based
+on `jax.lax.custom_linear_solve` and demonstrates it here:
 
 .. code-block:: bash
 
