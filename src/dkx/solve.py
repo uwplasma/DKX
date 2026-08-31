@@ -95,6 +95,7 @@ try:  # noqa: E402
     from solvax.implicit import linear_solve as solvax_linear_solve
     from solvax.krylov import gcrot
     from solvax.native import SpluFactorization
+    from solvax.native_eigen import sparse_operator_matrix
     from solvax.refine import iterative_refinement
 except ImportError:
     BlockTridiagFactors = None  # type: ignore[assignment, misc]
@@ -105,6 +106,7 @@ except ImportError:
     solvax_linear_solve = None  # type: ignore[assignment]
     gcrot = None  # type: ignore[assignment]
     SpluFactorization = None  # type: ignore[assignment, misc]
+    sparse_operator_matrix = None  # type: ignore[assignment]
 
 from dkx import require_float64
 from dkx.coarse_precond import (  # noqa: E402
@@ -125,6 +127,7 @@ __all__ = [
     "build_coarse_preconditioner",
     "build_tier1_solver",
     "build_tier2_preconditioner",
+    "materialize_csr",
     "materialize_dense",
     "solve",
     "tier1_available",
@@ -1004,14 +1007,21 @@ def build_tier1_solver(op: KineticOperator) -> Tier1Solver:
 # =============================================================================
 
 
-def materialize_dense(
+def materialize_csr(
     op: KineticOperator, *, column_chunk: int = 1024, pin_masked_dofs: bool = False
-) -> np.ndarray:
-    """Materialize the full bordered operator as a dense numpy matrix.
+):
+    """Materialize the full bordered operator as a scipy CSR matrix.
 
-    Applies the matrix-free operator to identity columns in vmapped chunks.
-    Meant for tiny systems (tier-3 fallback and referee tests) — memory is
-    ``O(total_size**2)``.
+    ``solvax.native_eigen.sparse_operator_matrix`` owns the sampling: it
+    applies the matrix-free operator to identity columns in vmapped chunks and
+    sparsifies each chunk as it lands, so no dense ``O(total_size**2)`` array
+    is ever formed.  The kinetic operator is a stencil (about 9 of 1121
+    entries per angular row; see :mod:`dkx.sparse_precond`), so CSR is what the
+    matrix actually is.
+
+    The cost that is *not* removed is the sampling itself: ``total_size``
+    operator applications, one per column.  That, not the intermediate, is what
+    ``max_dense_size`` guards.
 
     Args:
         op: the kinetic operator.
@@ -1021,16 +1031,23 @@ def materialize_dense(
             :func:`_pinned_matvecs`) instead of the raw rectangular embedding,
             which has exact zero rows on those DOFs.
     """
-    n = op.total_size
+    _require_solvax()
     apply = _pinned_matvecs(op)[0] if pin_masked_dofs else op.apply
-    batched = jax.jit(jax.vmap(apply, in_axes=1, out_axes=1))
-    cols: list[np.ndarray] = []
-    for j0 in range(0, n, column_chunk):
-        j1 = min(j0 + column_chunk, n)
-        basis = jnp.zeros((n, j1 - j0), dtype=jnp.float64)
-        basis = basis.at[j0 + jnp.arange(j1 - j0), jnp.arange(j1 - j0)].set(1.0)
-        cols.append(np.asarray(batched(basis)))
-    return np.concatenate(cols, axis=1)
+    prototype = jnp.zeros((op.total_size,), dtype=jnp.float64)
+    return sparse_operator_matrix(apply, prototype, batch_size=column_chunk)
+
+
+def materialize_dense(
+    op: KineticOperator, *, column_chunk: int = 1024, pin_masked_dofs: bool = False
+) -> np.ndarray:
+    """:func:`materialize_csr` as a dense numpy matrix, for referee tests.
+
+    Densifying costs ``O(total_size**2)`` memory, which is why the tier-3
+    solve route uses the CSR form directly and only tests come through here.
+    """
+    return materialize_csr(
+        op, column_chunk=column_chunk, pin_masked_dofs=pin_masked_dofs
+    ).toarray()
 
 
 def _escalate_after_tier2_stall(
@@ -1058,10 +1075,12 @@ def _escalate_after_tier2_stall(
     announced a fall back to the tier-3 host direct solve, which obtains its
     matrix by applying the operator to ``n`` identity columns.  At the sizes
     where tier 2 actually stalls that is hopeless -- a 66004-DOF deck needs
-    66004 matvecs and O(n^2) memory -- so the guard in :func:`_solve_tier3`
-    refused, and a convergence problem surfaced as a hard crash telling the
-    user to raise ``max_dense_size``.  Taking that advice would have tried to
-    allocate 32.5 GB.
+    66004 operator applications before the factorization even starts -- so the
+    guard in :func:`_solve_tier3` refused, and a convergence problem surfaced
+    as a hard crash telling the user to raise ``max_dense_size``.  Sampling
+    into CSR (:func:`materialize_csr`) removed the dense ``O(n^2)``
+    intermediate that used to sit on top of that, but not the ``n``
+    applications, so the guard stands and this ladder still ends elsewhere.
 
     SFINCS Fortran v3 does not have this failure mode, and the reason is worth
     stating because it dictates the order below.  It assembles the simplified
@@ -1177,14 +1196,13 @@ def _escalate_after_tier2_stall(
         )
 
     best_label, best = min(attempts, key=lambda item: _residual(item[1]))
-    dense_gb = op.total_size**2 * 8 / 1024**3
     raise RuntimeError(
         f"the linear solve did not converge at total_size={op.total_size}.\n"
         f"Tried: {'; '.join(label for label, _ in attempts)}.\n"
         f"Best final residual {_residual(best):.3e} ({best_label}), tolerance {tol:.1e}.\n"
-        "The host sparse-direct fallback was not attempted: it materializes the operator column by "
-        f"column, which at this size needs {op.total_size} matvecs and "
-        f"{dense_gb:.1f} GB, so raising max_dense_size would not help.\n"
+        "The host sparse-direct fallback was not attempted: it samples the operator column by "
+        f"column, which at this size needs {op.total_size} operator applications "
+        "before any factorization starts, so raising max_dense_size would not help.\n"
         "What usually does help, in order: lower the collisionality-scaled Er "
         "(stalls cluster at the largest |Er|, where the ExB term dominates); "
         "raise solverTolerance; or reduce Nxi/Ntheta/Nzeta at the offending "
@@ -1210,19 +1228,17 @@ def _solve_tier3(
     n = op.total_size
     if n > max_dense_size:
         raise RuntimeError(
-            f"tier-3 dense materialization refused: total_size={n} > "
-            f"max_dense_size={max_dense_size}; raise max_dense_size explicitly if "
-            "you really want this."
+            f"tier-3 materialization refused: total_size={n} > "
+            f"max_dense_size={max_dense_size}, i.e. {n} operator applications to "
+            "sample the matrix column by column; raise max_dense_size explicitly "
+            "if you really want this."
         )
     print(
         f"[dkx.solve] tier-3 host sparse-direct solve (SuperLU, n={n}): "
         "non-differentiable fallback path."
     )
-    import scipy.sparse as sp  # lazy: matches solvax.native's optional-scipy policy
-
     t0 = time.perf_counter()
-    dense = materialize_dense(op, pin_masked_dofs=True)
-    lu = SpluFactorization(sp.csr_matrix(dense))
+    lu = SpluFactorization(materialize_csr(op, pin_masked_dofs=True))
     t1 = time.perf_counter()
     x2d = jnp.asarray(lu.solve(np.asarray(rhs2d)))
     if x2d.ndim == 1:
@@ -1251,18 +1267,28 @@ def _implicit_solve(
     rhs_col: jnp.ndarray,
     fwd_solve: Callable[[jnp.ndarray], jnp.ndarray],
     t_solve: Callable[[jnp.ndarray], jnp.ndarray],
-) -> jnp.ndarray:
+    *,
+    has_aux: bool = False,
+):
     """One differentiable column solve via ``solvax.implicit.linear_solve``.
 
     The single ``solver`` callable required by the API dispatches between the
     forward and transposed factorized solves by identity of the matvec it is
     handed (``linear_solve`` passes ``transpose_matvec`` through verbatim).
+
+    With ``has_aux`` both callables return ``(x, aux)`` and the *forward*
+    solve's ``aux`` comes back beside the solution.  That is how tier 2 reads
+    its iteration count, residual and recycle pair off the one solve the
+    wrapper runs, instead of running a second solve outside it just to see
+    them.
     """
 
-    def solver(mv: Callable, b: jnp.ndarray) -> jnp.ndarray:
+    def solver(mv: Callable, b: jnp.ndarray):
         return t_solve(b) if mv is matvec_t else fwd_solve(b)
 
-    return solvax_linear_solve(matvec, rhs_col, solver, transpose_matvec=matvec_t)
+    return solvax_linear_solve(
+        matvec, rhs_col, solver, transpose_matvec=matvec_t, has_aux=has_aux
+    )
 
 
 def _solve_tier1(
@@ -1853,32 +1879,26 @@ def _solve_tier2(
     res_norms: list[jnp.ndarray] = []
     for j in range(rhs2d.shape[1]):
         b = rhs2d[:, j]
-        sol = gcrot(
-            matvec,
-            b,
-            x0=None if x0_2d is None else x0_2d[:, j],
-            precond=precond,
-            m=restart,
-            k=recycle_dim,
-            rtol=tol,
-            atol=atol,
-            max_restarts=max_restarts,
-            recycle=recycle,
-        )
-        recycle = sol.recycle
-        if traced:
-            total_iters = None  # iteration counts are tracers under jit/grad
-        else:
-            total_iters += int(sol.iterations)
-            converged = converged and bool(sol.converged)
-        res_norms.append(sol.residual_norm)
         if differentiable:
-            # Re-run under the implicit-function-theorem wrapper so gradients
-            # flow (one extra solve; the adjoint uses the transposed
-            # preconditioner and the same recycle-free GCROT).  Both the
-            # forward and the adjoint (transposed) solves have their *true*
-            # residual recomputed from the operator and recorded in
-            # ``diagnostics``; with check_adjoint on a miss aborts loudly
+            # One forward solve, not two.  ``custom_linear_solve`` *defines*
+            # the primal as ``solve(matvec, b)``, so the wrapper runs a GCROT
+            # of its own no matter what; this used to sit on top of a plain
+            # GCROT whose solution was then thrown away, and every
+            # differentiable tier-2 solve paid for both.  ``has_aux`` carries
+            # the recycle pair, iteration count, convergence flag and residual
+            # out of the wrapper's own solve instead, so there is nothing left
+            # to recompute outside it.
+            #
+            # The wrapped solve takes no ``x0``: ``custom_linear_solve``
+            # applies the same solver to *tangent* right-hand sides, for which
+            # the primal's warm start is a bad initial guess.  The recycle pair
+            # is right-hand-side independent -- a deflation subspace, with
+            # ``A U`` recomputed and re-orthonormalized against the current
+            # operator on entry -- so it is still threaded across columns.
+            #
+            # Both the forward and the adjoint (transposed) solves have their
+            # *true* residual recomputed from the operator and recorded in
+            # ``diagnostics``; with check_adjoint on, a miss aborts loudly
             # instead of silently corrupting the gradient
             # (jax.debug.callback fires at execution time, i.e. during the
             # backward pass for the adjoint).
@@ -1887,8 +1907,9 @@ def _solve_tier2(
                 mv: Callable[[jnp.ndarray], jnp.ndarray],
                 pc: Callable[[jnp.ndarray], jnp.ndarray] | None,
                 rhs_col: jnp.ndarray,
+                warm: tuple[jnp.ndarray, jnp.ndarray] | None,
                 index: int = j,
-            ) -> jnp.ndarray:
+            ):
                 s = gcrot(
                     mv,
                     rhs_col,
@@ -1898,8 +1919,9 @@ def _solve_tier2(
                     rtol=tol,
                     atol=atol,
                     max_restarts=max_restarts,
+                    recycle=warm,
                 )
-                return _guarded_solve(
+                measured = _guarded_solve(
                     label,
                     index,
                     mv,
@@ -1911,16 +1933,50 @@ def _solve_tier2(
                     raise_on_failure=check_adjoint,
                     diagnostics=diagnostics,
                 )
+                return measured, (
+                    s.recycle,
+                    s.iterations,
+                    s.converged,
+                    s.residual_norm,
+                )
 
-            def fwd_solve(rhs_col: jnp.ndarray) -> jnp.ndarray:
-                return _measured("forward", matvec, precond, rhs_col)
+            def fwd_solve(rhs_col: jnp.ndarray, warm=recycle):
+                return _measured("forward", matvec, precond, rhs_col, warm)
 
-            def t_solve(rhs_col: jnp.ndarray) -> jnp.ndarray:
-                return _measured("adjoint (transposed)", matvec_t, precond_t, rhs_col)
+            def t_solve(rhs_col: jnp.ndarray):
+                # The adjoint keeps its own cold start: the forward pair is
+                # built inside the wrapper's trace and cannot reach here.
+                return _measured(
+                    "adjoint (transposed)", matvec_t, precond_t, rhs_col, None
+                )
 
-            cols.append(_implicit_solve(matvec, matvec_t, b, fwd_solve, t_solve))
+            x_col, aux = _implicit_solve(
+                matvec, matvec_t, b, fwd_solve, t_solve, has_aux=True
+            )
+            recycle, iterations, col_converged, residual_norm = aux
         else:
-            cols.append(sol.x)
+            sol = gcrot(
+                matvec,
+                b,
+                x0=None if x0_2d is None else x0_2d[:, j],
+                precond=precond,
+                m=restart,
+                k=recycle_dim,
+                rtol=tol,
+                atol=atol,
+                max_restarts=max_restarts,
+                recycle=recycle,
+            )
+            x_col = sol.x
+            recycle, iterations = sol.recycle, sol.iterations
+            col_converged, residual_norm = sol.converged, sol.residual_norm
+        if traced:
+            total_iters = None  # iteration counts are tracers under jit/grad
+        else:
+            total_iters += int(iterations)
+            converged = converged and bool(col_converged)
+        res_norms.append(residual_norm)
+        cols.append(x_col)
     x_stacked = jax.block_until_ready(
         jnp.stack(cols, axis=1)
     )  # real solve time, not dispatch
@@ -2219,7 +2275,8 @@ def solve(
             (tier 2 continuation warm start).
         differentiable: wrap the solution in
             ``solvax.implicit.linear_solve`` so ``jax.grad`` flows through
-            (tiers 1/2; tier 3 refuses).  Tier 2 pays one extra solve.
+            (tiers 1/2; tier 3 refuses).  The forward solve is the same one
+            either way; a *gradient* costs one extra (transposed) solve.
         check_adjoint: (differentiable tier 2 only, default on) abort loudly
             — a ``RuntimeError`` raised from a ``jax.debug.callback`` at
             execution time — when the forward or the adjoint (transposed)
