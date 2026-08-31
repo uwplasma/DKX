@@ -349,6 +349,116 @@ def _cmd_converge(args: argparse.Namespace) -> int:
     return 0 if report.converged else 1
 
 
+def _cmd_roots(args: argparse.Namespace) -> int:
+    """Print the ambipolar root table stored in a Result.
+
+    plan.md section 5.6 asks Rich to own "root tables and branch events". The
+    ambipolar workflow already records every root's field, current, slope,
+    classification, bracket and branch, plus the events where a branch
+    appears or vanishes; until now nothing surfaced them except reading the
+    NetCDF by hand.
+
+    A branch event marked nonsmooth is reported rather than smoothed over: the
+    output is not differentiable across it, so a gradient taken through that
+    interval is meaningless even though ``jax.grad`` will return a number.
+    """
+    from rich.console import Console  # noqa: PLC0415
+    from rich.table import Table  # noqa: PLC0415
+
+    from .result import Result  # noqa: PLC0415
+
+    try:
+        result = Result.load(args.result)
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"dkx roots failed: {exc}", file=sys.stderr)
+        return 2
+
+    arrays = result.arrays
+    if "ambipolar_root_kV_m" not in arrays:
+        print(
+            f"dkx roots failed: {result.case_name} carries no ambipolar roots. "
+            "Roots come from workflow = 'ambipolar_profile'; this result used "
+            f"workflow = '{result.workflow}'.",
+            file=sys.stderr,
+        )
+        return 2
+
+    fields = np.asarray(arrays["ambipolar_root_kV_m"], dtype=float)
+    counts = np.asarray(arrays["ambipolar_root_count"]).astype(int).ravel()
+    currents = np.asarray(arrays["ambipolar_root_current_A_m2"], dtype=float)
+    slopes = np.asarray(arrays["ambipolar_root_slope_A_m2_per_kV_m"], dtype=float)
+    kinds = np.asarray(arrays["ambipolar_root_type"])
+    widths = np.asarray(arrays["ambipolar_root_final_bracket_width_kV_m"], dtype=float)
+    selected = np.asarray(arrays.get("selected_ambipolar_root", [])).ravel()
+
+    def _text(value: object) -> str:
+        return value.decode() if isinstance(value, bytes) else str(value)
+
+    rows: list[dict[str, object]] = []
+    for surface in range(fields.shape[0]):
+        for index in range(int(counts[surface])):
+            rows.append({
+                "surface": surface,
+                "root": index,
+                "field_kV_m": float(fields[surface, index]),
+                "current_A_m2": float(currents[surface, index]),
+                "slope": float(slopes[surface, index]),
+                "type": _text(kinds[surface, index]),
+                "bracket_width_kV_m": float(widths[surface, index]),
+                "selected": bool(selected.size > surface and selected[surface] == index),
+            })
+
+    nonsmooth = arrays.get("ambipolar_nonsmooth_event")
+    nonsmooth_surfaces = (
+        [int(i) for i, flag in enumerate(np.asarray(nonsmooth).ravel()) if flag]
+        if nonsmooth is not None
+        else []
+    )
+
+    if args.format == "json":
+        print(json.dumps({
+            "case": result.case_name,
+            "roots": rows,
+            "nonsmooth_event_surfaces": nonsmooth_surfaces,
+        }, indent=2, sort_keys=True))
+        return 0
+
+    console = Console()
+    console.print(f"{result.case_name} ({result.case_id[:12]})", markup=False, highlight=False)
+    if not rows:
+        console.print(
+            "No roots were admitted. A sign-sampled scan cannot see a tangential "
+            "root or an even number of crossings between samples, so this is not "
+            "evidence that none exist."
+        )
+        return 0
+
+    table = Table(show_lines=False)
+    for column, justify in (
+        ("surface", "right"), ("root", "right"), ("E_r [kV/m]", "right"),
+        ("J_r [A/m^2]", "right"), ("type", "left"), ("bracket [kV/m]", "right"),
+        ("selected", "left"),
+    ):
+        table.add_column(column, justify=justify)
+    for row in rows:
+        table.add_row(
+            str(row["surface"]), str(row["root"]),
+            f"{row['field_kV_m']:.6g}", f"{row['current_A_m2']:.3e}",
+            str(row["type"]), f"{row['bracket_width_kV_m']:.2e}",
+            "yes" if row["selected"] else "",
+        )
+    console.print(table)
+
+    if nonsmooth_surfaces:
+        console.print(
+            f"[yellow]Nonsmooth branch event on surface(s) {nonsmooth_surfaces}. "
+            "A root appears or vanishes there, so the selected-root output is not "
+            "differentiable across it; a gradient through that interval is not "
+            "meaningful even though jax.grad returns one.[/yellow]"
+        )
+    return 0
+
+
 def _cmd_run_case(args: argparse.Namespace) -> int:
     """Execute a case and write its Result.
 
@@ -1207,7 +1317,7 @@ _CONVERGE_AXES: tuple[str, ...] = ("theta", "zeta", "pitch", "speed")
 #: the parser's own ``sub.choices`` -- so the runtime behaviour cannot drift
 #: from the registered set. It exists for direct callers and as documentation.
 _KNOWN_COMMANDS: frozenset[str] = frozenset({
-    "validate", "doctor", "converge", "schema", "run", "inspect", "solve-v3", "ambipolar",
+    "validate", "doctor", "converge", "roots", "schema", "run", "inspect", "solve-v3", "ambipolar",
     "scan-er", "ambipolar-solve", "run-fortran", "write-output",
     "transport-matrix-v3", "monoenergetic-database", "dump-h5", "plot-output",
     "compare-h5", "postprocess-upstream",
@@ -1431,6 +1541,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_converge.add_argument("--format", choices=("table", "json"), default="table")
     p_converge.set_defaults(func=_cmd_converge)
+
+    p_roots = sub.add_parser(
+        "roots",
+        help="Print the ambipolar root table and branch events stored in a result.",
+    )
+    _add_common_cli_args(p_roots)
+    _add_parallel_cli_args(p_roots)
+    p_roots.add_argument("result", help="Path to a NetCDF Result written by dkx run.")
+    p_roots.add_argument("--format", choices=("table", "json"), default="table")
+    p_roots.set_defaults(func=_cmd_roots)
 
     p_schema = sub.add_parser(
         "schema",
