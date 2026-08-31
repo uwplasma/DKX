@@ -21,7 +21,7 @@ Machine-readable planning and validation evidence lives under ``validation/``:
 - ``registry.toml`` is the single index of registered evidence artifacts: one
   entry per artifact naming its capability, status, claim, inputs, generating
   command, checksum, and the limits of what it establishes. One runner,
-  ``python -m dkx.validation.registry``, checks them all, and
+  ``python -m tools.release.registry``, checks them all, and
   ``tests/test_validation.py`` is the one test module that consumes it;
 - ``capabilities.toml`` records capability status and evidence gaps;
 - ``baseline.toml`` pins the audited tree, package sizes, CI state, coverage,

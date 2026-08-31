@@ -26,7 +26,7 @@ except Exception as exc:  # pragma: no cover
 
 import numpy as np
 
-from dkx.validation.artifacts import (
+from tools.release.artifacts import (
     SuiteCaseMetric,
     build_fortran_suite_benchmark_summary,
     filter_suite_metrics_by_fortran_runtime,

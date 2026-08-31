@@ -4,7 +4,7 @@ This replaces nineteen per-campaign modules. Each of them re-implemented the
 same generic half -- load an audit script by path, run it, assert it passed,
 assert the claim scope and exclusions, and in eight cases tamper with the
 artifact and assert the auditor rejected it. That half is now
-`dkx.validation.registry`, driven from `validation/registry.toml` and
+`tools.release.registry`, driven from `validation/registry.toml` and
 parametrized below over every entry.
 
 What is *not* generic stays written out: the resolutions, root topologies,
@@ -23,12 +23,12 @@ from typing import Any
 
 import pytest
 
-from dkx.validation.artifacts import (
+from tools.release.artifacts import (
     coefficient_relative_errors,
     dkes_to_beidler,
     nu_prime_for_nu_over_v,
 )
-from dkx.validation.registry import (
+from tools.release.registry import (
     check_entry,
     load_capability_ids,
     load_registry,
@@ -992,7 +992,7 @@ def test_stellarator_audit_rejects_a_wrong_external_equilibrium(tmp_path: Path) 
             directory.mkdir(parents=True)
             (directory / "w7x-sc1.bc").write_bytes(b"wrong")
 
-    from dkx.validation.registry import load_audit_callable
+    from tools.release.registry import load_audit_callable
 
     audit = load_audit_callable(entry, ROOT)
     report = audit(artifact, results_root=results)
@@ -1101,7 +1101,7 @@ def _write_checkout(tmp_path: Path, **overrides: Any) -> Path:
 
 
 def _problems(tmp_path: Path, **overrides: Any) -> list[str]:
-    from dkx.validation.registry import load_hardware_ids
+    from tools.release.registry import load_hardware_ids
 
     root = _write_checkout(tmp_path, **overrides)
     registry = load_registry(root)
@@ -1222,14 +1222,14 @@ def test_a_probe_that_fails_for_the_wrong_reason_is_reported(tmp_path: Path) -> 
 
 
 def test_an_unknown_corruption_operation_is_refused() -> None:
-    from dkx.validation.registry import corrupt_payload
+    from tools.release.registry import corrupt_payload
 
     with pytest.raises(ValueError, match="unknown corruption operation 'invert'"):
         corrupt_payload({"a": 1}, {"path": "a", "operation": "invert", "value": 0})
 
 
 def test_corruption_paths_index_lists_including_from_the_end() -> None:
-    from dkx.validation.registry import corrupt_payload
+    from tools.release.registry import corrupt_payload
 
     document = {"rows": [{"v": 1.0}, {"v": 2.0}]}
     corrupt_payload(document, {"path": "rows.-1.v", "operation": "scale", "value": 3.0})
@@ -1237,7 +1237,7 @@ def test_corruption_paths_index_lists_including_from_the_end() -> None:
 
 
 def test_an_audit_script_without_an_audit_function_is_refused(tmp_path: Path) -> None:
-    from dkx.validation.registry import load_audit_callable
+    from tools.release.registry import load_audit_callable
 
     root = _write_checkout(tmp_path)
     (root / "tools" / "audit_example.py").write_text("x = 1\n", encoding="utf-8")
@@ -1267,7 +1267,7 @@ def test_an_audit_returning_a_non_mapping_is_refused(tmp_path: Path) -> None:
 
 def test_an_entry_whose_audit_fails_is_reported_by_the_registry(tmp_path: Path) -> None:
     """The audit itself failing, with the seal and every other check intact."""
-    from dkx.validation.registry import audit_registry
+    from tools.release.registry import audit_registry
 
     root = _write_checkout(tmp_path)
     (root / "tools" / "audit_example.py").write_text(
@@ -1282,7 +1282,7 @@ def test_an_entry_whose_audit_fails_is_reported_by_the_registry(tmp_path: Path) 
 
 
 def test_artifact_exclusions_reads_both_recorded_spellings() -> None:
-    from dkx.validation.registry import artifact_exclusions
+    from tools.release.registry import artifact_exclusions
 
     assert artifact_exclusions({"exclusions": ["a"]}) == ("a",)
     assert artifact_exclusions({"claim_exclusions": ["b"]}) == ("b",)
@@ -1291,14 +1291,14 @@ def test_artifact_exclusions_reads_both_recorded_spellings() -> None:
 
 def test_the_registry_is_not_available_outside_a_checkout(tmp_path: Path) -> None:
     """A wheel user gets a precise error, not an obscure missing-file traceback."""
-    from dkx.validation.registry import repository_root
+    from tools.release.registry import repository_root
 
     with pytest.raises(FileNotFoundError, match="not from a wheel"):
         repository_root(tmp_path / "nowhere" / "site-packages" / "dkx")
 
 
 def test_a_non_object_artifact_is_refused(tmp_path: Path) -> None:
-    from dkx.validation.registry import read_artifact
+    from tools.release.registry import read_artifact
 
     root = _write_checkout(tmp_path)
     (root / "validation" / "example_v1.json").write_text("[1, 2]", encoding="utf-8")
@@ -1314,7 +1314,7 @@ def test_an_unknown_entry_id_raises(tmp_path: Path) -> None:
 
 
 def test_the_cli_reports_success_and_failure(tmp_path: Path, capsys) -> None:
-    from dkx.validation.registry import main
+    from tools.release.registry import main
 
     root = _write_checkout(tmp_path)
     assert main(["--root", str(root), "--quiet"]) == 0

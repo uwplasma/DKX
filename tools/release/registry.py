@@ -14,11 +14,11 @@ written out once per campaign. That half now lives here, once.
 
 Run the whole registry from a checkout::
 
-    python -m dkx.validation.registry
+    python -m tools.release.registry
 
 or a single entry::
 
-    python -m dkx.validation.registry --entry w7x_seeded_bracket_discovery
+    python -m tools.release.registry --entry w7x_seeded_bracket_discovery
 """
 
 from __future__ import annotations
@@ -461,7 +461,7 @@ def audit_registry(root: Path | None = None, *, entry_id: str | None = None) -> 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="python -m dkx.validation.registry",
+        prog="python -m tools.release.registry",
         description="Check every registered DKX validation artifact.",
     )
     parser.add_argument("--root", type=Path, default=None)

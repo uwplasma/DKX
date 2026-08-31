@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from dkx.validation.artifacts import (
+from tools.release.artifacts import (
     ARTIFACT_CLASS_RELEASE_BLOCKING,
     BenchmarkArtifactIndex,
     BenchmarkArtifactIndexEntry,

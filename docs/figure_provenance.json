@@ -80,7 +80,7 @@
    "generator": "tools/publication_figures/generate_fortran_suite_benchmark_summary.py"
   },
   "docs/_static/figures/paper/dkx_high_collisionality_trend_proxy.png": {
-   "generator": "src/dkx/validation/artifacts.py"
+   "generator": "tools/release/artifacts.py"
   },
   "docs/_static/figures/paper/dkx_publication_validation_dashboard.png": {
    "generator": "tools/publication_figures/generate_validation_dashboard.py"

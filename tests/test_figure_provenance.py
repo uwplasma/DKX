@@ -98,7 +98,7 @@ def test_manifest_shape(key: str):
 def _evidence_figures() -> set[str]:
     """Figures cited as evidence in a tracked completion record.
 
-    ``dkx.validation.release`` existence-checks these paths, so they are
+    ``tools.release.release`` existence-checks these paths, so they are
     load-bearing even though no page displays them.
     """
     cited = set()

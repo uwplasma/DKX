@@ -65,7 +65,7 @@
       "purpose": "Preserve historical benchmark campaigns, publication figures, Zenodo audits, and long-run validation scripts outside the stable core.",
       "core_extracted_paths": [],
       "source_paths": [
-        "src/dkx/validation/artifacts.py"
+        "tools/release/artifacts.py"
       ],
       "test_paths": [
         "tests/test_benchmark_artifact_policy.py",
@@ -511,13 +511,13 @@
       "review_status": "canonical_owner_post_trim"
     },
     {
-      "path": "src/dkx/validation/release.py",
+      "path": "tools/release/release.py",
       "lines_at_audit": 2600,
       "category": "core",
       "action": "trim",
       "public_imports": [],
       "internal_callers": [
-        "src/dkx/validation/artifacts.py"
+        "tools/release/artifacts.py"
       ],
       "tests": [
         "tests/test_release_gate_metadata.py"
@@ -551,7 +551,7 @@
       "next_step": "Extract long-run worker/sharded paths; keep only any proven simple CPU/GPU backend defaults."
     },
     {
-      "path": "src/dkx/validation/artifacts.py",
+      "path": "tools/release/artifacts.py",
       "lines_at_audit": 837,
       "category": "core",
       "action": "retain",

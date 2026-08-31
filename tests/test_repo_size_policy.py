@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from dkx.validation import release
+from tools.release import release
 
 
 def test_tracked_large_files_are_reviewed() -> None:

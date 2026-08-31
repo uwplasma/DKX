@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 import pytest
 
-from dkx.validation.artifacts import (
+from tools.release.artifacts import (
     CollisionalityRecord,
     TRANSPORT_ELEMENTS,
     collisionality_grid,

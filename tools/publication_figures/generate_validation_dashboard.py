@@ -23,7 +23,7 @@ except Exception as exc:  # pragma: no cover
 
 import numpy as np
 
-from dkx.validation.artifacts import (
+from tools.release.artifacts import (
     DEFAULT_PUBLICATION_ARTIFACTS,
     build_publication_validation_summary,
     load_collisionality_records,

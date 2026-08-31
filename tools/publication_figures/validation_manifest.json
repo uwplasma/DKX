@@ -178,7 +178,7 @@
     ],
     "source_code": [
       "tools/publication_figures/generate_sfincs_paper_figs.py",
-      "src/dkx/validation/artifacts.py"
+      "tools/release/artifacts.py"
     ],
     "tests": [
       "tests/test_generate_sfincs_paper_figs.py",
@@ -216,7 +216,7 @@
       "LHD Fokker-Planck L11/L12 tails do not yet reach the asymptotic inverse-nu gate on the checked-in scan, so this implemented artifact is a bounded trend proxy rather than the full analytic-limit reproduction"
     ],
     "source_code": [
-      "src/dkx/validation/artifacts.py"
+      "tools/release/artifacts.py"
     ],
     "tests": [
       "tests/test_validation_artifacts.py"
@@ -254,7 +254,7 @@
       "W7-X FP L11/L12 tails satisfy the inverse-nu slope proxy on the current range, while LHD still fails that gate"
     ],
     "source_code": [
-      "src/dkx/validation/artifacts.py"
+      "tools/release/artifacts.py"
     ],
     "tests": [
       "tests/test_validation_artifacts.py"
@@ -370,7 +370,7 @@
     ],
     "source_code": [
       "tools/publication_figures/generate_validation_dashboard.py",
-      "src/dkx/validation/artifacts.py"
+      "tools/release/artifacts.py"
     ],
     "tests": [
       "tests/test_generate_validation_dashboard.py",
@@ -413,7 +413,7 @@
     ],
     "source_code": [
       "tools/publication_figures/generate_fortran_suite_benchmark_summary.py",
-      "src/dkx/validation/artifacts.py"
+      "tools/release/artifacts.py"
     ],
     "tests": [
       "tests/test_generate_fortran_suite_benchmark_summary.py",
@@ -453,7 +453,7 @@
     "source_code": [
       "src/dkx/ambipolar.py",
       "src/dkx/io.py",
-      "src/dkx/validation/artifacts.py"
+      "tools/release/artifacts.py"
     ],
     "tests": [
       "tests/test_er_scan_and_ambipolar.py",
@@ -495,7 +495,7 @@
       "The implemented rung is not full-Fokker-Planck, ambipolar-profile, finite-electric-field, experimental, or cross-code performance validation"
     ],
     "source_code": [
-      "src/dkx/validation/artifacts.py",
+      "tools/release/artifacts.py",
       "tools/paper_benchmarks/audit_independent_cross_code_validation.py"
     ],
     "tests": [
@@ -1154,7 +1154,7 @@
     "source_code": [
       "src/dkx/solve.py",
       "src/dkx/magnetic_geometry.py",
-      "src/dkx/validation/artifacts.py",
+      "tools/release/artifacts.py",
       "tools/publication_figures/generate_autodiff_sensitivity_validation.py"
     ],
     "tests": [
