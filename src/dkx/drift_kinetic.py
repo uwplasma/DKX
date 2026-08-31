@@ -82,7 +82,13 @@ the remaining refusals below are numerical-surface gaps, not physics:
 - ``collisionOperator=0`` with the uniform/Chebyshev speed grids
   (``xGridScheme`` 3/4/7/8): the Fokker-Planck Rosenbluth-potential
   interpolation matrices for those grids (``interpolationMatrix.F90`` /
-  ``ChebyshevInterpolationMatrix.F90``) are not ported.
+  ``ChebyshevInterpolationMatrix.F90``) are not ported;
+- ``force0RadialCurrentInEquilibrium=.false.``: the equilibrium radial current
+  adds a ``BHat_sub_psi`` term to ``BDotCurlB`` (``geometry.F90:291``) and a
+  second ``factor2`` coefficient to the L=0/L=2 radial drift fluxes
+  (``diagnostics.F90:430-436``).  Only the v3 default ``.true.`` is ported, and
+  the key is rejected rather than ignored (see
+  :func:`dkx.input_compat.require_force0_radial_current_in_equilibrium`).
 
 All ``xGridScheme`` values 1-8 and every valid ``xDotDerivativeScheme`` (-2..11
 except the Fortran-buggy -1, whose ``do i=i,Nx`` loop reads an undefined start)
@@ -93,6 +99,7 @@ are canonical; see :func:`dkx.phase_space.make_grids` and
 from __future__ import annotations
 
 import math
+import warnings
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -127,8 +134,10 @@ from dkx.phase_space import (  # noqa: E402
     legendre_coupling_lower,
     legendre_coupling_upper,
     make_grids,
+    x_grid_k_override_message,
 )
 from dkx.input_compat import (  # noqa: E402
+    check_force0_radial_current_in_equilibrium,
     effective_equilibrium_file,
     effective_psi_a_hat,
     effective_psi_n_wish,
@@ -2242,6 +2251,11 @@ def kinetic_operator_build_from_namelist(nml: Any) -> KineticOperatorBuild:
     ``NotImplementedError`` for the deferred features listed in the module
     docstring (Fokker-Planck collisions on the uniform/Chebyshev x grids).
     """
+    # ``force0RadialCurrentInEquilibrium`` is a SFINCS global rather than a
+    # member of any readInput.F90 group, so it is looked up across the whole
+    # deck; only the v3 default (.true.) is ported (see input_compat).
+    check_force0_radial_current_in_equilibrium(nml)
+
     general = nml.group("general")
     phys = nml.group("physicsParameters")
     other = nml.group("otherNumericalParameters")
@@ -2335,6 +2349,16 @@ def kinetic_operator_build_from_namelist(nml: Any) -> KineticOperatorBuild:
     x_dot_derivative_scheme = _get_int(other, "xDotDerivativeScheme", 0)
     point_at_x0 = x_grid_scheme in {2, 3, 4, 6, 7, 8}
 
+    # One effective xGrid_k for the whole build: the speed grid, the
+    # Fokker-Planck collision matrices, and the export_f interpolation each read
+    # the key from the deck, so the xGridScheme 2/6 override has to be applied
+    # once, here, rather than independently inside each consumer.
+    x_grid_k = _get_float(other, "xGrid_k", 0.0)
+    x_grid_k_override = x_grid_k_override_message(x_grid_scheme, x_grid_k)
+    if x_grid_k_override is not None:
+        warnings.warn(x_grid_k_override, RuntimeWarning, stacklevel=2)
+        x_grid_k = 0.0
+
     # ---- grids (phase_space) ----
     grids = make_grids(
         n_theta=_get_int(res, "Ntheta", 15),
@@ -2347,7 +2371,7 @@ def kinetic_operator_build_from_namelist(nml: Any) -> KineticOperatorBuild:
         zeta_derivative_scheme=_get_int(other, "zetaDerivativeScheme", 2),
         magnetic_drift_derivative_scheme=_get_int(other, "magneticDriftDerivativeScheme", 3),
         x_grid_scheme=x_grid_scheme,
-        x_grid_k=_get_float(other, "xGrid_k", 0.0),
+        x_grid_k=x_grid_k,
         x_max=_get_float(res, "xMax", 5.0),
         x_dot_derivative_scheme=x_dot_derivative_scheme,
         n_xi_for_x_option=_get_int(other, "Nxi_for_x_option", 1),
@@ -2488,7 +2512,7 @@ def kinetic_operator_build_from_namelist(nml: Any) -> KineticOperatorBuild:
             x_weights=np.asarray(grids.x_weights, dtype=np.float64),
             ddx=np.asarray(grids.ddx, dtype=np.float64),
             d2dx2=np.asarray(grids.d2dx2, dtype=np.float64),
-            x_grid_k=_get_float(other, "xGrid_k", 0.0),
+            x_grid_k=x_grid_k,
             z_s=np.asarray(species.z, dtype=np.float64),
             m_hats=np.asarray(species.m_hat, dtype=np.float64),
             n_hats=np.asarray(species.n_hat, dtype=np.float64),
@@ -2516,7 +2540,7 @@ def kinetic_operator_build_from_namelist(nml: Any) -> KineticOperatorBuild:
             x_weights=np.asarray(grids.x_weights, dtype=np.float64),
             ddx=np.asarray(grids.ddx, dtype=np.float64),
             d2dx2=np.asarray(grids.d2dx2, dtype=np.float64),
-            x_grid_k=_get_float(other, "xGrid_k", 0.0),
+            x_grid_k=x_grid_k,
             z_s=np.asarray(species.z, dtype=np.float64),
             m_hats=np.asarray(species.m_hat, dtype=np.float64),
             n_hats=np.asarray(species.n_hat, dtype=np.float64),

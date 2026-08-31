@@ -61,7 +61,7 @@ from dkx.moments import (
     rhsmode1_moments,
     transport_moments_table,
 )
-from dkx.phase_space import Grids
+from dkx.phase_space import Grids, x_grid_k_override_message
 
 __all__ = [
     "operator_containers",
@@ -276,6 +276,8 @@ def _base_fields(
         ("useDKESExBDrift", phys.use_dkes_exb_drift),
         ("useIterativeLinearSolver", other.use_iterative_linear_solver),
         ("finished", True), ("pointAtX0", op.point_at_x0),
+        # Hardcoded: dkx ports only the v3 default (globalVariables.F90:65) and
+        # rejects .false. decks in input_compat, so this can only be true.
         ("force0RadialCurrentInEquilibrium", True),
         ("includePhi1", phys.include_phi1),
         ("includePhi1InCollisionOperator", phys.include_phi1_in_collision_operator),
@@ -1125,6 +1127,10 @@ def _export_f_config(*, raw, grids: Grids, geom: FluxSurfaceGeometry) -> _Export
             raise NotImplementedError(
                 f"export_f_x_option=1 is only implemented for xGridScheme in {{1,2,5,6}} (got {x_grid_scheme})."
             )
+        # Same override the grid itself took, so the interpolation weight matches
+        # the collocation weight (validateInput.F90:1094-1104).
+        if x_grid_k_override_message(x_grid_scheme, x_grid_k) is not None:
+            x_grid_k = 0.0
         alpxk = np.exp(-(x * x)) * (x**x_grid_k)
         alpx = np.exp(-(export_x * export_x)) * (export_x**x_grid_k)
         map_x = polynomial_interpolation_matrix_np(xk=x, x=export_x, alpxk=alpxk, alpx=alpx)

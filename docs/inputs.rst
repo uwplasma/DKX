@@ -21,6 +21,9 @@ Python type is inferred from its default (``tuple`` :math:`\to` float array,
   recognized group is dropped from the typed fields but retained in
   ``SfincsInput.raw``; an unknown *group* is likewise retained in ``raw`` but
   never typed. "Supported" below means specifically the typed fields.
+- **Except where dropping one would change the physics.** A setting `dkx` has
+  not ported is rejected with a ``NotImplementedError`` naming the missing
+  terms, rather than silently ignored — see `Unsupported inputs`_.
 
 The parser has an inverse: :meth:`dkx.inputs.SfincsInput.to_namelist`
 serializes a typed input back to Fortran-readable namelist text, and
@@ -278,10 +281,19 @@ acted upon.
        `dkx`-only ``±103`` / ``±104`` widened upwind pairs
    * - ``xDotDerivativeScheme``
      - ``0``
-     - speed-derivative scheme (canonical: 0)
+     - speed-derivative scheme (canonical: 0). Scheme ``-2`` needs
+       ``xGrid_k = 0`` on any grid with a node at :math:`x = 0` (see
+       ``xGrid_k`` below); `dkx` rejects that combination rather than
+       returning the ``NaN`` matrices the Fortran does
    * - ``xGridScheme`` / ``xPotentialsGridScheme`` / ``xGrid_k``
      - ``5`` / ``2`` / ``0.0``
-     - speed-grid family and weight exponent :math:`k`
+     - speed-grid family and weight exponent :math:`k`. The speed weight
+       :math:`e^{-x^2} x^k` vanishes at :math:`x = 0` for :math:`k > 0`, and
+       ``xGridScheme`` 2, 3, 4, 6, 7, and 8 all place a node there. For 2 and 6
+       `dkx` overrides ``xGrid_k`` to ``0`` and records it in
+       ``SfincsInput.warnings``, as Fortran ``validateInput.F90`` does; for the
+       uniform and Chebyshev grids the weight is only reached through
+       ``xDotDerivativeScheme = -2``, and that combination is rejected
    * - ``Nxi_for_x_option``
      - ``1``
      - :math:`N_\xi`-for-:math:`x` ramp (:doc:`numerics`)
@@ -392,6 +404,13 @@ The remaining gaps against SFINCS Fortran v3 are:
   or GPU); there is no distributed-memory mode.
 - **Convergence-scan ramp arrays** (``NthetaNumRuns``, ``Nx_min``, ...) — no
   typed fields; retained in ``raw`` only and not acted upon (see above).
+- **``force0RadialCurrentInEquilibrium = .false.``** — an equilibrium carrying
+  a radial current adds a :math:`B_\psi` term to ``BDotCurlB`` and a second
+  coefficient to the :math:`L = 0` and :math:`L = 2` radial drift fluxes.
+  `dkx` implements only the SFINCS default ``.true.``. The setting is not part
+  of any Fortran v3 namelist group (it is a compiled-in global), but a deck
+  that carries it anyway is rejected with a ``NotImplementedError`` rather than
+  ignored.
 
 Everything else in the Fortran v3 input format is fully supported on the
 canonical stack; the README feature matrix carries the parity evidence. That

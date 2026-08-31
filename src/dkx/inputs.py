@@ -22,6 +22,12 @@ from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Tuple, Union
 
+from .input_compat import (
+    FORCE0_RADIAL_CURRENT_IN_EQUILIBRIUM,
+    check_force0_radial_current_in_equilibrium,
+    require_force0_radial_current_in_equilibrium,
+)
+
 Number = Union[int, float]
 Scalar = Union[str, bool, Number]
 Value = Union[Scalar, List[Scalar]]
@@ -548,6 +554,13 @@ class SfincsInput:
         """
         section_kwargs: Dict[str, Dict[str, Any]] = {attr: {} for attr, _ in _SECTION_GROUPS}
         for name, value in params.items():
+            if name.upper() == FORCE0_RADIAL_CURRENT_IN_EQUILIBRIUM.upper():
+                # No typed field: this is a SFINCS global (globalVariables.F90:65),
+                # not a member of any readInput.F90 group.  It is recognized here
+                # only so its unported .false. branch fails with the physics
+                # explanation instead of a generic "Unknown parameter".
+                require_force0_radial_current_in_equilibrium(value)
+                continue
             entry = _FLAT_FIELDS.get(name.upper())
             if entry is None:
                 raise ValueError(
@@ -662,6 +675,27 @@ def _build_section(section_name: str, nml: RawNamelist) -> Any:
     return cls(**kwargs)
 
 
+# The two ``xGrid_k`` rules live in dkx.phase_space, which owns the speed-grid
+# semantics; these wrappers defer the import for the same reason as
+# :func:`_widened_upwind_scheme_codes`, so this module stays a leaf.
+
+
+def _x_grid_k_override_message(x_grid_scheme: int, x_grid_k: float) -> str | None:
+    """The ``xGridScheme`` 2/6 ``xGrid_k`` override notice, or ``None``."""
+    from dkx.phase_space import x_grid_k_override_message  # noqa: PLC0415
+
+    return x_grid_k_override_message(x_grid_scheme, x_grid_k)
+
+
+def _x_grid_k_conflict_message(
+    x_grid_scheme: int, x_grid_k: float, x_dot_derivative_scheme: int
+) -> str | None:
+    """Why this ``xGrid_k`` cannot be built on this grid, or ``None``."""
+    from dkx.phase_space import x_grid_k_conflict_message  # noqa: PLC0415
+
+    return x_grid_k_conflict_message(x_grid_scheme, x_grid_k, x_dot_derivative_scheme)
+
+
 def _widened_upwind_scheme_codes() -> Tuple[Tuple[int, ...], Tuple[int, ...]]:
     """The dkx-only widened-upwind namelist codes, ``(angle, magnetic drift)``.
 
@@ -696,6 +730,12 @@ def _validate(inp: SfincsInput) -> SfincsInput:
         inp.preconditioner,
         inp.species,
     )
+
+    # ``force0RadialCurrentInEquilibrium`` has no typed field (it is a SFINCS
+    # global, not a namelist member), so a deck carrying it is only reachable
+    # through the retained raw parse.  dkx implements the .true. branch alone.
+    if inp.raw is not None:
+        check_force0_radial_current_in_equilibrium(inp.raw)
 
     # --- Option ranges (validateInput.F90) ---
     if gen.rhs_mode < 1:
@@ -760,6 +800,12 @@ def _validate(inp: SfincsInput) -> SfincsInput:
         )
     if not 1 <= other.x_grid_scheme <= 8:
         raise ValueError("xGridScheme must be between 1 and 8.")
+    # validateInput.F90:1094-1104 overrides rather than stopping; dkx.phase_space
+    # owns the rule so the grid and the collision matrices agree on ``k``.
+    x_grid_k_override = _x_grid_k_override_message(other.x_grid_scheme, other.x_grid_k)
+    if x_grid_k_override is not None:
+        warnings.append(x_grid_k_override)
+        other = replace(other, x_grid_k=0.0)
     if not -2 <= other.x_dot_derivative_scheme <= 11:
         raise ValueError("xDotDerivativeScheme must be between -2 and 11.")
     if (
@@ -770,6 +816,14 @@ def _validate(inp: SfincsInput) -> SfincsInput:
         raise ValueError(
             "If xDotDerivativeScheme is >0 and not 11, then xGridScheme must be either 3 or 4."
         )
+    # Not an upstream check: xDotDerivativeScheme=-2 differentiates on a sub-grid
+    # that keeps the x=0 node, where the xGrid_k weight vanishes (NaN in Fortran
+    # too).  Runs after the override above, so schemes 2/6 never reach it.
+    x_grid_k_conflict = _x_grid_k_conflict_message(
+        other.x_grid_scheme, other.x_grid_k, other.x_dot_derivative_scheme
+    )
+    if x_grid_k_conflict is not None:
+        raise ValueError(x_grid_k_conflict)
     if not 1 <= other.x_potentials_grid_scheme <= 4:
         raise ValueError("xPotentialsGridScheme must be between 1 and 4.")
     if not 0 <= pre.preconditioner_species <= 1:

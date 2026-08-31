@@ -492,6 +492,13 @@ def test_speed_grid_matches_old_xgrid(n_x: int, k: float, include_x0: bool) -> N
     assert_exact(new.poly_a, old.poly_a)
     assert_exact(new.poly_b, old.poly_b)
     assert_exact(new.poly_c, old.poly_c)
+    if include_x0 and k != 0.0:
+        # The weight exp(-x^2) x^k is zero at the pinned node, so both grids
+        # refuse the plain-dx weights instead of returning inf.
+        for grid in (new, old):
+            with pytest.raises(ValueError, match="vanishes at the node"):
+                grid.dx_weights(k)
+        return
     assert_exact(new.dx_weights(k), old.dx_weights(k))
 
 

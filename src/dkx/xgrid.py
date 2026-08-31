@@ -43,6 +43,22 @@ def x_weight_d2_over_weight_np(x: np.ndarray, k: float) -> np.ndarray:
     return out
 
 
+def _reject_vanishing_weight(x: np.ndarray, k: float, *, consumer: str) -> None:
+    """Refuse a grid whose weight `exp(-x^2) x^k` is zero at one of its nodes.
+
+    Both the plain-dx weights and the polynomial differentiation matrices divide
+    by the weight, so a node at x=0 with k>0 makes them `inf`/`NaN`. Kept in
+    lockstep with `dkx.phase_space._reject_vanishing_speed_weight`.
+    """
+
+    if float(k) != 0.0 and bool(np.any(np.asarray(x) == 0.0)):
+        raise ValueError(
+            f"The weight exp(-x^2) x^k vanishes at the node x=0 for k={k}, so "
+            f"{consumer} would divide by zero. A speed grid with a node at x=0 "
+            "(xGridScheme [2, 3, 4, 6, 7, 8]) requires xGrid_k=0."
+        )
+
+
 def make_x_polynomial_diff_matrices(x: np.ndarray, *, k: float) -> tuple[np.ndarray, np.ndarray]:
     """Port of v3 `makeXPolynomialDiffMatrices` (polynomialDiffMatrices.F90).
 
@@ -55,6 +71,7 @@ def make_x_polynomial_diff_matrices(x: np.ndarray, *, k: float) -> tuple[np.ndar
     n = int(x.size)
     if n < 1:
         raise ValueError("x must have at least one point")
+    _reject_vanishing_weight(x, k, consumer="the collocation differentiation matrices")
 
     xx = np.broadcast_to(x[:, None], (n, n)).copy()
     dx = xx - xx.T
@@ -133,9 +150,14 @@ class XGrid:
     x0: float
 
     def dx_weights(self, k: float | None = None) -> np.ndarray:
-        """Return weights for plain `dx` integrals (Fortran divides by the weight function)."""
+        """Return weights for plain `dx` integrals (Fortran divides by the weight function).
+
+        Kept in lockstep with :meth:`dkx.phase_space.SpeedGrid.dx_weights`,
+        including its refusal of a vanishing weight at a node pinned to x=0.
+        """
         if k is None:
             k = self.k
+        _reject_vanishing_weight(self.x, k, consumer="the plain-dx quadrature weights")
         w = np.exp(-(self.x * self.x)) * (self.x**k)
         return self.gaussian_weights / w
 

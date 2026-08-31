@@ -30,6 +30,7 @@ polynomial x-grid kernel the collision operators consume lives in
 from __future__ import annotations
 
 import math
+import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import lru_cache
@@ -62,6 +63,8 @@ __all__ = [
     "uniform_periodic_diff_matrices",
     "widened_upwind_periodic_diff_matrix",
     "widened_upwind_stencil",
+    "x_grid_k_conflict_message",
+    "x_grid_k_override_message",
     "xdot_diff_matrices",
 ]
 
@@ -990,6 +993,44 @@ def _speed_weight_d2_over_weight(x: np.ndarray, k: float) -> np.ndarray:
     return out
 
 
+#: ``xGridScheme`` values whose speed grid contains a node at exactly ``x = 0``:
+#: the Gauss-Radau polynomial grids (2/6) pin one there, and the uniform (3/4)
+#: and Chebyshev (7/8) grids set their first node to 0 outright.
+_SCHEMES_WITH_NODE_AT_X0 = frozenset({2, 3, 4, 6, 7, 8})
+
+
+def _reject_vanishing_speed_weight(x: np.ndarray, k: float, *, consumer: str) -> None:
+    """Reject a speed grid whose weight ``exp(-x^2) x^k`` vanishes at a node.
+
+    Both consumers of the weight divide by it: the plain-``dx`` quadrature
+    weights (:meth:`SpeedGrid.dx_weights`) and the collocation differentiation
+    matrices (:func:`speed_grid_diff_matrices`, through ``exp(-x^2) x^k`` itself
+    and through ``k/x - 2x``).  A node at ``x = 0`` therefore turns both into
+    ``inf``/``NaN`` the moment ``k > 0``, and the results built on them are
+    silently wrong rather than obviously broken.
+
+    ``validateInput.F90:1094-1104`` keeps the Fortran clear of this for
+    ``xGridScheme`` 2/6 only, and :func:`x_grid_k_override_message` mirrors that
+    override; the uniform and Chebyshev grids have the same singularity with no
+    upstream guard, so this check is the floor under every route.
+
+    Args:
+      x: The speed-grid nodes about to be used.
+      k: The weight exponent ``xGrid_k``.
+      consumer: What would divide by zero, named in the error message.
+
+    Raises:
+      ValueError: if ``k`` is nonzero and any node sits at exactly ``x = 0``.
+    """
+
+    if float(k) != 0.0 and bool(np.any(np.asarray(x) == 0.0)):
+        raise ValueError(
+            f"The speed weight exp(-x^2) x^k vanishes at the node x=0 for k={k}, so "
+            f"{consumer} would divide by zero. A speed grid with a node at x=0 "
+            f"(xGridScheme {sorted(_SCHEMES_WITH_NODE_AT_X0)}) requires xGrid_k=0."
+        )
+
+
 @dataclass(frozen=True)
 class SpeedGrid:
     """Collocation nodes, weights, and recurrence data for the speed grid.
@@ -1023,6 +1064,7 @@ class SpeedGrid:
         """Weights for plain ``dx`` integrals (Fortran divides by the weight)."""
         if k is None:
             k = self.k
+        _reject_vanishing_speed_weight(self.x, k, consumer="the plain-dx quadrature weights")
         w = np.exp(-(self.x * self.x)) * (self.x**k)
         return self.gaussian_weights / w
 
@@ -1190,6 +1232,7 @@ def speed_grid_diff_matrices(
     n = int(x.size)
     if n < 1:
         raise ValueError("x must have at least one point")
+    _reject_vanishing_speed_weight(x, k, consumer="the collocation differentiation matrices")
 
     xx = np.broadcast_to(x[:, None], (n, n)).copy()
     dx = xx - xx.T
@@ -1599,6 +1642,88 @@ def _upwinded_pair(
     return ddx_plus, ddx_minus
 
 
+def x_grid_k_override_message(x_grid_scheme: int, x_grid_k: float) -> str | None:
+    """The ``validateInput.F90:1094-1104`` ``xGrid_k`` override, or ``None``.
+
+    ``xGridScheme`` 2 and 6 pin a speed node at ``x = 0``, where the SFINCS
+    weight ``exp(-x^2) x^k`` is zero for every ``k > 0``: the plain-``dx``
+    quadrature weights (:meth:`SpeedGrid.dx_weights`) and the collocation
+    differentiation matrices both divide by it, so the grid -- and every moment
+    taken on it -- comes out ``inf``/``NaN``.  Upstream warns and forces
+    ``xGrid_k = 0`` there rather than stopping, and dkx mirrors that.
+
+    The policy lives here alone so the speed grid, the Fokker-Planck collision
+    matrices, and the ``export_f`` interpolation (all of which read ``xGrid_k``
+    from the deck separately) cannot end up disagreeing about ``k``.
+
+    Args:
+      x_grid_scheme: Namelist ``xGridScheme``.
+      x_grid_k: Namelist ``xGrid_k`` as requested by the deck.
+
+    Returns:
+      The message to report -- as a Python warning, or as an entry in
+      :attr:`dkx.inputs.SfincsInput.warnings` -- when the override applies, and
+      ``None`` when the requested ``xGrid_k`` stands.
+    """
+
+    if int(x_grid_scheme) in {2, 6} and float(x_grid_k) != 0.0:
+        return (
+            f"Overriding xGrid_k={x_grid_k} to 0, since xGridScheme={x_grid_scheme} pins a "
+            "node at x=0, where the speed weight exp(-x^2) x^k vanishes "
+            "(validateInput.F90:1094-1104)."
+        )
+    return None
+
+
+def x_grid_k_conflict_message(
+    x_grid_scheme: int, x_grid_k: float, x_dot_derivative_scheme: int
+) -> str | None:
+    """Why this ``xGrid_k`` cannot be built on this grid, or ``None`` if it can.
+
+    The companion to :func:`x_grid_k_override_message`, for the case upstream
+    does *not* handle.  ``xDotDerivativeScheme = -2`` builds its upwinded pair
+    from :func:`speed_grid_diff_matrices` on the two sub-grids ``x[:-1]`` and
+    ``x[1:]``.  Dropping the *last* node leaves the ``x = 0`` node in place, so
+    on any grid that has one the polynomial weight ``exp(-x^2) x^k`` vanishes
+    inside that call for ``k > 0`` and the returned ``ddx_xDot_plus`` comes back
+    with ``NaN`` entries -- which then propagate silently into the solve.
+
+    ``validateInput.F90`` guards only the ``xGridScheme`` 2/6 combination
+    (lines 1094-1104), and those two are already forced to ``xGrid_k = 0`` by
+    :func:`x_grid_k_override_message`; the uniform (3/4) and Chebyshev (7/8)
+    grids place a node at ``x = 0`` just as firmly and reach the same
+    singularity, in the Fortran as much as here.  Upstream has no check for it,
+    so dkx refuses the combination rather than reproducing the ``NaN``.
+
+    Call this *after* applying :func:`x_grid_k_override_message`, so the schemes
+    upstream does override are never reported as a conflict.
+
+    Args:
+      x_grid_scheme: Namelist ``xGridScheme``.
+      x_grid_k: Namelist ``xGrid_k``, after the 2/6 override.
+      x_dot_derivative_scheme: Namelist ``xDotDerivativeScheme``.
+
+    Returns:
+      The ``ValueError`` message to raise, or ``None`` when the combination is
+      well posed.
+    """
+
+    if (
+        int(x_dot_derivative_scheme) == -2
+        and float(x_grid_k) != 0.0
+        and int(x_grid_scheme) in _SCHEMES_WITH_NODE_AT_X0
+    ):
+        return (
+            f"xDotDerivativeScheme=-2 requires xGrid_k=0 on xGridScheme={x_grid_scheme} "
+            f"(got xGrid_k={x_grid_k}), whose speed grid has a node at x=0. The scheme "
+            "differentiates on the sub-grid x[:-1], which keeps that node, and the "
+            "polynomial weight exp(-x^2) x^k vanishes there, so ddx_xDot_plus would be "
+            "NaN. Upstream SFINCS shares the singularity but does not check for it "
+            "(validateInput.F90:1094-1104 covers xGridScheme 2 and 6 only)."
+        )
+    return None
+
+
 def make_grids(
     *,
     n_theta: int,
@@ -1650,13 +1775,19 @@ def make_grids(
         potentials), 7 is the Chebyshev grid on ``[0, x_max]`` with the last
         of ``n_x + 1`` points dropped, and 8 is the ``n_x``-point Chebyshev
         grid including ``x_max``.
-      x_grid_k: Namelist ``xGrid_k`` weight exponent.
+      x_grid_k: Namelist ``xGrid_k`` weight exponent.  The weight
+        ``exp(-x^2) x^k`` vanishes at ``x = 0``, so a nonzero ``k`` is forced to
+        0 (with a ``RuntimeWarning``) on the Gauss-Radau grids 2/6, as upstream
+        does, and rejected on the other grids that carry a node there; see
+        :func:`x_grid_k_override_message` and :func:`x_grid_k_conflict_message`.
       x_max: Namelist ``xMax``; the domain limit of the uniform/Chebyshev
         grids (schemes 3/4/7/8; unused by 1/2/5/6).
       x_dot_derivative_scheme: Namelist ``xDotDerivativeScheme``; 0 uses the
         centered ``ddx`` for the E_r xDot term in both upwind directions,
         nonzero values build the ``ddx_xdot_plus``/``ddx_xdot_minus`` pair
-        (see :func:`xdot_diff_matrices`).
+        (see :func:`xdot_diff_matrices`).  Scheme ``-2`` is the one that reads
+        ``x_grid_k``, and needs it zero wherever the grid has a node at
+        ``x = 0`` (:func:`x_grid_k_conflict_message`).
       n_xi_for_x_option: Namelist ``Nxi_for_x_option`` ramp (0-3).
       n_xi_for_x_override: Optional explicit active Legendre-mode count at
         every speed node. Values must be nondecreasing, lie between
@@ -1676,6 +1807,14 @@ def make_grids(
     n_xi = int(n_xi)
     n_l = int(n_l)
     n_periods = int(n_periods)
+
+    override = x_grid_k_override_message(x_grid_scheme, x_grid_k)
+    if override is not None:
+        warnings.warn(override, RuntimeWarning, stacklevel=2)
+        x_grid_k = 0.0
+    conflict = x_grid_k_conflict_message(x_grid_scheme, x_grid_k, x_dot_derivative_scheme)
+    if conflict is not None:
+        raise ValueError(conflict)
 
     # v3 forces odd Ntheta/Nzeta so the grids contain no point conjugate to
     # the Nyquist mode.

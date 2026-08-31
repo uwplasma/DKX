@@ -87,6 +87,97 @@ def config_float(config: Any, groups: tuple[str, ...], key: str, default: float 
     return float(first_config_value(lookup_config_value(config, groups, key, default), default))
 
 
+FORCE0_RADIAL_CURRENT_IN_EQUILIBRIUM = "force0RadialCurrentInEquilibrium"
+
+
+def _lookup_in_any_group(config: Any, key: str) -> Any | None:
+    """Return ``key`` from whichever namelist group carries it, or ``None``.
+
+    Unlike :func:`lookup_config_value` this does not take a group list.
+    ``force0RadialCurrentInEquilibrium`` is a SFINCS *global*
+    (``globalVariables.F90:65``) that ``readInput.F90`` never puts in a namelist
+    group, so a deck porting it has no canonical home for it; scanning every
+    group keeps the diagnostic from depending on which one the author picked.
+    """
+
+    key_upper = key.upper()
+    groups: Any = getattr(config, "groups", None)
+    if groups is None and isinstance(config, Mapping):
+        groups = config
+    if isinstance(groups, Mapping):
+        for group_data in groups.values():
+            if not isinstance(group_data, Mapping):
+                continue
+            for name, value in group_data.items():
+                if str(name).upper() == key_upper:
+                    return value
+    if isinstance(config, Mapping):
+        for name, value in config.items():
+            if str(name).upper() == key_upper:
+                return value
+    return None
+
+
+def require_force0_radial_current_in_equilibrium(value: Any) -> bool:
+    """Reject the unported ``force0RadialCurrentInEquilibrium = .false.`` branch.
+
+    dkx implements only the SFINCS v3 default ``.true.``
+    (``globalVariables.F90:65``), and hardcodes it in the output writer.  With
+    ``.false.`` upstream changes the physics in three places that are not
+    ported, so accepting the key silently would return wrong numbers with no
+    diagnostic:
+
+    - ``geometry.F90:291-293`` adds
+      ``DHat * BHat_sub_psi * (dBHat_sub_zeta_dtheta - dBHat_sub_theta_dzeta)``
+      to ``BDotCurlB``;
+    - ``diagnostics.F90:430-436`` switches on a second drift-flux coefficient
+      ``factor2 = 2 * (dBHat_sub_zeta_dtheta - dBHat_sub_theta_dzeta) / BHat**2``,
+      entering the radial particle/heat fluxes as ``factor * (8/3) + factor2 *
+      (2/3)`` at L=0 (line 455) and ``(factor + factor2) * (4/15)`` at L=2
+      (line 545); dkx's moment kernels carry the ``factor`` terms only
+      (:mod:`dkx.moments`);
+    - the collisionless d/dx term associated with :math:`E_r` picks up the
+      matching ``xDotFactor2`` (see
+      :meth:`dkx.drift_kinetic.KineticOperator._er_xdot`).
+
+    Args:
+      value: The namelist value, or ``None`` when the deck omits the key.
+
+    Returns:
+      ``True`` (the only supported setting), so callers can assign the result.
+
+    Raises:
+      NotImplementedError: if ``value`` requests the ``.false.`` branch.
+    """
+
+    enabled = True if value is None else bool(first_config_value(value, True))
+    if not enabled:
+        raise NotImplementedError(
+            f"{FORCE0_RADIAL_CURRENT_IN_EQUILIBRIUM} = .false. is not supported: dkx "
+            "implements only the SFINCS v3 default .true. (globalVariables.F90:65). "
+            "Turning it off adds DHat*BHat_sub_psi*(dBHat_sub_zeta_dtheta - "
+            "dBHat_sub_theta_dzeta) to BDotCurlB (geometry.F90:291-293) and a "
+            "factor2 = 2*(dBHat_sub_zeta_dtheta - dBHat_sub_theta_dzeta)/BHat**2 term "
+            "to the L=0 and L=2 radial drift fluxes (diagnostics.F90:433-434, 455, "
+            "545), and it changes the E_r xDot coefficient. None of that is ported, "
+            "so the key is rejected rather than silently ignored."
+        )
+    return enabled
+
+
+def check_force0_radial_current_in_equilibrium(config: Any) -> bool:
+    """Run :func:`require_force0_radial_current_in_equilibrium` over a namelist.
+
+    ``config`` is a :class:`dkx.namelist.Namelist`, a
+    :class:`dkx.inputs.RawNamelist`, or a nested ``{group: {key: value}}``
+    mapping.  Decks that omit the key keep the ``.true.`` default.
+    """
+
+    return require_force0_radial_current_in_equilibrium(
+        _lookup_in_any_group(config, FORCE0_RADIAL_CURRENT_IN_EQUILIBRIUM)
+    )
+
+
 def effective_equilibrium_file(*, geom_params: Mapping[str, Any]) -> Any | None:
     geometry_scheme = int(_group_get(geom_params, "geometryScheme") or -1)
     equilibrium_file = _group_get(geom_params, "equilibriumFile")
