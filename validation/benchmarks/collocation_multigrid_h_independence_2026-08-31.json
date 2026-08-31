@@ -1,0 +1,137 @@
+{
+  "artifact_id": "collocation-multigrid-h-independence-2026-08-31",
+  "case": {
+    "collision_operator": "pitch-angle scattering, DKES-like trajectories",
+    "equilibrium": "w7x_standardConfig.bc",
+    "er": 0.01,
+    "geometry_scheme": 11,
+    "nu": 0.0083,
+    "nx": 7,
+    "r_n": 0.5
+  },
+  "findings": {
+    "all_rungs_converged": true,
+    "cycle_rate_is_resolution_independent": true,
+    "iteration_count_is_resolution_independent": false,
+    "reached_size_where_classical_route_exhausts_memory": true
+  },
+  "hardware": {
+    "host_id": "official-laptop-cpu",
+    "platform": "macOS 14.4.1 (23E224)",
+    "processor": "Apple M3 Max"
+  },
+  "interpretation": "Split result. The multigrid V-cycle achieves the property it was built for: the average residual reduction per cycle is 0.487-0.537 across a 12.7x range in unknowns, flat to 10%. The outer Krylov iteration count is not flat -- 94 to 230, a 2.45x growth over that same 12.7x -- so the route is not h-independent in the sense the benchmark's own docstring requires of it. Growth is sublinear rather than proportional. The measured advantage is memory: every rung converged to a true relative residual of 1e-10, including 614,656 unknowns at 1.08 GB, past the ~488,000 where the classical route is recorded as running out of memory.",
+  "ladder": [
+    {
+      "converged": true,
+      "cycle_rate": 0.48675785849474296,
+      "grid": [
+        24,
+        12,
+        24
+      ],
+      "iterations": 94,
+      "levels": 3,
+      "peak_gb": 0.372283935546875,
+      "residual": 8.261348027357468e-11,
+      "seconds_warm": 7.022236000000248,
+      "unknowns": 48384
+    },
+    {
+      "converged": true,
+      "cycle_rate": 0.5370017475313829,
+      "grid": [
+        32,
+        16,
+        32
+      ],
+      "iterations": 137,
+      "levels": 4,
+      "peak_gb": 0.5149383544921875,
+      "residual": 9.997844677351954e-11,
+      "seconds_warm": 19.906940416999987,
+      "unknowns": 114688
+    },
+    {
+      "converged": true,
+      "cycle_rate": 0.5122435406702185,
+      "grid": [
+        40,
+        20,
+        40
+      ],
+      "iterations": 162,
+      "levels": 4,
+      "peak_gb": 0.8724212646484375,
+      "residual": 9.674138581077091e-11,
+      "seconds_warm": 38.464518957999644,
+      "unknowns": 224000
+    },
+    {
+      "converged": true,
+      "cycle_rate": 0.5043896254018189,
+      "grid": [
+        48,
+        24,
+        48
+      ],
+      "iterations": 179,
+      "levels": 4,
+      "peak_gb": 0.8724517822265625,
+      "residual": 9.385918232658553e-11,
+      "seconds_warm": 54.25902449999967,
+      "unknowns": 387072
+    },
+    {
+      "converged": true,
+      "cycle_rate": 0.4925325207280043,
+      "grid": [
+        56,
+        28,
+        56
+      ],
+      "iterations": 230,
+      "levels": 4,
+      "peak_gb": 1.0778045654296875,
+      "residual": 9.500628451427654e-11,
+      "seconds_warm": 92.07100033400002,
+      "unknowns": 614656
+    }
+  ],
+  "promotion_status": {
+    "criteria_met": [
+      "convergence on every rung tested",
+      "memory improvement"
+    ],
+    "criteria_not_met": [
+      "convergence over a representative regime matrix (one geometry, one collisionality, one Er)",
+      "CPU and GPU evidence (CPU only)",
+      "derivative support (not exercised)",
+      "complete runtime improvement (not measured against the classical route on the same host)"
+    ],
+    "decision": "neither promoted nor removed"
+  },
+  "purpose": "plan.md Route S5 requires a measured regime matrix before the experimental collocation/multigrid route is promoted or removed. This is the h-independence half of that evidence.",
+  "repository": {
+    "commit": "b7dbd08b5d2f8341ee56ef5c2b1b4ec5697cd62a",
+    "url": "https://github.com/uwplasma/DKX"
+  },
+  "route": {
+    "cycle": "v",
+    "krylov": "gcrot",
+    "preconditioner": "multigrid",
+    "recycle": 8,
+    "restart": 30,
+    "smoother": "line",
+    "stencil": "up1",
+    "true_relative_residual_target": 1e-10
+  },
+  "schema_version": 1,
+  "software": {
+    "jax": "0.10.2",
+    "numpy": "2.4.6",
+    "python": "3.11.14",
+    "solvax": "0.20.0"
+  },
+  "timestamp_utc": "2026-08-31T20:54:00Z"
+}
