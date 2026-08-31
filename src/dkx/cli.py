@@ -257,6 +257,98 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_converge(args: argparse.Namespace) -> int:
+    """Refine each phase-space axis of a case and report observable convergence.
+
+    Reports the joint refinement alongside the per-axis table because the two
+    can disagree: axes that each look settled on their own are not evidence
+    that the case is converged when they couple.
+    """
+    from rich.console import Console  # noqa: PLC0415
+    from rich.table import Table  # noqa: PLC0415
+
+    from .config import Case, CaseValidationError  # noqa: PLC0415
+    from .workflows.converge import converge_case  # noqa: PLC0415
+
+    try:
+        case = Case.from_file(args.case)
+    except (CaseValidationError, OSError) as exc:
+        print(f"dkx converge failed: {exc}", file=sys.stderr)
+        return 2
+
+    progress = Console(stderr=True)
+    emit = None if args.quiet else (lambda message: progress.print(message, highlight=False))
+    # The solver kernels still write progress to stdout rather than emitting
+    # events (plan.md section 5.6). For --format json that would interleave with
+    # the report and make it unparseable, so stdout is borrowed for the duration
+    # of the solves and the JSON is the only thing written to the real one.
+    quiet_stdout = (
+        contextlib.redirect_stdout(sys.stderr)
+        if args.format == "json"
+        else contextlib.nullcontext()
+    )
+    try:
+        with quiet_stdout:
+            report = converge_case(
+                case,
+                axes=tuple(args.axes),
+                factor=args.factor,
+                tolerance=args.tolerance,
+                joint=not args.no_joint,
+                emit=emit,
+            )
+    except (CaseValidationError, NotImplementedError, ValueError) as exc:
+        print(f"dkx converge failed: {exc}", file=sys.stderr)
+        return 2
+
+    rows = [*report.refinements] + ([report.joint] if report.joint is not None else [])
+    if args.format == "json":
+        print(json.dumps({
+            "baseline": report.baseline,
+            "tolerance": report.tolerance,
+            "converged": report.converged,
+            "axes_understate_the_joint_change": report.axes_understate_the_joint_change,
+            "refinements": [
+                {
+                    "label": r.label,
+                    "resolution": r.resolution,
+                    "changes": r.changes,
+                    "worst": r.worst,
+                    "seconds": r.seconds,
+                }
+                for r in rows
+            ],
+        }, indent=2, sort_keys=True))
+    else:
+        console = Console()
+        console.print(f"baseline {report.baseline}", highlight=False)
+        table = Table(show_lines=False)
+        table.add_column("refined", style="bold")
+        table.add_column("resolution")
+        table.add_column("worst relative change", justify="right")
+        table.add_column("", justify="left")
+        for row in rows:
+            inside = row.worst < report.tolerance
+            table.add_row(
+                row.label,
+                ", ".join(f"{k}={v}" for k, v in row.resolution.items()),
+                f"{row.worst:.3e}",
+                "[green]within[/green]" if inside else "[yellow]above[/yellow]",
+            )
+        console.print(table)
+        if report.axes_understate_the_joint_change:
+            console.print(
+                "[yellow]The joint refinement moved the outputs more than twice as far as any "
+                "single axis. The per-axis rows are not a safe summary of this case: refine "
+                "the axes together before treating it as converged.[/yellow]"
+            )
+        console.print(
+            f"converged at tolerance {report.tolerance:g}: "
+            + ("[green]yes[/green]" if report.converged else "[red]no[/red]")
+        )
+    return 0 if report.converged else 1
+
+
 def _cmd_run_case(args: argparse.Namespace) -> int:
     """Execute a case and write its Result.
 
@@ -1106,11 +1198,16 @@ def _maybe_handle_plot(argv: list[str]) -> int | None:
     return 0
 
 
+#: Refinement axes, mirrored from dkx.workflows.converge.AXES so building the
+#: parser does not import the execution stack. The test suite pins them equal.
+_CONVERGE_AXES: tuple[str, ...] = ("theta", "zeta", "pitch", "speed")
+
+
 #: Every registered subcommand name. ``main`` does not read this -- it passes
 #: the parser's own ``sub.choices`` -- so the runtime behaviour cannot drift
 #: from the registered set. It exists for direct callers and as documentation.
 _KNOWN_COMMANDS: frozenset[str] = frozenset({
-    "validate", "doctor", "schema", "run", "inspect", "solve-v3", "ambipolar",
+    "validate", "doctor", "converge", "schema", "run", "inspect", "solve-v3", "ambipolar",
     "scan-er", "ambipolar-solve", "run-fortran", "write-output",
     "transport-matrix-v3", "monoenergetic-database", "dump-h5", "plot-output",
     "compare-h5", "postprocess-upstream",
@@ -1313,6 +1410,27 @@ def main(argv: list[str] | None = None) -> int:
     _add_parallel_cli_args(p_doctor)
     p_doctor.add_argument("--format", choices=("table", "json"), default="table")
     p_doctor.set_defaults(func=_cmd_doctor)
+
+    p_converge = sub.add_parser(
+        "converge",
+        help="Refine each phase-space axis of a case and report observable convergence.",
+    )
+    _add_common_cli_args(p_converge)
+    _add_parallel_cli_args(p_converge)
+    p_converge.add_argument("case", help="Path to a .toml or .json case file.")
+    p_converge.add_argument(
+        "--axes", nargs="+", default=list(_CONVERGE_AXES),
+        choices=list(_CONVERGE_AXES),
+        help="Phase-space axes to refine (default: all).",
+    )
+    p_converge.add_argument("--factor", type=float, default=1.5, help="Refinement factor per axis.")
+    p_converge.add_argument("--tolerance", type=float, default=0.02, help="Relative-change tolerance.")
+    p_converge.add_argument(
+        "--no-joint", action="store_true",
+        help="Skip the all-axes-together run. Faster, and unable to detect axis coupling.",
+    )
+    p_converge.add_argument("--format", choices=("table", "json"), default="table")
+    p_converge.set_defaults(func=_cmd_converge)
 
     p_schema = sub.add_parser(
         "schema",

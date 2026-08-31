@@ -2,12 +2,12 @@ Geometry models and loading
 ===========================
 
 `dkx` solves a radially local neoclassical kinetic problem on a single
-flux surface, so geometry is not an incidental input: the magnetic field
-strength :math:`\hat B(\theta,\zeta)`, its derivatives, the Jacobian factor
-:math:`\hat D`, and the covariant/contravariant field components set the
-coefficients of the streaming, mirror, :math:`E\times B`, and magnetic-drift
-terms (:doc:`physics_reference`), as well as the flux-surface averages used in
-every diagnostic.
+flux surface, so the geometry sets the coefficients of the equation directly.
+The magnetic field strength :math:`\hat B(\theta,\zeta)`, its derivatives, the
+Jacobian factor :math:`\hat D`, and the covariant/contravariant field components
+fix the streaming, mirror, :math:`E\times B`, and magnetic-drift terms
+(:doc:`physics_reference`) and the flux-surface averages used in every
+diagnostic.
 
 All geometry is consolidated in the single canonical module
 :mod:`dkx.magnetic_geometry`, which mirrors the Fortran v3 ``geometry.F90``
@@ -102,7 +102,7 @@ period factor, matching the Fortran ``boozer_bmnc(m,n)`` convention). The
 covariant components reduce to the flux functions
 :math:`\hat B_\theta = \hat I`, :math:`\hat B_\zeta = \hat G` plus the field-
 period structure, which is why Boozer geometry is the natural setting for the
-drift coefficients and for monoenergetic (``RHSMode>3``) runs.
+drift coefficients and for monoenergetic (``RHSMode=3``) runs.
 
 The retained harmonics follow the **representable-mode policy** imposed by the
 discrete :math:`(\theta,\zeta)` grid, matching the v3 Jacobian assembly at a
@@ -166,10 +166,10 @@ gradient check is in ``examples/autodiff/differentiable_geometry_gradients.py``.
 The ``FluxSurfaceGeometry`` container
 -------------------------------------
 
-The operator does not carry an opaque geometry object; the solve path works with
-explicitly normalized arrays collected in the frozen dataclass
-:class:`dkx.magnetic_geometry.FluxSurfaceGeometry`. Its fields follow the
-SFINCS v3 ``sfincsOutput.h5`` names (``BHat`` :math:`\to` ``b_hat``, ``DHat``
+The solve path works with explicitly normalized arrays, collected in the frozen
+dataclass :class:`dkx.magnetic_geometry.FluxSurfaceGeometry` rather than in an
+opaque geometry object. Its fields follow the SFINCS v3 ``sfincsOutput.h5``
+names (``BHat`` :math:`\to` ``b_hat``, ``DHat``
 :math:`\to` ``d_hat``, ...):
 
 - scalars: ``n_periods``, ``b0_over_bbar``, ``iota``, ``g_hat`` (``GHat``),

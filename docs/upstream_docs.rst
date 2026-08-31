@@ -2,8 +2,8 @@ Upstream SFINCS sources and primary literature
 ==============================================
 
 `dkx` reimplements the radially local, multi-species drift-kinetic model of
-the mature SFINCS code. Rather than vendoring copies of the upstream papers and
-internal technical notes, this documentation transcribes the physics and numerical
+the mature SFINCS code. This documentation does not vendor copies of the upstream
+papers and internal technical notes. It transcribes the physics and numerical
 content that `dkx` depends on into its own pages and cites the primary
 sources below.
 
@@ -33,14 +33,15 @@ operator, the orthogonal-polynomial speed grid, and the geometry/benchmark sourc
 Upstream project (technical notes and manuals)
 ----------------------------------------------
 
-The longer-form SFINCS technical documentation — the version-3 technical notes, the
-single- and multi-species derivations, the Fokker--Planck implementation note, the
+The longer-form SFINCS technical documentation is a set of **unpublished upstream
+project documents**: the version-3 technical notes, the single- and multi-species
+derivations, the Fokker--Planck implementation note, the
 :math:`\Phi_1`/quasineutrality notes, the classical-fluxes and DKES-limit notes, and
-the SFINCS user manual — are **unpublished upstream project documents**. They are not
-redistributed here. Their archival home is the upstream SFINCS project repository:
+the SFINCS user manual. They are not redistributed here. Their archival home is the
+upstream SFINCS project repository:
 
 - `SFINCS project (github.com/landreman/sfincs) <https://github.com/landreman/sfincs>`_
 
 Readers who need the original derivations should consult that repository directly.
-The material that `dkx` actually relies on is reproduced, in original prose,
-on the derived-theory pages linked above.
+The material that `dkx` relies on is reproduced, in original prose, on the
+derived-theory pages linked above.

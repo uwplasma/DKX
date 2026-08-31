@@ -119,7 +119,7 @@ def _validate_native_slice(case: Case) -> None:
             "convergence.enabled",
             True,
             "false for a prescribed-field profile",
-            "Use convergence refinement with workflow = 'ambipolar_profile'; phase-space rung expansion remains a separate dkx.converge workflow.",
+            "Use convergence refinement with workflow = 'ambipolar_profile'. Phase-space refinement of theta, zeta, pitch and speed is a separate study: run `dkx converge CASE`.",
         )
     if (
         case.convergence.retain_legendre_tail

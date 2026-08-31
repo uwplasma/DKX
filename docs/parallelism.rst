@@ -4,7 +4,7 @@ Parallelism
 `dkx` runs on a single node — a multi-core CPU or the node's local GPUs — and
 gets its throughput from two places: batched ``jax.vmap`` over independent
 solves (optionally split across the node's devices) and the structured
-``solvax`` solve tiers underneath. This covers the same physics that SFINCS
+``solvax`` solve routes underneath. This covers the same physics that SFINCS
 Fortran v3 spreads across many nodes with MPI, while keeping the whole path
 differentiable.
 
@@ -29,7 +29,7 @@ Two kinds of parallelism
 Batching independent solves
 ---------------------------
 
-The batched API in ``dkx.batch`` productizes ``jax.vmap`` over solves
+The batched API in ``dkx.batch`` wraps ``jax.vmap`` over solves
 that share a discretization:
 
 .. code-block:: python
@@ -51,11 +51,11 @@ monoenergetic database (``dkx.monoenergetic``) — are exactly the
 parallel-friendly shape.
 
 **Automatic memory budgeting.** There are no sharding environment variables on
-this path. The batch runs in ``jax.lax.map`` chunks sized from the per-solve
-memory footprint of the route the ``auto`` policy actually takes — a solve
-that routes to the memory-lean truncated tier-1 kernel is charged its
-truncated working set, not the full-band factorization peak that route never
-allocates — and the resolved device (or host) memory budget, so only one
+this path. The batch runs in ``jax.lax.map`` chunks sized from two numbers: the
+per-solve memory footprint of the route the ``auto`` policy actually takes, and
+the resolved device (or host) memory budget. A solve that routes to the
+memory-lean truncated structured direct kernel is charged its truncated working
+set, not the full-band factorization peak that route never allocates. Only one
 chunk's intermediates are ever live. ``memory_budget_gb`` overrides the
 resolved budget and is forwarded to each element's solver-route decision as
 well as the outer chunk planner. A tight budget therefore cannot size a small
@@ -73,55 +73,56 @@ batched calls also accept a ``devices`` argument that splits the batch across
 devices: ``devices="auto"`` uses every local device of the default backend
 when more than one is visible, and an explicit sequence of ``jax.Device``
 objects selects a subset. Each device receives a contiguous near-equal shard
-of the batch, runs the same memory-budgeted chunked solve on it — the budget
-bounds each device's chunk, so the auto-chunking arithmetic is per device —
-and the results are gathered on the host in batch order. Anything short of
-two usable devices, or a batch smaller than the device count, degrades to the
-single-device path unchanged, and traced inputs (inside ``jax.jit`` /
-``jax.grad``) fall back to the single-device path, which computes the same
-answer; keep ``devices=None`` on paths meant for tracing. The per-element
-computation is the single-device computation: with matched executed chunk
-widths (an explicit ``max_batch``) the results are bitwise identical across
-device counts, and the identity gate in ``tests/test_batch.py`` verifies
-element-wise identical results for one versus two forced host CPU devices
-(``DKX_CPU_DEVICES=2``), which exercises the same split/placement/gather path
-as two GPUs. Multi-GPU *speedup* validation is pending access to a
-multi-GPU host — the API is measured-correct on multi-device CPU, where no
-speedup is possible (forced host devices share one threadpool) and the split
-costs one extra per-shard dispatch, so the honest CPU expectation is
-neutral-to-slower wall time.
+of the batch and runs the same memory-budgeted chunked solve on it, so the
+budget bounds each device's chunk and the auto-chunking arithmetic is per
+device; the results are gathered on the host in batch order. Three properties
+of that split:
 
-Solve tiers and where the GPU helps
------------------------------------
+- Fewer than two usable devices, or a batch smaller than the device count,
+  degrades to the single-device path unchanged. Traced inputs (inside
+  ``jax.jit`` / ``jax.grad``) fall back to the single-device path too, which
+  computes the same answer; keep ``devices=None`` on paths meant for tracing.
+- The per-element computation is the single-device computation. With matched
+  executed chunk widths (an explicit ``max_batch``) the results are bitwise
+  identical across device counts, and the identity check in
+  ``tests/test_batch.py`` verifies element-wise identical results for one
+  versus two forced host CPU devices (``DKX_CPU_DEVICES=2``), which exercises
+  the same split/placement/gather path as two GPUs.
+- Multi-GPU *speedup* validation is pending access to a multi-GPU host. The API
+  is measured-correct on multi-device CPU, where no speedup is possible (forced
+  host devices share one threadpool) and the split costs one extra per-shard
+  dispatch, so the honest CPU expectation is neutral-to-slower wall time.
 
-Every solve routes through the three ``solvax``-backed tiers selected by the
+Solver routes and where the GPU helps
+-------------------------------------
+
+Every solve takes one of the three ``solvax``-backed routes selected by the
 ``auto`` policy (:doc:`numerics`):
 
-- **Tier 1 — structured direct.** Block-tridiagonal elimination over the
-  Legendre index. For the DKES-trajectory / pitch-angle family the system splits
-  into independent block-tridiagonal systems (one per species and speed node)
-  solved with ``vmap``. This tier is GPU-viable and the one batching
-  accelerates.
-- **Tier 2 — preconditioned recycled Krylov.** Matrix-free FGMRES with subspace
-  recycling, right-preconditioned by an exact tier-1 solve of a simplified
+- **Structured direct.** Block-tridiagonal elimination over the Legendre index.
+  For the DKES-trajectory / pitch-angle family the system splits into
+  independent block-tridiagonal systems (one per species and speed node) solved
+  with ``vmap``. This route is GPU-viable and the one batching accelerates.
+- **Recycled Krylov.** Matrix-free FGMRES with subspace recycling,
+  right-preconditioned by an exact structured direct solve of a simplified
   coarse operator. It carries a recycle pair to warm-start neighbouring points
   in an ``E_r`` scan or a Newton iteration.
-- **Tier 3 — host sparse-direct fallback.** A host sparse factorization for
-  cases the structured tier cannot admit; non-differentiable, used only on
-  ``method="direct"`` or when tier 2 breaches its iteration cap.
+- **Sparse direct.** A host sparse factorization for cases the structured direct
+  route cannot admit; non-differentiable, used only on ``method="direct"`` or
+  when the recycled Krylov route breaches its iteration cap.
 
-Measured in :doc:`performance`: the GPU reaches CPU parity on the **direct**
-tier and runs the **iterative** and small-system paths 2-5x *slower*, because
-those are dominated by serial, dispatch-bound iterations. GPU wins therefore
-come from **batched** direct-tier work, meaning multi-``E_r`` or multi-surface
-sweeps, not from single solves.
+Measured in :doc:`performance`: the GPU reaches CPU parity on the **structured
+direct** route and runs the **iterative** and small-system paths 2-5x *slower*,
+because those are dominated by serial, dispatch-bound iterations. GPU wins
+therefore come from **batched** structured direct work, meaning multi-``E_r`` or
+multi-surface sweeps, not from single solves.
 
-Subsystem batching within a tier-1 solve
-----------------------------------------
+Subsystem batching within a structured direct solve
+---------------------------------------------------
 
-The truncated tier-1 kernel eliminates ``B = n_species * n_x`` independent
-``(species, x)`` subsystems. ``solve(subsystem_batch=...)`` sets how many it
-eliminates concurrently. An integer fixes the width (clamped to ``[1, B]``;
+The truncated structured direct kernel eliminates ``B = n_species * n_x``
+independent ``(species, x)`` subsystems. ``solve(subsystem_batch=...)`` sets how
+many it eliminates concurrently. An integer fixes the width (clamped to ``[1, B]``;
 ``1`` is the fully serial, minimum-memory sweep), and any width computes
 identical per-subsystem arithmetic — the knob trades memory for batched
 parallel work, so the CPU path is byte-identical to the serial sweep.
@@ -139,7 +140,7 @@ parallel work, so the CPU path is byte-identical to the serial sweep.
   the memory budget, because batching raises device occupancy there while the
   budget clamp bounds the working set.
 
-The knob is ignored by the non-truncated tiers.
+The knob is ignored by the non-truncated routes.
 
 CPU threads
 -----------
@@ -155,22 +156,24 @@ thread control must be in place **before JAX is imported**; the CLI
 ``DKX_CORES=N`` pins the solver threadpool to ``N`` threads (applied as
 ``NPROC``, the variable XLA reads, plus the host BLAS OpenMP/OpenBLAS pools);
 ``DKX_CORES=0`` lets XLA size the threadpool itself; when unset the
-threadpool is clamped to ``min(8, cpu_count)``. The measured optimum is 4-8
-threads on both a 10-core laptop and a 36-core workstation: tier-1 thread
-scaling saturates near 2-2.5x and **inverts** beyond the optimum on wide
-machines. On the 36-core workstation the mid HSX deck (336,610 unknowns) warm
-tier-1 solve measures 9.7 s at 1 thread, 7.8 s at 2, 5.6 s at 4, and 4.87 s at
-8 threads — the optimum, a 1.99x speedup at 25% parallel efficiency — then
-rises back to 12.2 s at 16, 56.6 s at 32, and 29.3 s at the full 36. The
-operator build stays flat near 8 s at every core count, so the inversion is
-entirely the XLA fork-join overhead over the sequential Legendre-block sweep
-once the pool is too wide (the wide-pool tail carries large run-to-run
-variance). The guidance on many-core hosts is to set ``--cores`` to
-roughly 4-8, not to ``nproc``. ``DKX_CPU_DEVICES`` is a separate, explicit
-opt-in that forces multiple host *devices* for multi-device CPU tests; forced
-host devices share one threadpool, so it is not a performance knob. Full
-semantics and defaults are in the environment-variable reference
-(:doc:`usage`).
+threadpool is clamped to ``min(8, cpu_count)``.
+
+The measured optimum is 4-8 threads on both a 10-core laptop and a 36-core
+workstation: structured direct thread scaling saturates near 2-2.5x and
+**inverts** beyond the optimum on wide machines. On the 36-core workstation the
+mid HSX deck (336,610 unknowns) warm structured direct solve measures 9.7 s at
+1 thread, 7.8 s at 2, 5.6 s at 4, and 4.87 s at 8 threads — the optimum, a 1.99x
+speedup at 25% parallel efficiency — then rises back to 12.2 s at 16, 56.6 s at
+32, and 29.3 s at the full 36. The operator build stays flat near 8 s at every
+core count, so the inversion is entirely the XLA fork-join overhead over the
+sequential Legendre-block sweep once the pool is too wide (the wide-pool tail
+carries large run-to-run variance). The guidance on many-core hosts is to set
+``--cores`` to roughly 4-8, not to ``nproc``.
+
+``DKX_CPU_DEVICES`` is a separate, explicit opt-in that forces multiple host
+*devices* for multi-device CPU tests; forced host devices share one threadpool,
+so it is not a performance knob. Full semantics and defaults are in the
+environment-variable reference (:doc:`usage`).
 
 Multi-host execution
 --------------------
@@ -194,5 +197,5 @@ decomposition. `dkx` targets a single node — a multi-core CPU or one GPU
 independent solves, subspace recycling across neighbouring points, and exact
 gradients that replace finite-difference scans in optimization. Parallel paths
 call the same matrix-free operators as the sequential path, so outputs stay
-bit-compatible up to floating-point reduction order and a parallel run is a
-referee for a serial one.
+bit-compatible up to floating-point reduction order and a parallel run is an
+independent cross-check of a serial one.

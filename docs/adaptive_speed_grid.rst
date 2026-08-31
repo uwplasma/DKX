@@ -1,5 +1,5 @@
-Speed grids (canonical) and the retired adaptive-map research lane
-==================================================================
+Speed grids (canonical) and the retired adaptive-map research topic
+===================================================================
 
 Canonical speed grids
 ---------------------
@@ -14,13 +14,14 @@ The polynomial x-grid kernel consumed by the collision operators lives in
 ``tests/test_output_h5_xgrid_schemes_parity.py`` and the phase-space unit
 tests.
 
-Retired research lane
----------------------
+Retired research topic
+----------------------
 
 The differentiable adaptive-map primitives (monotone maps
 ``x = g_theta(eta)`` with positive Jacobians, the opt-in ``xGridScheme = 50``
 construction, and the mapped-grid transport-evidence workflow) were research
 material hosted by the legacy ``discretization``/``workflows.mapped_xgrid``
-owners. They were deleted with the legacy pipeline; the lane is preserved in
-git history and may return through :doc:`research_lanes` gates as a
-differentiable-grid optimization workflow on the canonical stack.
+owners. They were deleted with the legacy pipeline; the topic is preserved in
+git history and may return through the checks recorded in
+:doc:`research_lanes` as a differentiable-grid optimization workflow on the
+canonical stack.

@@ -3,25 +3,25 @@
 Archived NTX RHSMode=1 Handoff
 ==============================
 
-This page is archived for provenance. The active DKX release plan no
-longer treats the NTX/NEOPAX profile-current ladder as a DKX blocking
-lane; downstream NTX collaborators are continuing that workflow in the NTX
+This page is archived for provenance. The active DKX release plan does not
+treat the NTX/NEOPAX profile-current ladder as a DKX release blocker;
+downstream NTX collaborators are continuing that workflow in the NTX
 repository. The solver-policy and output-observability changes recorded here
 remain useful for DKX production finite-beta/profile-current runs.
 
-This page records the DKX state that should be used by the NTX
-finite-beta profile-current lane after the RHSMode=1 solver-policy audit.
-It is intentionally operational: commands, expected solver metadata, and the
-remaining physics caveat are listed in the same place.
+It records the DKX state that the NTX finite-beta profile-current work should
+use after the RHSMode=1 solver-policy audit, and is intentionally operational:
+commands, expected solver metadata, and the remaining physics caveat are listed
+in the same place.
 
 Status on 2026-05-01
 --------------------
 
 The collaborator-reported runtime cliff for finite-beta RHSMode=1 constrained
 PAS profile-current decks is closed for the validated non-differentiable CPU
-lane.  Large constrained-PAS decks in the validated size window route from
-``solve_method=auto`` to sparse-preconditioned GMRES instead of the older
-matrix-free/PAS fallback that could stall near an ``O(1e-2)`` true residual.
+path.  Large constrained-PAS decks in the validated size window route from
+``solve_method=auto`` to sparse-preconditioned GMRES instead of the archived
+matrix-free/PAS fallback, which could stall near an ``O(1e-2)`` true residual.
 
 The validated NTX ``17 x 21 x 12, Nx=5`` deck completes through the default
 CLI path in about ``7 s`` on the local CPU, with peak RSS about
@@ -81,8 +81,8 @@ What Is Closed
   row-density counters, sparse-pattern build time, and sparse preconditioner
   factorization time.  This makes NTX profile-current handoffs auditable without
   reopening a full Perfetto/XPlane trace.
-- The default large constrained-PAS RHSMode=1 CPU policy no longer chooses the
-  slow residual-stalling path in the validated NTX size window.
+- The default large constrained-PAS RHSMode=1 CPU policy avoids the slow
+  residual-stalling path in the validated NTX size window.
 - The sparse-PC path converges the same algebraic system to true residuals near
   roundoff on the ``17 x 21 x 12, Nx=5`` deck.
 - The ``25 x 31 x 17, Nx=11`` production-resolution NTX deck completes locally
@@ -101,16 +101,16 @@ DKX sparse-PC branch matches the clean PETSc sparse-matrix branch, but
 some MUMPS/SuperLU_DIST Fortran artifacts and Redl/NTX+NEOPAX comparisons use
 different nullspace/reference branches for the profile-current observable.
 
-Before promoting this lane as a publication parity result, NTX and DKX
+Before promoting this comparison as a publication parity result, NTX and DKX
 should pin the physical branch by rerunning the radial/profile ladder with:
 
 - the same finite-beta VMEC geometry,
 - the same species/profile/gradient normalization contract,
 - the same RHSMode=1 current observable,
-- a converged true residual gate in the output metadata,
+- a converged true-residual check in the output metadata,
 - and an explicit comparison to Redl and NTX+NEOPAX current profiles.
 
 The GPU-native RHSMode=1 path is also not promoted by this handoff.  The
-validated fix is the non-differentiable CPU sparse-PC production lane.  GPU
-kernel-level work should be treated as a separate profiling and robustness
+validated fix is the non-differentiable CPU sparse-PC production path.  GPU
+kernel-level work should be treated as a separate profiling and reliability
 campaign.

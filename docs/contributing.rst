@@ -7,7 +7,7 @@ documentation are expected to evolve together.
 Repository layout
 -----------------
 
-- `dkx/`: Python package code
+- `src/dkx/`: Python package code
 - `tests/`: unit tests and frozen reference fixtures (including some PETSc binaries)
 - `examples/`: pedagogic scripts organized by workflow category
 - `docs/`: Sphinx docs (Read the Docs compatible)
@@ -44,7 +44,7 @@ At minimum, contributors should run:
    sphinx-build -W -b html docs docs/_build/html
 
 If a change touches performance-sensitive logic, also run the relevant benchmark or
-example-case gate and update the documented results when needed.
+example-case check and update the documented results when needed.
 
 
 Figures
@@ -59,7 +59,7 @@ displayed figure to the checked-in script that produces it, and
 * an entry naming a script that does not exist fails the suite;
 * the number of figures with no identifiable generator is a **ratchet** -- it
   may fall and may not rise, so a new figure has to arrive with its generator
-  even though sixteen older ones are still unresolved.
+  even though sixteen earlier ones remain unresolved.
 
 To add a figure: write the script that produces it under ``examples/`` or
 ``tools/``, add the entry, then reference the file from the page.  To pay down

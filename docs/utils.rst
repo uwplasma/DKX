@@ -15,17 +15,16 @@ Execution mode
 --------------
 
 Use the normal solver path to produce the output file. CLI runs are
-performance-oriented by default; Python workflows can request differentiable
-paths explicitly when a gradient calculation is required:
+performance-oriented by default:
 
 .. code-block:: bash
 
    dkx write-output --input input.namelist --out sfincsOutput.h5
    dkx postprocess-upstream --case-dir . --util sfincsPlot -- --save-prefix /tmp/sfincsPlot
 
-For differentiable Python workflows, use the pure canonical APIs
-(:func:`dkx.solve.solve` with ``differentiable=True``) before
-post-processing the resulting HDF5 file.
+A Python workflow that needs a gradient requests the differentiable path
+explicitly: call the pure canonical APIs (:func:`dkx.solve.solve` with
+``differentiable=True``) before post-processing the resulting HDF5 file.
 
 .. note::
    The export‑f grid uses the **full internal grids**. ``sfincsPlotF``
@@ -50,9 +49,8 @@ Scan:
    dkx scan-er --input input.namelist --out scan_er
    dkx postprocess-upstream --case-dir scan_er --util sfincsScanPlot_2 -- --save /tmp/scan_er.png
 
-The following sections document each script and show compact checked figures
-from the documentation static assets. The supported user entry point is the
-``dkx postprocess-upstream`` command shown above.
+The sections below document each script and show compact checked figures from
+the documentation static assets.
 
 Scan directives (``!ss``)
 -------------------------

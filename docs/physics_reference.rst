@@ -5,8 +5,8 @@ This page is the physics reference for the canonical `dkx` stack. It
 derives the radially local, linearized drift-kinetic equation (DKE) that the
 code solves, states the SFINCS normalization conventions, and maps every term
 onto the module that implements it. The equations quoted here are the forms the
-code assembles (the implementing module and operator are named in the *Where in
-the code* boxes), not a paraphrase of an external note.
+code assembles; the *Where in the code* boxes name the implementing module and
+operator for each one.
 
 For textbook background see Helander & Sigmar, *Collisional Transport in
 Magnetized Plasmas* (2002); for the SFINCS model specifically see
@@ -213,9 +213,10 @@ reduces to the collisionless streaming/mirror plus collisions.
 
 .. admonition:: Where in the code
 
-   ``KineticOperator._er_xidot`` and ``_er_xdot``. The trajectory model is therefore encoded entirely by
-   three flags: ``useDKESExBDrift`` (DKES :math:`E\times B`),
-   ``includeElectricFieldTermInXiDot``, and ``includeXDotTerm``. The tangential
+   ``KineticOperator._er_xidot`` and ``_er_xdot``. The trajectory model is
+   therefore encoded entirely by three flags: ``useDKESExBDrift``
+   (DKES :math:`E\times B`), ``includeElectricFieldTermInXiDot``, and
+   ``includeXDotTerm``. The tangential
    *magnetic* drift terms (``magneticDriftScheme`` 1--9, matching the Fortran
    ``select case`` blocks) are assembled in ``drift_kinetic.py``; the ``full``
    trajectory here means the full :math:`E_r` terms.
@@ -286,7 +287,7 @@ function and the Chandrasekhar function
 
    \Psi(x) = \frac{\operatorname{erf}(x) - \frac{2}{\sqrt\pi}\,x\,e^{-x^2}}{2x^2}.
 
-PAS is block-diagonal in :math:`L`, which is what makes the tier-1 structured
+PAS is block-diagonal in :math:`L`, which is what makes the structured direct
 solve applicable (:doc:`numerics`).
 
 .. admonition:: Where in the code
@@ -392,11 +393,11 @@ map is differentiable through the implicit-function theorem.
 
    The quasineutrality rows and the :math:`\langle\Phi_1\rangle=0` Lagrange row
    are ``KineticOperator._quasineutrality_rows``; the
-   :math:`\Phi_1`-in-kinetic coupling is ``_add_phi1_in_kinetic``; the :math:`\Phi_1`-in-collision poloidal density
-   factor :math:`n_s e^{-Z_s\alpha\Phi_1/\hat T_s}` is applied in ``apply_f``.
+   :math:`\Phi_1`-in-kinetic coupling is ``_add_phi1_in_kinetic``; the
+   :math:`\Phi_1`-in-collision poloidal density factor
+   :math:`n_s e^{-Z_s\alpha\Phi_1/\hat T_s}` is applied in ``apply_f``.
    The nonlinear Newton driver is :func:`dkx.phi1.solve_phi1`, with the
-   differentiable variant
-   :func:`dkx.phi1.phi1_state`. ``readExternalPhi1`` treats
+   differentiable variant :func:`dkx.phi1.phi1_state`. ``readExternalPhi1`` treats
    :math:`\Phi_1` as a fixed external field: a linear solve (no Newton
    iteration) routed through :func:`dkx.run.run_profile`.
 
@@ -425,7 +426,7 @@ These are the ``particleFlux_vm_psiHat`` / ``heatFlux_vm_psiHat`` outputs. The
 ``_vm0`` variants use only :math:`f_{s0}`; the :math:`E\times B` flux family
 (``_vE``) uses the analogous factor
 :math:`(\hat B_\theta\,\partial_\zeta\Phi_1 - \hat B_\zeta\,\partial_\theta\Phi_1)/\hat B^2`
-(note the :math:`\hat B^2` denominator, a genuine physical difference from the
+(the :math:`\hat B^2` denominator here is a genuine physical difference from the
 magnetic-drift :math:`\hat B^3`).
 
 Parallel flow and bootstrap current. The :math:`L=1` moment gives the parallel
@@ -449,10 +450,10 @@ columns and assembles :math:`L_{ij}` mapping the thermodynamic forces (radial
 gradient drive, parallel electric field) to the responses (radial flux, parallel
 flow). The shared :math:`\hat g_+ = \hat G + \iota\hat I` and
 :math:`b_0/\hat G^2` normalization structure is what enforces the Onsager
-symmetry :math:`L_{12}=L_{21}`; the ``examples/transport/transport_coefficients.py`` script
-prints the measured Onsager asymmetry as a check. The classic result is that in
-a non-axisymmetric field the radial coefficient :math:`L_{11}` (:math:`D_{11}`-
-like) grows like :math:`1/\nu` at low collisionality:
+symmetry :math:`L_{12}=L_{21}`. The ``examples/transport/transport_coefficients.py``
+script prints the measured Onsager asymmetry as a check. The classic result is
+that in a non-axisymmetric field the radial coefficient :math:`L_{11}`
+(:math:`D_{11}`-like) grows like :math:`1/\nu` at low collisionality:
 
 .. figure:: _static/figures/docs/transport_coeff_vs_collisionality.png
    :alt: Monoenergetic transport coefficients versus normalized collisionality for a three-helicity model field.
@@ -468,8 +469,9 @@ like) grows like :math:`1/\nu` at low collisionality:
 
 .. admonition:: Where in the code
 
-   Magnetic-drift fluxes: :func:`dkx.moments.vm_flux_moments`; RHSMode-1 per-species table including ``FSABjHat`` and
-   ``FSABFlow``: :func:`dkx.moments.rhsmode1_moments`;
+   Magnetic-drift fluxes: :func:`dkx.moments.vm_flux_moments`; RHSMode-1
+   per-species table including ``FSABjHat`` and ``FSABFlow``:
+   :func:`dkx.moments.rhsmode1_moments`;
    :math:`E\times B` flux: ``electric_drift_flux_moments``;
    transport matrix: :func:`dkx.moments.transport_matrix_from_flux_arrays`.
 

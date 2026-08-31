@@ -1,8 +1,10 @@
 Validation Matrix
 =================
 
-This page tracks the publication-facing validation lanes for ``dkx``. The goal
-is to connect each physics claim or benchmark figure to:
+This page tracks the publication-facing validation entries for ``dkx``. A
+validation entry is one self-contained line of validation work: its scripts,
+artifacts, tests, and pass/fail criteria. Each entry connects a physics claim or
+benchmark figure to:
 
 - a literature anchor,
 - the script or workflow that generates it,
@@ -16,28 +18,28 @@ The corresponding machine-readable manifest lives in:
 
 - ``tools/publication_figures/validation_manifest.json``
 
-That file is the stable spine for:
+It holds one record per validation entry, and is the stable spine for:
 
 - future manuscript figure generation,
 - reproducible benchmark reruns,
-- and test/benchmark dashboards that distinguish implemented release lanes from
-  deferred post-release research lanes.
+- and test/benchmark dashboards that separate implemented release entries from
+  deferred post-release research topics.
 
-Each manifest lane carries explicit research gates:
+Each manifest entry carries explicit research criteria:
 
-- ``source_code``: the implementation files that define the lane,
-- ``tests``: the tests that protect the lane or its scaffold,
-- ``acceptance_gates``: the concrete criteria required before the lane can support a
+- ``source_code``: the implementation files that define the entry,
+- ``tests``: the tests that protect the entry or its scaffold,
+- ``acceptance_gates``: the concrete criteria required before the entry can support a
   manuscript or release claim.
 - ``release_gate``: the release-facing claim status, evidence level, nonblocking
-  release decision, and promotion gate for the lane.
+  release decision, and ``promotion_gate`` for the entry.
 
 The schema is enforced by ``tests/test_validation_manifest_schema.py``. Implemented
-release lanes must point to existing scripts, artifacts, source files, and tests.
-Deferred post-release lanes are closed for the tagged release but retain literature
+release entries must point to existing scripts, artifacts, source files, and tests.
+Deferred post-release entries are closed for the tagged release but retain literature
 anchors, implementation targets, tests, and acceptance criteria so follow-up research
 work is not lost. ``python -m tools.release.release check-gates`` applies the same path
-hygiene to deferred lanes: listed source files, tests, scripts, and artifacts must
+hygiene to deferred entries: listed source files, tests, scripts, and artifacts must
 exist even when the claim status is ``closed_deferred``.
 
 Release claim gate metadata
@@ -48,20 +50,20 @@ Every manifest record has a ``release_gate`` block checked by
 The allowed ``claim_status`` values are:
 
 - ``release_ready``: checked-in artifacts support the documented release-scope
-  claim, and the listed tests are the fast gate for that claim.
+  claim, and the listed tests are the fast check for that claim.
 - ``regression_scaffold``: checked-in bounded artifacts are useful for CI,
   branch validation, or manuscript layout, but a broader/full-resolution claim is
   intentionally not being made.
 - ``bounded_proxy``: checked-in artifacts support a narrower proxy or
   normalization claim, while the corresponding full literature reproduction stays
-  closed until its promotion gate is met.
-- ``closed_deferred``: the lane is explicitly closed for the tagged release as
+  closed until its ``promotion_gate`` is met.
+- ``closed_deferred``: the entry is explicitly closed for the tagged release as
   post-release or nightly research work.
 
-No manifest lane may set ``blocks_current_release=true`` unless the release
-process intentionally stops on that lane. A lane that is not ready must
+No manifest entry may set ``blocks_current_release=true`` unless the release
+process intentionally stops on that entry. An entry that is not ready must
 therefore be either absent from the release manifest or recorded as
-``closed_deferred`` with a concrete reason and promotion gate. This prevents
+``closed_deferred`` with a concrete reason and ``promotion_gate``. This prevents
 scaffold scripts, run plans, or proxy figures from being mistaken for closed
 publication evidence.
 
@@ -72,18 +74,18 @@ The release is shippable only for the documented release-ready and bounded-proxy
 claims. Production-resolution QI CPU/GPU seed ladders, true differentiable
 device-QI closure, and single-case multi-device strong scaling are not release
 blockers because they are explicitly scoped as bounded or deferred research
-lanes. They should be promoted only after checked artifacts satisfy the listed
-residual, output, trace, parity, and scaling gates.
+topics. They should be promoted only after checked artifacts satisfy the listed
+residual, output, trace, parity, and scaling checks.
 
 Implemented literature reproductions
 ------------------------------------
 
-These lanes already have scripts and figure artifacts in the repository.
+These entries already have scripts and figure artifacts in the repository.
 
 Matched full-kinetic SFINCS profile
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The first independent full-Fokker--Planck profile rung uses the exact checked
+The first independent full-Fokker--Planck profile comparison uses the exact checked
 ``validation/inputs/tokamak_full_fp_{high,ultra}.input.namelist`` decks in both
 DKX and pinned SFINCS v3. The case is an analytic axisymmetric tokamak surface
 with physical density and temperature gradients, full trajectories, zero
@@ -91,7 +93,7 @@ electric field, and the recommended automatic full-FP constraint.
 
 The machine-readable evidence is
 ``validation/full_kinetic_sfincs_v1.json``. Re-audit its decks, compact outputs,
-convergence arithmetic, residual gates, and claim boundary with:
+convergence arithmetic, residual checks, and claim boundary with:
 
 .. code-block:: console
 
@@ -109,22 +111,22 @@ convergence arithmetic, residual gates, and claim boundary with:
      - ``0.042%``
    * - heat-flux movement
      - ``0.280%``
-   * - largest scaled DKX/SFINCS difference at the finest rung, across nonzero
-       scalar and speed-resolved observables
+   * - largest scaled DKX/SFINCS difference at the finest refinement level,
+       across nonzero scalar and speed-resolved observables
      - ``2.69e-10``
    * - completed true residuals
      - below ``1.82e-11``
 
 Particle flux and NTV vanish by axisymmetric cancellation at the
-checked accuracy, so their gate is the recorded ``1e-12`` absolute scale rather
-than a meaningless relative error.
+checked accuracy, so their acceptance criterion is the recorded ``1e-12``
+absolute scale rather than a meaningless relative error.
 
 The reference build is the pinned SFINCS commit with PETSc 3.23.6 and MUMPS
 5.8.1; both MUMPS and SuperLU_DIST are detected at runtime and MUMPS is selected.
 No scientific SFINCS source edits or link stubs are used. Timing and memory are
 retained for reproduction, not for a cross-code performance claim. Multispecies
 and stellarator full-FP physics, finite electric field, Phi1, ambipolar roots,
-and experimental agreement remain separate gates.
+and experimental agreement remain separate checks.
 
 Matched finite-Er full-kinetic profile
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -154,10 +156,10 @@ the comparison by passing the artifact to the shared command above.
      - below ``5.25e-11``
 
 Axisymmetric intrinsic ambipolarity makes summed particle flux and NTV
-cancellation-level quantities, so their acceptance gate is ``2e-11`` absolute.
-This is a prescribed-field surface comparison, not an electric-field scan or
-ambipolar-root validation. The separate zero-field stellarator full-FP lane is
-recorded below.
+cancellation-level quantities, so their acceptance criterion is ``2e-11``
+absolute. This is a prescribed-field surface comparison, not an electric-field
+scan or ambipolar-root validation. The separate zero-field stellarator full-FP
+entry is recorded below.
 
 Matched stellarator full-kinetic profile
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -180,31 +182,31 @@ field, automatic constraint 1, and a ``1e-12`` solver tolerance.
      - 87,887 -> 155,994 unknowns
    * - largest high-to-ultra movement
      - ``0.444%``
-   * - finest-rung flow, particle and heat flux, NTV and retained speed
-       spectra, scaled agreement
+   * - flow, particle and heat flux, NTV and retained speed spectra at the
+       finest refinement level, scaled agreement
      - ``1.37e-8``
    * - completed true residuals
      - below ``1.82e-12``
 
 That largest scaled difference is NTV, and corresponds to an absolute
-difference of about ``8.31e-13``. Momentum flux is retained as a near-zero absolute gate rather
-than assigned an unstable relative error.
+difference of about ``8.31e-13``. Momentum flux is retained as a near-zero
+absolute criterion rather than assigned an unstable relative error.
 
 The artifact pins the SFINCS commit, MUMPS-enabled build, Boozer source path
 and checksum, exact decks, raw and compact outputs, logs, solver traces,
 cold/warm DKX timing, SFINCS timing, and process memory. These measurements are
 reproduction provenance, not a cross-code performance claim. This one-species
 surface comparison is not an Er scan, ambipolar-profile, Phi1, experimental,
-or second-stellarator-family full-FP certificate.
+or second-stellarator-family full-FP validation.
 
-Whole-profile ambipolar certificate from a case file
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Whole-profile ambipolar evidence from a case file
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 ``validation/native_ambipolar_profile_v1.json`` records the admitted case-file
-workflow as a separate evidence lane. The portable checked TOML drives five
+workflow as a separate validation entry. The portable checked TOML drives five
 W7-X standard-configuration surfaces with physical hydrogen/electron profiles,
 PAS collisions, DKES drifts, bounded midpoint refinement, all-root search, and
-radial branch continuation. Recompute every compact gate with:
+radial branch continuation. Recompute every compact check with:
 
 .. code-block:: console
 
@@ -221,7 +223,7 @@ The artifact pins the portable input, geometry, cold/warm DKX NetCDF,
 compact profile, commit, environment, timing, and process-memory evidence.
 Passing ``--results-root`` additionally verifies the external files and exact
 cold/warm scientific-array identity. The warm process was 0.15% slower, so no
-cache-speedup claim is made. This is a PAS/DKES workflow certificate, not
+cache-speedup claim is made. This is a PAS/DKES workflow record, not
 phase-space-convergence, continuously localized bifurcations, experiment,
 full-Fokker--Planck or independent ambipolar validation, Phi1, or a second
 stellarator-family claim.
@@ -242,15 +244,15 @@ The three resolutions are ``(13, 31, 32, 5)``, ``(15, 37, 36, 6)``, and
 ``(17, 37, 40, 6)`` in theta, zeta, pitch, and speed. Root counts remain
 ``[1, 1, 3, 1, 1]`` with identical classifications, branch identities, and
 selected branches. Reference-to-fine movement nevertheless fails the unchanged
-root and observable gates:
+root and observable criteria:
 
-.. list-table:: Reference-to-fine movement against its gates
+.. list-table:: Reference-to-fine movement against its thresholds
    :header-rows: 1
    :widths: 34 28 20 14
 
    * - quantity
      - movement
-     - gate
+     - threshold
      - result
    * - ambipolar root
      - ``1.6259765625 kV/m``
@@ -270,10 +272,10 @@ root and observable gates:
      - pass
 
 The auditable outcome is ``refinement_exhausted``. This negative result
-prevents promotion of the workflow certificate to phase-space-converged
-validation. The fine rung only refines theta and pitch beyond the reference;
-zeta/speed convergence, independent full-Fokker--Planck ambipolar comparison,
-experiment, and cross-code performance remain separate gates.
+prevents promotion of the workflow record to phase-space-converged
+validation. The fine refinement level only refines theta and pitch beyond the
+reference; zeta/speed convergence, independent full-Fokker--Planck ambipolar
+comparison, experiment, and cross-code performance remain separate checks.
 
 Theta/pitch resolution diagnosis
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -310,7 +312,7 @@ pitch-only ``(15, 37, 40, 6)``, then extends the fixed-theta pitch sequence to
      - ``14.07%``
 
 Pitch40 is the dominant failed direction. Pitch40-to-pitch44 does not approach
-the gates.
+the thresholds.
 
 All topology and accepted true-residual checks pass, but the pitch44 process
 reached a ``22,275,409,800 B`` footprint on the 24 GiB host. The artifact
@@ -356,7 +358,7 @@ This admitted route makes a bounded uniform pitch-22/26/30 diagnostic possible,
 but it does not make the physics converged. Root counts change
 ``[3, 1, 1] -> [1, 1, 1] -> [1, 3, 1]``.
 
-.. list-table:: Adjacent-rung movement, uniform pitch 22/26/30
+.. list-table:: Adjacent-level movement, uniform pitch 22/26/30
    :header-rows: 1
    :widths: 38 26 26
 
@@ -370,10 +372,10 @@ but it does not make the physics converged. Root counts change
      - ``55.72%``
      - ``45.25%``
 
-All accepted true residuals remain below
-``5.65e-14``, so the artifact truthfully records ``refinement_exhausted``,
+All accepted true residuals remain below ``5.65e-14``, so the artifact
+truthfully records ``refinement_exhausted``,
 rejects a uniform pitch-34-or-higher escalation, and leaves speed-node-local,
-zeta, speed, independent-code, experiment, full-FP, and Phi1 gates open.
+zeta, speed, independent-code, experiment, full-FP, and Phi1 checks open.
 
 Fixed-work pitch-by-speed diagnosis
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -399,7 +401,7 @@ surfaces.
      - ``[4,5,11,25,44,44]``
      - 133
 
-Audit the checksums, extraction, comparisons, and gates with:
+Audit the checksums, extraction, comparisons, and acceptance criteria with:
 
 .. code-block:: console
 
@@ -423,15 +425,14 @@ Root counts change ``[3,1] -> [1,3] -> [1,1]``.
 
 Uniform-to-linear keeps the intermediate-speed group fixed at 44 modes. The
 linear-to-quadratic redistribution also changes topology. All accepted
-residuals stay
-below ``7.04e-14`` and all measured footprints below 4.14 GB. The quadratic
-cold/warm scientific arrays are exact except for their timing field; the warm
-run is slower and supports no cache-speedup claim.
+residuals stay below ``7.04e-14`` and all measured footprints below 4.14 GB.
+The quadratic cold/warm scientific arrays are exact except for their timing
+field; the warm run is slower and supports no cache-speedup claim.
 
 The diagnostic is complete but phase-space convergence is false. The next
 bounded pair must hold high-speed work fixed while separating low from
 intermediate sensitivity. Zeta, speed, independent-code, experiment, full-FP,
-Phi1, and performance gates remain open.
+Phi1, and performance checks remain open.
 
 Explicit fixed-high-work pitch diagnosis
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -477,15 +478,14 @@ pair. Pairwise movements nevertheless reach the following:
      - ``9.08%``
 
 Every new evaluation uses the bounded structured route, accepted residuals stay
-below
-``3.05e-14``, and measured footprints stay below 4.01 GB. The retained
+below ``3.05e-14``, and measured footprints stay below 4.01 GB. The retained
 intermediate-heavy replay is scientifically exact except for timing, but no
 warm-speedup claim is supported.
 
 The outcome is ``refinement_exhausted``, not phase-space convergence. The next
 bounded diagnostic must raise low and intermediate work together while holding
 the high-speed group fixed. Zeta, speed, independent-code, experiment,
-full-FP, Phi1, and performance gates remain open.
+full-FP, Phi1, and performance checks remain open.
 
 Publication validation dashboard
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -543,18 +543,22 @@ Artifacts:
    plotted bars show wall-clock runtime and active solver memory for SFINCS
    Fortran v3, ``dkx`` CPU cold/warm, and ``dkx`` GPU cold/warm
    across the reference-runtime-window rows whose Fortran v3 reference runtime
-   is at least ``10 s``. The summary JSON records which frozen rows are excluded
-   from public performance claims until production-resolution reruns exist. JAX active memory subtracts the fixed Python/JAX/XLA runtime
-   baseline using profiler RSS deltas while preserving full process RSS in the
-   JSON audit fields. Cases are ordered by best warm ``dkx`` speedup over the
-   Fortran v3 runtime. The acceptance tests require all 39 audited cases to remain
+   is at least ``10 s``. Cases are ordered by best warm ``dkx`` speedup over the
+   Fortran v3 runtime.
+
+   JAX active memory subtracts the fixed Python/JAX/XLA runtime baseline using
+   profiler RSS deltas while preserving full process RSS in the JSON audit
+   fields. The acceptance tests require all 39 audited cases to remain
    ``parity_ok`` on both backends, with zero strict mismatches and no
-   ``jax_error`` or ``max_attempts`` failures. Absolute runtime, memory, ratios,
-   top offenders, warm timing-source counts, and the excluded short-reference
-   rows are recomputed from the checked-in reports and stored in the JSON summary
-   for manuscript tables and regression triage. The excluded short-reference
-   rows remain CI parity/smoke checks until rerun at production-comparison
-   resolution.
+   ``jax_error`` or ``max_attempts`` failures.
+
+   The summary JSON records which frozen rows are excluded from public
+   performance claims until production-resolution reruns exist. Absolute
+   runtime, memory, ratios, top offenders, warm timing-source counts, and the
+   excluded short-reference rows are recomputed from the checked-in reports and
+   stored in the JSON summary for manuscript tables and regression triage. The
+   excluded short-reference rows remain CI parity/smoke checks until rerun at
+   production-comparison resolution.
 
 SFINCS 2014 collisionality figures
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -616,7 +620,7 @@ Corrected bounded branch artifacts:
 
    Corrected bounded LHD collisionality rerun with the guarded scan-input writer.
    This artifact resolves the expected FP/PAS separation and is backed by direct
-   JSON-based assertions, but it is a bounded fast branch lane rather than the
+   JSON-based assertions, but it is a bounded fast branch artifact rather than the
    final audited paper figure.
 
 - bounded corrected W7-X summary:
@@ -629,7 +633,7 @@ Corrected bounded branch artifacts:
    :width: 85%
 
    Corrected bounded W7-X collisionality rerun after fixing the scan-input writer.
-   This lane also resolves clean FP/PAS separation and is light enough for branch-level
+   This rerun also resolves clean FP/PAS separation and is light enough for branch-level
    validation, but it remains a bounded fast artifact rather than the final audited
    paper figure.
 
@@ -641,11 +645,11 @@ Literature anchors:
 - `Paul et al. 2019 adjoint optimization <https://arxiv.org/abs/1904.06430>`_
 - `APS adjoint optimization abstract <https://meetings-archive.aps.org/dpp/2018/bp11/36/>`_
 
-Current script:
+Script:
 
 - ``tools/publication_figures/generate_autodiff_sensitivity_validation.py``
 
-Current artifacts:
+Artifacts:
 
 - ``tools/publication_figures/artifacts/dkx_autodiff_sensitivity_validation_summary.json``
 - ``docs/_static/figures/paper/dkx_autodiff_gradient_check.png``
@@ -653,7 +657,7 @@ Current artifacts:
 - ``docs/_static/figures/paper/dkx_autodiff_sensitivity_map.png``
 - ``docs/_static/figures/paper/dkx_autodiff_sensitivity_map.pdf``
 
-Fortran-v3 RHSMode 4/5 source-contract gates:
+Fortran-v3 RHSMode 4/5 source-contract checks:
 
 - ``dkx.sensitivity.validate_fortran_v3_adjoint_sensitivity_constraints``
   mirrors the source-code restrictions from ``validateInput.F90`` for adjoint
@@ -666,7 +670,7 @@ Fortran-v3 RHSMode 4/5 source-contract gates:
   required RHSMode=4/5 field names and tensor ranks against either HDF5-like
   arrays or lightweight JSON summaries.
 - ``tests/test_sensitivity.py`` checks valid and invalid RHSMode 4/5 decks,
-  including the Fortran source-code gate that writes ``dParallelFlowdLambda``
+  including the Fortran source-code condition that writes ``dParallelFlowdLambda``
   from ``adjointParticleFluxOption`` or ``debugAdjoint``.
 - ``tests/fixtures/fortran_v3_reference_fixture.json`` contains compact
   RHSMode=4/5 reference summaries and embedded namelist text. The checked
@@ -701,16 +705,16 @@ Fortran-v3 RHSMode 4/5 source-contract gates:
    artifact validates the public analytic-Boozer geometry path used by examples and
    optimization scaffolds; it does not claim full VMEC-boundary optimization.
 
-Bounded integration lanes
--------------------------
+Bounded integration work
+------------------------
 
-These lanes are useful for integration review, but they are not current-release
-publication claims unless and until they are added to
+These lines of work are useful for integration review, but they are not
+release-facing publication claims unless and until they are added to
 ``tools/publication_figures/validation_manifest.json`` with explicit
 ``release_gate`` metadata.
 
-Open lane board
-^^^^^^^^^^^^^^^
+Open research topics
+^^^^^^^^^^^^^^^^^^^^
 
 - QI/device-QI solver research: QI seed-robustness, hard-seed GPU
   campaigns, and device-QI operator-reuse promotion evidence are preserved on
@@ -718,14 +722,14 @@ Open lane board
   validation artifacts in the stable core. Any future QI/device-QI promotion
   must restore or regenerate compact artifacts from the candidate branch and
   pass residual, output, runtime, memory, CPU/GPU parity, solver-trace, and
-  documentation gates before appearing in this matrix.
+  documentation checks before appearing in this matrix.
 - PAS memory/runtime: guarded ``tzfft`` and weak-PAS fail-fast routes are bounded
   diagnostics. The byte-budgeted geometry4 and HSX real-solve probes are
   residual-clean and solver-path stable, but they are not promoted because they
   regress runtime, memory, or both against the checked baselines. Promotion still
   requires residual-clean CPU/GPU evidence with no parity loss and a measured
   runtime or memory win on geometry-rich PAS floors.
-- Single-case scaling: transport-worker case/RHS throughput is separately gated,
+- Single-case scaling: transport-worker case/RHS throughput has its own checks,
   but single-case multi-device strong scaling remains experimental until a warm,
   compile-amortized, device-covered artifact shows a real speedup.
 - Coverage/refactor: policy seams and solver helpers have focused tests, but the
@@ -733,17 +737,17 @@ Open lane board
   profile solves, transport solves, operator assembly, output writing, and a
   JAX-safe coverage environment.
 - VMEC/Boozer workflow: validation checks cover workflow provenance, optional
-  ecosystem gates, and proxy-gradient consistency. Full VMEC-boundary-to-SFINCS
+  ecosystem checks, and proxy-gradient consistency. Full VMEC-boundary-to-SFINCS
   kinetic transport gradients remain deferred.
 - Deferred validations: W7-X ambipolar validation, high-``nu`` analytic-limit
   extension, broader MONKES/KNOSOS overlap, production-resolution QI ladders, and
-  large geometry-rich PAS claims remain deferred until checked-in numerically
-  gated artifacts and release-gate metadata exist. Production-resolution QI
-  ladders should not launch until the GPU hard-seed gate writes output through a
-  true device route.
+  large geometry-rich PAS claims remain deferred until checked-in artifacts with
+  numerical acceptance criteria and ``release_gate`` metadata exist.
+  Production-resolution QI ladders should not launch until the GPU hard-seed run
+  writes output through a true device route.
 
-Mapped x-grid PAS transport evidence (retired lane)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Mapped x-grid PAS transport evidence (retired)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The mapped x-grid research owners and their tests were deleted with the
 legacy pipeline (see :doc:`adaptive_speed_grid`). The bounded artifacts are
@@ -763,20 +767,19 @@ Scope and status:
 - The best reduced PAS tokamak candidate by transport error is a bounded evidence
   point for the opt-in mapped-grid machinery, not a claim that mapped grids should
   replace default SFINCS-v3-compatible grids.
-- Full-FP mapped-grid compatibility remains open because the current full-FP
-  collision precompute path still has assumptions that are not yet mapped-grid
-  compatible.
+- Full-FP mapped-grid compatibility remains open because the full-FP collision
+  precompute path makes assumptions that are not mapped-grid compatible.
 
-Promotion gates:
+Promotion criteria:
 
-- add the lane to the manifest with ``claim_status`` no stronger than
+- add the entry to the manifest with ``claim_status`` no stronger than
   ``bounded_proxy`` until production-resolution evidence exists,
 - compare against higher-resolution default-grid references, not only
   same-resolution smoke solves,
 - demonstrate residual-clean CPU/GPU behavior on at least one representative PAS
   transport case,
 - and keep default ``xGridScheme`` behavior unchanged unless full-suite parity and
-  runtime/memory gates justify promotion.
+  runtime/memory checks justify promotion.
 
 QI/device-QI research boundary
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -787,10 +790,10 @@ The stable core intentionally keeps only general solver-policy and output-schema
 contracts. It does not ship QI seed-robustness JSON artifacts, QI promotion
 figures, or QI-only example inputs as release evidence.
 
-Promotion gates for any future QI/device-QI return to stable are:
+Promotion criteria for any future QI/device-QI return to stable:
 
 - regenerate compact artifacts from the candidate branch,
-- pass strict true-residual and output-write gates on CPU and GPU,
+- pass strict true-residual and output-write checks on CPU and GPU,
 - record solver traces, runtime, and peak-memory budgets,
 - compare supported observables against SFINCS Fortran v3 where the models
   overlap,
@@ -800,23 +803,23 @@ Promotion gates for any future QI/device-QI return to stable are:
 Solver-path policy refactor
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Current source and tests:
+Source and tests:
 
-- ``dkx/solve.py`` (the three-tier auto-policy and its tier-selection
+- ``dkx/solve.py`` (the automatic solver policy and its route-selection
   helpers)
 - ``tests/test_solve.py`` and the solver-trace tests
 
 Scope and status:
 
-- Solver-path selection (tier eligibility, memory-based auto-selection,
-  preconditioner construction, residual gates, and recycling) is centralized
+- Solver-path selection (route eligibility, memory-based auto-selection,
+  preconditioner construction, residual checks, and recycling) is centralized
   in ``dkx/solve.py``; the standalone legacy policy module was retired
   with the legacy solver packages. Selection decisions are recorded in the
   versioned solver trace (``dkx/solver_trace.py``).
-- This is a maintainability and reproducibility gate for solver-path selection.
+- This is a maintainability and reproducibility check for solver-path selection.
   It does not by itself support a new performance or physics claim.
 
-Promotion gates:
+Promotion criteria:
 
 - keep policy tests green alongside the driver-wrapper tests,
 - verify no solver-path branch change is promoted without residual-clean and
@@ -824,8 +827,8 @@ Promotion gates:
 - and summarize solver-path provenance in release artifacts before using a new
   branch as a documented default.
 
-Pinned independent monoenergetic device-family rung
----------------------------------------------------
+Pinned independent monoenergetic device-family comparison
+---------------------------------------------------------
 
 The first independent device-family artifact is
 ``validation/independent_cross_code_v1.json``. It compares one axisymmetric
@@ -846,7 +849,7 @@ values::
    python tools/paper_benchmarks/audit_independent_cross_code_validation.py \
      --yancc-root ../YANCC
 
-All four coefficients pass the 6% bounded gate.
+All four coefficients pass the 6% bounded acceptance criterion.
 
 .. list-table:: Maximum relative difference by device
    :header-rows: 1
@@ -873,12 +876,12 @@ discrete compatibility fixtures remain enforced separately; the checked
 full-kinetic DSHAPE SFINCS table is recorded as context only because substituting
 it here would compare different equations.
 
-Closed post-release research lanes
-----------------------------------
+Closed post-release research topics
+-----------------------------------
 
-The following lanes are not release blockers. They are closed in the manifest as
-``deferred_post_release`` with explicit criteria for reopening them in a later
-research/nightly cycle.
+The following research topics are not release blockers. They are closed in the
+manifest as ``deferred_post_release`` with explicit criteria for reopening them
+in a later research/nightly cycle.
 
 1. Electric-field sweeps
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -894,14 +897,14 @@ Publication target:
 - fluxes, flows, and bootstrap current versus normalized radial electric field,
 - clear comparison of partial, DKES-like, and full-trajectory models.
 
-Current scaffold:
+Scaffold:
 
 - ``tools/publication_figures/generate_er_trajectory_sweep.py``
 
-This script already implements the correct upstream trajectory-model switches and
+This script implements the correct upstream trajectory-model switches and
 produces JSON summaries plus 2x2 publication-style figures.
 
-Current fixed artifacts:
+Fixed artifacts:
 
 - audited tokamak-like reference summary:
   ``tools/publication_figures/artifacts/er_sweep_tokamak_reference_summary.json``
@@ -917,7 +920,7 @@ Current fixed artifacts:
    :width: 85%
 
    Fixed tokamak-like ``E_r`` sweep across DKES, partial, and full trajectory
-   models. This lane is pinned to checked-in JSON and figure artifacts, and it
+   models. This entry is pinned to checked-in JSON and figure artifacts, and it
    is backed by direct numerical assertions on zero-field agreement and
    finite-field model separation.
 
@@ -926,16 +929,16 @@ Current fixed artifacts:
    :width: 85%
 
    Fixed stellarator-like fast branch scaffold across DKES, partial, and full
-   trajectory models. This is intentionally a bounded branch-validation lane:
-   it resolves the expected model separation on the selected input, but the
-   full-resolution stellarator sweep remains a heavier validation target.
+   trajectory models. This is intentionally a bounded branch-validation
+   artifact: it resolves the expected model separation on the selected input,
+   but the full-resolution stellarator sweep remains a heavier validation target.
 
 Validation goal:
 
 - verify small-field agreement and large-field separation behavior,
 - make the ordering and crossover behavior explicit in both assertions and figures,
-- promote the stellarator-like branch scaffold to a full-resolution audited lane only
-  after the runtime/cost tradeoff is acceptable for the release/nightly workflow.
+- promote the stellarator-like branch scaffold to a full-resolution audited entry
+  only after the runtime/cost tradeoff is acceptable for the release/nightly workflow.
 
 2. High-collisionality proxy after collisionality audit
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -954,7 +957,7 @@ Closed branch evidence:
   corrected artifacts:
   ``tools/publication_figures/artifacts/dkx_high_collisionality_trend_proxy_summary.json``
 - a checked-in Simakov-Helander normalization audit records the Appendix-B
-  geometry ingredients, ``FSABHat2`` recomputation, inverse-``nu`` slope gates, and
+  geometry ingredients, ``FSABHat2`` recomputation, inverse-``nu`` slope checks, and
   explicit readiness status:
   ``tools/publication_figures/artifacts/dkx_simakov_helander_limit_audit_summary.json``
 
@@ -968,17 +971,17 @@ Closed branch evidence:
    scaling in the ``nu' >> 1`` limit. The checked-in LHD artifact satisfies the
    loose inverse-tail proxy, but the W7-X artifact does not yet. The stricter
    Simakov-Helander audit therefore keeps both geometries deferred until wider
-   high-``nu`` scans are pinned, so this figure is kept as an implemented trend gate
+   high-``nu`` scans are pinned, so this figure is kept as an implemented trend check
    rather than the final analytic-limit reproduction.
 
 .. figure:: _static/figures/paper/dkx_simakov_helander_limit_audit.png
    :alt: Simakov-Helander high-collisionality readiness audit
    :width: 92%
 
-   Normalization and readiness audit for the full Simakov-Helander lane. The audit
+   Normalization and readiness audit for the full Simakov-Helander entry. The audit
    confirms that checked-in ``sfincsOutput.h5`` files contain the geometry quantities
    needed for an Appendix-B comparison, but it keeps the full analytic-limit
-   reproduction closed because the current full collisionality summaries stop near
+   reproduction closed because the full collisionality summaries stop near
    ``nu'=10`` rather than a wider ``nu' >> 1`` range. The JSON summary also
    carries a recommended logarithmic high-``nu'`` extension grid for each case,
    ending near ``nu'`` of ``100``, so the next heavy run is pinned and reviewable.
@@ -986,7 +989,7 @@ Closed branch evidence:
 Post-release acceptance criteria:
 
 - keep machine-readable summary artifacts for each full scan,
-- keep the Simakov-Helander audit artifact in CI as the parent gate for future
+- keep the Simakov-Helander audit artifact in CI as the parent check for future
   high-collisionality scan work,
 - use
   ``tools/publication_figures/artifacts/dkx_simakov_helander_high_nu_run_plan.json``
@@ -996,20 +999,20 @@ Post-release acceptance criteria:
   ``nu'=17.78`` on the office GPU took about ``569 s`` for one transport point,
   so the complete FP/PAS LHD+W7-X extension is a nightly/workstation campaign,
 - and only promote the deferred full analytic-limit reproduction after wider
-  high-``nu`` LHD and W7-X scans are regenerated and the readiness gate flips true.
+  high-``nu`` LHD and W7-X scans are regenerated and the readiness check passes.
 
 The run-plan artifact is explicitly labelled as a deferred executable plan. Its
-machine-readable gates record that residual thresholds are wired into every command
+machine-readable checks record that residual thresholds are wired into every command
 and that ``ready_for_literature_claim`` remains false because no completed high-``nu``
-scan artifact is present yet. Publication panel summaries use the same convention:
-``publication_figure.claim_status`` is ``proxy_or_deferred`` unless the source JSON is
-both numerically gated and checked in as a converged artifact.
+scan artifact is present. Publication panel summaries use the same convention:
+``publication_figure.claim_status`` is ``proxy_or_deferred`` unless the source JSON
+carries numerical acceptance criteria and is checked in as a converged artifact.
 
 A separate W7-X high-``nu`` preconditioner/performance figure is available for the
-single first FP point, but it is not a physics-validation lane. Its summary gates
-only support the bounded claim that sparse-helper factor reuse is residual-clean,
-faster than no-reuse, uses fewer sparse factorizations, and rejects the failed
-bounded Krylov route. The figure metadata therefore keeps
+single first FP point, but it is not a physics-validation entry. Its recorded
+acceptance criteria only support the bounded claim that sparse-helper factor reuse
+is residual-clean, faster than no-reuse, uses fewer sparse factorizations, and
+rejects the failed bounded Krylov route. The figure metadata therefore keeps
 ``ready_for_physics_validation_claim=false``.
 
 3. W7-X ambipolar-field validation
@@ -1030,9 +1033,9 @@ Publication target:
 Validation goal:
 
 - make any profile reconstruction assumptions explicit,
-- use this lane only if the reconstructed input set is scientifically defensible.
+- use this entry only if the reconstructed input set is scientifically defensible.
 
-Stable artifact gate:
+Stable artifact check:
 
 - ``tools.release.artifacts.build_w7x_ambipolar_root_provenance_panel``
 - ``tools/publication_figures/provenance/w7x_ambipolar_provenance_template.json``
@@ -1053,7 +1056,7 @@ The deferred panel includes explicit ``acceptance_gates``:
 - an ion-root candidate,
 - complete equilibrium/profile/discharge/literature provenance,
 - checked-in source-artifact status,
-- and the combined ``ready_for_literature_claim`` gate.
+- and the combined ``ready_for_literature_claim`` check.
 
 Without a provenance JSON containing ``equilibrium_source``, ``profile_source``,
 ``configuration_or_shot``, and ``literature_reference``, generated artifacts remain
@@ -1069,9 +1072,9 @@ equilibrium/profile reconstruction before any literature-facing W7-X claim.
 
 Closure note:
 
-- the stable core keeps the ambipolar solver and provenance/artifact gate tests,
+- the stable core keeps the ambipolar solver and provenance/artifact tests,
 - the checked-in literature artifact and long generator are intentionally absent,
-- this lane is classified as ``deferred_post_release`` until a
+- this entry is classified as ``deferred_post_release`` until a
   defensible W7-X input reconstruction is run and its summary/figure are pinned in
   the repository.
 
@@ -1091,12 +1094,12 @@ Publication target:
 Validation goal:
 
 - separate exact overlap claims from qualitative trend/ordering claims,
-- keep this lane focused on the model subset that is genuinely comparable.
+- keep this entry focused on the model subset that is genuinely comparable.
 
 Keeping this page in step with the code
 ---------------------------------------
 
-Each time a new figure lane is implemented, update both:
+Each time a new figure entry is implemented, update both:
 
 - this page,
 - and ``tools/publication_figures/validation_manifest.json``.

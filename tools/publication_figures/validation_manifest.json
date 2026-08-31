@@ -212,8 +212,8 @@
     ],
     "claims": [
       "PAS L11/L12 high-collisionality tails have positive power-law slopes on both corrected full collisionality artifacts",
-      "W7-X Fokker-Planck L11/L12 tails show inverse-nu-like slopes on the checked-in nu'<=10 artifact",
-      "LHD Fokker-Planck L11/L12 tails do not yet reach the asymptotic inverse-nu gate on the checked-in scan, so this implemented artifact is a bounded trend proxy rather than the full analytic-limit reproduction"
+      "LHD Fokker-Planck L11/L12 tails show inverse-nu-like slopes on the checked-in nu'<=10 artifact",
+      "W7-X Fokker-Planck L11/L12 tails do not yet reach the asymptotic inverse-nu gate on the checked-in scan, so this implemented artifact is a bounded trend proxy rather than the full analytic-limit reproduction"
     ],
     "source_code": [
       "tools/release/artifacts.py"
@@ -224,7 +224,7 @@
     "acceptance_gates": [
       "Summary JSON records the high-collisionality tail slopes and source artifacts",
       "PAS L11/L12 slopes are positive on both LHD and W7-X corrected full scans",
-      "The artifact must explicitly mark LHD as needing a wider high-nu scan before replacing the analytic-limit reproduction"
+      "The artifact must explicitly mark W7-X as needing a wider high-nu scan before replacing the analytic-limit reproduction"
     ]
   },
   {
@@ -251,7 +251,7 @@
     "claims": [
       "The checked-in LHD and W7-X output files contain the Appendix-B geometry ingredients needed for a reproducible normalization audit",
       "The current full collisionality summaries stop near nu'=10, so the audit keeps the full Simakov-Helander analytic-limit reproduction closed until wider high-nu scans are pinned",
-      "W7-X FP L11/L12 tails satisfy the inverse-nu slope proxy on the current range, while LHD still fails that gate"
+      "LHD FP L11/L12 tails satisfy the inverse-nu slope proxy on the current range, while W7-X still fails that gate"
     ],
     "source_code": [
       "tools/release/artifacts.py"

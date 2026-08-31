@@ -54,13 +54,25 @@ case = dkx.Case.from_mapping({
 })
 result = dkx.run(case)
 
+print("solver route:", result.metadata["solver_route"])
 print("particle flux:", float(result.arrays["particle_flux_m2_s"][1, 0]))
-print("bootstrap current <j.B>:", float(result.arrays["parallel_current_A_T_m2"][1]))
 ```
 
 A case is one TOML or JSON file. `Case` is immutable with a deterministic
 `case_id`; `Result` carries the arrays, solver route, achieved residual, and
 provenance. See [case files](docs/case_files.rst).
+
+The resolution above is sized to run in seconds, and it is not converged —
+`dkx converge` reports this case still moving by more than 100% under
+refinement. Check any case before trusting its numbers:
+
+```bash
+dkx converge case.toml     # refines theta, zeta, pitch and speed
+```
+
+It refines the axes jointly as well as one at a time, because one at a time
+can mislead: on the shipped tokamak example the theta axis looks settled to
+0.2% at `pitch = 8` and moves the outputs 74% at `pitch = 40`.
 
 ## Speed
 

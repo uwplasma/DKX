@@ -33,11 +33,15 @@ Machine tooling can request JSON Schema instead:
    dkx schema --format json > case-v1.schema.json
 
 The checked full-schema example is
-``examples/cases/w7x_ambipolar_profile.toml``. Its
-field names carry engineering units where a dimensional value appears, such as
-``density_m3``, ``temperature_keV``, and ``search_kV_m``. Solver methods use
-physical route names instead of numbered tiers: ``structured_direct``,
-``recycled_krylov``, and ``sparse_direct_referee``.
+``examples/cases/w7x_ambipolar_profile.toml``. Its field names carry
+engineering units where a dimensional value appears, such as ``density_m3``,
+``temperature_keV``, and ``search_kV_m``. Solver methods are
+named for the route they take: ``structured_direct`` eliminates the Legendre
+blocks in one direct sweep, ``recycled_krylov`` iterates with a coarse
+preconditioner and a reused search subspace, and ``sparse_direct_referee``
+factors the assembled operator as an independent cross-check on the other two.
+:doc:`numerics` describes each route and the ``auto`` policy that chooses
+between them.
 
 The optional ``resolution.pitch_speed_ramp`` isolates a subtle convergence
 choice without exposing a namelist route. Its values are the matching SFINCS
@@ -77,10 +81,12 @@ Validation and portability
 --------------------------
 
 Validation errors identify the full input path, supplied value, expected form,
-and a correction. Profile arrays must have one entry per requested surface;
-surface values are unique and lie from zero through one; all physical profile
-values are finite and positive; and an ambipolar search requires increasing
-finite bounds.
+and a correction. The checked rules are:
+
+- profile arrays must have one entry per requested surface;
+- surface values must be unique and lie from zero through one;
+- all physical profile values must be finite and positive;
+- an ambipolar search requires increasing finite bounds.
 
 Schema validation does not require a geometry file to exist. This keeps a case
 portable and permits validation before data staging. ``Case.geometry_path``
@@ -108,7 +114,7 @@ exceeds 100,000 retained evaluations per surface fail validation with the same
 actionable reduction advice as execution.
 
 The evaluation count is a capacity bound, not a runtime estimate. It assumes
-every hierarchy point could bracket a root on every refinement rung, so a
+every hierarchy point could bracket a root on every refinement level, so a
 normal run should use fewer evaluations. Conversely, no finite hierarchy can
 prove the absence of an even number of hidden crossings. Use the preflight to
 bound a campaign before launch, then retain the actual evaluation reasons,
@@ -117,7 +123,9 @@ refinement levels, brackets, and exhaustion status in the Result.
 The checked
 ``validation/inputs/w7x_standard_native_ambipolar_admitted_flux_preflight.toml``
 case applies this contract to the five-surface W7-X transport-flux grid admitted
-by the fixed-field resolution referee.
+by the fixed-field resolution cross-check: an independent study at a fixed
+electric field that admits a phase-space grid only once refining each axis in
+turn leaves the retained fluxes inside its declared tolerance.
 
 .. list-table:: Preflight bound for that case
    :header-rows: 1
@@ -137,7 +145,7 @@ from its convergence observables because the high-zeta current grid is not yet
 admitted.
 
 Case execution and results
-----------------------------
+--------------------------
 
 The directly executable route accepts built-in analytic geometry, a VMEC
 ``wout``, or a Boozer ``.bc`` file for prescribed-electric-field and ambipolar
@@ -157,6 +165,10 @@ the operator. Run a checked example from Python:
    result.plot("profile.png")
    particle_flux = result.particle_flux_m2_s
    certificate = result.certificate()
+
+``result.certificate()`` returns the compact record used for review: solver
+route, residual, iteration counts, geometry checksum, package and runtime
+versions, and timings.
 
 For an ambipolar profile, every retained electric-field evaluation also keeps
 the already integrated speed-node contributions
@@ -205,7 +217,7 @@ evaluation budget and solver-attempt evidence, and its observables and true
 residual must reproduce the accepted point. Its working set is included in
 memory preflight. This remains supporting evidence only. The checked
 ``validation/ambipolar_joint_pitch_speed_v1.json`` artifact exercises both
-contracts and retains the still-failed speed and pitch gates.
+contracts and retains the still-failed speed and pitch checks.
 
 For a VMEC equilibrium, change only the geometry source:
 
@@ -237,9 +249,9 @@ The reader auto-detects the six-column cosine-only and ten-column
 asymmetric v3 conventions at the file boundary. It reads and parses the source
 once, then reuses the immutable Fourier tables for every surface. A DKX case
 file therefore never requires ``geometryScheme = 11`` or ``12``, and never
-converts the ``Case`` back into a SFINCS namelist. At least two tabulated surfaces are required
-for the radial derivatives used by the kinetic operator. The exact source
-SHA-256 is retained in the Result.
+converts the ``Case`` back into a SFINCS namelist. At least two tabulated
+surfaces are required for the radial derivatives used by the kinetic operator.
+The exact source SHA-256 is retained in the Result.
 
 For ambipolar execution, select the workflow and give physical search
 controls:
@@ -290,24 +302,24 @@ a deterministic bounded hierarchy:
    max_refinements = 2
 
 Every added kinetic solve records ``evaluation_reason`` and
-``evaluation_refinement_level``. Each rung records its search and total solve
-counts, discovered root count, root movement, requested-observable movement,
-and maximum final bracket width. The preflight records a conservative retained
-evaluation budget and rejects work or evidence storage beyond its fixed work
-and requested memory bounds before allocating the hierarchy.
+``evaluation_refinement_level``. Each refinement level records its search and
+total solve counts, discovered root count, root movement, requested-observable
+movement, and maximum final bracket width. The preflight records a conservative
+retained evaluation budget and rejects work or evidence storage beyond its
+fixed work and requested memory bounds before allocating the hierarchy.
 
 The bounded hierarchy runs through the configured ``max_refinements`` so an
-early stable root cannot prevent a finer declared rung from exposing another
+early stable root cannot prevent a finer declared level from exposing another
 pair of crossings. ``ambipolar_refinement_status`` is ``resolved`` only when
-the final two rungs retain the same nonzero root count and meet the declared
+the final two levels retain the same nonzero root count and meet the declared
 root, observable, and bracket-width tolerances. ``refinement_exhausted`` means
 roots were observed but the final evidence did not stabilize.
 ``no_bracket_observed`` means the finite hierarchy observed no sign-changing
 bracket. It is not a proof that no root exists: an even number of crossings can
 remain hidden between the finest adjacent samples. ``find_all_roots`` therefore
 means every bracket exposed by the declared finite hierarchy, not every
-mathematically possible root. Independent dense-surface validation remains a
-promotion gate for the discrete branch evidence below.
+mathematically possible root. The discrete branch evidence below must still
+pass independent dense-surface validation before it is promoted.
 
 For an independently discovered set of sign-changing intervals, a second
 stage can promote only those brackets at a more expensive phase-space grid:
@@ -349,8 +361,9 @@ assignment, admitted only within one quarter of the declared electric-field
 search span. The first observation at the profile boundary is labeled
 ``boundary_origin`` rather than a physical creation. Interior unmatched roots
 and branches are labeled ``creation`` and ``loss``. A lost branch that
-approaches a survivor within the continuation gate also retains a ``merger``
-event whose detail explicitly calls it a *discrete merger candidate*.
+approaches a survivor within the continuation tolerance also retains a
+``merger`` event whose detail explicitly calls it a *discrete merger
+candidate*.
 
 DKX additionally records branch-order ``crossing`` and
 ``classification_transition`` events between adjacent sampled surfaces. These
@@ -363,10 +376,10 @@ where branch-local derivatives are nonsmooth or undefined.
 Selection is separate from discovery: every alternative root and branch stays
 in the Result. With ``continue_branches = true``, the first available surface
 selects the root nearest zero and later surfaces retain that branch ID. If the
-selected branch is lost, the nearest root to its previous electric field is
-selected and ``ambipolar_selection_reason`` records the fallback. With
-continuation disabled, each surface selects its root nearest zero while branch
-evidence remains visible. The electric-field plot overlays every branch on the
+selected branch is lost, the root nearest its electric field on the preceding
+surface is selected and ``ambipolar_selection_reason`` records the fallback.
+With continuation disabled, each surface selects its root nearest zero while
+branch evidence remains visible. The electric-field plot overlays every branch on the
 selected profile.
 
 ``Result`` copies its named arrays and makes them read-only. The
@@ -398,6 +411,6 @@ The executable route supports these case fields and values:
 
 Unsupported combinations fail with the exact case field and a correction; they
 are not silently downgraded. Resumable scan execution, phase-space convergence
-rungs, and SFINCS conversion are later work. Existing namelist workflows remain
+levels, and SFINCS conversion are later work. Existing namelist workflows remain
 available through ``dkx.run`` and the established CLI without a numerical-path
 change.

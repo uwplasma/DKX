@@ -29,6 +29,16 @@ mode = "prescribed"
 value_kV_m = 0.0
 
 [resolution]
+# A smoke-test resolution, not a converged one. `dkx converge` on this file
+# reports the outputs still moving by more than 100% under refinement: theta
+# 9 -> 14 alone moves the particle flux by 1187%. It is sized so the example
+# runs in seconds. Treat the numbers as a demonstration that the workflow
+# executes, not as transport coefficients for this configuration.
+#
+# The axes also couple, so refining one at a time is misleading here: at
+# pitch = 8 the theta axis looks settled to 0.2%, and at pitch = 40 the same
+# refinement moves the outputs by 74%. Run `dkx converge CASE` -- which
+# refines the axes jointly as well as separately -- before trusting a result.
 theta = 9
 zeta = 1
 pitch = 8

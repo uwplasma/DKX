@@ -7,14 +7,18 @@ flux surface. The unknown is the non-adiabatic part of the species distribution,
 proxies, NTV, and transport-matrix coefficients are velocity-space and flux-surface
 moments of this solved perturbation.
 
-The continuous equation is treated by expanding pitch-angle dependence in a
-Legendre representation, discretizing speed on the ``x`` grid, discretizing
-``theta``/``zeta`` on a periodic flux-surface grid, and applying finite-difference
-or spectral-style periodic stencils to the streaming, drift, and mirror terms. The
-collision block is either the pitch-angle-scattering model or the full linearized
-Fokker-Planck/Rosenbluth operator, depending on ``collisionOperator``. Only after
-this discretization does the problem become the block linear/nonlinear algebraic
-system described below.
+The discretization of that continuous equation has four parts:
+
+- a Legendre representation of the pitch-angle dependence,
+- the ``x`` grid for speed,
+- a periodic flux-surface grid for ``theta``/``zeta``,
+- finite-difference or spectral-style periodic stencils for the streaming,
+  drift, and mirror terms.
+
+The collision block is either the pitch-angle-scattering model or the full
+linearized Fokker-Planck/Rosenbluth operator, depending on ``collisionOperator``.
+Only after this discretization does the problem become the block
+linear/nonlinear algebraic system described below.
 
 In its most general supported configuration, `dkx` solves a coupled system consisting of:
 
@@ -34,9 +38,9 @@ manual in the upstream SFINCS project repository, cited from :doc:`upstream_docs
 Unknown ordering
 ----------------
 
-The operator uses a global ordering for the state vector and the rows/columns of the
-master system that follows the mature SFINCS-style block layout because that structure
-is physically natural and convenient for diagnostics, comparison, and testing.
+The state vector and the rows/columns of the master system follow the mature
+SFINCS-style block layout, which is physically natural and convenient for
+diagnostics, comparison, and testing.
 
 For the common ``readExternalPhi1 = .false.`` case:
 

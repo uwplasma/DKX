@@ -3,14 +3,14 @@
 Validation against reference implementations
 ============================================
 
-`dkx` validates outputs and solver behavior against a mature Fortran SFINCS implementation as a
-reference implementation.
+`dkx` validates outputs and solver behavior against a mature Fortran SFINCS
+implementation.
 
 .. note::
 
    This page reports the broad **example-suite audit** across the vendored
    SFINCS v3 examples. The single-case head-to-head runtime/memory evidence and
-   its parity referees live in :doc:`performance`.
+   the parity cross-checks live in :doc:`performance`.
 
 The release-facing comparison is the full vendored
 example-suite audit, with production-floor tokamak reruns merged into the frozen
@@ -43,14 +43,13 @@ checks unless they are rerun at production-comparison resolution.
    Release benchmark generated from the profiled CPU/GPU suite reports. Panel A
    compares wall-clock runtime and Panel B compares active solver memory for the
    reference-runtime-window subset, with separate ``dkx`` cold and warm bars for
-   CPU and GPU.
-   Cases are ordered by best warm ``dkx`` speedup over the Fortran v3
-   runtime.
+   CPU and GPU. Cases are ordered by best warm ``dkx`` speedup over the
+   Fortran v3 runtime.
    The benchmark artifacts have median cold JAX/Fortran wall-clock ratios of about
    ``0.021x`` on CPU and ``0.037x`` on GPU for the plotted reference-runtime
    subset. Median process maximum-RSS ratios remain available in the JSON audit
-   fields, while the public memory bars use profiler active RSS deltas over the
-   fixed Python/JAX/XLA baseline; the median active-memory ratios are about
+   fields. The public memory bars use profiler active RSS deltas over the
+   fixed Python/JAX/XLA baseline, and the median active-memory ratios are about
    ``2.89x`` on CPU and ``3.71x`` on GPU. The top runtime and memory cases are recorded in
    ``tools/publication_figures/artifacts/dkx_fortran_suite_benchmark_summary.json``.
 
