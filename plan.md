@@ -888,6 +888,16 @@ The original SFINCS notes and manuals are source material, not pages to copy ver
 
 ### 8.4 README
 
+Hard cap 250 lines, enforced by `tests/test_benchmark_doc_claims.py`. That
+ceiling was raised three times before the cap was restored -- 327, 345, 347 --
+each with a comment justifying that particular addition, which is how a budget
+becomes a rubber stamp. Raising it again requires deleting something else.
+
+The README answers, in this order: what is this, how do I install it, how do I
+run it, how fast is it, how accurate is it, what can it do, what can it not do.
+Anything else belongs in the documentation. Benchmark narratives, optimization
+demonstrations, and implementation notes are not README material.
+
 Target no more than about 250 lines:
 
 1. badges;
@@ -903,6 +913,36 @@ Target no more than about 250 lines:
 Move detailed benchmarks, implementation notes, and long scientific claims to the documentation.
 
 ### 8.5 Prose quality
+
+The failure mode is specific and recurring: a paragraph that packs six facts
+into one sentence, joined by em-dashes and subordinate clauses, so a reader
+looking for one number has to parse all six. Two real examples, both removed:
+
+> ``dkx wout_XXX.nc`` writes ``<name>.panels.png`` and ``<name>.panels.h5``:
+> monoenergetic D11/D31/D33 vs nuPrime across the 1/nu, plateau and
+> Pfirsch-Schlueter regimes (a curve per EStar), |B| on the surface, and --- at
+> the ambipolar root, against radius --- the bootstrap current in kA/m^2 beside
+> the VMEC equilibrium's own, and species fluxes in SI units. [...]
+
+> With the matched Nxi-for-x ramp discretization, DKX solves in 27.2 s at
+> 0.93 GB --- 17x faster than 1-rank Fortran (463.6 s, 3.98 GB) and 8.4x faster
+> than Fortran's best measured parallel floor (229.5 s / 2.86 GB at 2 ranks),
+> at roughly 30% of the memory. [...]
+
+Both are tables, not paragraphs. A comparison of measured numbers is always a
+table. Rules that follow from this:
+
+- put the result first; a reader must not read prose to reach a number;
+- a sentence carries one fact, and a comparison of numbers is a table;
+- headings name the content, not the act of thinking about it. "Interpreting a
+  difference" and "Understanding the results" are not headings;
+- delete throat-clearing: "It is worth noting", "Importantly", "In practice",
+  "The practical point is", "This is not specific to";
+- do not restate a claim in the next paragraph in different words;
+- an em-dash aside that carries a fact should be its own sentence;
+- a section that needs three paragraphs of setup belongs in the reference
+  documentation, with a link from where the user actually is;
+- prefer a figure to a description of a figure.
 
 Apply concrete no-slop rules:
 

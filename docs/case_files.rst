@@ -1,5 +1,5 @@
-Native cases
-============
+Case files
+==========
 
 DKX schema version 1 defines an immutable, physically named ``Case``. TOML is
 the primary human-authored format; JSON has exactly the same semantic fields
@@ -21,7 +21,7 @@ residual, and the wall time; ``--out`` writes the versioned NetCDF ``Result``,
 and omitting it runs without saving rather than guessing a path. ``dkx inspect``
 reads a saved ``Result`` back and lists its arrays without recomputing them.
 
-``inspect`` prints no units column. A native ``Result`` does not yet carry
+``inspect`` prints no units column. A ``Result`` does not yet carry
 per-variable units metadata, so an empty column would suggest the metadata is
 present and blank rather than absent; array names carry the unit by convention
 (``heat_flux_W_m2``).
@@ -33,7 +33,7 @@ Machine tooling can request JSON Schema instead:
    dkx schema --format json > case-v1.schema.json
 
 The checked full-schema example is
-``examples/native/w7x_ambipolar_profile.toml``. Its
+``examples/cases/w7x_ambipolar_profile.toml``. Its
 field names carry engineering units where a dimensional value appears, such as
 ``density_m3``, ``temperature_keV``, and ``search_kV_m``. Solver methods use
 physical route names—``structured_direct``, ``recycled_krylov``, and
@@ -80,7 +80,7 @@ Declarative scan preflight
 Schema-v1 accepts Cartesian and zipped explicit-value axes. ``Case.scan``
 computes the case count before launch and rejects counts above ``max_cases``;
 zipped axes must have equal lengths. Resume metadata and append-safe result
-storage belong to the native scan/result execution slice and are not simulated
+storage belong to the scan and result execution slice and are not simulated
 by the validator.
 
 Ambipolar work preflight
@@ -109,7 +109,7 @@ surface, 5,115 for the profile, and 4,746,720 retained-evidence bytes. This is a
 launch bound only: the input deliberately excludes bootstrap current from its
 convergence observables because the high-zeta current grid is not yet admitted.
 
-Native execution and results
+Case execution and results
 ----------------------------
 
 The directly executable route accepts built-in analytic geometry, a VMEC
@@ -122,7 +122,7 @@ the operator. Run a checked example from Python:
 
    import dkx
 
-   case = dkx.Case.from_file("examples/native/analytic_tokamak_profile.toml")
+   case = dkx.Case.from_file("examples/cases/analytic_tokamak_profile.toml")
    result = dkx.run(case)
    result.print_summary()
    result.save()                         # the case's [output].file
@@ -202,7 +202,7 @@ SFINCS geometry route:
    file = "my_device.bc"
    surfaces = [0.20, 0.30]
 
-The native reader auto-detects the six-column cosine-only and ten-column
+The reader auto-detects the six-column cosine-only and ten-column
 asymmetric v3 conventions at the file boundary. It reads and parses the source
 once, then reuses the immutable Fourier tables for every surface. Native cases
 therefore never require ``geometryScheme = 11`` or ``12`` and never convert the
@@ -210,7 +210,7 @@ therefore never require ``geometryScheme = 11`` or ``12`` and never convert the
 for the radial derivatives used by the kinetic operator. The exact source
 SHA-256 is retained in the Result.
 
-For native ambipolar execution, select the workflow and give physical search
+For ambipolar execution, select the workflow and give physical search
 controls:
 
 .. code-block:: toml
@@ -349,7 +349,7 @@ The executable route supports ``workflow = "profile"`` with a prescribed
 field or ``workflow = "ambipolar_profile"`` with a bounded search, ``format =
 "analytic"``, ``"vmec"``, or ``"boozer"`` geometry, ``magnetic_drifts =
 "dkes"``, ``phi1 = "off"``, and at least two profile surfaces.
-Unsupported native combinations fail with the exact case field and a
+Unsupported combinations fail with the exact case field and a
 correction; they are not silently downgraded. Resumable scan execution,
 phase-space convergence rungs, and SFINCS conversion are subsequent vertical
 slices. Existing namelist workflows remain available through ``dkx.run`` and

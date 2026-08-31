@@ -20,7 +20,7 @@ import pytest
 from dkx import cli
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-ANALYTIC_CASE = REPO_ROOT / "examples" / "native" / "analytic_tokamak_profile.toml"
+ANALYTIC_CASE = REPO_ROOT / "examples" / "cases" / "analytic_tokamak_profile.toml"
 
 
 def test_run_executes_a_native_case_and_writes_a_result(tmp_path, capsys) -> None:
