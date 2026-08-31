@@ -97,11 +97,25 @@ convergence arithmetic, residual gates, and claim boundary with:
 
    python tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py
 
-The accepted resolution rises from 6,887 to 12,509 unknowns. Bootstrap/parallel
-flow moves ``0.042%`` and heat flux moves ``0.280%``. At the finest rung, the
-largest scaled DKX/SFINCS difference across nonzero scalar and speed-resolved
-observables is ``2.69e-10`` and every completed true residual is below
-``1.82e-11``. Particle flux and NTV vanish by axisymmetric cancellation at the
+.. list-table:: Matched full-kinetic tokamak profile, measured
+   :header-rows: 1
+   :widths: 56 28
+
+   * - measurement
+     - value
+   * - accepted resolution
+     - 6,887 -> 12,509 unknowns
+   * - bootstrap/parallel-flow movement
+     - ``0.042%``
+   * - heat-flux movement
+     - ``0.280%``
+   * - largest scaled DKX/SFINCS difference at the finest rung, across nonzero
+       scalar and speed-resolved observables
+     - ``2.69e-10``
+   * - completed true residuals
+     - below ``1.82e-11``
+
+Particle flux and NTV vanish by axisymmetric cancellation at the
 checked accuracy, so their gate is the recorded ``1e-12`` absolute scale rather
 than a meaningless relative error.
 
@@ -118,14 +132,27 @@ Matched finite-Er full-kinetic profile
 The companion ``validation/full_kinetic_sfincs_finite_er_v1.json`` artifact
 uses the pinned upstream one-species full-FP tokamak case at normalized
 ``Er = -30``. Both codes use full trajectories, automatic constraint 1, a
-``1e-13`` solver tolerance, and matched angular, pitch, and speed grids. The
-SFINCS matrices grow from 6,887 to 12,509 unknowns; DKX's distinct internal
-representation grows from 10,532 to 18,614. Audit the comparison by passing the
-artifact to the shared command above.
+``1e-13`` solver tolerance, and matched angular, pitch, and speed grids. Audit
+the comparison by passing the artifact to the shared command above.
 
-The finest flow/current, momentum flux, heat flux, and speed-resolved outputs
-agree within ``1.88e-9`` scaled error. High-to-ultra movement is at most
-``0.326%``, and all completed true residuals are below ``5.25e-11``.
+.. list-table:: Matched finite-``Er`` tokamak profile, measured
+   :header-rows: 1
+   :widths: 56 28
+
+   * - measurement
+     - value
+   * - SFINCS matrices
+     - 6,887 -> 12,509 unknowns
+   * - DKX's distinct internal representation
+     - 10,532 -> 18,614 unknowns
+   * - finest flow/current, momentum flux, heat flux and speed-resolved
+       outputs, scaled agreement
+     - ``1.88e-9``
+   * - high-to-ultra movement
+     - at most ``0.326%``
+   * - completed true residuals
+     - below ``5.25e-11``
+
 Axisymmetric intrinsic ambipolarity makes summed particle flux and NTV
 cancellation-level quantities, so their acceptance gate is ``2e-11`` absolute.
 This is a prescribed-field surface comparison, not an electric-field scan or
@@ -139,15 +166,28 @@ The companion ``validation/full_kinetic_sfincs_stellarator_v1.json`` artifact
 uses exact relative-path decks on the checksummed W7-X SC1 Boozer surface at
 ``rN = 0.5``. Both live codes use physical density and temperature gradients,
 full linearized Fokker--Planck collisions, full trajectories, zero electric
-field, automatic constraint 1, and a ``1e-12`` solver tolerance. SFINCS's
-algebraic systems grow from 54,407 to 98,126 unknowns; DKX's distinct internal
-representation grows from 87,887 to 155,994.
+field, automatic constraint 1, and a ``1e-12`` solver tolerance.
 
-The largest high-to-ultra movement is ``0.444%``. At the finest rung, flow,
-particle and heat flux, NTV, and the retained speed spectra agree within
-``1.37e-8`` scaled error; that maximum is NTV and corresponds to an absolute
-difference of about ``8.31e-13``. All completed true residuals are below
-``1.82e-12``. Momentum flux is retained as a near-zero absolute gate rather
+.. list-table:: Matched stellarator full-kinetic profile, measured
+   :header-rows: 1
+   :widths: 56 28
+
+   * - measurement
+     - value
+   * - SFINCS algebraic systems
+     - 54,407 -> 98,126 unknowns
+   * - DKX's distinct internal representation
+     - 87,887 -> 155,994 unknowns
+   * - largest high-to-ultra movement
+     - ``0.444%``
+   * - finest-rung flow, particle and heat flux, NTV and retained speed
+       spectra, scaled agreement
+     - ``1.37e-8``
+   * - completed true residuals
+     - below ``1.82e-12``
+
+That largest scaled difference is NTV, and corresponds to an absolute
+difference of about ``8.31e-13``. Momentum flux is retained as a near-zero absolute gate rather
 than assigned an unstable relative error.
 
 The artifact pins the SFINCS commit, MUMPS-enabled build, Boozer source path
@@ -157,10 +197,10 @@ reproduction provenance, not a cross-code performance claim. This one-species
 surface comparison is not an Er scan, ambipolar-profile, Phi1, experimental,
 or second-stellarator-family full-FP certificate.
 
-Native whole-profile ambipolar certificate
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Whole-profile ambipolar certificate from a case file
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-``validation/native_ambipolar_profile_v1.json`` records the admitted native
+``validation/native_ambipolar_profile_v1.json`` records the admitted case-file
 workflow as a separate evidence lane. The portable checked TOML drives five
 W7-X standard-configuration surfaces with physical hydrogen/electron profiles,
 PAS collisions, DKES drifts, bounded midpoint refinement, all-root search, and
@@ -177,7 +217,7 @@ misses its unchanged target; the retained bounded GMRES retry reduces the true
 residual from ``8.23e-13`` to ``1.93e-13``. Every final bracket is
 ``0.0048828125 kV/m`` wide and every refinement hierarchy is resolved.
 
-The artifact pins the portable input, geometry, cold/warm native NetCDF,
+The artifact pins the portable input, geometry, cold/warm DKX NetCDF,
 compact profile, commit, environment, timing, and process-memory evidence.
 Passing ``--results-root`` additionally verifies the external files and exact
 cold/warm scientific-array identity. The warm process was 0.15% slower, so no
@@ -201,11 +241,33 @@ SI particle/heat-flux movement, topology decision, and admission status with:
 The three resolutions are ``(13, 31, 32, 5)``, ``(15, 37, 36, 6)``, and
 ``(17, 37, 40, 6)`` in theta, zeta, pitch, and speed. Root counts remain
 ``[1, 1, 3, 1, 1]`` with identical classifications, branch identities, and
-selected branches. However, reference-to-fine movement reaches
-``1.6259765625 kV/m`` for an ambipolar root, ``4.08%`` for selected particle
-flux, and ``7.81%`` for selected heat flux. These fail the unchanged
-``0.005 kV/m`` root and ``2%`` observable gates; the maximum accepted true
-residual, ``3.92e-13``, passes its ``1e-12`` gate.
+selected branches. Reference-to-fine movement nevertheless fails the unchanged
+root and observable gates:
+
+.. list-table:: Reference-to-fine movement against its gates
+   :header-rows: 1
+   :widths: 34 28 20 14
+
+   * - quantity
+     - movement
+     - gate
+     - result
+   * - ambipolar root
+     - ``1.6259765625 kV/m``
+     - ``0.005 kV/m``
+     - fail
+   * - selected particle flux
+     - ``4.08%``
+     - ``2%``
+     - fail
+   * - selected heat flux
+     - ``7.81%``
+     - ``2%``
+     - fail
+   * - maximum accepted true residual
+     - ``3.92e-13``
+     - ``1e-12``
+     - pass
 
 The auditable outcome is ``refinement_exhausted``. This negative result
 prevents promotion of the workflow certificate to phase-space-converged
@@ -226,12 +288,29 @@ pitch-only ``(15, 37, 40, 6)``, then extends the fixed-theta pitch sequence to
 
    python tools/paper_benchmarks/audit_ambipolar_phase_space_axes.py
 
-Theta-only keeps selected particle and heat-flux movement below ``2%`` but
-still moves a root by ``0.1611328125 kV/m``. Pitch40 is the dominant failed
-direction, moving a root by ``1.7333984375 kV/m`` and selected heat flux by
-``9.47%`` relative to the reference. Pitch40-to-pitch44 does not approach the
-gates: maximum root, selected particle-flux, and selected heat-flux movements
-are ``0.205078125 kV/m``, ``13.52%``, and ``14.07%``.
+.. list-table:: Movement against the ``(15, 37, 36, 6)`` reference
+   :header-rows: 1
+   :widths: 32 26 20 20
+
+   * - comparison
+     - root movement
+     - selected particle flux
+     - selected heat flux
+   * - theta-only ``(17, 37, 36, 6)``
+     - ``0.1611328125 kV/m``
+     - below ``2%``
+     - below ``2%``
+   * - pitch40 ``(15, 37, 40, 6)``
+     - ``1.7333984375 kV/m``
+     - —
+     - ``9.47%``
+   * - pitch40 to pitch44 ``(15, 37, 44, 6)``
+     - ``0.205078125 kV/m``
+     - ``13.52%``
+     - ``14.07%``
+
+Pitch40 is the dominant failed direction. Pitch40-to-pitch44 does not approach
+the gates.
 
 All topology and accepted true-residual checks pass, but the pitch44 process
 reached a ``22,275,409,800 B`` footprint on the 24 GiB host. The artifact
@@ -249,20 +328,49 @@ from phase-space admission. Audit it with:
 
    python tools/paper_benchmarks/audit_ambipolar_pitch_budget.py
 
-For the exact uniform-pitch-22 profile, forwarding the native memory budget to
+For the exact uniform-pitch-22 profile, forwarding the DKX memory budget to
 each batched solve changes all 139 evaluations from full factors to the
-memory-bounded structured route. Roots and brackets are exact, selected fluxes
-agree within ``3.58e-11`` relative, retained evaluation fluxes within
-``1.53e-10``, and the bounded residual is ``5.28e-14``. The retained bounded
-processes stay below ``2,923,810,392 B`` footprint versus ``31,859,925,880 B``
-for the earlier full-factor process. The populated-cache run is slower than
-the cold run, so no cache-speedup claim is made.
+memory-bounded structured route. Roots and brackets are exact.
+
+.. list-table:: Bounded route against the full-factor route
+   :header-rows: 1
+   :widths: 52 34
+
+   * - measurement
+     - value
+   * - selected fluxes, relative agreement
+     - ``3.58e-11``
+   * - retained evaluation fluxes, relative agreement
+     - ``1.53e-10``
+   * - bounded residual
+     - ``5.28e-14``
+   * - retained bounded process footprint
+     - below ``2,923,810,392 B``
+   * - earlier full-factor process footprint
+     - ``31,859,925,880 B``
+
+The populated-cache run is slower than the cold run, so no cache-speedup claim
+is made.
 
 This admitted route makes a bounded uniform pitch-22/26/30 diagnostic possible,
 but it does not make the physics converged. Root counts change
-``[3, 1, 1] -> [1, 1, 1] -> [1, 3, 1]``. Adjacent selected-field movements
-reach ``9.599609375`` and ``7.7001953125 kV/m``; selected heat-flux movements
-reach ``55.72%`` and ``45.25%``. All accepted true residuals remain below
+``[3, 1, 1] -> [1, 1, 1] -> [1, 3, 1]``.
+
+.. list-table:: Adjacent-rung movement, uniform pitch 22/26/30
+   :header-rows: 1
+   :widths: 38 26 26
+
+   * - quantity
+     - first adjacent pair
+     - second adjacent pair
+   * - selected field
+     - ``9.599609375 kV/m``
+     - ``7.7001953125 kV/m``
+   * - selected heat flux
+     - ``55.72%``
+     - ``45.25%``
+
+All accepted true residuals remain below
 ``5.65e-14``, so the artifact truthfully records ``refinement_exhausted``,
 rejects a uniform pitch-34-or-higher escalation, and leaves speed-node-local,
 zeta, speed, independent-code, experiment, full-FP, and Phi1 gates open.
@@ -272,20 +380,50 @@ Fixed-work pitch-by-speed diagnosis
 
 ``validation/ambipolar_pitch_speed_groups_v1.json`` compares the supported
 uniform-22, linear-ramp-36, and quadratic-ramp-44 rules on two common W7-X
-surfaces. Their active pitch counts by the six speed nodes are
-``[22,22,22,22,22,22]``, ``[4,9,17,27,36,36]``, and
-``[4,5,11,25,44,44]``: 132, 129, and 133 modes. Audit the checksums,
-extraction, comparisons, and gates with:
+surfaces.
+
+.. list-table:: Active pitch counts by speed node
+   :header-rows: 1
+   :widths: 28 42 18
+
+   * - rule
+     - counts at the six speed nodes
+     - total modes
+   * - uniform-22
+     - ``[22,22,22,22,22,22]``
+     - 132
+   * - linear-ramp-36
+     - ``[4,9,17,27,36,36]``
+     - 129
+   * - quadratic-ramp-44
+     - ``[4,5,11,25,44,44]``
+     - 133
+
+Audit the checksums, extraction, comparisons, and gates with:
 
 .. code-block:: console
 
    python tools/paper_benchmarks/audit_ambipolar_pitch_speed_groups.py
 
-Root counts change ``[3,1] -> [1,3] -> [1,1]``. Uniform-to-linear keeps the
-intermediate-speed group fixed at 44 modes while selected electric field and
-heat flux move by up to ``12.20703125 kV/m`` and ``68.35%``. The next
-linear-to-quadratic redistribution also changes topology and moves those
-quantities by ``2.177734375 kV/m`` and ``17.93%``. All accepted residuals stay
+Root counts change ``[3,1] -> [1,3] -> [1,1]``.
+
+.. list-table:: Movement between adjacent rules
+   :header-rows: 1
+   :widths: 32 30 26
+
+   * - redistribution
+     - selected electric field
+     - selected heat flux
+   * - uniform to linear
+     - up to ``12.20703125 kV/m``
+     - up to ``68.35%``
+   * - linear to quadratic
+     - ``2.177734375 kV/m``
+     - ``17.93%``
+
+Uniform-to-linear keeps the intermediate-speed group fixed at 44 modes. The
+linear-to-quadratic redistribution also changes topology. All accepted
+residuals stay
 below ``7.04e-14`` and all measured footprints below 4.14 GB. The quadratic
 cold/warm scientific arrays are exact except for their timing field; the warm
 run is slower and supports no cache-speedup claim.
@@ -300,19 +438,46 @@ Explicit fixed-high-work pitch diagnosis
 
 ``validation/ambipolar_pitch_explicit_groups_v1.json`` compares three exact
 six-speed-node allocations with the same 129 active modes and the same 72
-high-speed modes: supported linear-36 ``[4,9,17,27,36,36]``, low-heavy
-``[12,12,16,17,36,36]``, and intermediate-heavy
-``[4,4,24,25,36,36]``. Audit the compact record and, when staged externally,
-all raw results and the pinned geometry with:
+high-speed modes.
+
+.. list-table:: Explicit six-speed-node allocations
+   :header-rows: 1
+   :widths: 32 42
+
+   * - allocation
+     - active pitch counts
+   * - supported linear-36
+     - ``[4,9,17,27,36,36]``
+   * - low-heavy
+     - ``[12,12,16,17,36,36]``
+   * - intermediate-heavy
+     - ``[4,4,24,25,36,36]``
+
+Audit the compact record and, when staged externally, all raw results and the
+pinned geometry with:
 
 .. code-block:: console
 
    python tools/paper_benchmarks/audit_ambipolar_pitch_explicit_groups.py
 
 All three allocations preserve root counts ``[1,3]`` on the bounded surface
-pair. Pairwise selected electric-field, particle-flux, and heat-flux movements
-nevertheless reach ``1.064453125 kV/m``, ``9.89%``, and ``9.08%``. Every new
-evaluation uses the bounded structured route, accepted residuals stay below
+pair. Pairwise movements nevertheless reach the following:
+
+.. list-table:: Largest pairwise movement across the three allocations
+   :header-rows: 1
+   :widths: 42 30
+
+   * - quantity
+     - movement
+   * - selected electric field
+     - ``1.064453125 kV/m``
+   * - selected particle flux
+     - ``9.89%``
+   * - selected heat flux
+     - ``9.08%``
+
+Every new evaluation uses the bounded structured route, accepted residuals stay
+below
 ``3.05e-14``, and measured footprints stay below 4.01 GB. The retained
 intermediate-heavy replay is scientifically exact except for timing, but no
 warm-speedup claim is supported.
@@ -396,7 +561,7 @@ SFINCS 2014 collisionality figures
 
 Literature anchor:
 
-- [Landreman et al. 2014](https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf)
+- `Landreman et al. 2014 <https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf>`_
 
 Scripts:
 
@@ -681,8 +846,21 @@ values::
    python tools/paper_benchmarks/audit_independent_cross_code_validation.py \
      --yancc-root ../YANCC
 
-All four coefficients pass the 6% bounded gate: the maximum relative
-differences are 5.51% for DSHAPE, 1.66% for NCSX, and 5.52% for W7-X EIM;
+All four coefficients pass the 6% bounded gate.
+
+.. list-table:: Maximum relative difference by device
+   :header-rows: 1
+   :widths: 34 26
+
+   * - device
+     - maximum relative difference
+   * - DSHAPE
+     - 5.51%
+   * - NCSX
+     - 1.66%
+   * - W7-X EIM
+     - 5.52%
+
 ``D33*`` differs by at most 0.065%. The artifact pins external commits,
 input and compact-output checksums, reference residuals, resolution, hardware,
 wall time, and process peak RSS. The threshold covers the measured
@@ -707,7 +885,7 @@ research/nightly cycle.
 
 Literature anchors:
 
-- [Landreman et al. 2014](https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf)
+- `Landreman et al. 2014 <https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf>`_
 
 Publication target:
 
@@ -764,7 +942,7 @@ Validation goal:
 
 Literature anchors:
 
-- [Landreman et al. 2014](https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf)
+- `Landreman et al. 2014 <https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf>`_
 
 Closed branch evidence:
 
@@ -839,9 +1017,9 @@ bounded Krylov route. The figure metadata therefore keeps
 
 Literature anchors:
 
-- [Pablant et al. 2020 ion-root context](https://sites.fusion.ciemat.es/jlvelasco/files/papers/pablant2020ionroot.pdf)
-- [Pablant et al. 2018 W7-X core radial electric field](https://sites.fusion.ciemat.es/jlvelasco/files/papers/pablant2018er.pdf)
-- [Nature 2021 W7-X neoclassical validation context](https://www.nature.com/articles/s41586-021-03687-w)
+- `Pablant et al. 2020 ion-root context <https://sites.fusion.ciemat.es/jlvelasco/files/papers/pablant2020ionroot.pdf>`_
+- `Pablant et al. 2018 W7-X core radial electric field <https://sites.fusion.ciemat.es/jlvelasco/files/papers/pablant2018er.pdf>`_
+- `Nature 2021 W7-X neoclassical validation context <https://www.nature.com/articles/s41586-021-03687-w>`_
 
 Publication target:
 
@@ -902,8 +1080,8 @@ Closure note:
 
 Literature anchors:
 
-- [MONKES paper](https://arxiv.org/abs/2312.12248)
-- [KNOSOS paper](https://arxiv.org/abs/1908.11615)
+- `MONKES paper <https://arxiv.org/abs/2312.12248>`_
+- `KNOSOS paper <https://arxiv.org/abs/1908.11615>`_
 
 Publication target:
 
@@ -915,8 +1093,8 @@ Validation goal:
 - separate exact overlap claims from qualitative trend/ordering claims,
 - keep this lane focused on the model subset that is genuinely comparable.
 
-How this page should evolve
----------------------------
+Keeping this page in step with the code
+---------------------------------------
 
 Each time a new figure lane is implemented, update both:
 

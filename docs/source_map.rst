@@ -33,8 +33,8 @@ code:
 - ``dkx/validation`` for frozen-reference loading, Fortran/PETSc
   fixture readers, release-data manifests, validation artifacts, and the
   release/benchmark command-line tooling.
-- ``dkx/workflows`` for scan orchestration (``scans.py``), native all-root
-  ambipolar profile execution (``ambipolar_native.py``), optimization support
+- ``dkx/workflows`` for scan orchestration (``scans.py``), all-root ambipolar
+  profile execution (``ambipolar_native.py``), optimization support
   (``optimization.py``), and JAX-native geometry adapters for external
   equilibrium producers (``geometry_adapters.py``).
 
@@ -91,18 +91,18 @@ Physics and numerics:
   ambipolar root algorithms; ``workflows/ambipolar_native.py`` owns physical
   profile scans, bounded adaptive midpoint/refinement evidence, all-root
   classification, predictive radial branch identity, discrete branch-event
-  evidence, and branch-aware selection for native ``Case`` execution.
+  evidence, and branch-aware selection for ``Case`` execution.
 
 Input/output and orchestration:
 
 - ``inputs.py`` / ``namelist.py`` / ``input_compat.py``: typed namelist with
   Fortran-cited defaults and validation, parsing, alias handling.
-- ``config.py``: immutable native ``Case`` with versioned TOML/JSON readers,
+- ``config.py``: immutable ``Case`` with versioned TOML/JSON readers,
   deterministic semantic IDs, declarative scan bounds, and schema generation.
-- ``execution.py``: native physical normalization and ``Case`` execution;
+- ``execution.py``: physical normalization and ``Case`` execution;
   consumes typed fields directly and never serializes a SFINCS namelist.
 - ``result.py``: immutable named-array ``Result``, reviewer certificate, and
-  the versioned native NetCDF reader/writer.
+  the versioned DKX NetCDF reader/writer.
 - ``run.py``: end-to-end RHSMode 1/2/3 drivers and ``run_from_namelist``.
 - ``writer.py``: the canonical ``sfincsOutput`` writer (all formats,
   geometry-only output, export_f, solver-trace sidecars).

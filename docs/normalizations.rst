@@ -96,7 +96,7 @@ gradients:
 
 Each per-species flux is emitted in all four coordinate variants
 (``*_psiHat``, ``*_psiN``, ``*_rHat``, ``*_rN``); the conversion multiplies the
-native :math:`\nabla\hat\psi` flux by :math:`d(\text{coord})/d\hat\psi`
+underlying :math:`\nabla\hat\psi` flux by :math:`d(\text{coord})/d\hat\psi`
 (:doc:`outputs`).
 
 Radial electric field

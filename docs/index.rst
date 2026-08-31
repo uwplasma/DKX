@@ -2,7 +2,7 @@ DKX
 ===
 
 `dkx` solves the radially local, linearized drift-kinetic equation on a
-flux surface — the same physics as SFINCS Fortran v3 — in pure JAX. One
+flux surface, in pure JAX. The physics is the same as SFINCS Fortran v3. One
 ``input.namelist`` plus one geometry file gives neoclassical particle/heat
 fluxes, parallel flows, bootstrap current, and transport matrices for
 stellarators and tokamaks, on CPU or GPU, with end-to-end automatic
@@ -50,22 +50,38 @@ written and read back); :doc:`examples` walks through each one:
   solve the ambipolar root.
 - ``examples/autodiff/gradients_tour.py`` — ``jax.grad`` through the kinetic solve,
   verified against finite differences.
-- ``examples/optimization/optimize_QA_bootstrap.py`` — flagship gradient-based QA
+- ``examples/optimization/optimize_QA_bootstrap.py`` — gradient-based QA
   stellarator optimization with kinetic ``<j.B>`` in the objective.
 
 Performance and parity evidence
 -------------------------------
 
-:doc:`performance` records the measured canonical-stack evidence: on the
-744k-unknown HSX PAS/DKES case, the tier-1 structured solve completes in
-``27.2 s`` at ``0.93 GB`` on a MacBook M4, versus ``463.6 s`` / ``3.98 GB``
-for 1-rank SFINCS Fortran v3 and ``229.5 s`` / ``2.86 GB`` at its measured
-2-rank parallel floor. Parity referees pin RHSMode=1 output tables to
-``8e-14``, state vectors to ``1e-11``, and transport matrices to
-``6e-13 .. 9e-9`` against Fortran golden data.
+:doc:`performance` records the measured canonical-stack evidence. On the
+744k-unknown HSX PAS/DKES case:
 
-A broader example-suite benchmark complements that single case: it runs the
-full 39-case CPU/GPU example suite against SFINCS Fortran v3 and plots every
+.. list-table:: 744k-unknown HSX PAS/DKES case
+   :header-rows: 1
+   :widths: 46 20 20
+
+   * - Configuration
+     - Solve time
+     - Peak RSS
+   * - ``dkx`` tier-1 structured solve, MacBook M4
+     - ``27.2 s``
+     - ``0.93 GB``
+   * - SFINCS Fortran v3, 1 rank
+     - ``463.6 s``
+     - ``3.98 GB``
+   * - SFINCS Fortran v3, measured 2-rank parallel floor
+     - ``229.5 s``
+     - ``2.86 GB``
+
+Parity referees pin three envelopes against Fortran golden data: RHSMode=1
+output tables to ``8e-14``, state vectors to ``1e-11``, and transport matrices
+to ``6e-13 .. 9e-9``.
+
+A broader example-suite benchmark complements that single case. It runs the
+full 39-case CPU/GPU example suite against SFINCS Fortran v3, and plots every
 row whose Fortran reference runtime clears a ``10 s`` reference-runtime-window,
 so process-launch and JIT-amortization noise does not dominate the bars.
 
@@ -79,8 +95,8 @@ so process-launch and JIT-amortization noise does not dominate the bars.
    profiler RSS deltas over the fixed runtime baseline. Reproduce with
    ``tools/publication_figures/generate_fortran_suite_benchmark_summary.py``.
 
-What this documentation covers
-------------------------------
+Documentation map
+-----------------
 
 - getting started: :doc:`installation`, :doc:`usage`, :doc:`case_files`, :doc:`examples`
 - physics and numerics: :doc:`physics_models`, :doc:`system_equations`,

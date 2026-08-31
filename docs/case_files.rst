@@ -36,14 +36,27 @@ The checked full-schema example is
 ``examples/cases/w7x_ambipolar_profile.toml``. Its
 field names carry engineering units where a dimensional value appears, such as
 ``density_m3``, ``temperature_keV``, and ``search_kV_m``. Solver methods use
-physical route names—``structured_direct``, ``recycled_krylov``, and
-``sparse_direct_referee``—instead of numbered tiers.
+physical route names instead of numbered tiers: ``structured_direct``,
+``recycled_krylov``, and ``sparse_direct_referee``.
 
 The optional ``resolution.pitch_speed_ramp`` isolates a subtle convergence
-choice without exposing a namelist route. Values 0, 1, and 2 are the matching
-SFINCS ``Nxi_for_x_option`` rules: 0 retains the declared maximum pitch order
-at every speed node, 1 is the default linear speed ramp, and 2 is the quadratic
-ramp. Because increasing ``resolution.pitch`` under a ramp changes several
+choice without exposing a namelist route. Its values are the matching SFINCS
+``Nxi_for_x_option`` rules:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 12 62
+
+   * - value
+     - rule
+   * - 0
+     - retain the declared maximum pitch order at every speed node
+   * - 1
+     - linear speed ramp (the default)
+   * - 2
+     - quadratic ramp
+
+Because increasing ``resolution.pitch`` under a ramp changes several
 speed-local truncations at once, resolution studies should record the option
 and the resulting active mode counts rather than describe only the maximum
 pitch order.
@@ -54,9 +67,9 @@ mode count per speed node. Counts must be integers, nondecreasing with speed,
 between 4 and ``resolution.pitch``, and must reach the declared pitch maximum
 at the final node. ``pitch_speed_ramp`` must remain at its implicit default
 when this advanced evidence control is present. Omitting the array preserves
-the historical default and every existing case ID. Native Result/NetCDF
-metadata distinguishes ``explicit`` from ``pitch_speed_ramp`` allocation and
-retains the exact counts and their sum. The explicit control changes only the
+the historical default and every existing case ID. The ``Result`` and NetCDF
+metadata distinguish ``explicit`` from ``pitch_speed_ramp`` allocation and
+retain the exact counts and their sum. The explicit control changes only the
 active Legendre mask inside the same rectangular operator shape; it is not by
 itself a convergence claim.
 
@@ -104,10 +117,24 @@ refinement levels, brackets, and exhaustion status in the Result.
 The checked
 ``validation/inputs/w7x_standard_native_ambipolar_admitted_flux_preflight.toml``
 case applies this contract to the five-surface W7-X transport-flux grid admitted
-by the fixed-field resolution referee. Its bound is 1,023 evaluations per
-surface, 5,115 for the profile, and 4,746,720 retained-evidence bytes. This is a
-launch bound only: the input deliberately excludes bootstrap current from its
-convergence observables because the high-zeta current grid is not yet admitted.
+by the fixed-field resolution referee.
+
+.. list-table:: Preflight bound for that case
+   :header-rows: 1
+   :widths: 44 26
+
+   * - bound
+     - value
+   * - evaluations per surface
+     - 1,023
+   * - evaluations for the profile
+     - 5,115
+   * - retained-evidence bytes
+     - 4,746,720
+
+This is a launch bound only: the input deliberately excludes bootstrap current
+from its convergence observables because the high-zeta current grid is not yet
+admitted.
 
 Case execution and results
 ----------------------------
@@ -154,20 +181,24 @@ Full modal states can additionally retain
 ``evaluation_legendre_tail_relative_l2`` on the same named axes. The ratio is
 the volume- and Legendre-orthogonality-weighted L2 norm of the final two active
 modes divided by the norm of all active modes. It is supporting evidence, not
-a replacement for observable movement under a resolution increase. The
-memory-lean ``block_tridiagonal_truncated`` route returns exact low transport
-moments but deliberately zero-pads eliminated high modes; DKX therefore omits
-the array and records ``unavailable_on_zero_padded_truncated_state`` rather
-than publishing a false zero tail by default. Set
-``convergence.retain_legendre_tail = true`` to request a second bounded-memory
-selected-tail sweep on that route. DKX then writes
+a replacement for observable movement under a resolution increase.
+
+The memory-lean ``block_tridiagonal_truncated`` route returns exact low
+transport moments but deliberately zero-pads eliminated high modes. DKX
+therefore omits the array and records
+``unavailable_on_zero_padded_truncated_state`` rather than publishing a false
+zero tail by default.
+
+Set ``convergence.retain_legendre_tail = true`` to request a second
+bounded-memory selected-tail sweep on that route. DKX then writes
 ``evaluation_legendre_tail_relative_l2_upper_bound``: the numerator uses the
-exact final two active modes and the denominator the exact union of the three
+exact final two active modes, and the denominator the exact union of the three
 retained low modes and those tail modes. Omitted middle-mode energy is
-nonnegative, so this value rigorously bounds the full-state ratio from above;
-the distinct name and ``retained_selected_tail_relative_l2_upper_bound``
-metadata prevent it from being presented as the exact full-state metric. The
-extra kinetic replay and selected-tail sweep are retained only at each
+nonnegative, so this value rigorously bounds the full-state ratio from above.
+The distinct name and ``retained_selected_tail_relative_l2_upper_bound``
+metadata prevent it from being presented as the exact full-state metric.
+
+The extra kinetic replay and selected-tail sweep are retained only at each
 surface's accepted selected field; other evaluation rows remain missing rather
 than multiplying every search/bisection solve. The replay is counted in the
 evaluation budget and solver-attempt evidence, and its observables and true
@@ -204,9 +235,9 @@ SFINCS geometry route:
 
 The reader auto-detects the six-column cosine-only and ten-column
 asymmetric v3 conventions at the file boundary. It reads and parses the source
-once, then reuses the immutable Fourier tables for every surface. Native cases
-therefore never require ``geometryScheme = 11`` or ``12`` and never convert the
-``Case`` back into a SFINCS deck. At least two tabulated surfaces are required
+once, then reuses the immutable Fourier tables for every surface. A DKX case
+file therefore never requires ``geometryScheme = 11`` or ``12``, and never
+converts the ``Case`` back into a SFINCS namelist. At least two tabulated surfaces are required
 for the radial derivatives used by the kinetic operator. The exact source
 SHA-256 is retained in the Result.
 
@@ -303,10 +334,10 @@ A seed that does not bracket a root produces ``seeded_bracket_failed`` or
 ``seeded_bracket_partial_failure`` rather than global no-root evidence.
 
 This split follows the useful sign-change/search-range discipline in PENTA's
-``find_Er_roots`` while retaining DKX's stronger evidence boundary: PENTA's
-routine requests a wider search for zero or even crossing counts and refines
-an interpolated radial-flux fit, whereas DKX retains every kinetic endpoint and
-bisection evaluation and never presents interpolation as a solved root.
+``find_Er_roots``, while retaining DKX's stronger evidence boundary. PENTA's
+routine requests a wider search for zero or even crossing counts, and refines
+an interpolated radial-flux fit. DKX retains every kinetic endpoint and
+bisection evaluation, and never presents interpolation as a solved root.
 
 Radial branch evidence
 ----------------------
@@ -345,12 +376,28 @@ contract. Files contain the canonical case, normalization, geometry checksum,
 package/runtime/device versions, selected route, residual, iteration and timing
 evidence, and peak host memory.
 
-The executable route supports ``workflow = "profile"`` with a prescribed
-field or ``workflow = "ambipolar_profile"`` with a bounded search, ``format =
-"analytic"``, ``"vmec"``, or ``"boozer"`` geometry, ``magnetic_drifts =
-"dkes"``, ``phi1 = "off"``, and at least two profile surfaces.
-Unsupported combinations fail with the exact case field and a
-correction; they are not silently downgraded. Resumable scan execution,
-phase-space convergence rungs, and SFINCS conversion are subsequent vertical
-slices. Existing namelist workflows remain available through ``dkx.run`` and
-the established CLI without a numerical-path change.
+The executable route supports these case fields and values:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 56
+
+   * - case field
+     - supported values
+   * - ``workflow``
+     - ``"profile"`` with a prescribed field, or ``"ambipolar_profile"``
+       with a bounded search
+   * - ``format``
+     - ``"analytic"``, ``"vmec"``, or ``"boozer"`` geometry
+   * - ``magnetic_drifts``
+     - ``"dkes"``
+   * - ``phi1``
+     - ``"off"``
+   * - profile surfaces
+     - at least two
+
+Unsupported combinations fail with the exact case field and a correction; they
+are not silently downgraded. Resumable scan execution, phase-space convergence
+rungs, and SFINCS conversion are later work. Existing namelist workflows remain
+available through ``dkx.run`` and the established CLI without a numerical-path
+change.

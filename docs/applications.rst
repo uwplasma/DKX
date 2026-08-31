@@ -63,7 +63,7 @@ Examples:
 Parallel production workflows
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Two different parallel patterns matter in practice:
+Two parallel patterns matter here:
 
 - **case/RHS parallelism** for throughput,
 - **single-case sharding** for very large solves.

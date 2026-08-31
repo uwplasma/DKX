@@ -40,10 +40,10 @@ Canonical modules
      - ``run_profile`` / ``run_transport_matrix`` orchestration and console flow
      - :doc:`usage`
    * - ``dkx.config``
-     - Native immutable ``Case``, schema validation, IDs, and scan preflight
+     - Immutable ``Case``, schema validation, IDs, and scan preflight
      - :doc:`case_files`
    * - ``dkx.execution`` / ``dkx.result``
-     - Direct native normalization/execution and named-array NetCDF results
+     - Direct normalization/execution and named-array NetCDF results
      - :doc:`case_files`
    * - ``dkx.inputs`` / ``dkx.namelist``
      - Typed ``SfincsInput`` parser and raw namelist reader
