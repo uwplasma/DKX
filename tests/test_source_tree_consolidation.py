@@ -63,8 +63,8 @@ REQUIRED_CORE_SLIM_SOURCE_OWNERS = {
     "src/dkx/writer.py",
     "src/dkx/magnetic_geometry.py",
     "src/dkx/moments.py",
-    "src/dkx/validation/artifacts.py",
-    "src/dkx/validation/release.py",
+    "tools/release/artifacts.py",
+    "tools/release/release.py",
 }
 REQUIRED_CORE_SLIM_NONPACKAGE_OWNERS = {
     "examples",

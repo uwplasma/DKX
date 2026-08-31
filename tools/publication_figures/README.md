@@ -202,7 +202,7 @@ reconstruction and matching checked-in source artifact are available. The stable
 tree keeps the provenance template and package-level artifact gates:
 
 - `tools/publication_figures/provenance/w7x_ambipolar_provenance_template.json`
-- `dkx.validation.artifacts.build_w7x_ambipolar_root_provenance_panel`
+- `tools.release.artifacts.build_w7x_ambipolar_root_provenance_panel`
 
 Long W7-X ambipolar scan/figure generation belongs on the publication-audits
 research branch. Stable tests keep the deferred panel fail-closed behavior,

@@ -1163,33 +1163,6 @@ def _profile_data(equilibrium: Path, *, full: bool = False, quick: bool = False,
 DEFAULT_ER_SCAN = (-8.0, -5.0, -3.0, -2.0, -1.0, -0.5, 0.5, 1.0, 2.0, 4.0)
 
 
-def ambipolarity_scan(
-    namelist: Any,
-    *,
-    er_values: Sequence[float] = DEFAULT_ER_SCAN,
-    emit: Callable[[str], None] | None = None,
-) -> list[dict[str, Any]]:
-    """Radial current against ``E_r``: the ambipolar condition is ``J_r = 0``.
-
-    One batched ``vmap`` solve over the whole ``E_r`` vector on a shared
-    geometry, so this costs far less than the point count suggests.
-    """
-    from dkx.api import batched_er_scan  # noqa: PLC0415
-
-    result = _quiet(
-        lambda: batched_er_scan(namelist, np.asarray(er_values, dtype=float))
-    )
-    # BatchedSolveResult names it `radial_current`; guessing "J_r" silently
-    # yields an empty scan and an empty panel rather than an error.
-    j_r = np.asarray(result.radial_current, dtype=float).ravel()
-    records = [
-        {"er": float(e), "J_r": float(j)}
-        for e, j in zip(np.asarray(er_values, dtype=float), j_r)
-    ]
-    if emit:
-        for r in records:
-            emit(f"    Er={r['er']:+6.2f} kV/m   J_r={r['J_r']:+.4e}")
-    return records
 
 
 def _ambipolar_roots(records: list[dict[str, Any]]) -> list[float]:

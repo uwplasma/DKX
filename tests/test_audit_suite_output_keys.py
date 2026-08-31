@@ -5,7 +5,7 @@ from pathlib import Path
 
 import h5py
 
-from dkx.validation import release
+from tools.release import release
 
 
 def _write_h5(path: Path, keys: dict[str, float]) -> None:

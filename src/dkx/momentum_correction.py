@@ -84,7 +84,6 @@ __all__ = [
     "MomentumCorrectionResult",
     "ParallelViscosity",
     "momentum_corrected_bootstrap",
-    "momentum_restoring_factor",
     "parallel_friction_matrix",
     "parallel_viscosity",
     "solve_corrected_flows",
@@ -333,27 +332,6 @@ def parallel_viscosity(
     mc = n * jnp.sum(quad[None, :] * base * factor, axis=1)
     return ParallelViscosity(uncorrected=m0, corrected=mc, restoring_factor=m0 / mc)
 
-def momentum_restoring_factor(
-    db: MonoenergeticDatabase,
-    *,
-    z_s: Any,
-    m_hats: Any,
-    n_hats: Any,
-    t_hats: Any,
-    nu_n: Any,
-    x: Any = None,
-    x_weights: Any = None,
-    n_x: int = 64,
-    x_max: float = 5.0,
-) -> jnp.ndarray:
-    """Single-species Sugama-Nishimura momentum-restoring factor ``M^(0)/M``.
-
-    Convenience wrapper returning :attr:`ParallelViscosity.restoring_factor`.
-    """
-    return parallel_viscosity(
-        db, z_s=z_s, m_hats=m_hats, n_hats=n_hats, t_hats=t_hats, nu_n=nu_n,
-        x=x, x_weights=x_weights, n_x=n_x, x_max=x_max,
-    ).restoring_factor  # fmt: skip
 
 def solve_corrected_flows(
     uncorrected_flows: Any,

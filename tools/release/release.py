@@ -25,7 +25,7 @@ from typing import Any
 
 import h5py
 # The JAX backend is imported below; dkx/runtime.py explains why this is here.
-from ..runtime import configure as _configure_runtime
+from dkx.runtime import configure as _configure_runtime
 
 _configure_runtime()
 
@@ -33,8 +33,8 @@ import jax
 from jax import profiler as jax_profiler
 
 from dkx.io import localize_equilibrium_file_in_place
-from dkx.validation.artifacts import check_research_lane_completion_file
-from ..paths import repository_root
+from .artifacts import check_research_lane_completion_file
+from dkx.paths import repository_root
 
 #: The checkout these release tools operate on.
 #:

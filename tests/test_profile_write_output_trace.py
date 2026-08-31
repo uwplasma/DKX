@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from dkx.validation import release as write_output_trace
+from tools.release import release as write_output_trace
 
 
 def _load_module():

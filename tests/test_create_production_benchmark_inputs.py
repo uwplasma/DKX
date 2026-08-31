@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from dkx.validation import release as bench_inputs
+from tools.release import release as bench_inputs
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

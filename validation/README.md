@@ -5,7 +5,7 @@ this directory has one entry there naming its capability, its status, the claim
 it makes, the inputs and command that produced it, the checksum that seals it,
 and the limits of what it establishes. One runner checks them all::
 
-    python -m dkx.validation.registry
+    python -m tools.release.registry
 
 `tests/test_validation.py` is the one test module that consumes the registry.
 Do not add a per-campaign registry, runner, or test module: add an entry.

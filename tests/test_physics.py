@@ -9,12 +9,22 @@ were wrong.
 Each check here is against a closed form or an exactly known moment, so a
 regression cannot be absorbed by refreshing a fixture.
 
-What is deliberately *not* asserted: a physical density in SI or SFINCS-hat
-units. Recovering ``n`` from ``f0`` requires the velocity-space Jacobian and
-the moment normalization that ``vm_flux_moments`` applies, and pinning a
-convention here that the moment routines might spell differently would be
-inventing a contract rather than proving one. The shape-level invariants below
-hold whatever that convention turns out to be.
+The density and pressure moments *are* asserted here. An earlier version of
+this file declined to, on the grounds that the normalization could not be
+pinned without guessing. That was wrong in two specific ways, both worth
+recording because they are easy to repeat:
+
+* the solver does not integrate with ``gaussian_weights``. It uses the plain-dx
+  weights from ``XGrid.dx_weights``, which divide ``exp(-x^2) x^k`` back out
+  (``phase_space.py`` builds them; SFINCS does the same at
+  ``createGrids.F90:589``, with no comment saying so);
+* the velocity-space Jacobian is not in the weights. It is applied at the point
+  of use as ``4 pi (That/mhat)^{3/2}`` in ``rhsmode1_moments``, matching
+  ``diagnostics.F90:402``. The missing ``(That/mhat)^{3/2}`` is exactly the
+  factor that made the naive integral come out as ``n (m/T)^{3/2}``.
+
+The ``sqrt(2)`` lives in the reference speed ``vbar = sqrt(2 Tbar / mbar)``, so
+in hat units ``v_th = sqrt(That/mhat)`` with no 2 under the radical.
 """
 
 from __future__ import annotations
@@ -153,3 +163,99 @@ def test_f0_is_positive_everywhere() -> None:
     phi1 = jnp.asarray(np.array([[-1.0, 0.0, 2.0], [0.5, -0.5, 1.0]]))
     f0 = f0_of(one_species(1.0, 0.7, 1.0), phi1=phi1, n_theta=2, n_zeta=3)
     assert np.all(f0 > 0.0)
+
+
+# --------------------------------------------------------------------------
+# Moment normalization
+#
+# These pin the convention DKX shares with SFINCS field for field. The
+# quadrature is exact when dividing the weight out leaves a polynomial in x,
+# which holds for k in {0, 1, 2} and fails at k = 3 -- so the exactness is a
+# property of the rule, not a tolerance someone tuned.
+# --------------------------------------------------------------------------
+
+MOMENT_GRID_EXPONENTS = [0.0, 1.0, 2.0]
+
+
+def f0_on(grid, species: SpeciesParams, *, phi1=None, alpha: float = 1.0,
+          n_theta: int = 1, n_zeta: int = 1):
+    """``f0`` sampled on *this* grid's nodes, not the module-level one.
+
+    Mixing the two is the mistake this helper exists to prevent: evaluating f0
+    on one grid and integrating with another grid's weights gives a plausible
+    wrong number rather than an error.
+    """
+    return np.asarray(
+        maxwellian_f0_l0(species, jnp.asarray(grid.x), alpha=alpha, phi1_hat=phi1,
+                         n_theta=n_theta, n_zeta=n_zeta)
+    )
+
+
+@pytest.mark.parametrize("k", MOMENT_GRID_EXPONENTS)
+@pytest.mark.parametrize(("n_hat", "t_hat", "m_hat"), PLASMAS)
+def test_the_density_moment_of_f0_returns_n_hat(
+    k: float, n_hat: float, t_hat: float, m_hat: float
+) -> None:
+    """``4 pi (That/mhat)^{3/2} sum(w_dx x^2 f0) == nhat``, to roundoff.
+
+    This is the contract ``rhsmode1_moments`` relies on when it adds the
+    perturbation to ``n_hat * exp_phi1``: the equilibrium piece must integrate
+    to exactly the density it was built from, or every reported density is off
+    by a constant nobody would see.
+    """
+    grid = make_x_grid(n=10, k=k)
+    speeds = np.asarray(grid.x)
+    weights = np.asarray(grid.dx_weights(k))
+    f0 = f0_on(grid, one_species(n_hat, t_hat, m_hat))[0, :, 0, 0]
+
+    density = 4.0 * np.pi * (t_hat / m_hat) ** 1.5 * np.sum(weights * speeds**2 * f0)
+    assert density == pytest.approx(n_hat, rel=1e-13)
+
+
+@pytest.mark.parametrize(("n_hat", "t_hat", "m_hat"), PLASMAS)
+def test_the_pressure_moment_of_f0_returns_n_hat_t_hat(
+    n_hat: float, t_hat: float, m_hat: float
+) -> None:
+    """``(8 pi/3) That^{5/2} mhat^{-3/2} sum(w_dx x^4 f0) == nhat That``.
+
+    Density alone cannot catch a wrong power of temperature, because the
+    prefactor and the Maxwellian width move together. The pressure moment
+    carries a different power of ``That`` and separates them.
+    """
+    grid = make_x_grid(n=10, k=0.0)
+    speeds = np.asarray(grid.x)
+    weights = np.asarray(grid.dx_weights(0.0))
+    f0 = f0_on(grid, one_species(n_hat, t_hat, m_hat))[0, :, 0, 0]
+
+    pressure = (8.0 * np.pi / 3.0) * t_hat**2.5 / m_hat**1.5 * np.sum(
+        weights * speeds**4 * f0
+    )
+    assert pressure == pytest.approx(n_hat * t_hat, rel=1e-13)
+
+
+def test_the_density_moment_stops_being_exact_when_the_reduced_integrand_is_not_polynomial() -> None:
+    """At k = 3 the rule integrates ``x^{-1}``, and exactness is gone.
+
+    Pinned so the passing cases above read as a property of Gauss quadrature
+    rather than as a tolerance that happened to fit.
+    """
+    grid = make_x_grid(n=10, k=3.0)
+    speeds = np.asarray(grid.x)
+    weights = np.asarray(grid.dx_weights(3.0))
+    f0 = f0_on(grid, one_species(1.0, 1.0, 1.0))[0, :, 0, 0]
+
+    density = 4.0 * np.pi * np.sum(weights * speeds**2 * f0)
+    assert density != pytest.approx(1.0, rel=1e-6)
+
+
+def test_the_phi1_factor_carries_through_the_density_moment() -> None:
+    """With Phi1 the moment returns ``nhat exp(-Z alpha Phi1/That)``, not ``nhat``."""
+    grid = make_x_grid(n=10, k=0.0)
+    speeds = np.asarray(grid.x)
+    weights = np.asarray(grid.dx_weights(0.0))
+    phi1 = jnp.asarray(np.array([[0.0, 0.5]]))
+    f0 = f0_on(grid, one_species(2.0, 1.0, 1.0, z_s=1.0), phi1=phi1, n_zeta=2)
+
+    for index, potential in enumerate((0.0, 0.5)):
+        density = 4.0 * np.pi * np.sum(weights * speeds**2 * f0[0, :, 0, index])
+        assert density == pytest.approx(2.0 * np.exp(-potential), rel=1e-13)

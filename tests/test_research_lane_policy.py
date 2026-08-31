@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from dkx.validation.release import check_research_lanes_main
-from dkx.validation.artifacts import (
+from tools.release.release import check_research_lanes_main
+from tools.release.artifacts import (
     ResearchLanePolicyError,
     check_research_lane_completion_file,
     research_lane_completion_errors,

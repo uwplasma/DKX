@@ -4,7 +4,7 @@ import copy
 import json
 from pathlib import Path
 
-from dkx.validation.release import release_gate_errors
+from tools.release.release import release_gate_errors
 
 
 _DEFERRED_LANE_IDS = {

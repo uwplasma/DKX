@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dkx.validation import release as readme_audit
+from tools.release import release as readme_audit
 
 
 def _load_module():

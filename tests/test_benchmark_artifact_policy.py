@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from dkx.validation.artifacts import (
+from tools.release.artifacts import (
     ARTIFACT_CLASS_FORTRAN_SUITE_SUMMARY,
     ARTIFACT_CLASS_LEGACY,
     ARTIFACT_CLASS_NON_PAS,
