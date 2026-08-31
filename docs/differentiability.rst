@@ -196,13 +196,14 @@ recorded agreements are:
    :widths: 40 34 26
 
    * - Differentiable target
-     - Adjoint route
+     - Reverse-mode route
      - ``grad`` vs finite difference
    * - PAS + :math:`E_r` kinetic outputs
      - recycled Krylov transposed solve
      - ``2.9e-6``
    * - Ramped-PAS RHSMode=1 output
-     - structured direct truncated block-Thomas, transposed
+     - truncated block-Thomas, taped reverse mode (the
+       ``tier1_adjoint_window=None`` default; no implicit adjoint)
      - agree at rtol ``1e-6``
    * - Monoenergetic :math:`L_{11}` w.r.t. :math:`\hat B_{mn}`
      - differentiable structured direct + energy convolution
