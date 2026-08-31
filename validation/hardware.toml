@@ -39,7 +39,8 @@ gpu = "2x NVIDIA RTX A4000"
 gpu_memory_bytes = 17171480576
 gpu_driver = "580.173.02"
 device_count = 2
-notes = "Observed directly on 2026-08-30; earlier audits recorded it as unreachable. The stellarator_venv there carries jax 0.6.2 with both CUDA devices visible, which is below the floor DKX now needs, so a GPU lane requires its own environment before any accelerator claim is published."
+python_system = "3.10.12"
+notes = "Observed directly on 2026-08-30; earlier audits recorded it as unreachable. A GPU lane is blocked on the interpreter, not on the hardware: the only Python present is the system 3.10.12, and DKX now requires >=3.11. There is no conda, pyenv or uv on the box, and the existing stellarator_venv runs jax 0.6.2 with both CUDA devices visible. Standing up a GPU lane means installing a 3.11+ toolchain into the user home first; that is a change to a shared lab workstation and needs the maintainer to agree before anyone does it."
 
 [[host]]
 id = "local-mac-mini-m2"
