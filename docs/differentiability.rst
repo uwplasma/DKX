@@ -9,10 +9,10 @@ ambipolar :math:`E_r`, a transport coefficient — can be handed straight to
 plasma profiles, or the collisionality. There is no divided-difference
 stencil in the loop and no differentiation through solver iterations.
 
-This page explains how the gradient is taken through the linear solve, catalogues
-what is differentiable, reports the measured gradient-vs-finite-difference
-agreement, and shows the differentiable geometry chain
-``vmex -> booz_xform_jax -> dkx`` used for stellarator optimization.
+Covered here: the gradient through the linear solve, the catalogue of
+differentiable targets, the measured gradient-vs-finite-difference agreement, and
+the differentiable geometry chain ``vmex -> booz_xform_jax -> dkx`` used for
+stellarator optimization.
 
 .. figure:: _static/figures/paper/dkx_autodiff_gradient_check.png
    :alt: Autodiff gradients of dkx observables overlaid on centered finite differences.
@@ -26,7 +26,7 @@ agreement, and shows the differentiable geometry chain
 Implicit differentiation through the solve
 ------------------------------------------
 
-Every tier of the solver returns the solution of a linear system
+Every solver route returns the solution of a linear system
 :math:`A(p)\,u = b(p)`, where :math:`p` collects the differentiable parameters
 (geometry, profiles, drives). For a scalar objective :math:`J = g(u, p)` the
 chain rule needs :math:`\mathrm{d}u/\mathrm{d}p`, which satisfies the *tangent*
@@ -51,12 +51,13 @@ single *transposed* solve
    + \lambda^{\mathsf T}\!\left(\frac{\partial b}{\partial p}
    - \frac{\partial A}{\partial p}\,u\right).
 
-The decisive point is that :math:`A^{\mathsf T}\lambda = \cdot` **reuses the
-forward factorization**. In tier 1 the adjoint is the same block-Thomas sweep run
-with ``transpose=True`` on the factors already computed for the forward solve; in
-tier 2 it is the transposed-preconditioner recycled-Krylov solve seeded from the
-same coarse operator. A gradient therefore costs *one extra solve*, independent
-of how many iterations the forward solve took.
+The transposed solve :math:`A^{\mathsf T}\lambda = \cdot` **reuses the
+forward factorization**. On the structured direct route the adjoint is the same
+block-Thomas sweep run with ``transpose=True`` on the factors already computed
+for the forward solve; on the recycled Krylov route it is the
+transposed-preconditioner solve seeded from the same coarse operator. A gradient
+therefore costs *one extra solve*, independent of how many iterations the forward
+solve took.
 
 The wrappers come from the standalone ``solvax`` package: linear solves route
 through ``solvax.implicit.linear_solve`` (``jax.lax.custom_linear_solve``), and
@@ -68,17 +69,17 @@ function theorem rather than unrolled iterations.
 .. admonition:: Where in the code
 
    ``solve(op, rhs, differentiable=True)`` (:func:`dkx.solve.solve`) wraps
-   tiers 1 and 2 with the implicit adjoint. The scalar
-   ``ambipolar_er`` (:func:`dkx.er.ambipolar_er`) and the
+   the structured direct and recycled Krylov routes with the implicit adjoint.
+   The scalar ``ambipolar_er`` (:func:`dkx.er.ambipolar_er`) and the
    ``phi1_state`` (:func:`dkx.phi1.phi1_state`) helpers return
-   differentiable JAX arrays directly. The tier-3 host direct solve is *not*
+   differentiable JAX arrays directly. The sparse direct host solve is *not*
    differentiable and raises if ``differentiable=True`` is requested.
 
-Bounded reverse mode for the truncated tier-1 kernel
-----------------------------------------------------
+Bounded reverse mode for the truncated structured direct kernel
+---------------------------------------------------------------
 
-One tier is deliberately outside the implicit-adjoint wrapper. The memory-lean
-truncated tier-1 kernel
+One path is deliberately outside the implicit-adjoint wrapper. The memory-lean
+truncated structured direct kernel
 (``solve(op, rhs, method="block_tridiagonal_truncated")``) inverts the *reduced*
 Schur-complemented operator on the lowest ``tier1_keep_lowest`` Legendre blocks
 rather than the full band, so a full-operator :math:`A^{\mathsf T}` adjoint would
@@ -86,15 +87,15 @@ be inconsistent and would silently corrupt the gradient. Its blocks are instead
 assembled on the fly, which keeps the **forward** working set at
 :math:`O(\text{keep}\cdot m^2)` per ``(species, x)`` subsystem, independent of
 :math:`N_\xi` — the property that lets large ramped PAS/DKES decks route through
-tier 1 at all.
+the structured direct kernel at all.
 
 Plain ``jax.grad`` through that kernel tapes the generated sweeps, so the
-**reverse** pass costs :math:`O(N_\xi\cdot m^2)` per subsystem and gives back
+**reverse** pass costs :math:`O(N_\xi\cdot m^2)` per subsystem and surrenders
 the block-count independence exactly where gradient-based transport and profile
 inversion need it. ``solve(..., tier1_adjoint_window=w)`` restores it by routing
-through ``solvax``'s structure-preserving custom VJP for generated blocks:
-the right-hand-side gradient is an exactly
-*generated* truncated solve of the transposed operator, and the coefficient
+through ``solvax``'s structure-preserving custom VJP for generated blocks: the
+right-hand-side gradient is an exactly *generated* truncated solve of the
+transposed operator, and the coefficient
 gradients are pulled back through the block assembly's own derivative on the
 leading ``keep + w`` blocks. Reverse mode then runs at
 :math:`O((\text{keep}+w)\cdot m^2)` per subsystem, matching the forward sweep.
@@ -182,12 +183,12 @@ schemes, or the ``vmex -> booz_xform_jax`` transform below.
    untruncated pitch embedding (``Nxi_for_x_option = 0``); with an active
    :math:`N_\xi`-for-:math:`x` ramp they raise ``NotImplementedError`` rather than
    return an approximate gradient. RHSMode=1 outputs remain differentiable through
-   the ramped tier-1 route.
+   the ramped structured direct route.
 
 Measured gradient accuracy
 --------------------------
 
-Every differentiable path is gated against centered finite differences. The
+Every differentiable path is checked against centered finite differences. The
 recorded agreements are:
 
 .. list-table::
@@ -198,28 +199,28 @@ recorded agreements are:
      - Adjoint route
      - ``grad`` vs finite difference
    * - PAS + :math:`E_r` kinetic outputs
-     - tier-2 recycled-Krylov transposed solve
+     - recycled Krylov transposed solve
      - ``2.9e-6``
    * - Ramped-PAS RHSMode=1 output
-     - tier-1 truncated block-Thomas, transposed
+     - structured direct truncated block-Thomas, transposed
      - agree at rtol ``1e-6``
    * - Monoenergetic :math:`L_{11}` w.r.t. :math:`\hat B_{mn}`
-     - tier-1 differentiable + energy convolution
+     - differentiable structured direct + energy convolution
      - ``5.5e-10``
    * - Monoenergetic energy convolution to thermal :math:`L_{ij}`
      - closed-form convolution vs a full RHSMode=2 kinetic solve
      - ``5.8e-14``
 
 As a throughput reference, a ``value_and_grad`` of a 39,318-unknown PAS
-scheme-1 objective through the tier-1 differentiable route costs about
-``5.3 s`` cold and ``2.1 s`` warm on the development MacBook — the adjoint adds
+scheme-1 objective through the differentiable structured direct route costs
+about ``5.3 s`` cold and ``2.1 s`` warm on the development MacBook — the adjoint adds
 roughly one forward solve, as predicted.
 
 .. warning::
 
-   **A tier-2 gradient on a singular operator aborts rather than answers.**
-   The implicit-function-theorem adjoint is a *transposed* solve, and on an
-   operator whose null space the constraint scheme does not span it is the
+   **A recycled Krylov gradient on a singular operator aborts rather than
+   answers.** The implicit-function-theorem adjoint is a *transposed* solve, and
+   on an operator whose null space the constraint scheme does not span it is the
    only thing that fails: the physical drive stays in the range of
    :math:`A`, so the forward solve converges to ``1e-15`` and every field of
    ``SolveResult`` looks healthy while the vector-Jacobian product returns
@@ -320,5 +321,5 @@ Worked examples
   optimization with kinetic :math:`\langle \mathbf{j}\cdot\mathbf{B}\rangle` in
   the objective.
 
-See :doc:`numerics` for the solver tiers behind the adjoint and :doc:`performance`
+See :doc:`numerics` for the solver routes behind the adjoint and :doc:`performance`
 for runtime and memory of the differentiable paths.

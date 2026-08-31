@@ -4,14 +4,14 @@ Optimization Workflows
 ``dkx`` supports optimization workflows in two layers:
 
 1. **Fast differentiable proxies** used inside a stellarator optimizer.
-2. **High-fidelity kinetic gates** run on accepted designs before making a
+2. **High-fidelity kinetic checks** run on accepted designs before making a
    physics or publication claim.
 
-This split is deliberate.  A full neoclassical solve at every VMEC objective
+The split is deliberate.  A full neoclassical solve at every VMEC objective
 evaluation is usually too expensive, and it can make optimizer behavior depend
-on solver tolerances, branch choices, and one-off failed scans.  The recommended
-workflow is therefore to optimize with cheap JAX-native terms and promote only
-selected candidates to full ``dkx`` scans.
+on solver tolerances, branch choices, and one-off failed scans.  Optimize with
+cheap JAX-native terms, and promote only selected candidates to full ``dkx``
+scans.
 
 The implementation lives in
 ``dkx.workflows.optimization`` and the public example is
@@ -20,7 +20,7 @@ The implementation lives in
 QA nfp=2 Example
 ----------------
 
-Run the fast QA optimization lane from the repository root:
+Run the fast QA optimization workflow from the repository root:
 
 .. code-block:: bash
 
@@ -37,13 +37,12 @@ This produces a JSON provenance file plus PNG/PDF figures:
    :align: center
    :width: 95%
 
-   Fast QA nfp=2 neoclassical optimization proxy.  Panels A-B show the
-   differentiable JAX objective and gradient norm.  Panel C shows the proxy
-   terms before and after optimization.  Panels D-E show the initial and
-   optimized normalized Boozer field strength.  Panel F shows the proxy
-   electron-root and impurity-flux target amplitudes.  This figure is an
-   optimizer-design diagnostic, not a replacement for high-fidelity SFINCS
-   kinetic validation.
+   Fast QA nfp=2 neoclassical optimization proxy.  Panels A-B: differentiable
+   JAX objective and gradient norm.  Panel C: proxy terms before and after
+   optimization.  Panels D-E: initial and optimized normalized Boozer field
+   strength.  Panel F: proxy electron-root and impurity-flux target
+   amplitudes.  This figure is an optimizer-design diagnostic, not a
+   replacement for high-fidelity SFINCS kinetic validation.
 
 Available objective presets are:
 
@@ -51,7 +50,7 @@ Available objective presets are:
    Prioritize small bootstrap-current and QA-like geometry penalties.
 
 ``electron-root``
-   Prioritize a proxy for a resolved positive ambipolar root.
+   Reward a proxy for a resolved positive ambipolar root.
 
 ``flux-selective``
    Penalize main-species heat and particle flux while encouraging outward
@@ -64,12 +63,12 @@ Available objective presets are:
 Bootstrap-Current Comparison Example
 ------------------------------------
 
-The most direct way to teach the geometry-to-transport workflow is to start from
-the real ``vmex`` QA optimization output, verify that the VMEC equilibrium
-has the intended finite rotational transform, and then use that equilibrium as
-the input to kinetic ``dkx`` promotion scans.  The checked figure below
-uses ``vmex/examples/optimization/QA_optimization.py``, whose public target
-is aspect ratio 5 and mean iota 0.41.
+This example walks the geometry-to-transport workflow: start from the real
+``vmex`` QA optimization output, verify that the VMEC equilibrium has the
+intended finite rotational transform, then use that equilibrium as the input to
+kinetic ``dkx`` promotion scans.  The checked figure below uses
+``vmex/examples/optimization/QA_optimization.py``, whose public target is aspect
+ratio 5 and mean iota 0.41.
 
 .. code-block:: bash
 
@@ -83,31 +82,36 @@ is aspect ratio 5 and mean iota 0.41.
    :align: center
    :width: 95%
 
-   VMEC-backed QA nfp=2 optimization diagnostic.  Panels A-B show the real
-   VMEC last-closed-flux-surface and LCFS field strength.  Panel C shows LCFS
-   cuts.  Panel D shows the finite rotational-transform profile from the final
-   VMEC ``wout``.  Panel E shows the VMEC equilibrium current diagnostic
+   VMEC-backed QA nfp=2 optimization diagnostic.  Panels A-B: the real VMEC
+   last-closed-flux-surface and LCFS field strength.  Panel C: LCFS cuts.
+   Panel D: the finite rotational-transform profile from the final VMEC
+   ``wout``.  Panel E: the VMEC equilibrium current diagnostic
    :math:`J\cdot B/\sqrt{B\cdot B}` versus normalized toroidal-flux radius.
-   Panel F audits the ``QA_optimization.py`` objective and the final aspect/iota
-   gate.  The checked artifact has aspect ratio 4.999999 and mean iota 0.4097.
+   Panel F audits the ``QA_optimization.py`` objective and the final
+   aspect/iota check.  The checked artifact has aspect ratio 4.999999 and mean
+   iota 0.4097.
 
 Pass ``--comparison-result-dir`` to overlay a second ``vmex`` result, for
 example a QA run in which ``QA_optimization.py`` has been edited to add
-``JDotB`` or ``RedlBootstrapMismatch`` to ``objective_tuples``.  That overlay is
-accepted only if it reduces the VMEC current diagnostic while preserving the
-finite-iota/aspect gate.  The plotted current profile is still not a completed
-kinetic SFINCS current.  A candidate selected from this step should be promoted
-with completed ``dkx scan-er`` outputs.  The corresponding kinetic
-observable is ``FSABjHatOverRootFSAB2``,
+``JDotB`` or ``RedlBootstrapMismatch`` to ``objective_tuples``.  Accept that
+overlay only if it reduces the VMEC current diagnostic while preserving the
+finite-iota/aspect check.
+
+The plotted current profile is still not a completed kinetic SFINCS current, so
+promote a candidate selected from this step with completed ``dkx scan-er``
+outputs.  The corresponding kinetic observable is ``FSABjHatOverRootFSAB2``,
 
 .. math::
 
    \frac{\langle\mathbf{J}\cdot\mathbf{B}\rangle}
         {\sqrt{\langle B^2\rangle}},
 
-which should be checked together with residual convergence, CPU/GPU agreement,
-radial and velocity-space convergence, and SFINCS Fortran v3 comparison when
-the input lies in shared model scope.
+and it should be checked together with:
+
+- residual convergence;
+- CPU/GPU agreement;
+- radial and velocity-space convergence;
+- SFINCS Fortran v3 comparison when the input lies in shared model scope.
 
 For a directly editable script, use
 ``examples/optimization/QA_optimization_bootstrap_current.py``.  It follows the
@@ -155,8 +159,9 @@ bootstrap current.
 Two constraints follow from DKX being a host code rather than a traced one:
 
 - the problem must be built with ``derivative_method="finite_difference"``;
-  the implicit lane needs a traceable ``(state, runtime)`` term, which is what
-  ``RedlBootstrapMismatch.residuals_state`` provides and this term cannot.
+  the implicit derivative path needs a traceable ``(state, runtime)`` term,
+  which ``RedlBootstrapMismatch.residuals_state`` provides and this term
+  cannot.
 - each residual evaluation is one drift-kinetic solve per surface (per
   ``E_r`` point with ``ambipolar=True``), so the cost is minutes per evaluation.
   Keep ``surfaces`` short.
@@ -298,8 +303,8 @@ tests, and rapid design iteration.  It is not a high-fidelity kinetic transport
 claim, and it does not make the later promoted kinetic ``scan-er`` outputs
 differentiable.
 
-High-Fidelity Promotion Gates
------------------------------
+High-Fidelity Promotion Checks
+------------------------------
 
 Accepted designs should be promoted to actual ``dkx`` solves before
 publication or engineering decisions.  Real promotion starts only after the
@@ -351,7 +356,7 @@ directory; anything before that is proxy provenance or scan planning.
 
 Run production evidence as explicit scan, audit, and comparison commands. This
 keeps the stable examples small and makes each expensive CPU, GPU, or optional
-Fortran-v3 lane scheduler-friendly. Fortran-v3 HDF5 files often do not contain
+Fortran-v3 stage scheduler-friendly. Fortran-v3 HDF5 files often do not contain
 the JAX linear-residual datasets, so only relax residual requirements for
 Fortran-derived promotion JSON files when that absence is documented.
 
@@ -434,7 +439,7 @@ The script reads each completed ``sfincsOutput.h5`` file, computes
 :math:`\sum_s Z_s\Gamma_s(E_r)`, classifies ambipolar roots, audits bootstrap
 current and species fluxes, and checks linear residual diagnostics.  If
 ``--scan-dir`` is omitted, it creates a tiny synthetic SFINCS-style scan so the
-plotting and gate logic can be demonstrated without a long solve.  That
+plotting and pass/fail logic can be demonstrated without a long solve.  That
 synthetic mode is demo-only and cannot promote an optimization candidate.
 
 .. figure:: _static/figures/optimization/qa_nfp2_dkx_promotion_scan.png
@@ -442,17 +447,17 @@ synthetic mode is demo-only and cannot promote an optimization candidate.
    :align: center
    :width: 90%
 
-   Promotion dashboard for an optimization candidate.  Panel A shows the
-   ambipolar radial-current bracket and selected electron root.  Panel B shows
-   the bootstrap-current observable.  Panels C-D show particle and heat fluxes
-   by species, together with the promotion gate status.  Real optimization
+   Promotion dashboard for an optimization candidate.  Panel A: the ambipolar
+   radial-current bracket and selected electron root.  Panel B: the
+   bootstrap-current observable.  Panels C-D: particle and heat fluxes by
+   species, together with the promotion check status.  Real optimization
    campaigns should use completed ``dkx scan-er`` outputs rather than the
    synthetic demonstration scan used to generate this documentation artifact.
 
-Practical End-To-End Lane
--------------------------
+Practical End-To-End Workflow
+-----------------------------
 
-Use this lane when a QA optimizer has produced a small set of accepted
+Use this workflow when a QA optimizer has produced a small set of accepted
 ``vmex`` candidates and you want a reproducible path from proxy evidence to
 kinetic validation.  The repository does not make ``vmex`` or
 ``booz_xform_jax`` hard dependencies; a production campaign may run the VMEC
@@ -475,7 +480,7 @@ The scalar optimized in the proxy stage has the same role as the terms above:
 Here :math:`\mathbf{a}` are the active Boozer-spectrum coefficients and
 :math:`\widehat B = B/B_{00}`.  This objective is an optimizer-steering scalar,
 not a kinetic solve.  It can rank candidates and record a gradient/provenance
-gate, but it cannot by itself establish ambipolar roots, bootstrap-current
+check, but it cannot by itself establish ambipolar roots, bootstrap-current
 accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
 
 1. Run the optional VMEC/Boozer preflight and proxy-gradient workflow.
@@ -513,7 +518,7 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
    The resulting ``candidate01_proxy.json`` is provenance for the proxy
    objective, not a SFINCS input file.  It should travel with the accepted
    candidate so later audits can see the weights, final proxy coefficients,
-   finite-difference gradient gate, and required promotion plan.
+   finite-difference gradient check, and required promotion plan.
 
 2. Build the SFINCS input and run the high-fidelity electric-field scan.
 
@@ -612,7 +617,7 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
         --er-min -3 --er-max 3 --er-initial 0
 
    This direct path writes per-evaluation ``sfincsOutput.h5`` files and solver
-   traces, then summarizes the selected solver lane, residual, timing, active
+   traces, then summarizes the selected solver route, residual, timing, active
    size, cache provenance, and shape-checked Krylov state reuse in
    ``ambipolar_result.json``.
 
@@ -675,12 +680,16 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
            {\max(\|y_B\|_\infty, y_\mathrm{floor})}.
 
    Set the actual tolerances in the campaign record before looking at the
-   results, and keep them observable-specific.  CPU/GPU agreement establishes
-   backend reproducibility for the compared inputs.  Fortran agreement
-   establishes reference parity only for keys and physics options supported by
-   both implementations.  Neither comparison upgrades a proxy-only candidate to
-   a publication claim unless the promoted kinetic scans, convergence evidence,
-   and claim-specific tolerances are all archived.
+   results, and keep them observable-specific.  What each comparison
+   establishes:
+
+   - CPU/GPU agreement: backend reproducibility for the compared inputs.
+   - Fortran agreement: reference parity only for keys and physics options
+     supported by both implementations.
+
+   Neither comparison upgrades a proxy-only candidate to a publication claim
+   unless the promoted kinetic scans, convergence evidence, and claim-specific
+   tolerances are all archived.
 
    Once the CPU, GPU, and optional Fortran promotion JSON files exist, create a
    compact comparison report:
@@ -708,7 +717,7 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
       agreement for the promotion machinery and shared model outputs; it is not
       an electron-root or finite-beta QA optimization claim.
 
-   The reduced-W7-X comparison passed the default strict gates without relaxed
+   The reduced-W7-X comparison passed the default strict checks without relaxed
    tolerances: CPU/GPU root, bootstrap-objective, and flux-objective relative
    differences were below :math:`5\times 10^{-13}`, and the DKX versus
    Fortran-v3 differences were below :math:`8\times 10^{-11}`.  The checked
@@ -727,7 +736,7 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
       :math:`N_\theta=7`, :math:`N_\zeta=7`, :math:`N_\xi=5`,
       :math:`N_L=4`, :math:`N_x=4`, ``solverTolerance = 1e-8``,
       ``dNHatdrHats = (0, -5)``, and ``dTHatdrHats = (0, -10)``.  All three
-      lanes selected a positive electron root in the bracket
+      runs selected a positive electron root in the bracket
       :math:`E_r\in[0.25,0.5]`; the JAX CPU/GPU roots agreed to
       :math:`3.1\times10^{-13}` absolute difference, and the DKX versus
       Fortran-v3 root differed by :math:`7.1\times10^{-8}`.  The comparison
@@ -745,74 +754,84 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
       :width: 90%
 
       Bounded finite-beta QA electron-root convergence ladder at
-      :math:`r_N=0.5`.  The first tier is the checked
+      :math:`r_N=0.5`.  The first level is the checked
       :math:`7\times7\times5\times4` CPU/GPU/Fortran promotion artifact above;
-      the second tier is a completed :math:`9\times9\times7\times4`
-      CPU/GPU/Fortran scan.  The intermediate tier remains backend-clean:
+      the second level is a completed :math:`9\times9\times7\times4`
+      CPU/GPU/Fortran scan.  The intermediate level remains backend-clean:
       CPU/GPU root agreement is :math:`8.94\times10^{-14}` and
       DKX/Fortran-v3 root agreement is :math:`1.91\times10^{-7}`.  The
       root moved from :math:`E_r=0.4136092671` to
       :math:`E_r=0.4006366757`, so the ladder is useful evidence but not a
       final physics claim.  The summary is intentionally marked ``deferred``
-      because the final checked tier is below the declared production floor
+      because the final checked level is below the declared production floor
       :math:`N_\theta=25`, :math:`N_\zeta=51`, :math:`N_\xi=100`,
       :math:`N_L=4`, :math:`N_x=4`.
 
-   A medium-resolution solver-policy probe covers the next
-   non-dense rung for this same finite-beta QA deck.  At
+   A medium-resolution solver-policy probe covers the next non-dense
+   refinement level for this same finite-beta QA deck, at
    :math:`N_\theta=17`, :math:`N_\zeta=21`, :math:`N_\xi=12`,
-   :math:`N_L=4`, :math:`N_x=4` with two species, ``solve_method="auto"``
-   selected the (since-deleted) ``xblock_sparse_pc_gmres`` lane at the time of
-   the recorded audit.  The CPU run wrote output in about
-   7 seconds, required 139 matrix-vector products, and reached a true residual
-   :math:`1.44\times10^{-13}` against a target
-   :math:`2.71\times10^{-13}`.  The same point matched the written Fortran-v3
-   output to better than :math:`1.6\times10^{-6}` relative over the
-   bootstrap-current, flow, particle-flux, and heat-flux observables.  This
-   validates the bounded medium-resolution solver policy and keeps the
-   production floor honest: the full
-   :math:`25\times51\times100\times4` ladder has
-   :math:`1{,}020{,}004` active unknowns, so it still requires a larger
+   :math:`N_L=4`, :math:`N_x=4` with two species:
+
+   - ``solve_method="auto"`` selected the (since-deleted)
+     ``xblock_sparse_pc_gmres`` route at the time of the recorded audit.
+   - The CPU run wrote output in about 7 seconds and required 139
+     matrix-vector products.
+   - It reached a true residual :math:`1.44\times10^{-13}` against a target
+     :math:`2.71\times10^{-13}`.
+   - The same point matched the written Fortran-v3 output to better than
+     :math:`1.6\times10^{-6}` relative over the bootstrap-current, flow,
+     particle-flux, and heat-flux observables.
+
+   This validates the bounded medium-resolution solver policy and keeps the
+   production floor honest: the full :math:`25\times51\times100\times4` ladder
+   has :math:`1{,}020{,}004` active unknowns, so it still requires a larger
    non-dense campaign before being promoted as a production convergence claim.
 
    The solver-policy audit is stored in
    ``docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_xblock_policy_probe.json``.
 
-   The next above-window rung,
+   The next above-window refinement level,
    :math:`N_\theta=21`, :math:`N_\zeta=25`, :math:`N_\xi=14`,
    :math:`N_L=4`, :math:`N_x=4`, has :math:`58{,}804` active unknowns and was
-   run on local CPU, one office GPU, and SFINCS Fortran v3.  The CPU path
-   converged in 18.8 seconds wall time, the GPU path converged in 86.0 seconds
-   wall time, and both reached the requested true residual.  CPU/GPU agreement
-   was better than :math:`2.7\times10^{-8}` relative on current and flux
-   observables; GPU/Fortran-v3 agreement was better than
-   :math:`2.7\times10^{-6}` relative.  The default multispecies non-dense
-   x-block policy is bounded to this measured window
-   (:math:`30{,}000 \le n_\mathrm{active} \le 60{,}000`,
+   run on local CPU, one office GPU, and SFINCS Fortran v3:
+
+   - The CPU path converged in 18.8 seconds wall time and the GPU path in
+     86.0 seconds wall time; both reached the requested true residual.
+   - CPU/GPU agreement was better than :math:`2.7\times10^{-8}` relative on
+     current and flux observables.
+   - GPU/Fortran-v3 agreement was better than :math:`2.7\times10^{-6}`
+     relative.
+
+   The default multispecies non-dense x-block policy is bounded to this
+   measured window (:math:`30{,}000 \le n_\mathrm{active} \le 60{,}000`,
    :math:`12 \le N_\xi \le 14`) and intentionally does not cover the
    million-unknown production floor.
 
    The above-window solver-policy audit is stored in
    ``docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_xblock_policy_probe_21x25x14.json``.
 
-   The next medium rung,
+   The next medium refinement level,
    :math:`N_\theta=25`, :math:`N_\zeta=31`, :math:`N_\xi=16`,
    :math:`N_L=4`, :math:`N_x=4`, has :math:`99{,}204` active unknowns and
-   estimated dense storage of about 73 GiB.  The (since-deleted) forced ``xblock_sparse_pc_gmres`` lane
-   converged on local CPU in 68.1 seconds wrapper time with residual
-   :math:`2.74\times10^{-14}` against target :math:`4.00\times10^{-13}`.
-   The same input converged on one office GPU in 232 seconds wrapper time with
-   residual :math:`1.75\times10^{-13}`.  CPU/GPU agreement was better than
-   :math:`3.2\times10^{-8}` relative on current and flux observables, and
-   GPU/Fortran-v3 agreement was better than :math:`4.5\times10^{-7}` relative
-   on those observables.  Since this path uses host sparse factors, it is a
-   correctness-safe GPU route but not a GPU-performance claim at this size; the
-   CPU path is faster for this rung.  The default multispecies non-dense
-   x-block policy is bounded to
+   estimated dense storage of about 73 GiB.  With the (since-deleted) forced
+   ``xblock_sparse_pc_gmres`` route:
+
+   - local CPU converged in 68.1 seconds wrapper time with residual
+     :math:`2.74\times10^{-14}` against target :math:`4.00\times10^{-13}`;
+   - the same input converged on one office GPU in 232 seconds wrapper time
+     with residual :math:`1.75\times10^{-13}`;
+   - CPU/GPU agreement was better than :math:`3.2\times10^{-8}` relative on
+     current and flux observables, and GPU/Fortran-v3 agreement was better
+     than :math:`4.5\times10^{-7}` relative on those observables.
+
+   Since this path uses host sparse factors, it is a correctness-safe GPU
+   route but not a GPU-performance claim at this size; the CPU path is faster
+   for this refinement level.  The default multispecies non-dense x-block
+   policy is bounded to
    :math:`30{,}000 \le n_\mathrm{active} \le 100{,}000`,
    :math:`12 \le N_\xi \le 16`.
 
-   The medium-rung solver-policy audit is stored in
+   The medium-level solver-policy audit is stored in
    ``docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_xblock_policy_probe_25x31x16.json``.
 
    These checked finite-beta artifacts are QA electron-root evidence only.  They
@@ -841,7 +860,7 @@ QI/device-QI optimization research
 QI electron-root screening, QI kinetic promotion ladders, and true device-QI
 operator-reuse experiments are preserved on the
 ``research/qi-device-hard-seed`` branch. They are not part of the stable
-examples or release-facing optimization evidence until the same gates used for
+examples or release-facing optimization evidence until the same checks used for
 the QA workflows pass at production resolution: strict true residuals,
 CPU/GPU agreement, resolution convergence, runtime/memory budgets, and
 Fortran-v3 comparison where the models overlap.
@@ -849,9 +868,9 @@ Fortran-v3 comparison where the models overlap.
 VMEC JAX Integration
 --------------------
 
-The current ``vmex`` QA script already exposes objective tuples such as
-aspect ratio, mean iota, and quasisymmetry.  The neoclassical lane should be
-added as an outer-loop or accepted-candidate gate:
+The shipped ``vmex`` QA script already exposes objective tuples such as
+aspect ratio, mean iota, and quasisymmetry.  Add the neoclassical stage as an
+outer-loop or accepted-candidate check:
 
 .. code-block:: python
 
@@ -865,7 +884,7 @@ added as an outer-loop or accepted-candidate gate:
 Inside every VMEC optimizer residual evaluation, use the differentiable proxy
 if a transport-informed term is needed.  After a candidate is accepted, write a
 VMEC ``wout``, transform or load the geometry, run the selected ``dkx``
-surfaces, and evaluate the high-fidelity gates above.
+surfaces, and evaluate the high-fidelity checks above.
 
 This keeps the optimizer fast while preserving a clear evidence path from
 geometry optimization to validated neoclassical transport metrics.

@@ -3,8 +3,8 @@ Numerics and algorithms
 
 `dkx` solves a large structured linear (or, with :math:`\Phi_1`,
 nonlinear) system that comes from discretizing the radially local drift-kinetic
-equation of :doc:`physics_reference` on a single flux surface. This page
-describes the discretization, the three-tier solver policy, and the
+equation of :doc:`physics_reference` on a single flux surface. This page covers
+the discretization, the three solver routes and how one is chosen, and the
 implicit-differentiation adjoint.
 
 Discrete unknowns
@@ -105,8 +105,8 @@ Velocity-space discretization
 -----------------------------
 
 **Pitch angle** is expanded in Legendre modes,
-:math:`f = \sum_{L=0}^{N_\xi-1} f_L(x,\theta,\zeta)\,P_L(\xi)`. This has two
-structural consequences that drive the solver design:
+:math:`f = \sum_{L=0}^{N_\xi-1} f_L(x,\theta,\zeta)\,P_L(\xi)`. The structural
+consequences that drive the solver design are:
 
 - streaming and mirror couple :math:`L\leftrightarrow L\pm1`;
 - the :math:`E_r` energy/pitch drifts couple :math:`L\leftrightarrow L\pm2`;
@@ -166,14 +166,23 @@ cleanly.
    block-tridiagonal-in-:math:`L` extraction is
    ``KineticOperator.to_block_tridiagonal``.
 
-The three solver tiers
-----------------------
+The three solver routes
+-----------------------
 
-The solve policy (:func:`dkx.solve.solve`, ``solve_method="auto"``) picks
-the cheapest adequate tier over a :class:`~dkx.drift_kinetic.KineticOperator`.
+The solve policy (:func:`dkx.solve.solve`, ``solve_method="auto"``) picks the
+cheapest adequate route over a :class:`~dkx.drift_kinetic.KineticOperator`.
+The three routes are named the same way in a case file's ``[solver] method``
+field: ``structured_direct``, ``recycled_krylov``, and
+``sparse_direct_referee``.
 
-Tier 1 — structured direct (block-tridiagonal Legendre elimination)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Code identifiers still spell these routes with the retired tier numbering:
+``tier1`` names belong to the structured direct route
+(``tier1_keep_lowest``, ``DKX_TIER1_MEMORY_BUDGET_GB``), ``tier2`` to recycled
+Krylov (``DKX_TIER2_MEMORY_GUARD``), and ``tier3`` to the sparse direct route.
+The prose on every page uses the route names.
+
+Structured direct (block-tridiagonal Legendre elimination)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 When the operator reduces to the **DKES-trajectory / pitch-angle-scattering
 family** — streaming and mirror couple :math:`L\pm1`, :math:`E\times B` and PAS
@@ -201,7 +210,7 @@ and variational treatment of the monoenergetic drift-kinetic equation by
 right-hand side and the physical moments actually touch — are retained, so peak
 memory is bounded by the truncation depth instead of the full Legendre chain.
 
-Concretely, the tier-1 peak memory is
+Concretely, the structured direct peak memory is
 
 .. math::
 
@@ -213,54 +222,59 @@ square of the dense angular block dimension :math:`m`, and is **independent of**
 :math:`N_\xi` and :math:`N_x`. One :math:`2875^2` block at the 744k-unknown HSX
 resolution is about 66 MB, so the truncated route needs :math:`\sim 0.3` GB where
 a full-band factorization of the same operator would need :math:`\sim 91` GB
-(:doc:`performance`). This is the origin of the tier-1 memory advantage over an
-assembled sparse factorization. The same discrete operator also yields an
-a-posteriori convergence certificate: the variational transport-coefficient
-bounds (:doc:`capabilities`) bracket the monoenergetic :math:`D_{11}` from above
-and below.
+(:doc:`performance`). This is the origin of the structured direct memory
+advantage over an assembled sparse factorization. The same discrete operator
+also yields an error bound computed from the solution itself, with no reference
+run needed: the variational transport-coefficient bounds (:doc:`capabilities`)
+bracket the monoenergetic :math:`D_{11}` from above and below.
 
-Tier 2 — preconditioned, recycled Krylov
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Recycled Krylov (preconditioned, with subspace recycling)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-When tier 1 does not apply (full Fokker--Planck, or the full-trajectory
-:math:`E_r` terms), the code runs matrix-free FGMRES with subspace recycling
-(GCROT) on ``KineticOperator.apply``, right-preconditioned by an **exact tier-1
-solve of a SFINCS-simplified coarse operator**. The coarse operator uses the
+When the structured direct route does not apply (full Fokker--Planck, or the
+full-trajectory :math:`E_r` terms), the code runs matrix-free FGMRES with
+subspace recycling (GCROT) on ``KineticOperator.apply``, right-preconditioned by
+an **exact structured direct solve of a SFINCS-simplified coarse operator**.
+The coarse operator uses the
 Fortran ``preconditionerOptions`` idiom — ``preconditioner_species=1``
 (self-collisions only) and ``preconditioner_x=1`` (:math:`x`-diagonal
 collisions) reduce Fokker--Planck to a PAS-like :math:`L`-diagonal coefficient,
 and the :math:`E_r` :math:`L\pm2` terms are dropped — so the preconditioner is
-itself a tier-1 direct solve. The recycle pair :math:`(C,U)` is returned for
+itself a structured direct solve. The recycle pair :math:`(C,U)` is returned for
 warm-starting continuation, which makes neighbouring points in an :math:`E_r`
 scan or Newton :math:`\Phi_1` iteration converge in a handful of iterations.
 
-Tier 3 — host sparse-direct fallback
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Sparse direct (host fallback and independent cross-check)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 As an escape hatch the operator is materialized (vmapped unit vectors, guarded
-by ``max_dense_size``) into CSR and factored by SuperLU on the host. This tier
+by ``max_dense_size``) into CSR and factored by SuperLU on the host. This route
 is non-differentiable and non-jittable and prints a one-line notice; it is used
-on explicit request (``method="direct"``) or when tier 2 breaches its iteration
-cap under ``method="auto"``.
+on explicit request (``method="direct"``) or when the recycled Krylov route
+breaches its iteration cap under ``method="auto"``. Because it inverts the
+assembled operator with a general-purpose factorization, it also serves as the
+independent cross-check on answers from the other two routes; the case-file
+value ``sparse_direct_referee`` names that role.
 
 .. admonition:: Where in the code
 
-   :func:`dkx.solve.solve` (auto policy, solve.py); tier-1 build
+   :func:`dkx.solve.solve` (auto policy, solve.py); the structured direct build
    ``build_tier1_solver`` and the truncated variant ``_solve_tier1_truncated``;
-   tier-2 ``_solve_tier2`` with ``build_coarse_preconditioner``; tier-3
-   ``_solve_tier3``. The structured factorization, recycled Krylov, and host
-   direct solves are provided by the ``solvax`` library
+   the recycled Krylov ``_solve_tier2`` with ``build_coarse_preconditioner``;
+   the sparse direct ``_solve_tier3``. The structured factorization, recycled
+   Krylov, and host direct solves are provided by the ``solvax`` library
    (`github.com/uwplasma/SOLVAX <https://github.com/uwplasma/SOLVAX>`_,
    `PyPI <https://pypi.org/project/solvax/>`_).
 
 Implicit differentiation (IFT adjoint)
 --------------------------------------
 
-For gradient-based workflows tiers 1 and 2 are wrapped with the implicit
-function theorem (``jax.lax.custom_linear_solve`` via
-``solvax.implicit.linear_solve``). Rather than differentiating through the
-solver iterations, the adjoint of a linear solve :math:`Au=b` is one **transposed
-solve**, which reuses the same tier-1 block-Thomas factors
+For gradient-based workflows the structured direct and recycled Krylov routes
+are wrapped with the implicit function theorem
+(``jax.lax.custom_linear_solve`` via ``solvax.implicit.linear_solve``). Rather
+than differentiating through the solver iterations, the adjoint of a linear
+solve :math:`Au=b` is one **transposed solve**, which reuses the same
+block-Thomas factors
 (``block_thomas_solve(transpose=True)``) or a transposed-preconditioner GCROT
 solve. The cost of a gradient is therefore one additional solve, independent of
 the iteration count of the forward solve. The ambipolar :math:`E_r` root and the
@@ -271,38 +285,38 @@ outer (root) level (:func:`dkx.er.ambipolar_er`,
 Numerical building blocks — the structured factorizations, the recycled Krylov,
 the mixed-precision block-Thomas, and the implicit-solve wrappers — live in the
 standalone ``solvax`` package so they can be tested and reused independently.
-The mixed-precision block-Thomas path is GPU-gated (it is faster on GPU FP64 but
-slower on CPU), so the CPU path uses the plain block-Thomas factorization.
+The mixed-precision block-Thomas path runs on GPU only (it is faster on GPU FP64
+but slower on CPU), so the CPU path uses the plain block-Thomas factorization.
 
-When to use which tier
-----------------------
+When to use which route
+-----------------------
 
 .. list-table::
    :header-rows: 1
    :widths: 26 20 30 24
 
    * - Case
-     - Auto tier
+     - Auto route
      - Why
      - Differentiable
    * - DKES trajectories + PAS (RHSMode 3, monoenergetic)
-     - Tier 1
+     - Structured direct
      - Block-tridiagonal in :math:`L`; :math:`N_s N_x` independent chains
      - yes (transposed factors)
    * - PAS, full profile solve (RHSMode 1)
-     - Tier 1
+     - Structured direct
      - Same structure; multi-RHS shares one elimination
      - yes
    * - Full Fokker--Planck collisions
-     - Tier 2
+     - Recycled Krylov
      - Dense :math:`x`/species coupling breaks tridiagonality
      - yes (transposed preconditioner)
    * - Full-trajectory :math:`E_r` (:math:`L\pm2` terms)
-     - Tier 2
+     - Recycled Krylov
      - :math:`L\pm2` coupling breaks tridiagonality
      - yes
-   * - Ill-conditioned / small, or tier-2 stall
-     - Tier 3
+   * - Ill-conditioned / small, or a recycled Krylov stall
+     - Sparse direct
      - Host SuperLU direct
      - no (loud escape hatch)
 

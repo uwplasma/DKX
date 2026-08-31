@@ -64,7 +64,7 @@ Canonical modules
      - Pitch-angle scattering and full Fokker--Planck (Rosenbluth) operators
      - :doc:`physics_reference`
    * - ``dkx.solve``
-     - Three-tier auto solver (block-tridiagonal, recycled Krylov, host direct)
+     - Automatic route choice: structured direct, recycled Krylov, sparse direct
      - :doc:`numerics`
    * - ``dkx.moments``
      - Velocity-space moments, fluxes, ``FSABjHat``, transport matrix
@@ -107,7 +107,7 @@ Reduced-model and analysis modules
      - :doc:`capabilities`
    * - ``dkx.variational``
      - Variational upper/lower bounds on the monoenergetic :math:`D_{11}`
-       (convergence certificate)
+       (an error bound needing no reference run)
      - :doc:`capabilities`
    * - ``dkx.shaing_callen``
      - Collisionless-limit bootstrap coefficient with an analytic axisymmetric

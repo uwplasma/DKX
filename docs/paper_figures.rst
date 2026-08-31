@@ -87,7 +87,7 @@ Autodiff and sensitivity validation
    Gradient-validation dashboard for the differentiable solve path. Panel A compares
    autodiff/implicit-diff gradients with centered finite differences for stable scalar
    objectives, including a pinned SFINCS full-system linear solve. Panel B records the
-   finite-difference step sweep used for the SFINCS gradient gate. Panel C shows primal
+   finite-difference step sweep used for the SFINCS gradient check. Panel C shows primal
    and adjoint residuals for the solve checks. Panel D shows the solve-count advantage
    of implicit differentiation over centered finite differences as the number of
    parameters grows. The machine-readable summary is
@@ -132,10 +132,11 @@ publication-audits research branch.
    :alt: Simakov-Helander high-collisionality normalization audit for dkx
    :width: 92%
 
-   Reviewer-facing audit for the full high-collisionality analytic-limit lane.
-   The JSON artifact records the Appendix-B geometry ingredients available in
-   checked-in ``sfincsOutput.h5`` files, recomputes ``FSABHat2`` from ``BHat`` and
-   ``DHat``, tracks the ``L11``/``L12`` inverse-``nu`` slope proxy, and explicitly
+   Reviewer-facing audit for the full high-collisionality analytic-limit entry
+   in the validation manifest. The JSON artifact records the Appendix-B geometry
+   ingredients available in checked-in ``sfincsOutput.h5`` files, recomputes
+   ``FSABHat2`` from ``BHat`` and ``DHat``, tracks the ``L11``/``L12``
+   inverse-``nu`` slope proxy, and explicitly
    keeps the full Simakov-Helander reproduction closed until wider high-``nu``
    scans are pinned. The machine-readable summary is
    ``tools/publication_figures/artifacts/dkx_simakov_helander_limit_audit_summary.json``.
@@ -165,13 +166,15 @@ visible before committing to the full FP/PAS LHD+W7-X extension:
      --scan-only
 
 These executable scans run on the explicit (non-differentiable) performance
-path: the scan subprocesses go through the ``sfincsScan`` CLI flow, whose
-solves are explicit by default — implicit differentiation is opt-in from the
-Python API — and the launcher records ``implicit_solve: false`` in each run
-plan for provenance. The run plan caps sparse direct solves at ``30000`` active
-unknowns by default: the LHD FP pilot remains on the accurate host sparse-LU
-path, while larger W7-X FP high-``nu'`` runs must explicitly opt into the
-``40000`` cap after a bounded pilot proves the residual gate is clean. The same
+path. The scan subprocesses go through the ``sfincsScan`` CLI flow, whose solves
+are explicit by default (implicit differentiation is opt-in from the Python
+API), and the launcher records ``implicit_solve: false`` in each run plan for
+provenance.
+
+The run plan caps sparse direct solves at ``30000`` active unknowns by default:
+the LHD FP pilot remains on the accurate host sparse-LU path, while larger
+W7-X FP high-``nu'`` runs must explicitly opt into the
+``40000`` cap after a bounded pilot proves the residual check passes. The same
 residual thresholds are also used as fail-fast aborts for sequential and
 GPU-worker runs, so a bad high-``nu'`` point does not waste the rest of a
 campaign once the first failed RHS is known. GPU runs can still opt into larger
@@ -182,9 +185,10 @@ direct solvers.
 The two-GPU ``office`` pilot for the first LHD FP high-``nu'`` point produced
 residuals ``4.33e-16``, ``5.33e-14``, and ``4.06e-11`` in about ``262 s``. The
 same explicit point on one GPU took about ``345 s``; the implicit-path
-comparison took about ``569 s`` and stalled at much larger residuals. The first
-full-resolution W7-X FP high-``nu'`` point has a residual-clean route: with one GPU worker,
-a float32 sparse-direct factorization, and
+comparison took about ``569 s`` and stalled at much larger residuals.
+
+The first full-resolution W7-X FP high-``nu'`` point has a residual-clean route:
+with one GPU worker, a float32 sparse-direct factorization, and
 ``--transport-sparse-direct-max 40000``, the three RHS residual/RHS/relative
 tuples were ``1.297471e-10 / 1.885192e-04 / 6.882435e-07``,
 ``1.975724e-12 / 2.623896e-04 / 7.529734e-09``, and
@@ -192,7 +196,7 @@ tuples were ``1.297471e-10 / 1.885192e-04 / 6.882435e-07``,
 reuse, the scan took about ``582 s`` on one office GPU instead of about
 ``2028 s`` before reuse; RHS timings were about ``574.0 s``, ``2.47 s``, and
 ``2.38 s``. The smaller ``30000`` cap and Krylov-only
-preconditioners still fail this point, so the strict residual gates remain
+preconditioners still fail this point, so the strict residual checks remain
 mandatory for widened scans.
 
 W7-X high-nu preconditioning/performance
@@ -210,7 +214,7 @@ Generate the W7-X high-``nu'`` performance figure with
 
    Runtime, residual, setup-count, and peak-RSS comparison for the first
    full-resolution W7-X FP high-``nu'`` point. The bounded ``30000`` cap is
-   shown as a rejected route because it fails the residual gate. The
+   shown as a rejected route because it fails the residual check. The
    factor-reuse sparse-LU route preserves the residual-clean transport matrix
    exactly while reducing wall time from about ``33.8 min`` to ``9.7 min`` and
    measured peak RSS from about ``19.9 GB`` to ``15.3 GB``. The machine-readable
@@ -251,8 +255,8 @@ Physics benchmarks
 ------------------
 
 These figures were shown in the README until it was cut back to a landing page.
-They are results, not decoration, so they live here rather than being deleted.
-Each is regenerated by the named script under ``tools/paper_benchmarks/``.
+They are results, so they live here. Each is regenerated by the named script
+under ``tools/paper_benchmarks/``.
 
 .. figure:: _static/figures/paper_benchmarks/monoenergetic_icnts_w7x.png
    :alt: DKX monoenergetic coefficients against the ICNTS W7-X reference

@@ -4,15 +4,15 @@ Release notes
 Unreleased
 ----------
 
-- Added a compact, checksummed native whole-profile certificate for the
+- Added a compact, checksummed native whole-profile review record for the
   five-surface W7-X PAS/DKES method case. One portable TOML and pinned Boozer
   checksum reproduce root counts ``[1, 1, 3, 1, 1]``, selected physical
   electric fields and SI fluxes, adaptive brackets, branch events, and all 222
-  solver attempts. The audit recomputes every compact gate and can additionally
-  verify both external native NetCDF files and geometry. Cold/warm scientific
-  arrays match exactly except timing; this remains workflow evidence, not
-  phase-space-converged, experimental, full-FP, or independent ambipolar
-  validation.
+  solver attempts. The audit recomputes every compact check and can
+  additionally verify both external native NetCDF files and geometry.
+  Cold/warm scientific arrays match exactly except timing; this remains
+  workflow evidence, not phase-space-converged, experimental, full-FP, or
+  independent ambipolar validation.
 - Native ambipolar profiles now retain the executed structural route and every
   linear-solver attempt for each physical electric-field evaluation. When the
   automatic structured route misses the unchanged true-residual target, only
@@ -21,48 +21,49 @@ Unreleased
   solver choices remain fail-closed. A five-surface W7-X method case exercises
   one targeted recovery while retaining all ion, unstable, and electron roots;
   this is solver/workflow evidence, not an experimental or independent-code
-  ambipolar certificate.
+  ambipolar review record.
 - Added a matched zero-field W7-X SC1 full-kinetic DKX/SFINCS v3 validation
-  rung. Exact high/ultra decks use checksummed Boozer geometry, physical
-  density and temperature gradients, full linearized Fokker--Planck
+  refinement level. Exact high/ultra decks use checksummed Boozer geometry,
+  physical density and temperature gradients, full linearized Fokker--Planck
   collisions, full trajectories, automatic constraint 1, and a ``1e-12``
   solver tolerance. The largest high-to-ultra movement is ``0.444%``; retained
   nonzero scalar and speed-resolved outputs agree within ``1.37e-8``, and all
   completed true residuals are below ``1.82e-12``. Momentum flux is retained as
-  an explicit near-zero absolute gate. Timing and memory are provenance, not a
-  cross-code performance claim, and this surface comparison is not an
-  ambipolar or experimental certificate.
+  an explicit near-zero absolute acceptance criterion. Timing and memory are
+  provenance, not a cross-code performance claim, and this surface comparison
+  is not an ambipolar or experimental review record.
 - Extended the matched full-kinetic DKX/SFINCS evidence to the pinned
   one-species tokamak case at normalized ``Er = -30``. The checked high/ultra
-  rungs use full trajectories and a ``1e-13`` solver tolerance; retained
-  nonzero scalar and speed-resolved outputs agree within ``1.88e-9``,
+  refinement levels use full trajectories and a ``1e-13`` solver tolerance;
+  retained nonzero scalar and speed-resolved outputs agree within ``1.88e-9``,
   resolution movement is at most ``0.326%``, and completed true residuals stay
   below ``5.25e-11``. Intrinsically ambipolar particle flux and NTV use an
-  explicit absolute cancellation gate. The claim remains a single prescribed
+  explicit absolute cancellation check. The claim remains a single prescribed
   field, not an Er scan, ambipolar-root, or stellarator full-FP validation.
-- Added a matched full-kinetic DKX/SFINCS v3 validation rung for a physical
-  one-species analytic-tokamak surface. Both codes use the full linearized
-  Fokker--Planck operator, full trajectories, identical density/temperature
-  gradients and coordinates, zero electric field, the recommended automatic
-  constraint, and a ``1e-10`` linear tolerance. At the finest checked rung the
-  largest scaled error over nonzero scalar and speed-resolved observables is
-  ``2.69e-10``; the high-to-ultra bootstrap/heat-flux movement is at most
-  ``0.280%`` and every completed true residual is below ``1.82e-11``.
-  Axisymmetric particle flux and NTV are explicitly gated as near-zero absolute
-  quantities. The artifact pins the MUMPS-enabled reference build, commits,
-  decks, compact and raw outputs, logs, cold/warm timing, memory, checksums, and
-  exclusions without making a cross-code performance claim.
-- Added a bounded independent zero-field monoenergetic validation rung for a
-  DSHAPE tokamak, NCSX, and W7-X EIM. The checked artifact aligns the applied
-  Lorentz frequency, local-radius Beidler normalization, reference-field
-  scale, and handedness before comparing ``D11*``, ``D31*``, ``D13*``, and
-  ``D33*``. Live YANCC results and the pinned MONKES table agree with DKX
-  within 6% on all three cases. The artifact pins external commits, inputs,
-  compact outputs, checksums, residuals, resolution, timing, RSS, and
+- Added a matched full-kinetic DKX/SFINCS v3 validation refinement level for a
+  physical one-species analytic-tokamak surface. Both codes use the full
+  linearized Fokker--Planck operator, full trajectories, identical
+  density/temperature gradients and coordinates, zero electric field, the
+  recommended automatic constraint, and a ``1e-10`` linear tolerance. At the
+  finest checked refinement level the largest scaled error over nonzero scalar
+  and speed-resolved observables is ``2.69e-10``; the high-to-ultra
+  bootstrap/heat-flux movement is at most ``0.280%`` and every completed true
+  residual is below ``1.82e-11``. Axisymmetric particle flux and NTV must pass
+  explicit near-zero absolute checks. The artifact pins the MUMPS-enabled
+  reference build, commits, decks, compact and raw outputs, logs, cold/warm
+  timing, memory, checksums, and exclusions without making a cross-code
+  performance claim.
+- Added a bounded independent zero-field monoenergetic validation refinement
+  level for a DSHAPE tokamak, NCSX, and W7-X EIM. The checked artifact aligns
+  the applied Lorentz frequency, local-radius Beidler normalization,
+  reference-field scale, and handedness before comparing ``D11*``, ``D31*``,
+  ``D13*``, and ``D33*``. Live YANCC results and the pinned MONKES table agree
+  with DKX within 6% on all three cases. The artifact pins external commits,
+  inputs, compact outputs, checksums, residuals, resolution, timing, RSS, and
   exclusions; CI re-audits every checked-in normalization and checksum, while
   an adjacent pinned YANCC checkout additionally verifies the external inputs.
   Full-Fokker--Planck, finite-``Er``, ambipolar, experimental, and cross-code
-  performance claims remain outside this rung.
+  performance claims remain outside this refinement level.
 - Native ``Case`` execution now accepts Boozer ``.bc`` equilibria directly.
   The reader auto-detects the cosine-only and asymmetric v3 column conventions,
   reads and parses the file once, reuses the immutable surface tables and one
@@ -101,11 +102,12 @@ Unreleased
 - Release artifacts now share one literal version in ``dkx/_version.py``.
   Setuptools reads that value dynamically and the tag check reads the same file
   without importing JAX during a build.
-- The release gate builds both wheel and source distribution, checks metadata
-  and package data in both archives, installs each into a separate clean
-  environment outside the checkout, and exercises finite scientific results.
-  A versioned size policy measures the wheel, source distribution, installed
-  DKX-owned files, tracked source/media, and a fresh full clone independently.
+- The release check builds both wheel and source distribution, verifies
+  metadata and package data in both archives, installs each into a separate
+  clean environment outside the checkout, and exercises finite scientific
+  results. A versioned size policy measures the wheel, source distribution,
+  installed DKX-owned files, tracked source/media, and a fresh full clone
+  independently.
 - The PyPI workflow downloads the published wheel back from the public index,
   verifies its version and install location, runs the CLI, and performs a small
   kinetic solve. Required CI also runs checksum-pinned ``actionlint`` and feeds
@@ -164,8 +166,8 @@ Unreleased
   problem owners can now provide operator actions, transpose actions,
   parameter-derivative actions, and selected solve/transpose-solve closures
   without assembling dense matrices, while tests compare the matrix-free
-  tangent/adjoint certificate against the dense certificate and centered finite
-  differences.
+  tangent/adjoint derivative check record against the dense record and centered
+  finite differences.
 - Added ``matrix_free_rhs1_vm_radial_current_linear_observable_system`` as the
   first RHSMode=1 production-facing radial-current derivative builder. It uses
   real full-system matrix-free operator actions, caller-supplied transpose and
@@ -180,7 +182,7 @@ Unreleased
   operator block.
 - Added ``matrix_free_radial_current_derivative_provider`` so ambipolar
   safeguarded Newton/bisection and pure Newton paths can consume matrix-free
-  implicit derivative certificates directly. Fast option-1/3-style tests now
+  implicit derivative check records directly. Fast option-1/3-style tests now
   verify root convergence, derivative metadata, tangent/adjoint consistency,
   and finite-difference agreement through the root-solver API.
 - Added analytic no-Phi1 ``E_r`` operator-tangent helpers for fixed-shape
@@ -192,12 +194,12 @@ Unreleased
   on a real electric-field ``xDot`` fixture.
 - Added an explicit ``keep_zero_er_terms`` option to the f-block and full-system
   operator builders. Normal solves keep the previous default branch behavior,
-  while derivative/ambipolar gates can retain zero-valued ExB and ``E_r``
+  while derivative/ambipolar checks can retain zero-valued ExB and ``E_r``
   suboperators at ``E_r=0`` so JVP tangents see the same fixed-shape operator
   family used at nearby nonzero fields.
 - Added ``rhsmode1_radial_current_response_from_namelist`` as the first
   namelist-backed RHSMode=1 radial-current response/derivative provider. It
-  keeps zero-field ``E_r`` branches for fixed-shape derivative gates, reuses
+  keeps zero-field ``E_r`` branches for fixed-shape derivative checks, reuses
   the analytic/JVP operator tangent path, and is covered by a real small-deck
   implicit derivative versus centered finite-difference test.
 - The namelist-backed RHSMode=1 response now uses a Fortran-style active
@@ -219,8 +221,8 @@ Unreleased
 - Added Fortran-v3 RHSMode=4/5 adjoint-sensitivity source contracts to
   ``dkx.sensitivity``. The new helpers validate the Fortran-compatible
   adjoint namelist restrictions and return the sensitivity HDF5 fields written
-  by ``writeHDF5Output.F90``, including the documented source-code gate for
-  ``dParallelFlowdLambda``.
+  by ``writeHDF5Output.F90``, including the documented source-code requirement
+  for ``dParallelFlowdLambda``.
 - Added the first compact SFINCS Fortran v3 RHSMode=4 sensitivity reference
   summary: a tiny W7-X-like analytic radial-current sensitivity deck. Tests pin
   the output fields and the identity
@@ -232,8 +234,9 @@ Unreleased
   ``dTotalHeatFluxdLambda = sum_s dHeatFluxdLambda_s`` without committing the
   generated HDF5 file.
 - Added a compact RHSMode=4 parallel-flow/bootstrap sensitivity reference.
-  Tests pin the Fortran writer-gated ``dParallelFlowdLambda`` field and the
-  identity ``dBootstrapdLambda = sum_s Z_s dParallelFlowdLambda_s``.
+  Tests pin the ``dParallelFlowdLambda`` field that the Fortran writer emits
+  conditionally, and the identity
+  ``dBootstrapdLambda = sum_s Z_s dParallelFlowdLambda_s``.
 - Added the first compact RHSMode=5 constant-current sensitivity reference. It
   runs the small Fortran v3 Brent ambipolar solve, then pins the heat-flux
   adjoint outputs and the extra ``dPhidPsidLambda`` field emitted at ambipolar
@@ -242,7 +245,7 @@ Unreleased
   regression validates every debug output field name/rank, finite selected
   percent errors, and the Fortran NaN mask for lambda/mode entries that the
   finite-difference diagnostic does not fill.
-- Added an aggregate RHSMode=4/5 fixture coverage gate so the checked
+- Added an aggregate RHSMode=4/5 fixture coverage check so the checked
   references must collectively cover particle flux, heat flux, parallel flow,
   bootstrap current, total heat flux, radial current, constant-current
   ``dPhidPsidLambda``, and debug finite-difference percent-error outputs.
@@ -254,7 +257,7 @@ Unreleased
   passed with ``2668 passed in 562.12 s``.
 - Moved the RHSMode=2/3 transport policy and solver-support cluster into
   ``dkx.problems.transport_matrix``: backend/sparse/recycle policies,
-  solve policy, residual-quality gates, handoff policy, host-GMRES rescue,
+  solve policy, residual-quality checks, handoff policy, host-GMRES rescue,
   KSP iteration diagnostics, and linear-solve dispatch. The old top-level module
   paths remain aliases to preserve existing imports and monkeypatch seams. The
   post-move local full suite passed with ``2668 passed in 556.85 s``.
@@ -297,7 +300,7 @@ Unreleased
   while the non-differentiable host-factor path now lives in the solver-domain
   package.
 - Moved RHSMode=1 profile-response support utilities into flat
-  ``dkx.problems.profile_*`` modules: residual gates, active-DOF
+  ``dkx.problems.profile_*`` modules: residual checks, active-DOF
   decisions, active full/reduced projection, accepted-solve handoff, and solver
   diagnostics. Maintained imports use the canonical flat modules directly; the
   top-level ``dkx.rhs1_*`` aliases for these utilities were removed in
@@ -344,7 +347,7 @@ Unreleased
 - Moved the x-block global coarse/load-vector builders and smoothed-load QI
   basis construction from ``v3_driver.py`` into ``rhs1_qi_coarse.py``. The new
   direct tests cover RHS, tail, constraint-source, flux-surface-average, and
-  low-angular load labels, smoothed-load rank gating, and driver alias
+  low-angular load labels, smoothed-load rank checks, and driver alias
   compatibility. Focused validation passed with ``15`` tests and the broader
   RHSMode=1 QI/device/sparse policy slice passed with
   ``253 passed in 153.39 s``. The post-move local full suite passed with
@@ -390,7 +393,8 @@ Unreleased
 - Moved JAX-native padded-row and compact-CSR triangular sparse-factor solves
   under ``solvers/explicit_sparse.py`` with dense-reference tests. The driver
   keeps the old private helper names by import, preserving sparse-preconditioner
-  apply behavior while keeping the explicit sparse factor lane in one owner.
+  apply behavior while keeping the explicit sparse factor line of work in one
+  owner.
 - Extracted preconditioner setup utilities into ``preconditioning.py``:
   chunk-size policy, matrix-free selected submatrix probing, and stable array
   hashing for cache keys. ``v3_driver.py`` keeps a compatibility wrapper for
@@ -472,8 +476,8 @@ Unreleased
   failure paths have direct unit tests.
 - Extracted optional Newton-Krylov/Phi1 GMRES history replay into the
   profile-response solver diagnostics owner with direct tests for disabled
-  diagnostics, size/iteration skip gates, successful residual-history emission,
-  and non-fatal replay failures.
+  diagnostics, size/iteration skip checks, successful residual-history
+  emission, and non-fatal replay failures.
 - Extracted explicit sparse host-factor policy parsing into
   ``explicit_sparse.py``. Factor-kind aliases, numeric/boolean
   environment parsing, and monolithic LU/ILU guard sizing now have direct tests
@@ -568,9 +572,9 @@ Unreleased
   construction to a focused helper before the per-``whichRHS`` solve branches.
 - Moved the sequential RHSMode=2/3 post-``whichRHS`` residual/ETA bookkeeping
   into the same helper. The driver now records elapsed times, emits residual
-  summaries, applies configured residual abort gates, and reports remaining-time
-  estimates through ``TransportLoopProgress`` instead of carrying mutable
-  progress state inline.
+  summaries, applies configured residual abort checks, and reports
+  remaining-time estimates through ``TransportLoopProgress`` instead of
+  carrying mutable progress state inline.
 - Moved the RHSMode=2/3 per-``whichRHS`` loop policy into
   ``problems.transport_matrix.policies``. The driver delegates E_parallel loose/Krylov
   routing, constraint-nullspace projection admission, optional KSP iteration-stat
@@ -605,31 +609,31 @@ v2.3.1
 ------
 
 Fixes both halves of a reported ``scanType=5`` failure (an ``Er`` scan inside a
-radius scan) on a 66004-DOF deck. Tier-2 GCROT stalled at the largest ``|Er|``,
-DKX fell back to the tier-3 host direct solve, and tier 3 refused at once
-because it materializes the operator column by column -- 66004 matvecs and
-32.5 GB at that size. The ``RuntimeError`` propagated out through the scan
-driver and killed every remaining ``Er`` point at that radius: one radius folder
-finished with zero of a hundred outputs, another with three.
+radius scan) on a 66004-DOF deck. Recycled Krylov GCROT stalled at the largest
+``|Er|``, DKX fell back to the sparse direct host solve, and the sparse direct
+route refused at once because it materializes the operator column by column --
+66004 matvecs and 32.5 GB at that size. The ``RuntimeError`` propagated out
+through the scan driver and killed every remaining ``Er`` point at that radius:
+one radius folder finished with zero of a hundred outputs, another with three.
 
-- A stalled tier-2 solve now escalates instead of crashing: the ``sparse``
-  preconditioner, then ``multigrid``, then a 4x iteration budget, and tier 3
-  only where tier 3 can actually run. This is the SFINCS v3 strategy -- it
-  preconditions GMRES with a sparse direct LU (MUMPS or SuperLU_dist) of the
-  analytically assembled simplified matrix, and retries automatically on a
-  failed factorization -- and DKX already shipped the analogue without ever
-  trying it. Measured on the starved-tier-2 fixture, the first rung alone
-  recovers the solve. When every rung fails, the error names what was tried,
-  the best residual reached, why tier 3 was skipped, and remedies that help,
-  rather than the old advice to raise ``max_dense_size``, which at this size
-  asked for a 32.5 GB allocation.
+- A stalled recycled Krylov solve now escalates instead of crashing: the
+  ``sparse`` preconditioner, then ``multigrid``, then a 4x iteration budget,
+  and the sparse direct route only where it can actually run. This is the
+  SFINCS v3 strategy: it preconditions GMRES with a sparse direct LU (MUMPS or
+  SuperLU_dist) of the analytically assembled simplified matrix, and retries
+  automatically on a failed factorization. DKX already shipped the analogue
+  without ever trying it. Measured on the starved recycled-Krylov fixture, the
+  first escalation step alone recovers the solve. When every step fails, the
+  error names what was tried, the best residual reached, why the sparse direct
+  route was skipped, and remedies that help, rather than the old advice to
+  raise ``max_dense_size``, which at this size asked for a 32.5 GB allocation.
 - All six scan types run each point through ``run_scan_point``, which records a
   failure and continues rather than raising. A failed point gets a
   ``dkx_FAILED.txt`` holding the traceback, the scan prints a tally of what is
   missing, and ``sfincsScan`` exits nonzero so a job script still notices.
   ``KeyboardInterrupt`` is re-raised, so Ctrl-C still stops a scan.
 
-Note that a point that cannot be solved now takes *longer* to fail, because the
+A point that cannot be solved now takes *longer* to fail, because the
 escalation tries several remedies first. That is the right trade for an
 unattended scan, but it is a change in timing.
 
@@ -709,17 +713,17 @@ v1.1.6
 ------
 
 This patch release keeps the ``v1.1.5`` solver and documentation state, then
-stabilizes the Linux/JAX CI gate for the active-ladder RHSMode=1 auto-selection
-test. The affected test still requires a residual at the requested tolerance
-scale and still checks the selected solver path; it no longer fails on a small
-last-iteration roundoff difference across JAX builds.
+stabilizes the Linux/JAX CI check for the active-ladder RHSMode=1
+auto-selection test. The affected test still requires a residual at the
+requested tolerance scale and still checks the selected solver path; it no
+longer fails on a small last-iteration roundoff difference across JAX builds.
 
 v1.1.5
 ------
 
 This patch release promotes the current residual-clean RHSMode=2/3 full-FP
 transport preconditioner into ``auto``, refreshes the QA/QH bootstrap-current
-documentation artifacts, and keeps production-resolution research lanes scoped
+documentation artifacts, and keeps production-resolution research topics scoped
 to their checked evidence.
 
 Highlights
@@ -730,8 +734,8 @@ Highlights
   ``auto`` now tries this PETSc-like route by default with strict residual
   admission and memory caps; set
   ``DKX_TRANSPORT_FP_FORTRAN_REDUCED_LU_AUTO=0`` to disable it for a
-  benchmark campaign. Lower-memory symbolic/native replacements remain gated
-  until production-floor CPU/GPU evidence passes.
+  benchmark campaign. Lower-memory symbolic/native replacements remain
+  deferred until production-floor CPU/GPU evidence passes.
 - Fixed a multi-device RHSMode=1 transformed-matvec bug found by the next QI
   ``nfp=2`` kinetic single-point probe. Preconditioner submatrix setup and
   custom-linear-solve matvecs now avoid entering ``jax.set_mesh``/``pjit`` from
@@ -741,29 +745,29 @@ Highlights
   skip-primary policy then reduces the measured solver time from about
   ``108 s`` to about ``35 s`` with identical key observables and records that
   one-device and explicit full-system sparse-host routes are not promotion
-  candidates for this rung.
+  candidates for this refinement level.
 - Added a bounded eight-point CPU solver-policy audit for the same QI
-  ``13 x 13 x 15 x 4`` rung. The sparse-LU skip-primary policy completes the
-  scan in ``263.1 s``, with mean solve time ``32.85 s``, max solve time
-  ``35.72 s``, all residual gates passing, and a fixed-resolution electron root
-  at ``E_r=2.2153427467``. This closes the CPU part of the rung and keeps the
-  public production-resolution QI claim gated on backend/reference and
-  resolution-ladder evidence.
+  ``13 x 13 x 15 x 4`` refinement level. The sparse-LU skip-primary policy
+  completes the scan in ``263.1 s``, with mean solve time ``32.85 s``, max
+  solve time ``35.72 s``, all residual checks passing, and a fixed-resolution
+  electron root at ``E_r=2.2153427467``. This closes the CPU part of the
+  refinement level and keeps the public production-resolution QI claim
+  conditional on backend/reference and resolution-ladder evidence.
 - Added the matching fixed-resolution GPU and Fortran-v3 comparison for the QI
-  ``13 x 13 x 15 x 4`` rung. CPU/GPU selected roots agree to ``4.8e-14`` and
-  CPU/Fortran-v3 agrees to ``7.4e-9``. Checked CPU/GPU observables agree within
-  ``5.2e-13`` relative; CPU/Fortran-v3 differs by at most ``1.8e-3`` on
-  ``FSABFlow`` and below ``9e-6`` on particle/heat fluxes. The GPU route is
-  correctness-clean but still performance-open because it safely enters host
-  sparse LU and is slower than CPU at this size.
-- Added the next QI ``15 x 15 x 17 x 4`` CPU/Fortran-v3 rung and fixed the
-  sparse x-block policy cliff it exposed. The previous default spent about
-  ``316.9 s`` on redundant x-block setup for the ``E_r=0.3`` point before
+  ``13 x 13 x 15 x 4`` refinement level. CPU/GPU selected roots agree to
+  ``4.8e-14`` and CPU/Fortran-v3 agrees to ``7.4e-9``. Checked CPU/GPU
+  observables agree within ``5.2e-13`` relative; CPU/Fortran-v3 differs by at
+  most ``1.8e-3`` on ``FSABFlow`` and below ``9e-6`` on particle/heat fluxes.
+  The GPU route is correctness-clean but still performance-open because it
+  safely enters host sparse LU and is slower than CPU at this size.
+- Added the next QI ``15 x 15 x 17 x 4`` CPU/Fortran-v3 refinement level and
+  fixed the sparse x-block policy cliff it exposed. The previous default spent
+  about ``316.9 s`` on redundant x-block setup for the ``E_r=0.3`` point before
   falling through to the exact active sparse-LU solve. The new default skips
   that redundant setup for mid-size systems covered by the direct sparse-LU
   cap, reducing the point to about ``69.4 s`` with the same residual and key
   observables. The eight-point CPU scan completes in ``535.8 s`` with all
-  residual gates passing, selects ``E_r=2.2132389239``, and agrees with the
+  residual checks passing, selects ``E_r=2.2132389239``, and agrees with the
   SFINCS Fortran v3 selected root to ``9.2e-7`` relative.
 - Added a guarded matrix-free QI-device operator-reuse route for explicit
   RHSMode=1 x-block Krylov runs. When ``xblock_sparse_pc_gmres`` is requested
@@ -771,11 +775,11 @@ Highlights
   can now skip local sparse x-block factor construction and report the decision
   in solver metadata. The existing host-sparse fallback remains unchanged when
   the guarded route is not requested or cannot be built. This is infrastructure
-  for the next one-GPU QI timing gate, not yet a production true-device-QI
+  for the next one-GPU QI timing check, not yet a production true-device-QI
   performance claim.
 - Production-sized nonconverged RHSMode=1 ``write-output`` runs now write the
   requested JSON solver-trace sidecar before refusing to write HDF5/NetCDF/NPZ
-  diagnostics. The physical output gate remains fail-closed, but failed large
+  diagnostics. The physical output check remains fail-closed, but failed large
   runs preserve solver path, residual, matvec, memory-estimate, and
   preconditioner metadata for debugging.
 - JIT-cycle device Krylov metadata now reports internal restart-cycle
@@ -789,7 +793,7 @@ Highlights
   setup, and corrected device-cycle accounting, while explicitly keeping
   residual convergence failed and production true-device-QI performance
   deferred.
-- Added the second refined QI ``nfp=2`` kinetic promotion rung at
+- Added the second refined QI ``nfp=2`` kinetic promotion refinement level at
   ``11 x 11 x 13 x 4`` after fixing a mid-size RHSMode=1 full-FP solver-policy
   cliff. The bounded dense policy now covers active sizes up to ``8000`` and
   ``scan-er`` writes per-point solver-trace sidecars. The checked CPU scan
@@ -798,13 +802,13 @@ Highlights
   agree to ``2.5e-13`` and the Fortran-v3 selected root agrees within the
   documented ``2e-6`` refined-grid tolerance. The remaining resolution drift
   keeps production-resolution QI open.
-- Added the first refined QI ``nfp=2`` kinetic promotion rung at
+- Added the first refined QI ``nfp=2`` kinetic promotion refinement level at
   ``9 x 9 x 11 x 4``. The two-species ion/electron scan passes CPU/GPU/Fortran
-  fixed-resolution gates with CPU/GPU selected
+  fixed-resolution checks with CPU/GPU selected
   ``E_r = 2.2834299271``, CPU/GPU root difference ``4.3e-14``, and Fortran-v3
   selected ``E_r = 2.2834273232`` within the documented refined-grid
   tolerance. The low-to-refined root drift is still about ``0.155``, so
-  production-resolution QI remains an open research lane.
+  production-resolution QI remains an open research item.
 - Fixed the promotion-audit default for two-species electron-root scans:
   ``--impurity-species-index`` is now optional, and no-impurity CPU/GPU
   comparisons automatically allow missing flux-objective scalars while still
@@ -826,12 +830,12 @@ Highlights
   hard-seed artifact writes converged output and trace metadata.
 - Added an opt-in Krylov-install mode for validated coupled residual-equation
   stages whose seed probe is rejected. This tests the preconditioner in the
-  mathematically relevant Krylov context without relaxing convergence gates or
+  mathematically relevant Krylov context without relaxing convergence checks or
   changing the initial seed.
 - Recorded the first scale-0.60 GPU coupled-residual Krylov-install evidence.
-  It improves the coupled-probe runtime and host RSS versus the seed-gated
-  attempt but still fails the residual/write gate, so true device-QI remains
-  an explicit research lane.
+  It improves the coupled-probe runtime and host RSS versus the attempt that
+  required the seed probe to pass, but still fails the residual/write check, so
+  true device-QI remains an explicit research topic.
 - Hardened QI evidence extraction for failed long GPU runs so coupled
   residual-equation and install-in-Krylov progress lines remain visible in
   compact artifacts and fail-closed manifests even when no HDF5 output or
@@ -852,7 +856,7 @@ Highlights
 v1.1.4
 ------
 
-This patch release packages the 2026-05-16 research-lane safety and planning
+This patch release packages the 2026-05-16 research-topic safety and planning
 push. It adds reusable QI/PAS/parallelism infrastructure while keeping public
 claims scoped to checked release evidence.
 
@@ -865,7 +869,7 @@ Highlights
   basis directions; applies a local-plus-coarse action; and exposes a
   fail-closed true-residual probe with rank and conditioning metadata. It is
   not promoted as a production device-QI solve until wired into the driver and
-  validated on the scale-0.60 CPU/GPU hard-seed gates.
+  validated on the scale-0.60 CPU/GPU hard-seed checks.
 - Strengthened PAS matrix-free memory guards with ``PasRuntimeChunkPlan`` and
   ``plan_pas_runtime_chunks``. PAS candidate and norm reductions can now derive
   bounded chunks from configured byte budgets, and tight budgets fail before
@@ -881,11 +885,11 @@ Highlights
 Validation
 ~~~~~~~~~~
 
-- Focused local validation for the new lanes passed:
+- Focused local validation for the new test groups passed:
   ``135 passed`` across QI block-Schur, PAS matrix-free/policy, PAS benchmark,
   sharding planner, sharded benchmark, and transport-parallel tests.
 - Full local validation passed: ``1651 passed in 712.28 s``.
-- Release-gate and research-lane checks remain green, and the Sphinx docs build
+- The release and research-topic checks remain green, and the Sphinx docs build
   passes with warnings treated as errors.
 - Package build and distribution metadata checks passed with ``python -m build``
   and ``twine check dist/*``.
@@ -893,27 +897,28 @@ Validation
   ``dkx.__version__`` so the PyPI workflow can validate the matching
   ``v1.1.4`` tag.
 
-Remaining research lanes
-~~~~~~~~~~~~~~~~~~~~~~~~
+Remaining research topics
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 No new release-facing claim depends on true device-QI, production-resolution QI
-ladders, or single-case multi-GPU strong scaling. Those lanes remain explicitly
-deferred until checked CPU/GPU artifacts pass their promotion gates.
+ladders, or single-case multi-GPU strong scaling. Those topics remain
+explicitly deferred until checked CPU/GPU artifacts pass their promotion
+criteria.
 
 v1.1.3
 ------
 
 This patch release candidate packages the 2026-05-15 release-narrative cleanup,
-bounded large-QI fallback work, PAS probe gating, and release-claim hardening.
+bounded large-QI fallback work, PAS probe checks, and release-claim hardening.
 
 Highlights
 ~~~~~~~~~~
 
 - Added an explicit release scope: current claims cover the audited example-suite
-  parity, bounded large-QI non-autodiff host fallback, PAS/runtime probe gates,
-  and transport-worker parallelism. Production-resolution QI CPU/GPU ladders,
+  parity, bounded large-QI non-autodiff host fallback, PAS/runtime probe
+  checks, and transport-worker parallelism. Production-resolution QI CPU/GPU ladders,
   true differentiable device-QI, and single-case multi-GPU strong scaling remain
-  deferred or experimental research lanes.
+  deferred or experimental research topics.
 
 - Added an explicit ``pas_tzfft`` / ``pas_fft`` RHSMode=1 PAS preconditioner
   candidate and a guarded ``DKX_RHSMODE1_PAS_TZ_MEMORY_FALLBACK=tzfft``
@@ -931,7 +936,7 @@ Highlights
 - Added ``DKX_RHSMODE1_PAS_TZ_GUARDED_CORRECTION=tzfft`` as an opt-in
   cheap-base plus matrix-free streaming-correction probe. It is bounded and
   modestly improves the cheap collision fallback, but the checked geometry4
-  smoke does not meet the promotion gate.
+  smoke does not meet the promotion criterion.
 - Large-QI explicit device-Krylov requests now have a metadata-visible
   non-autodiff host fallback that enters the measured host x-block auto policy
   before JAX factors are built. This is the current production escape hatch, not
@@ -940,26 +945,27 @@ Highlights
   by default, and the checked geometry4/HSX real-solve probes are documented as
   negative promotion evidence because they are residual-clean but do not improve
   runtime or memory.
-- Release-gate and research-lane manifests now keep deferred validation lanes,
-  device-QI work, and single-case scaling from silently blocking a tag while
-  still preserving concrete promotion gates.
+- The release and research-topic manifests now keep deferred validation
+  entries, device-QI work, and single-case scaling from silently blocking a tag
+  while still preserving concrete promotion criteria.
 
 Validation
 ~~~~~~~~~~
 
-- Release-gate and research-lane checks pass against the updated manifests.
+- The release and research-topic checks pass against the updated manifests.
 - Sphinx documentation builds with warnings as errors after this release-note and
   scope refresh.
 - Focused version metadata validation requires ``pyproject.toml`` and
   ``dkx.__version__`` to agree on ``1.1.3``.
 
-Remaining research lanes
-~~~~~~~~~~~~~~~~~~~~~~~~
+Remaining research topics
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
-No documented release-facing lane is blocked by true device-QI or single-case
-strong-scaling work. Production-resolution QI CPU/GPU seed ladders, the
-scale-0.60 one-GPU hard seed, and geometry-rich PAS runtime/memory wins remain
-post-release promotion candidates until checked artifacts pass their gates.
+No documented release-facing validation entry is blocked by true device-QI or
+single-case strong-scaling work. Production-resolution QI CPU/GPU seed ladders,
+the scale-0.60 one-GPU hard seed, and geometry-rich PAS runtime/memory wins
+remain post-release promotion candidates until checked artifacts pass their
+acceptance criteria.
 
 v1.1.2
 ------
@@ -995,23 +1001,23 @@ Validation
 - Current release-facing CPU/GPU suite artifacts remain ``39/39 parity_ok`` with
   zero strict mismatches, no ``jax_error``, and no ``max_attempts``.
 - Bounded PAS-TZ fallback smoke now returns for ``collision``, ``hybrid``,
-  ``zeta``, and ``theta`` under the 15 s local gate. These rows are
-  intentionally documented as negative, non-promoted baselines because their
-  residuals remain large.
+  ``zeta``, and ``theta`` under the 15 s local acceptance criterion. These
+  rows are intentionally documented as negative, non-promoted baselines because
+  their residuals remain large.
 - The bounded artifact is checked in at
   ``tests/reference_solver_path_artifacts/pas_tz_memory_fallback_geometry4_smoke_2026-05-10.json``
   and guarded by ``tests/test_solver_path_artifacts.py``.
 - Local release validation passed with ``1134 passed in 501.80 s``.
 
-Remaining research lane
-~~~~~~~~~~~~~~~~~~~~~~~
+Remaining research topic
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 No release blocker remains in the documented workflows. The remaining
-publication-scale optimization lane is still algorithmic: a genuinely stronger
+publication-scale optimization topic is still algorithmic: a genuinely stronger
 matrix-free line/plane smoother or iterative chunked Schwarz correction for
-geometry-rich PAS systems that clears the fixed gate of under 60 s, no measured
-memory regression, and at least 100x residual reduction before any default
-promotion.
+geometry-rich PAS systems that clears the fixed requirement of under 60 s, no
+measured memory regression, and at least 100x residual reduction before any
+default promotion.
 
 v1.1.1
 ------
@@ -1033,8 +1039,8 @@ Highlights
   regenerated from the checked-in release artifacts.
 - The production-resolution ``geometryScheme4_2species_PAS_noEr`` stress case is
   now explicitly closed for this release as ``no safe existing default
-  promotion``. CPU and GPU candidate routes all hit the bounded 300 s gate, so no
-  unsafe solver-path default is promoted.
+  promotion``. CPU and GPU candidate routes all hit the bounded 300 s cutoff,
+  so no unsafe solver-path default is promoted.
 
 Validation
 ~~~~~~~~~~
@@ -1045,14 +1051,14 @@ Validation
   ``tests/reference_solver_path_artifacts/geometry4_large_pas_closeout_2026-05-09.json``
   and guarded by ``tests/test_solver_path_artifacts.py``.
 
-Remaining research lane
-~~~~~~~~~~~~~~~~~~~~~~~
+Remaining research topic
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 No release blocker remains. The next research optimization target is a
 structured/chunked geometry-aware PAS preconditioner for production-resolution
 geometry-rich 3D cases; heuristic promotion of existing Schur, sparse-PC, or
 PAS-lite paths is intentionally blocked until a measured route clears the
-runtime, memory, residual, and Fortran-comparison gates.
+runtime, memory, residual, and Fortran-comparison checks.
 
 v1.1.0
 ------
@@ -1082,8 +1088,8 @@ Highlights
   and ``dkx --plot`` writes a PDF diagnostics panel from existing output
   files.
 - Documentation covers the drift-kinetic equation being solved, geometry loading,
-  normalizations, solver paths, output datasets, validation gates, performance
-  techniques, and release-maintainer checks.
+  normalizations, solver paths, output datasets, validation criteria,
+  performance techniques, and release-maintainer checks.
 
 Validation artifacts
 ~~~~~~~~~~~~~~~~~~~~
@@ -1103,11 +1109,11 @@ The latest focused GPU performance pass measured:
 - ``monoenergetic_geometryScheme1``: ``13.039 s`` / ``996 MB`` to ``3.541 s`` /
   ``981 MB``, with zero Fortran mismatches.
 
-Remaining research lanes
-~~~~~~~~~~~~~~~~~~~~~~~~
+Remaining research topics
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 No correctness blocker remains in the documented release-facing suite. The main
-future optimization lane is allocator and work-array lifetime reduction for the
-heaviest RHSMode 1 PAS Krylov/diagnostic paths. Single-case strong multi-GPU
+future optimization topic is allocator and work-array lifetime reduction for
+the heaviest RHSMode 1 PAS Krylov/diagnostic paths. Single-case strong multi-GPU
 scaling remains a research feature; release-facing parallel guidance continues to
 prefer case-parallel and transport-worker throughput.

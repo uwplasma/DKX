@@ -38,16 +38,18 @@ class SolverOptions:
 
     Attributes:
         method: ``"auto"`` | ``"block_tridiagonal"`` | ``"gmres"`` |
-            ``"direct"`` (the three-tier policy of :func:`dkx.solve.solve`).
+            ``"direct"`` (the route policy of :func:`dkx.solve.solve`).
         tol: relative residual tolerance (per RHS column).
         atol: absolute residual floor.
-        restart: FGMRES cycle size ``m`` (tier 2).
-        recycle_dim: GCROT recycle directions ``k`` (tier 2).
-        max_restarts: tier-2 outer-cycle cap (the tier-3 trigger in auto).
+        restart: FGMRES cycle size ``m`` (recycled Krylov route).
+        recycle_dim: GCROT recycle directions ``k`` (recycled Krylov route).
+        max_restarts: recycled-Krylov outer-cycle cap; exceeding it is what
+            makes ``auto`` fall through to the sparse direct route.
         differentiable: wrap the solution in an implicit-function-theorem
-            ``linear_solve`` so ``jax.grad`` flows through (tiers 1/2).
-        use_preconditioner: tier-2 coarse-operator preconditioner on/off.
-        preconditioner: which tier-2 preconditioner to build —
+            ``linear_solve`` so ``jax.grad`` flows through (structured direct and
+            recycled Krylov routes).
+        use_preconditioner: recycled-Krylov coarse-operator preconditioner on/off.
+        preconditioner: which recycled-Krylov preconditioner to build —
             ``"coarse"`` (dense block-Thomas over ``L``), ``"multigrid"``
             (:mod:`dkx.multigrid`), ``"sparse"`` (:mod:`dkx.sparse_precond`,
             the same operator inverted exactly in a fill-reducing order), or
@@ -59,7 +61,7 @@ class SolverOptions:
             or ``"gpu"``, or a concrete ``jax.Device``); ``None`` keeps the
             operator's placement.
         memory_budget_gb: budget above which ``method="auto"`` prefers the
-            memory-lean truncated tier-1 kernel over the full-band
+            memory-lean truncated structured-direct kernel over the full-band
             factorization; ``None`` reads ``DKX_TIER1_MEMORY_BUDGET_GB``,
             else the solve's default applies.
         cores: host CPU threadpool width.  XLA sizes its threadpool once,

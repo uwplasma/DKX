@@ -27,11 +27,12 @@ serializes a typed input back to Fortran-readable namelist text, and
 :meth:`~dkx.inputs.SfincsInput.write` puts it in a file. The default output is
 compact, carrying non-default fields only; ``include_defaults=True`` writes
 every typed field. Untyped keys retained in ``raw`` and the rank-2
-``boozer_bmnc(m,n)`` spectra survive the round trip. Inputs can also be
-built without a file at all: :meth:`dkx.inputs.SfincsInput.from_params`
-takes the flat Fortran parameter names of the tables below
-(case-insensitively) and returns a validated typed input that the run
-drivers accept directly (see :doc:`usage`).
+``boozer_bmnc(m,n)`` spectra survive the round trip.
+
+Inputs can also be built without a file at all:
+:meth:`dkx.inputs.SfincsInput.from_params` takes the flat Fortran parameter
+names of the tables below (case-insensitively) and returns a validated typed
+input that the run drivers accept directly (see :doc:`usage`).
 
 The tables give the Fortran namelist name, default, and type for every typed
 field, grouped by namelist.
@@ -363,7 +364,8 @@ than falling back.
      - ``.true.``
      - reuse the factorization across right-hand sides
 
-These map onto the tier-2 coarse preconditioner in :doc:`numerics`.
+These map onto the coarse preconditioner used by the recycled Krylov route
+(:doc:`numerics`).
 
 .. note::
 
@@ -378,9 +380,8 @@ These map onto the tier-2 coarse preconditioner in :doc:`numerics`.
    ``preconditioner_xi`` does, and it is expensive. Severing the coupling
    takes 6000 iterations to reach a residual of 0.77, where keeping it
    converges in 19 (:doc:`performance`). Streaming and mirror are the dominant
-   terms and are
-   strictly off-diagonal in the Legendre index, so severing them leaves a
-   preconditioner that no longer resembles the operator.
+   terms and are strictly off-diagonal in the Legendre index, so severing them
+   leaves a preconditioner that no longer resembles the operator.
 
 Unsupported inputs
 ------------------
@@ -437,8 +438,9 @@ Transport-matrix modes (``RHSMode = 2/3``)
 
 For ``RHSMode = 2`` and ``RHSMode = 3`` the solver loops over ``whichRHS`` and
 overwrites the relevant drives internally before building each RHS. On the
-canonical stack this is ``KineticOperator._with_rhs_settings``, so the transport-mode right-hand side reproduces the
-v3 solver RHS exactly. For ``RHSMode = 3`` the speed grid collapses to the single
+canonical stack this is ``KineticOperator._with_rhs_settings``, so the
+transport-mode right-hand side reproduces the v3 solver RHS exactly. For
+``RHSMode = 3`` the speed grid collapses to the single
 node at :math:`x=1` (``Nx = 1``), matching v3 ``createGrids.F90``; this is handled
 by :meth:`dkx.drift_kinetic.KineticOperator.from_namelist`.
 

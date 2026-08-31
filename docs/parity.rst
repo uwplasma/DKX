@@ -29,7 +29,7 @@ High-level summary (parity-tested)
      - Geometry + transport-matrix end-to-end fixtures
    * - Linear runs (RHSMode=1)
      - Yes
-     - Explicit CPU/GPU release lanes are parity-clean across the vendored example suite
+     - Explicit CPU and GPU release runs are parity-clean across the vendored example suite
    * - Transport matrices (RHSMode=2/3)
      - Yes
      - End-to-end ``sfincsOutput.h5`` parity for 2×2 and 3×3 cases
@@ -120,12 +120,12 @@ Current scope limits
   End-to-end differentiable solves remain available from Python via the implicit/differentiable path when requested.
 - Full Phi1 coupling end-to-end (nonlinear residual assembly + collision operator contributions) is still being expanded beyond the parity-tested subset.
 - VMEC-based geometry schemes beyond the ``geometryScheme=5`` parity subset.
-- Rosenbluth response matrices for FP cross-species coupling are computed with QUADPACK (matching v3). We added strict
+- Rosenbluth response matrices for FP cross-species coupling are computed with QUADPACK (matching v3). dkx uses strict
   scalar-order accumulation for the collocation-to-modal projection, but the remaining ~1e-10 deltas appear dominated by
   quadrature rounding differences rather than matrix-ordering effects.
 - VMEC geometryScheme=5 full Fokker–Planck fixtures exhibit small (~1e-6 absolute) differences in local flow/Mach
   diagnostics at isolated grid points. These deltas are well below the physics tolerance but can trip strict relative
-  checks when the true value is near zero, so we apply a dedicated absolute-floor override for the VMEC FP subset in
+  checks when the true value is near zero, so dkx applies a dedicated absolute-floor override for the VMEC FP subset in
   ``dkx/compare.py``. The release-facing CPU and GPU example-suite audits remain strict-clean.
 
 Near-zero tolerances
@@ -163,10 +163,10 @@ useful for faster debugging and historical comparison:
 - ``tests/reduced_upstream_examples/suite_report.json``
 - ``tests/reduced_upstream_examples/suite_report_strict.json``
 
-Regenerate the legacy-suite per-case table and audit counts from the tracked
-CPU/GPU reports (the root README carries the canonical-stack evidence instead
-of this block, so the ``readme-audit`` splice targets require the audit
-markers; use the summary generator to reproduce the table and figure):
+The root README carries the canonical-stack evidence instead of this block, so
+the ``readme-audit`` splice targets require the audit markers. Use the summary
+generator to regenerate the legacy-suite per-case table, the audit counts, and
+the figure from the tracked CPU/GPU reports:
 
 .. code-block:: bash
 
@@ -184,7 +184,7 @@ generator against a local Fortran build:
      --examples-dir /path/to/sfincs/fortran/version3/examples \
      --out-dir /tmp/reference-data-v2
 
-Day-to-day Fortran/JAX parity is enforced by the pytest golden gates: frozen
+Day-to-day Fortran/JAX parity is enforced by the pytest golden checks: frozen
 ``tests/ref`` fixtures plus the release-hosted reference data fetched by
 ``python -m dkx.validation.data_fetch``.
 
@@ -196,8 +196,8 @@ After a suite refresh, verify the structural output coverage explicitly:
      --suite-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak \
      --fail-on-missing
 
-When refreshing a CPU lane and a local frozen baseline is available, compare
-runtime against that promoted reference lane:
+When refreshing a CPU suite run and a local frozen baseline is available,
+compare runtime against that promoted reference baseline:
 
 .. code-block:: bash
 
@@ -228,4 +228,4 @@ the strict reports ignore all overrides.
 
 Matrix/operator parity diagnosis against raw Fortran PETSc dumps is a
 research-branch workflow. The stable core keeps frozen-state diagnostic checks
-and public output parity gates rather than shipping dense matrix-dump tooling.
+and public output parity checks rather than shipping dense matrix-dump tooling.

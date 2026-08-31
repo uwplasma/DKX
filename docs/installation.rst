@@ -11,7 +11,7 @@ Standard install
 Solver library (``solvax``)
 ---------------------------
 
-The structured linear-algebra solver tiers (block-tridiagonal Legendre
+The structured linear-algebra solver routes (block-tridiagonal Legendre
 elimination, recycled GCROT Krylov, implicit differentiation) live in the
 external `solvax <https://pypi.org/project/solvax/>`_ library. It is a core
 dependency and installs automatically with ``dkx``; every canonical
@@ -33,7 +33,7 @@ SFINCS Fortran v3 reference build (optional)
 --------------------------------------------
 
 Parity and benchmark tooling can compare against a local SFINCS Fortran v3
-executable. A reproducible route on macOS/Linux is a conda environment that
+executable. A reproducible setup on macOS/Linux is a conda environment that
 provides PETSc and MUMPS (the measured baselines in :doc:`performance` use
 conda PETSc 3.23 + MUMPS 5.8.2) together with upstream's
 ``makefiles/makefile.conda`` in the SFINCS repository
@@ -63,7 +63,7 @@ Use ``DKX_DATA_DIR=/path/to/cache`` to choose a different cache root. Use
 downloading missing data.
 
 Editable install (recommended for development)
------------------------------------------------
+----------------------------------------------
 
 .. code-block:: bash
 
@@ -91,17 +91,16 @@ you want those examples:
    pip install optax
 
 Optional solver-library adoption studies, including Lineax, Equinox-wrapper, and
-JAXopt comparisons, are research-lane material. They are not required for the
+JAXopt comparisons, are research material. They are not required for the
 stable install, stable examples, or default CI.
 
 
 Floating-point precision
 ------------------------
 
-``dkx`` requires JAX in float64.  This is a correctness requirement rather than
-a preference: the block eliminations and every SFINCS parity fixture depend on
-it, and single precision changes which results are trustworthy rather than
-merely how accurate they are.
+``dkx`` requires JAX in float64 for correctness.  The block eliminations and
+every SFINCS parity fixture depend on it, and single precision changes which
+results are trustworthy.
 
 Importing ``dkx`` enables it, once, in ``dkx/__init__.py``.  That is a global
 change to the process, so a caller who shares the interpreter with a library

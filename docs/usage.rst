@@ -7,9 +7,9 @@ Usage
    drivers (``dkx.run.run_profile`` and the transport-matrix runners)
    shown in the quickstart on :doc:`index` and in :doc:`examples`. This page
    documents the full CLI and Python API: the matrix-free operator, the
-   three-tier solve, the output writers, ``Er`` scans, and the ambipolar and
-   transport-matrix runners, including the advanced controls that most scripts
-   do not need.
+   automatic solver policy, the output writers, ``Er`` scans, and the ambipolar
+   and transport-matrix runners, including the advanced controls that most
+   scripts do not need.
 
 Parsing an input file
 ---------------------
@@ -77,12 +77,15 @@ scripts.  The full typed knob set of :func:`dkx.solve.solve` is
 ``recycle_dim``, ``max_restarts``, ``differentiable``, ``use_preconditioner``,
 ``device``, and ``memory_budget_gb``.  Pass it as ``solver=SolverOptions(...)``
 to ``run_profile``, ``run_transport_matrix``, or ``run_from_namelist``; when
-given, it supersedes ``solve_method`` and ``tol``.  Environment variables keep acting as overrides for knobs left at
-``None`` (``memory_budget_gb=None`` reads ``DKX_TIER1_MEMORY_BUDGET_GB``).
-Runtime messages use descriptive route names: ``structured direct``,
-``memory-bounded structured direct``, ``recycled iterative``, and ``host
-sparse-direct fallback``. The historical tier numbers remain only in internal
-knob names and detailed implementation documentation.
+given, it supersedes ``solve_method`` and ``tol``.  Environment variables keep
+acting as overrides for knobs left at ``None`` (``memory_budget_gb=None`` reads
+``DKX_TIER1_MEMORY_BUDGET_GB``).
+
+Runtime messages name the route that ran: ``structured direct``,
+``memory-bounded structured direct``, ``recycled iterative``, or ``host
+sparse-direct fallback``.  :doc:`numerics` describes the three routes and maps
+them onto the ``tier1``/``tier2``/``tier3`` spellings that survive inside code
+identifiers.
 
 The ``cores`` field is an exception: it is carried for provenance only.  XLA
 sizes its host threadpool once, before the first JAX device use, so thread
@@ -144,7 +147,7 @@ The collision blocks are assembled into the operator automatically from
 Fokker--Planck / Rosenbluth operator (``= 0``), both from
 :mod:`dkx.collisions` and applied inside ``KineticOperator.apply_f`` (the
 distribution-block-only action). To solve the assembled system, hand the
-operator to :func:`dkx.solve.solve` (the three-tier auto policy in
+operator to :func:`dkx.solve.solve` (the automatic solver policy in
 :doc:`numerics`), or use the high-level :func:`dkx.run.run_profile`.
 
 Running the Fortran v3 executable
@@ -220,19 +223,33 @@ Advanced solver controls
 ------------------------
 
 Most runs should keep ``--solve-method auto``. The automatic policy is measured
-against parity, residual, runtime, and memory gates before a branch is promoted.
-Only force a solver when reproducing a benchmark, debugging a path choice, or
-running an expert study where the output ``linearSolver*`` diagnostics and
-``--solver-trace`` sidecar will be inspected.
+against parity, residual, runtime, and memory checks before a branch is
+promoted. Force a solver only when reproducing a benchmark, debugging a route
+choice, or running an expert study where the output ``linearSolver*``
+diagnostics and ``--solver-trace`` sidecar will be inspected.
 
 The ``dkx.solve`` policy accepts an explicit ``method`` (CLI
-``--solve-method``): ``auto`` (the default), ``block_tridiagonal`` and
-``block_tridiagonal_truncated`` (the tier-1 structured direct solves),
-``gmres`` (the tier-2 recycled Krylov solve), and ``direct`` (the tier-3 host
-sparse-direct referee). The three-tier ``auto`` policy covers every supported
-deck and routes each one to the cheapest adequate tier (:doc:`numerics`);
-an unrecognized method name raises an error. These names are intentionally
-advanced API: scripts for general users should omit them and rely on ``auto``.
+``--solve-method``):
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 66
+
+   * - ``method``
+     - route
+   * - ``auto``
+     - the default; picks one of the three routes below
+   * - ``block_tridiagonal``, ``block_tridiagonal_truncated``
+     - the structured direct solves
+   * - ``gmres``
+     - the recycled Krylov solve
+   * - ``direct``
+     - the host sparse direct solve
+
+The ``auto`` policy covers every supported deck and sends each one to the
+cheapest adequate route (:doc:`numerics`); an unrecognized method name raises an
+error. These names are intentionally advanced API: scripts for general users
+should omit them and rely on ``auto``.
 
 Parallel CLI controls
 ---------------------
@@ -310,12 +327,11 @@ workstation or cluster launch.
 Environment variables
 ---------------------
 
-Defaults are chosen for validated production runs. Solver selection is
-governed by ``--solve-method``/``method`` and the ``auto`` three-tier policy
-(:doc:`numerics`), not by environment variables. The variables below are
-runtime, parallel-execution, cache, diagnostic, and parity overrides; the few
-that touch a solve are numerical or parity overrides for reproducing a benchmark
-or debugging a path choice, not stable solver selectors.
+Defaults are chosen for validated production runs. Solver selection is governed
+by ``--solve-method``/``method`` and the ``auto`` route policy (:doc:`numerics`),
+never by an environment variable. The variables below are runtime,
+parallel-execution, cache, diagnostic, and parity overrides, for reproducing a
+benchmark or debugging a route choice.
 
 Precision, cache, and data files
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -392,8 +408,8 @@ includePhi1 Newton–Krylov tolerances
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 These are numerical overrides for the ``includePhi1 = .true.`` Newton–Krylov
-solve. They have no namelist/API equivalent and are overrides for parity or
-debugging, not solver selectors.
+solve. They have no namelist or API equivalent, and exist for parity work and
+debugging.
 
 - ``DKX_PHI1_NEWTON_TOL``: absolute nonlinear (Newton) tolerance for
   includePhi1 solves (default: ``1e-12``). It governs how many Newton iterates
@@ -477,17 +493,23 @@ sidecar with backend, selected solve path, elapsed time, device count, and
 output metadata for profiling or regression reports.
 
 RHSMode=1 output files also carry the core convergence fields directly:
-``linearSolverMethod``, ``linearSolverResidualNorm``,
-``linearSolverResidualTarget``, ``linearSolverResidualTargetRatio``,
-``linearSolverConverged``, ``linearSolverAccepted``, and
-``linearSolverAcceptanceCriterion``. In PETSc-compatible constrained-PAS
-minimum-norm runs, ``linearSolverConverged`` can be false while
-``linearSolverAccepted`` is true. That distinction is intentional: it prevents
-true-residual convergence from being conflated with Fortran/PETSc-compatible
-branch acceptance. Sparse-PC runs additionally expose
-``linearSolverMatvecs``, setup/solve/elapsed timings, sparse-pattern build time,
-sparse preconditioner factorization time, and sparse-pattern nonzero counters in
-the same output file.
+
+- ``linearSolverMethod``
+- ``linearSolverResidualNorm``
+- ``linearSolverResidualTarget``
+- ``linearSolverResidualTargetRatio``
+- ``linearSolverConverged``
+- ``linearSolverAccepted``
+- ``linearSolverAcceptanceCriterion``
+
+In PETSc-compatible constrained-PAS minimum-norm runs,
+``linearSolverConverged`` can be false while ``linearSolverAccepted`` is true.
+The two fields are deliberately separate, so true-residual convergence is not
+conflated with Fortran/PETSc-compatible branch acceptance.
+
+Sparse-PC runs add ``linearSolverMatvecs``, setup/solve/elapsed timings,
+sparse-pattern build time, sparse preconditioner factorization time, and
+sparse-pattern nonzero counters to the same output file.
 
 The solver trace is intentionally separate from the physics output so parity
 comparisons against SFINCS Fortran v3 can continue to use byte-stable HDF5,
@@ -516,6 +538,8 @@ Use the trace when debugging runtime cliffs: compare ``selected_path``,
 ``backend``, ``elapsed_s``, and ``device_count`` before changing solver
 environment variables or forcing a preconditioner.
 
+Override the Boozer equilibrium file:
+
 .. code-block:: bash
 
    dkx write-output \
@@ -523,13 +547,19 @@ environment variables or forcing a preconditioner.
      --out sfincsOutput.h5 \
      --equilibrium-file /path/to/equilibrium.bc
 
+Override a VMEC ``wout``:
+
 .. code-block:: bash
 
    dkx /path/to/input.namelist --wout-path /path/to/wout.nc --out sfincsOutput.h5
 
+The module form of the same command:
+
 .. code-block:: bash
 
    python -m dkx write-output --input /path/to/input.namelist --out sfincsOutput.h5
+
+From Python, the equivalent of a default CLI run:
 
 .. code-block:: python
 
@@ -537,6 +567,8 @@ environment variables or forcing a preconditioner.
    from dkx.api import write_output
 
    write_output(Path("input.namelist"), Path("sfincsOutput.h5"))
+
+Add the JSON solver-trace sidecar:
 
 .. code-block:: python
 
@@ -546,11 +578,15 @@ environment variables or forcing a preconditioner.
        solver_trace_path=Path("solver_trace.json"),
    )
 
+Write NetCDF4 or NPZ by changing the suffix:
+
 .. code-block:: python
 
    write_output(Path("input.namelist"), Path("sfincsOutput.nc"))
 
    write_output(Path("input.namelist"), Path("sfincsOutput.npz"))
+
+Point the same call at a VMEC ``wout``:
 
 .. code-block:: python
 
@@ -595,8 +631,8 @@ selects the ``whichRHS`` loop automatically and ``transportMatrix`` is written:
 Running an ``Er`` scan (transport-matrix mode)
 ----------------------------------------------
 
-To generate a scan directory compatible with upstream plotting scripts like ``sfincsScanPlot_2``,
-you can use the ``scan-er`` subcommand:
+The ``scan-er`` subcommand generates a scan directory compatible with upstream
+plotting scripts such as ``sfincsScanPlot_2``:
 
 .. code-block:: bash
 
@@ -614,7 +650,7 @@ auditable record for each point. It stores backend, selected solve path, active
 size, elapsed time, residual target, residual norm, and memory estimates,
 without changing the Fortran-compatible physics output.
 
-For large scans, you can parallelize scan points:
+``--jobs`` parallelizes scan points, for large scans:
 
 .. code-block:: bash
 

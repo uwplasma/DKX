@@ -3,17 +3,19 @@ Fortran v3 And dkx Feature Matrix
 
 This page is the review anchor for functionality parity and intentional
 extensions. It is audited from the local SFINCS Fortran v3 source tree and the
-upstream SFINCS version-3 user manual on 2026-06-25; the feature-completion series
-that followed (Phi1 collision coupling and ``readExternalPhi1``, tangential
+upstream SFINCS version-3 user manual on 2026-06-25. The feature-completion
+series that followed (Phi1 collision coupling and ``readExternalPhi1``, tangential
 magnetic drifts 0-9, constraint schemes 3/4, ``export_f``, geometry scheme 13
 from the namelist, non-stellarator-symmetric VMEC, and speed-grid schemes
 ``xGridScheme`` 1-8 with ``xDotDerivativeScheme`` -2..11) is summarised in the
-README functionality table and lands here at the next audit pass. It separates three questions that
-are easy to conflate during refactoring:
+README functionality table and lands here at the next audit pass.
+
+The matrix separates three questions that are easy to conflate during
+refactoring:
 
 - what the Fortran v3 code can do,
 - where that behavior lives in ``dkx``,
-- and which promotion gate is still required before making a production claim.
+- and which check must still pass before a production claim.
 
 Status definitions
 ------------------
@@ -22,17 +24,17 @@ Status definitions
    The capability is available through the public CLI or Python API and has a
    focused test or checked validation artifact.
 
-``implemented with gates``
+``implemented, with checks``
    The capability is available, but production claims are limited by explicit
-   residual, runtime, memory, grid-resolution, or backend gates.
+   residual, runtime, memory, grid-resolution, or backend checks that must pass.
 
 ``partial``
    The mathematical or API spine exists, but at least one Fortran-compatible
-   output, branch, option, or production-resolution gate is not complete.
+   output, branch, option, or production-resolution check is not complete.
 
 ``deferred``
    The capability is intentionally documented as future work. It must not be
-   used as release evidence until its promotion gate is closed.
+   used as release evidence until the check that promotes it passes.
 
 Fortran v3 feature ownership
 ----------------------------
@@ -58,17 +60,17 @@ Fortran v3 feature ownership
      - Fortran performs a nonlinear or linear profile-response solve, then
        writes particle fluxes, heat fluxes, flows, currents, Phi1 fields, and
        convergence diagnostics.
-     - ``dkx.run`` :math:`\to` ``dkx.solve`` (three-tier auto
+     - ``dkx.run`` :math:`\to` ``dkx.solve`` (automatic solver
        policy) over the consolidated ``dkx.drift_kinetic``:
-       implemented with gates. QA/QH production-grid convergence is supported
+       implemented, with checks. QA/QH production-grid convergence is supported
        with documented solver-policy limits; lower-memory replacement remains a
-       performance lane, not a correctness blocker.
+       line of performance work, not a correctness blocker.
    * - RHSMode 2 and RHSMode 3 transport/monoenergetic matrices
      - ``solver.F90``, ``diagnostics.F90``, ``validateInput.F90``
      - Fortran loops over transport RHS columns; RHSMode 3 enforces
        monoenergetic constraints such as ``Nx=1`` and DKES-compatible settings.
      - ``dkx.run.run_transport_matrix`` :math:`\to` ``dkx.solve``:
-       implemented with gates.
+       implemented, with checks.
        Geometry-rich production preconditioners are bounded by residual and
        setup-time admission tests before auto promotion.
    * - Ambipolar root solve option 1
@@ -105,13 +107,13 @@ Fortran v3 feature ownership
        parallel flow, total heat flux, and radial current sensitivities.
      - ``dkx.sensitivity`` plus diagnostic observable builders:
        source contract plus derivative spine present. Linear implicit
-       derivative, JVP/VJP, dot-product, small RHSMode-1 radial-current gates,
+       derivative, JVP/VJP, dot-product, small RHSMode-1 radial-current checks,
        active Fortran-style option-1 ``dJ_r/dE_r`` replay, Fortran-v3
-       RHSMode-4/5 input validators, HDF5 sensitivity field-name/rank gates,
+       RHSMode-4/5 input validators, HDF5 sensitivity field-name/rank checks,
        and compact Fortran RHSMode-4 radial-current, heat-flux,
        parallel-flow, bootstrap, and debug finite-difference numerical replay
        fixtures are implemented and covered by tests. Production-grid refreshes
-       are release benchmarks rather than normal CI gates.
+       are release benchmarks rather than normal CI checks.
    * - RHSMode 5 ambipolar sensitivities
      - ``ambipolarSolver.F90``, ``solver.F90``, ``adjointDiagnostics.F90``
      - Fortran first finds ambipolar ``E_r``, then evaluates derivatives at
@@ -126,13 +128,13 @@ Fortran v3 feature ownership
        branches, plus field-particle and momentum-restoring terms.
      - ``dkx.collisions`` (pitch-angle-scattering and full Fokker--Planck
        operators): implemented for the
-       release-facing suite, with high-pitch/geometry-rich performance gates
+       release-facing suite, with high-pitch/geometry-rich performance checks
        tracked separately.
    * - Magnetic and electric drift branches
      - ``validateInput.F90``, ``populateMatrix.F90``, ``geometry.F90``
      - Manual ``magneticDriftScheme`` notes Fortran limitations when Phi1 and
        some magnetic-drift terms are combined.
-     - Implemented with gates. Release examples cover DKES-like and full
+     - Implemented, with checks. Release examples cover DKES-like and full
        trajectory branches; Phi1 drift-current sensitivity promotion is still
        explicit future work.
    * - Geometry schemes and radial-coordinate conversions
@@ -140,8 +142,8 @@ Fortran v3 feature ownership
      - Fortran supports analytic, Boozer, VMEC-derived, and related geometry
        schemes, with RHSMode>3 restricted to Boozer coordinates.
      - ``dkx.magnetic_geometry`` (``FluxSurfaceGeometry`` with schemes
-       1--5/11/12 and the differentiable ``from_fourier``): implemented with
-       gates. VMEC and differentiable spectra are supported; broader QI and
+       1--5/11/12 and the differentiable ``from_fourier``): implemented, with
+       checks. VMEC and differentiable spectra are supported; broader QI and
        scheme-13-via-namelist production promotion remains documented research
        work.
    * - Phi1/quasineutrality
@@ -162,8 +164,8 @@ Fortran v3 feature ownership
        sparse direct fallback, transpose solves, and MUMPS memory retry controls.
      - Fortran generally factors a preconditioner/direct matrix and uses the
        same infrastructure for adjoint/transpose solves.
-     - In-house JAX/Python solver stack: implemented with gates. ``dkx``
-       intentionally does not require PETSc/MUMPS/SuperLU_DIST. Current work
+     - In-house JAX/Python solver stack: implemented, with checks. ``dkx``
+       intentionally does not require PETSc/MUMPS/SuperLU_DIST. Work
        focuses on reusable operator protocols, in-house block/Schur factors, and
        strict true-residual admission rather than external direct-solver
        bindings.
@@ -181,8 +183,9 @@ Fortran v3 feature ownership
      - Fortran delegates matrix distribution, factorization, and solves to MPI
        PETSc and optional parallel direct solvers.
      - JAX CPU/GPU execution, chunking, worker scaling, and sharding paths:
-       implemented with gates. Single-case multi-GPU strong scaling and true
-       device-QI are deferred research lanes until strict production gates pass.
+       implemented, with checks. Single-case multi-GPU strong scaling and true
+       device-QI are deferred research topics until strict production checks
+       pass.
 
 ``dkx`` implementation status
 ------------------------------------
@@ -194,7 +197,7 @@ Fortran v3 feature ownership
    * - Capability
      - Status
      - Evidence in this branch
-     - Remaining promotion gate
+     - Remaining requirement
    * - Example-suite parity against SFINCS Fortran v3
      - implemented
      - Frozen CPU/GPU 39-case reports and benchmark plots referenced from
@@ -213,46 +216,46 @@ Fortran v3 feature ownership
        and RSS bounds.
    * - Ambipolar Newton/bisection and pure Newton options
      - bounded small-deck implemented; production pending
-     - Small-deck derivative certificates, the namelist-backed fixed-shape
+     - Small-deck derivative error bounds, the namelist-backed fixed-shape
        RHSMode-1 radial-current response helper, active Fortran-style
        option-1 current/slope replay, option-1/3 root replay, and
-       radial-current observable gates in ``tests/test_sensitivity.py`` and
+       radial-current observable checks in ``tests/test_sensitivity.py`` and
        ``tests/test_ambipolar_problem.py``.
      - Production sparse/matrix-free ``E_r`` derivatives, in-process RHSMode-1
-       evaluator reuse, and production Fortran option-1/3 replay gates.
+       evaluator reuse, and production Fortran option-1/3 replay checks.
    * - RHSMode 4 fixed-``E_r`` sensitivities
      - source contract implemented; numerical replay pending
      - ``dkx.sensitivity`` supports implicit linear observable
        derivatives, builder probes, JVP/VJP, adjoint dot-product checks,
        Fortran-compatible input validation, and HDF5 sensitivity field-name
-       gates.
+       checks.
      - Build numerical Fortran-compatible diagnostic/output surfaces and
-       intermediate-grid gates.
+       intermediate-grid checks.
    * - RHSMode 5 ambipolar sensitivities
      - source contract implemented; numerical replay deferred
      - Shared sensitivity spine exists; constant-current formulas are documented
-       in this matrix and source-compatible input/output field gates are tested.
-     - Close option-1/3 ambipolar derivative gates first, then add
+       in this matrix and source-compatible input/output field checks are tested.
+     - Close option-1/3 ambipolar derivative checks first, then add
        constant-current HDF5 diagnostics.
    * - QA/QH bootstrap-current validation
-     - implemented with gates
+     - implemented, with checks
      - README/docs figures compare ``dkx``, SFINCS Fortran v3, and Redl
        formula at matched resolutions where available.
      - More radial points and production-grid repeats after solver-policy
        changes.
    * - QI kinetic promotion
-     - implemented with gates
+     - implemented, with checks
      - Bounded CPU/GPU/Fortran promotion artifacts and documented claim
        boundaries.
      - True device-QI and production-resolution ladders remain deferred.
    * - Lower-memory production solver replacement
-     - implemented with gates
+     - implemented, with checks
      - In-house block/Schur/factor infrastructure, direct-Pmat experiments, and
        true-residual admission tests.
      - Promote to auto only when production CPU/GPU residual, runtime, and RSS
-       gates pass.
+       checks pass.
    * - Refactor/review-ready architecture
-     - implemented with review gates
+     - implemented, with review checks
      - Domain packages, source-tree guards, import-contract tests, and direct
        owner tests cover the retired monolith and canonical flat owners.
      - Keep docs and the source map synchronized, avoid file-count churn, and
@@ -268,6 +271,6 @@ all of the following:
 
 - a public CLI or Python entry point,
 - a focused unit or numerical test,
-- a physics or cross-code gate when the capability is physics-facing,
+- a physics or cross-code check when the capability is physics-facing,
 - docs that identify limitations and reproduction commands,
 - and, for performance claims, fresh runtime and memory provenance.

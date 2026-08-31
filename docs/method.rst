@@ -7,8 +7,8 @@ CPU/GPU-capable solver orchestration.
 
 The code solves for the non-adiabatic correction to the distribution function on a
 single flux surface. For the model and literature background, see
-:doc:`physics_models` and :doc:`physics_reference`. This page focuses on the
-discretization and implementation choices that turn that model into an efficient
+:doc:`physics_models` and :doc:`physics_reference`. What follows is the
+discretization and the implementation choices that turn that model into a
 computational workflow.
 
 .. figure:: _static/figures/magdrift_bhat.png
@@ -138,7 +138,7 @@ Magnetic drift terms (ΔL = 0 and ΔL = ±2)
    applied inside ``KineticOperator.apply_f``. Because the drift term couples
    :math:`L \leftrightarrow L\pm2` it breaks the block-tridiagonal-in-:math:`L`
    structure, so ``KineticOperator.to_block_tridiagonal`` declines drift decks
-   and the tier-2 recycled-Krylov solver owns them (:doc:`numerics`). The
+   and the recycled Krylov route owns them (:doc:`numerics`). The
    ``full`` versus ``DKES`` trajectory distinction is carried separately by the
    :math:`E_r` energy/pitch terms and the ``useDKESExBDrift`` switch
    (:doc:`physics_reference`).
@@ -306,15 +306,16 @@ Linear solvers and preconditioning
 
 SFINCS v3 systems are large, stiff, and often ill-conditioned due to collision
 operators, constraint nullspaces, and mixed dense/sparse structure. The canonical
-stack keeps the operator matrix-free and applies a three-tier auto policy
-(:func:`dkx.solve.solve`) described in full in :doc:`numerics`:
+stack keeps the operator matrix-free and applies an automatic solver policy
+(:func:`dkx.solve.solve`) over three routes, described in full in
+:doc:`numerics`:
 
-- **Tier 1** — a structured direct solve (block-tridiagonal Legendre
-  elimination) for the DKES-trajectory / pitch-angle-scattering family;
-- **Tier 2** — matrix-free recycled Krylov (FGMRES + GCROT) right-preconditioned
-  by an exact tier-1 solve of a SFINCS-simplified coarse operator (the Fortran
-  ``preconditionerOptions`` idiom);
-- **Tier 3** — a host sparse-direct (SuperLU) escape hatch.
+- **Structured direct** — a block-tridiagonal Legendre elimination for the
+  DKES-trajectory / pitch-angle-scattering family;
+- **Recycled Krylov** — matrix-free FGMRES + GCROT right-preconditioned
+  by an exact structured direct solve of a SFINCS-simplified coarse operator
+  (the Fortran ``preconditionerOptions`` idiom);
+- **Sparse direct** — a host SuperLU escape hatch.
 
 The structured factorizations, recycled Krylov, and implicit-solve wrappers are
 provided by the ``solvax`` library.
@@ -322,8 +323,8 @@ provided by the ``solvax`` library.
 Block-tridiagonal elimination for the Legendre chain
 ----------------------------------------------------
 
-The tier-1 solve exploits the block-tridiagonal-in-:math:`L` structure of the
-monoenergetic operator. For diagonal blocks :math:`D_k` and neighbour couplings
+The structured direct solve exploits the block-tridiagonal-in-:math:`L`
+structure of the monoenergetic operator. For diagonal blocks :math:`D_k` and neighbour couplings
 :math:`L_k`, :math:`U_k`,
 
 .. math::

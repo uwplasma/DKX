@@ -1,9 +1,9 @@
 Applications and research workflows
 ===================================
 
-`dkx` is designed for practical neoclassical analysis, benchmarking, and
-optimization-oriented workflows. This page summarizes the main ways the code is used in
-practice and points to the repository examples that exercise those paths.
+`dkx` targets practical neoclassical analysis, benchmarking, and
+optimization-oriented workflows. Each section below names one way the code is used
+and the repository examples that exercise it.
 
 Core application areas
 ----------------------
@@ -44,7 +44,7 @@ Examples:
 - ``examples/getting_started/write_sfincs_output_vmec.py``
 
 Differentiable and inverse-design workflows
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The Python API can retain differentiability through selected solve paths. This is useful
 for:
@@ -68,9 +68,9 @@ Two parallel patterns matter here:
 - **case/RHS parallelism** for throughput,
 - **single-case sharding** for very large solves.
 
-The production-ready GPU scaling story on the documented audited scope is the
-transport-worker lane for RHSMode=2/3 runs. The sharded single-case path remains
-available for research and benchmarking, but is still more sensitive to hardware and
+On the documented audited scope, the production-ready GPU scaling comes from the
+transport-worker workflow for RHSMode=2/3 runs. The sharded single-case path remains
+available for research and benchmarking, but is more sensitive to hardware and
 problem structure.
 
 Examples:
@@ -86,7 +86,7 @@ results quickly:
 - ``examples/getting_started/plot_sfincs_output.py``
 - ``tools/publication_figures/generate_er_trajectory_sweep.py``
 
-These examples are intentionally lightweight. They are meant to show how to read
+These examples are intentionally lightweight: they show how to read
 ``sfincsOutput.h5`` and how to turn the stored diagnostics into publication figures or
 analysis notebooks.
 
@@ -114,8 +114,8 @@ Trust and external comparison
 
 For users who need external validation before applying the code to a new device or
 profile set, the repository also documents comparison against frozen reference outputs
-from a mature Fortran implementation on the audited scope. That material is kept as a
-validation section, not as the primary identity of the code.
+from a mature Fortran implementation on the audited scope. That material is kept in
+the validation section.
 
 See :doc:`fortran_comparison` for that trust-building material and :doc:`testing` for
 the broader validation strategy.

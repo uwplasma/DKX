@@ -24,7 +24,7 @@ Foundational neoclassical theory
   relevant to the SFINCS ``full`` and DKES trajectory models.
 
 SFINCS model, collision operator, and speed grid
--------------------------------------------------
+------------------------------------------------
 
 - M. Landreman, H. M. Smith, A. Mollén, and P. Helander,
   `Comparison of particle trajectories and collision operators for collisional transport in nonaxisymmetric plasmas <https://doi.org/10.1063/1.4870077>`_,
@@ -53,7 +53,7 @@ SFINCS model, collision operator, and speed grid
 Block-tridiagonal Legendre solver and variational bounds
 --------------------------------------------------------
 
-The tier-1 structured solve (:doc:`numerics`) eliminates the Legendre chain of
+The structured direct solve (:doc:`numerics`) eliminates the Legendre chain of
 the monoenergetic drift-kinetic equation with a block-tridiagonal factorization
 and a truncated-storage back-substitution; the variational transport-coefficient
 bounds (:doc:`capabilities`) bracket the monoenergetic :math:`D_{11}` from the

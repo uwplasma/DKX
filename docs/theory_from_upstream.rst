@@ -1,8 +1,8 @@
 Theory from the upstream SFINCS notes
 =====================================
 
-This page pulls the core narrative from the SFINCS technical notes into the main
-documentation set. The goal is to keep the theory readable in the docs themselves. The
+This page carries the core narrative of the SFINCS technical notes into the main
+documentation set, so the theory stays readable in the docs themselves. The
 original upstream notes are unpublished project documents archived in the upstream
 SFINCS project repository (cited from :doc:`upstream_docs`); the prose below is an
 original summary rather than a copy of those documents.
@@ -62,7 +62,7 @@ SFINCS v3 and preserved in ``dkx``:
 with :math:`v_{\mathrm{th},s} = \sqrt{2T_s/m_s}` and
 :math:`\Omega_s = Z_s e B / (m_s c)`.
 
-These normalizations are not just bookkeeping. They determine:
+The normalizations determine:
 
 - the scale separation assumed by the local model,
 - the exact factors that appear in the drift and collision operators,
@@ -93,10 +93,9 @@ families:
 - ``RHSMode=2`` transport-matrix columns,
 - ``RHSMode=3`` monoenergetic transport coefficients.
 
-The transport-matrix and Beidler-matrix notes are useful here because they make explicit
-that SFINCS is not solving a different kinetic problem in those modes. It is solving the
-same discrete operator with a controlled basis of source terms and then post-processing
-the resulting flux moments into transport coefficients.
+The transport-matrix and Beidler-matrix notes make explicit what those modes do:
+they solve the same discrete operator with a controlled basis of source terms, then
+post-process the resulting flux moments into transport coefficients.
 
 Constraint structure and nullspaces
 -----------------------------------
@@ -107,8 +106,8 @@ remove nullspaces associated with those conserved quantities. That is why
 SFINCS carries explicit constraints, and why different ``constraintScheme``
 choices can change the algebraic branch even when the physics is equivalent.
 
-The implementation consequence for ``dkx`` is that validation is not
-only about matching matrix entries. It is also about matching:
+The implementation consequence for ``dkx`` is that validation covers the matrix
+entries and also matches:
 
 - which nullspace or gauge is selected,
 - which moments are constrained directly,
@@ -125,16 +124,16 @@ Monoenergetic and DKES-like limits
 The upstream SFINCS paper and the DKES notes explain why monoenergetic limits remain
 important even in a multispecies code:
 
-- they provide a bridge to older stellarator databases and optimization workflows,
+- they provide a bridge to legacy stellarator databases and optimization workflows,
 - they isolate geometry and trajectory effects from full energy-coupling effects,
 - and they support transport-matrix workflows where many source columns must be solved
   repeatedly.
 
-In this limit the kinetic problem becomes smaller and more structured. That is exactly
-why reduced monoenergetic and DKES-style codes can exploit specialized solvers that are not natural for
-the full SFINCS state. For ``dkx``, this is a strong hint that the worst
-monoenergetic and low-energy-coupling offenders should not necessarily be treated with
-the same generic flattened solver path used for full FP runs.
+In this limit the kinetic problem becomes smaller and more structured, which is why
+reduced monoenergetic and DKES-style codes can exploit specialized solvers that are
+not natural for the full SFINCS state. For ``dkx``, that structure suggests the
+hardest monoenergetic and low-energy-coupling cases need not go through the same
+generic flattened solver path used for full FP runs.
 
 Fokker-Planck field terms and Rosenbluth potentials
 ---------------------------------------------------
@@ -159,8 +158,8 @@ Two consequences matter directly for ``dkx``:
   are often more promising than repeated generic Krylov iterations on the full flattened
   state.
 
-This is exactly the direction suggested by structured block elimination and by the
-existing species-by-:math:`x` block preconditioners already present in ``dkx``.
+This is the direction suggested by structured block elimination and by the
+species-by-:math:`x` block preconditioners already in ``dkx``.
 
 Phi1, quasineutrality, and poloidally varying collisions
 --------------------------------------------------------
@@ -175,7 +174,7 @@ First, :math:`\Phi_1` modifies the kinetic equation through parallel acceleratio
 drift terms, and the background Maxwellian. Second, when enabled, it modifies the
 collision operator through a poloidally varying effective density or Boltzmann factor.
 
-The practical message from those notes is subtle:
+Three practical points follow:
 
 - some flux definitions that look different in the presence of :math:`\Phi_1` reduce to
   the same physical fluxes once all terms are handled consistently,
@@ -189,7 +188,7 @@ requested differentiable ``\Phi_1`` workflows while allowing the CLI/default pat
 more aggressive explicit strategies when they converge to the same final state.
 
 What this means for dkx engineering
-------------------------------------------
+-----------------------------------
 
 The upstream notes point to a consistent implementation strategy:
 
@@ -198,7 +197,7 @@ The upstream notes point to a consistent implementation strategy:
   and angle coordinates,
 - and avoid treating every hard case as an unstructured dense or generic Krylov problem.
 
-That leads directly to the current engineering split in ``dkx``:
+That leads directly to the engineering split in ``dkx``:
 
 - a validation-oriented differentiable path for explicit Python requests and gradient
   workflows,
