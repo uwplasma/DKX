@@ -190,10 +190,10 @@ Related reference pages
 References
 ----------
 
-.. [#sfincs2015] M. Mollen et al., “Implementation of a fully linearized Fokker–Planck
+.. [#sfincs2015] M. Mollén et al., “Implementation of a fully linearized Fokker–Planck
    collision operator in SFINCS,” arXiv:1504.04810 (2015).
 .. [#boozer1980] A. H. Boozer, “Guiding center drift equations,” *Phys. Fluids* 23(5),
    904–908 (1980). OSTI: https://www.osti.gov/biblio/5655342
-.. [#phi1_2018] M. Mollen et al., “Poloidal variation of impurity density and electric
+.. [#phi1_2018] M. Mollén et al., “Poloidal variation of impurity density and electric
    potential in stellarators,” *Plasma Phys. Control. Fusion* 60 (2018) 084001.
    OSTI: https://www.osti.gov/biblio/1473123

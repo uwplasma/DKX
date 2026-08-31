@@ -14,7 +14,9 @@ opinion about difficulty.
 Canonical examples
 ------------------
 
-Six pedagogic scripts on the canonical API sit at the top of ``examples/``.
+Six pedagogic scripts on the canonical API sit in the ``examples/``
+subdirectories ``getting_started/``, ``transport/``, ``autodiff/`` and
+``vmex_finite_beta/``.
 Each follows the same style contract: no ``main()``, all parameters at the top
 of the file, printed setup/progress/final results, at least one plot, and
 output files written and read back. All run on a laptop CPU; CI runs each one

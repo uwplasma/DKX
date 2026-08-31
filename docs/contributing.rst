@@ -7,7 +7,7 @@ documentation are expected to evolve together.
 Repository layout
 -----------------
 
-- `dkx/`: Python package code
+- `src/dkx/`: Python package code
 - `tests/`: unit tests and frozen reference fixtures (including some PETSc binaries)
 - `examples/`: pedagogic scripts organized by workflow category
 - `docs/`: Sphinx docs (Read the Docs compatible)

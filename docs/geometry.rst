@@ -102,7 +102,7 @@ period factor, matching the Fortran ``boozer_bmnc(m,n)`` convention). The
 covariant components reduce to the flux functions
 :math:`\hat B_\theta = \hat I`, :math:`\hat B_\zeta = \hat G` plus the field-
 period structure, which is why Boozer geometry is the natural setting for the
-drift coefficients and for monoenergetic (``RHSMode>3``) runs.
+drift coefficients and for monoenergetic (``RHSMode=3``) runs.
 
 The retained harmonics follow the **representable-mode policy** imposed by the
 discrete :math:`(\theta,\zeta)` grid, matching the v3 Jacobian assembly at a
