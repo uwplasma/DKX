@@ -4,16 +4,16 @@ Outputs (HDF5, NetCDF4, and NPZ)
 `dkx` writes results to the format selected by the output filename:
 
 - ``.h5`` / ``.hdf5``: Fortran-compatible HDF5, the parity and regression-test default.
-- ``.nc`` / ``.netcdf``: NetCDF4, useful for xarray, climate/space-physics tooling,
+- ``.nc`` / ``.netcdf``: NetCDF4, for xarray, climate/space-physics tooling,
   and long-lived metadata-aware archives.
-- ``.npz``: fast uncompressed NumPy archive, useful for lightweight Python workflows
+- ``.npz``: fast uncompressed NumPy archive for lightweight Python workflows
   and rapid local sweeps.
 
 The HDF5 layout is designed to remain compatible with the SFINCS-style
 postprocessing ecosystem, and it is also the public results format of `dkx`.
 
 Writing output with `dkx`
---------------------------------
+-------------------------
 
 CLI
 ^^^
@@ -41,9 +41,9 @@ main file:
   implementation route when the solver exposes it.
 - ``linearSolverPreconditionerKind`` records the selected preconditioner when
   available, for example ``pas_tz`` or ``collision``. (Fields describing the
-  deleted sparse-PC/structured-CSR lanes no longer appear in new outputs.)
+  deleted sparse-PC/structured-CSR code paths no longer appear in new outputs.)
 - ``linearSolverResidualNorm`` and ``linearSolverResidualTarget`` record the
-  true residual norm and requested target used by the output safety gate.
+  true residual norm and requested target used by the output safety check.
 - ``linearSolverResidualTargetRatio`` is residual divided by target.
 - ``linearSolverConverged`` is a Fortran-style logical flag, ``+1`` when the
   residual target was met and ``-1`` otherwise.
@@ -56,10 +56,11 @@ main file:
 - ``linearSolverSetupTime``, ``linearSolverSolveTime``, and
   ``linearSolverElapsedTime`` split preconditioner setup from Krylov iteration
   time for large production solves. (The sparse-pattern/CSR/factor-estimate
-  metadata of the deleted sparse-PC lanes no longer appears in new outputs.)
+  metadata of the deleted sparse-PC code paths no longer appears in new
+  outputs.)
 - The optional solver-trace sidecar records string-valued solver policy
-  metadata. Use this sidecar when auditing why two runs with the same input used different
-  sparse-factor ordering or precision.
+  metadata. Use it when auditing why two runs with the same input used
+  different sparse-factor ordering or precision.
 
 For a publication-style PDF diagnostics panel from an existing output file:
 

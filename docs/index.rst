@@ -43,7 +43,7 @@ written and read back); :doc:`examples` walks through each one:
 - ``examples/getting_started/run_tokamak.py`` — build a namelist in Python, solve a circular
   tokamak, read HDF5/NetCDF back.
 - ``examples/getting_started/run_w7x.py`` — W7-X Boozer geometry with full Fokker-Planck
-  collisions (tier-2 recycled Krylov).
+  collisions (the recycled Krylov route).
 - ``examples/transport/transport_coefficients.py`` — monoenergetic transport matrices
   and a collisionality scan.
 - ``examples/vmex_finite_beta/ambipolar_er_scan.py`` — scan the radial electric field and
@@ -66,7 +66,7 @@ Performance and parity evidence
    * - Configuration
      - Solve time
      - Peak RSS
-   * - ``dkx`` tier-1 structured solve, MacBook M4
+   * - ``dkx`` structured direct solve, MacBook M4
      - ``27.2 s``
      - ``0.93 GB``
    * - SFINCS Fortran v3, 1 rank
@@ -76,14 +76,14 @@ Performance and parity evidence
      - ``229.5 s``
      - ``2.86 GB``
 
-Parity referees pin three envelopes against Fortran golden data: RHSMode=1
+Cross-check tests pin three envelopes against Fortran golden data: RHSMode=1
 output tables to ``8e-14``, state vectors to ``1e-11``, and transport matrices
 to ``6e-13 .. 9e-9``.
 
-A broader example-suite benchmark complements that single case. It runs the
-full 39-case CPU/GPU example suite against SFINCS Fortran v3, and plots every
-row whose Fortran reference runtime clears a ``10 s`` reference-runtime-window,
-so process-launch and JIT-amortization noise does not dominate the bars.
+A broader benchmark covers more than that single case. It runs the full 39-case
+CPU/GPU example suite against SFINCS Fortran v3, and plots every row whose
+Fortran reference runtime clears a ``10 s`` reference-runtime-window, so
+process-launch and JIT-amortization noise does not dominate the bars.
 
 .. figure:: _static/figures/paper/dkx_fortran_suite_benchmark_summary.png
    :alt: Runtime and active-memory comparison for SFINCS Fortran v3 and dkx across the example suite.

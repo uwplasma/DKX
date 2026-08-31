@@ -1,7 +1,7 @@
 Release checklist
 =================
 
-This page is intended for maintainers preparing a tagged release (PyPI + Read the Docs).
+Maintainer steps for preparing a tagged release (PyPI + Read the Docs).
 
 What this project can and cannot claim
 --------------------------------------
@@ -15,7 +15,7 @@ corresponding release artifacts are regenerated from the tagged commit:
 - matching ``sfincsOutput.h5`` common numeric datasets, zero missing Fortran top-level
   output keys in JAX, and the required terminal-output signals for the supported examples.
 - transport-worker GPU parallelism for independent RHS/case throughput on the
-  checked two-GPU benchmark lane.
+  checked two-GPU benchmark study.
 
 The authoritative release-facing artifacts for this state are:
 
@@ -31,7 +31,7 @@ What should still be stated carefully:
 - single-case multi-GPU strong scaling remains experimental and must not be
   presented as the release scaling story,
 - and remaining work is concentrated on runtime and memory optimization of the
-  heaviest PAS and geometry-rich cases.
+  heaviest PAS cases and the cases with the most detailed geometry.
 
 Before shipping a release, make sure `README.md`,
 `docs/fortran_comparison.rst`, and the performance/parallelism pages
@@ -66,36 +66,41 @@ For a fast claim-scope check without running the whole suite, use:
    python -m tools.release.release check-gates
    python -m tools.release.release check-research-lanes
 
-This validates that publication-facing lanes are either implemented for the
-documented release-scope claim, kept as bounded scaffolds/proxies, or explicitly
-closed as post-release work. No manifest lane may silently remain an open
-release blocker.
-The research-lane check additionally validates that active large-push completion
+This validates that publication-facing validation entries are either implemented
+for the documented release-scope claim, kept as bounded scaffolds/proxies, or
+explicitly closed as post-release work. No manifest entry may silently remain an
+open release blocker. Each entry is one self-contained line of validation work;
+the JSON records and CLI commands keep the ``lanes`` spelling.
+
+The research-topic check additionally validates that active large-push completion
 estimates are tied to checked-in evidence and next actions rather than informal
-status text. When a push asks for a larger absolute movement than a lane has
-remaining, the lane may pass only by saturating its checked target percentage;
-the gate does not allow percentages to exceed the target just to satisfy a
+status text. When a push asks for a larger absolute movement than a topic has
+remaining, the topic may pass only by saturating its checked target percentage;
+the check does not allow percentages to exceed the target just to satisfy a
 requested point increase.
+
 The benchmark-doc checks make the README/docs runtime and memory claims fail if
 they drift from the checked-in CPU/GPU suite reports or benchmark summary JSON.
+
 QI/device-QI promotion evidence is preserved on the
 ``research/qi-device-hard-seed`` branch and is not part of the stable release
 checklist.
 
-The mapped-grid and solver-path integration lanes were retired with the
+The mapped-grid and solver-path integration entries were retired with the
 legacy pipeline; their bounded integration checks no longer exist. Any
-revival goes through the research-lane gates in :doc:`research_lanes`.
+revival goes through the research-topic checks in :doc:`research_lanes`.
 
 QI/device-QI seed-robustness artifacts are not part of the stable checkout.
 Only claim production QI robustness after promotion artifacts are restored from
 the research branch, regenerated from the tagged commit, and admitted by the
-same residual, output, runtime, memory, CPU/GPU parity, and documentation gates
+same residual, output, runtime, memory, CPU/GPU parity, and documentation checks
 used for the release-facing suite.
 
 Mapped x-grid transport artifacts in ``docs/_static`` are bounded historical
 evidence. Regeneration campaigns live on research-audit branches; keep any
 stable-branch claim scoped to PAS RHSMode=2 bounded evidence unless a broader
-production-resolution comparison is checked in and gated.
+production-resolution comparison is checked in with acceptance criteria of its
+own.
 
 Smoke-run the examples that do not require optional dependencies:
 
@@ -125,12 +130,12 @@ Each tracked suite root carries:
 - ``suite_report.json`` (and ``suite_report_strict.json`` where applicable)
 - ``suite_output_key_coverage_summary.json``
 - ``suite_runtime_drift.json`` plus ``suite_runtime_drift_summary.json``
-  for lanes audited against a baseline report.
+  for suite roots audited against a baseline report.
 
 For release promotion, require:
 
 - ``suite_output_key_coverage_summary.json`` reports ``missing_total = 0``
-- and the candidate runtime lane is audited against the frozen CPU baseline lane.
+- and the candidate runtime root is audited against the frozen CPU baseline root.
 
 Manual audit commands:
 
@@ -150,7 +155,7 @@ Manual audit commands:
      --threshold-ratio 1.25 \
      --min-baseline-runtime-s 1.0
 
-Sync or regenerate the matching GPU lane against that CPU root before updating
+Sync or regenerate the matching GPU root against that CPU root before updating
 release-facing README or docs claims. The matching GPU root is
 ``tests/scaled_example_suite_gpu_bounded_default_2026-05-08_lu3000_pas``.
 

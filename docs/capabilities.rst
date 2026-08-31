@@ -1,13 +1,18 @@
 Reduced-model capabilities
 ==========================
 
-Beyond the full drift-kinetic solve, `dkx` ships three reduced-model tools
-that make the monoenergetic layer of the theory directly usable: a
-**monoenergetic-database mode** for the community-standard
-:math:`(\nu'/v,\ E_r/v)` scan and energy convolution, **variational bounds** that
-bracket the monoenergetic :math:`D_{11}` and act as a convergence certificate, and
-a **Shaing-Callen collisionless-limit** evaluator for the bootstrap coefficient
-with an analytic axisymmetric cross-check. All three build on the same
+Beyond the full drift-kinetic solve, `dkx` ships three reduced-model tools that
+make the monoenergetic layer of the theory directly usable:
+
+- **monoenergetic-database mode** — the community-standard
+  :math:`(\nu'/v,\ E_r/v)` scan and energy convolution;
+- **variational bounds** — an upper and a lower bound bracketing the
+  monoenergetic :math:`D_{11}`, computed from the solution itself with no
+  reference run;
+- **Shaing-Callen collisionless-limit** evaluator — the bootstrap coefficient,
+  with an analytic axisymmetric cross-check.
+
+All three build on the same
 :class:`~dkx.drift_kinetic.KineticOperator` and normalizations as the full
 solve, so their results compose with everything else in the package.
 
@@ -82,8 +87,8 @@ B`) antisymmetric under the entropy inner product. Two quadratic functionals the
 bound the diffusion coefficient :math:`D_{11}` from below and above for any trial
 field, and both are tight at the exact solution. Evaluated at the even and odd
 Legendre-parity parts of the *discrete* solution, they sit symmetrically around
-the computed :math:`D_{11}`, and their relative gap measures how well the
-discretization preserves the continuum entropy-production structure — it shrinks
+the computed :math:`D_{11}`. Their relative gap measures how well the
+discretization preserves the continuum entropy-production structure; it shrinks
 under :math:`\theta`/:math:`\zeta`/:math:`\xi` refinement and at high
 collisionality.
 
@@ -104,8 +109,8 @@ converged monoenergetic state:
 
 The returned :class:`~dkx.variational.MonoenergeticD11Bounds` guarantees
 ``lower <= transportMatrix[0][0] <= upper`` to solver-residual precision, so
-``gap`` is an a-posteriori certificate that requires no reference solution: a
-small gap certifies a converged discretization, a large gap flags an
+``gap`` is an error bound computed from this run alone, with no reference
+solution: a small gap means a converged discretization, a large gap flags an
 under-resolved one. The functionals are the upper/lower estimates of `van Rij &
 Hirshman, Phys. Fluids B 1, 563 (1989) <https://doi.org/10.1063/1.859116>`_,
 built on the variational principle of Hirshman et al. (1986). The strict-bound

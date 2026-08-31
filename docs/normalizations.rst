@@ -3,9 +3,9 @@ Normalizations and units
 
 SFINCS v3 (and `dkx`) mixes *physical* quantities (:math:`n_s`,
 :math:`T_s`, ...) with dimensionless *normalized* quantities written with hats
-(``BHat`` :math:`=\hat B`, ...). This page collects the normalization
-conventions used throughout the code and the ``sfincsOutput.h5`` fields. The
-drift-kinetic equation that uses them is derived in :doc:`physics_reference`.
+(``BHat`` :math:`=\hat B`, ...). The conventions below hold throughout the code
+and the ``sfincsOutput.h5`` fields. The drift-kinetic equation that uses them is
+derived in :doc:`physics_reference`.
 
 Reference scales and hats
 -------------------------

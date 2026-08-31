@@ -1,9 +1,9 @@
 Source-code map
 ===============
 
-This page links the main pieces of the mathematics to the source files that
-implement them. The goal is to shorten the path from an equation in the docs
-to the exact module that evaluates it.
+This page links each piece of the mathematics to the source file that
+implements it, shortening the path from an equation in the docs to the exact
+module that evaluates it.
 
 High-level flow
 ---------------
@@ -58,17 +58,18 @@ Physics and numerics:
 - ``drift_kinetic.py``: the matrix-free ``KineticOperator`` — streaming,
   mirror, ExB, Er xDot/xiDot, tangential magnetic drifts, collisions, sources,
   constraints, RHS drives (``populateMatrix.F90``, ``evaluateResidual.F90``).
-- ``solve.py``: the solve-route policy (structured block elimination,
-  recycled Krylov with a coarse-operator preconditioner, host direct referee)
-  on the external ``solvax`` library; implicit differentiation.
-- ``coarse_precond.py``: the tier-2 coarse preconditioner ``solve.py`` uses by
+- ``solve.py``: the solve-route policy (structured direct block elimination,
+  recycled Krylov with a coarse-operator preconditioner, and a host sparse
+  direct route used as an independent cross-check) on the external ``solvax``
+  library; implicit differentiation.
+- ``coarse_precond.py``: the coarse preconditioner ``solve.py`` uses by
   default — the SFINCS-simplified operator, the three pins that make its chain
   invertible, and the routing between its dense-band, reusable Schur-LU and
   one-shot storage policies by what fits in memory
   (``preconditioner.F90``).  ``multigrid.py`` and ``sparse_precond.py`` are its
   drop-in alternatives and reproduce its pins.
-- ``multigrid.py``: the semicoarsened geometric-multigrid tier-2
-  preconditioner selected by ``solve(preconditioner="multigrid")``:
+- ``multigrid.py``: the semicoarsened geometric-multigrid preconditioner for
+  the recycled Krylov route, selected by ``solve(preconditioner="multigrid")``:
   rediscretized coarse operators on coarsened ``(theta, zeta[, xi])`` grids,
   pitch-collocation and Legendre-plane relaxations, and the block-Thomas solve
   on the coarsest grid; plus the pitch-basis diagnostics
@@ -101,8 +102,9 @@ Input/output and orchestration:
   deterministic semantic IDs, declarative scan bounds, and schema generation.
 - ``execution.py``: physical normalization and ``Case`` execution;
   consumes typed fields directly and never serializes a SFINCS namelist.
-- ``result.py``: immutable named-array ``Result``, reviewer certificate, and
-  the versioned DKX NetCDF reader/writer.
+- ``result.py``: immutable named-array ``Result``, the compact numerical and
+  provenance record used for review, and the versioned DKX NetCDF
+  reader/writer.
 - ``run.py``: end-to-end RHSMode 1/2/3 drivers and ``run_from_namelist``.
 - ``writer.py``: the canonical ``sfincsOutput`` writer (all formats,
   geometry-only output, export_f, solver-trace sidecars).
@@ -113,7 +115,7 @@ Input/output and orchestration:
 - ``_version.py``: the single package and release version source.
 - ``ambipolar.py``: scanplot-compatible ambipolar post-processing.
 - ``sensitivity.py``: JVP/VJP, adjoint, and implicit differentiation helpers.
-- ``compare.py``: HDF5 comparison and parity gates.
+- ``compare.py``: HDF5 comparison and parity checks.
 - ``plotting.py``: output plotting for the CLI and examples.
 - ``paths.py`` / ``profiling.py``: path resolution and timing/memory probes.
 
@@ -136,8 +138,9 @@ separate owner because each answers a question the drift-kinetic solve does not:
 - ``impurity.py``: classical impurity transport, screening, and the
   ``vmap``-over-charge-state API.
 - ``variational.py``: entropy-production functionals that bound the
-  monoenergetic coefficient from both sides -- a convergence certificate rather
-  than a convergence claim.
+  monoenergetic coefficient from both sides -- an error bound computed from the
+  solution itself, with no reference run needed, rather than a convergence
+  claim.
 - ``validity.py``: local-validity diagnostics (finite-orbit-width parameter,
   ``E x B`` resonance ratios, collisionality-regime classifier) that say when a
   radially-local answer should not be trusted.
@@ -165,4 +168,4 @@ SFINCS v3 Fortran file           Canonical owner
 The retired legacy pipeline (the transitional ``problems``, ``operators``,
 ``solvers``, ``outputs``, ``discretization``, ``geometry``, and ``physics``
 packages) was deleted once every physics family became canonical; its parity
-coverage lives on as Fortran-golden referees under ``tests/``.
+coverage lives on as Fortran-golden cross-check tests under ``tests/``.

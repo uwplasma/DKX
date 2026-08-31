@@ -38,10 +38,10 @@ at shrunken resolution (``DKX_CI=1``) in
 
 ``examples/getting_started/run_w7x.py`` — stellarator geometry and full Fokker-Planck
    Loads a W7-X Boozer equilibrium and solves with the linearized
-   Fokker-Planck operator, which routes ``auto`` to the tier-2 recycled-Krylov
-   (GCROT) solver instead of the tier-1 structured direct path. It teaches
+   Fokker-Planck operator, which sends ``auto`` to the recycled Krylov
+   (GCROT) route instead of the structured direct route. It teaches
    geometry files, collision-operator selection, and how to inspect which
-   solver tier ran (``run.solve_result.method``).
+   solver route ran (``run.solve_result.method``).
 
 ``examples/transport/transport_coefficients.py`` — RHSMode=3 transport matrices
    Computes monoenergetic transport matrices over a collisionality scan,
@@ -57,18 +57,18 @@ at shrunken resolution (``DKX_CI=1``) in
    path, and verifies every gradient against central finite differences.
 
 ``examples/optimization/optimize_QA_bootstrap.py`` — gradient-based optimization
-   Gradient-based optimization of a quasi-axisymmetric stellarator boundary
-   for low bootstrap current: boundary Fourier coefficients ->
+   Optimizes a quasi-axisymmetric stellarator boundary for low bootstrap
+   current: boundary Fourier coefficients ->
    ``vmex`` fixed-boundary equilibrium (implicit-adjoint VJP) ->
    differentiable Boozer transform (``booz_xform_jax``) ->
    ``FluxSurfaceGeometry.from_fourier`` (geometryScheme-13 pure-JAX path) ->
-   canonical kinetic solve (tier-2 GCROT, warm-started and recycled across
-   optimizer iterations) -> ``FSABjHat``. One ``jax.value_and_grad`` call
-   differentiates the whole chain; the example verifies the end-to-end
-   gradient against central finite differences and holds aspect ratio, mean
-   iota, and quasisymmetry with penalty terms. Alternative objective lines
-   (e.g. ``D11``-style targets) ship commented and CI-tested. Requires
-   ``vmex`` and ``booz_xform_jax``.
+   canonical kinetic solve (recycled Krylov GCROT, warm-started and
+   recycled across optimizer iterations) -> ``FSABjHat``.
+   One ``jax.value_and_grad`` call differentiates the whole chain; the
+   example verifies the end-to-end gradient against central finite
+   differences and holds aspect ratio, mean iota, and quasisymmetry with
+   penalty terms. Alternative objective lines (e.g. ``D11``-style targets)
+   ship commented and CI-tested. Requires ``vmex`` and ``booz_xform_jax``.
 
    .. figure:: _static/figures/readme/optimize_QA_bootstrap.png
       :alt: QA low-bootstrap optimization dashboard: objective history, boundary cross-sections, |B| spectrum, and <j.B> profile.
@@ -80,7 +80,7 @@ at shrunken resolution (``DKX_CI=1``) in
 Example tree
 ------------
 
-The repository includes a structured `examples/` tree:
+Topic folders in the `examples/` and `tools/` trees:
 
 - `examples/cases/`: versioned ``Case`` TOML/JSON validation and schema examples
 - `examples/tutorials/`: notebook-led learning path and a fast output/plot script
@@ -172,8 +172,8 @@ frozen-reference or benchmark workflow.
      - ``tools/parity/output_parity_vs_fortran_fixture.py``
      - ``python tools/parity/output_parity_vs_fortran_fixture.py``
 
-Fast tutorial, getting-started, and frozen-fixture parity entries are designed
-for seconds-scale laptop CPU runs. VMEC, Redl, optimization, and performance
+Fast tutorial, getting-started, and frozen-fixture parity entries run in
+seconds on a laptop CPU. VMEC, Redl, optimization, and performance
 entries may take longer; use ``--quick`` where available and inspect generated
 solver metadata before treating a result as quantitative evidence.
 
@@ -201,7 +201,7 @@ folder name.
      - Covers RHSMode=2/3 transport matrices and scan postprocessing.
    * - I need gradients or optimization hooks.
      - ``examples/autodiff/`` and ``examples/optimization/``
-     - Starts with residual/JVP examples, then moves to QA/QI objectives and promotion gates.
+     - Starts with residual/JVP examples, then moves to QA/QI objectives and promotion checks.
    * - I need bootstrap current or Redl comparisons.
      - ``examples/vmex_finite_beta/``
      - Owns the VMEC, Redl, ambipolar-root, and bootstrap-current profile scripts.
@@ -218,10 +218,10 @@ folder name.
 Application recipe map
 ----------------------
 
-Use this table when you know the physics or software task, but not the folder
-name. The first entry point is the smallest useful run; the research workflow
-points to the script or notebook that adds production-style validation,
-convergence, or profiling detail.
+This table maps a physics or software task to a script. The first entry point
+is the smallest useful run; the research workflow points to the script or
+notebook that adds production-style validation, convergence, or profiling
+detail.
 
 .. list-table::
    :header-rows: 1
@@ -267,11 +267,8 @@ convergence, or profiling detail.
 Top-level folder categories
 ---------------------------
 
-The top-level folders are grouped by user intent. Start with the ``learning``
-folders when exploring the code, use ``capability`` folders for physics or
-differentiability workflows, and use ``validation`` folders when producing
-parity, performance, or publication evidence. The ``reference`` folders are not
-the recommended first stop for new workflows.
+The top-level folders are grouped by user intent. The ``reference`` folders are
+not the recommended first stop for new workflows.
 
 .. list-table::
    :header-rows: 1
@@ -317,17 +314,21 @@ Geometry-specific write-output examples:
    python examples/getting_started/write_sfincs_output_vmec.py
 
 Finite-beta VMEX to kinetic transport
------------------------------------------
+-------------------------------------
 
-The finite-beta example is a single Python script that reads the bundled
-``input.nfp2_QA_finite_beta`` VMEC input, runs ``vmex`` for a bounded number
-of fixed-boundary iterations, writes a VMEC-style ``wout`` file, and uses that
-file directly in ``dkx`` with ``geometryScheme=5``.  It then scans the
-normalized radial electric field on several flux surfaces, computes ambipolar
-radial-current roots when each scan brackets them, and selects a continuous root
-branch.  The PNG/PDF panel it writes carries the radial electric-field profile,
-the bootstrap-current radial profile, representative ambipolarity and flux scans
-in ``Er``, and a VMEC magnetic-field contour plot using a ``jet`` colormap.
+The finite-beta example is a single Python script that:
+
+- reads the bundled ``input.nfp2_QA_finite_beta`` VMEC input and runs ``vmex``
+  for a bounded number of fixed-boundary iterations;
+- writes a VMEC-style ``wout`` file and uses that file directly in ``dkx``
+  with ``geometryScheme=5``;
+- scans the normalized radial electric field on several flux surfaces, computes
+  ambipolar radial-current roots when each scan brackets them, and selects a
+  continuous root branch;
+- produces a PNG/PDF panel carrying the radial electric-field profile, the
+  bootstrap-current radial profile, representative ambipolarity and flux scans
+  in ``Er``, and a VMEC magnetic-field contour plot using a ``jet`` colormap.
+
 The radial-profile x-axis is normalized toroidal flux,
 :math:`\psi_N = r_N^2`, not the square-root radial label used in the input file.
 
@@ -371,15 +372,15 @@ The checked documentation figure is run at ``Ntheta=7``, ``Nzeta=7``,
 ambipolar roots until the local ``Er`` bracket is no wider than ``1.25``.  The
 dashed overlay in the top panels uses the same kinetic-space grid on every
 plotted surface, but refines each bracketed ambipolar root to a local ``Er``
-bracket width of ``0.625``.  The checked documentation figure passes the default
-gate:
+bracket width of ``0.625``.  That figure passes the default acceptance
+criteria:
 
-.. list-table:: Documentation-figure gate, cached run
+.. list-table:: Documentation-figure acceptance criteria, cached run
    :header-rows: 1
    :widths: 30 22 22
 
    * - quantity
-     - gate
+     - requirement
      - measured
    * - ``max |Delta Er|``
      - ``<= 0.1``
@@ -418,19 +419,18 @@ and bootstrap current:
    kinetic-space convergence.
 
 DKX / Redl bootstrap-current comparison
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The finite-beta directory includes a standalone diagnostic script for the QA and
 QH SFINCS/Redl benchmarks used in the Zenodo artifact associated with
 arXiv:2205.02914.  The script evaluates the Redl analytic formula on the
 archived VMEC ``wout_new_QA_aScaling.nc`` and ``wout_new_QH_aScaling.nc`` files
-and overlays ``dkx`` RHSMode=1 kinetic solves.  Use ``--jax-vs-redl`` for
-the first-run path: it
-plots only ``dkx`` and Redl, and does not load or require a SFINCS
-Fortran v3 executable or archived ``psiN_*/sfincsOutput.h5`` files.  If those
-archived SFINCS Fortran v3 outputs are present in the Zenodo tree, the script
-can also overlay them as a reference curve without installing or running the
-Fortran executable.  It intentionally makes one plot only: ``dkx``, Redl,
+and overlays ``dkx`` RHSMode=1 kinetic solves.  Use ``--jax-vs-redl`` for the
+first-run path: it plots only ``dkx`` and Redl, and does not load or require a
+SFINCS Fortran v3 executable or archived ``psiN_*/sfincsOutput.h5`` files.  If
+those archived SFINCS Fortran v3 outputs are present in the Zenodo tree, the
+script can also overlay them as a reference curve without installing or running
+the Fortran executable.  It intentionally makes one plot only: ``dkx``, Redl,
 and optionally SFINCS Fortran v3, with no NTX or NEOPAX data.
 
 Run a quick QA ``dkx``-versus-Redl diagnostic with no Fortran v3
@@ -505,7 +505,7 @@ surfaces; increase the grid beyond ``13 x 13 x 21 x 5`` for production accuracy
 studies.
 
 For an apples-to-apples DKX/SFINCS Fortran v3 figure, use the
-same-resolution gate:
+same-resolution check:
 
 .. code-block:: bash
 
@@ -518,7 +518,7 @@ same-resolution gate:
      --solver-tolerance 1e-6 \
      --solve-method auto
 
-The gate reads the archived Fortran grid and sets the JAX grid to matching
+The check reads the archived Fortran grid and sets the JAX grid to matching
 ``Ntheta,Nzeta,Nxi,Nx`` values before running. If the plotted JAX and Fortran
 surfaces do not have the same grid, the script fails before writing a public
 figure. JAX error bars come from ``--with-errorbars`` refinement probes. Fortran
@@ -537,7 +537,7 @@ refinement bars come from independent ``15 x 15 x 21 x 5`` real-space and
 ``13 x 13 x 25 x 6`` velocity-space probes. Fortran bars are one-sided
 refinement deltas against the archived ``25 x 39 x 60 x 7`` Fortran v3 outputs.
 
-.. list-table:: Same-resolution 11-surface gate
+.. list-table:: Same-resolution 11-surface check
    :header-rows: 1
    :widths: 44 20 20
 
@@ -564,7 +564,7 @@ nonconverged production-sized diagnostics.
    :alt: Same-resolution DKX and SFINCS Fortran v3 QA bootstrap-current comparison against the Redl analytic formula.
    :width: 100%
 
-   Same-resolution 11-surface QA bootstrap-current gate.  The black curve is
+   Same-resolution 11-surface QA bootstrap-current check.  The black curve is
    a local SFINCS Fortran v3 rerun at ``13 x 13 x 21 x 5``.  The red markers are
    DKX at the same grid, with refinement bars from independent
    real-space and velocity-space probes.  Fortran bars are refinement deltas
@@ -575,7 +575,7 @@ nonconverged production-sized diagnostics.
    :alt: Same-resolution DKX and SFINCS Fortran v3 QH bootstrap-current comparison against the Redl analytic formula.
    :width: 100%
 
-   Same-resolution 11-surface QH bootstrap-current gate.  The maximum
+   Same-resolution 11-surface QH bootstrap-current check.  The maximum
    JAX-vs-Fortran difference is ``3.54e-3``; the larger visible red bars at low
    radius are JAX velocity-space refinement deltas, not a Fortran/JAX
    normalization mismatch.
@@ -624,7 +624,8 @@ The two paper-backed diagnostics below run ``dkx`` at the reduced
    The right panels compare the total solve wall time over all plotted radii and
    the peak solver-memory metric over those radii; the QA column of the table
    above gives the values.  This is a useful reduced-grid diagnostic while the
-   full same-resolution production parity claim remains a separate gate.
+   full same-resolution production parity claim remains a separate
+   acceptance criterion.
 
 .. figure:: _static/figures/vmex_finite_beta/qs_paper_qh_dkx_redl_comparison.png
    :alt: DKX and SFINCS Fortran v3 QH bootstrap-current comparison against the Redl analytic formula.
@@ -633,11 +634,11 @@ The two paper-backed diagnostics below run ``dkx`` at the reduced
    Paper-backed QH bootstrap-current diagnostic with the same whole-radius
    plotting contract.  The QH run is also residual-clean under ``auto`` /
    ``fortran_reduced_pc_gmres``.  Its wall time, memory and maximum differences
-   on the reduced JAX grid are in the QH column of the table above.  This keeps
-   the QH production-resolution convergence lane open.  Term-level audits point
-   away from a simple stale-radius geometry, radial-gradient conversion, or
-   current-assembly normalization bug, but the production-resolution convergence
-   gate remains the acceptance criterion.
+   on the reduced JAX grid are in the QH column of the table above.  QH
+   production-resolution convergence stays an open research item.  Term-level
+   audits point away from a simple stale-radius geometry, radial-gradient
+   conversion, or current-assembly normalization bug, but production-resolution
+   convergence remains the acceptance criterion.
 
 The plotted quantity is the flux-surface-averaged bootstrap current projected
 along the magnetic field,
@@ -792,7 +793,7 @@ optional bootstrap-current term, and promotion audits from completed
    python examples/optimization/qa_nfp2_dkx_objectives.py --objective balanced --steps 20
    python examples/optimization/QA_optimization_bootstrap_current.py
 
-Optional ecosystem solver-library comparisons are research-lane material rather
+Optional ecosystem solver-library comparisons are open research items rather
 than stable user examples. The retained examples use the in-tree JAX
 differentiable geometry and optimization helpers.
 
@@ -808,9 +809,9 @@ on `jax.lax.custom_linear_solve` and demonstrates it here:
    python examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py
 
 Edit the ``SOLVE_METHOD`` parameter at the top of the script to route the solve
-through the ``auto``, ``block_tridiagonal``, or ``gmres`` tier.
+through the ``auto``, ``block_tridiagonal``, or ``gmres`` route.
 
-VMEC-to-Boozer Differentiable Geometry Workflow
+VMEC-to-Boozer differentiable geometry workflow
 -----------------------------------------------
 
 For optional ``vmex`` and ``booz_xform_jax`` installations, this example
@@ -821,19 +822,19 @@ checks a public differentiable geometry workflow into ``dkx``:
    python examples/autodiff/vmex_to_boozer_sfincs_pipeline.py
 
 The script first prints the optional-backend status and runs a dependency-free
-Boozer-proxy gradient gate.  When ``vmex`` and ``booz_xform_jax`` are installed
+Boozer-proxy gradient check.  When ``vmex`` and ``booz_xform_jax`` are installed
 and a VMEC ``wout`` resolves, it then reports a Boozer-spectrum geometry proxy,
 its JAX gradient, a centered finite-difference gradient, and a few scalar
 optimization steps.  Edit the ``WOUT_PATH``, ``SURFACE``, ``MBOZ``, and
 ``NBOZ`` parameters at the top (or set ``DKX_VMEX_WOUT``) to change the input.
-It is a fast research workflow gate for JAX-native geometry coupling; it is not
+It is a fast research-workflow check for JAX-native geometry coupling; it is not
 a full kinetic transport optimization solve.
 
-The dependency-free backend status and gradient gate always run first, and the
+The dependency-free backend status and gradient check always run first, and the
 workflow summary JSON records shallow backend availability, differentiability
 labels, the exact geometry-proxy gradient claim, deferred kinetic-gradient
-work, and a no-overclaim gate that forbids presenting this lane as full
-VMEC-boundary-to-SFINCS transport differentiation.
+work, and a no-overclaim check that forbids presenting this line of work as
+full VMEC-boundary-to-SFINCS transport differentiation.
 
 Parallel and scaling examples
 -----------------------------
@@ -841,7 +842,7 @@ Parallel and scaling examples
 The legacy transport-worker scaling benchmark was deleted with the legacy
 pipeline. Solver thread count for canonical runs is configured through the
 ``DKX_CORES`` environment knob (:doc:`parallelism`); single-case sharded
-RHSMode=1 scaling remains a research lane rather than a stable example.
+RHSMode=1 scaling remains an open research item rather than a stable example.
 
 .. note::
 
@@ -856,12 +857,12 @@ implicit gradients are the memory-efficient path. This is the recommended
 pattern for gradients without backpropagating through every Krylov iteration.
 
 Upstream SFINCS example inputs
---------------------------------
+------------------------------
 
-For convenience, `dkx` vendors the upstream-style SFINCS-v3 example suite
+`dkx` vendors the upstream-style SFINCS-v3 example suite
 in `examples/sfincs_examples/`. These files are recognizable reference points
-for SFINCS users and support compatibility audits. A best-effort runner is
-provided:
+for SFINCS users and support compatibility audits. A best-effort runner ships
+with them:
 
 .. code-block:: bash
 

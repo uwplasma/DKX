@@ -89,7 +89,7 @@ Field-wise reduced-suite tolerances are stored in
 the practical report. The strict report ignores all of these overrides.
 
 Detailed matrix-dump and PETSc operator triage is preserved on the research
-audit branches. The stable repository keeps the reduced-suite output gates and
+audit branches. The stable repository keeps the reduced-suite output checks and
 small frozen fixtures needed for reviewable parity evidence.
 
 Promoted reduced-input fixtures
@@ -111,7 +111,7 @@ Promoted fixtures:
 - ``tests/reduced_inputs/monoenergetic_geometryScheme5_netCDF.input.namelist``
 - ``tests/reduced_inputs/transportMatrix_geometryScheme11.input.namelist``
 
-These are intended as fast, reusable parity gates for CI and local development, not as the
+These are intended as fast, reusable parity checks for CI and local development, not as the
 release-facing source of truth.
 
 Historical blocker typing used for reduced-case triage

@@ -181,11 +181,11 @@ The detailed switch-to-equation map is given in :doc:`system_equations`.
 Related reference pages
 -----------------------
 
-- Term-by-term input switches are documented in :doc:`system_equations`.
-- Discretization details (Legendre modes, :math:`x` grid, angular finite differences)
-  are summarized in :doc:`method` and :doc:`numerics`.
-- Normalizations for all hat variables are listed in :doc:`normalizations`.
-- Source-file locations for the main operators are listed in :doc:`source_map`.
+- Term-by-term input switches: :doc:`system_equations`.
+- Discretization details (Legendre modes, :math:`x` grid, angular finite
+  differences): :doc:`method` and :doc:`numerics`.
+- Normalizations for all hat variables: :doc:`normalizations`.
+- Source-file locations for the main operators: :doc:`source_map`.
 
 References
 ----------
