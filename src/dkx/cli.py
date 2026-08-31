@@ -135,6 +135,128 @@ def _cmd_schema(args: argparse.Namespace) -> int:
         print(json.dumps(case_json_schema(), indent=2, sort_keys=True))
     return 0
 
+def _doctor_checks() -> list[tuple[str, str, str]]:
+    """Collect one ``(status, name, detail)`` row per environment check.
+
+    Every row reports what this process *observed*, not what it was asked for.
+    The distinction matters: ``JAX_ENABLE_X64`` being set in the environment is
+    not evidence that float64 is active, because a backend already initialized
+    by an earlier import ignores it. So the check below allocates an array and
+    reads its dtype. The same rule applies to the accelerator row, which lists
+    the devices JAX actually enumerates rather than the platform requested.
+
+    Status is one of ``ok``, ``warn`` or ``fail``. Only ``fail`` means the
+    install cannot run correctly; ``warn`` marks something absent that limits
+    what is available without breaking the core solver.
+    """
+    from importlib.metadata import PackageNotFoundError, version  # noqa: PLC0415
+
+    rows: list[tuple[str, str, str]] = []
+
+    py = ".".join(str(n) for n in sys.version_info[:3])
+    rows.append(
+        ("ok", "python", py) if sys.version_info >= (3, 11)
+        else ("fail", "python", f"{py} is below the 3.11 floor")
+    )
+
+    try:
+        rows.append(("ok", "dkx", version("dkx")))
+    except PackageNotFoundError:
+        rows.append(("warn", "dkx", "not installed as a distribution (running from a checkout)"))
+
+    # solvax carries the solver tiers, and a version below the declared floor
+    # fails deep inside a solve rather than at import, so it is checked here.
+    floor = (0, 19, 0)
+    try:
+        raw = version("solvax")
+        parsed = tuple(int(part) for part in raw.split(".")[:3])
+        rows.append(
+            ("ok", "solvax", raw) if parsed >= floor
+            else ("fail", "solvax", f"{raw} is below the {'.'.join(map(str, floor))} floor")
+        )
+    except PackageNotFoundError:
+        rows.append(("fail", "solvax", "missing; every canonical solve needs it"))
+    except ValueError:
+        rows.append(("warn", "solvax", f"{raw} could not be compared against the floor"))
+
+    for name, required in (
+        ("jax", True), ("jaxlib", True), ("numpy", True), ("scipy", True),
+        ("h5py", False), ("netCDF4", False), ("matplotlib", False), ("rich", True),
+    ):
+        try:
+            rows.append(("ok", name, version(name)))
+        except PackageNotFoundError:
+            rows.append(("fail" if required else "warn", name, "missing"))
+
+    # Observed float64, not the environment variable that requests it.
+    try:
+        import warnings  # noqa: PLC0415
+
+        import jax.numpy as jnp  # noqa: PLC0415
+
+        # JAX warns when it truncates a requested float64 to float32. Probing
+        # for exactly that is the point here, so the warning is the finding,
+        # not a problem to surface twice.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            dtype = str(jnp.zeros(1, dtype=jnp.float64).dtype)
+        rows.append(
+            ("ok", "float64", "active") if dtype == "float64"
+            else ("fail", "float64", f"arrays materialize as {dtype}; results will be wrong")
+        )
+    except Exception as exc:  # noqa: BLE001 - any backend failure is the finding
+        rows.append(("fail", "float64", f"could not allocate a JAX array: {exc}"))
+
+    # Observed devices, not the requested platform.
+    try:
+        import jax  # noqa: PLC0415
+
+        devices = jax.devices()
+        kinds = sorted({d.platform for d in devices})
+        rows.append(("ok", "devices", f"{len(devices)} x {','.join(kinds)}"))
+    except Exception as exc:  # noqa: BLE001
+        rows.append(("fail", "devices", f"JAX enumerated no devices: {exc}"))
+
+    return rows
+
+
+def _cmd_doctor(args: argparse.Namespace) -> int:
+    """Report whether this install can run, and exit non-zero when it cannot.
+
+    Exists because the failure modes users actually hit are environmental, not
+    physical: a conda numpy 1.x that dies inside ``ml_dtypes``, a solvax below
+    the floor that fails mid-solve, or float64 silently off so every number is
+    plausible and wrong. Each of those produces a traceback that names neither
+    dkx nor the real cause.
+    """
+    from rich.console import Console  # noqa: PLC0415
+    from rich.table import Table  # noqa: PLC0415
+
+    rows = _doctor_checks()
+
+    if args.format == "json":
+        print(json.dumps(
+            {name: {"status": status, "detail": detail} for status, name, detail in rows},
+            indent=2, sort_keys=True,
+        ))
+    else:
+        console = Console()
+        table = Table(show_lines=False)
+        table.add_column("")
+        table.add_column("check", style="bold")
+        table.add_column("observed")
+        marks = {"ok": "[green]ok[/green]", "warn": "[yellow]warn[/yellow]", "fail": "[red]fail[/red]"}
+        for status, name, detail in rows:
+            table.add_row(marks[status], name, detail)
+        console.print(table)
+
+    failures = [name for status, name, _ in rows if status == "fail"]
+    if failures:
+        print(f"dkx doctor: {len(failures)} blocking problem(s): {', '.join(failures)}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def _cmd_run_case(args: argparse.Namespace) -> int:
     """Execute a case and write its Result.
 
@@ -984,27 +1106,30 @@ def _maybe_handle_plot(argv: list[str]) -> int | None:
     return 0
 
 
-def _normalize_default_argv(argv: list[str]) -> list[str]:
+#: Every registered subcommand name. ``main`` does not read this -- it passes
+#: the parser's own ``sub.choices`` -- so the runtime behaviour cannot drift
+#: from the registered set. It exists for direct callers and as documentation.
+_KNOWN_COMMANDS: frozenset[str] = frozenset({
+    "validate", "doctor", "schema", "run", "inspect", "solve-v3", "ambipolar",
+    "scan-er", "ambipolar-solve", "run-fortran", "write-output",
+    "transport-matrix-v3", "monoenergetic-database", "dump-h5", "plot-output",
+    "compare-h5", "postprocess-upstream",
+})
+
+
+def _normalize_default_argv(
+    argv: list[str], known_cmds: frozenset[str] | set[str] = _KNOWN_COMMANDS
+) -> list[str]:
+    """Insert the implicit ``write-output`` command when the user named none.
+
+    ``main`` passes the built parser's own command set rather than the constant
+    above. That coupling is deliberate: the set was previously a literal here,
+    and adding a subcommand without mirroring it in meant the new name was not
+    recognised as a command, fell through to the positional namelist path, and
+    surfaced as a ``FileNotFoundError`` naming a file the user never typed.
+    """
     if not argv:
         return argv
-    known_cmds = {
-        "validate",
-        "schema",
-        "run",
-        "inspect",
-        "solve-v3",
-        "ambipolar",
-        "scan-er",
-        "ambipolar-solve",
-        "run-fortran",
-        "write-output",
-        "transport-matrix-v3",
-        "monoenergetic-database",
-        "dump-h5",
-        "plot-output",
-        "compare-h5",
-        "postprocess-upstream",
-    }
     if any(tok in known_cmds for tok in argv):
         return argv
     global_opts_with_val = {
@@ -1166,8 +1291,6 @@ def main(argv: list[str] | None = None) -> int:
     rc = _maybe_handle_plot(argv)
     if rc is not None:
         return rc
-    argv = _normalize_default_argv(argv)
-    _maybe_reexec_for_early_runtime(argv)
     parser = argparse.ArgumentParser(prog="dkx")
     _add_common_cli_args(parser)
     _add_parallel_cli_args(parser)
@@ -1181,6 +1304,15 @@ def main(argv: list[str] | None = None) -> int:
     _add_parallel_cli_args(p_validate)
     p_validate.add_argument("case", help="Path to a .toml or .json case file.")
     p_validate.set_defaults(func=_cmd_validate_case)
+
+    p_doctor = sub.add_parser(
+        "doctor",
+        help="Check that this install can run, and say what is wrong when it cannot.",
+    )
+    _add_common_cli_args(p_doctor)
+    _add_parallel_cli_args(p_doctor)
+    p_doctor.add_argument("--format", choices=("table", "json"), default="table")
+    p_doctor.set_defaults(func=_cmd_doctor)
 
     p_schema = sub.add_parser(
         "schema",
@@ -1505,6 +1637,8 @@ def main(argv: list[str] | None = None) -> int:
 
     p_pp.set_defaults(func=_cmd_postprocess_upstream)
 
+    argv = _normalize_default_argv(argv, set(sub.choices))
+    _maybe_reexec_for_early_runtime(argv)
     args = parser.parse_args(argv)
     args = _merge_global_cli_args(argv, args)
     _apply_runtime_env_defaults()
