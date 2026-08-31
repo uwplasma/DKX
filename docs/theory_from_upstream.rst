@@ -138,7 +138,9 @@ generic flattened solver path used for full FP runs.
 Fokker-Planck field terms and Rosenbluth potentials
 ---------------------------------------------------
 
-The 2014 Rosenbluth-potential implementation note is especially important for performance.
+The upstream Fokker--Planck operator implementation note — the unpublished note
+covering the Rosenbluth-potential field term, listed among the primary sources
+below — is especially important for performance.
 Its key observation is that the dense field-particle part of the linearized
 Fokker-Planck operator can be organized as:
 

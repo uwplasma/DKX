@@ -136,7 +136,7 @@ print(f"  wrote namelist: {DECK_PATH}")
 # ----------------------------------------------------------------------------
 print("Step 2: run_profile on the in-memory input with SolverOptions")
 run_mem = run_profile(inp, solver=SOLVER, emit=None)
-print(f"  solver tier used: {run_mem.solve_result.method} "
+print(f"  solver route used: {run_mem.solve_result.method} "
       f"(residual norm {float(np.max(np.asarray(run_mem.solve_result.residual_norms))):.3e})")
 
 run_file = run_profile(DECK_PATH, solver=SOLVER, emit=None)

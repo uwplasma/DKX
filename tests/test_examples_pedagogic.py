@@ -27,7 +27,7 @@ CASES = {
         (
             "SfincsInput round trip verified",
             "in-memory run matches the file-based run: particleFlux_vm_psiHat =",
-            "solver tier used: block_tridiagonal",  # SolverOptions(method="auto") on a PAS deck
+            "solver route used: block_tridiagonal",  # SolverOptions(method="auto") on a PAS deck
             "nu_n = 3.0e-03:  particleFlux_vm_psiHat =",
         ),
         OUT_DIR / "build_input_from_python.png",
@@ -45,7 +45,7 @@ CASES = {
     ),
     "getting_started/run_w7x.py": (
         (
-            "Solver tier used: gcrot",  # FP collisions must route to tier 2
+            "Solver route used: gcrot",  # FP collisions must take the recycled Krylov route
             "tier-1 structured direct applicable: False",
             "particleFlux_vm_psiHat[ions] =",
             "particleFlux_vm_psiHat[electrons] =",

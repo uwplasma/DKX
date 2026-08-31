@@ -146,7 +146,7 @@ print(f"  wrote namelist: {DECK_PATH}")
 # ----------------------------------------------------------------------------
 print("Step 2: solving the drift-kinetic equation with run_profile()")
 run = run_profile(DECK_PATH, solve_method="auto", out_path=H5_PATH)
-print(f"  solver tier used: {run.solve_result.method} "
+print(f"  solver route used: {run.solve_result.method} "
       f"(residual norm {float(np.max(np.asarray(run.solve_result.residual_norms))):.3e})")
 
 # Also write NetCDF: the writer picks the format from the file suffix.
