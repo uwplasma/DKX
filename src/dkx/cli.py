@@ -459,6 +459,152 @@ def _cmd_roots(args: argparse.Namespace) -> int:
     return 0
 
 
+def _looks_like_sfincs_h5(path: Path) -> bool:
+    """True for a SFINCS HDF5 output, false for a dkx NetCDF Result.
+
+    Decided by extension rather than by sniffing the file: NetCDF4 *is* HDF5,
+    so an h5py open succeeds on both and would misroute every dkx Result into
+    the SFINCS comparison.
+    """
+    return path.suffix.lower() in {".h5", ".hdf5"}
+
+
+#: Arrays that record how a solve went rather than what it computed. They are
+#: reported but never decide the verdict: wall-clock time differs between any
+#: two runs of the same case, so counting it would make `dkx compare` exit
+#: non-zero on a bit-identical re-run and train the reader to ignore the exit
+#: status. Iteration counts move with warm starts for the same reason.
+_COMPARE_INFORMATIONAL: frozenset[str] = frozenset({"solve_time_s", "solver_iterations"})
+
+
+def _compare_result_arrays(a, b, *, rtol: float, atol: float):
+    """Compare two dkx Results array by array.
+
+    Returns ``(rows, only_a, only_b)``. Keys present in one result and not the
+    other are reported separately rather than skipped: a comparison that
+    silently ignores them would call two runs equal when one stopped producing
+    an output entirely.
+
+    Rows in :data:`_COMPARE_INFORMATIONAL` carry ``status="informational"``
+    when they differ, so they appear in the table without failing the run.
+    """
+    shared = sorted(set(a.arrays) & set(b.arrays))
+    only_a = sorted(set(a.arrays) - set(b.arrays))
+    only_b = sorted(set(b.arrays) - set(a.arrays))
+
+    rows = []
+    for key in shared:
+        left = np.asarray(a.arrays[key])
+        right = np.asarray(b.arrays[key])
+        if left.shape != right.shape:
+            rows.append({"key": key, "status": "shape",
+                         "detail": f"{left.shape} vs {right.shape}",
+                         "max_abs": float("nan"), "max_rel": float("nan")})
+            continue
+        if not (np.issubdtype(left.dtype, np.number) and np.issubdtype(right.dtype, np.number)):
+            same = bool(np.array_equal(left, right))
+            rows.append({"key": key, "status": "ok" if same else "differs",
+                         "detail": "non-numeric", "max_abs": 0.0 if same else float("nan"),
+                         "max_rel": 0.0 if same else float("nan")})
+            continue
+        lf = left.astype(float, copy=False)
+        rf = right.astype(float, copy=False)
+        diff = np.abs(lf - rf)
+        # NaN in the same place on both sides is agreement, not a difference.
+        both_nan = np.isnan(lf) & np.isnan(rf)
+        diff = np.where(both_nan, 0.0, diff)
+        scale = np.maximum(np.abs(lf), np.abs(rf))
+        max_abs = float(np.nanmax(diff)) if diff.size else 0.0
+        with np.errstate(invalid="ignore", divide="ignore"):
+            rel = np.where(scale > 0.0, diff / scale, 0.0)
+        max_rel = float(np.nanmax(rel)) if rel.size else 0.0
+        ok = bool(np.allclose(lf, rf, rtol=rtol, atol=atol, equal_nan=True))
+        status = "ok" if ok else ("informational" if key in _COMPARE_INFORMATIONAL else "differs")
+        rows.append({"key": key, "status": status,
+                     "detail": "", "max_abs": max_abs, "max_rel": max_rel})
+    return rows, only_a, only_b
+
+
+def _cmd_compare(args: argparse.Namespace) -> int:
+    """Compare two results, dkx-native or SFINCS, and exit non-zero on a difference.
+
+    plan.md section 5.6 lists one ``compare`` rather than a per-format command.
+    Dispatch is by extension: ``.h5`` pairs go to the SFINCS comparison, which
+    already carries the upstream per-dataset tolerances, and everything else is
+    read back as a dkx Result. A mixed pair is refused -- the two carry
+    different variable names, so "nothing matched" would look like agreement.
+    """
+    from rich.console import Console  # noqa: PLC0415
+    from rich.table import Table  # noqa: PLC0415
+
+    a_path, b_path = Path(args.a), Path(args.b)
+    a_h5, b_h5 = _looks_like_sfincs_h5(a_path), _looks_like_sfincs_h5(b_path)
+    if a_h5 != b_h5:
+        print(
+            f"dkx compare failed: cannot compare a SFINCS HDF5 output against a dkx "
+            f"Result ({a_path.name} vs {b_path.name}). They use different variable "
+            "names, so every key would be unmatched and the result would read as "
+            "agreement. Convert one first.",
+            file=sys.stderr,
+        )
+        return 2
+
+    if a_h5:
+        args.tolerances_json = getattr(args, "tolerances_json", None)
+        args.show_all = args.verbose_keys
+        return _cmd_compare_h5(args)
+
+    from .result import Result  # noqa: PLC0415
+
+    try:
+        left = Result.load(a_path)
+        right = Result.load(b_path)
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"dkx compare failed: {exc}", file=sys.stderr)
+        return 2
+
+    rows, only_a, only_b = _compare_result_arrays(
+        left, right, rtol=float(args.rtol), atol=float(args.atol)
+    )
+    # Anything not "ok" and not informational fails, so a status added later
+    # (a shape mismatch, a non-numeric difference) counts by default rather
+    # than passing silently because it was not listed here.
+    bad = [r for r in rows if r["status"] not in {"ok", "informational"}]
+    noted = [r for r in rows if r["status"] == "informational"]
+
+    if args.format == "json":
+        print(json.dumps({"a": str(a_path), "b": str(b_path), "rows": rows,
+                          "only_in_a": only_a, "only_in_b": only_b,
+                          "agree": not bad and not only_a and not only_b},
+                         indent=2, sort_keys=True))
+        return 0 if not bad and not only_a and not only_b else 2
+
+    console = Console()
+    shown = rows if args.verbose_keys else (bad + noted)
+    if shown:
+        table = Table(show_lines=False)
+        table.add_column("array", style="bold")
+        table.add_column("status")
+        table.add_column("max abs", justify="right")
+        table.add_column("max rel", justify="right")
+        for row in shown[:60]:
+            table.add_row(row["key"], row["status"] or row["detail"],
+                          f"{row['max_abs']:.3e}", f"{row['max_rel']:.3e}")
+        console.print(table)
+        if len(shown) > 60:
+            console.print(f"... {len(shown) - 60} more rows not shown")
+    for label, keys in (("only in A", only_a), ("only in B", only_b)):
+        if keys:
+            console.print(f"[yellow]{label} ({len(keys)}): {', '.join(keys[:12])}"
+                          + (" ..." if len(keys) > 12 else "") + "[/yellow]")
+    if not bad and not only_a and not only_b:
+        console.print(f"[green]{len(rows)} arrays agree within rtol={args.rtol:g} "
+                      f"atol={args.atol:g}[/green]")
+        return 0
+    console.print(f"[red]{len(bad)} of {len(rows)} arrays differ[/red]")
+    return 2
+
+
 def _cmd_run_case(args: argparse.Namespace) -> int:
     """Execute a case and write its Result.
 
@@ -1317,7 +1463,7 @@ _CONVERGE_AXES: tuple[str, ...] = ("theta", "zeta", "pitch", "speed")
 #: the parser's own ``sub.choices`` -- so the runtime behaviour cannot drift
 #: from the registered set. It exists for direct callers and as documentation.
 _KNOWN_COMMANDS: frozenset[str] = frozenset({
-    "validate", "doctor", "converge", "roots", "schema", "run", "inspect", "solve-v3", "ambipolar",
+    "validate", "doctor", "converge", "roots", "compare", "schema", "run", "inspect", "solve-v3", "ambipolar",
     "scan-er", "ambipolar-solve", "run-fortran", "write-output",
     "transport-matrix-v3", "monoenergetic-database", "dump-h5", "plot-output",
     "compare-h5", "postprocess-upstream",
@@ -1551,6 +1697,21 @@ def main(argv: list[str] | None = None) -> int:
     p_roots.add_argument("result", help="Path to a NetCDF Result written by dkx run.")
     p_roots.add_argument("--format", choices=("table", "json"), default="table")
     p_roots.set_defaults(func=_cmd_roots)
+
+    p_compare = sub.add_parser(
+        "compare",
+        help="Compare two results (dkx NetCDF or SFINCS HDF5) and exit non-zero if they differ.",
+    )
+    _add_common_cli_args(p_compare)
+    _add_parallel_cli_args(p_compare)
+    p_compare.add_argument("a")
+    p_compare.add_argument("b")
+    p_compare.add_argument("--rtol", type=float, default=1e-9)
+    p_compare.add_argument("--atol", type=float, default=0.0)
+    p_compare.add_argument("--verbose-keys", action="store_true",
+                           help="List every array, not only the differing ones.")
+    p_compare.add_argument("--format", choices=("table", "json"), default="table")
+    p_compare.set_defaults(func=_cmd_compare)
 
     p_schema = sub.add_parser(
         "schema",
