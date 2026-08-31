@@ -178,6 +178,78 @@ def test_high_collisionality_proxy_summary_keeps_analytic_limit_lane_honest() ->
     assert payload["gates"]["ready_for_literature_claim"] is False
 
 
+def test_the_manifest_prose_names_the_same_device_the_data_does() -> None:
+    """The manifest's English must agree with the computed inverse-nu gate.
+
+    Regression. The suite already recomputed the gate from the raw scans and
+    pinned LHD passing and W7-X not, and ``docs/paper_figures.rst`` said so --
+    but the release manifest's claim strings had the two devices exactly
+    reversed, and had for as long as they existed. Nothing compared the prose
+    to the numbers, so a release artifact asserted the opposite of its own
+    evidence about which geometry had demonstrated the high-collisionality
+    limit.
+
+    The check is written against whichever device currently passes rather than
+    against the literal names, so it keeps holding if a wider scan promotes
+    W7-X.
+    """
+    summary = json.loads(
+        (_artifact_dir() / "dkx_high_collisionality_trend_proxy_summary.json").read_text()
+    )
+    names = {"lhd": "LHD", "w7x": "W7-X"}
+    passing = {
+        names[key]
+        for key, case in summary["cases"].items()
+        if case["gates"]["fp_l11_l12_inverse_like"]
+    }
+    failing = set(names.values()) - passing
+    assert passing and failing, "this check needs one device on each side of the gate"
+
+    manifest = json.loads(
+        (Path(artifacts.__file__).resolve().parents[2] / "tools/publication_figures/validation_manifest.json").read_text()
+    )
+
+    def _strings(node):
+        if isinstance(node, str):
+            yield node
+        elif isinstance(node, dict):
+            for value in node.values():
+                yield from _strings(value)
+        elif isinstance(node, list):
+            for value in node:
+                yield from _strings(value)
+
+    #: Phrases that assert a device has, or has not, met the inverse-nu gate.
+    passes = ("show inverse-nu-like slopes", "satisfy the inverse-nu slope proxy")
+    fails = ("do not yet reach the asymptotic inverse-nu", "still fails that gate",
+             "needing a wider high-nu scan")
+
+    checked = 0
+    for text in _strings(manifest):
+        if "inverse-nu" not in text and "high-nu scan" not in text:
+            continue
+        # A two-device sentence splits at "while": subject before, contrast after.
+        head, _, tail = text.partition("while")
+        for fragment in ([head, tail] if tail else [text]):
+            named = {name for name in names.values() if name in fragment}
+            if not named:
+                continue
+            if any(phrase in fragment for phrase in passes):
+                assert named <= passing, (
+                    f"manifest says {named} meets the inverse-nu gate, but the artifact "
+                    f"data says only {passing} does: {text!r}"
+                )
+                checked += 1
+            if any(phrase in fragment for phrase in fails):
+                assert named <= failing, (
+                    f"manifest says {named} misses the inverse-nu gate, but the artifact "
+                    f"data says only {failing} does: {text!r}"
+                )
+                checked += 1
+
+    assert checked >= 4, f"expected the manifest's inverse-nu claims to be checked, saw {checked}"
+
+
 def test_recommended_high_collisionality_nuprime_grid_extends_beyond_current_tail() -> None:
     extension = recommended_high_collisionality_nuprime_grid(
         [0.1, 1.0, 10.0],
