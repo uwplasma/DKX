@@ -36,11 +36,16 @@ def test_the_quickstart_snippet_runs_and_prints_finite_numbers(tmp_path):
     assert done.returncode == 0, done.stdout[-2000:] + done.stderr[-3000:]
 
     values = [float(line.split(":")[-1]) for line in done.stdout.splitlines()
-              if line.startswith(("particle flux:", "bootstrap current"))]  # fmt: skip
-    assert len(values) == 2, f"expected both printed results, got {done.stdout!r}"
+              if line.startswith("particle flux:")]  # fmt: skip
+    assert len(values) == 1, f"expected the printed flux, got {done.stdout!r}"
     assert all(v == v and abs(v) < float("inf") for v in values), values
     # A run that silently produced nothing would still print zeros.
     assert any(v != 0.0 for v in values), "the quickstart solved nothing"
+    # The route is printed rather than a second physics number: the quickstart
+    # resolution is deliberately unconverged, so showing which solver ran is
+    # honest where showing a bootstrap current invited it to be quoted.
+    assert any(line.startswith("solver route:") and line.split(":")[-1].strip()
+               for line in done.stdout.splitlines()), done.stdout
 
 
 def test_the_quickstart_uses_the_entry_point_we_document():
