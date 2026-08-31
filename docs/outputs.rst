@@ -9,9 +9,8 @@ Outputs (HDF5, NetCDF4, and NPZ)
 - ``.npz``: fast uncompressed NumPy archive, useful for lightweight Python workflows
   and rapid local sweeps.
 
-The HDF5 layout is designed to remain compatible with the established SFINCS-style
-postprocessing ecosystem while also serving as the native public results format of
-`dkx`.
+The HDF5 layout is designed to remain compatible with the SFINCS-style
+postprocessing ecosystem, and it is also the public results format of `dkx`.
 
 Writing output with `dkx`
 --------------------------------
@@ -140,8 +139,8 @@ Units: converting the "Hat" outputs to SI
 -----------------------------------------
 
 Every quantity in the output file is dimensionless: SFINCS works with ratios to
-a fixed reference set, the "Bar" quantities.  That set is not a free choice ---
-the ``globalVariables.F90`` defaults ``Delta = 4.5694e-3`` and
+a fixed reference set, the "Bar" quantities.  That set is not a free choice.
+The ``globalVariables.F90`` defaults ``Delta = 4.5694e-3`` and
 ``nu_n = 8.330e-3`` are satisfied simultaneously only by
 
 .. math::
@@ -185,10 +184,10 @@ VMEC profile provenance and failure status
 ------------------------------------------
 
 ``dkx wout_*.nc`` consumes VMEC's canonical, evaluated ``presf`` array.  It
-does not re-evaluate ``am`` or assume a coefficient layout, so ``power_series``,
+does not re-evaluate ``am`` or assume a coefficient layout.  ``power_series``,
 ``gauss_trunc``, ``two_power``, ``two_lorentz``, ``akima_spline``,
 ``cubic_spline``, ``pedestal``, ``rational``, and encountered ``sum_atan``
-metadata all use the same checked path.  The original ``pmass_type`` is retained
+metadata therefore all use the same checked path.  The original ``pmass_type`` is retained
 as provenance in ``profiles/pressure_representation``.
 
 A standard VMEC ``wout`` contains total pressure, not the separate density and
@@ -198,11 +197,12 @@ The representative command therefore applies the documented explicit
 have recovered unavailable density or temperature parameterizations.
 
 Each radial record stores ``profile_input_status`` and ``evaluation_status``.
-The former distinguishes ``available``, ``physics_unavailable`` (for example,
-no ``presf`` or no physical minor radius), and ``parser_failure``.  The latter
-distinguishes a ``bracketed_root``, ``no_bracketed_root`` with the closest finite
-sample retained, and ``solve_failure`` with its exception class and detail.
-Plots use the same vocabulary instead of rendering an unexplained empty panel.
+``profile_input_status`` is one of ``available``, ``physics_unavailable`` (for
+example, no ``presf`` or no physical minor radius), or ``parser_failure``.
+``evaluation_status`` is one of ``bracketed_root``, ``no_bracketed_root`` with
+the closest finite sample retained, or ``solve_failure`` with its exception
+class and detail.  Plots use the same vocabulary instead of rendering an
+unexplained empty panel.
 
 Output-variable reference
 -------------------------
@@ -308,10 +308,10 @@ Classical fluxes, NTV, sources, and metadata
 
 .. _flux-legend:
 
-Flux-flavor and radial-coordinate legend
+Flux-suffix and radial-coordinate legend
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-**Drift flavor** (suffix on flux names):
+**Drift suffix** (on flux names):
 
 - ``_vm`` — magnetic (:math:`\nabla B` + curvature) drift on the full
   distribution; geometric factor
@@ -320,13 +320,13 @@ Flux-flavor and radial-coordinate legend
 - ``_vE`` / ``_vE0`` — :math:`E\times B` drift (factor with :math:`/\hat B^2` and
   :math:`\partial\Phi_1`). **Deferred in the file**: the moment functions exist
   (``electric_drift_flux_moments``), but only zero ``BeforeSurfaceIntegral_vE``
-  arrays are written — the surface-integrated ``_vE`` / total-drift ``_vd``
+  arrays are written.  The surface-integrated ``_vE`` and total-drift ``_vd``
   scalars are not emitted.
 
 **Radial coordinate** (a :math:`\nabla\hat\psi` flux is converted by
 :math:`\times\,d(\text{coord})/d\hat\psi`):
 
-- ``_psiHat`` — native normalized poloidal flux (all fluxes computed here first);
+- ``_psiHat`` — normalized poloidal flux (all fluxes computed here first);
 - ``_psiN`` = ``_psiHat`` / ``psiAHat``; ``_rHat`` = :math:`r/\bar R`;
   ``_rN`` = :math:`r/a`.
 
@@ -387,10 +387,10 @@ neoclassical-transport papers:
 .. note::
 
    ``uHat`` depends on many transcendental evaluations (cos/sin) and long floating-point
-   reductions. In practice we observe tiny platform-dependent differences vs the frozen
-   Fortran fixture (absolute errors :math:`\sim 10^{-9}` in the small scheme-4 test case),
-   so the parity test compares ``uHat`` with a slightly looser tolerance than most other
-   datasets.
+   reductions. Measured differences against the frozen Fortran fixture are tiny but
+   platform-dependent (absolute errors :math:`\sim 10^{-9}` in the small scheme-4 test
+   case), so the parity test compares ``uHat`` with a slightly looser tolerance than most
+   other datasets.
 
 .. _fortran-layout:
 

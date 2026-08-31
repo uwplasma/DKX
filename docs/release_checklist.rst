@@ -200,8 +200,8 @@ an isolated build may fail due to missing network access. In that case, use:
 
    python -m build --no-isolation
 
-Fixture generation note (Fortran v3)
-------------------------------------
+Fixture generation (Fortran v3)
+-------------------------------
 
 Many parity tests rely on **frozen Fortran v3 fixtures** (PETSc binaries and/or `sfincsOutput.h5`).
 Generating new fixtures requires a working v3 executable and an MPI/PETSc runtime environment that

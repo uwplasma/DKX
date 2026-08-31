@@ -254,8 +254,6 @@ and the metric contractions used by the classical transport and NTV diagnostics.
 Deferrals and non-modes
 -----------------------
 
-Stated plainly:
-
 - **Scheme 13 via namelist**: the differentiable ``from_fourier`` spectrum path
   exists in Python, but parsing ``bmnc``/``bmns`` from an ``input.namelist`` is
   deferred; use the Python constructor for optimization loops.

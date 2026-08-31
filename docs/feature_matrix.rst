@@ -162,9 +162,9 @@ Fortran v3 feature ownership
        sparse direct fallback, transpose solves, and MUMPS memory retry controls.
      - Fortran generally factors a preconditioner/direct matrix and uses the
        same infrastructure for adjoint/transpose solves.
-     - Native JAX/Python solver stack: implemented with gates. ``dkx``
+     - In-house JAX/Python solver stack: implemented with gates. ``dkx``
        intentionally does not require PETSc/MUMPS/SuperLU_DIST. Current work
-       focuses on reusable operator protocols, native block/Schur factors, and
+       focuses on reusable operator protocols, in-house block/Schur factors, and
        strict true-residual admission rather than external direct-solver
        bindings.
    * - Output files and plotting
@@ -247,7 +247,7 @@ Fortran v3 feature ownership
      - True device-QI and production-resolution ladders remain deferred.
    * - Lower-memory production solver replacement
      - implemented with gates
-     - Native block/Schur/factor infrastructure, direct-Pmat experiments, and
+     - In-house block/Schur/factor infrastructure, direct-Pmat experiments, and
        true-residual admission tests.
      - Promote to auto only when production CPU/GPU residual, runtime, and RSS
        gates pass.

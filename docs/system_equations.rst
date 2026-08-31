@@ -155,8 +155,8 @@ The coupled system includes a quasineutrality condition and the constraint
 In the fully nonlinear v3 configuration, the quasineutrality equation contains additional
 nonlinear dependence through :math:`f_{s0}(\Phi_1)` and (depending on options) adiabatic responses.
 
-Implementation note
--------------------
+Which module builds each block
+------------------------------
 
 Not every optional Phi1 coupling that appears in the extended literature is active in
 every public workflow. The supported scope is documented in :doc:`inputs`,

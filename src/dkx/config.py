@@ -1,4 +1,4 @@
-"""Versioned, immutable native DKX case configuration.
+"""Versioned, immutable DKX case configuration.
 
 TOML is the human-authored format and JSON is the machine-authored format.
 Both enter through :meth:`Case.from_mapping`, which is the single validation
@@ -253,7 +253,7 @@ class Case:
         data = asdict(self)
         data.pop("source_path", None)
         data.pop("_case_id", None)
-        # Option 1 has always been the native execution default.  Omitting it
+        # Option 1 has always been the case execution default.  Omitting it
         # from canonical content preserves existing schema-v1 case IDs while
         # non-default ramp choices remain explicit semantic input.
         if data["resolution"]["pitch_speed_ramp"] == 1:
@@ -291,8 +291,8 @@ class Case:
                 raise CaseValidationError(
                     "$file",
                     source.name,
-                    "a .toml or .json native DKX case",
-                    "Rename or convert the input to a supported native case format.",
+                    "a .toml or .json DKX case",
+                    "Rename or convert the input to a supported case format.",
                 )
         except (tomllib.TOMLDecodeError, json.JSONDecodeError) as exc:
             raise CaseValidationError(
@@ -390,7 +390,7 @@ def migrate_case_data(raw: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def case_json_schema() -> dict[str, Any]:
-    """Return the machine-readable JSON Schema for native schema version 1."""
+    """Return the machine-readable JSON Schema for case schema version 1."""
 
     positive_numbers = {
         "type": "array",
@@ -400,7 +400,7 @@ def case_json_schema() -> dict[str, Any]:
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "$id": "https://github.com/uwplasma/DKX/schemas/case-v1.json",
-        "title": "DKX native Case",
+        "title": "DKX case",
         "type": "object",
         "additionalProperties": False,
         "required": [
@@ -577,7 +577,7 @@ def case_json_schema() -> dict[str, Any]:
     }
 
 
-COMMENTED_TOML_EXAMPLE = """# DKX native Case schema version 1.
+COMMENTED_TOML_EXAMPLE = """# DKX case schema version 1.
 schema = 1
 name = "w7x_ambipolar_profile"
 

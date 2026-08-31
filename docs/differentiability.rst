@@ -253,7 +253,7 @@ Each arrow is a JAX transformation, so ``jax.grad`` of the bootstrap current
 :math:`\langle \mathbf{j}\cdot\mathbf{B}\rangle` (or a transport coefficient)
 with respect to the boundary Fourier modes propagates through the equilibrium
 solve, the Boozer transform, and the drift-kinetic solve without any finite
-differences. The flagship script ``examples/optimization/optimize_QA_bootstrap.py`` drives a
+differences. ``examples/optimization/optimize_QA_bootstrap.py`` drives a
 quasi-axisymmetric, low-bootstrap optimization on exactly this chain with warm
 starts and finite-difference-verified gradients; the geometry link on its own is
 demonstrated in ``examples/autodiff/vmex_to_boozer_sfincs_pipeline.py``. See
@@ -316,7 +316,7 @@ Worked examples
   differentiation through a full-system Krylov solve on a VMEC geometry.
 - ``examples/autodiff/differentiable_geometry_gradients.py`` — a geometry scalar
   differentiated with respect to harmonic amplitudes.
-- ``examples/optimization/optimize_QA_bootstrap.py`` — the flagship gradient-based
+- ``examples/optimization/optimize_QA_bootstrap.py`` — gradient-based
   optimization with kinetic :math:`\langle \mathbf{j}\cdot\mathbf{B}\rangle` in
   the objective.
 

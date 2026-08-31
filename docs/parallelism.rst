@@ -110,11 +110,11 @@ Every solve routes through the three ``solvax``-backed tiers selected by the
   cases the structured tier cannot admit; non-differentiable, used only on
   ``method="direct"`` or when tier 2 breaches its iteration cap.
 
-The honest headline, measured in :doc:`performance`: the GPU reaches CPU parity
-on the **direct** tier and runs the **iterative** and small-system paths 2-5x
-*slower*, because those are dominated by serial, dispatch-bound iterations. GPU
-wins therefore come from **batched** direct-tier work — multi-``E_r`` or
-multi-surface sweeps — not from single solves.
+Measured in :doc:`performance`: the GPU reaches CPU parity on the **direct**
+tier and runs the **iterative** and small-system paths 2-5x *slower*, because
+those are dominated by serial, dispatch-bound iterations. GPU wins therefore
+come from **batched** direct-tier work, meaning multi-``E_r`` or multi-surface
+sweeps, not from single solves.
 
 Subsystem batching within a tier-1 solve
 ----------------------------------------

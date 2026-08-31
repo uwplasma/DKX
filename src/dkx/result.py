@@ -253,7 +253,7 @@ class Result:
             print(f"warning: {warning}")
 
     def save(self, path: str | Path | None = None, *, overwrite: bool = True) -> Path:
-        """Write the versioned native result as NetCDF4."""
+        """Write the versioned result as NetCDF4."""
 
         target = Path(path) if path is not None else self.output_path
         if target is None:
@@ -262,7 +262,7 @@ class Result:
             )
         target = target.expanduser().resolve()
         if target.suffix.lower() != ".nc":
-            raise ValueError("native Result.save() writes .nc files; use a .nc suffix")
+            raise ValueError("Result.save() writes .nc files; use a .nc suffix")
         if target.exists() and not overwrite:
             raise FileExistsError(target)
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -448,7 +448,7 @@ class Result:
 
     @classmethod
     def load(cls, path: str | Path) -> "Result":
-        """Load a version-1 native NetCDF result."""
+        """Load a version-1 NetCDF result."""
 
         source = Path(path).expanduser().resolve()
         from netCDF4 import Dataset  # noqa: PLC0415
