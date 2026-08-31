@@ -11,12 +11,12 @@ import pytest
 
 from dkx import cli
 from dkx import plotting
-from dkx.validation.artifacts import (
+from tools.release.artifacts import (
     check_benchmark_artifact_file,
     check_benchmark_artifact_files,
     fortran_suite_benchmark_summary_errors,
 )
-from dkx.validation.artifacts import (
+from tools.release.artifacts import (
     build_simakov_helander_high_nu_panel,
     build_w7x_ambipolar_root_provenance_panel,
 )

@@ -1420,28 +1420,4 @@ def classical_fluxes(
 
 # ---- Radial-coordinate flux variants (radialCoordinates.F90) ---------------
 
-class RadialFluxVariants(NamedTuple):
-    """One psiHat-projected flux expressed in all four v3 radial coordinates."""
 
-    psi_hat: jnp.ndarray
-    psi_n: jnp.ndarray
-    r_hat: jnp.ndarray
-    r_n: jnp.ndarray
-
-def flux_coordinate_variants(values_psi_hat: jnp.ndarray, coords: RadialCoordinates) -> RadialFluxVariants:
-    """Express a flux (moment of ``vdrift . grad psiHat``) in psiN/rHat/rN.
-
-    A flux projected onto ``grad y`` scales by ``dy/dpsiHat``, i.e. by the
-    v3 factors ``ddpsiN2ddpsiHat``/``ddrHat2ddpsiHat``/``ddrN2ddpsiHat``
-    (radialCoordinates.F90 lines 157-159), exposed by
-    :class:`dkx.constants.RadialCoordinates` as the
-    ``*_to_d_dpsi_hat`` conversion factors.  These are the reciprocals of the
-    gradient factors in ``RadialCoordinates.gradients_from_d_dpsi_hat``.
-    """
-    values = jnp.asarray(values_psi_hat, dtype=jnp.float64)
-    return RadialFluxVariants(
-        psi_hat=values,
-        psi_n=values * coords.d_dpsi_n_to_d_dpsi_hat,
-        r_hat=values * coords.d_dr_hat_to_d_dpsi_hat,
-        r_n=values * coords.d_dr_n_to_d_dpsi_hat,
-    )

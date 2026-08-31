@@ -4,7 +4,7 @@ Collisionality and electric-field series, the record types and loaders that
 read them, phase timing, and the per-case suite metrics built on top. This is
 what the summary builders in ``artifacts`` are built *from*.
 
-Depends only on :mod:`dkx.validation.lanes`, for the collisionality protocol.
+Depends only on :mod:`tools.release.lanes`, for the collisionality protocol.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ import time
 from typing import Any, Iterator
 import numpy as np
 from .lanes import CollisionalityLike
-from ..paths import repository_root
+from dkx.paths import repository_root
 
 
 TRANSPORT_ELEMENTS: dict[str, tuple[int, int]] = {
@@ -472,7 +472,7 @@ def load_er_sweep_records(path: Path) -> list[ErSweepRecord]:
 
 
 def load_suite_report(path: Path) -> list[Mapping[str, object]]:
-    """Load a frozen CPU/GPU suite report from ``python -m dkx.validation.suite scaled``.
+    """Load a frozen CPU/GPU suite report from ``python -m tools.release.suite scaled``.
 
     The release-facing report is a list of per-case dictionaries. Some archived
     summary artifacts wrap that list in a top-level ``rows`` key, so this loader

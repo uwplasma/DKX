@@ -339,7 +339,7 @@ default to ``--jax-profile-marks off`` so runtime drift is measured without
 profiler interference. Only opt into ``on`` or ``full`` when the goal is an
 explicit profiling lane, and leave per-mark device-memory sampling off unless
 you are doing targeted device-memory diagnosis. Kernel/XLA traces should go
-through ``python -m dkx.validation.release write-output-trace`` or the transport-trace helpers,
+through ``python -m tools.release.release write-output-trace`` or the transport-trace helpers,
 not through always-on per-phase GPU memory polling. The runtime-drift audit also
 prefers the solver's logged ``elapsed_s=...`` value when available, falling back
 to subprocess wall time only for archived artifacts that do not record it. The suite
@@ -380,7 +380,7 @@ unit/regression suite:
 - :doc:`validation_matrix` is the corresponding human-facing documentation page.
 - ``tests/test_validation_manifest_schema.py`` enforces that every lane has explicit
   source-code anchors, protecting tests, and acceptance gates.
-- ``python -m dkx.validation.release check-gates`` and ``tests/test_release_gate_metadata.py`` add a
+- ``python -m tools.release.release check-gates`` and ``tests/test_release_gate_metadata.py`` add a
   CI-fast release gate over the manifest's ``release_gate`` metadata. Each lane must be
   ``release_ready``, ``regression_scaffold``, ``bounded_proxy``, or
   ``closed_deferred``; no lane may remain ambiguous in the release manifest. The
@@ -391,13 +391,13 @@ unit/regression suite:
   tagged release claim, but it is not allowed to rot silently.
 - ``docs/_static/research_lane_completion_2026_05_12.json`` records the active
   research/performance lanes, evidence artifacts, completion estimates, gates,
-  and next actions for the checked research-lane cycle. ``python -m dkx.validation.release check-research-lanes``
+  and next actions for the checked research-lane cycle. ``python -m tools.release.release check-research-lanes``
   and ``tests/test_research_lane_policy.py`` enforce that those percentages are
   evidence-backed and that active lanes record substantial measured progress
   before their completion estimate is increased. The policy is target-capped:
   if a lane has fewer percentage points remaining than the current push target,
   it must reach its checked target rather than overclaiming beyond it.
-- ``python -m dkx.validation.release check-research-lanes`` and
+- ``python -m tools.release.release check-research-lanes`` and
   ``tests/test_research_lane_policy.py`` provide the offline gate for deferred
   QI/device-QI evidence. The gate checks provenance, fail-closed metadata, and
   evidence-backed completion percentages only; it is not a convergence
@@ -506,7 +506,7 @@ It intentionally does not close the full analytic-limit reproduction, because th
 current audited collisionality scans stop near ``nu'=10``.
 
 The deferred Simakov-Helander panel-data scaffold is also executable in
-``dkx.validation.artifacts`` and guarded by
+``tools.release.artifacts`` and guarded by
 ``tests/test_validation_figures.py``. It consumes a compact payload of
 ``nuprime``, computed value, and analytic-limit rows, then records:
 
@@ -542,7 +542,7 @@ mistaken for a closed W7-X or Simakov-Helander physics validation.
 
 The W7-X ambipolar literature lane is kept as a deferred artifact gate, not as a
 stable long-run figure generator. The retained package-level validation is
-``dkx.validation.artifacts.build_w7x_ambipolar_root_provenance_panel`` with
+``tools.release.artifacts.build_w7x_ambipolar_root_provenance_panel`` with
 focused coverage in ``tests/test_validation_figures.py`` and the core ambipolar
 scan/solve tests. The gate records explicit ``deferred_reasons``, provenance
 completeness scores, finite-root checks, current-bracket checks, and matching

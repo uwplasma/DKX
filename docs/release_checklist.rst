@@ -45,8 +45,8 @@ From the repository root:
 .. code-block:: bash
 
    pytest -q
-   python -m dkx.validation.release check-gates
-   python -m dkx.validation.release check-research-lanes
+   python -m tools.release.release check-gates
+   python -m tools.release.release check-research-lanes
    sphinx-build -W -b html docs docs/_build/html
    python -m build
    python -m twine check dist/*
@@ -63,8 +63,8 @@ For a fast claim-scope check without running the whole suite, use:
 
    pytest -q tests/test_validation_manifest_schema.py tests/test_release_gate_metadata.py
    pytest -q tests/test_benchmark_doc_claims.py tests/test_generate_fortran_suite_benchmark_summary.py
-   python -m dkx.validation.release check-gates
-   python -m dkx.validation.release check-research-lanes
+   python -m tools.release.release check-gates
+   python -m tools.release.release check-research-lanes
 
 This validates that publication-facing lanes are either implemented for the
 documented release-scope claim, kept as bounded scaffolds/proxies, or explicitly
@@ -140,11 +140,11 @@ Manual audit commands:
    DKX_OFFLINE=1 python examples/getting_started/write_sfincs_output_vmec.py \
      --out /tmp/dkx_vmec_release_data_smoke.h5
 
-   python -m dkx.validation.release audit-output-keys \
+   python -m tools.release.release audit-output-keys \
      --suite-root tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak \
      --fail-on-missing
 
-   python -m dkx.validation.release audit-runtime-drift \
+   python -m tools.release.release audit-runtime-drift \
      --baseline-report /path/to/frozen_cpu_baseline/suite_report.json \
      --candidate-report tests/scaled_example_suite_release_cpu_2026-05-08_production_tokamak/suite_report.json \
      --threshold-ratio 1.25 \

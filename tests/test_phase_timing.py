@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dkx.validation.artifacts import PhaseTimer, maxrss_mb
+from tools.release.artifacts import PhaseTimer, maxrss_mb
 
 
 def test_maxrss_mb_normalizes_linux_and_macos_units() -> None:

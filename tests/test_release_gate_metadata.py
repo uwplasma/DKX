@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from dkx.validation.release import check_release_gates_main
-from dkx.validation.release import release_gate_errors
+from tools.release.release import check_release_gates_main
+from tools.release.release import release_gate_errors
 
 
 def _repo_root() -> Path:

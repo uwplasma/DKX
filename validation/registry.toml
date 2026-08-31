@@ -3,7 +3,7 @@
 # One entry per registered evidence artifact. plan.md section 7.8 makes this file
 # the single place that binds a claim to its capability, its inputs, its
 # generating command, the artifact it produced, and the limits of what the
-# artifact establishes. `dkx.validation.registry` is the one generic runner that
+# artifact establishes. `tools.release.registry` is the one generic runner that
 # checks every entry; tests/test_validation.py is the one test module that
 # consumes it. Do not add a per-campaign registry, runner, or test module.
 #

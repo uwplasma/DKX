@@ -7,11 +7,11 @@ import subprocess
 import numpy as np
 import pytest
 
-# The panel builders and their private helpers live in dkx.validation.panels;
-# dkx.validation.artifacts re-exports the public ones, but a test that reaches
+# The panel builders and their private helpers live in tools.release.panels;
+# tools.release.artifacts re-exports the public ones, but a test that reaches
 # into internals should name the module that owns them.
-import dkx.validation.panels as validation_figures
-from dkx.validation.artifacts import (
+import tools.release.panels as validation_figures
+from tools.release.artifacts import (
     build_simakov_helander_high_nu_panel,
     build_w7x_ambipolar_root_provenance_panel,
 )

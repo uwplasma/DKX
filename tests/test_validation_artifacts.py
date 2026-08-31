@@ -7,8 +7,8 @@ import h5py
 import numpy as np
 import pytest
 
-import dkx.validation.artifacts as artifacts
-from dkx.validation.artifacts import (
+import tools.release.artifacts as artifacts
+from tools.release.artifacts import (
     appendix_b_geometry_audit_from_h5,
     autodiff_gradient_error_summary,
     benchmark_artifact_policy_errors,

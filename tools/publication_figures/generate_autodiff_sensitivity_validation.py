@@ -31,7 +31,7 @@ from solvax.implicit import linear_solve as solvax_linear_solve
 from dkx.drift_kinetic import kinetic_operator_from_namelist
 from dkx.magnetic_geometry import FluxSurfaceGeometry
 from dkx.namelist import read_sfincs_input
-from dkx.validation.artifacts import (
+from tools.release.artifacts import (
     PAUL_2019_ADJOINT_URL,
     SFINCS_ADJOINT_APS_URL,
     build_autodiff_sensitivity_validation_summary,

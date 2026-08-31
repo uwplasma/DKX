@@ -22,16 +22,24 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import sys
 from typing import Any
 
-from dkx.validation.artifacts import (
+# The evidence helpers live in ``tools/release/``, which is checkout tooling
+# rather than an installed package, so the repository root has to be importable
+# before the import below -- running this file directly puts only its own
+# directory on the path.  Under pytest ``tests/conftest.py`` has already done it.
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from tools.release.artifacts import (  # noqa: E402
     coefficient_relative_errors,
     dkes_to_beidler,
     nu_prime_for_nu_over_v,
 )
 
 
-ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ARTIFACT = ROOT / "validation" / "independent_cross_code_v1.json"
 
 

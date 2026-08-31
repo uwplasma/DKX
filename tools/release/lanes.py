@@ -15,7 +15,7 @@ import math
 from pathlib import Path
 from typing import Protocol
 import numpy as np
-from ..paths import repository_root
+from dkx.paths import repository_root
 
 
 VALID_LANE_STATUSES = frozenset({"active", "evidence_ready", "closed", "deferred"})
