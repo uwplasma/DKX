@@ -33,8 +33,12 @@ SFINCS model, collision operator, and speed grid
   full-vs-DKES trajectory comparison implemented in
   :mod:`dkx.drift_kinetic`.
 - M. Mollén et al.,
-  `Implementation of a full linearized Fokker-Planck collision operator in SFINCS <https://arxiv.org/abs/1504.04810>`_.
-  Basis for the Fokker--Planck operator in :mod:`dkx.collisions`.
+  `Implementation of a full linearized Fokker-Planck collision operator in SFINCS <https://arxiv.org/abs/1504.04810>`_,
+  arXiv:1504.04810 (2015). Basis for the Fokker--Planck operator in
+  :mod:`dkx.collisions`. This is a separate work from the 2014 *Physics of
+  Plasmas* SFINCS paper above, and from the unpublished upstream
+  Fokker--Planck operator implementation note summarized in
+  :doc:`theory_from_upstream`.
 - M. Landreman and D. R. Ernst,
   `New velocity-space discretization for continuum kinetic calculations and Fokker--Planck collisions <https://arxiv.org/abs/1210.5289>`_,
   J. Comput. Phys. **243**, 130 (2013). The non-classical orthogonal-polynomial

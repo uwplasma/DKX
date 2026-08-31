@@ -134,7 +134,7 @@ run = run_profile(DECK_PATH, solve_method="auto", out_path=H5_PATH)
 # Krylov, "gcrot") when the operator couples (species, x) densely, tier 3
 # (host direct, "direct") as a loud fallback.  Ask why tier 1 was rejected:
 tier1_ok, tier1_reason = tier1_available(run.operator)
-print(f"  Solver tier used: {run.solve_result.method}")
+print(f"  Solver route used: {run.solve_result.method}")
 print(f"  tier-1 structured direct applicable: {tier1_ok}")
 print(f"  policy reason: {tier1_reason if not tier1_ok else 'tier 1 supported'}")
 if run.solve_result.iterations is not None:
@@ -187,7 +187,7 @@ plt.close(fig)
 # 5) Final results
 # ----------------------------------------------------------------------------
 print("=== Final results ===")
-print(f"  Solver tier used: {run.solve_result.method}")
+print(f"  Solver route used: {run.solve_result.method}")
 for s, name in enumerate(labels):
     print(f"  particleFlux_vm_psiHat[{name}] = {gamma[s]:.6e}")
     print(f"  heatFlux_vm_psiHat[{name}]     = {q_flux[s]:.6e}")

@@ -817,7 +817,8 @@ VMEC-to-Boozer differentiable geometry workflow
 -----------------------------------------------
 
 For optional ``vmex`` and ``booz_xform_jax`` installations, this example
-checks a public differentiable geometry workflow into ``dkx``:
+exercises the public differentiable geometry workflow that feeds VMEC
+equilibria through Boozer coordinates into ``dkx``:
 
 .. code-block:: bash
 
@@ -854,7 +855,7 @@ RHSMode=1 scaling remains an open research item rather than a stable example.
    examples use the supported analytic Boozer tokamak path instead.
 
 The autodiff examples build cached operators, treat scalar inputs such as
-:math:`\\nu_n` as differentiable parameters, and use `custom_linear_solve` where
+:math:`\nu_n` as differentiable parameters, and use `custom_linear_solve` where
 implicit gradients are the memory-efficient path. This is the recommended
 pattern for gradients without backpropagating through every Krylov iteration.
 

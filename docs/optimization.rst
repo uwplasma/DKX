@@ -757,7 +757,7 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
       :math:`r_N=0.5`.  The first level is the checked
       :math:`7\times7\times5\times4` CPU/GPU/Fortran promotion artifact above;
       the second level is a completed :math:`9\times9\times7\times4`
-      CPU/GPU/Fortran scan.  The intermediate level remains backend-clean:
+      CPU/GPU/Fortran scan.  That second level remains backend-clean:
       CPU/GPU root agreement is :math:`8.94\times10^{-14}` and
       DKX/Fortran-v3 root agreement is :math:`1.91\times10^{-7}`.  The
       root moved from :math:`E_r=0.4136092671` to
@@ -790,10 +790,11 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
    The solver-policy audit is stored in
    ``docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_xblock_policy_probe.json``.
 
-   The next above-window refinement level,
+   The next refinement level, above the policy window as it stood at the time
+   of that first probe, is
    :math:`N_\theta=21`, :math:`N_\zeta=25`, :math:`N_\xi=14`,
-   :math:`N_L=4`, :math:`N_x=4`, has :math:`58{,}804` active unknowns and was
-   run on local CPU, one office GPU, and SFINCS Fortran v3:
+   :math:`N_L=4`, :math:`N_x=4`.  It has :math:`58{,}804` active unknowns and
+   was run on local CPU, one office GPU, and SFINCS Fortran v3:
 
    - The CPU path converged in 18.8 seconds wall time and the GPU path in
      86.0 seconds wall time; both reached the requested true residual.
@@ -802,10 +803,13 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
    - GPU/Fortran-v3 agreement was better than :math:`2.7\times10^{-6}`
      relative.
 
-   The default multispecies non-dense x-block policy is bounded to this
-   measured window (:math:`30{,}000 \le n_\mathrm{active} \le 60{,}000`,
-   :math:`12 \le N_\xi \le 14`) and intentionally does not cover the
-   million-unknown production floor.
+   This probe widened the validated x-block window to
+   :math:`30{,}000 \le n_\mathrm{active} \le 60{,}000`,
+   :math:`12 \le N_\xi \le 14` (the ``policy_after_probe`` block of the audit
+   below); the :math:`25\times31\times16\times4` probe further down widens it
+   again.  The two figures quoted on this page are successive states of the
+   same ladder, not competing claims.  Neither covers the million-unknown
+   production floor, and neither is meant to.
 
    The above-window solver-policy audit is stored in
    ``docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_xblock_policy_probe_21x25x14.json``.
@@ -826,10 +830,17 @@ accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
 
    Since this path uses host sparse factors, it is a correctness-safe GPU
    route but not a GPU-performance claim at this size; the CPU path is faster
-   for this refinement level.  The default multispecies non-dense x-block
-   policy is bounded to
+   for this refinement level.  This is the last probe in the ladder, so its
+   ``policy_after_probe`` block records the widest validated window:
    :math:`30{,}000 \le n_\mathrm{active} \le 100{,}000`,
    :math:`12 \le N_\xi \le 16`.
+
+   That window is the range these probes cover, not a check the solver
+   applies.  Nothing in ``src/dkx`` reads an :math:`n_\mathrm{active}` or
+   :math:`N_\xi` bound; ``solve(method="auto")`` chooses its route from a
+   memory budget (:func:`dkx.solve.tier1_peak_memory_bytes` against
+   ``DKX_TIER1_MEMORY_BUDGET_GB``).  Read the window as evidence of where
+   the x-block route has been measured, and expect no error outside it.
 
    The medium-level solver-policy audit is stored in
    ``docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_xblock_policy_probe_25x31x16.json``.
