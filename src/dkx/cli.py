@@ -619,19 +619,27 @@ def _cmd_plot(args: argparse.Namespace) -> int:
     out_path = Path(args.out) if args.out else source.with_suffix(".png")
 
     if _looks_like_sfincs_h5(source):
+        if args.kind != "summary":
+            print(
+                f"dkx plot failed: --kind {args.kind} applies to a dkx Result; "
+                "a SFINCS HDF5 file has only the summary panel.",
+                file=sys.stderr,
+            )
+            return 2
         from .plotting import plot_sfincs_output_summary  # noqa: PLC0415
 
         written = plot_sfincs_output_summary(input_h5=source, output_png=out_path)
     else:
-        from .plotting import plot_result_summary  # noqa: PLC0415
+        from .plotting import plot_ambipolar_search, plot_result_summary  # noqa: PLC0415
 
         try:
             result = Result.load(source)
         except (OSError, ValueError, KeyError) as exc:
             print(f"dkx plot failed: {exc}", file=sys.stderr)
             return 2
+        draw = plot_result_summary if args.kind == "summary" else plot_ambipolar_search
         try:
-            written = plot_result_summary(result=result, output_path=out_path)
+            written = draw(result=result, output_path=out_path)
         except ValueError as exc:
             print(f"dkx plot failed: {exc}", file=sys.stderr)
             return 2
@@ -2206,6 +2214,11 @@ def main(argv: list[str] | None = None) -> int:
     _add_parallel_cli_args(p_plot_result)
     p_plot_result.add_argument("result")
     p_plot_result.add_argument("--out", default=None, help="Output image path (default: alongside the input).")
+    p_plot_result.add_argument(
+        "--kind", choices=("summary", "search"), default="summary",
+        help="summary: radial profiles. search: radial current against E_r with "
+             "every evaluation, bracket and root (ambipolar results only).",
+    )
     p_plot_result.set_defaults(func=_cmd_plot)
 
     p_scan_case = sub.add_parser(

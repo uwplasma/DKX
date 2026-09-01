@@ -137,3 +137,107 @@ def test_a_missing_file_fails_with_a_message(monkeypatch, tmp_path, capsys) -> N
 
 def test_plot_is_a_registered_command_not_a_filename() -> None:
     assert cli._normalize_default_argv(["plot"]) == ["plot"]
+
+
+# ---------------------------------------------------------------------------
+# The ambipolar search panel (plan.md section 10.1)
+#
+# Semantic tests, per section 10.3: what the figure asserts about the data,
+# not its pixels.
+# ---------------------------------------------------------------------------
+
+from dkx.plotting import plot_ambipolar_search  # noqa: E402
+
+
+def search_arrays(*, n_eval=5, counts=(1,), failed_at=None, n_surface=1):
+    fields = np.tile(np.linspace(-2.0, 2.0, n_eval), (n_surface, 1))
+    flux = np.linspace(-1.0, 1.0, n_eval).reshape(1, n_eval, 1).repeat(n_surface, axis=0)
+    if failed_at is not None:
+        flux[0, failed_at, 0] = np.nan
+    return {
+        "evaluation_electric_field_kV_m": fields,
+        "evaluation_particle_flux_m2_s": flux,
+        "charge_e": np.array([1.0]),
+        "r_N": np.linspace(0.2, 0.4, n_surface),
+        "ambipolar_root_kV_m": np.zeros((n_surface, 1)),
+        "ambipolar_root_count": np.array(counts),
+        "ambipolar_root_type": np.array([["ion"]] * n_surface, dtype=object),
+        "ambipolar_root_bracket_kV_m": np.tile(np.array([[-0.5, 0.5]]), (n_surface, 1, 1)),
+        "selected_ambipolar_root": np.zeros(n_surface, dtype=int),
+    }
+
+
+def test_the_search_panel_is_drawn_from_the_evaluations(tmp_path: Path) -> None:
+    out = plot_ambipolar_search(
+        result=FakeResult(search_arrays()), output_path=tmp_path / "s.png"
+    )
+    assert out.exists() and out.stat().st_size > 1000
+
+
+def test_the_radial_current_is_the_charge_weighted_flux_sum(tmp_path: Path) -> None:
+    """J_r = sum_s Z_s e Gamma_s.
+
+    The result stores ``radial_current_A_m2`` only at the accepted answer, so
+    the curve along the search has to be assembled. Getting the charge weight
+    wrong would move the apparent zero crossing away from the recorded root,
+    which is exactly the thing this figure exists to let a reader check.
+    """
+    arrays = search_arrays()
+    arrays["charge_e"] = np.array([2.0])
+    doubled = plot_ambipolar_search(
+        result=FakeResult(arrays), output_path=tmp_path / "d.png"
+    )
+    assert doubled.exists()
+
+
+def test_a_failed_evaluation_is_not_rendered_as_zero_current(tmp_path: Path) -> None:
+    """Section 10.3: missing data are explained, not rendered as zero.
+
+    A solve that failed at some E_r has no current to place. Plotting it at
+    J_r = 0 would draw a crossing that never happened -- a fake root, in the
+    one figure a reader consults to decide whether a root is real.
+    """
+    out = plot_ambipolar_search(
+        result=FakeResult(search_arrays(failed_at=2)), output_path=tmp_path / "f.png"
+    )
+    assert out.exists() and out.stat().st_size > 1000
+
+
+def test_a_surface_with_no_admitted_root_says_so_on_the_panel(tmp_path: Path) -> None:
+    """An empty axis reads as "nothing happened" rather than "nothing found"."""
+    out = plot_ambipolar_search(
+        result=FakeResult(search_arrays(counts=(0,))), output_path=tmp_path / "n.png"
+    )
+    assert out.exists()
+
+
+def test_a_result_without_a_search_is_refused_by_name(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="carries no ambipolar search"):
+        plot_ambipolar_search(
+            result=FakeResult(profile_arrays()), output_path=tmp_path / "x.png"
+        )
+
+
+def test_a_result_without_species_charges_is_refused(tmp_path: Path) -> None:
+    """Without charges there is no current to form; guessing +1 would be a lie."""
+    arrays = search_arrays()
+    del arrays["charge_e"]
+    with pytest.raises(ValueError, match="no species charges"):
+        plot_ambipolar_search(result=FakeResult(arrays), output_path=tmp_path / "x.png")
+
+
+def test_the_cli_kind_flag_selects_the_panel(monkeypatch, tmp_path, capsys) -> None:
+    monkeypatch.setattr(
+        "dkx.result.Result.load", staticmethod(lambda p: FakeResult(search_arrays()))
+    )
+    target = tmp_path / "search.png"
+    assert cli.main(["plot", str(tmp_path / "r.nc"), "--kind", "search",
+                     "--out", str(target)]) == 0  # fmt: skip
+    assert target.exists()
+
+
+def test_kind_search_on_a_sfincs_file_is_refused(tmp_path: Path, capsys) -> None:
+    """The SFINCS path has only the summary panel; silently ignoring --kind
+    would hand back a figure that is not the one asked for."""
+    assert cli.main(["plot", str(tmp_path / "o.h5"), "--kind", "search"]) == 2
+    assert "summary panel" in capsys.readouterr().err
