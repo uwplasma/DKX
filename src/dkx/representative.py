@@ -26,6 +26,7 @@ Resolution and benchmark rationale live with the maintained user guidance in
 from __future__ import annotations
 
 import dataclasses
+import os
 import time
 import warnings
 from pathlib import Path
@@ -803,6 +804,22 @@ def run_representative(
 #: T_i = T_e = T leaves p = 2 n T: one equation, two unknowns.  Fixing T on axis
 #: and letting n carry the profile is the conventional choice, and it is stated
 #: on the figure because it is an assumption, not a measurement.
+#: Environment override for the assumed on-axis temperature.
+T_AXIS_ENV = "DKX_T_AXIS_KEV"
+
+#: Assumed on-axis temperature, in keV. A VMEC equilibrium fixes the *pressure*
+#: and nothing else, so this half of the closure is a convention, not a
+#: measurement -- and the bootstrap current is very sensitive to it. Measured on
+#: ``wout_LandremanPaul2021_QA_beta2p5_bootstrap`` at fixed pressure and fixed
+#: resolution, ``<j.B>/sqrt(<B^2>)`` runs -0.208, -0.499, -0.787, -1.130 for an
+#: axis temperature of 2, 4, 8 and 16 keV: a factor of 5.4, because the
+#: collisionality that suppresses the bootstrap current scales like ``n/T^2``
+#: and the split holds ``p = 2nT`` fixed.
+#:
+#: The consequence for a reader: a bootstrap current computed from a pressure
+#: profile alone cannot be compared against one from an optimizer that assumed a
+#: different temperature. Set :data:`T_AXIS_ENV` to the design point to compare
+#: like with like.
 DEFAULT_T_AXIS_KEV = 2.0
 
 #: Exponent splitting the pressure between temperature and density:
@@ -814,12 +831,33 @@ DEFAULT_T_AXIS_KEV = 2.0
 TEMPERATURE_PRESSURE_EXPONENT = 1.0 / 3.0
 
 
+def _t_axis_kev() -> float:
+    """The assumed on-axis temperature, overridable per run.
+
+    Read at call time rather than at import so a caller can set it without
+    reloading the module.
+    """
+    raw = os.environ.get(T_AXIS_ENV, "").strip()
+    if not raw:
+        return DEFAULT_T_AXIS_KEV
+    try:
+        value = float(raw)
+    except ValueError:
+        raise ValueError(
+            f"{T_AXIS_ENV}={raw!r} is not a number; expected keV on axis, e.g. 8.0"
+        ) from None
+    if not value > 0.0:
+        raise ValueError(f"{T_AXIS_ENV}={raw!r}: an on-axis temperature must be positive")
+    return value
+
+
 def _temperature(p_pa: float, p_axis: float) -> float:
     """``T(s) = T_0 (p(s)/p(0))^e`` in keV --- the assumed half of the closure."""
+    t_axis = _t_axis_kev()
     if p_axis <= 0.0:
-        return DEFAULT_T_AXIS_KEV
+        return t_axis
     ratio = max(float(p_pa) / float(p_axis), 0.0)
-    return DEFAULT_T_AXIS_KEV * ratio**TEMPERATURE_PRESSURE_EXPONENT
+    return t_axis * ratio**TEMPERATURE_PRESSURE_EXPONENT
 
 
 def plasma_summary(plasma: dict, source: str = "") -> str:
@@ -1040,7 +1078,15 @@ def resolve_plasma(equilibrium: Path) -> tuple[dict[str, float], str]:
     """
     plasma = plasma_parameters(equilibrium)
     if plasma:
-        return plasma, "p(s) from the equilibrium"
+        # Name the assumption. "p(s) from the equilibrium" alone reads as though
+        # the whole plasma came from the file; only the pressure did. The
+        # bootstrap current moves by a factor of 5 across a plausible range of
+        # this number, so a reader comparing against an optimizer's own
+        # bootstrap current has to know which temperature was assumed.
+        return plasma, (
+            f"p(s) from the equilibrium; T(0)={_t_axis_kev():g} keV assumed "
+            f"(set {T_AXIS_ENV} to match a design point)"
+        )
     return dict(
         FALLBACK_PLASMA
     ), f"generic reference; {_no_pressure_reason(equilibrium)}"
