@@ -14,7 +14,7 @@ standard way to get gradients through an iterative solver without unrolling it
 -- a key ingredient for gradient-based stellarator/neoclassical optimization
 [M. Landreman et al., Phys. Plasmas 21, 042503 (2014); SFINCS technical
 documentation, https://github.com/landreman/sfincs].  The ``auto`` solve policy
-routes this PAS deck to the structured direct tier.
+routes this PAS deck to the structured direct route.
 
 Run:
   python examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py
@@ -40,8 +40,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # Frozen Fortran v3 PAS fixture (single species, no Er, scheme 5).
 INPUT_NAMELIST = REPO_ROOT / "tests" / "ref" / "pas_1species_PAS_noEr_tiny_scheme5.input.namelist"
 
-# Solve tier: "auto" routes this PAS deck to the structured direct tier;
-# "gmres" forces the recycled-Krylov tier; "block_tridiagonal" the direct tier.
+# Solve route: "auto" routes this PAS deck to the structured direct route;
+# "gmres" forces recycled Krylov; "block_tridiagonal" forces structured direct.
 SOLVE_METHOD = "auto"
 SOLVER_TOLERANCE = 1e-12
 FD_EPS = 1e-5  # centered finite-difference step for the gradient check

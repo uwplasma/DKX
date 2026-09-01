@@ -26,9 +26,9 @@ packages remain: `validation/` and `workflows/`.
 | `vmec_ascii.py` | The LIBSTELL text form of a VMEC `wout`, which upstream accepts for `geometryScheme 5` alongside NetCDF (`read_wout_text` in `read_wout_mod.F`). `read_vmec_wout` routes here by file signature, so callers never choose. Covers VMEC VERSION <= 8.0, where every record after the version line is list-directed and the Nyquist tables are inline; later versions and the ANIMEC/FLOW variants are refused by name rather than mis-parsed. |
 | `collisions.py` | Pitch-angle scattering and full Fokker-Planck with Rosenbluth terms. |
 | `drift_kinetic.py` | The `KineticOperator`: term assembly, matrix-free apply, analytic Legendre blocks, RHS drives, bordered constraints. |
-| `solve.py` | Three-tier policy (structured block elimination, preconditioned recycled Krylov, host direct referee) on the `solvax` library (a core dependency); implicit differentiation. |
-| `coarse_precond.py` | The tier-2 coarse preconditioner itself: the SFINCS-simplified operator, the three pins its chain is singular without (diagonal floor, `Nxi_for_x` identity rows, rank-one `l = 0` pin), and the routing between its three storage policies by measured size — dense bands, reusable Schur-LU-only factors, or one-shot checkpointed elimination. `multigrid.py` and `sparse_precond.py` are drop-in alternatives to it and import its pins. |
-| `multigrid.py` | Semicoarsened geometric-multigrid preconditioner for the tier-2 Krylov solve: rediscretized coarse operators on coarsened (theta, zeta[, xi]) grids, pitch-collocation and Legendre-plane relaxations, and the existing block-Thomas solve on the coarsest grid. Also the pitch-basis diagnostics (`pitch_collocation_surrogate`, `line_diagonal_dominance`, `line_smoother_spectral_radius`) that measure why that route cannot reach tolerance on a Legendre-modal pitch discretization. |
+| `solve.py` | Three-route policy (structured direct block elimination, preconditioned recycled Krylov, sparse direct referee) on the `solvax` library (a core dependency); implicit differentiation. |
+| `coarse_precond.py` | The coarse preconditioner of the recycled Krylov route: the SFINCS-simplified operator, the three pins its chain is singular without (diagonal floor, `Nxi_for_x` identity rows, rank-one `l = 0` pin), and the routing between its three storage policies by measured size — dense bands, reusable Schur-LU-only factors, or one-shot checkpointed elimination. `multigrid.py` and `sparse_precond.py` are drop-in alternatives to it and import its pins. |
+| `multigrid.py` | Semicoarsened geometric-multigrid preconditioner for the recycled Krylov solve: rediscretized coarse operators on coarsened (theta, zeta[, xi]) grids, pitch-collocation and Legendre-plane relaxations, and the existing block-Thomas solve on the coarsest grid. Also the pitch-basis diagnostics (`pitch_collocation_surrogate`, `line_diagonal_dominance`, `line_smoother_spectral_radius`) that measure why that route cannot reach tolerance on a Legendre-modal pitch discretization. |
 | `sparse_precond.py` | The same SFINCS-simplified operator as `multigrid.py`, inverted *exactly* but in a fill-reducing elimination order rather than by eliminating the Legendre index first (which fills the angular blocks in). CSR assembly from the `legendre_blocks` coefficients, host SuperLU, `jax.pure_callback` application, and a Sherman-Morrison correction that keeps the dense `l = 0` null-space pin out of the sparsity pattern. Selected by `solve(preconditioner="sparse")`; refuses traced operator leaves. |
 | `moments.py` | Velocity-space moments, flux families, transport matrices, NTV, classical transport, keyed by sfincsOutput.h5 names. |
 | `inputs.py`, `console.py` | Typed namelist with Fortran-cited defaults/validation; byte-parity Fortran stdout blocks. |
@@ -62,7 +62,7 @@ errors raised by `inputs.load_sfincs_input`. There is no legacy fallback.
 | `_version.py` | Single source of truth for the package and release version. |
 | `config.py` | Native schema-v1 `Case` and its typed physical/numerical submodels. |
 | `ambipolar.py` | Scanplot-compatible ambipolar post-processing (`solve_ambipolar_from_scan_dir`, `radial_current_from_output`) over precomputed scan directories; in-process ambipolar solves live in `er.py`. |
-| `batch.py` | First-class batched-solve API over the two canonical batch axes — an `E_r` scan on one geometry (`batched_er_scan`) and a batch of flux surfaces sharing discretization (`batched_surface_scan`) — via `jax.vmap` over the varying `KineticOperator` leaves (`batched_solve`). Reuses `solve.py`/the operator read-only, stays differentiable and jit-safe, and auto-chunks with `jax.lax.map` to a memory-budgeted batch size from the tier-1 footprint model (`solve.tier1_peak_memory_bytes`) and the device/host memory. |
+| `batch.py` | First-class batched-solve API over the two canonical batch axes — an `E_r` scan on one geometry (`batched_er_scan`) and a batch of flux surfaces sharing discretization (`batched_surface_scan`) — via `jax.vmap` over the varying `KineticOperator` leaves (`batched_solve`). Reuses `solve.py`/the operator read-only, stays differentiable and jit-safe, and auto-chunks with `jax.lax.map` to a memory-budgeted batch size from the structured direct footprint model (`solve.tier1_peak_memory_bytes`) and the device/host memory. |
 | `sensitivity.py` | JVP/VJP, adjoint, and implicit differentiation helpers. |
 | `plotting.py` | Output plotting used by the CLI and examples. |
 | `representative.py` | The `dkx wout_*.nc` representative run and the `dkx --plot` publication panels, for DKX and Fortran SFINCS output alike. |
@@ -85,7 +85,7 @@ The deleted legacy stack (the `problems/`, `operators/`, `solvers/`,
 `outputs/`, `discretization/`, `geometry/`, and `physics/` packages, the
 sparse-direct/CSR-assembly solver families, and the root `grids.py` /
 `diagnostics.py` helpers) must not be reintroduced; the canonical `solve.py`
-tiers and the flat root modules own the entire supported surface.
+routes and the flat root modules own the entire supported surface.
 
 ## Design Rules
 

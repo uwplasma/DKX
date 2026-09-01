@@ -1,4 +1,6 @@
-"""Sparse-elimination inverse of the SFINCS-simplified operator (tier-2).
+"""Sparse-elimination inverse of the SFINCS-simplified operator.
+
+A preconditioner route of the recycled Krylov solve.
 
 :func:`dkx.coarse_precond.build_coarse_preconditioner` inverts the simplified operator
 *exactly* by a block-Thomas recursion over the Legendre index ``L`` whose
@@ -31,8 +33,8 @@ Three facts make this admissible where a host callback would not otherwise be:
 * The ``(species, x)`` subsystems are **uncoupled** in the simplified operator,
   so this is ``Nspecies * Nx`` independent factorizations of ``Nxi *
   Ntheta * Nzeta`` rows each, not one factorization of the whole system.
-* A preconditioner is never differentiated.  The tier-2 implicit-diff wrapper
-  differentiates the *solution*; the preconditioner enters only the forward and
+* A preconditioner is never differentiated.  The recycled Krylov implicit-diff
+  wrapper differentiates the *solution*; the preconditioner enters only the forward and
   transposed linear solves, whose derivatives the implicit function theorem
   supplies.
 * The route is opt-in (``solve(preconditioner="sparse")``) and refuses under
@@ -77,7 +79,7 @@ def _np(x) -> np.ndarray:
     """Host copy of an operator leaf, refusing tracers with a usable message."""
     if isinstance(x, jax.core.Tracer):
         raise NotImplementedError(
-            "the sparse tier-2 preconditioner assembles its matrix on the host and "
+            "the sparse preconditioner assembles its matrix on the host and "
             "cannot run with traced operator leaves (jit/vmap/grad over the "
             "operator); use preconditioner='coarse', which stays traceable."
         )
@@ -119,7 +121,7 @@ def _tz_templates(op: KineticOperator):
     densely; taking them through ``scipy.sparse`` keeps only the stencil
     entries, which is the whole point of this module.
     """
-    import scipy.sparse as sp  # lazy: matches the optional-scipy policy of tier 3
+    import scipy.sparse as sp  # lazy: matches the sparse direct optional-scipy policy
 
     d_theta = sp.csr_matrix(_np(op.ddtheta))
     d_zeta = sp.csr_matrix(_np(op.ddzeta))

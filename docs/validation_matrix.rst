@@ -332,7 +332,7 @@ from phase-space admission. Audit it with:
 
 For the exact uniform-pitch-22 profile, forwarding the DKX memory budget to
 each batched solve changes all 139 evaluations from full factors to the
-memory-bounded structured route. Roots and brackets are exact.
+memory-bounded structured direct route. Roots and brackets are exact.
 
 .. list-table:: Bounded route against the full-factor route
    :header-rows: 1
@@ -477,7 +477,7 @@ pair. Pairwise movements nevertheless reach the following:
    * - selected heat flux
      - ``9.08%``
 
-Every new evaluation uses the bounded structured route, accepted residuals stay
+Every new evaluation uses the bounded structured direct route, accepted residuals stay
 below ``3.05e-14``, and measured footprints stay below 4.01 GB. The retained
 intermediate-heavy replay is scientifically exact except for timing, but no
 warm-speedup claim is supported.

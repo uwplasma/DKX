@@ -1,4 +1,4 @@
-"""Referee tests for ``dkx.multigrid`` — the tier-2 multigrid preconditioner.
+"""Referee tests for ``dkx.multigrid`` — the recycled Krylov multigrid preconditioner.
 
 Two things are pinned here.
 
@@ -13,7 +13,7 @@ rediscretize the same physics; and the coarsest block-Thomas solve must invert
 its own level operator.
 
 *Parity.*  A preconditioner cannot change the answer.  ``preconditioner=
-"multigrid"`` must return the same tier-2 solution as ``preconditioner=
+"multigrid"`` must return the same recycled Krylov solution as ``preconditioner=
 "coarse"`` to solver tolerance on decks spanning pitch-angle scattering, full
 Fokker-Planck, the improved Sugama model and the ``E_r`` ``xDot`` terms, and
 the gradient through the differentiable solve must still match finite
@@ -266,7 +266,7 @@ def test_transposed_multigrid_preconditioner_is_exact() -> None:
     factors, fixed coarse factorization), so :func:`jax.linear_transpose` gives
     ``M^T`` exactly.  Getting this wrong is invisible in the forward solve and
     only corrupts the implicit-differentiation gradient, which is what the
-    tier-2 adjoint guard exists to catch.
+    recycled Krylov adjoint guard exists to catch.
     """
     from dkx.multigrid import build_multigrid_f_inverse
 

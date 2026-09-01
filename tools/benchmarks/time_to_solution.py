@@ -6,7 +6,7 @@ warm, all cores or one GPU), and reports end-to-end seconds per configuration.
 End-to-end wall time is the honest cross-code metric here: the Fortran run is
 one linear RHSMode=1 solve whose cost is dominated by the preconditioner
 factorization plus a handful of Krylov applications, while the dkx
-auto tier solves the same system directly; internal phase timers are not
+auto route solves the same system directly; internal phase timers are not
 comparable one-to-one.
 
 This is the harness behind the measured table in ``docs/performance.rst``.

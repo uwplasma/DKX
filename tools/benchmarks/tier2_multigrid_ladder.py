@@ -1,10 +1,10 @@
 #!/usr/bin/env python
-"""Tier-2 preconditioner ladder: coarse block-Thomas vs multigrid V-cycle.
+"""Krylov preconditioner ladder: coarse block-Thomas vs multigrid V-cycle.
 
-Measures what the tier-2 Krylov solve actually costs on a resolution ladder of
+Measures what the recycled Krylov solve actually costs on a resolution ladder of
 one full-Fokker-Planck, full-trajectory stellarator deck -- the physics that
-has no block-tridiagonal-in-L structure and therefore *cannot* use the tier-1
-direct solver.  For each grid it runs :func:`dkx.solve.solve` with
+has no block-tridiagonal-in-L structure and therefore *cannot* use the
+structured direct solver.  For each grid it runs :func:`dkx.solve.solve` with
 ``preconditioner="coarse"`` (the classical exact block-Thomas factorization of
 the SFINCS-simplified operator, cubic in ``Ntheta*Nzeta``) and with
 ``preconditioner="multigrid"`` (the same operator inverted by the semicoarsened

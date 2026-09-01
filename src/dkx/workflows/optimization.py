@@ -4,6 +4,14 @@ This module owns the optimization-facing public workflow surface. Historical
 ``optimization_*`` submodules are kept as package-level compatibility aliases in
 ``dkx.workflows`` so existing imports continue to resolve without keeping
 one implementation file per workflow stage.
+
+A note on the word "tier", which means something different here than it used
+to mean elsewhere in dkx. The solver tiers were renamed to route names
+(structured direct, recycled Krylov, sparse direct) and survive only as
+identifiers in :mod:`dkx.solve`. The ``tiers`` in this module are unrelated:
+they are the resolution levels of a convergence ladder. ``"tiers"`` is a key
+in the user's ladder config and in the emitted summary JSON, so it is a
+compatibility surface -- do not rename it while retiring the solver spelling.
 """
 
 from __future__ import annotations

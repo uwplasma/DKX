@@ -5,8 +5,8 @@ device budget, 36-core CPU), warm best-of-N ``block_tridiagonal_truncated``
 solves of HSX-family decks:
 
 * left  -- single-GPU memory ladder: device peak (GB) versus unknown count,
-  against the 12.56 GB device budget, showing that the truncated tier-1
-  working set keeps a 2.525M-unknown solve at 2.21 GB;
+  against the 12.56 GB device budget, showing that the truncated structured
+  direct working set keeps a 2.525M-unknown solve at 2.21 GB;
 * right -- 36-core CPU single-solve thread scaling on the mid deck (336,610
   unknowns): warm solve versus pinned core count, with the 8-core optimum and
   the inversion past it.

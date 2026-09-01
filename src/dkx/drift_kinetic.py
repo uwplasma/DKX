@@ -73,8 +73,8 @@ Three consumers, one source of truth (plan §2.2):
    transport-matrix loops.
 
 Every ``magneticDriftScheme`` 0-9 is canonical (the tangential magnetic drifts
-couple L, L±2 so :meth:`to_block_tridiagonal` refuses drift decks and tier-2
-GCROT owns them).  With that, the last deferred physics family is consolidated;
+couple L, L±2 so :meth:`to_block_tridiagonal` refuses drift decks and recycled
+Krylov GCROT owns them).  With that, the last deferred physics family is consolidated;
 the remaining refusals below are numerical-surface gaps, not physics:
 
 - ``collisionOperator`` other than 0 (Fokker-Planck) and 1 (pitch-angle
@@ -757,13 +757,13 @@ class KineticOperator:
         to ``L +- 1`` (see :meth:`_magnetic_drifts`), which is why
         :meth:`to_block_tridiagonal` refuses them outright.  But the ``L``-diagonal
         half of them *does* fit a block-tridiagonal chain: it adds to ``D_L`` and
-        nothing else.  That half is what the tier-2 coarse preconditioner is missing
+        nothing else.  That half is what the coarse preconditioner is missing
         against Fortran, whose ``preconditioner_magnetic_drifts_max_L`` keeps drifts
         in the preconditioner rather than dropping them
         (``populateMatrix.F90`` lines 544 and 671, ``whichMatrix==0``).
 
-Measured through the production tier-2 path.  On the tiny drift fixtures the
-        gain is modest (51 -> 30 GCROT iterations on ``magdrift_1species_tiny``,
+Measured through the production recycled Krylov path.  On the tiny drift
+        fixtures the gain is modest (51 -> 30 GCROT iterations on ``magdrift_1species_tiny``,
         0-1 elsewhere), but it grows with resolution: on a reduced-resolution
         W7-X deck carrying the production physics --- Fokker-Planck collisions,
         magnetic drifts, ``geometryScheme`` 5, 194,404 unknowns --- it is
@@ -1023,8 +1023,8 @@ Measured through the production tier-2 path.  On the tiny drift fixtures the
         couples L to L and L±2 (the ``(L+1)L/…`` diagonal and
         ``(L+3)(L+2)(L+1)/…`` / ``-L(L-1)(L-2)/…`` couplings).  Because of the
         L±2 coupling the operator is not block-tridiagonal in L, so
-        :meth:`to_block_tridiagonal` refuses it and tier-2 GCROT owns these
-        decks.
+        :meth:`to_block_tridiagonal` refuses it and recycled Krylov GCROT owns
+        these decks.
 
         Per-species ``THat``/``Z`` enter via ``factor = Delta THat DHat x^2 /
         (2 Z BHat^3)`` and the upwind selector ``sign(geometricFactor1 DHat(1,1)
@@ -1768,7 +1768,7 @@ Measured through the production tier-2 path.  On the tiny drift fixtures the
                 "couple L±2 and break the block-tridiagonal-in-L structure."
             )
         # NOTE: point_at_x0 grids are accepted here because the blocks also
-        # serve as the tier-2 coarse preconditioner, where approximating the
+        # serve as the Krylov coarse preconditioner, where approximating the
         # x=0 boundary rows (f=0 for L>0, the df/dx=0 regularity row for L=0)
         # by the plain DKE blocks is fine.  The exact structured direct routes
         # additionally refuse point_at_x0 in dkx.solve.
@@ -1776,22 +1776,22 @@ Measured through the production tier-2 path.  On the tiny drift fixtures the
             raise NotImplementedError(
                 "legendre_blocks does not support tangential magnetic drifts: the "
                 "magneticDriftScheme d/dtheta, d/dzeta, and d/dxi terms couple L±2 "
-                "and break the block-tridiagonal-in-L structure (tier-2 GCROT owns "
-                "these decks)."
+                "and break the block-tridiagonal-in-L structure (the recycled "
+                "Krylov route owns these decks)."
             )
         if self.fp is not None or self.fp_phi1 is not None or self.sugama is not None:
             raise NotImplementedError(
                 "legendre_blocks currently supports pitch-angle-scattering collisions only; "
                 "Fokker-Planck and the improved Sugama model operator couple (species, x) "
                 "densely within each L (their per-L blocks live in KineticOperator.fp.mat / "
-                "KineticOperator.sugama.mat). The tier-2 coarse preconditioner reduces them "
+                "KineticOperator.sugama.mat). The coarse preconditioner reduces them "
                 "to their PAS-like self-species x-diagonal in dkx.solve."
             )
         if self.external_phi1_hat is not None and self.include_phi1_in_kinetic:
             raise NotImplementedError(
                 "legendre_blocks does not support the readExternalPhi1 Phi1-in-kinetic "
                 "coupling: the fixed-external-Phi1 speed-derivative term couples x densely "
-                "(tier-2 GCROT owns these decks)."
+                "(the recycled Krylov route owns these decks)."
             )
 
     def legendre_blocks(self, ell: int) -> LegendreBlocks:
@@ -1800,7 +1800,7 @@ Measured through the production tier-2 path.  On the tiny drift fixtures the
         Built analytically from the term coefficients — no operator probing:
         streaming/mirror provide ``lower``/``upper`` (L±1 with the phase_space
         coupling factors), ExB and pitch-angle scattering provide ``diag``.
-        Supported for the DKES-trajectory PAS family (the tier-1 structured
+        Supported for the DKES-trajectory PAS family (the structured direct
         solver family of plan §2.3); raises otherwise.
 
         Returns blocks of shape ``(n_species, n_x, T*Z, T*Z)``; the truncated-L
@@ -1884,7 +1884,7 @@ Measured through the production tier-2 path.  On the tiny drift fixtures the
         """Stack :meth:`legendre_blocks` over all L.
 
         Returns arrays of shape ``(n_xi, n_species, n_x, T*Z, T*Z)`` ready for a
-        block-Thomas recursion over L (SOLVAX tier-1 kernel).
+        block-Thomas recursion over L (SOLVAX structured direct kernel).
         """
         self._check_block_extraction_supported()
         blocks = [self.legendre_blocks(ell) for ell in range(self.n_xi)]

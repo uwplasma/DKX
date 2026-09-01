@@ -4,7 +4,7 @@ Physics and consistency gates for :mod:`dkx.monoenergetic` (conventions
 of C.D. Beidler et al., Nucl. Fusion 51, 076001 (2011); monoenergetic
 formulation of S.P. Hirshman et al., Phys. Fluids 29, 2951 (1986)).
 
-Measured reference values (recorded 2026-07-12, float64, tier-1 direct
+Measured reference values (recorded 2026-07-12, float64, structured direct
 solves unless noted):
 
 ===========================================================  ===============

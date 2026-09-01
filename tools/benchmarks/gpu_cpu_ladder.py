@@ -23,11 +23,11 @@ Usage (from the repo root)::
     # phase profile, explicit deck (e.g. the production namelist)
     python tools/benchmarks/gpu_cpu_ladder.py --deck /path/to/input.namelist
 
-    # tier-1 crossover scan (warm auto-route solve per size, one backend)
-    python tools/benchmarks/gpu_cpu_ladder.py --scan tier1
+    # structured direct crossover scan (warm auto-route solve per size, one backend)
+    python tools/benchmarks/gpu_cpu_ladder.py --scan structured
 
-    # tier-2 GCROT crossover scan (FP deck family, method="gmres")
-    python tools/benchmarks/gpu_cpu_ladder.py --scan tier2
+    # recycled Krylov crossover scan (FP deck family, method="gmres")
+    python tools/benchmarks/gpu_cpu_ladder.py --scan krylov
 
 Each invocation prints one JSON object per case on stdout (last line(s)), so
 an orchestrator over ssh can collect results with ``tail``/``json.loads``.
@@ -138,7 +138,11 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--size", choices=sorted(SIZES), help="built-in HSX PAS/DKES ladder size")
     ap.add_argument("--deck", type=Path, help="explicit input.namelist (overrides --size)")
-    ap.add_argument("--scan", choices=["tier1", "tier2"], help="crossover scan instead of one profile")
+    ap.add_argument(
+        "--scan",
+        choices=["structured", "krylov"],
+        help="crossover scan instead of one profile",
+    )
     ap.add_argument(
         "--rungs",
         default="",
@@ -152,14 +156,14 @@ def main() -> int:
     import tempfile
 
     if args.scan:
-        base = REPO_ROOT / (_HSX if args.scan == "tier1" else _S4_2SP)
-        grid = TIER1_SCAN if args.scan == "tier1" else TIER2_SCAN
+        base = REPO_ROOT / (_HSX if args.scan == "structured" else _S4_2SP)
+        grid = TIER1_SCAN if args.scan == "structured" else TIER2_SCAN
         if args.rungs:
             lo, _, hi = args.rungs.partition("-")
             grid = grid[int(lo) : int(hi or lo) + 1]
-        method = "auto" if args.scan == "tier1" else "gmres"
+        method = "auto" if args.scan == "structured" else "gmres"
         text = base.read_text()
-        if args.scan == "tier2":
+        if args.scan == "krylov":
             text = patch_namelist(text, "physicsParameters", {"collisionOperator": "0"})
         for ntheta, nzeta, nxi, nx in grid:
             patches = [("resolutionParameters", {"Ntheta": ntheta, "Nzeta": nzeta, "Nxi": nxi, "Nx": nx})]

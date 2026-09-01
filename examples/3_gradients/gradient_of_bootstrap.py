@@ -49,9 +49,10 @@ print(f"operator: {operator.n_species} species, matrix size {operator.total_size
 def bootstrap_current(t_hat):
     """<j.B> as a function of the species temperature.  Differentiable."""
     perturbed = replace(operator, t_hat=jnp.reshape(t_hat, (1,)))
-    # method="auto" picks the tier the deck needs.  Naming a tier by hand is
-    # how you meet "tier-1 requires uniform Nxi_for_x": this deck ramps Nxi
-    # with speed, so it belongs on the truncated kernel, and "auto" knows that.
+    # method="auto" picks the route the deck needs.  Naming a route by hand is
+    # how you meet "the full-band structured direct factorization requires
+    # uniform Nxi_for_x": this deck ramps Nxi with speed, so it belongs on the
+    # truncated kernel, and "auto" knows that.
     solved = solve(perturbed, perturbed.rhs(), method="auto", differentiable=True)
     return profile_moments_from_operator(perturbed, solved.x)["FSABjHat"]
 

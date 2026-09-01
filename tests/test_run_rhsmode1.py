@@ -8,8 +8,8 @@
   the golden-pinned ``console.species_results_lines`` helpers
   (format byte-parity is pinned in ``tests/test_inputs_console.py``), with
   values matching the reference-data-v2 Fortran log;
-- the auto solver policy must pick tier 1 (``block_tridiagonal``) for the PAS
-  family and tier 2 (``gcrot``) for Fokker-Planck;
+- the auto solver policy must pick structured direct (``block_tridiagonal``) for the PAS
+  family and recycled Krylov (``gcrot``) for Fokker-Planck;
 - ``jax.grad`` of FSABjHat must flow through the pure moment/solve path.
 """
 
@@ -36,7 +36,7 @@ EXPECTED_SOLVE_METHOD = {
     WITH_ER_BASE: "block_tridiagonal",
 }
 
-# Tier 1 is a direct solve, but the frozen Fortran states carry the Fortran
+# Structured direct is a direct solve, but the frozen Fortran states carry the Fortran
 # Krylov tolerance: a tight deck keeps the state referee sharp.
 _WITH_ER_TOLERANCE_LINE = "  Nx = 3\n  solverTolerance = 1d-13\n"
 
@@ -227,12 +227,12 @@ def test_console_species_results_block_quick2species(
 
 
 # ---------------------------------------------------------------------------
-# Solver policy: tier 1 for PAS, tier 2 for Fokker-Planck
+# Solver policy: structured direct for PAS, recycled Krylov for Fokker-Planck
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("base", FIXTURES)
-def test_auto_policy_tier_selection(base: str, tmp_path_factory: pytest.TempPathFactory) -> None:
+def test_auto_policy_route_selection(base: str, tmp_path_factory: pytest.TempPathFactory) -> None:
     case = _case(base, tmp_path_factory)
     assert case["run"].solve_result.method == EXPECTED_SOLVE_METHOD[base]
 
@@ -256,8 +256,8 @@ def test_run_profile_magnetic_drifts_end_to_end(
 
     The ``magneticDriftScheme=1`` Boozer (geometryScheme 11) deck routes through
     the canonical stack.  Because the drift couples L±2 the operator is not
-    block-tridiagonal, so :func:`dkx.solve.solve` routes it to tier-2
-    GCROT (falling back to the exact tier-3 direct solve on this tiny
+    block-tridiagonal, so :func:`dkx.solve.solve` routes it to recycled Krylov
+    GCROT (falling back to the exact sparse direct solve on this tiny
     collisionless fixture).  The drift assembly is validated element-wise
     against Fortran v3 in ``tests/test_magnetic_drifts_parity.py`` and the
     scheme 2-9 output families against Fortran goldens in

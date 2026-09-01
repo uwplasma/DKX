@@ -266,7 +266,7 @@ def test_testing_docs_coverage_gate_matches_ci_workflow() -> None:
 
 
 def test_coarse_truncation_table_matches_its_named_generator() -> None:
-    """The tier-2 truncation table must be reproducible from the script it names.
+    """The coarse-chain truncation table must be reproducible from the script it names.
 
     The rows are GCROT iteration counts, which are deterministic and
     load-independent, so the claim is checkable rather than a wall time. What

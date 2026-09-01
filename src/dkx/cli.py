@@ -164,7 +164,7 @@ def _doctor_checks() -> list[tuple[str, str, str]]:
     except PackageNotFoundError:
         rows.append(("warn", "dkx", "not installed as a distribution (running from a checkout)"))
 
-    # solvax carries the solver tiers, and a version below the declared floor
+    # solvax carries the solver routes, and a version below the declared floor
     # fails deep inside a solve rather than at import, so it is checked here.
     floor = (0, 19, 0)
     try:
@@ -1938,7 +1938,7 @@ def main(argv: list[str] | None = None) -> int:
     p_tm.add_argument(
         "--solve-method",
         default="auto",
-        help="Advanced solver override (dkx.solve tiers). Default 'auto' is recommended; see docs/usage.rst.",
+        help="Advanced solver-route override (dkx.solve). Default 'auto' is recommended; see docs/usage.rst.",
     )
     _add_equilibrium_override_args(p_tm)
     p_tm.set_defaults(func=_cmd_transport_matrix_v3)
@@ -1960,7 +1960,7 @@ def main(argv: list[str] | None = None) -> int:
     p_mono.add_argument(
         "--solve-method",
         default="auto",
-        help="Advanced solver override (dkx.solve tiers). Default 'auto' is recommended.",
+        help="Advanced solver-route override (dkx.solve). Default 'auto' is recommended.",
     )
     p_mono.set_defaults(func=_cmd_monoenergetic_database)
 

@@ -56,7 +56,8 @@ CI = os.environ.get("DKX_CI") == "1"  # shrink resolution for CI
 ER_BRACKET = (-3.0, 1.0)          # Er search bracket (normalized deck units)
 ER_SCAN = np.linspace(*ER_BRACKET, 5 if CI else 7)  # coarse scan for the plot
 
-# Resolution (small non-axisymmetric case; PAS collisions keep tier 1 active).
+# Resolution (small non-axisymmetric case; PAS collisions keep the structured
+# direct route active).
 N_THETA = 7 if CI else 11
 N_ZETA = 7 if CI else 11
 N_XI = 8 if CI else 16

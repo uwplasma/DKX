@@ -82,10 +82,9 @@ acting as overrides for knobs left at ``None`` (``memory_budget_gb=None`` reads
 ``DKX_TIER1_MEMORY_BUDGET_GB``).
 
 Runtime messages name the route that ran: ``structured direct``,
-``memory-bounded structured direct``, ``recycled iterative``, or ``host
-sparse-direct fallback``.  :doc:`numerics` describes the three routes and maps
-them onto the ``tier1``/``tier2``/``tier3`` spellings that survive inside code
-identifiers.
+``memory-bounded structured direct``, ``recycled Krylov``, or ``sparse
+direct``.  :doc:`numerics` describes the three routes and maps them onto the
+``tier1``/``tier2``/``tier3`` spellings that survive inside code identifiers.
 
 The ``cores`` field is an exception: it is carried for provenance only.  XLA
 sizes its host threadpool once, before the first JAX device use, so thread

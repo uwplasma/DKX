@@ -46,7 +46,7 @@ CASES = {
     "getting_started/run_w7x.py": (
         (
             "Solver route used: gcrot",  # FP collisions must take the recycled Krylov route
-            "tier-1 structured direct applicable: False",
+            "structured direct applicable: False",
             "particleFlux_vm_psiHat[ions] =",
             "particleFlux_vm_psiHat[electrons] =",
             "read back from h5: NPeriods = 5",

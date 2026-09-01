@@ -40,8 +40,8 @@ theorem sensitivity) is identical; only the resonance *scale* is rescaled.
 What the script produces
 ------------------------
 1. ``J_r(E_r)`` S-curve at the transition ``T_e/T_i`` with all roots resolved
-   and classified ion / unstable / electron (moderate resolution; the tier-1
-   block solve, no autodiff).
+   and classified ion / unstable / electron (moderate resolution; the
+   structured direct block solve, no autodiff).
 2. A ``T_e/T_i`` scan bracketing the electron-root onset: the ambipolar-Er
    bifurcation diagram (ion-root branch, unstable branch, electron-root branch)
    and the near-degenerate saddle-node where the electron/unstable pair is born.
@@ -119,9 +119,10 @@ TE_RATIOS = (
 # The Te/Ti where the S-curve exhibits three well-separated roots.
 TE_TRANSITION = 0.72
 
-# Moderate resolution for the (autodiff-free) S-curve scan: tier-1 block solve.
-# The electron channel's superbanana resonance needs Nxi >~ 28 to converge
-# (below that the ion/electron trend is unresolved); the tier-1 block solve
+# Moderate resolution for the (autodiff-free) S-curve scan: the structured
+# direct block solve.  The electron channel's superbanana resonance needs
+# Nxi >~ 28 to converge (below that the ion/electron trend is unresolved);
+# that block solve
 # keeps each J_r(E_r) evaluation to a fraction of a second even at Nxi=32.
 RES_SCAN = dict(n_theta=9, n_zeta=9, n_xi=32, n_x=6) if not CI else dict(
     n_theta=7, n_zeta=7, n_xi=24, n_x=5
@@ -217,7 +218,7 @@ def _classify(er: float, slope: float) -> str:
 
 
 def scan_radial_current(deck_path: Path, er_values: np.ndarray) -> np.ndarray:
-    """J_r at each E_r via the canonical solve (warm-started, tier-1 block)."""
+    """J_r at each E_r via the canonical solve (warm-started, structured direct)."""
     prob = er_mod.prepare(deck_path, er_bracket=ER_BRACKET)
     jr = np.empty(er_values.shape, dtype=np.float64)
     state = None

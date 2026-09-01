@@ -85,7 +85,7 @@ RHSMODE2_TEXT = """
 """
 
 # PAS + DKES trajectories with Er != 0: streaming/mirror (L±1), ExB (diagonal
-# in L), and PAS collisions (diagonal in L) — the tier-1 block-tridiagonal
+# in L), and PAS collisions (diagonal in L) — the structured direct block-tridiagonal
 # family used to validate the analytic Legendre-block extraction.
 PAS_DKES_ER_TEXT = """
 &general
@@ -242,7 +242,7 @@ def test_matrix_free_apply_equals_materialized() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Analytic Legendre-block extraction (the probing-free tier-1 route)
+# Analytic Legendre-block extraction (the probing-free structured direct route)
 # ---------------------------------------------------------------------------
 
 
@@ -405,7 +405,7 @@ def test_magnetic_drifts_are_canonical_and_reject_block_extraction() -> None:
         np.testing.assert_allclose(y_new, y_ref, rtol=0.0, atol=1e-11)
 
     # The d/dtheta, d/dzeta, and d/dxi drift terms couple L±2, so the
-    # block-tridiagonal extraction must refuse (solve.py routes to tier-2 GCROT).
+    # block-tridiagonal extraction must refuse (solve.py routes to recycled Krylov).
     with pytest.raises(NotImplementedError, match="magnetic drift"):
         op_new.legendre_blocks(0)
     with pytest.raises(NotImplementedError, match="magnetic drift"):
@@ -542,7 +542,7 @@ def test_constraint_scheme_3_4_operator_differs_from_scheme1() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Fokker-Planck: the Kronecker structure a direct tier needs
+# Fokker-Planck: the Kronecker structure a direct route needs
 # ---------------------------------------------------------------------------
 
 
@@ -562,7 +562,7 @@ def _dense_f_block(op) -> np.ndarray:
 def test_fokker_planck_block_is_a_kronecker_sum_in_speed_and_angle(er: str) -> None:
     r"""``diag_L = C_{x,L} (x) I_TZ`` and ``offdiag_L = diag(x) (x) S_L``, exactly.
 
-    This is the structure that decides whether a *direct* tier is affordable
+    This is the structure that decides whether a *direct* route is affordable
     for Fokker-Planck decks.  ``legendre_blocks`` refuses them because the
     collision operator couples ``(species, x)`` densely inside each Legendre
     index, which would turn the block-Thomas block size from ``TZ`` into

@@ -183,7 +183,7 @@ def objective(dofs, warm=None):
 
 
 # ----------------------------------------------------------------------------
-# 2) Initial evaluation + warm-start savings (tier-2 FP GCROT recycling)
+# 2) Initial evaluation + warm-start savings (recycled Krylov FP GCROT)
 # ----------------------------------------------------------------------------
 print("Step 2: initial evaluation (cold kinetic solve)")
 value_and_grad = jax.value_and_grad(objective, has_aux=True)

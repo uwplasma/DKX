@@ -1,11 +1,11 @@
-"""The tier-2 coarse preconditioner, and the generated block rows it is built from.
+"""The coarse preconditioner, and the generated block rows it is built from.
 
 :func:`build_coarse_preconditioner` inverts the SFINCS-simplified coarse
-operator exactly and hands the result to :mod:`dkx.solve` as the tier-2
-right-preconditioner.  It lives here rather than in ``dkx/solve.py`` because it
-is a self-contained owner with two drop-in siblings --- :mod:`dkx.sparse_precond`
-and :mod:`dkx.multigrid` --- that both reproduce its pins and both import the
-pieces from this module.
+operator exactly and hands the result to :mod:`dkx.solve` as the recycled
+Krylov right-preconditioner.  It lives here rather than in ``dkx/solve.py``
+because it is a self-contained owner with two drop-in siblings ---
+:mod:`dkx.sparse_precond` and :mod:`dkx.multigrid` --- that both reproduce its
+pins and both import the pieces from this module.
 
 The simplified operator is block-tridiagonal over Legendre modes and uncoupled
 over ``(species, x)``, so one block-Thomas factorization per subsystem inverts
@@ -99,7 +99,7 @@ def _require_solvax() -> None:
     if _SOLVAX_IMPORT_ERROR is not None:
         raise ImportError(
             "dkx requires the 'solvax' package for its solver "
-            "tiers. solvax is a core dependency: `pip install dkx` "
+            "routes. solvax is a core dependency: `pip install dkx` "
             "pulls it in automatically (the `dkx[structured]` extra is "
             "a no-op alias). To install it directly: `pip install solvax` or "
             "`pip install git+https://github.com/uwplasma/SOLVAX`."
@@ -116,14 +116,15 @@ def _transposed_apply(op: KineticOperator) -> Callable[[jnp.ndarray], jnp.ndarra
 
     return apply_t
 
-# Multiple of physical RAM the ``"coarse"`` tier-2 preconditioner's dense bands may
-# claim before :func:`_coarse_bands_fit` sends the solve down the generated route.
-# Set at 1.0 -- "the arrays alone do not fit in RAM" -- because that needs no tuning
-# and the measured outcomes separate cleanly on either side: on the 2026-08-01
-# upstream campaign (24 GB machine) every deck up to 16.9 GB of bands completed and
-# every deck from 42.9 GB was killed.  The transient is charged separately, by
-# _COARSE_BAND_RESIDENT_OVERHEAD, rather than by shrinking this fraction, so that
-# the fraction stays a policy and the overhead stays a measurement.
+# Multiple of physical RAM the ``"coarse"`` Krylov preconditioner's dense bands
+# may claim before :func:`_coarse_bands_fit` sends the solve down the generated
+# route.  Set at 1.0 -- "the arrays alone do not fit in RAM" -- because that
+# needs no tuning and the measured outcomes separate cleanly on either side: on
+# the 2026-08-01 upstream campaign (24 GB machine) every deck up to 16.9 GB of
+# bands completed and every deck from 42.9 GB was killed.  The transient is
+# charged separately, by _COARSE_BAND_RESIDENT_OVERHEAD, rather than by shrinking
+# this fraction, so that the fraction stays a policy and the overhead stays a
+# measurement.
 _TIER2_GUARD_FRACTION = 1.0
 _TIER2_GUARD_ENV = "DKX_TIER2_MEMORY_GUARD"
 # Precision of the reusable Schur LU factors: "float64" (default) or "float32".
@@ -131,7 +132,7 @@ _TIER2_GUARD_ENV = "DKX_TIER2_MEMORY_GUARD"
 _COARSE_FACTOR_DTYPE_ENV = "DKX_COARSE_FACTOR_DTYPE"
 
 def coarse_preconditioner_band_bytes(op: KineticOperator) -> float:
-    """Bytes the ``"coarse"`` tier-2 preconditioner allocates for its bands.
+    """Bytes the ``"coarse"`` Krylov preconditioner allocates for its bands.
 
     Three dense ``(Ntheta*Nzeta)`` blocks per ``(species, x, L)``.  This is an
     exact allocation size, not an estimate: the arrays are materialized before
@@ -299,16 +300,16 @@ def _coarse_route_preamble(op: KineticOperator) -> str:
     """What did not fit, and on what machine -- shared by both fallback messages."""
     total = _host_memory_bytes()
     return (
-        f"the coarse tier-2 preconditioner's dense (Ntheta*Nzeta) bands would take "
+        f"the coarse preconditioner's dense (Ntheta*Nzeta) bands would take "
         f"{coarse_preconditioner_band_bytes(op) / 2**30:.1f} GB ({op.n_theta}x{op.n_zeta} "
         f"angular grid, Nxi={op.n_xi}, {op.n_species} species, Nx={op.n_x}) on a machine "
         f"with {'unknown' if total is None else format(total / 2**30, '.1f')} GB of RAM, "
     )
 
 def _coarse_other_routes_note() -> str:
-    """The two tier-2 preconditioners that are still not a way out at this size."""
+    """The two other preconditioners that are still not a way out at this size."""
     return (
-        "\nThe other tier-2 preconditioners are still not a way out at this size: "
+        "\nThe other preconditioners are still not a way out at this size: "
         "'sparse' stores far less but was measured killed or timed out on all five "
         "decks this size (tools/benchmarks/tier2_sparse_vs_coarse.py), and 'multigrid' "
         "fits but does not reach tolerance on this physics (docs/performance.rst)."
@@ -839,7 +840,9 @@ def _coarse_generated_block_data(
 def build_coarse_preconditioner(
     op: KineticOperator, *, drop_l_coupling: bool = False
 ) -> tuple[Callable[[jnp.ndarray], jnp.ndarray], Callable[[jnp.ndarray], jnp.ndarray]]:
-    """Tier-1 exact solve of the SFINCS-simplified coarse operator, as a preconditioner.
+    """Structured direct solve of the SFINCS-simplified coarse operator.
+
+    The result is exact, and is used as the Krylov right-preconditioner.
 
     Mirrors the Fortran ``preconditionerOptions`` defaults: collisions become
     self-species and x-diagonal (the dense (species, x)-coupled Fokker-Planck
@@ -1080,7 +1083,7 @@ def build_coarse_preconditioner(
         # ``+lambda`` coupling and the ``<Phi1>=0`` row couples Phi1), so the
         # constraint-only ``schur_projected_precond`` (which assumes ``D=0``)
         # does not apply.  Eliminate the full border exactly with the generalized
-        # bordered Schur complement -- the coarse tier-1 f-block solve plus a
+        # bordered Schur complement -- the coarse structured f-block solve plus a
         # dense ``p x p`` (``p ~ Ntheta*Nzeta``) Schur solve over the Phi1/border
         # block.  The Phi1->f coupling (``B``), the QN-from-f rows (``C``) and the
         # Phi1/lambda border block (``D``) are all probed exactly from the

@@ -7,7 +7,7 @@ deck has a Fortran SFINCS v3 golden ``sfincsOutput.h5`` (single rank, MUMPS) and
 a ``whichMatrix_1`` PETSc matrix; the matrix parity lives in
 ``tests/test_magnetic_drifts_parity.py`` and this module pins the canonical
 :func:`dkx.run.run_profile` route end to end — the drift decks couple L±2
-so they are not block-tridiagonal and tier-2 GCROT owns them (solverTolerance
+so they are not block-tridiagonal and recycled Krylov owns them (solverTolerance
 1e-10 in the decks).
 
 Mirrors the sibling ``test_output_h5_constraintscheme34_parity`` structure:
@@ -93,7 +93,7 @@ def test_magdrift_scheme_matches_fortran_fixture(
     assert not bad_g, f"Mismatched gpsiHatpsiHat: {bad_g}"
 
     # Kinetic transport / moments from the solved state.  Fortran direct-solves
-    # (MUMPS) while the canonical route is tier-2 GCROT at solverTolerance
+    # (MUMPS) while the canonical route is recycled Krylov at solverTolerance
     # 1e-10; the measured absolute differences are <~2e-11 on these fixtures.
     transport = compare_sfincs_outputs(a_path=out, b_path=golden, keys=_TRANSPORT_KEYS, rtol=0, atol=1e-8)
     bad_t = [(r.key, r.max_abs) for r in transport if not r.ok]

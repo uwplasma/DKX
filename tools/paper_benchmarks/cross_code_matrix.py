@@ -7,8 +7,8 @@ preconditioned Krylov:
 ===============================  ==================
 route                            faster than SFINCS
 ===============================  ==================
-block elimination (tier 1)       9 of 9
-preconditioned Krylov (tier 2)   7 of 23
+structured direct                9 of 9
+recycled Krylov                  7 of 23
 ===============================  ==================
 
 That is the finding worth plotting.  A win/lose colouring would show 16 of 32
@@ -20,12 +20,12 @@ tangential magnetic drifts, by the ``E_r`` ``xDot``/``xiDot`` terms, and by the
 
 Memory is the weaker axis and is shown as measured: ``dkx`` is lighter on 3 of
 the 32 decks it completed.  Below ~10k unknowns the JAX runtime floor dominates
-a Fortran process that runs in 0.1 GB; above ~1M the tier-2 preconditioner's
+a Fortran process that runs in 0.1 GB; above ~1M the Krylov preconditioner's
 dense ``(Ntheta*Nzeta)`` bands do.  The memory panel shows only completed runs:
 a killed process's peak RSS records where it died, not what the solve costs.
 
 Six decks did not complete.  Five were killed by the operating system while the
-tier-2 preconditioner allocated its bands -- ``dkx.solve`` now refuses those up
+Krylov preconditioner allocated its bands -- ``dkx.solve`` refuses those up
 front instead, naming the fill-reducing route that does fit.  The sixth wanted
 the LIBSTELL text form of a VMEC ``wout``, which ``dkx`` could not read at the
 time of this sweep and now can.
@@ -124,9 +124,9 @@ def plot(rows: list[dict], path: Path) -> None:
     speed.axhline(1.0, color="0.5", lw=1.0, ls=(0, (5, 4)), zorder=1)
     for group, color, marker, label in (
         (direct, DKX_COLOR, "o",
-         f"block elimination — faster on {d_win} of {len(direct)}"),
+         f"structured direct — faster on {d_win} of {len(direct)}"),
         (krylov, REF_COLOR, "s",
-         f"preconditioned Krylov — faster on {k_win} of {len(krylov)}"),
+         f"recycled Krylov — faster on {k_win} of {len(krylov)}"),
     ):
         speed.scatter([r["dof"] for r in group],
                       [r["ref_s"] / r["dkx_s"] for r in group],
