@@ -34,8 +34,10 @@ DOMAIN_PACKAGES = (
 
 ACTIVE_PACKAGE_EXPORTS = {
     "dkx.workflows": (
+        "converge",
         "geometry_adapters",
         "optimization",
+        "scan",
     ),
 }
 

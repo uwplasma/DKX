@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import sys as _sys
 
+from . import converge as converge
 from . import geometry_adapters as geometry_adapters
 from . import optimization as optimization
+from . import scan as scan
 
 # Historical optimization_* modules are compatibility aliases to the durable
 # optimization owner. This keeps existing user imports working without retaining
@@ -20,4 +22,4 @@ for _name in (
 ):
     _sys.modules[f"{__name__}.{_name}"] = optimization
 
-__all__ = ("geometry_adapters", "optimization")
+__all__ = ("converge", "geometry_adapters", "optimization", "scan")
