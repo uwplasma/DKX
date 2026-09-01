@@ -391,3 +391,93 @@ def plot(source, out="dkx_panels.png", *, style="panels", show=False):
         "plot() takes the object dkx.run() returned, a path to an sfincsOutput "
         f"file, or a directory holding one; got {type(source).__name__}"
     )
+
+
+def plot_result_summary(*, result, output_path: Path) -> Path:
+    """Write a radial-profile panel for a dkx Result.
+
+    One row per admitted observable against ``r_N``, with one line per species
+    where the array carries a species axis. The panel is deliberately plain:
+    it exists so ``dkx run`` output can be looked at without writing a script,
+    not to be a publication figure.
+
+    A Result from the ambipolar workflow also gets its admitted roots drawn
+    against ``r_N``, marked by branch. Unstable roots are drawn hollow --
+    they solve ``J_r = 0`` but a plasma does not sit on them, and a filled
+    marker would imply otherwise.
+    """
+    arrays = result.arrays
+    radius = np.asarray(arrays.get("r_N", []), dtype=float).ravel()
+    if radius.size == 0:
+        raise ValueError(
+            f"{getattr(result, 'case_name', 'result')} carries no r_N axis, so there "
+            "is no radial coordinate to plot against"
+        )
+
+    panels = [
+        ("particle_flux_m2_s", r"particle flux  [m$^{-2}$s$^{-1}$]"),
+        ("heat_flux_W_m2", r"heat flux  [W m$^{-2}$]"),
+        ("parallel_current_A_T_m2", r"$\langle j_\parallel B\rangle$  [A T m$^{-2}$]"),
+    ]
+    present = [(key, label) for key, label in panels if key in arrays]
+    has_roots = "ambipolar_root_kV_m" in arrays
+    rows = len(present) + (1 if has_roots else 0)
+    if rows == 0:
+        raise ValueError(
+            f"{getattr(result, 'case_name', 'result')} carries none of "
+            f"{[k for k, _ in panels]}, so there is nothing to plot"
+        )
+
+    species = [str(s) for s in np.asarray(arrays.get("species", [])).ravel()]
+    fig, axes = plt.subplots(rows, 1, figsize=(7.0, 2.4 * rows), sharex=True)
+    axes = np.atleast_1d(axes)
+
+    for ax, (key, label) in zip(axes, present):
+        values = np.asarray(arrays[key], dtype=float)
+        if values.ndim == 2 and values.shape[0] == radius.size:
+            for index in range(values.shape[1]):
+                name = species[index] if index < len(species) else f"species {index}"
+                ax.plot(radius, values[:, index], marker="o", ms=3, label=name)
+            ax.legend(fontsize="small", frameon=False)
+        else:
+            ax.plot(radius, values.ravel()[: radius.size], marker="o", ms=3)
+        ax.set_ylabel(label, fontsize="small")
+        ax.grid(alpha=0.3)
+
+    if has_roots:
+        ax = axes[len(present)]
+        fields = np.asarray(arrays["ambipolar_root_kV_m"], dtype=float)
+        counts = np.asarray(arrays["ambipolar_root_count"]).astype(int).ravel()
+        kinds = np.asarray(arrays["ambipolar_root_type"])
+        any_unstable = False
+        for surface in range(min(fields.shape[0], radius.size)):
+            for index in range(int(counts[surface])):
+                kind = kinds[surface, index]
+                kind = kind.decode() if isinstance(kind, bytes) else str(kind)
+                unstable = kind == "unstable"
+                any_unstable = any_unstable or unstable
+                ax.plot(
+                    radius[surface], fields[surface, index],
+                    marker="o", ms=6,
+                    markerfacecolor="none" if unstable else None,
+                    color={"ion": "tab:blue", "electron": "tab:red"}.get(kind, "tab:grey"),
+                )
+        ax.axhline(0.0, color="k", lw=0.6, alpha=0.5)
+        ax.set_ylabel(r"$E_r$ roots  [kV m$^{-1}$]", fontsize="small")
+        ax.grid(alpha=0.3)
+        if any_unstable:
+            # Only when one is drawn: a legend for a marker style that does not
+            # appear reads as a missing feature rather than an absent branch.
+            ax.text(
+                0.99, 0.97, "hollow = unstable branch", transform=ax.transAxes,
+                ha="right", va="top", fontsize="x-small", alpha=0.7,
+            )
+
+    axes[-1].set_xlabel(r"$r_N$")
+    fig.suptitle(getattr(result, "case_name", "dkx result"), fontsize="medium")
+    fig.tight_layout()
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    return output_path
