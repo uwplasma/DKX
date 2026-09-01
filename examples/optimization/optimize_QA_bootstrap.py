@@ -37,7 +37,7 @@ What this example teaches:
            against the host wout tables in tests/test_example_qa_bootstrap.py)
         -> booz_xform_jax (differentiable Boozer transform, |B| spectrum)
         -> FluxSurfaceGeometry.from_fourier (geometryScheme-13 pure-JAX path)
-        -> KineticOperator -> tier-2 GCROT solve with implicit differentiation
+        -> KineticOperator -> recycled Krylov solve with implicit differentiation
         -> FSABjHat;
 
   - a constrained physics target expressed as penalty terms: hold the field
@@ -65,7 +65,7 @@ smaller than a search that is free to spend quasisymmetry).  The kinetic
 configuration is the classic "full trajectories" setup -- two species (ions and
 electrons) with a finite radial electric field carried by the full-trajectory
 terms (includeXDotTerm and includeElectricFieldTermInXiDot on), which routes to
-the tier-2 GCROT solver where warm starts and recycling matter -- at
+the recycled Krylov solver where warm starts and recycling matter -- at
 reactor-core conditions, and with the *momentum-conserving* full linearized
 Fokker-Planck collision operator, which the bootstrap current requires because
 <j.B> is itself a parallel-momentum moment [Landreman, Smith, Mollen &
@@ -225,7 +225,7 @@ QS_HELD_TARGET = float("inf")  # set after the first (Stage-A) evaluation below
 # ----------------------------------------------------------------------------
 # Two species (ions + electrons) with a finite radial electric field carried by
 # the full-trajectory terms (includeXDotTerm / includeElectricFieldTermInXiDot),
-# which routes the system to the tier-2 GCROT solver where warm starts and
+# which routes the system to the recycled Krylov solver where warm starts and
 # recycling matter; it is also nonsingular and exactly implicit-differentiable.
 KIN_NTHETA, KIN_NZETA, KIN_NXI, KIN_NL, KIN_NX = (9, 7, 8, 4, 4) if CI else (13, 11, 24, 4, 6)
 KINETIC_SOLVER_TOL = 1e-9

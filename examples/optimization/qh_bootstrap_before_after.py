@@ -17,7 +17,7 @@ low-bootstrap QH configuration is still a QH configuration:
   surface with the momentum-conserving Fokker-Planck operator, because a single
   mid-radius number hides whether a reduction is local or global.
 
-The bootstrap profile is the expensive part: one tier-2 GCROT solve per surface
+The bootstrap profile is the expensive part: one recycled Krylov solve per surface
 per configuration.  ``DKX_QH_PROFILE_SURFACES`` sets how many (default 5), and
 ``DKX_CI=1`` shrinks the resolution.
 
@@ -203,7 +203,7 @@ def boozer_at(state, rt, row: int):
 
 
 def bootstrap_at(state, rt, row: int, s: float, psi_a: float) -> float:
-    """``<j.B>/sqrt(<B^2>)`` on one surface: a full tier-2 kinetic solve."""
+    """``<j.B>/sqrt(<B^2>)`` on one surface: a full recycled Krylov solve."""
     _tabs, booz = boozer_at(state, rt, row)
     template = _operator_template(s, psi_a)
     grids = make_grids(

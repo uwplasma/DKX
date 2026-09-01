@@ -71,8 +71,8 @@ Expected runtime: ~20 min total on a 10-core laptop CPU (16 scan points:
 convergence checks; the Fortran cross-check adds a few minutes when
 enabled).  Finished rows are cached in ``output/`` and skipped on re-runs;
 set ``SHAING_CALLEN_MAX_NEW_POINTS=N`` to stop after ``N`` newly computed
-solve stages (chunked/resumable runs).  The scan sets a 16 GB tier-1
-direct-factorization budget (``DKX_TIER1_MEMORY_BUDGET_GB``, preset
+solve stages (chunked/resumable runs).  The scan sets a 16 GB structured
+direct factorization budget (``DKX_TIER1_MEMORY_BUDGET_GB``, preset
 wins) so every scan point uses the full banded factorization on a 24 GB
 machine; the larger convergence-check points route through the truncated
 kernel + Krylov fallback automatically.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Why the tier-2 multigrid route stalls: a pitch-basis study.
+"""Why the multigrid preconditioner route stalls: a pitch-basis study.
 
 Reproduces the measurements the negative result in :mod:`dkx.multigrid` rests
 on.  Everything here works on **one ``(species, speed)`` block** of the
@@ -149,7 +149,7 @@ def clamped_linear_interp(fine: np.ndarray, coarse: np.ndarray) -> np.ndarray:
 
 
 def pin(matrix: np.ndarray) -> np.ndarray:
-    """Regularize the surface-constant null direction, as the tier-1 solve does."""
+    """Regularize the surface-constant null direction, as the structured direct solve does."""
     out = matrix.copy()
     out[0, 0] += np.abs(np.diag(matrix)).mean()
     return out

@@ -19,7 +19,7 @@ The TJ-II deck is built from the Boozer ``|B|`` spectrum embedded in the
 example script (parsed from its source; geometryScheme=13), so the tiny
 gate also covers the namelist-spectrum path end to end.
 
-Measured on 2026-07-16/17 (float64, tier-1 direct solves):
+Measured on 2026-07-16/17 (float64, structured direct solves):
 - W7-X (17x31x24): ``D11*(nuPrime=3e-3) = 0.20596213``, Onsager <= 2.7e-3,
   ~15 s including the cached-equilibrium geometry load.
 - TJ-II (17x49x32): ``D11*(nuPrime=3e-2) = 13.74769803``, Onsager <= 0.085

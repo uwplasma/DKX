@@ -8,7 +8,7 @@ refinement, and the bounds must be tight at high collisionality where the
 solution is collision dominated.
 
 Measured reference values on the tiny scheme-1 monoenergetic deck (recorded
-2026-07-12, float64, direct tier-1 solves):
+2026-07-12, float64, structured direct solves):
 
 ======================  =========  ==========================================
 configuration           gap        notes

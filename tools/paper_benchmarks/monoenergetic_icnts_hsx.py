@@ -33,7 +33,7 @@ Expected runtime: ~10 min total on a 10-core laptop CPU (27 scan points at
 Ntheta=15, Nzeta=91, Nxi=96, ~15 s/point; ~1 min for the 1.27x-resolution
 convergence point; the Fortran cross-check adds a few minutes when
 enabled).  Finished rows are cached in ``output/`` and skipped on re-runs.
-The scan sets a 14 GB tier-1 direct-factorization budget
+The scan sets a 14 GB structured direct factorization budget
 (``DKX_TIER1_MEMORY_BUDGET_GB``, preset wins) so every point uses the
 full banded factorization on a 24 GB machine; the Fortran cross-check runs
 pass the same MUMPS pivot/refinement options as the TJ-II case (see that

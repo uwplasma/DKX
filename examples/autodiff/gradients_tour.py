@@ -56,8 +56,8 @@ CI = os.environ.get("DKX_CI") == "1"  # shrink resolution for CI
 FD_EPS_REL = 1e-6  # central finite-difference relative step
 
 # A tiny single-species PAS case with a helical ripple and a nonzero Er so
-# both parameters below have a real effect.  PAS + DKES ExB keeps the tier-1
-# structured direct solver (and its exact implicit differentiation) active.
+# both parameters below have a real effect.  PAS + DKES ExB keeps the
+# structured direct route (and its exact implicit differentiation) active.
 N_THETA = 7 if CI else 9
 N_ZETA = 5 if CI else 7
 N_XI = 5 if CI else 8

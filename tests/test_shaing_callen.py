@@ -6,7 +6,7 @@ collisionless Shaing-Callen value (Shaing and Callen, Phys. Fluids 26, 3315
 ``nuPrime -> 0``.  Convergence is slow (a ~sqrt(nu) collisional boundary
 layer in the axisymmetric case) and non-monotonic in general geometry, so
 the tests assert a monotone *approach* within envelopes chosen from the
-measured tables below (recorded 2026-07-12, float64, tier-1 direct solves).
+measured tables below (recorded 2026-07-12, float64, structured direct solves).
 
 Axisymmetric scheme-1 deck (epsilon_t=0.15, iota=0.4542, GHat=3.7481,
 IHat=0): the limit reduces to the Boozer-Gardner tokamak value

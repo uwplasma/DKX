@@ -1776,22 +1776,22 @@ Measured through the production recycled Krylov path.  On the tiny drift
             raise NotImplementedError(
                 "legendre_blocks does not support tangential magnetic drifts: the "
                 "magneticDriftScheme d/dtheta, d/dzeta, and d/dxi terms couple L±2 "
-                "and break the block-tridiagonal-in-L structure (tier-2 GCROT owns "
-                "these decks)."
+                "and break the block-tridiagonal-in-L structure (the recycled "
+                "Krylov route owns these decks)."
             )
         if self.fp is not None or self.fp_phi1 is not None or self.sugama is not None:
             raise NotImplementedError(
                 "legendre_blocks currently supports pitch-angle-scattering collisions only; "
                 "Fokker-Planck and the improved Sugama model operator couple (species, x) "
                 "densely within each L (their per-L blocks live in KineticOperator.fp.mat / "
-                "KineticOperator.sugama.mat). The tier-2 coarse preconditioner reduces them "
+                "KineticOperator.sugama.mat). The coarse preconditioner reduces them "
                 "to their PAS-like self-species x-diagonal in dkx.solve."
             )
         if self.external_phi1_hat is not None and self.include_phi1_in_kinetic:
             raise NotImplementedError(
                 "legendre_blocks does not support the readExternalPhi1 Phi1-in-kinetic "
                 "coupling: the fixed-external-Phi1 speed-derivative term couples x densely "
-                "(tier-2 GCROT owns these decks)."
+                "(the recycled Krylov route owns these decks)."
             )
 
     def legendre_blocks(self, ell: int) -> LegendreBlocks:

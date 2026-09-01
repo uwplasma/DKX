@@ -395,7 +395,7 @@ def test_solve_footprint_models_the_truncated_route(tmp_path: Path) -> None:
     """A production-shaped op is charged the truncated working set, not the bands.
 
     At (S=2, X=5, L=100, T=25, Z=51) — the 1.27M-DOF production shape — the
-    full-band factorization peak is ~53 GB, far above the tier-1 budget, so
+    full-band factorization peak is ~53 GB, far above the structured direct budget, so
     ``method="auto"`` routes to the truncated block-Thomas kernel whose
     measured working set is ~1.2 GB.  The footprint model must follow that
     route: charging the full-band peak caps batched scans at ``chunk=1`` and

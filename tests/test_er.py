@@ -8,7 +8,7 @@ Pins the ``er.py`` slice against the legacy path it replaces:
   Fortran-parity Brent solver (``problems/ambipolar.py``, captured before its
   deletion and hard-coded here);
 - warm starts / GCROT recycling reduce the total Krylov iteration count on a
-  Fokker-Planck (tier-2) Er scan;
+  Fokker-Planck (recycled Krylov) Er scan;
 - ion / electron / unstable classification from the sign of ``dJr/dEr``;
 - the differentiable :func:`dkx.er.ambipolar_er` gradient matches a
   central finite difference (implicit function theorem, not FD roots).
@@ -163,14 +163,14 @@ def test_brent_expands_bracket_and_finds_analytic_root() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 3. warm starts / recycling reduce total Krylov iterations (tier-2 FP)
+# 3. warm starts / recycling reduce total Krylov iterations (recycled Krylov FP)
 # ---------------------------------------------------------------------------
 
 
 def test_warm_start_reduces_solver_iterations(tmp_path: Path) -> None:
     from dkx import er as er_mod
 
-    # Fokker-Planck collisions route the auto policy to the tier-2 recycled
+    # Fokker-Planck collisions route the auto policy to the recycled
     # GCROT solver, where warm starts and recycling pay off.
     deck = _pas_deck(collision_operator=0, n_theta=5, n_zeta=5, n_xi=16, n_x=4)
     prob = er_mod.prepare(_write(tmp_path, deck), er_bracket=(-3.0, 1.0))

@@ -76,7 +76,7 @@ QUANTIZE_COLORS = 64
 
 # --- Case (matches the committed w7x_ambipolar_er benchmark record) ---------
 EQUILIBRIUM = "w7x_standardConfig.bc"  # geometryScheme = 11 Boozer spectrum
-SOLVER = "block_tridiagonal"  # tier-1 direct block-Thomas solve
+SOLVER = "block_tridiagonal"  # structured direct block-Thomas solve
 N_PERIODS = 5  # W7-X field periods
 # SI conversion, documented in docs/examples.rst: <j.B> = FSABjHat * vBar *
 # nBar * e with vBar = 437695 m/s (TBar = 1 keV, proton mBar), nBar = 1e20

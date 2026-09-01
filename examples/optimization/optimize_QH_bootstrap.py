@@ -5,7 +5,7 @@ kinetic sibling of ``vmex/examples/optimization/QH_optimization.py``.  Same
 differentiable chain -- boundary Fourier coefficients -> vmex implicit
 fixed-boundary equilibrium (custom-VJP adjoint) -> traceable VMEC spectral
 tables -> booz_xform_jax |B| spectrum -> FluxSurfaceGeometry.from_fourier
-(geometryScheme 13) -> KineticOperator -> tier-2 GCROT solve with implicit
+(geometryScheme 13) -> KineticOperator -> recycled Krylov solve with implicit
 differentiation -> <j.B> -- but the quasisymmetry residual now targets the
 helical family ``|B| = |B|(s, theta - nfp*zeta)`` (helicity (m, n) = (1, -1))
 and the seed is a precise-QH configuration.
@@ -46,7 +46,7 @@ The kinetic setup is the classic full-trajectory two-species run at
 reactor-core density and temperature with the momentum-conserving full
 linearized Fokker-Planck collision operator (the bootstrap current is a
 parallel-momentum moment, so a momentum-conserving operator is not optional)
-and a finite Er, routed to the tier-2 GCROT solver where warm starts and
+and a finite Er, routed to the recycled Krylov solver where warm starts and
 recycling matter.  The seed is reactor scale, so its |B| spectrum feeds the
 BBar = 1 T, RBar = 1 m kinetic template unnormalized.
 

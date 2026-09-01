@@ -118,7 +118,7 @@ CASES: dict[str, dict] = {
         "runner": "transport",
     },
     # solve_phi1's inner Krylov is unpreconditioned and refuses total_size > 6000
-    # (the documented Phi1-aware tier-2 preconditioner follow-up), so this case
+    # (the documented Phi1-aware coarse preconditioner follow-up), so this case
     # is sized just under that cap — the largest canonical Phi1 solve possible.
     "phi1_newton_mid": {
         "base": _PHI1,

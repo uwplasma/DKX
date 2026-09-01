@@ -5,8 +5,8 @@ What this example teaches:
     (geometryScheme=11, the ``w7x_standardConfig.bc`` file that ships with the
     SFINCS repository; dkx fetches and caches it automatically),
   - how full Fokker-Planck (collisionOperator=0) multi-species runs work,
-  - how the ``solve_method="auto"`` three-tier solver policy picks its tier,
-    and how to ask *why* (``dkx.solve.tier1_available``),
+  - how the ``solve_method="auto"`` policy picks one of the three solver
+    routes, and how to ask *why* (``dkx.solve.tier1_available``),
   - how to plot the density/pressure perturbations of f1 on the flux surface.
 
 Physics context: Wendelstein 7-X is a stellarator, so its magnetic-field
@@ -129,14 +129,18 @@ print(f"  wrote namelist: {DECK_PATH}")
 print("Step 2: solving with run_profile(solve_method='auto')")
 run = run_profile(DECK_PATH, solve_method="auto", out_path=H5_PATH)
 
-# The auto policy has three tiers: tier 1 (structured direct block-Thomas,
-# "block_tridiagonal") for the PAS/DKES family, tier 2 (recycled GCROT/FGMRES
-# Krylov, "gcrot") when the operator couples (species, x) densely, tier 3
-# (host direct, "direct") as a loud fallback.  Ask why tier 1 was rejected:
+# The auto policy has three routes: structured direct (block-Thomas,
+# "block_tridiagonal") for the PAS/DKES family, recycled Krylov (GCROT/FGMRES,
+# "gcrot") when the operator couples (species, x) densely, and sparse direct
+# (host SuperLU, "direct") as a loud fallback.  Ask why the structured direct
+# route was rejected:
 tier1_ok, tier1_reason = tier1_available(run.operator)
 print(f"  Solver route used: {run.solve_result.method}")
-print(f"  tier-1 structured direct applicable: {tier1_ok}")
-print(f"  policy reason: {tier1_reason if not tier1_ok else 'tier 1 supported'}")
+print(f"  structured direct applicable: {tier1_ok}")
+print(
+    "  policy reason: "
+    f"{tier1_reason if not tier1_ok else 'structured direct supported'}"
+)
 if run.solve_result.iterations is not None:
     print(f"  Krylov iterations: {run.solve_result.iterations}")
 print(f"  residual norm: {float(np.max(np.asarray(run.solve_result.residual_norms))):.3e}")

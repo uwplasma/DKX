@@ -1,4 +1,4 @@
-"""The reusable-factor tier-2 route must capture no arrays as XLA constants.
+"""The reusable-factor coarse route must capture no arrays as XLA constants.
 
 The route's whole claim is storage: it keeps one ``(Nxi, TZ, TZ)`` array per
 subsystem instead of three, regenerating the two off-diagonal bands inside each

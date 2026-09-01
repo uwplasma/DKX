@@ -78,7 +78,7 @@ fluxes, and the resolution-convergence note.
 
 Expected runtime: ~25-35 min on a laptop CPU (float64); six surfaces x a
 warm-started ``E_r`` scan at Ntheta=15, Nzeta=37, Nxi=36, Nx=6 (~16 s / solve,
-tier-1 block solve) plus one convergence surface.  Every surface is checkpointed
+structured direct block solve) plus one convergence surface.  Every surface is checkpointed
 under ``output/w7x_ambipolar_er/`` and skipped on re-runs
 (``DKX_W7XAMB_FORCE=1`` to recompute).  The CI-sized regression version lives in
 ``tests/test_paper_benchmark_w7x_ambipolar.py``.
@@ -175,7 +175,7 @@ ER_SCAN = (
     else np.array([-15.0, -8.0, -4.0, -1.0, 2.0, 5.0, 8.0, 11.0, 15.0])
 )
 ER_BRACKET = (-25.0, 25.0)
-SOLVER = "block_tridiagonal"  # tier-1 direct block-Thomas (exact for PAS)
+SOLVER = "block_tridiagonal"  # structured direct block-Thomas (exact for PAS)
 CONV_SURFACE = 0.30  # surface for the resolution-convergence check
 
 # ---------------------------------------------------------------------------

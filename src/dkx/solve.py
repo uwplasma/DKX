@@ -580,7 +580,7 @@ def _residual_guard(
             "Remedies: raise the resolution or pick a constraint scheme that "
             "regularizes this operator (SFINCS pairs constraintScheme=1 with "
             "the Fokker-Planck/Sugama operators and 2 with pitch-angle "
-            "scattering); referee the case on a direct tier "
+            "scattering); referee the case on a direct route "
             "(method='block_tridiagonal' where available, or method='direct' "
             "for a non-differentiable check of the forward solve); tighten "
             "tol and raise max_restarts; or, if you have verified the "
@@ -967,12 +967,13 @@ def build_tier1_solver(op: KineticOperator) -> Tier1Solver:
     ok, reason = tier1_available(op)
     if not ok:
         raise NotImplementedError(
-            f"tier-1 structured direct path unavailable: {reason}"
+            f"structured direct route unavailable: {reason}"
         )
     if not _uniform_nxi_for_x(op):
         raise NotImplementedError(
-            "tier-1 full-band factorization requires uniform Nxi_for_x (the ramped "
-            "bands carry singular zero rows on the truncated DOFs); ramped decks "
+            "the full-band structured direct factorization requires uniform "
+            "Nxi_for_x (the ramped bands carry singular zero rows on the "
+            "truncated DOFs); ramped decks "
             "route through the truncated kernel (method='block_tridiagonal_truncated')"
         )
 
@@ -1052,8 +1053,8 @@ def materialize_dense(
 ) -> np.ndarray:
     """:func:`materialize_csr` as a dense numpy matrix, for referee tests.
 
-    Densifying costs ``O(total_size**2)`` memory, which is why the tier-3
-    solve route uses the CSR form directly and only tests come through here.
+    Densifying costs ``O(total_size**2)`` memory, which is why the sparse
+    direct route uses the CSR form directly and only tests come through here.
     """
     return materialize_csr(
         op, column_chunk=column_chunk, pin_masked_dofs=pin_masked_dofs
@@ -1120,7 +1121,7 @@ def _escalate_after_tier2_stall(
         return float(norms[-1]) if norms.size else float("inf")
 
     print(
-        f"[dkx.solve] recycled iterative solve stalled with the {preconditioner} "
+        f"[dkx.solve] recycled Krylov solve stalled with the {preconditioner} "
         f"preconditioner (iterations={stalled.iterations}, residual="
         f"{_residual(stalled):.3e}); escalating rather than giving up."
     )
@@ -1196,11 +1197,11 @@ def _escalate_after_tier2_stall(
     except Exception as exc:
         print(f"[dkx.solve]   widened retry failed: {exc}")
 
-    # Rung 3: tier 3, but only where it can actually run.  Announcing a
+    # Rung 3: sparse direct, but only where it can actually run.  Announcing a
     # fallback that the size guard will refuse is what produced the original
     # crash, so the size is checked here rather than discovered downstream.
     if op.total_size <= max_dense_size:
-        print("[dkx.solve]   falling back to the host sparse-direct solve ...")
+        print("[dkx.solve]   falling back to the sparse direct host solve ...")
         return _solve_tier3(
             op, rhs2d, tol=tol, atol=atol, max_dense_size=max_dense_size
         )
@@ -1210,7 +1211,7 @@ def _escalate_after_tier2_stall(
         f"the linear solve did not converge at total_size={op.total_size}.\n"
         f"Tried: {'; '.join(label for label, _ in attempts)}.\n"
         f"Best final residual {_residual(best):.3e} ({best_label}), tolerance {tol:.1e}.\n"
-        "The host sparse-direct fallback was not attempted: it samples the operator column by "
+        "The sparse direct fallback was not attempted: it samples the operator column by "
         f"column, which at this size needs {op.total_size} operator applications "
         "before any factorization starts, so raising max_dense_size would not help.\n"
         "What usually does help, in order: lower the collisionality-scaled Er "
@@ -1231,20 +1232,21 @@ def _solve_tier3(
     _require_solvax()
     if _is_traced(rhs2d):
         raise RuntimeError(
-            "tier-3 host sparse-direct solve is non-differentiable and cannot run "
+            "the sparse direct (host SuperLU) solve is non-differentiable and "
+            "cannot run "
             "under jit/vmap/grad; use method='block_tridiagonal' or 'gmres' with "
             "differentiable=True."
         )
     n = op.total_size
     if n > max_dense_size:
         raise RuntimeError(
-            f"tier-3 materialization refused: total_size={n} > "
+            f"sparse direct materialization refused: total_size={n} > "
             f"max_dense_size={max_dense_size}, i.e. {n} operator applications to "
             "sample the matrix column by column; raise max_dense_size explicitly "
             "if you really want this."
         )
     print(
-        f"[dkx.solve] tier-3 host sparse-direct solve (SuperLU, n={n}): "
+        f"[dkx.solve] sparse direct route (host SuperLU, n={n}): "
         "non-differentiable fallback path."
     )
     t0 = time.perf_counter()
@@ -1287,10 +1289,10 @@ def _implicit_solve(
     handed (``linear_solve`` passes ``transpose_matvec`` through verbatim).
 
     With ``has_aux`` both callables return ``(x, aux)`` and the *forward*
-    solve's ``aux`` comes back beside the solution.  That is how tier 2 reads
-    its iteration count, residual and recycle pair off the one solve the
-    wrapper runs, instead of running a second solve outside it just to see
-    them.
+    solve's ``aux`` comes back beside the solution.  That is how the recycled
+    Krylov route reads its iteration count, residual and recycle pair off the
+    one solve the wrapper runs, instead of running a second solve outside it
+    just to see them.
     """
 
     def solver(mv: Callable, b: jnp.ndarray):
@@ -1632,7 +1634,7 @@ def tier1_truncated_tail_blocks(
     ok, reason = _truncation_supported(op, int(keep_lowest))
     if not ok:
         raise NotImplementedError(
-            f"tier-1 selected-tail reconstruction unavailable: {reason}"
+            f"structured direct selected-tail reconstruction unavailable: {reason}"
         )
     if int(np.min(np.asarray(op.n_xi_for_x))) < int(keep_highest):
         raise ValueError("keep_highest exceeds the minimum active Nxi_for_x")
@@ -1896,7 +1898,7 @@ def _solve_tier2(
             # the primal as ``solve(matvec, b)``, so the wrapper runs a GCROT
             # of its own no matter what; this used to sit on top of a plain
             # GCROT whose solution was then thrown away, and every
-            # differentiable tier-2 solve paid for both.  ``has_aux`` carries
+            # differentiable Krylov solve paid for both.  ``has_aux`` carries
             # the recycle pair, iteration count, convergence flag and residual
             # out of the wrapper's own solve instead, so there is nothing left
             # to recompute outside it.
@@ -2136,7 +2138,7 @@ def _auto_route(
     if emit is not None:
         emit(
             f"[dkx.solve] structured direct route unavailable: {blocker} and "
-            f"truncation is invalid ({why}); using the recycled iterative solve."
+            f"truncation is invalid ({why}); using the recycled Krylov solve."
         )
     return "gmres"
 
@@ -2227,7 +2229,8 @@ def _resolve_solve_device(
             return None
         print(
             f"[dkx.solve] device route: total_size={int(op.total_size)} <= "
-            f"{max_size} — running this {'tier-1' if chosen.startswith('block') else 'tier-2'} "
+            f"{max_size} — running this "
+            f"{'structured direct' if chosen.startswith('block') else 'recycled Krylov'} "
             f"solve on the host CPU (small solves are dispatch-bound on {backend}; "
             f"override with device='default' or {_SOLVE_DEVICE_ENV})."
         )
@@ -2487,12 +2490,14 @@ def solve(
     if method == "block_tridiagonal_truncated":
         ok, reason = tier1_available(op)
         if not ok:
-            raise NotImplementedError(f"tier-1 truncated path unavailable: {reason}")
+            raise NotImplementedError(
+                f"truncated structured direct route unavailable: {reason}"
+            )
         keep = min(tier1_keep_lowest, op.n_xi)
         sup_ok, sup_reason = _truncation_supported(op, keep)
         if not sup_ok:
             raise NotImplementedError(
-                f"tier-1 truncated path unavailable: {sup_reason}"
+                f"truncated structured direct route unavailable: {sup_reason}"
             )
     require_float64()
     rhs2d, squeeze = _as_columns(rhs)
@@ -2548,16 +2553,16 @@ def solve(
             # near-singular systems (e.g. a nu_n=0 collisionless deck, whose
             # bordered constraint leaves the operator with condition numbers
             # ~1e18) its residual can miss the tolerance even though the
-            # system is consistent.  Mirror the tier-2 -> tier-3 pattern and
-            # fall through to the preconditioned Krylov tier.
+            # system is consistent.  Mirror the recycled-Krylov -> sparse-direct
+            # pattern and fall through to the preconditioned Krylov route.
             print(
-                "[dkx.solve] tier-1 structured solve missed the "
+                "[dkx.solve] the structured direct solve missed the "
                 f"tolerance (residuals={np.asarray(result.residual_norms)}); "
-                "falling back to the tier-2 Krylov solve."
+                "falling back to the recycled Krylov route."
             )
             chosen = "gmres"
     if chosen in ("block_tridiagonal", "block_tridiagonal_truncated"):
-        pass  # tier-1 result stands.
+        pass  # structured direct result stands.
     elif chosen == "gmres":
         result = _solve_tier2(
             op,
@@ -2596,7 +2601,9 @@ def solve(
             )
     else:  # direct
         if differentiable:
-            raise RuntimeError("tier-3 (method='direct') is non-differentiable.")
+            raise RuntimeError(
+                "the sparse direct route (method='direct') is non-differentiable."
+            )
         result = _solve_tier3(
             op, rhs2d, tol=tol, atol=atol, max_dense_size=max_dense_size
         )
