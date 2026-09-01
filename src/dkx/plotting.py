@@ -336,9 +336,9 @@ def plot(source, out="dkx_panels.png", *, style="panels", show=False):
     book; ``style="panels"`` writes its one figure whatever the suffix.
 
     For a figure this does not draw, read the numbers off ``run.moments`` and
-    use matplotlib directly --- ``examples/1_basics/plot_custom.py`` shows
-    that, and it is not a fallback so much as the normal way to make a figure
-    for a paper.
+    use matplotlib directly. That is not a fallback so much as the normal way
+    to make a figure for a paper; every rung of ``examples/`` ends by doing
+    exactly that with its own result.
 
     Args:
         source: a run object, an output-file path, or a directory.

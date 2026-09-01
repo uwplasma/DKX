@@ -13,6 +13,7 @@ pinned, but in the example that produced them, beside the code that re-checks.
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 import subprocess
@@ -23,12 +24,46 @@ EXAMPLES_ROOT = REPO_ROOT / "examples"
 DOCS_EXAMPLES = REPO_ROOT / "docs" / "examples.rst"
 WORKFLOW_CATALOG = EXAMPLES_ROOT / "workflow_catalog.json"
 
-# The graded ladder, in order.  Grading is by what a folder *requires* -- 1
-# needs nothing installed, 2 needs real geometry, 3 differentiates through the
-# solve -- because that is objective, where "beginner/advanced" is taste.
-GRADED_FOLDERS = ("1_basics", "2_equilibria", "3_gradients")
+# The canonical example ladder (plan.md section 9.1), in order.  Each rung is
+# one directory holding run.py and, where the case schema can express it,
+# case.toml.  The numbering is the reading order: every rung changes one thing
+# about the one before it.
+LADDER_FOLDERS = (
+    "01_tokamak_profile",
+    "02_vmec_stellarator",
+    "03_boozer_stellarator",
+    "04_monoenergetic_scan",
+    "05_ambipolar_profile",
+    "06_convergence_certificate",
+    "07_gradients",
+    "08_vmex_optimization",
+    "09_phi1_and_impurities",
+)
+
+# Rungs whose case is also expressible as a native schema-v1 case file.
+LADDER_FOLDERS_WITH_CASE_FILES = (
+    "01_tokamak_profile",
+    "02_vmec_stellarator",
+    "03_boozer_stellarator",
+    "05_ambipolar_profile",
+    "06_convergence_certificate",
+)
+
+# Rungs that have no case.toml because the *native executor* cannot run what
+# they teach -- it implements neither the monoenergetic workflow nor Phi1.  A
+# reader who goes looking for the file deserves to be told that rather than
+# left to guess, so the docstring has to name it.  (07 and 08 are different:
+# plan.md section 9.1 gives them no case file in the first place, because a
+# gradient and a descent are not a case.)
+LADDER_FOLDERS_BLOCKED_BY_THE_SCHEMA = (
+    "04_monoenergetic_scan",
+    "09_phi1_and_impurities",
+)
 
 # Older topic folders, kept while their content is folded into the ladder.
+# Several are still executed by other tests, by .github/workflows/ci.yml, or by
+# argv strings inside src/dkx/workflows/optimization.py, so they outlive the
+# ladder rungs that replaced their teaching role.
 LEGACY_FOLDERS = (
     "autodiff",
     "data",
@@ -40,9 +75,7 @@ LEGACY_FOLDERS = (
     "vmex_finite_beta",
 )
 
-CASE_FOLDERS = ("cases",)
-
-ALLOWED_EXAMPLE_FOLDERS = set(GRADED_FOLDERS) | set(LEGACY_FOLDERS) | set(CASE_FOLDERS)
+ALLOWED_EXAMPLE_FOLDERS = set(LADDER_FOLDERS) | set(LEGACY_FOLDERS)
 
 DISALLOWED_TRACKED_PARTS = {
     "__pycache__",
@@ -117,34 +150,69 @@ def test_examples_top_level_folders_are_intentional() -> None:
     assert folders == ALLOWED_EXAMPLE_FOLDERS
 
 
-def test_the_graded_ladder_is_complete_and_linked_from_the_top_readme() -> None:
-    """1 -> 2 -> 3 is the path a new user is told to walk; keep it walkable."""
+def test_the_ladder_is_complete_and_linked_from_the_top_readme() -> None:
+    """01 -> 09 is the path a new user is told to walk; keep it walkable."""
     readme = (EXAMPLES_ROOT / "README.md").read_text(encoding="utf-8")
 
-    for folder in GRADED_FOLDERS:
+    missing_directories: list[str] = []
+    missing_scripts: list[str] = []
+    unlinked: list[str] = []
+    for folder in LADDER_FOLDERS:
         directory = EXAMPLES_ROOT / folder
-        assert directory.is_dir(), folder
-        assert (directory / "README.md").is_file(), f"{folder} does not introduce itself"
-        assert list(directory.glob("*.py")), f"{folder} has no scripts"
-        assert folder in readme, f"{folder} is not linked from examples/README.md"
+        if not directory.is_dir():
+            missing_directories.append(folder)
+            continue
+        if not (directory / "run.py").is_file():
+            missing_scripts.append(folder)
+        if folder not in readme:
+            unlinked.append(folder)
+
+    assert missing_directories == []
+    assert missing_scripts == []
+    assert unlinked == []
 
 
-def test_every_graded_script_is_listed_in_its_folder_readme() -> None:
-    """An unlisted script is one nobody finds, which is the same as absent."""
-    unlisted: list[str] = []
-    for folder in GRADED_FOLDERS:
-        readme = (EXAMPLES_ROOT / folder / "README.md").read_text(encoding="utf-8")
+def test_every_ladder_rung_holds_only_run_py_and_its_inputs() -> None:
+    """One rung is one lesson; a second script in a rung is a second lesson."""
+    extra_scripts: list[str] = []
+    for folder in LADDER_FOLDERS:
         for script in sorted((EXAMPLES_ROOT / folder).glob("*.py")):
-            if script.name not in readme:
-                unlisted.append(f"{folder}/{script.name}")
+            if script.name != "run.py":
+                extra_scripts.append(f"{folder}/{script.name}")
 
-    assert unlisted == []
+    assert extra_scripts == []
 
 
-def test_every_folder_introduces_itself() -> None:
+def test_ladder_case_files_exist_and_the_rest_say_why_they_do_not() -> None:
+    """A case.toml the schema cannot express is a fact worth stating out loud."""
+    missing: list[str] = []
+    unexpected: list[str] = []
+    unexplained: list[str] = []
+    for folder in LADDER_FOLDERS:
+        case_file = EXAMPLES_ROOT / folder / "case.toml"
+        if folder in LADDER_FOLDERS_WITH_CASE_FILES:
+            if not case_file.is_file():
+                missing.append(folder)
+            continue
+        if case_file.is_file():
+            unexpected.append(folder)
+            continue
+        if folder not in LADDER_FOLDERS_BLOCKED_BY_THE_SCHEMA:
+            continue
+        docstring = ast.get_docstring(ast.parse((EXAMPLES_ROOT / folder / "run.py").read_text()))
+        if not docstring or "case.toml" not in docstring:
+            unexplained.append(folder)
+
+    assert missing == []
+    assert unexpected == []
+    assert unexplained == []
+
+
+def test_every_legacy_folder_introduces_itself() -> None:
+    """The ladder rungs introduce themselves in their module docstring instead."""
     missing = [
         folder
-        for folder in sorted(ALLOWED_EXAMPLE_FOLDERS)
+        for folder in sorted(LEGACY_FOLDERS)
         if not (EXAMPLES_ROOT / folder / "README.md").is_file()
     ]
     assert missing == []

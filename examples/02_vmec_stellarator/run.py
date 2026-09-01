@@ -1,108 +1,114 @@
-"""Solve the equilibrium and the transport in one script: VMEX -> DKX.
+"""Real geometry from a VMEC ``wout``: the same solve, one line different.
 
-``geometryScheme=5`` reads a VMEC ``wout`` and VMEX produces one in the same
-process, so a boundary shape reaches neoclassical transport with no file
-carried between tools.  Here it is a rotating ellipse: four coefficients.
+Rung 01 with ``geometry.format`` changed from ``"analytic"`` to ``"vmec"`` and
+a file beside it.  That is the whole difference -- the species, physics and
+solver blocks are untouched -- which is the point: the equilibrium is an input,
+not a different code path.  Point ``GEOMETRY["file"]`` at your own
+``wout_*.nc`` and rerun.
 
-The trap is ``ncurr=0``.  It means the iota profile is *specified*, via ``ai``,
-not derived from a current -- so ``ai=[0.0]`` builds a stellarator with no
-rotational transform.  VMEC converges, DKX runs, every number is meaningless.
-``ai=[0.42, 0.15]`` gives iota rising 0.42 -> 0.57, which the script prints and
-checks so a zero cannot pass silently.
+Physics: an up-down asymmetric tokamak equilibrium solved by VMEC, one
+deuterium species, pitch-angle scattering, three surfaces, no radial electric
+field.  ``zeta`` is now 9 rather than 1 because a VMEC field is resolved on a
+toroidal grid even when the configuration is nearly axisymmetric.
 
-Requires the optional companion ``vmex`` (``pip install vmex``); skips cleanly
-when it is absent.  Physics: a 3-field-period vacuum rotating ellipse, one
-hydrogen species, pitch-angle scattering, no radial electric field.
+Expected runtime: ~5 s on a laptop CPU.
 
-Expected runtime: ~25 s on a laptop CPU -- about 5 s VMEX, 20 s DKX.
-
-Achieved: VMEX converges in 300 iterations, then FSABjHat = -4.183e-02 and
-particleFlux_vm_psiHat = +5.886e-05 at rN = 0.5.
+Equivalent CLI:
+  dkx run examples/02_vmec_stellarator/case.toml --out examples/output/02_vmec_stellarator/result.nc
+  dkx inspect examples/output/02_vmec_stellarator/result.nc
 """
 
+# 1. Imports
 from pathlib import Path
 
 import numpy as np
 
 import dkx
 
-try:
-    import vmex
-except ImportError:  # pragma: no cover - optional companion
-    raise SystemExit(
-        "This example needs vmex:  pip install vmex\n"
-        "Everything in 1_basics runs without it."
-    )
+# 2. User-editable parameters
+HERE = Path(__file__).resolve().parent
+OUT_DIR = HERE.parent / "output" / "02_vmec_stellarator"
+CASE_FILE = HERE / "case.toml"
+RESULT_FILE = OUT_DIR / "result.nc"
+PLOT_FILE = OUT_DIR / "result.png"
 
-# --------------------------- parameters -------------------------------------
-NFP, MPOL, NTOR = 3, 4, 3
-IOTA_PROFILE = [0.42, 0.15]   # iota(s) = 0.42 + 0.15 s.  NOT [0.0] -- see above.
-PHIEDGE = 0.08
-R_N = 0.5                     # flux surface to solve the kinetics on
+SURFACES = (0.16, 0.25, 0.36)
 
-OUT_DIR = Path(__file__).resolve().parent / "output"
-WOUT = OUT_DIR / "wout_rotating_ellipse.nc"
+# 3. Geometry and species construction
+GEOMETRY = {
+    "format": "vmec",
+    # Relative paths resolve beside the case file, not from the shell's working
+    # directory, so the case is portable.  Swap in your own wout here.
+    "file": "../../tests/ref/wout_up_down_asymmetric_tokamak.nc",
+    "surfaces": list(SURFACES),
+}
+SPECIES = [
+    {
+        "name": "deuterium",
+        "charge": 1,
+        "mass_amu": 2.014,
+        "density_m3": [8.0e19, 7.0e19, 5.8e19],
+        "temperature_keV": [1.0, 0.8, 0.6],
+    },
+]
 
-KINETICS = dict(
-    Zs=[1.0], mHats=[1.0], nHats=[1.0], THats=[1.0],
-    dNHatdrHats=[-0.5], dTHatdrHats=[-1.0],
-    Ntheta=13, Nzeta=25, Nxi=24, NL=4, Nx=5,
-    collisionOperator=1, Delta=4.5694e-3, alpha=1.0, nu_n=0.01,
+# 4. Physics and numerical configuration
+PHYSICS = {
+    "model": "full_local",
+    "collisions": "pitch_angle_scattering",
+    "magnetic_drifts": "dkes",
+    "phi1": "off",
+}
+ELECTRIC_FIELD = {"mode": "prescribed", "value_kV_m": 0.0}
+RESOLUTION = {"theta": 9, "zeta": 9, "pitch": 8, "speed": 4}
+SOLVER = {"method": "auto", "relative_tolerance": 1.0e-8, "memory_fraction": 0.75, "reuse": "auto"}
+# end of parameters
+
+case = dkx.Case.from_mapping(
+    {
+        "schema": 1,
+        "name": "native_vmec_profile",
+        "run": {"workflow": "profile", "progress": True},
+        "geometry": GEOMETRY,
+        "species": SPECIES,
+        "physics": PHYSICS,
+        "electric_field": ELECTRIC_FIELD,
+        "resolution": RESOLUTION,
+        "solver": SOLVER,
+        "output": {"file": "native_vmec_profile.nc", "plots": True},
+    },
+    source_path=CASE_FILE,
 )
-# ----------------------------- end of parameters ----------------------------
+from_toml = dkx.Case.from_file(CASE_FILE)
+assert case.case_id == from_toml.case_id, "run.py and case.toml have drifted apart"
+print(f"case id = {case.case_id[:12]} (run.py and case.toml agree)")
+print(f"equilibrium: {case.geometry_path}")
 
-# The boundary is (n, m) Fourier coefficients of R and Z.  Four terms make a
-# rotating ellipse: the major radius, the circular part, and the m=1 n=1 pair
-# whose relative sign is what rotates the cross-section along the torus.
-rbc = np.zeros((2 * NTOR + 1, MPOL))
-zbs = np.zeros((2 * NTOR + 1, MPOL))
-
-
-def coefficient(array, n, m, value):
-    """Set the (n, m) coefficient; n is offset because n runs negative."""
-    array[n + NTOR, m] = value
-
-
-coefficient(rbc, 0, 0, 1.00)    # major radius
-coefficient(rbc, 0, 1, 0.18)    # minor radius
-coefficient(zbs, 0, 1, 0.18)
-coefficient(rbc, 1, 1, 0.05)    # the rotating pair: opposite signs
-coefficient(zbs, 1, 1, -0.05)
-coefficient(rbc, 1, 0, 0.08)    # axis excursion
-coefficient(zbs, 1, 0, -0.08)
-
-equilibrium = vmex.VmecInput(
-    nfp=NFP, mpol=MPOL, ntor=NTOR, lasym=False,
-    ns_array=[16, 31], ftol_array=[1e-10, 1e-12], niter_array=[1500, 3000],
-    phiedge=PHIEDGE, delt=0.9, nstep=200,
-    ncurr=0, am=[0.0], ai=IOTA_PROFILE,   # am=[0.0] is a vacuum field: no pressure
-    rbc=rbc, zbs=zbs,
-)
-
-print("solving the equilibrium with VMEX ...")
-solved = vmex.solve(equilibrium)
-print(f"  converged: {bool(solved.converged)}  after {int(solved.iterations)} iterations")
-print(f"  iota: {float(solved.iotaf[0]):.3f} on axis -> {float(solved.iotaf[-1]):.3f} at the edge")
-if abs(float(solved.iotaf[-1])) < 1e-6:
-    raise SystemExit("iota is zero -- check ai; see the note about ncurr=0 above")
-
+# 5. Run
 OUT_DIR.mkdir(parents=True, exist_ok=True)
-vmex.write_wout(
-    WOUT,
-    vmex.wout_from_state(
-        inp=equilibrium, state=solved.state,
-        fsqr=solved.fsqr, fsqz=solved.fsqz, fsql=solved.fsql,
-        niter=solved.iterations, converged=solved.converged,
-    ),
-)
-print(f"  wrote {WOUT.name} ({WOUT.stat().st_size // 1024} KB)")
+result = dkx.run(case)
 
-print(f"\nsolving the kinetics with DKX at rN = {R_N} ...")
-run = dkx.run(
-    geometryScheme=5, equilibriumFile=str(WOUT),
-    inputRadialCoordinate=3, rN_wish=R_N, **KINETICS,
-)
-for name in ("FSABjHat", "particleFlux_vm_psiHat", "heatFlux_vm_psiHat"):
-    print(f"  {name:<26s} = {np.asarray(run.moments[name]).ravel()[0]:+.6e}")
+# 6. Print a scientific summary and certificate
+certificate = result.certificate()
+print("\n=== Final results ===")
+print(f"  geometry sha256: {certificate['geometry_sha256'][:16]} (the equilibrium is pinned)")
+for index, psi_n in enumerate(np.asarray(result.arrays["surface"], dtype=float)):
+    gamma = float(np.asarray(result.arrays["particle_flux_m2_s"])[index, 0])
+    heat = float(np.asarray(result.arrays["heat_flux_W_m2"])[index, 0])
+    current = float(np.asarray(result.arrays["parallel_current_A_T_m2"])[index])
+    print(
+        f"  psi_N={psi_n:.2f}  Gamma = {gamma:+.4e} m^-2 s^-1"
+        f"  Q = {heat:+.4e} W m^-2  <j.B> = {current:+.4e} A T m^-2"
+    )
+print(f"  converged: {certificate['converged']}")
+print(f"  solver route: {certificate['solver_route']}")
+print(f"  residual norm: {certificate['residual_norm']:.3e}")
 
-print("\nSame wout works with dkx.plot, and with any other geometryScheme=5 deck.")
+# 7. Save native result
+saved = result.save(RESULT_FILE)
+print(f"  Wrote result: {saved}")
+
+# 8. Plot publication-ready outputs
+plotted = result.plot(PLOT_FILE)
+print(f"  Saved plot: {plotted}")
+print("Done: examples/02_vmec_stellarator/run.py")

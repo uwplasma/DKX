@@ -1,18 +1,63 @@
 Examples
 ========
 
-How the example folders are graded
-----------------------------------
-
-``examples/1_basics/`` is where a new user starts: DKX alone on analytic
-geometry, no optional dependencies and no equilibrium files.
-``examples/2_equilibria/`` runs the same solver on real VMEC and Boozer
-geometry, and ``examples/3_gradients/`` differentiates through the solve.  The
-grading is by what each script requires, which is checkable, rather than by an
-opinion about difficulty.
-
-Canonical examples
+The example ladder
 ------------------
+
+The teaching path is nine numbered rungs under ``examples/``, read in order.
+Each rung is one directory holding ``run.py`` and, where the native case schema
+can express the same case, ``case.toml``.  Every rung changes one thing about
+the rung before it, and each is sized to run in seconds at the resolution it
+ships with, so continuous integration runs the same code a reader does.
+
+``examples/01_tokamak_profile/`` -- the whole native loop
+   Build a ``dkx.Case``, call ``dkx.run``, read SI moments off the
+   ``dkx.Result``, print the certificate, save NetCDF, plot.  Analytic
+   circular tokamak, one deuterium species, pitch-angle scattering.
+
+``examples/02_vmec_stellarator/`` -- real geometry from a VMEC ``wout``
+   Rung 01 with ``geometry.format`` changed to ``"vmec"``.  The equilibrium is
+   an input, not a different code path, and the certificate records its
+   SHA-256.
+
+``examples/03_boozer_stellarator/`` -- Boozer ``.bc`` geometry
+   The third geometry format, with the cosine-only/asymmetric column
+   convention auto-detected, and the solver route chosen from the operator's
+   structure rather than requested by hand.
+
+``examples/04_monoenergetic_scan/`` -- the cross-code benchmark figure
+   ``D11*``, ``D31*`` and ``D33*`` against collisionality at two values of
+   ``E*``, through ``dkx.run_monoenergetic_database``.
+
+``examples/05_ambipolar_profile/`` -- solving for the radial electric field
+   ``run.workflow = "ambipolar_profile"``: every root on every surface, each
+   classified, with the branch-selection reason recorded.  ``dkx roots``
+   prints the same table from the saved result.
+
+``examples/06_convergence_certificate/`` -- a small residual is not a converged answer
+   Refines each phase-space axis and then all of them together, because axes
+   couple.  Equivalent to ``dkx converge``.
+
+``examples/07_gradients/`` -- exact derivatives through the solve
+   ``jax.grad`` on the operator lane, checked against central differences.
+
+``examples/08_vmex_optimization/`` -- a shape gradient
+   Differentiates from a Boozer :math:`|B|` Fourier amplitude through the
+   kinetic solve to the radial particle flux, and descends.  Prints the
+   ``vmex`` hand-off contract, which covers a geometry proxy rather than a
+   full VMEC-boundary-to-transport gradient.
+
+``examples/09_phi1_and_impurities/`` -- multi-species transport with ``Phi1``
+   Hydrogen, fully ionized carbon and electrons, run with and without
+   in-surface potential variation at identical resolution.
+
+Rungs 04, 07, 08 and 09 have no ``case.toml``, and each says why in its module
+docstring: the native executor implements neither the monoenergetic workflow
+nor ``Phi1``, and gradients run on the operator lane rather than through
+``dkx.run(Case)``.
+
+Older canonical examples
+------------------------
 
 Six pedagogic scripts on the canonical API sit in the ``examples/``
 subdirectories ``getting_started/``, ``transport/``, ``autodiff/`` and
@@ -84,7 +129,6 @@ Example tree
 
 Topic folders in the `examples/` and `tools/` trees:
 
-- `examples/cases/`: versioned ``Case`` TOML/JSON validation and schema examples
 - `examples/tutorials/`: notebook-led learning path and a fast output/plot script
 - `examples/getting_started/`: basic API usage (no external reference code required)
 - `tools/parity/`: focused validation scripts against frozen reference fixtures

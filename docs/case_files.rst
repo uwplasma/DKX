@@ -33,7 +33,7 @@ Machine tooling can request JSON Schema instead:
    dkx schema --format json > case-v1.schema.json
 
 The checked full-schema example is
-``examples/cases/w7x_ambipolar_profile.toml``. Its field names carry
+``examples/05_ambipolar_profile/w7x_case.toml``. Its field names carry
 engineering units where a dimensional value appears, such as ``density_m3``,
 ``temperature_keV``, and ``search_kV_m``. Solver methods are
 named for the route they take: ``structured_direct`` eliminates the Legendre
@@ -157,7 +157,7 @@ the operator. Run a checked example from Python:
 
    import dkx
 
-   case = dkx.Case.from_file("examples/cases/analytic_tokamak_profile.toml")
+   case = dkx.Case.from_file("examples/01_tokamak_profile/case.toml")
    result = dkx.run(case)
    result.print_summary()
    result.save()                         # the case's [output].file

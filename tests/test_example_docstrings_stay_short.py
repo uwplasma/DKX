@@ -10,18 +10,18 @@ from pathlib import Path
 
 import pytest
 
-MAX_LINES = 20
+# 24 rather than 20: plan.md section 9.2 requires the header to carry the
+# physical regime, the expected runtime, and the equivalent CLI command, and a
+# rung with no case.toml has to say why.  That is a real floor, so the budget
+# is set just above it rather than pretending those lines are optional.
+MAX_LINES = 24
 EXAMPLES_ROOT = Path(__file__).resolve().parents[1] / "examples"
-# The graded folders are the curated ones users are pointed at; the older
+# The numbered ladder is the curated path users are pointed at; the older topic
 # folders predate this budget and are being retired rather than reformatted.
-EXAMPLES = sorted(
-    path
-    for folder in ("1_basics", "2_equilibria", "3_gradients")
-    for path in (EXAMPLES_ROOT / folder).glob("*.py")
-)
+EXAMPLES = sorted(EXAMPLES_ROOT.glob("0[1-9]_*/run.py"))
 
 
-@pytest.mark.parametrize("path", EXAMPLES, ids=lambda p: p.name)
+@pytest.mark.parametrize("path", EXAMPLES, ids=lambda p: p.parent.name)
 def test_module_docstring_is_at_most_twenty_lines(path: Path) -> None:
     docstring = ast.get_docstring(ast.parse(path.read_text()))
     assert docstring is not None, f"{path.name} has no module docstring"

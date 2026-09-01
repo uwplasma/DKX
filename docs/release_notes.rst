@@ -4,6 +4,20 @@ Release notes
 Unreleased
 ----------
 
+- Replaced the overlapping example folders with the canonical nine-rung
+  ladder under ``examples/01_tokamak_profile`` through
+  ``examples/09_phi1_and_impurities``.  Each rung is one directory holding
+  ``run.py`` and, where the native case schema can express the same case,
+  ``case.toml``; the script builds that case in Python and asserts the two
+  share a deterministic case ID, so the documented CLI line solves what the
+  script solves.  The rungs carry no ``DKX_CI`` branch: each is sized to run in
+  seconds at the resolution it ships with, and continuous integration runs the
+  same code a reader runs.  Rungs 04, 07, 08 and 09 have no ``case.toml`` and
+  say why in their module docstring -- the native executor implements neither
+  the monoenergetic workflow nor ``Phi1``, and gradients run on the operator
+  lane rather than through ``dkx.run(Case)``.  The graded ``1_basics`` /
+  ``2_equilibria`` / ``3_gradients`` folders and ``examples/cases`` are gone;
+  the case files moved into the rungs that use them.
 - Added a compact, checksummed native whole-profile review record for the
   five-surface W7-X PAS/DKES method case. One portable TOML and pinned Boozer
   checksum reproduce root counts ``[1, 1, 3, 1, 1]``, selected physical
