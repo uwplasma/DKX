@@ -408,7 +408,22 @@ def build_sparse_preconditioner(
     Same simplified operator, same regularization, same exact elimination of the
     bordered constraint / ``Phi1`` rows — only the inner f-block inverse changes
     from a dense block-Thomas factorization to a host sparse LU.
+
+    Requires a host CPU device: the sparse LU runs on the host through
+    ``jax.pure_callback``. Under ``JAX_PLATFORMS=cuda`` no CPU backend exists
+    and the callback fails at solve time with a JAX-internal message naming
+    neither this route nor the cause, so the requirement is checked here.
     """
+    try:
+        jax.devices("cpu")
+    except RuntimeError as exc:
+        raise RuntimeError(
+            "the sparse preconditioner factorizes on the host through "
+            "jax.pure_callback, which needs a CPU device, and none is available. "
+            "JAX_PLATFORMS appears to exclude it -- unset it, or set "
+            "JAX_PLATFORMS=cuda,cpu. Use preconditioner='coarse' to stay on the "
+            "accelerator."
+        ) from exc
     from dkx.coarse_precond import (  # noqa: PLC0415
         _materialize_borders,
         _materialize_full_border,

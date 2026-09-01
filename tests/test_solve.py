@@ -1550,3 +1550,47 @@ def test_omitting_precond_still_builds_one() -> None:
     op = _load_sugama_op()
     result = solve(op, op.rhs(), method="gmres", tol=1e-10)
     assert result.converged and result.method == "gcrot"
+
+
+def test_recycle_dim_zero_is_refused_by_name() -> None:
+    """solvax's GCROT cannot recycle zero directions; say so rather than crash.
+
+    Left unguarded this dies inside jax indexing with "index is out of bounds
+    for axis 1 with size 0" -- a traceback naming neither the parameter the
+    caller set nor DKX. Plain restarted FGMRES is not reachable through this
+    route, and the message says which alternatives are.
+    """
+    op = _load_sugama_op()
+    with pytest.raises(ValueError, match="recycle_dim=0"):
+        solve(op, op.rhs(), method="gmres", tol=1e-8, recycle_dim=0)
+
+
+def test_one_recycled_direction_is_enough_to_run() -> None:
+    """The guard's boundary: 1 must work, or the message would be wrong."""
+    op = _load_sugama_op()
+    assert solve(op, op.rhs(), method="gmres", tol=1e-8, recycle_dim=1).converged
+
+
+def test_the_coarse_factor_dtype_knob_actually_changes_the_factors(monkeypatch) -> None:
+    """DKX_COARSE_FACTOR_DTYPE=float32 was silently inert on the dense-band route.
+
+    Its docstring promises the knob is honoured, and the GPU profile measured a
+    bit-identical residual with it set -- proof that it did nothing. Operating
+    rule 11 forbids a silent no-op, so this pins that the factors really change
+    precision while the answer does not.
+    """
+    op = _load_sugama_op()
+    rhs = op.rhs()
+    base = solve(op, rhs, method="gmres", tol=1e-10)
+
+    monkeypatch.setenv("DKX_COARSE_FACTOR_DTYPE", "float32")
+    lowered = solve(op, rhs, method="gmres", tol=1e-10)
+
+    assert lowered.converged
+    # The factors differ, so the iteration path differs -- that is the proof it
+    # took effect. A float32 Schur LU preconditions fine; it just is not free.
+    assert (lowered.iterations, float(np.min(lowered.residual_norms))) != (
+        base.iterations, float(np.min(base.residual_norms))
+    ), "float32 factors produced an identical path: the knob is inert again"
+    # The converged answer is a property of the operator, not the preconditioner.
+    assert _rel_err(np.asarray(lowered.x), np.asarray(base.x)) < 1e-8
