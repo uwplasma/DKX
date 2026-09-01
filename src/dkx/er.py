@@ -19,7 +19,7 @@ Public entry points:
 
 - :func:`radial_current` — one canonical solve at a given ``E_r`` returning
   ``(J_r, per-species Gamma, ErSolveState)``.  ``x0``/``recycle`` thread warm
-  starts and GCROT recycling across ``E_r`` evaluations (tier-2 Krylov).  When
+  starts and GCROT recycling across ``E_r`` evaluations (recycled Krylov).  When
   called on a base :class:`~dkx.drift_kinetic.KineticOperator` (or an
   :class:`ErProblem`) it is a differentiable function of ``E_r`` and of the
   operator's parameters.
@@ -155,10 +155,10 @@ class ErSolveState:
     """Warm-start payload threaded across ``E_r`` evaluations.
 
     Attributes:
-        x: the solved state, shape ``(total_size, 1)`` — a tier-2 warm start
-            (``x0``) for the next nearby ``E_r``.
-        recycle: the GCROT recycle pair from the previous tier-2 solve, or
-            ``None`` (tier-1 direct solves do not recycle).
+        x: the solved state, shape ``(total_size, 1)`` — a recycled Krylov warm
+            start (``x0``) for the next nearby ``E_r``.
+        recycle: the GCROT recycle pair from the previous Krylov solve, or
+            ``None`` (structured direct solves do not recycle).
         result: the underlying :class:`~dkx.solve.SolveResult`
             (``method``, ``iterations``, ``residual_norms``, ``timings``).
     """
@@ -382,8 +382,8 @@ def radial_current(
             :class:`~dkx.drift_kinetic.KineticOperator` (needs
             ``dphi_per_er``), or a deck (``SfincsInput`` / path).
         er: the radial electric field (scalar; may be a traced JAX value).
-        x0: tier-2 warm-start state from a previous :class:`ErSolveState`.
-        recycle: tier-2 GCROT recycle pair from a previous solve.
+        x0: Krylov warm-start state from a previous :class:`ErSolveState`.
+        recycle: GCROT recycle pair from a previous Krylov solve.
         dphi_per_er: ``dPhiHatdpsiHat`` per unit ``E_r`` (required only when the
             first argument is a bare operator).
         z_s: species charges override (defaults to the operator's).
@@ -415,10 +415,11 @@ def radial_current(
     if differentiable:
         # Fully traceable path for autodiff / implicit differentiation: assemble
         # the operator densely (all jnp) and solve exactly with jnp.linalg.solve.
-        # The tiered ``solve`` builds its factorization with host numpy, which
+        # The routed ``solve`` builds its factorization with host numpy, which
         # cannot run under ``solvax.root_solve`` closure conversion; the dense
-        # solve is exact and matches tier 1 to machine precision on the tiny
-        # ambipolar decks that carry a differentiable objective.
+        # solve is exact and matches the structured direct route to machine
+        # precision on the tiny ambipolar decks that carry a differentiable
+        # objective.
         x_full = _dense_solve(op, rhs)
         state = None
     else:
@@ -589,7 +590,7 @@ def find_ambipolar_er(
     ``zbrent`` update (``Er_search_tolerance_f = current_tol``,
     ``NEr_ambipolarSolve = max_iter``).  Warm starts and GCROT recycling are
     threaded across evaluations when ``warm_start`` is set (a benefit only on
-    tier-2 Krylov solves; tier-1 direct solves ignore them).
+    recycled Krylov solves; structured direct solves ignore them).
 
     With ``all_roots`` the bracket is additionally coarse-scanned so every root
     is returned classified (ion / electron / unstable), while the *selected*
