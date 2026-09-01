@@ -1,0 +1,51 @@
+! A second `dkx convert` deck: two species, Fokker-Planck collisions, a finite
+! E_r on DKES trajectories, and geometryScheme=2 (the built-in LHD model).
+! Together with convert_pas_w7x_noEr_tiny it covers both collision operators,
+! both field cases, and the multi-species mass/charge conversion.
+
+&general
+  RHSMode = 1
+/
+
+&geometryParameters
+  geometryScheme = 2
+/
+
+&speciesParameters
+  Zs = 1 -1
+  mHats = 2.0d+0 5.446170214d-4
+  nHats = 0.6d+0 0.6d+0
+  THats = 0.9d+0 1.1d+0
+  dNHatdrHats = -0.4d+0 -0.4d+0
+  dTHatdrHats = -1.0d+0 -1.5d+0
+/
+
+&physicsParameters
+  Er = 0.6d+0
+  collisionOperator = 0
+  useDKESExBDrift = .true.
+  includeXDotTerm = .false.
+  includeElectricFieldTermInXiDot = .false.
+  includePhi1 = .false.
+/
+
+&resolutionParameters
+  Ntheta = 5
+  Nzeta = 5
+  Nxi = 5
+  NL = 4
+  Nx = 3
+  solverTolerance = 1d-10
+/
+
+&otherNumericalParameters
+  Nxi_for_x_option = 0
+/
+
+&preconditionerOptions
+/
+
+&export_f
+  export_full_f = .false.
+  export_delta_f = .false.
+/

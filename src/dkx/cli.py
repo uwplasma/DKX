@@ -641,6 +641,68 @@ def _cmd_plot(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_convert(args: argparse.Namespace) -> int:
+    """Convert a SFINCS ``input.namelist`` into a native case file.
+
+    This is the migration path for SFINCS users, and the direction that matters:
+    a deck is dimensionless and single-surface, a case is SI and profile-shaped,
+    so the conversion is a real translation rather than a rename. Anything the
+    case schema cannot carry refuses here, naming the namelist key, rather than
+    producing a case that runs and answers a different question (plan.md
+    operating rule 11).
+    """
+    from rich.console import Console  # noqa: PLC0415
+    from rich.table import Table  # noqa: PLC0415
+
+    from .config import CaseValidationError  # noqa: PLC0415
+    from .input_compat import convert_sfincs_namelist  # noqa: PLC0415
+
+    try:
+        case, written = convert_sfincs_namelist(
+            args.source, args.destination, name=args.name, overwrite=args.force
+        )
+    except (CaseValidationError, OSError, ValueError) as exc:
+        print(f"dkx convert failed: {exc}", file=sys.stderr)
+        return 2
+
+    if args.quiet:
+        return 0
+    console = Console(stderr=False)
+    console.print(f"{case.name} ({case.case_id[:12]})", markup=False, highlight=False)
+    table = Table(show_lines=False)
+    table.add_column("quantity", style="bold")
+    table.add_column("value")
+    table.add_row("source", str(args.source))
+    table.add_row("case", str(written))
+    table.add_row("workflow", case.run.workflow)
+    table.add_row("geometry", f"{case.geometry.format} ({case.geometry.file})")
+    table.add_row(
+        "surfaces",
+        ", ".join(f"{value:.6g}" for value in case.geometry.surfaces),
+    )
+    table.add_row("species", ", ".join(item.name for item in case.species))
+    table.add_row(
+        "electric field",
+        case.electric_field.mode
+        + (
+            f" at {case.electric_field.value_kV_m:.6g} kV/m"
+            if case.electric_field.value_kV_m is not None
+            else f" over {list(case.electric_field.search_kV_m or ())} kV/m"
+        ),
+    )
+    console.print(table)
+    # The deck names one surface; the case states a profile. Saying so here is
+    # the difference between a reader trusting the extra surfaces and wondering
+    # where they came from.
+    console.print(
+        f"The deck's single surface became {len(case.geometry.surfaces)} surfaces "
+        "carrying a profile linear in rHat, so the deck's prescribed gradients are "
+        "recovered exactly where it asked for them.",
+        highlight=False,
+    )
+    return 0
+
+
 def _cmd_scan(args: argparse.Namespace) -> int:
     """Expand a case's ``[scan]`` axes, run every point, and write one Result.
 
@@ -1551,7 +1613,7 @@ _CONVERGE_AXES: tuple[str, ...] = ("theta", "zeta", "pitch", "speed")
 #: choices is what the compatibility group exists to avoid.
 _USER_COMMANDS: tuple[str, ...] = (
     "doctor", "schema", "validate", "run", "roots", "converge", "inspect",
-    "compare", "plot", "scan", "sfincs",
+    "compare", "plot", "scan", "convert", "sfincs",
 )
 
 
@@ -1559,7 +1621,7 @@ _USER_COMMANDS: tuple[str, ...] = (
 #: the parser's own ``sub.choices`` -- so the runtime behaviour cannot drift
 #: from the registered set. It exists for direct callers and as documentation.
 _KNOWN_COMMANDS: frozenset[str] = frozenset({
-    "validate", "doctor", "converge", "roots", "compare", "plot", "scan", "schema", "run", "inspect", "solve-v3", "ambipolar",
+    "validate", "doctor", "converge", "roots", "compare", "plot", "scan", "convert", "schema", "run", "inspect", "solve-v3", "ambipolar",
     "scan-er", "ambipolar-solve", "run-fortran", "write-output",
     "transport-matrix-v3", "monoenergetic-database", "dump-h5", "plot-output",
     "compare-h5", "postprocess-upstream",
@@ -2191,6 +2253,25 @@ def main(argv: list[str] | None = None) -> int:
     _add_parallel_cli_args(p_inspect)
     p_inspect.add_argument("result", help="Path to a DKX .nc result.")
     p_inspect.set_defaults(func=_cmd_inspect_result)
+
+    p_convert = sub.add_parser(
+        "convert",
+        help="Convert a SFINCS input.namelist into a native .toml or .json case.",
+    )
+    _add_common_cli_args(p_convert)
+    _add_parallel_cli_args(p_convert)
+    p_convert.add_argument("source", help="Path to a SFINCS v3 input.namelist.")
+    p_convert.add_argument(
+        "destination",
+        help="Case file to write; the .toml or .json extension picks the format.",
+    )
+    p_convert.add_argument(
+        "--name", default=None, help="Case name (default: derived from SOURCE)."
+    )
+    p_convert.add_argument(
+        "--force", action="store_true", help="Overwrite DESTINATION if it exists."
+    )
+    p_convert.set_defaults(func=_cmd_convert)
 
     # SFINCS-compatibility commands: visible under `dkx sfincs`, and still
     # accepted at the top level as hidden aliases so existing scripts run.
