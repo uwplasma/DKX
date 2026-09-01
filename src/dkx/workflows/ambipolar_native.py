@@ -737,7 +737,14 @@ def solve_native_ambipolar_surface(
         if tail_containers is not None and "truncated" not in executed_route:
             from dkx.moments import legendre_tail_relative_l2_batch
 
-            legendre_tail = np.asarray(
+            # np.array, not np.asarray: asarray over a JAX buffer returns a
+            # read-only view, and the automatic true-residual recovery below
+            # assigns into this array element-wise. Its sibling arrays escape
+            # the same trap only because they are scaled by a unit factor on
+            # the way out, which copies. Left as asarray this raises
+            # "assignment destination is read-only" the first time a deck both
+            # retains the Legendre tail and needs a retry.
+            legendre_tail = np.array(
                 legendre_tail_relative_l2_batch(
                     *tail_containers,
                     batch.states,
