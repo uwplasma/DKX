@@ -633,7 +633,11 @@ def test_a_real_pressure_profile_is_still_used(tmp_path):
         handle.createVariable("Aminor_p", "f8", ())[...] = 0.6
 
     plasma, source = resolve_plasma(path)
-    assert source == "p(s) from the equilibrium"
+    # The phrase now also names the assumed axis temperature: only the pressure
+    # comes from the equilibrium, and the bootstrap current moves by a factor
+    # of 5 across a plausible range of that assumption.
+    assert source.startswith("p(s) from the equilibrium")
+    assert "T(0)=" in source and "DKX_T_AXIS_KEV" in source
     assert plasma["n_hat"] > 0.1  # 1e20-scale, not 1e-11
 
 
@@ -968,3 +972,47 @@ def test_the_out_of_memory_retry_grid_never_grows_an_axis():
         assert any(reduced[a] < resolution[a] for a in resolution), (
             "nothing was reduced"
         )
+
+
+# ---------------------------------------------------------------------------
+# The assumed on-axis temperature
+# ---------------------------------------------------------------------------
+
+
+def test_the_assumed_axis_temperature_is_overridable(monkeypatch) -> None:
+    """A VMEC equilibrium fixes the pressure and nothing else.
+
+    The temperature half of the closure is a convention, and the bootstrap
+    current is very sensitive to it: at fixed pressure and fixed resolution,
+    ``<j.B>/sqrt(<B^2>)`` runs -0.208, -0.499, -0.787, -1.130 for an assumed
+    axis temperature of 2, 4, 8 and 16 keV, because the collisionality that
+    suppresses the bootstrap current scales like ``n/T^2`` while ``p = 2nT``
+    is held fixed. A reader comparing against an optimizer's own bootstrap
+    current has to be able to match its design point.
+    """
+    from dkx.representative import _t_axis_kev, DEFAULT_T_AXIS_KEV, T_AXIS_ENV
+
+    monkeypatch.delenv(T_AXIS_ENV, raising=False)
+    assert _t_axis_kev() == DEFAULT_T_AXIS_KEV
+    monkeypatch.setenv(T_AXIS_ENV, "8.0")
+    assert _t_axis_kev() == 8.0
+
+
+@pytest.mark.parametrize("bad", ["nonsense", "0", "-3"])
+def test_a_bad_axis_temperature_is_refused(monkeypatch, bad: str) -> None:
+    """Silently falling back to the default would hide the very assumption
+    this knob exists to make visible."""
+    from dkx.representative import _t_axis_kev, T_AXIS_ENV
+
+    monkeypatch.setenv(T_AXIS_ENV, bad)
+    with pytest.raises(ValueError, match=T_AXIS_ENV):
+        _t_axis_kev()
+
+
+def test_the_provenance_phrase_names_the_temperature_assumption(monkeypatch) -> None:
+    """"p(s) from the equilibrium" alone reads as if the whole plasma came from
+    the file. Only the pressure did."""
+    from dkx.representative import T_AXIS_ENV, _t_axis_kev
+
+    monkeypatch.setenv(T_AXIS_ENV, "5.5")
+    assert _t_axis_kev() == 5.5
