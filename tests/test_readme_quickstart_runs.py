@@ -56,3 +56,55 @@ def test_the_quickstart_uses_the_entry_point_we_document():
     # quickstart is the one place that must not drift back to it.
     assert "run_profile(" not in snippet
     assert "argparse" not in snippet and "__main__" not in snippet
+
+
+# ---------------------------------------------------------------------------
+# The documentation landing page
+# ---------------------------------------------------------------------------
+
+INDEX = REPO_ROOT / "docs" / "index.rst"
+
+
+def _index_snippet() -> str:
+    """The first python code-block on the landing page."""
+    text = INDEX.read_text(encoding="utf-8")
+    match = re.search(r"\.\. code-block:: python\n\n((?:   .*\n|\n)+)", text)
+    if match is None:
+        pytest.fail("no python code-block found on the documentation landing page")
+    return "\n".join(
+        line[3:] if line.startswith("   ") else line
+        for line in match.group(1).split("\n")
+    )
+
+
+def test_the_landing_page_quickstart_runs(tmp_path):
+    """The docs landing page must execute, for the same reason the README does.
+
+    It was SFINCS-namelist-first until 2026-09-01 and showed ``run_profile``
+    against an ``input.namelist`` the reader did not have. The replacement is
+    self-contained on purpose -- it names no equilibrium file -- so there is no
+    excuse for it not to run in CI.
+    """
+    script = tmp_path / "landing.py"
+    script.write_text(_index_snippet(), encoding="utf-8")
+    done = subprocess.run([sys.executable, str(script)], capture_output=True, text=True,
+                          cwd=tmp_path, timeout=1800)  # fmt: skip
+    assert done.returncode == 0, done.stdout[-2000:] + done.stderr[-3000:]
+
+    values = [float(line) for line in done.stdout.splitlines()
+              if re.fullmatch(r"-?\d+\.?\d*(e[+-]\d+)?", line.strip())]  # fmt: skip
+    assert values, f"the snippet printed no number: {done.stdout!r}"
+    assert all(v == v and abs(v) < float("inf") for v in values), values
+    assert any(v != 0.0 for v in values), "the quickstart solved nothing"
+
+
+def test_the_landing_page_does_not_lead_with_a_namelist():
+    """plan.md Phase F: no stale SFINCS-first quickstart.
+
+    The compatibility path is still documented further down; what this pins is
+    that the *first* thing a reader sees is the native case API.
+    """
+    snippet = _index_snippet()
+    assert "input.namelist" not in snippet
+    assert "run_profile" not in snippet
+    assert "Case.from_mapping" in snippet or "Case.from_file" in snippet

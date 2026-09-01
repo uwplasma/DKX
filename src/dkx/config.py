@@ -74,7 +74,12 @@ class SpeciesConfig:
 class PhysicsConfig:
     model: str = "full_local"
     collisions: str = "linearized_fokker_planck"
-    magnetic_drifts: str = "full"
+    #: "dkes" is the default because it is the route execution implements. The
+    #: schema still admits "full" (tangential magnetic drifts) so a case can
+    #: name it once the executor supports it, but defaulting to it meant every
+    #: case that omitted the field -- including the template `dkx schema`
+    #: prints -- was refused at run time.
+    magnetic_drifts: str = "dkes"
     phi1: str = "off"
     #: Coulomb logarithm. The reference set pins 17.0, and the normalized
     #: collisionality is proportional to it, so this is how a case says what a
@@ -585,11 +590,16 @@ def case_json_schema() -> dict[str, Any]:
 
 
 COMMENTED_TOML_EXAMPLE = """# DKX case schema version 1.
+#
+# This template shows every field the schema accepts, so it is a reference
+# rather than a file that runs unedited: it names a VMEC equilibrium you have
+# to supply, and it turns on convergence refinement and sharding. Edit it down
+# to what you need. `dkx validate` will tell you what is left to fix.
 schema = 1
 name = "w7x_ambipolar_profile"
 
 [run]
-workflow = "ambipolar_profile" # profile, transport_matrix, or monoenergetic are also supported.
+workflow = "ambipolar_profile" # or "profile" for a prescribed electric field.
 precision = "float64"
 device = "auto"
 progress = true
@@ -616,7 +626,7 @@ temperature_keV = [2.5, 2.3, 2.0, 1.6, 1.0]
 [physics]
 model = "full_local"
 collisions = "linearized_fokker_planck"
-magnetic_drifts = "full"
+magnetic_drifts = "dkes"
 phi1 = "off"
 # Coulomb logarithm. The collisionality is proportional to it, so this is how a
 # case says what a SFINCS deck says with a nu_n override. 17.0 is the pinned
@@ -724,7 +734,7 @@ def _parse_physics(data: Mapping[str, Any]) -> PhysicsConfig:
         collisions=_string(
             data, "collisions", path, default="linearized_fokker_planck"
         ),
-        magnetic_drifts=_string(data, "magnetic_drifts", path, default="full"),
+        magnetic_drifts=_string(data, "magnetic_drifts", path, default="dkes"),
         phi1=_string(data, "phi1", path, default="off"),
         coulomb_logarithm=_number(data, "coulomb_logarithm", path, default=17.0),
     )
