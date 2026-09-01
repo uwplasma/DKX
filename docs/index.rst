@@ -1,12 +1,14 @@
 DKX
 ===
 
-`dkx` solves the radially local, linearized drift-kinetic equation on a
-flux surface, in pure JAX. The physics is the same as SFINCS Fortran v3. One
-``input.namelist`` plus one geometry file gives neoclassical particle/heat
-fluxes, parallel flows, bootstrap current, and transport matrices for
-stellarators and tokamaks, on CPU or GPU, with end-to-end automatic
-differentiation for sensitivities and optimization.
+`dkx` solves the radially local, linearized drift-kinetic equation on a flux
+surface, in pure JAX. It returns neoclassical particle and heat fluxes,
+parallel flows, bootstrap current, transport matrices and ambipolar electric
+field roots for stellarators and tokamaks, on CPU or GPU, and every output is
+differentiable in every input.
+
+The physics is the same as SFINCS Fortran v3, and `dkx` reads and writes
+SFINCS files. It does not require them: a run is described by one case file.
 
 Quickstart
 ----------
@@ -15,23 +17,62 @@ Quickstart
 
    pip install dkx
 
+A complete run, with no equilibrium file to supply:
+
 .. code-block:: python
 
-   from pathlib import Path
-   from dkx.run import run_profile
+   import dkx
 
-   run = run_profile(Path("input.namelist"), solve_method="auto",
-                     out_path=Path("sfincsOutput.h5"))
-   print(float(run.moments["particleFlux_vm_psiHat"][0]))
-   print(float(run.moments["FSABjHat"]))  # bootstrap current <j.B>
+   case = dkx.Case.from_mapping({
+       "schema": 1,
+       "name": "tokamak",
+       "run": {"workflow": "profile", "progress": False},
+       "geometry": {"format": "analytic", "file": "tokamak",
+                    "surfaces": [0.16, 0.25, 0.36]},
+       "species": [{"name": "deuterium", "charge": 1, "mass_amu": 2.014,
+                    "density_m3": [8.0e19, 7.0e19, 6.0e19],
+                    "temperature_keV": [1.0, 0.8, 0.6]}],
+       "physics": {"model": "full_local", "collisions": "pitch_angle_scattering"},
+       "electric_field": {"mode": "prescribed", "value_kV_m": 0.0},
+       "resolution": {"theta": 9, "zeta": 1, "pitch": 8, "speed": 4},
+       "solver": {"method": "auto", "relative_tolerance": 1e-8},
+   })
+   result = dkx.run(case)
+   print(float(result.arrays["particle_flux_m2_s"][1, 0]))
 
-``run_profile`` prints the Fortran-parity console flow, writes
-``sfincsOutput.h5``/``.nc`` keyed by the SFINCS output names, and returns the
-state vector, solver statistics, and all velocity-space moments in memory. The
-CLI equivalent is ``dkx input.namelist --out sfincsOutput.h5``;
-``dkx --plot sfincsOutput.h5`` builds a PDF diagnostics panel. See
-:doc:`installation` for the ``solvax`` structured-solver core dependency, GPU
-wheels, and the Fortran reference build.
+Save that mapping as a ``.toml`` file and the command line does the same:
+
+.. code-block:: bash
+
+   dkx validate case.toml     # check it, and print its deterministic id
+   dkx run case.toml --out result.nc
+   dkx inspect result.nc
+
+``dkx schema --format toml`` prints a template showing every field the schema
+accepts. It is a reference, not a starting file: it names a VMEC equilibrium
+you have to supply and enables options this quickstart does not need.
+
+The resolution above is sized to run in seconds and is **not converged**. Run
+``dkx converge case.toml`` before trusting any number from it.
+
+A case is one TOML or JSON file. ``Case`` is immutable and carries a
+deterministic ``case_id``; ``Result`` carries the arrays, the solver route,
+the achieved residual and provenance. See :doc:`case_files` for the schema and
+:doc:`cli` for the eleven commands.
+
+Coming from SFINCS
+------------------
+
+Existing decks keep working, unchanged:
+
+.. code-block:: bash
+
+   dkx input.namelist --out sfincsOutput.h5   # solve a deck directly
+   dkx convert input.namelist case.toml       # or turn it into a case file
+   dkx sfincs --help                          # the compatibility commands
+
+See :doc:`installation` for the ``solvax`` structured-solver core dependency,
+GPU wheels, and the Fortran reference build.
 
 Examples
 --------
