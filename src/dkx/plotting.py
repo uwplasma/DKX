@@ -604,3 +604,92 @@ def plot_ambipolar_search(*, result, output_path: Path) -> Path:
     fig.savefig(output_path, dpi=150)
     plt.close(fig)
     return output_path
+
+
+def plot_scan_summary(*, result, output_path: Path) -> Path:
+    """Plot a scan's observables against its axis, one panel per observable.
+
+    ``dkx scan`` writes a Result whose arrays carry a leading ``case``
+    dimension and whose axis values sit beside the observables. Until this
+    existed there was no way to look at one: ``plot_result_summary`` expects a
+    radial profile and refuses a scan for want of ``r_N``.
+
+    A scan point that failed is drawn as a marked gap on the axis rather than
+    omitted. Omitting it would silently interpolate the curve across the
+    missing point, which is how a scan with a hole in the middle comes to look
+    like a smooth trend.
+
+    Only one-dimensional scans are drawn. A multi-axis scan has no single
+    abscissa, and projecting it onto one axis would overplot unrelated points;
+    that is refused rather than guessed at.
+    """
+    arrays = result.arrays
+    axes_names = sorted(name for name in arrays if name.startswith("axis_"))
+    if not axes_names:
+        raise ValueError(
+            f"{getattr(result, 'case_name', 'result')} carries no scan axis. "
+            "This plot needs a result written by `dkx scan`."
+        )
+    if len(axes_names) > 1:
+        raise ValueError(
+            f"this scan varies {len(axes_names)} axes ({', '.join(a[5:] for a in axes_names)}); "
+            "a single abscissa cannot represent it. Plot a one-axis scan, or read "
+            "the arrays directly."
+        )
+
+    axis_name = axes_names[0]
+    x = np.asarray(arrays[axis_name], dtype=float)
+    status = np.asarray(arrays.get("status", np.array(["ok"] * x.size, dtype=object)))
+    ok = np.array([
+        (s.decode() if isinstance(s, bytes) else str(s)) == "ok" for s in status.ravel()
+    ])
+
+    observables = [
+        (name, label)
+        for name, label in (
+            ("particle_flux_m2_s", r"particle flux  [m$^{-2}$s$^{-1}$]"),
+            ("heat_flux_W_m2", r"heat flux  [W m$^{-2}$]"),
+            ("parallel_current_A_T_m2", r"$\langle j_\parallel B\rangle$  [A T m$^{-2}$]"),
+        )
+        if name in arrays
+    ]
+    if not observables:
+        raise ValueError(
+            f"{getattr(result, 'case_name', 'result')} carries none of the scan "
+            "observables, so there is nothing to plot"
+        )
+
+    order = np.argsort(x)
+    fig, axes = plt.subplots(
+        len(observables), 1, figsize=(7.0, 2.4 * len(observables)), sharex=True, squeeze=False
+    )
+    axes = axes[:, 0]
+    for ax, (name, label) in zip(axes, observables):
+        y = np.asarray(arrays[name], dtype=float)
+        good = order[ok[order]]
+        ax.plot(x[good], y[good], "-o", ms=4, color="tab:blue")
+        bad = order[~ok[order]]
+        if bad.size:
+            for value in x[bad]:
+                ax.axvline(value, color="tab:red", lw=1.2, ls=":", alpha=0.8)
+            ax.plot([], [], color="tab:red", lw=1.2, ls=":", label="case failed")
+            ax.legend(fontsize="x-small", frameon=False)
+        ax.set_ylabel(label, fontsize="small")
+        ax.grid(alpha=0.3)
+
+    # The array name has had its dots flattened to underscores, so
+    # "electric_field.value_kV_m" would come back as "electric field value kV m".
+    # The scan records the real schema path in metadata; use it. Section 10.2
+    # asks for physical coordinates and units, not mangled internal key names.
+    declared = list(getattr(result, "metadata", {}).get("scan_axes", []) or [])
+    axes[-1].set_xlabel(
+        declared[0] if len(declared) == 1 else axis_name[len("axis_"):]
+    )
+    title = getattr(result, "case_name", "dkx scan")
+    fig.suptitle(f"{title} — {int(ok.sum())} of {ok.size} cases", fontsize="medium")
+    fig.tight_layout()
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    return output_path

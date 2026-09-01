@@ -264,7 +264,7 @@ def test_an_unreadable_output_is_not_trusted_as_a_cache(monkeypatch, tmp_path) -
 # --------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-ANALYTIC_CASE = REPO_ROOT / "examples" / "cases" / "analytic_tokamak_profile.toml"
+ANALYTIC_CASE = REPO_ROOT / "examples" / "01_tokamak_profile" / "case.toml"
 
 
 def test_a_real_two_point_scan_runs_and_resumes(tmp_path) -> None:
