@@ -70,7 +70,7 @@ def test_electron_root_completes_and_decreases(er_example) -> None:
     assert bool(g["objective_decreased"]), f"{float(g['J0'])} -> {float(g['J_final'])}"
     assert (g["OUT_DIR"] / f"{g['STEM']}.png").exists()
     assert (g["OUT_DIR"] / f"{g['STEM']}_history.json").exists()
-    # warm start reduced the tier-2 Krylov iteration count on the E_r scan
+    # warm start reduced the recycled Krylov iteration count on the E_r scan
     assert int(g["it_warm"]) < int(g["it_cold"])
 
 
@@ -112,7 +112,7 @@ def test_impurity_completes_and_decreases(imp_example) -> None:
     assert bool(g["objective_decreased"]), f"{float(g['J0'])} -> {float(g['J_final'])}"
     assert (g["OUT_DIR"] / f"{g['STEM']}.png").exists()
     assert (g["OUT_DIR"] / f"{g['STEM']}_history.json").exists()
-    assert int(g["it_warm"]) < int(g["it_cold"])          # tier-2 FP warm-start savings
+    assert int(g["it_warm"]) < int(g["it_cold"])          # recycled Krylov FP warm-start savings
     assert np.isfinite(float(g["screening_coeff"]))        # temperature-screening coefficient
 
 

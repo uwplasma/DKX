@@ -1,4 +1,4 @@
-"""The coarse tier-2 preconditioner generates what it cannot afford to store.
+"""The coarse preconditioner generates what it cannot afford to store.
 
 Its dense ``(Ntheta*Nzeta)`` bands are sized exactly by the grid, so a solve
 that cannot fit them is knowable before any work happens.  Five upstream decks
@@ -294,7 +294,7 @@ def test_the_reusable_route_is_what_a_near_miss_deck_builds(monkeypatch):
 
 
 def test_the_sparse_route_is_not_gated(monkeypatch):
-    """The other tier-2 routes stay reachable whatever the bands cost."""
+    """The other preconditioner routes stay reachable whatever the bands cost."""
     pytest.importorskip("scipy.sparse.linalg")
     monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: 1.0)
     precond, _ = build_tier2_preconditioner(_small_op(), "sparse")
@@ -343,7 +343,7 @@ AGREEMENT_CASES = {
     "phi1_in_collision": lambda: _load_op(
         "fp_1species_FPCollisions_noEr_tiny_withPhi1_inCollision"
     ),
-    # The Er term that forces tier 2 in the first place, and the mask pin.
+    # The Er term that forces recycled Krylov in the first place, and the mask pin.
     "er_xdot": _small_op,
     "ramped_nxi_for_x": _ramped_op,
 }

@@ -84,8 +84,8 @@ NU_N_SCAN = [8.4774e-3, 2.4e-2, 6.8e-2, 1.6e-1, 3.0e-1]
 
 # Modest kinetic resolution (a decomposition/scaling demo, not a converged
 # transport number -- recorded in the JSON provenance).  Kept below the
-# tier-3 dense-fallback size so every point solves even if the Krylov tier
-# is exhausted.
+# sparse direct dense-fallback size so every point solves even if the Krylov
+# route is exhausted.
 N_THETA, N_ZETA, N_XI, N_X = 7, 13, 8, 5
 SOLVER_TOLERANCE = 1e-8
 DELTA = 4.5694e-3

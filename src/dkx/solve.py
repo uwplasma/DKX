@@ -1,10 +1,16 @@
-"""The plan-§2.3 three-tier auto-policy linear solver over a :class:`KineticOperator`.
+"""The plan-§2.3 three-route auto-policy linear solver over a :class:`KineticOperator`.
 
 This module is the Phase-3.3 solve track: given the consolidated v3
 drift-kinetic operator (:mod:`dkx.drift_kinetic`) and one or more right-hand
-sides, pick and run the cheapest adequate linear solver:
+sides, pick and run the cheapest adequate linear solver.
 
-Tier 1 — structured direct (``solvax.direct`` block Thomas over Legendre modes)
+The three routes are named as a case file's ``[solver] method`` names them:
+``structured_direct``, ``recycled_krylov``, ``sparse_direct_referee``.  Code
+identifiers in this module still spell them with the retired tier numbering —
+``tier1`` names belong to the structured direct route, ``tier2`` to recycled
+Krylov, ``tier3`` to sparse direct — while the prose uses the route names.
+
+Structured direct (``solvax.direct`` block Thomas over Legendre modes)
     Available when :meth:`KineticOperator.to_block_tridiagonal` succeeds (the
     DKES-trajectory / pitch-angle-scattering family: streaming+mirror couple
     L±1, ExB and PAS are diagonal in L, no Er xDot/xiDot L±2 terms, no
@@ -19,11 +25,11 @@ Tier 1 — structured direct (``solvax.direct`` block Thomas over Legendre modes
     the batch is solved by ``vmap``-ed ``solvax.block_thomas_factor`` /
     ``block_thomas_solve``.  Multi-RHS shares one elimination.
 
-Tier 2 — preconditioned, recycled Krylov (``solvax.krylov.gcrot``)
+Recycled Krylov — preconditioned, with subspace recycling (``solvax.krylov.gcrot``)
     Matrix-free FGMRES+recycling on :meth:`KineticOperator.apply`,
-    right-preconditioned by an exact tier-1 solve of the SFINCS-simplified
-    coarse operator (the Fortran ``preconditionerOptions`` idiom):
-    ``preconditioner_species=1`` (self-collisions only) and
+    right-preconditioned by an exact structured direct solve of the
+    SFINCS-simplified coarse operator (the Fortran ``preconditionerOptions``
+    idiom): ``preconditioner_species=1`` (self-collisions only) and
     ``preconditioner_x=1`` (x-diagonal collisions) reduce Fokker-Planck to a
     PAS-like L-diagonal coefficient; the Er L±2 terms are dropped, which is
     Fortran's ``preconditioner_xi=1`` applied unconditionally.  The bordered
@@ -34,28 +40,28 @@ Tier 2 — preconditioned, recycled Krylov (``solvax.krylov.gcrot``)
     preconditioner itself, its pins and the routing between its three storage
     policies live in :mod:`dkx.coarse_precond`.
 
-Tier 3 — host sparse-direct fallback (``solvax.native.splu_solve``)
+Sparse direct — host fallback and cross-check (``solvax.native.splu_solve``)
     Materializes the operator (vmapped unit vectors; guarded by
     ``max_dense_size``) into CSR and hands it to SuperLU on the host.
     Non-differentiable, non-jittable; prints a loud one-line notice.  Used on
-    explicit request (``method="direct"``) or when tier 2 breaches its
-    iteration cap under ``method="auto"``.
+    explicit request (``method="direct"``) or when the recycled Krylov route
+    breaches its iteration cap under ``method="auto"``.
 
-Differentiability: tiers 1 and 2 are wrapped with
-``solvax.implicit.linear_solve`` (implicit function theorem via
+Differentiability: the structured direct and recycled Krylov routes are wrapped
+with ``solvax.implicit.linear_solve`` (implicit function theorem via
 ``jax.lax.custom_linear_solve``) when ``differentiable=True``; the adjoint
-costs one transposed solve which reuses the same tier-1 factors
+costs one transposed solve which reuses the same structured direct factors
 (``block_thomas_solve(transpose=True)``) or a transposed-preconditioner
-GCROT solve.  Tier 3 is a loud, non-differentiable escape hatch.
+GCROT solve.  Sparse direct is a loud, non-differentiable escape hatch.
 
 That transposed solve is the one place where a bad answer is invisible: the
 forward solution, its residual, and every other field of :class:`SolveResult`
-stay correct while the gradient is silently wrong.  The differentiable tier-2
-path therefore recomputes each solve's *true* residual from the operator
-(``||A^T y - g||``, never the Krylov method's internal estimate), records it
-in :class:`AdjointDiagnostics` on :attr:`SolveResult.adjoint`, and — unless
-``check_adjoint=False`` — raises at execution time when it misses both the
-requested tolerance and the double-precision backward-error floor.
+stay correct while the gradient is silently wrong.  The differentiable
+recycled Krylov path therefore recomputes each solve's *true* residual from
+the operator (``||A^T y - g||``, never the Krylov method's internal estimate),
+records it in :class:`AdjointDiagnostics` on :attr:`SolveResult.adjoint`, and
+— unless ``check_adjoint=False`` — raises at execution time when it misses
+both the requested tolerance and the double-precision backward-error floor.
 
 Fortran correspondence: ``solver.F90`` (KSP setup / preconditioner matrix
 ``whichMatrix=0``), ``preconditioner.F90`` (the ``preconditioner_*`` knobs),
@@ -139,16 +145,16 @@ __all__ = [
 ]
 
 # Default memory budget above which ``solve(method="auto")`` prefers the
-# memory-lean truncated tier-1 kernel over the full-band factorization.  Chosen
-# to match the validated HSX head-to-head benchmark
+# memory-lean truncated structured direct kernel over the full-band
+# factorization.  Chosen to match the validated HSX head-to-head benchmark
 # (tools/benchmarks/tier1_hsx_head_to_head.py).  Overridable per call via the
 # ``tier1_memory_budget_gb`` argument or the environment variable below.
 _TIER1_BUDGET_GB_DEFAULT = 8.0
 _TIER1_BUDGET_ENV = "DKX_TIER1_MEMORY_BUDGET_GB"
 
-# Defect-correction sweeps after the tier-1 factor solve.  One reproduces the
-# hand-rolled pass this replaced and already reaches O(1e-16) relative residual
-# in float64; the knob exists because the float32-factor variant needs more.
+# Defect-correction sweeps after the structured direct factor solve.  One
+# reproduces the hand-rolled pass this replaced and already reaches O(1e-16)
+# relative residual in float64; the knob exists because the float32-factor variant needs more.
 _TIER1_REFINEMENT_SWEEPS = 1
 
 # RHSMode 1/2/3 drives (radial gradient on L=0,2; inductive E_parallel on L=1)
@@ -162,24 +168,24 @@ _TIER1_KEEP_LOWEST_DEFAULT = 3
 # instead.  Both thresholds default to 0 — auto-routing OFF — because the
 # same-host measurements do not support a nonzero default (36-core Pop!_OS box
 # with an RTX A4000, 2026-07-17, docs/performance.rst "Same-host CPU/GPU
-# crossover"): the GPU won every tier-1 warm solve measured down to 6.5k DOFs
-# (2.7x-39x) and every preconditioned tier-2 warm solve down to 2.8k DOFs
-# (1.5x-2.7x).  The one CPU-wins case — the small unpreconditioned tier-2
-# loop of the Phi1 Newton solve (4.5k DOFs: warm 0.048 s CPU vs 0.159 s GPU)
-# — did NOT recover its win under solve-level routing (0.12-0.13 s: the
-# per-Newton-iteration residuals stay on the GPU and each routed solve pays
-# device transfers plus a one-time CPU compile), so routing small Phi1
-# workloads is best done whole-process (``JAX_PLATFORMS=cpu``), not per
-# solve.  The knob remains for hosts where the balance differs: set e.g.
-# ``DKX_SOLVE_CPU_MAX_SIZE_TIER2=6000`` to route small tier-2 solves.
+# crossover"): the GPU won every structured direct warm solve measured down to
+# 6.5k DOFs (2.7x-39x) and every preconditioned recycled Krylov warm solve down
+# to 2.8k DOFs (1.5x-2.7x).  The one CPU-wins case — the small unpreconditioned
+# recycled Krylov loop of the Phi1 Newton solve (4.5k DOFs: warm 0.048 s CPU
+# vs 0.159 s GPU) — did NOT recover its win under solve-level routing
+# (0.12-0.13 s: the per-Newton-iteration residuals stay on the GPU and each
+# routed solve pays device transfers plus a one-time CPU compile), so routing
+# small Phi1 workloads is best done whole-process (``JAX_PLATFORMS=cpu``), not
+# per solve.  The knob remains for hosts where the balance differs: set e.g.
+# ``DKX_SOLVE_CPU_MAX_SIZE_TIER2=6000`` to route small recycled Krylov solves.
 _SOLVE_DEVICE_ENV = "DKX_SOLVE_DEVICE"
 _SOLVE_CPU_MAX_TIER1_ENV = "DKX_SOLVE_CPU_MAX_SIZE_TIER1"
 _SOLVE_CPU_MAX_TIER2_ENV = "DKX_SOLVE_CPU_MAX_SIZE_TIER2"
 _SOLVE_CPU_MAX_TIER1_DEFAULT = 0
 _SOLVE_CPU_MAX_TIER2_DEFAULT = 0
 
-# Tier-2 preconditioner routes of ``solve(preconditioner=...)``.  All three
-# invert the *same* SFINCS-simplified operator and differ only in how.
+# Recycled Krylov preconditioner routes of ``solve(preconditioner=...)``.  All
+# three invert the *same* SFINCS-simplified operator and differ only in how.
 # ``"coarse"`` is the historical default (exact block-Thomas over L with dense
 # ``Ntheta*Nzeta`` blocks); ``"multigrid"`` swaps its inner f-block inverse for
 # the semicoarsened V-cycle of :mod:`dkx.multigrid`; ``"sparse"`` keeps the
@@ -307,24 +313,26 @@ class SolveResult:
             ``"gcrot"``, or ``"direct"``.  For "what did it do", read
             :attr:`route` instead, which is ``"direct"`` or ``"iterative"``.
         iterations: total Krylov inner iterations across all right-hand sides
-            (tier 2), else ``None``.
+            (recycled Krylov), else ``None``.
         residual_norms: true residual norms ``||b - A x||`` per right-hand
             side, shape ``(n_rhs,)`` (jnp array; traced under ``jax.grad``).
         converged: every residual below ``max(atol, tol * ||b||)``.  ``True``
-            by construction for the direct tiers when residuals are finite.
+            by construction for the direct routes when residuals are finite.
         recycle: GCROT recycle pair ``(C, U)`` from the last right-hand side
-            (tier 2), for warm-starting the next solve of a continuation.
+            (recycled Krylov), for warm-starting the next solve of a
+            continuation.
         timings: wall-clock seconds per phase (``build``, ``solve``).  Each
             phase ends with a ``jax.block_until_ready`` so the numbers are real
             device-compute time, not JAX async-dispatch latency (which would
             under-report by ~10x).  Under ``jit``/``grad`` the blocks are no-ops
             and the values are trace-time only.
         adjoint: :class:`AdjointDiagnostics` of the implicit-differentiation
-            solves (differentiable tier 2 only, else ``None``).  Empty when the
-            result is returned: the records are appended at *execution* time,
-            i.e. the forward ones when the value is computed and the adjoint
-            ones when the backward pass runs, so inspect it after the enclosing
-            ``jax.grad`` / ``jax.vjp`` call has completed.
+            solves (differentiable recycled Krylov only, else ``None``).
+            Empty when the result is returned: the records are appended at
+            *execution* time, i.e. the forward ones when the value is computed
+            and the adjoint ones when the backward pass runs, so inspect it
+            after the enclosing ``jax.grad`` / ``jax.vjp`` call has
+            completed.
     """
 
     x: jnp.ndarray
@@ -371,7 +379,7 @@ def _converged_flag(
     res_norms: jnp.ndarray, rhs2d: jnp.ndarray, tol: float, atol: float
 ) -> bool:
     if _is_traced(res_norms):
-        return True  # direct tiers under trace: exact up to factor accuracy
+        return True  # direct routes under trace: exact up to factor accuracy
     rhs_norms = np.linalg.norm(np.asarray(rhs2d), axis=0)
     # Judge every column against the LARGEST column's scale, not its own.  The
     # columns are solved by one shared factorization (or one Krylov space), so
@@ -489,8 +497,8 @@ def _residual_guard(
     """Host callback that records — and by default aborts on — a bad solve.
 
     Used on both the forward and the adjoint (transposed) GCROT solves of the
-    ``differentiable=True`` tier-2 path.  A stalled *adjoint* solve is the
-    dangerous one: the forward solution stays good, nothing in the returned
+    ``differentiable=True`` recycled Krylov path.  A stalled *adjoint* solve is
+    the dangerous one: the forward solution stays good, nothing in the returned
     :class:`SolveResult` changes, and the implicit-function-theorem VJP hands
     back a wrong gradient (the singular Fokker-Planck +
     ``constraintScheme=1`` failure mode).  Runs at execution time via
@@ -572,7 +580,7 @@ def _residual_guard(
             "Remedies: raise the resolution or pick a constraint scheme that "
             "regularizes this operator (SFINCS pairs constraintScheme=1 with "
             "the Fokker-Planck/Sugama operators and 2 with pitch-angle "
-            "scattering); referee the case on a direct tier "
+            "scattering); referee the case on a direct route "
             "(method='block_tridiagonal' where available, or method='direct' "
             "for a non-differentiable check of the forward solve); tighten "
             "tol and raise max_restarts; or, if you have verified the "
@@ -622,22 +630,22 @@ def _guarded_solve(
 
 
 # =============================================================================
-# Tier 1 — structured direct (block Thomas over Legendre modes)
+# Structured direct (block Thomas over Legendre modes)
 # =============================================================================
 
 
 def tier1_available(op: KineticOperator) -> tuple[bool, str]:
-    """Check whether the tier-1 structured direct family applies to ``op``.
+    """Check whether the structured direct family applies to ``op``.
 
     The decision is driven by the operator's own block extraction: if
     :meth:`KineticOperator.legendre_blocks` refuses (Er L±2 terms,
-    Fokker-Planck collisions), tier 1 is off.  On top of that the bordered
-    constraint machinery must be diagonal over (species, x)
+    Fokker-Planck collisions), the structured direct route is off.  On top of
+    that the bordered constraint machinery must be diagonal over (species, x)
     (``constraintScheme`` 0 or 2 without ``point_at_x0``).  Non-uniform
     ``Nxi_for_x`` (the production speed-dependent Legendre ramp) is accepted:
-    every (species, x) subsystem is closed, so the truncated tier-1 kernel
-    solves it with its own ``n_blocks = Nxi_for_x[ix]`` — exactly the packed
-    Fortran system.  Only the full-band factorization
+    every (species, x) subsystem is closed, so the truncated structured direct
+    kernel solves it with its own ``n_blocks = Nxi_for_x[ix]`` — exactly the
+    packed Fortran system.  Only the full-band factorization
     (:func:`build_tier1_solver`) additionally requires uniform ``Nxi_for_x``;
     ramped decks always route through the truncated kernel.
     """
@@ -661,12 +669,12 @@ def _uniform_nxi_for_x(op: KineticOperator) -> bool:
 
 
 # =============================================================================
-# Tier 1 memory model and the full-vs-truncated route decision
+# Structured direct memory model and the full-vs-truncated route decision
 # =============================================================================
 
 
 def tier1_full_band_bytes(op: KineticOperator) -> float:
-    """Bytes of the full tier-1 Legendre bands (``lower``/``diag``/``upper``).
+    """Bytes of the structured direct Legendre bands (``lower``/``diag``/``upper``).
 
     :func:`build_tier1_solver` materializes the three block-tridiagonal bands
     of :meth:`KineticOperator.to_block_tridiagonal`, each of shape
@@ -688,7 +696,7 @@ def tier1_full_band_bytes(op: KineticOperator) -> float:
 
 
 def tier1_peak_memory_bytes(op: KineticOperator) -> float:
-    """Peak-memory estimate of the full tier-1 factorization.
+    """Peak-memory estimate of the full structured direct factorization.
 
     Adds the block-Thomas LU factors and elimination temporaries on top of the
     three input bands (:func:`tier1_full_band_bytes`).  The
@@ -705,7 +713,7 @@ def tier1_truncated_peak_memory_bytes(
     keep_lowest: int = _TIER1_KEEP_LOWEST_DEFAULT,
     subsystem_batch: int | str = "auto",
 ) -> float:
-    """Working-set estimate of the truncated tier-1 solve (:func:`_solve_tier1_truncated`).
+    """Working-set estimate of :func:`_solve_tier1_truncated` (structured direct).
 
     The truncated route never materializes the full Legendre bands, so the
     ~``tier1_peak_memory_bytes`` full-band peak wildly overestimates it (46x on
@@ -827,7 +835,7 @@ def _tier1_budget_bytes(budget_gb: float | None) -> tuple[float, float]:
 
 
 def _truncation_supported(op: KineticOperator, keep: int) -> tuple[bool, str]:
-    """Structural check that the truncated tier-1 kernel applies to ``op``.
+    """Structural check that the truncated structured direct kernel applies.
 
     Assumes :func:`tier1_available` already passed (PAS/DKES family,
     constraintScheme in {0, 2}, no point_at_x0).  Additionally every closed
@@ -943,7 +951,9 @@ class Tier1Solver:
 
 
 def build_tier1_solver(op: KineticOperator) -> Tier1Solver:
-    """Assemble and factor the tier-1 batched bordered block-tridiagonal solver.
+    """Assemble and factor the batched bordered block-tridiagonal solver.
+
+    This is the full-band structured direct route.
 
     Uses the analytic (probing-free) :meth:`KineticOperator.to_block_tridiagonal`
     blocks — the replacement for the retired probing-based RHSMode=3 solver POC
@@ -957,12 +967,13 @@ def build_tier1_solver(op: KineticOperator) -> Tier1Solver:
     ok, reason = tier1_available(op)
     if not ok:
         raise NotImplementedError(
-            f"tier-1 structured direct path unavailable: {reason}"
+            f"structured direct route unavailable: {reason}"
         )
     if not _uniform_nxi_for_x(op):
         raise NotImplementedError(
-            "tier-1 full-band factorization requires uniform Nxi_for_x (the ramped "
-            "bands carry singular zero rows on the truncated DOFs); ramped decks "
+            "the full-band structured direct factorization requires uniform "
+            "Nxi_for_x (the ramped bands carry singular zero rows on the "
+            "truncated DOFs); ramped decks "
             "route through the truncated kernel (method='block_tridiagonal_truncated')"
         )
 
@@ -1003,7 +1014,7 @@ def build_tier1_solver(op: KineticOperator) -> Tier1Solver:
 
 
 # =============================================================================
-# Tier 3 — host sparse-direct fallback
+# Sparse direct — host fallback and independent cross-check
 # =============================================================================
 
 
@@ -1042,8 +1053,8 @@ def materialize_dense(
 ) -> np.ndarray:
     """:func:`materialize_csr` as a dense numpy matrix, for referee tests.
 
-    Densifying costs ``O(total_size**2)`` memory, which is why the tier-3
-    solve route uses the CSR form directly and only tests come through here.
+    Densifying costs ``O(total_size**2)`` memory, which is why the sparse
+    direct route uses the CSR form directly and only tests come through here.
     """
     return materialize_csr(
         op, column_chunk=column_chunk, pin_masked_dofs=pin_masked_dofs
@@ -1071,14 +1082,14 @@ def _escalate_after_tier2_stall(
     """Work through the remedies a user would otherwise have to know about.
 
     A stalled Krylov solve is a *preconditioner* problem, not a reason to
-    change solver tier, and this is where DKX used to get it backwards: it
-    announced a fall back to the tier-3 host direct solve, which obtains its
+    change solver route, and this is where DKX used to get it backwards: it
+    announced a fall back to the sparse direct host solve, which obtains its
     matrix by applying the operator to ``n`` identity columns.  At the sizes
-    where tier 2 actually stalls that is hopeless -- a 66004-DOF deck needs
-    66004 operator applications before the factorization even starts -- so the
-    guard in :func:`_solve_tier3` refused, and a convergence problem surfaced
-    as a hard crash telling the user to raise ``max_dense_size``.  Sampling
-    into CSR (:func:`materialize_csr`) removed the dense ``O(n^2)``
+    where recycled Krylov actually stalls that is hopeless -- a 66004-DOF deck
+    needs 66004 operator applications before the factorization even starts --
+    so the guard in :func:`_solve_tier3` refused, and a convergence problem
+    surfaced as a hard crash telling the user to raise ``max_dense_size``.
+    Sampling into CSR (:func:`materialize_csr`) removed the dense ``O(n^2)``
     intermediate that used to sit on top of that, but not the ``n``
     applications, so the guard stands and this ladder still ends elsewhere.
 
@@ -1094,8 +1105,8 @@ def _escalate_after_tier2_stall(
     DKX already owns the equivalent of that preconditioner -- ``"sparse"``
     eliminates in a fill-reducing order and keeps the inverse exact -- and the
     stall above happened without ever trying it.  So the ladder escalates the
-    preconditioner first, in increasing cost, and only considers tier 3 at a
-    size where tier 3 can actually run.
+    preconditioner first, in increasing cost, and only considers the sparse
+    direct route at a size where it can actually run.
 
     Returns the first converged result, or the best (lowest final residual) if
     none converges, so a caller that can tolerate a loose solve still gets the
@@ -1110,7 +1121,7 @@ def _escalate_after_tier2_stall(
         return float(norms[-1]) if norms.size else float("inf")
 
     print(
-        f"[dkx.solve] recycled iterative solve stalled with the {preconditioner} "
+        f"[dkx.solve] recycled Krylov solve stalled with the {preconditioner} "
         f"preconditioner (iterations={stalled.iterations}, residual="
         f"{_residual(stalled):.3e}); escalating rather than giving up."
     )
@@ -1186,11 +1197,11 @@ def _escalate_after_tier2_stall(
     except Exception as exc:
         print(f"[dkx.solve]   widened retry failed: {exc}")
 
-    # Rung 3: tier 3, but only where it can actually run.  Announcing a
+    # Rung 3: sparse direct, but only where it can actually run.  Announcing a
     # fallback that the size guard will refuse is what produced the original
     # crash, so the size is checked here rather than discovered downstream.
     if op.total_size <= max_dense_size:
-        print("[dkx.solve]   falling back to the host sparse-direct solve ...")
+        print("[dkx.solve]   falling back to the sparse direct host solve ...")
         return _solve_tier3(
             op, rhs2d, tol=tol, atol=atol, max_dense_size=max_dense_size
         )
@@ -1200,7 +1211,7 @@ def _escalate_after_tier2_stall(
         f"the linear solve did not converge at total_size={op.total_size}.\n"
         f"Tried: {'; '.join(label for label, _ in attempts)}.\n"
         f"Best final residual {_residual(best):.3e} ({best_label}), tolerance {tol:.1e}.\n"
-        "The host sparse-direct fallback was not attempted: it samples the operator column by "
+        "The sparse direct fallback was not attempted: it samples the operator column by "
         f"column, which at this size needs {op.total_size} operator applications "
         "before any factorization starts, so raising max_dense_size would not help.\n"
         "What usually does help, in order: lower the collisionality-scaled Er "
@@ -1221,20 +1232,21 @@ def _solve_tier3(
     _require_solvax()
     if _is_traced(rhs2d):
         raise RuntimeError(
-            "tier-3 host sparse-direct solve is non-differentiable and cannot run "
+            "the sparse direct (host SuperLU) solve is non-differentiable and "
+            "cannot run "
             "under jit/vmap/grad; use method='block_tridiagonal' or 'gmres' with "
             "differentiable=True."
         )
     n = op.total_size
     if n > max_dense_size:
         raise RuntimeError(
-            f"tier-3 materialization refused: total_size={n} > "
+            f"sparse direct materialization refused: total_size={n} > "
             f"max_dense_size={max_dense_size}, i.e. {n} operator applications to "
             "sample the matrix column by column; raise max_dense_size explicitly "
             "if you really want this."
         )
     print(
-        f"[dkx.solve] tier-3 host sparse-direct solve (SuperLU, n={n}): "
+        f"[dkx.solve] sparse direct route (host SuperLU, n={n}): "
         "non-differentiable fallback path."
     )
     t0 = time.perf_counter()
@@ -1257,7 +1269,7 @@ def _solve_tier3(
 
 
 # =============================================================================
-# Tier drivers
+# Route drivers
 # =============================================================================
 
 
@@ -1277,10 +1289,10 @@ def _implicit_solve(
     handed (``linear_solve`` passes ``transpose_matvec`` through verbatim).
 
     With ``has_aux`` both callables return ``(x, aux)`` and the *forward*
-    solve's ``aux`` comes back beside the solution.  That is how tier 2 reads
-    its iteration count, residual and recycle pair off the one solve the
-    wrapper runs, instead of running a second solve outside it just to see
-    them.
+    solve's ``aux`` comes back beside the solution.  That is how the recycled
+    Krylov route reads its iteration count, residual and recycle pair off the
+    one solve the wrapper runs, instead of running a second solve outside it
+    just to see them.
     """
 
     def solver(mv: Callable, b: jnp.ndarray):
@@ -1367,7 +1379,7 @@ def _solve_tier1(
 
 
 # =============================================================================
-# Tier 1 (truncated) — memory-lean block Thomas over the lowest K Legendre modes
+# Structured direct (truncated) — block Thomas over the lowest K Legendre modes
 # =============================================================================
 
 
@@ -1381,7 +1393,7 @@ def _solve_tier1_truncated(
     subsystem_batch: int | str = "auto",
     adjoint_window: int | None = None,
 ) -> SolveResult:
-    """Memory-lean tier-1 solve: only the lowest ``keep`` Legendre blocks.
+    """Memory-lean structured direct solve: the lowest ``keep`` Legendre blocks.
 
     Assembles each ``(m, m)`` Legendre block on the fly inside
     ``solvax.direct.block_thomas_truncated_fn`` (peak memory ``O(keep * m^2)``
@@ -1414,10 +1426,11 @@ def _solve_tier1_truncated(
     Differentiability: the whole solve is a pure-JAX composition of
     ``block_thomas_truncated_fn`` sweeps, so ``jax.grad`` differentiates
     straight through it.  It is *not* wrapped in the full-operator
-    implicit-function-theorem adjoint used by the full tier-1/tier-2 paths:
-    this solve inverts the *reduced* Schur-complemented operator on the lowest
-    ``keep`` blocks, not the full band, so a full-operator ``A^T`` adjoint
-    would be inconsistent and silently corrupt gradients.  Two consistent
+    implicit-function-theorem adjoint used by the full structured direct and
+    recycled Krylov paths: this solve inverts the *reduced* Schur-complemented
+    operator on the lowest ``keep`` blocks, not the full band, so a
+    full-operator ``A^T`` adjoint would be inconsistent and silently corrupt
+    gradients.  Two consistent
     reverse-mode paths exist instead.  The default tapes the generated sweeps
     (exact, but the tape grows with ``n_xi``: ``O(n_xi * m^2)`` per
     subsystem).  With ``adjoint_window=w`` the
@@ -1603,7 +1616,7 @@ def tier1_truncated_tail_blocks(
     keep_lowest: int = _TIER1_KEEP_LOWEST_DEFAULT,
     keep_highest: int = 2,
 ) -> jnp.ndarray:
-    """Recover exact final Legendre blocks after a truncated tier-1 solve.
+    """Recover exact final Legendre blocks after a truncated structured solve.
 
     The production truncated solve retains exact low transport modes and the
     ``constraintScheme=2`` source unknowns.  This opt-in diagnostic performs a
@@ -1621,7 +1634,7 @@ def tier1_truncated_tail_blocks(
     ok, reason = _truncation_supported(op, int(keep_lowest))
     if not ok:
         raise NotImplementedError(
-            f"tier-1 selected-tail reconstruction unavailable: {reason}"
+            f"structured direct selected-tail reconstruction unavailable: {reason}"
         )
     if int(np.min(np.asarray(op.n_xi_for_x))) < int(keep_highest):
         raise ValueError("keep_highest exceeds the minimum active Nxi_for_x")
@@ -1772,7 +1785,7 @@ def _truncated_partial_residual(
 def _resolve_preconditioner(
     preconditioner: str | None, use_preconditioner: bool
 ) -> str:
-    """Normalize the tier-2 preconditioner request.
+    """Normalize the recycled Krylov preconditioner request.
 
     ``preconditioner=None`` keeps the historical ``use_preconditioner`` boolean
     (``True`` -> the coarse block-Thomas preconditioner, ``False`` -> none), so
@@ -1792,7 +1805,7 @@ def _resolve_preconditioner(
 def build_tier2_preconditioner(
     op: KineticOperator, kind: str, *, drop_l_coupling: bool = False
 ) -> tuple[Callable[[jnp.ndarray], jnp.ndarray], Callable[[jnp.ndarray], jnp.ndarray]]:
-    """``(precond, precond_t)`` for the requested tier-2 preconditioner.
+    """``(precond, precond_t)`` for the requested Krylov preconditioner.
 
     ``"coarse"`` is :func:`build_coarse_preconditioner` (the exact block-Thomas
     factorization of the SFINCS-simplified operator); ``"multigrid"`` is
@@ -1803,7 +1816,8 @@ def build_tier2_preconditioner(
     which keeps the inverse exact but eliminates in a fill-reducing order on the
     host instead of eliminating ``L`` first, so the angular stencils stay sparse.
     All three eliminate the bordered constraint / ``Phi1`` rows identically, and
-    none changes the solution: they change how fast tier 2 reaches it.
+    none changes the solution: they change how fast the Krylov route gets
+    there.
     """
     if kind == "coarse":
         return build_coarse_preconditioner(op, drop_l_coupling=drop_l_coupling)
@@ -1884,7 +1898,7 @@ def _solve_tier2(
             # the primal as ``solve(matvec, b)``, so the wrapper runs a GCROT
             # of its own no matter what; this used to sit on top of a plain
             # GCROT whose solution was then thrown away, and every
-            # differentiable tier-2 solve paid for both.  ``has_aux`` carries
+            # differentiable Krylov solve paid for both.  ``has_aux`` carries
             # the recycle pair, iteration count, convergence flag and residual
             # out of the wrapper's own solve instead, so there is nothing left
             # to recompute outside it.
@@ -2003,7 +2017,7 @@ def _auto_route_structural(
     budget_gb: float | None = None,
     keep_lowest: int = _TIER1_KEEP_LOWEST_DEFAULT,
 ) -> str:
-    """The ``method="auto"`` tier-1 route decided from operator structure alone.
+    """The ``method="auto"`` structured route decided from operator structure.
 
     The RHS-free twin of :func:`_auto_route`, for callers that must predict the
     route without a right-hand side (the memory model behind
@@ -2044,9 +2058,9 @@ def auto_solve_peak_memory_bytes(
     never allocated on that route, and charging their factorization peak
     overstates a ramped or budget-forced production solve by ~46x.  The
     full-band route keeps the factorization peak
-    (:func:`tier1_peak_memory_bytes`); the tier-2 GCROT fallback keeps it too,
-    as a deliberately conservative stand-in (its matvec working set is smaller,
-    but it has no validated model of its own).
+    (:func:`tier1_peak_memory_bytes`); the recycled Krylov GCROT fallback keeps
+    it too, as a deliberately conservative stand-in (its matvec working set is
+    smaller, but it has no validated model of its own).
     """
     route = _auto_route_structural(op, budget_gb, keep_lowest)
     if route == "block_tridiagonal_truncated":
@@ -2062,7 +2076,7 @@ def _auto_route(
     subsystem_batch: int | str = "auto",
     emit: Callable[[str], None] | None = print,
 ) -> str:
-    """Pick the tier for ``method="auto"`` and print a Fortran-style one-liner.
+    """Pick the route for ``method="auto"`` and print a Fortran-style one-liner.
 
     Structural changes to the routing conditions here must be mirrored in
     :func:`_auto_route_structural` (the RHS-free twin used by the memory
@@ -2124,7 +2138,7 @@ def _auto_route(
     if emit is not None:
         emit(
             f"[dkx.solve] structured direct route unavailable: {blocker} and "
-            f"truncation is invalid ({why}); using the recycled iterative solve."
+            f"truncation is invalid ({why}); using the recycled Krylov solve."
         )
     return "gmres"
 
@@ -2171,7 +2185,7 @@ def _resolve_solve_device(
     knob is inert: arrays cannot be moved mid-trace, and the enclosing ``jit``
     already pinned the computation's devices.
     """
-    if traced or chosen == "direct":  # tier 3 is a host solve already
+    if traced or chosen == "direct":  # sparse direct is a host solve already
         return None
     if device is None:
         device = os.environ.get(_SOLVE_DEVICE_ENV, "").strip().lower() or "auto"
@@ -2215,7 +2229,8 @@ def _resolve_solve_device(
             return None
         print(
             f"[dkx.solve] device route: total_size={int(op.total_size)} <= "
-            f"{max_size} — running this {'tier-1' if chosen.startswith('block') else 'tier-2'} "
+            f"{max_size} — running this "
+            f"{'structured direct' if chosen.startswith('block') else 'recycled Krylov'} "
             f"solve on the host CPU (small solves are dispatch-bound on {backend}; "
             f"override with device='default' or {_SOLVE_DEVICE_ENV})."
         )
@@ -2249,36 +2264,38 @@ def solve(
     device: str | jax.Device | None = None,
     emit: Callable[[str], None] | None = print,
 ) -> SolveResult:
-    """Solve ``K x = rhs`` with the plan-§2.3 three-tier auto-policy.
+    """Solve ``K x = rhs`` with the plan-§2.3 three-route auto-policy.
 
     Policy (``method="auto"``):
 
-    1. **tier 1** (``"block_tridiagonal"``) when :func:`tier1_available` —
-       PAS/DKES family, exact direct solve, multi-RHS in one elimination;
-    2. **tier 2** (``"gmres"``) otherwise — GCROT-recycled FGMRES on the
-       matrix-free operator, right-preconditioned by an exact tier-1 solve of
-       the Fortran-style simplified coarse operator;
-    3. **tier 3** (``"direct"``) on explicit request, or automatically when
-       tier 2 breaches its iteration cap — host SuperLU on the materialized
-       matrix, non-differentiable, loud.
+    1. **structured direct** (``"block_tridiagonal"``) when
+       :func:`tier1_available` — PAS/DKES family, exact direct solve,
+       multi-RHS in one elimination;
+    2. **recycled Krylov** (``"gmres"``) otherwise — GCROT-recycled FGMRES on
+       the matrix-free operator, right-preconditioned by an exact structured
+       direct solve of the Fortran-style simplified coarse operator;
+    3. **sparse direct** (``"direct"``) on explicit request, or automatically
+       when recycled Krylov breaches its iteration cap — host SuperLU on the
+       materialized matrix, non-differentiable, loud.
 
     Args:
         op: the kinetic operator (:class:`dkx.drift_kinetic.KineticOperator`).
         rhs: right-hand side(s), ``(total_size,)`` or ``(total_size, n_rhs)``
             — e.g. columns of :meth:`KineticOperator.rhs` for RHSMode 2/3.
         method: ``"auto"`` | ``"block_tridiagonal"`` | ``"gmres"`` |
-            ``"direct"``.  Explicit tier requests raise if unsupported.
+            ``"direct"``.  Explicit route requests raise if unsupported.
         tol: relative residual tolerance (on ``||rhs||``, per column).
         atol: absolute residual floor.
-        x0: warm-start solution (tier 2), same shape as ``rhs``.
+        x0: warm-start solution (recycled Krylov), same shape as ``rhs``.
         recycle: GCROT recycle pair from a previous :class:`SolveResult`
-            (tier 2 continuation warm start).
+            (recycled Krylov continuation warm start).
         differentiable: wrap the solution in
             ``solvax.implicit.linear_solve`` so ``jax.grad`` flows through
-            (tiers 1/2; tier 3 refuses).  The forward solve is the same one
-            either way; a *gradient* costs one extra (transposed) solve.
-        check_adjoint: (differentiable tier 2 only, default on) abort loudly
-            — a ``RuntimeError`` raised from a ``jax.debug.callback`` at
+            (structured direct and recycled Krylov; sparse direct refuses).
+            The forward solve is the same one either way; a *gradient* costs
+            one extra (transposed) solve.
+        check_adjoint: (differentiable recycled Krylov only, default on) abort
+            loudly — a ``RuntimeError`` raised from a ``jax.debug.callback`` at
             execution time — when the forward or the adjoint (transposed)
             GCROT solve misses its residual.  A stalled *adjoint* solve is
             invisible from the outside: the forward solution and every field
@@ -2312,20 +2329,22 @@ def solve(
     Operators with a truncated Legendre resolution (non-uniform ``Nxi_for_x``)
     are structurally singular in the rectangular state layout: the truncated
     DOFs are exact zero rows of :meth:`KineticOperator.apply` (Fortran v3
-    never carries them — packed indexing in ``indices.F90``).  Tiers 2 and 3
-    therefore solve the *pinned* system ``(A M + I - M) x = rhs`` with ``M``
-    the active-DOF projector (:meth:`KineticOperator.active_dof_mask`): it is
-    nonsingular, agrees with ``A`` on the physical subspace, and forces
+    never carries them — packed indexing in ``indices.F90``).  The recycled
+    Krylov and sparse direct routes therefore solve the *pinned* system
+    ``(A M + I - M) x = rhs`` with ``M`` the active-DOF projector
+    (:meth:`KineticOperator.active_dof_mask`): it is nonsingular, agrees with
+    ``A`` on the physical subspace, and forces
     ``x = rhs = 0`` on the truncated DOFs, so solutions, residuals, and
     implicit-function-theorem gradients all match the packed Fortran system.
-    The truncated tier-1 kernel is consistent with the same pinning: it
-    eliminates each closed (species, x) subsystem with its own
+    The truncated structured direct kernel is consistent with the same
+    pinning: it eliminates each closed (species, x) subsystem with its own
     ``n_blocks = Nxi_for_x[ix]`` (exactly the packed Fortran system) and
     zero-pads everything above, so ramped PAS/DKES decks route through it;
-    only the full tier-1 factorization requires uniform ``Nxi_for_x``.
-        use_preconditioner: tier-2 preconditioner on/off (legacy boolean; a
-            non-``None`` ``preconditioner`` overrides it).
-        preconditioner: which tier-2 preconditioner to build —
+    only the full structured direct factorization requires uniform
+    ``Nxi_for_x``.
+        use_preconditioner: recycled-Krylov preconditioner on/off (legacy
+            boolean; a non-``None`` ``preconditioner`` overrides it).
+        preconditioner: which recycled-Krylov preconditioner to build —
 
             ``"coarse"``
                 the classical one (:func:`build_coarse_preconditioner`): an
@@ -2340,7 +2359,7 @@ def solve(
                 affordable at angular resolutions where the cubic
                 factorization is not.  It buys that affordability at the cost
                 of preconditioner quality — on the measured NCSX
-                full-Fokker-Planck ladder it does *not* reach the tier-2
+                full-Fokker-Planck ladder it does *not* reach the Krylov
                 tolerance, and ``docs/performance.rst`` records both the table
                 and the diagnosis — so it stays opt-in.
             ``"sparse"``
@@ -2365,19 +2384,20 @@ def solve(
             and expensive; see :func:`dkx.coarse_precond.build_coarse_preconditioner`.
         restart: FGMRES cycle size ``m``.
         recycle_dim: GCROT recycle directions ``k``.
-        max_restarts: tier-2 outer-cycle cap (the tier-3 trigger in auto).
-        max_dense_size: tier-3 materialization guard.
+        max_restarts: recycled-Krylov outer-cycle cap (what makes ``auto``
+            fall through to the sparse direct route).
+        max_dense_size: sparse direct materialization guard.
         tier1_memory_budget_gb: budget (GB) above which ``method="auto"``
-            prefers the memory-lean truncated tier-1 kernel over the full-band
-            factorization.  ``None`` reads the ``DKX_TIER1_MEMORY_BUDGET_GB``
+            prefers the memory-lean truncated structured direct kernel over
+            the full-band factorization.  ``None`` reads the ``DKX_TIER1_MEMORY_BUDGET_GB``
             environment variable, else the 8 GB default.  The full-band peak is
             estimated by :func:`tier1_peak_memory_bytes`.
-        tier1_keep_lowest: number of Legendre blocks the truncated tier-1
-            kernel computes exactly (default 3 — the RHSMode 1/2/3 drives and
+        tier1_keep_lowest: number of Legendre blocks the truncated structured
+            direct kernel computes exactly (default 3 — the RHSMode 1/2/3 drives and
             output moments live on ``l <= 2``).
         subsystem_batch: how many of the ``B = n_species * n_x`` independent
-            (species, x) subsystems the truncated tier-1 kernel eliminates
-            concurrently.  ``"auto"`` (default) is backend-aware: width 1 on
+            (species, x) subsystems the truncated structured direct kernel
+            eliminates concurrently.  ``"auto"`` (default) is backend-aware: width 1 on
             the CPU backend (XLA:CPU runs batched LAPACK factor/solve calls
             serially per batch element, so wider sweeps measure
             neutral-to-slower — see :func:`_resolve_subsystem_batch`), and on
@@ -2387,9 +2407,9 @@ def solve(
             fixes the width (clamped to ``[1, B]``; 1 is the fully serial
             minimum-memory sweep).  Any width computes identical
             per-subsystem arithmetic — the knob trades memory for batched
-            parallel work.  Ignored by the non-truncated tiers.
+            parallel work.  Ignored by the non-truncated routes.
         tier1_adjoint_window: opt-in bounded reverse mode for the truncated
-            tier-1 kernel.  ``None`` (default)
+            structured direct kernel.  ``None`` (default)
             keeps the taped gradient — bit-identical behavior to previous
             releases.  An integer ``w`` selects solvax's structure-preserving
             custom VJP: ``jax.grad`` through the truncated solve then runs at
@@ -2426,7 +2446,8 @@ def solve(
             description; ``None`` suppresses routine route presentation while
             retaining exceptions and convergence failures.
 
-    Auto-policy tier-1 routing (``method="auto"``, :func:`tier1_available` true):
+    Auto-policy structured routing (``method="auto"``, when
+    :func:`tier1_available` is true):
 
     ================================  =============================================
     condition                         route
@@ -2437,8 +2458,9 @@ def solve(
     budget                            truncation is valid (lowest ``keep`` blocks
                                       only, ~O(keep m^2) memory; ramps solved with
                                       per-subsystem ``n_blocks = Nxi_for_x[ix]``)
-    …and truncation invalid           ``"gcrot"`` tier 2, with a printed notice
-                                      (high-l output the truncation cannot supply)
+    …and truncation invalid           ``"gcrot"`` recycled Krylov, with a
+                                      printed notice (high-l output the
+                                      truncation cannot supply)
     ================================  =============================================
 
     "Truncation valid" means the operator admits the truncated kernel
@@ -2468,12 +2490,14 @@ def solve(
     if method == "block_tridiagonal_truncated":
         ok, reason = tier1_available(op)
         if not ok:
-            raise NotImplementedError(f"tier-1 truncated path unavailable: {reason}")
+            raise NotImplementedError(
+                f"truncated structured direct route unavailable: {reason}"
+            )
         keep = min(tier1_keep_lowest, op.n_xi)
         sup_ok, sup_reason = _truncation_supported(op, keep)
         if not sup_ok:
             raise NotImplementedError(
-                f"tier-1 truncated path unavailable: {sup_reason}"
+                f"truncated structured direct route unavailable: {sup_reason}"
             )
     require_float64()
     rhs2d, squeeze = _as_columns(rhs)
@@ -2529,16 +2553,16 @@ def solve(
             # near-singular systems (e.g. a nu_n=0 collisionless deck, whose
             # bordered constraint leaves the operator with condition numbers
             # ~1e18) its residual can miss the tolerance even though the
-            # system is consistent.  Mirror the tier-2 -> tier-3 pattern and
-            # fall through to the preconditioned Krylov tier.
+            # system is consistent.  Mirror the recycled-Krylov -> sparse-direct
+            # pattern and fall through to the preconditioned Krylov route.
             print(
-                "[dkx.solve] tier-1 structured solve missed the "
+                "[dkx.solve] the structured direct solve missed the "
                 f"tolerance (residuals={np.asarray(result.residual_norms)}); "
-                "falling back to the tier-2 Krylov solve."
+                "falling back to the recycled Krylov route."
             )
             chosen = "gmres"
     if chosen in ("block_tridiagonal", "block_tridiagonal_truncated"):
-        pass  # tier-1 result stands.
+        pass  # structured direct result stands.
     elif chosen == "gmres":
         result = _solve_tier2(
             op,
@@ -2577,7 +2601,9 @@ def solve(
             )
     else:  # direct
         if differentiable:
-            raise RuntimeError("tier-3 (method='direct') is non-differentiable.")
+            raise RuntimeError(
+                "the sparse direct route (method='direct') is non-differentiable."
+            )
         result = _solve_tier3(
             op, rhs2d, tol=tol, atol=atol, max_dense_size=max_dense_size
         )

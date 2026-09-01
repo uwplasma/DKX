@@ -23,7 +23,7 @@ bounds and re-measure key numbers on an idle machine before publishing.
    production manifest resolution (Ntheta=25, Nzeta=115, Nxi=149, Nx=5; 2.14 M phase
    points): observed 3.6–5.7 GB RSS, **killed after ~2.6 h wall without completing**
    (machine under concurrent load, but the point stands). This is the exact workload the
-   plan's tier-1/tier-2 solvers target: the operator is block-tridiagonal in Legendre
+   plan's structured direct / recycled Krylov routes target: the operator is block-tridiagonal in Legendre
    modes with dense (25·115)² = (2875)² blocks — one factor/solve sweep should be
    O(Nxi · 2875³) flops of batched GEMM, minutes not hours, with O((NθNζ)²) memory.
 
@@ -67,7 +67,7 @@ upstream's expected value (−1.07986), not to the reference-data-v2 h5. The sol
 block-Thomas RHSMode=3 path reproduces upstream's expected values to 4.2e-6 — the
 direct solve is immune to this instability by construction.
 
-## Tier-1 result (RHSMode=3 block-Thomas POC)
+## Structured direct result (RHSMode=3 block-Thomas POC)
 
 Probing the existing matrix-free operator into Legendre bands (mod-3 phase probing,
 3m+1 matvecs), null space fixed by exact rank-one absorbed bordering, both drives +
@@ -84,7 +84,7 @@ the transport matrix by 0.0). Existing parity suites 21/21 with the switch ON an
 machine never reached the solve: the factorization drove macOS swap to 46.5/47 GB
 (the same swap-exhaustion pattern that crashed the machine in an earlier run) and was killed. Conclusion for
 Phase 4/5: at production resolution on a laptop, *neither* code can rely on a global
-sparse factorization; the Legendre block-elimination tier (memory O((NθNζ)²) ≈ 66 MB
+sparse factorization; the Legendre block-elimination route (memory O((NθNζ)²) ≈ 66 MB
 per 2875² block, independent of Nξ) is the only locally-viable direct path, and the
 Fortran strong-scaling baseline must use a case sized to fit (~≤8 GB MUMPS footprint,
 e.g. Ntheta=25, Nzeta=51, Nxi=100 PAS, ~450 k unknowns).
@@ -110,15 +110,16 @@ not harder, as N grows on laptop-class hardware.
 ## Next measurements
 
 - [ ] Final HSX JAX outcome (converged? wall? peak RSS?).
-- [ ] Same case via the solvax block-Thomas tier-1 path (POC in progress).
+- [ ] Same case via the solvax block-Thomas structured direct route (POC in progress).
 - [ ] QH bootstrap profile at 25×51×100×4 (queued behind machine load).
 - [ ] Fortran `mpiexec -n {1,2,4,8}` strong-scaling baselines (Phase 5.1).
 
-## Phase-4 head-to-head: canonical tier-1 vs Fortran (744k unknowns, HSX PAS DKES RHSMode=1)
+## Phase-4 head-to-head: canonical structured direct vs Fortran (744k unknowns, HSX PAS DKES RHSMode=1)
 
 Truncated Legendre elimination (`block_thomas_truncated_fn`, blocks assembled on the
 fly from the analytic operator coefficients, keep_lowest=3 — exact for every
-RHSMode-1 output). Full-band tier-1 would need ~91 GB; the truncated route ~0.3 GB.
+RHSMode-1 output). The full-band structured direct factorization would need ~91 GB;
+the truncated route ~0.3 GB.
 
 | | MacBook M4 CPU | office Xeon (36t) | RTX A4000 | Fortran 1 rank | Fortran 2 ranks |
 |---|---|---|---|---|---|
@@ -139,13 +140,13 @@ RHSMode-1 output). Full-band tier-1 would need ~91 GB; the truncated route ~0.3 
 - office Xeon XLA-CPU pathology: 36 threads, 36x slower than the M4 on sequential
   1275^2 LU steps — Phase-5 thread budgeting must cap intra-op parallelism per step.
 
-## Bug: tier-2 differentiable adjoint silently wrong on singular FP systems
+## Bug: recycled Krylov differentiable adjoint silently wrong on singular FP systems
 
 Full Fokker-Planck with constraintScheme=1 on the flagship-optimization deck
 yields a numerically singular system (~5 zero singular values, cond ~2e36); the
-tier-2 GCROT adjoint stagnates and the implicit-diff VJP returns a wrong
+recycled Krylov adjoint stagnates and the implicit-diff VJP returns a wrong
 gradient without any error (AD -1.7e-3 vs FD +2.8e-5 on the affected dof).
-PAS+Er tier-2 gradients on the same chain are exact (2.9e-6 vs FD). Fix
+PAS+Er Krylov gradients on the same chain are exact (2.9e-6 vs FD). Fix
 direction: surface adjoint-solve convergence in SolveResult and raise/flag when
 the adjoint residual misses tolerance; investigate the constraintScheme=1
 bordering conditioning in drift_kinetic. A reproducer was filed as a spawned
@@ -156,14 +157,14 @@ task from the flagship-example work.
 solvax 0.2.0 ships `mixed_precision_block_thomas` (fp32 factor + fp64 refinement).
 On RANDOM well-conditioned diagonally-dominant blocks it is 1.79x faster on an
 RTX A4000 at 1e-15 accuracy (and 0.22-0.98x, up to 4.5x SLOWER, on CPU — fp32 gives
-no CPU throughput gain). BUT on the ACTUAL tier-1 bordered kinetic operators the
+no CPU throughput gain). BUT on the ACTUAL structured direct bordered kinetic operators the
 result reverses: the constraint-bordered, low-collisionality streaming operators are
 too ill-conditioned for float32 (kappa * u_fp32 >> 1), so refinement DIVERGES on every
 realistic-sized case (m >= ~169 probed at low Nxi / high collisionality all diverge;
 only m <= 49 converge, too small to benefit). The isolated fp32 factorization is ~1.5x
 faster on the A4000, but the "large enough to help" and "well-conditioned enough for
 fp32" regimes do not overlap for these operators. Conclusion: mixed precision is NOT
-the GPU lever for dkx tier-1 and must not be auto-engaged (it would silently
+the GPU lever for the dkx structured direct route and must not be auto-engaged (it would silently
 return non-converged results or always fall back to fp64, a net regression). The tool
 remains in solvax for well-conditioned consumers. The real GPU levers here are (a)
 better operator conditioning / preconditioning so fp32 becomes viable, and (b)
@@ -176,18 +177,19 @@ CPU = the development MacBook (idle), main @ 95e34659, per-case fresh subprocess
 
 | case | DOFs | method | solve cold / warm | peak RSS |
 | --- | --- | --- | --- | --- |
-| hsx_pas_dkes_mid (Nxi_for_x ramp) | 336,610 | gcrot (tier-2) | 32.5 s / 15.4 s | **10.8 GB** |
+| hsx_pas_dkes_mid (Nxi_for_x ramp) | 336,610 | gcrot (recycled Krylov) | 32.5 s / 15.4 s | **10.8 GB** |
 | w7x_fp_2species | 78,628 | gcrot, 115 iters | 17.5 s / 7.6 s | 4.1 GB |
 | mono_rhs3_scheme1 | — | block_tridiagonal | 4.8 s e2e | 2.0 GB |
 | phi1_newton (4.5k, at the 6000 cap) | 4,548 | unpreconditioned GCROT | **232 s cold** (12,360 inner iters, 3 Newton) / 0.04 s warm | 1.4 GB |
-| grad_pas_scheme1 (value_and_grad) | 39,318 | tier-1 differentiable | 5.3 s / 2.1 s | 4.3 GB |
+| grad_pas_scheme1 (value_and_grad) | 39,318 | structured direct, differentiable | 5.3 s / 2.1 s | 4.3 GB |
 | ambipolar_er_2species | — | Brent root | 31.2 s | 3.9 GB |
 
 Findings and actions:
 
-1. **Ramped decks bypassed tier-1 (fixed same day).** The production-default
-   `Nxi_for_x` ramp hit a blanket refusal in `tier1_available`, routing PAS
-   production decks to tier-2 GCROT (10.8 GB / 15.4 s warm above). Promoting the
+1. **Ramped decks bypassed the structured direct route (fixed same day).** The
+   production-default `Nxi_for_x` ramp hit a blanket refusal in
+   `tier1_available`, routing PAS production decks to recycled Krylov
+   (10.8 GB / 15.4 s warm above). Promoting the
    per-(species,x) truncated kernel (`n_blocks = Nxi_for_x[ix]`, the
    tier1_hsx_head_to_head machinery) into `solve(method="auto")` gives, same
    case: **block_tridiagonal_truncated, peak 885 MB (12.2x less), solve
@@ -196,7 +198,7 @@ Findings and actions:
 2. **Phi1 Newton is the top remaining runtime target.** The inner solve is
    unpreconditioned full-restart GCROT capped at total_size <= 6000; at 4.5k
    DOFs it takes 232 s (12,360 inner iterations for 3 Newton steps). Fix
-   design: absorb the Phi1(T*Z)+lambda rows into the tier-1 bordered Schur
+   design: absorb the Phi1(T*Z)+lambda rows into the structured direct bordered Schur
    (solvax.BorderedOperator) for PAS decks -> exact direct inner solve, cap
    removed; FP+Phi1 uses GCROT preconditioned by the Phi1-stripped coarse
    operator.
@@ -206,8 +208,9 @@ Findings and actions:
 4. **GPU battery invalidated by a stale install**: the office `sfincs-gpu` env
    had an old wheel shadowing the repo (no `dkx.phi1`/`er`), so all GPU
    numbers ran old code (fixed with an editable install; re-run pending). Under
-   the OLD tier-2 route the ramped HSX cases also **OOM'd on the 16 GB A4000**
-   (1.4 GiB / 12.1 GiB allocations failed) — the ramp-aware tier-1 (885 MB on
+   the OLD recycled Krylov route the ramped HSX cases also **OOM'd on the 16 GB
+   A4000** (1.4 GiB / 12.1 GiB allocations failed) — the ramp-aware structured
+   direct route (885 MB on
    CPU) is expected to make both HSX cases fit on GPU. One suggestive old-code
    number: the 39k-DOF gradient case ran slower on GPU (6.8 s warm) than CPU
    (2.1 s) — small cases do not amortize GPU dispatch; the serial L-scan
@@ -216,7 +219,7 @@ Findings and actions:
 ## Post-fix GPU + 744k head-to-head (same day, main @ 33c88f7d)
 
 GPU battery re-run (office A4000 16 GB, editable install fixed, ramp-aware
-tier-1 active) and the full production HSX case on both backends:
+structured direct route active) and the full production HSX case on both backends:
 
 | hsx_pas_dkes_prod (Ntheta=25 Nzeta=51 Nxi=100 Nx=5; 744,610 packed DOFs) | runtime | peak RSS |
 | --- | --- | --- |
@@ -224,10 +227,10 @@ tier-1 active) and the full production HSX case on both backends:
 | dkx CPU (dev MacBook) | 41.4 s e2e (25.0 s warm solve) | 1.35 GB |
 | dkx GPU (A4000) | 59.6 s e2e (26.2 s warm solve) | 2.3 GB |
 
-Both backends route block_tridiagonal_truncated; under the tier-2 route the
+Both backends route block_tridiagonal_truncated; under the recycled Krylov route the
 same case OOM'd the 16 GB GPU. Mid-size HSX warm solve is at CPU/GPU parity (3.5 s vs
 3.3 s). Every iterative/small path (FP gcrot 115 iters, Phi1 Newton,
 value_and_grad, ambipolar Brent, monoenergetic one-shot) runs 2-5x SLOWER on
 the GPU — dispatch-bound serial iterations, consistent with the serial L-scan
-ceiling note. Conclusion: the direct truncated tier is the GPU-viable path;
+ceiling note. Conclusion: the truncated structured direct route is the GPU-viable path;
 GPU wins need batched work (multi-Er/multi-surface vmaps), not single solves.

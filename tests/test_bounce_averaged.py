@@ -16,7 +16,7 @@ and the trapped-particle bounce integrals of the radial magnetic drift from the
 * low-collisionality cross-validation against the full drift-kinetic solve --
   the monoenergetic ``D11* nu*`` enters the ``1/nu`` regime and its
   geometry dependence converges to the surrogate's ``Gamma_c`` ratio as
-  ``nu -> 0`` (numbers recorded 2026-07-13, float64, tier-1 direct solves).
+  ``nu -> 0`` (numbers recorded 2026-07-13, float64, structured direct solves).
 
 Measured full-DKE ``D11* nu*`` on the tiny helical scheme-1 deck
 (``epsilon_t = -0.07053``, ``epsilon_h`` scanned, ``iota = 0.4542``):

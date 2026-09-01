@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Head-to-head benchmark: dkx tier-1 truncated solve vs the Fortran baseline.
+"""Head-to-head benchmark: dkx truncated structured direct solve vs the Fortran baseline.
 
 Case: HSX PAS DKES RHSMode=1 (Ntheta=25, Nzeta=51, Nxi=100, Nx=5, two species;
 744,610 unknowns with the Fortran Nxi_for_x ramp).  The Fortran baseline
@@ -8,7 +8,7 @@ Case: HSX PAS DKES RHSMode=1 (Ntheta=25, Nzeta=51, Nxi=100, Nx=5, two species;
 
 Route selection: for the PAS/DKES family the (species, x) axes are uncoupled
 Legendre-block-tridiagonal systems with dense TZ = Ntheta*Nzeta blocks.  The
-full tier-1 factor storage is ``3 * Nxi * S * X * TZ^2 * 8 B`` (~39 GB here),
+full structured direct factor storage is ``3 * Nxi * S * X * TZ^2 * 8 B`` (~39 GB here),
 so when that estimate breaches the memory budget this benchmark uses
 ``solvax.direct.block_thomas_truncated_fn``: blocks are assembled on the fly
 from the analytic per-term coefficients of
@@ -17,12 +17,12 @@ materializing the bands), and only the lowest ``keep_lowest=3`` Legendre
 blocks of the solution are computed.  That is exact for every RHSMode=1
 output moment (fluxes, flows, sources, FSA constraints): the drives have
 Legendre support l <= 2 and all moments contract against l <= 2 only.
-When the full tier-1 estimate fits the budget, the canonical
+When the full structured direct estimate fits the budget, the canonical
 ``dkx.solve.solve(..., method="block_tridiagonal")`` path is used
 instead.
 
 The input is run with ``Nxi_for_x_option = 0`` (uniform Nxi_for_x) because the
-canonical tier-1 elimination requires all speed nodes to retain the full
+canonical structured direct elimination requires all speed nodes to retain the full
 Legendre resolution.  The Fortran baseline uses the default ramp (option 1),
 which *drops* high-L modes at low x — so the JAX problem solved here is
 strictly LARGER than the Fortran one (bias against JAX; small physics
@@ -37,7 +37,7 @@ Usage::
         --input /Users/rogerio/local/fortran_scaling_baseline/sized/input.namelist \
         --fortran-h5 /Users/rogerio/local/fortran_scaling_baseline/sized/sfincsOutput.h5
 
-    # cross-check of the truncated kernel against the full tier-1 factorization
+    # cross-check of the truncated kernel against the full structured direct factorization
     # on a reduced grid (memory-safe):
     ... tier1_hsx_head_to_head.py --input ... --validate-small
     # bound the Nxi_for_x ramp-vs-uniform physics effect on a reduced grid:
@@ -117,18 +117,18 @@ def patch_namelist(text: str, group: str, settings: dict[str, str]) -> str:
 
 
 def full_band_gigabytes(op: KineticOperator) -> float:
-    """Storage of the full tier-1 bands (lower/diag/upper), before factors."""
+    """Storage of the full structured direct bands (lower/diag/upper), before factors."""
     n_tz = op.n_theta * op.n_zeta
     return 3.0 * op.n_xi * op.n_species * op.n_x * n_tz * n_tz * 8.0 / 2**30
 
 
 # =============================================================================
-# Truncated tier-1 solve: analytic on-the-fly blocks + block_thomas_truncated_fn
+# Truncated structured direct solve: analytic on-the-fly blocks + block_thomas_truncated_fn
 # =============================================================================
 
 
 class TruncatedTier1:
-    """Memory-lean tier-1 solve for the PAS/DKES family.
+    """Memory-lean structured direct solve for the PAS/DKES family.
 
     Mirrors ``dkx.solve.build_tier1_solver`` (same analytic blocks as
     ``KineticOperator.legendre_blocks``, same exact rank-one border absorption
@@ -362,7 +362,7 @@ def compute_moments(op: KineticOperator, x_full: np.ndarray) -> dict[str, np.nda
 
 
 # =============================================================================
-# Small-grid cross-validation: truncated kernel vs full tier-1 factorization
+# Small-grid cross-validation: truncated kernel vs full structured direct factorization
 # =============================================================================
 
 
@@ -381,7 +381,7 @@ def validate_small(base_text: str, n_xi: int = 30) -> None:
 
     ref = canonical_solve(op, rhs, method="block_tridiagonal")
     x_ref = np.asarray(ref.x)
-    print(f"[validate] full tier-1: residual={float(ref.residual_norms[0]):.3e}, "
+    print(f"[validate] full structured direct: residual={float(ref.residual_norms[0]):.3e}, "
           f"converged={ref.converged}")
 
     trunc = TruncatedTier1(op)
@@ -449,7 +449,7 @@ def main() -> None:
     ap.add_argument("--fortran-rss-gb", type=float, nargs=2, default=(3.98, 2.86),
                     metavar=("N1", "N2"), help="Fortran peak RSS GB (1 rank, 2 ranks)")
     ap.add_argument("--memory-budget-gb", type=float, default=8.0,
-                    help="route to the truncated kernel above this full tier-1 estimate")
+                    help="route to the truncated kernel above this full structured direct estimate")
     ap.add_argument("--validate-small", action="store_true",
                     help="only run the reduced-grid truncated-vs-full cross-check")
     ap.add_argument("--small-nxi", type=int, default=30,
@@ -500,9 +500,9 @@ def main() -> None:
     )
     uniform = int(np.min(np.asarray(op.n_xi_for_x))) == op.n_xi
     use_full = est_full_gb <= args.memory_budget_gb and uniform and not args.ramp
-    print(f"memory estimate: full tier-1 ~{est_full_gb:.1f} GB, truncated ~{trunc_gb:.2f} GB "
+    print(f"memory estimate: full structured direct ~{est_full_gb:.1f} GB, truncated ~{trunc_gb:.2f} GB "
           f"(budget {args.memory_budget_gb} GB)")
-    print("route: " + ("canonical solve.py tier-1 (fits budget)" if use_full else
+    print("route: " + ("canonical solve.py structured direct (fits budget)" if use_full else
                        "truncated block-Thomas (block_thomas_truncated_fn), keep_lowest=3"))
 
     # ---- 3. RHS + solver setup ----

@@ -56,7 +56,7 @@ N_X = 4 if CI else 6
 NU_N_SCAN = [3.0e-3, 3.0e-2] if CI else [3.0e-3, 1.0e-2, 3.0e-2, 1.0e-1]
 
 # Solver tuning: the typed knob set threaded to dkx.solve.solve.  "auto"
-# picks the tier-1 structured direct path for this PAS deck; tol is the
+# picks the structured direct route for this PAS deck; tol is the
 # relative residual tolerance.  (SolverOptions also carries atol/restart/
 # recycle_dim/max_restarts/differentiable/use_preconditioner/device/
 # memory_budget_gb for the Krylov and memory-budget paths.)

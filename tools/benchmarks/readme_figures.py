@@ -10,7 +10,7 @@ Runtime/memory bars (``tier1_hsx_runtime_memory.png``):
   ``docs/dev/failure_analysis.md`` sections "Phase 5.1 Fortran strong-scaling
   baseline" and "Phase-4 head-to-head" — ``HSX_PASCollisions_DKESTrajectories``
   at Ntheta=25, Nzeta=51, Nxi=100, Nx=5 (744,610 unknowns), RHSMode=1.
-  - dkx tier-1 truncated Legendre elimination (canonical stack), warm
+  - dkx truncated structured direct Legendre elimination (canonical stack), warm
     solve: 27.2 s with the Nxi-for-x ramp discretization (0.93 GB peak RSS) and
     44.3 s with uniform Nxi (1.16 GB), MacBook M4 CPU, JAX x64.
   - dkx on an RTX A4000 GPU: 45.0 s (the L-scan is serial and the A4000
@@ -23,7 +23,7 @@ Parity chart (``canonical_parity.png``):
   Deletion-pass referee tests that gated each canonical-stack slice:
   - RHSMode=1 output tables vs the Fortran-parity legacy writer: max scaled
     difference 8e-14 (``tests/test_run_rhsmode1.py``).
-  - Tier-1 state vectors vs recorded reference state vectors: 1e-11
+  - Structured direct state vectors vs recorded reference state vectors: 1e-11
     (``tests/test_run_transport.py``, frozen Fortran/legacy state fixtures).
   - RHSMode=2/3 transport matrices vs Fortran golden data: 6e-13 .. 9e-9
     depending on case/conditioning (``tests/test_run_transport.py``; the
@@ -71,7 +71,7 @@ PARITY = (
     # label, low, high (equal -> single point), referee
     ("RHSMode=1 output tables\nvs Fortran-parity writer", 8e-14, 8e-14,
      "tests/test_run_rhsmode1.py"),
-    ("State vectors (tier 1)\nvs recorded references", 1e-11, 1e-11,
+    ("State vectors (structured direct)\nvs recorded references", 1e-11, 1e-11,
      "tests/test_run_transport.py"),
     ("Transport matrices (RHSMode=2/3)\nvs Fortran golden data", 6e-13, 9e-9,
      "tests/test_run_transport.py"),

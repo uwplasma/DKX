@@ -246,7 +246,7 @@ def test_h5_phi1_fields_vs_fortran_golden(tmp_path: Path) -> None:
 # is an EXACT algebraic function of the converged (Phi1, f) state, so the
 # canonical-vs-legacy parity is inherited from the two solvers' state parity:
 #   * scheme5 is the LINEAR Phi1 deck (1 Newton step): state parity ~3e-16 here,
-#     so both tiers assert tight.
+#     so both routes assert tight.
 #   * inKinetic / inCollision are NONLINEAR: state parity is the documented
 #     Phi1Hat bound (measured ~5e-12 and ~1e-9 here).  The O(1e-8) flux families
 #     land far below that (tight f-parity, small fluxes); the Phi1-scale

@@ -1,14 +1,14 @@
 """A stalled Krylov solve must escalate, not crash on a fallback that cannot run.
 
 Reported from a scanType=5 run (Er scan inside a radius scan) on a 66004-DOF
-deck.  Tier-2 GCROT hit its iteration cap at the largest |Er|, DKX announced a
-fall back to the tier-3 host direct solve, and tier 3 refused immediately
+deck.  Recycled Krylov GCROT hit its iteration cap at the largest |Er|, DKX announced a
+fall back to the sparse direct host solve, and that route refused immediately
 because 66004 > max_dense_size=8192.  The RuntimeError propagated out through
 the scan driver and killed every remaining Er point at that radius: one radius
 folder finished with zero outputs, another with three of a hundred.
 
-Tier 3 obtains its matrix by applying the operator to n identity columns, so
-at the sizes where tier 2 actually stalls it can never run -- the advice in the
+Sparse direct obtains its matrix by applying the operator to n identity columns, so
+at the sizes where recycled Krylov actually stalls it can never run -- the advice in the
 old message, to raise max_dense_size, would have asked for 32.5 GB.  A stalled
 Krylov solve is a preconditioner problem, and DKX already ships the strong
 preconditioner (``sparse``) that SFINCS's MUMPS LU is the analogue of; it was
@@ -37,7 +37,7 @@ def _operator():
 
 
 def _stalled(op) -> SolveResult:
-    """What tier 2 hands back when it breaches its cap."""
+    """What recycled Krylov hands back when it breaches its cap."""
     return SolveResult(
         x=np.zeros((op.total_size, 1)),
         method="gmres",
@@ -51,7 +51,7 @@ def _stalled(op) -> SolveResult:
 
 
 def _rhs2d(op):
-    """Tier 2 works in (n, nrhs); op.rhs() is (n,), as solve() reshapes it."""
+    """Recycled Krylov works in (n, nrhs); op.rhs() is (n,), as solve() reshapes it."""
     return np.asarray(op.rhs()).reshape(op.total_size, -1)
 
 
@@ -76,7 +76,7 @@ def test_escalation_recovers_a_stalled_solve() -> None:
 
 
 def test_a_deck_too_large_for_tier3_reports_the_real_problem() -> None:
-    """The failure the user hit: n > max_dense_size, so tier 3 cannot help.
+    """The failure the user hit: n > max_dense_size, so sparse direct cannot help.
 
     The message must not send them to max_dense_size, and must name what was
     tried and what actually helps.
@@ -84,7 +84,7 @@ def test_a_deck_too_large_for_tier3_reports_the_real_problem() -> None:
     op = _operator()
     with pytest.raises(RuntimeError) as excinfo:
         # Force every rung to fail by demanding a tolerance nothing can meet,
-        # with tier 3 excluded exactly as it is at 66004 DOFs.
+        # with sparse direct excluded exactly as it is at 66004 DOFs.
         _escalate(op, tol=1e-300, max_dense_size=1)
     message = str(excinfo.value)
     assert "did not converge" in message

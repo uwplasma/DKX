@@ -116,8 +116,9 @@ OUT_DIR.mkdir(parents=True, exist_ok=True)
 # NOTE on speed: run_transport_matrix rebuilds the operator per call, but JAX
 # caches the compiled solve kernels, so only the first point pays compilation.
 # For dense scans the lower-level route pays off even more: build one
-# KineticOperator, then reuse the tier-1 factorization across right-hand sides
-# (dkx.solve.build_tier1_solver) or warm-start tier-2 Krylov solves by
+# KineticOperator, then reuse the structured direct factorization across
+# right-hand sides (dkx.solve.build_tier1_solver) or warm-start recycled
+# Krylov solves by
 # passing the previous SolveResult's ``recycle=(C, U)`` pair and ``x0`` to
 # dkx.solve.solve — the recycled deflation space makes neighboring
 # collisionality points converge in a handful of iterations.

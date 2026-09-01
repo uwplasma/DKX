@@ -1,4 +1,4 @@
-"""The sparse tier-2 preconditioner is the coarse one in a different order.
+"""The sparse preconditioner is the coarse one in a different order.
 
 :mod:`dkx.sparse_precond` exists for speed and memory, so the property that has
 to hold is that it changes *nothing else*: same simplified operator, same
@@ -46,7 +46,7 @@ def _sugama_op() -> KineticOperator:
 
 # Each entry exercises a different way the two routes could diverge: the
 # collision reduction (fokker_planck, improved_sugama), the ``E_r`` terms that
-# force tier 2 in the first place (er_xdot), and the bordered constraint rows.
+# force recycled Krylov in the first place (er_xdot), and the bordered constraint rows.
 CASES = {
     "pas": lambda: _load_op("pas_1species_PAS_noEr_tiny_scheme1"),
     "fokker_planck": lambda: _load_op("quick_2species_FPCollisions_noEr"),

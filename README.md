@@ -97,8 +97,8 @@ than problem size decides the outcome:
 
 | Across 38 upstream decks | DKX |
 | --- | --- |
-| Block elimination faster | 9 of 9 |
-| Preconditioned Krylov faster | 7 of 23 |
+| Structured direct route faster | 9 of 9 |
+| Recycled Krylov route faster | 7 of 23 |
 | Lower peak memory | 3 of 32 |
 | Did not complete | 6 (reference: 0 of 38) |
 | Median agreement | `4.1e-06` |

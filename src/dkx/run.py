@@ -3,16 +3,16 @@
 The single-call drivers for the SFINCS v3 linear modes (``sfincs_main.F90`` /
 ``solver.F90``): parse and validate the input (:mod:`dkx.inputs`),
 build the drift-kinetic operator (:mod:`dkx.drift_kinetic`), solve with
-the three-tier policy (:mod:`dkx.solve`), assemble the diagnostic
+the three-route policy (:mod:`dkx.solve`), assemble the diagnostic
 moments (:mod:`dkx.moments`), emit the Fortran-parity stdout blocks
 (:mod:`dkx.console`), and write ``sfincsOutput``
 (:mod:`dkx.writer`).  No legacy ``problems``/``operators``/``outputs``
 modules are imported.
 
 - :func:`run_transport_matrix` — RHSMode=2/3, the whichRHS transport-matrix
-  loop (tier-1 structured direct for the PAS/DKES family).
+  loop (structured direct for the PAS/DKES family).
 - :func:`run_profile` — RHSMode=1, the single-RHS profile-gradient solve with
-  the full per-species diagnostic table (tier 1 for PAS, tier-2 recycled
+  the full per-species diagnostic table (structured direct for PAS, recycled
   Krylov for Fokker-Planck).  The validateInput.F90 RHSMode=3 monoenergetic
   forcing adapter is *not* applied here.
 """
@@ -310,7 +310,7 @@ def run_transport_matrix(
             apply), or an in-memory :class:`dkx.inputs.SfincsInput`
             (runs without touching disk).
         solve_method: :func:`dkx.solve.solve` method (``"auto"`` picks
-            the tier-1 structured direct path for the PAS/DKES family).
+            the structured direct route for the PAS/DKES family).
         tol: relative residual tolerance per whichRHS column.
         solver: full typed knob set (:class:`dkx.api.SolverOptions`)
             for the multi-RHS solve; when given, it supersedes
@@ -573,7 +573,7 @@ def run_profile(
             RHSMode=3 monoenergetic forcing adapter is *not* applied: RHSMode=1
             keeps the deck's collision operator, Er terms, and speed grid.
         solve_method: :func:`dkx.solve.solve` method (``"auto"`` picks
-            tier 1 for the PAS/DKES family and tier-2 recycled Krylov for
+            structured direct for the PAS/DKES family and recycled Krylov for
             Fokker-Planck collisions).
         tol: relative residual tolerance for the single-RHS solve.
         solver: full typed knob set (:class:`dkx.api.SolverOptions`) for
