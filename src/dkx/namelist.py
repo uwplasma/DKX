@@ -197,7 +197,14 @@ def parse_sfincs_input_text(text: str, *, source_path: str | Path | None = None)
         parsed_groups[gname] = scalars
         parsed_indexed[gname] = {k: v for k, v in indexed.items()}
 
-    return Namelist(groups=parsed_groups, indexed=parsed_indexed, source_path=source, source_text=text)
+    nml = Namelist(groups=parsed_groups, indexed=parsed_indexed, source_path=source, source_text=text)
+    # plan.md operating rule 11: a deck asking for a model dkx does not solve is
+    # refused here, at deck-read time, rather than silently solved as the
+    # adjacent model.  Deferred import keeps this parser a leaf module.
+    from .inputs import check_supported_deck_options  # noqa: PLC0415
+
+    check_supported_deck_options(nml)
+    return nml
 
 
 #: Leading bytes of the binary formats a user is most likely to hand this
