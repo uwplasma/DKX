@@ -241,3 +241,100 @@ def test_kind_search_on_a_sfincs_file_is_refused(tmp_path: Path, capsys) -> None
     would hand back a figure that is not the one asked for."""
     assert cli.main(["plot", str(tmp_path / "o.h5"), "--kind", "search"]) == 2
     assert "summary panel" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# The scan panel
+# ---------------------------------------------------------------------------
+
+from dkx.plotting import plot_scan_summary  # noqa: E402
+
+
+class ScanResult(FakeResult):
+    def __init__(self, arrays, metadata=None):
+        super().__init__(arrays)
+        self.metadata = metadata or {}
+
+
+def scan_arrays(*, n=4, failed=(), axes=1):
+    arrays = {
+        "particle_flux_m2_s": np.linspace(1.0, 4.0, n),
+        "heat_flux_W_m2": np.linspace(5.0, 8.0, n),
+        "status": np.array(
+            ["failed: boom" if i in failed else "ok" for i in range(n)], dtype=object
+        ),
+    }
+    for a in range(axes):
+        arrays[f"axis_electric_field_value_kV_m{'' if a == 0 else f'_{a}'}"] = np.linspace(-1.0, 1.0, n)
+    return arrays
+
+
+def test_a_scan_result_is_plotted_against_its_axis(tmp_path: Path) -> None:
+    out = plot_scan_summary(
+        result=ScanResult(scan_arrays(), {"scan_axes": ("electric_field.value_kV_m",)}),
+        output_path=tmp_path / "s.png",
+    )
+    assert out.exists() and out.stat().st_size > 1000
+
+
+def test_the_axis_label_is_the_declared_schema_path(tmp_path: Path) -> None:
+    """The array name has had its dots flattened, so it is not the label.
+
+    ``axis_electric_field_value_kV_m`` would render as "electric field value kV
+    m". Section 10.2 asks for physical coordinates and units rather than
+    mangled internal key names, and the scan already records the real path.
+    """
+    result = ScanResult(scan_arrays(), {"scan_axes": ("electric_field.value_kV_m",)})
+    assert plot_scan_summary(result=result, output_path=tmp_path / "s.png").exists()
+    assert result.metadata["scan_axes"][0] == "electric_field.value_kV_m"
+
+
+def test_a_failed_scan_point_is_marked_not_interpolated_over(tmp_path: Path) -> None:
+    """Dropping it would join the curve across the hole.
+
+    A scan missing its middle point should not look like a smooth trend; the
+    gap is the finding.
+    """
+    out = plot_scan_summary(
+        result=ScanResult(scan_arrays(failed=(1, 2)), {}), output_path=tmp_path / "f.png"
+    )
+    assert out.exists()
+
+
+def test_a_multi_axis_scan_is_refused_rather_than_projected(tmp_path: Path) -> None:
+    """Two axes have no single abscissa; projecting would overplot unrelated points."""
+    with pytest.raises(ValueError, match="cannot represent it"):
+        plot_scan_summary(
+            result=ScanResult(scan_arrays(axes=2), {}), output_path=tmp_path / "m.png"
+        )
+
+
+def test_a_non_scan_result_is_refused_by_name(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="no scan axis"):
+        plot_scan_summary(
+            result=ScanResult(profile_arrays(), {}), output_path=tmp_path / "x.png"
+        )
+
+
+def test_auto_kind_picks_the_scan_panel_for_a_scan_result(monkeypatch, tmp_path) -> None:
+    """A scan Result has no r_N, so the profile panel would refuse it.
+
+    Dispatching on content means a user does not have to know which panel their
+    result supports before they can look at it.
+    """
+    monkeypatch.setattr(
+        "dkx.result.Result.load",
+        staticmethod(lambda p: ScanResult(scan_arrays(), {"scan_axes": ("electric_field.value_kV_m",)})),
+    )
+    target = tmp_path / "auto.png"
+    assert cli.main(["plot", str(tmp_path / "s.nc"), "--out", str(target)]) == 0
+    assert target.exists()
+
+
+def test_auto_kind_still_picks_the_profile_panel_for_a_profile_result(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(
+        "dkx.result.Result.load", staticmethod(lambda p: ScanResult(profile_arrays(), {}))
+    )
+    target = tmp_path / "auto2.png"
+    assert cli.main(["plot", str(tmp_path / "p.nc"), "--out", str(target)]) == 0
+    assert target.exists()

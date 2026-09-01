@@ -73,9 +73,25 @@ settled to 0.2% at ``pitch = 8`` and moves the outputs 74% at ``pitch = 40``.
 Reading results
 ---------------
 
-``dkx inspect RESULT`` lists what a result holds. ``dkx plot RESULT`` writes a
-radial-profile panel, plus an ``E_r`` root panel when the result came from the
-ambipolar workflow.
+``dkx inspect RESULT`` lists what a result holds.
+
+``dkx plot RESULT`` picks a panel from what the result actually contains: a
+radial-profile panel for a profile run, plus an ``E_r`` root panel when the run
+was ambipolar, and observables against the axis for a result written by ``dkx
+scan``. ``--kind`` forces one instead:
+
+.. code-block:: bash
+
+   dkx plot result.nc                    # auto
+   dkx plot result.nc --kind search      # J_r against E_r: every evaluation,
+                                         # bracket, root type, selected branch
+   dkx plot scan.nc   --kind scan        # observables against the scan axis
+
+The ``search`` panel is the one to look at before believing a root. It draws
+every field the search evaluated, so the interval the result is scoped to is
+visible rather than implied. An evaluation that failed is marked on the axis
+rather than plotted at ``J_r = 0``, which would draw a crossing that never
+happened; a scan point that failed is marked rather than interpolated over.
 
 ``dkx roots RESULT`` prints the ambipolar roots with their classification,
 bracket width and branch, and flags any surface carrying a nonsmooth branch
