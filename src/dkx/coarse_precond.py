@@ -840,7 +840,9 @@ def _coarse_generated_block_data(
 
 @functools.partial(
     jax.jit,
-    static_argnames=("n_tz", "n_xi", "n_x", "n_s", "batch", "drop_l_coupling"),
+    static_argnames=(
+        "n_tz", "n_xi", "n_x", "n_s", "batch", "drop_l_coupling", "factor_dtype",
+    ),
 )
 def _assemble_and_factor_bands(
     blocks,
@@ -855,6 +857,7 @@ def _assemble_and_factor_bands(
     n_s: int,
     batch: int,
     drop_l_coupling: bool,
+    factor_dtype=None,
 ):
     """Assemble the coarse bands and factor them, as one XLA computation.
 
@@ -896,9 +899,18 @@ def _assemble_and_factor_bands(
     gamma = _l0_pin_gamma(l0_defect, band, scale.reshape(n_s, n_x), c0).reshape(-1)
     d4 = d4.at[:, 0].add(gamma[:, None, None] * jnp.outer(ones, c0)[None, :, :])
 
-    return jax.vmap(block_thomas_factor)(
-        lower.reshape(batch, n_xi, n_tz, n_tz), d4, upper.reshape(batch, n_xi, n_tz, n_tz)
-    )
+    lower = lower.reshape(batch, n_xi, n_tz, n_tz)
+    upper = upper.reshape(batch, n_xi, n_tz, n_tz)
+    if factor_dtype is not None and factor_dtype != jnp.float64:
+        # The bands are assembled in float64 and only the factored working
+        # precision drops: a float32 Schur LU is exact enough to precondition
+        # with, and the surrounding solve stays float64. Casting here rather
+        # than earlier keeps the pins and the invertibility floor -- which are
+        # scaled against band magnitudes -- computed at full precision.
+        lower = lower.astype(factor_dtype)
+        d4 = d4.astype(factor_dtype)
+        upper = upper.astype(factor_dtype)
+    return jax.vmap(block_thomas_factor)(lower, d4, upper)
 
 
 def build_coarse_preconditioner(
@@ -1006,6 +1018,7 @@ def build_coarse_preconditioner(
             blocks, coll_diag, drift, c0, mask,
             n_tz=n_tz, n_xi=n_xi, n_x=n_x, n_s=n_s, batch=batch,
             drop_l_coupling=bool(drop_l_coupling),
+            factor_dtype=_coarse_factor_dtype(),
         )
 
         def _a_inv(transpose: bool) -> Callable[[jnp.ndarray], jnp.ndarray]:
