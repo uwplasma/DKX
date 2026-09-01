@@ -36,6 +36,7 @@ from __future__ import annotations
 import math
 
 __all__ = [
+    "ATOMIC_MASS_UNIT",
     "B_BAR",
     "COULOMB_LOGARITHM",
     "CURRENT_DENSITY",
@@ -49,15 +50,25 @@ __all__ = [
     "R_BAR",
     "T_BAR",
     "V_BAR",
+    "density_m3_from_n_hat",
+    "electric_field_kv_m_from_er_hat",
+    "er_hat_from_electric_field_kv_m",
     "flux_psi_hat_to_r_hat",
+    "m_hat_from_mass_amu",
+    "mass_amu_from_m_hat",
+    "n_hat_from_density_m3",
     "reference_delta",
     "reference_nu_n",
+    "t_hat_from_temperature_kev",
+    "temperature_kev_from_t_hat",
 ]
 
 #: SI defining constants (2019 redefinition; exact) and the proton mass.
 ELEMENTARY_CHARGE: float = 1.602176634e-19  # C
 PROTON_MASS: float = 1.67262192369e-27  # kg
 VACUUM_PERMITTIVITY: float = 8.8541878128e-12  # F/m
+#: The unified atomic mass unit (2022 CODATA), the unit of ``mass_amu``.
+ATOMIC_MASS_UNIT: float = 1.66053906892e-27  # kg
 
 #: The SFINCS reference set (see the module docstring for how it is pinned).
 N_BAR: float = 1.0e20  # m^-3
@@ -96,6 +107,66 @@ def reference_nu_n() -> float:
         / (3.0 * (4.0 * math.pi * VACUUM_PERMITTIVITY) ** 2 * math.sqrt(M_BAR) * T_BAR**1.5)
     )
     return nu_bar * R_BAR / V_BAR
+
+
+#: --- Dimensionless "Hat" inputs <-> the SI quantities a native case declares.
+#:
+#: A SFINCS deck states ``nHats``, ``THats``, ``mHats`` and ``Er`` as ratios to
+#: the reference set above; a DKX case states ``density_m3``, ``temperature_keV``,
+#: ``mass_amu`` and ``value_kV_m``.  The two descriptions are the same physics
+#: only through the *pinned* reference values, so both directions live here
+#: rather than being re-derived at each boundary that crosses them.
+
+
+def density_m3_from_n_hat(n_hat: float) -> float:
+    """``n = nHat * nBar`` in m^-3."""
+    return float(n_hat) * N_BAR
+
+
+def n_hat_from_density_m3(density_m3: float) -> float:
+    """``nHat = n / nBar``, the dimensionless density a deck declares."""
+    return float(density_m3) / N_BAR
+
+
+def temperature_kev_from_t_hat(t_hat: float) -> float:
+    """``T = THat * TBar`` in keV (numerically ``THat``, since ``TBar = 1 keV``)."""
+    return float(t_hat) * T_BAR / (1.0e3 * ELEMENTARY_CHARGE)
+
+
+def t_hat_from_temperature_kev(temperature_kev: float) -> float:
+    """``THat = T / TBar``, the dimensionless temperature a deck declares."""
+    return float(temperature_kev) * 1.0e3 * ELEMENTARY_CHARGE / T_BAR
+
+
+def mass_amu_from_m_hat(m_hat: float) -> float:
+    """``m/u = mHat * mBar / u``.
+
+    ``mHat`` is a ratio to the *proton* mass while a case declares a ratio to
+    the unified atomic mass unit, so the two differ by 0.14% -- enough to move
+    a collision frequency, and exactly the kind of silent factor this module
+    exists to keep in one place.
+    """
+    return float(m_hat) * M_BAR / ATOMIC_MASS_UNIT
+
+
+def m_hat_from_mass_amu(mass_amu: float) -> float:
+    """``mHat = m / mBar`` from the atomic-mass-unit ratio a case declares."""
+    return float(mass_amu) * ATOMIC_MASS_UNIT / M_BAR
+
+
+def electric_field_kv_m_from_er_hat(er_hat: float) -> float:
+    """``Er`` in kV/m from the dimensionless ``Er = -dPhiHat/drHat`` of a deck.
+
+    ``PhiHat = e Phi / TBar`` and ``rHat = r / RBar``, so with ``TBar = 1 keV``
+    and ``RBar = 1 m`` the two are numerically equal; the conversion is written
+    out anyway so a change to the reference set cannot silently invalidate it.
+    """
+    return float(er_hat) * T_BAR / (1.0e3 * ELEMENTARY_CHARGE * R_BAR)
+
+
+def er_hat_from_electric_field_kv_m(value_kv_m: float) -> float:
+    """Inverse of :func:`electric_field_kv_m_from_er_hat`."""
+    return float(value_kv_m) * 1.0e3 * ELEMENTARY_CHARGE * R_BAR / T_BAR
 
 
 def flux_psi_hat_to_r_hat(*, psi_a_hat: float, a_hat: float, r_n: float) -> float:

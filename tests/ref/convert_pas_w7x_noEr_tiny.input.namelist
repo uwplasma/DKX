@@ -1,0 +1,53 @@
+! A deck `dkx convert` accepts, written for tests/test_cli_convert.py.
+!
+! Every checked-in SFINCS deck in this repository is refused by `dkx convert`
+! (see the module docstring of tests/test_cli_convert.py): they all override
+! `nu_n`, ask for a geometryScheme=1 model the native analytic route cannot
+! carry, snap to a stored VMEC surface, or run RHSMode 2/3.  This deck is
+! deliberately inside the convertible subset -- geometryScheme=4 fixes its own
+! normalization, `nu_n` is left at the globalVariables.F90 default, and the
+! trajectory switches are the DKES set -- so the conversion can be checked
+! against the physics rather than against the refusals.
+
+&general
+  RHSMode = 1
+/
+
+&geometryParameters
+  geometryScheme = 4
+/
+
+&speciesParameters
+  Zs = 1
+  mHats = 1.0d+0
+  nHats = 0.8d+0
+  THats = 1.2d+0
+  dNHatdrHats = -0.5d+0
+  dTHatdrHats = -2.0d+0
+/
+
+&physicsParameters
+  Er = 0.0d+0
+  collisionOperator = 1
+  includePhi1 = .false.
+/
+
+&resolutionParameters
+  Ntheta = 5
+  Nzeta = 5
+  Nxi = 4
+  Nx = 3
+  solverTolerance = 1d-10
+/
+
+&otherNumericalParameters
+  Nxi_for_x_option = 0
+/
+
+&preconditionerOptions
+/
+
+&export_f
+  export_full_f = .false.
+  export_delta_f = .false.
+/
