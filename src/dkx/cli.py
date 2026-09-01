@@ -605,6 +605,42 @@ def _cmd_compare(args: argparse.Namespace) -> int:
     return 2
 
 
+def _cmd_plot(args: argparse.Namespace) -> int:
+    """Plot a result, dkx-native or SFINCS, dispatching on the file extension.
+
+    plan.md section 5.6 lists one ``plot``. The SFINCS path is the existing
+    diagnostics panel; the dkx path is a radial-profile panel that did not
+    exist before -- ``OutputConfig.plots`` was in the case schema but nothing
+    read it, so a native Result could only be looked at by writing a script.
+    """
+    from .result import Result  # noqa: PLC0415
+
+    source = Path(args.result)
+    out_path = Path(args.out) if args.out else source.with_suffix(".png")
+
+    if _looks_like_sfincs_h5(source):
+        from .plotting import plot_sfincs_output_summary  # noqa: PLC0415
+
+        written = plot_sfincs_output_summary(input_h5=source, output_png=out_path)
+    else:
+        from .plotting import plot_result_summary  # noqa: PLC0415
+
+        try:
+            result = Result.load(source)
+        except (OSError, ValueError, KeyError) as exc:
+            print(f"dkx plot failed: {exc}", file=sys.stderr)
+            return 2
+        try:
+            written = plot_result_summary(result=result, output_path=out_path)
+        except ValueError as exc:
+            print(f"dkx plot failed: {exc}", file=sys.stderr)
+            return 2
+
+    if not args.quiet:
+        print(f"wrote {written}")
+    return 0
+
+
 def _cmd_run_case(args: argparse.Namespace) -> int:
     """Execute a case and write its Result.
 
@@ -1465,7 +1501,7 @@ _CONVERGE_AXES: tuple[str, ...] = ("theta", "zeta", "pitch", "speed")
 #: choices is what the compatibility group exists to avoid.
 _USER_COMMANDS: tuple[str, ...] = (
     "doctor", "schema", "validate", "run", "roots", "converge", "inspect",
-    "compare", "sfincs",
+    "compare", "plot", "sfincs",
 )
 
 
@@ -1473,7 +1509,7 @@ _USER_COMMANDS: tuple[str, ...] = (
 #: the parser's own ``sub.choices`` -- so the runtime behaviour cannot drift
 #: from the registered set. It exists for direct callers and as documentation.
 _KNOWN_COMMANDS: frozenset[str] = frozenset({
-    "validate", "doctor", "converge", "roots", "compare", "schema", "run", "inspect", "solve-v3", "ambipolar",
+    "validate", "doctor", "converge", "roots", "compare", "plot", "schema", "run", "inspect", "solve-v3", "ambipolar",
     "scan-er", "ambipolar-solve", "run-fortran", "write-output",
     "transport-matrix-v3", "monoenergetic-database", "dump-h5", "plot-output",
     "compare-h5", "postprocess-upstream",
@@ -2049,6 +2085,16 @@ def main(argv: list[str] | None = None) -> int:
                            help="List every array, not only the differing ones.")
     p_compare.add_argument("--format", choices=("table", "json"), default="table")
     p_compare.set_defaults(func=_cmd_compare)
+
+    p_plot_result = sub.add_parser(
+        "plot",
+        help="Plot a result (dkx NetCDF radial profiles, or a SFINCS HDF5 panel).",
+    )
+    _add_common_cli_args(p_plot_result)
+    _add_parallel_cli_args(p_plot_result)
+    p_plot_result.add_argument("result")
+    p_plot_result.add_argument("--out", default=None, help="Output image path (default: alongside the input).")
+    p_plot_result.set_defaults(func=_cmd_plot)
 
     p_schema = sub.add_parser(
         "schema",
