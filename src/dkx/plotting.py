@@ -481,3 +481,126 @@ def plot_result_summary(*, result, output_path: Path) -> Path:
     fig.savefig(output_path, dpi=150)
     plt.close(fig)
     return output_path
+
+
+#: Elementary charge, for assembling the radial current from species fluxes.
+_ELEMENTARY_CHARGE = 1.602176634e-19
+
+#: Marker colour per admitted root classification.
+_ROOT_COLOURS = {"ion": "tab:blue", "electron": "tab:red", "unstable": "tab:grey"}
+
+
+def plot_ambipolar_search(*, result, output_path: Path) -> Path:
+    r"""Plot the radial current against the electric field, one panel per surface.
+
+    plan.md section 10.1 asks for "radial current versus electric field with
+    every evaluation, bracket, root type, selected branch, and failed
+    interval". This is that family, and it exists because DKX's admitted
+    ambipolar results are scoped to explicit sampled intervals: the claim is
+    only honest if a reader can see where the scan actually looked.
+
+    The radial current is assembled as :math:`J_r = \sum_s Z_s e \Gamma_s`
+    from the per-evaluation species fluxes, because the result stores
+    ``radial_current_A_m2`` only at the accepted answer, not along the search.
+
+    Two contract points from section 10.3 are load-bearing:
+
+    * an evaluation that did not produce a number is drawn on a rug at the
+      bottom rather than dropped or plotted as zero -- a failed solve at a
+      given field is information about the search, and rendering it as
+      :math:`J_r = 0` would put a fake root there;
+    * a surface with no admitted roots says so on the panel, together with the
+      reason a null result is not proof, rather than showing an empty axis.
+    """
+    arrays = result.arrays
+    required = ("evaluation_electric_field_kV_m", "evaluation_particle_flux_m2_s")
+    missing = [name for name in required if name not in arrays]
+    if missing:
+        raise ValueError(
+            f"{getattr(result, 'case_name', 'result')} carries no ambipolar search "
+            f"(missing {missing}). This plot needs workflow = 'ambipolar_profile'."
+        )
+
+    fields = np.asarray(arrays["evaluation_electric_field_kV_m"], dtype=float)
+    fluxes = np.asarray(arrays["evaluation_particle_flux_m2_s"], dtype=float)
+    charges = np.asarray(arrays.get("charge_e", []), dtype=float)
+    if charges.size == 0:
+        raise ValueError("result carries no species charges; cannot form a radial current")
+
+    current = np.einsum("sek,k->se", fluxes, charges) * _ELEMENTARY_CHARGE
+
+    roots = np.asarray(arrays.get("ambipolar_root_kV_m", np.zeros((fields.shape[0], 0))))
+    counts = np.asarray(arrays.get("ambipolar_root_count", np.zeros(fields.shape[0]))).astype(int).ravel()
+    kinds = np.asarray(arrays.get("ambipolar_root_type", np.empty(roots.shape, dtype=object)))
+    brackets = arrays.get("ambipolar_root_bracket_kV_m")
+    selected = np.asarray(arrays.get("selected_ambipolar_root", [])).ravel()
+    radius = np.asarray(arrays.get("r_N", []), dtype=float).ravel()
+
+    n_surface = fields.shape[0]
+    fig, axes = plt.subplots(n_surface, 1, figsize=(7.0, 3.0 * n_surface), squeeze=False)
+    axes = axes[:, 0]
+
+    for surface, ax in enumerate(axes):
+        x = fields[surface]
+        y = current[surface]
+        finite = np.isfinite(x) & np.isfinite(y)
+        failed = np.isfinite(x) & ~np.isfinite(y)
+
+        order = np.argsort(x[finite])
+        ax.plot(x[finite][order], y[finite][order], "-o", ms=3, lw=1.0,
+                color="0.35", label=r"$J_r$ evaluations", zorder=2)
+        ax.axhline(0.0, color="k", lw=0.7, alpha=0.6, zorder=1)
+
+        if brackets is not None:
+            band = np.asarray(brackets, dtype=float)
+            for index in range(int(counts[surface])):
+                lo, hi = band[surface, index]
+                if np.isfinite(lo) and np.isfinite(hi):
+                    ax.axvspan(lo, hi, color="tab:orange", alpha=0.18, zorder=0,
+                               label="bracket" if index == 0 else None)
+
+        for index in range(int(counts[surface])):
+            kind = kinds[surface, index]
+            kind = kind.decode() if isinstance(kind, bytes) else str(kind)
+            is_selected = selected.size > surface and selected[surface] == index
+            ax.plot(
+                roots[surface, index], 0.0, marker="o", ms=10 if is_selected else 7,
+                markerfacecolor="none" if kind == "unstable" else _ROOT_COLOURS.get(kind, "tab:green"),
+                markeredgecolor=_ROOT_COLOURS.get(kind, "tab:green"),
+                markeredgewidth=2.0 if is_selected else 1.2, linestyle="none", zorder=4,
+                label=f"{kind} root" if index == 0 else None,
+            )
+
+        if failed.any():
+            # A rug, not a y value: a failed solve has no current to place.
+            ax.plot(x[failed], np.full(failed.sum(), ax.get_ylim()[0]), marker="|",
+                    linestyle="none", color="tab:red", ms=10,
+                    label="evaluation failed", zorder=3)
+
+        if int(counts[surface]) == 0:
+            ax.text(
+                0.5, 0.5,
+                "no root admitted in the sampled interval\n"
+                "(sign sampling cannot see a tangential root,\n"
+                "or an even number of crossings between samples)",
+                transform=ax.transAxes, ha="center", va="center",
+                fontsize="small", color="tab:red", alpha=0.85,
+            )
+
+        label = f"surface {surface}"
+        if radius.size > surface:
+            label += rf"  ($r_N = {radius[surface]:.3g}$)"
+        ax.set_title(label, fontsize="small")
+        ax.set_ylabel(r"$J_r$  [A m$^{-2}$]", fontsize="small")
+        ax.grid(alpha=0.3)
+        ax.legend(fontsize="x-small", frameon=False, loc="best")
+
+    axes[-1].set_xlabel(r"$E_r$  [kV m$^{-1}$]")
+    fig.suptitle(f"{getattr(result, 'case_name', 'dkx result')} — ambipolar search",
+                 fontsize="medium")
+    fig.tight_layout()
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    return output_path
