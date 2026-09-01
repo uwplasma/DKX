@@ -83,6 +83,21 @@ def _cmd_validate_case(args: argparse.Namespace) -> int:
     except (CaseValidationError, OSError) as exc:
         print(f"dkx validate failed: {exc}", file=sys.stderr)
         return 2
+    # The schema is deliberately wider than the executor: it admits
+    # magnetic_drifts = "full", workflow = "monoenergetic" and
+    # phi1 = "kinetic"/"full", none of which execution implements yet. Running
+    # the executor's own preflight here is what makes `dkx validate` mean "this
+    # will run" rather than "this parses" -- otherwise a user learns which of
+    # the advertised enum values are real only after `dkx run` sets up and
+    # fails.
+    from .execution import _validate_native_slice  # noqa: PLC0415
+
+    try:
+        _validate_native_slice(case)
+    except CaseValidationError as exc:
+        print(f"dkx validate failed: {exc}", file=sys.stderr)
+        return 2
+
     print(f"valid DKX case: {case.name}")
     print(f"case_id: {case.case_id}")
     print(

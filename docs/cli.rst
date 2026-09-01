@@ -51,7 +51,13 @@ Running a case
 
 ``dkx run CASE --out RESULT.nc`` solves one case and writes a ``Result``.
 ``dkx validate CASE`` checks the file and prints its deterministic ``case_id``
-without solving, which is the cheap way to find a typo before a long run.
+without solving, which is the cheap way to find a problem before a long run.
+
+``validate`` runs the executor's own preflight, not just the schema. The case
+schema is deliberately wider than what the solver implements -- it admits
+``magnetic_drifts = "full"``, ``workflow = "monoenergetic"`` and
+``phi1 = "kinetic"``, none of which execution supports yet -- so a case can
+pass the JSON Schema and still be unrunnable. ``validate`` catches that.
 
 ``dkx scan CASE`` expands a ``[scan]`` table and solves every point, writing a
 single result with a leading ``case`` dimension and the axis values stored
