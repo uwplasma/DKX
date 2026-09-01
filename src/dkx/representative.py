@@ -1275,6 +1275,42 @@ DEFAULT_SURFACES = (0.25, 0.4, 0.55, 0.7, 0.85)
 DEFAULT_ER_BRACKET = (-12.0, -8.0, -6.0, -4.0, -2.0, -1.0, -0.4, 0.4, 1.0, 2.0)
 
 
+#: How far past the bracket's negative edge the scan may reach when the
+#: evidence says a root is just outside, and the step it takes getting there.
+#: Bounded rather than open-ended: the point is to catch a root a volt or two
+#: beyond the edge, not to go hunting at fields no device sustains.
+ER_EXTENSION_FLOOR_KV_M = -24.0
+ER_EXTENSION_STEP_KV_M = 4.0
+
+
+def _wants_more_negative_er(er: np.ndarray, j_r: np.ndarray) -> bool:
+    """Whether ``J_r`` says a root sits just past the negative edge.
+
+    Three conditions, all necessary. There must be no sign change already
+    (otherwise a root is in hand); ``J_r`` at the most negative sampled field
+    must be finite and still on one side of zero; and it must be *heading*
+    toward zero as the field decreases, i.e. smaller in magnitude at the edge
+    than at its neighbour. A scan whose current grows toward the edge has no
+    root out there and extending would only cost solves.
+
+    This is deliberately not "extend whenever no root was found". The bracket's
+    negative floor exists because, on at least one reference equilibrium, a
+    failed solve at a more negative field manufactured a sign change and the
+    root finder reported the fake crossing. Extending only into a monotone
+    approach keeps that case out: a failed solve does not approach zero
+    monotonically.
+    """
+    order = np.argsort(er)
+    e, j = np.asarray(er)[order], np.asarray(j_r)[order]
+    finite = np.isfinite(j)
+    if finite.sum() < 2:
+        return False
+    e, j = e[finite], j[finite]
+    if np.any(np.sign(j[:-1]) * np.sign(j[1:]) <= 0.0):
+        return False  # a crossing is already bracketed
+    return bool(abs(j[0]) < abs(j[1]))
+
+
 def _interp_at_root(er: np.ndarray, values: np.ndarray, root: float) -> float:
     """Linear interpolation of a scanned quantity onto the ambipolar root."""
     order = np.argsort(er)
@@ -1384,8 +1420,53 @@ def radial_profiles(
                 )
                 continue
             j_r = np.asarray(scan.radial_current, dtype=float).ravel()
+            er_used = np.asarray(er, dtype=float)
             roots = _ambipolar_roots([{"er": float(e), "J_r": float(j)}
-                                      for e, j in zip(er, j_r)])  # fmt: skip
+                                      for e, j in zip(er_used, j_r)])  # fmt: skip
+            # A root just past the negative edge is common on a device whose ion
+            # root deepens with radius: the surface at r/a = 0.25 brackets its
+            # root at -9.9 kV/m while the outer four sit at the -12 edge with
+            # J_r still approaching zero. Reporting those as "no root" and then
+            # quoting a bootstrap current at the edge is worse than spending a
+            # few more solves, so extend while the evidence says a root is out
+            # there and stop as soon as one is bracketed.
+            edge = float(np.min(er_used))
+            probes: list[float] = []
+            while (
+                not roots
+                and edge > ER_EXTENSION_FLOOR_KV_M
+                and _wants_more_negative_er(er_used, j_r)
+            ):
+                edge -= ER_EXTENSION_STEP_KV_M
+                try:
+                    extra = _quiet(lambda d=deck, e=edge: batched_er_scan(d, np.array([e])))
+                except Exception:  # noqa: BLE001 - a failed extension is not fatal
+                    break
+                extra_j = np.asarray(extra.radial_current, dtype=float).ravel()
+                if not np.all(np.isfinite(extra_j)):
+                    break
+                probes.append(edge)
+                er_used = np.concatenate([[edge], er_used])
+                j_r = np.concatenate([extra_j, j_r])
+                roots = _ambipolar_roots([{"er": float(e), "J_r": float(j)}
+                                          for e, j in zip(er_used, j_r)])  # fmt: skip
+            if probes:
+                # Re-scan once over the extended field list. The probes above
+                # only carry J_r, while every moment interpolated onto the root
+                # below indexes the scan's own arrays, so er and scan.moments
+                # have to describe the same set of fields -- appending to one
+                # and not the other reads back as an out-of-bounds index.
+                try:
+                    scan = _quiet(lambda d=deck, e=er_used: batched_er_scan(d, e))
+                    j_r = np.asarray(scan.radial_current, dtype=float).ravel()
+                    roots = _ambipolar_roots([{"er": float(e), "J_r": float(j)}
+                                              for e, j in zip(er_used, j_r)])  # fmt: skip
+                except Exception:  # noqa: BLE001 - fall back to the original bracket
+                    er_used = np.asarray(er, dtype=float)
+                    j_r = np.asarray(scan.radial_current, dtype=float).ravel()
+                    roots = _ambipolar_roots([{"er": float(e), "J_r": float(j)}
+                                              for e, j in zip(er_used, j_r)])  # fmt: skip
+            er = er_used
             record: dict[str, Any] = {
                 "r": float(radius), "er_scan": er.tolist(),
                 "J_r": j_r.tolist(), "roots": roots,
@@ -1460,9 +1541,19 @@ def radial_profiles(
                 e_txt = f"{record.get('er_evaluated', float('nan')):+.3f}"
                 b_txt = f"{record.get('bootstrap_kA_m2', float('nan')):+.4g}"
                 status = str(record.get("evaluation_status", "unavailable"))
-                emit(f"    r/a={radius:.2f}  Er_evaluated={e_txt} kV/m "
-                     f"status={status}  "
-                     f"<j.B>/sqrt(<B^2>)={b_txt} kA/m^2")  # fmt: skip
+                line = (f"    r/a={radius:.2f}  Er_evaluated={e_txt} kV/m "
+                        f"status={status}  "
+                        f"<j.B>/sqrt(<B^2>)={b_txt} kA/m^2")  # fmt: skip
+                if not record.get("evaluation_is_root", False):
+                    # Without this the number reads as a transport result. It is
+                    # not: with no sign change in the sampled interval the scan
+                    # falls back to whichever sampled field had the smallest
+                    # |J_r|, which is typically an endpoint. A bootstrap current
+                    # at a non-ambipolar field is not a state the plasma
+                    # occupies, and quoting it beside genuine roots invites
+                    # exactly the comparison it cannot support.
+                    line += "  [NOT an ambipolar root: J_r != 0 here]"
+                emit(line)
             out.append(record)
     return out
 

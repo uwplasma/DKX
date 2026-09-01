@@ -1016,3 +1016,63 @@ def test_the_provenance_phrase_names_the_temperature_assumption(monkeypatch) -> 
 
     monkeypatch.setenv(T_AXIS_ENV, "5.5")
     assert _t_axis_kev() == 5.5
+
+
+# ---------------------------------------------------------------------------
+# Extending the Er bracket toward a root just outside it
+# ---------------------------------------------------------------------------
+
+
+def test_the_scan_extends_when_the_current_is_heading_for_zero() -> None:
+    """A root a volt past the edge should be found, not reported as absent.
+
+    On the QA bootstrap equilibrium the ion root deepens with radius: r/a=0.25
+    brackets its root at -9.9 kV/m while the outer surfaces sit at the -12 edge
+    with J_r still approaching zero. Those were reported as "no bracketed root"
+    and then quoted a bootstrap current at the edge -- a field the plasma does
+    not occupy.
+    """
+    from dkx.representative import _wants_more_negative_er
+
+    er = np.array([-12.0, -8.0, -6.0, -4.0, -2.0])
+    # Positive everywhere and smallest at the negative edge: a root is out there.
+    j_r = np.array([1.17e-8, 5.99e-8, 8.24e-8, 1.04e-7, 1.23e-7])
+    assert _wants_more_negative_er(er, j_r) is True
+
+
+def test_a_scan_that_already_brackets_a_root_is_not_extended() -> None:
+    """Extending past a crossing would spend solves to find what is in hand."""
+    from dkx.representative import _wants_more_negative_er
+
+    er = np.array([-12.0, -8.0, -6.0, -4.0])
+    j_r = np.array([-6.39e-8, 5.86e-8, 1.15e-7, 1.64e-7])  # sign change
+    assert _wants_more_negative_er(er, j_r) is False
+
+
+def test_a_current_growing_toward_the_edge_is_not_extended() -> None:
+    """No root out there, so extending only costs solves."""
+    from dkx.representative import _wants_more_negative_er
+
+    er = np.array([-12.0, -8.0, -6.0, -4.0])
+    j_r = np.array([2.0e-7, 1.5e-7, 1.0e-7, 5.0e-8])  # largest at the edge
+    assert _wants_more_negative_er(er, j_r) is False
+
+
+def test_a_non_finite_scan_is_not_extended() -> None:
+    """The bracket's negative floor exists because a failed solve once
+    manufactured a sign change and the root finder reported the fake crossing.
+    A scan that cannot produce two finite points is not evidence of anything."""
+    from dkx.representative import _wants_more_negative_er
+
+    er = np.array([-12.0, -8.0, -6.0])
+    assert _wants_more_negative_er(er, np.array([np.nan, np.nan, 1.0e-7])) is False
+
+
+def test_the_extension_is_bounded() -> None:
+    """Bounded rather than open-ended: catch a root a volt or two out, do not
+    hunt at fields no device sustains."""
+    from dkx.representative import ER_EXTENSION_FLOOR_KV_M, ER_EXTENSION_STEP_KV_M
+
+    assert ER_EXTENSION_FLOOR_KV_M < -12.0
+    assert ER_EXTENSION_STEP_KV_M > 0.0
+    assert ER_EXTENSION_FLOOR_KV_M > -100.0
