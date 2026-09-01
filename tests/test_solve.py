@@ -24,6 +24,8 @@ from types import SimpleNamespace
 
 import jax
 import jax.numpy as jnp
+import dataclasses
+
 import numpy as np
 import pytest
 import scipy.linalg as sla
@@ -1594,3 +1596,42 @@ def test_the_coarse_factor_dtype_knob_actually_changes_the_factors(monkeypatch) 
     ), "float32 factors produced an identical path: the knob is inert again"
     # The converged answer is a property of the operator, not the preconditioner.
     assert _rel_err(np.asarray(lowered.x), np.asarray(base.x)) < 1e-8
+
+
+def test_only_the_krylov_route_returns_a_preconditioner() -> None:
+    """The route decides, so the caller must not guess ahead of it.
+
+    An earlier attempt at scan reuse built a preconditioner whenever the method
+    was "auto", which meant a case landing on the structured-direct route paid
+    for one it never used -- measurably slower. Returning what the solve
+    actually built removes the guess: a direct point hands back None and the
+    next point builds nothing.
+    """
+    op = _load_sugama_op()
+    rhs = op.rhs()
+    assert solve(op, rhs, method="gmres", tol=1e-9).precond is not None
+    assert solve(op, rhs, method="direct").precond is None
+
+
+def test_a_returned_preconditioner_can_be_fed_straight_back() -> None:
+    """The round trip is the whole point: solve, then reuse without rebuilding."""
+    from dataclasses import replace
+
+    op = _load_sugama_op()
+    rhs = op.rhs()
+    first = solve(op, rhs, method="gmres", tol=1e-10)
+
+    neighbour = replace(op, sugama=replace(op.sugama, mat=1.05 * op.sugama.mat))
+    reused = solve(neighbour, rhs, method="gmres", tol=1e-10, precond=first.precond)
+    own = solve(neighbour, rhs, method="gmres", tol=1e-10)
+
+    assert reused.converged
+    assert _rel_err(np.asarray(reused.x), np.asarray(own.x)) < 1e-9
+
+
+def test_the_er_scan_threads_the_preconditioner_it_was_given() -> None:
+    """ErSolveState carries it forward, and carries None when there is none."""
+    from dkx.er import ErSolveState
+
+    assert "precond" in {f.name for f in dataclasses.fields(ErSolveState)}
+    assert ErSolveState(x=None, recycle=None, result=None).precond is None

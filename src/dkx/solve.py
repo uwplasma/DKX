@@ -333,6 +333,13 @@ class SolveResult:
             and the adjoint ones when the backward pass runs, so inspect it
             after the enclosing ``jax.grad`` / ``jax.vjp`` call has
             completed.
+        precond: the preconditioner pair this solve built, or ``None`` when the
+            route did not need one. Pass it back as ``solve(..., precond=...)``
+            to skip the rebuild on a nearby operator -- an ``Er`` scan, a Newton
+            step, the next surface. Returning it rather than having the caller
+            build one ahead of time is what makes reuse correct: the route is
+            not known until the solve runs, so a caller who guesses builds a
+            preconditioner the structured-direct route then never uses.
     """
 
     x: jnp.ndarray
@@ -343,6 +350,7 @@ class SolveResult:
     recycle: tuple[jnp.ndarray, jnp.ndarray] | None
     timings: dict[str, float]
     adjoint: AdjointDiagnostics | None = None
+    precond: tuple[Callable, Callable] | None = None
 
     @property
     def route(self) -> str:
@@ -2026,6 +2034,10 @@ def _solve_tier2(
         recycle=recycle,
         timings={"build": t1 - t0, "solve": t2 - t1},
         adjoint=diagnostics,
+        # Only the recycled-Krylov route builds one, so a caller that threads
+        # this forward gets a preconditioner exactly when there is one to reuse
+        # and None when the route was direct.
+        precond=None if precond is None else (precond, precond_t),
     )
 
 
