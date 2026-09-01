@@ -12,8 +12,8 @@ Public entry points:
 
 - :func:`solve_phi1` -- the Fortran-parity Newton solve.  Each Newton step
   linearizes the residual (:meth:`dkx.drift_kinetic.KineticOperator.residual_phi1`)
-  and solves ``J dx = -r`` with :func:`dkx.solve.solve` (tier-2 recycled
-  Krylov on the matrix-free Jacobian-vector product), warm-started with the
+  and solves ``J dx = -r`` with :func:`dkx.solve.solve` (the recycled Krylov
+  route on the matrix-free Jacobian-vector product), warm-started with the
   GCROT recycle pair across Newton iterations.  Returns a :class:`Phi1Result`
   with the solved state, ``Phi1Hat``, per-iteration diagnostics, and the
   operator carrying the converged linearization.
@@ -92,7 +92,7 @@ class Phi1Result:
         n_newton: number of Newton iterations taken.
         iterations: the per-step Newton diagnostics.
         inner_iterations_total: total inner Krylov iterations across all Newton
-            steps (``None`` if any step ran a non-counting solve tier).
+            steps (``None`` if any step ran a non-counting solve route).
         timings: wall-clock seconds (``solve``).
     """
 
@@ -157,8 +157,8 @@ def _inner_restart(op: KineticOperator, restart: int | None, use_preconditioner:
     """Krylov restart for the inner Newton solve.
 
     Phi1 breaks the block-tridiagonal-in-L structure (the quasineutrality rows
-    couple all angles at L=0), so the inner solve is tier-2 GCROT on the
-    matrix-free Jacobian.
+    couple all angles at L=0), so the inner solve is recycled Krylov GCROT on
+    the matrix-free Jacobian.
 
     With the Phi1-aware coarse preconditioner
     (:func:`dkx.coarse_precond.build_coarse_preconditioner`, which Schur-eliminates

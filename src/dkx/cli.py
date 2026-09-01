@@ -164,7 +164,7 @@ def _doctor_checks() -> list[tuple[str, str, str]]:
     except PackageNotFoundError:
         rows.append(("warn", "dkx", "not installed as a distribution (running from a checkout)"))
 
-    # solvax carries the solver tiers, and a version below the declared floor
+    # solvax carries the solver routes, and a version below the declared floor
     # fails deep inside a solve rather than at import, so it is checked here.
     floor = (0, 19, 0)
     try:

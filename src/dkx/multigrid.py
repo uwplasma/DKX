@@ -1,6 +1,6 @@
-"""Geometric-multigrid preconditioner for the tier-2 Krylov solve.
+"""Geometric-multigrid preconditioner for the recycled Krylov solve.
 
-The tier-2 solver (:func:`dkx.solve.solve` with ``method="gmres"``) is the
+The recycled Krylov route (:func:`dkx.solve.solve` with ``method="gmres"``) is the
 only route open to the physics that has no block-tridiagonal-in-L structure:
 full Fokker-Planck and improved-Sugama collisions, ``Phi1``/quasineutrality,
 tangential magnetic drifts, and the ``E_r`` ``xDot``/``xiDot`` terms.  Its
@@ -18,7 +18,7 @@ This module replaces the exact inversion of that same simplified operator by
 a geometric multigrid V-cycle, keeping everything else -- which operator is
 simplified, and how the bordered constraint / ``Phi1`` rows are eliminated --
 byte-for-byte identical.  A preconditioner cannot change the answer, and the
-parity tests pin that: the tier-2 solution is the same to solver tolerance
+parity tests pin that: the Krylov solution is the same to solver tolerance
 whichever inner inverse is used.
 
 Hierarchy
@@ -149,7 +149,7 @@ why in one number, and the next section is that measurement.
 
 The consequence, measured end to end and reported in ``docs/performance.rst``:
 on the full-Fokker-Planck ladder the multigrid route is affordable where the
-classical preconditioner is not, but it does not reach the tier-2 tolerance,
+classical preconditioner is not, but it does not reach the Krylov tolerance,
 while the exact block-Thomas of the same simplified operator does so in 21
 iterations.  The route is therefore opt-in
 (``solve(preconditioner="multigrid")``) and the default is unchanged.
@@ -400,7 +400,7 @@ _DIAGONAL_FLOOR = 1e-8
 
 @dataclass(frozen=True)
 class MultigridSettings:
-    """Knobs of the tier-2 multigrid preconditioner.
+    """Knobs of the recycled Krylov multigrid preconditioner.
 
     Attributes:
         levels: maximum number of coarsening steps (the hierarchy stops
@@ -439,7 +439,7 @@ class MultigridSettings:
             The default ``1e-8`` is the invertibility floor of
             :func:`dkx.coarse_precond.build_coarse_preconditioner` and is what a
             preconditioner may spend: measured on the NCSX ladder, raising it
-            to ``0.01`` costs the tier-2 solve 60 iterations instead of 21, and
+            to ``0.01`` costs the Krylov solve 60 iterations instead of 21, and
             ``1.0`` never converges at all.
         plane_pin: weight of the per-line rank-one pin in the
             ``"legendre_plane"`` smoother (see :func:`_legendre_plane_blocks`),
@@ -520,12 +520,12 @@ def simplified_operator(
     :meth:`KineticOperator.to_block_tridiagonal` accept.
 
     Args:
-        op: the full tier-2 operator.
+        op: the full operator the recycled Krylov route solves.
         drop_l_coupling: drop the ``L +- 1`` streaming and mirror coupling,
             leaving the simplified operator block-*diagonal* in ``L``.  This is
             not Fortran's ``preconditioner_xi``, which drops ``L +- 2``; it is
             strictly more aggressive, and it removes the dominant term.  It is
-            off by default and measured expensive: on the tier-2 truncation
+            off by default and measured expensive: on the Krylov truncation
             study it takes 6000 iterations to a residual of 0.77 where keeping
             the coupling converges in 19 (``docs/performance.rst``).  Kept as a
             knob because a multigrid smoother at fixed ``L`` cannot see the
@@ -896,7 +896,7 @@ def _shift(level: KineticOperator, weight: float) -> jnp.ndarray:
       tiny NCSX operator the rank-one pin drives a smoother's error propagation
       from ``rho = 2.0`` to ``rho = 38``.
     * The magnitude matters far more than the form.  With the exact
-      block-Thomas of this simplified operator as the tier-2 preconditioner on
+      block-Thomas of this simplified operator as the Krylov preconditioner on
       the NCSX ``11 x 21 x 41 x 5`` deck, GCROT needs **21** iterations at
       ``delta = 0``, 60 at ``1e-2`` of the mean collision diagonal, and never
       converges at ``1.0``.  (The *unconditional* full-strength rank-one pin
@@ -942,7 +942,7 @@ def _coarse_solve(
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
     """Exact batched block-Thomas solve of the coarsest level operator.
 
-    The classical tier-2 preconditioner, kept where it belongs: its
+    The classical Krylov preconditioner, kept where it belongs: its
     ``O(Nxi Nspecies Nx (Ntheta Nzeta)**3)`` cost and
     ``O((Ntheta Nzeta)**2)`` storage are harmless once the angular grid is a
     handful of points across, and it makes the coarse-grid correction exact
@@ -1405,7 +1405,7 @@ def build_multigrid_f_inverse(
     """Multigrid approximate inverse of the simplified f-block.
 
     Args:
-        op: the full tier-2 operator.
+        op: the full operator the recycled Krylov route solves.
         drop_l_coupling: drop the ``L +- 1`` streaming and mirror coupling
             (see :func:`simplified_operator`).  Not Fortran's
             ``preconditioner_xi``, which drops ``L +- 2``.
@@ -1475,11 +1475,11 @@ def build_multigrid_preconditioner(
     of the cycle itself.  The cycle is a *linear* function of its argument
     (fixed transfers, fixed smoother factors, fixed coarse factorization), so
     its transpose is exact -- no second hierarchy, and no risk of the two
-    drifting apart, which is what the tier-2 adjoint guard would otherwise
+    drifting apart, which is what the Krylov adjoint guard would otherwise
     catch.
 
     Args:
-        op: the full tier-2 operator.
+        op: the full operator the recycled Krylov route solves.
         drop_l_coupling: drop the ``L +- 1`` streaming and mirror coupling
             (see :func:`simplified_operator`).  Not Fortran's
             ``preconditioner_xi``, which drops ``L +- 2``.
@@ -1668,7 +1668,7 @@ def dense_simplified_block(
     """Dense ``(Nxi*Ntheta*Nzeta)`` square block of the simplified operator.
 
     The simplified operator (:func:`simplified_operator`) is uncoupled over
-    ``(species, x)``, so one such block is the whole thing the classical tier-2
+    ``(species, x)``, so one such block is the whole thing the classical Krylov
     preconditioner factors, for one speed node of one species.  Index order is
     ``(L, theta, zeta)`` with ``zeta`` fastest, matching
     :meth:`KineticOperator.to_block_tridiagonal`.
@@ -1790,7 +1790,8 @@ def pitch_collocation_surrogate(
     which an alternating line block-Jacobi smoother converges, and dkx's is not.
 
     Args:
-        op: the full tier-2 operator (only the simplified part is used).
+        op: the full recycled-Krylov operator (only the simplified part is
+            used).
         species: species index.
         speed: speed-node index.
         n_alpha: pitch-grid size; defaults to ``op.n_xi``.

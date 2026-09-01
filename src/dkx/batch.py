@@ -1,6 +1,6 @@
 """Batched multi-surface / multi-``E_r`` kinetic solves (``jax.vmap`` productized).
 
-Single ``dkx`` solves are CPU/GPU parity on the direct tier; the GPU win
+Single ``dkx`` solves are CPU/GPU parity on the direct routes; the GPU win
 comes from **batching** many solves that share a discretization but differ in
 their physics leaves.  Because :class:`dkx.drift_kinetic.KineticOperator`
 is a registered, jit-safe pytree, ``jax.vmap`` maps cleanly over its varying
@@ -18,7 +18,7 @@ axes:
 Both are thin builders over the primitive :func:`batched_solve`, which
 ``jax.vmap``s a solve-plus-moments over an explicit mapping of the varying
 operator leaves.  Peak memory is bounded automatically: the per-solve footprint
-comes from the route-aware tier-1 memory model in :mod:`dkx.solve`
+comes from the route-aware structured direct memory model in :mod:`dkx.solve`
 (:func:`dkx.solve.auto_solve_peak_memory_bytes`), the memory budget from the
 device/host, and the batch is processed in ``jax.lax.map`` chunks of the
 computed size so only one chunk's intermediates are ever live.
@@ -97,8 +97,9 @@ _DISCRETIZATION_FIELDS = frozenset(
 )
 
 # Fraction of the resolved device/host memory used as the default budget: the
-# tier-1 footprint is an estimate and the runtime keeps other buffers live, so a
-# margin below the hard limit keeps the auto-chunked batch safely resident.
+# structured direct footprint is an estimate and the runtime keeps other
+# buffers live, so a margin below the hard limit keeps the auto-chunked batch
+# safely resident.
 _DEFAULT_BUDGET_FRACTION = 0.8
 
 # Budget floor when neither the device nor the host expose a memory size.
@@ -197,12 +198,12 @@ def solve_footprint_bytes(
     Follows the auto-router's own decision via
     :func:`dkx.solve.auto_solve_peak_memory_bytes`: a solve that routes to the
     truncated block-Thomas kernel (ramped ``Nxi_for_x`` or a full-band peak
-    above the tier-1 budget) is charged its truncated working set — ``O(keep *
-    m^2)`` per subsystem plus the compact coefficient buffers — not the
-    full-band factorization peak, which that route never allocates and which
-    overstates a production-shaped solve by ~46x (silently serializing batched
-    scans through ``chunk=1``).  Full-band and tier-2 routes keep the
-    conservative full-band peak.  ``memory_budget_gb`` is forwarded to the
+    above the structured direct budget) is charged its truncated working set —
+    ``O(keep * m^2)`` per subsystem plus the compact coefficient buffers — not
+    the full-band factorization peak, which that route never allocates and
+    which overstates a production-shaped solve by ~46x (silently serializing
+    batched scans through ``chunk=1``).  Full-band and recycled Krylov routes
+    keep the conservative full-band peak.  ``memory_budget_gb`` is forwarded to the
     same auto-router used by the solve so budget-forced truncation and chunk
     sizing cannot disagree.  The solved state vector and a fixed runtime
     allowance (:data:`_RUNTIME_OVERHEAD_BYTES`) are added on top.
