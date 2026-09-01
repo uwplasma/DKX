@@ -2419,8 +2419,14 @@ def kinetic_operator_build_from_namelist(nml: Any) -> KineticOperatorBuild:
             )
         dphi_kinetic = radial.d_dr_hat_to_d_dpsi_hat * (-er)
 
-    include_xdot = _get_bool(phys, "includeXDotTerm", False)
-    include_er_xidot = _get_bool(phys, "includeElectricFieldTermInXiDot", False)
+    # These three defaults must match globalVariables.F90:144-146, because a
+    # deck is free to omit the key and inherit it. includeXDotTerm and
+    # includeElectricFieldTermInXiDot default to .true. upstream; defaulting
+    # them to False here silently dropped both E_r trajectory terms from any
+    # compact deck with a finite E_r, which is a wrong answer rather than a
+    # missing feature. useDKESExBDrift really is .false. upstream.
+    include_xdot = _get_bool(phys, "includeXDotTerm", True)
+    include_er_xidot = _get_bool(phys, "includeElectricFieldTermInXiDot", True)
     use_dkes_exb = _get_bool(phys, "useDKESExBDrift", False)
     has_er = float(dphi_kinetic) != 0.0
 

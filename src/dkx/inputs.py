@@ -681,6 +681,189 @@ def _widened_upwind_scheme_codes() -> Tuple[Tuple[int, ...], Tuple[int, ...]]:
     )
 
 
+# --------------------------------------------------------------------------
+# Unsupported-model guards
+#
+# plan.md operating rule 11: a model dkx does not implement must RAISE, never
+# be silently replaced by an adjacent one.  Only options that change the
+# *equation* are listed below.  Fortran-only I/O (``saveMatlabOutput``,
+# ``outputFilename``, ``solveSystem``), PETSc/solver plumbing
+# (``useIterativeLinearSolver``, ``PETSCPreallocationStrategy``,
+# ``whichParallelSolverToFactorPreconditioner``), the ``preconditioner_*``
+# family, ``export_f``, and the Rosenbluth-potentials auxiliary grid
+# (``NxPotentialsPerVth`` / ``xPotentialsGridScheme``, which dkx replaces with
+# direct quadrature) are deliberately NOT guarded: they leave the converged
+# answer alone, and refusing them would make users edit working decks.
+# --------------------------------------------------------------------------
+
+
+def _unsupported_option(key: str, group: str, value: Any, assumed: str, physics: str) -> None:
+    """Refuse one namelist option, in the style of ``execution._unsupported``."""
+    from .config import CaseValidationError  # noqa: PLC0415
+
+    raise CaseValidationError(
+        f"{group}.{key}",
+        value,
+        f"{assumed}, the only value dkx implements",
+        physics,
+    )
+
+
+def _deck_value(deck: Any, key: str, default: Any) -> Any:
+    """One namelist scalar from a parsed deck, searched across every group.
+
+    The lookup is group-agnostic on purpose: ``force0RadialCurrentInEquilibrium``
+    is not a member of any v3 namelist group (globalVariables.F90:65), so a deck
+    that sets it can put it anywhere, and the guard must still see it.
+    """
+    groups = getattr(deck, "groups", None)
+    if not isinstance(groups, dict):
+        return default
+    upper = key.upper()
+    for values in groups.values():
+        if isinstance(values, Mapping) and upper in values:
+            value = values[upper]
+            if isinstance(value, (list, tuple)):
+                return value[0] if value else default
+            return value
+    return default
+
+
+def _as_int(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def check_supported_options(get: Any) -> None:
+    """Refuse a deck that asks for physics dkx does not solve.
+
+    ``get(key, default)`` returns one namelist value by its Fortran name.  The
+    checks run at deck-read time (the raw parser and :func:`_validate`) so a
+    mismatch is reported before a solve is started, and a deck that names the
+    value dkx *does* implement passes silently.
+    """
+    if not bool(get("force0RadialCurrentInEquilibrium", True)):
+        _unsupported_option(
+            "force0RadialCurrentInEquilibrium",
+            "geometryParameters",
+            False,
+            ".true.",
+            "With .false. the equilibrium radial current is retained: B.curl(B) gains "
+            "DHat*BHat_sub_psi*(dBHat_sub_zeta/dtheta - dBHat_sub_theta/dzeta) "
+            "(geometry.F90:291), the E_r d/dxi term gains "
+            "-2*BHat*(dBHat_sub_zeta/dtheta - dBHat_sub_theta/dzeta) "
+            "(populateMatrix.F90:856), and the E_r xDot term gains the second "
+            "coefficient xDotFactor2 (populateMatrix.F90:1014). dkx assembles all "
+            "three with the current-free (.true.) form only. Note SFINCS v3 does not "
+            "expose this switch in any namelist group, so the Fortran reader would "
+            "reject the deck outright.",
+        )
+
+    # validateInput.F90:166-176 silently disables the term for RHSMode=3, so a
+    # monoenergetic deck that sets it is not asking for anything dkx skips.
+    if _as_int(get("RHSMode", 1), 1) != 3 and bool(
+        get("includeTemperatureEquilibrationTerm", False)
+    ):
+        _unsupported_option(
+            "includeTemperatureEquilibrationTerm",
+            "physicsParameters",
+            True,
+            ".false.",
+            "With .true. the linearized collision operator also acts on the other "
+            "species' Maxwellians (populateMatrix.F90:2194-2236, applied to f0 in "
+            "evaluateResidual.F90:52), adding the inter-species temperature-"
+            "equilibration heat exchange to the drive. dkx builds only the f1 part "
+            "of the collision operator, so the heat fluxes of species held at "
+            "unequal temperatures would be wrong.",
+        )
+
+    # SFINCS itself reports that the NBI species has no impact without a solved
+    # Phi1 (validateInput.F90:583, 594), so those decks stay accepted.
+    if (
+        bool(get("withNBIspec", False))
+        and bool(get("includePhi1", False))
+        and not bool(get("readExternalPhi1", False))
+    ):
+        _unsupported_option(
+            "withNBIspec",
+            "speciesParameters",
+            True,
+            ".false.",
+            "With .true. the quasineutrality equation carries an extra beam charge "
+            "density, -NBIspecZ*NBIspecNHat*BHat/FSABHat (evaluateResidual.F90:196). "
+            "dkx assembles quasineutrality from the kinetic species plus the "
+            "withAdiabatic species only, so Phi1 and every Phi1-dependent flux would "
+            "be wrong.",
+        )
+
+    for key, coord in (("ExBDerivativeSchemeTheta", "theta"), ("ExBDerivativeSchemeZeta", "zeta")):
+        scheme = _as_int(get(key, 0), 0)
+        if scheme != 0:
+            _unsupported_option(
+                key,
+                "otherNumericalParameters",
+                scheme,
+                "0",
+                f"A nonzero {key} advects the ExB d/d{coord} term with an upwinded "
+                f"difference matrix picked from the sign of the drift "
+                f"(createGrids.F90:234/406, populateMatrix.F90:417/482) instead of the "
+                f"centered d/d{coord}. dkx always uses the centered "
+                f"{'theta' if coord == 'theta' else 'zeta'}DerivativeScheme operator, "
+                f"so both the discretized ExB advection and the numerical dissipation "
+                f"that stabilizes strong-E_r runs would differ.",
+            )
+
+    bcdat_file = get("EParallelHatSpec_bcdatFile", "")
+    if str(bcdat_file).strip().strip("\"'"):
+        _unsupported_option(
+            "EParallelHatSpec_bcdatFile",
+            "geometryParameters",
+            bcdat_file,
+            'the empty string ""',
+            "A non-empty file makes the inductive drive spatially varying: SFINCS "
+            "loads bcdata(theta,zeta) from it (geometry.F90:3064) and drives with "
+            "EParallelHat + EParallelHatSpec(s)*bcdata(theta,zeta) "
+            "(evaluateResidual.F90:263). dkx applies EParallelHatSpec as a "
+            "flux-surface constant, so the parallel drive would carry the wrong "
+            "poloidal/toroidal structure.",
+        )
+
+
+def check_supported_deck_options(deck: Any) -> None:
+    """:func:`check_supported_options` against a parsed namelist deck."""
+    check_supported_options(lambda key, default: _deck_value(deck, key, default))
+
+
+def _typed_option_getter(inp: SfincsInput) -> Any:
+    """A ``get(key, default)`` over typed sections, falling back to ``inp.raw``.
+
+    ``force0RadialCurrentInEquilibrium`` and ``EParallelHatSpec_bcdatFile`` have
+    no typed field (they are not v3 namelist-group members / not yet modeled),
+    so they are read from the parsed deck when one is attached.
+    """
+    typed: Dict[str, Any] = {
+        "RHSMODE": inp.general.rhs_mode,
+        "INCLUDETEMPERATUREEQUILIBRATIONTERM": inp.physics.include_temperature_equilibration_term,
+        "INCLUDEPHI1": inp.physics.include_phi1,
+        "READEXTERNALPHI1": inp.physics.read_external_phi1,
+        "WITHNBISPEC": inp.species.with_nbi_spec,
+        "EXBDERIVATIVESCHEMETHETA": inp.other.exb_derivative_scheme_theta,
+        "EXBDERIVATIVESCHEMEZETA": inp.other.exb_derivative_scheme_zeta,
+    }
+
+    def get(key: str, default: Any) -> Any:
+        upper = key.upper()
+        if upper in typed:
+            return typed[upper]
+        if inp.raw is None:
+            return default
+        return _deck_value(inp.raw, upper, default)
+
+    return get
+
+
 def _validate(inp: SfincsInput) -> SfincsInput:
     """Replicate the checks of validateInput.F90 that dkx relies on.
 
@@ -836,7 +1019,7 @@ def _validate(inp: SfincsInput) -> SfincsInput:
                 },
             )
 
-    return replace(
+    validated = replace(
         inp,
         general=gen,
         physics=phys,
@@ -846,6 +1029,10 @@ def _validate(inp: SfincsInput) -> SfincsInput:
         species=spec,
         warnings=tuple(warnings),
     )
+    # After the RHSMode=3 overrides, so a monoenergetic deck is judged on the
+    # settings v3 actually runs with rather than the ones it asked for.
+    check_supported_options(_typed_option_getter(validated))
+    return validated
 
 
 def sfincs_input_from_raw(nml: RawNamelist, *, validate: bool = True) -> SfincsInput:
