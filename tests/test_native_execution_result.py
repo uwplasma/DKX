@@ -66,8 +66,8 @@ def _boozer_case():
     return dkx.Case.from_file(
         Path(__file__).resolve().parents[1]
         / "examples"
-        / "cases"
-        / "boozer_profile.toml"
+        / "03_boozer_stellarator"
+        / "case.toml"
     )
 
 

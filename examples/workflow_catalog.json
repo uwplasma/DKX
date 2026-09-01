@@ -2,10 +2,50 @@
   "schema_version": 1,
   "purpose": "Machine-readable navigation map for public dkx examples.",
   "folders": {
-    "cases": {
+    "01_tokamak_profile": {
       "category": "learning",
-      "role": "Versioned native TOML/JSON Case validation and schema examples.",
-      "start_here": "cases/w7x_ambipolar_profile.toml"
+      "role": "Native Case end to end: build, solve, certify, save, plot.",
+      "start_here": "01_tokamak_profile/run.py"
+    },
+    "02_vmec_stellarator": {
+      "category": "learning",
+      "role": "The same native solve on a VMEC wout equilibrium.",
+      "start_here": "02_vmec_stellarator/run.py"
+    },
+    "03_boozer_stellarator": {
+      "category": "learning",
+      "role": "The same native solve on Boozer-coordinate .bc geometry.",
+      "start_here": "03_boozer_stellarator/run.py"
+    },
+    "04_monoenergetic_scan": {
+      "category": "learning",
+      "role": "Monoenergetic D11/D31/D33 across collisionality and E*.",
+      "start_here": "04_monoenergetic_scan/run.py"
+    },
+    "05_ambipolar_profile": {
+      "category": "learning",
+      "role": "Ambipolar radial electric field: all roots, classified and selected.",
+      "start_here": "05_ambipolar_profile/run.py"
+    },
+    "06_convergence_certificate": {
+      "category": "learning",
+      "role": "Phase-space refinement and the result certificate.",
+      "start_here": "06_convergence_certificate/run.py"
+    },
+    "07_gradients": {
+      "category": "learning",
+      "role": "Exact derivatives through the drift-kinetic solve with jax.grad.",
+      "start_here": "07_gradients/run.py"
+    },
+    "08_vmex_optimization": {
+      "category": "learning",
+      "role": "Shape gradient through the kinetic solve, and the vmex hand-off contract.",
+      "start_here": "08_vmex_optimization/run.py"
+    },
+    "09_phi1_and_impurities": {
+      "category": "learning",
+      "role": "Multi-species impurity transport with and without Phi1.",
+      "start_here": "09_phi1_and_impurities/run.py"
     },
     "autodiff": {
       "category": "capability",
@@ -46,21 +86,6 @@
       "category": "capability",
       "role": "Finite-beta VMEC, ambipolar electric field, Redl, and bootstrap-current workflows.",
       "start_here": "vmex_finite_beta/compare_qs_paper_dkx_redl.py"
-    },
-    "1_basics": {
-      "category": "learning",
-      "role": "DKX alone on analytic geometry: no optional dependencies, no equilibrium files, seconds per run.",
-      "start_here": "1_basics/run_tokamak.py"
-    },
-    "2_equilibria": {
-      "category": "learning",
-      "role": "The same solver on real magnetic geometry: VMEC wout and Boozer .bc files.",
-      "start_here": "2_equilibria/README.md"
-    },
-    "3_gradients": {
-      "category": "capability",
-      "role": "Differentiating through the solve, and putting that inside an optimization loop.",
-      "start_here": "3_gradients/README.md"
     }
   },
   "workflows": [
@@ -191,6 +216,149 @@
         "geometry"
       ],
       "runtime_budget": "optional dependency workflow",
+      "requires_fortran_v3": false
+    },
+    {
+      "id": "01_tokamak_profile",
+      "goal": "Solve one native Case end to end and read its certificate.",
+      "entrypoint": "01_tokamak_profile/run.py",
+      "command": "python examples/01_tokamak_profile/run.py",
+      "topic": "01_tokamak_profile",
+      "keywords": [
+        "case",
+        "tokamak",
+        "profile",
+        "native",
+        "getting started"
+      ],
+      "runtime_budget": "seconds",
+      "requires_fortran_v3": false
+    },
+    {
+      "id": "02_vmec_stellarator",
+      "goal": "Run the native profile workflow on a VMEC wout equilibrium.",
+      "entrypoint": "02_vmec_stellarator/run.py",
+      "command": "python examples/02_vmec_stellarator/run.py",
+      "topic": "02_vmec_stellarator",
+      "keywords": [
+        "vmec",
+        "wout",
+        "geometry",
+        "stellarator",
+        "profile"
+      ],
+      "runtime_budget": "seconds",
+      "requires_fortran_v3": false
+    },
+    {
+      "id": "03_boozer_stellarator",
+      "goal": "Run the native profile workflow on Boozer .bc geometry.",
+      "entrypoint": "03_boozer_stellarator/run.py",
+      "command": "python examples/03_boozer_stellarator/run.py",
+      "topic": "03_boozer_stellarator",
+      "keywords": [
+        "boozer",
+        "bc",
+        "geometry",
+        "stellarator",
+        "profile"
+      ],
+      "runtime_budget": "seconds",
+      "requires_fortran_v3": false
+    },
+    {
+      "id": "04_monoenergetic_scan",
+      "goal": "Build a monoenergetic transport database across collisionality.",
+      "entrypoint": "04_monoenergetic_scan/run.py",
+      "command": "python examples/04_monoenergetic_scan/run.py",
+      "topic": "04_monoenergetic_scan",
+      "keywords": [
+        "monoenergetic",
+        "transport",
+        "benchmark",
+        "collisionality",
+        "D11"
+      ],
+      "runtime_budget": "seconds",
+      "requires_fortran_v3": false
+    },
+    {
+      "id": "05_ambipolar_profile",
+      "goal": "Solve for the ambipolar radial electric field and inspect every root.",
+      "entrypoint": "05_ambipolar_profile/run.py",
+      "command": "python examples/05_ambipolar_profile/run.py",
+      "topic": "05_ambipolar_profile",
+      "keywords": [
+        "ambipolar",
+        "electric field",
+        "roots",
+        "er",
+        "branches"
+      ],
+      "runtime_budget": "seconds",
+      "requires_fortran_v3": false
+    },
+    {
+      "id": "06_convergence_certificate",
+      "goal": "Measure how far a case is from converged in phase space.",
+      "entrypoint": "06_convergence_certificate/run.py",
+      "command": "python examples/06_convergence_certificate/run.py",
+      "topic": "06_convergence_certificate",
+      "keywords": [
+        "convergence",
+        "resolution",
+        "certificate",
+        "refinement"
+      ],
+      "runtime_budget": "seconds",
+      "requires_fortran_v3": false
+    },
+    {
+      "id": "07_gradients",
+      "goal": "Differentiate a kinetic output through the solve with jax.grad.",
+      "entrypoint": "07_gradients/run.py",
+      "command": "python examples/07_gradients/run.py",
+      "topic": "07_gradients",
+      "keywords": [
+        "autodiff",
+        "jax",
+        "gradient",
+        "derivative",
+        "bootstrap"
+      ],
+      "runtime_budget": "seconds",
+      "requires_fortran_v3": false
+    },
+    {
+      "id": "08_vmex_optimization",
+      "goal": "Descend a shape gradient taken through the kinetic solve.",
+      "entrypoint": "08_vmex_optimization/run.py",
+      "command": "python examples/08_vmex_optimization/run.py",
+      "topic": "08_vmex_optimization",
+      "keywords": [
+        "optimization",
+        "vmex",
+        "shape gradient",
+        "boozer",
+        "spectrum"
+      ],
+      "runtime_budget": "seconds",
+      "requires_fortran_v3": false
+    },
+    {
+      "id": "09_phi1_and_impurities",
+      "goal": "Compare impurity transport with and without in-surface potential variation.",
+      "entrypoint": "09_phi1_and_impurities/run.py",
+      "command": "python examples/09_phi1_and_impurities/run.py",
+      "topic": "09_phi1_and_impurities",
+      "keywords": [
+        "phi1",
+        "impurity",
+        "quasineutrality",
+        "multi-species",
+        "carbon"
+      ],
+      "runtime_budget": "seconds",
       "requires_fortran_v3": false
     }
   ]

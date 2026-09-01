@@ -1,96 +1,124 @@
-"""Am I converged?  Scan every resolution axis and plot the answer.
+"""A converged residual is not a converged answer.  Refine every axis and look.
 
-``scan_resolution.py`` prints one axis; this plots each one against the value
-at the finest grid.  Read it as a budget: refine the axis still moving, cut
-the ones that have flattened.  Cost is the product of the axes while error is
-set by the worst of them, so refining everything at once buys expense rather
-than accuracy.
+Rungs 01-05 all print ``residual norm ~ 1e-15``, which says the linear system
+was solved accurately -- nothing at all about whether the *discretization* is
+fine enough.  Those are different questions, and only the second one decides
+whether a number is publishable.
 
-Physics: the tokamak of ``run_tokamak.py``.  The bootstrap current is the
-diagnostic because it is the most resolution-hungry moment here -- a narrow
-feature in pitch angle, so Nxi binds long after the fluxes have settled.
+This rung refines each phase-space axis in turn and then all of them together,
+and reports how far the observables moved.  The joint run is the load-bearing
+one: axes couple, so four axes that each look settled on their own are not
+evidence that the case is converged.  The certificate that comes back with the
+result records the solver route, the residual, and the exact software and
+hardware the numbers came from.
 
-Expected runtime: ~90 s on a laptop CPU, dominated by JAX compilation.
+Physics: the analytic tokamak of rung 01 at a deliberately coarse resolution,
+so the refinement has something to find.
 
-Achieved: Nxi binds by a wide margin -- 33.7% off at its smallest grid against
-2.0% for Ntheta and 0.8% for Nx -- and needs Nxi = 24 to come inside 1%.  The
-default Nxi=8 in ``run_tokamak.py`` is 34% low.  Watch Nx: its error falls
-monotonically but the values oscillate, so one shrinking step is not evidence
-of convergence there; two successive ones are.
+Expected runtime: ~12 s on a laptop CPU.  ``zeta`` does not appear in the
+table: the field is axisymmetric, so that axis is already exact at one point
+and refining it is not a measurement.
+
+Equivalent CLI:
+  dkx converge examples/06_convergence_certificate/case.toml
+  dkx converge examples/06_convergence_certificate/case.toml --format json
 """
 
-import os
+# 1. Imports
 from pathlib import Path
 
-import matplotlib.pyplot as plt
-import numpy as np
+import matplotlib
 
-import dkx
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
 
-# --------------------------- parameters -------------------------------------
-CI = os.environ.get("DKX_CI") == "1"
+import dkx  # noqa: E402
+from dkx.workflows.converge import converge_case  # noqa: E402
 
-BASE = dict(
-    geometryScheme=1, inputRadialCoordinate=3, rN_wish=0.3,
-    B0OverBBar=1.0, epsilon_t=-0.07, epsilon_h=0.0,
-    iota=0.4542, GHat=3.7481, IHat=0.0, psiAHat=0.15596,
-    Zs=[1.0], mHats=[1.0], nHats=[1.0], THats=[1.0],
-    dNHatdrHats=[-0.5], dTHatdrHats=[-1.0],
-    Ntheta=15, Nzeta=1, Nxi=32, NL=4, Nx=6,
-    collisionOperator=1, Delta=4.5694e-3, alpha=1.0, nu_n=8.330e-3,
+# 2. User-editable parameters
+HERE = Path(__file__).resolve().parent
+OUT_DIR = HERE.parent / "output" / "06_convergence_certificate"
+CASE_FILE = HERE / "case.toml"
+RESULT_FILE = OUT_DIR / "result.nc"
+PLOT_FILE = OUT_DIR / "convergence.png"
+
+# Which phase-space axes to refine, and by how much.  A factor of 1.5 is enough
+# to expose a trend without paying for a doubling on every axis.
+AXES = ("theta", "zeta", "pitch", "speed")
+FACTOR = 1.5
+# The relative movement an observable is allowed before the case counts as
+# unconverged.  2% is a reporting threshold, not a physical one -- set it from
+# the precision your conclusion actually needs.
+TOLERANCE = 0.02
+OBSERVABLES = ("particle_flux_m2_s", "heat_flux_W_m2", "parallel_current_A_T_m2")
+# end of parameters
+
+# 3. Geometry and species construction
+case = dkx.Case.from_file(CASE_FILE)
+print(f"case id = {case.case_id[:12]}")
+print(f"geometry: {case.geometry.format} '{case.geometry.file}' on {len(case.geometry.surfaces)} surfaces")
+print(f"species:  {', '.join(s.name for s in case.species)}")
+
+# 4. Physics and numerical configuration
+print(f"baseline resolution: theta={case.resolution.theta} zeta={case.resolution.zeta} "
+      f"pitch={case.resolution.pitch} speed={case.resolution.speed}")
+print(f"refining {list(AXES)} by x{FACTOR}, tolerance {TOLERANCE:.1%}")
+
+# 5. Run
+OUT_DIR.mkdir(parents=True, exist_ok=True)
+result = dkx.run(case)
+report = converge_case(
+    case,
+    axes=AXES,
+    factor=FACTOR,
+    tolerance=TOLERANCE,
+    observables=OBSERVABLES,
+    joint=True,
 )
 
-# Each axis is scanned with the others held at their BASE value.
-AXES = {
-    "Nxi": (8, 16, 24, 32, 40, 48),
-    "Ntheta": (9, 13, 15, 19, 23),
-    "Nx": (4, 5, 6, 7, 8),
-}
-if CI:
-    AXES = {"Nxi": (8, 16), "Ntheta": (9, 13), "Nx": (4, 5)}
+# 6. Print a scientific summary and certificate
+certificate = result.certificate()
+print("\n=== Final results ===")
+gamma = float(np.asarray(result.arrays["particle_flux_m2_s"])[0, 0])
+heat = float(np.asarray(result.arrays["heat_flux_W_m2"])[0, 0])
+print(f"  baseline at psi_N={float(result.arrays['surface'][0]):.2f}: "
+      f"Gamma = {gamma:+.4e} m^-2 s^-1  Q = {heat:+.4e} W m^-2")
+print(f"  baseline residual norm: {certificate['residual_norm']:.3e} "
+      f"(the linear solve, not the discretization)")
 
-DIAGNOSTIC = "FSABjHat"
-OUT = Path(__file__).resolve().parent / "output" / "plot_convergence_scan.png"
-# ----------------------------- end of parameters ----------------------------
+rows = [*report.refinements] + ([report.joint] if report.joint is not None else [])
+print(f"\n  {'refinement':<12} {'resolution':<28} {'worst change':>13} {'seconds':>8}")
+for row in rows:
+    resolution = " ".join(f"{key}={value}" for key, value in sorted(row.resolution.items()))
+    print(f"  {row.label:<12} {resolution:<28} {row.worst:>12.1%} {row.seconds:>8.1f}")
 
-case = dkx.SfincsInput.from_params(**BASE)
-results = {}
+print(f"\n  worst single-axis change: {report.per_axis_worst:.1%}")
+if report.joint is not None:
+    print(f"  joint change:             {report.joint.worst:.1%}")
+print(f"  axes understate the joint change: {report.axes_understate_the_joint_change}")
+print(f"  converged at {report.tolerance:.1%}: {report.converged}")
+print(f"  provenance: dkx {certificate['dkx_version']}, jax {certificate['jax_version']}, "
+      f"{certificate['device']}, {certificate['precision']}")
 
-for axis, values in AXES.items():
-    series = []
-    print(f"\nscanning {axis} (others fixed at the BASE grid)")
-    print(f"{axis:>8} {DIAGNOSTIC:>16} {'vs finest':>10}")
-    for value in values:
-        run = dkx.run(case, **{axis: value})
-        series.append(float(np.asarray(run.moments[DIAGNOSTIC]).ravel()[0]))
-    reference = series[-1]
-    for value, item in zip(values, series):
-        print(f"{value:>8} {item:>16.8e} {abs(item / reference - 1.0):>9.2%}")
-    results[axis] = (np.array(values), np.array(series), reference)
+# 7. Save native result
+saved = result.save(RESULT_FILE)
+print(f"  Wrote result: {saved}")
 
-figure, axes_row = plt.subplots(
-    1, len(results), figsize=(4.2 * len(results), 3.8), constrained_layout=True
-)
-axes_row = np.atleast_1d(axes_row)
-
-for panel, (axis, (values, series, reference)) in zip(axes_row, results.items()):
-    error = np.abs(series / reference - 1.0)
-    # The finest point is the reference, so its error is identically zero and
-    # cannot go on a log axis.  Dropping it silently would hide what everything
-    # is measured against, so it becomes a marked vertical line instead of a
-    # point pinned at some arbitrary floor -- which would drag the y-axis down
-    # and flatten the range that matters.
-    panel.semilogy(values[:-1], error[:-1], "o-")
-    panel.axvline(values[-1], color="0.6", ls=":", lw=1.0, label=f"reference ({values[-1]})")
-    panel.axhline(0.01, color="C3", ls="--", lw=1.0, label="1%")
-    panel.set_xlabel(axis)
-    panel.set_ylabel("relative change vs finest grid")
-    panel.set_title(f"{axis} (others fixed)")
-    panel.grid(alpha=0.25, which="both")
-    panel.legend(frameon=False, loc="lower left")
-
-figure.suptitle(f"Convergence of {DIAGNOSTIC}: one axis at a time")
-OUT.parent.mkdir(parents=True, exist_ok=True)
-figure.savefig(OUT, dpi=150)
-print(f"\nwrote {OUT}")
-print("Spend points on the axis still moving; cut the ones that have flattened.")
+# 8. Plot publication-ready outputs
+labels = [row.label for row in rows]
+worst = [row.worst for row in rows]
+figure, axis = plt.subplots(figsize=(7.5, 4.2), constrained_layout=True)
+colors = ["tab:red" if value > TOLERANCE else "tab:green" for value in worst]
+axis.bar(labels, worst, color=colors)
+axis.axhline(TOLERANCE, color="0.3", ls="--", lw=1.0, label=f"tolerance {TOLERANCE:.0%}")
+axis.set_yscale("log")
+axis.set_ylabel("worst relative change in an observable")
+axis.set_xlabel("refinement")
+axis.set_title("Refine every axis, then all of them together")
+axis.grid(alpha=0.3, axis="y", which="both")
+axis.legend(fontsize=9)
+figure.savefig(PLOT_FILE, dpi=150)
+plt.close(figure)
+print(f"  Saved plot: {PLOT_FILE}")
+print("Done: examples/06_convergence_certificate/run.py")
