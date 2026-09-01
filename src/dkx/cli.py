@@ -641,6 +641,56 @@ def _cmd_plot(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_scan(args: argparse.Namespace) -> int:
+    """Expand a case's ``[scan]`` axes, run every point, and write one Result.
+
+    Exits non-zero when any point failed. The output is still written: a scan
+    is run because each point is expensive, so losing the completed ones
+    because a later one failed is the wrong trade.
+    """
+    from rich.console import Console  # noqa: PLC0415
+
+    from .config import Case, CaseValidationError  # noqa: PLC0415
+    from .workflows.scan import run_scan  # noqa: PLC0415
+
+    try:
+        case = Case.from_file(args.case)
+    except (CaseValidationError, OSError) as exc:
+        print(f"dkx scan failed: {exc}", file=sys.stderr)
+        return 2
+    if case.scan is None:
+        print(
+            f"dkx scan failed: {args.case} has no [scan] table. Add one with at least "
+            "one [[scan.axis]], or use `dkx run` for a single case.",
+            file=sys.stderr,
+        )
+        return 2
+
+    progress = Console(stderr=True)
+    emit = None if args.quiet else (lambda message: progress.print(message, highlight=False))
+    try:
+        result, failures = run_scan(
+            case,
+            out=Path(args.out) if args.out else None,
+            emit=emit,
+            resume=False if args.no_resume else None,
+        )
+    except (CaseValidationError, ValueError) as exc:
+        print(f"dkx scan failed: {exc}", file=sys.stderr)
+        return 2
+
+    total = int(result.metadata.get("scan_cases", 0))
+    if failures:
+        print(
+            f"dkx scan: {failures} of {total} cases failed; the rest were written",
+            file=sys.stderr,
+        )
+        return 1
+    if not args.quiet:
+        Console().print(f"[green]{total} cases completed[/green]")
+    return 0
+
+
 def _cmd_run_case(args: argparse.Namespace) -> int:
     """Execute a case and write its Result.
 
@@ -1501,7 +1551,7 @@ _CONVERGE_AXES: tuple[str, ...] = ("theta", "zeta", "pitch", "speed")
 #: choices is what the compatibility group exists to avoid.
 _USER_COMMANDS: tuple[str, ...] = (
     "doctor", "schema", "validate", "run", "roots", "converge", "inspect",
-    "compare", "plot", "sfincs",
+    "compare", "plot", "scan", "sfincs",
 )
 
 
@@ -1509,7 +1559,7 @@ _USER_COMMANDS: tuple[str, ...] = (
 #: the parser's own ``sub.choices`` -- so the runtime behaviour cannot drift
 #: from the registered set. It exists for direct callers and as documentation.
 _KNOWN_COMMANDS: frozenset[str] = frozenset({
-    "validate", "doctor", "converge", "roots", "compare", "plot", "schema", "run", "inspect", "solve-v3", "ambipolar",
+    "validate", "doctor", "converge", "roots", "compare", "plot", "scan", "schema", "run", "inspect", "solve-v3", "ambipolar",
     "scan-er", "ambipolar-solve", "run-fortran", "write-output",
     "transport-matrix-v3", "monoenergetic-database", "dump-h5", "plot-output",
     "compare-h5", "postprocess-upstream",
@@ -2095,6 +2145,20 @@ def main(argv: list[str] | None = None) -> int:
     p_plot_result.add_argument("result")
     p_plot_result.add_argument("--out", default=None, help="Output image path (default: alongside the input).")
     p_plot_result.set_defaults(func=_cmd_plot)
+
+    p_scan_case = sub.add_parser(
+        "scan",
+        help="Expand a case's [scan] axes, run every point, and write one Result.",
+    )
+    _add_common_cli_args(p_scan_case)
+    _add_parallel_cli_args(p_scan_case)
+    p_scan_case.add_argument("case", help="Path to a .toml or .json case file with a [scan] table.")
+    p_scan_case.add_argument("--out", default=None, help="Output NetCDF path (default: scan.output).")
+    p_scan_case.add_argument(
+        "--no-resume", action="store_true",
+        help="Rerun every point even if the output already holds its result.",
+    )
+    p_scan_case.set_defaults(func=_cmd_scan)
 
     p_schema = sub.add_parser(
         "schema",

@@ -112,7 +112,7 @@ def _validate_native_slice(case: Case) -> None:
             "scan",
             "configured",
             "no scan for dkx.run(case)",
-            "Remove [scan] for a single run; dkx.scan will own resumable expansion.",
+            "Remove [scan] for a single run, or expand it with `dkx scan CASE`.",
         )
     if case.convergence.enabled and case.run.workflow != "ambipolar_profile":
         _unsupported(
