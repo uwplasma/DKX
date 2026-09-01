@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 
 import pytest
 
@@ -135,3 +136,57 @@ def test_run_is_reachable_as_an_installed_console_script() -> None:
     )
     assert completed.returncode == 0, completed.stderr[-2000:]
     assert "--out" in completed.stdout
+
+
+# ---------------------------------------------------------------------------
+# validate runs the executor's preflight
+# ---------------------------------------------------------------------------
+
+
+def _case_with(tmp_path, **overrides):
+    """The shipped tokamak case with one physics field replaced."""
+    import tomllib
+
+    source = ANALYTIC_CASE.read_text(encoding="utf-8")
+    for key, value in overrides.items():
+        source = re.sub(
+            rf'^{key} = ".*"$', f'{key} = "{value}"', source, count=1, flags=re.M
+        )
+    path = tmp_path / "case.toml"
+    path.write_text(source, encoding="utf-8")
+    tomllib.loads(source)  # the edit must still be valid TOML
+    return path
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "named"),
+    [
+        ("phi1", "kinetic", "physics.phi1"),
+        ("magnetic_drifts", "full", "physics.magnetic_drifts"),
+    ],
+)
+def test_validate_refuses_a_schema_valid_case_the_executor_cannot_run(
+    tmp_path, capsys, field: str, value: str, named: str
+) -> None:
+    """The schema is deliberately wider than the executor; validate closes the gap.
+
+    ``magnetic_drifts = "full"``, ``workflow = "monoenergetic"`` and
+    ``phi1 = "kinetic"`` all pass the JSON schema and are then refused by
+    execution. Without this preflight a user discovers which of the advertised
+    enum values are real only after ``dkx run`` has set up and failed --- and
+    ``dkx validate`` reporting success on a case that cannot run is worse than
+    not having the command.
+    """
+    path = _case_with(tmp_path, **{field: value})
+    assert cli.main(["validate", str(path)]) == 2
+    assert named in capsys.readouterr().err
+
+
+def test_validate_still_accepts_every_shipped_ladder_case() -> None:
+    """The preflight must not refuse the cases the repository ships.
+
+    A guard that rejects the project's own examples is a broken guard, and
+    these five are the ones a reader meets first.
+    """
+    for case_file in sorted((REPO_ROOT / "examples").glob("*/case.toml")):
+        assert cli.main(["validate", str(case_file)]) == 0, case_file
