@@ -1459,6 +1459,16 @@ def _maybe_handle_plot(argv: list[str]) -> int | None:
 _CONVERGE_AXES: tuple[str, ...] = ("theta", "zeta", "pitch", "speed")
 
 
+#: The commands `dkx --help` advertises, in the order plan.md section 5.6 lists
+#: them. The SFINCS commands are reachable as `dkx sfincs <command>` and as
+#: hidden top-level aliases, but are deliberately absent here: listing 21
+#: choices is what the compatibility group exists to avoid.
+_USER_COMMANDS: tuple[str, ...] = (
+    "doctor", "schema", "validate", "run", "roots", "converge", "inspect",
+    "compare", "sfincs",
+)
+
+
 #: Every registered subcommand name. ``main`` does not read this -- it passes
 #: the parser's own ``sub.choices`` -- so the runtime behaviour cannot drift
 #: from the registered set. It exists for direct callers and as documentation.
@@ -1633,118 +1643,37 @@ def _merge_global_cli_args(argv: list[str], args: argparse.Namespace) -> argpars
         setattr(args, name, getattr(pre_args, name))
     return args
 
-def main(argv: list[str] | None = None) -> int:
-    """Run the dkx command-line interface."""
-    # The CLI bootstrap, as plan.md section 6.4 requires: the runtime is applied
-    # here, once, before anything imports the JAX backend. Doing it first is what
-    # lets --cores reach XLA's threadpool, which reads NPROC when the CPU backend
-    # initialises and never again.
-    _runtime.configure()
-    argv = list(sys.argv[1:]) if argv is None else list(argv)
-    rc = _maybe_handle_plot(argv)
-    if rc is not None:
-        return rc
-    parser = argparse.ArgumentParser(prog="dkx")
-    _add_common_cli_args(parser)
-    _add_parallel_cli_args(parser)
-    sub = parser.add_subparsers(dest="cmd", required=True)
+class _HiddenAliases:
+    """Registers subcommands without listing them in ``--help``.
 
-    p_validate = sub.add_parser(
-        "validate",
-        help="Validate a versioned case file and print its deterministic ID.",
-    )
-    _add_common_cli_args(p_validate)
-    _add_parallel_cli_args(p_validate)
-    p_validate.add_argument("case", help="Path to a .toml or .json case file.")
-    p_validate.set_defaults(func=_cmd_validate_case)
+    The SFINCS commands are registered twice: once under ``dkx sfincs``, where
+    they are documented, and once at the top level so existing scripts keep
+    working. Only the first set should appear in ``dkx --help`` -- otherwise
+    the compatibility group would make the help output longer rather than
+    shorter, which is the opposite of what plan.md section 5.6 asks for.
+    """
 
-    p_doctor = sub.add_parser(
-        "doctor",
-        help="Check that this install can run, and say what is wrong when it cannot.",
-    )
-    _add_common_cli_args(p_doctor)
-    _add_parallel_cli_args(p_doctor)
-    p_doctor.add_argument("--format", choices=("table", "json"), default="table")
-    p_doctor.set_defaults(func=_cmd_doctor)
+    def __init__(self, sub) -> None:
+        self._sub = sub
 
-    p_converge = sub.add_parser(
-        "converge",
-        help="Refine each phase-space axis of a case and report observable convergence.",
-    )
-    _add_common_cli_args(p_converge)
-    _add_parallel_cli_args(p_converge)
-    p_converge.add_argument("case", help="Path to a .toml or .json case file.")
-    p_converge.add_argument(
-        "--axes", nargs="+", default=list(_CONVERGE_AXES),
-        choices=list(_CONVERGE_AXES),
-        help="Phase-space axes to refine (default: all).",
-    )
-    p_converge.add_argument("--factor", type=float, default=1.5, help="Refinement factor per axis.")
-    p_converge.add_argument("--tolerance", type=float, default=0.02, help="Relative-change tolerance.")
-    p_converge.add_argument(
-        "--no-joint", action="store_true",
-        help="Skip the all-axes-together run. Faster, and unable to detect axis coupling.",
-    )
-    p_converge.add_argument("--format", choices=("table", "json"), default="table")
-    p_converge.set_defaults(func=_cmd_converge)
+    def add_parser(self, name: str, **kwargs):
+        kwargs["help"] = argparse.SUPPRESS
+        return self._sub.add_parser(name, **kwargs)
 
-    p_roots = sub.add_parser(
-        "roots",
-        help="Print the ambipolar root table and branch events stored in a result.",
-    )
-    _add_common_cli_args(p_roots)
-    _add_parallel_cli_args(p_roots)
-    p_roots.add_argument("result", help="Path to a NetCDF Result written by dkx run.")
-    p_roots.add_argument("--format", choices=("table", "json"), default="table")
-    p_roots.set_defaults(func=_cmd_roots)
 
-    p_compare = sub.add_parser(
-        "compare",
-        help="Compare two results (dkx NetCDF or SFINCS HDF5) and exit non-zero if they differ.",
-    )
-    _add_common_cli_args(p_compare)
-    _add_parallel_cli_args(p_compare)
-    p_compare.add_argument("a")
-    p_compare.add_argument("b")
-    p_compare.add_argument("--rtol", type=float, default=1e-9)
-    p_compare.add_argument("--atol", type=float, default=0.0)
-    p_compare.add_argument("--verbose-keys", action="store_true",
-                           help="List every array, not only the differing ones.")
-    p_compare.add_argument("--format", choices=("table", "json"), default="table")
-    p_compare.set_defaults(func=_cmd_compare)
+def _add_compat_parsers(sub) -> None:
+    """Register the SFINCS-compatibility commands on a subparsers object.
 
-    p_schema = sub.add_parser(
-        "schema",
-        help="Print the complete case example or machine-readable JSON Schema.",
-    )
-    _add_common_cli_args(p_schema)
-    _add_parallel_cli_args(p_schema)
-    p_schema.add_argument("--format", choices=("toml", "json"), default="toml")
-    p_schema.set_defaults(func=_cmd_schema)
+    plan.md section 5.6 keeps SFINCS-specific operations in a compatibility
+    group rather than as unrelated top-level commands. This is called twice:
+    once to build ``dkx sfincs <command>``, and once at the top level, where
+    every command is registered with a suppressed help string so the old
+    spellings keep working for existing scripts without appearing in ``dkx
+    --help``.
 
-    p_run = sub.add_parser(
-        "run",
-        help="Execute a case file and write its NetCDF Result.",
-    )
-    _add_common_cli_args(p_run)
-    _add_parallel_cli_args(p_run)
-    p_run.add_argument("case", help="Path to a .toml or .json case file.")
-    p_run.add_argument(
-        "--out",
-        default=None,
-        help="Write the NetCDF Result here. Omitted, nothing is saved.",
-    )
-    p_run.set_defaults(func=_cmd_run_case)
-
-    p_inspect = sub.add_parser(
-        "inspect",
-        help="Print what a saved NetCDF Result contains.",
-    )
-    _add_common_cli_args(p_inspect)
-    _add_parallel_cli_args(p_inspect)
-    p_inspect.add_argument("result", help="Path to a DKX .nc result.")
-    p_inspect.set_defaults(func=_cmd_inspect_result)
-
+    Registering the same commands twice creates two independent parser
+    objects, which is what argparse requires; they share the handlers.
+    """
     p_solve = sub.add_parser("solve-v3", help="Solve a supported v3 linear problem matrix-free and write stateVector.npy.")
     _add_common_cli_args(p_solve)
     _add_parallel_cli_args(p_solve)
@@ -2035,6 +1964,135 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     p_pp.set_defaults(func=_cmd_postprocess_upstream)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run the dkx command-line interface."""
+    # The CLI bootstrap, as plan.md section 6.4 requires: the runtime is applied
+    # here, once, before anything imports the JAX backend. Doing it first is what
+    # lets --cores reach XLA's threadpool, which reads NPROC when the CPU backend
+    # initialises and never again.
+    _runtime.configure()
+    argv = list(sys.argv[1:]) if argv is None else list(argv)
+    rc = _maybe_handle_plot(argv)
+    if rc is not None:
+        return rc
+    parser = argparse.ArgumentParser(prog="dkx")
+    _add_common_cli_args(parser)
+    _add_parallel_cli_args(parser)
+    # metavar hides the compatibility aliases from the choice list. Without it
+    # argparse prints all 21 names even though their help is suppressed.
+    sub = parser.add_subparsers(
+        dest="cmd", required=True, metavar="{" + ",".join(_USER_COMMANDS) + "}"
+    )
+
+    p_validate = sub.add_parser(
+        "validate",
+        help="Validate a versioned case file and print its deterministic ID.",
+    )
+    _add_common_cli_args(p_validate)
+    _add_parallel_cli_args(p_validate)
+    p_validate.add_argument("case", help="Path to a .toml or .json case file.")
+    p_validate.set_defaults(func=_cmd_validate_case)
+
+    p_doctor = sub.add_parser(
+        "doctor",
+        help="Check that this install can run, and say what is wrong when it cannot.",
+    )
+    _add_common_cli_args(p_doctor)
+    _add_parallel_cli_args(p_doctor)
+    p_doctor.add_argument("--format", choices=("table", "json"), default="table")
+    p_doctor.set_defaults(func=_cmd_doctor)
+
+    p_converge = sub.add_parser(
+        "converge",
+        help="Refine each phase-space axis of a case and report observable convergence.",
+    )
+    _add_common_cli_args(p_converge)
+    _add_parallel_cli_args(p_converge)
+    p_converge.add_argument("case", help="Path to a .toml or .json case file.")
+    p_converge.add_argument(
+        "--axes", nargs="+", default=list(_CONVERGE_AXES),
+        choices=list(_CONVERGE_AXES),
+        help="Phase-space axes to refine (default: all).",
+    )
+    p_converge.add_argument("--factor", type=float, default=1.5, help="Refinement factor per axis.")
+    p_converge.add_argument("--tolerance", type=float, default=0.02, help="Relative-change tolerance.")
+    p_converge.add_argument(
+        "--no-joint", action="store_true",
+        help="Skip the all-axes-together run. Faster, and unable to detect axis coupling.",
+    )
+    p_converge.add_argument("--format", choices=("table", "json"), default="table")
+    p_converge.set_defaults(func=_cmd_converge)
+
+    p_roots = sub.add_parser(
+        "roots",
+        help="Print the ambipolar root table and branch events stored in a result.",
+    )
+    _add_common_cli_args(p_roots)
+    _add_parallel_cli_args(p_roots)
+    p_roots.add_argument("result", help="Path to a NetCDF Result written by dkx run.")
+    p_roots.add_argument("--format", choices=("table", "json"), default="table")
+    p_roots.set_defaults(func=_cmd_roots)
+
+    p_compare = sub.add_parser(
+        "compare",
+        help="Compare two results (dkx NetCDF or SFINCS HDF5) and exit non-zero if they differ.",
+    )
+    _add_common_cli_args(p_compare)
+    _add_parallel_cli_args(p_compare)
+    p_compare.add_argument("a")
+    p_compare.add_argument("b")
+    p_compare.add_argument("--rtol", type=float, default=1e-9)
+    p_compare.add_argument("--atol", type=float, default=0.0)
+    p_compare.add_argument("--verbose-keys", action="store_true",
+                           help="List every array, not only the differing ones.")
+    p_compare.add_argument("--format", choices=("table", "json"), default="table")
+    p_compare.set_defaults(func=_cmd_compare)
+
+    p_schema = sub.add_parser(
+        "schema",
+        help="Print the complete case example or machine-readable JSON Schema.",
+    )
+    _add_common_cli_args(p_schema)
+    _add_parallel_cli_args(p_schema)
+    p_schema.add_argument("--format", choices=("toml", "json"), default="toml")
+    p_schema.set_defaults(func=_cmd_schema)
+
+    p_run = sub.add_parser(
+        "run",
+        help="Execute a case file and write its NetCDF Result.",
+    )
+    _add_common_cli_args(p_run)
+    _add_parallel_cli_args(p_run)
+    p_run.add_argument("case", help="Path to a .toml or .json case file.")
+    p_run.add_argument(
+        "--out",
+        default=None,
+        help="Write the NetCDF Result here. Omitted, nothing is saved.",
+    )
+    p_run.set_defaults(func=_cmd_run_case)
+
+    p_inspect = sub.add_parser(
+        "inspect",
+        help="Print what a saved NetCDF Result contains.",
+    )
+    _add_common_cli_args(p_inspect)
+    _add_parallel_cli_args(p_inspect)
+    p_inspect.add_argument("result", help="Path to a DKX .nc result.")
+    p_inspect.set_defaults(func=_cmd_inspect_result)
+
+    # SFINCS-compatibility commands: visible under `dkx sfincs`, and still
+    # accepted at the top level as hidden aliases so existing scripts run.
+    p_sfincs = sub.add_parser(
+        "sfincs",
+        help="SFINCS v3 compatibility commands (namelist and HDF5 workflows).",
+    )
+    _add_compat_parsers(
+        p_sfincs.add_subparsers(dest="sfincs_cmd", required=True)
+    )
+    _add_compat_parsers(_HiddenAliases(sub))
+
 
     argv = _normalize_default_argv(argv, set(sub.choices))
     _maybe_reexec_for_early_runtime(argv)
