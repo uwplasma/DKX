@@ -441,11 +441,6 @@ def test_write_case_file_refuses_an_unknown_extension(tmp_path: Path) -> None:
 #: operating rule 11 requires each to refuse at convert time instead.
 REFUSALS: tuple[tuple[str, dict, str], ...] = (
     (
-        "normalization_nu_n",
-        {"insert": {"physicsParameters": "  nu_n = 8.4774d-3"}},
-        "nu_n",
-    ),
-    (
         "normalization_Delta",
         {"insert": {"physicsParameters": "  Delta = 1.0d-3"}},
         "Delta",
@@ -646,7 +641,6 @@ def test_the_landed_namelist_guards_still_apply_at_convert_time(tmp_path: Path) 
 @pytest.mark.parametrize(
     "deck",
     [
-        "pas_1species_PAS_noEr_tiny.input.namelist",
         "output_scheme1_tokamak_1species_tiny.input.namelist",
         "transportMatrix_PAS_tiny_rhsMode2_scheme2.input.namelist",
         "monoenergetic_PAS_tiny_scheme1.input.namelist",
@@ -655,10 +649,15 @@ def test_the_landed_namelist_guards_still_apply_at_convert_time(tmp_path: Path) 
 def test_checked_in_decks_refuse_rather_than_convert_approximately(deck: str) -> None:
     """The narrow convertible subset is a fact about the native route, not a bug.
 
-    Pinned so that widening the route (a case field for ``nu_n``, a
-    ``VMECRadialOption`` choice, a configurable analytic model) is a deliberate
-    change with a test to update, rather than something that silently starts
-    accepting decks whose physics has quietly shifted.
+    Pinned so that widening the route is a deliberate change with a test to
+    update, rather than something that silently starts accepting decks whose
+    physics has quietly shifted.
+
+    One widening has already happened: ``physics.coulomb_logarithm`` was added
+    to the case schema, which took the convertible count from 2 of 102 to 12
+    and moved ``pas_1species_PAS_noEr_tiny`` off this list. The remaining
+    entries need a ``VMECRadialOption`` choice, a configurable analytic model,
+    or ``RHSMode`` 2/3 support.
     """
     with pytest.raises(CaseValidationError):
         case_from_sfincs_namelist(REF / deck)
@@ -689,11 +688,15 @@ def test_the_cli_writes_the_case_and_reports_it(tmp_path: Path, capsys) -> None:
 def test_the_cli_reports_a_refusal_on_stderr_and_exits_non_zero(
     tmp_path: Path, capsys
 ) -> None:
-    deck = _deck_variant(tmp_path, "nu_n_cli", insert={"physicsParameters": "  nu_n = 8.4774d-3"})
+    # Delta rather than nu_n: nu_n is now expressible through
+    # physics.coulomb_logarithm and no longer refuses.
+    deck = _deck_variant(
+        tmp_path, "delta_cli", insert={"physicsParameters": "  Delta = 1.0d-3"}
+    )
     assert cli.main(["convert", str(deck), str(tmp_path / "case.toml")]) == 2
     captured = capsys.readouterr()
     assert "dkx convert failed" in captured.err
-    assert "nu_n" in captured.err
+    assert "Delta" in captured.err
     assert not (tmp_path / "case.toml").exists()
 
 
@@ -708,3 +711,82 @@ def test_the_cli_accepts_an_explicit_case_name(tmp_path: Path) -> None:
     destination = tmp_path / "named.toml"
     assert cli.main(["convert", str(PAS_DECK), str(destination), "--name", "w7x_probe"]) == 0
     assert Case.from_file(destination).name == "w7x_probe"
+
+
+# ---------------------------------------------------------------------------
+# physics.coulomb_logarithm
+# ---------------------------------------------------------------------------
+
+
+def test_the_default_coulomb_logarithm_leaves_the_collisionality_untouched() -> None:
+    """17.0 must reproduce DEFAULT_NU_N exactly, or every existing result moves.
+
+    execution scales the pinned literal rather than recomputing the
+    collisionality from first principles, precisely so that the default is a
+    no-op. Deriving it from ``units.reference_nu_n`` instead would shift every
+    case by the 5e-5 the Fortran's rounded 8.330e-3 carries.
+    """
+    from dkx.constants import DEFAULT_NU_N
+
+    assert DEFAULT_NU_N * (17.0 / 17.0) == DEFAULT_NU_N
+
+
+@pytest.mark.parametrize("deck_nu_n", [8.4774e-3, 8.31565e-3])
+def test_a_deck_collisionality_survives_the_round_trip_exactly(
+    tmp_path: Path, deck_nu_n: float
+) -> None:
+    """The converter inverts the expression execution uses, so nothing is lost.
+
+    These are the two ``nu_n`` overrides that appear across the checked-in
+    decks. Before ``physics.coulomb_logarithm`` existed they were the single
+    largest reason a real deck could not be converted at all: the case schema
+    had no way to say what Coulomb logarithm a run used.
+    """
+    from dkx.constants import DEFAULT_NU_N
+
+    deck = _deck_variant(
+        tmp_path, f"nu_{deck_nu_n}", insert={"physicsParameters": f"  nu_n = {deck_nu_n:.6e}".replace("e-0", "d-0")}
+    )
+    case = case_from_sfincs_namelist(deck)
+    recovered = DEFAULT_NU_N * (case.physics.coulomb_logarithm / 17.0)
+    assert recovered == pytest.approx(deck_nu_n, rel=1e-15)
+
+
+def _reloadable(case) -> dict:
+    """``Case.to_dict()`` with ``None`` values dropped.
+
+    ``to_dict`` emits ``electric_field.search_kV_m = None`` for a prescribed
+    field, and ``from_mapping`` rejects an explicit null where it wants an
+    array -- TOML has no null, so omission is the only correct spelling. This
+    is the same asymmetry ``write_case_file`` works around.
+    """
+    def prune(value):
+        if isinstance(value, dict):
+            return {k: prune(v) for k, v in value.items() if v is not None}
+        if isinstance(value, list):
+            return [prune(v) for v in value]
+        return value
+
+    return prune(case.to_dict())
+
+
+@pytest.mark.parametrize("bad", [1e6, 0.0, -17.0, 4.9, 30.1])
+def test_an_out_of_band_coulomb_logarithm_is_refused(bad: float) -> None:
+    """The band catches a value entered in the wrong units far more often than
+    it refuses a real plasma. Zero and negatives would give a zero or negative
+    collisionality, which is not a plasma at all."""
+    from dkx.config import Case
+
+    data = _reloadable(case_from_sfincs_namelist(PAS_DECK))
+    data["physics"]["coulomb_logarithm"] = bad
+    with pytest.raises(CaseValidationError, match="coulomb_logarithm"):
+        Case.from_mapping(data)
+
+
+@pytest.mark.parametrize("good", [5.0, 17.0, 30.0])
+def test_a_plausible_coulomb_logarithm_is_accepted(good: float) -> None:
+    from dkx.config import Case
+
+    data = _reloadable(case_from_sfincs_namelist(PAS_DECK))
+    data["physics"]["coulomb_logarithm"] = good
+    assert Case.from_mapping(data).physics.coulomb_logarithm == good
