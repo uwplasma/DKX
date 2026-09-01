@@ -837,6 +837,70 @@ def _coarse_generated_block_data(
     ).reshape(-1)  # fmt: skip
     return subs, floor, gamma
 
+
+@functools.partial(
+    jax.jit,
+    static_argnames=("n_tz", "n_xi", "n_x", "n_s", "batch", "drop_l_coupling"),
+)
+def _assemble_and_factor_bands(
+    blocks,
+    coll_diag,
+    drift,
+    c0,
+    mask,
+    *,
+    n_tz: int,
+    n_xi: int,
+    n_x: int,
+    n_s: int,
+    batch: int,
+    drop_l_coupling: bool,
+):
+    """Assemble the coarse bands and factor them, as one XLA computation.
+
+    Every step here -- three transposes, the collision and drift adds, three
+    band-magnitude reductions, the floor, the mask pin and the rank-one l=0 pin
+    -- produces a full-band intermediate. Run eagerly, each is a separate live
+    device buffer, and the peak reaches ~18 times one band where four would do.
+    Under one jit, XLA's buffer assignment reuses them: measured 2.90 GB to
+    0.75 GB on a 78,628-unknown Fokker-Planck deck, and faster as well.
+
+    Jitted at module level rather than as a local closure, so repeated builds at
+    the same shapes hit the compilation cache instead of lowering again.
+    """
+    lower, diag, upper = (jnp.transpose(a, (1, 2, 0, 3, 4)) for a in blocks)
+    eye = jnp.eye(n_tz, dtype=jnp.float64)
+    if coll_diag is not None:
+        diag = diag + coll_diag[:, :, :, None, None] * eye[None, None, None, :, :]
+    if drift is not None:
+        diag = diag + drift
+    if drop_l_coupling:
+        lower, upper = jnp.zeros_like(lower), jnp.zeros_like(upper)
+
+    band = jnp.maximum(
+        jnp.max(jnp.abs(diag), axis=(2, 3, 4)),
+        jnp.maximum(
+            jnp.max(jnp.abs(lower), axis=(2, 3, 4)), jnp.max(jnp.abs(upper), axis=(2, 3, 4))
+        ),
+    )
+    band = jnp.where(band > 0.0, band, 1.0)
+    l0_defect = jnp.max(jnp.abs(jnp.sum(diag[:, :, 0], axis=-1)), axis=-1)
+    floor = _COARSE_DIAGONAL_FLOOR * band
+    diag = diag + floor[:, :, None, None, None] * eye[None, None, None, :, :]
+    diag = diag + (1.0 - mask)[None, :, :, None, None] * eye[None, None, None, :, :]
+
+    d4 = diag.reshape(batch, n_xi, n_tz, n_tz)
+    scale = jnp.mean(jnp.abs(jnp.diagonal(d4, axis1=2, axis2=3)), axis=(1, 2))
+    scale = jnp.where(scale > 0.0, scale, 1.0)
+    ones = jnp.ones((n_tz,), dtype=jnp.float64)
+    gamma = _l0_pin_gamma(l0_defect, band, scale.reshape(n_s, n_x), c0).reshape(-1)
+    d4 = d4.at[:, 0].add(gamma[:, None, None] * jnp.outer(ones, c0)[None, :, :])
+
+    return jax.vmap(block_thomas_factor)(
+        lower.reshape(batch, n_xi, n_tz, n_tz), d4, upper.reshape(batch, n_xi, n_tz, n_tz)
+    )
+
+
 def build_coarse_preconditioner(
     op: KineticOperator, *, drop_l_coupling: bool = False
 ) -> tuple[Callable[[jnp.ndarray], jnp.ndarray], Callable[[jnp.ndarray], jnp.ndarray]]:
@@ -923,10 +987,7 @@ def build_coarse_preconditioner(
 
     if _coarse_bands_fit(op):
         blocks = stripped.to_block_tridiagonal()  # (L, S, X, TZ, TZ)
-        lower, diag, upper = (jnp.transpose(a, (1, 2, 0, 3, 4)) for a in blocks)  # (S,X,L,TZ,TZ)
-        eye = jnp.eye(n_tz, dtype=jnp.float64)
-        if coll_diag is not None:
-            diag = diag + coll_diag[:, :, :, None, None] * eye[None, None, None, :, :]
+        drift = None
         if drift_parts is not None:
             x2 = op.x * op.x
             drift = jnp.stack([
@@ -940,48 +1001,11 @@ def build_coarse_preconditioner(
                 ])
                 for sp in range(n_s)
             ])  # (S, X, L, TZ, TZ)
-            diag = diag + drift
-        if drop_l_coupling:
-            lower, upper = jnp.zeros_like(lower), jnp.zeros_like(upper)
 
-        # Invertibility floor.  A collisionless, drift-free coarse f-block (``nu_n=0``
-        # with ``Er=0``) has EXACTLY zero diagonal blocks -- only streaming and mirror
-        # couple L -- so block-Thomas would divide by zero, and the Phi1 Newton inner
-        # solve forces this preconditioner for every deck.  A per-(species, x) floor
-        # scaled by the band magnitude is negligible against a real collision/ExB
-        # diagonal and degrades toward a well-scaled identity where it is not.
-        band = jnp.maximum(
-            jnp.max(jnp.abs(diag), axis=(2, 3, 4)),
-            jnp.maximum(
-                jnp.max(jnp.abs(lower), axis=(2, 3, 4)), jnp.max(jnp.abs(upper), axis=(2, 3, 4))
-            ),
-        )  # (S, X)
-        band = jnp.where(band > 0.0, band, 1.0)
-        # How singular the ``l = 0`` block is in the direction the rank-one pin below
-        # removes, measured *before* the floor masks it: the constant-on-surface vector
-        # is that block's exact null vector, so its row sums are the whole defect, and
-        # flooring first makes every block look regular here (:func:`_l0_pin_gamma`).
-        l0_defect = jnp.max(jnp.abs(jnp.sum(diag[:, :, 0], axis=-1)), axis=-1)  # (S, X)
-        floor = _COARSE_DIAGONAL_FLOOR * band
-        diag = diag + floor[:, :, None, None, None] * eye[None, None, None, :, :]
-
-        # Masked (x, l) rows are identically zero in the operator: pin them with the
-        # identity so the coarse factorization stays nonsingular.
-        diag = diag + (1.0 - mask)[None, :, :, None, None] * eye[None, None, None, :, :]
-
-        # Adaptive rank-one pin of the l=0 block's constant-on-surface null space,
-        # per (species, x): tops that direction up to the floor's relative level where
-        # the block really is singular there, off entirely where its own l=0 diagonal
-        # exceeds it.  Pinning unconditionally instead cost GCROT 87 iterations against
-        # 21 on the NCSX 11x21x41x5 ladder (:func:`_l0_pin_gamma`, docs/performance).
-        d4 = diag.reshape(batch, n_xi, n_tz, n_tz)
-        scale = jnp.mean(jnp.abs(jnp.diagonal(d4, axis1=2, axis2=3)), axis=(1, 2))
-        scale = jnp.where(scale > 0.0, scale, 1.0)
-        gamma = _l0_pin_gamma(l0_defect, band, scale.reshape(n_s, n_x), c0).reshape(-1)
-        d4 = d4.at[:, 0].add(gamma[:, None, None] * jnp.outer(ones, c0)[None, :, :])
-
-        factors = jax.vmap(block_thomas_factor)(
-            lower.reshape(batch, n_xi, n_tz, n_tz), d4, upper.reshape(batch, n_xi, n_tz, n_tz)
+        factors = _assemble_and_factor_bands(
+            blocks, coll_diag, drift, c0, mask,
+            n_tz=n_tz, n_xi=n_xi, n_x=n_x, n_s=n_s, batch=batch,
+            drop_l_coupling=bool(drop_l_coupling),
         )
 
         def _a_inv(transpose: bool) -> Callable[[jnp.ndarray], jnp.ndarray]:
