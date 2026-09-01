@@ -90,10 +90,16 @@ def _cmd_validate_case(args: argparse.Namespace) -> int:
     # will run" rather than "this parses" -- otherwise a user learns which of
     # the advertised enum values are real only after `dkx run` sets up and
     # fails.
+    from dataclasses import replace as _replace  # noqa: PLC0415
+
     from .execution import _validate_native_slice  # noqa: PLC0415
 
+    # The preflight is the single-run one and refuses a [scan] table, which
+    # `dkx scan` exists to expand. Check the physics of a scan case with the
+    # table removed: refusing it here would make `dkx validate` reject every
+    # case `dkx scan` is designed to run.
     try:
-        _validate_native_slice(case)
+        _validate_native_slice(case if case.scan is None else _replace(case, scan=None))
     except CaseValidationError as exc:
         print(f"dkx validate failed: {exc}", file=sys.stderr)
         return 2

@@ -282,6 +282,12 @@ class Case:
             data["electric_field"].pop("search_strategy")
         if data["electric_field"]["seed_brackets_kV_m"] is None:
             data["electric_field"].pop("seed_brackets_kV_m")
+        # The Coulomb logarithm was added after schema v1 shipped. Omitting the
+        # pinned 17.0 keeps every case ID recorded before it existed: a schema
+        # extension must not invalidate sealed evidence that never mentioned
+        # the field. A non-default value is real semantic input and stays.
+        if data["physics"]["coulomb_logarithm"] == 17.0:
+            data["physics"].pop("coulomb_logarithm")
         if data["scan"] is not None:
             data["scan"]["axis"] = data["scan"].pop("axes")
         return _paths_to_strings(data)
