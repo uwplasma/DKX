@@ -161,11 +161,17 @@ class ErSolveState:
             ``None`` (structured direct solves do not recycle).
         result: the underlying :class:`~dkx.solve.SolveResult`
             (``method``, ``iterations``, ``residual_norms``, ``timings``).
+        precond: the preconditioner the previous point's solve built, or
+            ``None`` when its route did not need one. Threaded forward so a
+            bracket search builds one preconditioner rather than one per point.
+            Reuse is safe because a preconditioner never changes the converged
+            answer, only the iteration count.
     """
 
     x: Any
     recycle: Any
     result: SolveResult
+    precond: Any = None
 
 
 @dataclass(frozen=True)
@@ -362,6 +368,7 @@ def radial_current(
     *,
     x0: Any | None = None,
     recycle: Any | None = None,
+    precond: Any | None = None,
     dphi_per_er: float | None = None,
     z_s: Any | None = None,
     solve_method: str | None = None,
@@ -423,9 +430,20 @@ def radial_current(
         x_full = _dense_solve(op, rhs)
         state = None
     else:
-        result = solve(op, rhs, method=method, tol=rtol, x0=x0, recycle=recycle)
+        # Reuse whatever the previous point's route actually built. Nothing is
+        # constructed speculatively here: a structured-direct point returns
+        # precond=None and the next point simply builds nothing, which is why an
+        # earlier attempt that guessed ahead of the route was a pessimization.
+        result = solve(
+            op, rhs, method=method, tol=rtol, x0=x0, recycle=recycle, precond=precond
+        )
         x_full = jnp.reshape(result.x, (-1,))
-        state = ErSolveState(x=result.x, recycle=result.recycle, result=result)
+        state = ErSolveState(
+            x=result.x,
+            recycle=result.recycle,
+            result=result,
+            precond=result.precond,
+        )
     table = profile_moments_from_operator(op, x_full)
     gamma = table["particleFlux_vm_psiHat"]  # (n_species,)
     charges = jnp.asarray(problem.z_s, dtype=jnp.float64)
@@ -626,6 +644,7 @@ def find_ambipolar_er(
             er,
             x0=(prev.x if prev is not None else None),
             recycle=(prev.recycle if prev is not None else None),
+            precond=(prev.precond if prev is not None else None),
             solve_method=solve_method,
             tol=tol,
         )
