@@ -1846,11 +1846,22 @@ def _solve_tier2(
     differentiable: bool,
     check_adjoint: bool,
     adjoint_residual_factor: float = DEFAULT_ADJOINT_RESIDUAL_FACTOR,
+    prebuilt_precond: tuple[Callable, Callable] | None = None,
 ) -> SolveResult:
     traced = _is_traced(rhs2d, *jax.tree_util.tree_leaves(op))
     t0 = time.perf_counter()
     precond = precond_t = None
-    if preconditioner != "none":
+    # The escalation path deliberately does NOT pass a prebuilt pair: it is
+    # searching over preconditioner kinds, so pinning one would defeat the
+    # search it exists to perform.
+    if prebuilt_precond is not None:
+        # A caller that solves the same operator family repeatedly -- an Er
+        # scan, a Newton loop, a batched sweep -- can build once and hand the
+        # pair in. The build is a large fraction of a single call (39% on the
+        # Sugama collisionOperator=3 deck), so paying it per point is the
+        # single largest avoidable cost in a scan.
+        precond, precond_t = prebuilt_precond
+    elif preconditioner != "none":
         precond, precond_t = build_tier2_preconditioner(
             op, preconditioner, drop_l_coupling=drop_l_coupling_in_precond
         )
@@ -2263,6 +2274,7 @@ def solve(
     tier1_adjoint_window: int | None = None,
     device: str | jax.Device | None = None,
     emit: Callable[[str], None] | None = print,
+    precond: tuple[Callable, Callable] | None = None,
 ) -> SolveResult:
     """Solve ``K x = rhs`` with the plan-§2.3 three-route auto-policy.
 
@@ -2572,6 +2584,7 @@ def solve(
             x0=x0,
             recycle=recycle,
             preconditioner=_resolve_preconditioner(preconditioner, use_preconditioner),
+            prebuilt_precond=precond,
             drop_l_coupling_in_precond=drop_l_coupling_in_precond,
             restart=restart,
             recycle_dim=recycle_dim,
