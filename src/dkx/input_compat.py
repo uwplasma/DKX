@@ -791,13 +791,6 @@ def _refuse_unconvertible_physics(
             "alpha = e*phiBar/TBar follows from the pinned reference set, which fixes "
             "phiBar = TBar/e",
         ),
-        (
-            "nu_n",
-            DEFAULT_NU_N,
-            "nu_n = nuBar*RBar/vBar is the collisionality AT the reference parameters; "
-            "a case gives densities and temperatures in SI and dkx.execution evaluates "
-            "the collisionality from them with ln(Lambda) = 17",
-        ),
     ):
         value = config_float(nml, (phys,), key, pinned)
         if value != pinned:
@@ -1065,7 +1058,7 @@ def case_from_sfincs_namelist(
             names the namelist key and its value.
     """
     from .config import Case  # noqa: PLC0415
-    from .constants import RadialCoordinates  # noqa: PLC0415
+    from .constants import DEFAULT_NU_N, RadialCoordinates  # noqa: PLC0415
     from .inputs import (  # noqa: PLC0415
         check_supported_deck_options,
         read_sfincs_input as read_typed_sfincs_input,
@@ -1349,6 +1342,16 @@ def case_from_sfincs_namelist(
             # what 'dkes' names.
             "magnetic_drifts": "dkes",
             "phi1": "off",
+            # A deck states collisionality as nu_n; a case states the Coulomb
+            # logarithm it came from. dkx.execution scales the pinned
+            # DEFAULT_NU_N by ln(Lambda)/17, so inverting that exact expression
+            # -- rather than deriving ln(Lambda) from first principles -- is
+            # what makes the round trip reproduce the deck's nu_n bit for bit.
+            # Deriving it instead from units.reference_nu_n would be off by the
+            # 5e-5 the Fortran's rounded 8.330e-3 literal carries.
+            "coulomb_logarithm": 17.0
+            * config_float(nml, ("physicsParameters",), "nu_n", DEFAULT_NU_N)
+            / DEFAULT_NU_N,
         },
         "electric_field": electric_field,
         "resolution": {

@@ -76,6 +76,12 @@ class PhysicsConfig:
     collisions: str = "linearized_fokker_planck"
     magnetic_drifts: str = "full"
     phi1: str = "off"
+    #: Coulomb logarithm. The reference set pins 17.0, and the normalized
+    #: collisionality is proportional to it, so this is how a case says what a
+    #: SFINCS deck says with a ``nu_n`` override. Without it a case could not
+    #: express a different ln-Lambda at all, which is what blocked 28 of the
+    #: 102 checked-in decks from converting.
+    coulomb_logarithm: float = 17.0
 
 
 @dataclass(frozen=True)
@@ -462,6 +468,7 @@ def case_json_schema() -> dict[str, Any]:
                 },
                 magnetic_drifts={"enum": ["full", "dkes"]},
                 phi1={"enum": ["off", "kinetic", "full"]},
+                coulomb_logarithm={"type": "number", "minimum": 5.0, "maximum": 30.0},
             ),
             "electric_field": _object_schema(
                 ["mode"],
@@ -611,6 +618,10 @@ model = "full_local"
 collisions = "linearized_fokker_planck"
 magnetic_drifts = "full"
 phi1 = "off"
+# Coulomb logarithm. The collisionality is proportional to it, so this is how a
+# case says what a SFINCS deck says with a nu_n override. 17.0 is the pinned
+# reference value and the default; omit this line to use it.
+coulomb_logarithm = 17.0
 
 [electric_field]
 mode = "ambipolar"
@@ -703,7 +714,11 @@ def _parse_species(data: Mapping[str, Any], index: int) -> SpeciesConfig:
 
 def _parse_physics(data: Mapping[str, Any]) -> PhysicsConfig:
     path = "physics"
-    _reject_unknown(data, path, {"model", "collisions", "magnetic_drifts", "phi1"})
+    _reject_unknown(
+        data,
+        path,
+        {"model", "collisions", "magnetic_drifts", "phi1", "coulomb_logarithm"},
+    )
     return PhysicsConfig(
         model=_string(data, "model", path, default="full_local"),
         collisions=_string(
@@ -711,6 +726,7 @@ def _parse_physics(data: Mapping[str, Any]) -> PhysicsConfig:
         ),
         magnetic_drifts=_string(data, "magnetic_drifts", path, default="full"),
         phi1=_string(data, "phi1", path, default="off"),
+        coulomb_logarithm=_number(data, "coulomb_logarithm", path, default=17.0),
     )
 
 
@@ -1002,6 +1018,16 @@ def _validate_case(case: Case) -> None:
     )
     _choice("physics.magnetic_drifts", case.physics.magnetic_drifts, ("full", "dkes"))
     _choice("physics.phi1", case.physics.phi1, ("off", "kinetic", "full"))
+    # A ln-Lambda outside this band is not a plasma anyone is modelling here;
+    # the bound catches a value entered in the wrong units far more often than
+    # it refuses a real one.
+    if not (5.0 <= float(case.physics.coulomb_logarithm) <= 30.0):
+        _fail(
+            "physics.coulomb_logarithm",
+            case.physics.coulomb_logarithm,
+            "a Coulomb logarithm between 5 and 30",
+            "Fusion-relevant ln-Lambda is near 17, which is the default.",
+        )
     _choice(
         "electric_field.mode", case.electric_field.mode, ("prescribed", "ambipolar")
     )

@@ -321,6 +321,12 @@ def _make_operator(
         legendre_coupling_upper,
     )
 
+    # nu_n is proportional to the Coulomb logarithm (units.reference_nu_n, where
+    # ln-Lambda enters through nuBar), so the case's value scales the pinned
+    # default rather than replacing it. At the default 17.0 this is exactly
+    # DEFAULT_NU_N, so every existing result is unchanged bit for bit.
+    nu_n = DEFAULT_NU_N * (float(case.physics.coulomb_logarithm) / 17.0)
+
     geometry, radial = _geometry_context(case, grids, surface_index, geometry_state)
     z_s = jnp.asarray([species.charge for species in case.species], dtype=jnp.float64)
     m_hat = jnp.asarray(
@@ -347,7 +353,7 @@ def _make_operator(
             m_hats=m_hat,
             n_hats=n_surface,
             t_hats=t_surface,
-            nu_n=DEFAULT_NU_N,
+            nu_n=nu_n,
             n_xi_for_x=grids.n_xi_for_x,
             n_xi=grids.n_xi,
         )
@@ -363,7 +369,7 @@ def _make_operator(
             m_hats=np.asarray(m_hat),
             n_hats=np.asarray(n_surface),
             t_hats=np.asarray(t_surface),
-            nu_n=DEFAULT_NU_N,
+            nu_n=nu_n,
             krook=0.0,
             n_xi=grids.n_xi,
             nl=grids.n_l,
