@@ -98,7 +98,7 @@ process-launch and JIT-amortization noise does not dominate the bars.
 Documentation map
 -----------------
 
-- getting started: :doc:`installation`, :doc:`usage`, :doc:`case_files`, :doc:`examples`
+- getting started: :doc:`installation`, :doc:`usage`, :doc:`case_files`, :doc:`cli`, :doc:`examples`
 - physics and numerics: :doc:`physics_models`, :doc:`system_equations`,
   :doc:`geometry`, :doc:`method`, :doc:`numerics`, :doc:`differentiability`,
   :doc:`capabilities`
@@ -119,6 +119,7 @@ Documentation map
    examples
    usage
    case_files
+   cli
    inputs
    outputs
    normalizations
