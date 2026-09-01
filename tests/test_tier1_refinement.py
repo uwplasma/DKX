@@ -1,6 +1,6 @@
-"""Tier-1 defect correction is the library recurrence, unchanged.
+"""Structured direct defect correction is the library recurrence, unchanged.
 
-The tier-1 factor solve is followed by iterative refinement because the
+The structured direct factor solve is followed by iterative refinement because the
 block-Thomas elimination, though backward-stable, can leave the true relative
 residual a small multiple of eps above the production gate.  That recurrence
 moved from a hand-rolled line in :mod:`dkx.solve` to
@@ -57,7 +57,7 @@ def test_one_sweep_reproduces_the_hand_rolled_pass(n_rhs):
 
 
 def test_the_sweep_count_is_what_the_solver_uses():
-    """A silent bump would change the cost of every tier-1 solve."""
+    """A silent bump would change the cost of every structured direct solve."""
     assert _TIER1_REFINEMENT_SWEEPS == 1
 
 

@@ -1,6 +1,6 @@
-"""Does the fill-reducing tier-2 route make the largest decks runnable?
+"""Does the fill-reducing preconditioner route make the largest decks runnable?
 
-The classical tier-2 preconditioner allocates dense ``(Ntheta*Nzeta)`` blocks
+The classical Krylov preconditioner allocates dense ``(Ntheta*Nzeta)`` blocks
 over every Legendre index, which on the biggest production decks is tens of
 gigabytes (``tools/benchmarks/tier2_sparse_fill.py`` measures it).  On a 24 GB
 machine the five largest upstream decks are killed mid-solve at 11-14 GB
@@ -38,7 +38,7 @@ import tempfile
 from pathlib import Path
 
 #: The decks killed mid-solve with the classical preconditioner on a 24 GB
-#: machine (campaign of 2026-08-01).  All five route to tier 2: Fokker-Planck
+#: machine (campaign of 2026-08-01).  All five route to recycled Krylov: Fokker-Planck
 #: collisions, tangential magnetic drifts, or full trajectories.
 DEFAULT_DECKS = (
     "HSX_FPCollisions_DKESTrajectories",

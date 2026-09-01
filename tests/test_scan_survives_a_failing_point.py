@@ -1,6 +1,6 @@
 """One unsolvable scan point must not discard the rest of the scan.
 
-Reported from a scanType=5 run: tier-2 stalled at the largest |Er| on a
+Reported from a scanType=5 run: recycled Krylov stalled at the largest |Er| on a
 66004-DOF deck, the exception propagated out of ``run_dkx``, and every
 remaining Er point at that radius was lost.  One radius folder finished with
 zero of a hundred outputs, another with three.  The loss was silent, and it

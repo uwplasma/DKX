@@ -79,7 +79,7 @@ def _np(x) -> np.ndarray:
     """Host copy of an operator leaf, refusing tracers with a usable message."""
     if isinstance(x, jax.core.Tracer):
         raise NotImplementedError(
-            "the sparse tier-2 preconditioner assembles its matrix on the host and "
+            "the sparse preconditioner assembles its matrix on the host and "
             "cannot run with traced operator leaves (jit/vmap/grad over the "
             "operator); use preconditioner='coarse', which stays traceable."
         )

@@ -2,7 +2,7 @@
 
 :meth:`KineticOperator.magnetic_drift_diagonal_parts` rebuilds, as matrices, the
 part of :meth:`_magnetic_drifts` that lands on the same Legendre row it came
-from.  It exists so the tier-2 coarse preconditioner can carry the drifts the
+from.  It exists so the coarse preconditioner can carry the drifts the
 way Fortran's ``preconditioner_magnetic_drifts_max_L`` does instead of dropping
 them --- worth 51 -> 30 GCROT iterations on ``magdrift_1species_tiny`` and 0-1
 on the other eight drift schemes, measured through the production path.

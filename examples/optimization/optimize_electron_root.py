@@ -19,7 +19,7 @@ terms); the objective is a plain function of the resulting ``E_r``.
 
 Warm starts: the ambipolar *root finding* (``find_ambipolar_er``) threads the
 previous solve's ``x0`` and GCROT recycle pair across its ``E_r`` bracket
-evaluations (a tier-2 Fokker-Planck benefit, shown below); the differentiable
+evaluations (a recycled Krylov Fokker-Planck benefit, shown below); the differentiable
 ``ambipolar_er`` additionally seeds its secant from the previous optimizer
 iteration's root.
 
@@ -173,7 +173,7 @@ def ambipolar_root(dofs, er0):
 # ----------------------------------------------------------------------------
 # 2) Locate the seed root (Fortran-parity Brent) + warm-start savings
 # ----------------------------------------------------------------------------
-print("Step 2: locate seed root and measure warm-start savings (tier-2 FP)")
+print("Step 2: locate seed root and measure warm-start savings (Krylov FP)")
 seed_result = er_mod.find_ambipolar_er(
     er_mod.ErProblem(operator=operator_at(DOFS0), dphi_per_er=problem.dphi_per_er,
                      z_s=problem.z_s, er_initial=0.0, er_min=ER_BRACKET[0], er_max=ER_BRACKET[1]),
@@ -184,7 +184,7 @@ print(f"  seed root: E_r = {er_seed:+.5f}  ({seed_result.root_type} root), "
 
 
 def krylov_iterations(op0, warm):
-    """Sum tier-2 Krylov iterations over a short E_r scan (cold vs warm)."""
+    """Sum Krylov iterations over a short E_r scan (cold vs warm)."""
     er_seq = np.linspace(er_seed - 0.3, er_seed + 0.3, 5)
     total, state = 0, None
     for e in er_seq:

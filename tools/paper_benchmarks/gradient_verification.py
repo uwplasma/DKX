@@ -4,7 +4,7 @@ Three physics-relevant derivatives, each computed twice on the same tiny
 deck: once with JAX automatic differentiation through the full solve
 (implicit differentiation of the linear or root-finding problem, via
 ``jax.grad``), and once with central finite differences of the same scalar
-objective.  The rows exercise the three differentiable tiers of the code:
+objective.  The rows exercise the three differentiable paths of the code:
 
   (a) ``d(D11*)/d(B_10)``: derivative of the normalized monoenergetic
       radial-diffusion coefficient (Beidler et al. normalization) with

@@ -1938,7 +1938,7 @@ def main(argv: list[str] | None = None) -> int:
     p_tm.add_argument(
         "--solve-method",
         default="auto",
-        help="Advanced solver override (dkx.solve tiers). Default 'auto' is recommended; see docs/usage.rst.",
+        help="Advanced solver-route override (dkx.solve). Default 'auto' is recommended; see docs/usage.rst.",
     )
     _add_equilibrium_override_args(p_tm)
     p_tm.set_defaults(func=_cmd_transport_matrix_v3)
@@ -1960,7 +1960,7 @@ def main(argv: list[str] | None = None) -> int:
     p_mono.add_argument(
         "--solve-method",
         default="auto",
-        help="Advanced solver override (dkx.solve tiers). Default 'auto' is recommended.",
+        help="Advanced solver-route override (dkx.solve). Default 'auto' is recommended.",
     )
     p_mono.set_defaults(func=_cmd_monoenergetic_database)
 

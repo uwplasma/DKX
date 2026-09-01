@@ -1,18 +1,18 @@
-"""Referee tests for ``dkx.solve`` — the plan-§2.3 three-tier auto-policy.
+"""Referee tests for ``dkx.solve`` — the plan-§2.3 three-route auto-policy.
 
 Tiny fixtures only (shared with ``tests/test_drift_kinetic.py``):
 
-- tier 1 (analytic block-Thomas) must match the tier-3 dense solve to 1e-10
+- structured direct (analytic block-Thomas) must match the sparse direct solve to 1e-10
   on the monoenergetic (RHSMode=3) and PAS (RHSMode=1) fixtures, and match the
   recorded Fortran v3 ``stateVector`` fixtures on the RHSMode=3 transport
   columns (the referee formerly provided by the retired probing-based
   ``solvers/block_tridiagonal_transport`` POC);
-- tier 2 (GCROT + coarse-operator preconditioner) must converge on the
-  Fokker-Planck two-species fixture, match tier-3 dense to 1e-8, and need
+- recycled Krylov (GCROT + coarse-operator preconditioner) must converge on the
+  Fokker-Planck two-species fixture, match sparse direct to 1e-8, and need
   strictly fewer iterations than the unpreconditioned solve;
-- the auto-policy must pick tier 1 for the PAS family and tier 2 for FP;
+- the auto-policy must pick structured direct for the PAS family and recycled Krylov for FP;
 - recycling + warm start across an Er continuation must cut iterations;
-- ``jax.grad`` through the differentiable tier-1 solve must match finite
+- ``jax.grad`` through the differentiable structured direct solve must match finite
   differences.
 """
 
@@ -80,7 +80,7 @@ def _rel_err(x: np.ndarray, ref: np.ndarray) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Tier 1 == tier-3 dense on the structured-direct family
+# Structured direct == sparse direct on the structured direct family
 # ---------------------------------------------------------------------------
 
 
@@ -107,9 +107,9 @@ def test_tier1_matches_dense_pas_rhsmode1() -> None:
 
 @pytest.mark.parametrize("base", ("monoenergetic_PAS_tiny_scheme1", "monoenergetic_PAS_tiny_scheme11"))
 def test_tier1_matches_recorded_fortran_state_vectors_rhsmode3(base: str) -> None:
-    """Tier 1 must reproduce the frozen v3 PETSc stateVector for both transport drives.
+    """Structured direct must reproduce the frozen v3 PETSc stateVector for both transport drives.
 
-    This is the direct Fortran referee for the structured-direct tier on the
+    This is the direct Fortran referee for the structured direct route on the
     RHSMode=3 transport columns; it replaces the equality test against the
     retired probing-based ``solvers/block_tridiagonal_transport`` POC.
     """
@@ -126,7 +126,7 @@ def test_tier1_matches_recorded_fortran_state_vectors_rhsmode3(base: str) -> Non
 
 
 # ---------------------------------------------------------------------------
-# Truncated tier 1: memory-driven routing, full parity, moments, gradients
+# Truncated structured direct: memory-driven routing, full parity, moments, gradients
 # ---------------------------------------------------------------------------
 
 
@@ -190,8 +190,8 @@ def test_auto_policy_selects_full_vs_truncated_by_budget() -> None:
 
 
 def test_auto_policy_truncation_invalid_falls_through_to_tier2() -> None:
-    # Tier-1-eligible operator, but the RHS carries Legendre support at l>=keep:
-    # the truncated kernel would be inexact, so auto must fall back to tier 2.
+    # Structured-direct-eligible operator, but the RHS carries Legendre support at l>=keep:
+    # the truncated kernel would be inexact, so auto must fall back to recycled Krylov.
     op = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
     rhs = np.asarray(op.rhs())
     n_s, n_x, n_xi, n_t, n_z = op.f_shape
@@ -291,7 +291,7 @@ def test_gradient_through_truncated_route_matches_finite_differences() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Ramped (non-uniform Nxi_for_x) PAS decks: per-subsystem truncated tier 1
+# Ramped (non-uniform Nxi_for_x) PAS decks: per-subsystem truncated structured direct
 # ---------------------------------------------------------------------------
 
 
@@ -313,7 +313,7 @@ def test_ramped_pas_routes_truncated_and_matches_pinned_referees() -> None:
     """Auto must route ramped PAS decks to the per-subsystem truncated kernel.
 
     The solution (lowest-3 Legendre blocks and the vm flux/flow moments) must
-    match both pinned referees — tier-2 GCROT and the dense pinned direct
+    match both pinned referees — recycled Krylov and the dense pinned direct
     solve — to 1e-10; blocks l >= 3 are zero-padded (which covers every
     Nxi_for_x-truncated DOF, since keep <= min Nxi_for_x).
     """
@@ -430,14 +430,14 @@ def test_truncated_subsystem_width_respects_memory_budget() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Tier 2 on the Fokker-Planck fixture: convergence, parity, preconditioning
+# Recycled Krylov on the Fokker-Planck fixture: convergence, parity, preconditioning
 # ---------------------------------------------------------------------------
 
 
 def test_tier2_converges_and_matches_dense_fp() -> None:
     op = _load_op("quick_2species_FPCollisions_noEr")
     ok, _ = tier1_available(op)
-    assert not ok  # FP couples (species, x): tier 1 must refuse
+    assert not ok  # FP couples (species, x): structured direct must refuse
     rhs = op.rhs()
     tol = 1e-10
     result = solve(op, rhs, method="gmres", tol=tol)
@@ -464,7 +464,7 @@ def test_tier2_coarse_preconditioner_reduces_iterations() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Tier 2 on the improved Sugama fixture (collisionOperator=3): routing, parity,
+# Recycled Krylov on the improved Sugama fixture (collisionOperator=3): routing, parity,
 # and differentiability — the momentum/energy-restoring field coupling is
 # dropped from the coarse preconditioner but kept in the full operator.
 # ---------------------------------------------------------------------------
@@ -475,22 +475,22 @@ def test_sugama_collisionop3_routes_tier2_matches_tier3_and_differentiates() -> 
     assert op.sugama is not None and op.fp is None  # collisionOperator=3 built
     assert op.constraint_scheme == 1  # {density, temperature} speed null space
     ok, _reason = tier1_available(op)
-    assert not ok  # dense (species, x) collisions + constraintScheme=1: tier 1 refuses
+    assert not ok  # dense (species, x) collisions + constraintScheme=1: structured direct refuses
 
     rhs = op.rhs()
     tol = 1e-10
-    # The auto policy must pick the differentiable tier-2 GCROT, NOT the
-    # non-differentiable tier-3 host direct fallback.
+    # The auto policy must pick the differentiable recycled Krylov, NOT the
+    # non-differentiable sparse direct host fallback.
     r_auto = solve(op, rhs, method="auto", tol=tol)
     assert r_auto.method == "gcrot"
     assert r_auto.converged
 
-    # Tier 2 == tier 3 (host SuperLU) element-wise.
+    # Recycled Krylov == sparse direct (host SuperLU) element-wise.
     r_direct = solve(op, rhs, method="direct")
     assert r_direct.method == "direct"
     assert _rel_err(np.asarray(r_auto.x), np.asarray(r_direct.x)) < 1e-8
 
-    # Gradient flows through the differentiable tier-2 solve.  The Sugama mat is
+    # Gradient flows through the differentiable recycled Krylov solve.  The Sugama mat is
     # exactly proportional to nu_n, so a scalar multiplier on it models a nu_n
     # scan; AD (implicit function theorem) must match a central finite
     # difference on the differentiable segment.
@@ -502,7 +502,7 @@ def test_sugama_collisionop3_routes_tier2_matches_tier3_and_differentiates() -> 
         sol = solve(op_s, rhs, method="gmres", tol=1e-11, differentiable=True)
         return jnp.dot(g, sol.x)
 
-    # auto + differentiable stays on tier 2 (the production path).
+    # auto + differentiable stays on recycled Krylov (the production path).
     r_auto_diff = solve(
         replace(op, sugama=replace(op.sugama, mat=1.0 * base_mat)),
         rhs,
@@ -536,24 +536,24 @@ def test_auto_policy_selects_tier1_for_pas_and_tier2_for_fp() -> None:
 
 
 def test_tier1_refuses_er_xdot_l2_coupling() -> None:
-    # Er xDot couples L±2: the analytic block extraction (and hence tier 1)
-    # must refuse, leaving this family to the Krylov/direct tiers.
+    # Er xDot couples L±2: the analytic block extraction (and hence structured direct)
+    # must refuse, leaving this family to the Krylov and sparse direct routes.
     op = _load_op("er_xdot_1species_tiny")
     ok, _reason = tier1_available(op)
     assert not ok
 
 
 def test_auto_policy_recovers_a_starved_tier2_solve() -> None:
-    # Starve tier 2 (no preconditioner, tiny restart budget) on the FP
+    # Starve recycled Krylov (no preconditioner, tiny restart budget) on the FP
     # fixture: the auto policy must recover and still return the right answer.
     #
     # This used to assert result.method == "direct", because a cap breach fell
-    # straight to the tier-3 host solve.  That fallback is a dead end at any
-    # real size -- tier 3 materializes the operator column by column, so a
+    # straight to the sparse direct host solve.  That fallback is a dead end at any
+    # real size -- sparse direct materializes the operator column by column, so a
     # 66004-DOF deck would need 66004 matvecs -- and a user hit exactly that,
     # losing a whole radius of an Er scan to the crash.  A stalled Krylov solve
     # is a preconditioner problem, so the policy now escalates the
-    # preconditioner first and only reaches tier 3 where tier 3 can run.  What
+    # preconditioner first and only reaches sparse direct where that route can run.  What
     # matters is that a starved solve still lands on the correct answer.
     op = _load_op("quick_2species_FPCollisions_noEr")
     rhs = op.rhs()
@@ -572,7 +572,7 @@ def test_explicit_tier1_request_raises_on_fp() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Tier 3 (host SuperLU) parity
+# Sparse direct (host SuperLU) parity
 # ---------------------------------------------------------------------------
 
 
@@ -613,7 +613,7 @@ def test_recycling_cuts_iterations_on_er_continuation() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Differentiability: jax.grad through the tier-1 solve vs finite differences
+# Differentiability: jax.grad through the structured direct solve vs finite differences
 # ---------------------------------------------------------------------------
 
 
@@ -708,7 +708,7 @@ def test_fp_cs1_truncated_embedding_is_singular_and_pinning_fixes_it() -> None:
     s = np.linalg.svd(pinned, compute_uv=False)
     assert s[-1] > 1e-8
 
-    # The tier-2 solve on the physical RHS matches the pinned dense solve.
+    # The recycled Krylov solve on the physical RHS matches the pinned dense solve.
     rhs = op.rhs()
     assert float(np.max(np.abs(np.asarray(rhs)[mask == 0.0]))) == 0.0
     result = solve(op, rhs, method="gmres", tol=1e-10)
@@ -718,7 +718,7 @@ def test_fp_cs1_truncated_embedding_is_singular_and_pinning_fixes_it() -> None:
 
 
 def test_fp_cs1_gradients_match_fd() -> None:
-    """jax.grad through the differentiable tier-2 solve vs central FD.
+    """jax.grad through the differentiable recycled Krylov solve vs central FD.
 
     Before the truncated-DOF pinning this returned catastrophically wrong
     gradients (the adjoint system was inconsistent) while the forward solve
@@ -837,7 +837,7 @@ FP_CS1_ER_UNIFORM_TEXT = """
 def _tier2_grad_vs_fd(
     op0: KineticOperator, *, tol: float = 1e-10, seed: int = 11, **solve_kw
 ) -> tuple[float, float, SolveResult]:
-    """``jax.grad`` through the differentiable tier-2 solve vs central FD.
+    """``jax.grad`` through the differentiable recycled Krylov solve vs central FD.
 
     The scalar is threaded through ``THat`` (streaming/mirror and the RHS drive
     depend on it; the collision matrices stay frozen, so finite differences see
@@ -962,7 +962,7 @@ def test_check_adjoint_false_is_the_documented_unchecked_opt_out() -> None:
 def test_healthy_tier2_gradients_are_exact_and_do_not_raise(deck: str) -> None:
     """No false positives: a guard that fires on good decks is worse than the bug.
 
-    Each of these routes through the same differentiable tier-2 adjoint the
+    Each of these routes through the same differentiable recycled Krylov adjoint the
     guard watches, and each must come back matching finite differences with
     every recorded residual inside tolerance.
     """
@@ -1091,7 +1091,7 @@ def test_coarse_preconditioner_is_jit_safe_over_traced_operator_leaves() -> None
 # distribution constant over the flux surface, so *something* must regularize
 # it or the coarsest block-Thomas divides by zero.  Doing that unconditionally,
 # at the mean |diagonal| over all L, made the pin dominate the very block it
-# regularized: 87 GCROT iterations against 21 on the NCSX 11x21x41x5 tier-2
+# regularized: 87 GCROT iterations against 21 on the NCSX 11x21x41x5 recycled Krylov
 # ladder.  The contract now is that the pin is sized by the invertibility floor
 # and fires only where the block really is singular.
 # ---------------------------------------------------------------------------
@@ -1133,8 +1133,8 @@ def test_coarse_preconditioner_stays_finite_on_an_exactly_singular_l0_block() ->
 
     ``nu_n=0`` with ``Er=0`` leaves the coarse f-block's diagonal EXACTLY zero —
     only streaming and the mirror force couple ``L`` — which is the case the pin
-    exists for.  (Collisionless pitch-angle-scattering decks route to the tier-1
-    direct solver, but the ``Phi1`` Newton inner solve forces the coarse
+    exists for.  (Collisionless pitch-angle-scattering decks route to the
+    structured direct solver, but the ``Phi1`` Newton inner solve forces the coarse
     preconditioner for every deck.)  Both the preconditioner and its transpose
     must come back finite rather than dividing by zero.
     """
@@ -1144,7 +1144,7 @@ def test_coarse_preconditioner_stays_finite_on_an_exactly_singular_l0_block() ->
     v = jnp.asarray(np.linspace(-1.0, 1.0, op.total_size), dtype=jnp.float64)
     for apply in (precond, precond_t):
         assert np.all(np.isfinite(np.asarray(apply(v))))
-    # The deck still solves through tier 2 on that preconditioner.
+    # The deck still solves through recycled Krylov on that preconditioner.
     result = solve(op, op.rhs(), method="gmres", tol=1e-10)
     assert result.converged
 
@@ -1153,7 +1153,7 @@ def test_jit_value_and_grad_through_differentiable_solve_compiles_once() -> None
     """The differentiable solve must be jittable end-to-end and *reuse* its
     compilation.
 
-    ``jax.jit(value_and_grad(...))`` around the differentiable tier-1 solve must
+    ``jax.jit(value_and_grad(...))`` around the differentiable structured direct solve must
     compile exactly once and NOT retrace when only the operator leaf VALUES
     change — the optimization inner loop that used to recompile per eval.  The
     jitted gradient still matches central finite differences.
@@ -1253,7 +1253,7 @@ def test_resolve_solve_device_semantics_on_cpu_host() -> None:
     assert _resolve_solve_device(cpu0, "gmres", op, True) is None
     # explicit device object passes through untraced.
     assert _resolve_solve_device(cpu0, "gmres", op, False) is cpu0
-    # tier 3 is a host solve already: no movement.
+    # sparse direct is a host solve already: no movement.
     assert _resolve_solve_device(cpu0, "direct", op, False) is None
     # accelerator request on a CPU-only host is a loud error.
     with pytest.raises(ValueError, match="default JAX backend is CPU"):

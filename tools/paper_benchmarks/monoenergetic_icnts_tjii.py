@@ -41,7 +41,7 @@ resolution ladder), a known-hard regime for this machine in the benchmark
 literature.
 
 Solver notes recorded in the JSON:
-  - the scan sets a 14 GB tier-1 direct-factorization budget
+  - the scan sets a 14 GB structured direct factorization budget
     (``DKX_TIER1_MEMORY_BUDGET_GB``) so every point uses the full
     banded factorization on a 24 GB machine;
   - the Fortran v3 cross-check runs pass
@@ -74,7 +74,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 
-# A 24 GB laptop fits the full tier-1 factorization of this deck at ~13 GB
+# A 24 GB laptop fits the full structured direct factorization of this deck at ~13 GB
 # peak; opt out by presetting the environment variable.
 os.environ.setdefault("DKX_TIER1_MEMORY_BUDGET_GB", "14")
 

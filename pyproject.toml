@@ -26,7 +26,7 @@ dependencies = [
   # prints. It is a core dependency, not an extra: `dkx run` without it would
   # have to carry a second, plainer output path, and two formatters drift.
   "rich>=13.0",
-  # solvax (PyPI) owns the structured linear-algebra solver tiers (block-Thomas
+  # solvax (PyPI) owns the structured linear-algebra solver routes (block-Thomas
   # elimination, recycled GCROT, implicit differentiation) that every canonical
   # solve uses; it is a core dependency, not optional. 0.19.0 is the floor:
   # the opt-in bounded Legendre-tail evidence uses the selected-tail generated

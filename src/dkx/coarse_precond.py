@@ -99,7 +99,7 @@ def _require_solvax() -> None:
     if _SOLVAX_IMPORT_ERROR is not None:
         raise ImportError(
             "dkx requires the 'solvax' package for its solver "
-            "tiers. solvax is a core dependency: `pip install dkx` "
+            "routes. solvax is a core dependency: `pip install dkx` "
             "pulls it in automatically (the `dkx[structured]` extra is "
             "a no-op alias). To install it directly: `pip install solvax` or "
             "`pip install git+https://github.com/uwplasma/SOLVAX`."
@@ -300,16 +300,16 @@ def _coarse_route_preamble(op: KineticOperator) -> str:
     """What did not fit, and on what machine -- shared by both fallback messages."""
     total = _host_memory_bytes()
     return (
-        f"the coarse tier-2 preconditioner's dense (Ntheta*Nzeta) bands would take "
+        f"the coarse preconditioner's dense (Ntheta*Nzeta) bands would take "
         f"{coarse_preconditioner_band_bytes(op) / 2**30:.1f} GB ({op.n_theta}x{op.n_zeta} "
         f"angular grid, Nxi={op.n_xi}, {op.n_species} species, Nx={op.n_x}) on a machine "
         f"with {'unknown' if total is None else format(total / 2**30, '.1f')} GB of RAM, "
     )
 
 def _coarse_other_routes_note() -> str:
-    """The two tier-2 preconditioners that are still not a way out at this size."""
+    """The two other preconditioners that are still not a way out at this size."""
     return (
-        "\nThe other tier-2 preconditioners are still not a way out at this size: "
+        "\nThe other preconditioners are still not a way out at this size: "
         "'sparse' stores far less but was measured killed or timed out on all five "
         "decks this size (tools/benchmarks/tier2_sparse_vs_coarse.py), and 'multigrid' "
         "fits but does not reach tolerance on this physics (docs/performance.rst)."

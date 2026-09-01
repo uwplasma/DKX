@@ -1,6 +1,6 @@
-"""Can the tier-2 coarse preconditioner be truncated in Legendre index?
+"""Can the coarse preconditioner be truncated in Legendre index?
 
-The tier-1 kernel keeps only the lowest ``K`` Legendre blocks and that is what
+The structured direct kernel keeps only the lowest ``K`` Legendre blocks and that is what
 makes the 744k HSX case fit in 0.3 GB where the full band factorization wants
 91 GB.  The obvious next move is to truncate the *coarse preconditioner* the
 same way: factor the leading ``K`` blocks once, reuse those factors on every

@@ -83,7 +83,7 @@ def test_output_scheme13_matches_fortran_fixture(tmp_path: Path) -> None:
     assert not bad, f"Mismatched strict keys: {bad}"
 
     # Kinetic transport / moments from the solved state (Fortran uses a direct
-    # solve; the canonical tier-1 route is also direct, so parity is ~1e-13 here).
+    # solve; the canonical structured direct route is also direct, so parity is ~1e-13 here).
     transport = compare_sfincs_outputs(a_path=out, b_path=GOLDEN, keys=_TRANSPORT_KEYS, rtol=0, atol=1e-8)
     bad_t = [r.key for r in transport if not r.ok]
     assert not bad_t, f"Mismatched transport keys: {bad_t}"

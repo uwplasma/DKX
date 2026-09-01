@@ -21,7 +21,7 @@ The canonical-stack benchmark case is ``HSX_PASCollisions_DKESTrajectories``
 (RHSMode=1) at ``Ntheta=25, Nzeta=51, Nxi=100, Nx=5`` — 744,610 unknowns —
 measured on the same development machine (MacBook, Apple M4, ~10 cores, 24 GB)
 for both codes. The Fortran reference is the conda PETSc 3.23 + MUMPS 5.8.2
-build of SFINCS v3; ``dkx`` uses the tier-1 truncated Legendre block
+build of SFINCS v3; ``dkx`` uses the truncated structured direct Legendre block
 elimination (``solvax`` ``block_thomas_truncated_fn``, blocks assembled on the
 fly from the analytic operator coefficients, ``keep_lowest=3`` — exact for
 every RHSMode=1 output).
@@ -103,10 +103,10 @@ flip:
    * - route
      - faster than SFINCS
      - what it is
-   * - block elimination (tier 1)
+   * - structured direct
      - **9 of 9**
-     - exact structured direct solve over the Legendre index
-   * - preconditioned Krylov (tier 2)
+     - exact block elimination over the Legendre index
+   * - recycled Krylov
      - 7 of 23
      - GCROT under the coarse-operator preconditioner
 
@@ -114,18 +114,19 @@ The losses are not spread thinly over the suite.  They sit exactly where the
 block-tridiagonal-in-``L`` structure is broken -- full Fokker-Planck collisions,
 tangential magnetic drifts, the ``E_r`` ``xDot``/``xiDot`` terms, and the
 ``Phi1`` Newton iteration -- which is the same list as the physics ``dkx`` is
-uniquely good at.  Every one of those decks is locked out of tier 1 and has to
-go through tier 2, and tier 2 is where the reference is usually faster.
+uniquely good at.  Every one of those decks is locked out of the structured
+direct route and has to go through recycled Krylov, and recycled Krylov is
+where the reference is usually faster.
 
 Two more facts the sweep settles, both against ``dkx``:
 
 * *Memory is the weak axis.*  ``dkx`` is lighter on **3 of the 32** decks it
   completed.  Below ~10k unknowns the JAX runtime floor (~0.5 GB, paid on every
   solve however small) is already larger than the whole Fortran process, which
-  runs those decks in 0.1-0.2 GB.  Above ~1M the tier-2 preconditioner's dense
+  runs those decks in 0.1-0.2 GB.  Above ~1M the Krylov preconditioner's dense
   ``(Ntheta*Nzeta)`` bands dominate.
 * *Six decks did not complete at all,* against 38 of 38 for the reference.  Five
-  were killed by the operating system while the tier-2 preconditioner allocated
+  were killed by the operating system while the Krylov preconditioner allocated
   its bands.  Those five are the ones
   :func:`dkx.coarse_precond._coarse_bands_fit` diverts to the generated coarse route
   ("Running the decks the bands do not fit" below) rather than dying part way
@@ -230,8 +231,8 @@ Memory findings
 - The truncated Legendre block elimination is the locally viable direct path:
   its memory is ``O(K m^2)`` with ``m = Ntheta * Nzeta`` (one ~66 MB
   ``2875^2`` block at production resolution, independent of ``Nxi``). On the
-  744k case the truncated route needs ~0.3 GB where a full-band tier-1 factor
-  would need ~91 GB.
+  744k case the truncated route needs ~0.3 GB where a full-band structured
+  direct factorization would need ~91 GB.
 
 The small-deck floor, and what it is made of
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -317,16 +318,16 @@ past a few thousand unknowns the physics dominates it.
      - route
      - peak RSS
    * - 111
-     - block elimination
+     - structured direct
      - 0.527 GB
    * - 2,804
-     - preconditioned GCROT
+     - recycled Krylov
      - 0.741 GB
    * - 5,208
-     - host sparse-direct
+     - sparse direct
      - 1.031 GB
    * - 143,530
-     - preconditioned GCROT
+     - recycled Krylov
      - 3.979 GB
 
 The reference's own true residual
@@ -419,15 +420,15 @@ Parity referees
 
    Parity envelopes pinned by the CI referee tests
    (``tests/test_run_rhsmode1.py``, ``tests/test_run_transport.py``):
-   RHSMode=1 output tables at ``8e-14``, tier-1 state vectors vs recorded
+   RHSMode=1 output tables at ``8e-14``, structured direct state vectors vs recorded
    references at ``1e-11``, RHSMode=2/3 transport matrices vs Fortran golden
    data at ``6e-13 .. 9e-9``.
 
 Known issues
 ~~~~~~~~~~~~
 
-- **Singular tier-2 adjoints abort; they cannot be differentiated.** The
-  implicit-function-theorem VJP of the tier-2 solve costs one *transposed*
+- **Singular recycled Krylov adjoints abort; they cannot be differentiated.**
+  The implicit-function-theorem VJP of the Krylov solve costs one *transposed*
   solve, and that solve is the only place in ``dkx`` where a wrong answer
   leaves no trace: the physical drive stays in the range of :math:`A`, so the
   forward solve converges to ``1e-15`` and every field of ``SolveResult``
@@ -469,9 +470,9 @@ Known issues
 CPU and GPU: where each wins
 ----------------------------
 
-The structured tier-1 path is what lets ``dkx`` fit and finish a production
+The structured direct route is what lets ``dkx`` fit and finish a production
 case. **A development-MacBook CPU and a workstation RTX A4000 land at parity on
-the direct tier, while the iterative and small-system paths favored the MacBook
+that route, while the iterative and small-system paths favored the MacBook
 CPU.** Those two backends live on *different machines*. The same-host
 CPU-vs-GPU picture is measured in "Same-host CPU/GPU crossover" below and looks
 very different.
@@ -497,9 +498,9 @@ ramp-aware truncated kernel became the canonical route:
      - 2.3 GB
 
 Both machines route ``block_tridiagonal_truncated`` and land within a few seconds
-of each other on the warm solve; under the tier-2 recycled-Krylov route the same
-case ran out of memory on the 16 GB GPU, so the structured tier is what makes it
-fit at all. A mid-size HSX case (336k unknowns) is at MacBook-CPU-vs-A4000
+of each other on the warm solve; under the recycled Krylov route the same
+case ran out of memory on the 16 GB GPU, so the structured direct route is what
+makes it fit at all. A mid-size HSX case (336k unknowns) is at MacBook-CPU-vs-A4000
 parity as well (``3.5 s`` versus ``3.3 s`` warm).
 
 The GPU does **not** help the iterative and small-system paths *relative to a
@@ -510,7 +511,7 @@ MacBook's CPU.
 
 That comparison mixes machines. A dedicated same-host re-measurement (next
 section) puts the GPU ahead of *that machine's own 36-core CPU* on essentially
-every path and size, and shows the tier-1 production solve to be
+every path and size, and shows the structured direct production solve to be
 FP64-compute-bound on the card (1/32-rate FP64) rather than dispatch-bound.
 Batched work, such as multi-:math:`E_r` or multi-surface ``vmap`` sweeps,
 widens that same-host win.
@@ -526,11 +527,11 @@ included to expose the cross-machine effect. Warm = second identical
 process with a *populated* persistent compilation cache. Reproduce with
 ``tools/benchmarks/gpu_cpu_ladder.py``.
 
-**Tier-1 (direct truncated block-Thomas, the production route)** — the GPU won
+**Structured direct (truncated block-Thomas, the production route)** — the GPU won
 every measured size, 2.7x to 39x, so there is no same-host CPU/GPU crossover
 above the smallest deck measured (6.5k unknowns):
 
-.. list-table:: Warm tier-1 solve, HSX PAS/DKES family (seconds)
+.. list-table:: Warm structured direct solve, HSX PAS/DKES family (seconds)
    :header-rows: 1
    :widths: 26 22 22 30
 
@@ -597,11 +598,11 @@ warm repeat measured *slower* than its cold solve (1,036 s vs 952 s), and the
 "~1,998 s office CPU warm" figure matches this end-to-end total, not the warm
 solve alone.
 
-**Tier-2 (GCROT-recycled FGMRES, preconditioned)** — the GPU also won every
+**Recycled Krylov (GCROT-recycled FGMRES, preconditioned)** — the GPU also won every
 measured size warm; again no same-host crossover down to the smallest
 practical Fokker-Planck deck:
 
-.. list-table:: Warm tier-2 GCROT solve, W7-X FP family (seconds)
+.. list-table:: Warm recycled Krylov solve, W7-X FP family (seconds)
    :header-rows: 1
    :widths: 30 24 24 22
 
@@ -630,7 +631,7 @@ Cold-including-compile favors the CPU at the small end, because GPU
 compilation is slower. That is a first-run effect the persistent cache removes
 on repetition.
 
-.. list-table:: Cold tier-2 solve including compile (seconds)
+.. list-table:: Cold recycled Krylov solve including compile (seconds)
    :header-rows: 1
    :widths: 30 24 24
 
@@ -654,7 +655,7 @@ on repetition.
      - CPU
      - GPU
      - Measurement
-   * - ``value_and_grad`` through tier-1 (39.3k unknowns)
+   * - ``value_and_grad`` through structured direct (39.3k unknowns)
      - 4.21
      - 3.03
      - warm
@@ -680,9 +681,9 @@ compile. Small :math:`\Phi_1`-heavy workloads are best run whole-process on the
 CPU (``JAX_PLATFORMS=cpu``).
 
 **Where the GPU time goes (profiler trace).** A ``jax.profiler`` capture of the
-warm 336k tier-1 GPU solve records 31,953 kernel launches at a mean kernel
-duration of 0.086 ms. The device is busy 2.74 s of the 3.18 s device span
-(13.8% idle), against an untraced warm solve of 2.97 s. The tier-1 GPU solve is
+warm 336k structured direct GPU solve records 31,953 kernel launches at a mean
+kernel duration of 0.086 ms. The device is busy 2.74 s of the 3.18 s device span
+(13.8% idle), against an untraced warm solve of 2.97 s. That GPU solve is
 therefore ~90% device compute, *not* host-dispatch-bound: the async dispatch
 pipeline keeps the serial Legendre scan's small kernels queued ahead of
 execution.
@@ -750,7 +751,7 @@ corner from the production decks, so it is left unimplemented.
 Measured GPU anatomy and memory headroom (RTX A4000)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The same host quantifies how far the structured tier-1 route stretches a 16 GB
+The same host quantifies how far the structured direct route stretches a 16 GB
 card. All rows are warm best-of-N ``block_tridiagonal_truncated`` solves of
 HSX-family decks on the RTX A4000 (12.56 GB usable device budget), with the
 device peak read from ``jax`` device-memory statistics; every solve converged
@@ -767,7 +768,7 @@ with residuals in ``1e-13 .. 1e-15``.
    versus pinned cores, bottoming at the 8-core optimum and inverting past it.
    Regenerate with ``python tools/benchmarks/gpu_anatomy_figure.py``.
 
-.. list-table:: Warm tier-1 solve, single RTX A4000: memory ladder
+.. list-table:: Warm structured direct solve, single RTX A4000: memory ladder
    :header-rows: 1
    :widths: 36 22 22
 
@@ -788,7 +789,7 @@ with residuals in ``1e-13 .. 1e-15``.
      - 157.6
 
 The device peak grows far slower than the unknown count, because the truncated
-tier-1 kernel only ever materializes its ``O(K m^2)`` working set (the lowest
+structured direct kernel only ever materializes its ``O(K m^2)`` working set (the lowest
 Legendre blocks) rather than the full band. The 2,525,010-unknown solve peaks
 at 2.21 GB where the conservative full-band charge for that system is ~208 GB,
 so multi-million-unknown decks fit with large headroom on the 16 GB card. The
@@ -862,7 +863,7 @@ case, via ``tools/benchmarks/profile_production.py``):
      - 2.0 GB
    * - PAS gradient (``value_and_grad``)
      - 39,318
-     - tier-1 differentiable
+     - structured direct, differentiable
      - 5.3 s / 2.1 s
      - 4.3 GB
    * - :math:`\Phi_1` Newton
@@ -877,7 +878,8 @@ case, via ``tools/benchmarks/profile_production.py``):
      - 3.9 GB
 
 Two lessons follow. The first is that promoting the ramp-aware truncated kernel
-into ``solve(method="auto")`` moves the mid-size HSX case off the tier-2 route:
+into ``solve(method="auto")`` moves the mid-size HSX case off the recycled
+Krylov route:
 
 .. list-table:: Mid-size HSX case, warm, by route
    :header-rows: 1
@@ -886,10 +888,10 @@ into ``solve(method="auto")`` moves the mid-size HSX case off the tier-2 route:
    * - Route
      - Memory
      - Warm solve
-   * - tier-2
+   * - recycled Krylov
      - ``10.8 GB``
      - ``15.4 s``
-   * - ramp-aware truncated tier-1
+   * - ramp-aware truncated structured direct
      - ``885 MB``
      - ``3.5 s``
 
@@ -948,14 +950,14 @@ The process maximum-RSS row is kept in the summary JSON audit fields. That
 summary, together with the top runtime and memory cases, is recorded in
 ``tools/publication_figures/artifacts/dkx_fortran_suite_benchmark_summary.json``.
 
-Tier-2 preconditioners: coarse block-Thomas vs multigrid
+Krylov preconditioners: coarse block-Thomas vs multigrid
 --------------------------------------------------------
 
 Every physics ``dkx`` is uniquely good at -- full Fokker-Planck and improved
 Sugama collisions, ``Phi1``/quasineutrality, tangential magnetic drifts, the
 ambipolar-``E_r`` ``xDot``/``xiDot`` terms -- has no block-tridiagonal-in-L
-structure, so it is locked out of the tier-1 direct path and must go through
-tier 2.  The classical tier-2 preconditioner
+structure, so it is locked out of the structured direct route and must go
+through recycled Krylov.  The classical Krylov preconditioner
 (:func:`dkx.coarse_precond.build_coarse_preconditioner`) inverts the SFINCS-simplified
 operator *exactly* with a batched block-Thomas factorization whose blocks are
 ``Ntheta*Nzeta`` square, and rebuilds it on **every call**:
@@ -991,7 +993,7 @@ reproduce with ``tools/benchmarks/tier2_multigrid_ladder.py``):
    between 21 and 24 iterations on this ladder and 87 and 149 at identical
    residuals.
 
-.. list-table:: Tier-2 preconditioner ladder, full Fokker-Planck + full trajectories
+.. list-table:: Krylov preconditioner ladder, full Fokker-Planck + full trajectories
    :header-rows: 1
 
    * - grid (Ntheta x Nzeta x Nxi x Nx)
@@ -1274,7 +1276,7 @@ Two properties make it usable.  The ``(species, x)`` subsystems are uncoupled
 in the simplified operator, so this is ``Nspecies * Nx`` independent
 factorizations rather than one.  And a preconditioner is never differentiated,
 so a host callback is admissible here in a way it is not on the solve path: the
-tier-2 implicit-diff wrapper differentiates the *solution*, and the
+Krylov implicit-diff wrapper differentiates the *solution*, and the
 preconditioner enters only the forward and transposed linear solves.  It cannot
 run with traced operator leaves, and says so rather than falling back silently.
 
@@ -1338,7 +1340,7 @@ that a shared machine cannot measure honestly.  The route is therefore opt-in,
 and the default stays ``"coarse"`` until a controlled timing study lands.  The
 gap that motivates it is real and measured: on the ``sfincsPaperFigure3``
 two-species full-trajectory deck the Fortran reference's main solve takes 47 s
-against 312 s for tier 2 with the classical preconditioner.
+against 312 s for recycled Krylov with the classical preconditioner.
 
 Running the decks the bands do not fit
 --------------------------------------
@@ -1470,7 +1472,7 @@ fixed.
 That left the *runtime*, and the completed campaign localized it precisely.
 Measured on a 36-core, 62 GB machine, float32 reusable factors:
 
-.. list-table:: Upstream tier-2 decks whose preconditioner bands do not fit
+.. list-table:: Upstream Krylov decks whose preconditioner bands do not fit
    :header-rows: 1
    :widths: 40 12 12 14 12
 
@@ -1581,7 +1583,8 @@ Why the coarse chain is not truncated instead
 
 The generator above buys memory with time because it returns a solution rather
 than reusable factors.  The obvious way to buy memory and keep the factors is
-the lever tier 1 already uses: keep only the lowest ``K`` Legendre blocks, which
+the lever the structured direct route already uses: keep only the lowest ``K``
+Legendre blocks, which
 is what runs the 744k HSX case in ``0.3 GB`` where its full-band factorization
 wants ``91 GB``.  Factoring the coarse preconditioner's leading ``K`` blocks
 would store ``O(K m^2)`` with ``m = Ntheta*Nzeta`` instead of ``O(Nxi m^2)``,
@@ -1648,7 +1651,7 @@ converge on that deck either.
 
 The load-bearing conclusion is narrow.  The coarse operator is cheap to
 *simplify*: self-species x-diagonal collisions, no ``L +- 2`` terms and no
-magnetic drifts, all of which tier 2 corrects for in a handful of extra
+magnetic drifts, all of which recycled Krylov corrects for in a handful of extra
 iterations.  It is not cheap to *shorten*.  Memory has to come from how the
 chain is stored, not from how much of it is kept.
 
@@ -1764,7 +1767,7 @@ On the small deck the whole-file parse pulls the cold start from 6.19 s to
 
 **Route-aware memory footprint.** The ``auto`` policy's memory estimate models
 the kernel the solve actually executes. A deck that routes to the truncated
-tier-1 block-Thomas kernel is charged its truncated working set, not the
+structured direct block-Thomas kernel is charged its truncated working set, not the
 full-band factorization peak that route never allocates.
 
 .. list-table:: Memory estimate, full-band charge against route-aware charge
@@ -1798,19 +1801,20 @@ The design choices that produce the numbers above, in one place:
 - **Matrix-free operators.** The drift-kinetic Jacobian is applied as a pure
   function (tensor contractions and directional derivatives), never assembled as
   a sparse matrix, so it JIT-compiles for CPU/GPU and differentiates cleanly.
-- **Structured direct tier.** The block-tridiagonal-in-:math:`L` elimination with
+- **Structured direct route.** The block-tridiagonal-in-:math:`L` elimination with
   truncated storage is the memory lever: ``O(K m^2)`` with ``m = Ntheta*Nzeta``,
   independent of ``Nxi`` (:doc:`numerics`).
 - **The** :math:`N_\xi`-**for-**:math:`x` **ramp.** Fewer Legendre modes at high
   speed cut both work and memory; on the 744k HSX case the ramp is the difference
   between ``0.93 GB`` and ``1.16 GB`` at essentially identical physics outputs
   (:math:`\le 0.9\%`).
-- **Subspace recycling.** The tier-2 recycle pair warm-starts neighbouring points
+- **Subspace recycling.** The GCROT recycle pair warm-starts neighbouring points
   in an :math:`E_r` scan or a :math:`\Phi_1` Newton iteration, so continuation
   converges in a handful of iterations.
-- **Preconditioning by a simplified exact solve.** Tier 2 is right-preconditioned
-  by an exact tier-1 solve of a collision-/drift-simplified coarse operator (the
-  Fortran ``preconditionerOptions`` idiom).
+- **Preconditioning by a simplified exact solve.** The recycled Krylov route is
+  right-preconditioned by an exact structured direct solve of a
+  collision-/drift-simplified coarse operator (the Fortran
+  ``preconditionerOptions`` idiom).
 - **Phi1-aware bordered-Schur coarse preconditioner.** The :math:`\Phi_1`
   Newton inner solve is preconditioned by a generalized bordered Schur
   complement that eliminates the quasineutrality border (the
@@ -1848,5 +1852,6 @@ Gradients are exact and cost about one extra solve, because the adjoint reuses t
 forward factorization through the implicit function theorem. What is
 differentiable (geometry, profiles, the ambipolar :math:`E_r`, the :math:`\Phi_1`
 state, the monoenergetic transport matrix), the measured gradient-vs-finite-
-difference agreement, and the honest tier-2 singular-Fokker-Planck caveat are all
+difference agreement, and the honest recycled Krylov singular-Fokker-Planck
+caveat are all
 documented in :doc:`differentiability`.
