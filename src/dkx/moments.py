@@ -200,15 +200,32 @@ def _sum_x(w_x: jnp.ndarray, values_sxtz: jnp.ndarray, *, strict: bool = False) 
     """``sum_x w_x[x] * values[:, x, :, :]``; ``strict`` uses the Fortran x-loop order."""
     w_x = jnp.asarray(w_x, dtype=jnp.float64).reshape((-1,))
     values_sxtz = jnp.asarray(values_sxtz, dtype=jnp.float64)
-    n_x = int(values_sxtz.shape[1])
     if strict:
-        acc0 = jnp.zeros((values_sxtz.shape[0], values_sxtz.shape[2], values_sxtz.shape[3]), dtype=jnp.float64)
-
-        def body(ix: int, acc: jnp.ndarray) -> jnp.ndarray:
-            return acc + w_x[ix] * values_sxtz[:, ix, :, :]
-
-        return lax.fori_loop(0, n_x, body, acc0)
+        return _sum_x_strict(w_x, values_sxtz)
     return jnp.einsum("x,sxtz->stz", w_x, values_sxtz, precision=lax.Precision.HIGHEST)
+
+
+@jax.jit
+def _sum_x_strict(w_x: jnp.ndarray, values_sxtz: jnp.ndarray) -> jnp.ndarray:
+    """The Fortran x-loop accumulation, jitted once at module level.
+
+    The loop body is a closure. Defined inside the caller it is a *new* Python
+    object on every call, so the eager dispatch cache misses and XLA lowers the
+    same module again -- 42 identical lowerings per solve on the shipped
+    tokamak deck, which was most of a warm solve's wall time. Hoisting it under
+    a module-level ``jax.jit`` builds the closure once. The accumulation order
+    is unchanged, so the Fortran-parity results this branch exists for are
+    bit-identical.
+    """
+    acc0 = jnp.zeros(
+        (values_sxtz.shape[0], values_sxtz.shape[2], values_sxtz.shape[3]),
+        dtype=jnp.float64,
+    )
+
+    def body(ix: int, acc: jnp.ndarray) -> jnp.ndarray:
+        return acc + w_x[ix] * values_sxtz[:, ix, :, :]
+
+    return lax.fori_loop(0, int(values_sxtz.shape[1]), body, acc0)
 
 def _sum_tz(w_t: jnp.ndarray, w_z: jnp.ndarray, values_stz: jnp.ndarray) -> jnp.ndarray:
     """Flux-surface quadrature ``sum_t sum_z w_t w_z values[:, t, z]`` -> (S,)."""
@@ -226,16 +243,24 @@ def _sum_tz_sx(w_t: jnp.ndarray, w_z: jnp.ndarray, values_sxtz: jnp.ndarray, *, 
     w_z = jnp.asarray(w_z, dtype=jnp.float64).reshape((-1,))
     values_sxtz = jnp.asarray(values_sxtz, dtype=jnp.float64)
     if strict:
-        acc0 = jnp.zeros((values_sxtz.shape[0], values_sxtz.shape[1]), dtype=jnp.float64)
-
-        def body_t(it: int, acc_t: jnp.ndarray) -> jnp.ndarray:
-            def body_z(iz: int, acc_z: jnp.ndarray) -> jnp.ndarray:
-                return acc_z + (w_t[it] * w_z[iz]) * values_sxtz[:, :, it, iz]
-
-            return lax.fori_loop(0, int(values_sxtz.shape[3]), body_z, acc_t)
-
-        return lax.fori_loop(0, int(values_sxtz.shape[2]), body_t, acc0)
+        return _sum_tz_sx_strict(w_t, w_z, values_sxtz)
     return jnp.einsum("t,z,sxtz->sx", w_t, w_z, values_sxtz, precision=lax.Precision.HIGHEST)
+
+
+@jax.jit
+def _sum_tz_sx_strict(
+    w_t: jnp.ndarray, w_z: jnp.ndarray, values_sxtz: jnp.ndarray
+) -> jnp.ndarray:
+    """The Fortran (theta, zeta) loop order, jitted once. See :func:`_sum_x_strict`."""
+    acc0 = jnp.zeros((values_sxtz.shape[0], values_sxtz.shape[1]), dtype=jnp.float64)
+
+    def body_t(it: int, acc_t: jnp.ndarray) -> jnp.ndarray:
+        def body_z(iz: int, acc_z: jnp.ndarray) -> jnp.ndarray:
+            return acc_z + (w_t[it] * w_z[iz]) * values_sxtz[:, :, it, iz]
+
+        return lax.fori_loop(0, int(values_sxtz.shape[3]), body_z, acc_t)
+
+    return lax.fori_loop(0, int(values_sxtz.shape[2]), body_t, acc0)
 
 # ---- Flux-surface scalars and the leading-order Maxwellian -----------------
 
