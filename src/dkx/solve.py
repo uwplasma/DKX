@@ -1848,6 +1848,17 @@ def _solve_tier2(
     adjoint_residual_factor: float = DEFAULT_ADJOINT_RESIDUAL_FACTOR,
     prebuilt_precond: tuple[Callable, Callable] | None = None,
 ) -> SolveResult:
+    if int(recycle_dim) < 1:
+        # solvax's GCROT scatters the recycled subspace into a (n, k) array, so
+        # k = 0 dies inside jax indexing with "index is out of bounds for axis 1
+        # with size 0" -- a traceback naming neither the parameter nor DKX.
+        # Plain restarted FGMRES is not reachable through this route; refusing
+        # by name is better than a crash that looks like a library bug.
+        raise ValueError(
+            f"recycle_dim={recycle_dim}: the recycled Krylov route needs at least "
+            "one recycled direction. Use recycle_dim >= 1, or method='direct' for "
+            "a non-recycling solve."
+        )
     traced = _is_traced(rhs2d, *jax.tree_util.tree_leaves(op))
     t0 = time.perf_counter()
     precond = precond_t = None
