@@ -1490,3 +1490,63 @@ def test_a_single_column_is_unaffected() -> None:
     norm = float(np.linalg.norm(rhs))
     assert _converged_flag(np.array([0.9e-10 * norm]), rhs, 1e-10, 0.0)
     assert not _converged_flag(np.array([1.1e-10 * norm]), rhs, 1e-10, 0.0)
+
+
+# ---------------------------------------------------------------------------
+# Reusing a built preconditioner across a sweep (plan.md Phase G)
+# ---------------------------------------------------------------------------
+
+
+def test_a_reused_preconditioner_gives_the_same_answer() -> None:
+    """The preconditioner must not change the converged solution, only the path.
+
+    This is the property that makes reuse safe at all, and it is the same one
+    SFINCS relies on to precondition with a deliberately different, cheaper
+    matrix. If reuse moved the answer, the whole scheme would be unsound rather
+    than merely slower.
+    """
+    from dkx.solve import build_tier2_preconditioner
+
+    op = _load_sugama_op()
+    rhs = op.rhs()
+    built = solve(op, rhs, method="gmres", tol=1e-10)
+    reused = solve(op, rhs, method="gmres", tol=1e-10,
+                   precond=build_tier2_preconditioner(op, "coarse"))  # fmt: skip
+    assert built.converged and reused.converged
+    assert _rel_err(np.asarray(reused.x), np.asarray(built.x)) < 1e-9
+
+
+def test_a_preconditioner_built_elsewhere_still_converges_on_a_neighbour() -> None:
+    """A sweep reuses one build across nearby operators; convergence must hold.
+
+    The collisionality is scaled by 15%, which is wider than the step an Er or
+    nu scan takes between points. A preconditioner is an approximation to begin
+    with, so the question is never whether it is exact for the neighbour but
+    whether the iteration count stays sane -- and that is what is asserted,
+    rather than a fixed count that would pin machine-specific noise.
+    """
+    from dataclasses import replace
+
+    from dkx.solve import build_tier2_preconditioner
+
+    op = _load_sugama_op()
+    rhs = op.rhs()
+    neighbour = replace(op, sugama=replace(op.sugama, mat=1.15 * op.sugama.mat))
+
+    own = solve(neighbour, rhs, method="gmres", tol=1e-10)
+    borrowed = solve(neighbour, rhs, method="gmres", tol=1e-10,
+                     precond=build_tier2_preconditioner(op, "coarse"))  # fmt: skip
+
+    assert borrowed.converged
+    assert _rel_err(np.asarray(borrowed.x), np.asarray(own.x)) < 1e-9
+    assert borrowed.iterations < 3 * own.iterations, (
+        f"borrowed preconditioner took {borrowed.iterations} against "
+        f"{own.iterations} for its own: reuse has stopped paying"
+    )
+
+
+def test_omitting_precond_still_builds_one() -> None:
+    """The parameter is opt-in; the default path is unchanged."""
+    op = _load_sugama_op()
+    result = solve(op, op.rhs(), method="gmres", tol=1e-10)
+    assert result.converged and result.method == "gcrot"
