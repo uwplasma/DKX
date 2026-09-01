@@ -619,7 +619,7 @@ def _cmd_plot(args: argparse.Namespace) -> int:
     out_path = Path(args.out) if args.out else source.with_suffix(".png")
 
     if _looks_like_sfincs_h5(source):
-        if args.kind != "summary":
+        if args.kind not in ("auto", "summary"):
             print(
                 f"dkx plot failed: --kind {args.kind} applies to a dkx Result; "
                 "a SFINCS HDF5 file has only the summary panel.",
@@ -630,14 +630,29 @@ def _cmd_plot(args: argparse.Namespace) -> int:
 
         written = plot_sfincs_output_summary(input_h5=source, output_png=out_path)
     else:
-        from .plotting import plot_ambipolar_search, plot_result_summary  # noqa: PLC0415
+        from .plotting import (  # noqa: PLC0415
+            plot_ambipolar_search,
+            plot_result_summary,
+            plot_scan_summary,
+        )
 
         try:
             result = Result.load(source)
         except (OSError, ValueError, KeyError) as exc:
             print(f"dkx plot failed: {exc}", file=sys.stderr)
             return 2
-        draw = plot_result_summary if args.kind == "summary" else plot_ambipolar_search
+
+        kind = args.kind
+        if kind == "auto":
+            # A scan Result has no r_N to plot against, so the profile panel
+            # would refuse it. Dispatch on what the file actually holds rather
+            # than making the user know which panel their result supports.
+            kind = "scan" if any(k.startswith("axis_") for k in result.arrays) else "summary"
+        draw = {
+            "summary": plot_result_summary,
+            "search": plot_ambipolar_search,
+            "scan": plot_scan_summary,
+        }[kind]
         try:
             written = draw(result=result, output_path=out_path)
         except ValueError as exc:
@@ -2215,9 +2230,10 @@ def main(argv: list[str] | None = None) -> int:
     p_plot_result.add_argument("result")
     p_plot_result.add_argument("--out", default=None, help="Output image path (default: alongside the input).")
     p_plot_result.add_argument(
-        "--kind", choices=("summary", "search"), default="summary",
-        help="summary: radial profiles. search: radial current against E_r with "
-             "every evaluation, bracket and root (ambipolar results only).",
+        "--kind", choices=("auto", "summary", "search", "scan"), default="auto",
+        help="auto: pick from what the result holds. summary: radial profiles. "
+             "search: radial current against E_r with every evaluation, bracket "
+             "and root (ambipolar results). scan: observables against the scan axis.",
     )
     p_plot_result.set_defaults(func=_cmd_plot)
 
