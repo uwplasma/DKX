@@ -20,7 +20,7 @@ from dkx.config import (
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-EXAMPLE = REPO_ROOT / "examples" / "cases" / "w7x_ambipolar_profile.toml"
+EXAMPLE = REPO_ROOT / "examples" / "05_ambipolar_profile" / "w7x_case.toml"
 
 
 def _mapping() -> dict:
@@ -334,7 +334,7 @@ def test_validate_cli_reports_bounded_ambipolar_work_without_loading_geometry(
 ) -> None:
     path = (
         Path(__file__).resolve().parents[1]
-        / "examples/cases/analytic_ambipolar_profile.toml"
+        / "examples/05_ambipolar_profile/case.toml"
     )
 
     assert cli.main(["validate", str(path), "--quiet"]) == 0

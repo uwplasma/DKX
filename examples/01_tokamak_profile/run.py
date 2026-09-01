@@ -1,68 +1,124 @@
-"""Define a case in Python -> solve -> read the moments.  Start here.
+"""Analytic tokamak: one native case, one solve, one certified result.  Start here.
 
-The basic workflow is three lines: describe the case, call ``dkx.run``, read
-``run.moments``.  Nothing touches disk -- these are the parameters an SFINCS
-``input.namelist`` carries, passed as keywords.  For the file route see
-``run_from_namelist.py``; to vary a parameter see ``scan_resolution.py``.
+The whole native workflow in one screen: describe the plasma as a ``dkx.Case``,
+call ``dkx.run``, read SI moments off the ``dkx.Result``, print the certificate
+that says whether to believe them, save NetCDF, plot.  Every later rung changes
+one thing about this script and leaves the rest alone.
 
-Physics: concentric circular tokamak (``geometryScheme=1``, no helical ripple
-so ``Nzeta=1``), one hydrogen species, pitch-angle scattering.  Both the
-gradient-driven radial particle flux and the bootstrap current are printed.
+Physics: concentric circular-cross-section tokamak, one deuterium species,
+pitch-angle-scattering collisions, three flux surfaces, no radial electric
+field.  Axisymmetric, so a single toroidal grid point resolves it exactly.
 
-Expected runtime: ~5 s on a laptop CPU, nearly all JAX compilation; a second
-run in the same process is milliseconds.
+Expected runtime: ~4 s on a laptop CPU, nearly all of it JAX compilation.
 
-Achieved: FSABjHat = +2.408e-02, particleFlux_vm_psiHat = +1.268e-06.  That
-resolution runs in seconds but is *not* converged -- ``scan_resolution.py``
-takes FSABjHat to +3.630e-02, so this is 34% low.  Scan before trusting it.
+Equivalent CLI:
+  dkx run examples/01_tokamak_profile/case.toml --out examples/output/01_tokamak_profile/result.nc
+  dkx plot examples/output/01_tokamak_profile/result.nc
 """
 
-import os
+# 1. Imports
+from pathlib import Path
+
+import numpy as np
 
 import dkx
 
-# --------------------------- parameters -------------------------------------
-CI = os.environ.get("DKX_CI") == "1"  # shrink for a fast smoke run
+# 2. User-editable parameters
+HERE = Path(__file__).resolve().parent
+OUT_DIR = HERE.parent / "output" / "01_tokamak_profile"
+CASE_FILE = HERE / "case.toml"
+RESULT_FILE = OUT_DIR / "result.nc"
+PLOT_FILE = OUT_DIR / "result.png"
 
-TOKAMAK = dict(
-    # Geometry: SFINCS's three-helicity analytic model.  epsilon_h = 0 leaves a
-    # pure circular tokamak of inverse aspect ratio 0.07.
-    geometryScheme=1,
-    inputRadialCoordinate=3,  # 3 = pick the surface by rN = r/a
-    rN_wish=0.3,
-    B0OverBBar=1.0, epsilon_t=-0.07, epsilon_h=0.0,
-    iota=0.4542, GHat=3.7481, IHat=0.0, psiAHat=0.15596,
+# The surfaces are normalized toroidal flux, psi_N = psi/psi_edge, and the
+# profiles below carry one value per surface in that same order.  Gradients are
+# taken across them, so at least two are required.
+SURFACES = (0.09, 0.16, 0.25)
 
-    # Species: one hydrogen ion.  Add an electron by extending every list:
-    # Zs=[1.0, -1.0], mHats=[1.0, 5.446170214e-4], nHats=[1.0, 1.0], ...
-    Zs=[1.0], mHats=[1.0], nHats=[1.0], THats=[1.0],
-    dNHatdrHats=[-0.5], dTHatdrHats=[-1.0],
+# 3. Geometry and species construction
+GEOMETRY = {
+    # "analytic" takes a configuration *name*, not a path: tokamak,
+    # lhd_standard, lhd_inward or w7x_standard.
+    "format": "analytic",
+    "file": "tokamak",
+    "surfaces": list(SURFACES),
+}
+SPECIES = [
+    {
+        "name": "deuterium",
+        "charge": 1,
+        "mass_amu": 2.014,
+        "density_m3": [8.0e19, 7.0e19, 5.8e19],
+        "temperature_keV": [1.0, 0.8, 0.6],
+    },
+]
 
-    # Resolution.  Nzeta = 1 because the field is axisymmetric.
-    Ntheta=9 if CI else 15, Nzeta=1, Nxi=6 if CI else 8, NL=4, Nx=4 if CI else 6,
+# 4. Physics and numerical configuration
+PHYSICS = {
+    "model": "full_local",
+    # pitch_angle_scattering is cheap but has no momentum-restoring term; use
+    # linearized_fokker_planck for anything whose headline number is a current.
+    "collisions": "pitch_angle_scattering",
+    "magnetic_drifts": "dkes",
+    "phi1": "off",
+}
+ELECTRIC_FIELD = {"mode": "prescribed", "value_kV_m": 0.0}
+# Deliberately small so this runs in seconds.  It is *not* converged: rung 06
+# measures how far off it is.  Refine before quoting any number from it.
+RESOLUTION = {"theta": 9, "zeta": 1, "pitch": 8, "speed": 4}
+SOLVER = {"method": "auto", "relative_tolerance": 1.0e-8, "memory_fraction": 0.75, "reuse": "auto"}
+# end of parameters
 
-    # Collisions: 1 = pitch-angle scattering, 0 = full linearized Fokker-Planck.
-    # Use 0 for anything whose headline number is the bootstrap current: pitch
-    # angle scattering has no momentum-restoring term.
-    collisionOperator=1,
-    Delta=4.5694e-3, alpha=1.0, nu_n=8.330e-3,
+case = dkx.Case.from_mapping(
+    {
+        "schema": 1,
+        "name": "analytic_tokamak_profile",
+        "run": {"workflow": "profile", "progress": True},
+        "geometry": GEOMETRY,
+        "species": SPECIES,
+        "physics": PHYSICS,
+        "electric_field": ELECTRIC_FIELD,
+        "resolution": RESOLUTION,
+        "solver": SOLVER,
+        "output": {"file": "analytic_tokamak_profile.nc", "plots": True},
+    },
+    source_path=CASE_FILE,
 )
-# ----------------------------- end of parameters ----------------------------
 
-run = dkx.run(**TOKAMAK)
+# The case ID is a hash of the case content, so this proves the dict above and
+# case.toml beside it are the same physics -- the CLI line in the docstring
+# solves exactly what this script does.
+from_toml = dkx.Case.from_file(CASE_FILE)
+print(f"case id (Python) = {case.case_id[:12]}")
+print(f"case id (TOML)   = {from_toml.case_id[:12]}")
+assert case.case_id == from_toml.case_id, "run.py and case.toml have drifted apart"
 
-# run.moments is a dict keyed by the sfincsOutput.h5 names, so anything the
-# Fortran code reports is here under the same key.
-print(f"FSABjHat (bootstrap current)  = {float(run.moments['FSABjHat']):+.6e}")
-print(f"particleFlux_vm_psiHat        = {run.moments['particleFlux_vm_psiHat']}")
-print(f"heatFlux_vm_psiHat            = {run.moments['heatFlux_vm_psiHat']}")
-print(f"FSABFlow                      = {run.moments['FSABFlow']}")
+# 5. Run
+OUT_DIR.mkdir(parents=True, exist_ok=True)
+result = dkx.run(case)
 
-# The linear solve is reported too, so a run that did not converge says so
-# rather than returning a plausible number.
-print(f"residual                      = {float(run.solve_result.residual_norms[-1]):.3e}")
-print(f"converged                     = {bool(run.solve_result.converged)}")
-print(f"route                         = {run.solve_result.route}")
+# 6. Print a scientific summary and certificate
+certificate = result.certificate()
+print("\n=== Final results ===")
+print(f"  workflow: {result.workflow} on {len(SURFACES)} surfaces, {len(SPECIES)} species")
+for index, psi_n in enumerate(np.asarray(result.arrays["surface"], dtype=float)):
+    gamma = float(np.asarray(result.arrays["particle_flux_m2_s"])[index, 0])
+    heat = float(np.asarray(result.arrays["heat_flux_W_m2"])[index, 0])
+    current = float(np.asarray(result.arrays["parallel_current_A_T_m2"])[index])
+    print(
+        f"  psi_N={psi_n:.2f}  Gamma = {gamma:+.4e} m^-2 s^-1"
+        f"  Q = {heat:+.4e} W m^-2  <j.B> = {current:+.4e} A T m^-2"
+    )
+print(f"  converged: {certificate['converged']}")
+print(f"  solver route: {certificate['solver_route']}")
+print(f"  residual norm: {certificate['residual_norm']:.3e}")
+print(f"  dkx {certificate['dkx_version']} on {certificate['device']}, {certificate['precision']}")
 
-# To write an sfincsOutput file, pass out=... and the suffix picks the format:
-#   dkx.run(**TOKAMAK, out="tokamak.h5")   # or .nc, or .npz
+# 7. Save native result
+saved = result.save(RESULT_FILE)
+print(f"  Wrote result: {saved}")
+
+# 8. Plot publication-ready outputs
+plotted = result.plot(PLOT_FILE)
+print(f"  Saved plot: {plotted}")
+print("Done: examples/01_tokamak_profile/run.py")

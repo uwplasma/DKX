@@ -77,22 +77,28 @@ GPU wheels, and the Fortran reference build.
 Examples
 --------
 
-Six pedagogic scripts on the canonical API sit at the top of ``examples/``
-(no ``main()``, parameters at the top, printed progress, a plot, outputs
-written and read back); :doc:`examples` walks through each one:
+Nine numbered rungs in ``examples/``, each a ``run.py`` and, where the native
+route supports it, an equivalent ``case.toml``. Every rung prints a physical
+result with units, writes a NetCDF result and a figure, and runs in seconds;
+:doc:`examples` walks through each one.
 
-- ``examples/getting_started/run_tokamak.py`` — build a namelist in Python, solve a circular
-  tokamak, read HDF5/NetCDF back.
-- ``examples/getting_started/run_w7x.py`` — W7-X Boozer geometry with full Fokker-Planck
-  collisions (the recycled Krylov route).
-- ``examples/transport/transport_coefficients.py`` — monoenergetic transport matrices
-  and a collisionality scan.
-- ``examples/vmex_finite_beta/ambipolar_er_scan.py`` — scan the radial electric field and
-  solve the ambipolar root.
-- ``examples/autodiff/gradients_tour.py`` — ``jax.grad`` through the kinetic solve,
-  verified against finite differences.
-- ``examples/optimization/optimize_QA_bootstrap.py`` — gradient-based QA
-  stellarator optimization with kinetic ``<j.B>`` in the objective.
+- ``01_tokamak_profile`` — the whole native loop: ``Case`` to ``dkx.run`` to
+  SI moments, certificate, saved result, figure.
+- ``02_vmec_stellarator`` — the same solve from a VMEC equilibrium.
+- ``03_boozer_stellarator`` — Boozer ``.bc`` geometry, and the solver route
+  the operator structure selects.
+- ``04_monoenergetic_scan`` — ``D11*``/``D31*``/``D33*`` against collisionality.
+- ``05_ambipolar_profile`` — every admitted root, classified, with the
+  selection reason.
+- ``06_convergence_certificate`` — per-axis and joint refinement, and why a
+  small residual is not convergence.
+- ``07_gradients`` — ``jax.grad`` through the solve against central differences.
+- ``08_vmex_optimization`` — a kinetic shape gradient, and descent on it.
+- ``09_phi1_and_impurities`` — a multi-species case with and without ``Phi1``.
+
+Where a rung has a ``case.toml``, the script builds the same case in Python
+and asserts the two share a ``case_id``, so the documented command line
+provably solves what the script solves.
 
 Performance and parity evidence
 -------------------------------

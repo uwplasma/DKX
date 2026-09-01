@@ -1,107 +1,152 @@
-"""Scan the radial electric field -> find the ambipolar root -> plot both.
+"""The radial electric field is not an input: solve for it from ambipolarity.
 
-The radial electric field is not an input; it is set by ambipolarity,
-``J_r(E_r) = sum_s Z_s Gamma_s = 0``.  ``dkx.batched_er_scan`` does the scan
-in one batched call and the crossing is the root -- plotting it, rather than
-solving from a guess, shows whether you have one root or a stellarator's three.
+``E_r`` is fixed by the condition that no net charge leaves the flux surface,
+``J_r(E_r) = sum_s Z_s Gamma_s = 0``.  Rungs 01-04 prescribed it; this one
+searches for it.  Switching ``run.workflow`` to ``"ambipolar_profile"`` and
+``electric_field.mode`` to ``"ambipolar"`` is the entire change -- DKX then
+brackets the root on every surface, keeps *all* the roots it finds rather than
+the first, classifies them (ion root, electron root, unstable), and records why
+it selected the one it did.
 
-Ambipolarity is *charge-weighted*, not an equality of fluxes.  Here (hydrogen
-Z=1, carbon Z=6) the root is where ``Gamma_H = -6 Gamma_C``, so the curves sit
-nowhere near each other.  Only a Z = +-1 pair gives equal fluxes; taking that
-as the general rule is the mistake this example prevents.
+Keeping every root matters because a stellarator can have three, and the
+middle one is unstable: a solver that returns a single number cannot tell you
+which branch you are on or when the profile jumped between branches.
 
-Physics: hydrogen with a carbon impurity, from the bundled SFINCS examples.
-The root is negative -- an ion root -- and the impurity flux runs opposite in
-sign to the bulk flux.
+Physics: the analytic tokamak of rung 01, one deuterium species, two surfaces,
+searching +-5 kV/m.  Adaptive refinement is on, so the bracket is tightened
+until the observables stop moving.
 
-Expected runtime: ~30 s on a laptop CPU for the 13-point scan.
+Expected runtime: ~8 s on a laptop CPU.
 
-Achieved: one root near -0.97 kV/m, where the script asserts the
-charge-weighted sum rather than claiming it: -1.0e-24 against terms of 1e-09.
+Equivalent CLI:
+  dkx run examples/05_ambipolar_profile/case.toml --out examples/output/05_ambipolar_profile/result.nc
+  dkx roots examples/output/05_ambipolar_profile/result.nc
+  dkx validate examples/05_ambipolar_profile/w7x_case.toml   # the production-scale case
 """
 
-import os
+# 1. Imports
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import numpy as np
 
 import dkx
 
-# --------------------------- parameters -------------------------------------
-CI = os.environ.get("DKX_CI") == "1"
-OUT_DIR = Path(__file__).resolve().parent / "output"
-REPO = Path(__file__).resolve().parents[2]
-DECK = REPO / "examples/sfincs_examples/quick_2species_FPCollisions_noEr/input.namelist"
+# 2. User-editable parameters
+HERE = Path(__file__).resolve().parent
+OUT_DIR = HERE.parent / "output" / "05_ambipolar_profile"
+CASE_FILE = HERE / "case.toml"
+SHOWCASE_CASE_FILE = HERE / "w7x_case.toml"
+RESULT_FILE = OUT_DIR / "result.nc"
+PLOT_FILE = OUT_DIR / "result.png"
 
-ER_VALUES = np.linspace(-8.0, 8.0, 7 if CI else 13)
-# Widen if the scan shows no sign change -- a steeper plasma pushes the root
-# further out, and a bracket that misses it reports "no root" rather than
-# guessing:
-# ER_VALUES = np.linspace(-30.0, 10.0, 21)
-# ----------------------------- end of parameters ----------------------------
+SURFACES = (0.09, 0.16)
 
-OUT_DIR.mkdir(exist_ok=True)
-
-scan = dkx.batched_er_scan(DECK, ER_VALUES)
-j_r = np.asarray(scan.radial_current, dtype=float).ravel()
-gamma = np.asarray(scan.moments["particleFlux_vm_psiHat"], dtype=float)
-
-print(f"{'Er [kV/m]':>11} {'J_r':>14}   sign")
-for value, current in zip(ER_VALUES, j_r):
-    print(f"{value:>11.3f} {current:>14.5e}   {'+' if current > 0 else '-'}")
-
-# The root is where J_r crosses zero.  Linear interpolation across the
-# bracketing pair is deliberate: J_r is a linear combination of the species
-# fluxes, so interpolating every moment the same way keeps sum_s Z_s Gamma_s
-# exactly zero at the reported root.
-roots = [
-    float(a + (b - a) * ja / (ja - jb))
-    for a, b, ja, jb in zip(ER_VALUES, ER_VALUES[1:], j_r, j_r[1:])
-    if ja * jb < 0.0
+# 3. Geometry and species construction
+GEOMETRY = {"format": "analytic", "file": "tokamak", "surfaces": list(SURFACES)}
+SPECIES = [
+    {
+        "name": "deuterium",
+        "charge": 1,
+        "mass_amu": 2.014,
+        "density_m3": [8.0e19, 7.0e19],
+        "temperature_keV": [1.0, 0.8],
+    },
 ]
-print(f"\nroots found: {[f'{r:+.3f}' for r in roots] or 'none in this bracket'}")
 
-figure, (left, right) = plt.subplots(1, 2, figsize=(11.0, 4.2), constrained_layout=True)
+# 4. Physics and numerical configuration
+PHYSICS = {
+    "model": "full_local",
+    "collisions": "pitch_angle_scattering",
+    "magnetic_drifts": "dkes",
+    "phi1": "off",
+}
+# Widen search_kV_m if the run reports no bracketed root: a steeper profile
+# pushes the root further out, and a bracket that misses it says "no root"
+# rather than guessing.
+ELECTRIC_FIELD = {
+    "mode": "ambipolar",
+    "search_kV_m": [-5.0, 5.0],
+    "find_all_roots": True,
+    "continue_branches": True,
+    "search_points": 5,
+    "root_tolerance_kV_m": 0.05,
+    "max_root_iterations": 8,
+}
+RESOLUTION = {"theta": 9, "zeta": 1, "pitch": 8, "speed": 4}
+SOLVER = {"method": "auto", "relative_tolerance": 1.0e-8, "memory_fraction": 0.75, "reuse": "auto"}
+CONVERGENCE = {
+    "enabled": True,
+    "observables": ["particle_flux", "heat_flux", "electric_field"],
+    "relative_tolerance": 0.02,
+    "max_refinements": 1,
+}
+# end of parameters
 
-left.plot(ER_VALUES, j_r, "o-", color="tab:green")
-left.axhline(0.0, color="0.4", ls=":", lw=1.0)
-for root in roots:
-    left.plot([root], [0.0], "x", color="tab:red", ms=11, mew=2.5,
-              label=f"root {root:+.3f} kV/m")  # fmt: skip
-left.set(xlabel=r"$E_r$ [kV/m]", ylabel=r"$J_r=\sum_s Z_s\Gamma_s$")
-left.set_title("ambipolarity: the root is where this crosses zero", fontsize=10)
-left.grid(alpha=0.3)
-if roots:
-    left.legend(fontsize=8)
+case = dkx.Case.from_mapping(
+    {
+        "schema": 1,
+        "name": "analytic_ambipolar_profile",
+        "run": {"workflow": "ambipolar_profile", "precision": "float64",
+                "device": "auto", "progress": True},
+        "geometry": GEOMETRY,
+        "species": SPECIES,
+        "physics": PHYSICS,
+        "electric_field": ELECTRIC_FIELD,
+        "resolution": RESOLUTION,
+        "solver": SOLVER,
+        "parallel": {"strategy": "auto"},
+        "convergence": CONVERGENCE,
+        "output": {"file": "outputs/analytic_ambipolar.nc", "plots": True},
+    },
+    source_path=CASE_FILE,
+)
+from_toml = dkx.Case.from_file(CASE_FILE)
+assert case.case_id == from_toml.case_id, "run.py and case.toml have drifted apart"
+print(f"case id = {case.case_id[:12]} (run.py and case.toml agree)")
 
-# Label the species by their actual charge rather than assuming ions/electrons:
-# this deck is hydrogen plus a carbon impurity, and "electrons" would be a lie.
-from dkx.inputs import read_sfincs_input, sfincs_input_from_raw  # noqa: E402
+# 5. Run
+OUT_DIR.mkdir(parents=True, exist_ok=True)
+result = dkx.run(case)
 
-species = sfincs_input_from_raw(read_sfincs_input(DECK)).species
-names = [f"Z={z:g}" for z in species.z_s]
-for column, name in enumerate(names):
-    right.plot(ER_VALUES, gamma[:, column], "o-", ms=4, label=rf"$\Gamma$ {name}")
-right.set(xlabel=r"$E_r$ [kV/m]", ylabel=r"$\Gamma_s$")
-right.set_title("species particle flux across the scan", fontsize=10)
-right.grid(alpha=0.3)
-right.legend(fontsize=8)
+# 6. Print a scientific summary and certificate
+certificate = result.certificate()
+surfaces = np.asarray(result.arrays["surface"], dtype=float)
+roots = np.asarray(result.arrays["ambipolar_root_kV_m"], dtype=float)
+root_kinds = np.asarray(result.arrays["ambipolar_root_type"], dtype=object)
+root_counts = np.asarray(result.arrays["ambipolar_root_count"], dtype=int)
+root_currents = np.asarray(result.arrays["ambipolar_root_current_A_m2"], dtype=float)
+slopes = np.asarray(result.arrays["ambipolar_root_slope_A_m2_per_kV_m"], dtype=float)
+selected = np.asarray(result.arrays["selected_ambipolar_root"], dtype=int)
+field = np.asarray(result.arrays["electric_field_kV_m"], dtype=float)
 
-# Self-check: sum_s Z_s Gamma_s must vanish at the root.  With Z = 1 and 6 that
-# is Gamma_H = -6 Gamma_C, not Gamma_H = Gamma_C.
-if roots:
-    root = roots[0]
-    at_root = [float(np.interp(root, ER_VALUES, gamma[:, c])) for c in range(gamma.shape[1])]
-    weighted = sum(float(z) * g for z, g in zip(species.z_s, at_root))
-    scale = max(abs(float(z) * g) for z, g in zip(species.z_s, at_root))
-    for (z, g) in zip(species.z_s, at_root):
-        print(f"  Z={z:g}  Gamma = {g:+.5e}")
-    print(f"  sum_s Z_s Gamma_s = {weighted:+.3e}  ({weighted / scale:.1%} of the largest term)")
-    assert abs(weighted) < 1e-2 * scale, "ambipolarity violated at the reported root"
+print("\n=== Final results ===")
+for index, psi_n in enumerate(surfaces):
+    print(f"  psi_N={psi_n:.2f}: {root_counts[index]} root(s), selected #{selected[index]}")
+    for slot in range(int(root_counts[index])):
+        print(
+            f"    Er = {roots[index, slot]:+.4f} kV/m  "
+            f"J_r = {root_currents[index, slot]:+.3e} A m^-2  "
+            f"dJ_r/dEr = {slopes[index, slot]:+.3e} A m^-2 (kV/m)^-1  "
+            f"[{root_kinds[index, slot]}]"
+        )
+    gamma = float(np.asarray(result.arrays["particle_flux_m2_s"])[index, 0])
+    heat = float(np.asarray(result.arrays["heat_flux_W_m2"])[index, 0])
+    print(
+        f"    at the selected root: Er = {field[index]:+.4f} kV/m  "
+        f"Gamma = {gamma:+.4e} m^-2 s^-1  Q = {heat:+.4e} W m^-2"
+    )
+print(f"  selection rule: {certificate['ambipolar_selection']}")
+print(f"  all surfaces bracketed: {certificate['ambipolar_all_surfaces_bracketed']}")
+print(f"  refinement: {certificate['ambipolar_refinement']}")
+print(f"  converged: {certificate['converged']}")
+print(f"  residual norm: {certificate['residual_norm']:.3e}")
 
-figure.suptitle("Ambipolar radial electric field")
-out = OUT_DIR / "plot_ambipolar_er.png"
-figure.savefig(out, dpi=150)
-plt.show(block=False)
-print(f"wrote {out}")
+# 7. Save native result
+saved = result.save(RESULT_FILE)
+print(f"  Wrote result: {saved}")
+
+# 8. Plot publication-ready outputs
+plotted = result.plot(PLOT_FILE)
+print(f"  Saved plot: {plotted}")
+print(f"  Production-scale schema showcase: {SHOWCASE_CASE_FILE.name} (validate it, do not run it)")
+print("Done: examples/05_ambipolar_profile/run.py")
