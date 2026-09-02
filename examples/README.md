@@ -58,7 +58,7 @@ Outputs land in `output/<rung>/`, which is gitignored.
 | --- | --- |
 | `sfincs_examples/` | vendored upstream SFINCS v3 decks, kept for parity and benchmark audits, not as a teaching gallery |
 | `data/` | small shared input files |
-| `getting_started/`, `transport/`, `autodiff/`, `tutorials/`, `optimization/`, `vmex_finite_beta/` | older topic folders that predate the ladder. They still run and other tooling still points at them; the teaching path is the numbered rungs above |
+| `getting_started/`, `transport/`, `autodiff/`, `tutorials/`, `optimization/`, `vmex_finite_beta/` | topic folders that predate the ladder. They still run and other tooling still points at them; the teaching path is the numbered rungs above |
 
 ### Not examples
 

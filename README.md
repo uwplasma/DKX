@@ -119,6 +119,40 @@ One exception, documented rather than hidden: the scheme-1 monoenergetic
 itself, so it is pinned to upstream's expected value, which DKX reproduces to
 `4.2e-6`.
 
+### Against SFINCS, MONKES and YANCC
+
+![DKX against SFINCS Fortran v3, MONKES and YANCC: scaled differences at 1e-10 to 1e-8 on matched full Fokker-Planck decks, and percent-level agreement on Beidler-normalized monoenergetic coefficients](docs/_static/figures/readme/cross_code_validation.png)
+
+Two comparisons that mean different things, so they are reported separately.
+
+Against **SFINCS Fortran v3** the equations and the discretization are the
+same, so the only question is whether the JAX reimplementation reproduces the
+Fortran arithmetic. On matched decks with full Fokker-Planck collisions it does,
+to `2.7e-10` on an axisymmetric surface, `1.9e-09` with a finite electric field,
+and `1.4e-08` on a stellarator — differences of solver tolerance and summation
+order, not of physics. The W7-X row is the strict one at `3.2e-03`, because it
+runs the whole native path through to physical flux units.
+
+Against **MONKES** and **YANCC** the codes are independent, with their own
+discretizations, compared through the Beidler normalization. All four
+coefficients agree within the 6% release gate on all three configurations, and
+`D33` — the Spitzer-normalized parallel conductivity — agrees to better than
+0.1% everywhere.
+
+The cross-code rung is deliberately bounded: matched zero-field monoenergetic
+PAS/DKES equations only. It is not a finite-`Er`, ambipolar-profile,
+experimental, or performance comparison, and the artifact says so in five
+explicit exclusions.
+
+Every number in that figure is read at build time out of the sealed artifacts
+under [`validation/`](validation/) — the same files that gate a release, with
+pinned upstream commits for
+[SFINCS](https://github.com/landreman/sfincs),
+[MONKES](https://github.com/JavierEscoto/MONKES) and
+[YANCC](https://github.com/f0uriest/yancc). Regenerate with
+`python tools/benchmarks/cross_code_readme_figure.py`; it fails rather than
+draw a stale value. Full matrix: [validation](docs/validation_matrix.rst).
+
 ## Capabilities
 
 | | DKX | SFINCS v3 |

@@ -817,7 +817,16 @@ def _cmd_run_case(args: argparse.Namespace) -> int:
         print(f"dkx run failed: {exc}", file=sys.stderr)
         return 2
 
-    out_path = Path(args.out) if args.out else None
+    # A case file names where its result goes, and `dkx run` honours it.
+    # It did not: `[output].file` was parsed, validated, resolved and recorded
+    # on the Result, and then the save was skipped unless --out was given, so a
+    # case that declared an output path ran to convergence and wrote nothing
+    # without saying so. --out still wins when both are given.
+    out_path = (
+        Path(args.out)
+        if args.out
+        else (case.base_directory / case.output.file).resolve()
+    )
     from .execution import run_case  # noqa: PLC0415
 
     # Progress goes to stderr so `dkx run ... --out -` style piping of the
@@ -849,8 +858,7 @@ def _cmd_run_case(args: argparse.Namespace) -> int:
     table.add_row("true residual", "not measured" if residual is None else f"{residual:.3e}")
     table.add_row("solver route", str(result.metadata.get("solver_route", "unknown")))
     table.add_row("wall time", f"{elapsed:.2f} s")
-    if out_path is not None:
-        table.add_row("result", str(out_path))
+    table.add_row("result", str(out_path))
     console.print(table)
 
     if not args.quiet:

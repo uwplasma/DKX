@@ -154,7 +154,7 @@ profile linear in ``rHat`` -- exact for the ``np.gradient`` the executor uses.
 
 Conversion refuses rather than approximating. A deck using a model the native
 route does not implement fails at convert time, naming the key and what would
-differ. Most checked-in SFINCS decks currently refuse; the common reasons are
+differ. Most checked-in SFINCS decks refuse; the common reasons are
 analytic scheme-1 parameters, ``VMECRadialOption``, and ``RHSMode`` 2 or 3.
 
 The compatibility commands read and write SFINCS files directly, with no

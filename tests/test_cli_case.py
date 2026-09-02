@@ -190,3 +190,51 @@ def test_validate_still_accepts_every_shipped_ladder_case() -> None:
     """
     for case_file in sorted((REPO_ROOT / "examples").glob("*/case.toml")):
         assert cli.main(["validate", str(case_file)]) == 0, case_file
+
+
+def test_run_writes_the_output_file_the_case_declares_without_out(tmp_path) -> None:
+    """`dkx run CASE` honours `[output].file`.
+
+    The path was parsed, validated, resolved and recorded on the Result, and
+    then the save was gated on --out -- so a case that declared an output file
+    ran to convergence, printed "converged: yes", and wrote nothing. The
+    equilibrium benchmark that found this spent 130 s producing no artifact.
+    The case is copied into tmp_path so the declared relative path resolves
+    there rather than into the repository.
+    """
+    case = tmp_path / "case.toml"
+    case.write_text(ANALYTIC_CASE.read_text(encoding="utf-8"), encoding="utf-8")
+
+    code = cli.main(["run", str(case), "--quiet"])
+
+    assert code == 0
+    declared = tmp_path / "analytic_tokamak_profile.nc"
+    assert declared.is_file(), "run must write the file [output].file names"
+
+
+def test_run_out_flag_overrides_the_declared_output_file(tmp_path) -> None:
+    """--out wins when the case declares a path too, and the case path stays clean."""
+    case = tmp_path / "case.toml"
+    case.write_text(ANALYTIC_CASE.read_text(encoding="utf-8"), encoding="utf-8")
+    override = tmp_path / "override.nc"
+
+    assert cli.main(["run", str(case), "--out", str(override), "--quiet"]) == 0
+
+    assert override.is_file()
+    assert not (tmp_path / "analytic_tokamak_profile.nc").exists()
+
+
+def test_run_reports_the_result_path_it_wrote(tmp_path, capsys) -> None:
+    """A run that writes a file says where, so the artifact is findable.
+
+    The summary carried a "result" row only when --out was given, which is
+    exactly the case where the user already knew the path. It now always
+    reports the file the run produced. The rendered path may be elided to the
+    table width, so this checks the row, not the full string.
+    """
+    case = tmp_path / "case.toml"
+    case.write_text(ANALYTIC_CASE.read_text(encoding="utf-8"), encoding="utf-8")
+
+    cli.main(["run", str(case)])
+
+    assert "result" in capsys.readouterr().out
