@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-import sys
+
 import tomllib
 
 import numpy as np
@@ -212,17 +212,20 @@ def test_a_boozer_deck_converts_and_reproduces_its_fluxes(tmp_path: Path) -> Non
 
 
 @pytest.mark.xfail(
-    sys.platform != "darwin",
     reason=(
-        "Open defect, measured 2026-09-01 and not yet diagnosed: the deck route and "
-        "the converted-case route agree on FSABjHat to 2.6e-15 on macOS/arm64 and "
-        "disagree by 1.75e-4 on Linux/x86-64, on the same commit and the same "
-        "equilibrium. Both take the structured direct route to a 1e-15 residual, so "
-        "this is not solver tolerance: the two paths compute different numbers on "
-        "one platform and identical ones on the other. Deck FSABjHat is 6.640227e-10 "
-        "on macOS and 6.641136e-10 on Linux. Deliberately not weakened to a passing "
-        "tolerance -- the flux round-trip holds to 1e-8 on both platforms, so this is "
-        "specific to the parallel current and a loosened bound would hide it."
+        "This deck does not determine FSABjHat to the 1e-8 this asserts. Measured "
+        "2026-09-01 on one machine, varying only the solver route and tolerance: "
+        "direct gives 6.642796e-10 at every tolerance from 1e-10 to 1e-12, iterative "
+        "gives 6.640995e-10 at 1e-10 and 1e-11 and 6.642796e-10 at 1e-12 -- a spread "
+        "of 2.7e-4 with the physics held fixed. Across platforms the deck route gives "
+        "6.640227e-10 on macOS/arm64 and 6.641136e-10 on Linux/x86-64. The parallel "
+        "current is a small, poorly determined component of this tiny deck's solution: "
+        "a 1e-15 residual does not pin it, because the residual is small in the norm "
+        "of the whole state and this moment is not. The neighbouring flux round-trip "
+        "holds at 1e-8 on both platforms, so the discretization is not generally at "
+        "fault. Fixing this means a deck that resolves the parallel current, or a "
+        "reference converged far past the moment's own sensitivity -- not a looser "
+        "bound here, which would assert nothing."
     ),
     strict=False,
 )
