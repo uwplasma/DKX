@@ -157,6 +157,69 @@ _EQUILIBRIUM_KEY = re.compile(
 )
 
 
+# PETSc writes one fixed-width row per event. These are the events that
+# decide a SFINCS run's cost, in the order they happen: build the matrix,
+# order it, factor it, then back-substitute once per Krylov iteration.
+_PETSC_EVENTS = (
+    "MatAssemblyBegin",
+    "MatAssemblyEnd",
+    "MatLUFactorSym",
+    "MatLUFactorNum",
+    "MatSolve",
+    "MatMult",
+    "PCSetUp",
+    "PCApply",
+    "KSPSetUp",
+    "KSPSolve",
+    "SNESSolve",
+    "VecMDot",
+    "VecNorm",
+)
+
+
+def _parse_petsc_log(path: Path) -> dict:
+    """Extract per-event time and call count from a ``-log_view`` dump.
+
+    Returns ``{event: {"count": int, "time_s": float, "percent_time": float}}``
+    plus ``total_time_s``. Absent events are simply missing rather than zero,
+    so a case that never factors is distinguishable from one that factors in
+    no time.
+    """
+    if not path.is_file():
+        return {}
+    events: dict = {}
+    total = None
+    for line in path.read_text(errors="replace").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("Time (sec):"):
+            parts = stripped.split()
+            if len(parts) >= 3:
+                try:
+                    total = float(parts[2])
+                except ValueError:
+                    pass
+        name = stripped.split(" ", 1)[0] if stripped else ""
+        if name in _PETSC_EVENTS:
+            fields = stripped.split()
+            # PETSc's fixed 21-column event row:
+            #   0 name  1 count  2 ratio  3 time  4 ratio  5 flop  6 ratio
+            #   7..9 messages  10 %T (global)  ... 20 Mflop/s
+            try:
+                count = int(float(fields[1]))
+                time_s = float(fields[3])
+                percent_time = float(fields[10])
+            except (IndexError, ValueError):
+                continue
+            events[name] = {
+                "count": count,
+                "time_s": time_s,
+                "percent_time": percent_time,
+            }
+    if total is not None:
+        events["total_time_s"] = total
+    return events
+
+
 def _absolutize_equilibrium(deck: Path, source_dir: Path) -> None:
     """Rewrite a relative ``equilibriumFile`` against the deck's original home.
 
@@ -351,6 +414,7 @@ def deck_metadata(deck: Path) -> dict:
 def run_case(
     example_dir: Path,
     fortran_binary: Path | None,
+    petsc_profile: bool = False,
     *,
     ranks: list[int],
     reps: int,
@@ -379,10 +443,18 @@ def run_case(
                 _absolutize_equilibrium(work / "input.namelist", example_dir)
                 if fortran_residual:
                     _request_binary_dump(work / "input.namelist")
+                binary = [str(fortran_binary)]
+                if petsc_profile:
+                    # PETSc's own event log. This is the only way to see where
+                    # the Fortran run actually spends its time -- assembly,
+                    # symbolic factorization, numeric factorization, triangular
+                    # solves -- rather than inferring it from wall time. Parsed
+                    # below into ``petsc_events``.
+                    binary += ["-log_view", ":" + str(work / "petsc_log.txt")]
                 command = (
-                    [str(fortran_binary)]
+                    binary
                     if n_ranks == 1
-                    else ["mpirun", "-n", str(n_ranks), str(fortran_binary)]
+                    else ["mpirun", "-n", str(n_ranks), *binary]
                 )
                 # The launcher (e.g. ``micromamba run -n sfincs-fortran``) keeps
                 # the Fortran toolchain's libraries confined to this subprocess;
@@ -394,6 +466,8 @@ def run_case(
                     result["true_residual"] = fortran_true_residual(
                         work, linear=not record.get("includePhi1", False)
                     )
+                if petsc_profile:
+                    result["petsc_events"] = _parse_petsc_log(work / "petsc_log.txt")
                 if result["succeeded"]:
                     shutil.copy(work / "sfincsOutput.h5", root / f"fortran_{n_ranks}.h5")
                 else:
@@ -473,6 +547,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-dof", type=int, default=None)
     parser.add_argument("--min-dof", type=int, default=0)
     parser.add_argument("--only", nargs="*", default=None, help="case-name substrings")
+    parser.add_argument(
+        "--petsc-profile",
+        action="store_true",
+        help=(
+            "run the Fortran side under PETSc -log_view and record per-event "
+            "time and call counts (assembly, symbolic and numeric LU, "
+            "triangular solves, Krylov). This is what says where SFINCS's time "
+            "actually goes, and therefore what is worth attacking in dkx."
+        ),
+    )
     parser.add_argument("--equilibria", default=os.environ.get("DKX_EQUILIBRIA_DIRS"))
     parser.add_argument(
         "--fortran-residual", action="store_true",
@@ -531,6 +615,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[{index}/{len(cases)}] {directory.name} ({dof} dof)", file=sys.stderr)
             record = run_case(
                 directory, args.fortran_binary,
+                petsc_profile=args.petsc_profile,
                 ranks=args.ranks, reps=args.reps,
                 timeout_s=args.timeout_s, equilibria=args.equilibria,
                 launcher=args.fortran_launcher.split() if args.fortran_launcher else [],
