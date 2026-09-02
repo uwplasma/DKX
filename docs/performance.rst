@@ -121,7 +121,7 @@ rather than of the host.
 
 What warm solves buy is the second case onward, and the paths that exploit it
 carry more than the compilation: :func:`dkx.er.radial_current` and the
-ambipolar solver thread the GCROT recycle subspace, the previous solution as
+ambipolar solver thread the GCROT recycle subspace, the solved state as
 ``x0``, and the already-built preconditioner from one ``Er`` to the next. A
 scan that runs one process per point -- which is what the ``sfincsScan``
 compatibility driver does -- gets none of that, and pays a cold solve every
