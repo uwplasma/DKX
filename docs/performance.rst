@@ -69,6 +69,64 @@ the memory. Three qualifications go with that row:
 * Scope is one measured 744k-unknown HSX PAS case. Further cases are promoted
   as each vertical slice lands with its own evidence.
 
+Cold and warm solves
+~~~~~~~~~~~~~~~~~~~~
+
+Every runtime above is a **warm** solve: the second and later solves in one
+process, after JAX has traced the computation and XLA has compiled it. That is
+the right number for an optimizer, an ``Er`` scan, or a convergence ladder,
+which solve the same shapes repeatedly. It is not the number a user sees who
+opens a terminal and runs one case, so both are measured here.
+
+Apple M3 Max, CPU, ``JAX_ENABLE_X64``, one process per row, from
+``tools/benchmarks/tier1_hsx_head_to_head.py --device cpu --repeat 3 --ramp``.
+Cold is the first solve in a fresh process; warm is the fastest of the three
+that follow it.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Case
+     - Unknowns
+     - Cold [s]
+     - Warm [s]
+     - Cold / warm
+   * - HSX PAS reduced, ``(S,X,L,T,Z) = (2,12,10,13,13)``
+     - 40,584
+     - 1.72
+     - 0.12
+     - 14x
+   * - HSX PAS, ``Ntheta=25 Nzeta=51 Nxi=100 Nx=5``
+     - 744,610
+     - 23.6
+     - 20.0
+     - 1.18x
+
+Compilation costs roughly the same for both rows, so it dominates the small one
+and disappears into the large one. Two consequences:
+
+* **Timing ``dkx`` on a toy case measures XLA, not the solver.** The 14x on the
+  reduced deck is 1.6 s of compilation against a 0.12 s solve. Anyone
+  benchmarking DKX against another code on a small deck, in a fresh process, is
+  mostly comparing compilers.
+* **The head-to-head does not depend on the warm number.** Cold, the 744k case
+  is 23.6 s against 463.6 s on one Fortran rank and 229.5 s on two. A compiled
+  binary has no warm solve, so those are cold by construction, and the
+  comparison holds on the number a first run actually produces.
+
+The M3 Max rows are a different machine from the M4 head-to-head above, which
+is why they are reported separately rather than folded into that table. The
+quantity they establish is the *ratio*, which is a property of the case size
+rather than of the host.
+
+What warm solves buy is the second case onward, and the paths that exploit it
+carry more than the compilation: :func:`dkx.er.radial_current` and the
+ambipolar solver thread the GCROT recycle subspace, the solved state as
+``x0``, and the already-built preconditioner from one ``Er`` to the next. A
+scan that runs one process per point -- which is what the ``sfincsScan``
+compatibility driver does -- gets none of that, and pays a cold solve every
+time.
+
 **Read that number together with the whole-suite sweep below.** It is a
 pitch-angle-scattering DKES-trajectory deck, which is to say one where ``dkx``
 has a structured direct solver. That is the group it represents, and the sweep

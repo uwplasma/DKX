@@ -91,6 +91,22 @@ machine, against the PETSc 3.23 and MUMPS 5.8.2 build of SFINCS v3.
 
 Two ranks is the Fortran build's best; 4 and 8 are slower.
 
+### Cold and warm solves
+
+The table above is the **warm** solve: the second onward in a process, after
+XLA has compiled. An optimizer or `Er` scan sees that; one terminal run does
+not. Both, on an Apple M3 Max CPU with `JAX_ENABLE_X64`:
+
+| Case | Unknowns | Cold | Warm | Cold / warm |
+| --- | ---: | ---: | ---: | ---: |
+| HSX PAS reduced | 40,584 | 1.72 s | 0.12 s | 14x |
+| HSX PAS, `25x51x100x5` | 744,610 | 23.6 s | 20.0 s | 1.18x |
+
+Compilation costs the same either way, so it dominates a small run and
+disappears into a large one: timing DKX on a toy case measures XLA, not the
+solver. The headline does not rest on the warm number: cold, that case is
+23.6 s against the Fortran build's 463.6 s and 229.5 s, both cold by construction.
+
 That is **one measured 744k-unknown HSX PAS case**, picked because DKX has a
 structured direct solver for it. Across all 38 upstream decks, structure rather
 than problem size decides the outcome:
