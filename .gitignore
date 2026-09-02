@@ -76,6 +76,14 @@ examples/**/output/
 examples/**/figures/
 examples/additional_examples/run_compare_local/
 outputs/
+# The shipped cases declare `[output].file` as a bare name, so `dkx run` writes
+# the result next to the case rather than under outputs/. Repointing them would
+# touch the docs, the workflow catalog and four test modules that name these
+# files, so the artifacts are ignored where they land.
+examples/01_tokamak_profile/analytic_tokamak_profile.nc
+examples/02_vmec_stellarator/native_vmec_profile.nc
+examples/03_boozer_stellarator/native_boozer_profile.nc
+examples/06_convergence_certificate/convergence_certificate.nc
 
 # Public multi-megabyte equilibrium fixtures are release-hosted and fetched into
 # a user cache, not tracked in git.
