@@ -224,6 +224,43 @@ jobs:
           tar -xzf "${RUNNER_TEMP}/${archive}" -C "${RUNNER_TEMP}" actionlint
           "${RUNNER_TEMP}/actionlint" .github/workflows/*.yml
 
+  commit-trailers:
+    # The repository's authorship rule: every commit is the maintainer's, and
+    # no assistant is credited as an author or co-author. The rule was broken
+    # once without anyone noticing -- a branch whose individual commits carried
+    # a Co-authored-by trailer was squash-merged, GitHub collected the trailer
+    # into the squash message, and the account showed up in the repository's
+    # contributor list. Nothing in CI looked at commit messages, so the only
+    # signal was the contributor graph. This job is that missing signal.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Reject assistant authorship trailers
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          pattern='co-?authored-by:.*(claude|anthropic|codex|copilot)|generated with \[claude code\]|noreply@anthropic\.com'
+          bad=0
+          while read -r sha; do
+            [ -n "$sha" ] || continue
+            if git log -1 --format='%an <%ae>%n%cn <%ce>%n%B' "$sha" | grep -Eiq "$pattern"; then
+              echo "::error::commit $sha credits an assistant as an author or co-author"
+              git log -1 --format='%B' "$sha" | grep -Ein "$pattern" || true
+              bad=1
+            fi
+          done < <(git rev-list "${BASE_SHA}..${HEAD_SHA}")
+          if [ "$bad" -ne 0 ]; then
+            echo "Every commit is authored by the maintainer alone. Strip the trailer and force-push." >&2
+            exit 1
+          fi
+          echo "no assistant authorship trailers in $(git rev-list --count "${BASE_SHA}..${HEAD_SHA}") commits"
+
   wheel-install:
     # The one job that does not run from a source checkout.
     #
