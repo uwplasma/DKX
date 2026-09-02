@@ -174,8 +174,16 @@ def test_a_boozer_deck_converts_and_reproduces_its_fluxes(tmp_path: Path) -> Non
     text = text.replace("geometryScheme = 12", "geometryScheme = 12\n  VMECRadialOption = 0")
     deck = tmp_path / "boozer.input.namelist"
     deck.write_text(text, encoding="utf-8")
+    # The deck names its equilibrium by bare filename, so it has to sit beside
+    # the deck. Without the copy this resolved only through the tests/ref entry
+    # that input_compat adds when repository_root() finds a checkout -- which a
+    # non-editable install does not have, and the coverage job installs the
+    # wheel deliberately, so the test passed from a source tree and failed in
+    # CI. Copying it makes the test measure conversion rather than path search.
+    equilibrium = tmp_path / "nonStelSym_tiny_geometryScheme12.bc"
+    equilibrium.write_bytes((REF / "nonStelSym_tiny_geometryScheme12.bc").read_bytes())
 
-    boozer = read_native_boozer(REF / "nonStelSym_tiny_geometryScheme12.bc")
+    boozer = read_native_boozer(equilibrium)
     radial = RadialCoordinates(
         psi_a_hat=float(boozer.header.psi_a_hat),
         a_hat=float(boozer.header.a_hat),
