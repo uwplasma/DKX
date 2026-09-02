@@ -89,8 +89,20 @@ def test_a_deck_too_large_for_tier3_reports_the_real_problem() -> None:
     message = str(excinfo.value)
     assert "did not converge" in message
     assert "Tried:" in message
-    assert "raising max_dense_size would not help" in message
+    assert "raising max_dense_size trades a stall for a longer one" in message
     assert "Er" in message, "the remedy that matters should name the Er dependence"
+
+    # The guidance must point at pitch-angle resolution, and must point the
+    # right way. An earlier version told the user to *reduce* Nxi/Ntheta/Nzeta,
+    # which makes this failure mode worse: a deck that stalled at Nxi=20 and
+    # Er=15 converged at Nxi=30, and faster still at Nxi=80.
+    assert "RAISE Nxi" in message
+    assert "Reducing Nxi/Ntheta/Nzeta makes this failure mode worse" in message
+
+    # And it must say that converging is not the same as being resolved, since
+    # on that deck FSABjHat changes sign between Nxi=40 and Nxi=60.
+    assert "converged, not merely obtained" in message
+    assert "changes sign" in message
 
 
 def test_the_old_misleading_advice_is_gone() -> None:
