@@ -353,6 +353,7 @@ def compare_outputs(fortran_h5: Path, dkx_h5: Path, n_species: int = 1) -> dict:
     monoenergetic = _mode(reference) == 3 or _mode(candidate) == 3
 
     report: dict = {}
+    magnitudes: dict = {}
     for key in COMPARE_KEYS:
         if key not in reference or key not in candidate:
             continue
@@ -376,7 +377,15 @@ def compare_outputs(fortran_h5: Path, dkx_h5: Path, n_species: int = 1) -> dict:
             continue
         scale = max(float(np.max(np.abs(a))), float(np.max(np.abs(b))), 1e-300)
         report[key] = round(float(np.max(np.abs(a - b))) / scale, 12)
-    return report
+        # The magnitude the relative difference was taken against. Without it a
+        # relative-difference table cannot tell a regression from a physical
+        # zero: on an axisymmetric single-species deck at Er = 0 the particle
+        # flux is intrinsically ambipolar and lands at ~5e-12 against a
+        # bootstrap current of ~3e-2, so a 1.4e-2 relative difference there is
+        # an absolute difference of 7e-14 and means nothing. Recorded per key
+        # so the report can scale each moment against the case's own largest.
+        magnitudes[key] = float(np.max(np.abs(a)))
+    return {"difference": report, "magnitude": magnitudes}
 
 
 def deck_metadata(deck: Path) -> dict:
@@ -646,7 +655,10 @@ def main(argv: list[str] | None = None) -> int:
         "dkx_ok": sum(1 for r in records if (r.get("dkx") or {}).get("warm_s")),
         "comparable": sum(
             1 for r in records
-            if any(isinstance(v, float) for v in (r.get("parity") or {}).values())
+            if any(
+                isinstance(v, float)
+                for v in ((r.get("parity") or {}).get("difference") or {}).values()
+            )
         ),
     }
     sentinel.write_text(json.dumps(summary, indent=2) + "\n")
