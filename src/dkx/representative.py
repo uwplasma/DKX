@@ -804,23 +804,52 @@ def run_representative(
 #: T_i = T_e = T leaves p = 2 n T: one equation, two unknowns.  Fixing T on axis
 #: and letting n carry the profile is the conventional choice, and it is stated
 #: on the figure because it is an assumption, not a measurement.
-#: Environment override for the assumed on-axis temperature.
-T_AXIS_ENV = "DKX_T_AXIS_KEV"
-
-#: Assumed on-axis temperature, in keV. A VMEC equilibrium fixes the *pressure*
-#: and nothing else, so this half of the closure is a convention, not a
-#: measurement -- and the bootstrap current is very sensitive to it. Measured on
-#: ``wout_LandremanPaul2021_QA_beta2p5_bootstrap`` at fixed pressure and fixed
-#: resolution, ``<j.B>/sqrt(<B^2>)`` runs -0.208, -0.499, -0.787, -1.130 for an
-#: axis temperature of 2, 4, 8 and 16 keV: a factor of 5.4, because the
-#: collisionality that suppresses the bootstrap current scales like ``n/T^2``
-#: and the split holds ``p = 2nT`` fixed.
+#: Reference on-axis density and pressure, from the published kinetic profiles
+#: of the reactor-scale QA and QH configurations in Landreman, Buller and
+#: Drevlak, arXiv:2205.02914 -- the same study VMEX benchmarks its
+#: self-consistent bootstrap current against:
 #:
-#: The consequence for a reader: a bootstrap current computed from a pressure
-#: profile alone cannot be compared against one from an optimizer that assumed a
-#: different temperature. Set :data:`T_AXIS_ENV` to the design point to compare
-#: like with like.
-DEFAULT_T_AXIS_KEV = 2.0
+#:   QA: n_e(0) = 2.38e20 m^-3, T_e(0) = T_i(0) = 9.45 keV  -> p(0) = 7.207e5 Pa
+#:   QH: n_e(0) = 2.20e20 m^-3, T_e(0) = T_i(0) = 10.0 keV  -> p(0) = 7.050e5 Pa
+#:
+#: with Z_eff = 1 and p = e(n_e T_e + n_i T_i) exactly. The pair below is their
+#: mean. A hardcoded temperature was the previous approach and it was wrong by a
+#: factor of five on exactly this configuration family: 2 keV against the
+#: published 9.45, which put the density at 1.1e21 m^-3 and suppressed the
+#: bootstrap current by ~2.5x through the n/T^2 collisionality.
+REFERENCE_DENSITY_M3 = 2.29e20
+REFERENCE_PRESSURE_PA = 7.1282e5
+
+#: How the on-axis density scales with the equilibrium's own on-axis pressure:
+#: ``n(0) = n_ref (p(0)/p_ref)^AXIS_DENSITY_PRESSURE_EXPONENT``, and the
+#: temperature then *follows* from ``p = 2 n T`` rather than being assumed.
+#:
+#: One half splits the pressure equally between density and temperature in the
+#: logarithm, which is the assumption-light choice: it is symmetric in the two
+#: quantities, and it degrades gracefully far from the anchor where a steeper or
+#: flatter exponent would not. Near the anchor the choice barely matters -- 1/2,
+#: 2/3 and 1 give 9.77, 9.75 and 9.71 keV on the QA deck -- so this is chosen for
+#: its behaviour away from the reference, not at it.
+AXIS_DENSITY_PRESSURE_EXPONENT = 0.5
+
+
+def axis_density_m3(p_axis_pa: float) -> float:
+    """On-axis density implied by the equilibrium's own on-axis pressure."""
+    if not p_axis_pa > 0.0:
+        return REFERENCE_DENSITY_M3
+    ratio = float(p_axis_pa) / REFERENCE_PRESSURE_PA
+    return REFERENCE_DENSITY_M3 * ratio**AXIS_DENSITY_PRESSURE_EXPONENT
+
+
+def axis_temperature_kev(p_axis_pa: float, n_axis_m3: float | None = None) -> float:
+    """On-axis temperature from ``p = 2 n T`` -- derived, never assumed."""
+    from dkx.units import ELEMENTARY_CHARGE  # noqa: PLC0415
+
+    n0 = axis_density_m3(p_axis_pa) if n_axis_m3 is None else float(n_axis_m3)
+    if not (n0 > 0.0 and p_axis_pa > 0.0):
+        return 0.0
+    return float(p_axis_pa) / (2.0 * ELEMENTARY_CHARGE * n0) / 1.0e3
+
 
 #: Exponent splitting the pressure between temperature and density:
 #: ``T ~ p^TEMPERATURE_PRESSURE_EXPONENT`` and therefore ``n ~ p^(1-e)``.
@@ -831,29 +860,36 @@ DEFAULT_T_AXIS_KEV = 2.0
 TEMPERATURE_PRESSURE_EXPONENT = 1.0 / 3.0
 
 
-def _t_axis_kev() -> float:
-    """The assumed on-axis temperature, overridable per run.
+#: Explicit on-axis density override, in m^-3, or None to derive it from the
+#: equilibrium's own pressure. Set by ``dkx --density-m3``; not an environment
+#: variable, because a run's plasma should be visible in the command that
+#: produced it rather than in the shell that happened to launch it.
+_DENSITY_OVERRIDE_M3: float | None = None
 
-    Read at call time rather than at import so a caller can set it without
-    reloading the module.
-    """
-    raw = os.environ.get(T_AXIS_ENV, "").strip()
-    if not raw:
-        return DEFAULT_T_AXIS_KEV
-    try:
-        value = float(raw)
-    except ValueError:
-        raise ValueError(
-            f"{T_AXIS_ENV}={raw!r} is not a number; expected keV on axis, e.g. 8.0"
-        ) from None
-    if not value > 0.0:
-        raise ValueError(f"{T_AXIS_ENV}={raw!r}: an on-axis temperature must be positive")
-    return value
+
+def set_axis_density_override(value: float | None) -> None:
+    """Pin the on-axis density, or pass ``None`` to derive it from the pressure."""
+    global _DENSITY_OVERRIDE_M3
+    if value is not None and not float(value) > 0.0:
+        raise ValueError(f"on-axis density must be positive, got {value!r}")
+    _DENSITY_OVERRIDE_M3 = None if value is None else float(value)
+
+
+def _n_axis_m3(p_axis: float) -> float:
+    """The on-axis density this run is using: the override, else from pressure."""
+    if _DENSITY_OVERRIDE_M3 is not None:
+        return _DENSITY_OVERRIDE_M3
+    return axis_density_m3(p_axis)
+
+
+def _t_axis_kev(p_axis: float) -> float:
+    """The on-axis temperature, always derived from ``p = 2 n T``."""
+    return axis_temperature_kev(p_axis, _n_axis_m3(p_axis))
 
 
 def _temperature(p_pa: float, p_axis: float) -> float:
     """``T(s) = T_0 (p(s)/p(0))^e`` in keV --- the assumed half of the closure."""
-    t_axis = _t_axis_kev()
+    t_axis = _t_axis_kev(p_axis)
     if p_axis <= 0.0:
         return t_axis
     ratio = max(float(p_pa) / float(p_axis), 0.0)
@@ -886,6 +922,11 @@ def _plasma_keys(plasma: dict) -> dict:
 VACUUM_DENSITY_FLOOR = 1.0e-3
 
 
+#: On-axis pressure of the equilibrium most recently read, so the provenance
+#: line can name the (n, T) without a second file open.
+_P_AXIS_SEEN: dict[str, float] = {}
+
+
 def plasma_parameters(equilibrium: Path, radius: float = 0.5) -> dict[str, float]:
     r"""Density and temperature at ``r/a`` from the equilibrium's own pressure.
 
@@ -897,7 +938,7 @@ def plasma_parameters(equilibrium: Path, radius: float = 0.5) -> dict[str, float
     .. math:: T(s) = T_0 (p(s)/p(0))^{e},
               \qquad n(s) = p(s) / (2 T(s)) \propto p^{1-e},
 
-    with ``T_0 =`` :data:`DEFAULT_T_AXIS_KEV` and ``e =``
+    with ``T_0`` from :func:`axis_temperature_kev` and ``e =``
     :data:`TEMPERATURE_PRESSURE_EXPONENT`.  Only ``T_0`` is free, and the figure
     states it.
 
@@ -935,6 +976,9 @@ def plasma_parameters(equilibrium: Path, radius: float = 0.5) -> dict[str, float
         return {}
     s_grid = np.linspace(0.0, 1.0, pres.size)
     p_axis = float(pres[0])
+    # Carried out so the caller can report which (n, T) this run assumed
+    # without opening the equilibrium a second time.
+    _P_AXIS_SEEN["pa"] = p_axis
 
     def profiles(s: float) -> tuple[float, float]:
         """``(n [1e20 m^-3], T [keV])`` implied by ``p(s)`` under the closure."""
@@ -1083,9 +1127,15 @@ def resolve_plasma(equilibrium: Path) -> tuple[dict[str, float], str]:
         # bootstrap current moves by a factor of 5 across a plausible range of
         # this number, so a reader comparing against an optimizer's own
         # bootstrap current has to know which temperature was assumed.
+        p_axis = float(_P_AXIS_SEEN.get("pa", 0.0))
+        n0, t0 = _n_axis_m3(p_axis), _t_axis_kev(p_axis)
+        how = (
+            "pinned" if _DENSITY_OVERRIDE_M3 is not None
+            else "scaled from p(0) against the arXiv:2205.02914 reactor profiles"
+        )
         return plasma, (
-            f"p(s) from the equilibrium; T(0)={_t_axis_kev():g} keV assumed "
-            f"(set {T_AXIS_ENV} to match a design point)"
+            f"p(s) from the equilibrium; n(0)={n0:.3g} m^-3 {how}, "
+            f"T(0)={t0:.3g} keV from p=2nT (--density-m3 to pin n)"
         )
     return dict(
         FALLBACK_PLASMA
@@ -1274,13 +1324,59 @@ DEFAULT_SURFACES = (0.25, 0.4, 0.55, 0.7, 0.85)
 #: the most negative crossing, so that fake root would win.
 DEFAULT_ER_BRACKET = (-12.0, -8.0, -6.0, -4.0, -2.0, -1.0, -0.4, 0.4, 1.0, 2.0)
 
+#: The temperature this bracket was tuned at. The ambipolar field scales with
+#: it -- roughly ``E_r ~ T/(e L)`` -- so a bracket sized for a 2 keV plasma sits
+#: entirely inside the ion root of a 9 keV one, which is how every surface came
+#: to report "no bracketed root" and quote a bootstrap current at the edge.
+ER_BRACKET_REFERENCE_T_KEV = 2.0
+
+
+def _scaled_er_bracket(t_axis_kev: float) -> np.ndarray:
+    """The bracket, scaled to the plasma actually being solved."""
+    base = np.asarray(DEFAULT_ER_BRACKET, dtype=float)
+    if not t_axis_kev > 0.0:
+        return base
+    return base * (float(t_axis_kev) / ER_BRACKET_REFERENCE_T_KEV)
+
 
 #: How far past the bracket's negative edge the scan may reach when the
 #: evidence says a root is just outside, and the step it takes getting there.
 #: Bounded rather than open-ended: the point is to catch a root a volt or two
 #: beyond the edge, not to go hunting at fields no device sustains.
-ER_EXTENSION_FLOOR_KV_M = -24.0
-ER_EXTENSION_STEP_KV_M = 4.0
+#: The ion root deepens roughly with temperature, so a reactor-scale plasma at
+#: 9 keV sits far outside a bracket sized for a 2 keV one. The floor is
+#: therefore generous and the *step* is what keeps the cost down: each probe
+#: extrapolates to where J_r is heading rather than walking out in fixed jumps.
+ER_EXTENSION_FLOOR_KV_M = -120.0
+#: Cap on probes per surface, so a scan that never crosses cannot run away.
+ER_EXTENSION_MAX_PROBES = 6
+#: Smallest step, so extrapolation from a nearly flat pair still makes progress.
+ER_EXTENSION_MIN_STEP_KV_M = 2.0
+
+
+def _next_er_probe(er: np.ndarray, j_r: np.ndarray) -> float:
+    """Where to sample next: the linear extrapolation to ``J_r = 0``.
+
+    Walking out in fixed steps costs one solve per step and has no idea how far
+    it has to go -- at 2 keV the root sits a couple of volts past the edge and
+    at 9 keV it is tens. Extrapolating from the two most negative samples aims
+    at the crossing directly, and because the predicate only extends while
+    ``J_r`` is approaching zero the extrapolation always points outward.
+
+    Overshoot is deliberate but bounded: the estimate is stepped past the
+    predicted crossing by a quarter so the new point is likely to *straddle*
+    it rather than land just short and need another probe.
+    """
+    order = np.argsort(er)
+    e, j = np.asarray(er)[order], np.asarray(j_r)[order]
+    finite = np.isfinite(j)
+    e, j = e[finite], j[finite]
+    slope = (j[1] - j[0]) / (e[1] - e[0])
+    if not np.isfinite(slope) or slope == 0.0:
+        return float(e[0]) - ER_EXTENSION_MIN_STEP_KV_M
+    crossing = float(e[0] - j[0] / slope)
+    step = max(ER_EXTENSION_MIN_STEP_KV_M, 1.25 * (float(e[0]) - crossing))
+    return float(e[0]) - step
 
 
 def _wants_more_negative_er(er: np.ndarray, j_r: np.ndarray) -> bool:
@@ -1382,13 +1478,20 @@ def radial_profiles(
     # default would already have chosen for it.
     if surfaces is None:
         surfaces = QUICK_SURFACES if quick else DEFAULT_SURFACES
+    plasma, _derived = resolve_plasma(equilibrium)
     if er_values is None:
-        er_values = QUICK_ER_BRACKET if quick else DEFAULT_ER_BRACKET
+        base = QUICK_ER_BRACKET if quick else DEFAULT_ER_BRACKET
+        # Scale to this plasma, not to the 2 keV one the tuple was tuned on.
+        er_values = _scaled_er_bracket(_t_axis_kev(_P_AXIS_SEEN.get("pa", 0.0)))
+        if len(base) != len(DEFAULT_ER_BRACKET):
+            er_values = np.asarray(base, dtype=float) * (
+                float(er_values[0]) / float(DEFAULT_ER_BRACKET[0])
+            )
     er = np.asarray(er_values, dtype=float)
     if emit:
         emit(f"    radial-scan resolution: {resolution}; "
-             f"{len(er)} Er points per surface")  # fmt: skip
-    plasma, _derived = resolve_plasma(equilibrium)
+             f"{len(er)} Er points per surface over "
+             f"[{er.min():.3g}, {er.max():.3g}] kV/m")  # fmt: skip
     profile_input = vmec_profile_status(equilibrium)
     geometry = equilibrium_scalars(equilibrium)
     template = _PROFILE_TEMPLATE.format(
@@ -1430,14 +1533,15 @@ def radial_profiles(
             # quoting a bootstrap current at the edge is worse than spending a
             # few more solves, so extend while the evidence says a root is out
             # there and stop as soon as one is bracketed.
-            edge = float(np.min(er_used))
             probes: list[float] = []
             while (
                 not roots
-                and edge > ER_EXTENSION_FLOOR_KV_M
+                and len(probes) < ER_EXTENSION_MAX_PROBES
                 and _wants_more_negative_er(er_used, j_r)
             ):
-                edge -= ER_EXTENSION_STEP_KV_M
+                edge = _next_er_probe(er_used, j_r)
+                if edge < ER_EXTENSION_FLOOR_KV_M:
+                    break
                 try:
                     extra = _quiet(lambda d=deck, e=edge: batched_er_scan(d, np.array([e])))
                 except Exception:  # noqa: BLE001 - a failed extension is not fatal

@@ -114,6 +114,36 @@ the file extension rather than sniffing, because NetCDF4 *is* HDF5 and an
 reported but do not decide the verdict -- two runs of one case always differ in
 timing, and counting it would make the exit status meaningless.
 
+From an equilibrium
+-------------------
+
+``dkx wout_XXX.nc`` is a survey, not a study: about a minute, and panels out.
+It has to invent a plasma to do it, because a VMEC equilibrium fixes the
+*pressure* and nothing else.
+
+The on-axis density is scaled from that pressure against the published reactor
+profiles of Landreman, Buller and Drevlak (arXiv:2205.02914), and the
+temperature then follows from ``p = 2nT``. The run prints the pair it used.
+
+.. code-block:: bash
+
+   dkx wout_XXX.nc                       # scaled from p(0)
+   dkx wout_XXX.nc --density-m3 2.38e20  # pin n(0); T(0) follows
+   dkx wout_XXX.nc --quick               # coarser, for a first look
+
+The bootstrap current is sensitive to this. At fixed pressure it moves by a
+factor of five across a plausible density range, because the collisionality
+that suppresses it goes like ``n/T^2``. A bootstrap current computed from a
+pressure profile alone cannot be compared against one from an optimizer that
+assumed a different plasma -- pin the density to that design point first.
+
+The electric-field bracket is scaled to the same plasma, since the ambipolar
+field goes roughly like ``T/(e L)``: a bracket sized for a 2 keV plasma sits
+entirely inside the ion root of a 9 keV one.
+
+For real work, write a case file with your own profiles and resolution, then
+``dkx validate`` it and ``dkx converge`` it before trusting a number.
+
 Coming from SFINCS
 ------------------
 

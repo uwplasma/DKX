@@ -155,6 +155,36 @@ dkx --plot sfincsOutput.h5             # panels from a DKX or Fortran run
 dkx wout_XXX.nc                        # equilibrium in, panels out
 ```
 
+## From an equilibrium
+
+`dkx wout_XXX.nc` is a survey, not a study. It runs in about a minute and
+produces panels, and it has to invent a plasma to do so: a VMEC equilibrium
+fixes the **pressure** and nothing else.
+
+DKX scales the on-axis density from that pressure against the published
+reactor profiles of [Landreman, Buller and Drevlak
+(2022)](https://arxiv.org/abs/2205.02914), then takes the temperature from
+`p = 2nT`. The run prints the pair it used. Pin the density to your own design
+point when you have one:
+
+```bash
+dkx wout_XXX.nc --density-m3 2.38e20   # T(0) then follows from p = 2nT
+```
+
+The bootstrap current is sensitive to this: at fixed pressure it changes by a
+factor of five across a plausible density range, because collisionality goes
+like `n/T²`. A bootstrap current from a pressure profile alone cannot be
+compared against one from an optimizer that assumed a different plasma.
+
+For real work, write a [case file](docs/case_files.rst) with your own profiles
+and resolution, then check it:
+
+```bash
+dkx validate case.toml                 # will it run, and what is its id
+dkx converge case.toml                 # is the resolution enough
+dkx run case.toml --out result.nc
+```
+
 ## Documentation
 
 [Case files](docs/case_files.rst) ·
