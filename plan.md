@@ -1644,11 +1644,11 @@ Recorded on 2026-09-01 at `main = 038fbd6a756c401994282f2073fa64302b529cb3`, rel
 
 **Hosted state.** No open issues. GitHub's runner queue has been the binding constraint on CI turnaround rather than the suite itself, so recent merges were made on full local verification with CI following. `main` history was rewritten on 2026-08-31: superseded binary blobs stripped, all 2,537 commits and 30 tags preserved, tip tree byte-identical. Anyone holding an older clone must re-clone or reset.
 
-**Size.** Fresh clone 15 MiB, Git pack 13.94 MiB -- **inside** the 20 MiB target for the first time, where the previous checkpoint recorded 36.46 MiB with the object store alone over budget.
+**Size.** Fresh clone measured 2026-09-01: **29.32 MiB** total -- 14.49 MiB tracked working tree, 14.83 MiB object store, 3.07 MiB of that tree being media. The two enforced gates (`tracked_worktree`, `tracked_media`) pass; `full_clone` still fails and its recorded blocker was stale in both directions. The object store is no longer the problem -- the 2026-08-31 rewrite fixed that -- and no further rewrite can close the gate, because the tracked tree alone leaves 5.51 MiB for everything else. Either the tree shrinks (6.03 MiB tests, 4.74 MiB docs, with no single file above 0.20 MiB, so this is many small files rather than a few large ones) or the 20 MiB target is restated per measurement instead of against a sum.
 
 **Source.** 60 production Python files, 46,827 lines: 25 files and 1,827 lines above the section 6.2 budgets, against 28 files and 6,230 lines at the last checkpoint. 14 files exceed 1,200 lines and 7 exceed 1,800. The line budget is now close; the file budget is not, and will not be reached by merging small modules -- `units.py` into `constants.py` saves one file of the 25 for nineteen files of import churn. It needs either genuine dead-code deletion or the explicit justification section 15 allows.
 
-**Public surface.** 50 names in `dkx.__all__`. `dkx.workflows` exports `converge`, `geometry_adapters`, `optimization` and `scan`. The CLI advertises **11** commands and registers 22: the twelve SFINCS commands moved under `dkx sfincs` and are kept as hidden top-level aliases so existing scripts keep working. Of the section 5.6 target set, ten of eleven exist -- `doctor`, `schema`, `validate`, `run`, `roots`, `converge`, `inspect`, `compare`, `plot`, `scan` -- and only `convert` is missing.
+**Public surface.** 50 names in `dkx.__all__`. `dkx.workflows` exports `converge`, `geometry_adapters`, `optimization` and `scan`. The CLI advertises **11** commands and registers 22: the twelve SFINCS commands moved under `dkx sfincs` and are kept as hidden top-level aliases so existing scripts keep working. The section 5.6 target set is complete: `doctor`, `schema`, `validate`, `run`, `roots`, `converge`, `inspect`, `compare`, `plot`, `scan` and `convert` all exist and are advertised.
 
 **Tests and coverage.** 2,067 tests collected across 176 files, up from 1,721 at the last checkpoint. The last full measurement was **90.6% line, 78.5% branch**; the target is now 95% for both, not 100%. A fresh measurement is in progress and this line should be replaced with it. Note that the branch figure, not the hosted line figure, is the real distance to the target.
 
@@ -1674,7 +1674,7 @@ The next steps, in order:
 
 3. **Finish Phase B**: move the dated `tests/` campaign directories and raw suite outputs to release assets, rewire the release reader to the registry, and reduce the 20 summaries and the single-purpose audit scripts.
 
-4. **`dkx convert`**, the last of the section 5.6 set, and then Phase D's remaining native workflows (monoenergetic, transport-matrix, objective) and the physical-unit metadata that `dkx inspect` still cannot print.
+4. **Phase D's remaining native workflows** (monoenergetic, transport-matrix, objective) and the physical-unit metadata that `dkx inspect` still cannot print. `dkx convert` has landed, closing the section 5.6 set.
 
 The GPU lane is live: `~/venvs/dkx-gpu` on the office host runs jax 0.10.2 and reports both CUDA devices.
 
