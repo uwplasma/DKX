@@ -1641,9 +1641,48 @@ def _maybe_handle_plot(argv: list[str]) -> int | None:
     else:
         quick = "--quick" in argv
         label = " (quick)" if quick else ""
+        # --density-m3 pins the on-axis density instead of scaling it from the
+        # equilibrium's own pressure. A flag rather than an environment
+        # variable: the plasma a run assumed should be visible in the command
+        # that produced it, not in the shell that happened to launch it.
+        from dkx.representative import set_axis_density_override  # noqa: PLC0415
+
+        try:
+            set_axis_density_override(_density_override(argv))
+        except ValueError as exc:
+            print(f"dkx: {exc}", file=sys.stderr)
+            return 2
         print(f" dkx {path.name} — representative run{label}")
         print(f" wrote {run_representative(path, out_path=out, full='--full' in argv, quick=quick)}")
     return 0
+
+
+def _density_override(argv: list[str]) -> float | None:
+    """``--density-m3 VALUE`` from the raw argv, or ``None`` when absent.
+
+    Read here rather than through argparse because the representative run is
+    reached before the subcommand parser exists -- ``dkx wout.nc`` names a file,
+    not a command.
+    """
+    for form in ("--density-m3", "--density"):
+        if form in argv:
+            index = argv.index(form)
+            if index + 1 >= len(argv):
+                raise ValueError(f"{form} needs a value in m^-3, e.g. {form} 2.38e20")
+            raw = argv[index + 1]
+            try:
+                return float(raw)
+            except ValueError:
+                raise ValueError(f"{form}={raw!r} is not a number; expected m^-3") from None
+        prefix = f"{form}="
+        for token in argv:
+            if token.startswith(prefix):
+                raw = token[len(prefix):]
+                try:
+                    return float(raw)
+                except ValueError:
+                    raise ValueError(f"{form}={raw!r} is not a number; expected m^-3") from None
+    return None
 
 
 #: Refinement axes, mirrored from dkx.workflows.converge.AXES so building the

@@ -637,7 +637,7 @@ def test_a_real_pressure_profile_is_still_used(tmp_path):
     # comes from the equilibrium, and the bootstrap current moves by a factor
     # of 5 across a plausible range of that assumption.
     assert source.startswith("p(s) from the equilibrium")
-    assert "T(0)=" in source and "DKX_T_AXIS_KEV" in source
+    assert "T(0)=" in source and "--density-m3" in source
     assert plasma["n_hat"] > 0.1  # 1e20-scale, not 1e-11
 
 
@@ -649,7 +649,7 @@ def test_the_pressure_split_gives_the_temperature_a_gradient(tmp_path):
     an artifact of the assumed profile.
     """
     netCDF4 = pytest.importorskip("netCDF4")
-    from dkx.representative import DEFAULT_T_AXIS_KEV, plasma_parameters
+    from dkx.representative import plasma_parameters
 
     path = tmp_path / "wout_beta.nc"
     with netCDF4.Dataset(path, "w") as handle:
@@ -661,11 +661,16 @@ def test_the_pressure_split_gives_the_temperature_a_gradient(tmp_path):
     plasma = plasma_parameters(path, 0.5)
     # Both profiles fall wherever the pressure falls: the power-law split cannot
     # invent a hollow density the way a linear T against a flat-topped p does.
+    from dkx.representative import axis_temperature_kev
+
     assert plasma["dt_drhat"] < 0.0 and plasma["dn_drhat"] < 0.0
-    assert 0.0 < plasma["t_hat"] < DEFAULT_T_AXIS_KEV
+    # The axis temperature is no longer a constant: it follows from p = 2nT
+    # once the density is scaled from the equilibrium's own on-axis pressure.
+    t_axis = axis_temperature_kev(7.0e5)
+    assert 0.0 < plasma["t_hat"] < t_axis
     # T ~ p^(1/3) at s = r^2 = 0.25, where p/p(0) = 1 - 0.25^2.
     assert plasma["t_hat"] == pytest.approx(
-        DEFAULT_T_AXIS_KEV * (1.0 - 0.25**2) ** (1.0 / 3.0), rel=1e-3
+        t_axis * (1.0 - 0.25**2) ** (1.0 / 3.0), rel=1e-3
     )
 
 
@@ -979,43 +984,7 @@ def test_the_out_of_memory_retry_grid_never_grows_an_axis():
 # ---------------------------------------------------------------------------
 
 
-def test_the_assumed_axis_temperature_is_overridable(monkeypatch) -> None:
-    """A VMEC equilibrium fixes the pressure and nothing else.
 
-    The temperature half of the closure is a convention, and the bootstrap
-    current is very sensitive to it: at fixed pressure and fixed resolution,
-    ``<j.B>/sqrt(<B^2>)`` runs -0.208, -0.499, -0.787, -1.130 for an assumed
-    axis temperature of 2, 4, 8 and 16 keV, because the collisionality that
-    suppresses the bootstrap current scales like ``n/T^2`` while ``p = 2nT``
-    is held fixed. A reader comparing against an optimizer's own bootstrap
-    current has to be able to match its design point.
-    """
-    from dkx.representative import _t_axis_kev, DEFAULT_T_AXIS_KEV, T_AXIS_ENV
-
-    monkeypatch.delenv(T_AXIS_ENV, raising=False)
-    assert _t_axis_kev() == DEFAULT_T_AXIS_KEV
-    monkeypatch.setenv(T_AXIS_ENV, "8.0")
-    assert _t_axis_kev() == 8.0
-
-
-@pytest.mark.parametrize("bad", ["nonsense", "0", "-3"])
-def test_a_bad_axis_temperature_is_refused(monkeypatch, bad: str) -> None:
-    """Silently falling back to the default would hide the very assumption
-    this knob exists to make visible."""
-    from dkx.representative import _t_axis_kev, T_AXIS_ENV
-
-    monkeypatch.setenv(T_AXIS_ENV, bad)
-    with pytest.raises(ValueError, match=T_AXIS_ENV):
-        _t_axis_kev()
-
-
-def test_the_provenance_phrase_names_the_temperature_assumption(monkeypatch) -> None:
-    """"p(s) from the equilibrium" alone reads as if the whole plasma came from
-    the file. Only the pressure did."""
-    from dkx.representative import T_AXIS_ENV, _t_axis_kev
-
-    monkeypatch.setenv(T_AXIS_ENV, "5.5")
-    assert _t_axis_kev() == 5.5
 
 
 # ---------------------------------------------------------------------------
@@ -1069,10 +1038,109 @@ def test_a_non_finite_scan_is_not_extended() -> None:
 
 
 def test_the_extension_is_bounded() -> None:
-    """Bounded rather than open-ended: catch a root a volt or two out, do not
-    hunt at fields no device sustains."""
-    from dkx.representative import ER_EXTENSION_FLOOR_KV_M, ER_EXTENSION_STEP_KV_M
+    """Bounded two ways: a floor on how far out it may look, and a cap on how
+    many probes it may spend getting there. Neither alone is enough -- a floor
+    without a probe cap still permits a long walk, and a cap without a floor
+    permits one enormous extrapolated jump."""
+    from dkx.representative import (
+        ER_EXTENSION_FLOOR_KV_M,
+        ER_EXTENSION_MAX_PROBES,
+        ER_EXTENSION_MIN_STEP_KV_M,
+    )
 
     assert ER_EXTENSION_FLOOR_KV_M < -12.0
-    assert ER_EXTENSION_STEP_KV_M > 0.0
-    assert ER_EXTENSION_FLOOR_KV_M > -100.0
+    assert 0 < ER_EXTENSION_MAX_PROBES <= 12
+    assert ER_EXTENSION_MIN_STEP_KV_M > 0.0
+
+
+# ---------------------------------------------------------------------------
+# The on-axis plasma: derived from pressure, pinnable from the command line
+# ---------------------------------------------------------------------------
+
+
+def test_the_axis_density_is_anchored_to_published_reactor_profiles() -> None:
+    """At the reference pressure the relation must reproduce the reference.
+
+    The anchor is the mean of the QA and QH kinetic profiles of Landreman,
+    Buller and Drevlak (arXiv:2205.02914) -- the study VMEX benchmarks its
+    self-consistent bootstrap current against. Anchoring there rather than
+    hardcoding a temperature is the point: the previous 2 keV constant was off
+    by a factor of 4.7 on exactly that configuration family.
+    """
+    from dkx.representative import (
+        REFERENCE_DENSITY_M3,
+        REFERENCE_PRESSURE_PA,
+        axis_density_m3,
+    )
+
+    assert axis_density_m3(REFERENCE_PRESSURE_PA) == pytest.approx(REFERENCE_DENSITY_M3)
+    # 2.2-2.4e20 is the published band; the anchor must sit inside it.
+    assert 2.0e20 < REFERENCE_DENSITY_M3 < 2.6e20
+
+
+def test_the_temperature_follows_from_p_equals_2nT() -> None:
+    """Derived, never assumed. Pinning the published density must give back the
+    published temperature."""
+    from dkx.representative import axis_temperature_kev
+
+    # QA: n_e(0) = 2.38e20 m^-3 at p(0) = 7.207e5 Pa -> 9.45 keV in the paper.
+    assert axis_temperature_kev(7.2069e5, 2.38e20) == pytest.approx(9.45, rel=2e-3)
+
+
+def test_a_denser_plasma_is_colder_at_the_same_pressure() -> None:
+    """The whole reason the bootstrap current moved: p = 2nT is a constraint,
+    so pinning n fixes T, and collisionality n/T^2 follows."""
+    from dkx.representative import axis_temperature_kev
+
+    hot = axis_temperature_kev(7.2e5, 2.0e20)
+    cold = axis_temperature_kev(7.2e5, 9.0e20)
+    assert hot > cold
+
+
+def test_the_density_override_round_trips(monkeypatch) -> None:
+    from dkx.representative import set_axis_density_override, _n_axis_m3
+
+    set_axis_density_override(3.0e20)
+    try:
+        assert _n_axis_m3(7.2e5) == 3.0e20
+    finally:
+        set_axis_density_override(None)
+    assert _n_axis_m3(7.2e5) != 3.0e20  # back to the pressure-derived value
+
+
+@pytest.mark.parametrize("bad", [0.0, -1.0])
+def test_a_non_positive_density_override_is_refused(bad: float) -> None:
+    from dkx.representative import set_axis_density_override
+
+    with pytest.raises(ValueError, match="positive"):
+        set_axis_density_override(bad)
+
+
+def test_the_er_bracket_scales_with_the_plasma_temperature() -> None:
+    """A bracket sized for 2 keV sits entirely inside the ion root of a 9 keV
+    plasma, which is how every surface came to report "no bracketed root" and
+    then quote a bootstrap current at the edge."""
+    from dkx.representative import (
+        DEFAULT_ER_BRACKET,
+        ER_BRACKET_REFERENCE_T_KEV,
+        _scaled_er_bracket,
+    )
+
+    base = np.asarray(DEFAULT_ER_BRACKET, dtype=float)
+    assert np.allclose(_scaled_er_bracket(ER_BRACKET_REFERENCE_T_KEV), base)
+    wider = _scaled_er_bracket(4.0 * ER_BRACKET_REFERENCE_T_KEV)
+    assert wider.min() == pytest.approx(4.0 * base.min())
+
+
+def test_the_cli_parses_a_density_flag() -> None:
+    """A flag, not an environment variable: the plasma a run assumed belongs in
+    the command that produced it."""
+    from dkx.cli import _density_override
+
+    assert _density_override(["wout.nc"]) is None
+    assert _density_override(["wout.nc", "--density-m3", "2.38e20"]) == 2.38e20
+    assert _density_override(["wout.nc", "--density-m3=1e20"]) == 1e20
+    with pytest.raises(ValueError, match="not a number"):
+        _density_override(["wout.nc", "--density-m3", "abc"])
+    with pytest.raises(ValueError, match="needs a value"):
+        _density_override(["wout.nc", "--density-m3"])
