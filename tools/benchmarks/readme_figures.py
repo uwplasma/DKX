@@ -66,6 +66,22 @@ ROWS = (
     ("Fortran v3\n2 ranks", 229.5, 2.86, True),
 )
 
+# --- Measured cold/warm split (README "Cold and warm solves") ---------------
+# Apple M3 Max, CPU, JAX_ENABLE_X64, one process per row, via
+# tools/benchmarks/tier1_hsx_head_to_head.py --device cpu --repeat 3 --ramp.
+# Cold is the first solve in a fresh process and carries the XLA compile; warm
+# is the fastest of the three that follow it. Recorded on 2026-09-02.
+#
+# These are a different machine from the ROWS head-to-head above (M3 Max, not
+# M4), so they are kept as their own measurement rather than folded into that
+# table: the point they make is the ratio, which is a property of the case size
+# and not of the host.
+COLD_WARM = (
+    # label, unknowns, cold seconds, warm seconds
+    ("HSX PAS reduced", 40_584, 1.72, 0.12),
+    ("HSX PAS, 25x51x100x5", 744_610, 23.6, 20.0),
+)
+
 # --- Measured parity envelopes (see module docstring for provenance) --------
 PARITY = (
     # label, low, high (equal -> single point), referee

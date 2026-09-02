@@ -167,6 +167,14 @@ def test_readme_canonical_benchmark_claims_match_recorded_measurements() -> None
     for token in ("27.2", "44.3", "45.0", "463.6", "229.5", "0.93", "1.16", "3.98", "2.86"):
         assert token in readme, token
         assert token in figures_source, token
+
+    # The cold/warm split is a separate measurement on a separate machine, and
+    # is pinned the same way: the README may not state a number the recorded
+    # source does not carry. Without this the cold figures would be the only
+    # unbacked ones on the page.
+    for token in ("1.72", "0.12", "23.6", "20.0", "40,584"):
+        assert token in readme, token
+        assert token.replace(",", "_") in figures_source, token
     assert "744,610 unknowns" in readme
     assert "744,610 unknowns" in figures_source
 
