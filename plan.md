@@ -1670,11 +1670,16 @@ Added 2026-09-02 after several measurements had to be thrown away.
    it, a quantity that is physically zero reads as the worst regression in the
    suite. Record both, and classify a moment far below its case's largest as a
    physical zero rather than a failure.
-3. **A crashed reference run can still write output.** SFINCS's 2-rank segfault
+3. **Kill a sweep by process group, not by parent name.** `pkill -f
+   parity_performance_matrix` leaves the `sfincs` and DKX subprocesses it
+   spawned running. Twenty-four of them accumulated across three launches,
+   held the machine at load 42-60 for hours, and made every later case in the
+   sweep time out. Check for survivors after any kill.
+4. **A crashed reference run can still write output.** SFINCS's 2-rank segfault
    leaves a truncated HDF5 with classical fluxes and no neoclassical ones,
    which a parity check will happily compare against. Verify the reference
    succeeded before trusting a comparison, not just that a file exists.
-4. **State the toolchain with the number.** The 2-rank crash is macports PETSc
+5. **State the toolchain with the number.** The 2-rank crash is macports PETSc
    3.20.2 + MPICH; the recorded head-to-head used conda PETSc 3.23 where 2
    ranks worked. Neither is "SFINCS is broken".
 
@@ -1708,6 +1713,7 @@ Keep only one row per merged PR or consequential failed hypothesis.
 
 | Date | Change | Evidence | Next |
 | --- | --- | --- | --- |
+| 2026-09-03 | **The fresh sweep is void: `pkill` on the sweep parent orphaned its children, and they ate the machine for hours.** | The run completed 38 cases but only 11 were comparable -- SFINCS timed out or was killed on all 27 decks above 5208 unknowns, a clean cliff at 5208 -> 12648 that no physics explains. The cause was 24 orphaned processes: `parity_performance_matrix` was killed twice during the round, and each time its `sfincs` and DKX subprocesses survived. They accumulated across three sweep launches and were still running at 200% CPU each after the parent exited, holding load at 42-60 on 14 cores. The large decks ran last, so they took the worst of it. | Re-run the sweep once, on a quiet machine, and kill by process group rather than by parent name. Nothing from this sweep should be reported. |
 | 2026-09-02 | SFINCS Fortran v3 rebuilt locally and profiled; its cost is matrix assembly, not linear algebra. | Checkout `8df5453` rebuilt against macports PETSc 3.20.2 (MUMPS, PARMETIS, SCALAPACK), HDF5 1.14, local netcdf-fortran. One local source fix, deliberately not upstreamed: under gfortran 13 + MPICH a bare `use mpi` in `sfincs.F90` collides with the `mpi_base` PETSc already pulls in through `sfincs_main`, making `pmpi_wtime`/`pmpi_wtick` ambiguous; importing only `MPI_COMM_WORLD`, `MPI_INIT`, `MPI_FINALIZE` builds. On `tokamak_1species_FPCollisions_noEr` the run reports 1.159 s + 1.134 s + 1.868 s of its own Fortran pre-assembly against a 4.742 s total, so roughly 88% is building the matrix. PETSc's whole event log accounts for 0.176 s of that. | The 88% does not transfer to DKX: the structured direct route never materializes a matrix. This explains DKX's advantage rather than pointing at a fix. |
 | 2026-09-02 | **SFINCS segfaults at 2 MPI ranks on this build, on every deck tried**, and writes a truncated output first. | 4 of 4 decks, zero successful completions; pre-assembly inflates about 20x first (1.13 s to 23.0 s). The crashed run still leaves an `sfincsOutput.h5` of 70 KB against a good 341 KB, containing classical fluxes only and no neoclassical ones -- which would silently corrupt a parity comparison rather than fail it. | Sweeps on this machine are 1 rank only, and the 2-rank data was quarantined. Scope: this is macports PETSc 3.20.2 + MPICH; the recorded head-to-head used conda PETSc 3.23 with 2 ranks working, so this is a property of this toolchain and not a claim about upstream. |
 | 2026-09-02 | A parity table of relative differences cannot tell a regression from a physical zero, and produced a false alarm. | The first fresh sweep reported 1.4e-2 on `particleFlux_vm_psiHat` for `tokamak_1species_FPCollisions_noEr`, the worst number in the suite. It is not a regression: on an axisymmetric single-species deck at `Er = 0` the particle flux is intrinsically ambipolar, and SFINCS itself puts it at -4.79e-12 against a heat flux of 9.80e-08 and a bootstrap current of 3.31e-02, so 1.4e-2 relative is 7e-14 absolute. | #163 records the magnitude each difference was taken against, and `sweep_report.py` sets aside any moment below 1e-6 of its case's largest as a physical zero. That case now reports its meaningful 3.52e-07. |
