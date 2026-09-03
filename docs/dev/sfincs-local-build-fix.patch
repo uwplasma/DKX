@@ -1,0 +1,18 @@
+diff --git a/fortran/version3/sfincs.F90 b/fortran/version3/sfincs.F90
+index 57af3a9..365557b 100644
+--- a/fortran/version3/sfincs.F90
++++ b/fortran/version3/sfincs.F90
+@@ -1,7 +1,12 @@
+ program sfincs
+ 
+   use sfincs_main
+-  use mpi
++  ! Local build fix (not upstream): with gfortran 13 + MPICH, sfincs_main
++  ! already pulls in mpi_base through PETSc, so a bare `use mpi` makes
++  ! pmpi_wtime and pmpi_wtick ambiguous and the compile fails. Importing only
++  ! the three symbols this program actually uses avoids the clash and changes
++  ! nothing else.
++  use mpi, only: MPI_COMM_WORLD, MPI_INIT, MPI_FINALIZE
+ 
+   ! If you want to alter input parameters like Ntheta, you can use a line like the one commented out here:
+   !use globalVariables, only: Ntheta
