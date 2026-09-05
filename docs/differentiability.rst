@@ -88,6 +88,19 @@ Prepared ``ErProblem`` method/tolerance settings are preserved unless explicitly
 overridden. An explicit sparse ``direct`` request raises because that route
 is non-differentiable. Root and initial-field units follow the prepared problem.
 
+Differentiated current evaluations retain every Legendre block and recompute
+the original kinetic residual before admitting a state. Finite state, RHS and
+residual are required, with ``||Ax-b|| <= tol*||b||``; a zero RHS requires zero
+residual. This uses the prepared/overridden tolerance without a backward-error
+floor or solver-reported convergence flag. It costs an original operator
+application per current evaluation. Successful scalar JIT checks stay on device;
+failure callbacks raise at execution time. This certifies the primal equation,
+not the adjoint or phase-space resolution.
+Under ``vmap``, `JAX converts conditionals to selections
+<https://docs.jax.dev/en/latest/_autosummary/jax.lax.cond.html>`_, so a batch can
+invoke the callback even for accepted states; production batch/root scaling
+still requires measurement.
+
 CPU and installed-wheel GPU tests compare routed current derivatives to cold finite differences and
 root derivatives to finite differences of independently solved roots, for PAS
 and full-FP collisions with uniform and ramped pitch layouts. They also reject
