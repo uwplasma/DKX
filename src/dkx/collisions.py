@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 # The JAX backend is imported below; dkx/runtime.py explains why this is here.
 from .runtime import configure as _configure_runtime
@@ -1016,6 +1016,30 @@ class FokkerPlanckV3Phi1Operator:
     k_rosen: jnp.ndarray  # (S,S,NL,X,X)
 
     n_xi_for_x: jnp.ndarray  # (X,) int32
+
+    def rescale_temperature(self, scale: jnp.ndarray) -> FokkerPlanckV3Phi1Operator:
+        """Scale every species temperature by the same positive scalar.
+
+        Species speed ratios and interpolation/Rosenbluth responses are then
+        unchanged; all four unit-density kernels scale as ``scale**(-3/2)``.
+        This exact fixed-grid update supports JIT and AD, including the changed
+        Phi1 Boltzmann response. Masses, charges, densities, ``nu_n`` (including
+        any Coulomb logarithm), and normalization stay fixed. Callers must also
+        update the kinetic operator temperatures, drives and desired profiles.
+        Independent species temperature changes still require a full rebuild.
+
+        Nonpositive or nonfinite scales produce NaNs, including under JIT.
+        """
+        scale = jnp.asarray(scale, dtype=jnp.float64)
+        if scale.shape != ():
+            raise ValueError("temperature scale must be scalar")
+        scale = jnp.where(jnp.isfinite(scale) & (scale > 0), scale, jnp.nan)
+        factor = scale ** -1.5
+        return replace(
+            self, t_hats=self.t_hats * scale,
+            **{name: getattr(self, name) * factor
+               for name in ("k_nu", "k_cd", "k_ce", "k_rosen")},
+        )
 
     def at_uniform_density(self, n_hats: jnp.ndarray, *, n_xi: int) -> FokkerPlanckV3Operator:
         """Refresh uniform FP coefficients from the stored unit-density kernels.

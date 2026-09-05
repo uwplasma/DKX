@@ -231,13 +231,39 @@ are provenance and parity tools and are **not** differentiable. Geometry
 sensitivities flow through JAX-native producers instead — the analytic geometry
 schemes, or the ``vmex -> booz_xform_jax`` transform below.
 
+Full-FP profile changes must refresh the collision coefficients as well as the
+kinetic operator fields. The host NumPy/QUADPACK builder is not differentiable.
+Prepared ``FokkerPlanckV3Phi1Operator`` kernels support
+``at_uniform_density(n_hats, n_xi=...)`` at fixed species temperatures and
+``rescale_temperature(scale)`` for one common positive scalar temperature
+multiplier. The latter preserves every species speed ratio
+``sqrt(T_a*m_b/(T_b*m_a))`` and scales all four kernels by ``scale**(-3/2)``;
+it also updates the temperature in the Phi1 Boltzmann factor. It keeps ``nu_n``
+(including the Coulomb logarithm), masses, charges and normalization fixed.
+Nonpositive/nonfinite scales yield NaNs, including under JIT; vectors are rejected.
+Independent species temperature derivatives still require a differentiable
+response-matrix builder.
+
+For a uniform full-FP kinetic operator, a common-temperature scan can use::
+
+   scaled = kernels.rescale_temperature(scale)
+   op = dataclasses.replace(
+       base, t_hat=base.t_hat * scale,
+       fp=scaled.at_uniform_density(base.n_hat, n_xi=base.n_xi),
+   )
+
+Here ``kernels`` must have been built from the same species/grid as ``base``.
+Update radial gradients and other profile fields according to the intended
+experiment; this snippet keeps them fixed. It is a coefficient update, not a
+complete native profile builder or a reusable-factor certificate.
+
 .. note::
 
-   The differentiable ambipolar :math:`E_r` and :math:`\Phi_1` helpers require the
+   The differentiable :math:`\Phi_1` helper requires the
    untruncated pitch embedding (``Nxi_for_x_option = 0``); with an active
-   :math:`N_\xi`-for-:math:`x` ramp they raise ``NotImplementedError`` rather than
-   return an approximate gradient. RHSMode=1 outputs remain differentiable through
-   the ramped structured direct route.
+   :math:`N_\xi`-for-:math:`x` ramp it raises ``NotImplementedError``.
+   Ambipolar sensitivities use the routed differentiable solve and support
+   the tested PAS/full-FP ramped layouts.
 
 Measured gradient accuracy
 --------------------------

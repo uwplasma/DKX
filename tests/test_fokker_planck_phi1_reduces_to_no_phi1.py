@@ -107,8 +107,38 @@ def test_uniform_density_refresh_matches_rebuild_and_density_derivatives(fp_case
         kernels.at_uniform_density(density, n_xi=0)
 
 
+def test_common_temperature_refresh_matches_rebuild_and_phi1_derivative(fp_case):
+    kwargs, _, kernels, grids = fp_case
+    f = jnp.asarray(np.random.default_rng(17).normal(
+        size=(2, grids.x.size, grids.n_xi, grids.theta.size, grids.zeta.size)))
+    phi = jnp.full((grids.theta.size, grids.zeta.size), 0.07)
+
+    def action(scale):
+        return apply_fokker_planck_v3_phi1(
+            kernels.rescale_temperature(scale), f, phi1_hat=phi)
+
+    compiled = jax.jit(action)
+
+    def cold(scale):
+        rebuilt = make_fokker_planck_v3_phi1_operator(
+            **{**kwargs, "t_hats": kwargs["t_hats"] * scale}, alpha=float(kernels.alpha))
+        return apply_fokker_planck_v3_phi1(rebuilt, f, phi1_hat=phi)
+
+    for scale in (0.7, 1.0, 1.8):
+        np.testing.assert_allclose(compiled(scale), cold(scale), rtol=3e-11, atol=3e-11)
+    _, tangent = jax.jvp(compiled, (1.2,), (1.0,))
+    h = 1e-4
+    np.testing.assert_allclose(tangent, (cold(1.2 + h) - cold(1.2 - h)) / (2 * h),
+                               rtol=2e-6, atol=2e-7)
+    for invalid in (0.0, -1.0, np.inf, np.nan):
+        assert np.all(np.isnan(compiled(invalid)))
+    with pytest.raises(ValueError, match="scale must be scalar"):
+        kernels.rescale_temperature(jnp.ones(2))
+
+
+@pytest.mark.parametrize("parameter", ["density", "temperature"])
 @pytest.mark.parametrize("observable", ["FSABjHat", "heatFlux_vm_psiHat"])
-def test_density_gradient_through_full_fp_solve_matches_fresh_builds(fp_case, observable):
+def test_profile_gradient_through_full_fp_solve_matches_fresh_builds(fp_case, observable, parameter):
     from dataclasses import replace
     from dkx.drift_kinetic import KineticOperator
     from dkx.namelist import read_sfincs_input
@@ -119,34 +149,45 @@ def test_density_gradient_through_full_fp_solve_matches_fresh_builds(fp_case, ob
     base = KineticOperator.from_namelist(read_sfincs_input(
         "tests/ref/quick_2species_FPCollisions_noEr.input.namelist"
     ))
-    density = base.n_hat
+    point = base.n_hat if parameter == "density" else jnp.asarray(1.0)
+
+    def updated(n, *, fresh=False):
+        if parameter == "density":
+            values = {"n_hat": n}
+            builder = {**kwargs, "n_hats": np.asarray(n)} if fresh else None
+            fp = kernels.at_uniform_density(n, n_xi=base.n_xi) if not fresh else None
+        else:
+            values = {"t_hat": base.t_hat * n}
+            builder = {**kwargs, "t_hats": np.asarray(values["t_hat"])} if fresh else None
+            fp = (kernels.rescale_temperature(n).at_uniform_density(base.n_hat, n_xi=base.n_xi)
+                  if not fresh else None)
+        return replace(base, **values, fp=make_fokker_planck_v3_operator(**builder) if fresh else fp)
 
     def loss(n):
-        op = replace(base, n_hat=n, fp=kernels.at_uniform_density(n, n_xi=base.n_xi))
+        op = updated(n)
         state = solve(op, op.rhs(), method="gmres", tol=1e-11, differentiable=True).x
         return jnp.ravel(profile_moments_from_operator(op, state)[observable])[0]
 
-    value, grad = jax.jit(jax.value_and_grad(loss))(density)
+    value, grad = jax.jit(jax.value_and_grad(loss))(point)
     assert np.isfinite(value) and np.all(np.isfinite(grad))
-    direction = density * jnp.asarray([0.1, -0.2])
+    direction = point * jnp.asarray([0.1, -0.2] if parameter == "density" else 0.2)
     ad = float(jnp.vdot(grad, direction))
     assert abs(ad) > 1e-20
 
     def cold(n):
-        fp = make_fokker_planck_v3_operator(**{**kwargs, "n_hats": np.asarray(n)})
-        op = replace(base, n_hat=n, fp=fp)
+        op = updated(n, fresh=True)
         rhs = op.rhs()
         state = solve(op, rhs, method="gmres", tol=1e-11).x
         assert float(jnp.linalg.norm(op.apply(state) - rhs)) <= 1e-11 * float(jnp.linalg.norm(rhs))
         return float(jnp.ravel(profile_moments_from_operator(op, state)[observable])[0])
 
     for eps in (1e-3, 3e-4):
-        fd = (cold(density + eps * direction) - cold(density - eps * direction)) / (2 * eps)
+        fd = (cold(point + eps * direction) - cold(point - eps * direction)) / (2 * eps)
         np.testing.assert_allclose(ad, fd, rtol=2e-5, atol=abs(ad) * 1e-8)
 
     # A first-order derivative must leave a second-order Taylor remainder.
-    baseline = cold(density)
-    remainders = [abs(cold(density + h * direction) - baseline - h * ad)
+    baseline = cold(point)
+    remainders = [abs(cold(point + h * direction) - baseline - h * ad)
                   for h in (0.04, 0.02, 0.01)]
     for coarse, fine in zip(remainders, remainders[1:]):
         assert 3.0 < coarse / fine < 5.0, (observable, remainders)
