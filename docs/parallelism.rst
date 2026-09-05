@@ -68,30 +68,38 @@ beats a serial Python loop even on CPU — about ``9.5x`` for an ``E_r`` scan an
 sits at CPU parity but a batch fills the device. Reproduce both with
 ``python tools/benchmarks/batched_scan.py``.
 
-**Multiple devices.** The batch elements are embarrassingly parallel, so the
-batched calls also accept a ``devices`` argument that splits the batch across
-devices: ``devices="auto"`` uses every local device of the default backend
-when more than one is visible, and an explicit sequence of ``jax.Device``
-objects selects a subset. Each device receives a contiguous near-equal shard
-of the batch and runs the same memory-budgeted chunked solve on it, so the
-budget bounds each device's chunk and the auto-chunking arithmetic is per
-device; the results are gathered on the host in batch order. Three properties
-of that split:
+**Multiple devices.** ``devices="auto"`` uses every local device of the
+selected backend; an explicit sequence selects distinct devices. JAX
+``shard_map`` runs the memory-budgeted local map on each device, including
+inside ``jax.jit`` and ``jax.grad``. SOLVAX still owns each local solve.
+The current SOLVAX batch wrapper does not expose the varying-axis checker
+option needed by the custom linear solve, so DKX places the physics map with
+JAX directly. Numerical residual and derivative checks remain enabled.
 
-- Fewer than two usable devices, or a batch smaller than the device count,
-  degrades to the single-device path unchanged. Traced inputs (inside
-  ``jax.jit`` / ``jax.grad``) fall back to the single-device path too, which
-  computes the same answer; keep ``devices=None`` on paths meant for tracing.
-- The per-element computation is the single-device computation. With matched
-  executed chunk widths (an explicit ``max_batch``) the results are bitwise
-  identical across device counts, and the identity check in
-  ``tests/test_batch.py`` verifies element-wise identical results for one
-  versus two forced host CPU devices (``DKX_CPU_DEVICES=2``), which exercises
-  the same split/placement/gather path as two GPUs.
-- Multi-GPU *speedup* validation is pending access to a multi-GPU host. The API
-  is measured-correct on multi-device CPU, where no speedup is possible (forced
-  host devices share one threadpool) and the split costs one extra per-shard
-  dispatch, so the honest CPU expectation is neutral-to-slower wall time.
+- Fewer than two resolved devices, or fewer cases than devices, uses the
+  single-device path. Duplicate device entries are rejected.
+- Equal local shapes are obtained by repeating the final valid case for
+  padding. Trimming restores batch order and excludes padding from objectives
+  and their derivatives. There is no explicit host gather. Even batch outputs
+  remain partitioned; trimming uneven outputs can require redistribution.
+- ``tests/test_batch.py`` checks actual addressable shards, single-device
+  agreement, uneven batches, JIT, and physical-current gradients on two forced
+  CPU devices. Forced devices share host resources and do not prove CPU
+  speedup. GPU scaling and production memory/throughput require separate
+  synchronized measurements; device placement alone does not establish speedup.
+
+
+A bounded installed-wheel probe on two RTX A4000s (eight two-species PAS
+cases, 7×7 angular grid, eight pitch modes, three speed nodes, chunk size two)
+measured synchronized warm medians over ten calls: forward 44.1 ms on one GPU
+and 27.7 ms on two; current value plus gradient 71.8 ms and 43.4 ms. Compilation
+and first execution were measured separately (4.7–8.4 s). Perfetto traces show
+approximately half the device events on each GPU, rather than replicated
+whole-batch work. XLA temporary-memory estimates were 5.84 MB per device for
+forward execution and 23.67→19.22 MB for the gradient; these are compiled
+estimates, not measured process/device peaks. Raw traces, HLO and timings are
+archived outside Git under ``dkx-review-evidence-20260905/sharding-wheel``.
+This teaching-grid probe does not qualify production scaling or resolution.
 
 Solver routes and where the GPU helps
 -------------------------------------
