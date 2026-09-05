@@ -283,6 +283,96 @@ def test_sweep_does_not_reuse_outputs_copied_with_an_example(tmp_path: Path, mon
     assert "error" in record["parity"]
 
 
+@pytest.fixture
+def retained_campaign(tmp_path):
+    import hashlib
+    from tools.benchmarks import parity_performance_matrix as matrix
+    campaign = "a" * 64
+    root = tmp_path / "archive"
+    rows = []
+    for attempt in range(2):
+        row = {"case": "same_case", "converged": bool(attempt), "residual": 0. if attempt else float("nan")}
+        with matrix._case_workspace(row, root / campaign / str(attempt)) as work:
+            (work / "input.namelist").write_text("input")
+            (work / "state.bin").write_bytes(b"retained state")
+        row["campaign_id"] = campaign
+        rows.append(row)
+    out = tmp_path / "campaign.jsonl"
+    provenance = out.with_suffix(".jsonl.provenance.json")
+    provenance.write_text(json.dumps({"campaign_id": campaign}))
+    def publish():
+        out.write_text("".join(json.dumps(row) + "\n" for row in rows))
+        done = {"campaign_id": campaign, "attempts": 2, "cases": 1,
+                "checkpoint_sha256": hashlib.sha256(out.read_bytes()).hexdigest(),
+                "provenance_sha256": hashlib.sha256(provenance.read_bytes()).hexdigest()}
+        out.with_suffix(".jsonl.done").write_text(json.dumps(done))
+    publish()
+    return out, root, rows, publish
+
+
+def test_campaign_verification_is_offline_and_portable(retained_campaign, tmp_path, monkeypatch, capsys):
+    import shutil
+    from tools.benchmarks import parity_performance_matrix as matrix
+    out, root, rows, _ = retained_campaign
+    moved = tmp_path / "moved"
+    shutil.move(root, moved)
+    def no_execution(*args, **kwargs):
+        pytest.fail("verification must not execute a solver or preflight")
+    monkeypatch.setattr(matrix, "preflight_fortran", no_execution)
+    assert matrix.main(["--verify", "--out", str(out), "--artifacts-dir", str(moved)]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["files_checked"] == 4 and result["attempts"] == 2
+    assert result["scientific_acceptance"] == "not_checked"
+
+
+@pytest.mark.parametrize("mutation", ["bytes", "missing", "extra", "manifest", "checkpoint", "provenance", "record", "unretained", "symlink", "escape", "duplicate", "counts"])
+def test_campaign_verification_rejects_broken_evidence(retained_campaign, mutation):
+    import hashlib
+    from tools.benchmarks import parity_performance_matrix as matrix
+    out, root, rows, publish = retained_campaign
+    first = Path(rows[0]["artifacts_directory"])
+    state = first / "state.bin"
+    if mutation == "bytes":
+        state.write_bytes(b"tampered state")
+    elif mutation == "missing":
+        state.unlink()
+    elif mutation == "extra":
+        (first / "unrecorded").write_text("extra")
+    elif mutation == "manifest":
+        (first / "manifest.json").write_text("{}")
+    elif mutation == "checkpoint":
+        out.write_text("{}\n")
+    elif mutation == "provenance":
+        out.with_suffix(".jsonl.provenance.json").write_text("{}")
+    elif mutation == "record":
+        rows[0]["converged"] = True
+        publish()  # Rehashing the checkpoint cannot bypass its manifest binding.
+    elif mutation == "unretained":
+        rows[0].pop("artifacts_manifest_sha256")
+        publish()
+    elif mutation == "escape":
+        path = first / "manifest.json"
+        manifest = json.loads(path.read_text())
+        manifest["files"]["../state.bin"] = manifest["files"].pop("state.bin")
+        path.write_text(json.dumps(manifest))
+        rows[0]["artifacts_manifest_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+        publish()
+    elif mutation == "duplicate":
+        rows[1] = rows[0].copy()
+        publish()
+    elif mutation == "counts":
+        path = out.with_suffix(".jsonl.done")
+        done = json.loads(path.read_text())
+        done["attempts"] = 3
+        path.write_text(json.dumps(done))
+    else:
+        state.unlink()
+        state.symlink_to(first / "input.namelist")
+    with pytest.raises((ValueError, OSError)):
+        matrix.verify_campaign(out)
+    assert matrix.main(["--verify", "--out", str(out)]) == 2
+
+
 @pytest.mark.parametrize("outcome", ["exit", "timeout", "cancel"])
 def test_retained_case_keeps_raw_evidence_after_cleanup(tmp_path, monkeypatch, outcome):
     import hashlib

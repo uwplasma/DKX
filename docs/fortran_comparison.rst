@@ -176,6 +176,27 @@ versions, platform, selected environment variables and individual input/source/
 executable hashes. Its checksum is included in ``OUT.done``. Refused resume
 preserves the existing provenance and measurements.
 
+Verify a retained campaign without running either solver:
+
+.. code-block:: bash
+
+   python tools/benchmarks/parity_performance_matrix.py \
+     --verify --out /archive/campaign.jsonl --artifacts-dir /archive/attempts
+
+``--artifacts-dir`` relocates the retained tree, preserving its
+``CAMPAIGN_ID/ATTEMPT_DIRECTORY`` layout. Omit it to use recorded paths.
+Verification follows ``OUT.done`` to the checkpoint/provenance checksums,
+then binds every attempt record to its manifest and checks file sizes,
+checksums and the complete file inventory. Missing retention, incomplete
+campaigns, duplicate attempt directories and symlinks fail. Rejected scientific
+runs can still have intact evidence and are included in the check.
+
+The report establishes integrity relative to the supplied completion record.
+It does not authenticate that record, rerun residual/observable comparisons,
+revalidate external source/library files, or certify scientific completeness.
+Publish a trusted archive checksum alongside any publication; keep physics,
+numerical-convergence and environment-reproducibility gates separate.
+
 Use repeatable ``--provenance-file PATH`` for environment locks, build records,
 external PETSc option files or resolved shared libraries. Their contents become
 part of campaign identity; missing explicit files fail before preflight.

@@ -821,9 +821,83 @@ def _execution_complete(record: dict, args) -> bool:
     )
 
 
+def verify_campaign(out: Path, *, artifacts_dir: Path | None = None) -> dict:
+    """Verify retained bytes against the completion record, without executing code.
+
+    This checks integrity relative to the supplied completion record, not its
+    authenticity or the scientific validity/completeness of the experiment.
+    Original source/library paths in provenance need not exist on this host.
+    """
+    def checked(path, expected):
+        if path.is_symlink() or not path.is_file():
+            raise ValueError(f"missing or symlinked evidence: {path}")
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for block in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(block)
+        if digest.hexdigest() != expected:
+            raise ValueError(f"checksum mismatch: {path}")
+
+    done = json.loads(out.with_suffix(out.suffix + ".done").read_text())
+    checked(out, done["checkpoint_sha256"])
+    provenance_path = out.with_suffix(out.suffix + ".provenance.json")
+    checked(provenance_path, done["provenance_sha256"])
+    provenance = json.loads(provenance_path.read_text())
+    campaign = done["campaign_id"]
+    if not isinstance(campaign, str) or re.fullmatch(r"[0-9a-f]{64}", campaign) is None:
+        raise ValueError("invalid campaign identity")
+    if provenance.get("campaign_id") != campaign:
+        raise ValueError("provenance campaign identity mismatch")
+    records = [json.loads(line) for line in out.read_text().splitlines() if line.strip()]
+    if len(records) != done["attempts"] or len({r["case"] for r in records}) != done["cases"]:
+        raise ValueError("completion record case/attempt count mismatch")
+    files_checked = 0
+    seen = set()
+    for record in records:
+        if record.get("campaign_id") != campaign:
+            raise ValueError("attempt campaign identity mismatch")
+        if not record.get("artifacts_directory") or not record.get("artifacts_manifest_sha256"):
+            raise ValueError(f"attempt has no complete retained evidence: {record['case']}")
+        original = Path(record["artifacts_directory"])
+        root = original if artifacts_dir is None else artifacts_dir / campaign / original.name
+        if root.resolve() in seen:
+            raise ValueError(f"duplicate attempt evidence: {root}")
+        seen.add(root.resolve())
+        if root.is_symlink():
+            raise ValueError(f"symlinked evidence directory: {root}")
+        manifest_path = root / "manifest.json"
+        checked(manifest_path, record["artifacts_manifest_sha256"])
+        manifest = json.loads(manifest_path.read_text())
+        embedded = {k: v for k, v in record.items() if k not in ("campaign_id", "artifacts_manifest_sha256")}
+        if manifest.get("schema") != 1 or json.dumps(manifest.get("record"), sort_keys=True) != json.dumps(embedded, sort_keys=True):
+            raise ValueError(f"manifest record mismatch: {manifest_path}")
+        files = manifest["files"]
+        for name, info in files.items():
+            path = root / name
+            if Path(name).is_absolute() or ".." in Path(name).parts or not path.resolve().is_relative_to(root.resolve()):
+                raise ValueError(f"evidence path escapes its attempt: {name}")
+            checked(path, info["sha256"])
+            if path.stat().st_size != info["bytes"]:
+                raise ValueError(f"size mismatch: {path}")
+            files_checked += 1
+        actual = set()
+        for path in root.rglob("*"):
+            if path.is_symlink():
+                raise ValueError(f"symlinked evidence: {path}")
+            if path.is_file() and path != manifest_path:
+                actual.add(str(path.relative_to(root)))
+        if actual != set(files):
+            raise ValueError(f"manifest file inventory mismatch: {root}")
+    return {"archive_integrity": "passed", "campaign_id": campaign,
+            "attempts": len(records), "files_checked": files_checked,
+            "scientific_acceptance": "not_checked", "external_dependencies": "not_revalidated"}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--examples", type=Path, required=True)
+    parser.add_argument("--examples", type=Path)
+    parser.add_argument("--verify", action="store_true",
+                        help="verify retained --out evidence offline; --artifacts-dir relocates the archive root")
     parser.add_argument("--fortran-binary", type=Path, default=None)
     parser.add_argument(
         "--fortran-backend", metavar="PACKAGE",
@@ -880,6 +954,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    if args.verify:
+        try:
+            print(json.dumps(verify_campaign(args.out, artifacts_dir=args.artifacts_dir), sort_keys=True))
+            return 0
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+            print(f"evidence verification failed: {exc}", file=sys.stderr)
+            return 2
+    if args.examples is None:
+        parser.error("--examples is required unless --verify is used")
     for path in args.provenance_file:
         if not path.is_file():
             parser.error(f"--provenance-file is not a file: {path}")
