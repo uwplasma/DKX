@@ -203,6 +203,48 @@ distinguishes the explicitly evaluated norm from an estimated norm.
 Inputs, commands, pilot JSON/logs and the two retained diagnostic runs,
 including matrices and states, are archived with SHA-256 checksums outside
 Git in ``dkx-review-evidence-20260905/transport-reference-pilot``.
-The campaign runner deletes its temporary raw solve files; only the separate
-retained diagnostic runs preserve those files. R0 must add deliberate raw
-failure retention and a complete environment lock before production sweeps.
+The original campaign deleted its temporary raw solve files; its separate
+retained diagnostic runs preserve those files. Subsequent runs can use the
+retention option below. A complete environment lock remains R0 work.
+
+Retaining raw evidence
+----------------------
+
+Pass ``--artifacts-dir /path/outside/git`` to the campaign runner to retain
+**every attempt**, successful or failed, under a campaign hash and a unique
+case directory. Without this option, work directories remain temporary.
+The retained directory contains copied inputs, generated matrix/state/output
+files, complete stdout/stderr and PETSc logs, and each subprocess's argument
+vector, timeout and explicit environment overrides. ``manifest.json`` records
+per-file byte counts and SHA-256 checksums plus the case result; the JSONL
+record links its directory and manifest checksum after normal completion.
+
+Handled cancellation finalizes the partial manifest after subprocess cleanup,
+and the campaign checkpoint points to the interrupted attempt. SIGKILL,
+machine failure or disk exhaustion can leave an incomplete archive; a directory
+alone is not proof of completion. Retried failures receive new directories.
+Existing nonempty evidence directories are refused, and an archive inside the
+copied example is rejected to prevent recursive copying.
+
+The retained files are not pruned automatically. Hash verification, external
+equilibrium files, library/compiler locks and implicit PETSc options still
+belong in a publication archive; command overrides do not capture the whole
+environment. Preserve failed attempts when publishing a performance envelope.
+A one-case installed-wheel/office test retained and independently verified all
+26 files, including the rejected reference's matrices and both RHS states.
+It still reports no accepted pair.
+
+The retained 487-by-487 monoenergetic Jacobian has a dense SVD condition
+estimate of ``5.58e4``. An independent dense LU solve with extended-precision
+residual refinement gives much smaller residuals than the failed PETSc run.
+Modified Gram--Schmidt and classical Gram--Schmidt with reorthogonalization
+also leave the reference rejected. These are bounded diagnostics, not a
+causal explanation, production solver policy or a grid-convergence result.
+
+A separate PETSc C replay loads the same matrix and each saved physical RHS,
+without running SFINCS assembly. With MUMPS, GMRES and ``CNTL(1)=1e-6`` it
+reproduces the two relative residuals ``1.89e-9`` and ``5.61e-8``. Direct
+MUMPS with its default pivot threshold fails (KSP reason ``-11``, non-finite
+residual). This narrows the gap to the standalone PETSc solve/toolchain path;
+it does not establish which numerical kernel or dependency is responsible.
+The replay source, commands, binary and logs are in the same external archive.

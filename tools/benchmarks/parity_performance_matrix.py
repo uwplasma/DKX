@@ -38,6 +38,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import fcntl
 import hashlib
 import importlib.metadata
@@ -97,6 +98,9 @@ def _run_measured(
     SIGTERM cancellation is translated into SystemExit on the main thread so
     the finally block runs; SIGINT/other exceptions already unwind normally.
     """
+    _atomic_text(cwd / "benchmark.command.json", json.dumps({
+        "argv": command, "environment_overrides": env or {}, "timeout_s": timeout_s,
+    }, indent=2) + "\n")
     start = time.perf_counter()
     proc = None
     previous = None
@@ -533,6 +537,39 @@ def deck_metadata(deck: Path) -> dict:
     }
 
 
+@contextmanager
+def _case_workspace(record: dict, artifact_dir: Path | None):
+    """Optional persistent evidence, finalized after subprocess cleanup."""
+    if artifact_dir is None:
+        with tempfile.TemporaryDirectory(prefix="dkx_matrix_") as scratch:
+            yield Path(scratch)
+        return
+    root = artifact_dir.resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    if any(root.iterdir()):
+        raise ValueError(f"artifact directory is not empty: {root}")
+    record["artifacts_directory"] = str(root)
+    try:
+        yield root
+    except BaseException as exc:
+        record["error"] = f"{type(exc).__name__}: {exc}"
+        raise
+    finally:
+        files = {}
+        for path in sorted(root.rglob("*")):
+            if path.is_file():
+                digest = hashlib.sha256()
+                with path.open("rb") as handle:
+                    for block in iter(lambda: handle.read(1024 * 1024), b""):
+                        digest.update(block)
+                files[str(path.relative_to(root))] = {
+                    "sha256": digest.hexdigest(), "bytes": path.stat().st_size,
+                }
+        manifest = json.dumps({"schema": 1, "record": record, "files": files}, indent=2) + "\n"
+        _atomic_text(root / "manifest.json", manifest)
+        record["artifacts_manifest_sha256"] = hashlib.sha256(manifest.encode()).hexdigest()
+
+
 def run_case(
     example_dir: Path,
     fortran_binary: Path | None,
@@ -545,18 +582,20 @@ def run_case(
     equilibria: str | None,
     launcher: list[str],
     fortran_residual: bool,
+    artifact_dir: Path | None = None,
 ) -> dict:
     """One deck through both codes, in isolated copies of the example directory."""
     deck = example_dir / "input.namelist"
+    if artifact_dir is not None and artifact_dir.resolve().is_relative_to(example_dir.resolve()):
+        raise ValueError("artifact directory must be outside the copied example directory")
     record: dict = {"case": example_dir.name, "fortran_petsc_opts": list(fortran_petsc_opts)}
-    try:
-        record.update(deck_metadata(deck))
-    except Exception as exc:
-        record["metadata_error"] = f"{type(exc).__name__}: {exc}"
-        return record
-
-    with tempfile.TemporaryDirectory(prefix="dkx_matrix_") as scratch:
-        root = Path(scratch)
+    with _case_workspace(record, artifact_dir) as root:
+        shutil.copy(deck, root / "input.namelist")
+        try:
+            record.update(deck_metadata(deck))
+        except Exception as exc:
+            record["metadata_error"] = f"{type(exc).__name__}: {exc}"
+            return record
 
         record["fortran"] = {}
         if fortran_binary is not None:
@@ -767,6 +806,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--examples", type=Path, required=True)
     parser.add_argument("--fortran-binary", type=Path, default=None)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument(
+        "--artifacts-dir", type=Path,
+        help="retain every attempt's inputs, raw matrices/states, logs, commands and "
+             "checksummed manifest here, including failures and handled cancellation; "
+             "large files are not pruned automatically (use a directory outside Git)",
+    )
     parser.add_argument("--ranks", type=int, nargs="+", default=[1])
     parser.add_argument("--reps", type=int, default=1, help="warm repetitions")
     parser.add_argument("--timeout-s", type=float, default=1800.0)
@@ -853,6 +898,11 @@ def _run_campaign(args) -> int:
     print(f"{len(cases)} case(s) to run, {len(done)} successful executions retained", file=sys.stderr)
     for index, (dof, directory) in enumerate(cases, start=1):
         print(f"[{index}/{len(cases)}] {directory.name} ({dof} dof)", file=sys.stderr)
+        artifact_dir = None
+        if args.artifacts_dir is not None:
+            parent = args.artifacts_dir.resolve() / campaign_id
+            parent.mkdir(parents=True, exist_ok=True)
+            artifact_dir = Path(tempfile.mkdtemp(prefix=directory.name + "-", dir=parent))
         try:
             record = run_case(
                 directory, args.fortran_binary,
@@ -861,11 +911,12 @@ def _run_campaign(args) -> int:
                 ranks=args.ranks, reps=args.reps,
                 timeout_s=args.timeout_s, equilibria=args.equilibria,
                 launcher=args.fortran_launcher.split() if args.fortran_launcher else [],
-                fortran_residual=args.fortran_residual,
+                fortran_residual=args.fortran_residual, artifact_dir=artifact_dir,
             )
         except BaseException as exc:
             records.append({"case": directory.name, "campaign_id": campaign_id,
-                            "error": f"{type(exc).__name__}: {exc}"})
+                            "error": f"{type(exc).__name__}: {exc}",
+                            "artifacts_directory": str(artifact_dir) if artifact_dir else None})
             _atomic_text(args.out, "".join(json.dumps(row) + "\n" for row in records))
             raise
         record["campaign_id"] = campaign_id

@@ -283,6 +283,83 @@ def test_sweep_does_not_reuse_outputs_copied_with_an_example(tmp_path: Path, mon
     assert "error" in record["parity"]
 
 
+@pytest.mark.parametrize("outcome", ["exit", "timeout", "cancel"])
+def test_retained_case_keeps_raw_evidence_after_cleanup(tmp_path, monkeypatch, outcome):
+    import hashlib
+    import shutil
+    import sys
+    from tools.benchmarks import parity_performance_matrix as matrix
+
+    example = tmp_path / "example"
+    example.mkdir()
+    shutil.copy(ROOT / "tests/ref/monoenergetic_PAS_tiny_scheme1.input.namelist", example / "input.namelist")
+    artifact = tmp_path / "retained"
+    measured = matrix._run_measured
+
+    def run(command, work, timeout_s, env=None):
+        script = ("from pathlib import Path; import time; "
+                  "Path('sfincsBinary_partial').write_bytes(b'x' * 2000000); "
+                  "print('retained diagnostic', flush=True); "
+                  + ("time.sleep(30)" if outcome == "timeout" else "raise SystemExit(3)"))
+        result = measured([sys.executable, "-c", script], work, 0.5)
+        if outcome == "cancel":
+            raise KeyboardInterrupt("diagnostic cancellation")
+        return result
+
+    monkeypatch.setattr(matrix, "_run_measured", run)
+    kwargs = dict(ranks=[1], reps=0, timeout_s=1, equilibria=None, launcher=[],
+                  fortran_residual=True, artifact_dir=artifact)
+    if outcome == "cancel":
+        with pytest.raises(KeyboardInterrupt, match="diagnostic cancellation"):
+            matrix.run_case(example, Path("sfincs"), **kwargs)
+    else:
+        result = matrix.run_case(example, Path("sfincs"), **kwargs)
+        assert result["algebraic_pair_accepted"] is False
+        assert result["artifacts_manifest_sha256"] == hashlib.sha256((artifact / "manifest.json").read_bytes()).hexdigest()
+    manifest = json.loads((artifact / "manifest.json").read_text())
+    assert manifest["record"]["artifacts_directory"] == str(artifact)
+    assert "fortran_1/sfincsBinary_partial" in manifest["files"]
+    assert "fortran_1/benchmark.command.json" in manifest["files"]
+    for name, info in manifest["files"].items():
+        content = (artifact / name).read_bytes()
+        assert info == {"sha256": hashlib.sha256(content).hexdigest(), "bytes": len(content)}
+    if outcome == "cancel":
+        assert "KeyboardInterrupt" in manifest["record"]["error"]
+    elif outcome == "timeout":
+        assert "timeout" in manifest["record"]["fortran"]["1"]["error"]
+    with pytest.raises(ValueError, match="outside the copied example"):
+        matrix.run_case(example, Path("sfincs"), **{**kwargs, "artifact_dir": example / "archive"})
+    assert not (example / "archive").exists()
+    snapshot = (artifact / "manifest.json").read_bytes()
+    with pytest.raises(ValueError, match="not empty"):
+        matrix.run_case(example, Path("sfincs"), **kwargs)
+    assert (artifact / "manifest.json").read_bytes() == snapshot
+
+
+def test_campaign_retains_distinct_failed_attempts(tmp_path, monkeypatch):
+    import shutil
+    from tools.benchmarks import parity_performance_matrix as matrix
+
+    examples = tmp_path / "examples"
+    case = examples / "retry"
+    case.mkdir(parents=True)
+    shutil.copy(ROOT / "tests/ref/monoenergetic_PAS_tiny_scheme1.input.namelist", case / "input.namelist")
+    def failed(command, work, timeout_s, env=None):
+        (work / "benchmark.stdout.log").write_text("failure details")
+        return {"returncode": 1}
+    monkeypatch.setattr(matrix, "_run_measured", failed)
+    out = tmp_path / "campaign.jsonl"
+    argv = ["--examples", str(examples), "--out", str(out),
+            "--artifacts-dir", str(tmp_path / "artifacts")]
+    assert matrix.main(argv) == 0
+    assert matrix.main(argv) == 0
+    rows = [json.loads(line) for line in out.read_text().splitlines()]
+    assert len(rows) == 2
+    paths = [Path(row["artifacts_directory"]) for row in rows]
+    assert paths[0] != paths[1]
+    assert all((path / "manifest.json").is_file() for path in paths)
+
+
 def test_campaign_checkpoint_is_atomic_on_publish_failure(tmp_path: Path, monkeypatch) -> None:
     from tools.benchmarks import parity_performance_matrix as matrix
 
