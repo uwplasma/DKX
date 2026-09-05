@@ -71,8 +71,21 @@ unless explicitly overridden. For repeated differentiable scans:
    value, gradient = current(jnp.array([-0.2, 0.0, 0.2]))
 
 ``devices=None`` keeps the default single-device behavior. Both public scan
-functions return the original residual norms along with states and moments;
-use these diagnostics together with observable and resolution checks. These
+functions return original absolute and relative residuals plus a per-element
+``algebraic_converged`` array, including under JIT and multi-device sharding.
+The flag requires finite state/RHS/residual and ``||Ax-b|| <= tol*||b||``; it
+does not rely on a solver's reported success flag. For a zero RHS, zero
+residual gives relative residual zero, otherwise infinity. Use these diagnostics
+together with separate finite-moment, observable and resolution checks:
+
+.. code-block:: python
+
+   scan = batched_er_scan(problem, er_values, devices="auto")
+   rejected = ~scan.algebraic_converged  # one boolean per original input
+
+These flags report algebraic admission; they neither raise on every rejected
+nondifferentiable scan element nor certify its physics. The differentiable
+solve's existing forward/adjoint guards remain enabled. These
 prepared native problems reuse the existing Case physics builder without a
 kinetic solve or SFINCS namelist. ``problem.er_units`` is ``"kV/m"`` for this
 path (``"normalized"`` for deck preparation); moments and radial current remain
