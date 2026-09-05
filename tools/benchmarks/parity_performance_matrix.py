@@ -16,10 +16,10 @@ runtime overhead.  Each case gets a fresh copy of the example directory, so
 equilibrium files resolve exactly as they do upstream and outputs never
 collide.
 
-``dkx`` is reported cold *and* warm.  Cold includes JIT compilation and is the
-honest number for a single one-shot solve; warm is the honest number for the
-scan/optimization workloads the code exists for.  Fortran has no equivalent
-split.  Both are recorded so neither reading can be cherry-picked.
+``dkx`` reports the first invocation and repeated warm invocations. The first
+invocation may load a persistent compilation cache; it is not automatically a
+fresh-compilation measurement. The configured cache directory is recorded.
+Fortran has no equivalent JIT split. Both invocation costs are retained.
 
 Results stream to JSONL as each case finishes, so a long sweep is resumable
 and a single failing case never costs the rest of the run.
@@ -180,7 +180,9 @@ for _ in range(reps + 1):
             residuals.append(float(norm_r / norm_b) if norm_b else (0.0 if norm_r == 0 else None))
 valid = residuals and all(r is not None and np.isfinite(r) for r in residuals)
 json.dump({
-    "cold_s": samples[0],
+    "cold_s": samples[0],  # Legacy field; first invocation, not necessarily fresh compilation.
+    "first_run_s": samples[0],
+    "compilation_cache_dir": jax.config.jax_compilation_cache_dir,
     "warm_s": statistics.median(samples[1:]) if reps else None,
     "warm_samples_s": samples[1:],
     "backend": jax.default_backend(),
@@ -756,13 +758,13 @@ def _atomic_text(path: Path, text: str) -> None:
             temporary.unlink(missing_ok=True)
 
 
-def _campaign_id(args, directories: list[Path]) -> str:
+def _campaign_id(args, directories: list[Path], *, provenance: dict | None = None) -> str:
     """Bind resume to inputs, code, runtime settings and the selected executable.
 
     This detects changed campaigns; it is not a substitute for a pinned external
     compiler/MPI/library environment in a release benchmark.
     """
-    files = {Path(__file__).resolve()}
+    files = {Path(__file__).resolve(), *(path.resolve() for path in args.provenance_file)}
     for directory in directories:
         files.update(p.resolve() for p in directory.rglob("*") if p.is_file())
         for match in _EQUILIBRIUM_KEY.finditer((directory / "input.namelist").read_text()):
@@ -776,24 +778,32 @@ def _campaign_id(args, directories: list[Path]) -> str:
             spec = importlib.util.find_spec(package)
             if spec is not None and spec.origin is not None:
                 files.update(Path(spec.origin).parent.rglob("*.py"))
-    digest = hashlib.sha256(json.dumps({
+    metadata = {
         "schema": 1,
-        "options": {k: str(v) for k, v in vars(args).items() if k != "out"},
+        "options": json.loads(json.dumps({k: v for k, v in vars(args).items() if k != "out"}, default=str)),
         "versions": versions,
         "python": sys.version,
         "platform": platform.platform(),
         "environment": {k: v for k, v in os.environ.items() if k.startswith(
             ("PETSC_", "DKX_", "JAX_", "XLA_", "CUDA_", "OMP_", "MKL_", "OPENBLAS_", "MAMBA_", "LD_", "DYLD_")
         )},
-    }, sort_keys=True).encode())
+    }
+    digest = hashlib.sha256(json.dumps(metadata, sort_keys=True).encode())
+    file_hashes = {}
     for path in sorted(files):
         digest.update(str(path).encode() + b"\0")
         if not path.is_file():
             digest.update(b"missing\0")
+            file_hashes[str(path)] = None
             continue
+        file_digest = hashlib.sha256()
         with path.open("rb") as handle:
             for block in iter(lambda: handle.read(1024 * 1024), b""):
                 digest.update(block)
+                file_digest.update(block)
+        file_hashes[str(path)] = file_digest.hexdigest()
+    if provenance is not None:
+        provenance.update(metadata, files_sha256=file_hashes, campaign_id=digest.hexdigest())
     return digest.hexdigest()
 
 
@@ -822,6 +832,11 @@ def main(argv: list[str] | None = None) -> int:
              "takes precedence over conflicting --fortran-petsc-opt tokens",
     )
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument(
+        "--provenance-file", type=Path, action="append", default=[], metavar="PATH",
+        help="bind an external environment lock, PETSc options file, build record or "
+             "library to campaign identity; repeat per file and archive originals separately",
+    )
     parser.add_argument(
         "--artifacts-dir", type=Path,
         help="retain every attempt's inputs, raw matrices/states, logs, commands and "
@@ -865,6 +880,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    for path in args.provenance_file:
+        if not path.is_file():
+            parser.error(f"--provenance-file is not a file: {path}")
     if args.fortran_backend and args.fortran_binary is None:
         parser.error("--fortran-backend requires --fortran-binary")
     launcher = args.fortran_launcher.split() if args.fortran_launcher else []
@@ -901,7 +919,8 @@ def _run_campaign(args) -> int:
         cases.append((dof, directory))
     cases.sort()
 
-    campaign_id = _campaign_id(args, [directory for _, directory in cases])
+    provenance = {}
+    campaign_id = _campaign_id(args, [directory for _, directory in cases], provenance=provenance)
     records = []
     if args.out.exists():
         try:
@@ -911,6 +930,8 @@ def _run_campaign(args) -> int:
         except (ValueError, AttributeError) as exc:
             print(f"refusing to resume: {exc}; choose a fresh --out path", file=sys.stderr)
             return 2
+    provenance_path = args.out.with_suffix(args.out.suffix + ".provenance.json")
+    _atomic_text(provenance_path, json.dumps(provenance, indent=2, sort_keys=True) + "\n")
     latest = {record["case"]: record for record in records}
     done = {case for case, record in latest.items() if _execution_complete(record, args)}
     cases = [(dof, directory) for dof, directory in cases if directory.name not in done]
@@ -954,6 +975,7 @@ def _run_campaign(args) -> int:
         "execution_complete": sum(_execution_complete(record, args) for record in current),
         "campaign_id": campaign_id,
         "checkpoint_sha256": hashlib.sha256(args.out.read_bytes()).hexdigest(),
+        "provenance_sha256": hashlib.sha256(provenance_path.read_bytes()).hexdigest(),
         "fortran_ok": sum(
             1 for r in current
             if ((r.get("fortran") or {}).get("1") or {}).get("succeeded")

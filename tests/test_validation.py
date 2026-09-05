@@ -374,9 +374,10 @@ def test_campaign_checkpoint_is_atomic_on_publish_failure(tmp_path: Path, monkey
     assert list(tmp_path.iterdir()) == [checkpoint]
 
 
-@pytest.mark.parametrize("mutation", ["input", "equilibrium", "settings", "petsc", "petsc_env"])
+@pytest.mark.parametrize("mutation", ["input", "equilibrium", "settings", "petsc", "petsc_env", "external"])
 @pytest.mark.parametrize("interrupt", [False, True])
 def test_campaign_resume_retries_failures_and_checks_provenance(tmp_path: Path, monkeypatch, mutation, interrupt) -> None:
+    import hashlib
     from tools.benchmarks import parity_performance_matrix as matrix
 
     examples = tmp_path / "examples"
@@ -397,7 +398,9 @@ def test_campaign_resume_retries_failures_and_checks_provenance(tmp_path: Path, 
         return {"case": directory.name, "dkx": {"returncode": 0 if success else 1, "converged": success, "algebraic_acceptance": "passed" if success else "failed"}}
     monkeypatch.setattr(matrix, "run_case", run)
     monkeypatch.setattr(matrix, "deck_metadata", lambda path: {"dof": 1})
-    argv = ["--examples", str(examples), "--out", str(out)]
+    external = tmp_path / "toolchain.lock"
+    external.write_bytes(b"pinned build\x00library hash")
+    argv = ["--examples", str(examples), "--out", str(out), "--provenance-file", str(external)]
     if interrupt:
         with pytest.raises(KeyboardInterrupt):
             matrix.main(argv)
@@ -412,8 +415,20 @@ def test_campaign_resume_retries_failures_and_checks_provenance(tmp_path: Path, 
     summary = json.loads(out.with_suffix(".jsonl.done").read_text())
     assert summary["cases"] == 2 and summary["attempts"] == 3
     assert summary["execution_complete"] == 2
+    provenance_path = out.with_suffix(".jsonl.provenance.json")
+    provenance_bytes = provenance_path.read_bytes()
+    provenance = json.loads(provenance_bytes)
+    assert provenance["campaign_id"] == summary["campaign_id"]
+    assert provenance["options"]["provenance_file"] == [str(external)]
+    assert provenance["options"]["reps"] == 1
+    assert provenance["files_sha256"][str(external)] == hashlib.sha256(external.read_bytes()).hexdigest()
+    assert provenance["files_sha256"][str(equilibrium)] == hashlib.sha256(equilibrium.read_bytes()).hexdigest()
+    assert "jax" in provenance["versions"] and provenance["python"]
+    assert summary["provenance_sha256"] == hashlib.sha256(provenance_bytes).hexdigest()
     snapshot = out.read_bytes()
-    if mutation == "input":
+    if mutation == "external":
+        external.write_bytes(b"changed library build")
+    elif mutation == "input":
         (examples / "good/input.namelist").write_text("&general\n RHSMode=2\n/\n")
     elif mutation == "equilibrium":
         equilibrium.write_text("changed geometry")
@@ -425,7 +440,20 @@ def test_campaign_resume_retries_failures_and_checks_provenance(tmp_path: Path, 
         argv += ["--reps", "2"]
     assert matrix.main(argv) == 2
     assert out.read_bytes() == snapshot and len(calls) == 3
+    assert provenance_path.read_bytes() == provenance_bytes
 
+
+
+def test_missing_explicit_provenance_file_is_rejected_before_launch(tmp_path, monkeypatch):
+    from tools.benchmarks import parity_performance_matrix as matrix
+    def forbidden(*args, **kwargs):
+        raise AssertionError("missing evidence must fail before launching a process")
+    monkeypatch.setattr(matrix, "preflight_fortran", forbidden)
+    out = tmp_path / "results.jsonl"
+    with pytest.raises(SystemExit):
+        matrix.main(["--examples", str(tmp_path), "--out", str(out),
+                     "--provenance-file", str(tmp_path / "missing.lock")])
+    assert not out.exists()
 
 def test_campaign_lock_refuses_a_concurrent_writer(tmp_path: Path) -> None:
     import fcntl

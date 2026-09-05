@@ -170,11 +170,24 @@ wrong observations reject that reference. The selected package and
 ``backend_acceptance`` are recorded independently of algebraic acceptance.
 Backend-specific tuning tokens alone do not select a backend.
 
-Changed option tokens or recorded ``PETSC_`` environment settings invalidate
-resume. This is not a complete toolchain lock: archive external option-file
-contents and implicit PETSc configuration separately, and start a new campaign
-if they change. Every configuration still requires the original-residual and
-observable gates; a backend change can change accuracy as well as runtime.
+Changed options or recorded runtime environment settings invalidate resume.
+The runner writes ``OUT.provenance.json`` with typed options, Python/package
+versions, platform, selected environment variables and individual input/source/
+executable hashes. Its checksum is included in ``OUT.done``. Refused resume
+preserves the previous provenance and measurements.
+
+Use repeatable ``--provenance-file PATH`` for environment locks, build records,
+external PETSc option files or resolved shared libraries. Their contents become
+part of campaign identity; missing explicit files fail before preflight.
+Archive originals separately: a hash list does not supply the files, discover
+all dynamically loaded libraries or prove the selected environment is complete.
+Every configuration still requires the original-residual and observable gates.
+
+``first_run_s`` records DKX's first invocation; ``cold_s`` remains its legacy
+alias. ``compilation_cache_dir`` records the effective JAX cache directory.
+These do not certify a fresh compilation: use an explicitly empty cache and
+archive its initial state when measuring compilation, then distinguish later
+warm calls. The default persistent cache may already contain compiled code.
 
 Output comparison and transport reference limits
 ------------------------------------------------
@@ -294,3 +307,40 @@ fixed-count refinement from backward-error stopping and lists configurations
 that disable internal refinement, including distributed right-hand sides or
 solutions. Record the effective settings and verify the final residual at
 every rank count; an option token alone does not demonstrate refinement.
+
+Full-FP qualification with approximate preconditioners
+----------------------------------------------------------
+
+Two-species analytic scheme-4 fixtures at 2,804 and 15,844 total unknowns use
+full linearized Fokker--Planck collisions, zero field and no Phi1. The larger
+fixture has ``Ntheta=9, Nzeta=11, Nxi=16, Nx=5``; the smaller uses
+``5,7,8,5``. Both derive from
+``tests/ref/quick_2species_FPCollisions_noEr.input.namelist`` with
+``solverTolerance=1e-10``. Their dumped preconditioners differ from A
+(relative Frobenius differences 0.339 and 0.0953), unlike the monoenergetic
+fixtures above.
+
+Default SFINCS GMRES/MUMPS completes but fails original-residual acceptance
+(5.72e-9--6.59e-9). Adding ``-ksp_pc_side right`` and
+``-ksp_norm_type unpreconditioned`` passes at one/four MPI ranks on both grids
+(maximum 9.75e-11). Both installed-wheel CPU DKX solves pass too; the largest
+current difference is 2.44e-13 absolute, with flow/particle/heat moments also
+compared. The accepted medium reference takes substantially longer than the
+rejected default, so the earlier short timing is not a valid baseline.
+
+The installed-wheel medium solve on one A4000 reports GPU execution and a
+7.72e-11 original residual across first and two repeated invocations. Its
+current differs from accepted one-rank SFINCS by 3.55e-14 absolute; particle
+and heat fluxes differ by less than 4.28e-20. These are fixed-discretization
+checks, not joint-grid convergence, multi-GPU scaling or idle-machine timings.
+Host activity prevents a controlled speed comparison. First invocation used
+the existing persistent cache, so it is not a fresh compilation measurement.
+
+``dkx-review-evidence-20260905/full-fp-reference`` retains inputs, commands,
+failed/accepted attempts and GPU comparisons. The CPU campaign binds an
+explicit 107-package reference environment, build log, source patch and 91
+resolved linked libraries. Readable provenance hashes 182 files for CPU and
+86 for GPU; all 97 files in the accepted CPU/GPU attempt manifests and both
+provenance sidecar checksums were independently verified locally. GPU driver/
+runtime locking and comprehensive external-input archival remain separate
+publication requirements.
