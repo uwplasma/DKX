@@ -38,6 +38,10 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import fcntl
+import hashlib
+import importlib.metadata
+import importlib.util
 import json
 import os
 import platform
@@ -636,6 +640,72 @@ def preflight_fortran(binary: Path | None, launcher: list[str]) -> str | None:
     return None
 
 
+def _atomic_text(path: Path, text: str) -> None:
+    """Publish a complete checkpoint on the same filesystem, or keep the old one."""
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as handle:
+            temporary = Path(handle.name)
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def _campaign_id(args, directories: list[Path]) -> str:
+    """Bind resume to inputs, code, runtime settings and the selected executable.
+
+    This detects changed campaigns; it is not a substitute for a pinned external
+    compiler/MPI/library environment in a release benchmark.
+    """
+    files = {Path(__file__).resolve()}
+    for directory in directories:
+        files.update(p.resolve() for p in directory.rglob("*") if p.is_file())
+        for match in _EQUILIBRIUM_KEY.finditer((directory / "input.namelist").read_text()):
+            files.add((directory / match.group(2)).resolve())
+    if args.fortran_binary is not None:
+        files.add(args.fortran_binary.resolve())
+    versions = {}
+    for package in ("dkx", "solvax", "jax", "jaxlib", "numpy", "scipy", "h5py"):
+        versions[package] = importlib.metadata.version(package)
+        if package in ("dkx", "solvax"):
+            spec = importlib.util.find_spec(package)
+            if spec is not None and spec.origin is not None:
+                files.update(Path(spec.origin).parent.rglob("*.py"))
+    digest = hashlib.sha256(json.dumps({
+        "schema": 1,
+        "options": {k: str(v) for k, v in vars(args).items() if k != "out"},
+        "versions": versions,
+        "python": sys.version,
+        "platform": platform.platform(),
+        "environment": {k: v for k, v in os.environ.items() if k.startswith(
+            ("DKX_", "JAX_", "XLA_", "CUDA_", "OMP_", "MKL_", "OPENBLAS_", "MAMBA_", "LD_", "DYLD_")
+        )},
+    }, sort_keys=True).encode())
+    for path in sorted(files):
+        digest.update(str(path).encode() + b"\0")
+        if not path.is_file():
+            digest.update(b"missing\0")
+            continue
+        with path.open("rb") as handle:
+            for block in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(block)
+    return digest.hexdigest()
+
+
+def _execution_complete(record: dict, args) -> bool:
+    candidate = record.get("dkx", {})
+    if candidate.get("returncode") != 0 or candidate.get("converged") is not True:
+        return False
+    return args.fortran_binary is None or all(
+        record.get("fortran", {}).get(str(rank), {}).get("succeeded") is True
+        for rank in args.ranks
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--examples", type=Path, required=True)
@@ -677,27 +747,20 @@ def main(argv: list[str] | None = None) -> int:
         print(f"refusing to start: {reason}", file=sys.stderr)
         return 2
 
-    # A sweep runs for hours, so something always ends up waiting on it.  Clear
-    # the sentinel at the start and write it at the end, so a waiter can poll a
-    # *file*: `until [ -f sweep.jsonl.done ]; do sleep 60; done`.  Waiting on a
-    # process instead is a trap -- `pgrep -f parity_performance_matrix` matches
-    # the waiting shell's own command line, so the loop waits on itself and
-    # never exits.  That cost a day of wall clock on 2026-08-01, with the sweep
-    # sitting complete the whole time.
-    sentinel = args.out.with_suffix(args.out.suffix + ".done")
-    sentinel.unlink(missing_ok=True)
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    with args.out.with_suffix(args.out.suffix + ".lock").open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            print("refusing to start: another process owns this campaign", file=sys.stderr)
+            return 2
+        return _run_campaign(args)
 
-    done = set()
-    if args.out.exists():
-        for line in args.out.read_text().splitlines():
-            if line.strip():
-                done.add(json.loads(line)["case"])
 
+def _run_campaign(args) -> int:
     directories = sorted(p.parent for p in args.examples.glob("*/input.namelist"))
     cases = []
     for directory in directories:
-        if directory.name in done:
-            continue
         if args.only and not any(token in directory.name for token in args.only):
             continue
         try:
@@ -709,10 +772,25 @@ def main(argv: list[str] | None = None) -> int:
         cases.append((dof, directory))
     cases.sort()
 
-    print(f"{len(cases)} case(s) to run, {len(done)} already recorded", file=sys.stderr)
-    with args.out.open("a") as handle:
-        for index, (dof, directory) in enumerate(cases, start=1):
-            print(f"[{index}/{len(cases)}] {directory.name} ({dof} dof)", file=sys.stderr)
+    campaign_id = _campaign_id(args, [directory for _, directory in cases])
+    records = []
+    if args.out.exists():
+        try:
+            records = [json.loads(line) for line in args.out.read_text().splitlines() if line.strip()]
+            if any(record.get("campaign_id") != campaign_id for record in records):
+                raise ValueError("campaign inputs, code or settings differ (or legacy provenance is absent)")
+        except (ValueError, AttributeError) as exc:
+            print(f"refusing to resume: {exc}; choose a fresh --out path", file=sys.stderr)
+            return 2
+    latest = {record["case"]: record for record in records}
+    done = {case for case, record in latest.items() if _execution_complete(record, args)}
+    cases = [(dof, directory) for dof, directory in cases if directory.name not in done]
+    sentinel = args.out.with_suffix(args.out.suffix + ".done")
+    sentinel.unlink(missing_ok=True)
+    print(f"{len(cases)} case(s) to run, {len(done)} successful executions retained", file=sys.stderr)
+    for index, (dof, directory) in enumerate(cases, start=1):
+        print(f"[{index}/{len(cases)}] {directory.name} ({dof} dof)", file=sys.stderr)
+        try:
             record = run_case(
                 directory, args.fortran_binary,
                 petsc_profile=args.petsc_profile,
@@ -721,38 +799,39 @@ def main(argv: list[str] | None = None) -> int:
                 launcher=args.fortran_launcher.split() if args.fortran_launcher else [],
                 fortran_residual=args.fortran_residual,
             )
-            handle.write(json.dumps(record) + "\n")
-            handle.flush()
-            fortran = (record.get("fortran") or {}).get("1", {})
-            dkx = record.get("dkx", {})
-            print(
-                f"    fortran {fortran.get('wall_s')}s/{fortran.get('peak_rss_gb')}GB"
-                f"  dkx cold {dkx.get('cold_s')}s warm {dkx.get('warm_s')}s"
-                f"/{dkx.get('peak_rss_gb')}GB",
-                file=sys.stderr,
-            )
-
-    records = [
-        json.loads(line)
-        for line in args.out.read_text().splitlines()
-        if line.strip()
-    ]
+        except BaseException as exc:
+            records.append({"case": directory.name, "campaign_id": campaign_id,
+                            "error": f"{type(exc).__name__}: {exc}"})
+            _atomic_text(args.out, "".join(json.dumps(row) + "\n" for row in records))
+            raise
+        record["campaign_id"] = campaign_id
+        records.append(record)
+        _atomic_text(args.out, "".join(json.dumps(row) + "\n" for row in records))
+        latest[record["case"]] = record
+    if not args.out.exists():
+        _atomic_text(args.out, "")
+    current = list(latest.values())
     summary = {
-        "cases": len(records),
+        "cases": len(current),
+        "attempts": len(records),
+        "execution_complete": sum(_execution_complete(record, args) for record in current),
+        "campaign_id": campaign_id,
+        "checkpoint_sha256": hashlib.sha256(args.out.read_bytes()).hexdigest(),
         "fortran_ok": sum(
-            1 for r in records
+            1 for r in current
             if ((r.get("fortran") or {}).get("1") or {}).get("succeeded")
         ),
-        "dkx_ok": sum(1 for r in records if (r.get("dkx") or {}).get("warm_s")),
+        "dkx_ok": sum(1 for r in current if (r.get("dkx") or {}).get("returncode") == 0
+                      and (r.get("dkx") or {}).get("converged") is True),
         "comparable": sum(
-            1 for r in records
+            1 for r in current
             if any(
                 isinstance(v, float)
                 for v in ((r.get("parity") or {}).get("difference") or {}).values()
             )
         ),
     }
-    sentinel.write_text(json.dumps(summary, indent=2) + "\n")
+    _atomic_text(sentinel, json.dumps(summary, indent=2) + "\n")
     print(
         f"sweep complete: {summary['cases']} cases, "
         f"fortran ok {summary['fortran_ok']}, dkx ok {summary['dkx_ok']}, "

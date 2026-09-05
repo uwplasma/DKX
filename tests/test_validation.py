@@ -232,6 +232,80 @@ def test_sweep_does_not_reuse_outputs_copied_with_an_example(tmp_path: Path, mon
     assert "error" in record["parity"]
 
 
+def test_campaign_checkpoint_is_atomic_on_publish_failure(tmp_path: Path, monkeypatch) -> None:
+    from tools.benchmarks import parity_performance_matrix as matrix
+
+    checkpoint = tmp_path / "results.jsonl"
+    checkpoint.write_text("original\n")
+    def interrupted_replace(source, target):
+        raise OSError("interrupted publication")
+    monkeypatch.setattr(matrix.os, "replace", interrupted_replace)
+    with pytest.raises(OSError, match="interrupted"):
+        matrix._atomic_text(checkpoint, "replacement\n")
+    assert checkpoint.read_text() == "original\n"
+    assert list(tmp_path.iterdir()) == [checkpoint]
+
+
+@pytest.mark.parametrize("mutation", ["input", "equilibrium", "settings"])
+@pytest.mark.parametrize("interrupt", [False, True])
+def test_campaign_resume_retries_failures_and_checks_provenance(tmp_path: Path, monkeypatch, mutation, interrupt) -> None:
+    from tools.benchmarks import parity_performance_matrix as matrix
+
+    examples = tmp_path / "examples"
+    for case in ("good", "retry"):
+        work = examples / case
+        work.mkdir(parents=True)
+        (work / "input.namelist").write_text("&general\n/\n")
+    equilibrium = tmp_path / "geometry.bc"
+    equilibrium.write_text("original geometry")
+    (examples / "good/input.namelist").write_text(f"equilibriumFile = '{equilibrium}'\n")
+    out = tmp_path / "results.jsonl"
+    calls = []
+    def run(directory, *args, **kwargs):
+        calls.append(directory.name)
+        success = directory.name == "good" or calls.count("retry") > 1
+        if interrupt and not success:
+            raise KeyboardInterrupt("cancelled pilot")
+        return {"case": directory.name, "dkx": {"returncode": 0 if success else 1, "converged": success}}
+    monkeypatch.setattr(matrix, "run_case", run)
+    monkeypatch.setattr(matrix, "deck_metadata", lambda path: {"dof": 1})
+    argv = ["--examples", str(examples), "--out", str(out)]
+    if interrupt:
+        with pytest.raises(KeyboardInterrupt):
+            matrix.main(argv)
+        assert not out.with_suffix(".jsonl.done").exists()
+    else:
+        assert matrix.main(argv) == 0
+    assert matrix.main(argv) == 0
+    assert calls == ["good", "retry", "retry"]
+    rows = [json.loads(line) for line in out.read_text().splitlines()]
+    assert len(rows) == 3
+    assert "KeyboardInterrupt" in rows[1]["error"] if interrupt else rows[1]["dkx"]["returncode"] == 1
+    summary = json.loads(out.with_suffix(".jsonl.done").read_text())
+    assert summary["cases"] == 2 and summary["attempts"] == 3
+    assert summary["execution_complete"] == 2
+    snapshot = out.read_bytes()
+    if mutation == "input":
+        (examples / "good/input.namelist").write_text("&general\n RHSMode=2\n/\n")
+    elif mutation == "equilibrium":
+        equilibrium.write_text("changed geometry")
+    else:
+        argv += ["--reps", "2"]
+    assert matrix.main(argv) == 2
+    assert out.read_bytes() == snapshot and len(calls) == 3
+
+
+def test_campaign_lock_refuses_a_concurrent_writer(tmp_path: Path) -> None:
+    import fcntl
+    from tools.benchmarks import parity_performance_matrix as matrix
+
+    out = tmp_path / "results.jsonl"
+    with out.with_suffix(".jsonl.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        assert matrix.main(["--examples", str(tmp_path), "--out", str(out)]) == 2
+    assert not out.exists()
+
+
 def payload(entry_id: str) -> dict[str, Any]:
     """Return the registered artifact for ``entry_id``."""
     return json.loads(
