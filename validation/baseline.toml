@@ -490,3 +490,34 @@ gpu_prepared_trsm_kernel_s = 1.957129481
 gpu_prepared_device_span_s = 2.373386008
 sfincs_medium_status = "exit-15 failure and repeated 120-second timeouts; repeated failures stopped, incomplete outputs invalid"
 notes = "Different toolchains and timing boundaries forbid blanket CPU/GPU/SFINCS speedup claims. Full-operator JIT fails on traced discrete layout; selected dynamic-parameter staging prototype succeeds."
+
+[review.hard_cases]
+# Numbers the 2026-09-05 plan rewrite dropped from the execution log. They
+# constrain R1 and B11 and are kept here so the plan can cite them by key.
+recorded_at = "2026-09-02"
+conditioning_tool = "tools/benchmarks/operator_conditioning.py"
+cond_er_xdot = 3.36e18
+cond_er_xdot_equilibrated = 1.24e18
+cond_pas_scheme12 = 3.00e12
+cond_pas_scheme12_equilibrated = 6.58e9
+cond_magdrift = 6.43e7
+cond_magdrift_equilibrated = 2.46e6
+cond_fp_cs3 = 2.96e7
+cond_fp_cs3_equilibrated = 1.58e5
+warm_reuse_flux_change_fraction = 0.0246
+warm_reuse_primal_residual_below = 1e-10
+er15_deck = "HSX QHS user report, Ntheta=10 Nzeta=15 Nx=10, Er=15"
+er15_nxi = [30, 40, 60, 80, 120, 180]
+er15_seconds = [406.0, 436.0, 360.0, 359.0, 989.0, 1491.0]
+er15_fsabjhat = [5.877e-3, 3.000e-3, -3.364e-3, -4.084e-3, -3.812e-3, -3.769e-3]
+er15_nxi20_seconds_to_failure = 6182.0
+er15_provisional_resolved_value = -3.769e-3
+er15_nzeta_axis_checked = false
+sfincs_local_toolchain = "macports petsc 3.20.2, mumps 5.6.2, mpich, gfortran 13"
+sfincs_local_decks = 38
+sfincs_local_ok_mumps = 11
+sfincs_local_mumps_crash = 19
+sfincs_local_timeout_1800s = 8
+sfincs_local_ok_petsc_lu = 6
+sfincs_local_two_rank_completions = 0
+sfincs_local_valid_reference_below_unknowns = 5208
