@@ -99,8 +99,8 @@ class AmbipolarRoot:
         slope: ``dJr/dEr`` at the root (central finite difference, used only to
             classify the root — the differentiable gradient uses autodiff).
         root_type: ``"ion"`` (stable, ``E_r < 0``), ``"electron"`` (stable,
-            ``E_r > 0``), or ``"unstable"`` (``dJr/dEr > 0`` on the standard
-            stellarator S-curve, the middle branch).
+            ``E_r > 0``), ``"unstable"`` (``dJr/dEr < 0``), ``"marginal"``
+            (zero slope), or ``"unknown"`` (nonfinite field/slope).
     """
 
     er: float
@@ -116,7 +116,8 @@ class AmbipolarResult:
     Attributes:
         converged: whether the primary Brent solve converged.
         method: ``"brent"``.
-        status: ``"converged"`` | ``"unbracketed"`` | ``"max_evaluations"``.
+        status: ``"converged"`` | ``"unbracketed"`` | ``"max_evaluations"`` |
+            ``"current_tolerance"``.
         er: the selected (primary) root ``E_r`` (``None`` if unbracketed).
         radial_current: ``J_r`` at the selected root.
         root_type: classification of the selected root.
@@ -124,7 +125,7 @@ class AmbipolarResult:
             ``(n_species,)``.
         iterations: the ordered radial-current evaluations (Fortran-parity
             history).
-        roots: every root found in the bracket, classified (length 1 for a
+        roots: current-accepted roots found by the finite scan (length 1 for a
             single-root case; the differentiable :func:`ambipolar_er` wrapper
             differentiates one *selected* root).
         message: human-readable status detail.
@@ -463,8 +464,13 @@ def _classify(er: float, slope: float) -> str:
     The radial field relaxes as ``dEr/dt ~ -J_r``, so a root is *stable* iff
     ``dJr/dEr > 0``.  On the standard stellarator S-curve the outer stable ion
     (``E_r < 0``) and electron (``E_r > 0``) roots have ``dJr/dEr > 0`` and the
-    middle root has ``dJr/dEr < 0`` (unstable); a single root is always stable.
+    middle root has ``dJr/dEr < 0`` (unstable). Root count alone does not
+    determine stability; a zero slope is marginal.
     """
+    if not math.isfinite(er) or not math.isfinite(slope):
+        return "unknown"
+    if slope == 0.0:
+        return "marginal"
     if slope < 0.0:
         return "unstable"
     return "electron" if er > 0.0 else "ion"
@@ -480,6 +486,7 @@ def _brent(
     current_tol: float,
     max_expansions: int,
     emit: Callable[[str], None] | None,
+    field_tol: float = 1e-10,
 ) -> tuple[float | None, bool, str, str]:
     """Bracket-expanding Numerical-Recipes zbrent (``ambipolarSolverBrent``).
 
@@ -493,7 +500,7 @@ def _brent(
 
     # Expand the bracket until the radial current changes sign.
     expansions = 0
-    while fa * fc > 0.0:
+    while _same_sign(fa, fc):
         if expansions >= max_expansions:
             return None, False, "unbracketed", (
                 "Radial current did not change sign after "
@@ -509,7 +516,7 @@ def _brent(
             fc = eval_jr(c, "expand_max")
         expansions += 1
 
-    b = float(er_initial)
+    b = min(max(float(er_initial), a), c)
     fb = eval_jr(b, "initial")
 
     # Orient the initial guess into the bracket (ambipolarSolver.F90 lines 119-125).
@@ -528,10 +535,12 @@ def _brent(
         if abs(fc) < abs(fb):
             a, b, c = b, c, b
             fa, fb, fc = fb, fc, fb
-        tol1 = 2.0 * eps * abs(b) + 0.5 * float(current_tol)
+        tol1 = 2.0 * eps * abs(b) + 0.5 * float(field_tol)
         xm = 0.5 * (c - b)
-        if abs(xm) <= tol1 or abs(fb) < float(current_tol):
+        if abs(fb) <= float(current_tol):
             return b, True, "converged", "Brent algorithm successful."
+        if abs(xm) <= tol1:
+            return b, False, "current_tolerance", "Field bracket closed without satisfying the current tolerance."
         if abs(e) >= tol1 and abs(fa) > abs(fb):
             s = fb / fa
             if a == c:
@@ -573,6 +582,7 @@ def find_ambipolar_er(
     er_initial: float | None = None,
     max_iter: int = 20,
     current_tol: float = 1e-10,
+    field_tol: float = 1e-10,
     solve_method: str = "auto",
     tol: float = 1e-10,
     warm_start: bool = True,
@@ -585,17 +595,27 @@ def find_ambipolar_er(
 
     Evaluates ``E_r_min`` and ``E_r_max``, expands the bracket until the radial
     current changes sign, then refines the root with the ``ambipolarSolver.F90``
-    ``zbrent`` update (``Er_search_tolerance_f = current_tol``,
-    ``NEr_ambipolarSolve = max_iter``).  Warm starts and GCROT recycling are
+    ``zbrent`` update. Unlike its shared stopping tolerance, ``current_tol``
+    bounds normalized radial current and ``field_tol`` bounds bracket width
+    in the prepared problem's field units. A narrow bracket alone does not
+    establish convergence. ``NEr_ambipolarSolve`` corresponds to ``max_iter``.
+    Warm starts and GCROT recycling are
     threaded across evaluations when ``warm_start`` is set (a benefit only on
     recycled Krylov solves; structured direct solves ignore them).
 
-    With ``all_roots`` the bracket is additionally coarse-scanned so every root
-    is returned classified (ion / electron / unstable), while the *selected*
-    root remains the Brent result.
+    With ``all_roots`` the bracket is additionally coarse-scanned for sampled
+    zeros and sign-changing intervals. Only current-accepted candidates are
+    returned, while the selected root remains the Brent result. A finite scan
+    cannot guarantee finding tangencies or every root. Zero slope is marginal;
+    a small nonzero slope still requires an uncertainty study.
 
     Returns an :class:`AmbipolarResult`.
     """
+    for name, value in (("current_tol", current_tol), ("field_tol", field_tol)):
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError(f"{name} must be finite and positive")
+    if slope_step is not None and (not math.isfinite(slope_step) or slope_step <= 0):
+        raise ValueError("slope_step must be finite and positive")
     problem = (
         inp
         if isinstance(inp, ErProblem)
@@ -611,13 +631,16 @@ def find_ambipolar_er(
     if er_bracket is not None:
         er_min, er_max = float(er_bracket[0]), float(er_bracket[1])
     er_init = problem.er_initial if er_initial is None else float(er_initial)
+    if not all(math.isfinite(e) for e in (er_min, er_max, er_init)) or er_min >= er_max:
+        raise ValueError("The field bracket must be finite and increasing, with a finite initial field")
 
     iterations: list[AmbipolarIteration] = []
     state_box: dict[str, Any] = {"state": None, "gamma": None}
-    flux_cache: dict[float, np.ndarray] = {}
 
     def eval_jr(er: float, stage: str) -> float:
         er = float(er)
+        if not math.isfinite(er):
+            raise RuntimeError(f"Nonfinite ambipolar field at stage {stage}: Er={er}")
         prev = state_box["state"] if warm_start else None
         j_r, gamma, st = radial_current(
             problem,
@@ -631,8 +654,9 @@ def find_ambipolar_er(
         state_box["state"] = st
         gamma_np = np.asarray(gamma, dtype=np.float64).reshape((-1,))
         state_box["gamma"] = gamma_np
-        flux_cache[er] = gamma_np
         value = float(j_r)
+        if not math.isfinite(value) or not np.all(np.isfinite(gamma_np)):
+            raise RuntimeError(f"Nonfinite ambipolar field/current/flux at stage {stage}: Er={er}, Jr={value}")
         iterations.append(AmbipolarIteration(len(iterations) + 1, er, value, stage))
         if emit is not None:
             emit(f"Solving with Er = {er:.15g}   radialCurrent = {value:.8e}")
@@ -646,6 +670,7 @@ def find_ambipolar_er(
         er_initial=er_init,
         max_iter=max_iter,
         current_tol=current_tol,
+        field_tol=field_tol,
         max_expansions=50,
         emit=emit,
     )
@@ -666,9 +691,18 @@ def find_ambipolar_er(
             message=message,
         )
 
-    # One clean evaluation at the root for the reported fluxes.
+    # Accept against a cold final solve, independent of the continuation state.
+    state_box["state"] = None
     jr_root = eval_jr(root_er, "root")
     gamma_root = state_box["gamma"]
+    if not converged or abs(jr_root) > current_tol:
+        return AmbipolarResult(
+            converged=False, method="brent",
+            status=status if not converged else "current_tolerance",
+            er=float(root_er), radial_current=float(jr_root), root_type="unknown",
+            per_species_flux=gamma_root, iterations=tuple(iterations),
+            message=message if not converged else "Final current evaluation failed its tolerance.",
+        )
 
     # Classify the selected root by the sign of dJr/dEr (central difference).
     span = max(abs(er_max - er_min), 1.0)
@@ -684,12 +718,9 @@ def find_ambipolar_er(
             er_max=er_max,
             n_scan=n_scan,
             current_tol=current_tol,
+            field_tol=field_tol,
             slope_step=h,
             primary=roots[0],
-        )
-        # Keep the Brent root classification/slope in the returned selected root.
-        root_type = next(
-            (r.root_type for r in roots if abs(r.er - root_er) <= 2.0 * h), root_type
         )
 
     if emit is not None:
@@ -725,7 +756,8 @@ def _refine_secant(
     *,
     current_tol: float,
     max_steps: int = 40,
-) -> float:
+    field_tol: float = 1e-10,
+) -> float | None:
     """Bracketed secant/bisection refinement of a single sign-changing bracket."""
     for _ in range(max_steps):
         if fhi == flo:
@@ -735,13 +767,15 @@ def _refine_secant(
             if not (min(lo, hi) < mid < max(lo, hi)):
                 mid = 0.5 * (lo + hi)
         fmid = eval_jr(mid, "scan_refine")
-        if abs(fmid) < current_tol or abs(hi - lo) < 1e-13 * max(1.0, abs(hi)):
+        if abs(fmid) <= current_tol:
             return mid
+        if abs(hi - lo) <= field_tol:
+            return None
         if _same_sign(flo, fmid):
             lo, flo = mid, fmid
         else:
             hi, fhi = mid, fmid
-    return 0.5 * (lo + hi)
+    return None
 
 
 def _enumerate_roots(
@@ -753,22 +787,27 @@ def _enumerate_roots(
     current_tol: float,
     slope_step: float,
     primary: AmbipolarRoot,
+    field_tol: float = 1e-10,
 ) -> list[AmbipolarRoot]:
-    """Coarse-scan the bracket and classify every root (ion/electron/unstable)."""
+    """Classify accepted sampled zeros and sign-changing scan intervals."""
     grid = np.linspace(float(er_min), float(er_max), int(n_scan))
     fvals = np.asarray([eval_jr(float(e), "scan") for e in grid], dtype=np.float64)
-    roots: list[AmbipolarRoot] = []
+    candidates = [float(e) for e, f in zip(grid, fvals, strict=True) if f == 0.0]
     for i in range(len(grid) - 1):
         flo, fhi = float(fvals[i]), float(fvals[i + 1])
-        if flo == 0.0:
-            er = float(grid[i])
-        elif _same_sign(flo, fhi):
+        if flo == 0.0 or fhi == 0.0 or _same_sign(flo, fhi):
             continue
-        else:
-            er = _refine_secant(
-                eval_jr, float(grid[i]), flo, float(grid[i + 1]), fhi, current_tol=current_tol
-            )
+        er = _refine_secant(
+            eval_jr, float(grid[i]), flo, float(grid[i + 1]), fhi,
+            current_tol=current_tol, field_tol=field_tol,
+        )
+        if er is not None:
+            candidates.append(er)
+    roots: list[AmbipolarRoot] = []
+    for er in sorted(candidates):
         jr = eval_jr(er, "scan_root")
+        if not math.isfinite(jr) or abs(jr) > current_tol:
+            continue
         slope = (
             eval_jr(er + slope_step, "scan_slope_plus")
             - eval_jr(er - slope_step, "scan_slope_minus")

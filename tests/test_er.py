@@ -222,6 +222,110 @@ def test_classify_unit_logic() -> None:
     assert _classify(0.4, 1.0) == "electron"     # stable, Er > 0
     assert _classify(0.1, -1.0) == "unstable"    # dJr/dEr < 0 (middle branch)
     assert _classify(-0.1, -1.0) == "unstable"
+    assert _classify(-0.1, 0.0) == "marginal"
+    assert _classify(0.1, np.nan) == "unknown"
+    assert _classify(np.inf, 1.0) == "unknown"
+
+
+def test_brent_rejects_narrow_discontinuous_bracket():
+    from dkx.er import _brent
+    root, converged, status, _ = _brent(
+        lambda e, _: -1. if e < 0.123 else 1.,
+        er_min=-1., er_max=1., er_initial=0., max_iter=100,
+        current_tol=1e-8, field_tol=1e-6, max_expansions=0, emit=None,
+    )
+    assert root is not None and not converged and status == "current_tolerance"
+
+
+def test_brent_bracketing_does_not_multiply_tiny_currents():
+    from dkx.er import _brent
+    root, converged, status, _ = _brent(
+        lambda e, _: 1e-200, er_min=-1., er_max=1., er_initial=0.,
+        max_iter=100, current_tol=1e-250, max_expansions=2, emit=None,
+    )
+    assert root is None and not converged and status == "unbracketed"
+
+
+@pytest.fixture
+def host_current(monkeypatch):
+    from dkx import er
+    problem = er.ErProblem(None, 1., np.array([1.]), 0., -1., 1.)
+    def install(function):
+        def current(p, e, **kwargs):
+            value = function(e)
+            return value, np.array([value]), None
+        monkeypatch.setattr(er, "radial_current", current)
+        return lambda **kwargs: er.find_ambipolar_er(problem, emit=None, **kwargs)
+    return install
+
+
+def test_host_rejected_candidate_has_no_classified_roots(host_current):
+    result = host_current(lambda e: -1. if e < .123 else 1.)(max_iter=100)
+    assert not result.converged and result.status == "current_tolerance"
+    assert result.roots == () and result.root_type == "unknown"
+    assert abs(result.radial_current) == 1.
+
+
+def test_host_rechecks_final_current(host_current):
+    calls = 0
+    def current(e):
+        nonlocal calls
+        calls += 1
+        return e if calls <= 3 else 1.
+    result = host_current(current)(all_roots=False)
+    assert not result.converged and result.status == "current_tolerance"
+    assert result.roots == ()
+
+
+def test_host_final_acceptance_drops_warm_reuse(monkeypatch):
+    from types import SimpleNamespace
+    from dkx import er
+    calls = []
+    state = SimpleNamespace(x=np.ones(1), recycle=object(), precond=object())
+    def current(problem, field, **kwargs):
+        calls.append(kwargs)
+        return field, np.array([field]), state
+    monkeypatch.setattr(er, "radial_current", current)
+    problem = er.ErProblem(None, 1., np.array([1.]), 0., -1., 1.)
+    result = er.find_ambipolar_er(problem, all_roots=False, emit=None)
+    assert result.converged
+    assert calls[1]["x0"] is state.x and calls[2]["precond"] is state.precond
+    assert all(calls[3][key] is None for key in ("x0", "recycle", "precond"))
+
+
+def test_host_scan_keeps_endpoints_and_rejects_false_crossing(host_current):
+    # Endpoint roots plus a jump at 0.123; the discontinuity is not a root.
+    result = host_current(lambda e: (e**2 - 1) * (-1 if e < .123 else 1))(
+        er_initial=-1., n_scan=9, max_iter=100,
+    )
+    assert result.converged
+    assert [r.er for r in result.roots] == [-1., 1.]
+
+
+def test_host_selected_classification_is_not_replaced_by_nearby_root(host_current):
+    result = host_current(lambda e: (e + .001) * e * (e - .001))(
+        er_bracket=(-.002, .002), er_initial=.001, n_scan=5,
+        slope_step=.00075, current_tol=1e-16,
+    )
+    assert result.converged and result.er == .001
+    assert result.root_type == "electron"
+    assert [r.root_type for r in result.roots] == ["ion", "unstable", "electron"]
+
+
+@pytest.mark.parametrize("value", [np.nan, np.inf])
+def test_host_rejects_nonfinite_current(host_current, value):
+    with pytest.raises(RuntimeError, match="Nonfinite ambipolar"):
+        host_current(lambda e: value)()
+
+
+@pytest.mark.parametrize("options", [
+    {"current_tol": 0.}, {"current_tol": np.nan}, {"field_tol": -1.},
+    {"field_tol": np.inf}, {"slope_step": 0.},
+])
+def test_host_tolerances_validated_before_preparation(options):
+    from dkx.er import find_ambipolar_er
+    with pytest.raises(ValueError, match="finite and positive"):
+        find_ambipolar_er(None, **options)
 
 
 # ---------------------------------------------------------------------------
