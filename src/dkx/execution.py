@@ -449,6 +449,60 @@ def _route_name(method: str) -> str:
     }[method]
 
 
+def _prepare_profile_builder(case, op, grids, geometry_state, radial, surface_index, quadrature_order):
+    """Fixed native normalization/stencil with dynamic physical profiles."""
+    from dataclasses import replace
+    import jax.numpy as jnp
+    from dkx.collisions import make_pitch_angle_scattering_v3_operator, prepare_fokker_planck_v3_profiles
+    from dkx.constants import DEFAULT_NU_N
+
+    nsurf = len(case.geometry.surfaces)
+    shape = (nsurf, len(case.species))
+    r_hat = geometry_state.a_hat * np.sqrt(np.asarray(case.geometry.surfaces))
+    # Recover just the selected native stencil: at most three neighbors.
+    # Avoid storing/applying a dense surface-by-surface differentiation matrix.
+    width = min(3, nsurf)
+    start = max(0, min(surface_index - 1, nsurf - width))
+    support = np.arange(start, start + width)
+    basis = np.zeros((nsurf, width))
+    basis[support, np.arange(width)] = 1.
+    gradient = jnp.asarray(_profile_gradients(basis, r_hat)[surface_index])
+    nu_n = DEFAULT_NU_N * (float(case.physics.coulomb_logarithm) / 17.0)
+    common = dict(x=grids.x, z_s=op.z_s, m_hats=op.m_hat, nu_n=nu_n,
+                  n_xi_for_x=grids.n_xi_for_x)
+    fp_builder = None
+    if op.fp is not None:
+        fp_builder = prepare_fokker_planck_v3_profiles(
+            **common, x_weights=grids.x_weights, ddx=grids.ddx, d2dx2=grids.d2dx2,
+            x_grid_k=0., krook=0., nl=grids.n_l, quadrature_order=quadrature_order)
+    # The closure needs the static operator layout, not an extra retained copy
+    # of the original collision tensors; every update supplies fresh tensors.
+    op = replace(op, pas=None, fp=None)
+
+    def build(density_m3, temperature_keV):
+        n = jnp.asarray(density_m3, dtype=jnp.float64) / 1e20
+        t = jnp.asarray(temperature_keV, dtype=jnp.float64)
+        if n.shape != shape or t.shape != shape:
+            raise ValueError(f"native profiles must have shape {shape} (surface, species)")
+        valid = jnp.all(jnp.isfinite(n) & (n > 0)) & jnp.all(jnp.isfinite(t) & (t > 0))
+        n, t = jnp.where(valid, n, jnp.nan), jnp.where(valid, t, jnp.nan)
+        density, temperature = n[surface_index], t[surface_index]
+        collisions = (
+            {"fp": fp_builder(density, temperature).at_uniform_density(density, n_xi=op.n_xi)}
+            if fp_builder is not None else
+            {"pas": make_pitch_angle_scattering_v3_operator(
+                **common, n_hats=density, t_hats=temperature, n_xi=op.n_xi)}
+        )
+        return replace(
+            op, n_hat=density, t_hat=temperature,
+            dn_hat_dpsi_hat=radial.d_dr_hat_to_d_dpsi_hat * (gradient @ n[support]),
+            dt_hat_dpsi_hat=radial.d_dr_hat_to_d_dpsi_hat * (gradient @ t[support]),
+            **collisions,
+        )
+
+    return build
+
+
 def _sha256(path_or_token: Path) -> str:
     if path_or_token.exists() and path_or_token.is_file():
         digest = hashlib.sha256()

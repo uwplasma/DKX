@@ -42,7 +42,7 @@ from __future__ import annotations
 
 import math
 import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable
 
@@ -207,6 +207,21 @@ class ErProblem:
     solve_method: str = "auto"
     tol: float = 1e-10
     er_units: str = "normalized"
+    _profile_builder: Callable | None = field(default=None, repr=False, compare=False)
+
+    def with_profiles(self, *, density_m3, temperature_keV) -> ErProblem:
+        """Return updated native profiles, collisions and radial drives.
+
+        Enable with ``prepare_er_scan(..., differentiable_profiles=True)``.
+        Both inputs cover every Case surface/species; geometry, normalization
+        and Coulomb logarithm stay fixed. Usable inside JAX transformations;
+        the returned problem itself is a Python container, not a JAX array.
+        Solver policy and field bounds are preserved; reuse factors separately
+        only after checking their validity for the changed operator.
+        """
+        if self._profile_builder is None:
+            raise ValueError("prepare_er_scan requires differentiable_profiles=True for profile updates")
+        return replace(self, operator=self._profile_builder(density_m3, temperature_keV))
 
 
 # ---------------------------------------------------------------------------

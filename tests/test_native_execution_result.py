@@ -62,6 +62,120 @@ def _vmec_case():
     )
 
 
+@pytest.mark.parametrize("collisions", ["pitch_angle_scattering", "linearized_fokker_planck"])
+def test_native_profile_builder_does_not_retain_original_collision_tensors(monkeypatch, collisions):
+    import gc
+    import weakref
+    import dkx.execution as execution
+
+    base = _case()
+    case = replace(base, physics=replace(base.physics, collisions=collisions))
+    original = execution._make_operator
+    references = []
+    def capture(*args, **kwargs):
+        result = original(*args, **kwargs)
+        op = result[0]
+        references.append(weakref.ref(op.fp if op.fp is not None else op.pas))
+        return result
+    monkeypatch.setattr(execution, "_make_operator", capture)
+    problem = dkx.prepare_er_scan(case, differentiable_profiles=True)
+    gc.collect()
+    assert references and all(ref() is None for ref in references)
+    assert problem.operator.fp is not None or problem.operator.pas is not None
+
+
+@pytest.mark.parametrize("surfaces,index", [((.09, .25), 0), ((.09, .25), 1),
+                                          ((.04, .09, .2, .4, .7), 0),
+                                          ((.04, .09, .2, .4, .7), 2),
+                                          ((.04, .09, .2, .4, .7), 4)])
+def test_native_profile_stencil_matches_fresh_boundaries_and_interior(surfaces, index):
+    import jax
+    import jax.numpy as jnp
+
+    base = _case()
+    radius = np.sqrt(surfaces)
+    n, t = (1-radius/3+radius**2/5)*1e20, 1.5-radius/2+radius**3/4
+    species = replace(base.species[0], density_m3=tuple(n), temperature_keV=tuple(t))
+    case = replace(base, geometry=replace(base.geometry, surfaces=surfaces), species=(species,))
+    problem = dkx.prepare_er_scan(case, surface_index=index, differentiable_profiles=True)
+    fresh = dkx.prepare_er_scan(case, surface_index=index)
+    def drives(density, temperature):
+        op = problem.with_profiles(density_m3=density, temperature_keV=temperature).operator
+        return op.dn_hat_dpsi_hat, op.dt_hat_dpsi_hat
+    actual = jax.jit(drives)(jnp.asarray(n[:, None]), jnp.asarray(t[:, None]))
+    for got, expected in zip(actual, (fresh.operator.dn_hat_dpsi_hat, fresh.operator.dt_hat_dpsi_hat)):
+        np.testing.assert_allclose(got, expected, rtol=2e-13, atol=2e-13)
+    # Even an invalid point outside the selected local stencil invalidates
+    # a supplied native profile; it must not silently produce valid outputs.
+    invalid = jnp.asarray(t[:, None]).at[-1, 0].set(-1.)
+    assert np.all(np.isnan(jax.jit(drives)(jnp.asarray(n[:, None]), invalid)[1]))
+
+
+@pytest.mark.parametrize("collisions", ["pitch_angle_scattering", "linearized_fokker_planck"])
+@pytest.mark.parametrize("location", ["local", "neighbor"])
+def test_native_profile_refresh_updates_stencil_collisions_and_current_gradient(collisions, location):
+    import jax
+    import jax.numpy as jnp
+
+    base = _case()
+    first = replace(base.species[0], density_m3=(8e19, 7e19, 6e19), temperature_keV=(1.2, 1., .7))
+    second = replace(first, name="helium", charge=2, mass_amu=4.,
+                     density_m3=(2e19, 1.8e19, 1.4e19), temperature_keV=(.9, .7, .5))
+    case = replace(base, species=(first, second),
+                   geometry=replace(base.geometry, surfaces=(.04, .1225, .36)),
+                   physics=replace(base.physics, collisions=collisions),
+                   solver=replace(base.solver, relative_tolerance=1e-11))
+    problem = dkx.prepare_er_scan(case, surface_index=1, differentiable_profiles=True)
+    n = jnp.asarray([s.density_m3 for s in case.species]).T
+    t = jnp.asarray([s.temperature_keV for s in case.species]).T
+    dn = jnp.asarray([[.1, -.05], [0., 0.], [-.1, .2]])
+    dt = jnp.asarray([[.2, -.1], [0., 0.], [-.1, .1]])
+    if location == "local":
+        dn, dt = jnp.zeros_like(n).at[1].set(jnp.array([.1, -.2])), jnp.zeros_like(t).at[1].set(jnp.array([-.1, .2]))
+
+    def profiles(scale):
+        return n*(1+scale*dn), t*(1+scale*dt)
+
+    def current(prepared, differentiable=False):
+        scan = dkx.batched_er_scan(prepared, jnp.array([.2]), differentiable=differentiable)
+        value = scan.moments["FSABjHat"][0] * PARALLEL_CURRENT
+        if differentiable:
+            return value, scan.algebraic_converged
+        assert np.all(np.asarray(scan.algebraic_converged))
+        return value
+
+    def loss(scale):
+        density, temperature = profiles(scale)
+        return current(problem.with_profiles(density_m3=density, temperature_keV=temperature), True)
+
+    def fresh(scale):
+        density, temperature = map(np.asarray, profiles(scale))
+        species = tuple(replace(s, density_m3=tuple(density[:, i]), temperature_keV=tuple(temperature[:, i]))
+                        for i, s in enumerate(case.species))
+        return dkx.prepare_er_scan(replace(case, species=species), surface_index=1)
+
+    updated = problem.with_profiles(density_m3=profiles(.1)[0], temperature_keV=profiles(.1)[1])
+    cold = fresh(.1)
+    assert updated.tol == problem.tol and updated.solve_method == problem.solve_method
+    assert (updated.er_min, updated.er_max, updated.er_units) == (problem.er_min, problem.er_max, "kV/m")
+    for name in ("n_hat", "t_hat", "dn_hat_dpsi_hat", "dt_hat_dpsi_hat"):
+        np.testing.assert_allclose(getattr(updated.operator, name), getattr(cold.operator, name), rtol=2e-14, atol=2e-14)
+    if location == "neighbor":
+        np.testing.assert_array_equal(updated.operator.t_hat, problem.operator.t_hat)
+        assert not np.array_equal(updated.operator.dt_hat_dpsi_hat, problem.operator.dt_hat_dpsi_hat)
+    (value, accepted), derivative = jax.jit(jax.value_and_grad(loss, has_aux=True))(.1)
+    assert np.all(np.asarray(accepted))
+    np.testing.assert_allclose(value, current(cold), rtol=2e-8, atol=1e-8)
+    assert np.isfinite(derivative) and abs(float(derivative)) > 1e-8
+    for step in (1e-3, 3e-4):
+        fd = (current(fresh(.1+step))-current(fresh(.1-step))) / (2*step)
+        np.testing.assert_allclose(derivative, fd, rtol=2e-4, atol=abs(float(derivative))*1e-7)
+    with pytest.raises(ValueError, match="native profiles must have shape"):
+        problem.with_profiles(density_m3=n[1], temperature_keV=t[1])
+    with pytest.raises(ValueError, match="differentiable_profiles=True"):
+        fresh(0.).with_profiles(density_m3=n, temperature_keV=t)
+
+
 def _boozer_case():
     return dkx.Case.from_file(
         Path(__file__).resolve().parents[1]
