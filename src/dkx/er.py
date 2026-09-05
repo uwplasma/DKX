@@ -164,8 +164,8 @@ class ErSolveState:
         precond: the preconditioner the previous point's solve built, or
             ``None`` when its route did not need one. Threaded forward so a
             bracket search builds one preconditioner rather than one per point.
-            Reuse is safe because a preconditioner never changes the converged
-            answer, only the iteration count.
+            It remains an approximate inverse for subsequent operators;
+            original-residual and observable checks still govern acceptance.
     """
 
     x: Any
@@ -423,14 +423,8 @@ def radial_current(
     op = operator_at_er(problem.operator, er, dphi_per_er=problem.dphi_per_er)
     rhs = op.rhs()
     if differentiable:
-        # Fully traceable path for autodiff / implicit differentiation: assemble
-        # the operator densely (all jnp) and solve exactly with jnp.linalg.solve.
-        # The routed ``solve`` builds its factorization with host numpy, which
-        # cannot run under ``solvax.root_solve`` closure conversion; the dense
-        # solve is exact and matches the structured direct route to machine
-        # precision on the tiny ambipolar decks that carry a differentiable
-        # objective.
-        x_full = _dense_solve(op, rhs)
+        result = solve(op, rhs, method=method, tol=rtol, differentiable=True, emit=None)
+        x_full = jnp.reshape(result.x, (-1,))
         state = None
     else:
         # Reuse whatever the previous point's route actually built. Nothing is
@@ -452,23 +446,6 @@ def radial_current(
     charges = jnp.asarray(problem.z_s, dtype=jnp.float64)
     j_r = jnp.tensordot(charges, gamma, axes=1)
     return j_r, gamma, state
-
-
-def _dense_solve(op: KineticOperator, rhs):
-    """Exact dense solve of ``op x = rhs`` (traceable, differentiable).
-
-    Assembles the matrix column by column from the matrix-free ``op.apply`` and
-    solves with :func:`jax.numpy.linalg.solve`.  Requires the un-truncated
-    embedding (``Nxi_for_x_option=0``, no structurally singular DOFs) — the
-    caller (:func:`ambipolar_er`) checks this on the concrete operator.
-    """
-    import jax  # noqa: PLC0415
-    import jax.numpy as jnp  # noqa: PLC0415
-
-    n = int(op.total_size)
-    eye = jnp.eye(n, dtype=jnp.float64)
-    a = jnp.transpose(jax.vmap(op.apply)(eye))  # column i = op.apply(e_i)
-    return jnp.linalg.solve(a, jnp.reshape(rhs, (-1,)))
 
 
 # ---------------------------------------------------------------------------
@@ -813,8 +790,8 @@ def ambipolar_er(
     er0: float = 0.0,
     dphi_per_er: float | None = None,
     z_s: Any | None = None,
-    solve_method: str = "auto",
-    tol: float = 1e-10,
+    solve_method: str | None = None,
+    tol: float | None = None,
     root_tol: float = 1e-11,
     max_root_iter: int = 60,
 ):
@@ -823,7 +800,7 @@ def ambipolar_er(
     The residual ``f(E_r) = J_r(E_r)`` is a differentiable function of ``E_r``
     and of the operator's parameters (:func:`radial_current` with
     ``differentiable=True``).  The forward root is found with a black-box
-    bracketed secant, wrapped by :func:`solvax.implicit.root_solve`
+    secant, wrapped by :func:`solvax.implicit.root_solve`
     (``jax.lax.custom_root``): ``jax.grad`` of the returned ``E_r`` w.r.t. any
     parameter ``p`` that the operator closes over follows the implicit function
     theorem
@@ -831,7 +808,7 @@ def ambipolar_er(
         dEr/dp = -(dJr/dEr)^{-1} dJr/dp,
 
     with ``dJr/dEr`` and ``dJr/dp`` from autodiff of :func:`radial_current` — no
-    finite differences.  When the bracket contains several roots this
+    finite differences. When several roots exist this
     differentiates the one selected by ``er0`` (seed it near the desired root,
     e.g. with :func:`find_ambipolar_er`).
 
@@ -841,7 +818,9 @@ def ambipolar_er(
             ``dphi_per_er``), or a deck.
         er0: initial guess selecting the root and seeding the secant.
         dphi_per_er, z_s: overrides for the bare-operator path.
-        solve_method, tol: forwarded to the differentiable solve.
+        solve_method, tol: overrides for the routed differentiable solve;
+            omitted values preserve a prepared problem's policy (deck defaults
+            are auto and 1e-10).
         root_tol, max_root_iter: forward secant tolerance and iteration cap.
 
     Returns:
@@ -854,22 +833,14 @@ def ambipolar_er(
     from solvax.implicit import root_solve  # noqa: PLC0415
 
     problem = _resolve_problem(
-        inp_or_operator, dphi_per_er=dphi_per_er, z_s=z_s, solve_method=solve_method, tol=tol
+        inp_or_operator, dphi_per_er=dphi_per_er, z_s=z_s,
+        solve_method=solve_method or "auto", tol=tol if tol is not None else 1e-10,
     )
-    # The differentiable residual uses an exact dense solve, which needs the
-    # un-truncated embedding.  Check on the concrete operator (before tracing).
-    if problem.operator.active_dof_mask() is not None:
-        raise NotImplementedError(
-            "ambipolar_er's differentiable dense solve requires Nxi_for_x_option=0 "
-            "(no Legendre truncation); use find_ambipolar_er for the truncated case."
-        )
 
     def residual(er):
         j_r, _gamma, _state = radial_current(
-            problem.operator,
+            problem,
             er,
-            dphi_per_er=problem.dphi_per_er,
-            z_s=problem.z_s,
             solve_method=solve_method,
             tol=tol,
             differentiable=True,
@@ -877,7 +848,7 @@ def ambipolar_er(
         return j_r
 
     def solver(f, x_init):
-        # Black-box forward root: a bracketed secant (value only, so no nested
+        # Black-box forward root: secant iteration (value only, so no nested
         # gradient); custom_root supplies the implicit-function-theorem tangent.
         x_init = jnp.asarray(x_init, dtype=jnp.float64)
         step = jnp.where(jnp.abs(x_init) > 0.0, 1e-3 * jnp.abs(x_init), 1e-3)

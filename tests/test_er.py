@@ -20,6 +20,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 # The legacy Fortran-parity Brent root of the two-species PAS deck below,
 # captured from problems/ambipolar.brent_ambipolar_root (deleted in this slice)
@@ -228,14 +229,17 @@ def test_classify_unit_logic() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_ambipolar_er_grad_matches_finite_difference(tmp_path: Path) -> None:
+@pytest.mark.parametrize("collision,ramped", [(1, False), (1, True), (0, False), (0, True)])
+def test_ambipolar_er_grad_matches_finite_difference(tmp_path: Path, collision, ramped) -> None:
     import jax
 
     jax.config.update("jax_enable_x64", True)
 
     from dkx import er as er_mod
 
-    deck = _pas_deck()
+    deck = _pas_deck(collision_operator=collision)
+    if ramped:
+        deck = deck.replace("Nxi_for_x_option = 0", "Nxi_for_x_option = 1")
     prob = er_mod.prepare(_write(tmp_path, deck), er_bracket=(-3.0, 1.0))
 
     # Seed the differentiable root near the true root (selects that branch).
@@ -254,7 +258,7 @@ def test_ambipolar_er_grad_matches_finite_difference(tmp_path: Path) -> None:
             op_theta, er0=root, dphi_per_er=prob.dphi_per_er, z_s=prob.z_s
         )
 
-    # The differentiable dense solve reproduces the ambipolar root (the flat J_r
+    # The routed differentiable solve reproduces the ambipolar root (the flat J_r
     # near the root makes the exact value tolerance-sensitive, hence the loose
     # bound; the implicit-function-theorem gradient below is the real check).
     assert abs(float(er_of_theta(1.0)) - root) < 1e-3
@@ -265,3 +269,48 @@ def test_ambipolar_er_grad_matches_finite_difference(tmp_path: Path) -> None:
 
     assert np.isfinite(grad) and abs(fd) > 1e-6
     np.testing.assert_allclose(grad, fd, rtol=1e-4)
+
+
+@pytest.mark.parametrize("collision,ramped", [(1, False), (1, True), (0, False), (0, True)])
+def test_routed_radial_current_gradient_matches_cold_solves(tmp_path, monkeypatch, collision, ramped):
+    import jax
+    import jax.numpy as jnp
+    from dkx import er as er_mod
+
+    deck = _pas_deck(collision_operator=collision, n_theta=5, n_zeta=5, n_xi=6, n_x=3)
+    if ramped:
+        deck = deck.replace("Nxi_for_x_option = 0", "Nxi_for_x_option = 1")
+    problem = er_mod.prepare(_write(tmp_path, deck), tol=1e-11)
+    if ramped:
+        assert problem.operator.active_dof_mask() is not None
+    eye = jnp.eye
+    def no_global_identity(n, *args, **kwargs):
+        assert n != problem.operator.total_size, "ambipolar AD must not assemble the global dense matrix"
+        return eye(n, *args, **kwargs)
+    monkeypatch.setattr(jnp, "eye", no_global_identity)
+
+    def current(field):
+        return er_mod.radial_current(problem, field, differentiable=True)[0]
+    field = 0.2
+    value, gradient = jax.jit(jax.value_and_grad(current))(field)
+    cold = lambda e: float(er_mod.radial_current(problem, e)[0])
+    np.testing.assert_allclose(value, cold(field), rtol=1e-8, atol=1e-15)
+    assert np.isfinite(gradient) and abs(gradient) > 1e-15
+    differences = [(cold(field + h) - cold(field - h)) / (2 * h) for h in [1e-3, 3e-4, 1e-4]]
+    np.testing.assert_allclose(differences, gradient, rtol=3e-4, atol=1e-13)
+
+
+def test_ambipolar_root_preserves_prepared_solver_policy(tmp_path, monkeypatch):
+    from dkx import er as er_mod
+    problem = er_mod.prepare(_write(tmp_path, _pas_deck()), solve_method="direct", tol=2e-11)
+    with pytest.raises(RuntimeError, match="non-differentiable"):
+        er_mod.ambipolar_er(problem, er0=LEGACY_BRENT_ROOT_ER)
+    original = er_mod.solve
+    calls = []
+    def record(op, rhs, **kwargs):
+        calls.append((kwargs["method"], kwargs["tol"], kwargs["differentiable"]))
+        return original(op, rhs, **kwargs)
+    monkeypatch.setattr(er_mod, "solve", record)
+    root = er_mod.ambipolar_er(problem, er0=LEGACY_BRENT_ROOT_ER, solve_method="auto")
+    assert abs(float(root) - LEGACY_BRENT_ROOT_ER) < 1e-3
+    assert calls and set(calls) == {("auto", 2e-11, True)}

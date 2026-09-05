@@ -75,6 +75,42 @@ function theorem rather than unrolled iterations.
    differentiable JAX arrays directly. The sparse direct host solve is *not*
    differentiable and raises if ``differentiable=True`` is requested.
 
+Ambipolar solves use the routed kinetic solver
+----------------------------------------------
+
+``radial_current(..., differentiable=True)`` and ``ambipolar_er`` use the
+same structured/recycled-Krylov routes as :func:`dkx.solve.solve`, with SOLVAX
+owning the implicit linear and root differentiation. The previous separate
+assembly and dense factorization of the global kinetic matrix is removed.
+The selected route's layout and differentiation restrictions still apply;
+there is no longer a blanket rejection of ``Nxi_for_x_option=1``.
+Prepared ``ErProblem`` method/tolerance settings are preserved unless explicitly
+overridden. An explicit sparse ``direct`` request raises because that route
+is non-differentiable. Root and initial-field units follow the prepared problem.
+
+CPU and installed-wheel GPU tests compare routed current derivatives to cold finite differences and
+root derivatives to finite differences of independently solved roots, for PAS
+and full-FP collisions with uniform and ramped pitch layouts. They also reject
+construction of the global dense identity. These are bounded discretization
+checks, not joint-grid or marginal-root certificates. The outer secant's
+convergence/branch behavior is unchanged; seed the desired isolated root and
+verify its current residual and slope before using a design sensitivity.
+
+A paired installed-wheel A4000 probe on 2,358 PAS unknowns compares the former
+dense expression with the routed current at identical parameters. Twelve
+alternating, synchronized samples give median forward times 53.2 -> 10.7 ms
+and value/gradient times 54.7 -> 17.8 ms, with matching values/derivatives.
+HLO replaces the global 2358-by-2358 LU with batches of 49-by-49 factors.
+XLA temporary-buffer estimates decrease from about 266 MB to 4.3 MB; these
+are not allocator peak measurements. The trace confirms GPU execution of
+both expressions; the routed expression launches more, smaller kernels.
+Inputs, wheel checksum, HLO, trace and raw timings remain outside Git in
+``dkx-review-evidence-20260905/routed-ambipolar-ad``. This measures an inner
+current evaluation, not a full optimizer iteration or production scaling.
+The paired local CPU probe gives forward 51.6 -> 2.63 ms and value/gradient
+58.6 -> 3.01 ms. The GPU regression selection takes 419 seconds overall;
+full-root setup/compilation and repeated execution costs remain to be separated.
+
 Bounded reverse mode for the truncated structured direct kernel
 ---------------------------------------------------------------
 
