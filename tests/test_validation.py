@@ -1741,3 +1741,49 @@ def test_petsc_arguments_and_observed_backend_are_distinct(tmp_path, monkeypatch
     assert record["fortran_petsc_opts"] == list(options)
     assert record["fortran"]["1"]["observed_factor_backends"] == ["mumps"]
     assert not record["algebraic_pair_accepted"]
+
+
+def test_warm_observable_audit_checks_equations_and_reuse_modes(tmp_path):
+    from tools.benchmarks import operator_conditioning as probe
+
+    source = ROOT / 'tests/ref/pas_1species_PAS_noEr_tiny_scheme1.input.namelist'
+    target = tmp_path / 'target.namelist'
+    target.write_text(source.read_text().replace('epsilon_t = 0.1d+0', 'epsilon_t = 0.12d+0'))
+    audit = probe.warm_audit(str(source), str(target), tolerances=(1e-10,))
+    assert audit['size'] == 111
+    assert len(set(audit['input_sha256'].values())) == 2
+    assert audit['dual_relative_residual'] < 1e-12
+    assert audit['seed_relative_residual'] < 1e-10
+    assert [r['reuse'] for r in audit['records']] == ['cold', 'state', 'recycle', 'state_and_recycle']
+    for record in audit['records']:
+        assert record['original_relative_residual'] < 1e-10
+        # The dual identity includes floating-point residual/moment evaluation.
+        assert abs(record['identity_remainder']) < 1e-10 * max(abs(record['observable']), 1e-10)
+    with pytest.raises(ValueError, match='size cap'):
+        probe.warm_audit(str(source), str(target), max_size=1)
+    with pytest.raises(ValueError, match='positive and finite'):
+        probe.warm_audit(str(source), str(target), tolerances=(float('nan'),))
+    target.write_text(target.read_text().replace('Nxi = 4', 'Nxi = 5'))
+    with pytest.raises(ValueError, match='structure'):
+        probe.warm_audit(str(source), str(target))
+
+
+def test_warm_audit_dual_identity_sign_with_deliberately_inaccurate_states(monkeypatch):
+    import importlib
+    from types import SimpleNamespace
+    from tools.benchmarks import operator_conditioning as probe
+    import jax.numpy as jnp
+
+    calls = []
+    def inaccurate(op, rhs, **kwargs):
+        calls.append(None)
+        return SimpleNamespace(x=jnp.full((op.total_size, 1), float(len(calls))),
+                               recycle=None, method='manufactured', iterations=0, converged=False)
+    monkeypatch.setattr(importlib.import_module('dkx.solve'), 'solve', inaccurate)
+    deck = str(ROOT / 'tests/ref/pas_1species_PAS_noEr_tiny_scheme1.input.namelist')
+    audit = probe.warm_audit(deck, deck, tolerances=(1e-10,))
+    for row in audit['records'][1:]:
+        assert not row['original_residual_pass'] and not row['solver_converged']
+        assert abs(row['observable_difference']) > 1e-5
+        assert row['dual_predicted_difference'] == pytest.approx(row['observable_difference'], rel=1e-11)
+        assert row['linear_observable_difference'] == pytest.approx(row['observable_difference'], rel=1e-11)
