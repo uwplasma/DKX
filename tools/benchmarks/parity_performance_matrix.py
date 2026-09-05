@@ -43,6 +43,7 @@ import os
 import platform
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -98,27 +99,61 @@ def _time_flag() -> list[str]:
 def _run_measured(
     command: list[str], cwd: Path, timeout_s: float, env: dict | None = None
 ) -> dict:
-    """Run a command under /usr/bin/time; return wall seconds and peak RSS."""
+    """Run a command under /usr/bin/time; return wall seconds and peak RSS.
+
+    The child gets its own process group, and a timeout kills the **group**.
+
+    ``subprocess.run(..., timeout=...)`` kills only the process it started, and
+    the process it starts here is ``/usr/bin/time``: the measured program is a
+    grandchild and survives. Two full sweeps were lost to that. Each timeout
+    left a solver running at full speed, every leaked process slowed the next
+    case, and the next case then timed out too -- so the sweep degraded as it
+    went and reported SFINCS failing on every deck above 5208 unknowns, which
+    is nothing but the arithmetic of thirteen leaked processes on fourteen
+    cores. Thirteen were still running after the sweep declared itself
+    complete.
+    """
     start = time.perf_counter()
+    proc = subprocess.Popen(
+        _time_flag() + command,
+        cwd=cwd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env={**os.environ, **(env or {})},
+        start_new_session=True,  # its own group, so the kill below reaches all of it
+    )
     try:
-        proc = subprocess.run(
-            _time_flag() + command,
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=timeout_s,
-            env={**os.environ, **(env or {})},
-        )
+        stdout, stderr = proc.communicate(timeout=timeout_s)
     except subprocess.TimeoutExpired:
+        _kill_group(proc)
         return {"returncode": None, "wall_s": timeout_s, "peak_rss_gb": None,
                 "error": f"timeout after {timeout_s:.0f}s"}
     return {
         "returncode": proc.returncode,
         "wall_s": round(time.perf_counter() - start, 2),
-        "peak_rss_gb": _peak_rss_gb(proc.stderr),
-        "stdout_tail": proc.stdout[-2000:],
-        "stderr_tail": proc.stderr[-2000:],
+        "peak_rss_gb": _peak_rss_gb(stderr),
+        "stdout_tail": stdout[-2000:],
+        "stderr_tail": stderr[-2000:],
     }
+
+
+def _kill_group(proc: subprocess.Popen) -> None:
+    """SIGKILL the child's whole process group, then reap it.
+
+    SIGTERM first would be politer, but the programs being timed here are
+    numerical solvers in tight loops that may not service it promptly, and a
+    survivor is worse than an ungraceful exit: it corrupts every later
+    measurement in the run.
+    """
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):  # already gone
+        pass
+    try:
+        proc.communicate(timeout=30)
+    except subprocess.TimeoutExpired:  # pragma: no cover - kill -9 did not land
+        proc.kill()
 
 
 _DKX_DRIVER = """
