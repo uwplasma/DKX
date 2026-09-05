@@ -191,11 +191,33 @@ checksums and the complete file inventory. Missing retention, incomplete
 campaigns, duplicate attempt directories and symlinks fail. Rejected scientific
 runs can still have intact evidence and are included in the check.
 
+Add ``--dependency-archive /archive/runtime`` to check exact source/library/input
+bytes declared in provenance. The archive contains ``blobs/SHA256`` files and
+``bound-files.json``: schema 1, a ``campaigns`` mapping whose entries contain
+``campaign_id``, ``provenance_sha256`` and a ``files`` mapping from original path
+to ``{blob, sha256, bytes}``. One archive can hold several campaigns and deduplicate
+identical files. Each campaign must appear exactly once; missing or changed
+declared files fail. Original host paths need not exist. This option verifies
+an archive; it does not create one or discover undeclared dependencies.
+
 The report establishes integrity relative to the supplied completion record.
 It does not authenticate that record, rerun residual/observable comparisons,
-revalidate external source/library files, or certify scientific completeness.
+establish a complete runtime environment, or certify scientific completeness.
 Publish a trusted archive checksum alongside any publication; keep physics,
 numerical-convergence and environment-reproducibility gates separate.
+
+``ldd`` alone is insufficient for runtime archival: MPI/UCX can load plugins
+and GPU-driver libraries dynamically. A bounded same-host SFINCS replay restored
+the pinned executable, loader and libraries from archived bytes, reconstructed
+SONAME aliases, suppressed embedded library search paths and set the UCX module
+directory explicitly. All 100 traced library initializations used restored paths;
+the small full-FP reference residual was 9.74e-11 and the checked moments matched
+the qualified reference exactly. A fresh GPU full-FP replay captured resident
+libraries, imported modules, installed metadata and compiler executables and
+passed its 1e-10 residual gate. These are replay diagnostics, not clean-machine,
+MPI scaling, complete GPU environment or performance certificates. Set and
+record OpenMP/BLAS thread counts explicitly; a single MPI rank does not imply
+one CPU thread.
 
 Use repeatable ``--provenance-file PATH`` for environment locks, build records,
 external PETSc option files or resolved shared libraries. Their contents become

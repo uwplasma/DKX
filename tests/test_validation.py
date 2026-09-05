@@ -373,6 +373,44 @@ def test_campaign_verification_rejects_broken_evidence(retained_campaign, mutati
     assert matrix.main(["--verify", "--out", str(out)]) == 2
 
 
+@pytest.mark.parametrize("mutation", [None, "blob", "missing", "provenance", "duplicate"])
+def test_campaign_dependency_archive_binding(retained_campaign, tmp_path, mutation):
+    import hashlib
+    from tools.benchmarks import parity_performance_matrix as matrix
+    out, _, rows, publish = retained_campaign
+    digest = hashlib.sha256(b"source bytes").hexdigest()
+    origins = [str(tmp_path / "unavailable" / name) for name in ["a.py", "b.py"]]
+    provenance_path = out.with_suffix(".jsonl.provenance.json")
+    provenance = json.loads(provenance_path.read_text())
+    provenance["files_sha256"] = dict.fromkeys(origins, digest)
+    provenance_path.write_text(json.dumps(provenance))
+    publish()
+    archive = tmp_path / "dependencies"
+    (archive / "blobs").mkdir(parents=True)
+    (archive / "blobs" / digest).write_bytes(b"source bytes")
+    entry = {"campaign_id": rows[0]["campaign_id"],
+             "provenance_sha256": hashlib.sha256(provenance_path.read_bytes()).hexdigest(),
+             "files": {p: {"blob": "blobs/" + digest, "sha256": digest, "bytes": 12} for p in origins}}
+    data = {"schema": 1, "campaigns": {"example": entry}}
+    if mutation == "blob":
+        (archive / "blobs" / digest).write_bytes(b"changed")
+    elif mutation == "missing":
+        entry["files"].pop(origins[0])
+    elif mutation == "provenance":
+        entry["provenance_sha256"] = "0" * 64
+    elif mutation == "duplicate":
+        data["campaigns"]["duplicate"] = entry
+    (archive / "bound-files.json").write_text(json.dumps(data))
+    if mutation:
+        with pytest.raises(ValueError):
+            matrix.verify_campaign(out, dependency_archive=archive)
+    else:
+        result = matrix.verify_campaign(out, dependency_archive=archive)
+        assert result["external_files_checked"] == 2  # one deduplicated blob
+        assert result["external_dependencies"] == "archived_declared_files_verified"
+        assert matrix.main(["--verify", "--out", str(out), "--dependency-archive", str(archive)]) == 0
+
+
 @pytest.mark.parametrize("outcome", ["exit", "timeout", "cancel"])
 def test_retained_case_keeps_raw_evidence_after_cleanup(tmp_path, monkeypatch, outcome):
     import hashlib

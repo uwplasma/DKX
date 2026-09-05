@@ -821,7 +821,8 @@ def _execution_complete(record: dict, args) -> bool:
     )
 
 
-def verify_campaign(out: Path, *, artifacts_dir: Path | None = None) -> dict:
+def verify_campaign(out: Path, *, artifacts_dir: Path | None = None,
+                    dependency_archive: Path | None = None) -> dict:
     """Verify retained bytes against the completion record, without executing code.
 
     This checks integrity relative to the supplied completion record, not its
@@ -888,9 +889,33 @@ def verify_campaign(out: Path, *, artifacts_dir: Path | None = None) -> dict:
                 actual.add(str(path.relative_to(root)))
         if actual != set(files):
             raise ValueError(f"manifest file inventory mismatch: {root}")
+    external_files = 0
+    if dependency_archive is not None:
+        archive = json.loads((dependency_archive / "bound-files.json").read_text())
+        matches = [entry for entry in archive["campaigns"].values() if entry["campaign_id"] == campaign]
+        if archive.get("schema") != 1 or len(matches) != 1:
+            raise ValueError("dependency archive must identify this campaign exactly once")
+        entry = matches[0]
+        expected = provenance["files_sha256"]
+        if entry["provenance_sha256"] != done["provenance_sha256"] or set(entry["files"]) != set(expected):
+            raise ValueError("dependency archive does not match the bound provenance")
+        if (dependency_archive / "blobs").is_symlink():
+            raise ValueError("symlinked dependency blob directory")
+        for origin, digest in expected.items():
+            info = entry["files"][origin]
+            if not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+                raise ValueError(f"invalid dependency checksum: {origin}")
+            if info["sha256"] != digest or info["blob"] != "blobs/" + digest:
+                raise ValueError(f"dependency binding mismatch: {origin}")
+            path = dependency_archive / info["blob"]
+            checked(path, digest)
+            if path.stat().st_size != info["bytes"]:
+                raise ValueError(f"dependency size mismatch: {origin}")
+            external_files += 1
     return {"archive_integrity": "passed", "campaign_id": campaign,
             "attempts": len(records), "files_checked": files_checked,
-            "scientific_acceptance": "not_checked", "external_dependencies": "not_revalidated"}
+            "scientific_acceptance": "not_checked", "external_files_checked": external_files,
+            "external_dependencies": "archived_declared_files_verified" if dependency_archive is not None else "not_revalidated"}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -898,6 +923,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--examples", type=Path)
     parser.add_argument("--verify", action="store_true",
                         help="verify retained --out evidence offline; --artifacts-dir relocates the archive root")
+    parser.add_argument("--dependency-archive", type=Path,
+                        help="with --verify, check declared provenance files in a bound-files.json / blobs archive")
     parser.add_argument("--fortran-binary", type=Path, default=None)
     parser.add_argument(
         "--fortran-backend", metavar="PACKAGE",
@@ -956,13 +983,16 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.verify:
         try:
-            print(json.dumps(verify_campaign(args.out, artifacts_dir=args.artifacts_dir), sort_keys=True))
+            print(json.dumps(verify_campaign(args.out, artifacts_dir=args.artifacts_dir,
+                                             dependency_archive=args.dependency_archive), sort_keys=True))
             return 0
         except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
             print(f"evidence verification failed: {exc}", file=sys.stderr)
             return 2
     if args.examples is None:
         parser.error("--examples is required unless --verify is used")
+    if args.dependency_archive is not None:
+        parser.error("--dependency-archive requires --verify")
     for path in args.provenance_file:
         if not path.is_file():
             parser.error(f"--provenance-file is not a file: {path}")
