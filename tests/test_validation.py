@@ -502,7 +502,7 @@ def test_campaign_checkpoint_is_atomic_on_publish_failure(tmp_path: Path, monkey
     assert list(tmp_path.iterdir()) == [checkpoint]
 
 
-@pytest.mark.parametrize("mutation", ["input", "equilibrium", "settings", "petsc", "petsc_env", "external"])
+@pytest.mark.parametrize("mutation", ["input", "equilibrium", "settings", "petsc", "petsc_env", "external", "threads", "blas_env"])
 @pytest.mark.parametrize("interrupt", [False, True])
 def test_campaign_resume_retries_failures_and_checks_provenance(tmp_path: Path, monkeypatch, mutation, interrupt) -> None:
     import hashlib
@@ -564,6 +564,10 @@ def test_campaign_resume_retries_failures_and_checks_provenance(tmp_path: Path, 
         argv += ["--fortran-petsc-opt=-mat_superlu_dist_equil", "--fortran-petsc-opt=false"]
     elif mutation == "petsc_env":
         monkeypatch.setenv("PETSC_OPTIONS", "-ksp_rtol 1e-8")
+    elif mutation == "threads":
+        argv += ["--fortran-threads", "2"]
+    elif mutation == "blas_env":
+        monkeypatch.setenv("BLIS_NUM_THREADS", "2")
     else:
         argv += ["--reps", "2"]
     assert matrix.main(argv) == 2
@@ -1941,10 +1945,11 @@ def test_reference_preflight_is_isolated_and_supervised(tmp_path, monkeypatch, f
     run = matrix._run_measured
     workdirs = []
 
-    def bounded(command, cwd, timeout_s):
+    def bounded(command, cwd, timeout_s, env=None):
         assert command[-3:] == ["-label", "a b", "-help"]
+        assert env["OMP_NUM_THREADS"] == env["OPENBLAS_NUM_THREADS"] == "1"
         workdirs.append(cwd)
-        return run(command, cwd, 0.1 if failure == "timeout" else timeout_s)
+        return run(command, cwd, 0.1 if failure == "timeout" else timeout_s, env=env)
 
     monkeypatch.setattr(matrix, "_run_measured", bounded)
     reason = matrix.preflight_fortran(Path("reference"), [], ("-label", "a b"))
@@ -1990,8 +1995,10 @@ def test_conditioning_builds_without_solving_and_caps_before_materializing(monke
     def forbidden(*args, **kwargs):
         raise AssertionError('conditioning inventory must not solve or materialize above its cap')
 
-    monkeypatch.setattr(importlib.import_module('dkx.solve'), 'solve', forbidden)
-    monkeypatch.setattr(importlib.import_module('dkx.run'), 'solve', forbidden)
+    solve_mod = importlib.import_module('dkx.solve')
+    run_mod = importlib.import_module('dkx.run')
+    monkeypatch.setattr(solve_mod, 'solve', forbidden)
+    monkeypatch.setattr(run_mod, 'solve', forbidden)
     monkeypatch.setattr(probe, 'materialize_csr', forbidden)
     deck = str(ROOT / 'tests/ref/pas_1species_PAS_noEr_tiny_scheme1.input.namelist')
     op = probe.operator_for(deck)
@@ -2008,8 +2015,12 @@ def test_petsc_arguments_and_observed_backend_are_distinct(tmp_path, monkeypatch
 
     def measured(command, work, *args, **kwargs):
         calls.append(command)
+        if work.name.startswith("fortran"):
+            assert kwargs["env"]["OMP_NUM_THREADS"] == kwargs["env"]["OPENBLAS_NUM_THREADS"] == "4"
+        else:
+            assert "OMP_NUM_THREADS" not in kwargs["env"]
         (work / "benchmark.stdout.log").write_text(
-            "package used to perform factorization: mumps\n" + "x" * 9000
+            "package used to perform factorization: mumps\n#OMP = 4\n" + "x" * 9000
         )
         (work / "benchmark.stderr.log").write_text("")
         return {"returncode": 1}
@@ -2018,12 +2029,14 @@ def test_petsc_arguments_and_observed_backend_are_distinct(tmp_path, monkeypatch
     options = ("-pc_factor_mat_solver_type", "superlu_dist", "-options_string", "a value with spaces")
     record = matrix.run_case(tmp_path, Path("/reference"), fortran_petsc_opts=options,
                              ranks=[1, 2], reps=1, timeout_s=10, equilibria=None,
-                             launcher=["isolated-env"], fortran_residual=True)
+                             launcher=["isolated-env"], fortran_residual=True, fortran_threads=4)
     assert calls[0][:6] == ["isolated-env", "/reference", *options]
     assert calls[1][:5] == ["isolated-env", "mpirun", "-n", "2", "/reference"]
     assert calls[1][5:9] == list(options)
     assert record["fortran_petsc_opts"] == list(options)
     assert record["fortran"]["1"]["observed_factor_backends"] == ["mumps"]
+    assert record["fortran_threads"] == 4
+    assert record["fortran"]["2"]["observed_mumps_threads"] == [4]
     assert not record["algebraic_pair_accepted"]
 
 
@@ -2063,7 +2076,7 @@ def test_requested_factor_backend_is_selected_and_verified(tmp_path, monkeypatch
 def test_backend_selection_also_reaches_preflight(tmp_path, monkeypatch):
     from tools.benchmarks import parity_performance_matrix as matrix
     calls = []
-    monkeypatch.setattr(matrix, "preflight_fortran", lambda binary, launcher, opts: calls.append(opts))
+    monkeypatch.setattr(matrix, "preflight_fortran", lambda binary, launcher, opts, **kwargs: calls.append(opts))
     monkeypatch.setattr(matrix, "_run_campaign", lambda args: 0)
     argv = ["--examples", str(tmp_path), "--out", str(tmp_path / "result.jsonl"),
             "--fortran-backend", "superlu_dist"]
@@ -2072,6 +2085,45 @@ def test_backend_selection_also_reaches_preflight(tmp_path, monkeypatch):
     assert calls == []
     assert matrix.main(argv + ["--fortran-binary", "/reference"]) == 0
     assert calls == [("-pc_factor_mat_solver_type", "superlu_dist")]
+
+
+def test_reference_thread_request_and_quoted_launcher_reach_preflight(tmp_path, monkeypatch):
+    from tools.benchmarks import parity_performance_matrix as matrix
+    calls = []
+    def preflight(binary, launcher, opts, **kwargs):
+        calls.append((launcher, kwargs["fortran_threads"]))
+    monkeypatch.setattr(matrix, "preflight_fortran", preflight)
+    monkeypatch.setattr(matrix, "_run_campaign", lambda args: 0)
+    argv = ["--examples", str(tmp_path), "--out", str(tmp_path / "result.jsonl"),
+            "--fortran-launcher", "'/path with spaces/launcher' --label 'two words'"]
+    for value in ["0", "-1"]:
+        with pytest.raises(SystemExit):
+            matrix.main(argv + ["--fortran-threads", value])
+    with pytest.raises(SystemExit):
+        matrix.main(argv + ["--fortran-launcher", "'"])
+    assert calls == []
+    assert matrix.main(argv + ["--fortran-threads", "3"]) == 0
+    assert calls == [(["/path with spaces/launcher", "--label", "two words"], 3)]
+
+
+@pytest.mark.parametrize("reported,status", [(None, "not_checked"), (1, "passed"), (36, "failed")])
+def test_reported_mumps_thread_excess_rejects_reference(tmp_path, monkeypatch, reported, status):
+    from tools.benchmarks import parity_performance_matrix as matrix
+    (tmp_path / "input.namelist").write_text("&general\n/\n")
+    monkeypatch.setattr(matrix, "deck_metadata", lambda path: {"solverTolerance": 1e-10, "RHSMode": 1})
+    monkeypatch.setattr(matrix, "_fortran_succeeded", lambda *args: True)
+    monkeypatch.setattr(matrix, "fortran_true_residual", lambda *args, **kwargs: 1e-12)
+    def measured(command, work, *args, **kwargs):
+        (work / "benchmark.stdout.log").write_text("" if reported is None else f"#OMP = {reported}\n")
+        (work / "sfincsOutput.h5").write_bytes(b"mock output")
+        return {"returncode": 0 if work.name.startswith("fortran") else 1}
+    monkeypatch.setattr(matrix, "_run_measured", measured)
+    record = matrix.run_case(tmp_path, Path("/reference"), ranks=[1], reps=0,
+                             timeout_s=1, equilibria=None, launcher=[], fortran_residual=True,
+                             fortran_threads=2)
+    result = record["fortran"]["1"]
+    assert result["mumps_thread_acceptance"] == status
+    assert result["succeeded"] is (status != "failed")
 
 
 def test_warm_observable_audit_checks_equations_and_reuse_modes(tmp_path):
@@ -2104,6 +2156,11 @@ def test_warm_audit_dual_identity_sign_with_deliberately_inaccurate_states(monke
     from types import SimpleNamespace
     from tools.benchmarks import operator_conditioning as probe
     import jax.numpy as jnp
+    # warm_audit lazily imports batch for layout validation. Load that consumer
+    # before patching its provider, or batch permanently captures this mock.
+    from dkx import batch as batch_mod
+    original_solve = importlib.import_module('dkx.solve').solve
+    assert batch_mod.solve is original_solve
 
     calls = []
     def inaccurate(op, rhs, **kwargs):
@@ -2113,6 +2170,7 @@ def test_warm_audit_dual_identity_sign_with_deliberately_inaccurate_states(monke
     monkeypatch.setattr(importlib.import_module('dkx.solve'), 'solve', inaccurate)
     deck = str(ROOT / 'tests/ref/pas_1species_PAS_noEr_tiny_scheme1.input.namelist')
     audit = probe.warm_audit(deck, deck, tolerances=(1e-10,))
+    assert batch_mod.solve is original_solve
     for row in audit['records'][1:]:
         assert not row['original_residual_pass'] and not row['solver_converged']
         assert not row['recycle_supplied']

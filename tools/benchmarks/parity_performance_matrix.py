@@ -49,6 +49,7 @@ import os
 import platform
 import re
 import shutil
+import shlex
 import signal
 import subprocess
 import sys
@@ -572,6 +573,14 @@ def _case_workspace(record: dict, artifact_dir: Path | None):
         record["artifacts_manifest_sha256"] = hashlib.sha256(manifest.encode()).hexdigest()
 
 
+def _fortran_thread_env(threads: int) -> dict[str, str]:
+    if isinstance(threads, bool) or not isinstance(threads, int) or threads < 1:
+        raise ValueError("fortran_threads must be a positive integer")
+    return {"OMP_NUM_THREADS": str(threads), "OPENBLAS_NUM_THREADS": str(threads),
+            "MKL_NUM_THREADS": str(threads), "BLIS_NUM_THREADS": str(threads),
+            "VECLIB_MAXIMUM_THREADS": str(threads), "OMP_DYNAMIC": "FALSE", "MKL_DYNAMIC": "FALSE"}
+
+
 def run_case(
     example_dir: Path,
     fortran_binary: Path | None,
@@ -586,15 +595,17 @@ def run_case(
     launcher: list[str],
     fortran_residual: bool,
     artifact_dir: Path | None = None,
+    fortran_threads: int = 1,
 ) -> dict:
     """One deck through both codes, in isolated copies of the example directory."""
     deck = example_dir / "input.namelist"
+    thread_env = _fortran_thread_env(fortran_threads)
     if artifact_dir is not None and artifact_dir.resolve().is_relative_to(example_dir.resolve()):
         raise ValueError("artifact directory must be outside the copied example directory")
     if fortran_backend:
         fortran_petsc_opts += ("-pc_factor_mat_solver_type", fortran_backend)
     record: dict = {"case": example_dir.name, "fortran_petsc_opts": list(fortran_petsc_opts),
-                    "requested_factor_backend": fortran_backend}
+                    "requested_factor_backend": fortran_backend, "fortran_threads": fortran_threads}
     with _case_workspace(record, artifact_dir) as root:
         shutil.copy(deck, root / "input.namelist")
         try:
@@ -632,18 +643,29 @@ def run_case(
                 # the Fortran toolchain's libraries confined to this subprocess;
                 # exporting them into the parent would shadow the BLAS that this
                 # process's own numpy is linked against.
-                result = _run_measured(launcher + command, work, timeout_s)
+                result = _run_measured(launcher + command, work, timeout_s, env=thread_env)
                 # Record observed factor packages separately from requested
                 # options: SFINCS/PETSc may override a requested backend.
                 observed = set()
+                observed_threads = set()
                 if (work / "benchmark.stdout.log").is_file():
                     with (work / "benchmark.stdout.log").open(errors="replace") as log:
                         for line in log:
                             match = re.search(r"package used to perform factorization:\s*(\S+)", line)
                             if match:
                                 observed.add(match.group(1))
+                            match = re.search(r"#OMP\s*=\s*(\d+)", line)
+                            if match:
+                                observed_threads.add(int(match.group(1)))
                 result["observed_factor_backends"] = sorted(observed)
+                result["observed_mumps_threads"] = sorted(observed_threads)
                 result["succeeded"] = _fortran_succeeded(work, result)
+                result["mumps_thread_acceptance"] = "not_checked"
+                if observed_threads:
+                    result["mumps_thread_acceptance"] = "passed" if min(observed_threads) >= 1 and max(observed_threads) <= fortran_threads else "failed"
+                    if result["mumps_thread_acceptance"] == "failed":
+                        result["succeeded"] = False
+                        result["thread_error"] = f"requested at most {fortran_threads}; MUMPS reported {sorted(observed_threads)}"
                 result["backend_acceptance"] = "not_checked"
                 if fortran_backend:
                     result["backend_acceptance"] = "passed" if observed == {fortran_backend} else "failed"
@@ -706,7 +728,8 @@ def run_case(
     return record
 
 
-def preflight_fortran(binary: Path | None, launcher: list[str], petsc_opts: tuple[str, ...] = ()) -> str | None:
+def preflight_fortran(binary: Path | None, launcher: list[str], petsc_opts: tuple[str, ...] = (),
+                      *, fortran_threads: int = 1) -> str | None:
     """Reason the Fortran reference cannot run, or ``None`` if it can.
 
     A sweep is hours long and its whole value is the comparison, so a reference
@@ -727,7 +750,7 @@ def preflight_fortran(binary: Path | None, launcher: list[str], petsc_opts: tupl
         # files and supervise the launcher's descendants just like real runs.
         with tempfile.TemporaryDirectory(prefix="dkx-reference-preflight-") as scratch:
             work = Path(scratch)
-            result = _run_measured(probe, work, 120)
+            result = _run_measured(probe, work, 120, env=_fortran_thread_env(fortran_threads))
             if result.get("error"):
                 return f"cannot launch {' '.join(probe)}: {result['error']}"
             for stream in ("stdout", "stderr"):
@@ -785,7 +808,7 @@ def _campaign_id(args, directories: list[Path], *, provenance: dict | None = Non
         "python": sys.version,
         "platform": platform.platform(),
         "environment": {k: v for k, v in os.environ.items() if k.startswith(
-            ("PETSC_", "DKX_", "JAX_", "XLA_", "CUDA_", "OMP_", "MKL_", "OPENBLAS_", "MAMBA_", "LD_", "DYLD_")
+            ("PETSC_", "DKX_", "JAX_", "XLA_", "CUDA_", "OMP_", "MKL_", "OPENBLAS_", "BLIS_", "VECLIB_", "MAMBA_", "LD_", "DYLD_")
         )},
     }
     digest = hashlib.sha256(json.dumps(metadata, sort_keys=True).encode())
@@ -945,6 +968,8 @@ def main(argv: list[str] | None = None) -> int:
              "large files are not pruned automatically (use a directory outside Git)",
     )
     parser.add_argument("--ranks", type=int, nargs="+", default=[1])
+    parser.add_argument("--fortran-threads", type=int, default=1,
+                        help="OpenMP/BLAS thread request per reference MPI rank (default 1); recorded separately from rank count")
     parser.add_argument("--reps", type=int, default=1, help="warm repetitions")
     parser.add_argument("--timeout-s", type=float, default=1800.0)
     parser.add_argument("--max-dof", type=int, default=None)
@@ -998,11 +1023,16 @@ def main(argv: list[str] | None = None) -> int:
             parser.error(f"--provenance-file is not a file: {path}")
     if args.fortran_backend and args.fortran_binary is None:
         parser.error("--fortran-backend requires --fortran-binary")
-    launcher = args.fortran_launcher.split() if args.fortran_launcher else []
+    if args.fortran_threads < 1:
+        parser.error("--fortran-threads must be positive")
+    try:
+        launcher = shlex.split(args.fortran_launcher) if args.fortran_launcher else []
+    except ValueError as exc:
+        parser.error(f"invalid --fortran-launcher: {exc}")
     options = tuple(args.fortran_petsc_opt)
     if args.fortran_backend:
         options += ("-pc_factor_mat_solver_type", args.fortran_backend)
-    reason = preflight_fortran(args.fortran_binary, launcher, options)
+    reason = preflight_fortran(args.fortran_binary, launcher, options, fortran_threads=args.fortran_threads)
     if reason is not None:
         print(f"refusing to start: {reason}", file=sys.stderr)
         return 2
@@ -1063,9 +1093,10 @@ def _run_campaign(args) -> int:
                 directory, args.fortran_binary,
                 petsc_profile=args.petsc_profile,
                 fortran_petsc_opts=tuple(args.fortran_petsc_opt), fortran_backend=args.fortran_backend,
+                fortran_threads=args.fortran_threads,
                 ranks=args.ranks, reps=args.reps,
                 timeout_s=args.timeout_s, equilibria=args.equilibria,
-                launcher=args.fortran_launcher.split() if args.fortran_launcher else [],
+                launcher=shlex.split(args.fortran_launcher) if args.fortran_launcher else [],
                 fortran_residual=args.fortran_residual, artifact_dir=artifact_dir,
             )
         except BaseException as exc:

@@ -170,6 +170,21 @@ wrong observations reject that reference. The selected package and
 ``backend_acceptance`` are recorded independently of algebraic acceptance.
 Backend-specific tuning tokens alone do not select a backend.
 
+The matrix runner defaults to ``--fortran-threads 1`` per MPI rank. It sends
+explicit OpenMP/OpenBLAS/MKL/BLIS/Accelerate thread requests through preflight
+and every reference launch and disables OpenMP/MKL dynamic thread adjustment.
+Use, for example, ``--ranks 1 2 --fortran-threads 2`` to request two threads per
+rank. This setting is independent of DKX's CPU configuration and is recorded
+in campaign identity and launch environment metadata. Changing it invalidates
+resume. Quoted paths and arguments in ``--fortran-launcher`` are preserved.
+
+``observed_mumps_threads`` reports values parsed from MUMPS diagnostics.
+``mumps_thread_acceptance`` fails if any reported count exceeds the request or
+is invalid; that reference cannot be accepted as a benchmark pair. Missing
+reports remain ``not_checked``. These diagnostics do not establish CPU affinity,
+active worker count or the behavior of every BLAS implementation. Measure and
+record placement and utilization before comparing scaling or speed.
+
 Changed options or recorded runtime environment settings invalidate resume.
 The runner writes ``OUT.provenance.json`` with typed options, Python/package
 versions, platform, selected environment variables and individual input/source/
