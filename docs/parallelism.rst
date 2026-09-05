@@ -4,9 +4,9 @@ Parallelism
 `dkx` runs on a single node — a multi-core CPU or the node's local GPUs — and
 gets its throughput from two places: batched ``jax.vmap`` over independent
 solves (optionally split across the node's devices) and the structured
-``solvax`` solve routes underneath. This covers the same physics that SFINCS
-Fortran v3 spreads across many nodes with MPI, while keeping the whole path
-differentiable.
+``solvax`` solve routes underneath. Parallel execution does not establish
+SFINCS-v3 physics parity or complete parameter derivatives; see :doc:`numerics`
+and :doc:`differentiability` for supported domains.
 
 The lever to reach for first is **batching independent solves**. Scanning the
 radial electric field, sweeping flux surfaces, or building a monoenergetic
@@ -34,10 +34,10 @@ that share a discretization:
 
 .. code-block:: python
 
-   from dkx.batch import batched_er_scan, batched_surface_scan
+   from dkx import batched_er_scan, batched_surface_scan
 
    # Scan the radial electric field on one geometry.
-   result = batched_er_scan(problem, er_values)
+   result = batched_er_scan(problem, er_values, devices="auto")
    radial_current = result.radial_current       # J_r for each E_r value
 
    # Sweep a set of flux surfaces (one KineticOperator each).
@@ -49,6 +49,29 @@ take optional ``max_batch`` / ``memory_budget_gb`` overrides. Independent solves
 — a vector of ``E_r`` values, a set of surfaces, or the ``(nu*, E_r)`` grid of a
 monoenergetic database (``dkx.monoenergetic``) — are exactly the
 parallel-friendly shape.
+
+Prepare the problem or surface operators outside JAX transformations. The public
+``dkx.batched_er_scan`` retains a prepared problem's solver method and tolerance
+unless explicitly overridden. For repeated differentiable scans:
+
+.. code-block:: python
+
+   import jax
+   import jax.numpy as jnp
+   from dkx.er import prepare
+
+   problem = prepare("input.namelist", solve_method="gmres", tol=1e-10)
+   current = jax.jit(jax.value_and_grad(
+       lambda er: jnp.sum(batched_er_scan(
+           problem, er, devices="auto", differentiable=True,
+       ).moments["FSABjHat"])
+   ))
+   value, gradient = current(er_values)
+
+``devices=None`` keeps the default single-device behavior. Both public scan
+functions return the original residual norms along with states and moments;
+use these diagnostics together with observable and resolution checks. These
+operator/deck interfaces do not yet provide a prepared native ``Case`` API.
 
 **Automatic memory budgeting.** There are no sharding environment variables on
 this path. The batch runs in ``jax.lax.map`` chunks sized from two numbers: the

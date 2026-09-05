@@ -533,6 +533,15 @@ def test_api_batched_facades_route(tmp_path: Path) -> None:
         atol=1e-12,
     )
 
+    # Omitted options preserve the prepared problem's numerical policy.
+    prepared = dataclasses.replace(prob, solve_method="gmres", tol=3e-9)
+    inherited = api.batched_er_scan(prepared, er_values)
+    assert inherited.method == inherited.executed_method == "gmres"
+    expected = batch_mod.batched_er_scan(prepared, er_values)
+    np.testing.assert_array_equal(inherited.states, expected.states)
+    override = api.batched_er_scan(prepared, er_values, solve_method="auto", tol=1e-10)
+    np.testing.assert_array_equal(override.states, direct.states)
+
     specs = [(0.04, -0.5), (0.06, -0.55)]
     ops = [
         _build_op(tmp_path, epsilon_h=eh, dndr=dn, name=f"api_surface_{i}.namelist")
@@ -613,6 +622,7 @@ import jax.numpy as jnp
 
 from dkx import batch as batch_mod
 from dkx import er as er_mod
+from dkx import batched_er_scan, batched_surface_scan
 
 assert len(jax.devices()) == 2, f"expected 2 forced CPU devices, got {jax.devices()}"
 
@@ -667,7 +677,7 @@ assert {s.device for s in multi2.states.addressable_shards} == set(jax.devices()
 # Uneven batches retain order and discard padded cases, including in reverse mode.
 values = er_values[:5]
 def scan(values, devices):
-    return batch_mod.batched_er_scan(
+    return batched_er_scan(
         prob, values, devices=devices, max_batch=2, differentiable=True)
 for devices in (None, "auto"):
     result = jax.jit(lambda v: scan(v, devices))(values)
@@ -699,6 +709,15 @@ assert tight.chunk_size == 1 and tight.n_chunks == 4
 tight_ref = batch_mod.batched_er_scan(prob, er_values, memory_budget_gb=1e-6)
 assert tight.executed_method == tight_ref.executed_method
 assert close(tight.states, tight_ref.states)
+
+# The public surface facade preserves actual placement and diagnostics too.
+surface_ops = [er_mod.operator_at_er(prob.operator, e, dphi_per_er=prob.dphi_per_er)
+               for e in er_values[:2]]
+surface_result = batched_surface_scan(surface_ops, devices="auto")
+assert not surface_result.states.is_fully_replicated
+assert len(surface_result.states.addressable_shards) == 2
+assert close(surface_result.states, single.states[:2])
+assert close(surface_result.residual_norms, single.residual_norms[:2])
 
 # Full-FP Krylov solves use the same independent-batch contract.
 fp_prob = er_mod.prepare(sys.argv[2], er_bracket=(-1.0, 1.0), solve_method="gmres")
