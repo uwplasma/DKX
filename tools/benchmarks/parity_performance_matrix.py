@@ -43,6 +43,7 @@ import hashlib
 import importlib.metadata
 import importlib.util
 import json
+import math
 import os
 import platform
 import re
@@ -162,32 +163,42 @@ def _kill_group(proc: subprocess.Popen) -> None:
 
 
 _DKX_DRIVER = """
-import json, sys, time
+import json, sys, time, statistics
+import numpy as np
 import jax
 jax.config.update("jax_enable_x64", True)
 from dkx.inputs import load_sfincs_input
 from dkx.run import run_profile, run_transport_matrix
 
 deck, out, reps = sys.argv[1], sys.argv[2], int(sys.argv[3])
-general = load_sfincs_input(deck).raw.group("general")
-rhs_mode = int(next((v for k, v in general.items() if k.lower() == "rhsmode"), 1))
+inp = load_sfincs_input(deck)
+rhs_mode = inp.general.rhs_mode
 driver = run_profile if rhs_mode == 1 else run_transport_matrix
-
-t0 = time.perf_counter()
-run = driver(deck, out_path=out, emit=None)
-cold = time.perf_counter() - t0
-warm = None
-for _ in range(reps):
+linear = not inp.physics.include_phi1
+samples, residuals, converged = [], [], []
+for _ in range(reps + 1):
     t0 = time.perf_counter()
-    driver(deck, out_path=out, emit=None)
-    elapsed = time.perf_counter() - t0
-    warm = elapsed if warm is None else min(warm, elapsed)
+    run = driver(deck, out_path=out, emit=None, tol=inp.resolution.solver_tolerance)
+    states = [run.state_vector] if rhs_mode == 1 else run.state_vectors
+    jax.block_until_ready(states)
+    samples.append(time.perf_counter() - t0)
+    converged.append(bool(run.solve_result.converged))
+    if linear:
+        for i, state in enumerate(states, 1):
+            rhs = np.asarray(run.operator.rhs(i))
+            r = np.asarray(run.operator.apply(state)) - rhs
+            norm_b, norm_r = np.linalg.norm(rhs), np.linalg.norm(r)
+            residuals.append(float(norm_r / norm_b) if norm_b else (0.0 if norm_r == 0 else None))
+valid = residuals and all(r is not None and np.isfinite(r) for r in residuals)
 json.dump({
-    "cold_s": round(cold, 3),
-    "warm_s": None if warm is None else round(warm, 3),
+    "cold_s": samples[0],
+    "warm_s": statistics.median(samples[1:]) if reps else None,
+    "warm_samples_s": samples[1:],
     "backend": jax.default_backend(),
     "method": str(run.solve_result.method),
-    "converged": bool(run.solve_result.converged),
+    "converged": all(converged),
+    "true_residual": max(residuals) if valid else None,
+    "true_residuals": residuals if valid else None,
 }, open("dkx_timing.json", "w"))
 """
 
@@ -295,19 +306,23 @@ def _request_binary_dump(deck: Path) -> None:
         rf"^\s*{_BINARY_DUMP_KEY}\s*=", text, re.MULTILINE | re.IGNORECASE
     )
     if active is not None:
+        deck.write_text(re.sub(
+            rf"(^\s*{_BINARY_DUMP_KEY}\s*=)\s*\.[A-Za-z]+\.",
+            r"\1 .true.", text, flags=re.MULTILINE | re.IGNORECASE,
+        ))
         return
     deck.write_text(re.sub(r"^(&general\s*)$", rf"\g<1>\n  {_BINARY_DUMP_KEY} = .true.",
                            text, count=1, flags=re.MULTILINE | re.IGNORECASE))
 
 
-def fortran_true_residual(work: Path, *, linear: bool) -> float | None:
+def fortran_true_residual(work: Path, *, linear: bool, rhs_mode: int = 1) -> float | None:
     """``||A x - b|| / ||b||`` from SFINCS's *own* matrix, state and rhs.
 
-    Only meaningful for a **linear** run.  With ``Phi1``/quasineutrality the
-    problem is a Newton iteration: the dumped ``iteration_000`` matrix is the
-    Jacobian at the initial guess while the reported state comes from a later
-    step, so the combination is not a residual of anything.  Left unguarded it
-    reports values like 1.8 on decks whose outputs agree to 1e-12.
+    Supported for linear RHSMode 1/2/3, checking every RHS. Nonlinear runs
+    need a final-state coupled residual, not an initial Jacobian paired with a
+    later state. The campaign conservatively excludes Phi1 from this pairing,
+    including linear Phi1 configurations until their dump conventions are
+    independently verified.
 
     For linear runs, a disagreement between the two codes is not evidence about
     dkx until this is known.  PETSc's Krylov convergence test measures the *preconditioned*
@@ -328,23 +343,38 @@ def fortran_true_residual(work: Path, *, linear: bool) -> float | None:
 
     from dkx.validation.fortran import read_petsc_mat_aij, read_petsc_vec
 
-    matrix = work / "sfincsBinary_iteration_000_whichMatrix_3"
-    state = work / "sfincsBinary_iteration_000_stateVector"
-    residual = work / "sfincsBinary_iteration_000_residual"
-    if not (matrix.exists() and state.exists() and residual.exists()):
+    if rhs_mode not in (1, 2, 3):
         return None
+    matrix = work / "sfincsBinary_iteration_000_whichMatrix_3"
+    if not matrix.exists():
+        # Linear transport runs evaluate F only at zero; no residual matrix is
+        # dumped. Their Jacobian is the same linear operator, not matrix 0 (P).
+        matrix = work / "sfincsBinary_iteration_000_whichMatrix_1"
     try:
         aij = read_petsc_mat_aij(matrix)
         operator = csr_matrix((aij.data, aij.col_ind, aij.row_ptr), shape=aij.shape)
-        x = np.asarray(read_petsc_vec(state).values)
-        # The dumped residual is evaluated at x = 0, so it is -b.
-        b = -np.asarray(read_petsc_vec(residual).values)
-        norm_b = float(np.linalg.norm(b))
-        if norm_b == 0.0:
-            return None
-        return float(np.linalg.norm(operator @ x - b) / norm_b)
-    except Exception:  # pragma: no cover - a malformed dump must not kill the sweep
+        residuals = []
+        for i in range({1: 1, 2: 3, 3: 2}[rhs_mode]):
+            prefix = work / f"sfincsBinary_iteration_{i:03d}"
+            x = np.asarray(read_petsc_vec(Path(str(prefix) + "_stateVector")).values)
+            b = -np.asarray(read_petsc_vec(Path(str(prefix) + "_residual")).values)
+            norm_b = float(np.linalg.norm(b))
+            norm_r = float(np.linalg.norm(operator @ x - b))
+            relative = norm_r / norm_b if norm_b else (0.0 if norm_r == 0 else math.inf)
+            if not math.isfinite(relative):
+                return None
+            residuals.append(relative)
+        return max(residuals)
+    except (OSError, ValueError, TypeError, IndexError):
         return None
+
+
+def _algebraic_acceptance(result: dict, tolerance: float) -> str:
+    """Original relative-residual acceptance, separate from execution success."""
+    residual = result.get("true_residual")
+    if residual is None:
+        return "not_checked"
+    return "passed" if math.isfinite(residual) and 0 <= residual <= tolerance else "failed"
 
 
 def _fortran_succeeded(work: Path, result: dict) -> bool:
@@ -494,6 +524,7 @@ def deck_metadata(deck: Path) -> dict:
     n_xi, n_x = int(value(res, "Nxi", 16)), int(value(res, "Nx", 5))
     return {
         "dof": n_theta * n_zeta * n_xi * n_x * n_species,
+        "solverTolerance": float(value(res, "solverTolerance", 1e-6)),
         "Ntheta": n_theta, "Nzeta": n_zeta, "Nxi": n_xi, "Nx": n_x,
         "n_species": n_species,
         "geometryScheme": int(value(geo, "geometryScheme", 1)),
@@ -563,8 +594,9 @@ def run_case(
                 result["succeeded"] = _fortran_succeeded(work, result)
                 if fortran_residual and result["succeeded"]:
                     result["true_residual"] = fortran_true_residual(
-                        work, linear=not record.get("includePhi1", False)
+                        work, linear=not record.get("includePhi1", False), rhs_mode=record["RHSMode"]
                     )
+                result["algebraic_acceptance"] = _algebraic_acceptance(result, record["solverTolerance"])
                 if petsc_profile:
                     result["petsc_events"] = _parse_petsc_log(work / "petsc_log.txt")
                 if result["succeeded"]:
@@ -593,8 +625,15 @@ def run_case(
         timing_path = work / "dkx_timing.json"
         if timing_path.exists():
             result.update(json.loads(timing_path.read_text()))
+        result["algebraic_acceptance"] = _algebraic_acceptance(result, record["solverTolerance"])
         record["dkx"] = {k: v for k, v in result.items() if k != "stdout_tail"}
 
+        record["algebraic_pair_accepted"] = (
+            result.get("returncode") == 0 and result.get("converged") is True
+            and record["fortran"].get("1", {}).get("succeeded") is True
+            and result["algebraic_acceptance"] == "passed"
+            and record["fortran"].get("1", {}).get("algebraic_acceptance") == "passed"
+        )
         reference = root / "fortran_1.h5"
         record["parity"] = (
             compare_outputs(
@@ -602,8 +641,10 @@ def run_case(
             )
             if reference.exists() and result.get("returncode") == 0
             and result.get("converged") is True
-            else {"error": "no successful reference/candidate pair"}
+            and (not fortran_residual or record["algebraic_pair_accepted"])
+            else {"error": "no successful pair at the required original residual"}
         )
+        record["parity"]["scope"] = "algebraically_accepted" if record["algebraic_pair_accepted"] else "diagnostic_only"
     return record
 
 
@@ -700,8 +741,12 @@ def _execution_complete(record: dict, args) -> bool:
     candidate = record.get("dkx", {})
     if candidate.get("returncode") != 0 or candidate.get("converged") is not True:
         return False
+    if args.fortran_residual and candidate.get("algebraic_acceptance") != "passed":
+        return False
     return args.fortran_binary is None or all(
         record.get("fortran", {}).get(str(rank), {}).get("succeeded") is True
+        and (not args.fortran_residual or
+             record["fortran"][str(rank)].get("algebraic_acceptance") == "passed")
         for rank in args.ranks
     )
 
@@ -729,7 +774,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--equilibria", default=os.environ.get("DKX_EQUILIBRIA_DIRS"))
     parser.add_argument(
-        "--fortran-residual", action="store_true",
+        "--fortran-residual", action=argparse.BooleanOptionalAction, default=True,
         help="dump SFINCS's matrix/state/rhs and record its own true residual, so a "
              "reference that converged only in the preconditioned norm is not mistaken "
              "for a dkx parity failure (costs disk: 1.5M nonzeros on an 83k deck)",
@@ -814,6 +859,7 @@ def _run_campaign(args) -> int:
     summary = {
         "cases": len(current),
         "attempts": len(records),
+        "algebraic_pairs": sum(record.get("algebraic_pair_accepted", False) for record in current),
         "execution_complete": sum(_execution_complete(record, args) for record in current),
         "campaign_id": campaign_id,
         "checkpoint_sha256": hashlib.sha256(args.out.read_bytes()).hexdigest(),

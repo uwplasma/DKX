@@ -266,7 +266,7 @@ def test_campaign_resume_retries_failures_and_checks_provenance(tmp_path: Path, 
         success = directory.name == "good" or calls.count("retry") > 1
         if interrupt and not success:
             raise KeyboardInterrupt("cancelled pilot")
-        return {"case": directory.name, "dkx": {"returncode": 0 if success else 1, "converged": success}}
+        return {"case": directory.name, "dkx": {"returncode": 0 if success else 1, "converged": success, "algebraic_acceptance": "passed" if success else "failed"}}
     monkeypatch.setattr(matrix, "run_case", run)
     monkeypatch.setattr(matrix, "deck_metadata", lambda path: {"dof": 1})
     argv = ["--examples", str(examples), "--out", str(out)]
@@ -304,6 +304,51 @@ def test_campaign_lock_refuses_a_concurrent_writer(tmp_path: Path) -> None:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         assert matrix.main(["--examples", str(tmp_path), "--out", str(out)]) == 2
     assert not out.exists()
+
+
+@pytest.mark.parametrize("mode", [1, 2, 3])
+@pytest.mark.parametrize("perturb", [False, True])
+def test_original_residual_checks_every_rhs_of_a_nonsymmetric_system(tmp_path: Path, mode, perturb) -> None:
+    import numpy as np
+    from scipy.sparse import csr_matrix
+    from tools.benchmarks.parity_performance_matrix import fortran_true_residual
+
+    a = csr_matrix([[3.0, 2.0], [0.0, 4.0]])
+    matrix = tmp_path / "sfincsBinary_iteration_000_whichMatrix_1"
+    matrix.write_bytes(
+        np.asarray([1211216, 2, 2, a.nnz], dtype=">i4").tobytes()
+        + np.diff(a.indptr).astype(">i4").tobytes()
+        + a.indices.astype(">i4").tobytes() + a.data.astype(">f8").tobytes()
+    )
+    count = {1: 1, 2: 3, 3: 2}[mode]
+    for i in range(count):
+        x = np.asarray([1.0, i + 1.0])
+        b = a @ x
+        if perturb and i == count - 1:
+            x[0] += 0.1
+        for suffix, values in (("stateVector", x), ("residual", -b)):
+            (tmp_path / f"sfincsBinary_iteration_{i:03d}_{suffix}").write_bytes(
+                np.asarray([1211214, 2], dtype=">i4").tobytes() + values.astype(">f8").tobytes()
+            )
+    error = fortran_true_residual(tmp_path, linear=True, rhs_mode=mode)
+    assert error > 1e-3 if perturb else error == 0.0
+    assert fortran_true_residual(tmp_path, linear=False, rhs_mode=mode) is None
+    (tmp_path / f"sfincsBinary_iteration_{count-1:03d}_stateVector").unlink()
+    assert fortran_true_residual(tmp_path, linear=True, rhs_mode=mode) is None
+
+
+@pytest.mark.parametrize("value,status", [(None, "not_checked"), (float("nan"), "failed"), (1e-4, "failed"), (1e-8, "passed")])
+def test_original_residual_acceptance_is_distinct_from_convergence(value, status) -> None:
+    from tools.benchmarks.parity_performance_matrix import _algebraic_acceptance
+    assert _algebraic_acceptance({"converged": True, "true_residual": value}, 1e-6) == status
+
+
+def test_requested_binary_dump_overrides_a_disabled_setting(tmp_path: Path) -> None:
+    from tools.benchmarks.parity_performance_matrix import _request_binary_dump
+    deck = tmp_path / "input.namelist"
+    deck.write_text("&general\n saveMatricesAndVectorsInBinary = .false. ! retain this note\n/\n")
+    _request_binary_dump(deck)
+    assert "= .true. ! retain this note" in deck.read_text()
 
 
 def payload(entry_id: str) -> dict[str, Any]:
