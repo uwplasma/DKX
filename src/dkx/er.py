@@ -794,6 +794,8 @@ def ambipolar_er(
     tol: float | None = None,
     root_tol: float = 1e-11,
     max_root_iter: int = 60,
+    current_tol: float = 1e-12,
+    min_abs_slope: float = 0.0,
 ):
     """Differentiable ambipolar ``E_r`` (a scalar JAX array).
 
@@ -821,16 +823,38 @@ def ambipolar_er(
         solve_method, tol: overrides for the routed differentiable solve;
             omitted values preserve a prepared problem's policy (deck defaults
             are auto and 1e-10).
-        root_tol, max_root_iter: forward secant tolerance and iteration cap.
+        root_tol: secant step tolerance and maximum final local Newton
+            correction ``abs(Jr / (dJr/dEr))``, in the problem's field units.
+        max_root_iter: positive integer forward iteration cap.
+        current_tol: maximum absolute final normalized radial current.
+        min_abs_slope: strictly exceeded by ``abs(dJr/dEr)`` at the root,
+            in normalized current per field unit. Zero rejects exactly flat
+            roots; choose a positive threshold for application-specific
+            marginal-root rejection.
 
     Returns:
         The ambipolar ``E_r`` as a scalar JAX array, differentiable via
         ``jax.grad`` / ``jax.jacobian``.
+
+    Raises:
+        ValueError: invalid static acceptance controls.
+        RuntimeError: nonfinite or unacceptable final root, current, slope,
+            or local correction (wrapped by JAX under compilation). These
+            local checks do not establish uniqueness or grid convergence.
     """
     import jax  # noqa: PLC0415
     import jax.numpy as jnp  # noqa: PLC0415
 
     from solvax.implicit import root_solve  # noqa: PLC0415
+
+    for name, value, positive in (
+        ("root_tol", root_tol, True), ("current_tol", current_tol, False),
+        ("min_abs_slope", min_abs_slope, False),
+    ):
+        if not np.isfinite(value) or value < 0 or (positive and value == 0):
+            raise ValueError(f"{name} must be finite and {'positive' if positive else 'nonnegative'}")
+    if isinstance(max_root_iter, bool) or not isinstance(max_root_iter, (int, np.integer)) or max_root_iter < 1:
+        raise ValueError("max_root_iter must be a positive integer")
 
     problem = _resolve_problem(
         inp_or_operator, dphi_per_er=dphi_per_er, z_s=z_s,
@@ -848,8 +872,8 @@ def ambipolar_er(
         return j_r
 
     def solver(f, x_init):
-        # Black-box forward root: secant iteration (value only, so no nested
-        # gradient); custom_root supplies the implicit-function-theorem tangent.
+        # Value-only secant iterations; one field JVP checks final acceptance.
+        # custom_root supplies the implicit-function-theorem parameter tangent.
         x_init = jnp.asarray(x_init, dtype=jnp.float64)
         step = jnp.where(jnp.abs(x_init) > 0.0, 1e-3 * jnp.abs(x_init), 1e-3)
         x_prev = x_init
@@ -869,6 +893,23 @@ def ambipolar_er(
             return (i < max_root_iter) & (jnp.abs(xc - xp) > root_tol)
 
         _xp, _fp, x_root, _i = jax.lax.while_loop(cond, body, (x_prev, f_prev, x_cur, 0))
+        current, slope = jax.jvp(f, (x_root,), (jnp.ones_like(x_root),))
+
+        def check(root, current, slope):
+            root, current, slope = float(root), float(current), float(slope)
+            if not (
+                np.isfinite(root) and np.isfinite(current) and np.isfinite(slope)
+                and abs(current) <= current_tol and abs(slope) > min_abs_slope
+                and abs(current / slope) <= root_tol
+            ):
+                raise RuntimeError(
+                    "Ambipolar root acceptance failed: "
+                    f"Er={root}, Jr={current}, dJr/dEr={slope}; "
+                    f"require |Jr| <= {current_tol}, |dJr/dEr| > {min_abs_slope}, "
+                    f"and |Jr/(dJr/dEr)| <= {root_tol}."
+                )
+
+        jax.debug.callback(check, x_root, current, slope)
         return x_root
 
     return root_solve(residual, jnp.asarray(er0, dtype=jnp.float64), solver)

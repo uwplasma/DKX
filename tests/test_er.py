@@ -314,3 +314,86 @@ def test_ambipolar_root_preserves_prepared_solver_policy(tmp_path, monkeypatch):
     root = er_mod.ambipolar_er(problem, er0=LEGACY_BRENT_ROOT_ER, solve_method="auto")
     assert abs(float(root) - LEGACY_BRENT_ROOT_ER) < 1e-3
     assert calls and set(calls) == {("auto", 2e-11, True)}
+
+
+@pytest.fixture
+def scalar_current(monkeypatch):
+    """Isolate root acceptance/IFT from kinetic discretization error."""
+    from dkx import er as er_mod
+    monkeypatch.setattr(er_mod, "_resolve_problem", lambda parameter, **kwargs: parameter)
+    def install(function):
+        monkeypatch.setattr(er_mod, "radial_current", lambda p, e, **kwargs: (function(e, p), None, None))
+        return er_mod.ambipolar_er
+    yield install
+    # GPU callback failures can remain queued after block_until_ready raises.
+    # Drain expected effects so negative tests do not emit an atexit traceback.
+    import jax
+    try:
+        jax.effects_barrier()
+    except Exception as exc:
+        assert "Ambipolar root acceptance failed" in str(exc)
+        # Also verify recovery: a successful callback replaces the failed
+        # runtime token retained by JAX after effects_barrier raises.
+        value = jax.jit(install(lambda e, p: e - p))(1.)
+        np.testing.assert_allclose(value, 1.)
+        jax.effects_barrier()
+
+
+def test_ambipolar_acceptance_under_jit_grad_and_vmap(scalar_current):
+    import jax
+    import jax.numpy as jnp
+    root = scalar_current(lambda e, p: e - p)
+    values, gradients = jax.jit(jax.vmap(jax.value_and_grad(root)))(jnp.array([-2., 0., 3.]))
+    np.testing.assert_allclose(values, [-2., 0., 3.], atol=1e-12)
+    np.testing.assert_allclose(gradients, 1., atol=1e-12)
+
+
+@pytest.mark.parametrize("case,options", [
+    ("quadratic", {"er0": 1., "max_root_iter": 1}),
+    ("linear", {"er0": 5., "root_tol": 1.}),
+    ("constant", {}), ("flat", {}), ("nan", {}),
+    ("sqrt", {}),
+    ("shallow", {"min_abs_slope": 1e-10}),
+    # Small current alone is insufficient to bound local field correction.
+    ("shallow", {"er0": 5., "root_tol": 1.}),
+])
+@pytest.mark.parametrize("transform", ["eager", "jit", "grad"])
+def test_ambipolar_acceptance_rejects_invalid_roots(scalar_current, case, options, transform):
+    import jax
+    import jax.numpy as jnp
+    functions = {
+        "quadratic": lambda e, p: e**2 - 2 * p,
+        "linear": lambda e, p: e + p,
+        "constant": lambda e, p: jnp.asarray(p),
+        "flat": lambda e, p: jnp.zeros_like(e),
+        "nan": lambda e, p: jnp.full_like(e, jnp.nan),
+        "sqrt": lambda e, p: jnp.sqrt(e),
+        "shallow": lambda e, p: 1e-14 * (e - p),
+    }
+    root = scalar_current(functions[case])
+    call = lambda p: root(p, **options)
+    if transform == "jit":
+        call = jax.jit(call)
+    elif transform == "grad":
+        call = jax.grad(call)
+    with pytest.raises(Exception, match="Ambipolar root acceptance failed"):
+        jax.block_until_ready(call(1.))
+
+
+def test_ambipolar_acceptance_rejects_bad_batch_member(scalar_current):
+    import jax
+    import jax.numpy as jnp
+    root = scalar_current(lambda e, p: p * (e - 1.))
+    with pytest.raises(Exception, match="Ambipolar root acceptance failed"):
+        jax.jit(jax.vmap(root))(jnp.array([1., 0.])).block_until_ready()
+
+
+@pytest.mark.parametrize("options", [
+    {"root_tol": 0.}, {"root_tol": np.nan}, {"current_tol": -1.},
+    {"current_tol": np.inf}, {"min_abs_slope": -1.}, {"min_abs_slope": np.nan},
+    {"max_root_iter": 0}, {"max_root_iter": 1.5}, {"max_root_iter": True},
+])
+def test_ambipolar_acceptance_controls_checked_before_preparation(options):
+    from dkx.er import ambipolar_er
+    with pytest.raises(ValueError, match="must be"):
+        ambipolar_er(None, **options)
