@@ -170,3 +170,39 @@ resume. This is not a complete toolchain lock: archive external option-file
 contents and implicit PETSc configuration separately, and start a new campaign
 if they change. Every configuration still requires the original-residual and
 observable gates; a backend change can change accuracy as well as runtime.
+
+Output comparison and transport reference limits
+------------------------------------------------
+
+The comparator requires matching explicit ``RHSMode`` values. Mode 2 compares
+all entries of a 3-by-3 transport matrix; mode 3 requires a 2-by-2 matrix.
+Profile mode compares final species columns and final current, allowing
+different Newton-history lengths. Missing required outputs, incompatible
+shapes and non-finite data are errors. Absolute and unrounded relative
+differences are retained; irrelevant profile/transport datasets are excluded.
+These schema checks do not replace original-residual or grid convergence gates.
+
+A bounded office pilot of the analytic monoenergetic PAS fixture at
+``Ntheta=Nzeta=9`` and ``Nxi=6,12`` rejects both MUMPS and naturally ordered
+SuperLU_DIST at one/two MPI ranks: original relative residuals range from
+``5.61e-8`` to ``1.59e-6`` against ``1e-12``. DKX passes the algebraic gate on
+both inputs, but no pair is admitted for parity or performance claims.
+The CPU allocations differ, so these runs also lack a matched timing budget.
+
+A retained one-rank MUMPS repeat with ``-ksp_pc_side right``,
+``-ksp_norm_type unpreconditioned`` and ``-ksp_atol 1e-30`` still fails.
+For its second RHS, PETSc's estimated norm reaches ``1.54e-16`` while its
+explicit true residual is ``7.70e-8`` (relative ``1.28e-7``), agreeing with
+the independent dumped-matrix check. Changing norm semantics alone is
+insufficient. The source of this finite-precision residual gap remains under
+investigation; do not attribute it solely to a factorization package.
+PETSc's `true-residual monitor
+<https://petsc.org/release/manualpages/KSP/KSPMonitorTrueResidual/>`_
+distinguishes the explicitly evaluated norm from an estimated norm.
+
+Inputs, commands, pilot JSON/logs and the two retained diagnostic runs,
+including matrices and states, are archived with SHA-256 checksums outside
+Git in ``dkx-review-evidence-20260905/transport-reference-pilot``.
+The campaign runner deletes its temporary raw solve files; only the separate
+retained diagnostic runs preserve those files. R0 must add deliberate raw
+failure retention and a complete environment lock before production sweeps.

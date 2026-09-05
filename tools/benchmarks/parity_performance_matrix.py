@@ -73,21 +73,6 @@ COMPARE_KEYS = (
     "transportMatrix",
 )
 
-#: Keys that are NOT a monoenergetic run's output.  RHSMode=3 computes the
-#: transport matrix; the species fluxes are not defined for it, and one code
-#: writing zeros where the other writes a small residue yields a relative
-#: difference of exactly 1.0 -- a total disagreement on a quantity neither code
-#: was asked for.  That artifact set the campaign's headline "worst parity" and
-#: hid the real outlier, so the comparison skips them rather than reporting them.
-MONOENERGETIC_SKIP_KEYS = frozenset({
-    "particleFlux_vm_psiHat",
-    "heatFlux_vm_psiHat",
-    "particleFlux_vd_psiHat",
-    "heatFlux_vd_psiHat",
-    "FSABFlow",
-    "FSABjHat",
-})
-
 
 def _peak_rss_gb(timing_output: str) -> float | None:
     """Peak RSS in GB parsed from ``/usr/bin/time`` verbose output."""
@@ -325,8 +310,8 @@ def fortran_true_residual(work: Path, *, linear: bool, rhs_mode: int = 1) -> flo
     independently verified.
 
     For linear runs, a disagreement between the two codes is not evidence about
-    dkx until this is known.  PETSc's Krylov convergence test measures the *preconditioned*
-    residual, and SFINCS preconditions with a simplified matrix, so a run can
+    dkx until this is known. PETSc's default stopping norm can be preconditioned
+    or estimated, and SFINCS uses a simplified preconditioner, so a run can
     report success at ``solverTolerance = 1d-12`` while leaving a true residual
     of several percent -- measured at 7.5e-2 on
     ``geometryScheme4_2species_PAS_noEr``, where it produced a 28% error in the
@@ -444,9 +429,11 @@ def compare_outputs(fortran_h5: Path, dkx_h5: Path, n_species: int = 1) -> dict:
     """Max relative difference per compared key, scaled by the larger magnitude.
 
     ``n_species`` is what makes nonlinear (``Phi1``) runs comparable: both
-    codes write one row per Newton iteration and they need not take the same
+    codes write one column per Newton iteration and they need not take the same
     number of iterations, so the arrays differ in length even when the answers
-    agree.  The converged answer is the last row of each.
+    agree. The final column carries the per-species answer. Transport modes
+    require their complete, correctly shaped matrix; incompatible modes, shapes,
+    missing required moments and non-finite data are rejected.
     """
     import numpy as np
 
@@ -458,50 +445,59 @@ def compare_outputs(fortran_h5: Path, dkx_h5: Path, n_species: int = 1) -> dict:
     except Exception as exc:  # pragma: no cover - corrupt output
         return {"error": f"{type(exc).__name__}: {exc}"}
 
-    # RHSMode is written by both codes; 3 is monoenergetic.
-    def _mode(d: dict) -> int:
-        v = d.get("RHSMode")
-        try:
-            return int(np.atleast_1d(np.asarray(v)).ravel()[0])
-        except Exception:
-            return 1
+    try:
+        modes = []
+        for output in (reference, candidate):
+            value = float(np.asarray(output["RHSMode"]).item())
+            if value not in (1, 2, 3):
+                raise ValueError(f"unsupported RHSMode {value}")
+            modes.append(int(value))
+        if modes[0] != modes[1]:
+            raise ValueError(f"RHSMode mismatch: {modes}")
+        mode = modes[0]
+        keys = COMPARE_KEYS[:-1] if mode == 1 else ("transportMatrix",)
+        required = COMPARE_KEYS[:4] if mode == 1 else keys
+        for key in required:
+            if key not in reference or key not in candidate:
+                raise ValueError(f"missing required output {key}")
+        if n_species < 1:
+            raise ValueError("n_species must be positive")
+    except (KeyError, TypeError, ValueError) as exc:
+        return {"error": str(exc)}
 
-    monoenergetic = _mode(reference) == 3 or _mode(candidate) == 3
+    def scientific_array(value, key):
+        array = np.asarray(value, dtype=np.float64)
+        if not array.size or not np.all(np.isfinite(array)):
+            raise ValueError("empty or non-finite data")
+        if mode in (2, 3):
+            expected = (3, 3) if mode == 2 else (2, 2)
+            if array.shape != expected:
+                raise ValueError(f"transport shape {array.shape}; expected {expected}")
+            return array
+        if key == "FSABjHat" and array.ndim <= 1:
+            return array.reshape(-1)[-1:]
+        if key != "FSABjHat":
+            if array.ndim == 1 and array.shape == (n_species,):
+                return array
+            # Both writers use (species, iteration), not flattened last entries.
+            if array.ndim == 2 and array.shape[0] == n_species:
+                return array[:, -1]
+        raise ValueError(f"unsupported profile shape {array.shape} for {n_species} species")
 
-    report: dict = {}
-    magnitudes: dict = {}
-    for key in COMPARE_KEYS:
+    report, magnitudes, absolute = {}, {}, {}
+    for key in keys:
         if key not in reference or key not in candidate:
             continue
-        if monoenergetic and key in MONOENERGETIC_SKIP_KEYS:
-            continue
-        a = np.atleast_1d(np.asarray(reference[key], dtype=np.float64)).ravel()
-        b = np.atleast_1d(np.asarray(candidate[key], dtype=np.float64)).ravel()
-        # Both codes write one row per Newton iteration for some keys, and a
-        # nonlinear run need not converge in the same number of iterations in
-        # both.  Compare the converged row: the last ``n_species`` entries.
-        if a.size != b.size:
-            # Per-species keys carry ``n_species`` values per iteration;
-            # species-summed ones (FSABjHat) carry a single value.  Take the
-            # first row width that divides both lengths.
-            for row in (n_species, 1):
-                if row and a.size % row == 0 and b.size % row == 0:
-                    a, b = a[-row:], b[-row:]
-                    break
-        if a.size != b.size:
-            report[key] = {"error": f"shape {a.size} vs {b.size}"}
-            continue
+        try:
+            a = scientific_array(reference[key], key)
+            b = scientific_array(candidate[key], key)
+        except (TypeError, ValueError) as exc:
+            return {"error": f"{key}: {exc}"}
         scale = max(float(np.max(np.abs(a))), float(np.max(np.abs(b))), 1e-300)
-        report[key] = round(float(np.max(np.abs(a - b))) / scale, 12)
-        # The magnitude the relative difference was taken against. Without it a
-        # relative-difference table cannot tell a regression from a physical
-        # zero: on an axisymmetric single-species deck at Er = 0 the particle
-        # flux is intrinsically ambipolar and lands at ~5e-12 against a
-        # bootstrap current of ~3e-2, so a 1.4e-2 relative difference there is
-        # an absolute difference of 7e-14 and means nothing. Recorded per key
-        # so the report can scale each moment against the case's own largest.
+        absolute[key] = float(np.max(np.abs(a - b)))
+        report[key] = absolute[key] / scale
         magnitudes[key] = float(np.max(np.abs(a)))
-    return {"difference": report, "magnitude": magnitudes}
+    return {"difference": report, "magnitude": magnitudes, "absolute_difference": absolute}
 
 
 def deck_metadata(deck: Path) -> dict:

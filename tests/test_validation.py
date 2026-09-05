@@ -204,6 +204,57 @@ def test_fortran_execution_gate_rejects_invalid_outputs(tmp_path: Path, defect, 
     assert ("execution_error" in result) is (defect is not None)
 
 
+@pytest.mark.parametrize("mode", [1, 2, 3])
+@pytest.mark.parametrize("defect", [None, "mode", "missing_mode", "shape", "missing", "nan", "empty", "difference"])
+def test_output_comparison_requires_complete_mode_specific_data(tmp_path: Path, mode, defect) -> None:
+    import h5py
+    import numpy as np
+    from tools.benchmarks.parity_performance_matrix import COMPARE_KEYS, compare_outputs
+
+    paths = [tmp_path / "reference.h5", tmp_path / "candidate.h5"]
+    key = "FSABFlow" if mode == 1 else "transportMatrix"
+    for side, path in enumerate(paths):
+        with h5py.File(path, "w") as f:
+            if not (side and defect == "missing_mode"):
+                f["RHSMode"] = (mode % 3 + 1) if side and defect == "mode" else mode
+            # Irrelevant datasets must not count as scientific agreement.
+            if mode == 1:
+                f["transportMatrix"] = [np.nan]
+                for name in COMPARE_KEYS[:4]:
+                    # Distinct initial iterates and iteration counts; same final result.
+                    f[name] = [90 + side, 3] if name == "FSABjHat" else (
+                        [[91, 1], [92, 2]] if side == 0 else [[93, 94, 1], [95, 96, 2]]
+                    )
+            else:
+                f["FSABFlow"] = [np.nan]
+                f[key] = np.ones((3, 3) if mode == 2 else (2, 2))
+            if side and defect in ("shape", "missing", "nan", "empty", "difference"):
+                values = f[key][...]
+                del f[key]
+                if defect == "shape":
+                    f[key] = np.ones((1, 1))  # Matching last entry is insufficient.
+                elif defect == "nan":
+                    f[key] = values * np.nan
+                elif defect == "empty":
+                    f[key] = []
+                elif defect == "difference":
+                    values = values.astype(float)
+                    values[0, -1] += 1e-10
+                    f[key] = values
+    result = compare_outputs(*paths, n_species=2)
+    if defect not in (None, "difference"):
+        assert "error" in result
+        assert "difference" not in result
+    else:
+        assert "error" not in result
+        assert set(result["difference"]) == (set(COMPARE_KEYS[:4]) if mode == 1 else {key})
+        if defect == "difference":
+            assert 0 < result["difference"][key] < 1e-9
+            assert result["absolute_difference"][key] == pytest.approx(1e-10, rel=1e-5)
+        else:
+            assert all(value == 0 for value in result["difference"].values())
+
+
 def test_sweep_does_not_reuse_outputs_copied_with_an_example(tmp_path: Path, monkeypatch) -> None:
     import shutil
     from tools.benchmarks import parity_performance_matrix as matrix
