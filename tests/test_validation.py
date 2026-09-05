@@ -82,6 +82,156 @@ def test_direct_backend_referee_preserves_a_nonsymmetric_petsc_operator(
     assert checked and elapsed >= 0 and size == 3 and fill >= operator.nnz
 
 
+def _assert_process_stopped(pid: int) -> None:
+    import subprocess
+    import time
+
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        state = subprocess.run(
+            ["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True,
+        ).stdout.strip()
+        if not state or state.startswith("Z"):
+            return
+        time.sleep(0.02)
+    pytest.fail(f"measured descendant {pid} survived cleanup ({state})")
+
+
+@pytest.mark.parametrize("parent_exits", [False, True])
+def test_measurement_reaps_descendants_after_timeout_or_leader_exit(
+    tmp_path: Path, parent_exits: bool,
+) -> None:
+    import os
+    import signal
+    import sys
+    from tools.benchmarks.parity_performance_matrix import _run_measured
+
+    if os.name != "posix":
+        pytest.skip("measurement runner uses POSIX process groups")
+    script = (
+        "import subprocess,sys,time,pathlib; "
+        "p=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)']); "
+        "pathlib.Path('descendant.pid').write_text(str(p.pid)); "
+        + ("sys.exit(0)" if parent_exits else "time.sleep(60)")
+    )
+    pid = None
+    try:
+        result = _run_measured([sys.executable, "-c", script], tmp_path, 1)
+        pid = int((tmp_path / "descendant.pid").read_text())
+        assert ("error" in result) is not parent_exits
+        _assert_process_stopped(pid)
+    finally:
+        if pid is not None:
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+
+@pytest.mark.parametrize("cancel_signal", ["SIGINT", "SIGTERM"])
+def test_measurement_cancellation_reaps_the_solver_group(
+    tmp_path: Path, cancel_signal: str,
+) -> None:
+    import os
+    import signal
+    import subprocess
+    import sys
+    import time
+
+    if os.name != "posix":
+        pytest.skip("measurement runner uses POSIX process groups")
+    script = (
+        "import os,pathlib,time; "
+        "pathlib.Path('solver.pid').write_text(str(os.getpid())); time.sleep(60)"
+    )
+    worker = (
+        "import sys; from pathlib import Path; "
+        f"sys.path.insert(0, {str(ROOT)!r}); "
+        "from tools.benchmarks.parity_performance_matrix import _run_measured; "
+        f"_run_measured([{sys.executable!r}, '-c', {script!r}], Path('.'), 60)"
+    )
+    proc = subprocess.Popen(
+        [sys.executable, "-c", worker], cwd=tmp_path,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True,
+    )
+    pid = None
+    try:
+        deadline = time.monotonic() + 10
+        while not (tmp_path / "solver.pid").exists() and time.monotonic() < deadline:
+            assert proc.poll() is None
+            time.sleep(0.02)
+        pid = int((tmp_path / "solver.pid").read_text())
+        proc.send_signal(getattr(signal, cancel_signal))
+        assert proc.wait(timeout=5) != 0
+        _assert_process_stopped(pid)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+        proc.wait()
+        if pid is not None:
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+
+@pytest.mark.parametrize("mode", [1, 2, 3])
+@pytest.mark.parametrize("defect", [None, "partial", "nan", "unfinished", "diverged", "nonlinear_false", "exit"])
+def test_fortran_execution_gate_rejects_invalid_outputs(tmp_path: Path, defect, mode) -> None:
+    import h5py
+    import numpy as np
+    from tools.benchmarks.parity_performance_matrix import _fortran_succeeded
+
+    for stream in ("stdout", "stderr"):
+        (tmp_path / f"benchmark.{stream}.log").write_text(
+            "Nonlinear solve did not converge due to DIVERGED_MAX_IT\n" + "ok\n" * 4000
+            if defect == "diverged" and stream == "stdout" else ""
+        )
+    with h5py.File(tmp_path / "sfincsOutput.h5", "w") as f:
+        f["RHSMode"] = mode
+        f["integerToRepresentTrue"] = 1
+        f["finished"] = 0 if defect == "unfinished" else 1
+        if defect == "nonlinear_false":
+            f["didNonlinearCalculationConverge"] = -1
+        keys = ("FSABFlow", "FSABjHat", "particleFlux_vm_psiHat", "heatFlux_vm_psiHat") if mode == 1 else ("transportMatrix",)
+        for key in keys:
+            if defect == "partial" and key == keys[0]:
+                continue
+            f[key] = [np.nan if defect == "nan" else 1.0]
+        f.create_group("optional_group")
+    result = {"returncode": 1 if defect == "exit" else 0}
+    assert _fortran_succeeded(tmp_path, result) is (defect is None)
+    assert ("execution_error" in result) is (defect is not None)
+
+
+def test_sweep_does_not_reuse_outputs_copied_with_an_example(tmp_path: Path, monkeypatch) -> None:
+    import shutil
+    from tools.benchmarks import parity_performance_matrix as matrix
+
+    example = tmp_path / "example"
+    example.mkdir()
+    shutil.copy(ROOT / "tests/ref/pas_1species_PAS_noEr_tiny_scheme1.input.namelist", example / "input.namelist")
+    stale = ("sfincsOutput.h5", "dkxOutput.h5", "dkx_timing.json", "sfincsBinary_iteration_000_stateVector")
+    for name in stale:
+        (example / name).write_text('{"converged": true, "cold_s": 0.01}')
+    calls = []
+
+    def failed_run(command, work, timeout_s, env=None):
+        assert not any((work / name).exists() for name in stale)
+        calls.append(command)
+        return {"returncode": 1}
+
+    monkeypatch.setattr(matrix, "_run_measured", failed_run)
+    record = matrix.run_case(
+        example, Path("unused-sfincs"), ranks=[1], reps=0, timeout_s=1,
+        equilibria=None, launcher=[], fortran_residual=False,
+    )
+    assert len(calls) == 2
+    assert record["fortran"]["1"]["succeeded"] is False
+    assert "cold_s" not in record["dkx"]
+    assert "error" in record["parity"]
+
+
 def payload(entry_id: str) -> dict[str, Any]:
     """Return the registered artifact for ``entry_id``."""
     return json.loads(

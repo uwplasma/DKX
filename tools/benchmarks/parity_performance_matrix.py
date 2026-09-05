@@ -47,6 +47,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -99,61 +100,61 @@ def _time_flag() -> list[str]:
 def _run_measured(
     command: list[str], cwd: Path, timeout_s: float, env: dict | None = None
 ) -> dict:
-    """Run a command under /usr/bin/time; return wall seconds and peak RSS.
+    """Supervise a measured process group, retaining logs without buffering them.
 
-    The child gets its own process group, and a timeout kills the **group**.
-
-    ``subprocess.run(..., timeout=...)`` kills only the process it started, and
-    the process it starts here is ``/usr/bin/time``: the measured program is a
-    grandchild and survives. Two full sweeps were lost to that. Each timeout
-    left a solver running at full speed, every leaked process slowed the next
-    case, and the next case then timed out too -- so the sweep degraded as it
-    went and reported SFINCS failing on every deck above 5208 unknowns, which
-    is nothing but the arithmetic of thirteen leaked processes on fourteen
-    cores. Thirteen were still running after the sweep declared itself
-    complete.
+    Cleanup also covers cancellation and descendants whose immediate parent has
+    exited. The session leader PID is the group ID even after that leader exits.
+    SIGTERM cancellation is translated into SystemExit on the main thread so
+    the finally block runs; SIGINT/other exceptions already unwind normally.
     """
     start = time.perf_counter()
-    proc = subprocess.Popen(
-        _time_flag() + command,
-        cwd=cwd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        env={**os.environ, **(env or {})},
-        start_new_session=True,  # its own group, so the kill below reaches all of it
-    )
+    proc = None
+    previous = None
+
+    def terminate(signum, frame):
+        raise SystemExit(128 + signum)
+
+    if threading.current_thread() is threading.main_thread():
+        previous = signal.signal(signal.SIGTERM, terminate)
+    result = {}
     try:
-        stdout, stderr = proc.communicate(timeout=timeout_s)
-    except subprocess.TimeoutExpired:
-        _kill_group(proc)
-        return {"returncode": None, "wall_s": timeout_s, "peak_rss_gb": None,
-                "error": f"timeout after {timeout_s:.0f}s"}
-    return {
-        "returncode": proc.returncode,
-        "wall_s": round(time.perf_counter() - start, 2),
-        "peak_rss_gb": _peak_rss_gb(stderr),
-        "stdout_tail": stdout[-2000:],
-        "stderr_tail": stderr[-2000:],
-    }
+        with (cwd / "benchmark.stdout.log").open("wb") as stdout, (
+            cwd / "benchmark.stderr.log"
+        ).open("wb") as stderr:
+            try:
+                proc = subprocess.Popen(
+                    _time_flag() + command, cwd=cwd, stdout=stdout, stderr=stderr,
+                    env={**os.environ, **(env or {})}, start_new_session=True,
+                )
+                proc.wait(timeout=timeout_s)
+                result["returncode"] = proc.returncode
+            except subprocess.TimeoutExpired:
+                result.update(returncode=None, error=f"timeout after {timeout_s:.0f}s")
+            finally:
+                if proc is not None:
+                    _kill_group(proc)
+    finally:
+        if previous is not None:
+            signal.signal(signal.SIGTERM, previous)
+    for stream in ("stdout", "stderr"):
+        with (cwd / f"benchmark.{stream}.log").open("rb") as log:
+            log.seek(0, os.SEEK_END)
+            log.seek(max(0, log.tell() - 8192))
+            result[f"{stream}_tail"] = log.read().decode("utf-8", errors="replace")[-2000:]
+    result.update(
+        wall_s=round(time.perf_counter() - start, 2),
+        peak_rss_gb=_peak_rss_gb(result["stderr_tail"]),
+    )
+    return result
 
 
 def _kill_group(proc: subprocess.Popen) -> None:
-    """SIGKILL the child's whole process group, then reap it.
-
-    SIGTERM first would be politer, but the programs being timed here are
-    numerical solvers in tight loops that may not service it promptly, and a
-    survivor is worse than an ungraceful exit: it corrupts every later
-    measurement in the run.
-    """
+    """Kill the owned session group and reap its leader, including after exit."""
     try:
-        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-    except (ProcessLookupError, PermissionError):  # already gone
+        os.killpg(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
         pass
-    try:
-        proc.communicate(timeout=30)
-    except subprocess.TimeoutExpired:  # pragma: no cover - kill -9 did not land
-        proc.kill()
+    proc.wait()
 
 
 _DKX_DRIVER = """
@@ -343,20 +344,65 @@ def fortran_true_residual(work: Path, *, linear: bool) -> float | None:
 
 
 def _fortran_succeeded(work: Path, result: dict) -> bool:
-    """A Fortran run counts only if it produced output.
+    """Require successful execution, convergence and complete finite moments.
 
-    The return code alone is not evidence: SFINCS exits zero after an
-    equilibrium-file or geometry error.  The output file is the real signal.
+    This is an execution gate, not an algebraic or phase-space certificate.
+    SFINCS can exit zero and write moments after a failed SNES iteration.
     """
-    return result.get("returncode") == 0 and (work / "sfincsOutput.h5").exists()
+    import numpy as np
+
+    def fail(reason: str) -> bool:
+        result["execution_error"] = reason
+        return False
+
+    if result.get("returncode") != 0 or result.get("error"):
+        return fail("process failed or timed out")
+    for name in ("benchmark.stdout.log", "benchmark.stderr.log"):
+        path = work / name
+        if not path.is_file():
+            return fail(f"missing execution log: {name}")
+        with path.open(errors="replace") as log:
+            for line in log:
+                if "did not converge" in line.lower() or "DIVERGED_" in line:
+                    return fail(line.strip()[:1000])
+    try:
+        output = _read_h5(
+            work / "sfincsOutput.h5",
+            (*COMPARE_KEYS, "RHSMode", "integerToRepresentTrue", "finished",
+             "didNonlinearCalculationConverge"),
+        )
+        mode = int(np.asarray(output["RHSMode"]).item())
+        required = (
+            ("FSABFlow", "FSABjHat", "particleFlux_vm_psiHat", "heatFlux_vm_psiHat")
+            if mode == 1 else ("transportMatrix",) if mode in (2, 3) else ()
+        )
+        if not required:
+            return fail(f"unsupported reference RHSMode {mode}")
+        true = int(np.asarray(output["integerToRepresentTrue"]).item())
+        if int(np.asarray(output["finished"]).item()) != true:
+            return fail("output is not marked finished")
+        converged = output.get("didNonlinearCalculationConverge")
+        if converged is not None and int(np.asarray(converged).ravel()[-1]) != true:
+            return fail("nonlinear convergence flag is false")
+        complete = all(
+            key in output and np.asarray(output[key]).size > 0
+            and np.isfinite(output[key]).all() for key in required
+        )
+        return complete or fail("missing, empty or nonfinite required moments")
+    except (OSError, KeyError, TypeError, ValueError) as exc:
+        return fail(f"invalid reference output: {exc}")
 
 
-def _read_h5(path: Path) -> dict:
+def _read_h5(path: Path, keys: tuple[str, ...] | None = None) -> dict:
     import h5py
 
     out: dict = {}
     with h5py.File(path, "r") as handle:
-        handle.visititems(lambda name, obj: out.__setitem__(name.split("/")[-1], obj[...]))
+        handle.visititems(
+            lambda name, obj: out.__setitem__(name.split("/")[-1], obj[...])
+            if isinstance(obj, h5py.Dataset) and (keys is None or name.split("/")[-1] in keys)
+            else None
+        )
     return out
 
 
@@ -373,7 +419,8 @@ def compare_outputs(fortran_h5: Path, dkx_h5: Path, n_species: int = 1) -> dict:
     if not (fortran_h5.exists() and dkx_h5.exists()):
         return {"error": "missing output file"}
     try:
-        reference, candidate = _read_h5(fortran_h5), _read_h5(dkx_h5)
+        keys = ("RHSMode", *COMPARE_KEYS)
+        reference, candidate = _read_h5(fortran_h5, keys), _read_h5(dkx_h5, keys)
     except Exception as exc:  # pragma: no cover - corrupt output
         return {"error": f"{type(exc).__name__}: {exc}"}
 
@@ -483,11 +530,15 @@ def run_case(
         if fortran_binary is not None:
             for n_ranks in ranks:
                 work = root / f"fortran_{n_ranks}"
-                shutil.copytree(example_dir, work)
+                shutil.copytree(
+                    example_dir, work, ignore=shutil.ignore_patterns(
+                        "sfincsOutput.h5", "dkxOutput.h5", "dkx_timing.json", "sfincsBinary*"
+                    ),
+                )
                 _absolutize_equilibrium(work / "input.namelist", example_dir)
                 if fortran_residual:
                     _request_binary_dump(work / "input.namelist")
-                binary = [str(fortran_binary)]
+                binary = [str(fortran_binary), "-ksp_converged_reason", "-snes_converged_reason"]
                 if petsc_profile:
                     # PETSc's own event log. This is the only way to see where
                     # the Fortran run actually spends its time -- assembly,
@@ -521,7 +572,11 @@ def run_case(
                 }
 
         work = root / "dkx"
-        shutil.copytree(example_dir, work)
+        shutil.copytree(
+            example_dir, work, ignore=shutil.ignore_patterns(
+                "sfincsOutput.h5", "dkxOutput.h5", "dkx_timing.json", "sfincsBinary*"
+            ),
+        )
         _absolutize_equilibrium(work / "input.namelist", example_dir)
         env = {"JAX_ENABLE_X64": "True"}
         if equilibria:
@@ -541,8 +596,9 @@ def run_case(
             compare_outputs(
                 reference, work / "dkxOutput.h5", int(record.get("n_species", 1))
             )
-            if reference.exists()
-            else {"error": "no fortran reference"}
+            if reference.exists() and result.get("returncode") == 0
+            and result.get("converged") is True
+            else {"error": "no successful reference/candidate pair"}
         )
     return record
 

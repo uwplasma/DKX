@@ -25,6 +25,10 @@ Do not silently change collisions, trajectories, precision, resolution, root-sea
 
 ## 2. Current checkpoint and review coverage
 
+### Implementation checkpoint — 2026-09-05
+
+The reviewed roadmap and sparse referee correction are pushed in [PR #169](https://github.com/uwplasma/DKX/pull/169). R0 is in progress: the timeout-group fix from #168 is extended to SIGINT/SIGTERM cancellation and exited leaders, bounded-memory disk logs, full-log convergence checks, finite required moments, native SFINCS completion/Boolean encoding, and exclusion of stale copied outputs. These are execution-integrity checks, not algebraic or phase-space certificates. Local subprocess/HDF5 regressions and the validation registry pass; a live local SFINCS pilot accepts PAS and rejects finite-Er solver failure despite exit zero. Hosted gates and required review must pass before merging. Remaining R0 work includes common original-residual acceptance, atomic campaign completion/resume, isolated Linux reference builds and the controlled CPU/GPU/PETSc pilot; no broad sweep is resumed yet.
+
 ### 2.1 What has landed, and what has not
 
 The native analytic/VMEC/Boozer profile routes, native ambipolar evidence, physical flux conversion, CLI's eleven advertised commands, Python floor, src layout, inert top-level import, Rich, MyST/Furo, installed-artifact tests, and evidence runner/registry exist. Do not schedule their initial implementation again. Solver-module imports still configure runtime; distributed initialization must stop swallowing failures.
