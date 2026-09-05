@@ -43,6 +43,7 @@ import os
 import platform
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -98,27 +99,61 @@ def _time_flag() -> list[str]:
 def _run_measured(
     command: list[str], cwd: Path, timeout_s: float, env: dict | None = None
 ) -> dict:
-    """Run a command under /usr/bin/time; return wall seconds and peak RSS."""
+    """Run a command under /usr/bin/time; return wall seconds and peak RSS.
+
+    The child gets its own process group, and a timeout kills the **group**.
+
+    ``subprocess.run(..., timeout=...)`` kills only the process it started, and
+    the process it starts here is ``/usr/bin/time``: the measured program is a
+    grandchild and survives. Two full sweeps were lost to that. Each timeout
+    left a solver running at full speed, every leaked process slowed the next
+    case, and the next case then timed out too -- so the sweep degraded as it
+    went and reported SFINCS failing on every deck above 5208 unknowns, which
+    is nothing but the arithmetic of thirteen leaked processes on fourteen
+    cores. Thirteen were still running after the sweep declared itself
+    complete.
+    """
     start = time.perf_counter()
+    proc = subprocess.Popen(
+        _time_flag() + command,
+        cwd=cwd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env={**os.environ, **(env or {})},
+        start_new_session=True,  # its own group, so the kill below reaches all of it
+    )
     try:
-        proc = subprocess.run(
-            _time_flag() + command,
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=timeout_s,
-            env={**os.environ, **(env or {})},
-        )
+        stdout, stderr = proc.communicate(timeout=timeout_s)
     except subprocess.TimeoutExpired:
+        _kill_group(proc)
         return {"returncode": None, "wall_s": timeout_s, "peak_rss_gb": None,
                 "error": f"timeout after {timeout_s:.0f}s"}
     return {
         "returncode": proc.returncode,
         "wall_s": round(time.perf_counter() - start, 2),
-        "peak_rss_gb": _peak_rss_gb(proc.stderr),
-        "stdout_tail": proc.stdout[-2000:],
-        "stderr_tail": proc.stderr[-2000:],
+        "peak_rss_gb": _peak_rss_gb(stderr),
+        "stdout_tail": stdout[-2000:],
+        "stderr_tail": stderr[-2000:],
     }
+
+
+def _kill_group(proc: subprocess.Popen) -> None:
+    """SIGKILL the child's whole process group, then reap it.
+
+    SIGTERM first would be politer, but the programs being timed here are
+    numerical solvers in tight loops that may not service it promptly, and a
+    survivor is worse than an ungraceful exit: it corrupts every later
+    measurement in the run.
+    """
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):  # already gone
+        pass
+    try:
+        proc.communicate(timeout=30)
+    except subprocess.TimeoutExpired:  # pragma: no cover - kill -9 did not land
+        proc.kill()
 
 
 _DKX_DRIVER = """
@@ -424,6 +459,7 @@ def run_case(
     example_dir: Path,
     fortran_binary: Path | None,
     petsc_profile: bool = False,
+    fortran_petsc_opts: tuple[str, ...] = (),
     *,
     ranks: list[int],
     reps: int,
@@ -445,6 +481,7 @@ def run_case(
         root = Path(scratch)
 
         record["fortran"] = {}
+        record["fortran_petsc_opts"] = list(fortran_petsc_opts)
         if fortran_binary is not None:
             for n_ranks in ranks:
                 work = root / f"fortran_{n_ranks}"
@@ -452,7 +489,7 @@ def run_case(
                 _absolutize_equilibrium(work / "input.namelist", example_dir)
                 if fortran_residual:
                     _request_binary_dump(work / "input.namelist")
-                binary = [str(fortran_binary)]
+                binary = [str(fortran_binary)] + list(fortran_petsc_opts)
                 if petsc_profile:
                     # PETSc's own event log. This is the only way to see where
                     # the Fortran run actually spends its time -- assembly,
@@ -557,6 +594,23 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--min-dof", type=int, default=0)
     parser.add_argument("--only", nargs="*", default=None, help="case-name substrings")
     parser.add_argument(
+        "--fortran-petsc-opt",
+        action="append",
+        default=None,
+        metavar="OPT",
+        help=(
+            "extra PETSc option passed to the Fortran binary, repeatable. The "
+            "case this exists for: macports MUMPS 5.6.2 under PETSc 3.20.2 "
+            "crashes (SIGSEGV or SIGTRAP) on 19 of the 38 upstream decks, while "
+            "'--fortran-petsc-opt=-pc_factor_mat_solver_type --fortran-petsc-opt=petsc' "
+            "runs them to completion. The factorization backend does not change "
+            "the answer, so parity coverage is recoverable this way -- but "
+            "PETSc's built-in LU is slower than MUMPS, so RUNTIME measured with "
+            "this flag is not a fair number for SFINCS and must not be reported "
+            "as one."
+        ),
+    )
+    parser.add_argument(
         "--petsc-profile",
         action="store_true",
         help=(
@@ -625,6 +679,7 @@ def main(argv: list[str] | None = None) -> int:
             record = run_case(
                 directory, args.fortran_binary,
                 petsc_profile=args.petsc_profile,
+                fortran_petsc_opts=tuple(args.fortran_petsc_opt or ()),
                 ranks=args.ranks, reps=args.reps,
                 timeout_s=args.timeout_s, equilibria=args.equilibria,
                 launcher=args.fortran_launcher.split() if args.fortran_launcher else [],
