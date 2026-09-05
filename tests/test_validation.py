@@ -1871,6 +1871,53 @@ def test_petsc_arguments_and_observed_backend_are_distinct(tmp_path, monkeypatch
     assert not record["algebraic_pair_accepted"]
 
 
+@pytest.mark.parametrize("requested", ["mumps", "superlu_dist"])
+@pytest.mark.parametrize("observation", ["matching", "wrong", "missing", "mixed"])
+def test_requested_factor_backend_is_selected_and_verified(tmp_path, monkeypatch, requested, observation):
+    from tools.benchmarks import parity_performance_matrix as matrix
+    (tmp_path / "input.namelist").write_text("&general\n/\n")
+    monkeypatch.setattr(matrix, "deck_metadata", lambda path: {"solverTolerance": 1e-12, "RHSMode": 3})
+    monkeypatch.setattr(matrix, "_fortran_succeeded", lambda *args: True)
+    monkeypatch.setattr(matrix, "fortran_true_residual", lambda *args, **kwargs: 1e-14)
+    observed = {"matching": [requested], "wrong": ["other"], "missing": [], "mixed": [requested, "other"]}[observation]
+    calls = []
+    def measured(command, work, *args, **kwargs):
+        calls.append(command)
+        (work / "benchmark.stdout.log").write_text("".join(
+            f"package used to perform factorization: {backend}\n" for backend in observed
+        ))
+        (work / "sfincsOutput.h5").write_bytes(b"other execution checks mocked as passing")
+        return {"returncode": 0 if work.name.startswith("fortran") else 1}
+    monkeypatch.setattr(matrix, "_run_measured", measured)
+    record = matrix.run_case(tmp_path, Path("/reference"),
+                             fortran_petsc_opts=("-pc_factor_mat_solver_type", "conflicting"),
+                             fortran_backend=requested, ranks=[1, 2], reps=0, timeout_s=1,
+                             equilibria=None, launcher=[], fortran_residual=True)
+    assert record["requested_factor_backend"] == requested
+    assert record["fortran_petsc_opts"][-2:] == ["-pc_factor_mat_solver_type", requested]
+    for command in calls[:2]:
+        index = max(i for i, token in enumerate(command) if token == "-pc_factor_mat_solver_type")
+        assert command[index + 1] == requested
+    for result in record["fortran"].values():
+        assert result["succeeded"] is (observation == "matching")
+        assert result["backend_acceptance"] == ("passed" if observation == "matching" else "failed")
+        assert ("backend_error" in result) is (observation != "matching")
+
+
+def test_backend_selection_also_reaches_preflight(tmp_path, monkeypatch):
+    from tools.benchmarks import parity_performance_matrix as matrix
+    calls = []
+    monkeypatch.setattr(matrix, "preflight_fortran", lambda binary, launcher, opts: calls.append(opts))
+    monkeypatch.setattr(matrix, "_run_campaign", lambda args: 0)
+    argv = ["--examples", str(tmp_path), "--out", str(tmp_path / "result.jsonl"),
+            "--fortran-backend", "superlu_dist"]
+    with pytest.raises(SystemExit):
+        matrix.main(argv)
+    assert calls == []
+    assert matrix.main(argv + ["--fortran-binary", "/reference"]) == 0
+    assert calls == [("-pc_factor_mat_solver_type", "superlu_dist")]
+
+
 def test_warm_observable_audit_checks_equations_and_reuse_modes(tmp_path):
     from tools.benchmarks import operator_conditioning as probe
 

@@ -576,6 +576,7 @@ def run_case(
     petsc_profile: bool = False,
     *,
     fortran_petsc_opts: tuple[str, ...] = (),
+    fortran_backend: str | None = None,
     ranks: list[int],
     reps: int,
     timeout_s: float,
@@ -588,7 +589,10 @@ def run_case(
     deck = example_dir / "input.namelist"
     if artifact_dir is not None and artifact_dir.resolve().is_relative_to(example_dir.resolve()):
         raise ValueError("artifact directory must be outside the copied example directory")
-    record: dict = {"case": example_dir.name, "fortran_petsc_opts": list(fortran_petsc_opts)}
+    if fortran_backend:
+        fortran_petsc_opts += ("-pc_factor_mat_solver_type", fortran_backend)
+    record: dict = {"case": example_dir.name, "fortran_petsc_opts": list(fortran_petsc_opts),
+                    "requested_factor_backend": fortran_backend}
     with _case_workspace(record, artifact_dir) as root:
         shutil.copy(deck, root / "input.namelist")
         try:
@@ -638,6 +642,12 @@ def run_case(
                                 observed.add(match.group(1))
                 result["observed_factor_backends"] = sorted(observed)
                 result["succeeded"] = _fortran_succeeded(work, result)
+                result["backend_acceptance"] = "not_checked"
+                if fortran_backend:
+                    result["backend_acceptance"] = "passed" if observed == {fortran_backend} else "failed"
+                    if result["backend_acceptance"] == "failed":
+                        result["backend_error"] = f"expected {fortran_backend}; observed {sorted(observed)}"
+                        result["succeeded"] = False
                 if fortran_residual and result["succeeded"]:
                     result["true_residual"] = fortran_true_residual(
                         work, linear=not record.get("includePhi1", False), rhs_mode=record["RHSMode"]
@@ -805,6 +815,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--examples", type=Path, required=True)
     parser.add_argument("--fortran-binary", type=Path, default=None)
+    parser.add_argument(
+        "--fortran-backend", metavar="PACKAGE",
+        help="select the PETSc factor package (e.g. mumps or superlu_dist) and "
+             "reject runs whose observed -ksp_view package does not match; "
+             "takes precedence over conflicting --fortran-petsc-opt tokens",
+    )
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument(
         "--artifacts-dir", type=Path,
@@ -849,8 +865,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    if args.fortran_backend and args.fortran_binary is None:
+        parser.error("--fortran-backend requires --fortran-binary")
     launcher = args.fortran_launcher.split() if args.fortran_launcher else []
-    reason = preflight_fortran(args.fortran_binary, launcher, tuple(args.fortran_petsc_opt))
+    options = tuple(args.fortran_petsc_opt)
+    if args.fortran_backend:
+        options += ("-pc_factor_mat_solver_type", args.fortran_backend)
+    reason = preflight_fortran(args.fortran_binary, launcher, options)
     if reason is not None:
         print(f"refusing to start: {reason}", file=sys.stderr)
         return 2
@@ -907,7 +928,7 @@ def _run_campaign(args) -> int:
             record = run_case(
                 directory, args.fortran_binary,
                 petsc_profile=args.petsc_profile,
-                fortran_petsc_opts=tuple(args.fortran_petsc_opt),
+                fortran_petsc_opts=tuple(args.fortran_petsc_opt), fortran_backend=args.fortran_backend,
                 ranks=args.ranks, reps=args.reps,
                 timeout_s=args.timeout_s, equilibria=args.equilibria,
                 launcher=args.fortran_launcher.split() if args.fortran_launcher else [],

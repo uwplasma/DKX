@@ -155,15 +155,20 @@ The campaign runner accepts repeatable PETSc argument tokens, for example:
    python tools/benchmarks/parity_performance_matrix.py \
      --examples /path/to/cases --out /path/to/campaign.jsonl \
      --fortran-binary /path/to/qualified/sfincs \
+     --fortran-backend superlu_dist \
      --fortran-petsc-opt=-mat_superlu_dist_colperm \
      --fortran-petsc-opt=NATURAL --petsc-profile
 
 Each record retains ``fortran_petsc_opts`` and each reference run reports
 ``observed_factor_backends`` from ``-ksp_view``. An empty observed list means
 no factor-package name was captured; requested options alone do not prove
-which implementation ran. SFINCS or PETSc can override an option. The example
-assumes a separately qualified SuperLU_DIST configuration and does not itself
-select that backend.
+which implementation ran. SFINCS or PETSc can override an option.
+``--fortran-backend PACKAGE`` selects the factor package in preflight and each
+rank launch, taking precedence over conflicting option tokens. It also requires
+the observed package set to equal the requested package; missing, mixed or
+wrong observations reject that reference. The selected package and
+``backend_acceptance`` are recorded independently of algebraic acceptance.
+Backend-specific tuning tokens alone do not select a backend.
 
 Changed option tokens or recorded ``PETSC_`` environment settings invalidate
 resume. This is not a complete toolchain lock: archive external option-file
@@ -182,30 +187,60 @@ shapes and non-finite data are errors. Absolute and unrounded relative
 differences are retained; irrelevant profile/transport datasets are excluded.
 These schema checks do not replace original-residual or grid convergence gates.
 
-A bounded office pilot of the analytic monoenergetic PAS fixture at
-``Ntheta=Nzeta=9`` and ``Nxi=6,12`` rejects both MUMPS and naturally ordered
-SuperLU_DIST at one/two MPI ranks: original relative residuals range from
-``5.61e-8`` to ``1.59e-6`` against ``1e-12``. DKX passes the algebraic gate on
-both inputs, but no pair is admitted for parity or performance claims.
-The CPU allocations differ, so these runs also lack a matched timing budget.
+The bounded office monoenergetic PAS fixture has ``Ntheta=Nzeta=9`` and
+``Nxi=6,12``. Earlier notes misattributed the file named ``superlu.jsonl``:
+its observed package was MUMPS, so its residuals were duplicate MUMPS evidence.
+A new explicit selection verifies SuperLU_DIST separately. The original
+relative-residual gate remains ``1e-12`` for every RHS at one/two MPI ranks.
 
-A retained one-rank MUMPS repeat with ``-ksp_pc_side right``,
-``-ksp_norm_type unpreconditioned`` and ``-ksp_atol 1e-30`` still fails.
-For its second RHS, PETSc's estimated norm reaches ``1.54e-16`` while its
-explicit true residual is ``7.70e-8`` (relative ``1.28e-7``), agreeing with
-the independent dumped-matrix check. Changing norm semantics alone is
-insufficient. The source of this finite-precision residual gap remains under
-investigation; do not attribute it solely to a factorization package.
+.. list-table:: Bounded reference configurations
+   :header-rows: 1
+
+   * - Configuration
+     - Largest original relative residual over both grids and rank counts
+     - Algebraic gate
+   * - MUMPS, default SFINCS GMRES
+     - 1.59e-6
+     - Failed
+   * - Verified SuperLU_DIST, natural column ordering, GMRES
+     - 7.41e-10
+     - Failed
+   * - Verified MUMPS, Richardson, unpreconditioned norm, max 20 iterations
+     - 8.78e-13
+     - Passed
+
+For the accepted Richardson configuration, append these tokens to the runner:
+
+.. code-block:: bash
+
+   --fortran-backend mumps \
+   --fortran-petsc-opt=-ksp_type --fortran-petsc-opt=richardson \
+   --fortran-petsc-opt=-ksp_norm_type --fortran-petsc-opt=unpreconditioned \
+   --fortran-petsc-opt=-ksp_max_it --fortran-petsc-opt=20
+
+Both DKX solves also pass the original-residual gate. Complete transport
+matrices agree with one-rank SFINCS within ``6.71e-12`` absolute and
+``1.06e-14`` relative when scaled by the largest matrix entry. The individual
+coefficients and differences are retained in HDF5; the aggregate metric does
+not replace per-coefficient tolerances. These are discrete-model comparisons:
+the coefficients change substantially between the two pitch grids, so neither
+grid is physically certified. CPU allocations differ, precluding speed claims.
+The dumped preconditioner equals the full kinetic matrix on these fixtures;
+Richardson is not a general recommendation for approximate preconditioners.
+
+A right-preconditioned MUMPS repeat with an unpreconditioned norm still fails:
+the second RHS has estimated norm ``1.54e-16`` but explicit norm ``7.70e-8``
+(relative ``1.28e-7``), confirmed by the independent dumped-matrix check.
 PETSc's `true-residual monitor
 <https://petsc.org/release/manualpages/KSP/KSPMonitorTrueResidual/>`_
-distinguishes the explicitly evaluated norm from an estimated norm.
+distinguishes the explicitly evaluated norm from an estimated norm. Merely
+changing norm semantics or orthogonalization did not resolve this gap.
 
-Inputs, commands, pilot JSON/logs and the two retained diagnostic runs,
-including matrices and states, are archived with SHA-256 checksums outside
-Git in ``dkx-review-evidence-20260905/transport-reference-pilot``.
-The original campaign deleted its temporary raw solve files; its separate
-retained diagnostic runs preserve those files. Subsequent runs can use the
-retention option below. A complete environment lock remains R0 work.
+Inputs, commands, JSON/logs, replay programs and retained matrices/states are
+archived with checksums outside Git in
+``dkx-review-evidence-20260905/transport-reference-pilot``. The original
+campaign deleted temporary raw solve files; the explicitly selected backend
+campaigns preserve them. A complete environment lock remains R0 work.
 
 Retaining raw evidence
 ----------------------
@@ -244,7 +279,18 @@ causal explanation, production solver policy or a grid-convergence result.
 A separate PETSc C replay loads the same matrix and each saved physical RHS,
 without running SFINCS assembly. With MUMPS, GMRES and ``CNTL(1)=1e-6`` it
 reproduces the two relative residuals ``1.89e-9`` and ``5.61e-8``. Direct
-MUMPS with its default pivot threshold fails (KSP reason ``-11``, non-finite
-residual). This narrows the gap to the standalone PETSc solve/toolchain path;
-it does not establish which numerical kernel or dependency is responsible.
-The replay source, commands, binary and logs are in the same external archive.
+MUMPS with its default pivot threshold fails because of insufficient factor
+workspace (``INFOG(1)=-9``, KSP reason ``-11``). Raising ``ICNTL(14)`` to 200
+completes factorization but still misses the physical residual tolerance.
+Forcing five refinement steps with ``ICNTL(10)=-5`` reduces both replay
+residuals below ``1e-12``; positive 5 allows early stopping and does not suffice
+here. Richardson with an explicitly evaluated residual also passes, including
+the complete SFINCS runs above. This establishes bounded remedies; the source
+of the factor/recurrence residual gap and their larger-case cost remain open.
+
+The `MUMPS guide, section 5.8
+<https://mumps-solver.org/doc/userguide_5.9.1.pdf#page=42>`_ distinguishes
+fixed-count refinement from backward-error stopping and lists configurations
+that disable internal refinement, including distributed right-hand sides or
+solutions. Record the effective settings and verify the final residual at
+every rank count; an option token alone does not demonstrate refinement.
