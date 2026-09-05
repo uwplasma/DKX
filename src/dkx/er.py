@@ -598,8 +598,8 @@ def find_ambipolar_er(
     max_iter: int = 20,
     current_tol: float = 1e-10,
     field_tol: float = 1e-10,
-    solve_method: str = "auto",
-    tol: float = 1e-10,
+    solve_method: str | None = None,
+    tol: float | None = None,
     warm_start: bool = True,
     all_roots: bool = True,
     n_scan: int = 9,
@@ -624,6 +624,10 @@ def find_ambipolar_er(
     cannot guarantee finding tangencies or every root. Zero slope is marginal;
     a small nonzero slope still requires an uncertainty study.
 
+    Omitted ``solve_method`` and ``tol`` preserve a prepared problem's solver
+    policy. Unprepared inputs default to ``"auto"`` and ``1e-10``. Explicit
+    overrides apply to every kinetic solve, including the cold final check.
+
     Returns an :class:`AmbipolarResult`.
     """
     for name, value in (("current_tol", current_tol), ("field_tol", field_tol)):
@@ -636,8 +640,8 @@ def find_ambipolar_er(
         if isinstance(inp, ErProblem)
         else prepare(
             inp,
-            solve_method=solve_method,
-            tol=tol,
+            solve_method="auto" if solve_method is None else solve_method,
+            tol=1e-10 if tol is None else tol,
             er_bracket=er_bracket,
             er_initial=er_initial,
         )

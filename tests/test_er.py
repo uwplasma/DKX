@@ -404,6 +404,29 @@ def test_routed_radial_current_gradient_matches_cold_solves(tmp_path, monkeypatc
     np.testing.assert_allclose(differences, gradient, rtol=3e-4, atol=1e-13)
 
 
+@pytest.mark.parametrize("prepared", [False, True])
+@pytest.mark.parametrize("override", [False, True])
+def test_host_root_preserves_solver_policy(tmp_path, monkeypatch, prepared, override):
+    from dkx import er as er_mod
+    deck = _write(tmp_path, _pas_deck())
+    inp = er_mod.prepare(deck, solve_method="direct", tol=2e-11) if prepared else deck
+    original = er_mod.solve
+    calls = []
+
+    def record(op, rhs, **kwargs):
+        calls.append((kwargs["method"], kwargs["tol"]))
+        return original(op, rhs, **kwargs)
+
+    monkeypatch.setattr(er_mod, "solve", record)
+    policy = dict(solve_method="block_tridiagonal", tol=3e-11) if override else {}
+    result = er_mod.find_ambipolar_er(inp, all_roots=False, emit=None, **policy)
+    assert result.converged
+    assert abs(result.er - LEGACY_BRENT_ROOT_ER) < 1e-3
+    expected = (("block_tridiagonal", 3e-11) if override else
+                ("direct", 2e-11) if prepared else ("auto", 1e-10))
+    assert calls and set(calls) == {expected}
+
+
 def test_ambipolar_root_preserves_prepared_solver_policy(tmp_path, monkeypatch):
     from dkx import er as er_mod
     problem = er_mod.prepare(_write(tmp_path, _pas_deck()), solve_method="direct", tol=2e-11)
