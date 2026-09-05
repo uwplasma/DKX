@@ -82,9 +82,43 @@ ranks (original relative residuals ``2.64e-14`` and ``3.92e-14`` against
 ``1e-10``). SuperLU_DIST failed at both rank counts with segmentation
 violations and residuals of approximately ``0.068`` and ``0.053`` despite
 a reported linear convergence reason. This environment is therefore not
-a qualified SuperLU_DIST reference. Diagnose the failure with a debug/bounds
-build and matched matrix replay before admitting that backend. Neither this
-tiny MUMPS smoke nor compilation establishes production accuracy or scaling.
+a qualified SuperLU_DIST reference under its default settings. Neither this
+tiny smoke nor compilation establishes production accuracy or scaling.
+
+The checked ``-O0 -g -fcheck=all -fbacktrace`` SFINCS build reproduced the
+crash. Source inspection found an unconditional ``MatMumpsGetInfog`` call in
+``solver.F90`` after ``SNESSolve``, using a factor handle initialized only for
+MUMPS. An isolated reference patch replaces that call with:
+
+.. code-block:: fortran
+
+   factor_err = 0
+   if (actualSolverType == MATSOLVERMUMPS) then
+      call MatMumpsGetInfog(factorMat, 1, factor_err, ierr)
+   end if
+
+This patch eliminates the crash at both rank counts and preserves the MUMPS
+result, but leaves the SuperLU_DIST residual failure unchanged. Label the
+patched source and executable separately from upstream; this is a reference
+build correction, not a DKX physics change.
+
+A separate C/PETSc replay loads the same dumped matrix and manufactures
+``b = A * ones``. At one/two ranks, MUMPS obtains relative residuals below
+``8e-16``; default SuperLU_DIST returns approximately ``0.041`` and maximum
+state error ``3.32`` despite a positive solve reason. This reproduces an
+accuracy problem without SFINCS orchestration, but does not identify a
+specific library defect. In this replay, disabling equilibration, selecting
+natural column ordering, or enabling iterative refinement each restores a
+small residual. Removing row permutation instead produces a failed solve.
+
+For the patched SFINCS PAS case, the explicitly selected variants
+``-mat_superlu_dist_colperm NATURAL`` and
+``-mat_superlu_dist_equil false`` pass execution and original-residual checks
+at both rank counts (approximately ``1.3e-14`` and ``9.6e-15`` respectively).
+These are smoke-qualified configurations only. Natural ordering may increase
+fill on larger matrices; retain ordering, scaling and refinement settings
+with every measurement and recheck each original residual. A favorable
+setting for this case is not grounds for a global default change.
 
 With that environment activated, the review's SFINCS makefile configuration is:
 

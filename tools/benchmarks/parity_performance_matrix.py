@@ -663,21 +663,25 @@ def preflight_fortran(binary: Path | None, launcher: list[str]) -> str | None:
         return None  # dkx-only sweep: nothing to check
     if not binary.exists():
         return f"--fortran-binary {binary} does not exist"
-    probe = [*launcher, str(binary), "-help"]
+    probe = [*launcher, str(binary.resolve()), "-help"]
     try:
-        # PETSc's option banner is not valid UTF-8, so decode defensively: the
-        # probe only needs to see whether the launcher itself failed.
-        result = subprocess.run(
-            probe, capture_output=True, timeout=120, check=False,
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
+        # SFINCS may continue initialization after printing help. Isolate its
+        # files and supervise the launcher's descendants just like real runs.
+        with tempfile.TemporaryDirectory(prefix="dkx-reference-preflight-") as scratch:
+            work = Path(scratch)
+            result = _run_measured(probe, work, 120)
+            if result.get("error"):
+                return f"cannot launch {' '.join(probe)}: {result['error']}"
+            for stream in ("stdout", "stderr"):
+                with (work / f"benchmark.{stream}.log").open(errors="replace") as log:
+                    for line in log:
+                        if "prefix does not exist" in line or "critical libmamba" in line:
+                            return (
+                                f"the launcher cannot resolve its environment: {line.strip()[:1000]}\n"
+                                "  (set MAMBA_ROOT_PREFIX or use an explicit environment prefix)"
+                            )
+    except OSError as exc:
         return f"cannot launch {' '.join(probe)}: {exc}"
-    blob = (result.stdout + result.stderr).decode("utf-8", errors="replace")
-    if "prefix does not exist" in blob or "critical libmamba" in blob:
-        return (
-            f"the launcher cannot resolve its environment: {blob.strip().splitlines()[0]}\n"
-            "  (export MAMBA_ROOT_PREFIX=$HOME/micromamba before a non-interactive run)"
-        )
     return None
 
 

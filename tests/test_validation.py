@@ -1633,3 +1633,35 @@ def test_the_cli_reports_success_and_failure(tmp_path: Path, capsys) -> None:
     assert main(["--root", str(root)]) == 1
     failed = json.loads(capsys.readouterr().out)
     assert failed["failed"] == 1
+
+@pytest.mark.parametrize("failure", ["timeout", "environment", "none"])
+def test_reference_preflight_is_isolated_and_supervised(tmp_path, monkeypatch, failure):
+    import sys
+    from tools.benchmarks import parity_performance_matrix as matrix
+
+    binary = tmp_path / "reference"
+    body = {
+        "timeout": "import time; time.sleep(10)",
+        "environment": "print('critical libmamba: prefix does not exist'); print('x' * 10000)",
+        "none": "from pathlib import Path; Path('input.namelist').write_text('changed')",
+    }[failure]
+    binary.write_text(f"#!{sys.executable}\n{body}\n")
+    binary.chmod(0o755)
+    original = tmp_path / "input.namelist"
+    original.write_text("preserve")
+    monkeypatch.chdir(tmp_path)
+    run = matrix._run_measured
+    workdirs = []
+
+    def bounded(command, cwd, timeout_s):
+        workdirs.append(cwd)
+        return run(command, cwd, 0.1 if failure == "timeout" else timeout_s)
+
+    monkeypatch.setattr(matrix, "_run_measured", bounded)
+    reason = matrix.preflight_fortran(Path("reference"), [])
+    assert original.read_text() == "preserve"
+    assert workdirs and all(not path.exists() for path in workdirs)
+    if failure == "none":
+        assert reason is None
+    else:
+        assert ("timeout" if failure == "timeout" else "cannot resolve") in reason
