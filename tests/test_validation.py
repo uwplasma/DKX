@@ -1784,6 +1784,34 @@ def test_warm_audit_dual_identity_sign_with_deliberately_inaccurate_states(monke
     audit = probe.warm_audit(deck, deck, tolerances=(1e-10,))
     for row in audit['records'][1:]:
         assert not row['original_residual_pass'] and not row['solver_converged']
+        assert not row['recycle_supplied']
         assert abs(row['observable_difference']) > 1e-5
         assert row['dual_predicted_difference'] == pytest.approx(row['observable_difference'], rel=1e-11)
         assert row['linear_observable_difference'] == pytest.approx(row['observable_difference'], rel=1e-11)
+
+
+
+def test_warm_audit_zero_source_and_nonfinite_drives(tmp_path, monkeypatch):
+    from tools.benchmarks import operator_conditioning as probe
+    from dkx.drift_kinetic import KineticOperator
+    import jax.numpy as jnp
+
+    target = ROOT / 'tests/ref/pas_1species_PAS_noEr_tiny_scheme1.input.namelist'
+    source = tmp_path / 'zero.namelist'
+    source.write_text(target.read_text().replace('dNHatdrHats = -6.0d+0', 'dNHatdrHats = 0.0')
+                      .replace('dTHatdrHats = -3.0d+0', 'dTHatdrHats = 0.0'))
+    audit = probe.warm_audit(str(source), str(target), tolerances=(1e-10,))
+    assert audit['seed_original_residual_pass']
+    assert audit['seed_absolute_residual'] == 0.0
+    assert audit['seed_relative_residual'] is None
+    assert all(r['original_residual_pass'] for r in audit['records'])
+    assert not audit['records'][0]['initial_state_supplied']
+    assert audit['records'][1]['initial_state_supplied']
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError('nonfinite drives must be rejected before materialization')
+    monkeypatch.setattr(probe, 'materialize_csr', forbidden)
+    for value in (float('nan'), float('inf'), 1e308):
+        monkeypatch.setattr(KineticOperator, 'rhs', lambda self: jnp.full(self.total_size, value))
+        with pytest.raises(ValueError, match='finite drives and norms'):
+            probe.warm_audit(str(target), str(target))

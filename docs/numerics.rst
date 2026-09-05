@@ -347,7 +347,13 @@ builds their coefficients independently, passes no cached preconditioner or
 factorization, fingerprints both complete operators before/after the audit,
 and hashes the target matrix and drive. It checks original residuals at
 relative tolerances 1e-8, 1e-10 and 1e-12, retaining failures and executed methods.
-The selected moment is normalized current or first-species heat flux.
+Each row records whether an initial state and recycle data were actually
+supplied, separately from the requested trial label. The seed has its own
+convergence flag, absolute residual and original-residual gate. A zero-drive
+seed is allowed: its relative residual is null, and its absolute residual
+must vanish to pass. Non-finite drives or overflowing drive norms are rejected
+before dense materialization. The selected moment is normalized current or
+first-species heat flux.
 
 For a linear observable with coefficient vector :math:`q`, the diagnostic
 solves :math:`A^T\lambda=q` and compares

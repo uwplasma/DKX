@@ -107,11 +107,15 @@ def warm_audit(source_deck: str, target_deck: str, *, max_size: int = 4000,
         return digest.hexdigest()
 
     identities = [fingerprint(op) for op in (source, target)]
-    matrix = materialize_csr(target, pin_masked_dofs=True).toarray()
-    rhs = target.rhs()
-    norm_b = float(jnp.linalg.norm(rhs))
+    source_rhs, rhs = source.rhs(), target.rhs()
+    source_norm, norm_b = (float(jnp.linalg.norm(b)) for b in (source_rhs, rhs))
+    if not all(np.isfinite(np.asarray(b)).all() for b in (source_rhs, rhs)) or not all(
+        np.isfinite(n) for n in (source_norm, norm_b)
+    ):
+        raise ValueError("warm audit requires finite drives and norms")
     if not norm_b:
-        raise ValueError("warm audit requires a nonzero drive")
+        raise ValueError("warm audit requires a nonzero target drive")
+    matrix = materialize_csr(target, pin_masked_dofs=True).toarray()
 
     def moment(x):
         return jnp.ravel(profile_moments_from_operator(target, x)[observable])[0]
@@ -119,7 +123,8 @@ def warm_audit(source_deck: str, target_deck: str, *, max_size: int = 4000,
     q = np.asarray(jax.grad(moment)(jnp.zeros(target.total_size)))
     dual = dense_solve(matrix.T, q)
     dual_residual = q - matrix.T @ dual
-    seed = solve(source, source.rhs(), method="gmres", tol=min(tolerances), emit=None)
+    seed = solve(source, source_rhs, method="gmres", tol=min(tolerances), emit=None)
+    seed_residual = float(jnp.linalg.norm(source.apply(seed.x.reshape(-1)) - source_rhs.reshape(-1)))
     records = []
     for tol in tolerances:
         cold = None
@@ -139,6 +144,7 @@ def warm_audit(source_deck: str, target_deck: str, *, max_size: int = 4000,
             predicted = float(dual @ (cold[2] - dense_residual))
             records.append(dict(
                 tolerance=float(tol), reuse=label, method=result.method,
+                initial_state_supplied=initial is not None, recycle_supplied=recycle is not None,
                 iterations=result.iterations, solver_converged=bool(result.converged), observable=value,
                 original_residual_pass=bool(np.linalg.norm(original_residual) <= tol * norm_b),
                 original_relative_residual=float(np.linalg.norm(original_residual) / norm_b),
@@ -158,8 +164,10 @@ def warm_audit(source_deck: str, target_deck: str, *, max_size: int = 4000,
                       for p in (source_deck, target_deck)},
         target_matrix_sha256=hashlib.sha256(matrix.tobytes()).hexdigest(),
         target_rhs_sha256=hashlib.sha256(np.asarray(rhs).tobytes()).hexdigest(),
-        seed_relative_residual=float(jnp.linalg.norm(source.apply(seed.x.reshape(-1)) - source.rhs().reshape(-1)) /
-                                     jnp.linalg.norm(source.rhs())),
+        seed_solver_converged=bool(seed.converged),
+        seed_absolute_residual=seed_residual,
+        seed_original_residual_pass=bool(np.isfinite(seed_residual) and seed_residual <= min(tolerances) * source_norm),
+        seed_relative_residual=seed_residual / source_norm if source_norm else None,
         dual_relative_residual=float(np.linalg.norm(dual_residual) / max(np.linalg.norm(q), 1e-300)),
         records=records,
     )
