@@ -55,8 +55,10 @@ this path. The batch runs in ``jax.lax.map`` chunks sized from two numbers: the
 per-solve memory footprint of the route the ``auto`` policy actually takes, and
 the resolved device (or host) memory budget. A solve that routes to the
 memory-lean truncated structured direct kernel is charged its truncated working
-set, not the full-band factorization peak that route never allocates. Only one
-chunk's intermediates are ever live. ``memory_budget_gb`` overrides the
+set, not the full-band factorization peak that route never allocates. Forward
+work is chunked, but reverse mode can retain residuals across chunks. The
+budget is an estimate, not a hard allocation limit; measure the gradient peak
+separately. ``memory_budget_gb`` overrides the
 resolved budget and is forwarded to each element's solver-route decision as
 well as the outer chunk planner. A tight budget therefore cannot size a small
 chunk and then silently let each element choose an inadmissible full-factor

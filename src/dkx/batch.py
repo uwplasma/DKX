@@ -21,7 +21,8 @@ operator leaves.  Peak memory is bounded automatically: the per-solve footprint
 comes from the route-aware structured direct memory model in :mod:`dkx.solve`
 (:func:`dkx.solve.auto_solve_peak_memory_bytes`), the memory budget from the
 device/host, and the batch is processed in ``jax.lax.map`` chunks of the
-computed size so only one chunk's intermediates are ever live.
+computed size. Reverse mode can retain residuals across chunks; the budget is
+an estimate rather than a hard allocation limit.
 
 Independent batches can be split across distinct local devices using JAX's
 ``shard_map`` primitive. Each device runs the same memory-budgeted local map;
@@ -397,7 +398,8 @@ def batched_solve(
     table (:func:`dkx.run.profile_moments_from_operator`).  The map is a
     ``jax.vmap`` executed in memory-budgeted ``jax.lax.map`` chunks, so it is
     differentiable (the implicit solve composes with the batch axis), jit-safe,
-    and bounded in peak memory.
+    and chunked using an estimated memory budget. Reverse-mode residual storage
+    across chunks must be measured separately.
 
     Only ``op``'s varying leaves are mapped; every other leaf — crucially the
     discretization grids — is closed over and stays concrete, which keeps the
