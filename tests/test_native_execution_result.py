@@ -63,24 +63,21 @@ def _vmec_case():
 
 
 @pytest.mark.parametrize("collisions", ["pitch_angle_scattering", "linearized_fokker_planck"])
-def test_native_profile_builder_does_not_retain_original_collision_tensors(monkeypatch, collisions):
-    import gc
-    import weakref
-    import dkx.execution as execution
+def test_native_profile_preparation_builds_only_selected_collisions(monkeypatch, collisions):
+    import dkx.collisions as kernels
 
     base = _case()
     case = replace(base, physics=replace(base.physics, collisions=collisions))
-    original = execution._make_operator
-    references = []
-    def capture(*args, **kwargs):
-        result = original(*args, **kwargs)
-        op = result[0]
-        references.append(weakref.ref(op.fp if op.fp is not None else op.pas))
-        return result
-    monkeypatch.setattr(execution, "_make_operator", capture)
+    calls = {"make_fokker_planck_v3_operator": 0, "make_pitch_angle_scattering_v3_operator": 0}
+    for name in calls:
+        original = getattr(kernels, name)
+        def count(*args, _name=name, _original=original, **kwargs):
+            calls[_name] += 1
+            return _original(*args, **kwargs)
+        monkeypatch.setattr(kernels, name, count)
     problem = dkx.prepare_er_scan(case, differentiable_profiles=True)
-    gc.collect()
-    assert references and all(ref() is None for ref in references)
+    assert calls["make_fokker_planck_v3_operator"] == 0
+    assert calls["make_pitch_angle_scattering_v3_operator"] == int(collisions == "pitch_angle_scattering")
     assert problem.operator.fp is not None or problem.operator.pas is not None
 
 

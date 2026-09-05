@@ -611,6 +611,7 @@ def prepare_er_scan(
         case, surface_index=index, n_hat=density / 1e20, t_hat=temperature,
         dn_dr_hat=dn, dt_dr_hat=dt, grids=grids, geometry_state=geometry,
         electric_field_kv_m=1.0, force_exb_structure=True,
+        build_collisions=not differentiable_profiles,
     )
     initial = case.electric_field.value_kV_m or 0.0
     bounds = case.electric_field.search_kV_m or (initial - 5.0, initial + 5.0)

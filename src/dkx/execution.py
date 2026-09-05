@@ -307,6 +307,7 @@ def _make_operator(
     geometry_state: _GeometryState,
     electric_field_kv_m: float | None = None,
     force_exb_structure: bool = False,
+    build_collisions: bool = True,
 ):
     import jax.numpy as jnp  # noqa: PLC0415
 
@@ -346,7 +347,12 @@ def _make_operator(
     )
     pas = None
     fp = None
-    if case.physics.collisions == "pitch_angle_scattering":
+    constraint_scheme = 2 if case.physics.collisions == "pitch_angle_scattering" else 1
+    if not build_collisions:
+        # Internal template only; the profile builder fills collisions before
+        # the prepared problem is returned to a caller or used in a solve.
+        pass
+    elif case.physics.collisions == "pitch_angle_scattering":
         pas = make_pitch_angle_scattering_v3_operator(
             x=grids.x,
             z_s=z_s,
@@ -357,7 +363,6 @@ def _make_operator(
             n_xi_for_x=grids.n_xi_for_x,
             n_xi=grids.n_xi,
         )
-        constraint_scheme = 2
     else:
         fp = make_fokker_planck_v3_operator(
             x=np.asarray(grids.x),
@@ -376,7 +381,6 @@ def _make_operator(
             n_xi_for_x=np.asarray(grids.n_xi_for_x),
             strict_parity=len(case.species) > 1,
         )
-        constraint_scheme = 1
 
     field_kv_m = (
         case.electric_field.value_kV_m
@@ -471,7 +475,7 @@ def _prepare_profile_builder(case, op, grids, geometry_state, radial, surface_in
     common = dict(x=grids.x, z_s=op.z_s, m_hats=op.m_hat, nu_n=nu_n,
                   n_xi_for_x=grids.n_xi_for_x)
     fp_builder = None
-    if op.fp is not None:
+    if case.physics.collisions == "linearized_fokker_planck":
         fp_builder = prepare_fokker_planck_v3_profiles(
             **common, x_weights=grids.x_weights, ddx=grids.ddx, d2dx2=grids.d2dx2,
             x_grid_k=0., krook=0., nl=grids.n_l, quadrature_order=quadrature_order)

@@ -313,6 +313,8 @@ The fixed references are density 1e20 m^-3 and temperature 1 keV. Geometry,
 surface locations, species masses/charges, Coulomb logarithm, solver policy and
 field bounds stay fixed. PAS uses its analytic coefficients; full-FP uses the
 opt-in quadrature builder above (``quadrature_order=128`` by default).
+Opt-in preparation initializes the selected collision kernels directly, skipping
+the otherwise redundant host reference collision assembly.
 
 For example, with an existing native ``case`` and ``jax``/``jnp`` imports::
 
