@@ -207,6 +207,27 @@ def _ambipolar_case():
     )
 
 
+def test_native_profile_retains_a_state_satisfying_the_original_equation(monkeypatch):
+    import importlib
+    # Resolve consumers before patching, so lazy imports cannot retain the spy.
+    for name in ("dkx.batch", "dkx.er", "dkx.run"):
+        importlib.import_module(name)
+    solve_module = importlib.import_module("dkx.solve")
+    original = solve_module.solve
+    residuals = []
+    def checked(op, rhs, **kwargs):
+        result = original(op, rhs, **kwargs)
+        state = np.asarray(result.x).reshape(-1)
+        measured = float(np.linalg.norm(np.asarray(op.apply(state)) - np.asarray(rhs).reshape(-1)))
+        assert measured <= kwargs["tol"] * np.linalg.norm(rhs)
+        np.testing.assert_allclose(result.residual_norms, measured, atol=1e-14, rtol=1e-8)
+        residuals.append(measured)
+        return result
+    monkeypatch.setattr(solve_module, "solve", checked)
+    dkx.run(_case())
+    assert len(residuals) == 2
+
+
 def test_native_grid_honors_explicit_pitch_speed_ramp() -> None:
     from dkx.execution import _make_grids
 
@@ -467,8 +488,11 @@ def test_native_ambipolar_real_solver_brackets_and_roundtrips(tmp_path, capsys) 
     )
     assert "evaluation_legendre_tail_relative_l2" in result.arrays
     assert "evaluation_legendre_tail_relative_l2_upper_bound" not in result.arrays
-    # The original residual rejects moment-only states, invoking bounded recovery.
-    assert result.metadata["ambipolar_solver_attempts"]["automatic_true_residual_recovery_count"] > 0
+    # Full structured recovery avoids a failed moment-only solve and Krylov retry.
+    assert result.metadata["ambipolar_solver_attempts"]["automatic_true_residual_recovery_count"] == 0
+    assert set(result.metadata["ambipolar_solver_attempts"]["executed_route_counts"]) == {
+        "block_tridiagonal_truncated"
+    }
     assert "selected_tail_diagnostic_replay" not in set(
         result.evaluation_solver_attempt_reason.reshape(-1)
     )

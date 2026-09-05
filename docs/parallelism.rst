@@ -88,9 +88,11 @@ independently of the solver's reported residual. By default, a memory-bounded
 structured solve may return only the low-order Legendre blocks with a
 zero-filled tail. Its moments can be accurate while this state fails the full
 equation. ``retain_full_state=True`` recovers every block on that route, and
-chunk sizing includes its larger working set. A nonuniform pitch layout may
-route to Krylov when its shortest chain cannot satisfy the requested retained
-depth of the structured kernel. Inspect ``executed_method`` when comparing cost.
+chunk sizing includes its larger working set. Full recovery handles unequal
+pitch chains by retaining each chain's actual length and padding only inactive
+degrees of freedom. The generated structured route still avoids global band
+arrays, but retaining every block increases per-chain memory with pitch
+resolution. Inspect ``executed_method`` when comparing cost.
 This option is available on both
 public scan functions and ``dkx.batch.batched_solve``. Full retention does not
 guarantee convergence: inspect the flags before using states for restart or

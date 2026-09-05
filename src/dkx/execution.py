@@ -1102,6 +1102,7 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
             method=_route_name(case.solver.method),
             tol=case.solver.relative_tolerance,
             device=None if case.run.device == "auto" else case.run.device,
+            tier1_keep_lowest=op.n_xi,
             tier1_memory_budget_gb=case.solver.memory_fraction
             * _total_host_memory_bytes()
             / (1024**3),

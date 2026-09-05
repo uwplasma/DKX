@@ -374,7 +374,7 @@ def test_batch_full_state_certifies_original_equation(tmp_path, ramped):
     full = jax.jit(lambda e: batched_er_scan(problem, e, **options))(fields)
     head = batched_er_scan(problem, fields, memory_budget_gb=1e-6)
     assert head.executed_method == "block_tridiagonal_truncated"
-    assert full.executed_method == ("gmres" if ramped else "block_tridiagonal_truncated")
+    assert full.executed_method == "block_tridiagonal_truncated"
     assert np.all(full.algebraic_converged) and not np.any(head.algebraic_converged)
     np.testing.assert_allclose(full.radial_current, head.radial_current, atol=1e-12, rtol=1e-10)
     operators = [er_mod.operator_at_er(problem.operator, e, dphi_per_er=problem.dphi_per_er)
