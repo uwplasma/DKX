@@ -80,8 +80,22 @@ together with separate finite-moment, observable and resolution checks:
 
 .. code-block:: python
 
-   scan = batched_er_scan(problem, er_values, devices="auto")
+   scan = batched_er_scan(problem, er_values, devices="auto", retain_full_state=True)
    rejected = ~scan.algebraic_converged  # one boolean per original input
+
+The residual is recomputed from the original operator and returned state,
+independently of the solver's reported residual. By default, a memory-bounded
+structured solve may return only the low-order Legendre blocks with a
+zero-filled tail. Its moments can be accurate while this state fails the full
+equation. ``retain_full_state=True`` recovers every block on that route, and
+chunk sizing includes its larger working set. A nonuniform pitch layout may
+route to Krylov when its shortest chain cannot satisfy the requested retained
+depth of the structured kernel. Inspect ``executed_method`` when comparing cost.
+This option is available on both
+public scan functions and ``dkx.batch.batched_solve``. Full retention does not
+guarantee convergence: inspect the flags before using states for restart or
+accepting derivatives. The residual check adds an operator application per
+batch element; selected-tail bounds remain a separate opt-in diagnostic.
 
 These flags report algebraic admission; they neither raise on every rejected
 nondifferentiable scan element nor certify its physics. The differentiable

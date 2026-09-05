@@ -641,6 +641,7 @@ def batched_er_scan(
     memory_budget_gb: float | None = None,
     devices: Sequence[Any] | str | None = None,
     retain_legendre_tail: bool = False,
+    retain_full_state: bool = False,
 ) -> Any:
     """Batched ``E_r`` scan on one geometry (stable public facade).
 
@@ -666,6 +667,8 @@ def batched_er_scan(
         max_batch, memory_budget_gb: optional memory-budgeting overrides.
         devices: None for one device, "auto" for local devices, or a sequence
             of distinct devices. Forwarded to :func:`dkx.batch.batched_solve`.
+        retain_full_state: recover all Legendre blocks for full-state residual
+            certification/restart; includes the extra cost in chunk sizing.
         retain_legendre_tail: retain the selected-tail relative-L2 upper bound
             when the memory-lean truncated route executes.
 
@@ -697,6 +700,7 @@ def batched_er_scan(
         memory_budget_gb=memory_budget_gb,
         devices=devices,
         retain_legendre_tail=retain_legendre_tail,
+        retain_full_state=retain_full_state,
     )
 
 
@@ -710,6 +714,7 @@ def batched_surface_scan(
     memory_budget_gb: float | None = None,
     devices: Sequence[Any] | str | None = None,
     retain_legendre_tail: bool = False,
+    retain_full_state: bool = False,
 ) -> Any:
     """Batched solve over a batch of flux surfaces (stable public facade).
 
@@ -728,6 +733,8 @@ def batched_surface_scan(
         max_batch, memory_budget_gb: optional memory-budgeting overrides.
         devices: None for one device, "auto" for local devices, or a sequence
             of distinct devices. Forwarded to :func:`dkx.batch.batched_solve`.
+        retain_full_state: recover all Legendre blocks for full-state residual
+            certification/restart; includes the extra cost in chunk sizing.
         retain_legendre_tail: retain the selected-tail relative-L2 upper bound
             when the memory-lean truncated route executes.
 
@@ -755,6 +762,7 @@ def batched_surface_scan(
         memory_budget_gb=memory_budget_gb,
         devices=devices,
         retain_legendre_tail=retain_legendre_tail,
+        retain_full_state=retain_full_state,
     )
 
 

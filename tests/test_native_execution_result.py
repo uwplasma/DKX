@@ -134,7 +134,8 @@ def test_native_profile_refresh_updates_stencil_collisions_and_current_gradient(
         return n*(1+scale*dn), t*(1+scale*dt)
 
     def current(prepared, differentiable=False):
-        scan = dkx.batched_er_scan(prepared, jnp.array([.2]), differentiable=differentiable)
+        scan = dkx.batched_er_scan(prepared, jnp.array([.2]), differentiable=differentiable,
+                                   retain_full_state=True)
         value = scan.moments["FSABjHat"][0] * PARALLEL_CURRENT
         if differentiable:
             return value, scan.algebraic_converged
@@ -462,11 +463,13 @@ def test_native_ambipolar_real_solver_brackets_and_roundtrips(tmp_path, capsys) 
 
     assert "[dkx.solve]" not in capsys.readouterr().out
     assert result.metadata["legendre_tail_diagnostic"] == (
-        "retained_selected_tail_relative_l2_upper_bound"
+        "retained_full_state_relative_l2"
     )
-    assert "evaluation_legendre_tail_relative_l2" not in result.arrays
-    assert "evaluation_legendre_tail_relative_l2_upper_bound" in result.arrays
-    assert "selected_tail_diagnostic_replay" in set(
+    assert "evaluation_legendre_tail_relative_l2" in result.arrays
+    assert "evaluation_legendre_tail_relative_l2_upper_bound" not in result.arrays
+    # The original residual rejects moment-only states, invoking bounded recovery.
+    assert result.metadata["ambipolar_solver_attempts"]["automatic_true_residual_recovery_count"] > 0
+    assert "selected_tail_diagnostic_replay" not in set(
         result.evaluation_solver_attempt_reason.reshape(-1)
     )
     for name in (
@@ -483,8 +486,9 @@ def test_native_ambipolar_real_solver_brackets_and_roundtrips(tmp_path, capsys) 
             np.asarray(result.arrays[name]),
             np.asarray(baseline.arrays[name]),
         )
-    retained_tail = result.evaluation_legendre_tail_relative_l2_upper_bound
-    assert np.count_nonzero(np.isfinite(retained_tail)) == 2 * 4
+    retained_tail = result.evaluation_legendre_tail_relative_l2
+    valid_evaluations = np.count_nonzero(np.isfinite(result.evaluation_electric_field_kV_m))
+    assert np.count_nonzero(np.isfinite(retained_tail)) == valid_evaluations * 4
     for surface_index, selected_field in enumerate(result.electric_field_kV_m):
         evaluation_index = int(
             np.nanargmin(
@@ -520,7 +524,7 @@ def test_native_ambipolar_real_solver_brackets_and_roundtrips(tmp_path, capsys) 
     loaded = dkx.Result.load(tmp_path / "real-ambipolar.nc")
     np.testing.assert_allclose(loaded.electric_field_kV_m, result.electric_field_kV_m)
     np.testing.assert_allclose(
-        loaded.evaluation_legendre_tail_relative_l2_upper_bound,
+        loaded.evaluation_legendre_tail_relative_l2,
         retained_tail,
         equal_nan=True,
     )
