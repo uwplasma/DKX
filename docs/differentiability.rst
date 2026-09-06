@@ -355,6 +355,19 @@ or layout, and validate quadrature/observable uncertainty before changing
 collision routes. These updates do not certify factor reuse or a complete
 geometry/profile/ambipolar optimization chain.
 
+The native PAS/full-FP root regression also constructs a small dense referee
+from original operator actions. It checks the primal and transpose equations
+and compares the routed root derivative with
+:math:`dE_r/dp = -J_p/J_{E_r}`, where each current derivative includes both
+explicit moment dependence and the adjoint contraction
+:math:`\lambda^T(b_p-A_p x)`. The refined transpose solve is confined to the
+test; production root evaluation does not construct this dense matrix.
+Independently rebuilt cold roots check both finite differences and quadratic
+one-sided Taylor remainders above the field tolerance and local current/slope
+correction. These fixed-geometry, fixed-branch checks cover a small LHD
+analytic discretization. They do not provide runtime adjoint admission,
+joint-grid uncertainty, or a branch-continuity certificate.
+
 .. note::
 
    The differentiable :math:`\Phi_1` helper requires the
