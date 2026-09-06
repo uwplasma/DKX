@@ -1,540 +1,294 @@
-# DKX: a focused plan for verified transport and optimization
+# DKX research programme: an independent take, for reconciliation
 
-**Decision review: 2026-09-06. Planning only; no release is authorized by this plan.**
-Reviewed default branch: [`44a2e864`](https://github.com/uwplasma/DKX/commit/44a2e864f640deb6d7d30834044d0044fcfa7b6d).
-Reviewed implementation stack: [`be6506fe`](https://github.com/uwplasma/DKX/commit/be6506fedbf357ab7fbbc1c1eaa35195080afc9e),
-the head of [PR #188](https://github.com/uwplasma/DKX/pull/188).
-This file supersedes the R0–R11 work queue. The [preceding plan](https://github.com/uwplasma/DKX/blob/be6506fedbf357ab7fbbc1c1eaa35195080afc9e/plan.md)
-retains detailed historical measurements, rejected experiments and references.
-`docs/development_roadmap.rst` remains an entry point, not another plan.
+**Written 2026-09-06 against #189 (`0852294`), the 17-PR stack (`be6506fe`) and main (`44a2e864`). Planning only; nothing here authorizes a release.**
 
-## 1. The decision
+## 0. How to read this, and why a third plan
 
-Finish one dependable research workflow before expanding the solver portfolio:
-**specified toroidal equilibrium and species profiles → resolved transport and
-bootstrap current → a retained stellarator ambipolar branch → checked derivatives
-→ fast repeated evaluations → one actual equilibrium-boundary optimization.**
-For tokamaks, prescribe Er: an intrinsically ambipolar local model cannot determine
-it uniquely. Keep density and temperature explicit; pressure alone fixes neither.
+Three plans now exist. The stack's `plan.md` (15,900 words) is the R0–R11 work queue plus an execution diary. [#189](https://github.com/uwplasma/DKX/pull/189) (5,800 words) replaces it with three deliverables and is the best of the three at saying what not to do. This document is the third, written after reading both, the source of SFINCS's preconditioner, the code on the stack tip, and a literature and code survey whose references are in section 11. It exists so that an independent collaborator can produce one authoritative plan by adjudicating differences rather than reconstructing them; section 2 is the adjudication table.
 
-The code has made substantial progress in checking equations and derivatives.
-Its principal remaining risk is promoting a collection of small demonstrations
-into a general accuracy, performance or optimization claim. More solver choices,
-coordinate systems, benchmark decks and documentation pages will not by themselves
-close that gap. The next unit of progress is a useful calculation with a stated
-model, error budget, repeatable runtime and a runnable example.
+The document is deliberately detailed. A plan that is only a list of gates re-accumulates a diary because nobody can tell from it what to do on Monday. Each phase below therefore has the figure it produces, the steps, the entry and exit criteria, a kill criterion where the work is an experiment, and an effort range. Effort is in person-weeks with no dates.
 
-Three deliverables replace twelve parallel work packages:
+## 1. Thesis
 
-| Order | Deliverable | Completion means |
+**The unit of progress is a figure, not a gate.** Each phase is defined by a publishable figure or table; code, tooling and documentation are written when a figure needs them and not before. This is Whitesides' rule that the paper outline is the research plan, and it is the direct remedy for the pattern of the last week, in which evidence and provenance infrastructure grew faster than results.
+
+**The differentiator is not "differentiable GPU neoclassics".** yancc has published that phrase with an NCSX case in 6 GB on one A100 and 1 percent agreement with SFINCS and MONKES. What yancc has not done, and what MONKES and NTX cannot do, is exactly what DKX already has in code: the complete SFINCS-v3 model including Phi1 and the ambipolar root; and what nobody has published for the full problem: derivatives verified through the root and through geometry, and an error bar on every reported observable (algebraic from the adjoint-weighted residual, discretization from Richardson extrapolation, model from stated validity). Those three are the programme's claims. Speed against yancc is measured in Phase 1 and reported whichever way it comes out.
+
+**The algorithmic work is a diagnosis first, then two bounded extensions, not a new solver.** DKX already implements SFINCS's simplified-operator preconditioner as its default Krylov preconditioner, and inverts it exactly with the same block-tridiagonal solve that wins the pitch-angle-scattering decks (`coarse_precond.py:916`). The 7-of-23 Krylov record and the six non-completions are *with* that preconditioner, and five of the six died of memory while its dense angular bands were allocated, not of iteration counts. So the plan does not assert a fix. Phase 2 spends one week measuring which dropped coupling and which resource dominates on each deck, then runs two experiments the numerics survey supports with written kill criteria: a block-pentadiagonal structured solve that makes the Er and magnetic-drift decks exact again, and recycling discipline across sweep points (hold the preconditioner fixed over a window, separate transpose recycle space). Memory-lean preconditioner routes and fp32 factors after Ruiz scaling follow if memory, not iterations, is the binding loss. If everything fails, the record says so and #189's factor-application line takes over.
+
+## 2. Reconciliation with #189: agree, depart, and why
+
+| Topic | #189 | This plan | Why |
+| --- | --- | --- | --- |
+| Three deliverables replace twelve packages | yes | agree | R0–R11 had no ordering pressure. |
+| Deliverable 1 is "trustworthy calculations", a verification exercise | yes | **depart**: Phase 1 is a positioning figure against SFINCS and yancc at matched resolution, with error bars | a check table has no external audience; the figure forces every check #189 lists and answers the question every reviewer will ask first. |
+| Preconditioner: "measure before implementing", two open hypotheses | yes | **agree**, and name the hypotheses and the two experiments: a one-week diagnosis (dominant dropped coupling and dominant resource per deck), then block-pentadiagonal exactness for Er/drift decks and recycling discipline across sweeps, each with a kill criterion written first | the SFINCS-style preconditioner already exists as DKX's default (`coarse_precond.py:916`), so the question is why the route still loses; five of six failures were preconditioner memory, not iterations. |
+| Native Phi1 deferred behind "coupled/error contracts" | deferred | **depart**: Phase 4, with a named W7-X impurity result and an entry criterion | impurity transport with Phi1 is the one full-kinetic capability with a live experimental audience that no competitor has; the compatibility path already reproduces SFINCS Phi1. |
+| yancc | "not a transferable speedup" | agree, and measure it in Phase 1 | positioning must be measured, not argued. |
+| Effort estimates | none | **depart**: person-week ranges per phase, no dates | ordering pressure without dates. |
+| Publications | one methods paper; application paper only if D3 is interesting | methods paper, plus a physics letter whose figure is named now (the closure accuracy map) | the figure defines the work; three design teams have asked for it in print. |
+| Coordinates | keep Boozer/general angle plus Legendre | agree | |
+| Reuse contract: prepared problem plus explicit state; PETSc reuse rules; four ablations | design sketch | agree; adopt as written. The root is already differentiated by the implicit function theorem (`solvax.implicit.root_solve` = `jax.lax.custom_root`, `er.py:909–1037`) with finite-slope and original-equation admission; Optimistix is not needed. | |
+| Verification of low-ν bootstrap current | ladder in B11 | **add** the constraint from Albert et al. 2024: finite `E_r`, `ν*^(3/5)` decay as target; never the `E_r = 0` limit | the off-set current does not converge at `E_r = 0`. |
+| README | 250 to 140 lines, hedged | 100 lines, 590 words, one gradient example, four-code capability table, BibTeX; hedges move to docs; budget enforced by a T1 test | measured against Diffrax, Optimistix, simsopt, DESC; see section 9 rule 12. |
+| Evidence infrastructure | keep extending the campaign runner | **freeze** at what exists | runner, verifier, archive, provenance and supervisor all exist; nothing further until a figure or a reviewer needs it. |
+| Process | "one coherent slice per PR" | thirteen explicit rules with sources: size caps, no untooled stacks, review-capacity budget, CI tiers, ADRs, figure-per-week | section 9. |
+| Stack disposition | "resolve/rebase in order, maintainer work" | agree, with the concrete recipe in section 10 | dry-run verified 2026-09-05. |
+| Multigrid / coarse preconditioner code | audit for duplication | keep all three as alternative inverses of one simplified operator: `coarse` (exact block-Thomas, default), `multigrid` (semi-coarsened V-cycle over θ, ζ, ξ), `sparse` (SuperLU on host); the escalation ladder already tries them in order (`solve.py:1072–1248`) | they are not duplicates; they are the ablation Phase 2 measures. |
+
+## 3. Phase 0: land the stack and freeze (1 week)
+
+Entry: this plan and #189 reconciled into one by the collaborator. Steps:
+
+1. Revert `6db0159f` (#175) and `44a2e864` (#171) on main. Both are superseded by better versions inside the stack (#181 fetches the tested `GITHUB_SHA` from the full-history checkout; #177 integrates the PETSc tokens with the supervised runner). The revert applies cleanly and leaves the stack tip merging with zero conflicts (dry run 2026-09-05).
+2. Merge #169 → #170 → #173 → #174 → #176 → #177 → #178 → #179 → #180 → #181 → #182 → #183 → #184 → #185 → #186 → #187 → #188 in order. Three mid-stack heads (#179, #180, #181 to #183) carry coverage-shard failures that later PRs fix; main is briefly red at those commits and green at the tip. The alternative is one integration merge of the tip; granular history is worth the three red commits.
+3. Leave the `solvax>=0.19.0` floor: every name #188 uses (`GeneratedBlockTridiagFactors`, `block_thomas_factor_fn(store_offdiagonals=False)`, `iterative_refinement`, `linear_solve(has_aux=)`) exists at the 0.19.0 tag. Requalify 0.20.x explicitly rather than by branch.
+4. Close #168 (superseded by #170's supervisor) and #172 (integrated and corrected by #176) with one-line dispositions. Merge the reconciled plan PR last, replacing #189 and this one.
+5. Tag `v2.4.0-rc1`. Freeze evidence tooling. Fix `~/local/dkx`, which sits on the pre-rewrite history.
+
+Exit: main green at the tip tree, no open PR older than this plan, CHANGELOG entry drafted from the stack's PR descriptions (this is where the diary goes).
+
+## 4. Phase 1 — The positioning figure: DKX against SFINCS and yancc at matched resolution (3–4 weeks)
+
+**Why first.** The yancc paper ([Conlin & Landreman 2026](https://arxiv.org/abs/2607.20861)) is now the reference point every reviewer will hold DKX against: full 4D DKE on one A100, NCSX single-species at (n_x, n_α, n_θ, n_ζ) = (7, 121, 43, 65) in 6 GB, about 5× faster than SFINCS on 128 cores at moderate collisionality, agreement within 1% with SFINCS and MONKES. It does not do Phi1, does not find the ambipolar root, and reports no numerical verification of any derivative. Until DKX has a figure on the same problem, every DKX speed claim is unanchored and every "differentiable" claim is undifferentiated from yancc's. This phase produces that anchor and, as a by-product, forces every check #189 lists.
+
+**Figure 1 (methods paper, Fig. "positioning").** One NCSX full-Fokker-Planck single-species case and one two-species case at yancc's published resolutions, plus the W7-X monoenergetic MONKES/yancc case at (N_L, N_θ, N_ζ) = (180, 39, 99). Panels: (a) fluxes and bootstrap current from DKX, SFINCS v3 and yancc with DKX's algebraic error bar `λᵀr` and its Richardson grid estimate drawn on the DKX points; (b) time to accepted observable, cold and warm, CPU (M3 Max) and GPU (A4000), each code at its own converged resolution; (c) peak device/host memory. Discretizations differ (yancc: finite differences in pitch and angles; DKX/SFINCS: Legendre in pitch), so the comparison is at *converged observables*, never at "identical grids" in the literal sense; the figure says so in its caption.
+
+Steps:
+1. Install `yancc` from PyPI (0.0.1; depends on lineax, equinox, interpax, orthax) and pin its commit; reproduce its NCSX (7,121,43,65) and W7-X monoenergetic numbers on the A4000 before touching DKX. If its published numbers do not reproduce within 2× on our hardware, record that and proceed with our measurement only.
+2. Build the DKX cases from the same VMEC/Boozer files; converge each observable separately (theta, zeta, pitch, speed, jointly) with `dkx converge`; record the accepted grid per observable.
+3. Run SFINCS v3 on the office isolated toolchain (PETSc 3.23.6 / MUMPS 5.8.1) at the accepted grid with the right-preconditioned GMRES/MUMPS configuration that #189's evidence found necessary for a valid 1e-10 original residual.
+4. Compute `λᵀr` for every reported linear observable (one transpose solve with the operator's transpose, which every differentiable route already exposes through `_implicit_solve`) and the Richardson estimate from the convergence ladder; these become the error bars. The adjoint solve exists; what is added is the ~50-line utility that forms `λᵀr` per moment and writes it into `Result`, plus its manufactured-solution test.
+5. Measure with the existing supervised runner, pinned SHAs, idle machine, five repetitions, medians with dispersion; cold and warm separately; never DKX solve-only against SFINCS whole-process.
+
+Exit: Figure 1 rendered from tracked inputs by one runner selection; every DKX point carries both error bars; the caption states scope. Kill: none, this phase is mandatory; if DKX loses on time or memory the figure still ships, because a loss with error bars is publishable and a win without them is not.
+
+Effort: 3–4 weeks, one person, mostly measurement and yancc onboarding. No new DKX solver code. Evidence tooling frozen at what exists.
+
+## 5. Phase 2 — Why the Krylov route loses, and two bounded extensions (3 weeks, time-boxed)
+
+**Correction to the first draft of this plan, and to a common assumption.** DKX already implements SFINCS's simplified-operator preconditioner, and it is the default on every deck that leaves the pitch-angle-scattering family: `build_coarse_preconditioner` (`coarse_precond.py:916`) mirrors the Fortran `preconditionerOptions` defaults (self-species, x-diagonal collisions; the Er and drift L±2 terms dropped), inverts that operator *exactly* with a batched block-Thomas factorization over (species, x), eliminates the constraint border exactly by a Schur complement, and is Phi1-aware. `multigrid.py` and `sparse_precond.py` are alternative inverses of the same simplified operator; the Krylov method is SOLVAX's GCROT with a recycle space; the adjoint solve is a cold-started GCROT on the transpose. So "use the exact PAS solve as the preconditioner" is not a proposal, it is the status quo, and the 7-of-23 record and six non-completions are *with* it. #189 was right to say measure first. What the numerics survey adds is a short list of specific, testable reasons the route still loses, and two extensions that follow from them.
+
+**Step 1, one week: the diagnosis.** On the 23 Krylov-route decks and the six failures, log per solve: peak memory of the preconditioner bands and factors versus the operator apply (five of the six failures were OOM while `build_coarse_preconditioner` allocated dense (N_θN_ζ)² bands, 42.9 GB on `filteredW7XNetCDF_2species_magneticDrifts_noEr`; `docs/performance.rst:186–192`); GCROT iterations and restarts; the nonzero mass of `A − M` split by coupling type (field-particle x-coupling of the Fokker–Planck operator, inter-species blocks, |ΔL| = 2 terms from Er xiDot/xDot and tangential drifts, Phi1 border); whether the preconditioner was rebuilt or reused at that point; and the true residual at every restart. Group the decks by which coupling dominates `A − M`. This is instrumentation on data the solver already holds; no algorithm changes. Output: one table, decks × dominant coupling × iterations, which decides steps 2 and 3 and is itself a figure in the methods paper's solver section.
+
+**Step 2, one week: block-pentadiagonal structured solve.** The Er xiDot/xDot terms and the tangential-drift terms couple only |ΔL| ≤ 2 (they carry ξ² factors); the structured route refuses them today (`drift_kinetic.py:1770–1787`) and the coarse preconditioner drops them. Generalizing SOLVAX's block-Thomas kernel from tridiagonal to pentadiagonal in L restores an *exact* direct solve on those decks at roughly four times the tridiagonal factor cost, which on the 744k HSX reference would be about 100 s against the Fortran build's 464 s. Decks whose dominant `A − M` term is |ΔL| = 2 leave the Krylov route entirely. Admission test: on the Er-xDot and magnetic-drift decks, exact residual ≤ 1e-12 and wall time ≤ 5× the tridiagonal solve at matched size; A/B/A/B, pinned SHA, idle machine. Kill: if step 1 shows |ΔL| = 2 is not the dominant dropped coupling on those decks, or the pentadiagonal factor exceeds 5× tridiagonal at the 66k deck, stop and record. Ownership: the generic kernel in SOLVAX, the admissibility check and band assembly in DKX.
+
+**Step 3, one week: recycling discipline in sweeps.** Recycled harmonic Ritz vectors approximate invariant subspaces of the *preconditioned* operator; if M is rebuilt at every Er or ν point the recycle space refers to a different operator and mostly costs orthogonalizations ([Soodhalter, de Sturler & Kilmer 2020](https://arxiv.org/abs/2001.10347); [Parks et al. 2006](https://doi.org/10.1137/040607277)). Today the root driver threads `(x, recycle, precond)` across points when `warm_start=True` (`er.py:154–175, 659`), but `dkx.batch` scans thread nothing and rebuild M per point (`batch.py`), and the adjoint always cold-starts with no recycle space of its own. Changes: hold M fixed over a window of the sweep with a measured refresh rule (SFINCS's `reusePreconditioner`; #189's `T_build` versus expected extra iterations economics); restart the recycle space whenever M changes; keep a separate recycle space for the transpose (the operator is strongly nonnormal, so left and right invariant subspaces differ); solve all drives of a point as one block. An Er sweep is `A(E_r) = S + E_r E + ν C`, not a scalar shift, so shifted-Krylov shortcuts do not apply and validity is empirical: drop the recycle space when its first-cycle residual reduction does not beat no-recycling. Admission test: a 10-point Er sweep of one full-FP deck under four ablations, fixed M with recycling, fresh M with recycling, fixed M without, fresh M without; iterations and wall time per point, values within the observable budget of cold solves. Kill: fixed-M recycling does not reduce total iterations by 1.5× → stop and record.
+
+**Step 4, two days, accuracy not speed: extended-precision refinement on the exact route.** The PAS decks sit at κ ≈ 3e12 (7e9 after Ruiz equilibration), so the forward-error bound is κu ≈ 3e-4 unscaled, 7e-7 scaled. One to three refinement sweeps with an fp64 factor and a compensated double-double residual recover full double accuracy for κu ≪ 1 ([Carson & Higham 2018](https://nhigham.com/2017/07/26/accelerating-the-solution-of-linear-systems-by-iterative-refinement-in-three-precisions/); [Amestoy et al. 2024](https://eprints.maths.manchester.ac.uk/)). About twenty lines on the existing `solvax.refine.iterative_refinement` path; it makes the 1e-10-level agreement claims against SFINCS and DKES defensible rather than lucky.
+
+**Step 5, conditional on step 1, one week: memory-lean preconditioner by default where bands do not fit.** The memory-lean routes exist (`_coarse_factors_fit` keeps only the Schur LU, a third of the bands; `block_thomas_checkpointed_fn` regenerates rows on every application) and the coarse preconditioner has a `factor_dtype` switch. If step 1 confirms memory as the binding loss on the failing decks, make the route choice automatic against the device budget and add fp32 factors after Ruiz equilibration, admissible only for scaled κ ≪ 1e10 (Ruiz-scaled PAS at about 7e9 is borderline; unscaled 3e12 fails). Admission: the six decks complete within the office GPU's 16 GB with original residual ≤ 1e-10. Kill: fp32 factors do not converge under fp64 GMRES-IR on the 2,804 deck after Ruiz → keep fp64 and Schur-only.
+
+**Explicitly not in this phase.** Half precision anywhere in a factor is inadmissible for these operators. The κ ≈ 1e18 Er-xDot decks are numerically singular in double (κu ≈ 1e2); no preconditioner or refinement rescues them, and the fix is formulation (constraint-row and source-column scaling per SFINCS's block structure), diagnosed with a double-double factorization on a small deck. Semi-coarsened multigrid with the exact-in-L solve as plane smoother is built only if step 1 shows iterations growing with resolution; DKX's `multigrid.py` is the starting point. cuDSS through an XLA FFI call (the spineax pattern) is the SFINCS-style general LU fallback on GPU; it is proprietary and NVIDIA-only, and it is deferred until a deck needs it.
+
+Deliverable if any step passes: Figure 2 of the methods paper, iterations and time versus size for the ablation (none / coarse exact / multigrid / pentadiagonal direct / fixed-M recycling), with yancc's published multigrid numbers as the external bar. Deliverable if all fail: the same figure with the losses, and one-page experiment records under `docs/experiments/`.
+
+## 6. Phase 3 — Verified derivatives through the root and through geometry, then one real optimization (5–6 weeks)
+
+**Why this and not more speed.** Derivatives are the claim yancc makes without evidence and NTX proves only for the monoenergetic problem (14× over finite differences at 32 parameters, agreement ~2e-14). DKX's #184 and #188 routed the ambipolar-root and profile derivatives through the differentiable solver with original-equation admission; what does not exist is the *published* check on a real configuration, and the accuracy map that design teams have asked for in print.
+
+**Figure 3.** For one QI configuration (CIEMAT-QI4X or a Goodman-type QI) and one QA with large bootstrap current (Helios-like), at a W7-X-like surface: `dJ_bs/dp_k` and `dE_r/dp_k` for profile parameters and for a handful of boundary Fourier coefficients, from `jax.grad` through the ambipolar root by the implicit function theorem, against central finite differences over a step window and a Taylor-remainder slope near 2; cost ratio AD/FD versus parameter count; cold versus warm agreement. Where Paul et al. ([2019](https://arxiv.org/abs/1904.06430)) published sensitivities for the same quantities, overlay them.
+
+**Figure 4 (the accuracy map).** Bootstrap current from Redl/Sauter via the quasisymmetry isomorphism (what DESC and SIMSOPT use; DESC's own tutorial states it does not apply to non-quasisymmetric fields), from PENTA-style momentum-corrected monoenergetic coefficients, and from DKX full-operator multispecies kinetics, across ν* and E_r on the same three or four real designs (Infinity Two, Helios, Stellaris, W7-X). Saxena et al. ([2025](https://arxiv.org/abs/2507.05166)) frame "how wrong is the analytic closure off-symmetry" as the open question; Infinity Two's design paper iterates SFINCS with VMEC by hand; Stellaris is QI and needs off-Redl verification. This figure is the physics letter, and it uses nothing DKX does not already have except the phase-1 error bars.
+
+Verification design constraint from [Albert et al. 2024](https://arxiv.org/abs/2407.21599): at E_r = 0 the 1/ν off-set current does not converge and oscillates in log ν*; with finite E_r it decays as ν*^(3/5). Every low-collisionality bootstrap ladder in this programme is therefore run at finite E_r, and the ν*^(3/5) decay is itself a code-independent target (Figure 4 inset).
+
+Then the optimization (#189's Deliverable 3, unchanged in substance): fixed equilibrium and prescribed E_r first; a small set of boundary coefficients through VMEX with iota/aspect-ratio/field constraints; full cost per accepted step including the equilibrium; final design recomputed cold at finer resolution and checked against SFINCS on the converged equilibrium as in Saxena et al.
+
+Exit: Figures 3 and 4 rendered from tracked inputs; one optimization with objective improvement exceeding its numerical uncertainty. Kill: if the root derivative fails its Taylor test on a regular branch after two weeks of diagnosis, narrow to prescribed-E_r derivatives and say so.
+
+## 7. Phase 4 — Native Phi1 and a W7-X impurity result (4–6 weeks; entry requires Phase 1 error bars)
+
+#189 defers native Phi1 behind "coupled/error contracts". This plan puts it on the roadmap with a named result, because it is the one full-kinetic capability with a live experimental audience that neither yancc nor MONKES/NTX has: W7-X impurity transport is neoclassically dominated in NBI-heated and turbulence-suppressed scenarios with peaking scaling with Z (Nucl. Fusion 2023; PPCF 2025), and the flux-surface variation of the potential is known to change impurity fluxes at the order-unity level ([Mollén et al. 2018](https://iopscience.iop.org/article/10.1088/1361-6587/aac700); García-Regaña et al. 2017), with the classical channel mattering in optimized stellarators ([Buller et al.](https://arxiv.org/abs/1903.12511)). KNOSOS's Phi1 is low-collisionality only.
+
+**Figure 5.** W7-X standard configuration, bulk ions + electrons + one impurity (C or Fe), impurity particle flux and its convective/diffusive decomposition versus ν* with and without Phi1, DKX native against SFINCS with Phi1, and the impurity `E_r` root shift. GPU, warm scans.
+
+Steps: (1) expose the existing compatibility-path Phi1 through the prepared native objects with the *coupled* residual (kinetic + quasineutrality + gauge) as the admission check, linearized quasineutrality first, block/Schur preconditioner, Newton with Eisenstat–Walker forcing as #189 proposes; (2) reproduce Mollén 2018's impurity result; (3) the scan. Exit: Figure 5 with error bars from the coupled residual. Kill: if the coupled Newton solve does not converge on the W7-X case with the linearized quasineutrality after three weeks, ship the frozen-Phi1 comparison labeled as such.
+
+## 8. Phase 5 — Papers, defined by the figures above
+
+**Methods/software paper (CPC or JCP).** Figures: 1 (positioning), 2 (preconditioner ablation, if Phase 2 passes; otherwise the factor-reuse ablation), 3 (derivative verification), plus the convergence-order figures already in the validation matrix, the SFINCS field-by-field parity table, and the MONKES/YANCC monoenergetic table. The contribution statement is: SFINCS-v3 physics including Phi1 and ambipolar roots, on GPU, with every observable carrying an algebraic and a discretization error bar, and derivatives verified through the root. Not "differentiable GPU neoclassics", which yancc already owns as a phrase.
+
+**Physics letter (Nuclear Fusion or JPP Letters).** Figure 4, the accuracy map of Redl/PENTA/monoenergetic closures against full kinetics on real designs, with the ν*^(3/5) inset, and Figure 5 if Phase 4 lands in time. This is the result three design teams have said in print they need.
+
+Results the community would take up immediately, in the order they become available here: verified `dJ_bs/d(boundary)` inside DESC or SIMSOPT for a QI and a large-J_bs QA; the closure accuracy map; neoclassical Jacobians `∂(Γ_s, Q_s)/∂(∇n, ∇T, E_r)` and the root derivative as a T3D-compatible module (Infinity Two's T3D-GX-SFINCS pipeline has SFINCS as its CPU-only, derivative-free component); GPU Phi1 impurity scans for W7-X. No published neural surrogate of core stellarator neoclassical transport exists as of this survey; a DKX-generated table is a cheap by-product once the scans run, and is deliberately *not* a phase.
+
+## 9. Working method: what changes, and the evidence for each change
+
+The stack that produced #170–#188 was written in one day: 53 commits, 44 files, about 5,900 insertions. At the Cisco/SmartBear ceiling of roughly 500 reviewed lines per hour ([SmartBear](https://smartbear.com/learn/code-review/best-practices-for-peer-code-review/)) that is 12 to 18 reviewer-hours, ten to twenty times over Google's "100 lines is usually reasonable, 1,000 is usually too large" ([Google eng-practices](https://google.github.io/eng-practices/review/developer/small-cls.html)). The work was good; the process made it unreviewable, and an unreviewable stack is a release risk however green its CI. The following rules replace volume with direction.
+
+1. **Figure-first.** The roadmap is the ordered figure list of the two papers (Whitesides: a good outline for the paper is also a good plan for the research programme, [Adv. Mater. 2004](https://www.gmwgroup.harvard.edu/publications/whitesides-group-writing-paper)). Each roadmap item is a figure or table with an owner, a status and an acceptance criterion. Work that maps to no figure and no bug is not scheduled. Every week at least one merged PR adds or upgrades a paper figure.
+2. **PR size cap: at most 400 changed lines and 10 files, one idea per PR, refactor never shares a PR with behaviour.** Above 800 lines the PR is split before review. Generated data and pinned artifacts go in their own PR.
+3. **No stacks without tooling.** Stacks are allowed only with depth at most 3, auto-rebase tooling, and each PR independently mergeable ([Graphite](https://graphite.com/guides/stacked-diffs)). Otherwise finish and merge PR n before opening n+1; at most three open PRs per author. Branch lifetime at most 48 hours ([trunk-based development](https://trunkbaseddevelopment.com/)); incomplete features land behind a flag.
+4. **Agent output is budgeted by review capacity.** One reviewer, two 60-minute sessions a day at 400 lines each is about 800 reviewed lines a day. The agent stops opening PRs when the review queue reaches that, whatever its generation speed.
+5. **Four CI tiers; the PR gate is T1 and takes at most 20 minutes.** T0 lint and unit on every push. T1 touched-module tests, one small SFINCS parity deck, the README example. T2 nightly: the full 38-deck matrix and GPU. T3 on release tags: cross-code, figure regeneration, wheel, Zenodo. A change that cannot be trusted after T1 is too large.
+6. **Three documents, three jobs, hard caps.** `plan.md` holds phases, figures and criteria and never status prose (this document; deletions weekly). `docs/adr/NNNN-*.md` holds decisions, one page each, immutable, superseded by a new ADR ([adr.github.io](https://adr.github.io/)). `CHANGELOG.md` holds what shipped per release ([Wilson et al. 2017](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1005510)). Execution detail lives in PR descriptions; review reports are dated write-once files under `docs/reviews/`.
+7. **Experiments are time-boxed with a written kill criterion before they start.** The record is a one-page file under `docs/experiments/` with hypothesis, admission test, result, decision. Phase 2 is the template.
+8. **Provenance is five fields, not a framework.** Every output records version, git SHA, JAX/jaxlib versions with the x64 flag, `case_id` and command line, device and host ([Taschuk & Wilson 2017](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1005412), rule 10). Paper figures regenerate from `publications/<paper>/make_figures.py` in a pinned environment (the DESC pattern). The supervised runner, verifier, archive and provenance tooling that exist are frozen; nothing further until a reviewer asks.
+9. **Benchmarks follow Hoefler and Belli** ([SC'15](https://htor.inf.ethz.ch/publications/img/hoefler-scientific-benchmarking.pdf)) and the [JAX benchmarking page](https://docs.jax.dev/en/latest/benchmarking.html): absolute times beside every ratio, all decks including losses, median of at least five warm solves after `block_until_ready()`, compile time once per resolution, spread stated, hardware and versions in the caption. Pinned SHA, idle machine, A/B/A/B.
+10. **Verification is labelled by tier everywhere.** Tier A code verification: analytic limits, Onsager symmetry, adjoint-versus-finite-difference. Tier B solution verification: convergence per axis with the criterion stated. Tier C cross-code: SFINCS parity (same discretization, regression) reported separately from MONKES/yancc independence. Tier D validation: W7-X `E_r` with experimental uncertainty. Tier C is never called validation ([Oberkampf & Roy 2010](https://www.cambridge.org/core/books/abs/verification-and-validation-in-scientific-computing/index/EE029CB068531D27); ASME V&V 20).
+11. **Release at every paper milestone and at least monthly**, with tag, changelog, `CITATION.cff` and a Zenodo DOI. Papers cite the tag, not `main`.
+12. **README budget enforced by a T1 test**: at most 150 lines and 900 words, at most two Python blocks of at most 12 lines each (the quickstart that runs `dkx.run`, and one that ends in a gradient), one BibTeX block, and none of "has not", "cannot", "does not yet", "is not converged". Hedges live in the docs quadrant Diátaxis assigns them ([diataxis.fr](https://diataxis.fr/)). Measured exemplars: Diffrax 82 lines / 315 words, Optimistix 83 / 324, simsopt 85 / 403, DESC 137 / 623; DKX on main 250 / 1,508 with no citation block and no `jax.grad`. This test replaces `test_readme_canonical_benchmark_claims_match_recorded_measurements`, which pins fourteen numeric tokens and one sentence of the old README and therefore freezes its shape; the numbers move to `docs/performance.rst`, where the same single-source check applies. Until the collaborator decides, the README in this PR satisfies the existing gate.
+13. **Definition of done for a PR, in at most ten lines:** what changed, why, which CI tier proves it, which figure, ADR or issue it serves; tests and docs in the same PR; a physics change regenerates the affected figure by script and attaches it.
+
+## 10. Disposition of the open PRs
+
+| PR | Disposition | Reason |
 | --- | --- | --- |
-| **1. Trustworthy toroidal calculations** | Consolidate the PR stack; qualify a small PAS/full-FP reference set and a useful native profile/root workflow. | Every advertised observable has original-equation, unit, resolution and model checks; unresolved roots and failed references remain explicit. |
-| **2. Fast repeated calculations** | In-memory prepared solves, state/preconditioner reuse, measured CPU/GPU batching and one selected preconditioner improvement. | A whole scan and value/gradient workload improves at the same accepted accuracy, with bounded memory, cold fallbacks and history-independent answers. |
-| **3. A real design calculation** | VMEX boundary → equilibrium → geometry → DKX objective, first at prescribed Er, then on a regular stellarator root branch. | Independent full-chain derivatives, feasible improvement beyond numerical uncertainty, useful iteration cost and a cold, finer-grid final validation. |
-
-Documentation, examples and removal of duplication are part of each deliverable.
-SFINCS-v3 scientific completeness remains a long-term requirement; it is not
-claimed by this first supported envelope. Native Phi1 and the wider drift models
-follow explicit capability gates below. NEOPAX and ESSOS consume the validated
-interfaces. Mirrors remain last. Do not begin a second active algorithm experiment
-until the first has a measured decision or has been stopped.
-
-## 2. What exists, what changed, and what remains unproved
-
-### Source and review state
-
-At the review snapshot there are **19 open DKX PRs**, no open non-PR DKX issues,
-and one open SOLVAX PR. All checks reported for #188 are successful; this does not
-merge its dependencies or replace required review. The stack has **53 commits,
-44 changed files, 5,935 insertions and 2,820 deletions** relative to the reviewed
-default branch. These are stack totals, not the size of this planning PR.
-
-| Work to retain | Source / review | Remaining boundary |
-| --- | --- | --- |
-| Supervised, resumable benchmark attempts; original residual and complete-output checks; PETSc backend/provenance verification | #169–170, #176–177, #181, #183, #185; `tools/benchmarks/parity_performance_matrix.py` | Fresh installed production replay, valid references and observable/grid admission are still needed. |
-| Static operator layouts, refreshed collision coefficients and native profile preparation | #173–174, #178, #182, #186–187; `drift_kinetic.py`, `collisions.py`, `execution.py`, `er.py` | Profile updates are opt-in and hold geometry, normalization, species, Coulomb log and discrete layout fixed. They do not make `Case.run` a JAX transformation. |
-| Independent batch sharding through JIT and gradients, uneven-batch handling and per-input algebraic status | #179, #182, #187–188; `batch.py`, `api.py` | One whole system remains on one device. Native Case execution does not expose every expert batch option; memory budgets are estimates. |
-| Original kinetic and transpose checks; qualified dense adjoint references; native profile-to-root Taylor tests | #180, #184, #188; `solve.py`, `er.py`, solver/root tests | Small fixed-grid evidence does not establish resolution, branch or geometry uncertainty. Partial state recovery has a different derivative contract. |
-| Generated Schur-factor reuse across RHSs, forward/transpose solves and refinement | #188 `be6506fe`; existing SOLVAX generated-factor API | Factors belong to one solve execution. Persistent reuse across changed operators is not implemented by this change. Full-FP uses the Krylov route. |
-
-Merge preparation must reconcile #168 with its included timeout fix and #172 with
-its included roadmap review, rather than merging duplicate implementations. Review
-the dependent chain #169 → #170 → #173 → #174 → #176 → #177 → #178 → #179 → #180
-→ #181 → #182 → #183 → #184 → #185 → #186 → #187 → #188. Resolve/rebase in order,
-rerun checks on the resulting integration commit, then close superseded PRs with
-an explicit disposition. This is planned maintainer work, not permission to bypass
-protection. SOLVAX [#100](https://github.com/uwplasma/SOLVAX/pull/100) is also
-unmerged; the reviewed local DKX dependency is SOLVAX 0.20.0. Requalify its eventual
-successor rather than silently depending on a branch.
-
-The prior worktree and its paused root-timing edit are absent from their recorded
-local paths. The pushed head was freshly cloned for this review; no recovery or
-commit of that uncommitted fix is claimed. The pushed `find_ambipolar_er` timer
-still needs an outer-clock audit including preparation, final cold admission,
-slope estimation and optional root enumeration. Preserve its cold final solve.
-
-### Useful results, with their limits
-
-The #188 report records 244 distinct CPU cases and 22 GPU cases for its factor
-integration, and native root Taylor orders of 2.00–2.01. On one **7,850-unknown,
-three-field PAS objective**, twelve alternating synchronized pairs reduced warm
-value/gradient medians from **67.59 to 37.09 ms on CPU** and **221.74 to 195.56 ms
-on A4000**; GPU LU calls fell from 288 to 144. CPU used M3 Max/JAX 0.9.2; GPU used
-JAX 0.10.2. These compare two checked routes
-on each host. They are not full-FP, fresh compilation, allocator peak, whole-root,
-whole-optimization or cross-host scaling results. The underlying external traces
-were reported in the prior review; this review does not relabel them as new runs.
-
-Earlier README claims about a 744k HSX case and a broad upstream speed ranking
-are historical, with differing runtime/memory definitions and invalidated
-reference campaigns elsewhere in the record. Retain their evidence in the
-performance documentation; do not use them as an unqualified headline. In
-particular, small algebraic residuals and agreement with a failed Fortran run
-cannot certify a transport observable.
-
-Fresh review evidence is outside Git in `dkx-plan-evidence-20260906`; exact commands,
-inputs, source identities and logs accompany the review PR. Its role is to choose
-work, not to declare a new production benchmark. The initial bounded local pilot
-already reproduced a crucial distinction: a SFINCS full-FP solve reported success
-but its original residual was **1.10e-9 at a requested 1e-10**; DKX's was 8.48e-11.
-A separate direct reference also missed the gate. Neither failed-reference pair is admitted for a
-performance comparison. An initial HSX copy omitted its equilibrium and was
-rejected; its partial DKX state also failed the full residual check. Repair inputs
-and explicitly choose complete-state versus moment-only evidence before rerunning.
-
-A subsequent **right-preconditioned GMRES/MUMPS** run with an unpreconditioned
-stopping norm and inner rtol=1e-13 passed the common original 1e-10 gate: SFINCS
-1.20e-11 and DKX 8.48e-11. On this full-FP grid (5×5 angles, Nxi=6, Nx=3, two species, ramped
-pitch; 654 rows in the constrained Fortran matrix), scaled differences
-were 4.08e-6 for flow, 3.94e-6 for parallel current and below 8.64e-8 for fluxes.
-The PETSc log records one symbolic factorization, one numeric factorization and
-22 factor applications. This establishes a bounded algebraic comparison, not
-grid convergence or a runtime ranking; concurrent review tests exclude performance
-promotion. Solver/norm configuration must therefore be part of reference admission.
-
-| Fresh check on the reviewed source | Result / limit |
-| --- | --- |
-| DKX solver, Er, batch, native execution and planning suites | 248 passed on M3 Max CPU/JAX 0.9.2/SOLVAX 0.20.0; not a full coverage campaign. |
-| Office GPU selection | Four targeted batch/AD/full-state cases passed. The unchanged two-device harness also passed PAS/full-FP states, original residuals, uneven batches, actual placement, JIT gradients and an FD check on two A4000s, JAX 0.10.2. |
-| YANCC at `6f399a21` | 59 preconditioner/solve/collision tests passed locally, including its SFINCS/MONKES fixture comparisons, coordinate representations, warm state and derivative tests. This does not establish comparative runtime or general warm-reuse correctness. |
-| README examples | Native Python and CLI run/inspect pass; Python including the advanced JIT gradient also passes from an isolated DKX install inheriting host dependencies. |
-| Existing independent comparison artifact | All three coefficient rows and external YANCC input hashes pass the offline audit; this is an artifact audit, not three fresh kinetic benchmarks. |
-| Documentation | Five planning/wording checks and standard Sphinx `-W` pass. Extra `-n` reference checking finds 219 warnings in both baseline and revised docs; resolve this existing API-link debt during consolidation. |
-
-### Capability priorities
-
-| Capability | State at the reviewed head | Decision |
-| --- | --- | --- |
-| Analytic, VMEC and Boozer native profiles; PAS and full-FP; prescribed Er and stellarator roots | Implemented in a restricted DKES/no-Phi1 native domain | First supported research envelope; qualify multispecies fluxes **and** current separately. |
-| Prepared native profile/Er sensitivities and expert batching | Implemented with explicit fixed dependencies | Productize and measure, rather than introduce another public interface. |
-| RHSMode 1/2/3, richer trajectories, Phi1, magnetic drifts and distribution export | Broader compatibility/expert support | Preserve regression coverage; a checkmark must distinguish equation, native interface, derivative and validation support. |
-| Native single-surface profiles, transport matrices, explicit Case sharding, Phi1/full drifts | Rejected or incomplete in `execution.py` | Single-surface explicit drives and prepared-scan access are useful near-term interface work; Phi1/full drifts require physics gates, not just removing a rejection. |
-| Real VMEX boundary optimization | Example 08 is an analytic harmonic geometry proxy | Keep it as a teaching example; do not cite it as the design deliverable. |
-
-Extend the existing `validation/capabilities.toml` and SFINCS control inventory
-semantically: collision operators and backgrounds; trajectories/Er terms;
-Phi1/quasineutrality and gauge; geometries/asymmetry/radial conventions;
-RHS modes, sources/constraints and moments; grids/potentials; exports and solver
-controls. The recorded 145 declared namelist controls are an inventory, not 145
-validated scientific features. Map unsupported combinations to explicit reasons,
-references and tests. Do not promise parity with every experimental SFINCS branch.
-
-## 3. What the external codes and literature change
-
-GitHub branch heads, all-state PR/issue bodies and repository-wide issue/review
-comments were inventoried again. Branch comparisons identify divergent code;
-technical review concentrates on equations, preconditioners, adjoints, geometry
-and failures. This is not a claim to have built every branch or verified every
-historical line. Fresh clones of YANCC, MONKES and KNOSOS supplement the existing
-SFINCS-v3 and SOLVAX sources.
-
-| Repository | Branches / PRs / non-PR issues, all states | Findings that affect the decision |
-| --- | --- | --- |
-| [SFINCS](https://github.com/landreman/sfincs) | 39 / 16 / 10 | v3 [`solver.F90`](https://github.com/landreman/sfincs/blob/8df5453472e982df0f6ae005243ce38d57a83711/fortran/version3/solver.F90) reuses preconditioners; `populateMatrix.F90` distinguishes simplified P (0), Jacobian (1), residual f1 action (3) and adjoint operators (4/5). #24 guards MUMPS-specific queries; #25–26 concern root defaults and field scaling. Adjoint, AMG and externalF branches diverge from master. |
-| [YANCC](https://github.com/f0uriest/yancc) | 19 / 97 / 0 | Pinned `6f399a21`: full/monoenergetic DKE, multigrid, line smoothing and reusable initial/recycle state. Merged [#71](https://github.com/f0uriest/yancc/pull/71)/[#79](https://github.com/f0uriest/yancc/pull/79) reduce gauge/collision work, factor storage and smoother cost; open #8/#34/#62 remain proposals. The divergent smoothers branch adds frozen-plane coupling: a candidate to inspect, not a demonstrated DKX improvement. |
-| [MONKES](https://github.com/JavierEscoto/MONKES) | 1 / 0 / 1 | Pinned `4e8281c9`; spectral monoenergetic block elimination and database/transport tooling. A fresh bounds-checked local build succeeded, then a 7×9×12 W7-X smoke run failed at `DKE_BTD_Solution_Legendre.f90:105`: S1 extent 7 versus vm extent 8. This is distinct from the reader issue #1; no new numerical reference is admitted. |
-| [KNOSOS](https://github.com/joseluisvelasco/KNOSOS) | 3 / 0 / 4 | Orbit-averaged transport, tangential drifts and linearized surface potential; `amb_and_qn.f90` exposes the coupled workflow. Bounds issue #3 and build/usage requirements matter for an eventual reference. At `5134a9eb`, a serial bounds-checked build linked with local NetCDF/FFTW, but a bounded LHD monoenergetic smoke run stopped at `configuration.f90:91` (`bvco_b(0)` below lower bound 1). No transport/Phi1 comparison is admitted. |
-| [SOLVAX](https://github.com/uwplasma/SOLVAX) | 15 / 86 / 14 | Generated factors/refinement, recycled Krylov and implicit primitives already exist. Read #63's refresh-calibration problem and #56–58's window limitations; do not schedule their assumptions as established certificates. |
-
-Downstream inventories cover NEOPAX (19/11/3), ESSOS (53/60/5), VMEX (48/278/3)
-and NTX (9/24/1). Their open interfaces are dependencies, not delivered DKX
-features. Full inventories and relevant diffs remain external to keep the repo light.
-
-The [YANCC paper](https://arxiv.org/html/2607.20861v1) makes differentiable GPU
-neoclassics an existing comparison standard. Its important lesson is the joint
-choice of discretization and preconditioner, not a transferable speedup factor.
-Its general surface angles also show that Boozer coordinates are not obligatory.
-[MONKES](https://arxiv.org/html/2312.12248v2) supports retaining DKX's efficient
-Legendre structure where the physics permits it. [KNOSOS](https://arxiv.org/abs/1908.11615)
-supports a reduced model for a specified low-collisionality regime, not wholesale
-replacement of multispecies full-FP transport. The [SFINCS trajectory study](https://arxiv.org/abs/1312.6058)
-requires explicit finite-Er and momentum-conservation limits; agreeing reduced
-models cannot validate omitted physics.
-
-## 4. Deliverable 1: establish a trustworthy calculation
-
-First finish the stack review and fix evidence plumbing that prevents meaningful
-comparisons. The campaign must request full recovery when checking the original
-state equation; it must not confuse deliberately zero-filled Legendre tails with
-solver failure or certify them as complete distributions. Moment-only algorithms
-can remain useful, but require their own reduced-system/observable certificate.
-
-Use **four representative families**, adding points only to resolve a concrete
-uncertainty. Each has a fast verification grid and a separately converged research
-grid; a smoke grid is never silently promoted.
-
-| Family | Required physics and measurements | Independent anchor |
-| --- | --- | --- |
-| Analytic/axisymmetric tokamak | PAS and multispecies full-FP; prescribed Er; particle/heat flux, parallel flow, bootstrap/conductivity; NZeta=1 versus resolved symmetry | Collision invariants, Spitzer–Härm/full-FP and applicable tokamak limits; SFINCS v3 |
-| One structured stellarator and one W7-X surface | PAS/DKES monoenergetic coefficients at zero and finite Er; sign/normalization/Onsager conventions; selected thermal convolution | MONKES/YANCC in matched equations; existing Beidler-normalized fixtures |
-| Multispecies stellarator profile | Full-FP, independent n/T drives, finite Er, ion/electron currents and regular root branch | SFINCS/YANCC; native SI versus expert normalized path; independent cold roots |
-| A bounded hard case | Existing finite-Er current sign-changing grid ladder and warm cross-surface discrepancy, then one Phi1/drift case when that model is admitted | Original inputs from #160–161, refined referee, appropriate trajectory/Phi1 literature |
-
-For each published quantity Q, define a physical scale and an application tolerance
-`atol_Q + rtol_Q * |Q|`. Budget algebraic, grid/quadrature, root and geometry errors
-separately. A reasonable initial allocation is no more than 10% of the observable
-budget to linear/nonlinear algebraic error; calibrate it, rather than choosing a
-universal residual tolerance. Use absolute scales for near-zero current/flux.
-For a simple root, propagate current uncertainty through `|dJr/dEr|`; if the slope
-is too small or the error overlaps another branch, report unresolved/marginal.
-
-Mathematical verification includes independently derived manufactured forcing and
-moments, Fourier derivative symbols, Maxwell/Gamma quadrature identities, active
-layout and border identities, nonsymmetric transpose dot tests, collision number,
-combined momentum/energy conservation and nullspace/gauge checks. Preserve existing
-proofs rather than rewrite them to mirror the implementation. Full-FP conductivity
-is a different test from the existing Lorentz `8/sqrt(pi)` result. For linear
-`Q=cᵀx`, `Aᵀlambda=c` and `r=b-Ax`, the exact discrete identity is
-`Q_exact-Q_computed=lambdaᵀr`; approximate adjoints need an error allowance.
-This neither proves grid convergence nor identifies the cause of every discrepancy.
-
-Refine theta, zeta, pitch, speed, Rosenbluth resolution, geometry Fourier truncation
-and relevant radial/Phi1 grids both separately and jointly. Compare current and
-each species' flux independently. The historical Er=15 pitch ladder changes the
-sign of current; it is not fixed by a tighter Krylov residual alone. Recover the
-exact #161 source/target pair before attributing its 2.46% difference to conditioning.
-If it cannot be recovered, keep it unresolved and construct a new identified
-adversarial pair. Do not substitute the latter as a reproduction.
-
-Source inventory at this head: 60 production Python files / 49,405 lines;
-177 test Python files / 49,504 lines; 82 tool Python files / 29,329 lines.
-A separate untouched full remote clone measures 33.43 MiB allocated on this
-filesystem, including 16.26 MiB `.git`, above the 20 MiB target. The tested working
-checkout also contains generated files and is not used for that clone measurement.
-These counts identify consolidation opportunities, not a reason to delete physics.
-
-**Exit:** the supported toroidal domain, representative decks and per-observable
-tolerances are recorded; a valid reference and a convergence ladder support each
-advertised result; root branch/slope and original primal/transpose checks accompany
-derivatives. The installed native and compatibility paths agree in physical units.
-Failed cases are retained in the denominator. A broad all-deck sweep is unnecessary
-until this smaller set produces interpretable results.
-
-## 5. Deliverable 2: make repeated solves cheap
-
-### An in-memory reuse contract, not another restart subsystem
-
-Extend the existing `ErProblem`, `ErSolveState`, `solve` and SOLVAX factor/recycle
-objects. The intended expert interface is a prepared, immutable physical problem
-plus explicit reusable state passed in and returned from Python/JAX. The following
-is a **design sketch, not an implemented API**:
-
-```python
-prepared = prepare(case, layout=fixed_layout)
-result, state = evaluate(prepared, profiles, er, state=state)
-value, gradient = objective_and_grad(prepared, parameters, state=state)
-```
-
-File I/O is unnecessary for optimization. Disk checkpoints are an optional later
-serialization of physical state and provenance, not the first implementation.
-Keep reusable arrays as bounded pytrees; do not accumulate every iteration's
-factors or diagnostics in a closure. State owns its device, dtype, layout,
-physical dependency identity, constraints/gauge, previous iterate, recycle space
-and preconditioner metadata. Rejected optimizer trial states must not overwrite
-the accepted continuation state. A geometry/profile change can preserve layout
-and compilation while still requiring all affected coefficients to refresh.
-
-| Reused item | Validity / action |
-| --- | --- |
-| Compiled executable, quadrature and symbolic structure | Reuse for matching shapes, dtype, static model/layout and device contract. Changing n/T/Er is not automatically a retrace; changing active pitch topology is. |
-| Numerical factors | Exact solver only for the same numerical operator, border and constraints, including changed collision/geometry dependencies. RHS-only changes can share factors. Otherwise use as an **approximate preconditioner**, or refactor. |
-| Distribution / Phi1 / Er | Initial guess or branch predictor, never an accepted result by identity alone. Interpolate only through an explicit geometry/grid map and recheck physical constraints. |
-| Recycle basis | Recompute its image under the new original operator; reorthogonalize and discard dependent/stale vectors. A small parameter step is not a validity certificate. |
-| Lagged preconditioner | Permit nearby changed systems while true residuals converge; refresh on loss of convergence, measured extra work, memory pressure or changed constraints/layout. Keep forward/transpose use explicit. |
-
-[PETSc's successive-system rules](https://petsc.org/release/manualpages/KSP/KSPSetReusePreconditioner/)
-and [maintainer explanation](https://lists.mcs.anl.gov/pipermail/petsc-users/2022-October/047018.html)
-make this distinction explicit. [GCRO-DR](https://doi.org/10.1137/040607277) motivates
-recycling; SOLVAX's implementation still needs calibration on DKX sequences.
-Compare four ablations on exactly the same sequence: compilation only; plus x0;
-plus recycle; plus lagged P. Separately test repeated RHSs with an unchanged A.
-Record setup/apply/matvec/orthogonalization/adjoint work, cache rebuilds and peak
-storage, including large rejected steps, branch changes and species/grid changes.
-
-Select refresh by measured economics: if rebuilding costs `T_build`, compare it
-with the expected extra iterations times `T_apply + T_matvec + T_orth` over the
-remaining reuse horizon. Use a bounded diagnostic and a cold fallback, not a
-universal distance threshold. At least one full-FP n/T sequence and one stellarator
-Er/root sequence must agree with independent cold solves within the observable
-budget. Replay forward, reverse and permuted sequences: the answer must not depend
-on history. Short memory ownership tests must include failed/rejected evaluations.
-
-### Differentiation and coupled potential
-
-Differentiate the **converged equations**, not cache decisions or a fixed number
-of unconverged iterations. For `F(u,p)=0`, the adjoint solves
-`F_uᵀ lambda=Q_uᵀ`, giving `dQ/dp=Q_p-lambdaᵀF_p`. Warm guesses and lagged P can
-be detached from AD while physical coefficients remain differentiable, provided
-the primal and adjoint solve the intended equations accurately. This is the
-[JAX custom-linear-solve contract](https://docs.jax.dev/en/latest/_autosummary/jax.lax.custom_linear_solve.html),
-not permission to ignore residuals. Test JVP/VJP, two or more FD steps, quadratic
-Taylor remainders above the noise floor, and cold/warm derivative agreement.
-[Paul et al.'s neoclassical adjoint work](https://arxiv.org/abs/1904.06430)
-already includes root acceleration; evaluate safeguarded Newton continuation
-against the existing Brent search, charging every slope evaluation and retaining
-bracket fallback and cold final verification. Root selection switches are not smooth.
-
-For Phi1, the eventual state is `u=(f, Phi1, source/gauge variables)` and, when
-appropriate, Er. Reuse both f and Phi1, but certify the **coupled** kinetic,
-quasineutrality and gauge residual. A kinetic solve with frozen Phi1 is not the
-coupled derivative. Start with linearized quasineutrality and a block/Schur
-preconditioner; qualify nonlinear Newton/line-search behavior and potential gauge
-before native promotion. Reuse the existing compatibility implementation first.
-[PETSc SNES lagging](https://petsc.org/release/manualpages/SNES/SNESSetLagPreconditioner/)
-and [Eisenstat–Walker forcing](https://users.wpi.edu/~walker/Papers/forcing_terms%2CSISC_17%2C1996%2C16-32.pdf)
-suggest avoiding oversolved early Newton steps. Use existing SOLVAX support where
-available; tighten terminal primal/adjoint accuracy to the observable budget.
-This coupled extension follows the no-Phi1 reuse contract, not a parallel rewrite.
-
-### Preconditioners and MUMPS: adopt mechanisms, measure before implementing
-
-DKX owns the physics approximation P and its constraints; SOLVAX owns elimination,
-Krylov, refinement, recycling and reusable parallel algebra. The expensive
-full-FP route drops species/speed and some trajectory couplings in P. At difficult
-parameters this can require many iterations; dense angular blocks also make P
-expensive to store and apply. Both hypotheses are measurable, not universal causes.
-
-1. **First retain the implemented factor sharing**, then measure triangular solves,
-   border/RHS batching, callbacks and transfers at the complete objective level.
-   Avoid reconstructing a factor in every transpose or correction. Consider a
-   narrower host diagnostic transfer only if failure information remains complete.
-2. **Compare the same A and the same simplified P with PETSc/MUMPS/SuperLU_DIST.**
-   Record ordering, nnz(A/P), nnz(L+U), scaling, pivot tolerance, symbolic analysis,
-   numeric factorization, forward/transpose solve and multiple RHS cost. Include
-   aggregate rank memory and startup. Do not compare factoring P with factoring A,
-   or PETSc solve-only time with DKX compilation plus setup. Reuse symbolic structure
-   separately from numeric factors. Repair the reference build when required.
-3. **Choose one bounded improvement from the measured bottleneck.** If application
-   dominates, test compact/batched factor application. If iteration growth dominates,
-   retain the missing speed/species coupling in a coarse correction or test a
-   line/block smoother on a coarse discretization. Preserve the fine physical
-   operator and its nullspace; a coarse upwind P need not replace the fine scheme.
-   Stop the experiment if setup-inclusive scan/gradient cost and accepted memory
-   do not improve. No automatic escalation to a second discretization project.
-
-The [MUMPS 5.9.1 guide](https://mumps-solver.org/doc/userguide_5.9.1.pdf) describes
-separate analysis/factor/solve phases, pivoting, refinement and optional block
-low-rank compression. [SuperLU_DIST](https://github.com/xiaoyeli/superlu_dist)
-uses distributed supernodal methods with build-dependent accelerator support.
-These are substantial sparse solver infrastructures. The fresh 654-row full-FP dump illustrates the distinction:
-with the same COLAMD/SuperLU settings, simplified P has 10,070 nonzeros and
-42,634 factor entries; the original A has 12,995 nonzeros and 199,337 factor
-entries. Natural ordering increases the latter to 321,174. These are storage
-counts on one identical layout, not MUMPS/DKX timings or an accuracy certificate.
-A separate uniform-layout dump is excluded from this comparison.
-
-Reimplementing MUMPS in
-DKX would duplicate years of work and mix algorithms into the physics layer.
-Use these backends as references and, if useful, optional SOLVAX integrations;
-a CPU reference need not become a GPU dependency. BLR/mixed precision are deferred
-until kinetic factor ranks and refinement convergence justify them. Elliptic-PDE
-compression results do not establish compressibility of these nonsymmetric matrices.
-
-### Measure the work users actually pay for
-
-Time preparation → all kinetic/root/Newton evaluations → moments → backward pass
-→ acceptance, synchronizing arrays **and diagnostic effects**. Also separate process
-startup, empty-cache compile, persistent-cache load, warm solve and reuse modes.
-Use at least five unprofiled repetitions/pairs after checking stable load; retain
-samples, median and dispersion. Include failed solves, line searches and rebuilds.
-Peak RSS, aggregate MPI memory, allocator peak VRAM and compiler temporary estimates
-are separate quantities. Do not sum nested PETSc events or overlapping GPU intervals.
-
-Follow [JAX profiling guidance](https://docs.jax.dev/en/latest/profiling.html):
-coarse named regions first, then XPlane/Perfetto and HLO/XLA/kernel inspection of the
-identified bottleneck. Check trace completeness/event caps; do not infer occupancy
-or speed from a capped trace or HLO operation count. Keep TensorBoard/XProf/Perfetto
-artifacts outside Git. Profiled runs diagnose; unprofiled runs establish runtime.
-
-CPU policy compares thread counts and a small process pool with controlled BLAS/XLA
-threads and per-process memory. Logical JAX CPU devices share resources; they are
-not extra CPUs. GPU policy compares serial continuation against independent batches
-on one/two physical A4000s, including compile and transfers, uneven sizes, gradient
-placement and failure propagation. Nearby points may benefit more from serial warm
-reuse than simultaneous cold solves; group related points into resident sequences
-only if that measured tradeoff wins. Use strong/weak scaling for independent work;
-state partitioning and multi-host collectives are deferred.
-
-**Exit:** an installed native scan and a complete value/gradient/root workload
-show a reproducible benefit at fixed accepted accuracy. As a decision target,
-seek ≥20% end-to-end improvement or ≥2× lower measured peak memory on the identified
-bottleneck, with no loss of admitted cases; otherwise keep the simpler baseline.
-Targets are not promised results. Demonstrate cold fallback, bounded memory and
-no unintended recompilation for supported parameter updates on CPU and GPU.
-
-## 6. Coordinate choices and the actual optimization deliverable
-
-A coordinate change can simplify streaming or geometry preparation, but it also
-changes grids, Jacobians, collision representation and boundary conditions. It is
-not an algebraic cure for missing physics or an unresolved trapped/passing layer.
-
-| Option | Potential benefit | Cost / decision |
-| --- | --- | --- |
-| Existing Boozer/general surface-angle geometry with Legendre pitch | Preserves working block structure and compatibility; existing VMEC geometry avoids requiring every input to be Boozer transformed | **Default.** Audit the geometry tensor/weight contract and its derivatives. |
-| Direct VMEX/VMEC or DESC surface angles | Could avoid an expensive coordinate transform and its derivative in optimization | Use the existing general-geometry path where valid. Compare the same equilibrium, surface moments and shape derivative in two representations before choosing the adapter. No new solver backend is required merely to change the input representation. |
-| Field-aligned `(alpha,l)` | Simplifies parallel streaming, may aid a line preconditioner | Global toroidal periodicity, rational surfaces and cross-field ExB coupling remain. Defer a solver rewrite; reconsider only if measured angular coupling dominates after P improvements. |
-| Pitch angle `alpha=acos(xi)` with finite differences | YANCC-style regular endpoint handling and line smoothing | Loses the present simple Legendre collision/block structure and introduces new resolution/error tradeoffs. At most test it in P if justified; defer replacement of the fine operator. |
-| Bounce coordinates / orbit averaging | Removes a fast coordinate for selected low-collisionality objectives | Model/order restrictions, well creation/merging and singular quadrature require separate evidence. Use an external reduced objective for screening if useful, then verify with DKX. Do not claim full-FP/Phi1 parity from it. |
-
-The [differentiable bounce-averaging study](https://arxiv.org/html/2412.01724v2)
-demonstrates that useful reduced objectives can be differentiated; it does not
-make a bounce-averaged model equivalent to DKX's full local problem. The
-[NEO-2 bootstrap-limit study](https://arxiv.org/abs/2407.21599) also cautions against
-using a universal low-collisionality asymptote without the stated precession and
-ripple conditions. Both support a validity-based choice, not more active branches.
-
-Deliver the real optimization in three steps within one existing example family:
-
-1. Use a verified fixed equilibrium, explicit n/T profiles and prescribed Er.
-   Validate profile and geometry derivatives independently, including radial
-   coordinate, Fourier truncation and metric/Jacobian derivatives. Extend the
-   adapter already used by VMEX; pin the actual dependency and equilibrium residual.
-2. Optimize a small set of **boundary coefficients** through the equilibrium solve
-   and DKX transport/current objective with explicit aspect-ratio, iota, field and
-   geometric feasibility constraints. Report the full cost per accepted step,
-   rejected steps and compilation. Compare AD with finite differences over several
-   parameter counts at equal error; a harmonic field-amplitude descent is insufficient.
-3. Add regular-branch stellarator ambipolar response, then self-consistent bootstrap
-   current/equilibrium coupling. Differentiate the coupled fixed point or converge
-   and validate its implicit Jacobian; freezing the equilibrium current omits part
-   of the derivative. Keep a prescribed-Er tokamak example. Use
-   [direct neoclassical optimization](https://arxiv.org/abs/2406.04147) and
-   [bootstrap-consistent equilibrium optimization](https://arxiv.org/abs/2205.02914)
-   as comparison designs, not claims that DKX already reproduces them.
-
-**Exit:** objective improvement exceeds its numerical uncertainty, constraints are
-satisfied, full-chain Taylor/FD tests pass on smooth branches, and the final design
-is recomputed cold at finer resolution with an independent transport/current
-reference. Charge the equilibrium and coordinate transformation to the timing.
-Stop and narrow the parameter/physics domain if the derivative or model is invalid;
-do not silently freeze it to preserve a descending objective.
-
-NEOPAX integration then needs a small in-memory protocol for species order,
-radial centers/faces, SI fluxes and Jacobians, boundary conditions, validity and
-refresh. Check transport conservation and lagged-response error before claiming a
-transport simulation. NTX is a candidate monoenergetic database producer; avoid a
-second database framework until its normalization/interpolation/restart contract
-is compared with DKX's existing one. ESSOS first realizes coils for an accepted
-target with field-error, length, curvature, distance and current constraints.
-Arbitrary coil fields need not possess nested surfaces. Joint plasma/coils and
-open-field-line mirror optimization follow their own physical validity gates.
-
-## 7. Documentation, examples and deliberate reduction
-
-The README should contain one runnable start, a short feature/results summary and
-an easy-to-advanced workflow map. Remove categorical SFINCS/AD/GPU claims and
-multiple historical timing narratives. Keep scope beside each result. The docs
-landing page should route readers by task; remove its duplicate performance table
-and universal “runs in seconds” claim. Preserve existing URLs while consolidating.
-
-| Existing material | Canonical destination / action |
-| --- | --- |
-| `installation`, `examples`, first-run parts of `usage` | Tutorials: first physical result, convergence, gradients; examples remain executable sources. |
-| `case_files`, `applications`, `optimization`, `vmex_workflow`, `parallelism`, troubleshooting | How-to: one guide per user task; combine overlapping optimization instructions after the real adapter exists. |
-| `physics_models`, `system_equations`, `physics_reference`, `theory_from_upstream`, `method`, `numerics` | Explanation: one model/units/constraints derivation and one numerical-method explanation; keep independent citations and applicability. |
-| `api`, `cli`, `inputs`, `outputs`, `normalizations`, `capabilities`, `feature_matrix` | Reference: schemas/status generated from the existing definitions; link instead of copying a second capability matrix. |
-| `performance`, `validation_matrix`, `parity`, `fortran_comparison`, `research_lanes` | Evidence: accepted results versus historical/experimental records; archive a superseded experiment, do not present it as a second roadmap. |
-
-Reuse the nine numbered examples. Keep 01–03 for analytic/VMEC/Boozer profiles,
-04 for the documented monoenergetic path, 05 for root evidence, 06 for convergence,
-07 for gradients, 08 explicitly labeled geometry proxy until the real boundary
-example replaces it, and 09 for qualified Phi1/impurity comparisons. Add warm/batch
-options to the relevant examples and guides rather than another numbered gallery.
-Each needs editable profiles/geometry/resolution, units, model scope, expected
-qualitative result, a quick mode and a checksummed research case with measured
-resource requirements. Do not imply all nine support native Case execution.
-
-Students should reach a plot and a readable physical summary in one command, then
-see why a small residual is not grid convergence. Researchers should be able to
-replace equilibrium/profiles and run convergence, repeated solves and gradients
-without copying internal code. Examples must expose rejected points, root scope,
-error bars and SI conventions, not connect invalid entries as real data.
-
-Audit duplication in `solve.py`, `coarse_precond.py`, `multigrid.py`, geometry and
-workflow orchestration before creating helpers. Keep one physics assembly and one
-solver policy; generic new algorithms belong in SOLVAX. Remove obsolete paths only
-after preserving meaningful assertions, not by deleting difficult tests. Report
-source/test/tool/doc file counts, physical lines, tracked bytes, fresh-clone size,
-wheel and installed-owned size separately. Dependencies still count in user setup
-cost. Preserve the <20 MiB owned-artifact/fresh-clone targets and soft 45k production
-line target as visible debt where missed, without forcing unrelated modules into
-one file or silently changing measurement definitions. No history rewrite is planned.
-
-The 95% line/branch goal remains a ratchet for stable reachable code, not a reason
-to manufacture tests or postpone an urgent scientific correction. Run focused
-mathematical/physics tests per change, installed examples and warning-clean docs;
-reserve large external/GPU campaigns for relevant changes. Keep compact inputs,
-checksums, commands and result summaries in Git; raw states, traces and build trees
-belong in an archive. Verify retrieval before pruning an artifact that underpins
-an advertised result.
-
-## 8. Deferred work, publications, and the next PRs
-
-Defer a new fine-grid coordinate/discretization backend; MUMPS reimplementation;
-BLR/mixed precision without measured kinetic evidence; learned/Nyström/PINN
-preconditioners; unqualified truncated-adjoint windows; multi-host/state-decomposed
-execution; new database frameworks; joint coils/plasma optimization; and mirrors.
-Existing useful experimental APIs can remain clearly labeled. A deferred item
-reopens only with a named user calculation the active deliverables cannot serve,
-a bounded experiment and a measurable decision. Native Phi1/full drifts are
-scientific completeness work after the corresponding coupled/error contracts,
-not abandoned physics or an excuse to claim SFINCS parity early.
-
-The next implementation PRs should be concrete and sequential:
-
-1. **Integrate and qualify the baseline:** reconcile the existing PRs, close the
-   root-timing scope defect, request appropriate full states in the benchmark
-   runner, archive valid reference inputs/toolchains, and publish the four-family
-   observable/error table. Avoid a full campaign while its pairs remain invalid.
-2. **Expose safe reuse through existing prepared objects:** first unchanged A and
-   changing RHS, then full-FP n/T and regular Er continuation; cold/warm values,
-   derivatives, rejected-trial ownership, invalidation and memory are its tests.
-3. **Optimize one measured bottleneck:** choose factor application or a stronger
-   physics P from the ablations; include the complete scan/gradient benchmark,
-   CPU thread/process policy and one/two-GPU results. Stop if it does not pay off.
-4. **Replace the optimization proxy with the real dependency chain:** prescribed
-   Er first, root and bootstrap coupling only after their respective checks.
-   Improve the existing guides/examples in each PR, not in a final documentation dump.
-
-Estimate implementation effort only after the first baseline identifies reference,
-physics and dependency blockers. Do not promise a date or spend unlimited runtime
-recovering one historical input. Bound attempts and retain failure information;
-a smaller honest supported domain is more useful than a nominally complete matrix.
-
-Prepare **one methods/software paper** from deliverables 1–2: stated equations,
-independent mathematics/physics benchmarks, full-FP versus reduced-model scope,
-error-controlled derivatives, warm reuse, CPU/GPU throughput, whole-workflow cost,
-memory and failures. Differentiable GPU neoclassics alone is no longer a novelty
-claim. Its strongest possible contribution is reliable reuse and measured design
-throughput at accepted physical accuracy. A separate application paper is warranted
-only when deliverable 3 yields a scientifically interesting independently validated
-design, not merely because another example exists.
-
-**No new release until the open PRs are merged or explicitly resolved and the most
-important supported-scope goals above are achieved.** Then verify the exact installed
-wheel/sdist/dependencies, all required checks/reviews, documentation commands,
-scientific envelopes and archived figure provenance. Report remaining experimental
-capabilities honestly. All commits use author and committer `rogeriojorge`; keep
-user work and unrelated repositories intact. Completion updates this decision plan,
-existing capability/evidence registries and canonical docs together; it does not
-append another chronological execution diary.
+| #168 | close | superseded by #170's process-group supervisor |
+| #169 | merge first | the base of the stack; its plan is replaced by the reconciled plan at the end |
+| #170, #173, #174, #176, #177, #178, #179, #180, #181, #182, #183, #184, #185, #186, #187, #188 | merge in order after the two reverts | tip green 23/23; each is R0–R2 or B10 machinery, none is experimental |
+| #171 (merged) | revert | superseded by #177 |
+| #172 | close | integrated by #176, which corrected four of its conclusions; those corrections are accepted |
+| #175 (merged) | revert | superseded by #181 |
+| #189 | reconcile with this PR into one authoritative plan; close both in favour of it | |
+| SOLVAX #100 | requalify when released; do not depend on a branch | #189's note stands |
+
+
+## 11. References (verified by fetch during the 2026-09-06 survey unless marked UNVERIFIED)
+
+### Neoclassical codes, benchmarks and physics
+- Landreman, Smith, Mollen, Helander, "Comparison of particle trajectories and collision operators for collisional transport in nonaxisymmetric plasmas", Phys. Plasmas 21, 042503 (2014), DOI 10.1063/1.4870077, arXiv 1312.6058 https://arxiv.org/abs/1312.6058
+- SFINCS repository, landreman/sfincs; input.namelist symlink page https://github.com/landreman/sfincs/blob/master/fortran/version3/input.namelist ; issue #1 quoting preconditionerOptions (F) https://github.com/landreman/sfincs/issues/1
+- Mollen, Landreman, Smith, Braun, Helander, "Impurities in a non-axisymmetric plasma: transport and effect on bootstrap current", arXiv 1504.04810 https://arxiv.org/abs/1504.04810
+- Mollen, Landreman, Smith, Garcia-Regana, Nunami, "Flux-surface variations of the electrostatic potential in stellarators: impact on the radial electric field and neoclassical impurity transport", PPCF 60, 084001 (2018) https://www.osti.gov/biblio/1499870
+- Garcia-Regana et al., "Electrostatic potential variation on the flux surface and its impact on impurity transport" (2017) https://www.researchgate.net/publication/271079728_Electrostatic_potential_variation_on_the_flux_surface_and_its_impact_on_impurity_tran
+- Buller et al., "The importance of the classical channel in the impurity transport of optimized stellarators", J. Plasma Phys., arXiv 1903.12511 https://arxiv.org/html/1903.12511
+- Paul, Abel, Landreman, Dorland, "An adjoint method for neoclassical stellarator optimization", arXiv 1904.06430 https://arxiv.org/abs/1904.06430
+- Paul, Landreman, Antonsen, "Adjoint methods for stellarator shape optimization and sensitivity analysis", arXiv 2005.07633 https://arxiv.org/pdf/2005.07633
+- Paul et al., "Adjoint approach to calculating shape gradients for three-dimensional magnetic confinement equilibria" https://www.osti.gov/pages/biblio/1597704
+- Paul et al., "Adjoint methods for quasisymmetry of vacuum fields on a surface", arXiv 2108.11433 https://arxiv.org/pdf/2108.11433
+- Conlin, Landreman, "yancc: A GPU-accelerated, differentiable solver for neoclassical transport in tokamaks and stellarators", arXiv 2607.20861 (F abstract and full text) https://arxiv.org/abs/2607.20861 ; https://arxiv.org/html/2607.20861
+- yancc repository https://github.com/f0uriest/yancc
+- Escoto, Velasco, Calvo, Landreman, Parra, "MONKES: a fast neoclassical code for the evaluation of monoenergetic transport coefficients", Nucl. Fusion, DOI 10.1088/1741-4326/ad3fc9, arXiv 2312.12248 (F abstract and full text) https://arxiv.org/abs/2312.12248 
+- MONKES repository (F, from paper) https://github.com/JavierEscoto/MONKES/
+- Escoto Lopez, PhD thesis, "Fast and accurate calculation of the bootstrap current and radial neoclassical transport in low collisionality stellarator plasmas", arXiv 2510.27513 https://arxiv.org/abs/2510.27513
+- "Evaluation of neoclassical transport in nearly quasi-isodynamic stellarator magnetic fields using MONKES", arXiv 2410.17836 https://arxiv.org/pdf/2410.17836
+- NTX repository, uwplasma/NTX https://github.com/uwplasma/NTX
+- Velasco, Calvo, Parra, Garcia-Regana, "KNOSOS: a fast orbit-averaging neoclassical code for stellarator geometry", J. Comput. Phys. (2020), DOI 10.1016/j.jcp.2020.109512, arXiv 1908.11615 https://arxiv.org/abs/1908.11615
+- "Fast simulations for large aspect ratio stellarators with the neoclassical code KNOSOS", arXiv 2106.01727 https://arxiv.org/pdf/2106.01727
+- Hirshman, Shaing, van Rij, Beasley, Crume, "Plasma transport coefficients for nonsymmetric toroidal confinement systems", Phys. Fluids 29, 2951 (1986) https://pubs.aip.org/aip/pfl/article-abstract/29/9/2951/944354/ ; OSTI (S) https://www.osti.gov/servlets/pu
+- van Rij, Hirshman, "Variational bounds for transport coefficients in three-dimensional toroidal plasmas", Phys. Fluids B 1, 563 (1989) https://pubs.aip.org/aip/pfb/article-abstract/1/3/563/940728/
+- "Modelling of relativistic electron transport with non-relativistic DKES solver", J. Plasma Phys. (2024) https://www.cambridge.org/core/journals/journal-of-plasma-physics/article/modelling-of-relativistic-electron-transport-with-nonrelativistic-dkes-solver/A
+- Spong, "Generation and damping of neoclassical plasma flows in stellarators", Phys. Plasmas 12, 056114 (2005) https://pubs.aip.org/aip/pop/article/12/5/056114/1015589/
+- "Three-dimensional equilibria and transport in RFX-mod: A description using stellarator tools", Phys. Plasmas 18, 062505 (2011) https://pubs.aip.org/aip/pop/article-abstract/18/6/062505/387754/
+- Kernbichler et al., "Recent progress in NEO-2 - a code for neoclassical transport computations based on field line tracing", Plasma Fusion Res. 3, S1061 (2008) https://www.jstage.jst.go.jp/article/pfr/3/0/3_0_S1061/_article/-char/en
+- Kernbichler, Kasilov, Kapper, Martitsch, Nemov, Albert, Heyn, "Solution of drift kinetic equation in stellarators and tokamaks with broken symmetry using the code NEO-2", PPCF 58, 104001 (2016) https://iopscience.iop.org/article/10.1088/0741-3335/58/10/10400
+- Beurskens et al., "Demonstration of reduced neoclassical energy transport in Wendelstein 7-X", Nature (2021) (S; author list U) https://www.nature.com/articles/s41586-021-03687-w
+- W7-X power balance study (NEOTRANSP use), PPCF (2025) https://iopscience.iop.org/article/10.1088/1361-6587/ade824
+- EUTERPE vs NEOTRANSP Er benchmarking figure https://www.researchgate.net/figure/Benchmarking-of-the-global-neoclassical-radial-electric-field-calculated-with-EUTERPE_fig1_378516498
+- Beidler et al., "Benchmarking of the mono-energetic transport coefficients - results from the ICNTS", Nucl. Fusion 51, 076001 (2011) https://iopscience.iop.org/article/10.1088/0029-5515/51/7/076001
+- Redl, Angioni, Belli, Sauter, "A new set of analytical formulae for the computation of the bootstrap current and the neoclassical conductivity in tokamaks", Phys. Plasmas 28, 022502 (2021) https://pubs.aip.org/aip/pop/article/28/2/022502/124727/ ; open copy 
+- Sauter, Angioni, Lin-Liu, Phys. Plasmas 6, 2834 (1999) - U (no URL fetched)
+- Landreman, Buller, Drevlak, "Optimization of quasisymmetric stellarators with self-consistent bootstrap current and energetic particle confinement", Phys. Plasmas 29, 082501 (2022), DOI 10.1063/5.0098166, arXiv 2205.02914 https://arxiv.org/abs/2205.02914 ; h
+- Albert, Beidler, Kapper, Kasilov, Kernbichler, "On the convergence of bootstrap current to the Shaing-Callen limit in stellarators", arXiv 2407.21599 https://arxiv.org/abs/2407.21599
+- Saxena, Ferraro, Martin, Wright, "Bootstrap current modeling in M3D-C1", J. Plasma Phys. 91, E141 (2025), DOI 10.1017/S0022377825100834, arXiv 2507.05166 https://arxiv.org/abs/2507.05166 ; https://www.cambridge.org/core/journals/journal-of-plasma-physics/art
+- DESC tutorial "Bootstrap Current Self-Consistency" https://desc-docs.readthedocs.io/en/v0.15.0/notebooks/tutorials/bootstrap_current.html
+- VMEX references page https://vmex.readthedocs.io/en/latest/project/references.html
+- Goodman et al., "Quasi-isodynamic stellarators with low turbulence as fusion reactor candidates", PRX Energy 3, 023010 (2024), arXiv 2405.19860 https://arxiv.org/abs/2405.19860 ; https://link.aps.org/doi/10.1103/PRXEnergy.3.023010
+- Goodman et al., "Constructing precisely quasi-isodynamic magnetic fields", J. Plasma Phys. (2023) https://www.cambridge.org/core/journals/journal-of-plasma-physics/article/constructing-precisely-quasiisodynamic-magnetic-fields/6601E449C8DD3B3FEB361DA2C5732EF
+- Jorge et al., "A single-field-period quasi-isodynamic stellarator", J. Plasma Phys. https://www.cambridge.org/core/journals/journal-of-plasma-physics/article/singlefieldperiod-quasiisodynamic-stellarator/9B2A5FDCCD7774E4F91BE45E75FDC6B0
+- "CIEMAT-QI4X: a reactor-relevant quasi-isodynamic stellarator configuration compatible with an island divertor", Nucl. Fusion, arXiv 2512.08825 https://arxiv.org/pdf/2512.08825 ; https://iopscience.iop.org/article/10.1088/1741-4326/ae54ad
+- "Near-axis quasi-isodynamic database", arXiv 2601.08400 https://arxiv.org/pdf/2601.08400
+- "Optimization of nonlinear turbulence in stellarators", J. Plasma Phys. 90, 905900210 (2024) https://www.cambridge.org/core/journals/journal-of-plasma-physics/article/optimization-of-nonlinear-turbulence-in-stellarators/916FCC56452B5B166C14868F56D99AF5
+- Type One Energy, "A comprehensive, unified baseline physics design for the Type One Energy stellarator fusion pilot power plant, 'Infinity Two'", J. Plasma Phys. 91, E65 (2025) https://www.cambridge.org/core/journals/journal-of-plasma-physics/article/compreh
+- "Predictions of core plasma performance for the Infinity Two fusion pilot plant", J. Plasma Phys. (2025) https://www.cambridge.org/core/journals/journal-of-plasma-physics/article/predictions-of-core-plasma-performance-for-the-infinity-two-fusion-pilot-plant/
+- Thea Energy, "Overview of the Helios Design: A Practical Planar Coil Stellarator Fusion Power Plant", arXiv 2512.08027 https://arxiv.org/abs/2512.08027 ; PDF https://thea.energy/wp-content/uploads/2025/12/20251210_FPP_Helios_overview_paper.pdf ; Fusion Eng. 
+- "Equilibrium optimization of the Helios planar coil stellarator power plant", Fusion Eng. Des. (2026) https://sciencedirect.com/science/article/pii/S0920379626002905
+- "Stellarator fusion systems enabled by arrays of planar coils", Nucl. Fusion (2025) https://iopscience.iop.org/article/10.1088/1741-4326/ada56c
+- Proxima Fusion, "Stellaris: A high-field quasi-isodynamic stellarator for a prototypical fusion power plant", Fusion Eng. Des. (2025) https://www.sciencedirect.com/science/article/pii/S0920379625000705 ; press release https://www.proximafusion.com/press-news
+- "Quantitative comparison of impurity transport in turbulence reduced and enhanced scenarios at Wendelstein 7-X", Nucl. Fusion (2023) https://iopscience.iop.org/article/10.1088/1741-4326/aceb76
+- "The suppression of anomalous impurity transport above a critical normalized density gradient scale length in Wendelstein 7-X", PPCF (2025) https://iopscience.iop.org/article/10.1088/1361-6587/add597
+- "Neural network-based surrogate model for 3D edge-plasma transport in the standard configuration of W7-X", Nucl. Fusion 66 (2025) https://iopscience.iop.org/article/10.1088/1741-4326/ae203d
+- IPP abstract "Neoclassical transport simulations for stellarators" (DCOM/NNW description) https://pure.mpg.de/rest/items/item_2139735_1/component/file_2139734/content
+- MMMnet surrogate (NSTX-U) https://www6.lehigh.edu/~eus204/per/publications/journals/tps24_MMMnetNSTXU.pdf
+- "5D Neural Surrogates for Nonlinear Gyrokinetic Simulations of Plasma Turbulence", arXiv 2502.07469 https://arxiv.org/pdf/2502.07469
+- "Efficient dataset construction using active learning and uncertainty-aware neural networks for plasma turbulent transport surrogate models", arXiv 2507.15976 https://arxiv.org/pdf/2507.15976
+
+### Numerical methods
+- "yancc: A GPU-accelerated, differentiable solver for neoclassical transport in tokamaks and stellarators", arXiv:2607.20861 (2026). https://arxiv.org/abs/2607.20861 ; full text https://arxiv.org/html/2607.20861v1 (fetched). Author list not extracted — UNVERI
+- Landreman, Smith, Mollen, Helander, "Comparison of particle trajectories and collision operators for collisional transport in nonaxisymmetric plasmas", Phys. Plasmas 21, 042503 (2014). https://arxiv.org/pdf/1312.6058 (fetched, text extracted); https://pubs.a
+- SFINCS repository and v3 manual. https://github.com/landreman/sfincs ; https://raw.githubusercontent.com/landreman/sfincs/master/doc/manual/version3/runs.tex (read). input.tex not found (404) — namelist option names UNVERIFIED.
+- Escoto et al., "MONKES: a fast neoclassical code for the evaluation of monoenergetic transport coefficients", arXiv:2312.12248. https://arxiv.org/pdf/2312.12248 (URL seen)
+- Escoto Lopez, "Fast and accurate calculation of the bootstrap current and radial neoclassical transport in low collisionality stellarator plasmas" (thesis), arXiv:2510.27513 (2025). https://arxiv.org/abs/2510.27513 (fetched)
+- Belli & Candy, "Full linearized Fokker-Planck collisions in neoclassical transport simulations", PPCF 54, 015015 (2012). https://iopscience.iop.org/article/10.1088/0741-3335/54/1/015015
+- Landreman & Ernst, "New velocity-space discretization for continuum kinetic calculations and Fokker-Planck collisions", J. Comput. Phys. 243, 130-150 (2013). https://arxiv.org/abs/1210.5289 ; https://www.sciencedirect.com/science/article/abs/pii/S00219991130
+- Velasco et al., KNOSOS. https://arxiv.org/pdf/2106.01727 ; https://github.com/joseluisvelasco/KNOSOS (URLs seen)
+- PPPL-4775, "Numerical Calculation of Neoclassical Distribution Functions ..." https://bp-pub.pppl.gov/pub_report/2012/PPPL-4775.pdf (URL seen)
+- DKX and SOLVAX repositories (given by the task; not fetched). https://github.com/uwplasma/DKX ; https://github.com/uwplasma/SOLVAX
+- Dorf, Dorr, Ghosh, Umansky, Soukhanovskii, "Implicit full-F simulations of neoclassical ion transport", Phys. Plasmas 32(8) (2025). https://www.osti.gov/biblio/2588989 (fetched)
+- "Axisymmetric Gyrokinetic Simulation of ASDEX-Upgrade Scrape-off Layer Using a Conservative Implicit BGK Collision Operator" (Gkeyll), arXiv:2507.22821. https://arxiv.org/abs/2507.22821
+- Barnes, Abel, Dorland et al., "Linearized model Fokker-Planck collision operators for gyrokinetic simulations. II. Numerical implementation and tests", Phys. Plasmas 16, 072107 (2009). https://arxiv.org/abs/0809.3945
+- GENE-X LBD collision operator (implementation/verification). https://www.researchgate.net/publication/357053643_Implementation_and_verification_of_a_conservative_multi-species_gyro-averaged_full-f_Lenard-Bernstein_Dougherty_collision_operator_in_the_gyrokine
+- "An Angular Multigrid Preconditioner for the Radiation Transport Equation with Forward-Peaked Scatter", arXiv:2010.04559. https://arxiv.org/html/2010.04559 ; Fokker-Planck variant https://www.sciencedirect.com/science/article/pii/S0377042718306174
+- "P-Multigrid Method for the Discontinuous Galerkin Discretization of Elliptic Problems", J. Sci. Comput. (2025). https://link.springer.com/article/10.1007/s10915-025-03105-7
+- Parks, de Sturler, Mackey, Johnson, Maiti, "Recycling Krylov subspaces for sequences of linear systems", SIAM J. Sci. Comput. 28(5), 1651-1674 (2006), doi:10.1137/040607277. https://vtechworks.lib.vt.edu/items/590c07fe-a0c8-49b2-9494-be5061f5fbf7 ; https://w
+- Soodhalter, de Sturler, Kilmer, "A survey of subspace recycling iterative methods", GAMM-Mitt. 43(4), e202000016 (2020), doi:10.1002/gamm.202000016. https://arxiv.org/abs/2001.10347 ; https://arxiv.org/pdf/2001.10347 (fetched, text extracted); https://online
+- de Sturler, "Truncation strategies for optimal Krylov subspace methods", SIAM J. Numer. Anal. 36(3), 864-889 (1999), doi:10.1137/S0036142997315950 (DOI taken from the survey's reference list; not fetched separately)
+- Morgan, "GMRES with deflated restarting", SIAM J. Sci. Comput. 24(1), 20-37 (2002) (from the survey's reference list; not fetched separately)
+- Kilmer & de Sturler, "Recycling subspace information for diffuse optical tomography", SIAM J. Sci. Comput. (2006) (from the survey's reference list)
+- "Recycling Krylov Subspaces and Truncating Deflation Subspaces for Solving Sequence of Linear Systems", ACM TOMS (2021). https://dl.acm.org/doi/10.1145/3439746
+- Applications: https://arxiv.org/pdf/1501.03358 (CFD); https://arxiv.org/pdf/2309.09925 (aerostructural adjoints); https://arxiv.org/pdf/2401.09516 (neural-operator data generation)
+- Carson & Higham, "Accelerating the Solution of Linear Systems by Iterative Refinement in Three Precisions", SIAM J. Sci. Comput. (2018); MIMS EPrint 2017.24. https://nhigham.com/2017/07/26/accelerating-the-solution-of-linear-systems-by-iterative-refinement-i
+- Amestoy, Buttari, Higham, L'Excellent, Mary, Vieuble, "Five-precision GMRES-based iterative refinement", SIAM J. Matrix Anal. Appl. 45, 529-552 (2024); MIMS EPrint 2021.5. https://eprints.maths.manchester.ac.uk/2852/1/paper.pdf (fetched, text extracted); htt
+- Higham & Mary, "Mixed precision algorithms in numerical linear algebra", Acta Numerica 31 (2022). https://eprints.maths.manchester.ac.uk/2841/ ; https://research.manchester.ac.uk/en/publications/mixed-precision-algorithms-in-numerical-linear-algebra/
+- Abdelfattah et al., "A Survey of Numerical Methods Utilizing Mixed Precision Arithmetic". https://arxiv.org/pdf/2007.06674
+- "Mixed Precision GMRES-based Iterative Refinement with Recycling". https://arxiv.org/pdf/2201.09827
+- NVIDIA cuDSS documentation (v0.8.0, Preview). https://docs.nvidia.com/cuda/cudss/index.html (fetched); https://developer.nvidia.com/cudss
+- nvmath-python sparse direct solver (cuDSS-backed). https://docs.nvidia.com/cuda/nvmath-python/0.5.0/host-apis/sparse/index.html ; https://github.com/NVIDIA/nvmath-python/tree/main/examples/sparse/advanced/direct_solver ; https://pypi.org/project/nvidia-cudss
+- spineax (cuDSS in JAX via FFI). https://github.com/johnviljoen/spineax ; cudss_jax MWE https://github.com/stergiosba/cudss_jax ; JAX discussion https://github.com/jax-ml/jax/discussions/33205
+- sparsax (SuiteSparse CHOLMOD/KLU via XLA FFI). https://github.com/knaaptime/sparsax/blob/main/README.md
+- JAXMg (cuSOLVERMg multi-GPU dense via FFI). https://arxiv.org/pdf/2601.14466
+- jax.experimental.sparse.linalg.spsolve docs. https://docs.jax.dev/en/latest/_autosummary/jax.experimental.sparse.linalg.spsolve.html
+- Ghysels & Synk, "High performance sparse multifrontal solvers on modern GPUs", Parallel Computing 110 (2022). https://www.osti.gov/pages/biblio/1960514 (fetched)
+- Claus, Ghysels, Boukaram, Li, "A graphics processing unit accelerated sparse direct solver and preconditioner with block low rank compression", Int. J. HPC Appl. (2025), doi:10.1177/10943420241288567. https://journals.sagepub.com/doi/10.1177/1094342024128856
+- Li & Ghysels, ATPESC direct-solver lectures 2022/2023 (URLs seen). https://extremecomputingtraining.anl.gov/wp-content/uploads/sites/96/2023/08/ATPESC-2023-Track-5-Talk-3-Li-Ghysels-DirectSolvers.pdf
+- Rader, Lyons, Kidger, "Lineax: unified linear solves and linear least-squares in JAX and Equinox", arXiv:2311.17283 (NeurIPS 2023 AI4Science). https://arxiv.org/abs/2311.17283 ; https://arxiv.org/pdf/2311.17283 (fetched, text extracted); https://github.com/p
+- Rader et al., "Optimistix: modular optimisation in JAX and Equinox", arXiv:2402.09983. https://arxiv.org/pdf/2402.09983 ; adjoints doc https://docs.kidger.site/optimistix/api/adjoints/ (fetched); https://docs.kidger.site/optimistix/api/root_find/ ; https://g
+- Blondel, Berthet, Cuturi, Frostig, Hoyer, Llinares-Lopez, Pedregosa, Vert, "Efficient and Modular Implicit Differentiation", NeurIPS 2022, arXiv:2105.15183. https://arxiv.org/pdf/2105.15183 ; https://ar5iv.labs.arxiv.org/html/2105.15183
+- JAX issue #15837 "GMRES Fails Silently and Frequently from Stagnation". https://github.com/jax-ml/jax/issues/15837 ; gmres docs https://docs.jax.dev/en/latest/_autosummary/jax.scipy.sparse.linalg.gmres.html ; JEP 18137 https://docs.jax.dev/en/latest/jep/1813
+- torch-sla, "Differentiable Sparse Linear Algebra with Adjoint Solvers ...", arXiv:2601.13994. https://arxiv.org/pdf/2601.13994
+- "Differentiate the Solver, Not the Equation: Reverse-Sweep Adjoints for Block Implicit Simulation", arXiv:2608.08559. https://arxiv.org/html/2608.08559 (title only)
+- "Automating Steady and Unsteady Adjoints: Efficiently Utilizing Implicit and Algorithmic Differentiation", arXiv:2306.15243. https://arxiv.org/html/2306.15243 (title only)
+- Pierce & Giles, "Adjoint recovery of superconvergent functionals from PDE approximations", SIAM Review 42(2), 247-264 (2000) (metadata from search); Giles' error-analysis page https://people.maths.ox.ac.uk/gilesm/old/error.html
+- Giles & Pierce, "Adjoint Error Correction for Integral Outputs", Springer (doi 10.1007/978-3-662-05189-4_2). https://link.springer.com/chapter/10.1007/978-3-662-05189-4_2
+- Giles & Pierce, "Progress in adjoint error correction for integral functionals", Comput. Vis. Sci. https://people.maths.ox.ac.uk/~gilesm/files/cvs04.pdf ; https://link.springer.com/article/10.1007/s00791-003-0115-y
+- Becker & Rannacher, "An optimal control approach to a posteriori error estimation in finite element methods", Acta Numerica (2001). https://www.cambridge.org/core/journals/acta-numerica/article/abs/an-optimal-control-approach-to-a-posteriori-error-estimation
+- "Linearization Errors in Discrete Goal-Oriented Error Estimation", arXiv:2305.15285. https://arxiv.org/pdf/2305.15285 (title only)
+- Roache, Grid Convergence Index (secondary sources). https://cfd.university/blog/how-to-manage-uncertainty-in-cfd-the-grid-convergence-index/ ; Roy, "Grid Convergence Error Analysis for Mixed-Order Numerical Schemes" https://www.aoe.vt.edu/content/dam/aoe_vt_
+- Salari & Knupp, "Code Verification by the Method of Manufactured Solutions", SAND2000-1444 (2000). https://www.osti.gov/biblio/759450/
+- Roache, "Code Verification by the Method of Manufactured Solutions", J. Fluids Eng. 124(1), 4 (2002). https://asmedigitalcollection.asme.org/fluidsengineering/article-abstract/124/1/4/462791/Code-Verification-by-the-Method-of-Manufactured
+- ASME V&V 20-2009 (R2021), "Standard for Verification and Validation in Computational Fluid Dynamics and Heat Transfer". https://webstore.ansi.org/standards/asme/asme2020092021
+- Oberkampf & Roy, "Verification and Validation in Scientific Computing", Cambridge University Press (2010), ISBN 9780521113601. https://books.google.com/books/about/Verification_and_Validation_in_Scientifi.html?id=7d26zLEJ1FUC
+- "Accurate spectral numerical schemes for kinetic equations with energy diffusion", J. Comput. Phys. (2015). https://arxiv.org/pdf/1402.2971 ; https://www.sciencedirect.com/science/article/abs/pii/S0021999115001941
+- "Pseudo spectral collocation with Maxwell polynomials for kinetic equations with energy diffusion". https://arxiv.org/pdf/1708.09031
+- "A Spectral Transform Method for Singular Sturm-Liouville Problems with Applications to Energy Diffusion in Plasma Physics", SIAM J. Appl. Math. https://dx.doi.org/10.1137/130941948
+
+### Research-software practice
+- Google Engineering Practices, "Small CLs" — https://google.github.io/eng-practices/review/developer/small-cls.html
+- SmartBear, "Best Practices for Peer Code Review" (Cisco study) — https://smartbear.com/learn/code-review/best-practices-for-peer-code-review/
+- Hoefler & Belli, "Scientific Benchmarking of Parallel Computing Systems", SC '15, DOI 10.1145/2807591.2807644 — https://htor.inf.ethz.ch/publications/img/hoefler-scientific-benchmarking.pdf
+- JAX documentation, "Benchmarking JAX code" — https://docs.jax.dev/en/latest/benchmarking.html (and FAQ https://docs.jax.dev/en/latest/faq.html)
+- Wilson et al. 2017, "Good enough practices in scientific computing", DOI 10.1371/journal.pcbi.1005510 — https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1005510
+- Taschuk & Wilson 2017, "Ten simple rules for making research software more robust", DOI 10.1371/journal.pcbi.1005412 — https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1005412
+- JOSS review criteria — https://joss.readthedocs.io/en/latest/review_criteria.html
+- Diátaxis — https://diataxis.fr/
+- Graphite, "Stacked diffs" — https://graphite.com/guides/stacked-diffs
+- Trunk Based Development — https://trunkbaseddevelopment.com/
+- ADR GitHub organization — https://adr.github.io/
+- FAIR4RS principles, RDA output page (metadata only), DOI 10.15497/RDA00068 — https://www.rd-alliance.org/group_output/fair-principles-for-research-software-fair4rs-principles/
+- Conlin & Landreman, yancc, arXiv:2607.20861 — https://arxiv.org/html/2607.20861v1
+- Escoto et al., MONKES, Nucl. Fusion 64, 076030 (2024), arXiv:2312.12248 — https://arxiv.org/html/2312.12248
+- Panici et al., DESC Part I, JPP 2023, arXiv:2203.17173 — https://arxiv.org/abs/2203.17173
+- READMEs (raw): DESC https://raw.githubusercontent.com/PlasmaControl/DESC/master/README.rst ; simsopt https://raw.githubusercontent.com/hiddenSymmetries/simsopt/master/README.md ; Diffrax https://raw.githubusercontent.com/patrick-kidger/diffrax/main/README.md
+- Roache, "Code Verification by the Method of Manufactured Solutions", ASME J. Fluids Eng. 124, 4 (2002) — https://asmedigitalcollection.asme.org/fluidsengineering/article-abstract/124/1/4/462791
+- Roy, "Review of Code and Solution Verification Procedures for Computational Simulation", JCP — https://www.aoe.vt.edu/content/dam/aoe_vt_edu/people/faculty/cjroy/Publications-Articles/cjr_jcp.revise.final-accepted.pdf
+- Oberkampf & Roy, Verification and Validation in Scientific Computing, CUP 2010 — https://www.cambridge.org/core/books/abs/verification-and-validation-in-scientific-computing/index/EE029CB068531D278AB2631911F8BE42
+- Velasco et al., KNOSOS, J. Comput. Phys. 418, 109512 (2020) — https://www.sciencedirect.com/science/article/abs/pii/S0021999120302862 ; code https://github.com/joseluisvelasco/KNOSOS
+- Landreman, Smith, Mollén, Helander, Phys. Plasmas 21, 042503 (2014) (SFINCS) — https://pubs.aip.org/aip/pop/article-abstract/21/4/042503/818401 ; https://github.com/landreman/sfincs
+- Whitesides, "Whitesides' Group: Writing a Paper", Adv. Mater. 16, 1375 (2004), DOI 10.1002/adma.200400767 — https://www.gmwgroup.harvard.edu/publications/whitesides-group-writing-paper
+- The Turing Way, "Software Citation with CITATION.cff" — https://book.the-turing-way.org/communication/citable/citable-cff/ ; Citation File Format — https://citation-file-format.github.io/
+- ACM Artifact Review and Badging v1.1 — https://www.acm.org/publications/policies/artifact-review-and-badging-current (HTTP 403)
+- FAIR4RS principle wording; Chue Hong et al., Sci. Data 9, 622 (2022), DOI 10.1038/s41597-022-01710-x (Nature redirect loop)
+- ASME V&V 20-2009 scope statement (snippet only)
+- GENE / GS2 / COGENT verification suites; Google test-size taxonomy; Keep a Changelog; CPC "Program summary" requirement; `jax.test_util.check_grads`
