@@ -822,11 +822,9 @@ def test_differentiable_solve_aborts_loudly_on_genuinely_singular_operator() -> 
 #
 #   (a) the true residual ||A^T y - g|| is recomputed from the operator (not
 #       read off the Krylov method) and recorded on SolveResult.adjoint;
-#   (b) a solve that misses both the requested tolerance and the float64
-#       backward-error floor raises, by default, with an actionable message;
-#   (c) no false positives: healthy decks must return their exact gradient
-#       without raising, including near-singular ones whose adjoint solution
-#       norm makes ``tol * ||g||`` unreachable in double precision.
+#   (b) a solve that misses the requested tolerance raises by default;
+#   (c) backward-error estimates remain diagnostic, including when an
+#       independently checked observable happens to be accurate.
 # ---------------------------------------------------------------------------
 
 # Two species with full Fokker-Planck collisions, constraintScheme=1, a finite
@@ -921,22 +919,21 @@ def test_adjoint_residual_is_recorded_on_the_solve_result() -> None:
     op0 = KineticOperator.from_namelist(
         parse_sfincs_input_text(FP_CS1_ER_UNIFORM_TEXT)
     )
-    g, fd, result = _tier2_grad_vs_fd(op0)
+    g, fd, result = _tier2_grad_vs_fd(op0, check_adjoint=False)
     np.testing.assert_allclose(g, fd, rtol=1e-6)
 
     diag = result.adjoint
-    assert diag is not None and diag.checked
+    assert diag is not None and not diag.checked
     assert diag.tol == 1e-10
     adj = diag.adjoint_records
     assert len(adj) == 1 and len(diag.forward_records) == 1
     rec = adj[0]
     assert rec.label.startswith("adjoint")
-    assert rec.within_tolerance and diag.converged
-    # The residual is the one the operator itself reports, and it is genuinely
-    # above the requested tol*||g|| here: this near-singular deck is exactly
-    # the case the backward-error floor exists to accept.
+    assert not rec.within_tolerance and not diag.converged
+    # FD agreement does not override an unmet original-equation tolerance.
     assert rec.residual_norm > rec.target
-    assert rec.residual_norm <= rec.limit
+    assert rec.limit == rec.target
+    assert rec.floor > rec.limit
     assert diag.worst_relative_residual == rec.relative_residual
     assert 0.0 < rec.relative_residual < 1e-6
 
@@ -944,7 +941,59 @@ def test_adjoint_residual_is_recorded_on_the_solve_result() -> None:
     assert diag.records == [] and diag.worst_relative_residual == 0.0
 
 
-def test_singular_tier2_adjoint_raises_instead_of_returning_a_wrong_gradient() -> None:
+@pytest.fixture
+def adjoint_effects():
+    """Drain expected asynchronous guard failures between GPU tests."""
+    yield
+    try:
+        jax.effects_barrier()
+    except Exception as exc:
+        assert "GCROT solve failed to converge" in str(exc)
+        jax.jit(lambda: jax.debug.callback(lambda: None))()
+        jax.effects_barrier()
+
+
+@pytest.mark.parametrize("residual,rhs,zero,factor,accepted", [
+    (1e-9, 1., False, 1., False),  # Below the diagnostic scale, above requested tol.
+    (1e-9, 1., False, 20., True),  # Explicit expert relaxation still works.
+    (0., 0., False, 1., False),  # A nonzero defect whose squared norm underflows.
+    (0., 0., True, 1., True),
+    (0., np.inf, True, 1., False),
+])
+def test_adjoint_guard_does_not_promote_backward_error_to_acceptance(residual, rhs, zero, factor, accepted):
+    from dkx.solve import _residual_guard
+
+    guard = _residual_guard("adjoint (transposed)", 0, tol=1e-10, atol=0.,
+                            factor=factor, raise_on_failure=True, diagnostics=None)
+    if accepted:
+        guard(residual, rhs, 1e6, 1., zero)
+    else:
+        with pytest.raises(RuntimeError, match="does not enlarge this gate"):
+            guard(residual, rhs, 1e6, 1., zero)
+
+
+
+def test_jitted_adjoint_rejects_a_defect_below_the_backward_error_scale(adjoint_effects):
+    from dkx.solve import _guarded_solve, _implicit_solve
+
+    diagonal = jnp.array([1., 1e-12])
+    def apply(x):
+        return diagonal*x
+    def transpose(x):
+        return diagonal*x
+    def adjoint(rhs):
+        inaccurate = rhs/diagonal + jnp.array([1e-9, 0.])
+        return _guarded_solve("adjoint (transposed)", 0, transpose, rhs, inaccurate,
+                              tol=1e-10, atol=0., factor=1., raise_on_failure=True,
+                              diagnostics=None)
+    def loss(rhs):
+        x = _implicit_solve(apply, transpose, rhs, lambda b: b/diagonal, adjoint)
+        return jnp.dot(jnp.array([1., 1e-6]), x)
+    with pytest.raises(Exception, match="does not enlarge this gate"):
+        jax.jit(jax.grad(loss))(jnp.ones(2)).block_until_ready()
+
+
+def test_singular_tier2_adjoint_raises_instead_of_returning_a_wrong_gradient(adjoint_effects) -> None:
     """A deck whose transposed solve diverges must abort, not hand back a number.
 
     ``er_xidot_1species_tiny`` pairs the Er xiDot term with the per-speed
@@ -959,7 +1008,7 @@ def test_singular_tier2_adjoint_raises_instead_of_returning_a_wrong_gradient() -
         _tier2_grad_vs_fd(op0, max_restarts=20)
 
 
-def test_singular_tier2_adjoint_message_names_cause_and_remedies() -> None:
+def test_singular_tier2_adjoint_message_names_cause_and_remedies(adjoint_effects) -> None:
     """The abort has to be actionable, not just loud."""
     op0 = _load_op("er_xidot_1species_tiny")
     with pytest.raises(Exception) as excinfo:
@@ -1016,26 +1065,22 @@ def test_healthy_tier2_gradients_are_exact_and_do_not_raise(deck: str) -> None:
     assert all(r.within_tolerance for r in diag.records)
 
 
-def test_flagship_shaped_fp_cs1_gradient_matches_fd_without_raising() -> None:
-    """The documented failing configuration, at referee size.
+def test_flagship_shaped_fp_cs1_adjoint_must_meet_requested_tolerance(adjoint_effects) -> None:
+    """A near-singular adjoint is not admitted by its backward-error scale.
 
-    Full Fokker-Planck + constraintScheme=1 + finite Er on a uniform
-    ``Nxi_for_x`` grid: the adjoint stagnates two decades above ``tol*||g||``
-    because the cotangent excites an almost-null direction and ``||y||`` blows
-    up, yet the resulting gradient is right.  Judging that solve failed would
-    abort a healthy optimization; judging it silently fine is the original bug.
+    The unchecked observable/FD comparison is retained separately above;
+    agreement for that scalar does not change the requested equation gate.
     """
     op0 = KineticOperator.from_namelist(
         parse_sfincs_input_text(FP_CS1_ER_UNIFORM_TEXT)
     )
     assert op0.constraint_scheme == 1 and op0.fp is not None
-    assert op0.active_dof_mask() is None  # uniform: pinning is not what saves this
-    g, fd, result = _tier2_grad_vs_fd(op0)
-    np.testing.assert_allclose(g, fd, rtol=1e-6)
-    assert result.adjoint is not None and result.adjoint.converged
+    assert op0.active_dof_mask() is None
+    with pytest.raises(Exception, match="adjoint.*GCROT solve failed"):
+        _tier2_grad_vs_fd(op0)
 
 
-def test_adjoint_guard_survives_jit() -> None:
+def test_adjoint_guard_survives_jit(adjoint_effects) -> None:
     """Production gradients run under ``jit``; the guard has to fire there too.
 
     ``jax.debug.callback`` executes inside the compiled backward pass, so both
@@ -1070,7 +1115,7 @@ def test_adjoint_guard_survives_jit() -> None:
         return jnp.dot(ws, result.x)
 
     with pytest.raises(Exception, match="GCROT solve failed to converge"):
-        jax.jit(jax.grad(loss_singular))(jnp.asarray(1.0))
+        jax.jit(jax.grad(loss_singular))(jnp.asarray(1.0)).block_until_ready()
 
 
 def test_adjoint_guard_leaves_the_forward_solution_untouched() -> None:
@@ -1431,7 +1476,11 @@ def test_truncated_bounded_adjoint_is_subsystem_batch_invariant() -> None:
 
     x_serial = solve(op, rhs, subsystem_batch=1, tier1_adjoint_window=n_xi, **kwargs).x
     x_batched = solve(op, rhs, subsystem_batch=b, tier1_adjoint_window=n_xi, **kwargs).x
-    np.testing.assert_allclose(np.asarray(x_batched), np.asarray(x_serial), rtol=0, atol=1e-18)
+    # Serial and batched accelerator reductions need not round identically.
+    # Compare relative to the state scale, including components near zero.
+    reference = np.asarray(x_serial)
+    assert np.linalg.norm(reference) > 0
+    assert np.linalg.norm(np.asarray(x_batched)-reference) <= 64*np.finfo(float).eps*np.linalg.norm(reference)
 
     def loss(scale: jnp.ndarray, width: int) -> jnp.ndarray:
         scaled = replace(op, t_hat=op.t_hat * scale)

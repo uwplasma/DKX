@@ -421,9 +421,15 @@ roughly one forward solve, as predicted.
    estimate — records it in ``SolveResult.adjoint``, and raises with the
    residual and the remedies unless you pass ``check_adjoint=False``. Read
    ``result.adjoint`` after the backward pass to see the number behind the
-   decision; the check is silent on near-singular decks whose adjoint
-   residual is at the double-precision backward-error floor, where the
-   gradient is right even though the requested tolerance is unreachable.
+   decision. By default both forward and transpose solves must satisfy
+   ``max(atol, tol*||rhs||)``; the backward-error estimate is diagnostic and
+   never enlarges this gate. A homogeneous equation requires entrywise zero
+   defect, even when a nonzero defect's squared norm underflows. The default
+   ``adjoint_residual_factor`` is one. Explicitly raising it or disabling
+   the check requires independent observable validation; a small backward
+   error alone does not establish gradient accuracy. This runtime adjoint
+   gate covers recycled Krylov, not the structured direct routes.
+
 
 The differentiable optimization chain
 -------------------------------------

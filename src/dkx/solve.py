@@ -61,7 +61,7 @@ recycled Krylov path therefore recomputes each solve's *true* residual from
 the operator (``||A^T y - g||``, never the Krylov method's internal estimate),
 records it in :class:`AdjointDiagnostics` on :attr:`SolveResult.adjoint`, and
 — unless ``check_adjoint=False`` — raises at execution time when it misses
-both the requested tolerance and the double-precision backward-error floor.
+the requested tolerance (or an explicitly relaxed residual factor).
 
 Fortran correspondence: ``solver.F90`` (KSP setup / preconditioner matrix
 ``whichMatrix=0``), ``preconditioner.F90`` (the ``preconditioner_*`` knobs),
@@ -212,13 +212,13 @@ class SolveResidualRecord:
         rhs_norm: ``||b||`` (adjoint: ``||g||``, the cotangent).
         solution_norm: ``||x||`` (adjoint: ``||y||``).
         operator_norm: probe estimate of ``||A||`` (adjoint: ``||A^T||``),
-            used for the attainable backward-error floor.
+            used only for a diagnostic backward-error scale.
         target: the residual the caller asked for, ``max(atol, tol*||b||)``.
-        floor: the float64 backward-error floor
-            ``slack * eps * (||A|| ||x|| + ||b||)`` — no solver can push the
-            residual of *this* system below it in double precision.
-        limit: the accepted residual, ``factor * max(target, floor)``.
-        within_tolerance: ``residual_norm <= limit`` and every norm finite.
+        floor: capped diagnostic scale ``slack * eps * (||A|| ||x|| + ||b||)``.
+            This estimate is neither a lower bound nor an acceptance threshold.
+        limit: the accepted residual, ``factor * target``.
+        within_tolerance: residual gate and finite norms, with entrywise zero
+            defect required for homogeneous or zero-target equations.
     """
 
     label: str
@@ -258,7 +258,7 @@ class AdjointDiagnostics:
 
     Attributes:
         tol, atol: the tolerances the solve was asked for.
-        factor: the accepted slack over ``max(target, floor)``
+        factor: the explicitly accepted slack over ``target``
             (``adjoint_residual_factor`` of :func:`solve`).
         checked: whether a failure raises (``check_adjoint`` of :func:`solve`).
         records: the :class:`SolveResidualRecord` list, in execution order.
@@ -451,23 +451,12 @@ def _pinned_matvecs(
 # Accepted slack over the residual the caller asked for, before a
 # differentiable solve is declared failed.  The default of :func:`solve`'s
 # ``adjoint_residual_factor``.
-DEFAULT_ADJOINT_RESIDUAL_FACTOR = 10.0
+DEFAULT_ADJOINT_RESIDUAL_FACTOR = 1.0
 
-# Multiple of the float64 unit roundoff in the attainable backward-error floor
-# ``_ADJOINT_FLOOR_SLACK * eps * (||A|| ||x|| + ||b||)``.  A Krylov solve is
-# backward stable, so its residual settles at that scale; on a near-singular
-# system with a large-norm solution the floor is *above* ``tol * ||b||`` and
-# the requested tolerance is simply unreachable in double precision.  Judging
-# such a solve failed would abort perfectly good gradients.
+# Diagnostic backward-error scale; it does not enlarge the acceptance gate.
 _ADJOINT_FLOOR_SLACK = 32.0
 
-# Hard ceiling on that floor, relative to ``||b||``.  Without it a *diverged*
-# solve would excuse itself: its solution norm blows up, so a floor
-# proportional to ``||A|| ||x||`` grows past the residual it is meant to
-# judge.  ``x = 0`` always attains ``||r|| = ||b||``, so no argument about
-# attainable accuracy can justify a residual anywhere near ``||b||``; 1e-6
-# is far below any converged solve yet far above the near-singular
-# stagnation the floor exists to tolerate.
+# Retain the historical cap for comparable diagnostics, not for admission.
 _ADJOINT_FLOOR_MAX_RELATIVE = 1e-6
 
 # Rademacher probes used to estimate ``||A||`` for that floor.  Each costs one
@@ -485,7 +474,7 @@ def _operator_norm_estimate(
     ``max_i ||A u_i|| / ||u_i||`` over fixed pseudo-random sign vectors: a
     lower bound on the spectral norm, tight to within a small factor for the
     operators here, and used only to set the order of magnitude of the
-    backward-error floor in :func:`_residual_guard`.
+    diagnostic backward-error scale in :func:`_residual_guard`.
     """
     key = jax.random.PRNGKey(0)
     est = jnp.asarray(0.0, dtype=jnp.float64)
@@ -518,14 +507,10 @@ def _residual_guard(
 
     The residual handed in is recomputed from the operator itself
     (``||A^T y - g||``), never the Krylov method's internal recursive
-    estimate.  It is accepted when it meets the requested
-    ``max(atol, tol*||b||)`` *or* sits at the double-precision backward-error
-    floor ``_ADJOINT_FLOOR_SLACK * eps * (||A|| ||x|| + ||b||)``, both times
-    with ``factor`` slack.  The floor matters: when the operator is
-    near-singular the adjoint solution norm explodes, and no backward-stable
-    method can then drive ``||A^T y - g||`` down to ``tol * ||g||``.  It is
-    capped at ``_ADJOINT_FLOOR_MAX_RELATIVE * ||b||`` so a diverged solve
-    cannot excuse itself with its own inflated solution norm.
+    estimate. Acceptance requires ``factor * max(atol, tol*||b||)``.
+    The backward-error scale is recorded for diagnosis only: a small backward
+    error does not establish the accuracy of an ill-conditioned adjoint or
+    of the requested observable. Homogeneous equations require zero defect.
     """
 
     def guard(
@@ -533,6 +518,7 @@ def _residual_guard(
         rhs_norm: jnp.ndarray,
         sol_norm: jnp.ndarray,
         op_norm: jnp.ndarray,
+        zero_defect: jnp.ndarray | None = None,
     ) -> None:
         res = float(np.asarray(res_norm))
         b_norm = float(np.asarray(rhs_norm))
@@ -543,12 +529,14 @@ def _residual_guard(
             _ADJOINT_FLOOR_SLACK * _EPS64 * (a_norm * x_norm + b_norm),
             _ADJOINT_FLOOR_MAX_RELATIVE * b_norm,
         )
-        limit = factor * max(target, floor)
+        limit = factor * target
         ok = bool(
             np.isfinite(res)
             and np.isfinite(x_norm)
             and np.isfinite(a_norm)
+            and np.isfinite(b_norm)
             and res <= limit
+            and ((b_norm > 0 and target > 0) or bool(res == 0 if zero_defect is None else zero_defect))
         )
         record = SolveResidualRecord(
             label=label,
@@ -577,9 +565,10 @@ def _residual_guard(
             f"converge on right-hand side {rhs_index}: the true relative "
             f"residual {formula} is {rel:.3e} (residual {res:.3e}, "
             f"rhs norm {b_norm:.3e}, solution norm {x_norm:.3e}), above the accepted "
-            f"{limit:.3e} = {factor:g} x max(requested {target:.3e}, "
-            f"float64 backward-error floor {floor:.3e}). Returning would "
-            "silently corrupt the implicit-differentiation gradient, so the "
+            f"{limit:.3e} = {factor:g} x requested {target:.3e}. "
+            f"The diagnostic backward-error scale {floor:.3e} does not "
+            "enlarge this gate; homogeneous equations require zero defect. Returning would "
+            "leave the implicit-differentiation gradient uncertified, so the "
             "solve aborts instead.\n"
             "Likely cause: a singular or near-singular operator whose null "
             "space the constraint scheme does not span — full Fokker-Planck "
@@ -636,6 +625,7 @@ def _guarded_solve(
         jnp.linalg.norm(rhs_col),
         jnp.linalg.norm(x),
         _operator_norm_estimate(matvec, rhs_col.shape[0]),
+        jnp.all(residual == 0),
     )
     return x
 
@@ -2376,19 +2366,12 @@ def solve(
             answers are identical either way.
         adjoint_residual_factor: how far over its residual a differentiable
             solve may land before ``check_adjoint`` calls it a failure
-            (default 10).  The accepted residual is ``factor *
-            max(atol, tol*||b||, floor)``, where ``floor = 32 * eps *
-            (||A|| ||x|| + ||b||)`` is the double-precision backward-error
-            floor of that solve.  The floor is what keeps healthy cases
-            quiet: on a near-singular operator the adjoint solution norm
-            explodes (the cotangent has a component along an almost-null
-            direction), and no backward-stable method can then drive
-            ``||A^T y - g||`` down to ``tol * ||g||`` — the gradient is fine,
-            the requested residual is simply unreachable.  The floor is
-            capped at ``1e-6 * ||b||`` so a solve that diverges outright
-            cannot excuse itself with its own inflated solution norm; a
-            genuinely inconsistent adjoint misses by many orders of
-            magnitude and is caught regardless.
+            (default 1). The accepted residual is
+            ``factor * max(atol, tol*||b||)``. The recorded backward-error
+            scale never widens this gate. Homogeneous equations require
+            entrywise zero defect. Raising the factor is an explicit
+            relaxation, not an observable-accuracy certificate.
+
 
     Operators with a truncated Legendre resolution (non-uniform ``Nxi_for_x``)
     are structurally singular in the rectangular state layout: the truncated
