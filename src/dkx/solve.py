@@ -47,21 +47,17 @@ Sparse direct — host fallback and cross-check (``solvax.native.splu_solve``)
     explicit request (``method="direct"``) or when the recycled Krylov route
     breaches its iteration cap under ``method="auto"``.
 
-Differentiability: the structured direct and recycled Krylov routes are wrapped
-with ``solvax.implicit.linear_solve`` (implicit function theorem via
-``jax.lax.custom_linear_solve``) when ``differentiable=True``; the adjoint
-costs one transposed solve which reuses the same structured direct factors
-(``block_thomas_solve(transpose=True)``) or a transposed-preconditioner
-GCROT solve.  Sparse direct is a loud, non-differentiable escape hatch.
+Differentiability: full-state structured and recycled Krylov routes use
+``solvax.implicit.linear_solve`` when ``differentiable=True``. Full-factor
+structured solves reuse factors for the transpose; generated full recovery
+uses the generated RHS map's pullback, including its setup. Partial generated
+recovery retains its reduced-system derivative. Sparse direct refuses AD.
 
-That transposed solve is the one place where a bad answer is invisible: the
-forward solution, its residual, and every other field of :class:`SolveResult`
-stay correct while the gradient is silently wrong.  The differentiable
-full-factor structured and recycled Krylov paths recompute each solve's *true* residual from
-the operator (``||A^T y - g||``, never the Krylov method's internal estimate),
-records it in :class:`AdjointDiagnostics` on :attr:`SolveResult.adjoint`, and
-— unless ``check_adjoint=False`` — raises at execution time when it misses
-the requested tolerance (or an explicitly relaxed residual factor).
+Full-state implicit routes recompute forward/transpose residuals from their
+original physical actions and record bounded :class:`AdjointDiagnostics`.
+Unless ``check_adjoint=False``, a missed requested tolerance (or explicitly
+relaxed residual factor) raises at execution time. Padded coordinates cannot
+enlarge the generated full route's physical adjoint tolerance.
 
 Fortran correspondence: ``solver.F90`` (KSP setup / preconditioner matrix
 ``whichMatrix=0``), ``preconditioner.F90`` (the ``preconditioner_*`` knobs),
@@ -327,13 +323,15 @@ class SolveResult:
         recycle: GCROT recycle pair ``(C, U)`` from the last right-hand side
             (recycled Krylov), for warm-starting the next solve of a
             continuation.
-        timings: wall-clock seconds per phase (``build``, ``solve``).  Each
+        timings: wall-clock seconds per phase (``build``, ``solve``), or
+            ``build_and_solve`` when generated implicit recovery cannot separate
+            them. Each
             phase ends with a ``jax.block_until_ready`` so the numbers are real
             device-compute time, not JAX async-dispatch latency (which would
             under-report by ~10x).  Under ``jit``/``grad`` the blocks are no-ops
             and the values are trace-time only.
         adjoint: :class:`AdjointDiagnostics` of the implicit-differentiation
-            solves (differentiable full-factor structured and recycled Krylov, else ``None``).
+            solves (differentiable full-state structured and recycled Krylov, else ``None``).
             Empty when the result is returned: the records are appended at
             *execution* time, i.e. the forward ones when the value is computed
             and the adjoint ones when the backward pass runs, so inspect it
@@ -1303,7 +1301,7 @@ def _implicit_solve(
     *,
     has_aux: bool = False,
 ):
-    """One differentiable column solve via ``solvax.implicit.linear_solve``.
+    """One differentiable solve via ``solvax.implicit.linear_solve``.
 
     The single ``solver`` callable required by the API dispatches between the
     forward and transposed factorized solves by identity of the matvec it is
@@ -1322,6 +1320,64 @@ def _implicit_solve(
     return solvax_linear_solve(
         matvec, rhs_col, solver, transpose_matvec=matvec_t, has_aux=has_aux
     )
+
+
+def _solve_generated_full(
+    op: KineticOperator, rhs2d: jnp.ndarray, *, tol: float, atol: float,
+    subsystem_batch: int | str, adjoint_window: int | None,
+    check_adjoint: bool, adjoint_residual_factor: float,
+) -> SolveResult:
+    """Implicit full recovery using SOLVAX's existing generated sweeps."""
+    start = time.perf_counter()
+    diagnostics = AdjointDiagnostics(tol=float(tol), atol=float(atol),
+                                     factor=float(adjoint_residual_factor), checked=bool(check_adjoint))
+    apply, apply_t = _pinned_matvecs(op)
+    mask = op.active_dof_mask()
+    # Keep a single RHS vector-shaped in the implicit map. A matrix-shaped
+    # map leaves a root bitcast shared with diagnostics, which crashes the
+    # GPU multi-output fusion pass in JAX 0.10.2.
+    single = rhs2d.shape[1] == 1
+    def project(b):
+        return b if mask is None else jnp.where(mask if single else mask[:, None], b, 0.)
+    def generated(b):
+        result = _solve_tier1_truncated(
+            op, b[:, None] if single else b, keep=op.n_xi, tol=tol, atol=atol,
+            subsystem_batch=subsystem_batch, adjoint_window=adjoint_window,
+        )
+        # Complete the inverse with identity on inactive padding. The public
+        # RHS is projected below, retaining the generated route's zero padding.
+        return (result.x[:, 0] if single else result.x) + (b-project(b))
+    def transpose(b):
+        # Differentiate only the RHS map, not the physics coefficients. The
+        # implicit solve differentiates those through the original operator.
+        _, pullback = jax.vjp(generated, jnp.zeros_like(b))
+        return pullback(b)[0]
+    def measured(b, transposed=False):
+        x = transpose(b) if transposed else generated(b)
+        physical_b, physical_x = project(b), project(x)
+        for j in range(rhs2d.shape[1]):
+            _guarded_solve(
+                "adjoint (transposed)" if transposed else "forward", j,
+                apply_t if transposed else apply,
+                physical_b if single else physical_b[:, j],
+                physical_x if single else physical_x[:, j],
+                tol=tol, atol=atol, factor=adjoint_residual_factor,
+                raise_on_failure=check_adjoint, diagnostics=diagnostics, solver_name="generated full",
+            )
+        return x
+    # One matrix-RHS solve preserves shared factorization across columns.
+    apply2d = apply if single else jax.vmap(apply, in_axes=1, out_axes=1)
+    apply_t2d = apply_t if single else jax.vmap(apply_t, in_axes=1, out_axes=1)
+    x = _implicit_solve(apply2d, apply_t2d, project(rhs2d[:, 0] if single else rhs2d),
+                        measured, lambda b: measured(b, True))
+    if single:
+        x = x[:, None]
+    residuals = _residual_norms(apply, x, rhs2d)
+    jax.block_until_ready((x, residuals))
+    return SolveResult(x=x, method="block_tridiagonal_truncated", iterations=None,
+                       residual_norms=residuals, converged=_converged_flag(residuals, rhs2d, tol, atol),
+                       recycle=None, timings={"build_and_solve": time.perf_counter()-start},
+                       adjoint=diagnostics)
 
 
 def _solve_tier1(
@@ -1459,9 +1515,11 @@ def _solve_tier1_truncated(
     keeps exactly its own static block count at any width — identical
     per-subsystem arithmetic to the serial sweep.
 
-    Differentiability: the whole solve is a pure-JAX composition of
+    This raw kernel is a pure-JAX composition of
     ``block_thomas_truncated_fn`` sweeps, so ``jax.grad`` differentiates
-    straight through it.  It is *not* wrapped in the full-operator
+    straight through it. Public full recovery with ``differentiable=True``
+    instead enters :func:`_solve_generated_full`; the following reduced-system
+    discussion applies to partial recovery.  It is *not* wrapped in the full-operator
     implicit-function-theorem adjoint used by the full structured direct and
     recycled Krylov paths: this solve inverts the *reduced* Schur-complemented
     operator on the lowest ``keep`` blocks, not the full band, so a
@@ -2360,10 +2418,10 @@ def solve(
             (recycled Krylov continuation warm start).
         differentiable: wrap the solution in
             ``solvax.implicit.linear_solve`` so ``jax.grad`` flows through
-            (structured direct and recycled Krylov; sparse direct refuses).
-            The forward solve is the same one either way; a *gradient* costs
-            one extra (transposed) solve.
-        check_adjoint: (differentiable full-factor structured and recycled Krylov,
+            (full-state structured and recycled Krylov; sparse direct refuses).
+            Generated full recovery builds its transpose from the generated
+            RHS pullback; partial recovery retains the reduced-system derivative.
+        check_adjoint: (differentiable full-state structured and recycled Krylov,
             default on) abort
             loudly — a ``RuntimeError`` raised from a ``jax.debug.callback`` at
             execution time — when the forward or the adjoint (transposed)
@@ -2603,15 +2661,17 @@ def solve(
             )
         else:
             keep = min(tier1_keep_lowest, op.n_xi)
-            result = _solve_tier1_truncated(
-                op,
-                rhs2d,
-                keep=keep,
-                tol=tol,
-                atol=atol,
-                subsystem_batch=subsystem_batch,
-                adjoint_window=tier1_adjoint_window,
-            )
+            if differentiable and keep == op.n_xi:
+                result = _solve_generated_full(
+                    op, rhs2d, tol=tol, atol=atol, subsystem_batch=subsystem_batch,
+                    adjoint_window=tier1_adjoint_window, check_adjoint=check_adjoint,
+                    adjoint_residual_factor=adjoint_residual_factor,
+                )
+            else:
+                result = _solve_tier1_truncated(
+                    op, rhs2d, keep=keep, tol=tol, atol=atol,
+                    subsystem_batch=subsystem_batch, adjoint_window=tier1_adjoint_window,
+                )
         if method == "auto" and not result.converged and not differentiable:
             # Structured elimination has no pivoting across blocks: on
             # near-singular systems (e.g. a nu_n=0 collisionless deck, whose

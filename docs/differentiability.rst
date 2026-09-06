@@ -94,10 +94,10 @@ residual are required, with ``||Ax-b|| <= tol*||b||``; a zero RHS requires zero
 residual. This uses the prepared/overridden tolerance without a backward-error
 floor or solver-reported convergence flag. It costs an original operator
 application per current evaluation. Successful scalar current-level checks stay
-on device; failure callbacks raise at execution time. Full-factor structured
+on device; failure callbacks raise at execution time. Full-state structured
 and recycled Krylov solves additionally use callbacks to record primal/adjoint
-residual diagnostics. This certifies the primal equation,
-not the adjoint or phase-space resolution.
+residual diagnostics. These residual checks do not bound observable or
+phase-space error.
 Under ``vmap``, `JAX converts conditionals to selections
 <https://docs.jax.dev/en/latest/_autosummary/jax.lax.cond.html>`_, so a batch can
 invoke the callback even for accepted states; production batch/root scaling
@@ -147,16 +147,26 @@ fixed-seed PAS timings do not characterize branch searches or optimizer runs.
 Bounded reverse mode for the truncated structured direct kernel
 ---------------------------------------------------------------
 
-One path is deliberately outside the implicit-adjoint wrapper. The memory-lean
+Partial recovery remains outside the implicit-adjoint wrapper. The memory-lean
 truncated structured direct kernel
 (``solve(op, rhs, method="block_tridiagonal_truncated")``) inverts the *reduced*
 Schur-complemented operator on the lowest ``tier1_keep_lowest`` Legendre blocks
-rather than the full band, so a full-operator :math:`A^{\mathsf T}` adjoint would
+when fewer than ``op.n_xi`` blocks are retained. Using the zero-padded partial
+state with a full-operator :math:`A^{\mathsf T}` adjoint would
 be inconsistent and would silently corrupt the gradient. Its blocks are instead
 assembled on the fly, which keeps the **forward** working set at
 :math:`O(\text{keep}\cdot m^2)` per ``(species, x)`` subsystem, independent of
 :math:`N_\xi` — the property that lets large ramped PAS/DKES decks route through
 the structured direct kernel at all.
+
+With ``tier1_keep_lowest=op.n_xi`` and ``differentiable=True``, full generated
+recovery uses SOLVAX's implicit linear solve. Its transpose action is the JAX
+pullback of the existing generated RHS map; physics coefficient derivatives
+come from the original operator. Matrix RHSs share the generated factorization.
+The runtime checks project out inactive padding before computing physical
+residuals and RHS norms. Setup and execution are reported together as
+``build_and_solve`` in this route's timing dictionary. Partial recovery retains
+the derivative described below and has no full-equation adjoint admission.
 
 Plain ``jax.grad`` through that kernel tapes the generated sweeps, so the
 **reverse** pass costs :math:`O(N_\xi\cdot m^2)` per subsystem and surrenders
@@ -394,7 +404,7 @@ recorded agreements are:
    * - PAS + :math:`E_r` kinetic outputs
      - recycled Krylov transposed solve
      - ``2.9e-6``
-   * - Ramped-PAS RHSMode=1 output
+   * - Ramped-PAS RHSMode=1 output with partial recovery
      - truncated block-Thomas, taped reverse mode (the
        ``tier1_adjoint_window=None`` default; no implicit adjoint)
      - agree at rtol ``1e-6``
@@ -432,8 +442,9 @@ roughly one forward solve, as predicted.
    ``adjoint_residual_factor`` is one. Explicitly raising it or disabling
    the check requires independent observable validation; a small backward
    error alone does not establish gradient accuracy. This runtime adjoint
-   gate covers recycled Krylov and the full-factor structured route. Generated
-   full/partial recovery routes still need runtime adjoint admission.
+   gate covers recycled Krylov and full-state structured routes, including
+   generated recovery. Partial recovery still needs a reduced-system admission
+   policy; its zero-padded state is not a full-equation solution.
 
 
 The differentiable optimization chain
