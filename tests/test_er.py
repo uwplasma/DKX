@@ -510,17 +510,21 @@ def test_differentiated_root_rejects_inaccurate_cancelling_fluxes(tmp_path, monk
         jax.block_until_ready(jax.jit(lambda: er.ambipolar_er(problem))())
 
 
-@pytest.mark.parametrize("collision,ramped", [(1, False), (1, True), (0, False), (0, True)])
-def test_current_adjoint_matches_packed_original_equation(tmp_path, collision, ramped):
+@pytest.mark.parametrize("collision,ramped,tol", [
+    (1, False, 1e-10), (1, True, 1e-10), (0, False, 1e-10), (0, True, 1e-10),
+    (0, False, 1e-12),
+])
+def test_current_adjoint_matches_packed_original_equation(tmp_path, collision, ramped, tol):
     import jax
     import jax.numpy as jnp
     from dkx import er
     from dkx.run import profile_moments_from_operator
+    from scipy.linalg.lapack import dgesvx
 
     deck = _pas_deck(collision_operator=collision, n_theta=5, n_zeta=5, n_xi=6, n_x=3)
     if ramped:
         deck = deck.replace("Nxi_for_x_option = 0", "Nxi_for_x_option = 1")
-    problem = er.prepare(_write(tmp_path, deck), tol=1e-10)
+    problem = er.prepare(_write(tmp_path, deck), tol=tol)
     op = er.operator_at_er(problem.operator, .2, dphi_per_er=problem.dphi_per_er)
     rhs = op.rhs()
     def current(x):
@@ -544,8 +548,12 @@ def test_current_adjoint_matches_packed_original_equation(tmp_path, collision, r
     primal_residual = packed @ np.asarray(x)[active] - np.asarray(rhs)[active]
     assert np.linalg.norm(primal_residual) <= problem.tol * np.linalg.norm(rhs)
     assert np.linalg.norm(packed.T @ lam - g) <= problem.tol * np.linalg.norm(g)
-    reference = np.linalg.solve(packed.T, g)
+    *_, reference, _rcond, _ferr, _berr, info = dgesvx(packed, g[:, None], fact="N", trans="T")
+    assert info == 0
+    reference = reference[:, 0]
     assert np.linalg.norm(packed.T @ reference - g) <= problem.tol * np.linalg.norm(g)
+    if tol == 1e-12:
+        assert np.linalg.norm(lam - reference) <= 1e-8 * np.linalg.norm(reference)
     # Audit the research observable as well as the equation. Tight residuals
     # alone do not bound component errors in this ill-conditioned FP system.
     def at_field(field):
@@ -559,7 +567,8 @@ def test_current_adjoint_matches_packed_original_equation(tmp_path, collision, r
     )
     reference_slope = explicit + reference @ np.asarray(forcing)[active]
     slope = jax.grad(lambda field: er.radial_current(problem, field, differentiable=True)[0])(.2)
-    np.testing.assert_allclose(slope, reference_slope, rtol=1e-6, atol=0)
+    np.testing.assert_allclose(slope, reference_slope,
+                               rtol=1e-8 if tol == 1e-12 else 1e-6, atol=0)
 
 
 def test_host_root_rechecks_original_residual_on_final_cold_solve(tmp_path, monkeypatch):
