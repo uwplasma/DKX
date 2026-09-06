@@ -57,7 +57,7 @@ GCROT solve.  Sparse direct is a loud, non-differentiable escape hatch.
 That transposed solve is the one place where a bad answer is invisible: the
 forward solution, its residual, and every other field of :class:`SolveResult`
 stay correct while the gradient is silently wrong.  The differentiable
-recycled Krylov path therefore recomputes each solve's *true* residual from
+full-factor structured and recycled Krylov paths recompute each solve's *true* residual from
 the operator (``||A^T y - g||``, never the Krylov method's internal estimate),
 records it in :class:`AdjointDiagnostics` on :attr:`SolveResult.adjoint`, and
 — unless ``check_adjoint=False`` — raises at execution time when it misses
@@ -244,24 +244,20 @@ class SolveResidualRecord:
 class AdjointDiagnostics:
     """True residuals of the implicit-differentiation solves of one :func:`solve`.
 
-    The implicit-function-theorem VJP costs one *transposed* solve, and a
-    transposed solve that stalls returns a wrong gradient while the forward
-    solution stays perfectly good — the failure mode this container exists to
-    make visible.  Records are appended by a ``jax.debug.callback`` when the
-    corresponding solve actually executes (the adjoint ones during the
-    backward pass), so a freshly returned :class:`SolveResult` carries an
-    empty one; read it after ``jax.grad``/``jax.vjp`` has run.
-
-    Under ``jax.jit`` the callback closure is captured at *trace* time, so a
-    cached jitted function keeps appending to the object built on its first
-    trace.  Call :meth:`reset` between measurements.
+    Callbacks update records when each solve executes, including during the
+    backward pass. Synchronize device work/effects before inspecting them.
+    Cached JIT executions reuse this container; only the latest record for
+    each equation label and RHS column is retained, so long scans do not
+    accumulate an unbounded history. Copy ``records`` after synchronization
+    to retain a snapshot, or call :meth:`reset` before a new measurement.
 
     Attributes:
         tol, atol: the tolerances the solve was asked for.
         factor: the explicitly accepted slack over ``target``
             (``adjoint_residual_factor`` of :func:`solve`).
         checked: whether a failure raises (``check_adjoint`` of :func:`solve`).
-        records: the :class:`SolveResidualRecord` list, in execution order.
+        records: latest :class:`SolveResidualRecord` per equation/RHS key,
+            in first-seen key order.
     """
 
     tol: float
@@ -273,6 +269,13 @@ class AdjointDiagnostics:
     def reset(self) -> None:
         """Drop every record (e.g. between two runs of a jitted function)."""
         self.records.clear()
+
+    def _record(self, record: SolveResidualRecord) -> None:
+        for i, old in enumerate(self.records):
+            if (old.label, old.rhs_index) == (record.label, record.rhs_index):
+                self.records[i] = record
+                return
+        self.records.append(record)
 
     def _select(self, label_prefix: str) -> list[SolveResidualRecord]:
         return [r for r in self.records if r.label.startswith(label_prefix)]
@@ -330,7 +333,7 @@ class SolveResult:
             under-report by ~10x).  Under ``jit``/``grad`` the blocks are no-ops
             and the values are trace-time only.
         adjoint: :class:`AdjointDiagnostics` of the implicit-differentiation
-            solves (differentiable recycled Krylov only, else ``None``).
+            solves (differentiable full-factor structured and recycled Krylov, else ``None``).
             Empty when the result is returned: the records are appended at
             *execution* time, i.e. the forward ones when the value is computed
             and the adjoint ones when the backward pass runs, so inspect it
@@ -493,11 +496,12 @@ def _residual_guard(
     factor: float,
     raise_on_failure: bool,
     diagnostics: AdjointDiagnostics | None,
+    solver_name: str = "GCROT",
 ) -> Callable[..., None]:
     """Host callback that records — and by default aborts on — a bad solve.
 
-    Used on both the forward and the adjoint (transposed) GCROT solves of the
-    ``differentiable=True`` recycled Krylov path.  A stalled *adjoint* solve is
+    Used on forward and transposed solves of the differentiable full-factor
+    structured and recycled Krylov paths.  A stalled *adjoint* solve is
     the dangerous one: the forward solution stays good, nothing in the returned
     :class:`SolveResult` changes, and the implicit-function-theorem VJP hands
     back a wrong gradient (the singular Fokker-Planck +
@@ -551,7 +555,7 @@ def _residual_guard(
             within_tolerance=ok,
         )
         if diagnostics is not None:
-            diagnostics.records.append(record)
+            diagnostics._record(record)
         if ok or not raise_on_failure:
             return
         rel = record.relative_residual
@@ -561,7 +565,7 @@ def _residual_guard(
             else ("||A x - b|| / ||b||")
         )
         raise RuntimeError(
-            f"[dkx.solve] differentiable {label} GCROT solve failed to "
+            f"[dkx.solve] differentiable {label} {solver_name} solve failed to "
             f"converge on right-hand side {rhs_index}: the true relative "
             f"residual {formula} is {rel:.3e} (residual {res:.3e}, "
             f"rhs norm {b_norm:.3e}, solution norm {x_norm:.3e}), above the accepted "
@@ -570,13 +574,10 @@ def _residual_guard(
             "enlarge this gate; homogeneous equations require zero defect. Returning would "
             "leave the implicit-differentiation gradient uncertified, so the "
             "solve aborts instead.\n"
-            "Likely cause: a singular or near-singular operator whose null "
-            "space the constraint scheme does not span — full Fokker-Planck "
-            "with constraintScheme=1, or an Er xDot/xiDot deck under the "
-            "per-speed constraintScheme=2 border. The physical drive stays "
-            "in the range of A, so the forward solve converges and only the "
-            "transposed solve against a generic cotangent stalls; that is "
-            "why nothing else in the SolveResult looks wrong.\n"
+            "Possible causes include ill-conditioning, incomplete constraints, "
+            "or insufficient convergence/refinement. A physical forward drive "
+            "may be in the range of A even when a generic adjoint cotangent "
+            "is not, so a converged forward solve does not certify the adjoint.\n"
             "Remedies: raise the resolution or pick a constraint scheme that "
             "regularizes this operator (SFINCS pairs constraintScheme=1 with "
             "the Fokker-Planck/Sugama operators and 2 with pitch-angle "
@@ -604,6 +605,7 @@ def _guarded_solve(
     factor: float,
     raise_on_failure: bool,
     diagnostics: AdjointDiagnostics | None,
+    solver_name: str = "GCROT",
 ) -> jnp.ndarray:
     """Measure ``x``'s true residual against ``matvec`` and hand it to the guard.
 
@@ -620,6 +622,7 @@ def _guarded_solve(
             factor=factor,
             raise_on_failure=raise_on_failure,
             diagnostics=diagnostics,
+            solver_name=solver_name,
         ),
         jnp.linalg.norm(residual),
         jnp.linalg.norm(rhs_col),
@@ -1328,7 +1331,12 @@ def _solve_tier1(
     tol: float,
     atol: float,
     differentiable: bool,
+    check_adjoint: bool,
+    adjoint_residual_factor: float,
 ) -> SolveResult:
+    diagnostics = (AdjointDiagnostics(tol=float(tol), atol=float(atol),
+                                      factor=float(adjoint_residual_factor), checked=bool(check_adjoint))
+                   if differentiable else None)
     t0 = time.perf_counter()
     t1_solver = build_tier1_solver(op)
     # Force the async block-Thomas factorization to complete so the "build"
@@ -1341,7 +1349,7 @@ def _solve_tier1(
     )
     t1 = time.perf_counter()
 
-    def _solve_refined(b: jnp.ndarray, *, transpose: bool = False) -> jnp.ndarray:
+    def _solve_refined(b: jnp.ndarray, *, transpose: bool = False, rhs_index: int = 0) -> jnp.ndarray:
         """Factor solve plus iterative refinement (defect correction).
 
         The block-Thomas elimination is backward-stable but its rounding can
@@ -1365,6 +1373,12 @@ def _solve_tier1(
             lambda r: t1_solver.solve(r, transpose=transpose),
             iterations=_TIER1_REFINEMENT_SWEEPS,
         )
+        if differentiable:
+            x = _guarded_solve(
+                "adjoint (transposed)" if transpose else "forward", rhs_index,
+                apply, b, x, tol=tol, atol=atol, factor=adjoint_residual_factor,
+                raise_on_failure=check_adjoint, diagnostics=diagnostics, solver_name="structured",
+            )
         return x
 
     if differentiable:
@@ -1374,8 +1388,8 @@ def _solve_tier1(
                 op.apply,
                 apply_t,
                 rhs2d[:, j],
-                lambda b: _solve_refined(b),
-                lambda b: _solve_refined(b, transpose=True),
+                lambda b, j=j: _solve_refined(b, rhs_index=j),
+                lambda b, j=j: _solve_refined(b, transpose=True, rhs_index=j),
             )
             for j in range(rhs2d.shape[1])
         ]
@@ -1392,6 +1406,7 @@ def _solve_tier1(
         residual_norms=res,
         converged=_converged_flag(res, rhs2d, tol, atol),
         recycle=None,
+        adjoint=diagnostics,
         timings={"build": t1 - t0, "solve": t2 - t1},
     )
 
@@ -2348,10 +2363,11 @@ def solve(
             (structured direct and recycled Krylov; sparse direct refuses).
             The forward solve is the same one either way; a *gradient* costs
             one extra (transposed) solve.
-        check_adjoint: (differentiable recycled Krylov only, default on) abort
+        check_adjoint: (differentiable full-factor structured and recycled Krylov,
+            default on) abort
             loudly — a ``RuntimeError`` raised from a ``jax.debug.callback`` at
             execution time — when the forward or the adjoint (transposed)
-            GCROT solve misses its residual.  A stalled *adjoint* solve is
+            solve misses its residual.  A stalled *adjoint* solve is
             invisible from the outside: the forward solution and every field
             of the returned :class:`SolveResult` are fine and only the
             implicit-function-theorem gradient is wrong, which is how the
@@ -2582,7 +2598,8 @@ def solve(
     if chosen in ("block_tridiagonal", "block_tridiagonal_truncated"):
         if chosen == "block_tridiagonal":
             result = _solve_tier1(
-                op, rhs2d, tol=tol, atol=atol, differentiable=differentiable
+                op, rhs2d, tol=tol, atol=atol, differentiable=differentiable,
+                check_adjoint=check_adjoint, adjoint_residual_factor=adjoint_residual_factor,
             )
         else:
             keep = min(tier1_keep_lowest, op.n_xi)

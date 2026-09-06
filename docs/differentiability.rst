@@ -93,8 +93,10 @@ the original kinetic residual before admitting a state. Finite state, RHS and
 residual are required, with ``||Ax-b|| <= tol*||b||``; a zero RHS requires zero
 residual. This uses the prepared/overridden tolerance without a backward-error
 floor or solver-reported convergence flag. It costs an original operator
-application per current evaluation. Successful scalar JIT checks stay on device;
-failure callbacks raise at execution time. This certifies the primal equation,
+application per current evaluation. Successful scalar current-level checks stay
+on device; failure callbacks raise at execution time. Full-factor structured
+and recycled Krylov solves additionally use callbacks to record primal/adjoint
+residual diagnostics. This certifies the primal equation,
 not the adjoint or phase-space resolution.
 Under ``vmap``, `JAX converts conditionals to selections
 <https://docs.jax.dev/en/latest/_autosummary/jax.lax.cond.html>`_, so a batch can
@@ -420,15 +422,18 @@ roughly one forward solve, as predicted.
    the operator after the transposed solve — never the Krylov method's own
    estimate — records it in ``SolveResult.adjoint``, and raises with the
    residual and the remedies unless you pass ``check_adjoint=False``. Read
-   ``result.adjoint`` after the backward pass to see the number behind the
-   decision. By default both forward and transpose solves must satisfy
+   ``result.adjoint`` after synchronizing the backward pass to see the number
+   behind the decision. Cached JIT executions retain only the latest record
+   per equation and RHS column, so scans do not grow diagnostic history. Copy
+   ``records`` after synchronization to save a snapshot. By default both forward and transpose solves must satisfy
    ``max(atol, tol*||rhs||)``; the backward-error estimate is diagnostic and
    never enlarges this gate. A homogeneous equation requires entrywise zero
    defect, even when a nonzero defect's squared norm underflows. The default
    ``adjoint_residual_factor`` is one. Explicitly raising it or disabling
    the check requires independent observable validation; a small backward
    error alone does not establish gradient accuracy. This runtime adjoint
-   gate covers recycled Krylov, not the structured direct routes.
+   gate covers recycled Krylov and the full-factor structured route. Generated
+   full/partial recovery routes still need runtime adjoint admission.
 
 
 The differentiable optimization chain

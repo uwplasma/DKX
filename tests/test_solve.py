@@ -948,7 +948,7 @@ def adjoint_effects():
     try:
         jax.effects_barrier()
     except Exception as exc:
-        assert "GCROT solve failed to converge" in str(exc)
+        assert "solve failed to converge" in str(exc)
         jax.jit(lambda: jax.debug.callback(lambda: None))()
         jax.effects_barrier()
 
@@ -1118,15 +1118,76 @@ def test_adjoint_guard_survives_jit(adjoint_effects) -> None:
         jax.jit(jax.grad(loss_singular))(jnp.asarray(1.0)).block_until_ready()
 
 
-def test_adjoint_guard_leaves_the_forward_solution_untouched() -> None:
+
+@pytest.mark.parametrize("checked", [True, False])
+def test_structured_adjoint_rechecks_original_equation(monkeypatch, checked, adjoint_effects):
+    import importlib
+    solver = importlib.import_module("dkx.solve")
+    op = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
+    original = solver.build_tier1_solver
+
+    def corrupted(operator):
+        factors = original(operator)
+        return SimpleNamespace(
+            **{name: getattr(factors, name) for name in ("factors", "z_fwd", "z_t", "gamma")},
+            solve=lambda b, transpose=False: jnp.zeros_like(b) if transpose else factors.solve(b),
+        )
+    monkeypatch.setattr(solver, "build_tier1_solver", corrupted)
+    captured = {}
+    def loss(rhs):
+        result = solve(op, rhs, method="block_tridiagonal", differentiable=True,
+                       check_adjoint=checked, tol=1e-10)
+        captured["result"] = result
+        return jnp.sum(result.x)
+    gradient = jax.jit(jax.grad(loss))
+    if checked:
+        with pytest.raises(Exception, match="adjoint.*structured solve failed"):
+            gradient(op.rhs()).block_until_ready()
+    else:
+        np.testing.assert_array_equal(gradient(op.rhs()), 0.)
+        jax.effects_barrier()
+        diagnostics = captured["result"].adjoint
+        assert not diagnostics.checked and not diagnostics.converged
+        assert diagnostics.forward_records[0].within_tolerance
+        assert diagnostics.adjoint_records[0].relative_residual == pytest.approx(1.)
+
+
+@pytest.mark.parametrize("method", ["block_tridiagonal", "gmres"])
+def test_adjoint_records_stay_bounded_and_refresh_each_rhs_under_jit(method):
+    op = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
+    rhs = jnp.stack([op.rhs(), .5*op.rhs()], axis=1)
+    captured = {}
+    def loss(b):
+        result = solve(op, b, method=method, differentiable=True, tol=1e-10)
+        captured["result"] = result
+        return jnp.sum(result.x**2)
+    compiled = jax.jit(jax.value_and_grad(loss))
+    for scale in (1., 2., 3.):
+        _, gradient = compiled(scale*rhs)
+        gradient.block_until_ready()
+        jax.effects_barrier()
+        diagnostics = captured["result"].adjoint
+        assert diagnostics.checked and diagnostics.converged
+        for records in (diagnostics.forward_records, diagnostics.adjoint_records):
+            assert len(records) == 2 and {r.rhs_index for r in records} == {0, 1}
+            assert all(r.residual_norm <= r.target for r in records)
+        for record in diagnostics.forward_records:
+            assert record.rhs_norm == pytest.approx(scale*np.linalg.norm(rhs[:, record.rhs_index]))
+        assert np.linalg.norm(gradient[:, 0]) > 0
+        assert np.linalg.norm(gradient[:, 1]-.5*gradient[:, 0]) <= 1e-12*np.linalg.norm(.5*gradient[:, 0])
+
+
+@pytest.mark.parametrize("method,deck", [("gmres", "multispecies_quick_2species_FPCollisions_noEr"),
+                                         ("block_tridiagonal", "pas_1species_PAS_noEr_tiny_scheme1")])
+def test_adjoint_guard_leaves_the_forward_solution_untouched(method, deck) -> None:
     """No physics change: the check observes, it never alters an answer."""
-    op0 = _load_op("multispecies_quick_2species_FPCollisions_noEr")
+    op0 = _load_op(deck)
     rhs = op0.rhs()
-    checked = solve(op0, rhs, method="gmres", tol=1e-10, differentiable=True)
+    checked = solve(op0, rhs, method=method, tol=1e-10, differentiable=True)
     unchecked = solve(
-        op0, rhs, method="gmres", tol=1e-10, differentiable=True, check_adjoint=False
+        op0, rhs, method=method, tol=1e-10, differentiable=True, check_adjoint=False
     )
-    plain = solve(op0, rhs, method="gmres", tol=1e-10)
+    plain = solve(op0, rhs, method=method, tol=1e-10)
     assert np.array_equal(np.asarray(checked.x), np.asarray(unchecked.x))
     assert np.array_equal(np.asarray(checked.x), np.asarray(plain.x))
     assert plain.adjoint is None  # non-differentiable solves run no adjoint
