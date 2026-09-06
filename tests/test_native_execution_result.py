@@ -174,6 +174,63 @@ def test_native_profile_refresh_updates_stencil_collisions_and_current_gradient(
         fresh(0.).with_profiles(density_m3=n, temperature_keV=t)
 
 
+@pytest.mark.parametrize("collisions", ["pitch_angle_scattering", "linearized_fokker_planck"])
+def test_native_profile_gradient_matches_independently_rebuilt_ambipolar_roots(collisions):
+    import jax
+    import jax.numpy as jnp
+    from dkx.er import ambipolar_er, find_ambipolar_er, radial_current
+
+    base = _case()
+    ion = replace(base.species[0], density_m3=(8e19, 7e19, 6e19),
+                  temperature_keV=(1.2, 1., .8))
+    electron = replace(ion, name="electron", charge=-1, mass_amu=.00054858,
+                       temperature_keV=(1.5, 1.3, 1.1))
+    case = replace(base, species=(ion, electron),
+                   geometry=replace(base.geometry, file="lhd_standard", surfaces=(.09, .16, .25)),
+                   physics=replace(base.physics, collisions=collisions),
+                   resolution=replace(base.resolution, theta=5, zeta=5, pitch=6, speed=3,
+                                      pitch_speed_ramp=0),
+                   solver=replace(base.solver, relative_tolerance=1e-11))
+    prepared = dkx.prepare_er_scan(case, surface_index=1, differentiable_profiles=True)
+    density = jnp.asarray([s.density_m3 for s in case.species]).T
+    temperature = jnp.asarray([s.temperature_keV for s in case.species]).T
+
+    def cold_root(problem, bracket):
+        result = find_ambipolar_er(problem, er_bracket=bracket, max_iter=60,
+                                   current_tol=1e-16, field_tol=1e-12,
+                                   warm_start=False, all_roots=False, emit=None)
+        assert result.converged
+        return float(result.er)
+
+    seed = cold_root(prepared, (-5., 5.))
+
+    def profiles(scale):
+        return density*(1+.05*scale), temperature*(1+scale*jnp.array([.1, -.05]))
+
+    def root(scale):
+        n, t = profiles(scale)
+        return ambipolar_er(prepared.with_profiles(density_m3=n, temperature_keV=t),
+                            er0=seed, root_tol=1e-8, current_tol=1e-15, min_abs_slope=1e-15)
+
+    value, derivative = jax.jit(jax.value_and_grad(root))(0.)
+    np.testing.assert_allclose(value, seed, rtol=0, atol=1e-8)
+    assert np.isfinite(derivative) and abs(float(derivative)) > .1
+    current, slope = jax.jvp(lambda field: radial_current(prepared, field, differentiable=True)[0],
+                             (value,), (jnp.asarray(1.),))
+    assert abs(float(current)) <= 1e-15
+    assert np.isfinite(slope) and abs(float(slope)) > 1e-7
+    for step in (1e-3, 3e-4):
+        roots = []
+        for sign in (-1, 1):
+            n, t = map(np.asarray, profiles(sign*step))
+            species = tuple(replace(s, density_m3=tuple(n[:, i]), temperature_keV=tuple(t[:, i]))
+                            for i, s in enumerate(case.species))
+            # Rebuild the native host coefficients and solve cold on the same local branch.
+            fresh = dkx.prepare_er_scan(replace(case, species=species), surface_index=1)
+            roots.append(cold_root(fresh, (seed-.5, seed+.5)))
+        np.testing.assert_allclose(derivative, (roots[1]-roots[0])/(2*step), rtol=2e-6, atol=0)
+
+
 def _boozer_case():
     return dkx.Case.from_file(
         Path(__file__).resolve().parents[1]
