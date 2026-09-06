@@ -160,9 +160,20 @@ assembled on the fly, which keeps the **forward** working set at
 the structured direct kernel at all.
 
 With ``tier1_keep_lowest=op.n_xi`` and ``differentiable=True``, full generated
-recovery uses SOLVAX's implicit linear solve. Its transpose action is the JAX
-pullback of the existing generated RHS map; physics coefficient derivatives
-come from the original operator. Matrix RHSs share the generated factorization.
+recovery uses SOLVAX's implicit linear solve. When the estimated storage fits
+``tier1_memory_budget_gb``, it retains SOLVAX's generated Schur LU factors,
+regenerates off-diagonal blocks during substitution, and reuses the factors
+for forward/transpose solves and one refinement correction against the original
+physical action. Factors retain only active pitch blocks, grouped by chain
+length. They belong to this operator and solve execution; this is not yet a
+serialized restart or a cache across changing profile/geometry inputs.
+Batch sizing conservatively includes the optional factor storage.
+
+If the storage estimate does not fit, the transpose remains the JAX pullback
+of the existing generated RHS map, including its setup. Physics coefficient
+derivatives come from the original operator under either policy; matrix RHSs
+share factorization. Partial-recovery window settings do not approximate the
+full-state implicit derivative.
 The runtime checks project out inactive padding before computing physical
 residuals and RHS norms. Setup and execution are reported together as
 ``build_and_solve`` in this route's timing dictionary. Partial recovery retains

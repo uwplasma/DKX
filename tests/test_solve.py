@@ -311,6 +311,25 @@ def _ramped_pas_op() -> KineticOperator:
     return op
 
 
+@pytest.mark.parametrize("width", [1, "auto"])
+def test_generated_factors_solve_both_physical_borders(width):
+    from dkx.solve import _build_generated_full_solver
+    op = _ramped_pas_op()
+    a = np.asarray(materialize_dense(op, pin_masked_dofs=True))
+    exact = np.random.default_rng(77).normal(size=(op.total_size, 2))
+    exact *= np.asarray(op.active_dof_mask())[:, None]
+    rhs = jnp.asarray(a @ exact)
+    rhs_t = jnp.asarray(a.T @ exact)
+    def both(b, bt):
+        prepared = _build_generated_full_solver(op, width)
+        return prepared(b), prepared(bt, transpose=True)
+    values = jax.jit(both)(rhs, rhs_t)
+    for matrix, b, x in zip((a, a.T), (rhs, rhs_t), values):
+        x = np.asarray(x)
+        assert np.linalg.norm(matrix @ x - b) <= 1e-10 * np.linalg.norm(b)
+        assert np.linalg.norm(x-exact) <= 1e-8 * np.linalg.norm(exact)
+
+
 def test_ramped_pas_routes_truncated_and_matches_pinned_referees() -> None:
     """Auto must route ramped PAS decks to the per-subsystem truncated kernel.
 
@@ -386,6 +405,8 @@ def test_ramped_full_recovery_windowed_gradient_matches_tape_and_fd():
                        differentiable=differentiable, tier1_adjoint_window=window, emit=None)
         return jnp.sum(result.x**2)
     value, gradient = jax.jit(jax.value_and_grad(lambda t: loss(t, 2)))(1.)
+    jvp = jax.jit(lambda t: jax.jvp(lambda s: loss(s, 2), (t,), (jnp.ones_like(t),)))(1.)
+    np.testing.assert_allclose([value, gradient], jvp, rtol=1e-10, atol=1e-13)
     taped = jax.jit(jax.value_and_grad(lambda t: loss(t, None, False)))(1.)
     np.testing.assert_allclose([value, gradient], taped, rtol=1e-10, atol=1e-13)
     assert np.isfinite(gradient) and abs(float(gradient)) > 1e-12
@@ -412,7 +433,8 @@ def test_generated_full_adjoint_rejects_corrupted_pullback(monkeypatch, checked,
     captured = {}
     def loss(rhs):
         result = solve(op, rhs, differentiable=True, tier1_keep_lowest=op.n_xi,
-                       check_adjoint=checked, tol=1e-10, emit=None)
+                       check_adjoint=checked, tol=1e-10, emit=None,
+                       tier1_memory_budget_gb=1e-12)
         captured["result"] = result
         return jnp.sum(result.x)
     gradient = jax.jit(jax.grad(loss))
@@ -428,6 +450,59 @@ def test_generated_full_adjoint_rejects_corrupted_pullback(monkeypatch, checked,
         assert diagnostics.adjoint_records[0].relative_residual == pytest.approx(.5, rel=1e-8)
         assert diagnostics.forward_records[0].within_tolerance
         assert not diagnostics.adjoint_records[0].within_tolerance
+
+
+@pytest.mark.parametrize("checked", [True, False])
+def test_generated_retained_adjoint_rejects_corrupted_solve(monkeypatch, checked, adjoint_effects):
+    import importlib
+    solver = importlib.import_module("dkx.solve")
+    build = solver._build_generated_full_solver
+    def corrupted(*args):
+        prepared = build(*args)
+        return lambda rhs, transpose=False: jnp.zeros_like(rhs) if transpose else prepared(rhs)
+    monkeypatch.setattr(solver, "_build_generated_full_solver", corrupted)
+    op = _ramped_pas_op()
+    captured = {}
+    def loss(rhs):
+        result = solve(op, rhs, differentiable=True, tier1_keep_lowest=op.n_xi,
+                       check_adjoint=checked, tol=1e-10, emit=None)
+        captured["result"] = result
+        return jnp.sum(result.x)
+    gradient = jax.jit(jax.grad(loss))
+    if checked:
+        with pytest.raises(Exception, match="adjoint.*generated full solve failed"):
+            gradient(op.rhs()).block_until_ready()
+    else:
+        value = gradient(op.rhs())
+        value.block_until_ready()
+        jax.effects_barrier()
+        np.testing.assert_array_equal(value, 0.)
+        assert not captured["result"].adjoint.adjoint_records[0].within_tolerance
+
+
+def test_generated_factor_retention_respects_budget(monkeypatch):
+    import importlib
+    solver = importlib.import_module("dkx.solve")
+    build = solver._build_generated_full_solver
+    calls = []
+    def observed(*args):
+        calls.append(True)
+        return build(*args)
+    monkeypatch.setattr(solver, "_build_generated_full_solver", observed)
+    op = _ramped_pas_op()
+    def run(budget):
+        return jax.jit(lambda b: solve(
+            op, b, differentiable=True, tier1_keep_lowest=op.n_xi,
+            tier1_memory_budget_gb=budget, emit=None).x)(op.rhs())
+    recomputed = run(1e-12)
+    recomputed.block_until_ready()
+    assert not calls
+    retained = run(1.)
+    retained.block_until_ready()
+    assert calls == [True]
+    assert np.linalg.norm(retained-recomputed) <= 1e-8 * np.linalg.norm(recomputed)
+    for value in (retained, recomputed):
+        assert np.linalg.norm(op.apply(value)-op.rhs()) <= 1e-10 * np.linalg.norm(op.rhs())
 
 
 @pytest.mark.parametrize("columns", [None, 1, 2])

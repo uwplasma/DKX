@@ -49,8 +49,10 @@ Sparse direct — host fallback and cross-check (``solvax.native.splu_solve``)
 
 Differentiability: full-state structured and recycled Krylov routes use
 ``solvax.implicit.linear_solve`` when ``differentiable=True``. Full-factor
-structured solves reuse factors for the transpose; generated full recovery
-uses the generated RHS map's pullback, including its setup. Partial generated
+structured solves reuse factors for the transpose. Generated full recovery
+retains Schur factors and refines with the original action when its storage
+estimate fits the budget; otherwise it uses the generated RHS map's pullback,
+including its setup. Partial generated
 recovery retains its reduced-system derivative. Sparse direct refuses AD.
 
 Full-state implicit routes recompute forward/transpose residuals from their
@@ -89,7 +91,9 @@ import numpy as np  # noqa: E402
 try:  # noqa: E402
     from solvax.direct import (
         BlockTridiagFactors,
+        GeneratedBlockTridiagFactors,
         block_thomas_factor,
+        block_thomas_factor_fn,
         block_thomas_selected_tail_fn,
         block_thomas_solve,
         block_thomas_truncated_fn,
@@ -101,7 +105,9 @@ try:  # noqa: E402
     from solvax.refine import iterative_refinement
 except ImportError:
     BlockTridiagFactors = None  # type: ignore[assignment, misc]
+    GeneratedBlockTridiagFactors = None  # type: ignore[assignment, misc]
     block_thomas_factor = None  # type: ignore[assignment]
+    block_thomas_factor_fn = None  # type: ignore[assignment]
     block_thomas_selected_tail_fn = None  # type: ignore[assignment]
     block_thomas_solve = None  # type: ignore[assignment]
     block_thomas_truncated_fn = None  # type: ignore[assignment]
@@ -1322,10 +1328,81 @@ def _implicit_solve(
     )
 
 
+def _generated_full_factor_bytes(op: KineticOperator) -> float:
+    m = op.n_theta * op.n_zeta
+    return float(op.n_species * np.sum(np.asarray(op.n_xi_for_x)) * (8*m*m + 4*m))
+
+
+def _build_generated_full_solver(
+    op: KineticOperator, subsystem_batch: int | str
+) -> Callable[..., jnp.ndarray]:
+    """Retain SOLVAX Schur factors for this immutable physical operator.
+
+    Factors stay grouped by active chain length; inactive pitch padding is
+    never factored. The returned solve handles matrix RHSs and both borders.
+    For the shifted chain K + gamma*b*c^T, the border correction enforces
+    c^T*f = r_c; transposition swaps b and c and preserves gamma.
+    """
+    coef = _truncated_coefficients(op)
+    ns, nx, nl, nt, nz = op.f_shape
+    m = nt * nz
+    bordered = op.constraint_scheme == 2
+    width = _resolve_subsystem_batch(op, subsystem_batch, nl)
+    groups = {}
+    for ix, nb in enumerate(np.asarray(op.n_xi_for_x)):
+        groups.setdefault(int(nb), []).append(ix)
+    prepared = []
+    for nb, indices in groups.items():
+        idx = np.asarray(indices)
+        count = ns * len(indices)
+        inputs = (jnp.repeat(coef["stream"], len(indices), axis=0),
+                  jnp.repeat(coef["mirror"], len(indices), axis=0),
+                  coef["pas"][:, idx].reshape(count, nl),
+                  jnp.tile(op.x[idx], ns), coef["gamma"][:, idx].reshape(count))
+        def blocks(values):
+            return _truncated_block_fn(coef, nl, *values, shift_border=bordered)
+        def factor(values, nb=nb):
+            state = block_thomas_factor_fn(blocks(values), nb, store_offdiagonals=False)
+            return state.delta_lu, state.delta_piv
+        batch_size = None if min(width, count) == 1 else min(width, count)
+        lu, piv = jax.lax.map(factor, inputs, batch_size=batch_size)
+        prepared.append((nb, idx, inputs, lu, piv, batch_size))
+
+    def solve_prepared(rhs, transpose=False):
+        nr = rhs.shape[1]
+        rf = rhs[:op.f_size].reshape(ns, nx, nl, m, nr)
+        rc = (rhs[op.f_size:].reshape(ns, nx, nr) if bordered
+              else jnp.zeros((ns, nx, nr), dtype=rhs.dtype))
+        fields, sources = jnp.zeros_like(rf), jnp.zeros_like(rc)
+        b, c = (coef["c0"], coef["b0"]) if transpose else (coef["b0"], coef["c0"])
+        for nb, idx, inputs, lu, piv, batch_size in prepared:
+            count = ns * len(idx)
+            def solve_one(values, nb=nb):
+                coefficients, lu_one, piv_one, rhs_one, source = values
+                block_fn = _truncated_block_fn(coef, nl, *coefficients, shift_border=bordered)
+                state = GeneratedBlockTridiagFactors(lu_one, piv_one, block_fn, nb, rhs.dtype)
+                if bordered:
+                    border = jnp.zeros((nb, m, 1), dtype=rhs.dtype).at[0, :, 0].set(b)
+                    solution = block_thomas_solve(state, jnp.concatenate((rhs_one, border), axis=2), transpose=transpose)
+                    y, z = solution[:, :, :nr], solution[:, :, nr]
+                    shift = (c @ y[0] - source) / (c @ z[0])
+                    return y - z[:, :, None] * shift, coefficients[4] * source + shift
+                return block_thomas_solve(state, rhs_one, transpose=transpose), source
+            f, s = jax.lax.map(solve_one,
+                (inputs, lu, piv, rf[:, idx, :nb].reshape(count, nb, m, nr),
+                 rc[:, idx].reshape(count, nr)), batch_size=batch_size)
+            fields = fields.at[:, idx, :nb].set(f.reshape(ns, len(idx), nb, m, nr))
+            sources = sources.at[:, idx].set(s.reshape(ns, len(idx), nr))
+        result = fields.reshape(op.f_size, nr)
+        return jnp.concatenate((result, sources.reshape(op.extra_size, nr)), axis=0) if bordered else result
+    return solve_prepared
+
+
 def _solve_generated_full(
     op: KineticOperator, rhs2d: jnp.ndarray, *, tol: float, atol: float,
     subsystem_batch: int | str, adjoint_window: int | None,
     check_adjoint: bool, adjoint_residual_factor: float,
+    memory_budget_gb: float | None = None,
 ) -> SolveResult:
     """Implicit full recovery using SOLVAX's existing generated sweeps."""
     start = time.perf_counter()
@@ -1337,6 +1414,13 @@ def _solve_generated_full(
     # map leaves a root bitcast shared with diagnostics, which crashes the
     # GPU multi-output fusion pass in JAX 0.10.2.
     single = rhs2d.shape[1] == 1
+    budget, _ = _tier1_budget_bytes(memory_budget_gb)
+    # Extend the one-RHS estimate with four buffers/extra column and its 2x slack.
+    retained_peak = (tier1_truncated_peak_memory_bytes(op, op.n_xi, subsystem_batch)
+                     + 2 * _generated_full_factor_bytes(op)
+                     + 64 * op.total_size * (rhs2d.shape[1] - 1))
+    prepared = (_build_generated_full_solver(op, subsystem_batch)
+                if retained_peak <= budget else None)
     def project(b):
         return b if mask is None else jnp.where(mask if single else mask[:, None], b, 0.)
     def generated(b):
@@ -1353,7 +1437,15 @@ def _solve_generated_full(
         _, pullback = jax.vjp(generated, jnp.zeros_like(b))
         return pullback(b)[0]
     def measured(b, transposed=False):
-        x = transpose(b) if transposed else generated(b)
+        if prepared is None:
+            x = transpose(b) if transposed else generated(b)
+        else:
+            action = apply_t if transposed else apply
+            action = action if single else jax.vmap(action, in_axes=1, out_axes=1)
+            def cached(r):
+                value = prepared(r[:, None] if single else r, transpose=transposed)
+                return (value[:, 0] if single else value) + (r-project(r))
+            x, _ = iterative_refinement(action, b, cached, iterations=_TIER1_REFINEMENT_SWEEPS)
         physical_b, physical_x = project(b), project(x)
         for j in range(rhs2d.shape[1]):
             _guarded_solve(
@@ -2190,7 +2282,12 @@ def auto_solve_peak_memory_bytes(
     """
     route = _auto_route_structural(op, budget_gb, keep_lowest)
     if route == "block_tridiagonal_truncated":
-        return tier1_truncated_peak_memory_bytes(op, keep_lowest=keep_lowest)
+        peak = tier1_truncated_peak_memory_bytes(op, keep_lowest=keep_lowest)
+        # Full-state AD can retain Schur factors across primal/transpose calls.
+        # Include that optional state in batch sizing even for forward callers.
+        if keep_lowest >= op.n_xi:
+            peak += 2 * _generated_full_factor_bytes(op)
+        return peak
     return tier1_peak_memory_bytes(op)
 
 
@@ -2666,6 +2763,7 @@ def solve(
                     op, rhs2d, tol=tol, atol=atol, subsystem_batch=subsystem_batch,
                     adjoint_window=tier1_adjoint_window, check_adjoint=check_adjoint,
                     adjoint_residual_factor=adjoint_residual_factor,
+                    memory_budget_gb=tier1_memory_budget_gb,
                 )
             else:
                 result = _solve_tier1_truncated(
