@@ -78,6 +78,8 @@ differentiate the same way: [differentiability](docs/differentiability.rst).
 
 ## Verified
 
+![DKX against SFINCS Fortran v3, MONKES and YANCC: scaled differences on matched full Fokker-Planck decks, and Beidler-normalized monoenergetic coefficients](docs/_static/figures/readme/cross_code_validation.png)
+
 Against SFINCS Fortran v3 on 38 upstream decks with the same discretization, DKX
 agrees to solver tolerance: median 4e-6, full Fokker–Planck decks to 1e-8. Against the
 independent codes MONKES and YANCC, the four Beidler-normalized monoenergetic coefficients
