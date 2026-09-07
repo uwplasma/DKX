@@ -64,3 +64,34 @@ much better preconditioner against `Nx` dependent steps and `Nx^2/2` block
 matrix-vector products. On GPU that sequencing may cost more than the iterations
 it saves. That is the experiment, and it is worth running because nothing else
 measured so far addresses more than two per cent of the dropped mass.
+
+## Confirmation by exact dense operators, and one invalid attempt
+
+The table above uses random probes. Materializing the f-block densely on a
+small full-Fokker-Planck deck (one species, `Ntheta = Nzeta = 5`, `Nxi = 6`,
+`Nx = 5`, so 750 unknowns) gives the same answer without probing, as exact
+operator norms:
+
+| Preconditioner's f-block | `||A - M|| / ||A||` |
+| --- | ---: |
+| speed-diagonal collisions, what is used now | 0.3555 |
+| upper triangle in speed, `preconditioner_x = 2` | 0.0009 |
+
+A factor of about 400 in how well `M` represents `A`, by a method independent
+of the probe-based measurement.
+
+**What could not be measured this way, and why it matters to whoever runs the
+admission test.** The obvious next step, counting GMRES iterations against each
+preconditioner on that dense system, is invalid as posed. `apply_f` is the
+f-block alone, and the bordered system adds the constraint and source rows that
+remove its null space: on `tokamak_full_fp_high` the operator is 10,532 rows
+against an f-block of 10,530, so exactly the two constraint rows are missing.
+An attempt to run GMRES on the f-block alone therefore stagnated for every
+preconditioner, including none, and those iteration counts say nothing about
+the method. They are not reported here as evidence.
+
+The iteration half of step 2's admission test must therefore run through the
+bordered operator and `build_coarse_preconditioner`, whose Schur elimination
+handles that border exactly, rather than through a materialized f-block. That
+is production code, so the experiment needs the implementation rather than a
+standalone probe, which is the order the step already assumes.
