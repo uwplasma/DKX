@@ -39,7 +39,7 @@ jobs:
           git fetch --quiet origin "${BASE_REF}"
           changed=$(git diff --name-only "origin/${BASE_REF}...HEAD")
           echo "changed files:"
-          echo "${changed}" | sed 's/^/  /'
+          echo "${changed}"
           # Anything that can change what the code computes, how it is packaged
           # or how it is tested takes the full suite. Everything else is prose.
           if printf '%s\n' "${changed}" | grep -qE '^(src/|tests/|tools/|validation/|examples/|\.github/|pyproject\.toml|\.test_durations)'; then
