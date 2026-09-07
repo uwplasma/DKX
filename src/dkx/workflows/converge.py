@@ -42,6 +42,7 @@ class AxisRefinement:
     resolution: dict[str, int]
     changes: dict[str, float]
     seconds: float
+    uncertainties: dict[str, GridUncertainty] | None = None
 
     @property
     def worst(self) -> float:
@@ -69,6 +70,24 @@ class ConvergenceReport:
         return bool(self.refinements) and np.isfinite(worst) and worst < self.tolerance
 
     @property
+    def worst_grid_uncertainty(self) -> float:
+        """Largest usable fine-grid GCI over every axis and observable.
+
+        ``nan`` when no three-rung ladder was run; ``inf`` when one was and any
+        observable was refused, because an unusable estimate is not a small one.
+        """
+        estimates = [
+            estimate
+            for refinement in self.refinements
+            for estimate in (refinement.uncertainties or {}).values()
+        ]
+        if not estimates:
+            return float("nan")
+        if any(not estimate.usable for estimate in estimates):
+            return float("inf")
+        return max(estimate.relative for estimate in estimates)
+
+    @property
     def axes_understate_the_joint_change(self) -> bool:
         """True when the per-axis table would overstate how settled the case is.
 
@@ -80,6 +99,136 @@ class ConvergenceReport:
         if self.joint is None:
             return False
         return self.joint.worst > 2.0 * max(self.per_axis_worst, 1e-300)
+
+
+@dataclass(frozen=True)
+class GridUncertainty:
+    """A discretization error bar for one observable, from a three-rung ladder.
+
+    ``relative`` is the fine-grid GCI of Roache and ASME V&V 20: an estimated
+    band on the *discretization* error of the finest solution, not a bound and
+    not an algebraic-error estimate (that is
+    :func:`dkx.sensitivity.linear_observable_algebraic_error`). It is reported
+    only when the ladder is in the asymptotic range; otherwise ``status`` says
+    why refinement cannot support an estimate and ``relative`` is ``inf``.
+    """
+
+    status: str
+    order: float
+    relative: float
+    extrapolated: np.ndarray | None = None
+
+    @property
+    def usable(self) -> bool:
+        return self.status == "asymptotic" and np.isfinite(self.relative)
+
+
+def _observed_order(d21, d32, r21: float, r32: float, *, max_order: float) -> float:
+    """Observed order of accuracy for a possibly unequal refinement ratio.
+
+    ``d21`` is the fine-minus-medium difference and ``d32`` the medium-minus-coarse
+    difference. The convergence ratio ``R = d21/d32`` classifies the ladder as
+    ASME V&V 20 does: ``0 < R < 1`` is monotone convergence and is the only case
+    that supports an estimate; ``R > 1`` is monotone divergence, the differences
+    growing under refinement; ``R < 0`` is oscillatory. Both refusals return NaN.
+
+    For a converging ladder the order solves the fixed point
+    ``p = |ln|d32/d21| + q(p)| / ln(r21)`` with
+    ``q(p) = ln((r21**p - s)/(r32**p - s))``, the ASME V&V 20 / Celik procedure.
+    With equal ratios ``q`` vanishes and this is the textbook three-grid formula.
+    """
+    if d32 == 0.0:
+        return float("nan")
+    convergence_ratio = d21 / d32
+    if not np.isfinite(convergence_ratio) or not 0.0 < convergence_ratio < 1.0:
+        return float("nan")
+    ratio = 1.0 / convergence_ratio
+    s = 1.0
+    p = np.log(ratio) / np.log(r21)
+    for _ in range(64):
+        denominator = r32**p - s
+        if not np.isfinite(denominator) or denominator == 0.0:
+            return float("nan")
+        q = np.log((r21**p - s) / denominator)
+        updated = abs(np.log(ratio) + q) / np.log(r21)
+        if not np.isfinite(updated) or updated > max_order:
+            return float("nan")
+        if abs(updated - p) < 1e-10 * max(1.0, abs(p)):
+            return float(updated)
+        p = updated
+    return float("nan")
+
+
+def richardson_uncertainty(
+    coarse, medium, fine, *, sizes: tuple[int, int, int],
+    safety: float = 1.25, max_order: float = 12.0,
+    absolute_tolerance: float = 0.0,
+) -> GridUncertainty:
+    """Grid-convergence uncertainty for one observable over three resolutions.
+
+    ``sizes`` are the resolutions that produced ``coarse``, ``medium`` and
+    ``fine``; the representative grid spacing is taken as ``1/size``, so the
+    refinement ratios are ``r21 = fine/medium`` and ``r32 = medium/coarse``.
+    Arrays are compared entrywise on aligned entries and reduced to the worst
+    entry, because a single well-behaved surface must not certify the rest.
+
+    A ladder is refused, rather than reported with a number, when it is not
+    monotone: a differencing sign change means the observable has not entered
+    the asymptotic range, and extrapolating through it invents accuracy. The
+    ``Er = 15`` pitch ladder that reversed the sign of the bootstrap current
+    between ``Nxi = 40`` and ``60`` is the case this refusal exists for.
+    """
+    values = []
+    for value in (coarse, medium, fine):
+        array = np.asarray(value, dtype=float)
+        if array.size == 0 or not np.all(np.isfinite(array)):
+            return GridUncertainty("nonfinite or empty values", float("nan"), float("inf"))
+        values.append(array)
+    if values[0].shape != values[1].shape or values[1].shape != values[2].shape:
+        return GridUncertainty("shape changed across the ladder", float("nan"), float("inf"))
+    n_coarse, n_medium, n_fine = (int(n) for n in sizes)
+    if not n_coarse < n_medium < n_fine:
+        return GridUncertainty("sizes are not strictly refining", float("nan"), float("inf"))
+    if not np.isfinite(safety) or safety <= 0.0:
+        raise ValueError("safety factor must be finite and positive")
+
+    r21 = n_fine / n_medium
+    r32 = n_medium / n_coarse
+    if r21 <= 1.0 or r32 <= 1.0:
+        return GridUncertainty("refinement ratio must exceed one", float("nan"), float("inf"))
+
+    f3, f2, f1 = values
+    e21 = f1 - f2
+    e32 = f2 - f3
+
+    worst = 0.0
+    orders: list[float] = []
+    extrapolated = np.array(f1, dtype=float, copy=True)
+    for index in np.ndindex(f1.shape):
+        d21, d32 = float(e21[index]), float(e32[index])
+        scale = max(abs(float(f1[index])), absolute_tolerance)
+        if d21 == 0.0:
+            # Already at the floor of what this ladder can resolve.
+            continue
+        if scale == 0.0:
+            return GridUncertainty(
+                "a zero observable has no relative scale", float("nan"), float("inf"))
+        order = _observed_order(d21, d32, r21, r32, max_order=max_order)
+        if not np.isfinite(order) or order <= 0.0:
+            return GridUncertainty(
+                "not in the asymptotic range: the ladder diverges or oscillates",
+                float("nan"), float("inf"))
+        orders.append(order)
+        denominator = r21**order - 1.0
+        if not np.isfinite(denominator) or denominator <= 0.0:
+            return GridUncertainty(
+                "degenerate refinement ratio", float("nan"), float("inf"))
+        extrapolated[index] = float(f1[index]) + d21 / denominator
+        worst = max(worst, safety * abs(d21 / scale) / denominator)
+
+    if not orders:
+        return GridUncertainty("asymptotic", float("nan"), 0.0, extrapolated)
+    return GridUncertainty("asymptotic", float(np.median(orders)), float(worst), extrapolated)
 
 
 def _relative_changes(
@@ -146,6 +295,7 @@ def _converge(
     observables: tuple[str, ...] = DEFAULT_OBSERVABLES,
     absolute_tolerances: Mapping[str, float] | None = None,
     joint: bool = True,
+    richardson: bool = False,
     emit: Callable[[str], None] | None = None,
 ) -> ConvergenceReport:
     """Refine each axis of ``case`` and report what the observables did.
@@ -155,6 +305,10 @@ def _converge(
     refined together. Costs ``len(axes) + 2`` solves. Optional per-observable
     ``absolute_tolerances`` are in the arrays' physical units and default to zero.
     Each entry must change by less than max(tolerance * abs(reference), atol).
+    With ``richardson`` each axis gets a third rung at ``factor**2`` and a
+    discretization error bar per observable (:func:`richardson_uncertainty`),
+    costing one further solve per axis. A ladder that is not converging
+    monotonically is refused rather than reported.
     """
     import time  # noqa: PLC0415
 
@@ -206,15 +360,37 @@ def _converge(
         _say(f"refining {axis} -> {getattr(refined, axis)}")
         started = time.perf_counter()
         result = run_at_resolution(refined)
+        medium = _observables_of(result)
+        uncertainties: dict[str, GridUncertainty] | None = None
+        if richardson:
+            finer = normalize_resolution(_refined(resolution, axis, factor * factor))
+            if getattr(finer, axis) <= getattr(refined, axis):
+                _say(f"{axis}: no third rung available, no grid uncertainty")
+            else:
+                _say(f"third rung {axis} -> {getattr(finer, axis)}")
+                fine = _observables_of(run_at_resolution(finer))
+                sizes = (
+                    int(getattr(resolution, axis)),
+                    int(getattr(refined, axis)),
+                    int(getattr(finer, axis)),
+                )
+                uncertainties = {
+                    name: richardson_uncertainty(
+                        reference[name], medium[name], fine[name], sizes=sizes,
+                        absolute_tolerance=(absolute_tolerances or {}).get(name, 0.0),
+                    )
+                    for name in reference
+                }
         refinements.append(
             AxisRefinement(
                 label=axis,
                 resolution=_resolution_dict(refined),
                 changes=_relative_changes(
-                    reference, _observables_of(result), tolerance=tolerance,
+                    reference, medium, tolerance=tolerance,
                     absolute_tolerances=absolute_tolerances,
                 ),
                 seconds=time.perf_counter() - started,
+                uncertainties=uncertainties,
             )
         )
 
@@ -246,7 +422,8 @@ def converge_case(
     case, *, axes: tuple[str, ...] = AXES, factor: float = 1.5,
     tolerance: float = 0.02, observables: tuple[str, ...] = DEFAULT_OBSERVABLES,
     absolute_tolerances: Mapping[str, float] | None = None,
-    joint: bool = True, emit: Callable[[str], None] | None = None,
+    joint: bool = True, richardson: bool = False,
+    emit: Callable[[str], None] | None = None,
 ) -> ConvergenceReport:
     """Refine each axis and optionally all axes jointly; compare signed entries.
 
@@ -258,7 +435,8 @@ def converge_case(
     return _converge(
         case.resolution, lambda r: run_case(replace(case, resolution=r)),
         axes=axes, factor=factor, tolerance=tolerance, observables=observables,
-        absolute_tolerances=absolute_tolerances, joint=joint, emit=emit,
+        absolute_tolerances=absolute_tolerances, joint=joint,
+        richardson=richardson, emit=emit,
     )
 
 

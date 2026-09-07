@@ -415,3 +415,42 @@ an original-equation residual audit. Full recovery is included in these timings.
 The supervised runner binds child imports to the parent's DKX package and records
 the imported source path, so changing into an artifact directory cannot select
 an unrelated editable installation through a relative ``PYTHONPATH``.
+
+Discretization uncertainty from the convergence ladder
+------------------------------------------------------
+
+A converged linear solve says nothing about grid error. The two error bars a
+reported observable carries are therefore separate and are computed separately:
+the *algebraic* bar from the adjoint-weighted residual
+(:func:`dkx.sensitivity.linear_observable_algebraic_error`), and the
+*discretization* bar from Richardson extrapolation over a refinement ladder
+(:func:`dkx.workflows.converge.richardson_uncertainty`). Neither bounds model
+error, which is stated as a validity range rather than estimated.
+
+Passing ``richardson=True`` to ``converge_case`` adds a third rung per axis at
+``factor**2``, costing one further solve per axis, and reports for each
+observable an observed order of accuracy, an extrapolated value and a fine-grid
+GCI. The procedure is the one in ASME V&V 20 after Roache and Celik: with
+:math:`d_{21}` the fine-minus-medium difference, :math:`d_{32}` the
+medium-minus-coarse difference and refinement ratios :math:`r_{21}, r_{32}`
+taken from the resolutions themselves, the observed order solves
+
+.. math::
+
+   p = \frac{\left| \ln\left|d_{32}/d_{21}\right| + q(p) \right|}{\ln r_{21}},
+   \qquad q(p) = \ln\frac{r_{21}^{\,p} - s}{r_{32}^{\,p} - s},
+
+by fixed-point iteration, which reduces to the textbook three-grid formula when
+the ratios are equal. Integer resolutions rarely give equal ratios, so the
+general form is used throughout.
+
+The estimate is **refused, not reported**, unless the convergence ratio
+:math:`R = d_{21}/d_{32}` lies in :math:`(0, 1)`. Outside it the ladder is
+diverging (:math:`R > 1`, differences growing under refinement) or oscillating
+(:math:`R < 0`), and extrapolating through either invents accuracy the solves do
+not have. The measured ``Er = 15`` pitch ladder, whose bootstrap current
+reversed sign between ``Nxi = 40`` and ``60``, is refused by this test; a
+regression pins that. A refusal propagates: ``ConvergenceReport.worst_grid_uncertainty``
+is infinite when any requested estimate could not be made, because an estimate
+that could not be made is not a small one. Arrays are compared entrywise and
+reduced to the worst entry, so one settled surface cannot certify a moving one.
