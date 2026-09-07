@@ -797,3 +797,20 @@ def test_algebraic_moment_error_rejects_invalid_equations(failure):
             transpose_solve=lambda v: v * (2 if failure == "adjoint" else 1),
             primal_rtol=0., adjoint_rtol=0.,
         )
+
+
+def test_algebraic_error_uses_the_packed_or_pinned_physical_system():
+    from dkx.sensitivity import linear_observable_algebraic_error
+
+    # A zero padded row can retain a leaked column; its raw transpose is not
+    # the adjoint of the active one-dimensional problem A_active = [2].
+    raw = jnp.array([[2., 3.], [0., 0.]])
+    pinned = raw @ jnp.diag(jnp.array([1., 0.])) + jnp.diag(jnp.array([0., 1.]))
+    args = dict(rhs=jnp.array([2., 0.]), state=jnp.array([.999, 0.]),
+                observable_vector=jnp.array([1., 0.]), apply=lambda x: pinned @ x,
+                transpose_solve=lambda b: jnp.linalg.solve(pinned.T, b),
+                primal_rtol=.01, adjoint_rtol=1e-12)
+    out = linear_observable_algebraic_error(**args, transpose_apply=lambda x: pinned.T @ x)
+    assert out['signed_correction'] == pytest.approx(.001)
+    with pytest.raises(ValueError, match='adjoint relative residual'):
+        linear_observable_algebraic_error(**args, transpose_apply=lambda x: raw.T @ x)

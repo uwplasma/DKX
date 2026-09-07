@@ -570,3 +570,10 @@ and coefficients, with all source/gauge constraints included. Nonlinear moments,
 Phi1/root linearizations and grid/geometry uncertainty need their own evidence.
 See `Pierce and Giles (2004) <https://doi.org/10.1016/j.jcp.2004.05.001>`_ for the
 distinction between adjoint error corrections and error bounds.
+
+For speed-dependent pitch truncation, use the packed active equations or the
+production solver's pinned actions (``A M + I - M``, where ``M`` selects active
+coordinates), including the corresponding transpose. The raw rectangular
+operator can retain couplings from inactive columns despite zero inactive rows;
+its transpose is not the adjoint of the packed physical system. A transpose
+residual for that singular embedding cannot qualify the production adjoint.
