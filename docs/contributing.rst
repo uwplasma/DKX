@@ -46,6 +46,38 @@ At minimum, contributors should run:
 If a change touches performance-sensitive logic, also run the relevant benchmark or
 example-case check and update the documented results when needed.
 
+Checking patch coverage locally
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+CI fails a pull request whose new lines are not covered, and that is easier to
+find before pushing than after. On macOS ``pytest --cov`` aborts this suite
+with ``SIGABRT`` before pytest prints anything, under every ``COVERAGE_CORE``
+setting, so use ``coverage run`` with the plugin disabled instead:
+
+.. code-block:: bash
+
+   pip install -e .                       # the source tree must be the imported one
+   coverage run --source=dkx -m pytest tests/test_your_module.py -q -p no:cov
+   coverage report --include="*your_module.py" -m
+
+The ``-p no:cov`` is what avoids the abort, and ``--include`` takes a file glob:
+a directory-shaped pattern such as ``*workflows/converge*`` silently reports no
+data. The ``-m`` column lists the uncovered lines, which is what the CI gate is
+reading.
+
+A defensive branch that cannot be reached by any input is not covered because it
+should not exist. Prefer deleting it, or restructuring so one reachable guard
+replaces several unreachable ones, over marking it excluded.
+
+Python and JAX versions
+~~~~~~~~~~~~~~~~~~~~~~~
+
+CI pins Python 3.11 and resolves JAX at install time. The suite also passes on
+Python 3.13 with JAX 0.11, so a newer local environment is a valid place to
+work; create one with ``python3.13 -m venv`` and ``pip install -e ".[dev,docs]"``.
+Report the interpreter and JAX version with any measurement, since both change
+timings.
+
 
 Figures
 -------
