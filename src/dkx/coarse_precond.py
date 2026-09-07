@@ -1061,8 +1061,34 @@ def dropped_couplings(
     return DroppedCouplings(weights, float(relative), int(probes))
 
 
+
+def _strict_upper_speed_coupling(op: KineticOperator, mask: jnp.ndarray):
+    """``U[s, l, x, x']`` for ``x' > x``: the speed coupling above the diagonal.
+
+    The coarse preconditioner keeps ``mat[s, s, l, x, x]`` and drops the rest,
+    which is Fortran ``preconditioner_x = 1``. Retaining this block as well is
+    ``preconditioner_x = 2``, the upper triangle. For the linearized
+    Fokker-Planck operator that is very nearly the whole coupling, because the
+    Rosenbluth potentials make it an integral operator in speed whose strict
+    lower triangle is four to five orders of magnitude smaller
+    (``docs/experiments/2026-09-07-collision-speed-structure.md``).
+
+    ``None`` when there is no dense collision operator to retain.
+    """
+    collision = op.fp if op.fp is not None else op.sugama
+    if collision is None:
+        return None
+    mat = collision.mat  # (S, S, L, X, X)
+    n_species = mat.shape[0]
+    self_species = mat[jnp.arange(n_species), jnp.arange(n_species)]  # (S, L, X, X)
+    strictly_upper = jnp.triu(self_species, k=1)
+    # The same Nxi_for_x truncation the diagonal gets, applied on the row index.
+    return strictly_upper * mask.T[None, :, :, None]
+
+
 def build_coarse_preconditioner(
-    op: KineticOperator, *, drop_l_coupling: bool = False
+    op: KineticOperator, *, drop_l_coupling: bool = False,
+    retain_speed_triangle: bool | int = False,
 ) -> tuple[Callable[[jnp.ndarray], jnp.ndarray], Callable[[jnp.ndarray], jnp.ndarray]]:
     """Structured direct solve of the SFINCS-simplified coarse operator.
 
@@ -1106,6 +1132,15 @@ def build_coarse_preconditioner(
     Every route uses the *same* pinned generator or its dense equivalent, because
     the coarse chain is singular without all three pins and a route that reproduced
     only two would return ``nan`` rather than a worse preconditioner.
+
+    ``retain_speed_triangle`` additionally keeps the collision operator's
+    strictly upper speed coupling, Fortran ``preconditioner_x = 2``.  The bands
+    and their factorization are unchanged; the apply becomes a back-substitution
+    over ``x``, ``y_x = D_x^-1 (r_x - sum_{x' > x} U_{x,x'} y_{x'})``, reusing
+    the same block-Thomas factors and adding no factorization.  It trades a much
+    closer approximation of the operator against an apply that is sequential in
+    ``x`` where the default is one batched solve, so it stays opt-in until that
+    is measured.  Only the dense-band route implements it.
 
     Returns:
         ``(precond, precond_t)`` — approximate inverses of ``K`` and ``K^T`` on flat
@@ -1169,6 +1204,18 @@ def build_coarse_preconditioner(
             factor_dtype=_coarse_factor_dtype(),
         )
 
+        upper = (
+            _strict_upper_speed_coupling(op, mask) if retain_speed_triangle else None
+        )
+        # ``True`` means the exact inverse, which needs n_x - 1 corrections
+        # because D^-1 U is nilpotent of that index; an integer truncates the
+        # series, trading exactness in M for a cheaper apply.
+        sweeps = (
+            n_x - 1
+            if retain_speed_triangle is True
+            else int(retain_speed_triangle or 0)
+        )
+
         def _a_inv(transpose: bool) -> Callable[[jnp.ndarray], jnp.ndarray]:
             def apply(v: jnp.ndarray) -> jnp.ndarray:
                 g = v.reshape(batch, n_xi, n_tz)
@@ -1177,10 +1224,43 @@ def build_coarse_preconditioner(
                 )
                 return sol.reshape(v.shape)
 
-            return apply
+            def apply_triangular(v: jnp.ndarray) -> jnp.ndarray:
+                # M = D + U with D the speed-diagonal blocks already factored and
+                # U strictly upper in x, so D^-1 U is nilpotent of index n_x and
+                #   y_{k+1} = D^-1 (r - U y_k)
+                # reaches the exact inverse in n_x steps.  Back-substitution needs
+                # the same n_x steps but solves one speed at a time; this keeps
+                # every step batched over all (species, x), which is what the
+                # block-Thomas factors are shaped for.
+                def d_inv(r: jnp.ndarray) -> jnp.ndarray:
+                    flat = r.reshape(batch, n_xi, n_tz)
+                    out = jax.vmap(
+                        lambda f, b: block_thomas_solve(f, b, transpose=transpose)
+                    )(factors, flat)
+                    return out.reshape(n_s, n_x, n_xi, n_tz)
+
+                def couple(y: jnp.ndarray) -> jnp.ndarray:
+                    # (U y)[s, x, l, tz] = sum_{x'} U[s, l, x, x'] y[s, x', l, tz],
+                    # transposed for the adjoint, where U^T is strictly lower.
+                    subscripts = "slxy,sylt->sxlt" if not transpose else "slyx,sylt->sxlt"
+                    return jnp.einsum(subscripts, upper, y)
+
+                g = v.reshape(n_s, n_x, n_xi, n_tz)
+                y = d_inv(g)
+                for _ in range(sweeps):
+                    y = d_inv(g - couple(y))
+                return y.reshape(v.shape)
+
+            return apply_triangular if upper is not None else apply
 
         a_inv, a_inv_t = _a_inv(False), _a_inv(True)
     else:
+        if retain_speed_triangle:
+            raise NotImplementedError(
+                "retain_speed_triangle is implemented for the dense-band route only; "
+                "this operator's bands do not fit, so the coarse preconditioner is "
+                "built from generated rows instead"
+            )
         # The bands do not fit in RAM.  Both remaining routes eliminate the same
         # pinned chain from generated rows and materialize no band; they differ in
         # what survives the elimination, which is what decides whether the result
