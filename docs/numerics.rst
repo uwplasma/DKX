@@ -406,3 +406,5 @@ and heat moments for RHSMode 1, or every transport-matrix entry for RHSMode 2/3.
 Absolute budgets use those observables' units. Every original RHS residual must
 pass the deck's solver tolerance. Nonlinear Phi1 decks require a coupled error
 audit and are refused here. No output files are written by the Python helper.
+The namelist report records effective odd angular resolutions, matching the
+canonical grid builder; ``forceOddNthetaAndNzeta=false`` is not supported here.

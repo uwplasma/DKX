@@ -139,7 +139,7 @@ def _resolution_dict(resolution) -> dict[str, int]:
 
 def _converge(
     resolution, run_at_resolution,
-    *,
+    *, normalize_resolution=lambda r: r,
     axes: tuple[str, ...] = AXES,
     factor: float = 1.5,
     tolerance: float = 0.02,
@@ -188,6 +188,7 @@ def _converge(
             for name in observables
         }
 
+    resolution = normalize_resolution(resolution)
     _say(f"baseline {_resolution_dict(resolution)}")
     baseline_result = run_at_resolution(resolution)
     reference = _observables_of(baseline_result)
@@ -198,7 +199,7 @@ def _converge(
 
     refinements: list[AxisRefinement] = []
     for axis in axes:
-        refined = _refined(resolution, axis, factor)
+        refined = normalize_resolution(_refined(resolution, axis, factor))
         if refined == resolution:
             _say(f"{axis}: not refinable for this case, skipped")
             continue
@@ -219,7 +220,7 @@ def _converge(
 
     joint_refinement: AxisRefinement | None = None
     if joint and len(refinements) > 1:
-        refined = _refined(resolution, tuple(axes), factor)
+        refined = normalize_resolution(_refined(resolution, tuple(axes), factor))
         _say(f"refining every axis together -> {_resolution_dict(refined)}")
         started = time.perf_counter()
         result = run_at_resolution(refined)
@@ -280,6 +281,8 @@ def converge_sfincs_input(source, **kwargs) -> ConvergenceReport:
     mode = inp.general.rhs_mode
     if mode not in (1, 2, 3) or inp.physics.include_phi1:
         raise ValueError("namelist convergence requires linear RHSMode 1, 2 or 3 with includePhi1=false")
+    if not inp.resolution.force_odd_ntheta_and_nzeta:
+        raise ValueError("the canonical runner requires forceOddNthetaAndNzeta=true")
     names = dict(theta="n_theta", zeta="n_zeta", pitch="n_xi", speed="n_x")
     resolution = ResolutionConfig(**{k: getattr(inp.resolution, v) for k, v in names.items()})
     kwargs.setdefault("observables", ("FSABFlow", "particleFlux_vm_psiHat", "heatFlux_vm_psiHat")
@@ -303,4 +306,8 @@ def converge_sfincs_input(source, **kwargs) -> ConvergenceReport:
             arrays["transport_matrix"] = run.transport_matrix
         return SimpleNamespace(arrays=arrays, metadata={"converged": accepted})
 
-    return _converge(resolution, run_at_resolution, **kwargs)
+    def normalize(r):
+        return replace(r, theta=r.theta + (r.theta % 2 == 0),
+                       zeta=r.zeta + (r.zeta % 2 == 0))
+
+    return _converge(resolution, run_at_resolution, normalize_resolution=normalize, **kwargs)

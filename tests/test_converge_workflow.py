@@ -281,7 +281,8 @@ def test_namelist_refinement_preserves_physics_and_checks_each_rhs(monkeypatch, 
 
     inp = load_sfincs_input(Path(__file__).parent / 'ref/pas_1species_PAS_Er_tiny_xgrid4_xdot4.input.namelist')
     inp = replace(inp, general=replace(inp.general, rhs_mode=mode),
-                  physics=replace(inp.physics, er=-1., use_dkes_exb_drift=False))
+                  physics=replace(inp.physics, er=-1., use_dkes_exb_drift=False),
+                  resolution=replace(inp.resolution, n_theta=5))
     calls = []
     invalid = False
 
@@ -304,10 +305,10 @@ def test_namelist_refinement_preserves_physics_and_checks_each_rhs(monkeypatch, 
 
     run_module = importlib.import_module('dkx.run')
     monkeypatch.setattr(run_module, 'run_profile' if mode == 1 else 'run_transport_matrix', driver)
-    report = cv.converge_sfincs_input(inp, axes=('theta',), factor=1.4)
+    report = cv.converge_sfincs_input(inp, axes=('theta',), factor=1.2)
     assert report.converged
     assert calls[0].resolution == inp.resolution
-    assert calls[1].resolution.n_theta > inp.resolution.n_theta
+    assert calls[1].resolution.n_theta == report.refinements[0].resolution["theta"] == 7
     assert calls[1].resolution.n_xi == inp.resolution.n_xi
     invalid = True
     with pytest.raises(ValueError, match='failed solve'):
