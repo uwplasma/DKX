@@ -11,7 +11,81 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Working-method rule 5: the pull-request gate is tier 1, and tier 1 is the
+  # work the change can actually break. The full suite is 13 shards and about
+  # 96 runner-minutes; a change that touches no code cannot alter a solver
+  # result, so it runs the contract tests that read the documentation instead.
+  # Pushes to main always take the full suite, so nothing reaches the default
+  # branch on the reduced gate.
+  changes:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - id: filter
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ "${EVENT_NAME}" != "pull_request" ]; then
+            echo "code=true" >> "${GITHUB_OUTPUT}"
+            echo "not a pull request: taking the full suite"
+            exit 0
+          fi
+          git fetch --quiet origin "${BASE_REF}"
+          changed=$(git diff --name-only "origin/${BASE_REF}...HEAD")
+          echo "changed files:"
+          echo "${changed}"
+          # Anything that can change what the code computes, how it is packaged
+          # or how it is tested takes the full suite. Everything else is prose.
+          if printf '%s\n' "${changed}" | grep -qE '^(src/|tests/|tools/|validation/|examples/|\.github/|pyproject\.toml|\.test_durations)'; then
+            echo "code=true" >> "${GITHUB_OUTPUT}"
+            echo "code paths touched: taking the full suite"
+          else
+            echo "code=false" >> "${GITHUB_OUTPUT}"
+            echo "documentation only: taking the reduced gate"
+          fi
+
+  # The reduced gate. Prose still has contracts -- the README budget, the
+  # planning-file rules, the measured-claim tokens and a warning-free build --
+  # and those are exactly the tests that read what changed.
+  docs-gate:
+    needs: changes
+    if: needs.changes.outputs.code != 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    env:
+      JAX_ENABLE_X64: "True"
+      DKX_CI: "1"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install ".[dev,docs]"
+      - name: Documentation contracts
+        run: |
+          pytest -q -p no:cacheprovider \
+            tests/test_planning_evidence.py \
+            tests/test_public_docs_wording_contract.py \
+            tests/test_benchmark_doc_claims.py \
+            tests/test_readme_budget.py \
+            tests/test_readme_quickstart_runs.py \
+            tests/test_source_tree_consolidation.py \
+            tests/test_figure_provenance.py
+      - name: Documentation builds warning-free
+        run: python -m sphinx -b html -W --keep-going docs "${RUNNER_TEMP}/docs"
+
   coverage:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     strategy:
@@ -109,6 +183,8 @@ jobs:
           fail_ci_if_error: false
 
   examples-smoke:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     env:
@@ -160,6 +236,8 @@ jobs:
           python examples/autodiff/autodiff_sensitivity_nu_n_scheme5.py
 
   external-data-smoke:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     env:
@@ -281,6 +359,8 @@ jobs:
     # is 16.1 s against 64.9 s for the default, and it still drives all three
     # solve stages. The failures this job exists to catch happen while the deck
     # is being built, before the grid is read at all.
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     env:
@@ -486,6 +566,7 @@ jobs:
     timeout-minutes: 5
     needs:
       - coverage-report
+      - docs-gate
       - examples-smoke
       - external-data-smoke
       - workflow-lint
@@ -502,14 +583,24 @@ jobs:
           import sys
 
           needs = json.loads(os.environ["NEEDS_JSON"])
-          failed = {
-              name: data.get("result")
-              for name, data in needs.items()
-              if data.get("result") != "success"
-          }
+          results = {name: data.get("result") for name, data in needs.items()}
+
+          # A job the tier filter deliberately skipped is not a failure; a job
+          # that ran and did not succeed is.
+          failed = {n: r for n, r in results.items() if r not in ("success", "skipped")}
           if failed:
               for name, result in failed.items():
                   print(f"{name}: {result}")
               sys.exit(1)
-          print("All required CI jobs passed.")
+
+          # Exactly one tier must have run. Without this a filter that skipped
+          # everything would report success having tested nothing.
+          full = results.get("coverage-report") == "success"
+          reduced = results.get("docs-gate") == "success"
+          if not (full or reduced):
+              print(f"neither tier ran: {results}")
+              sys.exit(1)
+
+          print("Reduced documentation gate passed." if reduced and not full
+                else "All required CI jobs passed.")
           PY
