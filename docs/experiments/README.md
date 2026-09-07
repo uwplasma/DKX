@@ -28,3 +28,13 @@ Distinguish a planned test from an executed test and a smoke grid from convergen
 Continue, stop or narrow scope, with the admission/kill evidence that decides it.
 Link the implementation PR or superseding decision. Record negative results.
 ```
+
+## Records
+
+```{toctree}
+:glob:
+:maxdepth: 1
+
+20*
+```
+

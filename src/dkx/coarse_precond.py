@@ -57,7 +57,7 @@ import math
 import os
 import subprocess
 import warnings
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Callable
 
 # The JAX backend is imported below; dkx/runtime.py explains why this is here.
@@ -67,6 +67,7 @@ _configure_runtime()
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 # solvax is a core dependency (installed automatically with dkx), but keep this
 # module importable without it and raise a clear error on first use so broken or
@@ -911,6 +912,153 @@ def _assemble_and_factor_bands(
         d4 = d4.astype(factor_dtype)
         upper = upper.astype(factor_dtype)
     return jax.vmap(block_thomas_factor)(lower, d4, upper)
+
+
+
+
+#: The f-block terms the coarse preconditioner does not represent, and the
+#: operator fields that restore each one. ``fokker_planck`` is special: the
+#: preconditioner keeps the collision operator's self-species, x-diagonal part
+#: (``preconditioner_species=1`` and ``preconditioner_x=1``), so what it drops
+#: is the cross-species and off-x-diagonal remainder, not the whole operator.
+#: The bordered constraint and ``Phi1`` rows are absent because that border is
+#: eliminated *exactly* by a Schur complement.
+_DROPPED_F_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("fokker_planck", ("fp", "sugama")),
+    ("phi1_in_collisions", ("fp_phi1",)),
+    ("er_xdot", ("with_er_xdot",)),
+    ("er_xidot", ("with_er_xidot",)),
+    ("magnetic_drifts", ("with_magnetic_drifts",)),
+)
+
+
+def _collision_diagonal_only(coll):
+    """The collision operator reduced to what the preconditioner keeps.
+
+    ``coll.mat`` is ``(S, S, L, X, X)``; retaining only ``mat[s, s, l, x, x]``
+    is the Fortran ``preconditioner_species=1`` + ``preconditioner_x=1``
+    simplification that :func:`_dense_collision_diagonal` folds into the coarse
+    bands. Masking the dense block reproduces it as an operator, so the true
+    preconditioner can be applied through the ordinary code path.
+    """
+    if coll is None:
+        return None
+    mat = coll.mat
+    n_species, _, _, n_x, _ = mat.shape
+    keep = (
+        jnp.eye(n_species)[:, :, None, None, None]
+        * jnp.eye(n_x)[None, None, None, :, :]
+    )
+    return replace(coll, mat=mat * keep)
+
+
+def _coarse_operator(op: KineticOperator) -> KineticOperator:
+    """The operator the coarse preconditioner actually inverts.
+
+    :func:`_strip_for_coarse` removes the dense collision operators outright,
+    and :func:`build_coarse_preconditioner` then adds their diagonal back into
+    the bands. This composes both steps into one operator, so ``A - M`` can be
+    measured against what the preconditioner represents rather than against a
+    collisionless operator it never uses.
+    """
+    stripped = _strip_for_coarse(op)
+    return replace(
+        stripped,
+        fp=_collision_diagonal_only(op.fp),
+        sugama=_collision_diagonal_only(op.sugama),
+    )
+
+
+@dataclass(frozen=True)
+class DroppedCouplings:
+    """How far the coarse preconditioner is from the operator, and why.
+
+    ``weights`` gives each mechanism's share of ``||(A - M) f||``, and
+    ``relative_residual_operator`` is ``||(A - M) f|| / ||A f||``: how much of
+    the operator's action the preconditioner does not represent. ``dominant``
+    names the largest mechanism, which is what decides whether a deck needs a
+    stronger preconditioner, an exact route extended to its structure, or
+    neither.
+
+    The split is exact rather than statistical. The drift-kinetic operator is a
+    sum of terms, so ``(A - M) f`` is identically the sum of the dropped terms
+    applied to ``f``; :func:`dropped_couplings` measures each by restoring it
+    alone on top of ``M``.
+    """
+
+    weights: dict[str, float]
+    relative_residual_operator: float
+    probes: int
+
+    @property
+    def dominant(self) -> str | None:
+        """The mechanism carrying the largest share, or ``None`` if M is exact."""
+        active = {k: v for k, v in self.weights.items() if v > 0.0}
+        return max(active, key=active.__getitem__) if active else None
+
+
+def dropped_couplings(
+    op: KineticOperator, *, probes: int = 4, seed: int = 0
+) -> DroppedCouplings:
+    """Split ``A - M`` by physical mechanism for one operator, matrix-free.
+
+    ``M`` is the SFINCS-simplified operator the coarse preconditioner inverts
+    exactly (:func:`build_coarse_preconditioner`), including the collision
+    diagonal it retains. Every deck that leaves the pitch-angle-scattering
+    family is preconditioned by it, so when the recycled Krylov route converges
+    slowly the question is which dropped coupling is responsible. This answers
+    it in a few operator applications, with no assembly and no solve, on random
+    probes of the f-block.
+
+    Norms are Frobenius over the probe responses. Shares need not sum to one:
+    the mechanisms are summed inside the norm, so cancellation between them
+    makes the total smaller than the sum of the parts, and a share above one
+    states that two mechanisms partly cancel rather than an error.
+
+    This is an operator-norm attribution, not a convergence prediction. Krylov
+    convergence depends on the spectrum of ``M^-1 A``; a mechanism that
+    dominates ``A - M`` is the one worth addressing first, but the size of
+    ``relative_residual_operator`` does not by itself forecast an iteration
+    count.
+    """
+    if probes < 1:
+        raise ValueError(f"probes must be positive, got {probes}")
+    coarse = _coarse_operator(op)
+    restorable = [
+        (name, {field: getattr(op, field) for field in fields})
+        for name, fields in _DROPPED_F_TERMS
+        if any(
+            getattr(op, field) is not getattr(coarse, field)
+            for field in fields
+            if getattr(op, field) is not None or getattr(coarse, field) is not None
+        )
+        or any(
+            getattr(op, field) != getattr(coarse, field)
+            for field in fields
+            if isinstance(getattr(op, field), bool)
+        )
+    ]
+
+    generator = np.random.default_rng(seed)
+    totals = {name: 0.0 for name, _ in restorable}
+    residual_norm = 0.0
+    operator_norm = 0.0
+    for _ in range(probes):
+        f = jnp.asarray(generator.standard_normal(op.f_shape), dtype=jnp.float64)
+        base = coarse.apply_f(f)
+        full = op.apply_f(f)
+        residual_norm += float(jnp.linalg.norm(full - base))
+        operator_norm += float(jnp.linalg.norm(full))
+        for name, fields in restorable:
+            delta = replace(coarse, **fields).apply_f(f) - base
+            totals[name] += float(jnp.linalg.norm(delta))
+
+    weights = {
+        name: (total / residual_norm if residual_norm > 0.0 else 0.0)
+        for name, total in totals.items()
+    }
+    relative = residual_norm / operator_norm if operator_norm > 0.0 else 0.0
+    return DroppedCouplings(weights, float(relative), int(probes))
 
 
 def build_coarse_preconditioner(
