@@ -273,9 +273,11 @@ def test_sweep_does_not_reuse_outputs_copied_with_an_example(tmp_path: Path, mon
         if "-c" in command:
             import dkx
             assert Path(env["PYTHONPATH"].split(os.pathsep)[0]) == Path(dkx.__file__).resolve().parent.parent
+            assert all(Path(p).is_absolute() for p in env["PYTHONPATH"].split(os.pathsep))
         calls.append(command)
         return {"returncode": 1}
 
+    monkeypatch.setenv("PYTHONPATH", "relative_dependency:")
     monkeypatch.setattr(matrix, "_run_measured", failed_run)
     record = matrix.run_case(
         example, Path("unused-sfincs"), ranks=[1], reps=0, timeout_s=1,

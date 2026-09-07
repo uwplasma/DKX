@@ -702,9 +702,10 @@ def run_case(
         import dkx
         # The child changes cwd: bind the package whose source provenance was
         # captured here, rather than reinterpreting a relative PYTHONPATH.
-        env = {"JAX_ENABLE_X64": "True", "PYTHONPATH": os.pathsep.join((
+        env = {"JAX_ENABLE_X64": "True", "PYTHONPATH": os.pathsep.join([
             str(Path(dkx.__file__).resolve().parent.parent),
-            os.environ.get("PYTHONPATH", "")))}
+            *(str(Path(p or ".").resolve())
+              for p in os.environ.get("PYTHONPATH", "").split(os.pathsep))])}
         if equilibria:
             env["DKX_EQUILIBRIA_DIRS"] = equilibria
         result = _run_measured(
