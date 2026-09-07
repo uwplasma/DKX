@@ -158,6 +158,8 @@ import numpy as np
 import jax
 jax.config.update("jax_enable_x64", True)
 from dkx.inputs import load_sfincs_input
+from dkx.api import SolverOptions
+import dkx
 from dkx.run import run_profile, run_transport_matrix
 
 deck, out, reps = sys.argv[1], sys.argv[2], int(sys.argv[3])
@@ -168,7 +170,9 @@ linear = not inp.physics.include_phi1
 samples, residuals, converged = [], [], []
 for _ in range(reps + 1):
     t0 = time.perf_counter()
-    run = driver(deck, out_path=out, emit=None, tol=inp.resolution.solver_tolerance)
+    run = driver(deck, out_path=out, emit=None, solver=SolverOptions(
+        tol=inp.resolution.solver_tolerance,
+        keep_lowest=inp.resolution.n_xi if linear else 3))
     states = [run.state_vector] if rhs_mode == 1 else run.state_vectors
     jax.block_until_ready(states)
     samples.append(time.perf_counter() - t0)
@@ -187,6 +191,7 @@ json.dump({
     "warm_s": statistics.median(samples[1:]) if reps else None,
     "warm_samples_s": samples[1:],
     "backend": jax.default_backend(),
+    "dkx_source_file": dkx.__file__,
     "method": str(run.solve_result.method),
     "converged": all(converged),
     "true_residual": max(residuals) if valid else None,
@@ -694,7 +699,13 @@ def run_case(
             ),
         )
         _absolutize_equilibrium(work / "input.namelist", example_dir)
-        env = {"JAX_ENABLE_X64": "True"}
+        import dkx
+        # The child changes cwd: bind the package whose source provenance was
+        # captured here, rather than reinterpreting a relative PYTHONPATH.
+        env = {"JAX_ENABLE_X64": "True", "PYTHONPATH": os.pathsep.join([
+            str(Path(dkx.__file__).resolve().parent.parent),
+            *(str(Path(p or ".").resolve())
+              for p in os.environ.get("PYTHONPATH", "").split(os.pathsep))])}
         if equilibria:
             env["DKX_EQUILIBRIA_DIRS"] = equilibria
         result = _run_measured(

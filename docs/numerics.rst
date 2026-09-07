@@ -378,3 +378,40 @@ Coupled Phi1 requires an explicit linearization and is rejected here.
 The historical 2.46% report in PR #161 has no identified input pair in its PR
 body. A different supplied pair is a new audit, not a reproduction of that
 report; warm-restart promotion still requires the R1 acceptance evidence.
+
+Observable resolution checks
+----------------------------
+
+``dkx converge`` compares signed values at matching species and surfaces before
+reporting the largest relative change for each observable. Comparing only maximum
+magnitudes would hide sign reversals or changes in a smaller species flux.
+Missing, empty, nonfinite or differently shaped arrays fail the comparison; failed
+solves and studies with no refinable axes cannot certify convergence. Independent
+axis checks and the joint refinement must all satisfy the requested tolerance.
+For vanishing fluxes or currents, provide an explicit physical error budget via
+``converge_case(..., absolute_tolerances={"particle_flux_m2_s": atol})``.
+Each entry must change by less than the larger of its relative budget and this
+absolute tolerance in the array's units. The default absolute tolerance is zero;
+there is no implicit unit-dependent allowance for a zero reference.
+A two-grid difference is a resolution check, not a Richardson error estimate or
+an algebraic-error bound. Those require additional grid and adjoint evidence.
+
+For linear SFINCS decks, ``dkx converge input.namelist`` uses the canonical
+namelist runner, including finite-Er full trajectories and the deck's VMEC
+surface-selection policy. It does not convert to a native Case or alter the
+physics to fit that route. ``converge_sfincs_input`` accepts a path or an
+in-memory ``SfincsInput`` and the same refinement options as ``converge_case``.
+Default observables are the signed per-species SFINCS-normalized flow, particle
+and heat moments for RHSMode 1, or every transport-matrix entry for RHSMode 2/3.
+Absolute budgets use those observables' units. Every original RHS residual must
+pass the deck's solver tolerance. Nonlinear Phi1 decks require a coupled error
+audit and are refused here. No output files are written by the Python helper.
+The namelist report records effective odd angular resolutions, matching the
+canonical grid builder; ``forceOddNthetaAndNzeta=false`` is not supported here.
+The workflow and supervised parity runner request every Legendre block through
+``SolverOptions(keep_lowest=Nxi)``. The memory-saving structured route otherwise
+retains only the low moments: its zero-filled tail is not a full solution for
+an original-equation residual audit. Full recovery is included in these timings.
+The supervised runner binds child imports to the parent's DKX package and records
+the imported source path, so changing into an artifact directory cannot select
+an unrelated editable installation through a relative ``PYTHONPATH``.
