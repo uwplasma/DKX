@@ -440,6 +440,33 @@ def test_an_unusable_ladder_is_refused(ladder, sizes) -> None:
     assert not cv.richardson_uncertainty(*ladder, sizes=sizes).usable
 
 
+def test_a_stalled_coarse_pair_cannot_give_an_order() -> None:
+    """Two equal coarse rungs make the difference ratio undefined.
+
+    Refinement produced no change between the coarse and medium grids but did
+    between medium and fine, which is not a convergence history any order can
+    be read from.
+    """
+    assert not cv.richardson_uncertainty(1.0, 1.0, 1.1, sizes=(10, 20, 40)).usable
+
+
+def test_an_implausibly_high_order_is_refused() -> None:
+    """An order far above any discretization in DKX means the ladder is not
+    measuring convergence, so no bar is reported."""
+    # exact=0 keeps the differences representable: with an offset of 3.0 an
+    # order-20 ladder underflows to three identical doubles, which is a
+    # converged observable rather than a high-order one.
+    f = manufactured(20.0, exact=0.0)
+    assert not cv.richardson_uncertainty(
+        f(10), f(20), f(40), sizes=(10, 20, 40), max_order=12.0
+    ).usable
+
+
+def test_a_nonpositive_safety_factor_is_refused() -> None:
+    with pytest.raises(ValueError, match="safety factor"):
+        cv.richardson_uncertainty(1.0, 1.1, 1.2, sizes=(10, 20, 40), safety=0.0)
+
+
 def test_an_exactly_reproduced_observable_has_no_grid_uncertainty() -> None:
     estimate = cv.richardson_uncertainty(2.5, 2.5, 2.5, sizes=(10, 20, 40))
     assert estimate.usable and estimate.relative == 0.0

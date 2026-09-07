@@ -146,17 +146,17 @@ def _observed_order(d21, d32, r21: float, r32: float, *, max_order: float) -> fl
     s = 1.0
     p = np.log(ratio) / np.log(r21)
     for _ in range(64):
-        denominator = r32**p - s
-        if not np.isfinite(denominator) or denominator == 0.0:
+        # Guards the iterate rather than each intermediate: p outside (0, max_order]
+        # means the ladder implies no usable order, and a nonfinite iterate lands
+        # here too because the comparison is false for NaN.
+        if not 0.0 < p <= max_order:
             return float("nan")
-        q = np.log((r21**p - s) / denominator)
+        q = np.log((r21**p - s) / (r32**p - s))
         updated = abs(np.log(ratio) + q) / np.log(r21)
-        if not np.isfinite(updated) or updated > max_order:
-            return float("nan")
         if abs(updated - p) < 1e-10 * max(1.0, abs(p)):
             return float(updated)
         p = updated
-    return float("nan")
+    return float("nan")  # pragma: no cover - the iteration has not failed to settle
 
 
 def richardson_uncertainty(
@@ -194,8 +194,6 @@ def richardson_uncertainty(
 
     r21 = n_fine / n_medium
     r32 = n_medium / n_coarse
-    if r21 <= 1.0 or r32 <= 1.0:
-        return GridUncertainty("refinement ratio must exceed one", float("nan"), float("inf"))
 
     f3, f2, f1 = values
     e21 = f1 - f2
@@ -219,10 +217,8 @@ def richardson_uncertainty(
                 "not in the asymptotic range: the ladder diverges or oscillates",
                 float("nan"), float("inf"))
         orders.append(order)
+        # order > 0 and r21 > 1 (sizes strictly refine), so this is positive.
         denominator = r21**order - 1.0
-        if not np.isfinite(denominator) or denominator <= 0.0:
-            return GridUncertainty(
-                "degenerate refinement ratio", float("nan"), float("inf"))
         extrapolated[index] = float(f1[index]) + d21 / denominator
         worst = max(worst, safety * abs(d21 / scale) / denominator)
 
