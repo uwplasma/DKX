@@ -256,6 +256,7 @@ def test_output_comparison_requires_complete_mode_specific_data(tmp_path: Path, 
 
 
 def test_sweep_does_not_reuse_outputs_copied_with_an_example(tmp_path: Path, monkeypatch) -> None:
+    import os
     import shutil
     from tools.benchmarks import parity_performance_matrix as matrix
 
@@ -269,6 +270,9 @@ def test_sweep_does_not_reuse_outputs_copied_with_an_example(tmp_path: Path, mon
 
     def failed_run(command, work, timeout_s, env=None):
         assert not any((work / name).exists() for name in stale)
+        if "-c" in command:
+            import dkx
+            assert Path(env["PYTHONPATH"].split(os.pathsep)[0]) == Path(dkx.__file__).resolve().parent.parent
         calls.append(command)
         return {"returncode": 1}
 

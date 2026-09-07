@@ -273,6 +273,7 @@ def converge_sfincs_input(source, **kwargs) -> ConvergenceReport:
     """
     from types import SimpleNamespace  # noqa: PLC0415
 
+    from ..api import SolverOptions  # noqa: PLC0415
     from ..config import ResolutionConfig  # noqa: PLC0415
     from ..inputs import SfincsInput, load_sfincs_input  # noqa: PLC0415
     from ..run import run_profile, run_transport_matrix  # noqa: PLC0415
@@ -292,7 +293,8 @@ def converge_sfincs_input(source, **kwargs) -> ConvergenceReport:
         updated = replace(inp, resolution=replace(inp.resolution, **{
             v: getattr(r, k) for k, v in names.items()}))
         driver = run_profile if mode == 1 else run_transport_matrix
-        run = driver(updated, tol=inp.resolution.solver_tolerance, emit=None)
+        run = driver(updated, solver=SolverOptions(
+            tol=inp.resolution.solver_tolerance, keep_lowest=r.pitch), emit=None)
         states = [run.state_vector] if mode == 1 else run.state_vectors
         accepted = bool(run.solve_result.converged)
         for i, state in enumerate(states, 1):

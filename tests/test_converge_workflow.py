@@ -291,7 +291,8 @@ def test_namelist_refinement_preserves_physics_and_checks_each_rhs(monkeypatch, 
         assert updated.physics == inp.physics
         assert updated.geometry == inp.geometry
         assert updated.species == inp.species
-        assert kwargs['tol'] == inp.resolution.solver_tolerance
+        assert kwargs['solver'].tol == inp.resolution.solver_tolerance
+        assert kwargs['solver'].keep_lowest == updated.resolution.n_xi
         states = np.ones((mode, 2))
         if invalid:
             states[-1, 0] = 2
@@ -313,3 +314,20 @@ def test_namelist_refinement_preserves_physics_and_checks_each_rhs(monkeypatch, 
     invalid = True
     with pytest.raises(ValueError, match='failed solve'):
         cv.converge_sfincs_input(inp, axes=('theta',))
+
+
+def test_full_recovery_audits_equations_without_changing_transport():
+    from pathlib import Path
+    from dkx.api import SolverOptions
+    from dkx.run import run_transport_matrix
+
+    deck = Path(__file__).parent / 'ref/monoenergetic_PAS_tiny_scheme1.input.namelist'
+    low = run_transport_matrix(deck, solver=SolverOptions(memory_budget_gb=1e-12), emit=None)
+    full = run_transport_matrix(deck, solver=SolverOptions(
+        memory_budget_gb=1e-12, keep_lowest=low.operator.n_xi), emit=None)
+    assert full.solve_result.method == 'block_tridiagonal_truncated'
+    assert full.solve_result.converged
+    np.testing.assert_allclose(full.transport_matrix, low.transport_matrix, rtol=1e-10, atol=0)
+    for i, state in enumerate(full.state_vectors, 1):
+        rhs = np.asarray(full.operator.rhs(i))
+        assert np.linalg.norm(np.asarray(full.operator.apply(state)) - rhs) / np.linalg.norm(rhs) < 1e-10

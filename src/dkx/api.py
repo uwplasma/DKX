@@ -72,6 +72,8 @@ class SolverOptions:
             ``--cores`` flag before ``import dkx`` (see
             ``docs/parallelism.rst``); :meth:`solve_kwargs` deliberately
             excludes this field.
+        keep_lowest: Legendre blocks recovered by the memory-saving structured
+            route. Set to the input Nxi for original-equation residual audits.
     """
 
     method: str = "auto"
@@ -86,6 +88,7 @@ class SolverOptions:
     device: Any = None
     memory_budget_gb: float | None = None
     cores: int | None = None
+    keep_lowest: int = 3
 
     def solve_kwargs(self) -> dict[str, Any]:
         """Keyword arguments for :func:`dkx.solve.solve` (``cores`` excluded)."""
@@ -102,6 +105,7 @@ class SolverOptions:
                 None if self.preconditioner is None else str(self.preconditioner)
             ),
             "device": self.device,
+            "tier1_keep_lowest": int(self.keep_lowest),
             "tier1_memory_budget_gb": (
                 None if self.memory_budget_gb is None else float(self.memory_budget_gb)
             ),

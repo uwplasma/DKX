@@ -408,3 +408,10 @@ pass the deck's solver tolerance. Nonlinear Phi1 decks require a coupled error
 audit and are refused here. No output files are written by the Python helper.
 The namelist report records effective odd angular resolutions, matching the
 canonical grid builder; ``forceOddNthetaAndNzeta=false`` is not supported here.
+The workflow and supervised parity runner request every Legendre block through
+``SolverOptions(keep_lowest=Nxi)``. The memory-saving structured route otherwise
+retains only the low moments: its zero-filled tail is not a full solution for
+an original-equation residual audit. Full recovery is included in these timings.
+The supervised runner binds child imports to the parent's DKX package and records
+the imported source path, so changing into an artifact directory cannot select
+an unrelated editable installation through a relative ``PYTHONPATH``.
