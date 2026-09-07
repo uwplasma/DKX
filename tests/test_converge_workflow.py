@@ -359,6 +359,22 @@ def test_a_fourth_order_ladder_recovers_its_order() -> None:
     assert estimate.order == pytest.approx(4.0, abs=1e-9)
 
 
+def test_the_published_asme_worked_example_is_reproduced() -> None:
+    """Celik et al. (2008), ASME J. Fluids Eng. 130, 078001, example 1.
+
+    Three grids with r21 = 1.5 and r32 = 1.333 give a published observed order
+    of 1.53, an extrapolated 6.1685 and a fine-grid GCI of 2.2%. Reproducing an
+    external worked example checks the procedure itself, which a manufactured
+    ladder of our own construction cannot.
+    """
+    estimate = cv.richardson_uncertainty(
+        5.863, 5.972, 6.063, sizes=(3000, 4000, 6000)
+    )
+    assert estimate.order == pytest.approx(1.53, abs=0.01)
+    assert float(np.ravel(estimate.extrapolated)[0]) == pytest.approx(6.1685, abs=1e-4)
+    assert estimate.relative == pytest.approx(0.022, abs=0.001)
+
+
 def test_unequal_refinement_ratios_still_recover_the_order() -> None:
     """Integer resolutions rarely give a constant ratio: 9, 13, 20 is what
     ``factor = 1.5`` actually produces. The ASME V&V 20 iteration handles it."""

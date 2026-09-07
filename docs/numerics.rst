@@ -441,7 +441,9 @@ taken from the resolutions themselves, the observed order solves
    \qquad q(p) = \ln\frac{r_{21}^{\,p} - s}{r_{32}^{\,p} - s},
 
 by fixed-point iteration, which reduces to the textbook three-grid formula when
-the ratios are equal. Integer resolutions rarely give equal ratios, so the
+the ratios are equal. The implementation reproduces the published worked example
+of Celik et al. (2008), ASME J. Fluids Eng. **130**, 078001: observed order 1.53,
+extrapolated 6.1685 and a fine-grid GCI of 2.2 %, which a regression pins. Integer resolutions rarely give equal ratios, so the
 general form is used throughout.
 
 The estimate is **refused, not reported**, unless the convergence ratio
