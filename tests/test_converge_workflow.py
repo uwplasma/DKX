@@ -331,3 +331,204 @@ def test_full_recovery_audits_equations_without_changing_transport():
     for i, state in enumerate(full.state_vectors, 1):
         rhs = np.asarray(full.operator.rhs(i))
         assert np.linalg.norm(np.asarray(full.operator.apply(state)) - rhs) / np.linalg.norm(rhs) < 1e-10
+
+
+# --------------------------------------------------------------------------
+# Grid uncertainty: Richardson extrapolation over a three-rung ladder
+# --------------------------------------------------------------------------
+
+
+def manufactured(order, *, exact=3.0, coefficient=1.0):
+    """``f(N) = exact + coefficient * N**-order``, a ladder with a known answer."""
+    return lambda size: exact + coefficient * float(size) ** -order
+
+
+def test_a_second_order_ladder_recovers_its_order_and_its_exact_value() -> None:
+    f = manufactured(2.0)
+    estimate = cv.richardson_uncertainty(f(10), f(20), f(40), sizes=(10, 20, 40))
+    assert estimate.status == "asymptotic" and estimate.usable
+    assert estimate.order == pytest.approx(2.0, abs=1e-9)
+    assert float(np.ravel(estimate.extrapolated)[0]) == pytest.approx(3.0, abs=1e-12)
+    # The bar must cover the finest solution's actual error.
+    assert estimate.relative >= abs(f(40) - 3.0) / 3.0
+
+
+def test_a_fourth_order_ladder_recovers_its_order() -> None:
+    f = manufactured(4.0)
+    estimate = cv.richardson_uncertainty(f(10), f(20), f(40), sizes=(10, 20, 40))
+    assert estimate.order == pytest.approx(4.0, abs=1e-9)
+
+
+def test_the_published_asme_worked_example_is_reproduced() -> None:
+    """Celik et al. (2008), ASME J. Fluids Eng. 130, 078001, example 1.
+
+    Three grids with r21 = 1.5 and r32 = 1.333 give a published observed order
+    of 1.53, an extrapolated 6.1685 and a fine-grid GCI of 2.2%. Reproducing an
+    external worked example checks the procedure itself, which a manufactured
+    ladder of our own construction cannot.
+    """
+    estimate = cv.richardson_uncertainty(
+        5.863, 5.972, 6.063, sizes=(3000, 4000, 6000)
+    )
+    assert estimate.order == pytest.approx(1.53, abs=0.01)
+    assert float(np.ravel(estimate.extrapolated)[0]) == pytest.approx(6.1685, abs=1e-4)
+    assert estimate.relative == pytest.approx(0.022, abs=0.001)
+
+
+def test_unequal_refinement_ratios_still_recover_the_order() -> None:
+    """Integer resolutions rarely give a constant ratio: 9, 13, 20 is what
+    ``factor = 1.5`` actually produces. The ASME V&V 20 iteration handles it."""
+    f = manufactured(2.0)
+    estimate = cv.richardson_uncertainty(f(9), f(13), f(20), sizes=(9, 13, 20))
+    assert estimate.status == "asymptotic"
+    assert estimate.order == pytest.approx(2.0, abs=1e-6)
+    assert float(np.ravel(estimate.extrapolated)[0]) == pytest.approx(3.0, abs=1e-9)
+
+
+def test_the_er15_bootstrap_ladder_is_refused_not_extrapolated() -> None:
+    """The measured ``Er = 15`` pitch ladder reversed the sign of the current
+    between ``Nxi = 40`` and ``60``, and its differences grow under refinement.
+
+    Extrapolating through that invents accuracy the solves do not have, so the
+    estimator must refuse it. This is the case the refusal exists for.
+    """
+    estimate = cv.richardson_uncertainty(
+        5.877e-3, 3.000e-3, -3.364e-3, sizes=(30, 40, 60)
+    )
+    assert not estimate.usable
+    assert "asymptotic" in estimate.status and estimate.relative == float("inf")
+
+
+def test_an_oscillating_ladder_is_refused() -> None:
+    estimate = cv.richardson_uncertainty(1.0, 1.1, 1.0, sizes=(10, 20, 40))
+    assert not estimate.usable
+
+
+def test_a_diverging_ladder_is_refused() -> None:
+    """Differences that grow under refinement are divergence, not convergence."""
+    estimate = cv.richardson_uncertainty(1.0, 1.1, 1.4, sizes=(10, 20, 40))
+    assert not estimate.usable
+
+
+def test_the_worst_entry_sets_the_uncertainty() -> None:
+    """One settled surface must not certify a moving one."""
+    slow, fast = manufactured(2.0), manufactured(2.0, exact=-2.0, coefficient=50.0)
+    ladder = [np.array([slow(n), fast(n)]) for n in (10, 20, 40)]
+    estimate = cv.richardson_uncertainty(*ladder, sizes=(10, 20, 40))
+    alone = cv.richardson_uncertainty(
+        *[np.array([fast(n)]) for n in (10, 20, 40)], sizes=(10, 20, 40)
+    )
+    assert estimate.relative == pytest.approx(alone.relative)
+
+
+def test_one_refused_entry_refuses_the_whole_observable() -> None:
+    good = manufactured(2.0)
+    ladder = [np.array([good(n), v]) for n, v in ((10, 1.0), (20, 1.1), (40, 1.0))]
+    assert not cv.richardson_uncertainty(*ladder, sizes=(10, 20, 40)).usable
+
+
+@pytest.mark.parametrize(
+    "ladder, sizes",
+    [
+        ((1.0, 2.0, float("nan")), (10, 20, 40)),
+        ((np.array([1.0]), np.array([1.0, 2.0]), np.array([1.0])), (10, 20, 40)),
+        ((1.0, 1.1, 1.2), (40, 20, 10)),
+        ((1.0, 1.1, 1.2), (10, 10, 40)),
+    ],
+)
+def test_an_unusable_ladder_is_refused(ladder, sizes) -> None:
+    assert not cv.richardson_uncertainty(*ladder, sizes=sizes).usable
+
+
+def test_a_stalled_coarse_pair_cannot_give_an_order() -> None:
+    """Two equal coarse rungs make the difference ratio undefined.
+
+    Refinement produced no change between the coarse and medium grids but did
+    between medium and fine, which is not a convergence history any order can
+    be read from.
+    """
+    assert not cv.richardson_uncertainty(1.0, 1.0, 1.1, sizes=(10, 20, 40)).usable
+
+
+def test_an_implausibly_high_order_is_refused() -> None:
+    """An order far above any discretization in DKX means the ladder is not
+    measuring convergence, so no bar is reported."""
+    # exact=0 keeps the differences representable: with an offset of 3.0 an
+    # order-20 ladder underflows to three identical doubles, which is a
+    # converged observable rather than a high-order one.
+    f = manufactured(20.0, exact=0.0)
+    assert not cv.richardson_uncertainty(
+        f(10), f(20), f(40), sizes=(10, 20, 40), max_order=12.0
+    ).usable
+
+
+def test_a_nonpositive_safety_factor_is_refused() -> None:
+    with pytest.raises(ValueError, match="safety factor"):
+        cv.richardson_uncertainty(1.0, 1.1, 1.2, sizes=(10, 20, 40), safety=0.0)
+
+
+def test_an_exactly_reproduced_observable_has_no_grid_uncertainty() -> None:
+    estimate = cv.richardson_uncertainty(2.5, 2.5, 2.5, sizes=(10, 20, 40))
+    assert estimate.usable and estimate.relative == 0.0
+
+
+def test_a_zero_observable_needs_an_explicit_absolute_scale() -> None:
+    refused = cv.richardson_uncertainty(0.01, 0.0025, 0.0, sizes=(10, 20, 40))
+    assert not refused.usable
+    scaled = cv.richardson_uncertainty(
+        0.01, 0.0025, 0.0, sizes=(10, 20, 40), absolute_tolerance=1.0
+    )
+    assert scaled.usable and scaled.relative < 1.0
+
+
+def test_the_third_rung_gives_every_axis_an_error_bar(monkeypatch) -> None:
+    def response(r):
+        return 3.0 + sum(getattr(r, a) ** -2.0 for a in ("theta", "zeta", "pitch", "speed"))
+
+    report, calls = study(monkeypatch, response, richardson=True)
+    for refinement in report.refinements:
+        estimate = refinement.uncertainties["particle_flux_m2_s"]
+        assert estimate.usable, (refinement.label, estimate.status)
+        assert estimate.order == pytest.approx(2.0, abs=1e-3)
+    assert np.isfinite(report.worst_grid_uncertainty)
+    # baseline + (refine + third rung) per axis + joint
+    assert len(calls) == 1 + 2 * len(report.refinements) + 1
+
+
+def test_a_factor_too_small_to_form_a_third_rung_says_so(monkeypatch) -> None:
+    """At a small refinement factor the second and third rungs collide.
+
+    ``factor = 1.05`` rounds 10 to 11 and 10 * 1.05**2 to 11 as well, so there
+    is no third resolution to extrapolate from. That is reported and the axis
+    carries no bar, rather than an estimate built from two equal grid sizes.
+    """
+    report, _ = study(
+        monkeypatch,
+        lambda r: 3.0 + r.theta**-2.0,
+        richardson=True,
+        factor=1.05,
+        axes=("theta",),
+        joint=False,
+    )
+    theta = next(r for r in report.refinements if r.label == "theta")
+    assert theta.uncertainties is None
+    assert np.isnan(report.worst_grid_uncertainty)
+
+
+def test_without_the_third_rung_no_uncertainty_is_claimed(monkeypatch) -> None:
+    report, _ = study(monkeypatch, lambda r: 1.0 + 1.0 / r.theta)
+    assert all(r.uncertainties is None for r in report.refinements)
+    assert np.isnan(report.worst_grid_uncertainty)
+
+
+def test_a_refused_ladder_makes_the_reported_uncertainty_infinite(monkeypatch) -> None:
+    """An estimate that could not be made is not a small one."""
+    values = {}
+
+    def response(r):
+        # Oscillate in theta only; the other axes converge cleanly.
+        values.setdefault(r.theta, [1.0, 1.1, 1.0][len(values) % 3])
+        return values[r.theta] + sum(getattr(r, a) ** -2.0 for a in ("zeta", "pitch", "speed"))
+
+    report, _ = study(monkeypatch, response, richardson=True, axes=("theta",), joint=False)
+    assert report.worst_grid_uncertainty == float("inf")
