@@ -281,12 +281,11 @@ Exit: Figure 1 rendered from tracked inputs by one runner selection; every DKX p
 
 Effort: 3–4 weeks, one person, mostly measurement and yancc onboarding. No new DKX solver code. Evidence tooling frozen at what exists.
 
-**Execution qualification (2026-09-07; PRs #211 and #212, review pending).** Phase 1 remains open. The convergence and algebraic-audit utilities implement admission checks; they do not establish accepted grids or complete Figure 1. The campaign exposed three requirements within the steps above:
-- Original-equation audits must recover the complete Legendre state. The structured moment-only route's zero-filled tail cannot pass this audit; use existing full recovery and include its cost in timing.
-- Bind benchmark child imports to the source captured by parent provenance, including absolute dependency search paths. Earlier local NCSX subprocess campaigns using relative `PYTHONPATH=src` selected an older editable checkout; retain them as diagnostics and require source-bound reproduction before admission.
-- Match radial coordinates as well as field arrays. For KJM, [YANCC's DKES outputs](https://github.com/f0uriest/yancc/blob/33e1ce9b208f6d3209fdb55aeba8712e6d6a4223/yancc/solution.py) use `r=a_minor*rho`; DKX's Beidler conversion uses `r_eff=sqrt(abs(Psi)/(pi*B00))*rho`. Transform each radial coefficient index by `dr_eff/dr` before comparing. Derive the factor from geometry, never fit it to transport values.
+**Three criteria this phase's campaign must satisfy, found the hard way.**
 
-Continue with per-axis and joint grid qualification, stable adjoint estimates at accepted grids, then idle-machine repetitions and the tracked-input figure. Timeouts, killed processes and unqualified states remain visible; occupied GPUs and small adjacent-grid changes do not waive the exit criteria. No Phase 2 algorithm lane or release is admitted by these tooling fixes.
+- **Audit the complete Legendre state.** The memory-saving structured route returns only low Legendre moments by default, and its zero-filled tail cannot certify the original equations. Request full recovery (`SolverOptions(keep_lowest=Nxi)`) for any original-equation audit, and include the recovery cost in the timing.
+- **Bind benchmark child imports to the source the parent recorded**, including absolute dependency search paths. A relative `PYTHONPATH=src` is reinterpreted when the child's working directory changes and can select an unrelated editable installation; children must import the same package as the parent and record the source path they actually used.
+- **Match radial coordinates, not only field arrays.** [yancc's DKES outputs](https://github.com/f0uriest/yancc/blob/33e1ce9b208f6d3209fdb55aeba8712e6d6a4223/yancc/solution.py) use `r = a_minor * rho`, while DKX's Beidler conversion uses `r_eff = sqrt(|Psi| / (pi B00)) * rho`. Transform each radial coefficient before comparing, or the cross-code numbers differ by a coordinate factor rather than by physics.
 
 ### Phase 2: why the Krylov route loses, and two bounded extensions (3 weeks, time-boxed)
 
