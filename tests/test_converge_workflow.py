@@ -495,6 +495,26 @@ def test_the_third_rung_gives_every_axis_an_error_bar(monkeypatch) -> None:
     assert len(calls) == 1 + 2 * len(report.refinements) + 1
 
 
+def test_a_factor_too_small_to_form_a_third_rung_says_so(monkeypatch) -> None:
+    """At a small refinement factor the second and third rungs collide.
+
+    ``factor = 1.05`` rounds 10 to 11 and 10 * 1.05**2 to 11 as well, so there
+    is no third resolution to extrapolate from. That is reported and the axis
+    carries no bar, rather than an estimate built from two equal grid sizes.
+    """
+    report, _ = study(
+        monkeypatch,
+        lambda r: 3.0 + r.theta**-2.0,
+        richardson=True,
+        factor=1.05,
+        axes=("theta",),
+        joint=False,
+    )
+    theta = next(r for r in report.refinements if r.label == "theta")
+    assert theta.uncertainties is None
+    assert np.isnan(report.worst_grid_uncertainty)
+
+
 def test_without_the_third_rung_no_uncertainty_is_claimed(monkeypatch) -> None:
     report, _ = study(monkeypatch, lambda r: 1.0 + 1.0 / r.theta)
     assert all(r.uncertainties is None for r in report.refinements)
