@@ -395,3 +395,14 @@ absolute tolerance in the array's units. The default absolute tolerance is zero;
 there is no implicit unit-dependent allowance for a zero reference.
 A two-grid difference is a resolution check, not a Richardson error estimate or
 an algebraic-error bound. Those require additional grid and adjoint evidence.
+
+For linear SFINCS decks, ``dkx converge input.namelist`` uses the canonical
+namelist runner, including finite-Er full trajectories and the deck's VMEC
+surface-selection policy. It does not convert to a native Case or alter the
+physics to fit that route. ``converge_sfincs_input`` accepts a path or an
+in-memory ``SfincsInput`` and the same refinement options as ``converge_case``.
+Default observables are the signed per-species SFINCS-normalized flow, particle
+and heat moments for RHSMode 1, or every transport-matrix entry for RHSMode 2/3.
+Absolute budgets use those observables' units. Every original RHS residual must
+pass the deck's solver tolerance. Nonlinear Phi1 decks require a coupled error
+audit and are refused here. No output files are written by the Python helper.

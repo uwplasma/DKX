@@ -269,3 +269,46 @@ def test_large_absolute_budget_does_not_overflow_into_false_convergence():
 def test_a_missing_requested_observable_cannot_hide_behind_an_available_one(monkeypatch):
     with pytest.raises(ValueError, match="missing"):
         study(monkeypatch, lambda r: 1., observables=("particle_flux_m2_s", "heat_flux_W_m2"))
+
+
+@pytest.mark.parametrize('mode', [1, 2, 3])
+def test_namelist_refinement_preserves_physics_and_checks_each_rhs(monkeypatch, mode):
+    from dataclasses import replace
+    from pathlib import Path
+    from types import SimpleNamespace
+    import importlib
+    from dkx.inputs import load_sfincs_input
+
+    inp = load_sfincs_input(Path(__file__).parent / 'ref/pas_1species_PAS_Er_tiny_xgrid4_xdot4.input.namelist')
+    inp = replace(inp, general=replace(inp.general, rhs_mode=mode),
+                  physics=replace(inp.physics, er=-1., use_dkes_exb_drift=False))
+    calls = []
+    invalid = False
+
+    def driver(updated, **kwargs):
+        calls.append(updated)
+        assert updated.physics == inp.physics
+        assert updated.geometry == inp.geometry
+        assert updated.species == inp.species
+        assert kwargs['tol'] == inp.resolution.solver_tolerance
+        states = np.ones((mode, 2))
+        if invalid:
+            states[-1, 0] = 2
+        return SimpleNamespace(
+            operator=SimpleNamespace(rhs=lambda i: np.ones(2), apply=lambda x: x),
+            solve_result=SimpleNamespace(converged=True), state_vector=states[0],
+            state_vectors=states, moments={'FSABFlow': np.array([-2.]),
+                'particleFlux_vm_psiHat': np.array([3.]), 'heatFlux_vm_psiHat': np.array([4.])},
+            transport_matrix=np.eye(mode),
+        )
+
+    run_module = importlib.import_module('dkx.run')
+    monkeypatch.setattr(run_module, 'run_profile' if mode == 1 else 'run_transport_matrix', driver)
+    report = cv.converge_sfincs_input(inp, axes=('theta',), factor=1.4)
+    assert report.converged
+    assert calls[0].resolution == inp.resolution
+    assert calls[1].resolution.n_theta > inp.resolution.n_theta
+    assert calls[1].resolution.n_xi == inp.resolution.n_xi
+    invalid = True
+    with pytest.raises(ValueError, match='failed solve'):
+        cv.converge_sfincs_input(inp, axes=('theta',))

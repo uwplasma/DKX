@@ -137,8 +137,8 @@ def _resolution_dict(resolution) -> dict[str, int]:
     return {axis: int(getattr(resolution, axis)) for axis in AXES}
 
 
-def converge_case(
-    case,
+def _converge(
+    resolution, run_at_resolution,
     *,
     axes: tuple[str, ...] = AXES,
     factor: float = 1.5,
@@ -157,8 +157,6 @@ def converge_case(
     Each entry must change by less than max(tolerance * abs(reference), atol).
     """
     import time  # noqa: PLC0415
-
-    from ..execution import run_case  # noqa: PLC0415
 
     unknown = sorted(set(axes) - set(AXES))
     if unknown:
@@ -190,8 +188,8 @@ def converge_case(
             for name in observables
         }
 
-    _say(f"baseline {_resolution_dict(case.resolution)}")
-    baseline_result = run_case(case)
+    _say(f"baseline {_resolution_dict(resolution)}")
+    baseline_result = run_at_resolution(resolution)
     reference = _observables_of(baseline_result)
     if not reference:
         raise ValueError(
@@ -200,17 +198,17 @@ def converge_case(
 
     refinements: list[AxisRefinement] = []
     for axis in axes:
-        resolution = _refined(case.resolution, axis, factor)
-        if resolution == case.resolution:
+        refined = _refined(resolution, axis, factor)
+        if refined == resolution:
             _say(f"{axis}: not refinable for this case, skipped")
             continue
-        _say(f"refining {axis} -> {getattr(resolution, axis)}")
+        _say(f"refining {axis} -> {getattr(refined, axis)}")
         started = time.perf_counter()
-        result = run_case(replace(case, resolution=resolution))
+        result = run_at_resolution(refined)
         refinements.append(
             AxisRefinement(
                 label=axis,
-                resolution=_resolution_dict(resolution),
+                resolution=_resolution_dict(refined),
                 changes=_relative_changes(
                     reference, _observables_of(result), tolerance=tolerance,
                     absolute_tolerances=absolute_tolerances,
@@ -221,13 +219,13 @@ def converge_case(
 
     joint_refinement: AxisRefinement | None = None
     if joint and len(refinements) > 1:
-        resolution = _refined(case.resolution, tuple(axes), factor)
-        _say(f"refining every axis together -> {_resolution_dict(resolution)}")
+        refined = _refined(resolution, tuple(axes), factor)
+        _say(f"refining every axis together -> {_resolution_dict(refined)}")
         started = time.perf_counter()
-        result = run_case(replace(case, resolution=resolution))
+        result = run_at_resolution(refined)
         joint_refinement = AxisRefinement(
             label="all axes",
-            resolution=_resolution_dict(resolution),
+            resolution=_resolution_dict(refined),
             changes=_relative_changes(
                     reference, _observables_of(result), tolerance=tolerance,
                     absolute_tolerances=absolute_tolerances,
@@ -236,8 +234,73 @@ def converge_case(
         )
 
     return ConvergenceReport(
-        baseline=_resolution_dict(case.resolution),
+        baseline=_resolution_dict(resolution),
         refinements=tuple(refinements),
         joint=joint_refinement,
         tolerance=tolerance,
     )
+
+
+def converge_case(
+    case, *, axes: tuple[str, ...] = AXES, factor: float = 1.5,
+    tolerance: float = 0.02, observables: tuple[str, ...] = DEFAULT_OBSERVABLES,
+    absolute_tolerances: Mapping[str, float] | None = None,
+    joint: bool = True, emit: Callable[[str], None] | None = None,
+) -> ConvergenceReport:
+    """Refine each axis and optionally all axes jointly; compare signed entries.
+
+    Absolute tolerances are per-observable physical units, defaulting to zero.
+    Every entry must change by less than max(tolerance * abs(reference), atol).
+    """
+    from ..execution import run_case  # noqa: PLC0415
+
+    return _converge(
+        case.resolution, lambda r: run_case(replace(case, resolution=r)),
+        axes=axes, factor=factor, tolerance=tolerance, observables=observables,
+        absolute_tolerances=absolute_tolerances, joint=joint, emit=emit,
+    )
+
+
+def converge_sfincs_input(source, **kwargs) -> ConvergenceReport:
+    """Refine a linear RHSMode 1/2/3 namelist without converting its physics.
+
+    Accept a path or SfincsInput. Default observables use SFINCS normalization:
+    per-species flow/particle/heat moments for RHSMode 1, the full transport
+    matrix for RHSMode 2/3. Every original RHS residual must pass the deck's
+    solverTolerance. No files are written; geometry policy and gradients remain
+    those of the supplied deck. Refinement options match converge_case.
+    """
+    from types import SimpleNamespace  # noqa: PLC0415
+
+    from ..config import ResolutionConfig  # noqa: PLC0415
+    from ..inputs import SfincsInput, load_sfincs_input  # noqa: PLC0415
+    from ..run import run_profile, run_transport_matrix  # noqa: PLC0415
+
+    inp = source if isinstance(source, SfincsInput) else load_sfincs_input(source)
+    mode = inp.general.rhs_mode
+    if mode not in (1, 2, 3) or inp.physics.include_phi1:
+        raise ValueError("namelist convergence requires linear RHSMode 1, 2 or 3 with includePhi1=false")
+    names = dict(theta="n_theta", zeta="n_zeta", pitch="n_xi", speed="n_x")
+    resolution = ResolutionConfig(**{k: getattr(inp.resolution, v) for k, v in names.items()})
+    kwargs.setdefault("observables", ("FSABFlow", "particleFlux_vm_psiHat", "heatFlux_vm_psiHat")
+                      if mode == 1 else ("transport_matrix",))
+
+    def run_at_resolution(r):
+        updated = replace(inp, resolution=replace(inp.resolution, **{
+            v: getattr(r, k) for k, v in names.items()}))
+        driver = run_profile if mode == 1 else run_transport_matrix
+        run = driver(updated, tol=inp.resolution.solver_tolerance, emit=None)
+        states = [run.state_vector] if mode == 1 else run.state_vectors
+        accepted = bool(run.solve_result.converged)
+        for i, state in enumerate(states, 1):
+            rhs = np.asarray(run.operator.rhs(i))
+            defect = np.asarray(run.operator.apply(state)) - rhs
+            norm_b, norm_r = np.linalg.norm(rhs), np.linalg.norm(defect)
+            residual = norm_r / norm_b if norm_b else (0.0 if norm_r == 0 else np.inf)
+            accepted = accepted and np.isfinite(residual) and residual <= inp.resolution.solver_tolerance
+        arrays = dict(run.moments)
+        if mode != 1:
+            arrays["transport_matrix"] = run.transport_matrix
+        return SimpleNamespace(arrays=arrays, metadata={"converged": accepted})
+
+    return _converge(resolution, run_at_resolution, **kwargs)

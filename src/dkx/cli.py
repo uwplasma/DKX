@@ -289,10 +289,11 @@ def _cmd_converge(args: argparse.Namespace) -> int:
     from rich.table import Table  # noqa: PLC0415
 
     from .config import Case, CaseValidationError  # noqa: PLC0415
-    from .workflows.converge import converge_case  # noqa: PLC0415
+    from .workflows.converge import converge_case, converge_sfincs_input  # noqa: PLC0415
 
     try:
-        case = Case.from_file(args.case)
+        namelist = Path(args.case).suffix.lower() == ".namelist"
+        case = args.case if namelist else Case.from_file(args.case)
     except (CaseValidationError, OSError) as exc:
         print(f"dkx converge failed: {exc}", file=sys.stderr)
         return 2
@@ -310,7 +311,7 @@ def _cmd_converge(args: argparse.Namespace) -> int:
     )
     try:
         with quiet_stdout:
-            report = converge_case(
+            report = (converge_sfincs_input if namelist else converge_case)(
                 case,
                 axes=tuple(args.axes),
                 factor=args.factor,
@@ -318,7 +319,7 @@ def _cmd_converge(args: argparse.Namespace) -> int:
                 joint=not args.no_joint,
                 emit=emit,
             )
-    except (CaseValidationError, NotImplementedError, ValueError) as exc:
+    except (CaseValidationError, NotImplementedError, ValueError, OSError) as exc:
         print(f"dkx converge failed: {exc}", file=sys.stderr)
         return 2
 
@@ -2249,7 +2250,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     _add_common_cli_args(p_converge)
     _add_parallel_cli_args(p_converge)
-    p_converge.add_argument("case", help="Path to a .toml or .json case file.")
+    p_converge.add_argument("case", help="Path to a native .toml/.json case or a linear .namelist deck.")
     p_converge.add_argument(
         "--axes", nargs="+", default=list(_CONVERGE_AXES),
         choices=list(_CONVERGE_AXES),
