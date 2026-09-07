@@ -159,3 +159,54 @@ def test_the_diagnosis_does_not_depend_on_the_probe_draw(tmp_path: Path) -> None
 def test_probes_must_be_positive(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="probes must be positive"):
         dropped_couplings(_operator(tmp_path), probes=0)
+
+
+# --------------------------------------------------------------------------
+# The shape of the dropped coupling, which decides how to recover it
+# --------------------------------------------------------------------------
+
+
+def _collision_matrix(tmp_path: Path, *, n_x: int):
+    op = _operator(tmp_path, collision_operator=0, n_x=n_x)
+    collision = op.fp if op.fp is not None else op.sugama
+    assert collision is not None, "a full-Fokker-Planck deck must carry a dense operator"
+    # (S, S, L, X, X): one speed block per Legendre index, so the operator is
+    # diagonal in L and couples only species and speed.
+    return np.asarray(collision.mat)
+
+
+def test_the_collision_operator_is_upper_triangular_in_speed(tmp_path: Path) -> None:
+    """Rosenbluth potentials make collisions an integral operator in speed.
+
+    A row at one speed draws on integrals over the speeds above it, so in this
+    basis the matrix is upper triangular to round-off. The plan's phase 2 rests
+    on that: keeping the upper triangle (Fortran ``preconditioner_x = 2``) is
+    then very nearly the full coupling, and it inverts by back-substitution
+    reusing the block-Thomas factors rather than by a dense solve. If a change
+    of speed basis ever breaks the triangularity, that argument breaks with it.
+    """
+    mat = _collision_matrix(tmp_path, n_x=8)
+    rows, columns = np.tril_indices(mat.shape[-1], -1)
+    lower = mat[..., rows, columns]
+    assert np.linalg.norm(lower) / np.linalg.norm(mat) < 1e-2
+
+
+def test_the_collision_mass_sits_in_the_corner_not_in_a_band(tmp_path: Path) -> None:
+    """Why banding the speed coupling cannot help.
+
+    The mass is at the largest ``|x - x'|``, not beside the diagonal, so the
+    tridiagonal and diagonal-plus-superdiagonal simplifications SFINCS offers
+    (``preconditioner_x = 3`` and ``4``) recover almost nothing. Measured:
+    bandwidths 1 and 2 leave the residual operator where the diagonal already
+    left it. This test pins the structural reason.
+    """
+    mat = _collision_matrix(tmp_path, n_x=8)
+    n_x = mat.shape[-1]
+    separation = np.abs(np.arange(n_x)[:, None] - np.arange(n_x)[None, :])
+    total = np.linalg.norm(mat)
+    first_superdiagonal = np.linalg.norm(mat[..., separation == 1]) / total
+    corner = np.linalg.norm(mat[..., separation == n_x - 1]) / total
+    assert corner > 10.0 * first_superdiagonal, (
+        f"corner {corner:.3f} vs first superdiagonal {first_superdiagonal:.3f}: "
+        "a band would be the right shape after all, and phase 2 needs rethinking"
+    )
