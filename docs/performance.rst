@@ -1594,8 +1594,38 @@ a reduced deck at ``Nxi=40``, and 10-28x at the production ``Nxi=100``. The more
 Legendre rows the streaming chain spans, the more a preconditioner loses by
 omitting a term the operator has.
 
-On precision, ``float32`` factors are better on every axis, which inverts the
-expectation that they trade iterations for memory. Same machine, same commit, on
+On precision, ``float32`` factors are better on every axis **on this deck**,
+which inverts the expectation that they trade iterations for memory. Read that
+as a statement about decks of this kind and not as a general one: on decks the
+coarse preconditioner already fits and inverts nearly exactly, the same switch
+is expensive rather than free, because the factor error is then the dominant
+error in the preconditioner rather than a small addition to it. Measured on
+analytic decks at 9x9 angles, ``Nxi=16``, ``Nx=5``, dense-band route:
+
+.. list-table:: ``float32`` factors where the bands do fit
+   :header-rows: 1
+   :widths: 34 14 14 14 16
+
+   * - deck
+     - ``||A-M||/||A||``
+     - iterations, float64
+     - iterations, float32
+     - cost
+
+   * - pitch-angle scattering
+     - 0.000
+     - 3
+     - 228
+     - 76x
+
+   * - full Fokker-Planck
+     - 0.003
+     - 12
+     - 474
+     - 40x
+
+Both still reach 1e-10, so the switch is safe rather than wrong; it is simply
+not free away from the decks below. Same machine, same commit, on
 ``…magneticDrifts_noEr`` before the drift diagonal:
 
 .. list-table:: Schur-factor precision, ``…magneticDrifts_noEr``
