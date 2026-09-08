@@ -193,7 +193,7 @@ _SOLVE_CPU_MAX_TIER2_DEFAULT = 0
 # the semicoarsened V-cycle of :mod:`dkx.multigrid`; ``"sparse"`` keeps the
 # inverse exact but eliminates in a fill-reducing order on the host
 # (:mod:`dkx.sparse_precond`), which is what the Fortran reference does.
-_TIER2_PRECONDITIONERS = ("coarse", "multigrid", "sparse", "none")
+_TIER2_PRECONDITIONERS = ("coarse", "coarse_triangle", "multigrid", "sparse", "none")
 
 # =============================================================================
 # Result container
@@ -2000,7 +2000,10 @@ def build_tier2_preconditioner(
     """``(precond, precond_t)`` for the requested Krylov preconditioner.
 
     ``"coarse"`` is :func:`build_coarse_preconditioner` (the exact block-Thomas
-    factorization of the SFINCS-simplified operator); ``"multigrid"`` is
+    factorization of the SFINCS-simplified operator); ``"coarse_triangle"`` is
+    the same factorization with the collision operator's upper speed triangle
+    retained, Fortran ``preconditioner_x = 2``, applied by back-substitution
+    over ``x`` rather than one batched solve; ``"multigrid"`` is
     :func:`dkx.multigrid.build_multigrid_preconditioner`, which approximates
     the inverse of that *same* operator with a semicoarsened multigrid V-cycle
     and so is affordable where the cubic-in-``Ntheta*Nzeta`` factorization is
@@ -2013,6 +2016,10 @@ def build_tier2_preconditioner(
     """
     if kind == "coarse":
         return build_coarse_preconditioner(op, drop_l_coupling=drop_l_coupling)
+    if kind == "coarse_triangle":
+        return build_coarse_preconditioner(
+            op, drop_l_coupling=drop_l_coupling, retain_speed_triangle=True
+        )
     if kind == "sparse":
         from dkx.sparse_precond import build_sparse_preconditioner  # noqa: PLC0415
 
