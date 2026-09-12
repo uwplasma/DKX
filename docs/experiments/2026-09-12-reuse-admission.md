@@ -57,8 +57,8 @@ A separate profiled run recorded eight `jit(while)` compilations/cache loads
 of 0.32–0.43 seconds, with persistent-cache hits. First invocation is therefore
 not synonymous with fresh compilation. The Chrome export covers only part of
 the run (1,000,049 events); it cannot support full kernel attribution.
-`profile-kernels.py` disables Python-call tracing for a smaller follow-up,
-but has **not run**. The complete XPlane stays on office outside Git.
+A smaller follow-up disables Python-call tracing but has **not run**.
+The complete XPlane is retained outside Git.
 
 ### Implementation found by the audit
 
@@ -149,11 +149,7 @@ profile/history and bounded stale-recovery admission. Charge audits, pilots and
 retries in end-to-end timing. Preserve Phase 1's separate grid/observable-error
 requirements. No release or phase completion is claimed.
 
-Raw drivers, inputs, source archives, logs and checksums are in
-`/Users/rogeriojorge/local/dkx-reuse-evidence-20260912`; office copies are in
-`/home/rjorge/local/dkx-reuse-admission-20260912`. `README.md` there maps every
-run to its status, and `manifest.json` checks integrity, not scientific validity.
-The PR body contains restart commands and dependency provenance. Continuation evidence is in its `continuation/` subdirectory with separate
-logs and checksums. Recheck host RAM and GPU compute PIDs before restarting;
-other simulations can occupy either device mid-run. Keep large traces outside
-Git and do not overwrite evidence.
+Source-bound inputs, drivers, logs and integrity manifests are retained privately.
+Checksums establish integrity, not scientific validity. Recheck available host
+memory and GPU occupancy before any follow-up; shared workloads can change
+mid-run. Keep large traces outside Git and preserve failed attempts.
