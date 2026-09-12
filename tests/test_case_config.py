@@ -330,12 +330,23 @@ def test_validate_cli_reports_case_id_and_scan_preflight(
 
 
 def test_validate_cli_reports_bounded_ambipolar_work_without_loading_geometry(
-    capsys,
+    tmp_path: Path, capsys,
 ) -> None:
-    path = (
-        Path(__file__).resolve().parents[1]
-        / "examples/05_ambipolar_profile/case.toml"
-    )
+    # Keep the accounting fixture independent of the evolving teaching case.
+    # The VMEC file does not exist: preflight must not load its geometry.
+    data = _mapping()
+    data["run"] = {"workflow": "ambipolar_profile"}
+    data["species"] = data["species"][:1]
+    data["physics"] = {"collisions": "pitch_angle_scattering"}
+    data["electric_field"] = {
+        "mode": "ambipolar", "search_kV_m": [-5., 5.],
+        "find_all_roots": True, "search_points": 5,
+        "max_root_iterations": 8,
+    }
+    data["resolution"] = {"theta": 9, "zeta": 1, "pitch": 8, "speed": 4}
+    data["convergence"] = {"enabled": True, "max_refinements": 1}
+    path = tmp_path / "preflight.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
 
     assert cli.main(["validate", str(path), "--quiet"]) == 0
     output = capsys.readouterr().out

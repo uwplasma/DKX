@@ -6,10 +6,6 @@ chain runs from a Boozer ``|B|`` Fourier amplitude, through
 ``FluxSurfaceGeometry.from_fourier``, into the operator, through the linear
 solve, out to the radial particle flux; gradient descent then reduces it.
 
-The knob is the helical ripple amplitude ``epsilon_h``.  Ripple is what makes
-a stellarator lose particles in the ``1/nu`` regime, so the gradient should
-push it toward zero and the flux should fall as it does.
-
 Where vmex fits.  In a production loop ``vmex`` solves the VMEC equilibrium
 and ``booz_xform_jax`` transforms it, so the amplitudes below are outputs of a
 boundary shape rather than typed by hand.  DKX's public hand-off to that lane

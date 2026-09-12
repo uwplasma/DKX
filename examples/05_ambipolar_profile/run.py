@@ -8,10 +8,6 @@ brackets the root on every surface, keeps the sampled roots it finds rather than
 only the first, classifies them (ion root, electron root, unstable), and records why
 it selected the one it did.
 
-Searching for multiple roots matters because a stellarator can have three, and the
-middle one is unstable: a solver that returns a single number cannot tell you
-which branch you are on or when the profile jumped between branches.
-
 Physics: analytic W7-X, quasineutral deuterium and electrons, two surfaces,
 full linearized Fokker-Planck collisions with DKES trajectories, Phi1 off.
 This small grid teaches root finding; it does not establish grid convergence.
