@@ -30,9 +30,13 @@ ships with, so continuous integration runs the same code a reader does.
    ``E*``, through ``dkx.run_monoenergetic_database``.
 
 ``examples/05_ambipolar_profile/`` -- solving for the radial electric field
-   ``run.workflow = "ambipolar_profile"``: every root on every surface, each
-   classified, with the branch-selection reason recorded.  ``dkx roots``
-   prints the same table from the saved result.
+   Analytic W7-X with quasineutral ions/electrons and full-FP collisions.
+   ``run.workflow = "ambipolar_profile"`` records sampled roots on each surface
+   and their classification and branch-selection reason. This teaching grid
+   has no discretization certificate.  ``dkx roots``
+   prints the same table from the saved result. The axisymmetric local model
+   cannot determine an electric field from intrinsic ambipolarity; see
+   `Helander & Simakov (2008) <https://doi.org/10.1103/PhysRevLett.101.145003>`_.
 
 ``examples/06_convergence_certificate/`` -- a small residual is not a converged answer
    Refines each phase-space axis and then all of them together, because axes
@@ -43,7 +47,9 @@ ships with, so continuous integration runs the same code a reader does.
 
 ``examples/08_vmex_optimization/`` -- a shape gradient
    Differentiates from a Boozer :math:`|B|` Fourier amplitude through the
-   kinetic solve to the radial particle flux, and descends.  Prints the
+   kinetic solve to the radial particle flux, and descends. Reuses a compiled
+   value/gradient, checks the original kinetic residual and compares the initial
+   derivative across three finite-difference steps. Prints the
    ``vmex`` hand-off contract, which covers a geometry proxy rather than a
    full VMEC-boundary-to-transport gradient.
 

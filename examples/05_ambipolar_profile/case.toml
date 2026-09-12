@@ -9,7 +9,7 @@ progress = true
 
 [geometry]
 format = "analytic"
-file = "tokamak"
+file = "w7x_standard"
 surfaces = [0.09, 0.16]
 
 [[species]]
@@ -19,9 +19,16 @@ mass_amu = 2.014
 density_m3 = [8.0e19, 7.0e19]
 temperature_keV = [1.0, 0.8]
 
+[[species]]
+name = "electron"
+charge = -1
+mass_amu = 0.000548579909
+density_m3 = [8.0e19, 7.0e19]
+temperature_keV = [1.0, 0.8]
+
 [physics]
 model = "full_local"
-collisions = "pitch_angle_scattering"
+collisions = "linearized_fokker_planck"
 magnetic_drifts = "dkes"
 phi1 = "off"
 
@@ -32,11 +39,11 @@ find_all_roots = true
 continue_branches = true
 search_points = 5
 root_tolerance_kV_m = 0.05
-max_root_iterations = 8
+max_root_iterations = 20
 
 [resolution]
-theta = 9
-zeta = 1
+theta = 5
+zeta = 5
 pitch = 8
 speed = 4
 
@@ -50,7 +57,7 @@ reuse = "auto"
 strategy = "auto"
 
 [convergence]
-enabled = true
+enabled = false
 observables = ["particle_flux", "heat_flux", "electric_field"]
 relative_tolerance = 0.02
 max_refinements = 1

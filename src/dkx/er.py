@@ -195,7 +195,7 @@ class ErProblem:
         er_units: input-field units (normalized for decks, kV/m for native Cases).
         er_initial, er_min, er_max: the initial guess and default bracket read
             from the deck (``Er`` / ``ErMin`` / ``ErMax``).
-        solve_method, tol: forwarded to :func:`dkx.solve.solve`.
+        solve_method, tol, max_restarts: forwarded to :func:`dkx.solve.solve`.
     """
 
     operator: KineticOperator
@@ -393,6 +393,7 @@ def radial_current(
     solve_method: str | None = None,
     tol: float | None = None,
     differentiable: bool = False,
+    max_restarts: int = 200,
 ):
     """Radial current ``J_r`` and per-species fluxes at one ``E_r``.
 
@@ -443,12 +444,14 @@ def radial_current(
     if not np.isfinite(rtol) or rtol <= 0:
         raise ValueError("tol must be finite and positive")
 
+    if isinstance(max_restarts, bool) or not isinstance(max_restarts, int) or max_restarts < 1:
+        raise ValueError("max_restarts must be a positive integer")
     op = operator_at_er(problem.operator, er, dphi_per_er=problem.dphi_per_er)
     rhs = op.rhs()
     if differentiable:
         result = solve(
             op, rhs, method=method, tol=rtol, differentiable=True, emit=None,
-            tier1_keep_lowest=op.n_xi,
+            tier1_keep_lowest=op.n_xi, max_restarts=max_restarts,
         )
         x_full = jnp.reshape(result.x, (-1,))
         _check_kinetic_solution(op, er, x_full, rtol)
@@ -462,7 +465,7 @@ def radial_current(
             op, rhs, method=method, tol=rtol, x0=x0, recycle=recycle, precond=precond,
             # A reusable host state must include the Legendre tail: a moment-only
             # zero-padded head cannot satisfy the original kinetic equation.
-            tier1_keep_lowest=op.n_xi,
+            tier1_keep_lowest=op.n_xi, max_restarts=max_restarts,
         )
         x_full = jnp.reshape(result.x, (-1,))
         state = ErSolveState(
@@ -657,6 +660,8 @@ def find_ambipolar_er(
     solve_method: str | None = None,
     tol: float | None = None,
     warm_start: bool = True,
+    max_restarts: int = 200,
+    reuse_max_restarts: int | None = None,
     all_roots: bool = True,
     n_scan: int = 9,
     slope_step: float | None = None,
@@ -674,6 +679,16 @@ def find_ambipolar_er(
     threaded across evaluations when ``warm_start`` is set (a benefit only on
     recycled Krylov solves; structured direct solves ignore them).
 
+    ``max_restarts`` sets the initial Krylov restart cap for all evaluations;
+    the existing ``auto`` route may escalate it. The bounded reuse option below
+    requires explicit GMRES, which does not escalate.
+    With explicit ``solve_method="gmres"``, ``reuse_max_restarts`` optionally
+    caps a solve using retained factors more tightly. If its original equation
+    or finite current/flux check fails, retry once with fresh factors, no guess
+    or recycle vectors, and ``max_restarts``. A second failure raises; rejected
+    states never enter continuation. This host policy does not change the
+    differentiated root or select a refresh threshold automatically.
+
     With ``all_roots`` the bracket is additionally coarse-scanned for sampled
     zeros and sign-changing intervals. Only current-accepted candidates are
     returned, while the selected root remains the Brent result. A finite scan
@@ -690,6 +705,11 @@ def find_ambipolar_er(
 
     Returns an :class:`AmbipolarResult`.
     """
+    for name, value in (("max_restarts", max_restarts), ("reuse_max_restarts", reuse_max_restarts)):
+        if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 1):
+            raise ValueError(f"{name} must be a positive integer")
+    if max_restarts is None or (reuse_max_restarts is not None and reuse_max_restarts > max_restarts):
+        raise ValueError("require 1 <= reuse_max_restarts <= max_restarts")
     for name, value in (("current_tol", current_tol), ("field_tol", field_tol)):
         if not math.isfinite(value) or value <= 0:
             raise ValueError(f"{name} must be finite and positive")
@@ -706,6 +726,8 @@ def find_ambipolar_er(
             er_initial=er_initial,
         )
     )
+    if reuse_max_restarts is not None and (solve_method or problem.solve_method) != "gmres":
+        raise ValueError("reuse_max_restarts requires explicit gmres to prevent route escalation")
     er_min, er_max = problem.er_min, problem.er_max
     if er_bracket is not None:
         er_min, er_max = float(er_bracket[0]), float(er_bracket[1])
@@ -724,22 +746,32 @@ def find_ambipolar_er(
         if not math.isfinite(er):
             raise RuntimeError(f"Nonfinite ambipolar field at stage {stage}: Er={er}")
         prev = state_box["state"] if warm_start else None
-        j_r, gamma, st = radial_current(
-            problem,
-            er,
-            x0=(prev.x if prev is not None else None),
-            recycle=(prev.recycle if prev is not None else None),
-            precond=(prev.precond if prev is not None else None),
-            solve_method=solve_method,
-            tol=tol,
-        )
-        _check_host_kinetic_state(problem, er, st, kinetic_tol)
+        reused = prev is not None and prev.precond is not None and reuse_max_restarts is not None
+        for attempt in range(2 if reused else 1):
+            j_r, gamma, st = radial_current(
+                problem, er,
+                x0=prev.x if prev is not None else None,
+                recycle=prev.recycle if prev is not None else None,
+                precond=prev.precond if prev is not None else None,
+                solve_method=solve_method, tol=tol,
+                max_restarts=reuse_max_restarts if reused and attempt == 0 else max_restarts,
+            )
+            gamma_np = np.asarray(gamma, dtype=np.float64).reshape((-1,))
+            value = float(j_r)
+            try:
+                _check_host_kinetic_state(problem, er, st, kinetic_tol)
+                if not math.isfinite(value) or not np.all(np.isfinite(gamma_np)):
+                    raise RuntimeError(f"Nonfinite ambipolar field/current/flux at stage {stage}: Er={er}, Jr={value}")
+            except RuntimeError:
+                if not reused or attempt:
+                    raise
+                prev = None
+                if emit is not None:
+                    emit(f"Rejected reused state at Er={er}; retrying once without retained state or factors")
+            else:
+                break
         state_box["state"] = st
-        gamma_np = np.asarray(gamma, dtype=np.float64).reshape((-1,))
         state_box["gamma"] = gamma_np
-        value = float(j_r)
-        if not math.isfinite(value) or not np.all(np.isfinite(gamma_np)):
-            raise RuntimeError(f"Nonfinite ambipolar field/current/flux at stage {stage}: Er={er}, Jr={value}")
         iterations.append(AmbipolarIteration(len(iterations) + 1, er, value, stage))
         if emit is not None:
             emit(f"Solving with Er = {er:.15g}   radialCurrent = {value:.8e}")

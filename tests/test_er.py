@@ -712,3 +712,89 @@ def test_ambipolar_acceptance_controls_checked_before_preparation(options):
     from dkx.er import ambipolar_er
     with pytest.raises(ValueError, match="must be"):
         ambipolar_er(None, **options)
+
+
+@pytest.mark.parametrize("failure", ["residual", "current", "flux"])
+@pytest.mark.parametrize("cold_fails", [False, True])
+def test_host_bounded_reuse_rebuilds_once_before_acceptance(monkeypatch, failure, cold_fails):
+    from types import SimpleNamespace
+    from dkx import er
+    import jax.numpy as jnp
+    op = SimpleNamespace(rhs=lambda: jnp.ones(1), apply=lambda x: x)
+    monkeypatch.setattr(er, "operator_at_er", lambda *args, **kwargs: op)
+    good = SimpleNamespace(x=jnp.ones(1), recycle=object(), precond=object())
+    bad = SimpleNamespace(x=jnp.zeros(1), recycle=object(), precond=object())
+    calls = []
+    def current(problem, field, **kwargs):
+        calls.append(kwargs)
+        fail = len(calls) == 2 or (cold_fails and len(calls) == 3)
+        return (np.nan if fail and failure == "current" else field,
+                np.array([np.nan if fail and failure == "flux" else field]),
+                bad if fail and failure == "residual" else good)
+    monkeypatch.setattr(er, "radial_current", current)
+    problem = er.ErProblem(op, 1., np.array([1.]), 0., -1., 1., solve_method="gmres")
+    options = dict(all_roots=False, emit=None, max_restarts=12, reuse_max_restarts=2)
+    if cold_fails:
+        with pytest.raises(RuntimeError, match="kinetic residual failed|Nonfinite ambipolar"):
+            er.find_ambipolar_er(problem, **options)
+        assert len(calls) == 3
+    else:
+        result = er.find_ambipolar_er(problem, **options)
+        assert result.converged and result.er == 0.
+        # Failed factors/distribution never enter the next evaluation.
+        assert all(c["x0"] is not bad.x and c["precond"] is not bad.precond for c in calls)
+        assert calls[3]["precond"] is good.precond
+        # Independent final root solve still drops all retained state.
+        assert all(calls[4][key] is None for key in ("x0", "recycle", "precond"))
+    assert [c["max_restarts"] for c in calls[:3]] == [12, 2, 12]
+    assert all(calls[2][key] is None for key in ("x0", "recycle", "precond"))
+
+
+@pytest.mark.parametrize("options", [
+    {"max_restarts": 0}, {"max_restarts": None}, {"max_restarts": True},
+    {"reuse_max_restarts": 0}, {"reuse_max_restarts": 1.5},
+    {"max_restarts": 2, "reuse_max_restarts": 3},
+])
+def test_host_rejects_invalid_restart_budgets(options):
+    from dkx import er as er_mod
+    with pytest.raises(ValueError, match="restarts"):
+        er_mod.find_ambipolar_er(None, **options)
+
+
+def test_bounded_reuse_rejects_automatic_escalation():
+    from dkx import er as er_mod
+    problem = er_mod.ErProblem(None, 1., np.array([1.]), 0., -1., 1.)
+    with pytest.raises(ValueError, match="explicit gmres"):
+        er_mod.find_ambipolar_er(problem, reuse_max_restarts=2)
+
+
+def test_bounded_full_fp_root_matches_independent_cold_solutions(tmp_path):
+    from dkx import er
+    problem = er.prepare(_write(tmp_path, _pas_deck(
+        collision_operator=0, n_theta=5, n_zeta=5, n_xi=6, n_x=3)),
+        solve_method="gmres", er_bracket=(-3., 1.))
+    options = dict(all_roots=False, emit=None, max_restarts=12)
+    cold = er.find_ambipolar_er(problem, warm_start=False, **options)
+    bounded = er.find_ambipolar_er(problem, reuse_max_restarts=1, **options)
+    assert cold.converged and bounded.converged
+    np.testing.assert_allclose(bounded.er, cold.er, atol=1e-8, rtol=1e-8)
+    np.testing.assert_allclose(bounded.per_species_flux, cold.per_species_flux, atol=1e-14, rtol=1e-7)
+    assert bounded.root_type == cold.root_type
+
+
+def test_bounded_reuse_propagates_solver_runtime_errors(monkeypatch):
+    from types import SimpleNamespace
+    from dkx import er
+    calls = []
+    state = SimpleNamespace(x=np.ones(1), recycle=None, precond=object())
+    def current(problem, field, **kwargs):
+        calls.append(kwargs)
+        if kwargs["precond"] is not None:
+            raise RuntimeError("solver resource failure")
+        return field, np.array([field]), state
+    monkeypatch.setattr(er, "radial_current", current)
+    monkeypatch.setattr(er, "_check_host_kinetic_state", lambda *args: None)
+    problem = er.ErProblem(None, 1., np.array([1.]), 0., -1., 1., solve_method="gmres")
+    with pytest.raises(RuntimeError, match="solver resource failure"):
+        er.find_ambipolar_er(problem, reuse_max_restarts=2, emit=None)
+    assert len(calls) == 2  # A runtime failure is not a rejected numerical candidate.

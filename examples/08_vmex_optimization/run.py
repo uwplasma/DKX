@@ -6,10 +6,6 @@ chain runs from a Boozer ``|B|`` Fourier amplitude, through
 ``FluxSurfaceGeometry.from_fourier``, into the operator, through the linear
 solve, out to the radial particle flux; gradient descent then reduces it.
 
-The knob is the helical ripple amplitude ``epsilon_h``.  Ripple is what makes
-a stellarator lose particles in the ``1/nu`` regime, so the gradient should
-push it toward zero and the flux should fall as it does.
-
 Where vmex fits.  In a production loop ``vmex`` solves the VMEC equilibrium
 and ``booz_xform_jax`` transforms it, so the amplitudes below are outputs of a
 boundary shape rather than typed by hand.  DKX's public hand-off to that lane
@@ -21,7 +17,8 @@ reproducible with or without the optional backends installed.
 Physics: three-helicity analytic surface, ``N=5`` field periods, one hydrogen
 species, pitch-angle scattering, at fixed collisionality.
 
-Expected runtime: ~12 s on a laptop CPU.
+Expected runtime: compilation dominates the first value/gradient; later
+evaluations reuse that fixed-layout executable. This teaching grid has no discretization-error certificate.
 """
 
 # 1. Imports
@@ -62,7 +59,8 @@ EPSILON_H_START = 0.05
 LEARNING_RATE = 10.0
 N_STEPS = 5
 EPSILON_H_FLOOR = 0.0  # a negative ripple amplitude is the same surface, rotated
-FD_STEP = 1.0e-6  # for the gradient cross-check only
+FD_STEP = 1.0e-6  # smallest step in the central-difference window
+SOLVE_TOL = 1.0e-10
 
 # 3. Geometry and species construction
 N_PERIODS = 5
@@ -129,19 +127,33 @@ def particle_flux(epsilon_h):
         theta_weights=operator.theta_weights, zeta_weights=operator.zeta_weights
     )
     perturbed = replace(operator, **leaves)
-    solved = solve(perturbed, perturbed.rhs(), method="auto", differentiable=True)
-    return profile_moments_from_operator(perturbed, solved.x)["particleFlux_vm_psiHat"][0]
+    rhs = perturbed.rhs()
+    solved = solve(perturbed, rhs, method="auto", differentiable=True,
+                   tol=SOLVE_TOL, tier1_keep_lowest=perturbed.n_xi)
+    x = solved.x.reshape(-1)
+    residual = jnp.linalg.norm(perturbed.apply(x) - rhs.reshape(-1)) / jnp.linalg.norm(rhs)
+    flux = profile_moments_from_operator(perturbed, x)["particleFlux_vm_psiHat"][0]
+    return flux, residual
 
 
 # 5. Run
-value_and_gradient = jax.value_and_grad(particle_flux)
+# Compile the complete value/gradient once for this fixed discrete layout.
+# The residual is auxiliary data, not part of the optimization objective.
+value_and_gradient = jax.jit(jax.value_and_grad(particle_flux, has_aux=True))
+flux_and_residual = jax.jit(particle_flux)
 
 history_eps = [EPSILON_H_START]
 history_flux = []
 history_grad = []
+history_residual = []
 epsilon_h = EPSILON_H_START
 for step in range(N_STEPS + 1):
-    flux, gradient = value_and_gradient(jnp.asarray(epsilon_h))
+    (flux, residual), gradient = value_and_gradient(jnp.asarray(epsilon_h))
+    if not np.isfinite(float(residual)) or float(residual) > SOLVE_TOL:
+        raise RuntimeError("Optimization candidate failed its original kinetic equation")
+    if not np.isfinite(float(gradient)):
+        raise RuntimeError("Nonfinite geometry gradient")
+    history_residual.append(float(residual))
     history_flux.append(float(flux))
     history_grad.append(float(gradient))
     print(f"  step {step}: epsilon_h = {epsilon_h:.6f}  "
@@ -151,15 +163,22 @@ for step in range(N_STEPS + 1):
     epsilon_h = max(EPSILON_H_FLOOR, epsilon_h - LEARNING_RATE * float(gradient))
     history_eps.append(epsilon_h)
 
-# The gradient cross-check, at the starting point.
-step = FD_STEP
-central_difference = float(
-    (particle_flux(jnp.asarray(EPSILON_H_START + step))
-     - particle_flux(jnp.asarray(EPSILON_H_START - step))) / (2.0 * step)
-)
+# A finite-difference window checks the same geometry dependence and equation.
+steps = FD_STEP * np.array([1., 3., 10.])
+finite_differences = []
+for step in steps:
+    values = []
+    for sign in (-1, 1):
+        flux, residual = flux_and_residual(jnp.asarray(EPSILON_H_START + sign * step))
+        if not np.isfinite(float(residual)) or float(residual) > SOLVE_TOL:
+            raise RuntimeError("Finite-difference candidate failed its original kinetic equation")
+        values.append(float(flux))
+    finite_differences.append((values[1] - values[0]) / (2 * step))
+central_difference = finite_differences[0]
 
 # 6. Print a scientific summary and certificate
-relative_difference = abs(history_grad[0] / central_difference - 1.0)
+relative_difference = float(np.max(np.abs(np.asarray(finite_differences) - history_grad[0]) /
+    np.maximum(np.maximum(np.abs(finite_differences), abs(history_grad[0])), 1e-30)))
 print("\n=== Final results ===")
 print(f"  epsilon_h: {history_eps[0]:.6f} -> {history_eps[-1]:.6f}")
 print(f"  particle flux: {history_flux[0]:.6e} -> {history_flux[-1]:.6e} (normalized)")
@@ -169,7 +188,8 @@ print(f"  jax.grad           dGamma/d(epsilon_h) = {history_grad[0]:+.10e}")
 print(f"  central difference dGamma/d(epsilon_h) = {central_difference:+.10e}")
 print(f"  relative difference                    = {relative_difference:.3e}")
 assert relative_difference < 1.0e-5, "shape gradient disagrees with central differences"
-print("  all gradients verified against central finite differences")
+print("  initial geometry gradient checked over three finite-difference steps")
+print(f"  maximum original kinetic residual = {max(history_residual):.3e}")
 assert history_flux[-1] < history_flux[0], "descent did not reduce the flux"
 assert history_eps[-1] < history_eps[0], "ripple did not fall: check the sign of the gradient"
 print("  physics check: removing helical ripple lowered the neoclassical flux")
@@ -178,6 +198,10 @@ print("  kinetic solve executed: True (this gradient is not the geometry proxy)"
 # 7. Save native result
 with Dataset(RESULT_FILE, "w", format="NETCDF4") as dataset:
     dataset.createDimension("step", len(history_flux))
+    dataset.createDimension("fd_step", len(finite_differences))
+    dataset.createVariable("fd_step", "f8", ("fd_step",))[:] = steps
+    dataset.createVariable("fd_gradient", "f8", ("fd_step",))[:] = finite_differences
+    dataset.createVariable("original_relative_residual", "f8", ("step",))[:] = history_residual
     dataset.createVariable("epsilon_h", "f8", ("step",))[:] = np.asarray(history_eps)
     dataset.createVariable("particleFlux_vm_psiHat", "f8", ("step",))[:] = np.asarray(history_flux)
     dataset.createVariable("dFlux_depsilon_h", "f8", ("step",))[:] = np.asarray(history_grad)

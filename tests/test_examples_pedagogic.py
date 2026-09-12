@@ -130,7 +130,7 @@ LADDER_CASES = {
             "optional geometry backends:",
             "vmex hand-off claim scope: geometry_proxy_gradient_only",
             "full VMEC-boundary transport gradients claimed: False",
-            "all gradients verified against central finite differences",
+            "initial geometry gradient checked over three finite-difference steps",
             "physics check: removing helical ripple lowered the neoclassical flux",
             "kinetic solve executed: True",
         ),
