@@ -69,7 +69,7 @@ one inverse call. The retained array's shape is unchanged; mixed dtypes can
 change bytes. This is the same [bordered factorization](https://doi.org/10.1017/S0962492904000212),
 with different floating-point evaluation order, not a new physics model.
 
-[Draft SOLVAX #101](https://github.com/uwplasma/SOLVAX/pull/101), source
+[SOLVAX #101](https://github.com/uwplasma/SOLVAX/pull/101), source
 `bd52aea19b1e6545a9da01fcd683ddbc543a0a46`, implements the rearrangement.
 Its suite had 749 passes and six optional-backend skips; 31 operator tests
 include inverse-call count, nonsymmetric real/complex references, nonzero
@@ -77,16 +77,54 @@ border blocks and derivatives through setup. Ruff and Sphinx `-W` passed.
 Sixteen DKX GPU solves completed with maximum original residual `9.334e-11`;
 each reported species flux/flow agrees with the baseline within `4e-9` relative.
 The timing campaign stopped on a competing GPU PID and is **not admitted**.
-The broader local DKX integration run was interrupted without a final pytest
-summary; it is **not a passing gate**. Post-change repeated CPU timing remains
-unexecuted. Before the change, 110 ambipolar tests and 44 documentation-contract
-tests passed locally, and DKX's Sphinx `-W` build passed.
+The original broader integration run was interrupted and is not counted.
+
+### Continuation: completed integration and measured application cost
+
+A fresh single-worker local run passed **234 DKX integration tests** in 414.88 s
+(solve, Phi1, ambipolar, coarse constraints and full-FP/Phi1 profile derivatives).
+Pytest reported an unraisable JAX garbage-collection KeyboardInterrupt warning
+at teardown; the run returned zero with a complete passing summary.
+SOLVAX #101's CI, including combined coverage, passed.
+
+Fresh CPU baseline/candidate campaigns each completed 48 accepted solves. Median
+four-field times **including moment/original-equation audits** were 16.41 → 11.75 s
+with rebuilt factors and 13.25 → 8.56 s with fixed factors. Largest per-species
+flux/flow change was 1.04e-10 relative. Initial problem preparation is reported
+separately; these remain shared-host, cache-warm scaling diagnostics, not complete
+root/optimization or publication benchmarks. Baseline and candidate processes
+ran sequentially; only reuse-arm order alternated within each process.
+
+The candidate GPU 1 campaign completed all 48 solves, with no foreign compute
+PID sampled: audited medians 13.86 s rebuilt and 11.72 s fixed. Its solve-path
+medians were 13.53 and 11.39 s. A fresh baseline stopped after 20 accepted solves
+when another compute job started; all its times are excluded. Against the earlier
+complete GPU baseline, the matched **solve-path** medians were 25.53 → 13.53 s
+and 22.71 → 11.39 s, respectively; these are separate campaigns, not interleaved
+A/B trials. Candidate live peak was 2,166,612,992 bytes; pool peak remained
+4,292,870,144 bytes. No memory-saving claim follows. A shorter GPU 0 profile
+also stopped on contention, before any solve; full kernel attribution remains open.
+
+Bounded recovery is now implemented as an opt-in host control, rather than an
+automatic economic refresh heuristic: explicit GMRES, a smaller reused-factor
+restart budget, one cold retry with the full budget on failed original-equation
+or finite-current/flux admission, then refusal. Failed state never enters
+continuation; the final root remains independently cold. Runtime/resource
+exceptions propagate. The final ambipolar regression run passed 124 tests,
+including bounded failure recovery and full-FP agreement with independent cold
+roots; 27 documentation/example/size contracts and Sphinx `-W` also passed. See `find_ambipolar_er` and `docs/usage.rst`. Full step-3
+admission still requires representative root costs, histories and grid errors.
+The associated tutorial repair uses quasineutral full-FP analytic W7-X instead
+of an axisymmetric ambipolar example. The JIT-compiled geometry tutorial lowers
+its analytic objective by 63.4% in five steps, with maximum original residual
+1.44e-13 and three-step central-difference disagreement 2.72e-9. Neither is a
+converged research-grid or VMEX-boundary optimization result.
 
 ## Decision and handoff
 
 Keep explicit preconditioner reuse, but do not promote a refresh default from
-these measurements. First finish #101's downstream checks and recalibrate
-application cost; then complete step 3's root, single-species, cold-equivalence,
+these measurements. Use #101's qualified application cost and complete step 3's root,
+single-species, cold-equivalence,
 profile/history and bounded stale-recovery admission. Charge audits, pilots and
 retries in end-to-end timing. Preserve Phase 1's separate grid/observable-error
 requirements. No release or phase completion is claimed.
@@ -95,7 +133,7 @@ Raw drivers, inputs, source archives, logs and checksums are in
 `/Users/rogeriojorge/local/dkx-reuse-evidence-20260912`; office copies are in
 `/home/rjorge/local/dkx-reuse-admission-20260912`. `README.md` there maps every
 run to its status, and `manifest.json` checks integrity, not scientific validity.
-The PR body contains restart commands and dependency provenance. No owned jobs
-remain running. At handoff, local simulations were busy and office had only
-about 3 GiB available host RAM despite idle GPUs: recheck **both** resources
-before restarting. Keep large traces outside Git and do not overwrite evidence.
+The PR body contains restart commands and dependency provenance. Continuation evidence is in its `continuation/` subdirectory with separate
+logs and checksums. Recheck host RAM and GPU compute PIDs before restarting;
+other simulations can occupy either device mid-run. Keep large traces outside
+Git and do not overwrite evidence.

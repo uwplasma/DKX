@@ -4,19 +4,21 @@
 ``J_r(E_r) = sum_s Z_s Gamma_s = 0``.  Rungs 01-04 prescribed it; this one
 searches for it.  Switching ``run.workflow`` to ``"ambipolar_profile"`` and
 ``electric_field.mode`` to ``"ambipolar"`` is the entire change -- DKX then
-brackets the root on every surface, keeps *all* the roots it finds rather than
-the first, classifies them (ion root, electron root, unstable), and records why
+brackets the root on every surface, keeps the sampled roots it finds rather than
+only the first, classifies them (ion root, electron root, unstable), and records why
 it selected the one it did.
 
-Keeping every root matters because a stellarator can have three, and the
+Searching for multiple roots matters because a stellarator can have three, and the
 middle one is unstable: a solver that returns a single number cannot tell you
 which branch you are on or when the profile jumped between branches.
 
-Physics: the analytic tokamak of rung 01, one deuterium species, two surfaces,
-searching +-5 kV/m.  Adaptive refinement is on, so the bracket is tightened
-until the observables stop moving.
+Physics: analytic W7-X, quasineutral deuterium and electrons, two surfaces,
+full linearized Fokker-Planck collisions with DKES trajectories, Phi1 off.
+This small grid teaches root finding; it does not establish grid convergence.
+A tokamak's intrinsic neoclassical ambipolarity cannot determine its electric
+field (Helander & Simakov, PRL 101, 145003, 2008).
 
-Expected runtime: ~8 s on a laptop CPU.
+Expected runtime: depends on compilation and the sampled root branches.
 
 Equivalent CLI:
   dkx run examples/05_ambipolar_profile/case.toml --out examples/output/05_ambipolar_profile/result.nc
@@ -42,7 +44,7 @@ PLOT_FILE = OUT_DIR / "result.png"
 SURFACES = (0.09, 0.16)
 
 # 3. Geometry and species construction
-GEOMETRY = {"format": "analytic", "file": "tokamak", "surfaces": list(SURFACES)}
+GEOMETRY = {"format": "analytic", "file": "w7x_standard", "surfaces": list(SURFACES)}
 SPECIES = [
     {
         "name": "deuterium",
@@ -51,12 +53,16 @@ SPECIES = [
         "density_m3": [8.0e19, 7.0e19],
         "temperature_keV": [1.0, 0.8],
     },
+    {
+        "name": "electron", "charge": -1, "mass_amu": 0.000548579909,
+        "density_m3": [8.0e19, 7.0e19], "temperature_keV": [1.0, 0.8],
+    },
 ]
 
 # 4. Physics and numerical configuration
 PHYSICS = {
     "model": "full_local",
-    "collisions": "pitch_angle_scattering",
+    "collisions": "linearized_fokker_planck",
     "magnetic_drifts": "dkes",
     "phi1": "off",
 }
@@ -70,12 +76,12 @@ ELECTRIC_FIELD = {
     "continue_branches": True,
     "search_points": 5,
     "root_tolerance_kV_m": 0.05,
-    "max_root_iterations": 8,
+    "max_root_iterations": 20,
 }
-RESOLUTION = {"theta": 9, "zeta": 1, "pitch": 8, "speed": 4}
+RESOLUTION = {"theta": 5, "zeta": 5, "pitch": 8, "speed": 4}
 SOLVER = {"method": "auto", "relative_tolerance": 1.0e-8, "memory_fraction": 0.75, "reuse": "auto"}
 CONVERGENCE = {
-    "enabled": True,
+    "enabled": False,
     "observables": ["particle_flux", "heat_flux", "electric_field"],
     "relative_tolerance": 0.02,
     "max_refinements": 1,
@@ -139,6 +145,7 @@ print(f"  selection rule: {certificate['ambipolar_selection']}")
 print(f"  all surfaces bracketed: {certificate['ambipolar_all_surfaces_bracketed']}")
 print(f"  refinement: {certificate['ambipolar_refinement']}")
 print(f"  converged: {certificate['converged']}")
+print("  teaching grid: no discretization-convergence claim")
 print(f"  residual norm: {certificate['residual_norm']:.3e}")
 
 # 7. Save native result

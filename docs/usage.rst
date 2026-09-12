@@ -727,6 +727,29 @@ cannot establish completeness or exclude tangencies. Exactly zero slope is
 interpreting stability or using a sensitivity. These local checks do not
 replace kinetic residual and phase-space convergence checks.
 
+For explicitly selected GMRES, bounded factor reuse is opt-in:
+
+.. code-block:: python
+
+   result = er.find_ambipolar_er(
+       root, solve_method="gmres", max_restarts=12, reuse_max_restarts=2,
+       all_roots=False,
+   )
+
+Here each reused-factor trial gets at most two restart cycles. A failed
+original-equation or finite-current/flux check discards that candidate and
+retries once with fresh factors and no initial guess or recycle vectors,
+using at most twelve cycles. Failure of that retry raises. The final root
+check remains independent and uses the full budget. These illustrative
+budgets need calibration for the requested grid and tolerance; they are not
+automatically selected performance thresholds. Omitting ``reuse_max_restarts``
+preserves the existing policy. Automatic solver escalation is incompatible
+with this bounded option. Runtime/resource exceptions still propagate.
+
+Time the complete root call, including checks and retries. Reuse decisions
+are host control flow: use ``ambipolar_er`` for derivatives of the converged
+root, as above, rather than differentiating a timing or retry decision.
+
 Running upstream postprocessing scripts (utils/)
 ------------------------------------------------
 

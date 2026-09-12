@@ -8,6 +8,13 @@ deferred until the maintainer's important-goal and verification requirements are
 
 ### Correctness and differentiation
 
+- Add opt-in bounded GMRES reuse to the host ambipolar root, with one cold retry
+  after failed admission and independent final acceptance. Keep retry policy out
+  of root differentiation.
+- Correct the ambipolar teaching case to quasineutral analytic W7-X with full-FP
+  collisions. JIT the geometry-optimization value/gradient, check its original
+  kinetic residual and retain a three-step finite-difference window.
+
 - Keep discrete pitch layouts static under JIT; refresh full-FP density kernels
   and opt-in temperature-dependent coefficients for prepared profile derivatives
   (#173, #174, #178, #186).
