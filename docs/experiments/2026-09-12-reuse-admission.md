@@ -120,6 +120,15 @@ its analytic objective by 63.4% in five steps, with maximum original residual
 1.44e-13 and three-step central-difference disagreement 2.72e-9. Neither is a
 converged research-grid or VMEX-boundary optimization result.
 
+A separate 904-unknown full-FP root diagnostic on implementation `e98506e9`
+completed twelve roots (one initial pair, five alternating repetitions). Whole
+root-call medians were 2.062 s fully cold versus 1.551 s bounded reuse, including
+seven admitted current evaluations, independent final acceptance and slope
+classification; initial prepare was 0.164 s separately. Both modes retained the
+ion root near Er=-0.356279 with current about 1.46e-11 against current_tol=1e-10.
+No retry was needed in this benign sequence. This tiny-grid result does not
+qualify large-root economics, an adversarial recovery cost or discretization.
+
 ## Decision and handoff
 
 Keep explicit preconditioner reuse, but do not promote a refresh default from

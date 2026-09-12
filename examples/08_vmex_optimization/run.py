@@ -21,8 +21,8 @@ reproducible with or without the optional backends installed.
 Physics: three-helicity analytic surface, ``N=5`` field periods, one hydrogen
 species, pitch-angle scattering, at fixed collisionality.
 
-The first value/gradient compiles; later evaluations reuse that fixed-layout
-executable. This teaching grid has no discretization-error certificate.
+Expected runtime: compilation dominates the first value/gradient; later
+evaluations reuse that fixed-layout executable. This teaching grid has no discretization-error certificate.
 """
 
 # 1. Imports
