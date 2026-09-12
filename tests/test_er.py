@@ -780,3 +780,21 @@ def test_bounded_full_fp_root_matches_independent_cold_solutions(tmp_path):
     np.testing.assert_allclose(bounded.er, cold.er, atol=1e-8, rtol=1e-8)
     np.testing.assert_allclose(bounded.per_species_flux, cold.per_species_flux, atol=1e-14, rtol=1e-7)
     assert bounded.root_type == cold.root_type
+
+
+def test_bounded_reuse_propagates_solver_runtime_errors(monkeypatch):
+    from types import SimpleNamespace
+    from dkx import er
+    calls = []
+    state = SimpleNamespace(x=np.ones(1), recycle=None, precond=object())
+    def current(problem, field, **kwargs):
+        calls.append(kwargs)
+        if kwargs["precond"] is not None:
+            raise RuntimeError("solver resource failure")
+        return field, np.array([field]), state
+    monkeypatch.setattr(er, "radial_current", current)
+    monkeypatch.setattr(er, "_check_host_kinetic_state", lambda *args: None)
+    problem = er.ErProblem(None, 1., np.array([1.]), 0., -1., 1., solve_method="gmres")
+    with pytest.raises(RuntimeError, match="solver resource failure"):
+        er.find_ambipolar_er(problem, reuse_max_restarts=2, emit=None)
+    assert len(calls) == 2  # A runtime failure is not a rejected numerical candidate.

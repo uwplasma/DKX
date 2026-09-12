@@ -742,7 +742,9 @@ retries once with fresh factors and no initial guess or recycle vectors,
 using at most twelve cycles. Failure of that retry raises. The final root
 check remains independent and uses the full budget. These illustrative
 budgets need calibration for the requested grid and tolerance; they are not
-automatically selected performance thresholds. Omitting ``reuse_max_restarts``
+automatically selected performance thresholds. On a wide field sequence, repeated
+cold retries can cost more than rebuilding at every point; measure the whole
+call before choosing a budget. Omitting ``reuse_max_restarts``
 preserves the existing policy. Automatic solver escalation is incompatible
 with this bounded option. Runtime/resource exceptions still propagate.
 

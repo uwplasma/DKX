@@ -129,6 +129,17 @@ ion root near Er=-0.356279 with current about 1.46e-11 against current_tol=1e-10
 No retry was needed in this benign sequence. This tiny-grid result does not
 qualify large-root economics, an adversarial recovery cost or discretization.
 
+On the 73,444-unknown case, a 300-second-capped CPU pilot completed four
+whole-root calls with identical accepted fields/fluxes. The initial/repeated
+cold calls took 28.55/26.89 s; bounded reuse took 33.14/31.67 s and required
+four cold retries in each call. There are not five repetitions here: this is
+a negative pilot, not an admitted speed factor. The Er≈-3.42701 root was
+classified unstable with current -1.80e-11, so it is not an optimization-qualified
+branch either. **Do not promote the two-cycle budget or automatic refresh**:
+its retry cost loses on this wider field sequence. The GPU root follow-up
+also stopped on a foreign PID before solving. Keep the successful local
+bounded-recovery evidence separate from failed GPU and performance admission.
+
 ## Decision and handoff
 
 Keep explicit preconditioner reuse, but do not promote a refresh default from
