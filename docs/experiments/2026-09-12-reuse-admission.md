@@ -184,3 +184,13 @@ speed. The full NCSX candidate comparison remains pending its 43.7 GiB host
 availability gate; no memory-saving or GPU performance claim follows. The
 separate GPU correctness attempt stopped on a foreign process after two cases;
 it does not qualify the complete GPU selection.
+
+The complete-solve helper ablation on reduced NCSX `(11,13,25,6)` completed
+an initial pair plus five alternating pairs on local CPU. Rebuilding operator,
+factors and state every call, audited medians were 2.252 s eager versus 1.986 s
+jitted (about 12% lower). All 12 original residuals were at most 7.684e-11;
+41 iterations, all 45 moment fields and complete states agreed (largest state
+relative difference 2.14e-15). Compilation caches persisted; this compares the
+helper with its eager body in one candidate checkout, not independent releases
+or optimization runs. Campaign peak RSS was 2.24 GiB, not a per-arm memory
+comparison. The research-grid and GPU qualifications remain separate.
