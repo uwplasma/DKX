@@ -287,6 +287,18 @@ Effort: 3–4 weeks, one person, mostly measurement and yancc onboarding. No new
 - **Bind benchmark child imports to the source the parent recorded**, including absolute dependency search paths. A relative `PYTHONPATH=src` is reinterpreted when the child's working directory changes and can select an unrelated editable installation; children must import the same package as the parent and record the source path they actually used.
 - **Match radial coordinates, not only field arrays.** [yancc's DKES outputs](https://github.com/f0uriest/yancc/blob/33e1ce9b208f6d3209fdb55aeba8712e6d6a4223/yancc/solution.py) use `r = a_minor * rho`, while DKX's Beidler conversion uses `r_eff = sqrt(|Psi| / (pi B00)) * rho`. Transform each radial coefficient before comparing, or the cross-code numbers differ by a coordinate factor rather than by physics.
 
+**Latest bounded CPU attempt (2026-09-12).** Source-pinned DKX `fd3623c5` and
+SOLVAX `bd52aea` did not finish the NCSX baseline `(21,37,61,8)` within the
+180-second whole-child budget on four office CPU cores; the supervisor stopped
+only its owned process. Sampled peak RSS was 27.22 GiB, versus the 16.96 GiB
+Mac-derived forecast. No accepted state was produced and theta25 was not started.
+The host was shared and the child used a fresh compilation cache: this does not
+establish a solver regression or a speed ranking. Before another attempt,
+separate compilation, factor construction and Krylov costs with a bounded
+profile, and recalibrate the office memory budget from observed peaks. Do not
+repeat this campaign unchanged, increase grid size from the old memory estimate,
+or count the timeout as an observable error bar. Phase 1 remains open.
+
 ### Phase 2: why the Krylov route loses, and two bounded extensions (3 weeks, time-boxed)
 
 **Correction to the first draft of this plan, and to a common assumption.** DKX already implements SFINCS's simplified-operator preconditioner, and it is the default on every deck that leaves the pitch-angle-scattering family: `build_coarse_preconditioner` (`coarse_precond.py:916`) mirrors the Fortran `preconditionerOptions` defaults (self-species, x-diagonal collisions; the Er and drift L±2 terms dropped), inverts that operator *exactly* with a batched block-Thomas factorization over (species, x), eliminates the constraint border exactly by a Schur complement, and is Phi1-aware. `multigrid.py` and `sparse_precond.py` are alternative inverses of the same simplified operator; the Krylov method is SOLVAX's GCROT with a recycle space; the adjoint solve is a cold-started GCROT on the transpose. So "use the exact PAS solve as the preconditioner" is not a proposal, it is the status quo, and the 7-of-23 record and six non-completions are *with* it. #189 was right to say measure first. What the numerics survey adds is a short list of specific, testable reasons the route still loses, and two extensions that follow from them.
