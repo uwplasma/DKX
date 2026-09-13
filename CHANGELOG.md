@@ -27,6 +27,11 @@ deferred until the maintainer's important-goal and verification requirements are
 
 ### Execution
 
+- Build the transposed coarse preconditioner on its first application, and
+  synchronize coarse builds on their factors instead of a discarded zero-vector
+  application. Non-differentiable solves no longer pay two transposed coarse
+  applications per build; the preconditioner maps are unchanged.
+
 - Preserve independent-device batch sharding through JIT and gradients, including
   uneven batches (#179). Each complete system still resides on one device.
 - Reuse generated SOLVAX Schur factors within supported PAS solve executions for
