@@ -269,3 +269,14 @@ accepted roots, zero retries, five-pair medians 4.703 s cold / 4.149 s reused,
 The next poloidal refinement needs 56.1 GiB available under the measured-peak
 margin. A prepared baseline-adjoint campaign also failed its 42 GiB admission
 gate (40.48 GiB available), before any solve. Neither is a completed experiment.
+
+A separate 66,004-unknown current-adjoint diagnostic on point A did not pass
+its `1e-10` original transpose-residual criterion: the measured residual was
+`1.519e-10` (46.85 s supervised, 3.73 GiB peak). It is excluded as a qualified
+correction. Tightening the internal GCROT target to `1e-12` was stopped after
+31.28 s by the 5 GiB host-available reserve (3.99 GiB sampled child peak),
+before an accepted adjoint. No `lambda^T r` estimate or bound is claimed.
+Repeat only under admitted resources, preserving the original operator and
+independent transpose audit. The PR handoff includes the runnable operator,
+state-layout and reference commands needed to continue; all owned numerical
+jobs from this campaign have ended.
