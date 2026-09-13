@@ -36,6 +36,11 @@ deferred until the maintainer's important-goal and verification requirements are
   synchronize coarse builds on their factors instead of a discarded zero-vector
   application. Non-differentiable solves no longer pay two transposed coarse
   applications per build; the preconditioner maps are unchanged.
+- Factor the dense coarse preconditioner straight from its pinned row generator
+  inside one compiled computation, so no band is materialized before
+  elimination. The map is unchanged: the f-block inverse agrees with the
+  reusable Schur-LU route to rounding and GCROT iteration counts are identical
+  (`tests/test_coarse_ragged_chains.py`).
 
 - Preserve independent-device batch sharding through JIT and gradients, including
   uneven batches (#179). Each complete system still resides on one device.
