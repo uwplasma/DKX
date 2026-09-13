@@ -932,6 +932,13 @@ _DROPPED_F_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
+@functools.partial(jax.jit, static_argnames=("transpose",))
+def _apply_dense_coarse_factors(factors, rhs, *, transpose):
+    """Fuse substitutions; dynamic factors reuse compilation across builds."""
+    solve = functools.partial(block_thomas_solve, transpose=transpose)
+    return jax.vmap(solve)(factors, rhs.reshape(factors[0].shape[:-1])).reshape(rhs.shape)
+
+
 def _collision_diagonal_only(coll):
     """The collision operator reduced to what the preconditioner keeps.
 
@@ -1178,7 +1185,6 @@ def build_coarse_preconditioner(
     # (tests/test_magnetic_drift_diagonal.py).
     drift_parts = op.magnetic_drift_diagonal_parts()
     c0 = op._fs_average_factor().reshape(-1)
-    ones = jnp.ones((n_tz,), dtype=jnp.float64)
 
     if _coarse_bands_fit(op):
         blocks = stripped.to_block_tridiagonal()  # (L, S, X, TZ, TZ)
@@ -1217,12 +1223,7 @@ def build_coarse_preconditioner(
         )
 
         def _a_inv(transpose: bool) -> Callable[[jnp.ndarray], jnp.ndarray]:
-            def apply(v: jnp.ndarray) -> jnp.ndarray:
-                g = v.reshape(batch, n_xi, n_tz)
-                sol = jax.vmap(lambda f, r: block_thomas_solve(f, r, transpose=transpose))(
-                    factors, g
-                )
-                return sol.reshape(v.shape)
+            apply = functools.partial(_apply_dense_coarse_factors, factors, transpose=transpose)
 
             def apply_triangular(v: jnp.ndarray) -> jnp.ndarray:
                 # M = D + U with D the speed-diagonal blocks already factored and
@@ -1232,13 +1233,6 @@ def build_coarse_preconditioner(
                 # the same n_x steps but solves one speed at a time; this keeps
                 # every step batched over all (species, x), which is what the
                 # block-Thomas factors are shaped for.
-                def d_inv(r: jnp.ndarray) -> jnp.ndarray:
-                    flat = r.reshape(batch, n_xi, n_tz)
-                    out = jax.vmap(
-                        lambda f, b: block_thomas_solve(f, b, transpose=transpose)
-                    )(factors, flat)
-                    return out.reshape(n_s, n_x, n_xi, n_tz)
-
                 def couple(y: jnp.ndarray) -> jnp.ndarray:
                     # (U y)[s, x, l, tz] = sum_{x'} U[s, l, x, x'] y[s, x', l, tz],
                     # transposed for the adjoint, where U^T is strictly lower.
@@ -1246,9 +1240,9 @@ def build_coarse_preconditioner(
                     return jnp.einsum(subscripts, upper, y)
 
                 g = v.reshape(n_s, n_x, n_xi, n_tz)
-                y = d_inv(g)
+                y = apply(g)
                 for _ in range(sweeps):
-                    y = d_inv(g - couple(y))
+                    y = apply(g - couple(y))
                 return y.reshape(v.shape)
 
             return apply_triangular if upper is not None else apply

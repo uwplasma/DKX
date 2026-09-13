@@ -1358,7 +1358,7 @@ def test_coarse_preconditioner_is_jit_safe_over_traced_operator_leaves() -> None
         return precond(v)
 
     jitted = jax.jit(precond_action)(leaves)  # compiles (was a Tracer error)
-    ref, _ = build_coarse_preconditioner(op)
+    ref, ref_t = build_coarse_preconditioner(op)
     # The preconditioner is a dense factorization; XLA is free to fuse it
     # differently inside jit than out, and the two orderings differ in the last
     # few digits on some backends.  What must hold is that jit does not change
@@ -1370,6 +1370,13 @@ def test_coarse_preconditioner_is_jit_safe_over_traced_operator_leaves() -> None
     reference = np.asarray(ref(v))
     difference = np.linalg.norm(np.asarray(jitted) - reference)
     assert difference <= 1e-6 * max(1.0, float(np.linalg.norm(reference))), difference
+
+    # The nested JIT must retain the direct linear-transpose contract on JAX 0.9.
+    transposed = jax.linear_transpose(ref, jnp.zeros_like(v))(v)[0]
+    reference_t = np.asarray(ref_t(v))
+    assert np.linalg.norm(np.asarray(transposed) - reference_t) <= 1e-6 * max(
+        1.0, float(np.linalg.norm(reference_t))
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -153,3 +153,44 @@ Source-bound inputs, drivers, logs and integrity manifests are retained privatel
 Checksums establish integrity, not scientific validity. Recheck available host
 memory and GPU occupancy before any follow-up; shared workloads can change
 mid-run. Keep large traces outside Git and preserve failed attempts.
+
+### Merged-source profile and dense application follow-up
+
+DKX `20542772` and SOLVAX `9357191` passed 28 focused merged-source CPU
+checks, including full recovery, Phi1, direct transpose and derivatives. The
+NCSX `(21,37,61,8)` baseline then completed a bounded office CPU profile in
+187.27 s with 28.03 GiB sampled peak RSS, 53 iterations and original residual
+8.54e-11. Signed moments match the archived reference. Operator construction
+and dense band extraction took 0.91/9.15 s; fused band assembly/factorization
+57.48 s; projected-border setup dispatch 12.20/13.40 s; the synchronized
+first preconditioner probe 8.83 s; GCROT compilation plus execution 70.32 s.
+Nested timings are not additive, and synchronization/logging affect runtime.
+This qualifies a baseline state, not grid error bars or a speed ranking.
+
+The dense application now shares a module-level JIT helper with factors passed
+as runtime arguments. It removes eager per-block dispatch and reuses helper
+compilation for matching shapes/dtypes, following [JAX caching guidance](https://docs.jax.dev/en/latest/jit-compilation.html#jit-and-caching). The physical equation, factorization,
+SOLVAX recurrence and transpose semantics are unchanged. It also replaces the
+speed-triangle path's duplicated inverse application. Production code shrinks
+by six lines, with no new source file. Direct linear-transpose, real/complex
+setup/RHS derivatives, batching and changed-factor checks passed on JAX 0.9.2.
+
+A two-subsystem, 61-block, 8-by-8 diagnostic gave five-pair median warm
+application times around 131 ms eagerly and 0.42–0.53 ms with the helper, across
+real/complex forward/transposed solves; original residuals were below 1e-12.
+Both arms were warmed, factors excluded, and order alternated. This measures
+application dispatch outside an enclosing JIT, not whole GCROT or optimization
+speed. The full NCSX candidate comparison remains pending its 43.7 GiB host
+availability gate; no memory-saving or GPU performance claim follows. The
+separate GPU correctness attempt stopped on a foreign process after two cases;
+it does not qualify the complete GPU selection.
+
+The complete-solve helper ablation on reduced NCSX `(11,13,25,6)` completed
+an initial pair plus five alternating pairs on local CPU. Rebuilding operator,
+factors and state every call, audited medians were 2.252 s eager versus 1.986 s
+jitted (about 12% lower). All 12 original residuals were at most 7.684e-11;
+41 iterations, all 45 moment fields and complete states agreed (largest state
+relative difference 2.14e-15). Compilation caches persisted; this compares the
+helper with its eager body in one candidate checkout, not independent releases
+or optimization runs. Campaign peak RSS was 2.24 GiB, not a per-arm memory
+comparison. The research-grid and GPU qualifications remain separate.
