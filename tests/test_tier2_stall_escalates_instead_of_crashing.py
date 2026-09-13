@@ -98,3 +98,68 @@ def test_the_old_misleading_advice_is_gone() -> None:
     with pytest.raises(RuntimeError) as excinfo:
         _escalate(op, tol=1e-300, max_dense_size=1)
     assert "raise max_dense_size explicitly if you really want this" not in str(excinfo.value)
+
+
+@pytest.mark.parametrize('restart,cap,size,prebuilt,nonfinite,expected', [
+    (30, 30, 4, False, False, [(30, 5), (100, 7)]),
+    (30, 30, 4, False, True, [(30, 5), (100, 7)]),
+    (30, 5, 4, False, False, [(30, 5)]),
+    (1, 6, 4, False, False, [(1, 6)]),
+    (100, 30, 4, False, False, [(100, 30)]),
+    (30, 30, 167773, False, False, [(30, 30)]),
+    (30, 30, 4, True, False, [(30, 30)]),
+])
+def test_auto_restart_budget_and_current_factors(
+    monkeypatch, restart, cap, size, prebuilt, nonfinite, expected,
+):
+    """Probe/retry costs, factor identity, and unsafe-state cold fallback."""
+    import importlib
+    from types import SimpleNamespace
+    import jax.numpy as jnp
+    module = importlib.import_module('dkx.solve')
+    op = SimpleNamespace(total_size=size)
+    pair = (lambda x: x, lambda x: x)
+    builds, calls = [], []
+    monkeypatch.setattr(module, '_pinned_matvecs', lambda op: pair)
+    monkeypatch.setattr(module, 'build_tier2_preconditioner',
+                        lambda *a, **k: builds.append(True) or pair)
+    def gcrot(mv, b, **kwargs):
+        calls.append(kwargs)
+        x = jnp.full_like(b, jnp.nan if nonfinite and len(calls) == 1 else 0.5)
+        return SimpleNamespace(x=x, recycle=(x[:, None], x[:, None]),
+                               iterations=kwargs['m'] * kwargs['max_restarts'],
+                               converged=len(calls) > 1, residual_norm=jnp.array(1.))
+    monkeypatch.setattr(module, 'gcrot', gcrot)
+    result = module._solve_tier2(
+        op, jnp.ones((size, 1)), tol=1e-7, atol=0., x0=None, recycle=None,
+        preconditioner='coarse', drop_l_coupling_in_precond=False,
+        restart=restart, recycle_dim=8, max_restarts=cap, differentiable=False,
+        check_adjoint=False, prebuilt_precond=pair if prebuilt else None,
+        auto_restart_recovery=True,
+    )
+    assert [(c['m'], c['max_restarts']) for c in calls] == expected
+    assert result.iterations == sum(m * n for m, n in expected) <= restart * cap
+    assert len(builds) == (0 if prebuilt else 1)
+    assert all(c['precond'] is pair[0] and c['rtol'] == 1e-7 for c in calls)
+    if len(calls) == 2:
+        assert (calls[1]['x0'] is None) == nonfinite
+        assert (calls[1]['recycle'] is None) == nonfinite
+        if not nonfinite:
+            np.testing.assert_array_equal(calls[1]['x0'], 0.5)
+
+
+@pytest.mark.parametrize('method,differentiable,recovery', [
+    ('auto', False, True), ('auto', True, False), ('gmres', False, False),
+])
+def test_restart_recovery_is_only_auto_host_policy(monkeypatch, method, differentiable, recovery):
+    import importlib
+    from types import SimpleNamespace
+    module = importlib.import_module('dkx.solve')
+    op = SimpleNamespace(total_size=4)
+    monkeypatch.setattr(module, '_auto_route', lambda *a: 'gmres')
+    monkeypatch.setattr(module, '_resolve_solve_device', lambda *a: None)
+    def tier2(op, rhs, **kwargs):
+        assert kwargs['auto_restart_recovery'] is recovery
+        return SolveResult(rhs, 'gcrot', 0, np.array([0.]), True, None, {})
+    monkeypatch.setattr(module, '_solve_tier2', tier2)
+    assert module.solve(op, np.ones(4), method=method, differentiable=differentiable).converged

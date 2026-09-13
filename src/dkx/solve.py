@@ -2006,6 +2006,7 @@ def _solve_tier2(
     check_adjoint: bool,
     adjoint_residual_factor: float = DEFAULT_ADJOINT_RESIDUAL_FACTOR,
     prebuilt_precond: tuple[Callable, Callable] | None = None,
+    auto_restart_recovery: bool = False,
 ) -> SolveResult:
     if int(recycle_dim) < 1:
         # solvax's GCROT scatters the recycled subspace into a (n, k) array, so
@@ -2150,20 +2151,35 @@ def _solve_tier2(
             )
             recycle, iterations, col_converged, residual_norm = aux
         else:
-            sol = gcrot(
-                matvec,
-                b,
-                x0=None if x0_2d is None else x0_2d[:, j],
-                precond=precond,
-                m=restart,
-                k=recycle_dim,
-                rtol=tol,
-                atol=atol,
-                max_restarts=max_restarts,
-                recycle=recycle,
+            # Host-only recovery with factors built for this exact operator.
+            # Reserve whole wide cycles within the original inner-step cap;
+            # caller-supplied (possibly stale) factors keep the explicit path.
+            wide_cycles = restart * (max_restarts - 5) // 100
+            recover = (
+                auto_restart_recovery and not traced and prebuilt_precond is None
+                and 0 < restart < 100 and max_restarts > 5 and wide_cycles > 0
+                and 2 * 100 * op.total_size * rhs2d.dtype.itemsize <= 256 * 1024**2
             )
+            windows = [(restart, 5), (100, wide_cycles)] if recover else [(restart, max_restarts)]
+            guess = None if x0_2d is None else x0_2d[:, j]
+            iterations = 0
+            for window, cycles in windows:
+                sol = gcrot(
+                    matvec, b, x0=guess, precond=precond, m=window,
+                    k=recycle_dim, rtol=tol, atol=atol,
+                    max_restarts=cycles, recycle=recycle,
+                )
+                iterations = iterations + sol.iterations
+                recycle = sol.recycle
+                if not recover or bool(sol.converged):
+                    break
+                finite = all(
+                    np.all(np.isfinite(np.asarray(value)))
+                    for value in jax.tree_util.tree_leaves((sol.x, sol.residual_norm, recycle))
+                )
+                guess = sol.x if finite else None
+                recycle = recycle if finite else None
             x_col = sol.x
-            recycle, iterations = sol.recycle, sol.iterations
             col_converged, residual_norm = sol.converged, sol.residual_norm
         if traced:
             total_iters = None  # iteration counts are tracers under jit/grad
@@ -2567,7 +2583,14 @@ def solve(
         drop_l_coupling_in_precond: sever the L±1 coupling in the coarse
             operator.  Not Fortran's ``preconditioner_xi``, which drops L±2,
             and expensive; see :func:`dkx.coarse_precond.build_coarse_preconditioner`.
-        restart: FGMRES cycle size ``m``.
+        restart: FGMRES cycle size ``m``. Host-only, non-differentiable auto
+            solves with freshly built factors may probe five cycles then widen
+            to 100 when two 100-vector bases fit in 256 MiB. The probe plus
+            retry uses at most ``restart * max_restarts`` inner steps per RHS
+            (remaining work rounded down to whole wide cycles). Explicit
+            methods, traced solves and caller-supplied factors retain this size.
+            This bounds the initial preconditioner attempt; the existing auto
+            escalation ladder can still allocate additional iteration budgets.
         recycle_dim: GCROT recycle directions ``k``.
         max_restarts: recycled-Krylov outer-cycle cap (what makes ``auto``
             fall through to the sparse direct route).
@@ -2762,6 +2785,7 @@ def solve(
             recycle=recycle,
             preconditioner=_resolve_preconditioner(preconditioner, use_preconditioner),
             prebuilt_precond=precond,
+            auto_restart_recovery=method == "auto" and not differentiable,
             drop_l_coupling_in_precond=drop_l_coupling_in_precond,
             restart=restart,
             recycle_dim=recycle_dim,
