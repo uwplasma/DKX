@@ -8,6 +8,9 @@ deferred until the maintainer's important-goal and verification requirements are
 
 ### Correctness and differentiation
 
+- Report stalled solves without attributing an unmeasured physical cause or
+  recommending changes to the requested electric field and accuracy.
+
 - Add opt-in bounded GMRES reuse to the host ambipolar root, with one cold retry
   after failed admission and independent final acceptance. Keep retry policy out
   of root differentiation.
