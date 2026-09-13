@@ -131,6 +131,25 @@ def initialize_distributed_runtime_from_env() -> bool:
         return False
 
 
+#: Host BLAS thread-count variables DKX defaults to one thread.
+_BLAS_THREAD_ENV = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
+
+
+def _default_single_thread_blas() -> None:
+    """Default the host BLAS pools to one thread; explicit settings win.
+
+    JAX's CPU LAPACK kernels run a batch across XLA's intra-op threadpool, and a
+    multithreaded BLAS inside each batch element oversubscribes it.  Measured on a
+    36-thread Xeon W-2295: batched 777x777 ``lu_factor`` took 284-756 ms per
+    matrix with eight BLAS threads and 3.4-6.2 ms with one, and the NCSX
+    ``(21, 37, 61, 8)`` coarse factorization at ``DKX_CORES=4`` took 93 s with
+    four BLAS threads and 33 s with one, at identical iterations and moments.
+    The variables are read when a BLAS library loads, so this only affects
+    libraries loaded after DKX configures its runtime.
+    """
+    for name in _BLAS_THREAD_ENV:
+        os.environ.setdefault(name, "1")
+
 
 def configure(*, jax_x64: bool | None = None) -> None:
     """Apply the DKX runtime environment. Safe to call repeatedly.
@@ -153,8 +172,7 @@ def configure(*, jax_x64: bool | None = None) -> None:
     # variable, read once when the CPU backend initializes, so this must run before
     # the first jax import (imports below).  Semantics:
     #
-    #   DKX_CORES=N (N > 0)  pin the solver threadpool to N threads (NPROC), and
-    #                        default the host BLAS pools (OMP/OpenBLAS) to match;
+    #   DKX_CORES=N (N > 0)  pin the solver threadpool to N threads (NPROC);
     #   DKX_CORES=0          let XLA size the threadpool itself (full width);
     #   unset                clamp to min(8, os.cpu_count()) unless NPROC is
     #                        already set: the measured optimum is 4-8 threads on
@@ -162,9 +180,12 @@ def configure(*, jax_x64: bool | None = None) -> None:
     #                        many-core box is several times slower than 8 threads
     #                        (docs/performance.rst).
     #
-    # Forcing multiple host *devices* is a separate, test-oriented concern: it is
-    # available only through an explicit DKX_CPU_DEVICES (below) and has no
-    # measured benefit for solves (all forced host devices share one threadpool).
+    # In every case the host BLAS pools default to one thread; see
+    # _default_single_thread_blas.  Forcing multiple host *devices* is a separate,
+    # test-oriented concern: it is available only through an explicit
+    # DKX_CPU_DEVICES (below) and has no measured benefit for solves (all forced
+    # host devices share one threadpool).
+    _default_single_thread_blas()
     _cores_env = os.environ.get("DKX_CORES", "").strip()
     if _cores_env:
         try:
@@ -173,8 +194,6 @@ def configure(*, jax_x64: bool | None = None) -> None:
             _cores_val = None  # invalid value: fail closed, change nothing
         if _cores_val is not None and _cores_val > 0:
             os.environ["NPROC"] = str(_cores_val)
-            os.environ.setdefault("OMP_NUM_THREADS", str(_cores_val))
-            os.environ.setdefault("OPENBLAS_NUM_THREADS", str(_cores_val))
             os.environ.pop("_DKX_NPROC_DEFAULTED", None)
         elif _cores_val == 0:
             # Explicit "let XLA size the threadpool": undo a default clamp

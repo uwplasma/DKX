@@ -1525,8 +1525,9 @@ def _apply_cores_setting(cores: int | None) -> None:
     """Record the requested solver thread count in the process environment.
 
     ``cores > 0`` pins the XLA host threadpool (``NPROC`` — the variable XLA
-    actually reads when its CPU backend initializes) and defaults the host BLAS
-    pools (``OMP_NUM_THREADS``/``OPENBLAS_NUM_THREADS``) to match; ``cores ==
+    actually reads when its CPU backend initializes), and the host BLAS pools
+    default to one thread (:func:`dkx.runtime._default_single_thread_blas`
+    explains why); ``cores ==
     0`` requests XLA's own full-width sizing (``DKX_CORES=0`` suppresses the
     package default clamp of ``min(8, cpu_count)``).  Thread counts only take
     effect before JAX initializes, so the CLI re-execs itself with
@@ -1545,8 +1546,8 @@ def _apply_cores_setting(cores: int | None) -> None:
     os.environ["DKX_CORES"] = str(cores_val)
     if cores_val > 0:
         os.environ["NPROC"] = str(cores_val)
-        os.environ.setdefault("OMP_NUM_THREADS", str(cores_val))
-        os.environ.setdefault("OPENBLAS_NUM_THREADS", str(cores_val))
+        for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+            os.environ.setdefault(name, "1")
 
 def _apply_runtime_env_defaults() -> None:
     # Avoid large eager GPU preallocation in CLI workflows so solver/benchmark

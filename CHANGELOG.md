@@ -32,6 +32,10 @@ deferred until the maintainer's important-goal and verification requirements are
 
 ### Execution
 
+- Default the host BLAS pools to one thread. XLA's threadpool already runs
+  batched CPU LAPACK in parallel; four BLAS threads per call made the NCSX
+  `(21,37,61,8)` coarse factorization about 3x slower. Explicit settings win.
+
 - Build the transposed coarse preconditioner on its first application, and
   synchronize coarse builds on their factors instead of a discarded zero-vector
   application. Non-differentiable solves no longer pay two transposed coarse

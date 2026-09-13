@@ -195,17 +195,20 @@ def test_runtime_env_controls_solver_threads_and_compilation_cache(
     monkeypatch.delenv("NPROC", raising=False)
     monkeypatch.delenv("OMP_NUM_THREADS", raising=False)
     monkeypatch.delenv("OPENBLAS_NUM_THREADS", raising=False)
+    monkeypatch.delenv("MKL_NUM_THREADS", raising=False)
     monkeypatch.setenv("DKX_COMPILATION_CACHE_DIR", str(cache_dir))
     monkeypatch.delenv("JAX_COMPILATION_CACHE_DIR", raising=False)
     monkeypatch.setenv("XLA_FLAGS", "")
 
     _reconfigure()
 
-    # --cores/DKX_CORES pins the XLA host threadpool (NPROC) and the host
-    # BLAS pools; it must NOT force host devices or touch XLA_FLAGS.
+    # --cores/DKX_CORES pins the XLA host threadpool (NPROC); the host BLAS
+    # pools default to one thread, because XLA's pool already parallelizes the
+    # batched LAPACK calls. It must NOT force host devices or touch XLA_FLAGS.
     assert os.environ["NPROC"] == "2"
-    assert os.environ["OMP_NUM_THREADS"] == "2"
-    assert os.environ["OPENBLAS_NUM_THREADS"] == "2"
+    assert os.environ["OMP_NUM_THREADS"] == "1"
+    assert os.environ["OPENBLAS_NUM_THREADS"] == "1"
+    assert os.environ["MKL_NUM_THREADS"] == "1"
     assert "DKX_CPU_DEVICES" not in os.environ
     assert os.environ["XLA_FLAGS"] == ""
     assert os.environ["JAX_COMPILATION_CACHE_DIR"] == str(cache_dir)
@@ -249,6 +252,31 @@ def test_runtime_default_thread_clamp_and_zero_opt_out(monkeypatch: pytest.Monke
     monkeypatch.setenv("NPROC", "5")
     _reconfigure()
     assert os.environ["NPROC"] == "5"
+
+    monkeypatch.delenv("DKX_CORES", raising=False)
+
+
+def test_runtime_blas_pools_default_to_one_thread_unless_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DKX_DISABLE_COMPILATION_CACHE", "1")
+    monkeypatch.delenv("DKX_CORES", raising=False)
+    for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+        monkeypatch.delenv(name, raising=False)
+
+    # The default path (no DKX_CORES) also leaves BLAS single-threaded: the
+    # XLA threadpool, not BLAS, parallelizes the batched LAPACK calls.
+    _reconfigure()
+    assert os.environ["OMP_NUM_THREADS"] == "1"
+    assert os.environ["OPENBLAS_NUM_THREADS"] == "1"
+    assert os.environ["MKL_NUM_THREADS"] == "1"
+
+    # A value the user chose is never overridden, with or without DKX_CORES.
+    monkeypatch.setenv("OPENBLAS_NUM_THREADS", "6")
+    monkeypatch.setenv("DKX_CORES", "4")
+    _reconfigure()
+    assert os.environ["OPENBLAS_NUM_THREADS"] == "6"
+    assert os.environ["NPROC"] == "4"
 
     monkeypatch.delenv("DKX_CORES", raising=False)
 
