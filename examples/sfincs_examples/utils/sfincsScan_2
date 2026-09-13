@@ -51,6 +51,20 @@ print ("Here are the "+str(len(generalErs))+" values we will use for this quanti
 print (generalErs)
 
 directories = [varName+"{:.4g}".format(generalEr) for generalEr in generalErs]
+# Labels use the legacy four-significant-digit convention. Refuse collisions
+# before filtering existing results or writing anything into a point directory.
+seen_labels = {}
+for directory, value in zip(directories, generalErs):
+    if directory in seen_labels:
+        print(
+            f"Error: scan values {seen_labels[directory]!r} and {value!r} both map "
+            f"to directory {directory!r} at four significant digits. "
+            "Change the scan bounds or reduce NErs so directory labels are unique. "
+            "No scan points were written.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    seen_labels[directory] = value
 # Construct requested decks before deciding whether an existing point matches.
 source_path = Path(filename).resolve()
 point_inputs = []

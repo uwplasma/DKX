@@ -372,3 +372,25 @@ def test_retry_refuses_conflicting_localized_geometry_without_overwriting(tmp_pa
         driver.run_dkx(input_namelist=deck)
     assert local.read_bytes() == b"old geometry"
     assert not (point / "sfincsOutput.h5").exists()
+
+
+
+def test_colliding_er_labels_are_rejected_before_any_point_writes(legacy_dispatcher, tmp_path):
+    root = tmp_path / "scan"
+    root.mkdir()
+    deck = root / "input.namelist"
+    deck.write_text("!ss scanType = 2\n!ss NErs = 2\n!ss ErMin = 1.00001\n!ss ErMax = 1.00002\n"
+                    "&geometryParameters\n inputRadialCoordinateForGradients = 4\n/\n"
+                    "&physicsParameters\n Er = 0\n/\n")
+    point = root / "Er1"
+    point.mkdir()
+    _write_complete(point / "sfincsOutput.h5")
+    (point / "input.namelist").write_text("previous accepted input")
+    before = {str(p.relative_to(root)): p.read_bytes() for p in root.rglob("*") if p.is_file()}
+    result = legacy_dispatcher(root)
+    assert result.returncode == 1
+    assert "both map to directory 'Er1'" in result.stderr
+    assert "reduce NErs" in result.stderr
+    assert "No scan points were written" in result.stderr
+    assert {str(p.relative_to(root)): p.read_bytes() for p in root.rglob("*") if p.is_file()} == before
+    assert sorted(str(p.relative_to(root)) for p in root.rglob("*") if p.is_dir()) == ["Er1"]
