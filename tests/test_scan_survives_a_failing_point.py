@@ -30,9 +30,10 @@ SCAN_SCRIPTS = ("sfincsScan_1", "sfincsScan_2", "sfincsScan_3",
 
 def _validator_source():
     text = (UTILS / "dkx_driver.py").read_text()
-    return "\n\n".join(ast.get_source_segment(text, n) for n in ast.parse(text).body
+    return ("_EQUILIBRIUM_DIGESTS = {}\n"
+            "from dkx.input_compat import effective_equilibrium_file, _resolve_equilibrium_file_from_namelist\n") + "\n\n".join(ast.get_source_segment(text, n) for n in ast.parse(text).body
                          if isinstance(n, ast.FunctionDef)
-                         and n.name in {"output_is_complete", "output_matches_input"})
+                         and n.name in {"output_is_complete", "output_matches_input", "scan_input_fingerprint"})
 
 
 def _driver_stub():
@@ -40,7 +41,7 @@ def _driver_stub():
 
     ns = {"Path": Path}
     exec(_validator_source(), ns)
-    return SimpleNamespace(output_is_complete=ns["output_is_complete"],
+    return SimpleNamespace(scan_input_fingerprint=ns["scan_input_fingerprint"], output_is_complete=ns["output_is_complete"],
                            output_matches_input=ns["output_matches_input"])
 
 
@@ -186,6 +187,7 @@ def legacy_dispatcher(tmp_path):
         "        if os.environ.get('SCAN_TEST_PARTIAL_POINT') == directory.name: return output_path\n"
         "        for key in ['FSABFlow','FSABjHat','particleFlux_vm_psiHat','heatFlux_vm_psiHat']:\n"
         "            f[key] = [[1.0]]\n"
+        "        f.attrs['dkx_scan_input_fingerprint'] = scan_input_fingerprint(Path(input_namelist).read_text(), Path(input_namelist))\n"
         "    return output_path\n"
     )
     # Supply two synthetic profiles; exercise real nested dispatch, not profile interpolation.
@@ -284,6 +286,9 @@ def test_driver_never_reports_done_for_partial_output(tmp_path, monkeypatch, cap
     if not complete:
         with h5py.File(output, "a") as f:
             del f["FSABFlow"]
+    (tmp_path / "input.namelist").write_text("&general\n/\n")
+    with h5py.File(output, "a") as f:
+        f["input.namelist"] = (tmp_path / "input.namelist").read_text()
     monkeypatch.setattr(driver, "read_sfincs_input", lambda _: SimpleNamespace(group=lambda _: {}))
     monkeypatch.setattr(driver, "write_output", lambda *a, **kw: output)
     if complete:
@@ -292,6 +297,11 @@ def test_driver_never_reports_done_for_partial_output(tmp_path, monkeypatch, cap
         with pytest.raises(RuntimeError, match="Incomplete"):
             driver.run_dkx(input_namelist=tmp_path / "input.namelist", ensure_equilibrium=False)
     assert ("dkx_driver: done" in capsys.readouterr().out) is complete
+    with h5py.File(output, "r") as f:
+        assert ("dkx_scan_input_fingerprint" in f.attrs) is complete
+    if complete:
+        assert driver.output_matches_input(output, (tmp_path / "input.namelist").read_text(),
+                                           tmp_path / "input.namelist")
 
 
 def test_success_retires_failure_marker_and_keeps_history(tmp_path, monkeypatch):
@@ -345,6 +355,7 @@ def test_localized_equilibrium_and_comments_match_but_changed_content_does_not(t
     output = run / "sfincsOutput.h5"
     with h5py.File(output, "w") as f:
         f["input.namelist"] = text
+        f.attrs["dkx_scan_input_fingerprint"] = _driver_stub().scan_input_fingerprint(text, run / "input.namelist")
     requested = text.replace('"field.nc"', repr(str(source / "field.nc"))) + "! comment\n"
     match = _driver_stub().output_matches_input
     assert match(output, requested, source / "input.namelist")
@@ -394,3 +405,83 @@ def test_colliding_er_labels_are_rejected_before_any_point_writes(legacy_dispatc
     assert "No scan points were written" in result.stderr
     assert {str(p.relative_to(root)): p.read_bytes() for p in root.rglob("*") if p.is_file()} == before
     assert sorted(str(p.relative_to(root)) for p in root.rglob("*") if p.is_dir()) == ["Er1"]
+
+
+@pytest.mark.parametrize("change", ["missing_fingerprint", "same_path_equilibrium"])
+def test_unbound_or_replaced_equilibrium_output_is_archived_before_retry(legacy_dispatcher, tmp_path, change):
+    root = tmp_path / "scan"
+    root.mkdir()
+    equilibrium = root / "field.nc"
+    equilibrium.write_bytes(b"old geometry")
+    deck = root / "input.namelist"
+    deck.write_text('!ss scanType = 2\n!ss NErs = 1\n!ss ErMin = 1\n!ss ErMax = 1\n'
+                    '&geometryParameters\n inputRadialCoordinateForGradients = 4\n'
+                    f' equilibriumFile = "{equilibrium}"\n/\n'
+                    '&speciesParameters\n/\n&physicsParameters\n Er = 0\n/\n')
+    first = legacy_dispatcher(root)
+    assert first.returncode == 0, first.stdout + first.stderr
+    output = root / "Er1/sfincsOutput.h5"
+    with h5py.File(output, "r+") as f:
+        original_fingerprint = f.attrs["dkx_scan_input_fingerprint"]
+        if change == "missing_fingerprint":
+            del f.attrs["dkx_scan_input_fingerprint"]
+    accepted = output.read_bytes()
+    if change == "same_path_equilibrium":
+        equilibrium.write_bytes(b"new geometry")  # Same path and length, different bytes.
+    retry = legacy_dispatcher(root)
+    assert retry.returncode == 0, retry.stdout + retry.stderr
+    assert (root / "Er1/.dkx-failed-attempts/1/sfincsOutput.h5").read_bytes() == accepted
+    assert (root / "Er1/calls.txt").read_text().count("called") == 2
+    with h5py.File(output, "r") as f:
+        assert (f.attrs["dkx_scan_input_fingerprint"] != original_fingerprint) is (change == "same_path_equilibrium")
+    assert legacy_dispatcher(root).returncode == 0
+    assert (root / "Er1/calls.txt").read_text().count("called") == 2
+
+
+def test_equilibrium_digest_cache_invalidates_same_path_replacement(tmp_path, monkeypatch):
+    import hashlib
+
+    equilibrium = tmp_path / "field.nc"
+    equilibrium.write_bytes(b"old geometry")
+    deck = '&geometryParameters\n equilibriumFile = "field.nc"\n/\n'
+    fingerprint = _driver_stub().scan_input_fingerprint
+    real_digest = hashlib.file_digest
+    calls = []
+
+    def counted(*args):
+        calls.append(1)
+        return real_digest(*args)
+
+    monkeypatch.setattr(hashlib, "file_digest", counted)
+    before = fingerprint(deck, tmp_path / "input.namelist")
+    assert fingerprint(deck + "! comment\n", tmp_path / "input.namelist") == before
+    assert len(calls) == 1
+    equilibrium.write_bytes(b"new geometry")
+    assert fingerprint(deck, tmp_path / "input.namelist") != before
+    assert len(calls) == 2
+
+
+def test_driver_does_not_stamp_equilibrium_changed_during_execution(tmp_path, monkeypatch):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("scan_driver_changed_geometry", UTILS / "dkx_driver.py")
+    driver = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(driver)
+    equilibrium = tmp_path / "field.nc"
+    equilibrium.write_bytes(b"old geometry")
+    deck = tmp_path / "input.namelist"
+    deck.write_text('&geometryParameters\n equilibriumFile = "field.nc"\n/\n')
+    output = tmp_path / "sfincsOutput.h5"
+
+    def fake_solve(*args, **kwargs):
+        _write_complete(output)
+        with h5py.File(output, "a") as f:
+            f["input.namelist"] = deck.read_text()
+        equilibrium.write_bytes(b"new geometry")
+        return output
+
+    monkeypatch.setattr(driver, "write_output", fake_solve)
+    with pytest.raises(RuntimeError, match="changed during execution"):
+        driver.run_dkx(input_namelist=deck, ensure_equilibrium=False)
+    with h5py.File(output, "r") as f:
+        assert "dkx_scan_input_fingerprint" not in f.attrs

@@ -58,27 +58,51 @@ def output_is_complete(path: Path) -> bool:
         return False
 
 
-def output_matches_input(path: Path, requested_text: str, source_path: Path) -> bool:
-    """Compare the output's embedded deck, not a possibly edited input file."""
+_EQUILIBRIUM_DIGESTS = {}
+
+
+def scan_input_fingerprint(text: str, source_path: Path) -> str:
+    """Versioned canonical deck + equilibrium bytes, captured at execution time."""
     import hashlib
-    import h5py
+    import json
     from dkx.namelist import parse_sfincs_input_text
-    from dkx.input_compat import effective_equilibrium_file, _resolve_equilibrium_file_from_namelist
+
+    nml = parse_sfincs_input_text(text, source_path=source_path)
+    geom = nml.group("geometryParameters")
+    if effective_equilibrium_file(geom_params=geom) is not None:
+        equilibrium = _resolve_equilibrium_file_from_namelist(nml=nml).resolve()
+        stat = equilibrium.stat()
+        stamp = (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+        cached = _EQUILIBRIUM_DIGESTS.get(equilibrium)
+        if cached is None or cached[0] != stamp:
+            with equilibrium.open("rb") as stream:
+                digest = hashlib.file_digest(stream, "sha256").hexdigest()
+            after = equilibrium.stat()
+            if stamp != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns):
+                raise ValueError(f"Equilibrium changed while hashing: {equilibrium}")
+            _EQUILIBRIUM_DIGESTS[equilibrium] = (stamp, digest)
+        digest = _EQUILIBRIUM_DIGESTS[equilibrium][1]
+        for key in ("EQUILIBRIUMFILE", "FORT996BOOZER_FILE", "JGBOOZER_FILE", "JGBOOZER_FILE_NONSTELSYM"):
+            if key in geom:
+                geom[key] = digest
+
+    def canonical(value):
+        if isinstance(value, dict):
+            return [[key, canonical(item)] for key, item in sorted(value.items())]
+        return value
+
+    payload = json.dumps([canonical(nml.groups), canonical(nml.indexed)], allow_nan=False)
+    return "v1:" + hashlib.sha256(payload.encode()).hexdigest()
+
+
+def output_matches_input(path: Path, requested_text: str, source_path: Path) -> bool:
+    """Fail closed without an execution-time fingerprint; never rehash old inputs."""
+    import h5py
 
     try:
         with h5py.File(path, "r") as f:
-            saved_text = f["input.namelist"].asstr()[()]
-        old = parse_sfincs_input_text(saved_text, source_path=path.parent / "input.namelist")
-        new = parse_sfincs_input_text(requested_text, source_path=source_path)
-        for nml in (old, new):
-            geom = nml.group("geometryParameters")
-            if effective_equilibrium_file(geom_params=geom) is not None:
-                equilibrium = _resolve_equilibrium_file_from_namelist(nml=nml)
-                digest = hashlib.sha256(equilibrium.read_bytes()).hexdigest()
-                for key in ("EQUILIBRIUMFILE", "FORT996BOOZER_FILE", "JGBOOZER_FILE", "JGBOOZER_FILE_NONSTELSYM"):
-                    if key in geom:
-                        geom[key] = digest
-        return old.groups == new.groups and old.indexed == new.indexed
+            recorded = f.attrs["dkx_scan_input_fingerprint"]
+        return recorded == scan_input_fingerprint(requested_text, source_path)
     except (OSError, KeyError, TypeError, ValueError, AttributeError):
         return False
 
@@ -125,6 +149,7 @@ def run_dkx(
             f"differentiable={bool(differentiable)}",
             flush=True,
         )
+    fingerprint = scan_input_fingerprint(input_namelist.read_text(), input_namelist)
     t0 = time.perf_counter()
     out = write_output(
         input_namelist,
@@ -134,6 +159,12 @@ def run_dkx(
     )
     if not output_is_complete(Path(out)):
         raise RuntimeError(f"Incomplete or unsuccessful scan output: {out}")
+    import h5py
+
+    with h5py.File(out, "r+") as f:
+        if scan_input_fingerprint(f["input.namelist"].asstr()[()], input_namelist) != fingerprint:
+            raise RuntimeError("Scan input or equilibrium changed during execution")
+        f.attrs["dkx_scan_input_fingerprint"] = fingerprint
     if verbose:
         print(
             f"dkx_driver: done output={Path(out).name} elapsed_s={time.perf_counter() - t0:.3f}",
