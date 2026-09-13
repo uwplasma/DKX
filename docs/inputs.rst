@@ -295,6 +295,11 @@ acted upon.
      - ``'quadpack'``
      - Rosenbluth-potential quadrature (:ref:`rosenbluth-method`); a ``dkx``
        extension with no Fortran v3 counterpart
+   * - ``SfincsMatrixThreshold``
+     - ``0.0``
+     - parity switch that drops Fokker--Planck matrix entries at or below this
+       magnitude, as SFINCS v3 does at ``1d-12`` (:ref:`sfincs-matrix-threshold`);
+       a ``dkx`` extension, not for physics results
 
 .. _rosenbluth-method:
 
@@ -330,6 +335,25 @@ The same selector is available as the ``rosenbluth_method=`` argument of
 ``DKX_ROSENBLUTH_METHOD`` environment variable overrides the default only when
 no namelist key or API argument is given. An unrecognized value raises rather
 than falling back.
+
+.. _sfincs-matrix-threshold:
+
+``SfincsMatrixThreshold``: SFINCS sparsification parity
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+SFINCS v3 inserts every matrix entry through ``sparsify.F90``, which skips
+values with magnitude at or below ``threshholdForInclusion = 1d-12``. When the
+electron thermal speed is much larger than the ion one, the ion→electron
+field-particle block of the Fokker--Planck operator has entries far below that
+level, so SFINCS solves a different discrete operator. On an HSX-like deck with
+:math:`T_e/T_i = 23` the bootstrap current differed by 12--19% between the two
+codes; with the same threshold applied here they agree to :math:`2\times10^{-10}`
+(``docs/experiments/2026-09-13-sfincs-sparsify-threshold.md``).
+
+Set ``SfincsMatrixThreshold = 1d-12`` only to reproduce a SFINCS reference built
+with its default threshold. It applies to ``collisionOperator = 0`` without
+``includePhi1InCollisionOperator`` and raises otherwise. The default ``0.0``
+retains every entry and is the discretization of the stated model.
 
 ``&preconditionerOptions``
 --------------------------
