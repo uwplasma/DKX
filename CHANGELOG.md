@@ -12,6 +12,10 @@ deferred until the maintainer's important-goal and verification requirements are
   v3's `1d-12` matrix sparsification on the Fokker-Planck operator. It accounts
   for a 12-19% bootstrap-current gap on a hot-electron HSX-like deck; the
   default keeps every entry.
+- Add `dkx.validity.normalized_radial_electric_field` and its operator-build
+  form: the per-species `E_*` of Landreman et al. (2014), whose magnitude above
+  about 1/3 marks the E x B resonance regime where trajectory models separate and
+  resolution must follow `E_r`.
 
 - Add opt-in bounded GMRES reuse to the host ambipolar root, with one cold retry
   after failed admission and independent final acceptance. Keep retry policy out

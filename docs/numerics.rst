@@ -331,6 +331,29 @@ time rather than by a blind global scale factor; the examples and audited suite
 choose resolution changes per axis. For measured runtime/memory and parity
 evidence see :doc:`performance` and :doc:`parity`.
 
+The radial electric field needs its own check. The normalized field of
+Landreman et al. (Phys. Plasmas 21, 042503, 2014),
+
+.. math::
+
+   E_* = \frac{c\,G}{\iota\, v_s B_0}\frac{d\Phi_0}{d\psi}
+       = \frac{\alpha\Delta}{2}\,
+         \frac{\hat G\, d\hat\Phi/d\hat\psi}{\iota\,\hat B_0\sqrt{\hat T_s/\hat m_s}},
+   \qquad v_s = \sqrt{2T_s/m_s},
+
+compares :math:`E_r` with the resonant value at which the
+:math:`\mathbf{E}\times\mathbf{B}` precession cancels parallel streaming for
+thermal particles of species :math:`s`. Below :math:`|E_*| \approx 1/3` the full,
+partial and DKES trajectory models agree closely. Above it they separate, the
+bootstrap current can change sign, and the speed and pitch resolutions must be
+refined with :math:`E_r`. Ions with a low temperature against the electrons reach
+this regime first: on an HSX-like deck with :math:`T_e/T_i = 23` the ions sat at
+:math:`E_* \sim 1`–:math:`2`
+(``docs/experiments/2026-09-13-sfincs-sparsify-threshold.md``).
+:func:`dkx.validity.normalized_radial_electric_field_of` returns :math:`E_*` per
+species from an operator build, and :data:`dkx.validity.E_STAR_TRAJECTORY_AGREEMENT`
+holds the :math:`1/3` threshold.
+
 Auditing cold and warm observable differences
 ---------------------------------------------
 
