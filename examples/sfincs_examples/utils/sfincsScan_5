@@ -54,8 +54,7 @@ for runNum in range(len(radii)):
     else:
         print ("Creating directory "+directory)
         os.makedirs(directory)
-    os.chdir(directory)
-    work_dir = os.getcwd()
+    work_dir = str(Path(base_dir) / directory)
     current_dir = Path(work_dir)
     configure_krylov_recycle(prev_dir, current_dir)
 
@@ -138,7 +137,7 @@ for runNum in range(len(radii)):
     line += "!ss "+generalErName+"Min = "+str(generalEr_min[runNum])+"  ! set by sfincsScan_5.\n"
     input_lines.append(line)
 
-    input_path = Path(filename)
+    input_path = Path(work_dir) / filename
     input_path.write_text("".join(input_lines))
 
     #################################################
@@ -147,8 +146,7 @@ for runNum in range(len(radii)):
 ##    submitCommand = "sfincsScan -f" 
     #submitCommand = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))+"/sfincsScan -f"
     submitCommand = [sys.executable, str(Path(__file__).resolve().with_name("sfincsScan")), "--yes", "--input", str(input_path)]
-    subprocess.call(submitCommand, cwd=work_dir)
-    note_scan_run_done(progress=scan_progress, run_index=runNum+1, directory=directory, run_started_at=run_started_at)
+    radius_ok = run_scan_command(submitCommand, work_dir)
+    note_scan_run_done(progress=scan_progress, run_index=runNum+1, directory=directory, run_started_at=run_started_at, success=radius_ok)
 
-    os.chdir(base_dir)
-    prev_dir = current_dir
+    prev_dir = current_dir if radius_ok else prev_dir

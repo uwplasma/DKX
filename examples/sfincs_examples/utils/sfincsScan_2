@@ -58,8 +58,8 @@ directories_copy = list(directories)
 # This happens if you re-run sfincsScan more than once in the same directory.
 for i in range(len(generalErs_copy)):
     directory = directories_copy[i]
-    if os.path.exists(directory):
-        print ("Warning: directory "+directory+" already exists, so skipping this run.")
+    if scan_point_complete(directory):
+        print ("Directory "+directory+" has complete output; skipping this run.")
         generalErs.remove(generalErs_copy[i])
         directories.remove(directory)
 
@@ -86,19 +86,12 @@ for runNum in range(len(generalErs)):
     directory = directories[runNum]
     run_started_at = note_scan_run_start(progress=scan_progress, run_index=runNum+1, directory=directory)
 
-    # To be extra safe, check again to see if the directory exists.
-    if os.path.exists(directory):
-        print ("Warning: directory "+directory+" already exists.")
-        i = -1
-        while True:
-            i += 1
-            directory2 = directory+"_"+str(i)
-            if not os.path.exists(directory2):
-                break
-        directory = directory2
-    os.makedirs(directory)
-    os.chdir(directory)
-    current_dir = Path(os.getcwd())
+    if scan_point_complete(directory):
+        continue
+    # Retry incomplete points in place, preserving their previous attempt first.
+    os.makedirs(directory, exist_ok=True)
+    archive_scan_attempt(directory, filename)
+    current_dir = Path(directory).resolve()
     configure_krylov_recycle(prev_dir, current_dir)
 
     # Now copy the input.namelist file:
@@ -117,15 +110,14 @@ for runNum in range(len(generalErs)):
 
     #################################################
 
-    input_path = Path(filename)
+    input_path = current_dir / filename
     input_path.write_text("".join(input_lines))
     # One point that will not solve must not discard the rest of the scan.
-    run_scan_point(
+    point_ok = run_scan_point(
         input_namelist=input_path,
-        output_path=Path(outputFilename),
+        output_path=current_dir / outputFilename,
         directory=directory,
     )
-    note_scan_run_done(progress=scan_progress, run_index=runNum+1, directory=directory, run_started_at=run_started_at)
+    note_scan_run_done(progress=scan_progress, run_index=runNum+1, directory=directory, run_started_at=run_started_at, success=point_ok)
 
-    os.chdir("..")
-    prev_dir = current_dir
+    prev_dir = current_dir if point_ok else prev_dir

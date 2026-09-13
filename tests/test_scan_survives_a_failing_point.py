@@ -11,7 +11,13 @@ A point that will not solve is information, not a reason to throw away the
 other ninety-nine.
 """
 
-import importlib.util
+import ast
+import os
+import shutil
+import subprocess
+
+import h5py
+import numpy as np
 import sys
 from pathlib import Path
 
@@ -22,9 +28,38 @@ SCAN_SCRIPTS = ("sfincsScan_1", "sfincsScan_2", "sfincsScan_3",
                 "sfincsScan_4", "sfincsScan_21", "sfincsScan_22")
 
 
+def _validator_source():
+    text = (UTILS / "dkx_driver.py").read_text()
+    node = next(n for n in ast.parse(text).body if isinstance(n, ast.FunctionDef)
+                and n.name == "output_is_complete")
+    return ast.get_source_segment(text, node)
+
+
+def _driver_stub():
+    from types import SimpleNamespace
+
+    ns = {"Path": Path}
+    exec(_validator_source(), ns)
+    return SimpleNamespace(output_is_complete=ns["output_is_complete"])
+
+
+def _write_complete(path, mode=1):
+    with h5py.File(path, "w") as f:
+        f["RHSMode"] = mode
+        f["integerToRepresentTrue"] = 1
+        f["finished"] = 1
+        if mode == 1:
+            for key in ["FSABFlow", "particleFlux_vm_psiHat", "heatFlux_vm_psiHat"]:
+                f[key] = [[1.0]]
+            f["FSABjHat"] = [1.0]
+        else:
+            f["transportMatrix"] = np.eye(3 if mode == 2 else 2)
+
+
 def _load_common(tmp_path, monkeypatch):
     """Exec sfincsScan_common the way sfincsScan does, in its own namespace."""
     monkeypatch.syspath_prepend(str(UTILS))
+    monkeypatch.setitem(sys.modules, "dkx_driver", _driver_stub())
     namespace: dict = {"__file__": str(UTILS / "sfincsScan_common")}
     exec((UTILS / "sfincsScan_common").read_text(), namespace)  # noqa: S102
     return namespace
@@ -44,9 +79,9 @@ def test_a_failing_point_is_recorded_and_the_scan_continues(tmp_path, monkeypatc
             calls.append(Path(output_path).parent.name)
             if Path(output_path).parent.name == "Er3":
                 raise RuntimeError("the linear solve did not converge at total_size=66004")
-            Path(output_path).write_text("ok")
+            _write_complete(output_path)
 
-    monkeypatch.setitem(sys.modules, "dkx_driver", _FakeDriver)
+    monkeypatch.setattr(sys.modules["dkx_driver"], "run_dkx", _FakeDriver.run_dkx, raising=False)
 
     ok = []
     for i in range(5):
@@ -84,7 +119,7 @@ def test_keyboard_interrupt_still_stops_the_scan(tmp_path, monkeypatch):
         def run_dkx(**kwargs):
             raise KeyboardInterrupt
 
-    monkeypatch.setitem(sys.modules, "dkx_driver", _Interrupting)
+    monkeypatch.setattr(sys.modules["dkx_driver"], "run_dkx", _Interrupting.run_dkx, raising=False)
     directory = tmp_path / "Er1"
     directory.mkdir()
     with pytest.raises(KeyboardInterrupt):
@@ -106,3 +141,164 @@ def test_every_scan_type_uses_the_resilient_helper(script: str) -> None:
     assert "    run_dkx(" not in body and "   run_dkx(" not in body, (
         f"{script} still calls run_dkx directly, so one bad point aborts the scan"
     )
+
+
+@pytest.mark.parametrize("mode", [1, 2, 3])
+@pytest.mark.parametrize("defect", [None, "partial", "truncated", "unfinished", "nan", "empty", "nonlinear"])
+def test_scan_output_requires_complete_finite_finished_data(tmp_path, mode, defect):
+    path = tmp_path / "sfincsOutput.h5"
+    _write_complete(path, mode)
+    key = "FSABFlow" if mode == 1 else "transportMatrix"
+    if defect == "truncated":
+        path.write_bytes(b"partial hdf5")
+    elif defect:
+        with h5py.File(path, "a") as f:
+            if defect == "partial":
+                del f[key]
+            if defect == "unfinished":
+                f["finished"][...] = 0
+            if defect == "nan":
+                f[key][...] = np.nan
+            if defect == "empty":
+                del f[key]
+                f[key] = []
+            if defect == "nonlinear":
+                f["didNonlinearCalculationConverge"] = -1
+    assert _driver_stub().output_is_complete(path) is (defect is None)
+
+
+@pytest.fixture
+def legacy_dispatcher(tmp_path):
+    """Real dispatcher/point/radius loops, tiny fake solver, no kinetic solves."""
+    utils = tmp_path / "utils"
+    shutil.copytree(UTILS, utils)
+    (utils / "dkx_driver.py").write_text(
+        "from pathlib import Path\nimport os\nimport h5py\n" + _validator_source() + "\n" +
+        "def run_dkx(*, input_namelist, output_path, **kwargs):\n"
+        "    directory = Path(output_path).resolve().parent\n"
+        "    with (directory / 'calls.txt').open('a') as log: log.write('called\\n')\n"
+        "    with h5py.File(output_path, 'w') as f:\n"
+        "        f['RHSMode'] = 1; f['integerToRepresentTrue'] = 1; f['finished'] = 1\n"
+        "        if os.environ.get('SCAN_TEST_FAIL_POINT') == directory.name:\n"
+        "            raise RuntimeError('synthetic point failure')\n"
+        "        if os.environ.get('SCAN_TEST_PARTIAL_POINT') == directory.name: return output_path\n"
+        "        for key in ['FSABFlow','FSABjHat','particleFlux_vm_psiHat','heatFlux_vm_psiHat']:\n"
+        "            f[key] = [[1.0]]\n"
+        "    return output_path\n"
+    )
+    # Supply two synthetic profiles; exercise real nested dispatch, not profile interpolation.
+    (utils / "radialScans").write_text(
+        "radii=[0.2,0.4]\ndirectories=['radius_a','radius_b']\n"
+        "radiusName='rN'\nradiusNameForGradients='rHat'\ngeneralErName='Er'\n"
+        "Nspecies=1\nnHats=THats=[[1.,1.]]\ndnHatdradii=dTHatdradii=[[0.,0.]]\n"
+        "NErs=[3,3]\ngeneralEr_min=[-1.,-1.]\ngeneralEr_max=[1.,1.]\n"
+    )
+    def launch(directory, scan_type=2, **flags):
+        directory.mkdir(exist_ok=True)
+        deck = directory / "input.namelist"
+        if not deck.exists():
+            deck.write_text(f"!ss scanType = {scan_type}\n!ss NErs = 3\n!ss ErMin = -1\n!ss ErMax = 1\n"
+                            "&geometryParameters\n inputRadialCoordinateForGradients = 4\n/\n"
+                            "&speciesParameters\n/\n&physicsParameters\n Er = 0\n/\n")
+        env = dict(os.environ, **flags)
+        return subprocess.run([sys.executable, str(utils / "sfincsScan"), "--yes", "--input", str(deck)],
+                              env=env, capture_output=True, text=True, timeout=20)
+    return launch
+
+
+def test_er_scan_retries_only_failed_or_incomplete_points(legacy_dispatcher, tmp_path):
+    root = tmp_path / "scan"
+    first = legacy_dispatcher(root, SCAN_TEST_FAIL_POINT="Er0")
+    assert first.returncode == 1, first.stdout + first.stderr
+    assert "FAILED Er0" in first.stdout and "done Er0" not in first.stdout
+    assert (root / "Er-1/sfincsOutput.h5").exists()
+    accepted = (root / "Er1/sfincsOutput.h5").read_bytes()
+    old_input = (root / "Er0/input.namelist").read_bytes()
+    partial = (root / "Er0/sfincsOutput.h5").read_bytes()
+    # Also simulate a killed job which never got far enough to create a failure marker.
+    (root / "Er-1/sfincsOutput.h5").write_bytes(b"truncated")
+    (root / "Er0/dkx_state.npz").write_bytes(b"failed state")
+    second = legacy_dispatcher(root)
+    assert second.returncode == 0, second.stdout + second.stderr
+    assert (root / "Er1/sfincsOutput.h5").read_bytes() == accepted
+    assert (root / "Er1/calls.txt").read_text().count("called") == 1
+    assert (root / "Er0/calls.txt").read_text().count("called") == 2
+    assert (root / "Er-1/calls.txt").read_text().count("called") == 2
+    history = root / "Er0/.dkx-failed-attempts/1"
+    assert (history / "input.namelist").read_bytes() == old_input
+    assert (history / "sfincsOutput.h5").read_bytes() == partial
+    assert (history / "dkx_FAILED.txt").exists()
+    assert (history / "dkx_state.npz").read_bytes() == b"failed state"
+    assert not (root / "Er0/dkx_FAILED.txt").exists()
+    third = legacy_dispatcher(root)
+    assert third.returncode == 0 and "start Er" not in third.stdout
+
+
+def test_zero_exit_partial_output_is_a_failure(legacy_dispatcher, tmp_path):
+    root = tmp_path / "scan"
+    result = legacy_dispatcher(root, SCAN_TEST_PARTIAL_POINT="Er0")
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "missing, partial or unsuccessful output" in result.stdout
+    assert (root / "Er-1/sfincsOutput.h5").exists()
+
+
+def test_nested_radius_failures_propagate_and_retry(legacy_dispatcher, tmp_path):
+    root = tmp_path / "radial"
+    first = legacy_dispatcher(root, scan_type=5, SCAN_TEST_FAIL_POINT="Er0")
+    assert first.returncode == 1, first.stdout + first.stderr
+    for radius in ["radius_a", "radius_b"]:
+        assert (root / radius / "Er-1/sfincsOutput.h5").exists()
+        assert (root / radius / "dkx_FAILED.txt").exists()
+        assert f"FAILED {radius}" in first.stdout
+    second = legacy_dispatcher(root, scan_type=5)
+    assert second.returncode == 0, second.stdout + second.stderr
+    for radius in ["radius_a", "radius_b"]:
+        assert (root / radius / "Er1/calls.txt").read_text().count("called") == 1
+        assert (root / radius / "Er0/calls.txt").read_text().count("called") == 2
+        assert not (root / radius / "dkx_FAILED.txt").exists()
+
+
+def test_child_launch_error_is_recorded_and_interrupt_propagates(tmp_path, monkeypatch):
+    ns = _load_common(tmp_path, monkeypatch)
+    assert not ns["run_scan_command"]([str(tmp_path / "missing-executable")], tmp_path)
+    assert ns["report_scan_failures"]() == 1
+    def interrupt(*a, **kw):
+        raise KeyboardInterrupt
+    monkeypatch.setattr(subprocess, "run", interrupt)
+    with pytest.raises(KeyboardInterrupt):
+        ns["run_scan_command"](["unused"], tmp_path)
+
+
+@pytest.mark.parametrize("complete", [False, True])
+def test_driver_never_reports_done_for_partial_output(tmp_path, monkeypatch, capsys, complete):
+    import importlib.util
+    from types import SimpleNamespace
+
+    spec = importlib.util.spec_from_file_location("scan_driver_under_test", UTILS / "dkx_driver.py")
+    driver = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(driver)
+    output = tmp_path / "sfincsOutput.h5"
+    _write_complete(output)
+    if not complete:
+        with h5py.File(output, "a") as f:
+            del f["FSABFlow"]
+    monkeypatch.setattr(driver, "read_sfincs_input", lambda _: SimpleNamespace(group=lambda _: {}))
+    monkeypatch.setattr(driver, "write_output", lambda *a, **kw: output)
+    if complete:
+        assert driver.run_dkx(input_namelist=tmp_path / "input.namelist", ensure_equilibrium=False) == output
+    else:
+        with pytest.raises(RuntimeError, match="Incomplete"):
+            driver.run_dkx(input_namelist=tmp_path / "input.namelist", ensure_equilibrium=False)
+    assert ("dkx_driver: done" in capsys.readouterr().out) is complete
+
+
+def test_success_retires_failure_marker_and_keeps_history(tmp_path, monkeypatch):
+    ns = _load_common(tmp_path, monkeypatch)
+    marker = tmp_path / ns["FAILURE_MARKER"]
+    marker.write_text("previous failure")
+    monkeypatch.setattr(sys.modules["dkx_driver"], "run_dkx",
+                        lambda **kw: _write_complete(kw["output_path"]), raising=False)
+    assert ns["run_scan_point"](input_namelist=tmp_path / "input.namelist",
+                                output_path=tmp_path / "sfincsOutput.h5")
+    assert not marker.exists()
+    assert (tmp_path / ".dkx-failed-attempts/recovered-failures.txt").read_text() == "previous failure"

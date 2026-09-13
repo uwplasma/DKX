@@ -25,6 +25,38 @@ from dkx.io import localize_equilibrium_file_in_place  # noqa: E402
 from dkx.namelist import read_sfincs_input  # noqa: E402
 
 
+def output_is_complete(path: Path) -> bool:
+    """Execution/retry gate, not a residual or resolution certificate."""
+    import h5py
+    import numpy as np
+
+    try:
+        with h5py.File(path, "r") as f:
+            mode = int(f["RHSMode"][()].item())
+            true = int(f["integerToRepresentTrue"][()].item())
+            if true == 0 or int(f["finished"][()].item()) != true:
+                return False
+            if "includePhi1" in f and int(f["includePhi1"][()].item()) == true:
+                if "didNonlinearCalculationConverge" not in f:
+                    return False
+            if "didNonlinearCalculationConverge" in f:
+                if np.asarray(f["didNonlinearCalculationConverge"]).ravel()[-1] != true:
+                    return False
+            keys = (("FSABFlow", "FSABjHat", "particleFlux_vm_psiHat", "heatFlux_vm_psiHat")
+                    if mode == 1 else ("transportMatrix",) if mode in (2, 3) else ())
+            if not keys:
+                return False
+            for key in keys:
+                values = np.asarray(f[key])
+                if not values.size or not np.isfinite(values).all():
+                    return False
+                if key == "transportMatrix" and values.shape != ((3, 3) if mode == 2 else (2, 2)):
+                    return False
+            return True
+    except (OSError, KeyError, TypeError, ValueError, IndexError, AttributeError):
+        return False
+
+
 def run_dkx(
     *,
     input_namelist: Path,
@@ -67,6 +99,8 @@ def run_dkx(
         overwrite=overwrite,
         emit=print if verbose else None,
     )
+    if not output_is_complete(Path(out)):
+        raise RuntimeError(f"Incomplete or unsuccessful scan output: {out}")
     if verbose:
         print(
             f"dkx_driver: done output={Path(out).name} elapsed_s={time.perf_counter() - t0:.3f}",

@@ -11,6 +11,8 @@ import os
 import sys
 import time
 import traceback
+import shutil
+import subprocess
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -107,7 +109,7 @@ def note_scan_run_start(*, progress, run_index, directory):
     return time.time()
 
 
-def note_scan_run_done(*, progress, run_index, directory, run_started_at):
+def note_scan_run_done(*, progress, run_index, directory, run_started_at, success=True):
     total_runs = int(progress["total_runs"])
     run_elapsed = time.time() - float(run_started_at)
     progress["elapsed_s"].append(float(run_elapsed))
@@ -115,7 +117,7 @@ def note_scan_run_done(*, progress, run_index, directory, run_started_at):
     remaining_runs = max(0, total_runs - int(run_index))
     total_elapsed = time.time() - float(progress["t0"])
     print(
-        f"[{progress['label']}] run {int(run_index)}/{total_runs} done {directory} "
+        f"[{progress['label']}] run {int(run_index)}/{total_runs} {'done' if success else 'FAILED'} {directory} "
         f"run_elapsed={format_scan_duration(run_elapsed)} avg_run={format_scan_duration(avg_s)} "
         f"total_elapsed={format_scan_duration(total_elapsed)} est_remaining={format_scan_duration(avg_s * remaining_runs)}",
         flush=True,
@@ -459,49 +461,104 @@ _scan_failures = []
 FAILURE_MARKER = "dkx_FAILED.txt"
 
 
+def scan_point_complete(directory, output_filename=outputFilename):
+    from dkx_driver import output_is_complete
+
+    directory = Path(directory)
+    return (not (directory / FAILURE_MARKER).exists()
+            and output_is_complete(directory / output_filename))
+
+
+def archive_scan_attempt(directory, input_filename=inputFilename):
+    """Preserve previous input/output/failure/state before retrying in place."""
+    directory = Path(directory)
+    files = [directory / name for name in
+             dict.fromkeys((input_filename, outputFilename, FAILURE_MARKER, "dkx_state.npz"))]
+    files = [path for path in files if path.is_file()]
+    if not files:
+        return
+    archive = directory / ".dkx-failed-attempts"
+    archive.mkdir(exist_ok=True)
+    number = 1
+    while (archive / str(number)).exists():
+        number += 1
+    target = archive / str(number)
+    target.mkdir()
+    for path in files:
+        shutil.move(str(path), target / path.name)
+
+
+def record_scan_failure(label, directory, detail):
+    _scan_failures.append((str(label), detail.strip().splitlines()[-1]))
+    marker = Path(directory) / FAILURE_MARKER
+    try:
+        with marker.open("a") as f:
+            f.write(detail + "\n")
+    except OSError as exc:
+        print(f"[sfincsScan] could not write {marker}: {exc}", flush=True)
+    print(f"[sfincsScan] FAILED: {label}: {detail}", flush=True)
+    print("[sfincsScan] continuing with the remaining points/radii.", flush=True)
+
+
+def clear_scan_failure(directory):
+    """Retire a failure marker after success without losing its history."""
+    marker = Path(directory) / FAILURE_MARKER
+    if marker.exists():
+        # Preserve error history without moving a successful output.
+        archive = Path(directory) / ".dkx-failed-attempts"
+        archive.mkdir(exist_ok=True)
+        target = archive / "recovered-failures.txt"
+        with target.open("a") as f:
+            f.write(marker.read_text())
+        marker.unlink()
+
+
+def run_scan_command(command, directory):
+    """A failed child scan must not discard later radii or yield exit zero."""
+    try:
+        result = subprocess.run(command, cwd=directory, check=False)
+        if result.returncode:
+            raise RuntimeError(f"child scan exited {result.returncode}")
+        clear_scan_failure(directory)
+        return True
+    except (OSError, RuntimeError) as exc:
+        record_scan_failure(Path(directory).name, directory, str(exc))
+        return False
+
+
 def run_scan_point(*, input_namelist, output_path, directory=None, **kwargs):
-    """Run one scan point.  Returns True if it produced output.
+    """Run one scan point. Returns True only for complete, finite output.
 
     Never raises for a solver failure: the point is recorded and the scan goes
     on.  A KeyboardInterrupt still stops everything, because that is the user
     asking it to.
     """
-    from dkx_driver import run_dkx  # local helper in utils
+    from dkx_driver import run_dkx, output_is_complete
 
     label = str(directory if directory is not None else Path(input_namelist).parent.name)
     try:
         run_dkx(input_namelist=Path(input_namelist), output_path=output_path, **kwargs)
+        if not output_is_complete(Path(output_path)):
+            raise RuntimeError("missing, partial or unsuccessful output")
+        clear_scan_failure(Path(output_path).parent)
         return True
-    except KeyboardInterrupt:
-        raise
-    except BaseException as exc:  # noqa: BLE001 - the point of this function
-        detail = traceback.format_exc()
-        _scan_failures.append((label, f"{type(exc).__name__}: {exc}"))
-        marker = Path(output_path).parent / FAILURE_MARKER
-        try:
-            marker.write_text(
-                f"This scan point did not produce {Path(output_path).name}.\n\n{detail}"
-            )
-        except OSError:
-            pass
-        print(f"[sfincsScan] POINT FAILED: {label}: {type(exc).__name__}: {exc}")
-        print(f"[sfincsScan]   recorded in {marker}; continuing with the rest of the scan.")
+    except (Exception, SystemExit):
+        record_scan_failure(label, Path(output_path).parent, traceback.format_exc())
         return False
 
 
 def report_scan_failures():
     """Print the tally.  Returns the number of failed points."""
     if not _scan_failures:
-        print("[sfincsScan] all scan points produced output.")
+        print("[sfincsScan] all selected scan points/radii completed successfully.")
         return 0
     print("")
-    print(f"[sfincsScan] {len(_scan_failures)} scan point(s) did NOT produce output:")
+    print(f"[sfincsScan] {len(_scan_failures)} scan point(s)/radius scan(s) FAILED:")
     for label, reason in _scan_failures:
         print(f"[sfincsScan]   {label}: {reason}")
     print(
-        f"[sfincsScan] Each is marked with a {FAILURE_MARKER} file holding the "
-        "traceback.  The rest of the scan completed, so the plots will simply "
-        "be missing those points rather than being absent entirely."
+        f"[sfincsScan] Error details are saved in {FAILURE_MARKER} when writable. The rest of the scan was attempted; failed points are "
+        "not treated as complete on retry."
     )
     return len(_scan_failures)
 
