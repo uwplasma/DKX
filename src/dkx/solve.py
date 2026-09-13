@@ -1087,38 +1087,11 @@ def _escalate_after_tier2_stall(
     adjoint_residual_factor: float,
     max_dense_size: int,
 ) -> SolveResult:
-    """Work through the remedies a user would otherwise have to know about.
+    """Try alternate preconditioners and a larger iteration budget at fixed physics.
 
-    A stalled Krylov solve is a *preconditioner* problem, not a reason to
-    change solver route, and this is where DKX used to get it backwards: it
-    announced a fall back to the sparse direct host solve, which obtains its
-    matrix by applying the operator to ``n`` identity columns.  At the sizes
-    where recycled Krylov actually stalls that is hopeless -- a 66004-DOF deck
-    needs 66004 operator applications before the factorization even starts --
-    so the guard in :func:`_solve_tier3` refused, and a convergence problem
-    surfaced as a hard crash telling the user to raise ``max_dense_size``.
-    Sampling into CSR (:func:`materialize_csr`) removed the dense ``O(n^2)``
-    intermediate that used to sit on top of that, but not the ``n``
-    applications, so the guard stands and this ladder still ends elsewhere.
-
-    SFINCS Fortran v3 does not have this failure mode, and the reason is worth
-    stating because it dictates the order below.  It assembles the simplified
-    preconditioner matrix *analytically and sparsely*, factorizes it with a
-    sparse direct LU (MUMPS or SuperLU_dist), and preconditions GMRES with
-    that -- so its "direct solve" is a sparse factorization that handles 66004
-    routinely, and GMRES needs few iterations on top of it.  It also retries
-    automatically, doubling the MUMPS working-memory factor on a failed
-    factorization (``solver.F90``: ``mumps_icntl_14 = mumps_icntl_14 * 2``).
-
-    DKX already owns the equivalent of that preconditioner -- ``"sparse"``
-    eliminates in a fill-reducing order and keeps the inverse exact -- and the
-    stall above happened without ever trying it.  So the ladder escalates the
-    preconditioner first, in increasing cost, and only considers the sparse
-    direct route at a size where it can actually run.
-
-    Returns the first converged result, or the best (lowest final residual) if
-    none converges, so a caller that can tolerate a loose solve still gets the
-    best available answer along with an honest ``converged=False``.
+    Return the first converged result. If every iterative attempt fails, use
+    the host direct route only within its size guard; otherwise raise with the
+    best attempted residual. A stall alone does not diagnose its cause.
     """
     attempts: list[tuple[str, SolveResult]] = [
         (f"{preconditioner} preconditioner", stalled)

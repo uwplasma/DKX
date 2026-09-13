@@ -7,12 +7,8 @@ because 66004 > max_dense_size=8192.  The RuntimeError propagated out through
 the scan driver and killed every remaining Er point at that radius: one radius
 folder finished with zero outputs, another with three of a hundred.
 
-Sparse direct obtains its matrix by applying the operator to n identity columns, so
-at the sizes where recycled Krylov actually stalls it can never run -- the advice in the
-old message, to raise max_dense_size, would have asked for 32.5 GB.  A stalled
-Krylov solve is a preconditioner problem, and DKX already ships the strong
-preconditioner (``sparse``) that SFINCS's MUMPS LU is the analogue of; it was
-simply never tried.
+Escalation must preserve the requested equation and report failed attempts
+without claiming that nonconvergence establishes a particular physical cause.
 """
 
 import numpy as np
