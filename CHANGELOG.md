@@ -30,6 +30,13 @@ deferred until the maintainer's important-goal and verification requirements are
 
 ### Execution
 
+- Bound the first automatic Krylov attempt and reuse its factors with a wider
+  restart window when the basis-size guard permits. Preserve explicit solver
+  settings and the differentiated path.
+
+- Propagate nested legacy scan failures, distinguish failed progress from success,
+  and retry incomplete Er points while preserving previous attempt files.
+
 - Preserve independent-device batch sharding through JIT and gradients, including
   uneven batches (#179). Each complete system still resides on one device.
 - Reuse generated SOLVAX Schur factors within supported PAS solve executions for

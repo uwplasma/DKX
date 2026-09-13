@@ -2151,7 +2151,7 @@ def _solve_tier2(
             )
             recycle, iterations, col_converged, residual_norm = aux
         else:
-            # Host-only recovery with factors built for this exact operator.
+            # Host-controlled recovery with factors built for this exact operator.
             # Reserve whole wide cycles within the original inner-step cap;
             # caller-supplied (possibly stale) factors keep the explicit path.
             wide_cycles = restart * (max_restarts - 5) // 100
@@ -2583,9 +2583,10 @@ def solve(
         drop_l_coupling_in_precond: sever the L±1 coupling in the coarse
             operator.  Not Fortran's ``preconditioner_xi``, which drops L±2,
             and expensive; see :func:`dkx.coarse_precond.build_coarse_preconditioner`.
-        restart: FGMRES cycle size ``m``. Host-only, non-differentiable auto
+        restart: FGMRES cycle size ``m``. Host-controlled, non-differentiable auto
             solves with freshly built factors may probe five cycles then widen
-            to 100 when two 100-vector bases fit in 256 MiB. The probe plus
+            to 100 when two 100-vector bases fit in 256 MiB (a basis estimate,
+            not a bound on total solver memory). The probe plus
             retry uses at most ``restart * max_restarts`` inner steps per RHS
             (remaining work rounded down to whole wide cycles). Explicit
             methods, traced solves and caller-supplied factors retain this size.

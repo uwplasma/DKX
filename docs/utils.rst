@@ -137,6 +137,15 @@ Scan launchers (run ``dkx``)
 ``sfincsScan_21`` / ``sfincsScan_22``
   Run‑spec scans driven by ``runspec.dat`` (single runs or nested ``E_r`` scans).
 
+The legacy ``sfincsScan`` launcher records failed points in ``dkx_FAILED.txt``
+and continues with later points and radii; a scan with failures exits nonzero.
+Re-running an Er scan retries incomplete or changed inputs in their existing
+directories. Previous attempt files are retained under ``.dkx-failed-attempts``.
+Only complete, finite outputs with matching recorded input/equilibrium identity
+are reused. Older outputs without that identity are preserved before rerunning.
+Directory existence and a zero process exit are not physics acceptance tests:
+check original-equation residuals, observable agreement and grid convergence.
+
 DKX automatically uses a shared-operator batch for compatible single-process
 RHSMode=1 ``Er`` scans. Geometry discovery, operator construction, and JAX
 compilation happen once for the electric-field vector; every point still gets

@@ -194,3 +194,78 @@ relative difference 2.14e-15). Compilation caches persisted; this compares the
 helper with its eager body in one candidate checkout, not independent releases
 or optimization runs. Campaign peak RSS was 2.24 GiB, not a per-arm memory
 comparison. The research-grid and GPU qualifications remain separate.
+
+
+### Full-grid CPU qualification and collaborator replay (2026-09-13)
+
+DKX `370170e5` / SOLVAX `9357191` completed the same NCSX
+`(21,37,61,8)` diagnostic in 164.25 s supervised, 161.27 s audited,
+with 27.05 GiB sampled peak RSS, 53 iterations and original residual
+`8.53934e-11`. All four archived signed-observable screens passed. This used
+JAX 0.10.2, x64 and four office CPU threads. No resource guard fired.
+The earlier 187.27 s / 28.03 GiB result is a separate shared-host diagnostic,
+not a paired speed or memory-saving measurement. PR #228 is merged as
+`cf0038f4`; full-grid CPU acceptance does not qualify GPU performance,
+resolution error bars or representative root-reuse economics.
+
+A reconstructed two-species VMEC/full-trajectory input from a collaborator's
+failed radial/Er scan reached the 180 s local CPU diagnostic limit at
+`(11,15,20,10)` without an accepted state (2.50 GiB sampled peak RSS).
+The laptop Fortran reference crashed during matrix assembly; that attempt is
+excluded as a physics reference. These are retained unsuccessful attempts,
+not evidence that the requested equation has no solution. Scan recovery tests
+must remain separate from actual equation/observable acceptance. Do not
+advertise the collaborator's numerical issue as fixed until matched accepted
+outputs exist; private input data remain outside the repository.
+
+
+The isolated office SFINCS/PETSc/MUMPS reference also timed out after 180 s
+with the supplied iterative configuration. Switching only to SFINCS full
+MUMPS direct factorization completed the first point in 40.19 s: independently
+recomputed original residual `9.84e-9`, below the requested `1e-7`. Its packed
+43,894-entry state embeds in DKX's 66,004-entry masked layout with residual
+`1.48e-8`; a seeded random operator action agrees to `2.40e-12` relative and
+the RHS to `5.89e-15`. This qualifies that equation comparison, not a DKX
+solve or grid convergence. The second direct point exited zero in 41.99 s
+but its original residual `5.63e-7` exceeds `1e-7`: reject it as an accepted
+reference pending refinement. PETSc exposes [MUMPS iterative refinement](https://petsc.org/release/manualpages/Mat/MATSOLVERMUMPS/)
+through `-mat_mumps_icntl_10`; any follow-up must audit the original residual
+again rather than trusting process exit or factorization success.
+The initial MPI process-group memory measurement omitted descendants and is
+invalid; the corrected second-run process-tree peak is 3.81 GiB.
+
+
+MUMPS with five refinement steps and refinement stopping criterion `1e-14`
+completed both points with original residuals `8.34e-14` and `2.71e-12`.
+Explicit DKX GCROT restart 100 completed both at the input tolerance `1e-7`
+(32.81/18.59 s supervised); tightening to `1e-11` also completed
+(54.66/41.67 s). Despite this, the first bootstrap current is `0.0110337063`
+in DKX versus `0.0136166376` in refined SFINCS (18.97% difference). DKX moments
+on the imported SFINCS state reproduce the SFINCS values; the discrepancy is
+in the solved states, not that moment functional. The imported state has
+DKX residual `1.145e-8` while the tight DKX state has `8.65e-12`.
+Do not promote tiny random-action differences into observable parity for this
+sensitive grid. The second current likewise differs (`-0.0314056428` versus
+`-0.0356737207`); both require operator/observable sensitivity and resolution
+checks before research use.
+
+The automatic policy now probes five short cycles, then widens to 100 while
+retaining the same freshly built factors, when the nominal two-basis estimate
+fits 256 MiB. This is not a total-memory bound. The combined initial attempt
+keeps the original inner-step budget; later escalation remains separate.
+Both reconstructed inputs completed with default `auto` on CPU:
+
+| Point | Supervised time | Peak RSS | Iterations | Original norm / target |
+| --- | ---: | ---: | ---: | ---: |
+| A: rN=0.1870828693, Er=15 | 32.58 s | 2.69 GiB | 643 | 1.983e-8 / 2.552e-8 |
+| B: rN=0.3674234614, Er=14.39393939 | 20.78 s | 2.49 GiB | 407 | 2.447e-8 / 2.461e-8 |
+
+These are fresh-process shared-host diagnostics; cache coldness is not certified.
+The earlier 180 s timeout is censored, not a speed ratio. A GPU replay was
+stopped before computation when a foreign process appeared; no GPU result is
+admitted. A repeat of the small 904-unknown root comparison completed 12/12
+accepted roots, zero retries, five-pair medians 4.703 s cold / 4.149 s reused,
+63.81 s total and 2.31 GiB peak. It does not close representative retry economics.
+The next poloidal refinement needs 56.1 GiB available under the measured-peak
+margin. A prepared baseline-adjoint campaign also failed its 42 GiB admission
+gate (40.48 GiB available), before any solve. Neither is a completed experiment.
