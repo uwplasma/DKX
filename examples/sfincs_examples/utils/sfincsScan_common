@@ -461,12 +461,14 @@ _scan_failures = []
 FAILURE_MARKER = "dkx_FAILED.txt"
 
 
-def scan_point_complete(directory, output_filename=outputFilename):
-    from dkx_driver import output_is_complete
+def scan_point_complete(directory, output_filename=outputFilename, *, input_text=None, source_path=None):
+    from dkx_driver import output_is_complete, output_matches_input
 
     directory = Path(directory)
     return (not (directory / FAILURE_MARKER).exists()
-            and output_is_complete(directory / output_filename))
+            and output_is_complete(directory / output_filename)
+            and (input_text is None or output_matches_input(
+                directory / output_filename, input_text, source_path)))
 
 
 def archive_scan_attempt(directory, input_filename=inputFilename):

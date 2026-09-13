@@ -30,9 +30,9 @@ SCAN_SCRIPTS = ("sfincsScan_1", "sfincsScan_2", "sfincsScan_3",
 
 def _validator_source():
     text = (UTILS / "dkx_driver.py").read_text()
-    node = next(n for n in ast.parse(text).body if isinstance(n, ast.FunctionDef)
-                and n.name == "output_is_complete")
-    return ast.get_source_segment(text, node)
+    return "\n\n".join(ast.get_source_segment(text, n) for n in ast.parse(text).body
+                         if isinstance(n, ast.FunctionDef)
+                         and n.name in {"output_is_complete", "output_matches_input"})
 
 
 def _driver_stub():
@@ -40,7 +40,8 @@ def _driver_stub():
 
     ns = {"Path": Path}
     exec(_validator_source(), ns)
-    return SimpleNamespace(output_is_complete=ns["output_is_complete"])
+    return SimpleNamespace(output_is_complete=ns["output_is_complete"],
+                           output_matches_input=ns["output_matches_input"])
 
 
 def _write_complete(path, mode=1):
@@ -178,6 +179,7 @@ def legacy_dispatcher(tmp_path):
         "    directory = Path(output_path).resolve().parent\n"
         "    with (directory / 'calls.txt').open('a') as log: log.write('called\\n')\n"
         "    with h5py.File(output_path, 'w') as f:\n"
+        "        f['input.namelist'] = Path(input_namelist).read_text()\n"
         "        f['RHSMode'] = 1; f['integerToRepresentTrue'] = 1; f['finished'] = 1\n"
         "        if os.environ.get('SCAN_TEST_FAIL_POINT') == directory.name:\n"
         "            raise RuntimeError('synthetic point failure')\n"
@@ -302,3 +304,71 @@ def test_success_retires_failure_marker_and_keeps_history(tmp_path, monkeypatch)
                                 output_path=tmp_path / "sfincsOutput.h5")
     assert not marker.exists()
     assert (tmp_path / ".dkx-failed-attempts/recovered-failures.txt").read_text() == "previous failure"
+
+
+@pytest.mark.parametrize("code", [0, 2])
+def test_solver_system_exit_is_a_failed_point_not_scan_success(tmp_path, monkeypatch, code):
+    ns = _load_common(tmp_path, monkeypatch)
+    def stop(**kwargs):
+        raise SystemExit(code)
+    monkeypatch.setattr(sys.modules["dkx_driver"], "run_dkx", stop, raising=False)
+    assert not ns["run_scan_point"](input_namelist=tmp_path / "input.namelist",
+                                    output_path=tmp_path / "sfincsOutput.h5")
+    assert ns["report_scan_failures"]() == 1
+
+
+def test_changed_requested_input_does_not_reuse_stale_output(legacy_dispatcher, tmp_path):
+    root = tmp_path / "scan"
+    assert legacy_dispatcher(root).returncode == 0
+    accepted = (root / "Er1/sfincsOutput.h5").read_bytes()
+    deck = root / "input.namelist"
+    deck.write_text(deck.read_text().replace("&speciesParameters", "&speciesParameters\n nHats = 2"))
+    # An edited point input must not make an OLD output look like the new request.
+    child = root / "Er1/input.namelist"
+    child.write_text(child.read_text().replace("&speciesParameters", "&speciesParameters\n nHats = 2"))
+    result = legacy_dispatcher(root)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (root / "Er1/calls.txt").read_text().count("called") == 2
+    assert (root / "Er1/.dkx-failed-attempts/1/sfincsOutput.h5").read_bytes() == accepted
+    assert legacy_dispatcher(root).returncode == 0
+    assert (root / "Er1/calls.txt").read_text().count("called") == 2
+
+
+def test_localized_equilibrium_and_comments_match_but_changed_content_does_not(tmp_path):
+    source = tmp_path / "source"
+    source.mkdir()
+    run = tmp_path / "point"
+    run.mkdir()
+    (source / "field.nc").write_bytes(b"same geometry")
+    (run / "field.nc").write_bytes(b"same geometry")
+    text = '&geometryParameters\n geometryScheme = 5\n equilibriumFile = "field.nc"\n/\n'
+    output = run / "sfincsOutput.h5"
+    with h5py.File(output, "w") as f:
+        f["input.namelist"] = text
+    requested = text.replace('"field.nc"', repr(str(source / "field.nc"))) + "! comment\n"
+    match = _driver_stub().output_matches_input
+    assert match(output, requested, source / "input.namelist")
+    (source / "field.nc").write_bytes(b"changed geometry")
+    assert not match(output, requested, source / "input.namelist")
+
+
+
+def test_retry_refuses_conflicting_localized_geometry_without_overwriting(tmp_path):
+    import importlib.util
+
+    source = tmp_path / "original"
+    source.mkdir()
+    (source / "field.nc").write_bytes(b"new geometry")
+    point = tmp_path / "point"
+    point.mkdir()
+    local = point / "field.nc"
+    local.write_bytes(b"old geometry")
+    deck = point / "input.namelist"
+    deck.write_text(f'&geometryParameters\n geometryScheme = 5\n equilibriumFile = "{source / "field.nc"}"\n/\n')
+    spec = importlib.util.spec_from_file_location("scan_driver_geometry_test", UTILS / "dkx_driver.py")
+    driver = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(driver)
+    with pytest.raises(RuntimeError, match="Conflicting localized equilibrium"):
+        driver.run_dkx(input_namelist=deck)
+    assert local.read_bytes() == b"old geometry"
+    assert not (point / "sfincsOutput.h5").exists()

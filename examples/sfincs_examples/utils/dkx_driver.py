@@ -21,7 +21,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from dkx.api import write_output  # noqa: E402
-from dkx.io import localize_equilibrium_file_in_place  # noqa: E402
+from dkx.io import localize_equilibrium_file_in_place, _resolve_equilibrium_file_from_namelist  # noqa: E402
+from dkx.input_compat import effective_equilibrium_file  # noqa: E402
 from dkx.namelist import read_sfincs_input  # noqa: E402
 
 
@@ -57,6 +58,31 @@ def output_is_complete(path: Path) -> bool:
         return False
 
 
+def output_matches_input(path: Path, requested_text: str, source_path: Path) -> bool:
+    """Compare the output's embedded deck, not a possibly edited input file."""
+    import hashlib
+    import h5py
+    from dkx.namelist import parse_sfincs_input_text
+    from dkx.input_compat import effective_equilibrium_file, _resolve_equilibrium_file_from_namelist
+
+    try:
+        with h5py.File(path, "r") as f:
+            saved_text = f["input.namelist"].asstr()[()]
+        old = parse_sfincs_input_text(saved_text, source_path=path.parent / "input.namelist")
+        new = parse_sfincs_input_text(requested_text, source_path=source_path)
+        for nml in (old, new):
+            geom = nml.group("geometryParameters")
+            if effective_equilibrium_file(geom_params=geom) is not None:
+                equilibrium = _resolve_equilibrium_file_from_namelist(nml=nml)
+                digest = hashlib.sha256(equilibrium.read_bytes()).hexdigest()
+                for key in ("EQUILIBRIUMFILE", "FORT996BOOZER_FILE", "JGBOOZER_FILE", "JGBOOZER_FILE_NONSTELSYM"):
+                    if key in geom:
+                        geom[key] = digest
+        return old.groups == new.groups and old.indexed == new.indexed
+    except (OSError, KeyError, TypeError, ValueError, AttributeError):
+        return False
+
+
 def run_dkx(
     *,
     input_namelist: Path,
@@ -81,6 +107,13 @@ def run_dkx(
         compute_solution = rhs_mode == 1
 
     if ensure_equilibrium:
+        if effective_equilibrium_file(geom_params=nml.group("geometryParameters")) is not None:
+            source = _resolve_equilibrium_file_from_namelist(nml=nml)
+            local = input_namelist.parent / source.name
+            if local.exists() and local.resolve() != source.resolve() and local.read_bytes() != source.read_bytes():
+                raise RuntimeError(
+                    f"Conflicting localized equilibrium {local}; preserve it and use a fresh run directory."
+                )
         localize_equilibrium_file_in_place(input_namelist=input_namelist, overwrite=False)
 
     if verbose:

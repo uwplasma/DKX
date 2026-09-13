@@ -51,17 +51,26 @@ print ("Here are the "+str(len(generalErs))+" values we will use for this quanti
 print (generalErs)
 
 directories = [varName+"{:.4g}".format(generalEr) for generalEr in generalErs]
-generalErs_copy = list(generalErs)
-directories_copy = list(directories)
+# Construct requested decks before deciding whether an existing point matches.
+source_path = Path(filename).resolve()
+point_inputs = []
+for value in generalErs:
+    lines = []
+    for line in inputFile:
+        if namelistLineContains(line, varName):
+            continue
+        if line.strip().find("&physicsParameters") == 0:
+            line += "  "+varName+" = "+str(value)+" ! Set by sfincsScan_2.\n"
+        lines.append(line)
+    point_inputs.append("".join(lines))
 
-# See if any runs with the same description already exist.
-# This happens if you re-run sfincsScan more than once in the same directory.
-for i in range(len(generalErs_copy)):
-    directory = directories_copy[i]
-    if scan_point_complete(directory):
-        print ("Directory "+directory+" has complete output; skipping this run.")
-        generalErs.remove(generalErs_copy[i])
-        directories.remove(directory)
+pending = []
+for directory, text in zip(directories, point_inputs):
+    if scan_point_complete(directory, input_text=text, source_path=source_path):
+        print("Directory "+directory+" has complete output for this input; skipping this run.")
+    else:
+        pending.append((directory, text))
+directories = [directory for directory, _ in pending]
 
 print ()
 print ("Here are the directories that will be created:")
@@ -80,13 +89,12 @@ if waitBeforeSubmitting:
 
 print ("launching runs...")
 
-scan_progress = start_scan_progress(total_runs=len(generalErs), label=this_filename)
+scan_progress = start_scan_progress(total_runs=len(pending), label=this_filename)
 prev_dir = None
-for runNum in range(len(generalErs)):
-    directory = directories[runNum]
+for runNum, (directory, text) in enumerate(pending):
     run_started_at = note_scan_run_start(progress=scan_progress, run_index=runNum+1, directory=directory)
 
-    if scan_point_complete(directory):
+    if scan_point_complete(directory, input_text=text, source_path=source_path):
         continue
     # Retry incomplete points in place, preserving their previous attempt first.
     os.makedirs(directory, exist_ok=True)
@@ -94,24 +102,8 @@ for runNum in range(len(generalErs)):
     current_dir = Path(directory).resolve()
     configure_krylov_recycle(prev_dir, current_dir)
 
-    # Now copy the input.namelist file:
-
-    #################################################
-
-    input_lines = []
-    for line in inputFile:
-        if namelistLineContains(line,varName):
-##            line = "  "+varName+" = "+str(Ers[runNum])+" ! Set by sfincsScan_2.\n" 
-            continue
-
-        if line.strip().find("&physicsParameters") == 0 :
-            line += "  "+varName+" = "+str(generalErs[runNum])+" ! Set by sfincsScan_2.\n"
-        input_lines.append(line)
-
-    #################################################
-
     input_path = current_dir / filename
-    input_path.write_text("".join(input_lines))
+    input_path.write_text(text)
     # One point that will not solve must not discard the rest of the scan.
     point_ok = run_scan_point(
         input_namelist=input_path,
