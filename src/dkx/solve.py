@@ -2075,12 +2075,13 @@ def _solve_tier2(
         precond, precond_t = build_tier2_preconditioner(
             op, preconditioner, drop_l_coupling=drop_l_coupling_in_precond
         )
-        # The preconditioner closure captures the async coarse block-Thomas
-        # factorization; force it to complete (a zero probe) so the "build"
-        # timing is real compute, not JAX dispatch latency.  Skipped under
-        # jit/grad tracing, where block_until_ready is a no-op on tracers and
-        # the probe would only add dead nodes to the trace.
-        if not traced:
+        # Force asynchronous construction to complete so the "build" timing is
+        # real compute, not JAX dispatch latency.  The coarse routes synchronize
+        # on their own factors; a zero probe there compiled and discarded an
+        # extra application.  Skipped under jit/grad tracing, where
+        # block_until_ready is a no-op on tracers and the probe would only add
+        # dead nodes to the trace.
+        if not traced and preconditioner not in ("coarse", "coarse_triangle"):
             jax.block_until_ready(
                 precond(jnp.zeros((op.total_size,), dtype=jnp.float64))
             )

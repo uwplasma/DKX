@@ -1185,6 +1185,7 @@ def build_coarse_preconditioner(
     # (tests/test_magnetic_drift_diagonal.py).
     drift_parts = op.magnetic_drift_diagonal_parts()
     c0 = op._fs_average_factor().reshape(-1)
+    factors = None  # the one-shot checkpointed route keeps none
 
     if _coarse_bands_fit(op):
         blocks = stripped.to_block_tridiagonal()  # (L, S, X, TZ, TZ)
@@ -1335,6 +1336,11 @@ def build_coarse_preconditioner(
                 return jax.jit(apply)
 
         a_inv, a_inv_t = _a_inv(False), _a_inv(True)
+    if factors is not None and not _any_traced(op):
+        # Finish the asynchronously dispatched factorization here, so a caller's
+        # build timing is the elimination rather than dispatch latency, without
+        # compiling and discarding an extra application to find out.
+        jax.block_until_ready(factors)
     if op.include_phi1:
         # Phi1-augmented operator: the border is the whole quasineutrality block
         # ``[Phi1(theta,zeta) | lambda | sources]`` with a NONZERO border-border
@@ -1349,11 +1355,59 @@ def build_coarse_preconditioner(
         # Jacobian JVP, so only the f-block is approximated (GCROT corrects it).
         b_cols, c_rows, d_block = _materialize_full_border(op)
         precond = schur_projected_precond(a_inv, b_cols, c_rows, d_block=d_block)
-        precond_t = schur_projected_precond(a_inv_t, c_rows.T, b_cols.T, d_block=d_block.T)
+        precond_t = _lazy_projected_precond(
+            op, a_inv_t, c_rows.T, b_cols.T, d_block=d_block.T
+        )
         return precond, precond_t
     if op.extra_size == 0:
         return a_inv, a_inv_t
     b_cols, c_rows = _materialize_borders(op)
     precond = schur_projected_precond(a_inv, b_cols, c_rows)
-    precond_t = schur_projected_precond(a_inv_t, c_rows.T, b_cols.T)
+    precond_t = _lazy_projected_precond(op, a_inv_t, c_rows.T, b_cols.T)
     return precond, precond_t
+
+
+def _any_traced(*trees: object) -> bool:
+    return any(
+        isinstance(leaf, jax.core.Tracer) for leaf in jax.tree_util.tree_leaves(trees)
+    )
+
+
+def _lazy_projected_precond(
+    op: KineticOperator,
+    a_inv: Callable[[jnp.ndarray], jnp.ndarray],
+    b_cols: jnp.ndarray,
+    c_rows: jnp.ndarray,
+    d_block: jnp.ndarray | None = None,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """``schur_projected_precond``, built on its first application.
+
+    The projection applies ``a_inv`` to every border column when it is built. For
+    the transposed preconditioner those are transposed coarse applications that a
+    non-differentiable solve never uses: on the NCSX ``(21, 37, 61, 8)`` baseline
+    about 6 s and a 6.5 GiB transient per build, root retries included
+    (``docs/experiments/2026-09-13-preconditioner-cost-anatomy.md``).
+
+    A first call on a concrete vector builds the projection exactly as the eager
+    route did. A first call inside a trace (a jitted Krylov loop) builds under
+    ``jax.ensure_compile_time_eval``, so the cached projection holds concrete
+    arrays and its border columns are not recomputed on every traced
+    application. An operator or border that is itself traced (jit over operator
+    leaves) is built eagerly, as before, so no tracer is cached beyond its trace.
+    """
+    if _any_traced(op, a_inv, b_cols, c_rows, d_block):
+        return schur_projected_precond(a_inv, b_cols, c_rows, d_block=d_block)
+    built: list[Callable[[jnp.ndarray], jnp.ndarray]] = []
+
+    def precond_t(r: jnp.ndarray) -> jnp.ndarray:
+        if not built:
+            if isinstance(r, jax.core.Tracer):
+                with jax.ensure_compile_time_eval():
+                    built.append(
+                        schur_projected_precond(a_inv, b_cols, c_rows, d_block=d_block)
+                    )
+            else:
+                built.append(schur_projected_precond(a_inv, b_cols, c_rows, d_block=d_block))
+        return built[0](r)
+
+    return precond_t
