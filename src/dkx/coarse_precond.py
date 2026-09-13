@@ -13,8 +13,10 @@ it.  What differs between the three routes below is only where the blocks are
 kept.
 
 **Dense bands.**  Factor the pinned generated rows once, inside one compiled
-computation, and keep both off-diagonal bands beside the Schur LU.  Fastest to
-apply and the default wherever the bands fit.
+computation, and keep both off-diagonal bands beside the Schur LU.  Only the
+rows each subsystem's ``Nxi_for_x`` keeps are factored and stored; the truncated
+rows are an uncoupled ``(1 + floor) I`` and are applied as exactly that.  Fastest
+to apply and the default wherever the bands fit.
 
 **Reusable factors, Schur LU only.**  ``solvax.direct.block_thomas_factor_fn``
 with ``store_offdiagonals=False`` eliminates the same pinned chain from the
@@ -69,6 +71,7 @@ _configure_runtime()
 import jax
 import jax.numpy as jnp
 import numpy as np
+from jax.scipy.linalg import lu_factor, lu_solve
 
 # solvax is a core dependency (installed automatically with dkx), but keep this
 # module importable without it and raise a clear error on first use so broken or
@@ -135,8 +138,10 @@ def coarse_preconditioner_band_bytes(op: KineticOperator) -> float:
     """Bytes the ``"coarse"`` Krylov preconditioner allocates for its bands.
 
     Three dense ``(Ntheta*Nzeta)`` blocks per ``(species, x, L)``: the Schur LU and
-    the two off-diagonal bands the dense route retains, pivots aside.  This is an
-    exact allocation size, not an estimate.
+    the two off-diagonal bands the dense route retains, pivots aside.  Exact for an
+    untruncated deck.  With an ``Nxi_for_x`` ramp the route stores only the active
+    rows (:func:`_coarse_row_layout`), so this bounds it from above and the guard
+    built on it stays conservative.
     """
     n_s, n_x, n_xi, n_t, n_z = op.f_shape
     return 3.0 * n_s * n_x * n_xi * (n_t * n_z) ** 2 * 8.0
@@ -776,7 +781,7 @@ def _coarse_generated_block_data(
     the generators on the far side of a jit boundary can pass these across as
     arguments and rebuild them there with :func:`_coarse_pinned_block_fns`.
     ``subs`` is one tuple per subsystem, or with ``stacked`` one tuple of arrays
-    with a leading subsystem axis, the form :func:`_factor_coarse_chains` maps over.
+    with a leading subsystem axis, the form :func:`_factor_coarse_rows` takes.
 
     ``band``, the ``l = 0`` defect and the mean diagonal come from
     :func:`_coarse_row_stats`, streamed off the unregularized generator.
@@ -823,54 +828,77 @@ def _coarse_generated_block_data(
     return (subs if stacked else list(zip(*subs))), floor, gamma
 
 
-def _coarse_chain_layout(op: KineticOperator) -> tuple[tuple[int, tuple[int, ...]], ...]:
-    """``(rows, subsystems)`` groups: the chains the dense route factors.
+def _coarse_row_layout(op: KineticOperator) -> tuple[tuple[int, ...], tuple[int, ...]]:
+    """``(order, counts)``: which subsystems the dense route factors at each Legendre row.
 
-    One rectangular chain of ``Nxi`` rows for every subsystem ``b = s * n_x + x``.
+    Subsystem ``b = s * n_x + x`` keeps rows ``l < Nxi_for_x[x]``, and never fewer
+    than one, because the ``l = 0`` pin is not masked.  Past that cut the mask zeroes
+    both off-diagonal blocks on either side, and the diagonal is ``(1 + floor) I``,
+    so those rows are an uncoupled scaled identity that needs no factor.
+
+    ``order`` lists the subsystems longest chain first (stably), so the ``counts[l]``
+    subsystems active at row ``l`` are ``order[:counts[l]]``: every row's set is a
+    prefix of the row before it, and the coupling between rows ``l`` and ``l + 1``
+    pairs the first ``counts[l + 1]`` entries of each.  A traced ``n_xi_for_x`` has
+    no static lengths and keeps the full rectangle.
     """
-    return ((op.n_xi, tuple(range(op.n_species * op.n_x))),)
+    batch = op.n_species * op.n_x
+    if isinstance(op.n_xi_for_x, jax.core.Tracer):
+        return tuple(range(batch)), (batch,) * op.n_xi
+    keep = [min(max(int(n), 1), op.n_xi) for n in np.asarray(op.n_xi_for_x)]
+    length = [keep[b % op.n_x] for b in range(batch)]
+    order = tuple(sorted(range(batch), key=lambda b: -length[b]))
+    counts = tuple(sum(n > ell for n in length) for ell in range(max(length)))
+    return order, counts
 
 
 @functools.partial(
-    jax.jit, static_argnames=("n_xi", "layout", "drop_l_coupling", "factor_dtype")
+    jax.jit, static_argnames=("n_xi", "rows", "drop_l_coupling", "factor_dtype")
 )
-def _factor_coarse_chains(
-    coef, subs, floor, gamma, *, n_xi: int, layout: tuple, drop_l_coupling: bool,
+def _factor_coarse_rows(
+    coef, subs, floor, gamma, *, n_xi: int, rows: tuple, drop_l_coupling: bool,
     factor_dtype=None,
 ):  # fmt: skip
-    """Factor every active chain straight from the pinned generator, as one XLA computation.
+    """Block-Thomas elimination of every active row, one Legendre row at a time.
 
-    No band exists before elimination: ``block_thomas_factor_fn`` evaluates each
-    row once and stores it beside its Schur LU, so the retained state is three
-    ``m x m`` blocks per row plus pivots, and the working set is one
-    subsystem's chain, because ``lax.map`` runs the subsystems of a group in turn.
-    The generator arrays are arguments, never closures, so none becomes a captured
-    constant (tests/test_coarse_precond_constants.py).  Returns one stacked
-    ``BlockTridiagFactors`` per group of :func:`_coarse_chain_layout`.
+    Row ``l`` generates the blocks of its ``counts[l]`` active subsystems together,
+    subtracts the Schur coupling of the ``counts[l + 1]`` that continue to row
+    ``l + 1``, and factors them in one batched LU: the recurrence
+    ``solvax.direct.block_thomas_factor_fn`` runs per chain, batched across chains.
+    No band exists before elimination, the retained state is three ``m x m`` blocks
+    per active row plus pivots, and the working set is one row's blocks.  The
+    generator arrays are arguments, never closures, so none becomes a captured
+    constant (tests/test_coarse_precond_constants.py).  Returns, per row,
+    ``(delta_lu, delta_piv, lower, upper)`` with a leading ``counts[l]`` axis.
 
     Rows are generated in float64 and only then cast to ``factor_dtype``, so the
     pins and the floor, scaled against band magnitudes, stay at full precision.
     """
+    order, counts = rows
+    take = functools.partial(jnp.take, indices=jnp.asarray(order), axis=0)
+    subs, floor, gamma = jax.tree_util.tree_map(take, (subs, floor, gamma))
+    low = jnp.float64 if factor_dtype is None else factor_dtype
 
-    def factor(n_active, data):
-        sub, fl, ga = data
-        rows = _coarse_subsystem_block_fn(
+    def row_blocks(sub, fl, ga, ell):
+        generate = _coarse_subsystem_block_fn(
             coef, n_xi, sub, drop_l_coupling=drop_l_coupling, floor=fl, gamma=ga
         )
-        if factor_dtype is not None and factor_dtype != jnp.float64:
-            generated = rows
+        return tuple(a.astype(low) for a in generate(ell))
 
-            def rows(j):
-                return tuple(a.astype(factor_dtype) for a in generated(j))
-
-        return block_thomas_factor_fn(rows, n_active)
-
-    chains = []
-    for n_active, members in layout:
-        take = functools.partial(jnp.take, indices=jnp.asarray(members), axis=0)
-        data = jax.tree_util.tree_map(take, (subs, floor, gamma))
-        chains.append(jax.lax.map(functools.partial(factor, n_active), data))
-    return tuple(chains)
+    factors: list = [None] * len(counts)
+    for ell in reversed(range(len(counts))):
+        c = counts[ell]
+        head = (tuple(a[:c] for a in subs), floor[:c], gamma[:c])
+        lower, diag, upper = jax.vmap(row_blocks, in_axes=(0, 0, 0, None))(
+            *head, jnp.asarray(ell, dtype=jnp.int32)
+        )
+        if ell + 1 < len(counts):
+            n = counts[ell + 1]
+            lu, piv, lower_next, _ = factors[ell + 1]
+            solved = jax.vmap(lambda a, q, b: lu_solve((a, q), b))(lu, piv, lower_next)
+            diag = jnp.concatenate([diag[:n] - upper[:n] @ solved, diag[n:]])
+        factors[ell] = (*jax.vmap(lu_factor)(diag), lower, upper)
+    return tuple(factors)
 
 
 
@@ -891,19 +919,58 @@ _DROPPED_F_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
-@functools.partial(jax.jit, static_argnames=("transpose", "layout"))
-def _apply_dense_coarse_factors(factors, floor, rhs, *, transpose, layout):
-    """Fuse every chain's substitutions; dynamic factors reuse compilation across builds."""
-    m = factors[0].delta_piv.shape[-1]
+@functools.partial(jax.jit, static_argnames=("transpose", "rows"))
+def _apply_dense_coarse_factors(factors, floor, rhs, *, transpose, rows):
+    """Both block-Thomas sweeps over Legendre rows, each row one batched solve.
+
+    The substitutions of ``solvax.direct.block_thomas_solve``, run row by row across
+    every chain active at that row instead of chain by chain, so the kernels
+    launched per application scale with the longest chain and each covers the
+    largest batch.  A truncated row is ``(1 + floor) I`` with no coupling in or
+    out, so dividing it is what the substitution through it computes; the division
+    runs at the factors' precision, as that substitution's triangular solve would.
+    Dynamic factors reuse compilation across builds.
+    """
+    order, counts = rows
+    m = factors[0][1].shape[-1]
     g = rhs.reshape(floor.shape[0], -1, m)
-    out = jnp.zeros_like(g)
-    solve = functools.partial(block_thomas_solve, transpose=transpose)
-    for chain, (n_active, members) in zip(factors, layout, strict=True):
-        take = jnp.asarray(members, dtype=jnp.int32)
-        # Unique, sorted rows: the only scatter ``jax.linear_transpose`` accepts.
-        out = out.at[take, :n_active].set(
-            jax.vmap(solve)(chain, g[take, :n_active]), indices_are_sorted=True, unique_indices=True
+    low = factors[0][0].dtype
+    out = (g.astype(low) / (1.0 + floor).astype(low)[:, None, None]).astype(g.dtype)
+    work = jnp.result_type(g, factors[0][2])
+    trans = 1 if transpose else 0
+
+    def tsolve(lu, piv, v):
+        return jax.vmap(lambda a, q, b: lu_solve((a, q), b.astype(low), trans=trans).astype(work))(
+            lu, piv, v
         )
+
+    def couple(block, v):
+        # ``v @ block`` is ``block^T v`` without a transposed operand, whose fusion
+        # with the product XLA reorders differently inside and outside a jit.
+        return jax.vmap(lambda b, x: x @ b if transpose else b @ x)(block, v)
+
+    rows_b = np.concatenate([np.asarray(order[:c]) for c in counts])
+    rows_l = np.concatenate([np.full(c, ell) for ell, c in enumerate(counts)])
+    starts = np.cumsum((0, *counts))
+    packed = g[rows_b, rows_l]
+    sigma: list = [None] * len(counts)
+    for ell in reversed(range(len(counts))):
+        s = packed[starts[ell] : starts[ell + 1]]
+        if ell + 1 < len(counts):
+            n = counts[ell + 1]
+            lu, piv, lower_next, _ = factors[ell + 1]
+            down = lower_next if transpose else factors[ell][3][:n]
+            s = jnp.concatenate([s[:n] - couple(down, tsolve(lu, piv, sigma[ell + 1])), s[n:]])
+        sigma[ell] = s
+    solution: list = []
+    for ell, (lu, piv, lower, _) in enumerate(factors):
+        s = sigma[ell]
+        if ell > 0:
+            up = factors[ell - 1][3][: counts[ell]] if transpose else lower
+            s = s - couple(up, solution[-1][: counts[ell]])
+        solution.append(tsolve(lu, piv, s))
+    # Unique rows: the only scatter ``jax.linear_transpose`` accepts.
+    out = out.at[rows_b, rows_l].set(jnp.concatenate(solution), unique_indices=True)
     return out.reshape(rhs.shape)
 
 
@@ -1095,7 +1162,7 @@ def build_coarse_preconditioner(
 
     Three routes to the same inverse, chosen by what fits (module docstring).  The
     default factors the pinned rows once and keeps all three dense
-    ``(Ntheta*Nzeta)`` bands of every chain, which is what makes the
+    ``(Ntheta*Nzeta)`` bands of every active chain, which is what makes the
     preconditioner cheap to apply.  Where they exceed
     RAM (:func:`_coarse_bands_fit`; 42.9-53.3 GB on five upstream decks) the same
     pinned operator is eliminated from the generated rows of
@@ -1162,10 +1229,10 @@ def build_coarse_preconditioner(
 
     if _coarse_bands_fit(op):
         # Rows go straight from the generator into the elimination, so no band is
-        # materialized first.
-        layout = _coarse_chain_layout(op)
-        factors = _factor_coarse_chains(
-            coef, subs, floor, gamma, n_xi=n_xi, layout=layout,
+        # materialized first, and only the rows each chain keeps are stored.
+        rows = _coarse_row_layout(op)
+        factors = _factor_coarse_rows(
+            coef, subs, floor, gamma, n_xi=n_xi, rows=rows,
             drop_l_coupling=bool(drop_l_coupling), factor_dtype=_coarse_factor_dtype(),
         )  # fmt: skip
 
@@ -1183,7 +1250,7 @@ def build_coarse_preconditioner(
 
         def _a_inv(transpose: bool) -> Callable[[jnp.ndarray], jnp.ndarray]:
             apply = functools.partial(
-                _apply_dense_coarse_factors, factors, floor, transpose=transpose, layout=layout
+                _apply_dense_coarse_factors, factors, floor, transpose=transpose, rows=rows
             )
 
             def apply_triangular(v: jnp.ndarray) -> jnp.ndarray:

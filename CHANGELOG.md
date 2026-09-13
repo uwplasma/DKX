@@ -38,9 +38,14 @@ deferred until the maintainer's important-goal and verification requirements are
   applications per build; the preconditioner maps are unchanged.
 - Factor the dense coarse preconditioner straight from its pinned row generator
   inside one compiled computation, so no band is materialized before
-  elimination. The map is unchanged: the f-block inverse agrees with the
-  reusable Schur-LU route to rounding and GCROT iteration counts are identical
-  (`tests/test_coarse_ragged_chains.py`).
+  elimination, and store only the rows each subsystem's `Nxi_for_x` keeps. The
+  elimination and both substitution sweeps run one Legendre row at a time,
+  batched over the subsystems active at that row, so the kernels launched per
+  application scale with the longest chain. The truncated rows are an uncoupled
+  `(1 + floor) I` and are applied as such. The map is unchanged: the f-block
+  inverse agrees with the reusable Schur-LU route to rounding, GCROT iteration
+  counts are identical, and the band guard is left as it was, conservative for
+  ramped decks (`tests/test_coarse_ragged_chains.py`).
 
 - Preserve independent-device batch sharding through JIT and gradients, including
   uneven batches (#179). Each complete system still resides on one device.
