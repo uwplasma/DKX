@@ -8,6 +8,11 @@ deferred until the maintainer's important-goal and verification requirements are
 
 ### Correctness and differentiation
 
+- Add the opt-in `SfincsMatrixThreshold` parity switch, which reproduces SFINCS
+  v3's `1d-12` matrix sparsification on the Fokker-Planck operator. It accounts
+  for a 12-19% bootstrap-current gap on a hot-electron HSX-like deck; the
+  default keeps every entry.
+
 - Add opt-in bounded GMRES reuse to the host ambipolar root, with one cold retry
   after failed admission and independent final acceptance. Keep retry policy out
   of root differentiation.
