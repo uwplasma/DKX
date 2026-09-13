@@ -28,10 +28,13 @@ dependencies = [
   "rich>=13.0",
   # solvax (PyPI) owns the structured linear-algebra solver routes (block-Thomas
   # elimination, recycled GCROT, implicit differentiation) that every canonical
-  # solve uses; it is a core dependency, not optional. 0.19.0 is the floor:
-  # the opt-in bounded Legendre-tail evidence uses the selected-tail generated
-  # block solve and exact selected-head reuse introduced in that release.
-  "solvax>=0.19.0",
+  # solve uses; it is a core dependency, not optional. 0.21.0 is the floor:
+  # its bordered preconditioner applies the coarse inverse once per Krylov
+  # iteration instead of twice (SOLVAX #101), and every published DKX Krylov
+  # timing since 2026-09-12 was measured with that behaviour. 0.19.0 added the
+  # selected-tail generated block solve and exact selected-head reuse used by the
+  # opt-in bounded Legendre-tail evidence.
+  "solvax>=0.21.0",
 ]
 
 [project.optional-dependencies]
