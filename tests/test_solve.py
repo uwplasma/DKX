@@ -1014,7 +1014,8 @@ FP_CS1_ER_UNIFORM_TEXT = """
 
 
 def _tier2_grad_vs_fd(
-    op0: KineticOperator, *, tol: float = 1e-10, seed: int = 11, **solve_kw
+    op0: KineticOperator, *, tol: float = 1e-10, fd_tol: float = 1e-12, seed: int = 11,
+    **solve_kw,
 ) -> tuple[float, float, SolveResult]:
     """``jax.grad`` through the differentiable recycled Krylov solve vs central FD.
 
@@ -1023,6 +1024,13 @@ def _tier2_grad_vs_fd(
     the same function).  The cotangent is a fixed pseudo-random vector — a
     generic linear functional, the hardest case for the adjoint solve and the
     one a composed objective actually produces.
+
+    The gradient is taken at ``tol``; the two finite-difference solves use the
+    tighter ``fd_tol``.  A central difference with step ``1e-5`` divides each
+    solve's error by ``2e-5``, so at ``tol = 1e-10`` the reference alone is
+    uncertain at the ``1e-5`` level these tests assert (measured 9e-6 locally
+    and 2.1e-5 in CI on ``fp_1species_FPCollisions_noEr_tiny_cs4``); at
+    ``1e-12`` it is 9e-10.
     """
     mask = op0.active_dof_mask()
     w = jnp.asarray(np.random.default_rng(seed).standard_normal(op0.total_size))
@@ -1033,7 +1041,7 @@ def _tier2_grad_vs_fd(
     def loss(scale: jnp.ndarray, differentiable: bool = True) -> jnp.ndarray:
         op = replace(op0, t_hat=op0.t_hat * scale)
         result = solve(
-            op, op.rhs(), method="gmres", tol=tol,
+            op, op.rhs(), method="gmres", tol=tol if differentiable else fd_tol,
             differentiable=differentiable, **solve_kw,
         )
         if differentiable:
