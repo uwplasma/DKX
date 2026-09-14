@@ -115,3 +115,16 @@ disabled (rebuild with `threshholdForInclusion` lowered or the
 the finding upstream; add an `E_*` diagnostic to results so scans can be
 plotted against the resonance parameter; and treat resolution ladders near
 `E_* ≳ 1/3` as mandatory in `Nx` and `Nxi` for both fluxes and current.
+
+## Follow-up: SFINCS with the threshold disabled (2026-09-14)
+
+The same two decks were solved with SFINCS v3 (`8df5453`) built twice on macOS arm64 (PETSc 3.20.2, MUMPS 5.6.2, MPICH 4.3): once as released and once with `threshholdForInclusion = 0d0`. Both used one MPI rank and the refined-reference solver options, a MUMPS direct solve with GMRES refinement to `rtol = 1e-10`, and reached relative true residuals ≤ 2.5e-12. This MUMPS build segfaults in symbolic factorization with its default ordering on these decks, so every run adds `-mat_mumps_icntl_7 0` (AMD ordering).
+
+| Point | SFINCS, threshold `1d-12` | Relative to the refined reference | SFINCS, threshold `0` | Relative to DKX |
+| --- | ---: | ---: | ---: | ---: |
+| A | 1.36166376e-2 | 2.1e-9 | 1.10337063e-2 | 6.6e-11 |
+| B | −3.56737204e-2 | 8.7e-9 | −3.14056428e-2 | 1.4e-11 |
+
+The released build reproduces the refined reference to 1e-8, so the toolchain does not change the answer. With the threshold at zero, SFINCS and DKX agree to 7e-11 or better. This confirms from the SFINCS side what the column comparison above showed from the DKX side. Keeping the small entries adds about 2% Jacobian nonzeros (2,142,315 → 2,188,845 at A) at unchanged solve time (165 → 167 s).
+
+The fix is proposed upstream as [landreman/sfincs#27](https://github.com/landreman/sfincs/pull/27): `threshholdForInclusion = 0d0`, so every use skips only exact zeros. Records are outside Git in `dkx-review-evidence-20260913/sfincs_threshold_2026-09-14/`.
