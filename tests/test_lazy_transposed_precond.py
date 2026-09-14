@@ -105,4 +105,9 @@ def test_traced_operator_leaves_still_build_the_transpose():
     # Tracing the whole elimination lets XLA fuse it differently from the eager
     # build, which moves the last digits of this near-singular chain: 6e-11 on
     # this deck with the eager transpose as well, and 7e-12 on the forward map.
-    np.testing.assert_allclose(np.asarray(traced), np.asarray(eager), rtol=1e-9, atol=0.0)
+    # Per entry the rounding is unbounded where an entry is tiny: with one BLAS
+    # thread a CI runner moved one of 2804 entries by 3.7e-12, 1.2e-9 of its
+    # value. A dropped term or a wrong transpose moves the whole vector, so the
+    # comparison is on the norm.
+    traced, eager = np.asarray(traced), np.asarray(eager)
+    assert np.linalg.norm(traced - eager) <= 1e-9 * np.linalg.norm(eager)
