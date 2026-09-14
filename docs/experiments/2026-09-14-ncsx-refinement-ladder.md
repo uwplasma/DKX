@@ -43,7 +43,7 @@ Owner: independent review. Budget: one afternoon of office CPU.
 
 - **Acceptance.** Every point converged with original residual between 4.9e-11 and 9.8e-11.
 - **Reproduction.** The baseline, speed9, zeta43 and pitch81 reproduce the archived moments to 1.6e-14, 2.0e-14, 2.2e-14 and 3.1e-14 relative. So #231, #233, SOLVAX 0.21.0 and the BLAS setting did not change an answer.
-- **Cost.** The archived runs of the same three grids took 128–278 s at 15.7–16.2 GiB. Here they take 70–86 s at 8.8–10.1 GiB. theta25, previously refused for memory, completes at 10.4 GiB.
+- **Cost.** The archived runs of the same three grids took 128–278 s at 15.7–16.2 GiB. Here they take 70–86 s at 8.8–10.1 GiB. theta25, which the memory gate had refused, completes at 10.4 GiB.
 
 **Poloidal ladder** `Ntheta = 21 → 25 → 29` (GCI):
 
