@@ -450,16 +450,50 @@ def test_a_stalled_coarse_pair_cannot_give_an_order() -> None:
     assert not cv.richardson_uncertainty(1.0, 1.0, 1.1, sizes=(10, 20, 40)).usable
 
 
-def test_an_implausibly_high_order_is_refused() -> None:
-    """An order far above any discretization in DKX means the ladder is not
-    measuring convergence, so no bar is reported."""
-    # exact=0 keeps the differences representable: with an offset of 3.0 an
-    # order-20 ladder underflows to three identical doubles, which is a
-    # converged observable rather than a high-order one.
-    f = manufactured(20.0, exact=0.0)
-    assert not cv.richardson_uncertainty(
-        f(10), f(20), f(40), sizes=(10, 20, 40), max_order=12.0
-    ).usable
+def test_a_ladder_faster_than_max_order_reports_its_last_difference() -> None:
+    """Spectral directions converge faster than any order a ladder resolves.
+
+    Such a ladder carries no order and no extrapolation, but it is monotone, so
+    it is not refused: the bar is three times the last relative difference.
+    Sizes 2, 3, 4 keep an order-20 ladder representable next to ``exact = 1``.
+    """
+    f = manufactured(20.0, exact=1.0)
+    estimate = cv.richardson_uncertainty(f(2), f(3), f(4), sizes=(2, 3, 4), max_order=12.0)
+    assert estimate.status == cv.FASTER_THAN_MAX_ORDER and estimate.usable
+    assert np.isnan(estimate.order)
+    assert float(np.ravel(estimate.extrapolated)[0]) == f(4)
+    assert estimate.relative == pytest.approx(3.0 * abs(f(4) - f(3)) / f(4), rel=1e-12)
+    # The bar must cover the finest solution's actual error.
+    assert estimate.relative >= abs(f(4) - 1.0) / f(4)
+
+
+def test_the_ncsx_pitch_ladder_gets_the_last_difference_bar() -> None:
+    """Heat flux relative to ``Nxi = 61`` on the NCSX rungs ``81, 101, 121``.
+
+    From ``docs/experiments/2026-09-14-ncsx-refinement-ladder.md``: ``R = 0.048``
+    and an apparent order of 17, which the power-law check alone refused.
+    """
+    ladder = (1.0 - 7.33e-3, 1.0 - 7.75e-3, 1.0 - 7.77e-3)
+    estimate = cv.richardson_uncertainty(*ladder, sizes=(81, 101, 121))
+    assert estimate.status == cv.FASTER_THAN_MAX_ORDER and estimate.usable
+    assert estimate.relative == pytest.approx(3.0 * 2e-5 / ladder[2], rel=1e-9)
+
+
+def test_a_larger_safety_factor_also_widens_the_last_difference_bar() -> None:
+    f = manufactured(20.0, exact=1.0)
+    estimate = cv.richardson_uncertainty(f(2), f(3), f(4), sizes=(2, 3, 4), safety=5.0)
+    assert estimate.relative == pytest.approx(5.0 * abs(f(4) - f(3)) / f(4), rel=1e-12)
+
+
+def test_an_asymptotic_entry_and_a_faster_entry_share_one_bar() -> None:
+    """Mixed entries report the faster status, the algebraic order and the worst bar."""
+    slow = manufactured(2.0)
+    # R = 1e-4 < 2**-12 at a refinement ratio of 2: faster than max_order = 12.
+    fast = {10: 1.0 + 1e-2, 20: 1.0 + 1e-6, 40: 1.0 + 1e-10}
+    ladder = [np.array([slow(n), fast[n]]) for n in (10, 20, 40)]
+    estimate = cv.richardson_uncertainty(*ladder, sizes=(10, 20, 40))
+    assert estimate.status == cv.FASTER_THAN_MAX_ORDER and estimate.usable
+    assert estimate.order == pytest.approx(2.0, abs=1e-9)
 
 
 def test_a_nonpositive_safety_factor_is_refused() -> None:
