@@ -52,6 +52,9 @@ deferred until the maintainer's important-goal and verification requirements are
 - Reuse generated SOLVAX Schur factors within supported PAS solve executions for
   multiple right-hand sides, transpose solves and refinement, subject to memory
   policy (#188). Persistent reuse across changed operators is still future work.
+- Require SOLVAX 0.21.0, whose bordered Krylov preconditioner applies the coarse
+  inverse once per iteration instead of twice, matching the release used for
+  recent DKX timings.
 
 ### Benchmarking and development
 
