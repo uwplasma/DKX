@@ -67,6 +67,15 @@ Owner: independent review. Budget: one afternoon of office CPU.
 | pitch121 | (21, 37, 121, 8) | 53 | 135 s | 14.3 GiB | +8.53e-5 | −7.47e-3 | −7.77e-3 |
 | speed10 | (21, 37, 61, 10) | 77 | 93 s | 9.7 GiB | −8.60e-4 | −4.24e-4 | −1.96e-4 |
 
+**Ladder, third pass: speed** (same host and settings, same code `2b7641d` with SOLVAX 0.21.0, relative differences against the baseline):
+
+| Point | Grid (θ, ζ, ξ, x) | Iterations | Solve call | Peak RSS | Δ flow | Δ particle flux | Δ heat flux |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| speed11 | (21, 37, 61, 11) | 82 | 100 s | 10.7 GiB | −1.342e-3 | −1.18e-4 | −5.62e-5 |
+| speed12 | (21, 37, 61, 12) | 90 | 138 s | 11.6 GiB | −1.348e-3 | −2.40e-4 | −1.67e-4 |
+
+Both points converged, with original residuals of 9.6e-11 and 5.9e-11.
+
 **Per axis**, from three-rung ladders. `R` is the ratio of successive differences; `richardson_uncertainty` supports an estimate only for monotone convergence (`0 < R < 1`) at an observed order ≤ 12.
 
 | Axis (rungs) | Flow | Particle flux | Heat flux |
@@ -75,10 +84,13 @@ Owner: independent review. Budget: one afternoon of office CPU.
 | ζ (37, 43, 49) | monotone (R = 0.21) but order ≈ 12.1 > 12, refused; last change −4.7e-5 | asymptotic, GCI 8.8e-4 | asymptotic, GCI 9.1e-4 |
 | ξ (81, 101, 121) | monotone (R = 0.011), order ≈ 25, refused; last change 1.2e-8 | monotone (R = 0.042), order ≈ 18, refused; last change −1.4e-5 | monotone (R = 0.050), order ≈ 17, refused; last change −2.1e-5 |
 | x (8, 9, 10) | oscillatory (R = −0.49), spread 1.7e-3 | divergent (R = 2.0), spread 4.2e-4 | oscillatory (R = −9.6), spread 2.2e-4 |
+| x (10, 11, 12) | monotone (R = 0.013), faster than order 12; last change −6.4e-6 | oscillatory (R = −0.40) | oscillatory (R = −0.79) |
+| x (8, 10, 12) | asymptotic, GCI 1.6e-3 | oscillatory (R = −0.43) | oscillatory (R = −0.15) |
 
 - **Pitch (ξ) is converged by `Nxi = 101`.** The Legendre expansion converges faster than any power, so the helper's power-law order check refuses it. The last difference (≤ 2e-5 in the fluxes) is the honest estimate.
-- **Baseline pitch error.** Relative to the converged pitch value, the baseline grid `Nxi = 61` understates both fluxes by 0.75%. This is the largest single discretization error at the baseline.
-- **Speed (x).** It is not in the asymptotic range at `Nx = 8–10`, and its spread dominates the flow uncertainty (1.7e-3).
+- **Baseline pitch error.** Refining pitch lowers both fluxes: at `Nxi = 121` the particle flux is 0.75% and the heat flux 0.78% below the baseline. So the baseline grid `Nxi = 61` overstates both fluxes by about 0.75%. This is the largest single discretization error at the baseline.
+- **Speed (x), flow.** The flow settles by `Nx = 11`: `Nx = 11` and `12` differ by 6e-6 relative, and both sit 1.35e-3 below the baseline, so the baseline understates |flow| by 0.135%. The even ladder `(8, 10, 12)` is asymptotic with GCI 1.6e-3. `(10, 11, 12)` also counts as faster than order 12, but `(9, 10, 11)` oscillates, so the close agreement of the last two rungs may be partly accidental. The even-ladder bar is the one to quote.
+- **Speed (x), fluxes.** They alternate with the parity of `Nx` at a few 1e-4 through `Nx = 12`, and no speed ladder supports an estimate. Their spread over `Nx = 8–12` is 4.2e-4 for the particle flux and 2.2e-4 for the heat flux, well below the pitch error.
 
 **Baseline algebraic error estimates.** One primal solve at `(21,37,61,8)`: 53 iterations, residual 8.54e-11. For each moment, a transposed GCROT used the transposed preconditioner from that solve. The audit took 4 min in total, peaking at 9.7 GiB; the campaign had been gated at 42 GiB available.
 
@@ -92,17 +104,24 @@ Owner: independent review. Budget: one afternoon of office CPU.
 - **Stability.** Tightening the adjoint from 1e-10 to 1e-12 changes each correction by less than 3e-11 of itself. The flow adjoint at 1e-12 stopped at its restart cap with residual 6.4e-12; that residual passes the audit and gives the same estimate.
 - **Interpretation.** These are estimates, not bounds. The algebraic error of every reported moment is about 1e-10 relative: eight orders of magnitude below the discretization differences above.
 
-Scripts, records and logs are kept outside Git in `dkx-review-evidence-20260913/q9/` (`q9_ladder.py`, `q9_adjoints.py`, `run_ladder.sh`, `run_ladder2.sh`, `run_adjoints.sh`, `*.json`, `run.log`).
+Scripts, records and logs are kept outside Git in `dkx-review-evidence-20260913/q9/` (`q9_ladder.py`, `q9_adjoints.py`, `run_ladder.sh`, `run_ladder2.sh`, `run_speed_rungs.sh`, `run_adjoints.sh`, `speed_ladder_analysis.py`, `*.json`, `run.log`, `run_speed.log`).
 
 ## Decision
 
 Continue Phase 1 at a revised reporting grid, and record three follow-ups.
 
-**Error budget.** Algebraic error (≈ 1e-10) is negligible. At the baseline `(21,37,61,8)` the fluxes carry a −0.75% pitch error, +0.37% from ζ, and ≲ 1e-3 from θ and x. The flow carries ≲ 2e-3, dominated by x.
+**Error budget.** The algebraic error (≈ 1e-10) is negligible. The signed changes below are refined value minus baseline, relative to the baseline `(21,37,61,8)`.
 
-**Reporting grid.** For the positioning figure use at least `Nxi = 101` and `Nzeta = 49` for the fluxes, and extend the speed ladder to `Nx = 11, 12` before quoting a flow error bar. Each of these rungs fits in ≤ 17 GiB and runs in ≤ 4 min on four cores.
+| Source | Fluxes | Flow |
+| --- | --- | --- |
+| Pitch | −0.75% (the baseline overstates them) | — |
+| ζ | +0.37% | — |
+| θ | ≲ 7e-4 | — |
+| x | oscillates ≲ 4e-4 | −0.135% (the baseline understates \|flow\|), even-ladder GCI 1.6e-3 |
+
+**Reporting grid.** For the positioning figure use at least `Nxi = 101` and `Nzeta = 49` for the fluxes, and `Nx ≥ 11` for the flow. Each of these rungs fits in ≤ 17 GiB and runs in ≤ 4 min on four cores.
 
 **Follow-ups:**
-1. `richardson_uncertainty` refuses monotone ladders that converge faster than order 12, which is the normal behaviour of the spectral pitch and ζ directions here. It should report the last difference as the estimate in that case, rather than "not in the asymptotic range".
-2. GCROT iterations double from `Ntheta = 21` to 25–33 (53 → 102–114) and reach 137 on the joint grid. The coarse preconditioner's quality versus poloidal resolution needs a diagnosis; this is a performance item, not an accuracy item.
+1. Done in #239. `richardson_uncertainty` reports monotone ladders faster than `max_order` with `max(safety, 3)` times the last difference, instead of refusing them.
+2. Diagnosed in #240 (`2026-09-14-ntheta-iteration-growth.md`). The growth in iterations with `Ntheta` comes from the Fokker–Planck speed coupling the coarse preconditioner drops.
 3. Repeat the ladder on a two-species deck and on the collaborator's HSX-like deck at its resonant `E_*`, where the SFINCS manual expects the speed resolution to matter most.
