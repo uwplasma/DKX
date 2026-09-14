@@ -96,6 +96,7 @@ _configure_runtime()
 import jax.numpy as jnp  # noqa: E402
 
 __all__ = [
+    "E_STAR_TRAJECTORY_AGREEMENT",
     "Regime",
     "RegimeThresholds",
     "ValidityFlag",
@@ -106,6 +107,8 @@ __all__ = [
     "exb_collision_ratio",
     "finite_orbit_width_parameter",
     "local_validity_report",
+    "normalized_radial_electric_field",
+    "normalized_radial_electric_field_of",
     "thermal_gyroradius_hat",
 ]
 
@@ -280,6 +283,67 @@ def drift_resonance_ratio(*, v_e: Any, g_hat: Any, delta: Any) -> jnp.ndarray:
     g_hat = jnp.abs(jnp.asarray(g_hat, dtype=jnp.float64))
     delta = jnp.asarray(delta, dtype=jnp.float64)
     return v_e * g_hat / delta
+
+#: ``|E_*|`` below which the full, partial and DKES trajectory models give nearly
+#: identical results: "below roughly one third of the resonant value" (Landreman,
+#: Smith, Mollén and Helander, Phys. Plasmas 21, 042503 (2014)).  Above it the
+#: SFINCS v3 manual asks for the speed resolution to be raised with ``E_r``.
+E_STAR_TRAJECTORY_AGREEMENT = 1.0 / 3.0
+
+def normalized_radial_electric_field(
+    *,
+    alpha: Any,
+    delta: Any,
+    g_hat: Any,
+    iota: Any,
+    b0_over_bbar: Any,
+    dphi_hat_dpsi_hat: Any,
+    t_hat: Any,
+    m_hat: Any,
+) -> jnp.ndarray:
+    """The full-trajectory ``E_*`` of Landreman et al. (2014), per species.
+
+    ``E_* = c G/(iota v_s B0) dPhi0/dpsi`` with ``v_s = sqrt(2 T_s/m_s)``: the radial
+    electric field over the resonant value, at which the E x B precession cancels
+    parallel streaming for thermal particles of species ``s``.  In SFINCS hat units
+    (``Delta = c mBar vBar/(e BBar RBar)``, ``alpha = e PhiBar/TBar``,
+    ``vBar = sqrt(2 TBar/mBar)``)
+
+        E_* = (alpha Delta / 2) GHat dPhiHat/dpsiHat / (iota B0Hat sqrt(THat_s/mHat_s)).
+
+    Signed; ``|E_*|`` against :data:`E_STAR_TRAJECTORY_AGREEMENT` is the regime
+    test.  This is not the DKES-database ``EStar`` taken by
+    :func:`local_validity_report`.  Pure ``jnp``; differentiable.
+    """
+    alpha = jnp.asarray(alpha, dtype=jnp.float64)
+    delta = jnp.asarray(delta, dtype=jnp.float64)
+    g_hat = jnp.asarray(g_hat, dtype=jnp.float64)
+    iota = jnp.asarray(iota, dtype=jnp.float64)
+    b0 = jnp.asarray(b0_over_bbar, dtype=jnp.float64)
+    dphi = jnp.asarray(dphi_hat_dpsi_hat, dtype=jnp.float64)
+    t_hat = jnp.asarray(t_hat, dtype=jnp.float64)
+    m_hat = jnp.asarray(m_hat, dtype=jnp.float64)
+    return 0.5 * alpha * delta * g_hat * dphi / (iota * b0 * jnp.sqrt(t_hat / m_hat))
+
+def normalized_radial_electric_field_of(operator: Any, geometry: Any) -> jnp.ndarray:
+    """``E_*`` per species for a built operator and its flux-surface geometry.
+
+    Uses the E x B coefficient the kinetic terms multiply
+    (``operator.dphi_hat_dpsi_hat_kinetic``) and the geometry's ``GHat``, ``iota``
+    and ``B0OverBBar``; pass the ``operator`` and ``geometry`` of a
+    :class:`dkx.drift_kinetic.KineticOperatorBuild`.  See
+    :func:`normalized_radial_electric_field`.
+    """
+    return normalized_radial_electric_field(
+        alpha=operator.alpha,
+        delta=operator.delta,
+        g_hat=geometry.g_hat,
+        iota=geometry.iota,
+        b0_over_bbar=geometry.b0_over_bbar,
+        dphi_hat_dpsi_hat=operator.dphi_hat_dpsi_hat_kinetic,
+        t_hat=operator.t_hat,
+        m_hat=operator.m_hat,
+    )
 
 # =============================================================================
 # Regime classification (host-side)
