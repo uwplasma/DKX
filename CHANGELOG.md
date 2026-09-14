@@ -19,6 +19,10 @@ deferred until the maintainer's important-goal and verification requirements are
 - Correct the ambipolar teaching case to quasineutral analytic W7-X with full-FP
   collisions. JIT the geometry-optimization value/gradient, check its original
   kinetic residual and retain a three-step finite-difference window.
+- Report monotone refinement ladders that converge faster than `max_order`, as
+  spectral pitch and angle directions do, with three times the last difference
+  as the grid uncertainty instead of refusing them. Diverging and oscillating
+  ladders are still refused.
 
 - Keep discrete pitch layouts static under JIT; refresh full-FP density kernels
   and opt-in temperature-dependent coefficients for prepared profile derivatives

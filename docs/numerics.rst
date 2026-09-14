@@ -456,3 +456,16 @@ regression pins that. A refusal propagates: ``ConvergenceReport.worst_grid_uncer
 is infinite when any requested estimate could not be made, because an estimate
 that could not be made is not a small one. Arrays are compared entrywise and
 reduced to the worst entry, so one settled surface cannot certify a moving one.
+
+A monotone ladder whose observed order exceeds ``max_order`` (12 by default) is
+reported, not refused. Spectral directions converge this way: on the NCSX pitch
+rungs ``Nxi = 81, 101, 121`` the moments show apparent orders of 17–25
+(``docs/experiments/2026-09-14-ncsx-refinement-ladder.md``). No order can be read
+from such a ladder, so nothing is extrapolated. The bar is
+:math:`\max(F_s, 3)\,|d_{21}|/|f_1|`, Roache's factor of 3 for a study whose order
+is not established, and the status is ``FASTER_THAN_MAX_ORDER``. For equal ratios
+an order above ``max_order`` means :math:`R < r_{21}^{-p_\max}`, so the error left
+in the fine value, :math:`|d_{21}|\,R/(1-R)`, stays below :math:`3|d_{21}|` whenever
+:math:`r_{21}^{\,p_\max} \ge 4/3`. A ladder whose two finer rungs agree by
+accident cannot be told apart from a spectral one by three rungs; the joint
+refinement in ``converge_case`` is the cross-check.
