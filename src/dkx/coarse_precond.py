@@ -12,8 +12,11 @@ over ``(species, x)``, so one block-Thomas factorization per subsystem inverts
 it.  What differs between the three routes below is only where the blocks are
 kept.
 
-**Dense bands.**  Materialize the three dense ``(Ntheta*Nzeta)`` bands and
-factor them once.  Fastest to apply and the default wherever the bands fit.
+**Dense bands.**  Factor the pinned generated rows once, inside one compiled
+computation, and keep both off-diagonal bands beside the Schur LU.  Only the
+rows each subsystem's ``Nxi_for_x`` keeps are factored and stored; the truncated
+rows are an uncoupled ``(1 + floor) I`` and are applied as exactly that.  Fastest
+to apply and the default wherever the bands fit.
 
 **Reusable factors, Schur LU only.**  ``solvax.direct.block_thomas_factor_fn``
 with ``store_offdiagonals=False`` eliminates the same pinned chain from the
@@ -68,6 +71,7 @@ _configure_runtime()
 import jax
 import jax.numpy as jnp
 import numpy as np
+from jax.scipy.linalg import lu_factor, lu_solve
 
 # solvax is a core dependency (installed automatically with dkx), but keep this
 # module importable without it and raise a clear error on first use so broken or
@@ -77,7 +81,6 @@ import numpy as np
 try:
     from solvax.direct import (
         block_thomas_checkpointed_fn,
-        block_thomas_factor,
         block_thomas_factor_fn,
         block_thomas_solve,
     )
@@ -86,7 +89,6 @@ try:
     _SOLVAX_IMPORT_ERROR: BaseException | None = None
 except ImportError as _solvax_exc:  # pragma: no cover - exercised by env, not tests
     block_thomas_checkpointed_fn = None  # type: ignore[assignment]
-    block_thomas_factor = None  # type: ignore[assignment]
     block_thomas_factor_fn = None  # type: ignore[assignment]
     block_thomas_solve = None  # type: ignore[assignment]
     schur_projected_precond = None  # type: ignore[assignment]
@@ -135,9 +137,11 @@ _COARSE_FACTOR_DTYPE_ENV = "DKX_COARSE_FACTOR_DTYPE"
 def coarse_preconditioner_band_bytes(op: KineticOperator) -> float:
     """Bytes the ``"coarse"`` Krylov preconditioner allocates for its bands.
 
-    Three dense ``(Ntheta*Nzeta)`` blocks per ``(species, x, L)``.  This is an
-    exact allocation size, not an estimate: the arrays are materialized before
-    any factorization runs.
+    Three dense ``(Ntheta*Nzeta)`` blocks per ``(species, x, L)``: the Schur LU and
+    the two off-diagonal bands the dense route retains, pivots aside.  Exact for an
+    untruncated deck.  With an ``Nxi_for_x`` ramp the route stores only the active
+    rows (:func:`_coarse_row_layout`), so this bounds it from above and the guard
+    built on it stays conservative.
     """
     n_s, n_x, n_xi, n_t, n_z = op.f_shape
     return 3.0 * n_s * n_x * n_xi * (n_t * n_z) ** 2 * 8.0
@@ -405,33 +409,6 @@ def _coarse_generated_fallback_message(op: KineticOperator) -> str:
 #: Only the L-diagonal half is carried --- the L+-2 half would make the chain
 #: pentadiagonal, which block-Thomas cannot factor.
 _COARSE_DRIFT_MAX_L = 2
-
-def _drift_diagonal_block(
-    parts: dict[str, jnp.ndarray] | None, x2: jnp.ndarray, s: int | jnp.ndarray,
-    ell: jnp.ndarray, n_tz: int,
-) -> jnp.ndarray | None:  # fmt: skip
-    """The magnetic-drift contribution to one coarse diagonal block ``D_(s,x,L)``.
-
-    ``parts`` is :meth:`KineticOperator.magnetic_drift_diagonal_parts`, whose six
-    matrices do not depend on ``L``; the ``L`` dependence is the scalar
-    coefficients, so a block costs a few scaled adds rather than a stored array.
-    Rows above :data:`_COARSE_DRIFT_MAX_L` get zero, which is what Fortran's
-    ``preconditioner_magnetic_drifts_max_L`` does.
-
-    ``ell`` may be traced, so the row cutoff is a ``where`` and not a branch.
-    """
-    if parts is None:
-        return None
-    c = KineticOperator.magnetic_drift_diagonal_coefficients(ell)
-    keep = jnp.where(ell <= _COARSE_DRIFT_MAX_L, 1.0, 0.0)
-    block = (
-        c["c1"] * (parts["mt1"][s] + parts["mz1"][s])
-        + c["c2"] * (parts["mt2"][s] + parts["mz2"][s])
-        + c["c3"] * (parts["mt3"][s] + parts["mz3"][s])
-    )
-    idx = jnp.arange(n_tz)
-    block = block.at[idx, idx].add(c["xi"] * parts["xi"][s])
-    return (keep * x2) * block
 
 def _truncated_coefficients(op: KineticOperator) -> dict[str, jnp.ndarray]:
     """Compact per-term coefficient matrices for the on-the-fly Legendre blocks.
@@ -771,18 +748,43 @@ def _coarse_pinned_block_fns(
         for b, sub in enumerate(subs)
     ]
 
+@functools.partial(jax.jit, static_argnames=("n_xi", "drop_l_coupling"))
+def _coarse_row_stats(coef, subs, *, n_xi: int, drop_l_coupling: bool):
+    """``(band, l = 0 defect, diagonals)`` of every unregularized chain.
+
+    Reductions over ``L``, not storage: one live block per step, and ``lax.map``
+    rather than ``vmap`` so a step holds one subsystem's blocks, not the batch's.
+    """
+
+    def stats(sub):
+        block_fn = _coarse_subsystem_block_fn(coef, n_xi, sub, drop_l_coupling=drop_l_coupling)
+
+        def step(worst, j):
+            lo, di, up = block_fn(j)
+            return jnp.maximum(worst, jnp.max(jnp.abs(jnp.stack([lo, di, up])))), jnp.diagonal(di)
+
+        start = jnp.asarray(0.0, dtype=jnp.float64)
+        band, diagonals = jax.lax.scan(step, start, jnp.arange(n_xi, dtype=jnp.int32))
+        diag0 = block_fn(jnp.asarray(0, dtype=jnp.int32))[1]
+        return band, jnp.max(jnp.abs(jnp.sum(diag0, axis=-1))), diagonals
+
+    return jax.lax.map(stats, subs)
+
 def _coarse_generated_block_data(
     op: KineticOperator, coef: dict[str, jnp.ndarray], mask: jnp.ndarray,
     coll_diag: jnp.ndarray | None, c0: jnp.ndarray, drop_l_coupling: bool,
+    *, stacked: bool = False,
 ) -> tuple[list[tuple[jnp.ndarray, ...]], jnp.ndarray, jnp.ndarray]:  # fmt: skip
     """``(subs, floor, gamma)`` --- every array the pinned row generators close over.
 
     Returned as data rather than baked into closures so that a caller who needs
     the generators on the far side of a jit boundary can pass these across as
     arguments and rebuild them there with :func:`_coarse_pinned_block_fns`.
+    ``subs`` is one tuple per subsystem, or with ``stacked`` one tuple of arrays
+    with a leading subsystem axis, the form :func:`_factor_coarse_rows` takes.
 
-    ``band``, the ``l = 0`` defect and the mean diagonal are reductions over ``L``, not
-    storage, so they stream one live block at a time off the unregularized generator.
+    ``band``, the ``l = 0`` defect and the mean diagonal come from
+    :func:`_coarse_row_stats`, streamed off the unregularized generator.
     """
     n_s, n_x, n_xi = op.n_species, op.n_x, op.n_xi
     batch = n_s * n_x
@@ -805,113 +807,98 @@ def _coarse_generated_block_data(
         d2 = x2 * rep(parts["mt2"] + parts["mz2"])
         d3 = x2 * rep(parts["mt3"] + parts["mz3"])
         dxi = x2[:, :, 0] * rep(parts["xi"])
-    subs = list(zip(
+    subs = (
         jnp.repeat(coef["stream"], n_x, axis=0), jnp.repeat(coef["mirror"], n_x, axis=0),
         coef["pas"].reshape(batch, n_xi), jnp.tile(op.x, n_s), mask_b,
         zeros if coll_diag is None else coll_diag.reshape(batch, n_xi),
         d1, d2, d3, dxi,
-    ))  # fmt: skip
-    rows = functools.partial(_coarse_subsystem_block_fn, coef, n_xi,
-                             drop_l_coupling=drop_l_coupling)  # fmt: skip
-
-    def stats(block_fn):
-        def step(worst, j):
-            lo, di, up = block_fn(j)
-            return jnp.maximum(worst, jnp.max(jnp.abs(jnp.stack([lo, di, up])))), jnp.diagonal(di)
-
-        start = jnp.asarray(0.0, dtype=jnp.float64)
-        band, diagonals = jax.lax.scan(step, start, jnp.arange(n_xi, dtype=jnp.int32))
-        diag0 = block_fn(jnp.asarray(0, dtype=jnp.int32))[1]
-        return band, jnp.max(jnp.abs(jnp.sum(diag0, axis=-1))), diagonals
-
-    raw = [stats(rows(sub)) for sub in subs]
-    band = jnp.stack([s[0] for s in raw])  # (B,)
+    )  # fmt: skip
+    band, defect, diagonals = _coarse_row_stats(
+        coef, subs, n_xi=n_xi, drop_l_coupling=bool(drop_l_coupling)
+    )  # (B,), (B,), (B, L, TZ)
     band = jnp.where(band > 0.0, band, 1.0)
     floor = _COARSE_DIAGONAL_FLOOR * band  # (B,)
-    diagonals = jnp.stack([s[2] for s in raw])  # (B, L, TZ)
     scale = jnp.mean(
         jnp.abs(diagonals + floor[:, None, None] + (1.0 - mask_b)[:, :, None]), axis=(1, 2)
     )
     gamma = _l0_pin_gamma(
-        jnp.stack([s[1] for s in raw]).reshape(n_s, n_x), band.reshape(n_s, n_x),
+        defect.reshape(n_s, n_x), band.reshape(n_s, n_x),
         jnp.where(scale > 0.0, scale, 1.0).reshape(n_s, n_x), c0,
     ).reshape(-1)  # fmt: skip
-    return subs, floor, gamma
+    return (subs if stacked else list(zip(*subs))), floor, gamma
+
+
+def _coarse_row_layout(op: KineticOperator) -> tuple[tuple[int, ...], tuple[int, ...]]:
+    """``(order, counts)``: which subsystems the dense route factors at each Legendre row.
+
+    Subsystem ``b = s * n_x + x`` keeps rows ``l < Nxi_for_x[x]``, and never fewer
+    than one, because the ``l = 0`` pin is not masked.  Past that cut the mask zeroes
+    both off-diagonal blocks on either side, and the diagonal is ``(1 + floor) I``,
+    so those rows are an uncoupled scaled identity that needs no factor.
+
+    ``order`` lists the subsystems longest chain first (stably), so the ``counts[l]``
+    subsystems active at row ``l`` are ``order[:counts[l]]``: every row's set is a
+    prefix of the row before it, and the coupling between rows ``l`` and ``l + 1``
+    pairs the first ``counts[l + 1]`` entries of each.  A traced ``n_xi_for_x`` has
+    no static lengths and keeps the full rectangle.
+    """
+    batch = op.n_species * op.n_x
+    if isinstance(op.n_xi_for_x, jax.core.Tracer):
+        return tuple(range(batch)), (batch,) * op.n_xi
+    keep = [min(max(int(n), 1), op.n_xi) for n in np.asarray(op.n_xi_for_x)]
+    length = [keep[b % op.n_x] for b in range(batch)]
+    order = tuple(sorted(range(batch), key=lambda b: -length[b]))
+    counts = tuple(sum(n > ell for n in length) for ell in range(max(length)))
+    return order, counts
 
 
 @functools.partial(
-    jax.jit,
-    static_argnames=(
-        "n_tz", "n_xi", "n_x", "n_s", "batch", "drop_l_coupling", "factor_dtype",
-    ),
+    jax.jit, static_argnames=("n_xi", "rows", "drop_l_coupling", "factor_dtype")
 )
-def _assemble_and_factor_bands(
-    blocks,
-    coll_diag,
-    drift,
-    c0,
-    mask,
-    *,
-    n_tz: int,
-    n_xi: int,
-    n_x: int,
-    n_s: int,
-    batch: int,
-    drop_l_coupling: bool,
+def _factor_coarse_rows(
+    coef, subs, floor, gamma, *, n_xi: int, rows: tuple, drop_l_coupling: bool,
     factor_dtype=None,
-):
-    """Assemble the coarse bands and factor them, as one XLA computation.
+):  # fmt: skip
+    """Block-Thomas elimination of every active row, one Legendre row at a time.
 
-    Every step here -- three transposes, the collision and drift adds, three
-    band-magnitude reductions, the floor, the mask pin and the rank-one l=0 pin
-    -- produces a full-band intermediate. Run eagerly, each is a separate live
-    device buffer, and the peak reaches ~18 times one band where four would do.
-    Under one jit, XLA's buffer assignment reuses them: measured 2.90 GB to
-    0.75 GB on a 78,628-unknown Fokker-Planck deck, and faster as well.
+    Row ``l`` generates the blocks of its ``counts[l]`` active subsystems together,
+    subtracts the Schur coupling of the ``counts[l + 1]`` that continue to row
+    ``l + 1``, and factors them in one batched LU: the recurrence
+    ``solvax.direct.block_thomas_factor_fn`` runs per chain, batched across chains.
+    No band exists before elimination, the retained state is three ``m x m`` blocks
+    per active row plus pivots, and the working set is one row's blocks.  The
+    generator arrays are arguments, never closures, so none becomes a captured
+    constant (tests/test_coarse_precond_constants.py).  Returns, per row,
+    ``(delta_lu, delta_piv, lower, upper)`` with a leading ``counts[l]`` axis.
 
-    Jitted at module level rather than as a local closure, so repeated builds at
-    the same shapes hit the compilation cache instead of lowering again.
+    Rows are generated in float64 and only then cast to ``factor_dtype``, so the
+    pins and the floor, scaled against band magnitudes, stay at full precision.
     """
-    lower, diag, upper = (jnp.transpose(a, (1, 2, 0, 3, 4)) for a in blocks)
-    eye = jnp.eye(n_tz, dtype=jnp.float64)
-    if coll_diag is not None:
-        diag = diag + coll_diag[:, :, :, None, None] * eye[None, None, None, :, :]
-    if drift is not None:
-        diag = diag + drift
-    if drop_l_coupling:
-        lower, upper = jnp.zeros_like(lower), jnp.zeros_like(upper)
+    order, counts = rows
+    take = functools.partial(jnp.take, indices=jnp.asarray(order), axis=0)
+    subs, floor, gamma = jax.tree_util.tree_map(take, (subs, floor, gamma))
+    low = jnp.float64 if factor_dtype is None else factor_dtype
 
-    band = jnp.maximum(
-        jnp.max(jnp.abs(diag), axis=(2, 3, 4)),
-        jnp.maximum(
-            jnp.max(jnp.abs(lower), axis=(2, 3, 4)), jnp.max(jnp.abs(upper), axis=(2, 3, 4))
-        ),
-    )
-    band = jnp.where(band > 0.0, band, 1.0)
-    l0_defect = jnp.max(jnp.abs(jnp.sum(diag[:, :, 0], axis=-1)), axis=-1)
-    floor = _COARSE_DIAGONAL_FLOOR * band
-    diag = diag + floor[:, :, None, None, None] * eye[None, None, None, :, :]
-    diag = diag + (1.0 - mask)[None, :, :, None, None] * eye[None, None, None, :, :]
+    def row_blocks(sub, fl, ga, ell):
+        generate = _coarse_subsystem_block_fn(
+            coef, n_xi, sub, drop_l_coupling=drop_l_coupling, floor=fl, gamma=ga
+        )
+        return tuple(a.astype(low) for a in generate(ell))
 
-    d4 = diag.reshape(batch, n_xi, n_tz, n_tz)
-    scale = jnp.mean(jnp.abs(jnp.diagonal(d4, axis1=2, axis2=3)), axis=(1, 2))
-    scale = jnp.where(scale > 0.0, scale, 1.0)
-    ones = jnp.ones((n_tz,), dtype=jnp.float64)
-    gamma = _l0_pin_gamma(l0_defect, band, scale.reshape(n_s, n_x), c0).reshape(-1)
-    d4 = d4.at[:, 0].add(gamma[:, None, None] * jnp.outer(ones, c0)[None, :, :])
-
-    lower = lower.reshape(batch, n_xi, n_tz, n_tz)
-    upper = upper.reshape(batch, n_xi, n_tz, n_tz)
-    if factor_dtype is not None and factor_dtype != jnp.float64:
-        # The bands are assembled in float64 and only the factored working
-        # precision drops: a float32 Schur LU is exact enough to precondition
-        # with, and the surrounding solve stays float64. Casting here rather
-        # than earlier keeps the pins and the invertibility floor -- which are
-        # scaled against band magnitudes -- computed at full precision.
-        lower = lower.astype(factor_dtype)
-        d4 = d4.astype(factor_dtype)
-        upper = upper.astype(factor_dtype)
-    return jax.vmap(block_thomas_factor)(lower, d4, upper)
+    factors: list = [None] * len(counts)
+    for ell in reversed(range(len(counts))):
+        c = counts[ell]
+        head = (tuple(a[:c] for a in subs), floor[:c], gamma[:c])
+        lower, diag, upper = jax.vmap(row_blocks, in_axes=(0, 0, 0, None))(
+            *head, jnp.asarray(ell, dtype=jnp.int32)
+        )
+        if ell + 1 < len(counts):
+            n = counts[ell + 1]
+            lu, piv, lower_next, _ = factors[ell + 1]
+            solved = jax.vmap(lambda a, q, b: lu_solve((a, q), b))(lu, piv, lower_next)
+            diag = jnp.concatenate([diag[:n] - upper[:n] @ solved, diag[n:]])
+        factors[ell] = (*jax.vmap(lu_factor)(diag), lower, upper)
+    return tuple(factors)
 
 
 
@@ -932,11 +919,59 @@ _DROPPED_F_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
-@functools.partial(jax.jit, static_argnames=("transpose",))
-def _apply_dense_coarse_factors(factors, rhs, *, transpose):
-    """Fuse substitutions; dynamic factors reuse compilation across builds."""
-    solve = functools.partial(block_thomas_solve, transpose=transpose)
-    return jax.vmap(solve)(factors, rhs.reshape(factors[0].shape[:-1])).reshape(rhs.shape)
+@functools.partial(jax.jit, static_argnames=("transpose", "rows"))
+def _apply_dense_coarse_factors(factors, floor, rhs, *, transpose, rows):
+    """Both block-Thomas sweeps over Legendre rows, each row one batched solve.
+
+    The substitutions of ``solvax.direct.block_thomas_solve``, run row by row across
+    every chain active at that row instead of chain by chain, so the kernels
+    launched per application scale with the longest chain and each covers the
+    largest batch.  A truncated row is ``(1 + floor) I`` with no coupling in or
+    out, so dividing it is what the substitution through it computes; the division
+    runs at the factors' precision, as that substitution's triangular solve would.
+    Dynamic factors reuse compilation across builds.
+    """
+    order, counts = rows
+    m = factors[0][1].shape[-1]
+    g = rhs.reshape(floor.shape[0], -1, m)
+    low = factors[0][0].dtype
+    out = (g.astype(low) / (1.0 + floor).astype(low)[:, None, None]).astype(g.dtype)
+    work = jnp.result_type(g, factors[0][2])
+    trans = 1 if transpose else 0
+
+    def tsolve(lu, piv, v):
+        return jax.vmap(lambda a, q, b: lu_solve((a, q), b.astype(low), trans=trans).astype(work))(
+            lu, piv, v
+        )
+
+    def couple(block, v):
+        # ``v @ block`` is ``block^T v`` without a transposed operand, whose fusion
+        # with the product XLA reorders differently inside and outside a jit.
+        return jax.vmap(lambda b, x: x @ b if transpose else b @ x)(block, v)
+
+    rows_b = np.concatenate([np.asarray(order[:c]) for c in counts])
+    rows_l = np.concatenate([np.full(c, ell) for ell, c in enumerate(counts)])
+    starts = np.cumsum((0, *counts))
+    packed = g[rows_b, rows_l]
+    sigma: list = [None] * len(counts)
+    for ell in reversed(range(len(counts))):
+        s = packed[starts[ell] : starts[ell + 1]]
+        if ell + 1 < len(counts):
+            n = counts[ell + 1]
+            lu, piv, lower_next, _ = factors[ell + 1]
+            down = lower_next if transpose else factors[ell][3][:n]
+            s = jnp.concatenate([s[:n] - couple(down, tsolve(lu, piv, sigma[ell + 1])), s[n:]])
+        sigma[ell] = s
+    solution: list = []
+    for ell, (lu, piv, lower, _) in enumerate(factors):
+        s = sigma[ell]
+        if ell > 0:
+            up = factors[ell - 1][3][: counts[ell]] if transpose else lower
+            s = s - couple(up, solution[-1][: counts[ell]])
+        solution.append(tsolve(lu, piv, s))
+    # Unique rows: the only scatter ``jax.linear_transpose`` accepts.
+    out = out.at[rows_b, rows_l].set(jnp.concatenate(solution), unique_indices=True)
+    return out.reshape(rhs.shape)
 
 
 def _collision_diagonal_only(coll):
@@ -1126,8 +1161,9 @@ def build_coarse_preconditioner(
     converges in far fewer iterations (:func:`dkx.phi1.solve_phi1`).
 
     Three routes to the same inverse, chosen by what fits (module docstring).  The
-    default materializes the three dense ``(Ntheta*Nzeta)`` bands and factors them
-    once, which is what makes the preconditioner cheap to apply.  Where they exceed
+    default factors the pinned rows once and keeps all three dense
+    ``(Ntheta*Nzeta)`` bands of every active chain, which is what makes the
+    preconditioner cheap to apply.  Where they exceed
     RAM (:func:`_coarse_bands_fit`; 42.9-53.3 GB on five upstream decks) the same
     pinned operator is eliminated from the generated rows of
     :func:`_coarse_subsystem_block_fn` instead --- keeping only the Schur LU
@@ -1178,37 +1214,27 @@ def build_coarse_preconditioner(
             coll_diag = _dense_collision_diagonal(coll.mat) * mask[None, :, :]
     if op.fp_phi1 is not None:
         coll_diag = _collision_phi1_diagonal(op) * mask[None, :, :]
-    # The magnetic drifts SFINCS keeps in its preconditioner and DKX used to drop.
-    # Only the L-diagonal half fits a block-tridiagonal chain, and it is enough:
-    # on a reduced-resolution W7-X deck with the production physics (194,404
-    # unknowns) this is 5838 -> 2163 GCROT iterations and 900 s -> 337 s
-    # (tests/test_magnetic_drift_diagonal.py).
-    drift_parts = op.magnetic_drift_diagonal_parts()
+    # Every route eliminates the same pinned rows, generated from these arrays.
+    # They also carry the magnetic drifts SFINCS keeps in its preconditioner, the
+    # L-diagonal half only: on a reduced-resolution W7-X deck with the production
+    # physics (194,404 unknowns) that is 5838 -> 2163 GCROT iterations and
+    # 900 s -> 337 s (tests/test_magnetic_drift_diagonal.py).
     c0 = op._fs_average_factor().reshape(-1)
+    stripped._check_block_extraction_supported()
+    coef = _truncated_coefficients(stripped)
+    subs, floor, gamma = _coarse_generated_block_data(
+        op, coef, mask, coll_diag, c0, drop_l_coupling, stacked=True
+    )
+    factors = None  # the one-shot checkpointed route keeps none
 
     if _coarse_bands_fit(op):
-        blocks = stripped.to_block_tridiagonal()  # (L, S, X, TZ, TZ)
-        drift = None
-        if drift_parts is not None:
-            x2 = op.x * op.x
-            drift = jnp.stack([
-                jnp.stack([
-                    jnp.stack([
-                        _drift_diagonal_block(drift_parts, x2[ix], sp,
-                                              jnp.asarray(ell, jnp.float64), n_tz)
-                        for ell in range(n_xi)
-                    ])
-                    for ix in range(n_x)
-                ])
-                for sp in range(n_s)
-            ])  # (S, X, L, TZ, TZ)
-
-        factors = _assemble_and_factor_bands(
-            blocks, coll_diag, drift, c0, mask,
-            n_tz=n_tz, n_xi=n_xi, n_x=n_x, n_s=n_s, batch=batch,
-            drop_l_coupling=bool(drop_l_coupling),
-            factor_dtype=_coarse_factor_dtype(),
-        )
+        # Rows go straight from the generator into the elimination, so no band is
+        # materialized first, and only the rows each chain keeps are stored.
+        rows = _coarse_row_layout(op)
+        factors = _factor_coarse_rows(
+            coef, subs, floor, gamma, n_xi=n_xi, rows=rows,
+            drop_l_coupling=bool(drop_l_coupling), factor_dtype=_coarse_factor_dtype(),
+        )  # fmt: skip
 
         upper = (
             _strict_upper_speed_coupling(op, mask) if retain_speed_triangle else None
@@ -1223,7 +1249,9 @@ def build_coarse_preconditioner(
         )
 
         def _a_inv(transpose: bool) -> Callable[[jnp.ndarray], jnp.ndarray]:
-            apply = functools.partial(_apply_dense_coarse_factors, factors, transpose=transpose)
+            apply = functools.partial(
+                _apply_dense_coarse_factors, factors, floor, transpose=transpose, rows=rows
+            )
 
             def apply_triangular(v: jnp.ndarray) -> jnp.ndarray:
                 # M = D + U with D the speed-diagonal blocks already factored and
@@ -1259,11 +1287,7 @@ def build_coarse_preconditioner(
         # pinned chain from generated rows and materialize no band; they differ in
         # what survives the elimination, which is what decides whether the result
         # can be applied tens of times per solve or has to be rebuilt each time.
-        stripped._check_block_extraction_supported()
-        coef = _truncated_coefficients(stripped)
-        gen_data = _coarse_generated_block_data(
-            op, coef, mask, coll_diag, c0, drop_l_coupling
-        )
+        gen_data = (list(zip(*subs)), floor, gamma)
         pinned = _coarse_pinned_block_fns(coef, n_xi, *gen_data, drop_l_coupling)
         reusable = _coarse_factors_fit(op)
         warnings.warn(
@@ -1335,6 +1359,11 @@ def build_coarse_preconditioner(
                 return jax.jit(apply)
 
         a_inv, a_inv_t = _a_inv(False), _a_inv(True)
+    if factors is not None and not _any_traced(op):
+        # Finish the asynchronously dispatched factorization here, so a caller's
+        # build timing is the elimination rather than dispatch latency, without
+        # compiling and discarding an extra application to find out.
+        jax.block_until_ready(factors)
     if op.include_phi1:
         # Phi1-augmented operator: the border is the whole quasineutrality block
         # ``[Phi1(theta,zeta) | lambda | sources]`` with a NONZERO border-border
@@ -1349,11 +1378,59 @@ def build_coarse_preconditioner(
         # Jacobian JVP, so only the f-block is approximated (GCROT corrects it).
         b_cols, c_rows, d_block = _materialize_full_border(op)
         precond = schur_projected_precond(a_inv, b_cols, c_rows, d_block=d_block)
-        precond_t = schur_projected_precond(a_inv_t, c_rows.T, b_cols.T, d_block=d_block.T)
+        precond_t = _lazy_projected_precond(
+            op, a_inv_t, c_rows.T, b_cols.T, d_block=d_block.T
+        )
         return precond, precond_t
     if op.extra_size == 0:
         return a_inv, a_inv_t
     b_cols, c_rows = _materialize_borders(op)
     precond = schur_projected_precond(a_inv, b_cols, c_rows)
-    precond_t = schur_projected_precond(a_inv_t, c_rows.T, b_cols.T)
+    precond_t = _lazy_projected_precond(op, a_inv_t, c_rows.T, b_cols.T)
     return precond, precond_t
+
+
+def _any_traced(*trees: object) -> bool:
+    return any(
+        isinstance(leaf, jax.core.Tracer) for leaf in jax.tree_util.tree_leaves(trees)
+    )
+
+
+def _lazy_projected_precond(
+    op: KineticOperator,
+    a_inv: Callable[[jnp.ndarray], jnp.ndarray],
+    b_cols: jnp.ndarray,
+    c_rows: jnp.ndarray,
+    d_block: jnp.ndarray | None = None,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """``schur_projected_precond``, built on its first application.
+
+    The projection applies ``a_inv`` to every border column when it is built. For
+    the transposed preconditioner those are transposed coarse applications that a
+    non-differentiable solve never uses: on the NCSX ``(21, 37, 61, 8)`` baseline
+    about 6 s and a 6.5 GiB transient per build, root retries included
+    (``docs/experiments/2026-09-13-preconditioner-cost-anatomy.md``).
+
+    A first call on a concrete vector builds the projection exactly as the eager
+    route did. A first call inside a trace (a jitted Krylov loop) builds under
+    ``jax.ensure_compile_time_eval``, so the cached projection holds concrete
+    arrays and its border columns are not recomputed on every traced
+    application. An operator or border that is itself traced (jit over operator
+    leaves) is built eagerly, as before, so no tracer is cached beyond its trace.
+    """
+    if _any_traced(op, a_inv, b_cols, c_rows, d_block):
+        return schur_projected_precond(a_inv, b_cols, c_rows, d_block=d_block)
+    built: list[Callable[[jnp.ndarray], jnp.ndarray]] = []
+
+    def precond_t(r: jnp.ndarray) -> jnp.ndarray:
+        if not built:
+            if isinstance(r, jax.core.Tracer):
+                with jax.ensure_compile_time_eval():
+                    built.append(
+                        schur_projected_precond(a_inv, b_cols, c_rows, d_block=d_block)
+                    )
+            else:
+                built.append(schur_projected_precond(a_inv, b_cols, c_rows, d_block=d_block))
+        return built[0](r)
+
+    return precond_t

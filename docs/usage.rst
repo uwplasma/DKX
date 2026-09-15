@@ -366,14 +366,21 @@ Set these **before** JAX is imported (i.e. before running
 
 - ``DKX_CORES``: solver thread-count knob. ``N`` > 0 pins the XLA host
   threadpool to ``N`` threads (applied as ``NPROC``, the variable XLA reads
-  when its CPU backend initializes) and defaults the host BLAS pools
-  (``OMP_NUM_THREADS``/``OPENBLAS_NUM_THREADS``) to match. ``0`` lets XLA
+  when its CPU backend initializes). ``0`` lets XLA
   size the threadpool itself (full width). When unset, ``dkx`` clamps the
   threadpool to ``min(8, cpu_count)``: the measured optimum is 4-8 threads
   on both 10-core and 36-core hosts, and a full-width pool on a many-core
   box is several times slower than 8 threads (:doc:`performance`). An
   ``NPROC`` already present in the environment takes precedence over the
   clamp (never over an explicit ``DKX_CORES``).
+- Host BLAS pools (``OMP_NUM_THREADS``, ``OPENBLAS_NUM_THREADS``,
+  ``MKL_NUM_THREADS``) default to one thread unless already set. JAX's CPU
+  LAPACK kernels run batches across XLA's threadpool, and a multithreaded BLAS
+  inside each batch element oversubscribes it: on a 36-thread Xeon with
+  ``DKX_CORES=4``, the NCSX ``(21,37,61,8)`` coarse factorization took 93 s
+  with four BLAS threads and 33 s with one, at identical iterations and moments.
+  An unbatched dense direct solve can be faster with more BLAS threads; set the
+  variables explicitly before starting Python for that workload.
 - ``DKX_CPU_DEVICES``: explicit opt-in to force multiple host CPU devices
   (sets ``--xla_force_host_platform_device_count``), for multi-device CPU
   tests and SPMD experiments. Forced host devices share one threadpool, so

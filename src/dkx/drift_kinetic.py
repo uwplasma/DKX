@@ -2540,6 +2540,27 @@ def kinetic_operator_build_from_namelist(nml: Any) -> KineticOperatorBuild:
             strict_parity=strict_parity,
         )
 
+    # &otherNumericalParameters SfincsMatrixThreshold: a dkx parity switch, off by
+    # default.  SFINCS v3 inserts every matrix entry through sparsify.F90, which
+    # skips |value| <= 1d-12; on hot-electron decks that deletes part of the
+    # ion->electron field-particle collision block, and the electron flow and
+    # bootstrap current follow it (docs/experiments/2026-09-13-sfincs-sparsify-
+    # threshold.md).  Applied to the dense Fokker-Planck matrix, where the
+    # difference has been measured; physics results keep every entry.
+    sfincs_threshold = _get_float(other, "SfincsMatrixThreshold", 0.0)
+    if not math.isfinite(sfincs_threshold) or sfincs_threshold < 0.0:
+        raise ValueError(
+            f"SfincsMatrixThreshold must be finite and non-negative, got {sfincs_threshold!r}."
+        )
+    if sfincs_threshold > 0.0:
+        if fp is None:
+            raise ValueError(
+                "SfincsMatrixThreshold applies to collisionOperator=0 without "
+                "includePhi1InCollisionOperator; this deck has no Fokker-Planck "
+                "matrix to threshold."
+            )
+        fp = replace(fp, mat=jnp.where(jnp.abs(fp.mat) > sfincs_threshold, fp.mat, 0.0))
+
     # ---- inductive E_parallel ----
     e_parallel_hat = _get_float(phys, "EParallelHat", 0.0)
     epar_spec_raw = phys.get("EPARALLELHATSPEC", None)

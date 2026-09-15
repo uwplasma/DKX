@@ -109,8 +109,10 @@ class GridUncertainty:
     band on the *discretization* error of the finest solution, not a bound and
     not an algebraic-error estimate (that is
     :func:`dkx.sensitivity.linear_observable_algebraic_error`). It is reported
-    only when the ladder is in the asymptotic range; otherwise ``status`` says
-    why refinement cannot support an estimate and ``relative`` is ``inf``.
+    when the ladder is in the asymptotic range, or converges monotonically faster
+    than any order it can resolve (:data:`FASTER_THAN_MAX_ORDER`); otherwise
+    ``status`` says why refinement cannot support an estimate and ``relative``
+    is ``inf``.
     """
 
     status: str
@@ -120,7 +122,16 @@ class GridUncertainty:
 
     @property
     def usable(self) -> bool:
-        return self.status == "asymptotic" and np.isfinite(self.relative)
+        return self.status in ("asymptotic", FASTER_THAN_MAX_ORDER) and np.isfinite(self.relative)
+
+
+#: Status of a monotone ladder whose observed order exceeds ``max_order``, as
+#: spectral directions give (Legendre pitch, Fourier angles): usable, no order,
+#: no extrapolation, and a bar of ``max(safety, 3)`` times the last difference.
+FASTER_THAN_MAX_ORDER = "monotone, faster than max_order"
+
+#: Roache's safety factor for a study whose order of accuracy is not established.
+_UNRESOLVED_ORDER_SAFETY = 3.0
 
 
 def _observed_order(d21, d32, r21: float, r32: float, *, max_order: float) -> float:
@@ -131,6 +142,7 @@ def _observed_order(d21, d32, r21: float, r32: float, *, max_order: float) -> fl
     ASME V&V 20 does: ``0 < R < 1`` is monotone convergence and is the only case
     that supports an estimate; ``R > 1`` is monotone divergence, the differences
     growing under refinement; ``R < 0`` is oscillatory. Both refusals return NaN.
+    A converging ladder whose order exceeds ``max_order`` returns ``inf``.
 
     For a converging ladder the order solves the fixed point
     ``p = |ln|d32/d21| + q(p)| / ln(r21)`` with
@@ -146,11 +158,11 @@ def _observed_order(d21, d32, r21: float, r32: float, *, max_order: float) -> fl
     s = 1.0
     p = np.log(ratio) / np.log(r21)
     for _ in range(64):
-        # Guards the iterate rather than each intermediate: p outside (0, max_order]
-        # means the ladder implies no usable order, and a nonfinite iterate lands
-        # here too because the comparison is false for NaN.
+        # Guards the iterate rather than each intermediate. p above max_order is
+        # faster than the ladder can resolve; p <= 0 implies no usable order, and a
+        # nonfinite iterate lands there too because both comparisons are false for NaN.
         if not 0.0 < p <= max_order:
-            return float("nan")
+            return float("inf") if p > max_order else float("nan")
         q = np.log((r21**p - s) / (r32**p - s))
         updated = abs(np.log(ratio) + q) / np.log(r21)
         if abs(updated - p) < 1e-10 * max(1.0, abs(p)):
@@ -177,6 +189,15 @@ def richardson_uncertainty(
     the asymptotic range, and extrapolating through it invents accuracy. The
     ``Er = 15`` pitch ladder that reversed the sign of the bootstrap current
     between ``Nxi = 40`` and ``60`` is the case this refusal exists for.
+
+    A monotone ladder whose observed order exceeds ``max_order`` is not refused:
+    spectral directions converge that way (the NCSX pitch rungs ``81, 101, 121``
+    show orders of 17-25). No order can be read from it, so nothing is
+    extrapolated and the bar is ``max(safety, 3)`` times the last relative
+    difference, with status :data:`FASTER_THAN_MAX_ORDER`. For equal ratios an
+    order above ``max_order`` means ``R < r21**-max_order``, and the error left in
+    the fine value, ``|d21| R/(1 - R)``, stays below ``3 |d21|`` whenever
+    ``r21**max_order >= 4/3``.
     """
     values = []
     for value in (coarse, medium, fine):
@@ -201,6 +222,7 @@ def richardson_uncertainty(
 
     worst = 0.0
     orders: list[float] = []
+    faster_than_max_order = False
     extrapolated = np.array(f1, dtype=float, copy=True)
     for index in np.ndindex(f1.shape):
         d21, d32 = float(e21[index]), float(e32[index])
@@ -212,6 +234,10 @@ def richardson_uncertainty(
             return GridUncertainty(
                 "a zero observable has no relative scale", float("nan"), float("inf"))
         order = _observed_order(d21, d32, r21, r32, max_order=max_order)
+        if order == float("inf"):
+            faster_than_max_order = True
+            worst = max(worst, max(safety, _UNRESOLVED_ORDER_SAFETY) * abs(d21 / scale))
+            continue
         if not np.isfinite(order) or order <= 0.0:
             return GridUncertainty(
                 "not in the asymptotic range: the ladder diverges or oscillates",
@@ -222,9 +248,9 @@ def richardson_uncertainty(
         extrapolated[index] = float(f1[index]) + d21 / denominator
         worst = max(worst, safety * abs(d21 / scale) / denominator)
 
-    if not orders:
-        return GridUncertainty("asymptotic", float("nan"), 0.0, extrapolated)
-    return GridUncertainty("asymptotic", float(np.median(orders)), float(worst), extrapolated)
+    status = FASTER_THAN_MAX_ORDER if faster_than_max_order else "asymptotic"
+    order = float(np.median(orders)) if orders else float("nan")
+    return GridUncertainty(status, order, float(worst), extrapolated)
 
 
 def _relative_changes(

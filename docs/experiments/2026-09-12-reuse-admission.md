@@ -247,7 +247,10 @@ DKX residual `1.145e-8` while the tight DKX state has `8.65e-12`.
 Do not promote tiny random-action differences into observable parity for this
 sensitive grid. The second current likewise differs (`-0.0314056428` versus
 `-0.0356737207`); both require operator/observable sensitivity and resolution
-checks before research use.
+checks before research use. The gap is SFINCS v3's `1e-12` matrix sparsification threshold
+(`2026-09-13-sfincs-sparsify-threshold.md`): DKX with that threshold reproduces
+the SFINCS currents, and SFINCS without it matches the tight DKX currents to
+`6.6e-11` and `1.4e-11` relative.
 
 The automatic policy now probes five short cycles, then widens to 100 while
 retaining the same freshly built factors, when the nominal two-basis estimate

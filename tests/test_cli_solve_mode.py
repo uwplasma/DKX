@@ -943,14 +943,16 @@ def test_cmd_compare_h5_prints_failures_and_show_all(monkeypatch, tmp_path: Path
 
 
 def test_apply_cores_setting_pins_threads_and_zero_defers_to_xla(monkeypatch) -> None:
-    for name in ("DKX_CORES", "NPROC", "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
+    for name in ("DKX_CORES", "NPROC", "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
         monkeypatch.delenv(name, raising=False)
 
     cli._apply_cores_setting(4)
     assert os.environ["DKX_CORES"] == "4"
     assert os.environ["NPROC"] == "4"
-    assert os.environ["OMP_NUM_THREADS"] == "4"
-    assert os.environ["OPENBLAS_NUM_THREADS"] == "4"
+    # The threads go to XLA's pool; batched CPU LAPACK runs one BLAS thread each.
+    assert os.environ["OMP_NUM_THREADS"] == "1"
+    assert os.environ["OPENBLAS_NUM_THREADS"] == "1"
+    assert os.environ["MKL_NUM_THREADS"] == "1"
 
     # cores=0 records the "let XLA size the threadpool" preference without
     # pinning anything itself.

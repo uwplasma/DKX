@@ -82,6 +82,13 @@ def _agreement(op: KineticOperator, seed: int = 0) -> float:
 # It is checked below by the well-posed statement instead.
 WELL_CONDITIONED = sorted(set(CASES) - {"er_xdot"})
 
+# ``pas`` floors an ``l = 0`` near-null direction of its principal blocks, and the
+# bordered apply ``x = a_inv(r_x) - a_inv(B) y`` (SOLVAX >= 0.21) cancels up to
+# ~9e5 between its two terms there.  Round-off then reaches 1.4e-8 on some CPUs
+# (3e-9 with the older ``x = a_inv(r_x - B y)``), while a sparse floor 10% too
+# large already moves the map by 3.5e-7.  The other cases agree to 4e-13.
+AGREEMENT_BOUND = {"pas": 1e-7}
+
 
 @pytest.mark.parametrize("case", WELL_CONDITIONED)
 def test_sparse_preconditioner_is_the_same_map_as_the_coarse_one(case: str) -> None:
@@ -91,7 +98,7 @@ def test_sparse_preconditioner_is_the_same_map_as_the_coarse_one(case: str) -> N
     different factorizations of the same matrix; it is tight enough to catch a
     dropped term, a mis-sized floor or a transposed block.
     """
-    assert _agreement(CASES[case]()) < 1e-8
+    assert _agreement(CASES[case]()) < AGREEMENT_BOUND.get(case, 1e-8)
 
 
 # The Phi1 deck's solve is a Newton iteration owned by ``dkx.phi1.solve_phi1``
