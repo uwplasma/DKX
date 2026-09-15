@@ -1,8 +1,15 @@
 Release notes
 =============
 
-Unreleased
-----------
+v2.4.0
+------
+
+The reconciled research plan; bounded solver recovery for unattended scans;
+the row-wise dense coarse preconditioner and the single-thread host BLAS
+default; the opt-in SFINCS matrix-threshold switch; the ``E_*`` resonance
+diagnostic; refinement bars for spectrally converging ladders; and the NCSX and
+HSX-like verification records. ``CHANGELOG.md`` lists each change with its pull
+request. These records do not certify converged production performance.
 
 - Replaced the overlapping example folders with the canonical nine-rung
   ladder under ``examples/01_tokamak_profile`` through

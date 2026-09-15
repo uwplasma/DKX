@@ -1,10 +1,9 @@
 # Changelog
 
-## Unreleased — candidate v2.4.0-rc1
+## v2.4.0 — 2026-09-15
 
-Draft for the integrated #169–#188 stack, #191 and the reconciled #190 plan.
-No release or candidate tag has been created by this change. Release remains
-deferred until the maintainer's important-goal and verification requirements are met.
+The integrated #169–#191 stack, the reconciled #190 plan and the work from the
+2026-09-13 independent review (#229–#246).
 
 ### Correctness and differentiation
 
@@ -88,6 +87,25 @@ deferred until the maintainer's important-goal and verification requirements are
 - Adopt one authoritative figure-first plan, a concise workflow-oriented README,
   grouped documentation and citation metadata (#189, #190). Establish decision
   records and an experiment template in Phase 0.
+- Revise the plan from the 2026-09-13 independent review (#230). Take
+  finite-difference gradient references at `1e-12`, bound the sparse-map `pas`
+  check at `1e-7`, and regenerate `.test_durations` from one complete run on one
+  host so the thirteen coverage shards fit their time cap (#238, #241).
+
+### Research records
+
+- NCSX `(21,37,61,8)` refinement ladder with baseline adjoint estimates, its
+  `Nx = 11, 12` speed rungs, and the cause of GCROT iteration growth with
+  `Ntheta`: the dropped Fokker-Planck speed coupling (#237, #240, #242).
+- SFINCS v3's `1e-12` sparsification threshold explains the 12-19% current gap
+  on the HSX-like deck, confirmed from the SFINCS side and reported upstream as
+  landreman/sfincs#27 (#243).
+- SOLVAX operator couplings in the coarse preconditioner halve its memory but
+  run 3x slower, so the dense route stays; explicit-inverse storage is rejected
+  as not backward stable (#244).
+- The HSX-like deck at resonant `E_*` is resolved in pitch by `Nxi = 120` but
+  not in speed for the ion channel; no bootstrap current or ion flux at its two
+  points is admitted (#245, #246).
 
 These changes do not certify converged production performance, general persistent
 restart reuse, full native Phi1 support or complete equilibrium-boundary optimization.
