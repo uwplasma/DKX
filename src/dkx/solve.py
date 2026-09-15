@@ -1087,38 +1087,11 @@ def _escalate_after_tier2_stall(
     adjoint_residual_factor: float,
     max_dense_size: int,
 ) -> SolveResult:
-    """Work through the remedies a user would otherwise have to know about.
+    """Try alternate preconditioners and a larger iteration budget at fixed physics.
 
-    A stalled Krylov solve is a *preconditioner* problem, not a reason to
-    change solver route, and this is where DKX used to get it backwards: it
-    announced a fall back to the sparse direct host solve, which obtains its
-    matrix by applying the operator to ``n`` identity columns.  At the sizes
-    where recycled Krylov actually stalls that is hopeless -- a 66004-DOF deck
-    needs 66004 operator applications before the factorization even starts --
-    so the guard in :func:`_solve_tier3` refused, and a convergence problem
-    surfaced as a hard crash telling the user to raise ``max_dense_size``.
-    Sampling into CSR (:func:`materialize_csr`) removed the dense ``O(n^2)``
-    intermediate that used to sit on top of that, but not the ``n``
-    applications, so the guard stands and this ladder still ends elsewhere.
-
-    SFINCS Fortran v3 does not have this failure mode, and the reason is worth
-    stating because it dictates the order below.  It assembles the simplified
-    preconditioner matrix *analytically and sparsely*, factorizes it with a
-    sparse direct LU (MUMPS or SuperLU_dist), and preconditions GMRES with
-    that -- so its "direct solve" is a sparse factorization that handles 66004
-    routinely, and GMRES needs few iterations on top of it.  It also retries
-    automatically, doubling the MUMPS working-memory factor on a failed
-    factorization (``solver.F90``: ``mumps_icntl_14 = mumps_icntl_14 * 2``).
-
-    DKX already owns the equivalent of that preconditioner -- ``"sparse"``
-    eliminates in a fill-reducing order and keeps the inverse exact -- and the
-    stall above happened without ever trying it.  So the ladder escalates the
-    preconditioner first, in increasing cost, and only considers the sparse
-    direct route at a size where it can actually run.
-
-    Returns the first converged result, or the best (lowest final residual) if
-    none converges, so a caller that can tolerate a loose solve still gets the
-    best available answer along with an honest ``converged=False``.
+    Return the first converged result. If every iterative attempt fails, use
+    the host direct route only within its size guard; otherwise raise with the
+    best attempted residual. A stall alone does not diagnose its cause.
     """
     attempts: list[tuple[str, SolveResult]] = [
         (f"{preconditioner} preconditioner", stalled)
@@ -1219,29 +1192,16 @@ def _escalate_after_tier2_stall(
         f"the linear solve did not converge at total_size={op.total_size}.\n"
         f"Tried: {'; '.join(label for label, _ in attempts)}.\n"
         f"Best final residual {_residual(best):.3e} ({best_label}), tolerance {tol:.1e}.\n"
-        "The sparse direct fallback was not attempted. Sampling the operator is "
-        f"not the obstacle -- it is vmapped in column chunks, and at n={op.total_size} "
-        "was measured at about 160 s -- but the factorization is: SuperLU ran for "
-        "75 minutes on a matrix of this size and shape (n=66004, 33.5 nonzeros per "
-        "row) without finishing, so raising max_dense_size trades a stall for a "
-        "longer one.\n"
-        "What usually helps, in order:\n"
-        "  1. RAISE Nxi. A stall at large |Er| and low collisionality is usually "
-        "under-resolution in pitch angle, not a solver defect: the distribution "
-        "develops fine structure at the trapped-passing boundary that a coarse Nxi "
-        "cannot represent, and the discrete operator is then nearly singular. "
-        "Measured on one such deck at Er=15: Nxi=20 failed after 6182 s, while "
-        "Nxi=30 converged in 406 s and Nxi=80 in 359 s -- more resolution ran "
-        "*faster*, because the better-conditioned operator needs far fewer "
-        "iterations.\n"
-        "  2. Check that the answer is converged, not merely obtained. On that same "
-        "deck FSABjHat was +5.9e-3 at Nxi=30, +3.0e-3 at Nxi=40, -3.4e-3 at Nxi=60 "
-        "and -4.1e-3 at Nxi=80: it changes sign. A solve that converges at low Nxi "
-        "is not evidence that the physics is resolved, so scan Nxi before trusting "
-        "any of it.\n"
-        "  3. Lower |Er|, or raise solverTolerance, if the point is not needed at "
-        "full accuracy. Reducing Nxi/Ntheta/Nzeta makes this failure mode worse, "
-        "not better.\n"
+        f"The host direct fallback exceeds max_dense_size={max_dense_size}; "
+        "it was not attempted. Check memory requirements before changing this limit.\n"
+        "Nonconvergence alone does not identify under-resolution, an ill-conditioned "
+        "operator, or a preconditioner problem, and does not establish that the "
+        "physical model has no solution.\n"
+        "Inspect the residual history and available memory; compare preconditioners "
+        "at fixed physics. Then check Nxi, Nx, Ntheta and Nzeta convergence of "
+        "the fluxes and current separately. A small linear residual does not "
+        "establish resolution convergence. Keep Er and the requested tolerance "
+        "fixed when comparing solvers.\n"
         "Pass solver=SolverOptions(...) to control the solver directly."
     )
 
@@ -2046,6 +2006,7 @@ def _solve_tier2(
     check_adjoint: bool,
     adjoint_residual_factor: float = DEFAULT_ADJOINT_RESIDUAL_FACTOR,
     prebuilt_precond: tuple[Callable, Callable] | None = None,
+    auto_restart_recovery: bool = False,
 ) -> SolveResult:
     if int(recycle_dim) < 1:
         # solvax's GCROT scatters the recycled subspace into a (n, k) array, so
@@ -2191,20 +2152,35 @@ def _solve_tier2(
             )
             recycle, iterations, col_converged, residual_norm = aux
         else:
-            sol = gcrot(
-                matvec,
-                b,
-                x0=None if x0_2d is None else x0_2d[:, j],
-                precond=precond,
-                m=restart,
-                k=recycle_dim,
-                rtol=tol,
-                atol=atol,
-                max_restarts=max_restarts,
-                recycle=recycle,
+            # Host-controlled recovery with factors built for this exact operator.
+            # Reserve whole wide cycles within the original inner-step cap;
+            # caller-supplied (possibly stale) factors keep the explicit path.
+            wide_cycles = restart * (max_restarts - 5) // 100
+            recover = (
+                auto_restart_recovery and not traced and prebuilt_precond is None
+                and 0 < restart < 100 and max_restarts > 5 and wide_cycles > 0
+                and 2 * 100 * op.total_size * rhs2d.dtype.itemsize <= 256 * 1024**2
             )
+            windows = [(restart, 5), (100, wide_cycles)] if recover else [(restart, max_restarts)]
+            guess = None if x0_2d is None else x0_2d[:, j]
+            iterations = 0
+            for window, cycles in windows:
+                sol = gcrot(
+                    matvec, b, x0=guess, precond=precond, m=window,
+                    k=recycle_dim, rtol=tol, atol=atol,
+                    max_restarts=cycles, recycle=recycle,
+                )
+                iterations = iterations + sol.iterations
+                recycle = sol.recycle
+                if not recover or bool(sol.converged):
+                    break
+                finite = all(
+                    np.all(np.isfinite(np.asarray(value)))
+                    for value in jax.tree_util.tree_leaves((sol.x, sol.residual_norm, recycle))
+                )
+                guess = sol.x if finite else None
+                recycle = recycle if finite else None
             x_col = sol.x
-            recycle, iterations = sol.recycle, sol.iterations
             col_converged, residual_norm = sol.converged, sol.residual_norm
         if traced:
             total_iters = None  # iteration counts are tracers under jit/grad
@@ -2608,7 +2584,15 @@ def solve(
         drop_l_coupling_in_precond: sever the L±1 coupling in the coarse
             operator.  Not Fortran's ``preconditioner_xi``, which drops L±2,
             and expensive; see :func:`dkx.coarse_precond.build_coarse_preconditioner`.
-        restart: FGMRES cycle size ``m``.
+        restart: FGMRES cycle size ``m``. Host-controlled, non-differentiable auto
+            solves with freshly built factors may probe five cycles then widen
+            to 100 when two 100-vector bases fit in 256 MiB (a basis estimate,
+            not a bound on total solver memory). The probe plus
+            retry uses at most ``restart * max_restarts`` inner steps per RHS
+            (remaining work rounded down to whole wide cycles). Explicit
+            methods, traced solves and caller-supplied factors retain this size.
+            This bounds the initial preconditioner attempt; the existing auto
+            escalation ladder can still allocate additional iteration budgets.
         recycle_dim: GCROT recycle directions ``k``.
         max_restarts: recycled-Krylov outer-cycle cap (what makes ``auto``
             fall through to the sparse direct route).
@@ -2803,6 +2787,7 @@ def solve(
             recycle=recycle,
             preconditioner=_resolve_preconditioner(preconditioner, use_preconditioner),
             prebuilt_precond=precond,
+            auto_restart_recovery=method == "auto" and not differentiable,
             drop_l_coupling_in_precond=drop_l_coupling_in_precond,
             restart=restart,
             recycle_dim=recycle_dim,

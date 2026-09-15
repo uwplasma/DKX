@@ -525,12 +525,12 @@ for runNum in range(numRunsInScan):
     input_path = Path(filename)
     input_path.write_text("".join(input_lines))
     # One point that will not solve must not discard the rest of the scan.
-    run_scan_point(
+    point_ok = run_scan_point(
         input_namelist=input_path,
         output_path=Path(outputFilename),
         directory=directory,
     )
-    note_scan_run_done(progress=scan_progress, run_index=runNum+1, directory=directory, run_started_at=run_started_at)
+    note_scan_run_done(progress=scan_progress, run_index=runNum+1, directory=directory, run_started_at=run_started_at, success=point_ok)
 
     os.chdir("..")
-    prev_dir = current_dir
+    prev_dir = current_dir if point_ok else prev_dir

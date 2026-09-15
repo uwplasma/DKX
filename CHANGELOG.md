@@ -8,6 +8,8 @@ deferred until the maintainer's important-goal and verification requirements are
 
 ### Correctness and differentiation
 
+- Report stalled solves without attributing an unmeasured physical cause or
+  recommending changes to the requested electric field and accuracy.
 - Add the opt-in `SfincsMatrixThreshold` parity switch, which reproduces SFINCS
   v3's `1d-12` matrix sparsification on the Fokker-Planck operator. It accounts
   for a 12-19% bootstrap-current gap on a hot-electron HSX-like deck; the
@@ -40,6 +42,12 @@ deferred until the maintainer's important-goal and verification requirements are
 
 ### Execution
 
+- Bound the first automatic Krylov attempt and reuse its factors with a wider
+  restart window when the basis-size guard permits. Preserve explicit solver
+  settings and the differentiated path.
+
+- Propagate nested legacy scan failures, distinguish failed progress from success,
+  and retry incomplete Er points while preserving previous attempt files.
 - Default the host BLAS pools to one thread. XLA's threadpool already runs
   batched CPU LAPACK in parallel; four BLAS threads per call made the NCSX
   `(21,37,61,8)` coarse factorization about 3x slower. Explicit settings win.
