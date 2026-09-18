@@ -841,13 +841,21 @@ def _coarse_row_layout(op: KineticOperator) -> tuple[tuple[int, ...], tuple[int,
     prefix of the row before it, and the coupling between rows ``l`` and ``l + 1``
     pairs the first ``counts[l + 1]`` entries of each.  A traced ``n_xi_for_x`` has
     no static lengths and keeps the full rectangle.
+
+    Ties break on the speed and then the species, so one speed's subsystems are
+    adjacent in every row: a chain's length depends only on its speed, so the
+    entries before a speed's group are at least as long and stay active for as
+    long, which puts that group at the same static offset in every row it is
+    active in.  :func:`_apply_dense_coarse_speed` solves one speed by slicing
+    there.
     """
     batch = op.n_species * op.n_x
     if isinstance(op.n_xi_for_x, jax.core.Tracer):
-        return tuple(range(batch)), (batch,) * op.n_xi
+        order = tuple(s * op.n_x + x for x in range(op.n_x) for s in range(op.n_species))
+        return order, (batch,) * op.n_xi
     keep = [min(max(int(n), 1), op.n_xi) for n in np.asarray(op.n_xi_for_x)]
     length = [keep[b % op.n_x] for b in range(batch)]
-    order = tuple(sorted(range(batch), key=lambda b: -length[b]))
+    order = tuple(sorted(range(batch), key=lambda b: (-length[b], b % op.n_x, b // op.n_x)))
     counts = tuple(sum(n > ell for n in length) for ell in range(max(length)))
     return order, counts
 
@@ -972,6 +980,57 @@ def _apply_dense_coarse_factors(factors, floor, rhs, *, transpose, rows):
     # Unique rows: the only scatter ``jax.linear_transpose`` accepts.
     out = out.at[rows_b, rows_l].set(jnp.concatenate(solution), unique_indices=True)
     return out.reshape(rhs.shape)
+
+
+@functools.partial(
+    jax.jit, static_argnames=("transpose", "rows", "speed", "n_species")
+)
+def _apply_dense_coarse_speed(factors, floor, rhs, *, transpose, rows, speed, n_species):
+    """The same two sweeps as :func:`_apply_dense_coarse_factors`, for one speed.
+
+    Subsystem ``b = s * n_x + x`` is its own Legendre chain, so the speeds are
+    independent and a speed's solve reads only its own factors.  Because
+    :func:`_coarse_row_layout` keeps a speed's species adjacent at one offset,
+    that restriction is a static slice of every row rather than a gather, and
+    the solve touches ``1 / n_x`` of the stored blocks.  ``floor`` and ``rhs``
+    hold this speed alone, species-major.
+    """
+    order, counts = rows
+    start = order.index(speed)
+    stop = start + n_species
+    length = sum(c > start for c in counts)
+    m = factors[0][1].shape[-1]
+    g = rhs.reshape(n_species, -1, m)
+    low = factors[0][0].dtype
+    out = (g.astype(low) / (1.0 + floor).astype(low)[:, None, None]).astype(g.dtype)
+    work = jnp.result_type(g, factors[0][2])
+    trans = 1 if transpose else 0
+
+    def tsolve(lu, piv, v):
+        return jax.vmap(lambda a, q, b: lu_solve((a, q), b.astype(low), trans=trans).astype(work))(
+            lu, piv, v
+        )
+
+    def couple(block, v):
+        return jax.vmap(lambda b, x: x @ b if transpose else b @ x)(block, v)
+
+    sigma: list = [None] * length
+    for ell in reversed(range(length)):
+        s = g[:, ell]
+        if ell + 1 < length:
+            lu, piv, lower_next, _ = (a[start:stop] for a in factors[ell + 1])
+            down = lower_next if transpose else factors[ell][3][start:stop]
+            s = s - couple(down, tsolve(lu, piv, sigma[ell + 1]))
+        sigma[ell] = s
+    solution: list = []
+    for ell in range(length):
+        lu, piv, lower, _ = (a[start:stop] for a in factors[ell])
+        s = sigma[ell]
+        if ell > 0:
+            up = factors[ell - 1][3][start:stop] if transpose else lower
+            s = s - couple(up, solution[-1])
+        solution.append(tsolve(lu, piv, s))
+    return out.at[:, :length].set(jnp.stack(solution, axis=1)).reshape(rhs.shape)
 
 
 def _collision_diagonal_only(coll):
@@ -1239,28 +1298,45 @@ def build_coarse_preconditioner(
         upper = (
             _strict_upper_speed_coupling(op, mask) if retain_speed_triangle else None
         )
-        # ``True`` means the exact inverse, which needs n_x - 1 corrections
-        # because D^-1 U is nilpotent of that index; an integer truncates the
-        # series, trading exactness in M for a cheaper apply.
-        sweeps = (
-            n_x - 1
-            if retain_speed_triangle is True
-            else int(retain_speed_triangle or 0)
-        )
+        # ``True`` is the exact inverse of D + U, which one back-substitution over
+        # x reaches; an integer instead truncates the nilpotent series of D^-1 U,
+        # trading exactness in M for an apply that stays batched over all speeds.
+        sweeps = 0 if retain_speed_triangle is True else int(retain_speed_triangle or 0)
 
         def _a_inv(transpose: bool) -> Callable[[jnp.ndarray], jnp.ndarray]:
             apply = functools.partial(
                 _apply_dense_coarse_factors, factors, floor, transpose=transpose, rows=rows
             )
 
+            def apply_speed(x: int, r: jnp.ndarray) -> jnp.ndarray:
+                return _apply_dense_coarse_speed(
+                    factors, floor.reshape(n_s, n_x)[:, x], r,
+                    transpose=transpose, rows=rows, speed=x, n_species=n_s,
+                )  # fmt: skip
+
+            def apply_back_substitution(v: jnp.ndarray) -> jnp.ndarray:
+                # M = D + U with D the speed-diagonal blocks already factored and U
+                # strictly upper in x, so the last speed is solved outright and
+                #   y_x = D_x^-1 (r_x - sum_{x' > x} U[x, x'] y_{x'})
+                # needs only the speeds above it.  The adjoint's U^T is strictly
+                # lower, so it runs the other way.  One pass reads each speed's
+                # factors once; the series below reaches the same map by reading
+                # all of them once per sweep.
+                g = v.reshape(n_s, n_x, n_xi, n_tz)
+                speeds = range(n_x) if transpose else range(n_x - 1, -1, -1)
+                done = jnp.zeros_like(g)
+                columns: list = [None] * n_x
+                for x in speeds:
+                    y = apply_speed(x, g[:, x] - done[:, x])
+                    # What this speed contributes to the ones still to be solved.
+                    block = upper[:, :, x, :] if transpose else upper[:, :, :, x]
+                    done = done + jnp.einsum("slx,slt->sxlt", block, y)
+                    columns[x] = y
+                return jnp.stack(columns, axis=1).reshape(v.shape)
+
             def apply_triangular(v: jnp.ndarray) -> jnp.ndarray:
-                # M = D + U with D the speed-diagonal blocks already factored and
-                # U strictly upper in x, so D^-1 U is nilpotent of index n_x and
-                #   y_{k+1} = D^-1 (r - U y_k)
-                # reaches the exact inverse in n_x steps.  Back-substitution needs
-                # the same n_x steps but solves one speed at a time; this keeps
-                # every step batched over all (species, x), which is what the
-                # block-Thomas factors are shaped for.
+                # D^-1 U is nilpotent of index n_x, so y_{k+1} = D^-1 (r - U y_k)
+                # converges in n_x - 1 corrections; ``sweeps`` stops it earlier.
                 def couple(y: jnp.ndarray) -> jnp.ndarray:
                     # (U y)[s, x, l, tz] = sum_{x'} U[s, l, x, x'] y[s, x', l, tz],
                     # transposed for the adjoint, where U^T is strictly lower.
@@ -1273,7 +1349,9 @@ def build_coarse_preconditioner(
                     y = apply(g - couple(y))
                 return y.reshape(v.shape)
 
-            return apply_triangular if upper is not None else apply
+            if upper is None:
+                return apply
+            return apply_triangular if sweeps else apply_back_substitution
 
         a_inv, a_inv_t = _a_inv(False), _a_inv(True)
     else:
