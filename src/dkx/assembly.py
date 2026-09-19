@@ -163,7 +163,7 @@ def f_block_groups(op: KineticOperator, *, l_bandwidth: int = _L_BANDWIDTH) -> l
 
 
 def assemble_operator(
-    op: KineticOperator, *, tolerance: float = 1.0e-10, samples: int = 3
+    op: KineticOperator, *, tolerance: float = 1.0e-10, samples: int = 3, pinned: bool = True
 ) -> AssembledOperator:
     """Recover the bordered operator as CSR and check it against the operator.
 
@@ -171,6 +171,12 @@ def assemble_operator(
         op: the kinetic operator.
         tolerance: largest relative difference accepted on random vectors.
         samples: how many random vectors the check uses.
+        pinned: assemble ``A M + (I - M)`` with ``M`` the active-DOF projector,
+            which is the system the solver poses. The rectangular layout keeps
+            the ``l >= Nxi_for_x(x)`` degrees of freedom as exact zero rows, so
+            the raw operator is structurally singular and nothing can factor it;
+            pinning replaces those rows with trivial identity equations and
+            leaves the active subspace untouched (:func:`dkx.solve._pinned_matvecs`).
 
     Returns:
         The assembled operator, its cost in products, and the check's result.
@@ -186,9 +192,16 @@ def assemble_operator(
 
     f_size, extra = op.f_size, op.extra_size
     shape = op.f_shape
+    mask = op.active_dof_mask() if pinned else None
+    mask_f = None if mask is None else jnp.asarray(mask)[:f_size]
 
     def apply_f(vector: jnp.ndarray) -> jnp.ndarray:
-        return jnp.reshape(op.apply_f(jnp.reshape(vector, shape)), (f_size,))
+        if mask_f is None:
+            active = vector
+        else:
+            active = mask_f * vector
+        out = jnp.reshape(op.apply_f(jnp.reshape(active, shape)), (f_size,))
+        return out if mask_f is None else out + (1.0 - mask_f) * vector
 
     apply_f = jax.jit(apply_f)
     pattern = f_block_pattern(op)
@@ -209,7 +222,12 @@ def assemble_operator(
     else:
         matrix, products = block, len(groups)
 
-    error = verify_products(matrix, jax.jit(op.apply), samples=samples)
+    def apply_full(vector: jnp.ndarray) -> jnp.ndarray:
+        if mask is None:
+            return op.apply(vector)
+        return op.apply(jnp.asarray(mask) * vector) + (1.0 - jnp.asarray(mask)) * vector
+
+    error = verify_products(matrix, jax.jit(apply_full), samples=samples)
     if not np.isfinite(error) or error > tolerance:
         raise RuntimeError(
             f"the assembled matrix does not reproduce the operator (relative "

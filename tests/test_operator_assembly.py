@@ -81,12 +81,16 @@ def operator(tmp_path_factory):
     return kinetic_operator_from_namelist(load_sfincs_input(path).raw)
 
 
-def _sampled(op):
+def _sampled(op, *, pinned: bool = True):
     """The matrix by its definition: one product per column."""
+    import jax.numpy as jnp
+
+    from dkx.solve import _pinned_matvecs
     from solvax.native_eigen import sparse_operator_matrix
 
+    apply = _pinned_matvecs(op)[0] if pinned else op.apply
     matrix = sparse_operator_matrix(
-        jax.jit(op.apply), np.zeros(op.total_size), batch_size=64
+        jax.jit(lambda v: apply(jnp.asarray(v))), np.zeros(op.total_size), batch_size=64
     ).tocsr()
     matrix.eliminate_zeros()
     return matrix
@@ -101,6 +105,24 @@ def test_it_recovers_the_matrix_the_operator_defines(operator) -> None:
     assert difference.nnz == 0
     assert result.matrix.nnz == reference.nnz
     assert result.relative_error < 1e-12
+
+
+def test_the_truncated_rows_are_pinned_so_the_matrix_can_be_factored(operator) -> None:
+    """The rectangular layout keeps ``l >= Nxi_for_x(x)`` as exact zero rows, so
+    the raw operator is structurally singular: no factorization exists. The
+    solver poses the pinned system instead, and so does the assembly."""
+    mask = operator.active_dof_mask()
+    if mask is None:
+        pytest.skip("this deck truncates nothing")
+    raw = assemble_operator(operator, pinned=False).matrix
+    pinned = assemble_operator(operator).matrix
+    truncated = np.flatnonzero(np.asarray(mask) == 0.0)
+    assert truncated.size
+    assert np.count_nonzero(np.abs(raw[truncated].toarray()).sum(axis=1)) == 0
+    np.testing.assert_allclose(pinned[truncated].toarray().sum(axis=1), 1.0)
+    difference = pinned - _sampled(operator)
+    difference.eliminate_zeros()
+    assert difference.nnz == 0
 
 
 def test_it_costs_far_fewer_products_than_the_matrix_has_columns(operator) -> None:
