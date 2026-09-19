@@ -81,6 +81,28 @@ def test_it_answers_what_the_iterative_route_answers(operator) -> None:
     assert np.linalg.norm(a - b) / np.linalg.norm(b) < 1e-8
 
 
+def test_it_refuses_clearly_when_it_can_neither_assemble_nor_sample(
+    operator, monkeypatch
+) -> None:
+    """An operator whose pattern is unavailable falls back to the bound, and the
+    refusal has to name both halves: the applications sampling would cost, and
+    why the assembly that avoids them did not run."""
+    import dkx.assembly as assembly
+
+    def unavailable(*args, **kwargs):
+        raise NotImplementedError("no pattern for this operator")
+
+    monkeypatch.setattr(assembly, "assemble_operator", unavailable)
+    with pytest.raises(RuntimeError, match="no pattern for this operator") as excinfo:
+        solve(
+            operator, np.asarray(operator.rhs()), method="direct",
+            tol=1e-10, max_dense_size=10,
+        )
+    message = str(excinfo.value)
+    assert "max_dense_size=10" in message
+    assert "column by column" in message
+
+
 def test_a_small_deck_still_samples(operator, monkeypatch) -> None:
     """Below the bound nothing changes: sampling is exact and needs no pattern."""
     from dkx import solve as solve_module
