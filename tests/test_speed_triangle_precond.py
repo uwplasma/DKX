@@ -159,6 +159,73 @@ def test_truncating_the_series_is_allowed_and_ordered(tmp_path: Path) -> None:
     assert errors[-1] <= errors[0], errors
 
 
+def test_the_exact_triangle_solves_one_speed_at_a_time(tmp_path, monkeypatch) -> None:
+    """How the exact inverse is reached, which is what it costs.
+
+    ``D^-1 U`` is nilpotent, so sweeping the whole band ``n_x - 1`` times also
+    lands on the exact inverse -- while reading every chain's factors once per
+    sweep. Back-substitution over ``x`` reads each speed's factors once. Pin
+    the calls, because the two are indistinguishable in the map they produce.
+    """
+    import dkx.coarse_precond as cp
+
+    op = _operator(tmp_path, nx=4)
+    n_x = op.f_shape[1]
+    calls = {"speed": 0, "band": 0}
+    for key, name in (("speed", "_apply_dense_coarse_speed"), ("band", "_apply_dense_coarse_factors")):
+        real = getattr(cp, name)
+
+        def counted(*args, _real=real, _key=key, **kwargs):
+            calls[_key] += 1
+            return _real(*args, **kwargs)
+
+        monkeypatch.setattr(cp, name, counted)
+
+    v = jnp.asarray(np.random.default_rng(4).standard_normal(op.total_size))
+    # The bordered operator applies the coarse inverse more than once per
+    # preconditioner application, so measure that factor rather than assume it.
+    default, _ = cp.build_coarse_preconditioner(op)
+    default(v)
+    per_application = calls["band"]
+    assert per_application >= 1
+
+    calls.update(speed=0, band=0)
+    exact, _ = cp.build_coarse_preconditioner(op, retain_speed_triangle=True)
+    exact(v)
+    assert calls == {"speed": n_x * per_application, "band": 0}
+
+    calls.update(speed=0, band=0)
+    series, _ = cp.build_coarse_preconditioner(op, retain_speed_triangle=2)
+    series(v)
+    assert calls == {"speed": 0, "band": 3 * per_application}
+
+
+def test_back_substitution_and_the_full_series_are_the_same_map(tmp_path) -> None:
+    """Both reach the inverse of ``D + U``, so they must agree to rounding."""
+    op = _operator(tmp_path, nx=5)
+    n_x = op.f_shape[1]
+    v = jnp.asarray(np.random.default_rng(5).standard_normal(op.total_size))
+    for exact, series in zip(
+        build_coarse_preconditioner(op, retain_speed_triangle=True),
+        build_coarse_preconditioner(op, retain_speed_triangle=n_x - 1),
+    ):
+        difference = float(jnp.linalg.norm(exact(v) - series(v)))
+        assert difference / float(jnp.linalg.norm(series(v))) < 1e-10, difference
+
+
+def test_the_exact_triangle_adjoint_is_its_transpose(tmp_path) -> None:
+    """The adjoint runs the substitution the other way over ``x``, on the
+    transposed couplings. That is only right if it is the transposed map."""
+    op = _operator(tmp_path, nx=4)
+    precond, precond_t = build_coarse_preconditioner(op, retain_speed_triangle=True)
+    rng = np.random.default_rng(6)
+    u = jnp.asarray(rng.standard_normal(op.total_size))
+    w = jnp.asarray(rng.standard_normal(op.total_size))
+    left = float(jnp.dot(precond(u), w))
+    right = float(jnp.dot(u, precond_t(w)))
+    assert abs(left - right) <= 1e-9 * max(abs(left), abs(right)), (left, right)
+
+
 def test_it_refuses_the_route_it_does_not_implement(tmp_path, monkeypatch) -> None:
     """Where the bands do not fit, the coarse preconditioner is eliminated from
     generated rows and there is no band to retain the triangle in. Refuse
