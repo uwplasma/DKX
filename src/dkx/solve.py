@@ -1107,6 +1107,24 @@ def _escalate_after_tier2_stall(
         f"{_residual(stalled):.3e}); escalating rather than giving up."
     )
 
+    def _warm_start(result: SolveResult, fallback):
+        """The stalled iterate, when starting a rung there beats starting over.
+
+        Every rung solves the same equation, so an iterate the stalled solve
+        reached is the work already paid for.  It is used only when it is
+        finite and its residual improved on the right-hand side it started
+        from: a diverged iterate would begin the next rung further away than
+        the original guess.
+        """
+        if not np.isfinite(_residual(result)) or _residual(result) >= 1.0:
+            return fallback
+        x = np.asarray(result.x)
+        if x.shape != rhs2d.shape or not np.all(np.isfinite(x)):
+            return fallback
+        return x
+
+    warm = _warm_start(stalled, x0)
+
     # Rung 1: a preconditioner that can do what the stalled one could not.
     #
     # "coarse", "sparse" and "multigrid" are three inverses of one simplified
@@ -1139,7 +1157,7 @@ def _escalate_after_tier2_stall(
                 rhs2d,
                 tol=tol,
                 atol=atol,
-                x0=x0,
+                x0=warm,
                 recycle=recycle,
                 preconditioner=kind,
                 drop_l_coupling_in_precond=drop_l_coupling_in_precond,
@@ -1163,9 +1181,12 @@ def _escalate_after_tier2_stall(
     # Rung 2: more iterations.  Cheap to ask for, and the remedy when the
     # preconditioner is adequate but the cap was simply too low for this Er.
     widened = max(max_restarts * 4, max_restarts + 1)
-    best_kind = max(attempts, key=lambda item: -_residual(item[1]))[0].split()[0]
+    best_label_so_far, best_so_far = max(attempts, key=lambda item: -_residual(item[1]))
+    best_kind = best_label_so_far.split()[0]
     if best_kind not in _TIER2_PRECONDITIONERS:
         best_kind = preconditioner
+    # Continue from whichever rung came closest, for the same reason.
+    warm = _warm_start(best_so_far, warm)
     try:
         print(
             f"[dkx.solve]   retrying the iterative solve with the {best_kind} preconditioner "
@@ -1176,7 +1197,7 @@ def _escalate_after_tier2_stall(
             rhs2d,
             tol=tol,
             atol=atol,
-            x0=x0,
+            x0=warm,
             recycle=recycle,
             preconditioner=best_kind,
             drop_l_coupling_in_precond=drop_l_coupling_in_precond,

@@ -130,6 +130,73 @@ def test_pitch_angle_scattering_skips_the_triangle_rung(monkeypatch) -> None:
     assert "coarse_triangle" not in kinds, kinds
 
 
+def _spy_on_starts(monkeypatch) -> list:
+    """The initial guess each rung is handed."""
+    from dkx import solve as solve_module
+
+    starts: list = []
+    real = solve_module._solve_tier2
+
+    def spy(op, rhs2d, **kwargs):
+        starts.append(kwargs.get("x0"))
+        return real(op, rhs2d, **kwargs)
+
+    monkeypatch.setattr(solve_module, "_solve_tier2", spy)
+    return starts
+
+
+def test_escalation_continues_from_the_stalled_iterate(monkeypatch) -> None:
+    """Every rung solves the same equation, so the iterate the stalled solve
+    reached is the work already paid for. Starting the next rung from the
+    original guess throws it away."""
+    op = _operator()
+    reached = np.full((op.total_size, 1), 1e-3)
+    stalled = SolveResult(
+        x=reached, method="gmres", iterations=6000,
+        residual_norms=np.asarray([1.0, 0.5, 0.2]), converged=False,
+        recycle=None, timings={}, adjoint=None,
+    )
+    starts = _spy_on_starts(monkeypatch)
+    _escalate(op, stalled=stalled)
+    assert starts, "the ladder ran no rung"
+    np.testing.assert_allclose(np.asarray(starts[0]), reached)
+
+
+def test_a_diverged_iterate_is_not_used_as_a_start(monkeypatch) -> None:
+    """An iterate worse than the right-hand side it started from would begin
+    the next rung further away than the original guess."""
+    op = _operator()
+    diverged = SolveResult(
+        x=np.full((op.total_size, 1), 1e6), method="gmres", iterations=6000,
+        residual_norms=np.asarray([1.0, 5.0]), converged=False,
+        recycle=None, timings={}, adjoint=None,
+    )
+    starts = _spy_on_starts(monkeypatch)
+    _escalate(op, stalled=diverged)
+    assert starts and starts[0] is None, starts[:1]
+
+
+@pytest.mark.parametrize("flaw", ["nonfinite", "unreadable"])
+def test_an_unusable_iterate_is_not_used_as_a_start(monkeypatch, flaw: str) -> None:
+    """A stalled solve can report a residual it no longer has: GCROT hands back
+    whatever it reached, which may hold NaNs, and a cap breached before the
+    first cycle leaves no residual history to judge by. Neither is a start."""
+    op = _operator()
+    reached = np.full((op.total_size, 1), 1e-3)
+    norms = np.asarray([1.0, 0.2])
+    if flaw == "nonfinite":
+        reached[0, 0] = np.nan
+    else:
+        norms = np.asarray([])
+    stalled = SolveResult(
+        x=reached, method="gmres", iterations=6000, residual_norms=norms,
+        converged=False, recycle=None, timings={}, adjoint=None,
+    )
+    starts = _spy_on_starts(monkeypatch)
+    _escalate(op, stalled=stalled)
+    assert starts and starts[0] is None, starts[:1]
+
+
 def test_the_old_misleading_advice_is_gone() -> None:
     """`raise max_dense_size explicitly` at 66004 DOFs asks for 32.5 GB."""
     op = _operator()
