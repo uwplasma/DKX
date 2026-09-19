@@ -176,6 +176,27 @@ def test_a_diverged_iterate_is_not_used_as_a_start(monkeypatch) -> None:
     assert starts and starts[0] is None, starts[:1]
 
 
+@pytest.mark.parametrize("flaw", ["nonfinite", "unreadable"])
+def test_an_unusable_iterate_is_not_used_as_a_start(monkeypatch, flaw: str) -> None:
+    """A stalled solve can report a residual it no longer has: GCROT hands back
+    whatever it reached, which may hold NaNs, and a cap breached before the
+    first cycle leaves no residual history to judge by. Neither is a start."""
+    op = _operator()
+    reached = np.full((op.total_size, 1), 1e-3)
+    norms = np.asarray([1.0, 0.2])
+    if flaw == "nonfinite":
+        reached[0, 0] = np.nan
+    else:
+        norms = np.asarray([])
+    stalled = SolveResult(
+        x=reached, method="gmres", iterations=6000, residual_norms=norms,
+        converged=False, recycle=None, timings={}, adjoint=None,
+    )
+    starts = _spy_on_starts(monkeypatch)
+    _escalate(op, stalled=stalled)
+    assert starts and starts[0] is None, starts[:1]
+
+
 def test_the_old_misleading_advice_is_gone() -> None:
     """`raise max_dense_size explicitly` at 66004 DOFs asks for 32.5 GB."""
     op = _operator()
