@@ -82,6 +82,7 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "runtime.py": "explicit runtime configuration",
     "sensitivity.py": "public differentiation API",
     "shaing_callen.py": "stable physics kernel",
+    "assembly.py": "stable solver kernel",
     "coarse_precond.py": "stable solver kernel",
     "sparse_precond.py": "stable solver kernel",
     "units.py": "stable physics kernel",
