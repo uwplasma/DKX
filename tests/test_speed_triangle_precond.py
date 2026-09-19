@@ -170,8 +170,9 @@ def test_the_exact_triangle_solves_one_speed_at_a_time(tmp_path, monkeypatch) ->
     import dkx.coarse_precond as cp
 
     op = _operator(tmp_path, nx=4)
-    calls = {"triangle": 0, "band": 0}
-    for key, name in (("triangle", "_apply_dense_coarse_triangle"), ("band", "_apply_dense_coarse_factors")):
+    n_x = op.f_shape[1]
+    calls = {"speed": 0, "band": 0}
+    for key, name in (("speed", "_apply_dense_coarse_speed"), ("band", "_apply_dense_coarse_factors")):
         real = getattr(cp, name)
 
         def counted(*args, _real=real, _key=key, **kwargs):
@@ -188,17 +189,15 @@ def test_the_exact_triangle_solves_one_speed_at_a_time(tmp_path, monkeypatch) ->
     per_application = calls["band"]
     assert per_application >= 1
 
-    calls.update(triangle=0, band=0)
+    calls.update(speed=0, band=0)
     exact, _ = cp.build_coarse_preconditioner(op, retain_speed_triangle=True)
     exact(v)
-    # One compiled program per application, holding all n_x speeds, and no sweep
-    # of the whole band.
-    assert calls == {"triangle": per_application, "band": 0}
+    assert calls == {"speed": n_x * per_application, "band": 0}
 
-    calls.update(triangle=0, band=0)
+    calls.update(speed=0, band=0)
     series, _ = cp.build_coarse_preconditioner(op, retain_speed_triangle=2)
     series(v)
-    assert calls == {"triangle": 0, "band": 3 * per_application}
+    assert calls == {"speed": 0, "band": 3 * per_application}
 
 
 def test_back_substitution_and_the_full_series_are_the_same_map(tmp_path) -> None:
