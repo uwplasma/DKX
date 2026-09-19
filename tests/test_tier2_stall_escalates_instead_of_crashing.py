@@ -92,6 +92,44 @@ def test_a_deck_too_large_for_tier3_reports_the_real_problem() -> None:
     assert "Keep Er and the requested tolerance fixed" in message
 
 
+def _spy_on_rungs(monkeypatch) -> list[str]:
+    """The preconditioner each rung asks for, in order."""
+    from dkx import solve as solve_module
+
+    kinds: list[str] = []
+    real = solve_module._solve_tier2
+
+    def spy(op, rhs2d, **kwargs):
+        kinds.append(str(kwargs.get("preconditioner")))
+        return real(op, rhs2d, **kwargs)
+
+    monkeypatch.setattr(solve_module, "_solve_tier2", spy)
+    return kinds
+
+
+def test_the_ladder_restores_the_dropped_speed_coupling_first(monkeypatch) -> None:
+    """``sparse`` and ``multigrid`` invert the same simplified operator that
+    stalled, so neither can answer a stall caused by the Fokker-Planck speed
+    coupling that operator drops. Retaining its upper triangle is the rung that
+    changes the operator, and it reuses the factors already built, so it goes
+    first on a deck that has a dense collision operator to retain."""
+    op = dkx.run(**{**CASE, "collisionOperator": 0}).operator
+    assert op.fp is not None or op.sugama is not None
+    kinds = _spy_on_rungs(monkeypatch)
+    _escalate(op)
+    assert kinds[0] == "coarse_triangle", kinds
+
+
+def test_pitch_angle_scattering_skips_the_triangle_rung(monkeypatch) -> None:
+    """Pitch-angle scattering is already speed-diagonal, so retaining the
+    triangle would re-run the stalled solve under another name."""
+    op = _operator()
+    assert op.fp is None and op.sugama is None
+    kinds = _spy_on_rungs(monkeypatch)
+    _escalate(op)
+    assert "coarse_triangle" not in kinds, kinds
+
+
 def test_the_old_misleading_advice_is_gone() -> None:
     """`raise max_dense_size explicitly` at 66004 DOFs asks for 32.5 GB."""
     op = _operator()

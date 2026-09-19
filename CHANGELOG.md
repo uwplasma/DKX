@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Execution
+
+- Apply the exact speed triangle (`preconditioner="coarse_triangle"`) by
+  back-substitution over `x`, rather than reaching the same inverse as a
+  nilpotent series of `n_x` sweeps of the whole band. The map, the factors and
+  the memory are unchanged, and one application at NCSX `(25, 37, 61, 8)` costs
+  3.7x less: 2.3x a `coarse` application against 8.5x.
+- Escalate a stalled recycled-Krylov solve to that triangle before `sparse` and
+  `multigrid`. Those three are inverses of one simplified operator, so none of
+  them answers a stall caused by the Fokker-Planck speed coupling that operator
+  drops; retaining its upper triangle changes the operator being inverted, cuts
+  NCSX iterations 2.3-4.1x, and reuses the factors the coarse route already
+  built. A deck with no dense collision operator skips the rung, because there
+  the triangle is the stalled preconditioner under another name.
+
+### Research records
+
+- The speed-triangle back-substitution measurement, and the batched LU dispatch
+  measurement on CPU and GPU, in `docs/experiments/`.
+
 ## v2.4.0 — 2026-09-15
 
 The integrated #169–#191 stack, the reconciled #190 plan and the work from the

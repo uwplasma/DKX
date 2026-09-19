@@ -1107,11 +1107,27 @@ def _escalate_after_tier2_stall(
         f"{_residual(stalled):.3e}); escalating rather than giving up."
     )
 
-    # Rung 1: the strong preconditioner.  This is the SFINCS analogue and the
-    # single most likely fix, because "coarse" eliminates L first, which fills
-    # the angular stencils in, while "sparse" eliminates in a fill-reducing
-    # order and stays sparse.
-    for kind in ("sparse", "multigrid"):
+    # Rung 1: a preconditioner that can do what the stalled one could not.
+    #
+    # "coarse", "sparse" and "multigrid" are three inverses of one simplified
+    # operator, so they differ in fill and cost, not in what they approximate.
+    # When the stall comes from the Fokker-Planck speed coupling that
+    # ``preconditioner_x = 1`` drops, none of them can fix it: on NCSX that
+    # coupling is what makes GCROT iterations grow with Ntheta
+    # (docs/experiments/2026-09-14-ntheta-iteration-growth.md).  Retaining its
+    # upper triangle changes the operator being inverted and cuts iterations
+    # 2.3-4.1x there, and it reuses the factors the coarse route already built,
+    # so it is both the matched remedy and the cheapest rung to try
+    # (docs/experiments/2026-09-18-speed-triangle-back-substitution.md).  It is
+    # skipped where there is no dense collision operator to retain, such as
+    # pitch-angle scattering, since there it repeats the stalled solve.
+    #
+    # "sparse" follows because it eliminates in a fill-reducing order where
+    # "coarse" eliminates L first and fills the angular stencils in.
+    kinds = ("sparse", "multigrid")
+    if op.fp is not None or op.sugama is not None:
+        kinds = ("coarse_triangle", *kinds)
+    for kind in kinds:
         if kind == preconditioner:
             continue
         try:
