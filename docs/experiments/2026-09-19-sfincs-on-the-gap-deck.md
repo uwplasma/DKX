@@ -44,7 +44,7 @@ Owner: independent review. Budget: one day.
   that keeps the speed coupling, and both exhausted 36 GiB.
 - SFINCS assembles the full 29,781,431-nonzero matrix analytically in 1.55 s.
 
-**What transposes is the assembly, and DKX now has it.** The operator is
+**What transposes is the assembly, which DKX gains here.** The operator is
 matrix-free, so its sparse direct route sampled one column per product, 633,604
 products here, and was guarded off. The couplings are known, so a product with a
 whole group of columns that share no row carries all of them
