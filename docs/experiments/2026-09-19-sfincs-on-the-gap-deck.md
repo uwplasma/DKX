@@ -82,14 +82,52 @@ pinned operator in 5.4 s and SuperLU factored and solved it:
   here. The SFINCS figures are from `2026-09-12-reuse-admission.md`, on the same
   deck with the sparsification threshold in place.
 
+**A supernodal backend closes most of that gap, once the matrix is scaled.**
+Same assembled matrix, office, four pinned cores:
+
+| Backend | Factorization | Fill | Peak RSS | Relative residual |
+| --- | ---: | ---: | ---: | ---: |
+| SuperLU, COLAMD | 2,732 s | 389× | 19.1 GiB | 2.9e-11 |
+| PARDISO, as assembled | 201 s | — | 5.4 GiB | 9.4e-2 |
+| PARDISO, equilibrated | 103 s | — | 5.0 GiB | 3.1e-8, then 1.2e-10 refined |
+| MUMPS through SFINCS | about 40 s | — | 3.8 GiB | 8.3e-14 |
+
+- **The missing capability is the scaling, not the elimination.** PARDISO's
+  default answer is wrong at a relative residual of 9.4e-2, and an outer defect
+  correction makes it worse, at 117: static pivoting perturbs the pivots it
+  cannot use — nine of them here — so the factorization is of a different
+  matrix. Ruiz equilibration before the factorization halves it, to 103 s, and
+  brings the answer to 1.2e-10. MUMPS scales and matches by default, which is
+  why it never showed this.
+- **It is within 2.6× of MUMPS in time and 1.3× in memory**, and 26× faster than
+  SuperLU in a quarter of the memory.
+- **A factored operator is nearly free to reuse**: 0.59 s per solve, and the
+  second right-hand side costs the same. SuperLU's transposed solve costs 1.13 s
+  against 0.87 s forward. A transport matrix, a gradient and an ambipolar root
+  all pay one factorization and then almost nothing, which is what the reuse
+  contract of `plan.md` §5.1 is for.
+- PARDISO is MKL, so x86-64 only; the laptop is arm64. SuperLU stays as the
+  portable fallback and the backend is a run-time choice.
+
 **Two methods that did not transpose.**
 
 - **Fill-reducing ordering.** MUMPS needed AMD to factor this class of matrix at
-  all, so SuperLU's default was the suspect. On the matrices DKX's sparse
-  preconditioner factors (19,800 rows, 99.8% structurally symmetric) it is the
-  other way round: COLAMD fills 2.12×, the natural order 2.29×, and the AMD-like
-  `MMD_AT_PLUS_A` 4.12× at three times the factorization time. The subsystems
-  are block tridiagonal with banded blocks, which the default already suits.
+  all, so SuperLU's default was the suspect. It is the other way round, on both
+  matrices. On the simplified subsystems DKX's sparse preconditioner factors
+  (19,800 rows, 99.8% structurally symmetric): COLAMD fills 2.12×, the natural
+  order 2.29×, and the AMD-like `MMD_AT_PLUS_A` 4.12× at three times the
+  factorization time. On the full assembled matrix, COLAMD fills 389× in 801 s
+  where `MMD_AT_PLUS_A` fills 737× in 4,507 s, both on the laptop. SuperLU's
+  default is the right ordering for SuperLU; what separates it from MUMPS and
+  PARDISO is the elimination and the scaling, not the order.
+- **Diagonalizing the collision coupling.** The operator's collision array
+  carries no angular index and streaming is exactly `x · T_species + E`, so one
+  eigendecomposition per Legendre row would give the whole speed and species
+  coupling at the cost of the present preconditioner. The eigenvalues are real
+  and the basis is unusable: `cond(V) = 3.2e15` at `l = 0`, `5e12` at `l = 1`.
+  The block is not diagonally symmetrizable either — the best-fit weighting
+  leaves an asymmetry of 1.41, so no such weighting exists — because the
+  discretization does not preserve the continuum self-adjointness.
 - **An incomplete LU of the full operator.** It keeps the coupling the
   simplified preconditioner drops, at a fraction of a complete factorization's
   memory. On the collaborator grid it built in 133 s at 9.5× fill, and GMRES
@@ -113,6 +151,9 @@ Scripts and records are kept outside Git in
   keeps the speed coupling within memory is.
 - **Keep SuperLU's default ordering**, and do not pursue a drop-tolerance
   incomplete factorization.
-- **The direct route needs a multifrontal factorization**, not a different
-  assembly: 801 s against 40 s is the gap, and it is the first step of the
-  production solver program in `plan.md`.
+- **The direct route needs a supernodal backend and a scaling**, not a different
+  assembly or a different ordering. Equilibration plus PARDISO reaches 103 s and
+  5.0 GiB at a refined residual of 1.2e-10, from SuperLU's 2,732 s and 19.1 GiB.
+  Both belong to step 1 of the production solver program in `plan.md`:
+  the scaling lands in SOLVAX, and the backend is chosen at run time because
+  PARDISO is x86-64 only.
