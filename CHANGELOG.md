@@ -9,6 +9,11 @@
   nilpotent series of `n_x` sweeps of the whole band. The map, the factors and
   the memory are unchanged, and one application at NCSX `(25, 37, 61, 8)` costs
   3.7x less: 2.3x a `coarse` application against 8.5x.
+- Continue every escalation rung from the stalled iterate, rather than from the
+  original guess, when that iterate is finite and improved on the right-hand
+  side it started from. On a forced NCSX stall the rung that converges takes 18
+  iterations instead of 27, for the same answer. A diverged iterate is refused,
+  so a rung never starts further away than the original guess.
 - Escalate a stalled recycled-Krylov solve to that triangle before `sparse` and
   `multigrid`. Those three are inverses of one simplified operator, so none of
   them answers a stall caused by the Fokker-Planck speed coupling that operator
