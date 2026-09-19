@@ -98,6 +98,7 @@ try:  # noqa: E402
         block_thomas_solve,
         block_thomas_truncated_fn,
     )
+    from solvax.equilibration import equilibrate
     from solvax.implicit import linear_solve as solvax_linear_solve
     from solvax.krylov import gcrot
     from solvax.native import SpluFactorization
@@ -115,6 +116,7 @@ except ImportError:
     gcrot = None  # type: ignore[assignment]
     SpluFactorization = None  # type: ignore[assignment, misc]
     sparse_operator_matrix = None  # type: ignore[assignment]
+    equilibrate = None  # type: ignore[assignment]
 
 from dkx import require_float64
 from dkx.coarse_precond import (  # noqa: E402
@@ -1260,21 +1262,57 @@ def _solve_tier3(
             "differentiable=True."
         )
     n = op.total_size
+    assembled = None
     if n > max_dense_size:
-        raise RuntimeError(
-            f"sparse direct materialization refused: total_size={n} > "
-            f"max_dense_size={max_dense_size}, i.e. {n} operator applications to "
-            "sample the matrix column by column; raise max_dense_size explicitly "
-            "if you really want this."
-        )
-    print(
-        f"[dkx.solve] sparse direct route (host SuperLU, n={n}): "
-        "non-differentiable fallback path."
-    )
+        # Sampling costs one operator application per column, which is what
+        # max_dense_size bounds. The assembly costs one per group of columns
+        # that share no row -- 8,800 for 633,600 unknowns -- so that bound does
+        # not apply to it, and what the route can afford is the factorization.
+        try:
+            from dkx.assembly import assemble_operator  # noqa: PLC0415
+
+            assembled = assemble_operator(op)
+        except Exception as exc:  # the refusal is the fallback, not a crash
+            raise RuntimeError(
+                f"sparse direct materialization refused: total_size={n} > "
+                f"max_dense_size={max_dense_size}, i.e. {n} operator "
+                "applications to sample the matrix column by column, and the "
+                f"assembly that would avoid them is unavailable here ({exc}). "
+                "Raise max_dense_size explicitly to sample anyway."
+            ) from exc
     t0 = time.perf_counter()
-    lu = SpluFactorization(materialize_csr(op, pin_masked_dofs=True))
+    if assembled is None:
+        print(
+            f"[dkx.solve] sparse direct route (host SuperLU, n={n}): "
+            "non-differentiable fallback path."
+        )
+        matrix = materialize_csr(op, pin_masked_dofs=True)
+    else:
+        print(
+            f"[dkx.solve] sparse direct route (host SuperLU, n={n}): assembled "
+            f"from {assembled.products} products, {assembled.matrix.nnz} "
+            "nonzeros; non-differentiable fallback path."
+        )
+        matrix = assembled.matrix
+    # A factorization chooses its pivots from the matrix it is handed, and these
+    # rows carry streaming, collision and constraint terms at once. Scaling
+    # first is what keeps those pivots meaningful.
+    scaling = equilibrate(matrix)
+    lu = SpluFactorization(scaling.matrix)
     t1 = time.perf_counter()
-    x2d = jnp.asarray(lu.solve(np.asarray(rhs2d)))
+    rhs = np.asarray(rhs2d)
+    if rhs.ndim == 1:
+        rhs = rhs[:, None]
+    x2d = scaling.unscale_solution(np.asarray(lu.solve(scaling.scale_rhs(rhs))))
+    # One defect correction on the stored factors: cheap, and it turns the
+    # factorization's residual into the solution's.
+    apply_pinned = _pinned_matvecs(op)[0]
+    defect = rhs - np.asarray(
+        jax.vmap(apply_pinned, in_axes=1, out_axes=1)(jnp.asarray(x2d))
+    )
+    x2d = jnp.asarray(
+        x2d + scaling.unscale_solution(np.asarray(lu.solve(scaling.scale_rhs(defect))))
+    )
     if x2d.ndim == 1:
         x2d = x2d[:, None]
     t2 = time.perf_counter()
