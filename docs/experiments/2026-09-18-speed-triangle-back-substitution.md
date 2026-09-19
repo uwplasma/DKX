@@ -123,3 +123,54 @@ opt-in.**
 - A route that keeps exactness while batching several speeds per solve would
   need block back-substitution over speed groups. It is queued behind the
   `Nx = 16` test, which decides whether the triangle is worth more work at all.
+
+## Follow-up: where the triangle pays (2026-09-18)
+
+The record above measured the apply on NCSX, where the triangle loses end to
+end. Its prediction was that the exact triangle's cost stops growing with `Nx`
+while the dropped coupling costs more iterations as `Nx` grows, so the two must
+cross. This is that crossover, on the collaborator's HSX-like deck at point B
+(`rN = 0.367`, `Er = 14.39`, `Nxi = 120`), office, four pinned cores, GMRES
+`tol = 1e-10`, restart 100, up to 200 restarts.
+
+| `Nx` | Route | Iterations | Wall | Peak RSS | `FSABjHat` |
+| ---: | --- | ---: | ---: | ---: | ---: |
+| 10 | default | 150 | 53.7 s | 4.32 GiB | +6.3380212066e-3 |
+| 10 | triangle | 85 | 146.3 s | 7.06 GiB | +6.3380212052e-3 |
+| 13 | default | 495 | 145.7 s | 5.00 GiB | +6.5609074896e-3 |
+| 13 | triangle | 285 | 277.5 s | 8.78 GiB | +6.5609074897e-3 |
+| 16 | default | 6697 | 2519 s | 6.0 GiB | +6.3658404476e-3 |
+| 16 | triangle | 2599 | 1358 s | 11.09 GiB | +6.3658404486e-3 |
+
+- **The triangle wins from `Nx = 16` on this deck**, at 1.85× less wall time and
+  2.6× fewer iterations, for the same current to 1.6e-10. At `Nx = 10` and `13`
+  it loses, 2.7× and 1.9×, so the crossover lies between 13 and 16.
+- **What crosses is not `Nx`.** The triangle's iteration cut is 1.7-1.8× at
+  `Nx = 10` and `13` and 2.6× at 16; what changes by more than an order of
+  magnitude is the default route's own count, 150 to 495 to 6697. The triangle
+  pays where the default route's iterations run away, which is a property of the
+  solve, not of the grid.
+- **Memory is the price**: 1.6-1.8× the default route's peak at every rung,
+  since the triangle holds the coupling and the assembled speeds alongside the
+  same factors.
+- **Point A at `Nx = 16` did not finish** on either route: 3 h on the triangle
+  and 2 h 16 min on the series, both stopped by their caps with no residual
+  recorded. Its default-route attempt reached 2.5e-5 in 6957 s. That point stays
+  unresolved.
+
+**Should the ladder fire earlier?** At `Nx = 16` the default route converges
+inside its budget, so the stall rung of #250 never runs and a user pays 1977 s
+where the triangle costs 1358 s. Capping the first attempt near 1100 iterations
+to force escalation was measured on the same deck and host, on `main` at
+`e9e0d80`: the run reached 22 GiB and was stopped by the host-memory guard after
+52 min with no answer, against 5.9 GiB for the unchanged default. The rungs
+after the triangle build preconditioners of their own, so an earlier trigger
+buys the triangle's speed at several times the memory.
+
+**Decision.** Keep the late trigger, and keep `coarse` as the default route. The
+triangle is reached automatically after a stall (#250), warm-started (#251), and
+is worth selecting by hand on a deck whose iteration count runs away, such as
+this one at `Nx = 16`. Choosing it from grid parameters alone is not supported:
+what crosses is the iteration count, not `Nx`. A memory-aware rung order, which
+the triangle's factor reuse already exploits, is the open question, and the
+`Nx = 16` point A case stays unresolved on CPU.
