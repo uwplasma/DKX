@@ -163,15 +163,45 @@ a fill-reducing order rather than `L`-first, and at `(20, 16)` it returns
 *exactly* 2,788 iterations and the same `9.03e-11` residual, with the two
 preconditioner maps differing by `5.2e-9`.
 
-**So the factorization is exonerated, and the growth is in the spectrum.** What
-remains is the eigenvalue and eigenvector structure of `A M^-1` as `Nx` grows,
-which none of the measurements here touch. That is the next thing to look at,
-and it is a different kind of work from building another preconditioner.
+**So the factorization is exonerated, and the growth is in the spectrum.**
+Assembling `A M^-1` column by column on a grid small enough to take a dense
+eigendecomposition -- `Ntheta = 5`, `Nzeta = 5`, `Nxi = 8`, where the same
+growth survives at 113 iterations against 340 -- says which part of it:
 
-**What is still not shown.** Why the spectrum degrades with `Nx` and not with
-`Nxi`, and whether anything short of coupling the speeds in `M` addresses it --
-noting that coupling them exactly is separately measured to make convergence
-worse (`2026-09-19-collision-coupling-is-cross-species.md`). The weaker check,
+| | `Nx = 10` | `Nx = 16` |
+| --- | ---: | ---: |
+| eigenvector basis `cond` | 1.95e18 | 1.11e22 |
+| the same after diagonal balancing | 9.82e10 | 1.57e11 |
+| spectral radius | 4.69 | 20.9 |
+| eigenvalues within 0.5 of 1 | 96.7% | 94.3% |
+| largest / smallest modulus | 1.28e4 | 2.60e4 |
+
+**The eigenvalues barely move and the eigenvector basis collapses.** Clustering
+goes from 96.7% to 94.3% and the modulus ratio doubles, while the conditioning
+of the eigenvector basis grows by a factor of 5,700. A preconditioned operator
+this non-normal is not governed by its eigenvalues at all, which is why the
+operator-norm attribution that opened this program pointed the wrong way.
+
+**And the collapse is a diagonal scaling.** LAPACK balancing -- a diagonal
+similarity, so the eigenvalues are untouched -- takes those numbers to 9.82e10
+and 1.57e11: seven to eleven orders of magnitude removed, and the `Nx`
+dependence flattened from 5,700x to 1.6x. Whatever `Nx` does to this operator,
+a diagonal similarity very nearly undoes it.
+
+This does not contradict the point that scaling cannot move the spectrum. It
+cannot, and it does not here. It moves the basis in which that spectrum is
+expressed, and for an operator whose eigenvector conditioning is `1e22` that is
+the quantity convergence depends on.
+
+**What is still not shown.** That balancing the preconditioned operator
+actually reduces the iteration count. The measurement above is of the assembled
+operator, not of a solve: GCROT right-preconditioned by `M` minimizes a
+residual in the unscaled norm, and solving the balanced system instead means
+scaling the right-hand side and folding the diagonal into the preconditioner,
+which is a change to the solve and not only to the matrix. Nor is it shown
+which operator term the offending directions belong to -- the two obvious
+candidates are the high-speed rows of the light species, which is where every
+other measurement in this program has landed. The weaker check,
 whether the preconditioner inverts `_coarse_operator` as `Nx` grows, is
 inconclusive and was abandoned: that operator omits the floor, the `l = 0` pin
 and the drift diagonal the chains carry, leaving a constant 0.55 to 0.58
@@ -179,9 +209,11 @@ relative error at every `Nx`.
 
 ## Follow-up
 
-- Measure the spectrum of `A M^-1` against `Nx` on a deck small enough to
-  assemble both. Everything cheaper has been tried here: retaining more
-  coupling, loosening the tolerance, scaling, and a second elimination, and
-  none of them is where the growth lives.
-- `Nx = 12` deserves its own look: 3,810 iterations at `1e-10` against 564 at
-  `1e-9`, where its neighbours pay almost nothing for that decade.
+- Solve the balanced system and read the iteration count: scale the
+  right-hand side, fold the diagonal into the preconditioner, and compare
+  against 2,788 at `(20, 16)` on the production grid. The balancing diagonal
+  itself says which rows it is correcting, which is the cheapest route to
+  naming the term responsible.
+- `Nx = 12` deserves its own look on the production grid: 3,810 iterations at
+  `1e-10` against 564 at `1e-9`, where its neighbours pay almost nothing for
+  that decade.
