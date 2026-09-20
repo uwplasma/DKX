@@ -90,17 +90,41 @@ def _cyclic_radius(matrix) -> int:
     return int(np.max(np.minimum(distance, n - distance)), ) if rows.size else 0
 
 
-def _angular_stride(n: int, radius: int) -> int:
-    """Smallest stride that divides the grid and clears twice the stencil.
+def _angular_classes(n: int, radius: int) -> list[np.ndarray]:
+    """Partition a periodic grid into classes that clear twice the stencil.
 
-    The grid is periodic, so members of a residue class are a whole stride
-    apart only when the stride divides the grid; two columns share a row when
-    they sit within twice the stencil radius of each other.
+    Asking the separation to *divide* the grid is sufficient but wasteful
+    when the grid length is unhelpful: at ``n = 11``
+    with radius 2, the only divisor above 4 is 11 itself, so every point
+    becomes its own class, while ``{0, 5}`` is perfectly legal -- its two
+    cyclic gaps are 5 and 6, both above 4. Dropping the divisibility gives
+    ``{0,5} {1,6} {2,7} {3,8} {4,9} {10}``: six classes where the stride rule
+    gives eleven, and the assembly costs one product per class.
+
+    Members of a class are a full ``2 * radius + 1`` apart by construction, and
+    the wrap-around gap back to the first member is checked before a member is
+    added, so every pair clears the stencil in both directions. Where a dividing stride is
+    already tight this reproduces it exactly.
     """
-    for stride in range(1, n + 1):
-        if n % stride == 0 and stride > 2 * radius:
-            return stride
-    return n
+    step = 2 * radius + 1
+    if step >= n:
+        return [np.array([i]) for i in range(n)]
+    taken = np.zeros(n, dtype=bool)
+    classes: list[np.ndarray] = []
+    for start in range(n):
+        if taken[start]:
+            continue
+        members = [start]
+        taken[start] = True
+        candidate = start + step
+        # The gap that closes the circle is the one the stride rule buys with
+        # divisibility; check it rather than require it.
+        while candidate < n and not taken[candidate] and n - candidate + start > 2 * radius:
+            members.append(candidate)
+            taken[candidate] = True
+            candidate += step
+        classes.append(np.asarray(members))
+    return classes
 
 
 def f_block_pattern(op: KineticOperator, *, l_bandwidth: int = _L_BANDWIDTH):
@@ -146,17 +170,18 @@ def f_block_groups(op: KineticOperator, *, l_bandwidth: int = _L_BANDWIDTH) -> l
     coupling forbids, so ``(s, x)`` enters the group key.
     """
     n_s, n_x, n_xi, n_theta, n_zeta = op.f_shape
-    stride_theta = _angular_stride(n_theta, _cyclic_radius(op.ddtheta))
-    stride_zeta = _angular_stride(n_zeta, _cyclic_radius(op.ddzeta))
+    theta_classes = _angular_classes(n_theta, _cyclic_radius(op.ddtheta))
+    zeta_classes = _angular_classes(n_zeta, _cyclic_radius(op.ddzeta))
     # Legendre is a band, not a circle, so a stride past the bandwidth is enough.
     stride_l = min(2 * l_bandwidth + 1, n_xi)
     index = np.arange(op.f_size).reshape(n_s * n_x, n_xi, n_theta, n_zeta)
     groups: list[np.ndarray] = []
     for sx in range(n_s * n_x):
         for l0 in range(stride_l):
-            for t0 in range(stride_theta):
-                for z0 in range(stride_zeta):
-                    block = index[sx, l0::stride_l, t0::stride_theta, z0::stride_zeta]
+            rows = index[sx, l0::stride_l]
+            for theta in theta_classes:
+                for zeta in zeta_classes:
+                    block = rows[:, theta][:, :, zeta]
                     if block.size:
                         groups.append(block.reshape(-1))
     return groups
