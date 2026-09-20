@@ -89,7 +89,9 @@ matrices, row and column scaling alone:
 
 A diagonal scaling removes eleven orders of magnitude at `Nx = 16` and leaves a
 condition number of order ten that barely moves with `Nx`. The speed
-discretization is not intrinsically ill-conditioned; it is badly scaled.
+discretization is not intrinsically ill-conditioned; it is badly scaled. That
+is a fact about `ddx`, and the section below measures that it does *not* carry
+over to the chains the preconditioner factors, where scaling changes nothing.
 
 ## Decision
 
@@ -117,33 +119,48 @@ the collision diagonal does not. At `Nx = 16` the top seven electron chains run
 added multiplies the worst chain's backward error by about three, and raising
 `Nx` adds exactly such points at the top of the grid.
 
-This is not the chains being ill-conditioned -- assembled outright, the first
-chain's condition number is 169 at `Nx = 10` and 652 at `Nx = 16`, and the
-solve amplifies by 13 to 18. It is that the worst chains are badly scaled, in
-the same direction and for the same reason the speed derivative is.
+**It is the elimination, not the scaling.** Assembling those chains outright
+separates the two. Against a dense LU of the *same* chain with the *same*
+right-hand side, float64 throughout, at `Nx = 16`:
 
-**What is still not shown.** That a backward error of `3e-7` in the worst
+| subsystem | chain `cond` | block-Thomas | dense LU | ratio |
+| --- | ---: | ---: | ---: | ---: |
+| electrons, `x = 15` | 1.79e6 | 2.62e-7 | 1.36e-11 | 1.9e4 |
+| electrons, `x = 14` | 1.18e6 | 5.75e-8 | 9.06e-12 | 6.4e3 |
+| ions, `x = 15` | 6.36e3 | 7.88e-13 | 9.78e-14 | 8.1 |
+| ions, `x = 0` | 6.5e2 | 1.85e-16 | 3.03e-16 | 0.6 |
+
+A stable factorization of the worst chain returns `1.4e-11`, which is what its
+condition number allows. The block-Thomas elimination returns `2.6e-7` from the
+same matrix: a growth factor of about `3e9`, and it is the elimination that
+loses it. The ratio is 0.6 where the chain is well conditioned and 1.9e4 where
+it is not, which is the signature of an elimination that does not pivot.
+
+**Equilibration is not the fix.** Ruiz scaling of the worst chain before a
+dense LU returns `1.2e-11` against the unscaled `1.4e-11` -- nothing. The entry
+spread of that chain is 9.9e6 and scaling removes it, and the backward error
+does not move, so the loss is not the scaling the speed derivative's
+conditioning suggested. The chains are genuinely ill-conditioned at the top of
+the speed grid, `cond` 6.5e2 on the first and 1.79e6 on the worst, and they get
+worse as `Nx` adds points there.
+
+**What is still not shown.** That a backward error of `2.6e-7` in the worst
 chains, against `1e-16` in the best, is what costs the 16x in iterations. The
-step that closes it is to equilibrate the chain blocks before factoring them
-and re-measure both numbers together. A diagonal scaling applied consistently
-to the operator *and* its preconditioner would be a similarity transform and
-could not move the spectrum of `A M^-1`; scaling inside the factorization is a
-different thing, and these numbers say there is something there to recover.
-The weaker check -- whether the preconditioner inverts `_coarse_operator` as
-`Nx` grows -- is inconclusive and was abandoned, because that operator omits
-the floor, the `l = 0` pin and the drift diagonal the chains carry, leaving a
-constant 0.55 to 0.58 relative error at every `Nx`.
+step that closes it is a stable elimination for the chains that need one --
+pivoting, or routing those subsystems through the `sparse` route, which already
+eliminates in a fill-reducing order on the host -- measured against the
+iteration count. The weaker check, whether the preconditioner inverts
+`_coarse_operator` as `Nx` grows, is inconclusive and was abandoned: that
+operator omits the floor, the `l = 0` pin and the drift diagonal the chains
+carry, leaving a constant 0.55 to 0.58 relative error at every `Nx`.
 
 ## Follow-up
 
-- Equilibrate the pinned chain before factoring it, and read the worst
-  subsystem's backward error and the iteration count together. This is the same
-  move that
-  took MKL PARDISO from a relative residual of 9.4e-2 with nine perturbed
-  pivots to `1.2e-10` on the direct route
-  (`2026-09-19-sfincs-on-the-gap-deck.md`), and SOLVAX 0.24.0 already carries
-  `equilibrate`. Unlike scaling the whole system, scaling *inside* the
-  factorization changes the factors' accuracy rather than performing a
-  similarity transform.
+- Give the ill-conditioned chains a stable elimination -- pivoting, or routing
+  those subsystems through the `sparse` route, which already eliminates in a
+  fill-reducing order on the host -- and read the worst subsystem's backward
+  error and the iteration count together. Equilibration, which answered the
+  direct route's perturbed pivots (`2026-09-19-sfincs-on-the-gap-deck.md`), is
+  measured above not to answer this one.
 - `Nx = 12` deserves its own look: 3,810 iterations at `1e-10` against 564 at
   `1e-9`, where its neighbours pay almost nothing for that decade.
