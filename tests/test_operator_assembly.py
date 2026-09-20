@@ -13,13 +13,19 @@ the assembly rather than an option.
 
 from __future__ import annotations
 
+import itertools
 from pathlib import Path
 
 import jax
 import numpy as np
 import pytest
 
-from dkx.assembly import assemble_operator, f_block_groups, f_block_pattern
+from dkx.assembly import (
+    _angular_classes,
+    assemble_operator,
+    f_block_groups,
+    f_block_pattern,
+)
 from dkx.drift_kinetic import kinetic_operator_from_namelist
 from dkx.inputs import load_sfincs_input
 
@@ -140,6 +146,33 @@ def test_no_group_holds_two_columns_that_share_a_row(operator) -> None:
             [pattern.indices[pattern.indptr[j] : pattern.indptr[j + 1]] for j in group]
         )
         assert np.unique(rows).size == rows.size
+
+
+@pytest.mark.parametrize(
+    "n, radius", [(11, 2), (15, 2), (5, 2), (12, 1), (7, 3), (16, 2), (13, 1)]
+)
+def test_every_angular_class_clears_the_stencil_both_ways(n: int, radius: int) -> None:
+    """The property the grouping rests on, including around the wrap."""
+    classes = _angular_classes(n, radius)
+    covered = np.concatenate(classes)
+    assert np.array_equal(np.sort(covered), np.arange(n)), "must be a partition"
+    for members in classes:
+        for a, b in itertools.combinations(members.tolist(), 2):
+            gap = abs(a - b)
+            assert min(gap, n - gap) > 2 * radius, (n, radius, members)
+
+
+def test_the_classes_beat_a_dividing_stride_where_the_grid_is_unhelpful() -> None:
+    """A separation that must divide the grid is the wasteful part.
+
+    At ``n = 11`` with radius 2 the only divisor above 4 is 11, so a dividing
+    stride puts every point in its own class. ``{0, 5}`` is legal -- its cyclic
+    gaps are 5 and 6 -- and pairing points that way is one product saved per
+    pair on the assembly.
+    """
+    classes = _angular_classes(11, 2)
+    assert len(classes) == 6, [c.tolist() for c in classes]
+    assert sorted(len(c) for c in classes) == [1, 2, 2, 2, 2, 2]
 
 
 def test_a_pattern_that_misses_a_coupling_is_refused(operator, monkeypatch) -> None:
