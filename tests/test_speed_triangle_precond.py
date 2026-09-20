@@ -83,6 +83,27 @@ def _operator(tmp_path: Path, *, nx: int = 4, collision: int = 0):
     return kinetic_operator_from_namelist(load_sfincs_input(path).raw)
 
 
+TWO_SPECIES = """ Zs=1 -1
+ mHats=1.0 5.4465d-4
+ nHats=1.0 1.0
+ THats=1.0 1.0
+ dNHatdrHats=-0.5 -0.5
+ dTHatdrHats=-1.0 -1.0
+"""
+
+
+def _two_species_operator(tmp_path: Path, *, nx: int = 4):
+    """An ion-electron deck, where cross-species coupling exists at all."""
+    from dkx.drift_kinetic import kinetic_operator_from_namelist
+    from dkx.inputs import load_sfincs_input
+
+    single = DECK[DECK.index("&speciesParameters") : DECK.index("&physicsParameters")]
+    deck = DECK.replace(single, "&speciesParameters\n" + TWO_SPECIES + "/\n\n")
+    path = tmp_path / "two_species.namelist"
+    path.write_text(deck.format(nx=nx, collision=0))
+    return kinetic_operator_from_namelist(load_sfincs_input(path).raw)
+
+
 def _triangular_operator(op):
     """The operator the option's preconditioner is meant to invert exactly."""
     base = _coarse_operator(op)
@@ -120,6 +141,31 @@ def test_pitch_angle_scattering_has_nothing_to_retain(tmp_path: Path) -> None:
     op = _operator(tmp_path, collision=1)
     upper = _strict_upper_speed_coupling(op, op._mask())
     assert upper is None or float(jnp.linalg.norm(upper)) == 0.0
+
+
+def test_the_cross_species_block_is_left_out_deliberately(tmp_path: Path) -> None:
+    """The retained triangle is one species' own block, and stays that way.
+
+    On a two-species deck the cross-species blocks carry most of the collision
+    operator -- 99.9% of its norm on the HSX deck -- so retaining them as well
+    takes ``||A - M||/||A||`` from about 1.0 to 4.3e-4. That was built and
+    measured, and it converges *worse*: 6,786 GCROT iterations against this
+    option's 5,799 on that deck at ``(Nxi, Nx) = (40, 16)``, because the exact
+    inverse of ``D + U`` is ill-conditioned once ``U`` exceeds ``D`` by four to
+    five orders of magnitude
+    (``docs/experiments/2026-09-19-collision-coupling-is-cross-species.md``).
+    A closer ``M`` is not a better preconditioner here, so the block is left
+    out on purpose rather than by oversight.
+    """
+    op = _two_species_operator(tmp_path)
+    mat = np.asarray((op.fp if op.fp is not None else op.sugama).mat)
+    n_s = mat.shape[0]
+    assert n_s == 2
+    off_diagonal = np.linalg.norm(mat[0, 1]) + np.linalg.norm(mat[1, 0])
+    assert off_diagonal > 0.0, "the deck must have cross-species coupling to speak to"
+    upper = _strict_upper_speed_coupling(op, op._mask())
+    assert upper.ndim == 4, "one block per species, not one per species pair"
+    assert upper.shape[0] == n_s
 
 
 def test_it_inverts_the_operator_it_claims_to(tmp_path: Path) -> None:
