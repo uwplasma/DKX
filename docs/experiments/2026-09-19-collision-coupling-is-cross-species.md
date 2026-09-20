@@ -99,7 +99,10 @@ far apart the two can be.
 
 Wall time makes it worse: both triangles lose to `coarse` on this deck, because
 the apply is sequential over `Nx` where `coarse` batches
-(`2026-09-18-speed-triangle-back-substitution.md`).
+(`2026-09-18-speed-triangle-back-substitution.md`). The same trade appears at
+`(Nxi, Nx) = (60, 16)`, where the self-species triangle takes `coarse`'s 4,177
+iterations to 3,192 and its 322 s to 389 s. The cross-species arm was not run
+at that resolution, so the comparison above rests on `(40, 16)` alone.
 
 ## Decision
 
