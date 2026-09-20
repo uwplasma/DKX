@@ -4,6 +4,13 @@
 
 ### Execution
 
+- Build the sparse direct route's matrix from products with the operator rather
+  than one column at a time, scale it before factoring, and correct the defect
+  once. Sampling costs one operator application per column, which is what
+  `max_dense_size` bounds and why the route refused every production deck; the
+  assembly costs one per group of columns that share no row, 5,508 for the
+  66,004-unknown collaborator grid. That deck now solves in 846 s to a relative
+  residual of `1.3e-14`, where the route previously refused it.
 - Apply the exact speed triangle (`preconditioner="coarse_triangle"`) by
   back-substitution over `x`, rather than reaching the same inverse as a
   nilpotent series of `n_x` sweeps of the whole band. The map, the factors and

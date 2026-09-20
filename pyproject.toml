@@ -28,15 +28,18 @@ dependencies = [
   "rich>=13.0",
   # solvax (PyPI) owns the structured linear-algebra solver routes (block-Thomas
   # elimination, recycled GCROT, implicit differentiation) that every canonical
-  # solve uses; it is a core dependency, not optional. 0.23.0 is the floor:
-  # `solvax.compression` recovers a sparse matrix from products with a known
-  # pattern, which is how `dkx.assembly` forms the operator at all -- sampling
-  # one column per product costs 633,604 products on the deck that motivated it.
+  # solve uses; it is a core dependency, not optional. 0.24.0 is the floor:
+  # `solvax.equilibration` scales the assembled operator before it is factored,
+  # without which a factorization picks its pivots from rows carrying streaming,
+  # collision and constraint terms at once. 0.23.0 added `solvax.compression`,
+  # which recovers a sparse matrix from products with a known pattern and is how
+  # `dkx.assembly` forms the operator at all -- sampling one column per product
+  # costs 633,604 products on the deck that motivated it.
   # 0.21.0 was the previous floor: its bordered preconditioner applies the coarse
   # inverse once per Krylov iteration instead of twice (SOLVAX #101), and every
   # published DKX Krylov timing since 2026-09-12 was measured with that
   # behaviour.
-  "solvax>=0.23.0",
+  "solvax>=0.24.0",
 ]
 
 [project.optional-dependencies]
