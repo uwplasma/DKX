@@ -188,6 +188,15 @@ and 1.57e11: seven to eleven orders of magnitude removed, and the `Nx`
 dependence flattened from 5,700x to 1.6x. Whatever `Nx` does to this operator,
 a diagonal similarity very nearly undoes it.
 
+Two corrections to that paragraph, from the work it prompted
+(`2026-09-20-the-balanced-solve.md`). Those figures are `matrix_balance` at its
+`permute=True` default, and a permutation reorders rows, which a matrix-free
+solve cannot do; the diagonal alone gives 2.07e11 and 7.49e11, a flattening to
+3.6x. And the conditioning this removes is **not** what the solve's convergence
+depends on: removing 1.5e10 of it moves the iteration count by at most 1.05x,
+so the paragraph below, which reads the growth as living in this quantity, is
+withdrawn.
+
 This does not contradict the point that scaling cannot move the spectrum. It
 cannot, and it does not here. It moves the basis in which that spectrum is
 expressed, and for an operator whose eigenvector conditioning is `1e22` that is
