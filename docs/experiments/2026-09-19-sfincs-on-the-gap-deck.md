@@ -141,6 +141,27 @@ Scripts and records are kept outside Git in
 `ordering_bench.py`, `assembly_check.py`, `assembly_stats.py`, `ilu_probe.py`,
 `direct_probe.py` and their JSON outputs.
 
+**How far the direct route reaches.** The same route, PARDISO with
+equilibration, at the gap deck's structure (`Nx = 16`), office, four pinned
+cores:
+
+| `Nxi` | Unknowns | Factorization | Peak RSS | Refined residual | Perturbed pivots |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 20 | 66,004 | 103 s | 5.0 GiB | 1.2e-10 | 9 |
+| 30 | 158,404 | 1,107 s | 20.4 GiB | 3.3e-13 | 0 |
+
+- **The cost grows far faster than the deck.** 2.4× the unknowns costs 10.7× the
+  time and 4.1× the memory, which is an exponent of 2.8 in time and 1.6 in
+  memory. Extrapolated to the gap deck's 633,604 unknowns that is of order
+  fourteen hours and 190 GiB, against the 62 GiB the office host has. A general
+  sparse direct factorization does not reach that deck on this hardware.
+- **Equilibration is doing the work**: nine pivots were perturbed at `Nxi = 20`
+  and none at 30, and the refined residual improved with size rather than
+  degrading.
+- Two further points, `Nxi = 60` and `90`, were stopped by the host-memory guard
+  while two foreign jobs held the machine at load 21. They are reported as
+  stopped, not as values, and the extrapolation rests on two points.
+
 ## Decision
 
 - **Land the assembly.** It is exact, it is checked against the operator before
@@ -151,6 +172,14 @@ Scripts and records are kept outside Git in
   keeps the speed coupling within memory is.
 - **Keep SuperLU's default ordering**, and do not pursue a drop-tolerance
   incomplete factorization.
+- **The direct route is for small and medium decks, and it is now usable
+  there.** Through `solve(method="direct")` the 66,004-unknown collaborator grid
+  assembles, scales, factors and solves to a relative residual of `1.3e-14`,
+  which the route refused outright before this; further right-hand sides and
+  adjoints cost the solve, not the build. Its reach ends around a few hundred
+  thousand unknowns on a 62 GiB host, so it does not answer the gap deck.
+- **The gap deck needs a preconditioner that keeps the speed coupling**, which
+  is step 2 of the production solver program, not a bigger factorization.
 - **The direct route needs a supernodal backend and a scaling**, not a different
   assembly or a different ordering. Equilibration plus PARDISO reaches 103 s and
   5.0 GiB at a refined residual of 1.2e-10, from SuperLU's 2,732 s and 19.1 GiB.
