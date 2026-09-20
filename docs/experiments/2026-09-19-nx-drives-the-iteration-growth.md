@@ -100,25 +100,45 @@ convergence worse rather than better
 (`2026-09-19-collision-coupling-is-cross-species.md`). The resolution that
 costs is the one the operator-norm attribution says nothing about.
 
-**What is not yet shown.** That the scaling above is what the Krylov route
-feels does not follow from these numbers. A diagonal scaling applied
-consistently to the operator and its preconditioner is a similarity transform,
-which leaves the spectrum of `A M^-1` unchanged, so it cannot help by that
-route alone. Two mechanisms remain open and are separable by measurement: the
-eigenvector conditioning, which a similarity transform does change, and the
-accuracy of the coarse factorization itself, which is computed from blocks
-carrying this conditioning. The obvious check -- whether the preconditioner
-still inverts its own operator as `Nx` grows -- was attempted against
-`_coarse_operator` and is inconclusive, because that operator omits the floor,
-the `l = 0` pin and the drift diagonal the chains actually carry, which puts a
-constant 0.55 to 0.58 relative error in the way at every `Nx`.
+**And the factors do lose the chain, one speed at a time.** Comparing the
+block-Thomas factors against the pinned chain its own generators produce --
+`||K_b y - v||/||v||` per subsystem `b = (species, speed)`, float64 factors --
+places the loss exactly where the speed grid grows. At `Nx = 10`:
+
+| subsystem | ions | electrons |
+| --- | ---: | ---: |
+| lowest speed | 2.1e-16 | 4.7e-16 |
+| highest speed | 8.7e-14 | 7.9e-8 |
+
+The error rises monotonically with the speed index and is some six orders worse
+for the light species, whose streaming coefficients carry the `sqrt(T/m)` that
+the collision diagonal does not. At `Nx = 16` the top seven electron chains run
+2.2e-10, 8.9e-10, 2.9e-9, 6.3e-9, 2.8e-8, 1.0e-7 and 3.2e-7: each speed point
+added multiplies the worst chain's backward error by about three, and raising
+`Nx` adds exactly such points at the top of the grid.
+
+This is not the chains being ill-conditioned -- assembled outright, the first
+chain's condition number is 169 at `Nx = 10` and 652 at `Nx = 16`, and the
+solve amplifies by 13 to 18. It is that the worst chains are badly scaled, in
+the same direction and for the same reason the speed derivative is.
+
+**What is still not shown.** That a backward error of `3e-7` in the worst
+chains, against `1e-16` in the best, is what costs the 16x in iterations. The
+step that closes it is to equilibrate the chain blocks before factoring them
+and re-measure both numbers together. A diagonal scaling applied consistently
+to the operator *and* its preconditioner would be a similarity transform and
+could not move the spectrum of `A M^-1`; scaling inside the factorization is a
+different thing, and these numbers say there is something there to recover.
+The weaker check -- whether the preconditioner inverts `_coarse_operator` as
+`Nx` grows -- is inconclusive and was abandoned, because that operator omits
+the floor, the `l = 0` pin and the drift diagonal the chains carry, leaving a
+constant 0.55 to 0.58 relative error at every `Nx`.
 
 ## Follow-up
 
-- Compare the coarse factors against the pinned chain they are built from,
-  rather than against `_coarse_operator`, and read the backward error against
-  `Nx`. That decides between the two mechanisms above.
-- Equilibrate the pinned chain before factoring it. This is the same move that
+- Equilibrate the pinned chain before factoring it, and read the worst
+  subsystem's backward error and the iteration count together. This is the same
+  move that
   took MKL PARDISO from a relative residual of 9.4e-2 with nine perturbed
   pivots to `1.2e-10` on the direct route
   (`2026-09-19-sfincs-on-the-gap-deck.md`), and SOLVAX 0.24.0 already carries
