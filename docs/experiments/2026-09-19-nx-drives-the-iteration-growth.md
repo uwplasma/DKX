@@ -144,23 +144,44 @@ conditioning suggested. The chains are genuinely ill-conditioned at the top of
 the speed grid, `cond` 6.5e2 on the first and 1.79e6 on the worst, and they get
 worse as `Nx` adds points there.
 
-**What is still not shown.** That a backward error of `2.6e-7` in the worst
-chains, against `1e-16` in the best, is what costs the 16x in iterations. The
-step that closes it is a stable elimination for the chains that need one --
-pivoting, or routing those subsystems through the `sparse` route, which already
-eliminates in a fill-reducing order on the host -- measured against the
-iteration count. The weaker check, whether the preconditioner inverts
-`_coarse_operator` as `Nx` grows, is inconclusive and was abandoned: that
-operator omits the floor, the `l = 0` pin and the drift diagonal the chains
-carry, leaving a constant 0.55 to 0.58 relative error at every `Nx`.
+**And that accuracy is not what costs the iterations.** The sensitivity can be
+measured rather than argued, by making the factors far worse on purpose.
+`DKX_COARSE_FACTOR_DTYPE=float32` takes the worst chain's backward error from
+`2.6e-7` to `793`, 9.4 decades, and takes GCROT at `(Nxi, Nx) = (20, 16)` from
+2,788 iterations to 10,391 -- a factor of 3.7. The iteration count is that
+weakly sensitive to how well the chains are factored.
+
+Now compare what `Nx` actually does to those factors. From `Nx = 10` to
+`Nx = 16` the worst chain's float64 backward error moves from `7.9e-8` to
+`3.2e-7`: 0.6 of a decade, against the 9.4 decades that bought 3.7x. That
+cannot produce the 16x in iterations over the same interval, and recovering it
+entirely -- down to the dense LU's `1.4e-11`, 4.3 decades the other way --
+would by the same measured sensitivity buy well under 2x.
+
+A second elimination agrees. The `sparse` route eliminates the same operator in
+a fill-reducing order rather than `L`-first, and at `(20, 16)` it returns
+*exactly* 2,788 iterations and the same `9.03e-11` residual, with the two
+preconditioner maps differing by `5.2e-9`.
+
+**So the factorization is exonerated, and the growth is in the spectrum.** What
+remains is the eigenvalue and eigenvector structure of `A M^-1` as `Nx` grows,
+which none of the measurements here touch. That is the next thing to look at,
+and it is a different kind of work from building another preconditioner.
+
+**What is still not shown.** Why the spectrum degrades with `Nx` and not with
+`Nxi`, and whether anything short of coupling the speeds in `M` addresses it --
+noting that coupling them exactly is separately measured to make convergence
+worse (`2026-09-19-collision-coupling-is-cross-species.md`). The weaker check,
+whether the preconditioner inverts `_coarse_operator` as `Nx` grows, is
+inconclusive and was abandoned: that operator omits the floor, the `l = 0` pin
+and the drift diagonal the chains carry, leaving a constant 0.55 to 0.58
+relative error at every `Nx`.
 
 ## Follow-up
 
-- Give the ill-conditioned chains a stable elimination -- pivoting, or routing
-  those subsystems through the `sparse` route, which already eliminates in a
-  fill-reducing order on the host -- and read the worst subsystem's backward
-  error and the iteration count together. Equilibration, which answered the
-  direct route's perturbed pivots (`2026-09-19-sfincs-on-the-gap-deck.md`), is
-  measured above not to answer this one.
+- Measure the spectrum of `A M^-1` against `Nx` on a deck small enough to
+  assemble both. Everything cheaper has been tried here: retaining more
+  coupling, loosening the tolerance, scaling, and a second elimination, and
+  none of them is where the growth lives.
 - `Nx = 12` deserves its own look: 3,810 iterations at `1e-10` against 564 at
   `1e-9`, where its neighbours pay almost nothing for that decade.
