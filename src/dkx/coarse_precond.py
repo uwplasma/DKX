@@ -110,11 +110,20 @@ def _require_solvax() -> None:
 
 
 def _transposed_apply(op: KineticOperator) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """The transposed matvec ``w -> A^T w`` via ``jax.linear_transpose``."""
+    """The transposed matvec ``w -> A^T w`` via ``jax.linear_transpose``.
+
+    The transposition is taken once, here, rather than on every application:
+    ``jax.linear_transpose`` traces the operator to build it, and an adjoint
+    applies the result several times -- a defect correction and a residual check
+    at least. Taking it inside ``apply_t`` re-traced the whole operator per
+    application. The returned callable belongs to the trace context it was built
+    in, as it did before, so callers still build one per solve.
+    """
     primal = jax.ShapeDtypeStruct((op.total_size,), jnp.float64)
+    transposed = jax.linear_transpose(op.apply, primal)
 
     def apply_t(w: jnp.ndarray) -> jnp.ndarray:
-        (out,) = jax.linear_transpose(op.apply, primal)(w)
+        (out,) = transposed(w)
         return out
 
     return apply_t

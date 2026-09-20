@@ -131,6 +131,7 @@ from dkx.coarse_precond import (  # noqa: E402
 from dkx.drift_kinetic import KineticOperator  # noqa: E402
 
 __all__ = [
+    "DirectFactors",
     "SolveResult",
     "Tier1Solver",
     "auto_solve_peak_memory_bytes",
@@ -352,6 +353,14 @@ class SolveResult:
             build one ahead of time is what makes reuse correct: the route is
             not known until the solve runs, so a caller who guesses builds a
             preconditioner the structured-direct route then never uses.
+        factors: the factorization this solve built, on the two direct routes
+            --- a :class:`Tier1Solver` (structured) or :class:`DirectFactors`
+            (sparse), else ``None``.  Pass it back as ``solve(..., factors=...)``
+            and the next solve of the same operator is a triangular solve:
+            another right-hand side, or the adjoint with ``transpose=True``.
+            On a *neighbouring* operator the stored factors are an approximate
+            inverse, and the route says so by checking the original residual
+            and refactorizing once when it misses (see :func:`solve`).
     """
 
     x: jnp.ndarray
@@ -363,6 +372,7 @@ class SolveResult:
     timings: dict[str, float]
     adjoint: AdjointDiagnostics | None = None
     precond: tuple[Callable, Callable] | None = None
+    factors: Any = None
 
     @property
     def route(self) -> str:
@@ -418,6 +428,12 @@ def _converged_flag(
     targets = np.maximum(atol, tol * np.maximum(rhs_norms, scale))
     res = np.asarray(res_norms)
     return bool(np.all(np.isfinite(res)) and np.all(res <= np.maximum(targets, 1e-30)))
+
+
+def _say(emit: Callable[[str], None] | None, line: str) -> None:
+    """Route a status line to the caller's sink, or nowhere when silenced."""
+    if emit is not None:
+        emit(line)
 
 
 def _pinned_matvecs(
@@ -1245,22 +1261,72 @@ def _escalate_after_tier2_stall(
     )
 
 
-def _solve_tier3(
-    op: KineticOperator,
-    rhs2d: jnp.ndarray,
-    *,
-    tol: float,
-    atol: float,
-    max_dense_size: int,
-) -> SolveResult:
-    _require_solvax()
-    if _is_traced(rhs2d):
-        raise RuntimeError(
-            "the sparse direct (host SuperLU) solve is non-differentiable and "
-            "cannot run "
-            "under jit/vmap/grad; use method='block_tridiagonal' or 'gmres' with "
-            "differentiable=True."
+@dataclass(frozen=True)
+class DirectFactors:
+    """SuperLU factors of the equilibrated assembled operator, kept to reuse.
+
+    The sparse direct route spends nearly all of its time building this: the
+    assembly, the Ruiz scaling and the factorization. The solve that follows is
+    two triangular substitutions. Production never asks for one solve --- a
+    transport matrix is three right-hand sides of one operator and a gradient is
+    one transposed solve --- so the factors are returned rather than dropped,
+    and :func:`solve` takes them back.
+
+    The transpose comes from the same factors. With ``A_s = D_r A D_c`` the
+    scaled system that was factored, ``A^T y = g`` is ``A_s^T z = D_c g`` with
+    ``y = D_r z``: SuperLU substitutes through ``L`` and ``U`` in the other
+    order and the factorization is never repeated.
+
+    Attributes:
+        lu: the stored :class:`solvax.native.SpluFactorization`.
+        row_scale, column_scale: the Ruiz diagonals ``D_r`` and ``D_c``.
+        total_size: the operator size these factors were built for; a
+            right-hand side of any other length is refused.
+        products: operator applications the assembly cost (0 when the matrix
+            was sampled column by column instead).
+        nnz: nonzeros in the factored matrix.
+    """
+
+    lu: Any
+    row_scale: np.ndarray
+    column_scale: np.ndarray
+    total_size: int
+    products: int
+    nnz: int
+
+    def solve(self, rhs: np.ndarray, *, transpose: bool = False) -> np.ndarray:
+        """Apply the stored factors to ``rhs`` (all columns at once).
+
+        Args:
+            rhs: ``(total_size,)`` or ``(total_size, n_rhs)``, concrete.
+            transpose: solve ``A^T x = rhs`` instead of ``A x = rhs``.
+
+        Returns:
+            The solution, shaped like ``rhs``.
+        """
+        b = np.asarray(rhs)
+        squeeze = b.ndim == 1
+        if squeeze:
+            b = b[:, None]
+        if b.shape[0] != self.total_size:
+            raise ValueError(
+                f"stored factors are of size {self.total_size}; this "
+                f"right-hand side has {b.shape[0]} rows"
+            )
+        pre, post = (
+            (self.column_scale, self.row_scale)
+            if transpose
+            else (self.row_scale, self.column_scale)
         )
+        y = np.asarray(self.lu.solve(b * pre[:, None], trans="T" if transpose else "N"))
+        x = y * post[:, None]
+        return x[:, 0] if squeeze else x
+
+
+def _factor_direct(
+    op: KineticOperator, *, max_dense_size: int, emit: Callable[[str], None] | None
+) -> DirectFactors:
+    """Assemble, equilibrate and factor the operator once."""
     n = op.total_size
     assembled = None
     if n > max_dense_size:
@@ -1280,51 +1346,145 @@ def _solve_tier3(
                 f"assembly that would avoid them is unavailable here ({exc}). "
                 "Raise max_dense_size explicitly to sample anyway."
             ) from exc
-    t0 = time.perf_counter()
     if assembled is None:
-        print(
+        _say(
+            emit,
             f"[dkx.solve] sparse direct route (host SuperLU, n={n}): "
-            "non-differentiable fallback path."
+            "non-differentiable fallback path.",
         )
         matrix = materialize_csr(op, pin_masked_dofs=True)
     else:
-        print(
+        _say(
+            emit,
             f"[dkx.solve] sparse direct route (host SuperLU, n={n}): assembled "
             f"from {assembled.products} products, {assembled.matrix.nnz} "
-            "nonzeros; non-differentiable fallback path."
+            "nonzeros; non-differentiable fallback path.",
         )
         matrix = assembled.matrix
     # A factorization chooses its pivots from the matrix it is handed, and these
     # rows carry streaming, collision and constraint terms at once. Scaling
     # first is what keeps those pivots meaningful.
     scaling = equilibrate(matrix)
-    lu = SpluFactorization(scaling.matrix)
-    t1 = time.perf_counter()
+    return DirectFactors(
+        lu=SpluFactorization(scaling.matrix),
+        row_scale=np.asarray(scaling.row_scale),
+        column_scale=np.asarray(scaling.column_scale),
+        total_size=n,
+        products=0 if assembled is None else int(assembled.products),
+        nnz=int(matrix.nnz),
+    )
+
+
+#: Defect-correction sweeps the sparse direct route runs on its stored factors.
+#: One is what a fresh factorization needs to turn the factorization's residual
+#: into the solution's. Reused factors are a solve of a *neighbouring* operator
+#: corrected by the current one, so they get a bounded few more before the
+#: route gives up on them and factorizes again.
+_DIRECT_REFINEMENT_SWEEPS = 1
+_DIRECT_REUSE_REFINEMENT_SWEEPS = 4
+
+
+def _direct_refine(
+    op: KineticOperator,
+    factors: DirectFactors,
+    rhs: np.ndarray,
+    *,
+    transpose: bool,
+    sweeps: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Solve with ``factors`` and correct the defect against ``op`` itself.
+
+    The correction is what makes reuse safe: the defect is measured with the
+    *current* operator and only the inverse comes from the stored factors, so a
+    solve of a neighbouring operator converges to this one's answer when the
+    factors are close enough and visibly fails to when they are not.
+    """
+    apply = _pinned_matvecs(op)[1 if transpose else 0]
+    apply2d = jax.vmap(apply, in_axes=1, out_axes=1)
+    x = factors.solve(rhs, transpose=transpose)
+    defect = rhs - np.asarray(apply2d(jnp.asarray(x)))
+    for _ in range(sweeps):
+        x = x + factors.solve(defect, transpose=transpose)
+        defect = rhs - np.asarray(apply2d(jnp.asarray(x)))
+    # The last sweep already measured the defect of the solution it produced;
+    # the caller's convergence check is that defect and costs no further apply.
+    return x, defect
+
+
+def _solve_tier3(
+    op: KineticOperator,
+    rhs2d: jnp.ndarray,
+    *,
+    tol: float,
+    atol: float,
+    max_dense_size: int,
+    factors: DirectFactors | None = None,
+    transpose: bool = False,
+    emit: Callable[[str], None] | None = print,
+) -> SolveResult:
+    _require_solvax()
+    if _is_traced(rhs2d):
+        raise RuntimeError(
+            "the sparse direct (host SuperLU) solve is non-differentiable and "
+            "cannot run "
+            "under jit/vmap/grad; use method='block_tridiagonal' or 'gmres' with "
+            "differentiable=True."
+        )
+    if factors is not None and factors.total_size != op.total_size:
+        raise ValueError(
+            f"the factors passed in are of size {factors.total_size} and this "
+            f"operator is {op.total_size}; a factorization is only reusable "
+            "for an operator of its own shape"
+        )
     rhs = np.asarray(rhs2d)
     if rhs.ndim == 1:
         rhs = rhs[:, None]
-    x2d = scaling.unscale_solution(np.asarray(lu.solve(scaling.scale_rhs(rhs))))
-    # One defect correction on the stored factors: cheap, and it turns the
-    # factorization's residual into the solution's.
-    apply_pinned = _pinned_matvecs(op)[0]
-    defect = rhs - np.asarray(
-        jax.vmap(apply_pinned, in_axes=1, out_axes=1)(jnp.asarray(x2d))
+
+    reused = factors is not None
+    t0 = time.perf_counter()
+    if factors is None:
+        factors = _factor_direct(op, max_dense_size=max_dense_size, emit=emit)
+    t1 = time.perf_counter()
+    x2d, defect = _direct_refine(
+        op, factors, rhs, transpose=transpose,
+        sweeps=(
+            _DIRECT_REUSE_REFINEMENT_SWEEPS if reused else _DIRECT_REFINEMENT_SWEEPS
+        ),
     )
-    x2d = jnp.asarray(
-        x2d + scaling.unscale_solution(np.asarray(lu.solve(scaling.scale_rhs(defect))))
-    )
-    if x2d.ndim == 1:
-        x2d = x2d[:, None]
     t2 = time.perf_counter()
-    res = _residual_norms(_pinned_matvecs(op)[0], x2d, rhs2d)
+
+    res = jnp.asarray(np.linalg.norm(defect, axis=0))
+    if reused and not _converged_flag(res, jnp.asarray(rhs), tol, atol):
+        # The staleness test is the original residual, and it costs the applies
+        # the correction already paid for. Recovery is one factorization, not an
+        # unbounded wait: factors built at one Er have been measured to stall a
+        # Krylov solve for 6,000 iterations at another.
+        _say(
+            emit,
+            "[dkx.solve] the stored factors did not solve this operator "
+            f"(residuals={np.asarray(res)} after "
+            f"{_DIRECT_REUSE_REFINEMENT_SWEEPS} corrections); factorizing it.",
+        )
+        t0 = time.perf_counter()
+        factors = _factor_direct(op, max_dense_size=max_dense_size, emit=emit)
+        t1 = time.perf_counter()
+        x2d, defect = _direct_refine(
+            op, factors, rhs, transpose=transpose,
+            sweeps=_DIRECT_REFINEMENT_SWEEPS,
+        )
+        t2 = time.perf_counter()
+        res = jnp.asarray(np.linalg.norm(defect, axis=0))
+        reused = False
+
     return SolveResult(
-        x=x2d,
+        x=jnp.asarray(x2d),
         method="direct",
         iterations=None,
         residual_norms=res,
-        converged=_converged_flag(res, rhs2d, tol, atol),
+        converged=_converged_flag(res, jnp.asarray(rhs), tol, atol),
         recycle=None,
-        timings={"build": t1 - t0, "solve": t2 - t1},
+        timings={"build": 0.0 if reused else t1 - t0, "solve": t2 - t1},
+        factors=factors,
     )
 
 
@@ -1516,12 +1676,22 @@ def _solve_tier1(
     differentiable: bool,
     check_adjoint: bool,
     adjoint_residual_factor: float,
+    factors: Tier1Solver | None = None,
+    transpose: bool = False,
+    emit: Callable[[str], None] | None = print,
 ) -> SolveResult:
     diagnostics = (AdjointDiagnostics(tol=float(tol), atol=float(atol),
                                       factor=float(adjoint_residual_factor), checked=bool(check_adjoint))
                    if differentiable else None)
     t0 = time.perf_counter()
-    t1_solver = build_tier1_solver(op)
+    reused = factors is not None
+    if reused and factors.op.total_size != op.total_size:
+        raise ValueError(
+            f"the factors passed in are of size {factors.op.total_size} and "
+            f"this operator is {op.total_size}; a factorization is only "
+            "reusable for an operator of its own shape"
+        )
+    t1_solver = factors if reused else build_tier1_solver(op)
     # Force the async block-Thomas factorization to complete so the "build"
     # timing reflects real compute, not JAX dispatch latency.  We block on the
     # array fields (the Tier1Solver dataclass itself is not a pytree, so
@@ -1531,6 +1701,16 @@ def _solve_tier1(
         (t1_solver.factors, t1_solver.z_fwd, t1_solver.z_t, t1_solver.gamma)
     )
     t1 = time.perf_counter()
+
+    # ``_transposed_apply`` lowers a fresh ``jax.linear_transpose`` of the
+    # operator every time it is called, so the refinement, the guard and the
+    # residual check must share one rather than build three.
+    _applies: dict[bool, Callable[[jnp.ndarray], jnp.ndarray]] = {False: op.apply}
+
+    def _apply_for(transposed: bool) -> Callable[[jnp.ndarray], jnp.ndarray]:
+        if transposed not in _applies:
+            _applies[transposed] = _transposed_apply(op)
+        return _applies[transposed]
 
     def _solve_refined(b: jnp.ndarray, *, transpose: bool = False, rhs_index: int = 0) -> jnp.ndarray:
         """Factor solve plus iterative refinement (defect correction).
@@ -1548,7 +1728,7 @@ def _solve_tier1(
         documented route to a GPU that runs FP64 at 1/32 rate.  Reusable
         numerical kernels belong upstream in ``solvax`` rather than here.
         """
-        apply = _transposed_apply(op) if transpose else op.apply
+        apply = _apply_for(transpose)
         apply2d = apply if b.ndim == 1 else jax.vmap(apply, in_axes=1, out_axes=1)
         x, _residual_norms = iterative_refinement(
             apply2d,
@@ -1565,7 +1745,7 @@ def _solve_tier1(
         return x
 
     if differentiable:
-        apply_t = _transposed_apply(op)
+        apply_t = _apply_for(True)
         cols = [
             _implicit_solve(
                 op.apply,
@@ -1578,10 +1758,27 @@ def _solve_tier1(
         ]
         x2d = jnp.stack(cols, axis=1)
     else:
-        x2d = _solve_refined(rhs2d)
+        x2d = _solve_refined(rhs2d, transpose=transpose)
     x2d = jax.block_until_ready(x2d)  # real solve compute, not just dispatch
     t2 = time.perf_counter()
-    res = _residual_norms(op.apply, x2d, rhs2d)
+    res = _residual_norms(_apply_for(transpose), x2d, rhs2d)
+    if reused and not _converged_flag(res, rhs2d, tol, atol):
+        # The stored elimination belongs to a neighbouring operator and the
+        # refinement above did not make up the difference. The staleness test is
+        # this residual; the recovery is one factorization, bounded, not an
+        # unbounded wait on a Krylov method that has already been measured to
+        # spend 6,000 iterations failing at a distant Er.
+        _say(
+            emit,
+            "[dkx.solve] the stored elimination did not solve this operator "
+            f"(residuals={np.asarray(res)}); factorizing it.",
+        )
+        return _solve_tier1(
+            op, rhs2d, tol=tol, atol=atol, differentiable=differentiable,
+            check_adjoint=check_adjoint,
+            adjoint_residual_factor=adjoint_residual_factor,
+            factors=None, transpose=transpose, emit=emit,
+        )
     return SolveResult(
         x=x2d,
         method="block_tridiagonal",
@@ -1590,7 +1787,8 @@ def _solve_tier1(
         converged=_converged_flag(res, rhs2d, tol, atol),
         recycle=None,
         adjoint=diagnostics,
-        timings={"build": t1 - t0, "solve": t2 - t1},
+        timings={"build": 0.0 if reused else t1 - t0, "solve": t2 - t1},
+        factors=t1_solver,
     )
 
 
@@ -2546,6 +2744,8 @@ def solve(
     device: str | jax.Device | None = None,
     emit: Callable[[str], None] | None = print,
     precond: tuple[Callable, Callable] | None = None,
+    factors: Any = None,
+    transpose: bool = False,
 ) -> SolveResult:
     """Solve ``K x = rhs`` with the plan-§2.3 three-route auto-policy.
 
@@ -2730,6 +2930,36 @@ def solve(
         emit: route-status sink. The default prints one physical route
             description; ``None`` suppresses routine route presentation while
             retaining exceptions and convergence failures.
+        factors: a factorization a previous solve of this operator returned in
+            :attr:`SolveResult.factors` --- a :class:`Tier1Solver` on the
+            structured direct route, a :class:`DirectFactors` on the sparse
+            one.  The route then skips building one and the solve is a
+            triangular substitution, which is what makes a transport matrix,
+            an adjoint and a line search cost solves rather than
+            factorizations.  Only the two direct routes take it; the recycled
+            Krylov route's reusable object is its preconditioner
+            (``precond``), which is a different thing and is reused on
+            different terms.
+
+            Factors of a *different* operator are accepted deliberately: they
+            are then an approximate inverse, and the route corrects the defect
+            against the operator actually passed in.  What makes that bounded
+            rather than a gamble is the check that follows: the original
+            residual is recomputed, and a solve that misses its tolerance
+            factorizes once and repeats, at a cost of one factorization and a
+            few applies.  Stale factors have been measured to cost a Krylov
+            solve 6,000 iterations before it gave up
+            (``docs/experiments/2026-09-07-recycling-and-preconditioner-reuse.md``);
+            this route cannot, because it never iterates.  Reuse across
+            operators is a host decision --- nothing here refreshes on its own,
+            and no default changes.
+        transpose: solve ``A^T x = rhs`` instead of ``A x = rhs``, on the two
+            direct routes, from the same factors.  This is the adjoint of
+            §5.2: with ``factors`` from the primal, a gradient's linear algebra
+            is one substitution rather than a second factorization.  Not
+            available with ``differentiable=True`` --- a differentiable solve
+            builds its own transposed solve through
+            ``solvax.implicit.linear_solve`` and the two must not be nested.
 
     Auto-policy structured routing (``method="auto"``, when
     :func:`tier1_available` is true):
@@ -2784,6 +3014,18 @@ def solve(
             raise NotImplementedError(
                 f"truncated structured direct route unavailable: {sup_reason}"
             )
+    if transpose and differentiable:
+        raise ValueError(
+            "transpose=True is the explicit adjoint on stored factors; a "
+            "differentiable solve already builds its own transposed solve, so "
+            "pass one or the other"
+        )
+    if (factors is not None or transpose) and method in {"gmres", "iterative"}:
+        raise ValueError(
+            "stored factors and the explicit transpose belong to the direct "
+            "routes; the recycled Krylov route reuses a preconditioner "
+            "instead (precond=)"
+        )
     require_float64()
     rhs2d, squeeze = _as_columns(rhs)
     if rhs2d.shape[0] != op.total_size:
@@ -2792,7 +3034,11 @@ def solve(
         )
 
     chosen = method
-    if method == "auto":
+    if method == "auto" and factors is not None:
+        # A factorization in hand names its own route: the policy that would
+        # otherwise choose one cannot pick a route that then ignores it.
+        chosen = "block_tridiagonal" if isinstance(factors, Tier1Solver) else "direct"
+    elif method == "auto":
         chosen = _auto_route(
             op,
             rhs2d,
@@ -2800,6 +3046,18 @@ def solve(
             tier1_keep_lowest,
             subsystem_batch,
             emit,
+        )
+    if factors is not None and not isinstance(
+        factors, Tier1Solver if chosen == "block_tridiagonal" else DirectFactors
+    ):
+        raise TypeError(
+            f"the {chosen!r} route factors a "
+            f"{'Tier1Solver' if chosen == 'block_tridiagonal' else 'DirectFactors'}"
+            f"; it was handed a {type(factors).__name__}"
+        )
+    if transpose and chosen not in ("block_tridiagonal", "direct"):
+        raise NotImplementedError(
+            f"the {chosen!r} route has no transposed solve on stored factors"
         )
 
     target_device = _resolve_solve_device(
@@ -2822,6 +3080,7 @@ def solve(
             result = _solve_tier1(
                 op, rhs2d, tol=tol, atol=atol, differentiable=differentiable,
                 check_adjoint=check_adjoint, adjoint_residual_factor=adjoint_residual_factor,
+                factors=factors, transpose=transpose, emit=emit,
             )
         else:
             keep = min(tier1_keep_lowest, op.n_xi)
@@ -2896,7 +3155,8 @@ def solve(
                 "the sparse direct route (method='direct') is non-differentiable."
             )
         result = _solve_tier3(
-            op, rhs2d, tol=tol, atol=atol, max_dense_size=max_dense_size
+            op, rhs2d, tol=tol, atol=atol, max_dense_size=max_dense_size,
+            factors=factors, transpose=transpose, emit=emit,
         )
 
     if home_device is not None:
