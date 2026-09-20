@@ -86,8 +86,8 @@ identical operator, one arm per tree:
 
 Retaining the block that carries the mass makes `M` 2,300 times closer to `A`
 and costs 17% *more* iterations than retaining the block that carries almost
-none of it. The bootstrap current agrees to ten digits across all three arms,
-so this is a conditioning result and not a wrong solve.
+none of it. The bootstrap current agrees across all three arms to 1.6e-9
+relative, so this is a conditioning result and not a wrong solve.
 
 The reason is that `D + U` is inverted exactly, and that inverse is
 ill-conditioned: the collision block's off-diagonal exceeds its diagonal by up
