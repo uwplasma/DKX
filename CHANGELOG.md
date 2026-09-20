@@ -1,8 +1,38 @@
 # Changelog
 
-## Unreleased
+## v2.5.0 — 2026-09-20
+
+The production solver program of #253: the operator assembled from products
+with it, the sparse direct route rebuilt on that assembly and made reusable,
+and the gap deck's iteration growth traced to the speed resolution with six
+candidate causes measured and excluded.
 
 ### Execution
+
+- Return the factorization the two direct routes build, in
+  `SolveResult.factors`, and take it back through `solve(..., factors=...)`;
+  `solve(..., transpose=True)` solves `A^T x = b` from those same factors. A
+  transport matrix delivered as three separate calls cost three factorizations
+  and now costs none: 0.96 s against 0.28 s on a 16,230-unknown structured
+  deck, 1.19 s against 0.28 s on a 1,962-unknown sparse one. The sparse direct
+  route had no adjoint at all; a transposed solve is now 0.15 of a primal,
+  reached by substituting through the stored `L` and `U` in the other order.
+  Reuse across a *neighbouring* operator is permitted and checked rather than
+  assumed: the defect is measured against the operator actually passed in, and
+  a solve that misses its tolerance refactorizes once, so recovery is bounded
+  by a factorization instead of an unbounded Krylov wait.
+- Take the operator's transposition once per solve rather than once per
+  application. `_transposed_apply` called `jax.linear_transpose` inside the
+  callable it returned, so every adjoint application re-traced the whole
+  operator. The focused solve suites run in 247 s where they took 406 s.
+- Assemble the sparse direct route's matrix in fewer products by dropping the
+  requirement that the angular separation divide the grid. The grouping was
+  already optimal for its own conflict structure -- every group held exactly 72
+  columns and `633,600 / 72 = 8,800` -- but at `Ntheta = 11`, a prime, the only
+  divisor above twice the stencil radius is 11 itself, so every theta became
+  its own class. Checking the wrap-around gap directly instead takes the
+  633,604-unknown deck from 8,800 products to 4,800, each product being one
+  operator application; the recovered matrix is unchanged entrywise.
 
 - Build the sparse direct route's matrix from products with the operator rather
   than one column at a time, scale it before factoring, and correct the defect
@@ -33,6 +63,19 @@
 
 - The speed-triangle back-substitution measurement, and the batched LU dispatch
   measurement on CPU and GPU, in `docs/experiments/`.
+- Why the gap deck is slow, in four records. The dropped collision coupling is
+  not the cause although it is 0.9999997 of `A - M`; retaining it exactly costs
+  17% *more* iterations. The cost is carried by `Nx` and not `Nxi`, and is
+  independent of the tolerance. The preconditioned operator is strongly
+  non-normal and far more so with `Nx`, and a diagonal similarity that removes
+  1.5e10 of that eigenvector conditioning moves the iteration count by at most
+  1.05x, so the balanced solve is killed on its own criterion. Six candidate
+  causes are now measured and excluded.
+- What one factorization serving many solves does and does not buy: the
+  transport matrix admitted on both direct routes, the gradient admitted on the
+  sparse one, and `jax.grad` measured to miss its gate for a reason factor
+  reuse cannot address, since reverse mode re-executes the forward pass and the
+  adjoint already runs on the primal's factors.
 
 ## v2.4.0 — 2026-09-15
 
