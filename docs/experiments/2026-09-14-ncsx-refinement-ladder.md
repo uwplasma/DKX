@@ -180,6 +180,48 @@ not rerun the historical ladder or adjoints, establish joint convergence,
 or supply a three-grid uncertainty estimate. The combined reporting grid,
 joint refinement, and revised-grid uncertainty/adjoint evidence remain pending.
 
+### Reporting-grid attempt: time limit
+
+One subsequent `(33,49,101,11)` attempt used the same installed candidate,
+wheel, runtime and unchanged physics/tolerance above. The reporting input
+SHA256 was `edde8b27a69c81d0d02af9e19e716bb333f77caccec254890ecad601e3b0c8c2`.
+The guard selected reusable float64 Schur factors: 21.650 GiB factor storage,
+27.063 GiB with the route's resident multiplier, versus 94.149 GiB for dense
+bands with their multiplier. These estimates do not bound whole-process RSS.
+
+| Outcome | Wall at watchdog stop | Peak sampled run RSS | Minimum sampled host available |
+| --- | ---: | ---: | ---: |
+| Time limit; no accepted result | 1200.23 s | 26.94 GiB | 17.25 GiB |
+
+Admission required 44 GiB available and observed 44.49 GiB. An external
+watchdog sampled all processes in the created session before releasing the
+solver, including the child process group created by `timeout`, at roughly
+0.5-second intervals (maximum observed interval 0.573 s). Limits were 40 GiB
+summed RSS, 12 GiB host reserve and 20 minutes wall time. Only owned session
+groups were targeted at the deadline; no memory-limit violation was observed, and no
+session members remained afterward. No restart or larger joint run followed.
+
+The exact public command, under that external watchdog, was:
+
+```bash
+JAX_PLATFORMS=cpu JAX_ENABLE_X64=1 DKX_CORES=4 \
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+DKX_TIER2_MEMORY_GUARD=on DKX_COARSE_FACTOR_DTYPE=float64 \
+/usr/bin/time -v timeout --signal=TERM --kill-after=2s 20m \
+python -m dkx write-output --input input.namelist \
+  --out reporting.h5 --solver-trace reporting.json --cores 4 \
+  --no-overwrite > reporting.log 2>&1
+```
+
+The command alone does not implement the external RSS/reserve watchdog.
+Neither the requested HDF5 result nor the solver-trace JSON was produced;
+no normalized original residual, complete returned state or moments were
+available. The log confirms route selection but does not separate assembly,
+preconditioner build and solve time; GNU time's final summary was also absent
+after session termination. This is a time-limit outcome, not evidence of
+numerical nonconvergence. Phase timing is required before another large
+attempt; combined-grid acceptance and uncertainty remain unestablished.
+
 ## Public reconstruction and next refinement
 
 The exact equilibrium and source input are in
@@ -241,7 +283,9 @@ python -m dkx converge input.namelist --cores 4 \
 
 The reporting grid is `(33,49,101,11)`; separate refinements reach theta 37,
 zeta 55, pitch 111 and speed 12; the joint grid is `(37,55,111,12)`.
-These points have **not** been run in this update. Current route estimates
+The reporting grid was attempted once and stopped at the time limit above;
+the separate refinements and larger joint have **not** been run in this update.
+Current route estimates
 require about 27 GiB available for reusable factors at the reporting grid and
 52 GiB at the joint grid, excluding additional reservation headroom. Retaining
 the historical dense route instead requires roughly 179 GiB available at the
