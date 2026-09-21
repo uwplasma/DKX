@@ -35,7 +35,9 @@ class FakeResult:
         self.metadata = {"converged": True}
         if typed_residuals:
             self.metadata.update(original_residuals=[1e-10],
-                                 original_residual_norm="relative_l2")
+                                 original_residual_norm="relative_l2",
+                                 original_residual_tolerance=1e-8,
+                                 original_residual_complete_state=True)
 
 
 def study(monkeypatch, response, *, case=None, **kwargs):
@@ -118,6 +120,7 @@ def test_a_solution_independent_of_resolution_is_converged(monkeypatch) -> None:
     report, calls = study(monkeypatch, lambda r: 3.0)
     assert report.per_axis_worst == 0.0
     assert report.converged
+    assert report.original_equations_accepted
     np.testing.assert_array_equal(report.baseline_observables["particle_flux_m2_s"], [3.0])
     assert report.baseline_original_residuals == (1e-10,)
     assert report.refinements[0].observables["particle_flux_m2_s"].tolist() == [3.0]
@@ -251,6 +254,9 @@ def test_cli_json_contains_raw_values_and_typed_residual_evidence(monkeypatch, c
     assert payload["refinements"][0]["observables"]["FSABjHat"] is None
     assert payload["refinements"][0]["original_residuals"] == [2e-11]
     assert payload["refinements"][0]["original_residual_norm"] == "relative_l2"
+    assert payload["refinements"][0]["original_residual_status"] == "unavailable"
+    assert payload["converged"] is False
+    assert payload["original_equations_accepted"] is False
     assert payload["refinements"][0]["changes"]["particle_flux_m2_s"] is None
     assert payload["refinements"][0]["worst"] is None
 
@@ -324,6 +330,88 @@ def test_native_aggregate_residual_is_not_relabelled_as_original_evidence(monkey
     )
     assert report.baseline_original_residuals is None
     assert report.baseline_original_residual_norm is None
+    assert report.converged
+    assert not report.original_equations_accepted
+    assert report.baseline_residual_evidence_status == "unavailable"
+
+
+def test_bad_typed_residual_fails_original_equations_without_hiding_grid_change(
+    monkeypatch,
+):
+    result = FakeResult({"particle_flux_m2_s": np.ones(1)})
+    result.metadata["original_residuals"] = [2e-7]
+    monkeypatch.setattr("dkx.execution.run_case", lambda case, **_: result)
+    report = cv.converge_case(
+        FakeCase(FakeResolution(10, 4, 10, 10)), axes=("theta",),
+        observables=("particle_flux_m2_s",),
+    )
+    assert report.converged
+    assert not report.original_equations_accepted
+    assert report.baseline_residual_evidence_status == "failed"
+
+
+def test_native_result_array_provenance_supplies_relative_original_evidence(
+    monkeypatch,
+):
+    result = FakeResult({
+        "particle_flux_m2_s": np.ones(1),
+        "primal_residual": np.asarray([2e-9, 3e-9]),
+        "primal_rhs_norm": np.asarray([2.0, 3.0]),
+    }, typed_residuals=False)
+    result.metadata["original_residual_evidence"] = {
+        "residual_array": "primal_residual",
+        "rhs_norm_array": "primal_rhs_norm",
+        "norm": "absolute_l2",
+        "relative_tolerance": 2e-9,
+        "complete_state": True,
+    }
+    monkeypatch.setattr("dkx.execution.run_case", lambda case, **_: result)
+    report = cv.converge_case(
+        FakeCase(FakeResolution(10, 4, 10, 10)), axes=("theta",),
+        observables=("particle_flux_m2_s",),
+    )
+    assert report.baseline_original_residuals == pytest.approx((1e-9, 1e-9))
+    assert report.baseline_original_residual_norm == "relative_l2"
+    assert report.original_equations_accepted
+
+
+@pytest.mark.parametrize(
+    ("absolute", "rhs_norm", "norm", "complete"),
+    [
+        ([], [], "absolute_l2", True),
+        ([0.0], [1.0, 2.0], "absolute_l2", True),
+        ([np.nan], [1.0], "absolute_l2", True),
+        ([0.0], [np.nan], "absolute_l2", True),
+        ([0.0], [np.inf], "absolute_l2", True),
+        ([-1.0], [1.0], "absolute_l2", True),
+        ([0.0], [-1.0], "absolute_l2", True),
+        ([0.0], [1.0], "relative_l2", True),
+        ([0.0], [1.0], "absolute_l2", "false"),
+    ],
+)
+def test_malformed_native_residual_provenance_fails_closed(
+    monkeypatch, absolute, rhs_norm, norm, complete,
+):
+    result = FakeResult({
+        "particle_flux_m2_s": np.ones(1),
+        "primal_residual": np.asarray(absolute),
+        "primal_rhs_norm": np.asarray(rhs_norm),
+    }, typed_residuals=False)
+    result.metadata["original_residual_evidence"] = {
+        "residual_array": "primal_residual",
+        "rhs_norm_array": "primal_rhs_norm",
+        "norm": norm,
+        "relative_tolerance": 1e-8,
+        "complete_state": complete,
+    }
+    monkeypatch.setattr("dkx.execution.run_case", lambda case, **_: result)
+    report = cv.converge_case(
+        FakeCase(FakeResolution(10, 4, 10, 10)), axes=("theta",),
+        observables=("particle_flux_m2_s",),
+    )
+    assert report.converged
+    assert not report.original_equations_accepted
+    assert report.baseline_residual_evidence_status == "failed"
 
 
 @pytest.mark.parametrize("tolerance", [0., -1., np.inf, np.nan])
@@ -403,6 +491,7 @@ def test_namelist_refinement_preserves_physics_and_checks_each_rhs(monkeypatch, 
     } if mode == 1 else {"transport_matrix"})
     assert report.baseline_original_residual_norm == "relative_l2"
     assert len(report.baseline_original_residuals) == mode
+    assert report.original_equations_accepted
     invalid = True
     with pytest.raises(ValueError, match='failed solve'):
         cv.converge_sfincs_input(inp, axes=('theta',))

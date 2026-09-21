@@ -53,6 +53,10 @@ class RootEvaluation:
     reason: str = "initial_uniform_grid"
     refinement_level: int = 0
     solver_attempts: tuple[SolverAttempt, ...] = ()
+    rhs_norm: float | None = None
+    original_residual_norm: str | None = None
+    original_residual_complete_state: bool = False
+    original_residual_tolerance: float | None = None
 
 
 @dataclass(frozen=True)
@@ -792,6 +796,10 @@ def solve_native_ambipolar_surface(
                 raise RuntimeError(
                     "native ambipolar scan produced a non-finite residual"
                 )
+            if np.any(residuals < 0.0):
+                raise RuntimeError(
+                    "native ambipolar scan produced a negative original residual"
+                )
             requested_method = (
                 str(getattr(batch, "method", solve_method)).strip().lower()
             )
@@ -805,6 +813,7 @@ def solve_native_ambipolar_surface(
             # the fallback does not overlap the primary solve's residency.
             del batch
             targets: np.ndarray | None = None
+            rhs_norms: np.ndarray | None = None
             if hasattr(problem, "operator"):
                 from dkx.er import operator_at_er
 
@@ -823,6 +832,10 @@ def solve_native_ambipolar_surface(
                         for value in missing
                     ]
                 )
+                if not np.all(np.isfinite(rhs_norms)) or np.any(rhs_norms < 0.0):
+                    raise RuntimeError(
+                        "native ambipolar scan produced an invalid original RHS norm"
+                    )
                 targets = float(solve_tolerance) * rhs_norms
                 failed = np.flatnonzero(residuals > targets)
             else:
@@ -965,6 +978,14 @@ def solve_native_ambipolar_surface(
                     reason=reason,
                     refinement_level=int(refinement_level),
                     solver_attempts=tuple(attempts[index]),
+                    rhs_norm=(
+                        None if rhs_norms is None else float(rhs_norms[index])
+                    ),
+                    original_residual_norm=(
+                        None if rhs_norms is None else "absolute_l2"
+                    ),
+                    original_residual_complete_state=rhs_norms is not None,
+                    original_residual_tolerance=float(solve_tolerance),
                 )
             chunks.append(primary_n_chunks)
             chunk_sizes.append(primary_chunk_size)

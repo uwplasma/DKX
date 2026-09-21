@@ -337,6 +337,26 @@ def test_native_profile_retains_a_state_satisfying_the_original_equation(monkeyp
     assert len(residuals) == 2
 
 
+def test_native_profile_rejects_a_false_converged_solver_result(monkeypatch):
+    import importlib
+
+    solve_module = importlib.import_module("dkx.solve")
+    original = solve_module.solve
+
+    def corrupted(op, rhs, **kwargs):
+        result = original(op, rhs, **kwargs)
+        return replace(
+            result,
+            x=np.zeros_like(np.asarray(result.x)),
+            residual_norms=np.zeros_like(np.asarray(result.residual_norms)),
+            converged=True,
+        )
+
+    monkeypatch.setattr(solve_module, "solve", corrupted)
+    with pytest.raises(RuntimeError, match="independently recomputed original equation"):
+        dkx.run(_case())
+
+
 def test_native_grid_honors_explicit_pitch_speed_ramp() -> None:
     from dkx.execution import _make_grids
 
@@ -438,6 +458,12 @@ def test_native_case_solves_without_namelist_conversion(monkeypatch, tmp_path) -
     assert np.all(np.isfinite(result.particle_flux_m2_s))
     assert np.any(result.particle_flux_m2_s != 0.0)
     assert np.max(result.primal_residual) < 1.0e-8
+    evidence = result.metadata["original_residual_evidence"]
+    assert evidence["residual_array"] == "primal_residual"
+    assert evidence["rhs_norm_array"] == "primal_rhs_norm"
+    assert evidence["norm"] == "absolute_l2"
+    assert evidence["complete_state"] is True
+    assert np.all(result.primal_residual / result.primal_rhs_norm <= 1.0e-8)
     assert result.dimensions["particle_flux_m2_s"] == ("surface", "species")
     assert result.certificate()["case_id"] == _case().case_id
 
@@ -445,6 +471,8 @@ def test_native_case_solves_without_namelist_conversion(monkeypatch, tmp_path) -
     assert loaded.case_id == result.case_id
     np.testing.assert_array_equal(loaded.species, ["deuterium"])
     np.testing.assert_allclose(loaded.particle_flux_m2_s, result.particle_flux_m2_s)
+    np.testing.assert_allclose(loaded.primal_rhs_norm, result.primal_rhs_norm)
+    assert loaded.metadata["original_residual_evidence"] == evidence
     assert result.plot(tmp_path / "profile.png").is_file()
 
 
@@ -484,6 +512,10 @@ def test_native_ambipolar_result_preserves_scan_roots_and_selection(
             parallel_current_a_t_m2=4.0 + surface_index,
             residual_norm=1.0e-12,
             stage="root_refinement",
+            rhs_norm=1.0,
+            original_residual_norm="absolute_l2",
+            original_residual_complete_state=True,
+            original_residual_tolerance=case.solver.relative_tolerance,
             particle_flux_m2_s_vs_speed=(
                 np.asarray([0.1, 0.2, 0.3, 0.4])[:, None]
                 * (2.0 + surface_index)
@@ -530,6 +562,8 @@ def test_native_ambipolar_result_preserves_scan_roots_and_selection(
     assert calls == [(None, ((-2.0, 0.0),)), (-1.5, ((-2.0, 0.0),))]
     np.testing.assert_allclose(result.electric_field_kV_m, [-1.5, -1.25])
     np.testing.assert_allclose(result.particle_flux_m2_s[:, 0], [2.0, 3.0])
+    assert result.metadata["original_residual_evidence"]["complete_state"] is True
+    np.testing.assert_allclose(result.primal_rhs_norm, 1.0)
     np.testing.assert_array_equal(result.ambipolar_root_count, [1, 1])
     np.testing.assert_array_equal(result.ambipolar_status, ["bracketed_root"] * 2)
     np.testing.assert_array_equal(

@@ -570,6 +570,21 @@ def test_native_ambipolar_rejects_nonfinite_or_unconverged_batch(monkeypatch):
     with np.testing.assert_raises_regex(RuntimeError, "did not converge"):
         _solve(problem=SimpleNamespace(operator=FakeOperator(), dphi_per_er=1.0))
 
+    class NonfiniteRhsOperator:
+        def rhs(self):
+            return np.asarray([np.nan])
+
+    monkeypatch.setattr("dkx.batch.batched_er_scan", _fake_batch(lambda field: field))
+    monkeypatch.setattr(
+        "dkx.er.operator_at_er", lambda *_args, **_kwargs: NonfiniteRhsOperator()
+    )
+    with np.testing.assert_raises_regex(RuntimeError, "invalid original RHS norm"):
+        _solve(
+            problem=SimpleNamespace(
+                operator=NonfiniteRhsOperator(), dphi_per_er=1.0
+            )
+        )
+
 
 def test_auto_route_recovers_only_failed_points_and_retains_every_attempt(
     monkeypatch, tmp_path, capsys
@@ -597,6 +612,10 @@ def test_auto_route_recovers_only_failed_points_and_retains_every_attempt(
         problem=SimpleNamespace(operator=FakeOperator(), dphi_per_er=1.0),
         previous_root_kv_m=None,
     )
+    assert result.selected.rhs_norm == 1.0
+    assert result.selected.original_residual_norm == "absolute_l2"
+    assert result.selected.original_residual_complete_state is True
+    assert result.selected.original_residual_tolerance == 1.0e-10
 
     zero = next(
         evaluation

@@ -419,6 +419,14 @@ there is no implicit unit-dependent allowance for a zero reference.
 A two-grid difference is a resolution check, not a Richardson error estimate or
 an algebraic-error bound. Those require additional grid and adjoint evidence.
 
+The CLI therefore reports two verdicts. ``converged`` is the observable-grid
+diagnostic above; ``original_equations_accepted`` additionally requires a typed,
+complete-state original residual for the baseline and every attempted rung.
+Missing evidence leaves the grid diagnostic available but returns exit status 1.
+For native prescribed-field runs DKX independently reapplies the operator to the
+complete returned state. Native ambipolar runs reuse the batch path's independent
+full-equation audit rather than trusting its solver convergence flag.
+
 For linear SFINCS decks, ``dkx converge input.namelist`` uses the canonical
 namelist runner, including finite-Er full trajectories and the deck's VMEC
 surface-selection policy. It does not convert to a native Case or alter the
