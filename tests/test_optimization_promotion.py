@@ -74,6 +74,28 @@ def test_evaluate_sfincs_scan_promotion_fails_unbracketed_or_bad_residual(tmp_pa
     assert any("residual gate" in failure for failure in payload["failures"])
 
 
+def test_residual_ratio_override_cannot_accept_negative_residual(tmp_path: Path) -> None:
+    scan = tmp_path / "scan"
+    for er, current in [(-1.0, -1.0), (1.0, 1.0)]:
+        _write_scan_point(scan, er=er, current=current, residual=-1.0e-10)
+
+    summary = evaluate_sfincs_scan_promotion(scan, max_residual_ratio=10.0)
+
+    assert summary.gate_status == "fail"
+    assert all(run.residual_gate["status"] == "fail" for run in summary.runs)
+
+
+def test_residual_ratio_below_one_tightens_gate(tmp_path: Path) -> None:
+    scan = tmp_path / "scan"
+    for er, current in [(-1.0, -1.0), (1.0, 1.0)]:
+        _write_scan_point(scan, er=er, current=current, residual=7.5e-9)
+
+    summary = evaluate_sfincs_scan_promotion(scan, max_residual_ratio=0.5)
+
+    assert summary.gate_status == "fail"
+    assert all(run.residual_gate["status"] == "fail" for run in summary.runs)
+
+
 def test_evaluate_sfincs_scan_promotion_can_allow_reference_outputs_without_residuals(
     tmp_path: Path,
 ) -> None:

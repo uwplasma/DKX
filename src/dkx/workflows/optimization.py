@@ -292,28 +292,43 @@ def kinetic_validation_gate(
     """Gate a high-fidelity SFINCS objective before it is trusted."""
 
     failures: list[str] = []
+    residual_value = _finite_float(residual_norm)
+    target_value = _finite_float(residual_target)
+    comparison_value = _finite_float(cpu_gpu_relative_difference)
+    comparison_limit = _finite_float(max_cpu_gpu_relative_difference)
     if residual_norm is None or residual_target is None:
         failures.append("missing residual_norm or residual_target")
-    elif float(residual_norm) > float(residual_target):
-        failures.append(f"residual_norm={residual_norm:.3e} exceeds target={residual_target:.3e}")
-    if cpu_gpu_relative_difference is not None and (
-        float(cpu_gpu_relative_difference) > float(max_cpu_gpu_relative_difference)
-    ):
+    elif residual_value is None:
+        failures.append("residual_norm must be finite")
+    elif residual_value < 0.0:
+        failures.append("residual_norm must be non-negative")
+    elif target_value is None:
+        failures.append("residual_target must be finite")
+    elif target_value <= 0.0:
+        failures.append("residual_target must be positive")
+    elif residual_value > target_value:
+        failures.append(
+            f"residual_norm={residual_value:.3e} exceeds target={target_value:.3e}"
+        )
+
+    if comparison_limit is None or comparison_limit < 0.0:
+        failures.append("max_cpu_gpu_relative_difference must be finite and non-negative")
+    elif cpu_gpu_relative_difference is not None and comparison_value is None:
+        failures.append("cpu_gpu_relative_difference must be finite")
+    elif comparison_value is not None and comparison_value < 0.0:
+        failures.append("cpu_gpu_relative_difference must be non-negative")
+    elif comparison_value is not None and comparison_value > comparison_limit:
         failures.append(
             "cpu_gpu_relative_difference="
-            f"{cpu_gpu_relative_difference:.3e} exceeds {max_cpu_gpu_relative_difference:.3e}"
+            f"{comparison_value:.3e} exceeds {comparison_limit:.3e}"
         )
     return {
         "status": "pass" if not failures else "fail",
         "failures": failures,
-        "residual_norm": None if residual_norm is None else float(residual_norm),
-        "residual_target": None if residual_target is None else float(residual_target),
-        "cpu_gpu_relative_difference": (
-            None
-            if cpu_gpu_relative_difference is None
-            else float(cpu_gpu_relative_difference)
-        ),
-        "max_cpu_gpu_relative_difference": float(max_cpu_gpu_relative_difference),
+        "residual_norm": residual_value,
+        "residual_target": target_value,
+        "cpu_gpu_relative_difference": comparison_value,
+        "max_cpu_gpu_relative_difference": comparison_limit,
     }
 
 
@@ -683,13 +698,28 @@ def _read_run(path: Path, *, max_residual_ratio: float) -> ScanPromotionRun:
         residual_norm=residual_norm,
         residual_target=residual_target,
     )
+    residual_value = residual_gate["residual_norm"]
+    target_value = residual_gate["residual_target"]
     if (
-        residual_norm is not None
-        and residual_target is not None
-        and residual_target > 0.0
-        and residual_norm <= float(max_residual_ratio) * residual_target
+        residual_value is not None
+        and residual_value >= 0.0
+        and target_value is not None
+        and target_value > 0.0
     ):
-        residual_gate = {**residual_gate, "status": "pass", "failures": []}
+        residual_ratio = residual_value / target_value
+        ratio_passed = residual_ratio <= float(max_residual_ratio)
+        residual_gate = {
+            **residual_gate,
+            "status": "pass" if ratio_passed else "fail",
+            "failures": (
+                []
+                if ratio_passed
+                else [
+                    f"residual ratio={residual_ratio:.3e} exceeds "
+                    f"max_residual_ratio={float(max_residual_ratio):.3e}"
+                ]
+            ),
+        }
     return ScanPromotionRun(
         path=path,
         er=float(er),
@@ -744,6 +774,8 @@ def evaluate_sfincs_scan_promotion(
     """
 
     root_dir = Path(scan_dir).resolve()
+    if not isfinite(float(max_residual_ratio)) or float(max_residual_ratio) <= 0.0:
+        raise ValueError("max_residual_ratio must be finite and positive")
     runs = tuple(
         sorted(
             (_read_run(path, max_residual_ratio=max_residual_ratio) for path in _output_paths(root_dir)),
@@ -1773,6 +1805,13 @@ def evaluate_promotion_ladder(
     under-resolved ladder is reported as ``deferred`` rather than ``fail``.
     """
 
+    backend_root_atol = float(backend_root_atol)
+    root_drift_atol = float(root_drift_atol)
+    if not isfinite(backend_root_atol) or backend_root_atol < 0.0:
+        raise ValueError("backend_root_atol must be finite and non-negative")
+    if not isfinite(root_drift_atol) or root_drift_atol < 0.0:
+        raise ValueError("root_drift_atol must be finite and non-negative")
+
     root = Path(base_dir).resolve() if base_dir is not None else Path.cwd()
     floor = _normalized_resolution(production_floor or DEFAULT_PRODUCTION_FLOOR)
     raw_tiers = config.get("tiers")
@@ -1783,8 +1822,8 @@ def evaluate_promotion_ladder(
     failures: list[str] = []
     blockers: list[str] = []
     previous_root: float | None = None
-    all_backend_clean = True
-    all_converged = True
+    previous_tier: Mapping[str, Any] | None = None
+    refinement_comparisons = 0
 
     for index, raw_tier in enumerate(raw_tiers):
         if not isinstance(raw_tier, Mapping):
@@ -1794,49 +1833,72 @@ def evaluate_promotion_ladder(
             base_dir=root,
             production_floor=floor,
             previous_root=previous_root,
-            backend_root_atol=float(backend_root_atol),
-            root_drift_atol=float(root_drift_atol),
+            backend_root_atol=backend_root_atol,
+            root_drift_atol=root_drift_atol,
             is_baseline=index == 0,
         )
         tiers.append(tier)
         lane_failures = list(tier.get("failures", []))
         if lane_failures:
             failures.extend(str(item) for item in lane_failures)
-            all_backend_clean = False
+        resolution_refined = _is_strict_refinement(
+            tier["resolution"],
+            None if previous_tier is None else previous_tier["resolution"],
+        )
+        tier["convergence_gate"]["resolution_refined"] = resolution_refined
+        physics_mismatches: list[str] = []
+        if previous_tier is not None:
+            for field in ("r_n", "n_species"):
+                if tier[field] != previous_tier[field]:
+                    physics_mismatches.append(
+                        f"{tier['name']}: {field}={tier[field]} differs from previous tier "
+                        f"{field}={previous_tier[field]}"
+                    )
+        blockers.extend(physics_mismatches)
         if tier["convergence_gate"]["status"] == "fail":
-            all_converged = False
             blockers.append(
                 f"{tier['name']}: root drift {tier['convergence_gate']['root_drift_from_previous']:.6g} "
-                f"exceeds {float(root_drift_atol):.6g}"
+                f"exceeds {root_drift_atol:.6g}"
             )
+        elif tier["convergence_gate"]["status"] == "pass":
+            if resolution_refined and not physics_mismatches:
+                refinement_comparisons += 1
+            elif not resolution_refined:
+                blockers.append(
+                    f"{tier['name']}: resolution does not refine the previous tier"
+                )
         previous_root = _reference_root(tier)
+        previous_tier = tier
 
     final_tier = tiers[-1]
     if not final_tier["production_floor_met"]:
         blockers.append(f"{final_tier['name']}: final tier does not meet production floor")
+    if refinement_comparisons == 0:
+        blockers.append("ladder has no refinement comparison beyond the baseline tier")
 
     if failures:
         status = "fail"
-    elif final_tier["production_floor_met"] and all_backend_clean and all_converged:
-        status = "pass"
-    else:
+    elif blockers:
         status = "deferred"
+    else:
+        status = "pass"
 
     return {
         "workflow": "dkx_finite_beta_electron_root_convergence_ladder",
         "status": status,
         "claim_boundary": (
             "This summary compares already-promoted finite-beta QA electron-root "
-            "scans across resolution tiers. It is publication-grade only when "
-            "the final tier reaches the declared production floor and the "
-            "convergence/backend gates pass."
+            "scans across resolution tiers. A pass requires a refinement at the "
+            "declared production floor and clean available backend comparisons; "
+            "single-backend ladders report backend comparisons as untested."
         ),
         "production_floor": floor,
         "tolerances": {
-            "backend_root_atol": float(backend_root_atol),
-            "root_drift_atol": float(root_drift_atol),
+            "backend_root_atol": backend_root_atol,
+            "root_drift_atol": root_drift_atol,
         },
         "tiers": tiers,
+        "refinement_comparisons": int(refinement_comparisons),
         "failures": failures,
         "blockers": blockers,
     }
@@ -1888,6 +1950,18 @@ def _evaluate_tier(
         if diff > float(backend_root_atol):
             failures.append(f"{name}:{pair}: selected root diff {diff:.6g} exceeds {backend_root_atol:.6g}")
 
+    backend_comparison_gate = {
+        "status": (
+            "untested"
+            if not backend_diffs
+            else "pass"
+            if all(diff <= backend_root_atol for diff in backend_diffs.values())
+            else "fail"
+        ),
+        "tested_pairs": sorted(backend_diffs),
+        "reason": None if backend_diffs else "no comparable backend pair was supplied",
+    }
+
     reference_root = _reference_root_from_lanes(lane_summaries)
     if is_baseline or previous_root is None:
         convergence_gate = {
@@ -1913,6 +1987,7 @@ def _evaluate_tier(
         "production_floor_met": _meets_floor(resolution, production_floor),
         "lanes": lane_summaries,
         "backend_root_diffs": backend_diffs,
+        "backend_comparison_gate": backend_comparison_gate,
         "convergence_gate": convergence_gate,
         "reference_root_er": float(reference_root),
         "status": "pass" if not failures else "fail",
@@ -1990,6 +2065,17 @@ def _reference_root(tier: Mapping[str, Any]) -> float:
 
 def _meets_floor(resolution: Mapping[str, int], floor: Mapping[str, int]) -> bool:
     return all(int(resolution[key]) >= int(floor[key]) for key in ("Ntheta", "Nzeta", "Nxi", "NL", "Nx"))
+
+
+def _is_strict_refinement(
+    resolution: Mapping[str, int], previous: Mapping[str, int] | None
+) -> bool:
+    if previous is None:
+        return False
+    keys = ("Ntheta", "Nzeta", "Nxi", "NL", "Nx")
+    return all(int(resolution[key]) >= int(previous[key]) for key in keys) and any(
+        int(resolution[key]) > int(previous[key]) for key in keys
+    )
 
 
 __all__ = [
