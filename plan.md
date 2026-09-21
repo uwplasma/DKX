@@ -110,20 +110,25 @@ optimization claims.
   typed evidence through native Result and convergence reporting; a successful
   grid-change diagnostic without it is not a research certificate. Never infer
   observable correctness from a solver success flag.
-- Resolve the reduced public W7-X assembly discrepancy before timing larger
-  direct solves. CPU float64 with JAX 0.9.2 and SOLVAX 0.24 reproduced a
-  `2.33e-7` matrix/operator difference on the 2,104-unknown fixture named in
-  item 3, above the unchanged `1e-10` check. Replay without cached executables
-  in a pinned environment, compare against column sampling, and identify the
-  responsible terms before changing the sparsity pattern or numerical policy.
-  Passing analytic assembly tests does not qualify this full-FP VMEC case.
+- Merge and qualify [the magnetic-upwind assembly correction #268](https://github.com/uwplasma/DKX/pull/268)
+  before timing larger direct solves. The reduced public W7-X case exposed
+  missing angular support: clean-cache CPU float64 replay fell from `2.33e-7`
+  matrix/operator difference to `2.15e-16` after including active magnetic
+  stencils in both the pattern and grouping. Column sampling agrees to roundoff
+  on 2,104 unknowns. Keep the `1e-10` verification threshold; this small-case
+  result does not qualify the 66,004-unknown backend comparison in item 3.
 - Qualify sparse-direct transpose solves on general cotangents, not only
   cotangents constructed in the transpose range. The v2.5.0 release audit
   reported stagnation near `3e-8`, but its exact deck and random seed were not
   retained and a bounded search could not recover them. Keep that observation
   unresolved; qualify pinned, seeded cases and physical moment cotangents.
-  Change transpose scaling only against a reproducible failure, without
-  weakening the requested original-equation tolerance.
+  The corrected reduced W7-X fixture now provides a reproducible failure:
+  `default_rng(0).standard_normal(2104)` gives original transpose residuals
+  near `6.1e-10` with both SuperLU and MUMPS at requested `1e-10`, while the
+  physical forward RHS passes below `3e-13`. Diagnose matrix versus original
+  transpose arithmetic and physical cotangents on this case before promoting
+  the larger backend benchmark. Change scaling or refinement only against
+  reproducible evidence, without weakening the requested tolerance.
 - Qualify observable adjoints independently on PAS and full-Fokker–Planck decks.
   Compare the adjoint identity, finite differences over a step window, and a
   second-order Taylor remainder. Record branch and active-state assumptions.
