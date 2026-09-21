@@ -571,7 +571,8 @@ jobs:
       - external-data-smoke
       - workflow-lint
       - wheel-install
-    if: always()
+    # Report upstream failures, but let superseded runs stop on cancellation.
+    if: ${{ !cancelled() }}
     steps:
       - name: Check required CI jobs
         env:
