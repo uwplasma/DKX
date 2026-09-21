@@ -167,8 +167,10 @@ the operator. Run a checked example from Python:
    certificate = result.certificate()
 
 ``result.certificate()`` returns the compact record used for review: solver
-route, residual, iteration counts, geometry checksum, package and runtime
-versions, and timings.
+route, iteration counts, geometry checksum, package and runtime versions,
+and timings. Native results include per-surface original residual and RHS norms,
+with their norm, tolerance and complete-state provenance. This record does not
+by itself establish grid uncertainty or root-branch validity.
 
 For an ambipolar profile, every retained electric-field evaluation also keeps
 the already integrated speed-node contributions

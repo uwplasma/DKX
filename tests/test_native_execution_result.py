@@ -465,7 +465,11 @@ def test_native_case_solves_without_namelist_conversion(monkeypatch, tmp_path) -
     assert evidence["complete_state"] is True
     assert np.all(result.primal_residual / result.primal_rhs_norm <= 1.0e-8)
     assert result.dimensions["particle_flux_m2_s"] == ("surface", "species")
-    assert result.certificate()["case_id"] == _case().case_id
+    certificate = result.certificate()
+    assert certificate["case_id"] == _case().case_id
+    assert certificate["original_residual_evidence"] == dict(evidence)
+    np.testing.assert_array_equal(certificate["primal_residual"], result.primal_residual)
+    np.testing.assert_array_equal(certificate["primal_rhs_norm"], result.primal_rhs_norm)
 
     loaded = dkx.Result.load(path)
     assert loaded.case_id == result.case_id
