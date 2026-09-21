@@ -827,11 +827,18 @@ def test_mumps_budget_reserves_live_storage_and_reuses_one_factorization(monkeyp
         direct_memory_budget_gb=1.0,
     )
     reused = solve(op, 2.0 * rhs, method="auto", factors=result.factors)
+    wide_reused = solve(
+        op,
+        jnp.stack([rhs, 2.0 * rhs, 3.0 * rhs], axis=1),
+        method="auto",
+        factors=result.factors,
+    )
     transposed = solve(
         op, rhs, method="auto", factors=result.factors, transpose=True
     )
 
-    assert result.converged and reused.converged and transposed.converged
+    assert result.converged and reused.converged and wide_reused.converged
+    assert transposed.converged
     assert len(calls) == 1
     backend, workspace, safety = calls[0]
     assert backend == "mumps" and safety == 1.2
@@ -882,6 +889,10 @@ def test_stale_mumps_factors_refresh_once_with_the_same_backend_and_budget(monke
         )
 
     monkeypatch.setattr(solve_module, "_factor_direct", build_wrong_factors)
+    monkeypatch.setattr(
+        solve_module, "_process_rss_bytes", lambda: (128 * 2**20, "current RSS")
+    )
+    monkeypatch.setattr(solve_module, "_available_memory_bytes", lambda: 8 * 2**30)
     result = solve_module._solve_tier3(
         op, jnp.ones((1, 1)), tol=1e-12, atol=0.0, max_dense_size=8,
         factors=stale, emit=None,
@@ -948,6 +959,114 @@ def test_mumps_capability_and_budget_fail_before_assembly(monkeypatch) -> None:
         solve(
             op, op.rhs(), method="direct", direct_backend="mumps",
             direct_memory_budget_gb=1.0,
+        )
+
+
+@pytest.mark.parametrize(
+    ("backend", "budget", "falls_back", "message"),
+    [
+        ("mumps", 2.0, True, None),
+        (None, None, False, "default SuperLU host fallback is protected"),
+        ("mumps", None, False, "MUMPS requires a positive direct_memory_budget_gb"),
+    ],
+)
+def test_large_auto_fallback_requires_explicit_budgeted_mumps(
+    monkeypatch, backend, budget, falls_back, message
+) -> None:
+    import importlib
+
+    solve_module = importlib.import_module("dkx.solve")
+    rhs = jnp.ones((2, 1))
+    stalled = SolveResult(
+        x=jnp.zeros_like(rhs), method="gcrot", iterations=1,
+        residual_norms=jnp.asarray([1.0]), converged=False,
+        recycle=None, timings={},
+    )
+    op = SimpleNamespace(total_size=9000, fp=None, sugama=None)
+    monkeypatch.setattr(solve_module, "_solve_tier2", lambda *args, **kwargs: stalled)
+    direct_calls = []
+
+    def direct(*args, **kwargs):
+        direct_calls.append(kwargs)
+        return "direct-result"
+
+    monkeypatch.setattr(solve_module, "_solve_tier3", direct)
+    kwargs = dict(
+        stalled=stalled, tol=1e-10, atol=0.0, x0=None, recycle=None,
+        preconditioner="coarse", drop_l_coupling_in_precond=False,
+        restart=2, recycle_dim=1, max_restarts=1, check_adjoint=True,
+        adjoint_residual_factor=1.0, max_dense_size=8192,
+        direct_backend=backend, direct_memory_budget_gb=budget,
+    )
+    if falls_back:
+        assert solve_module._escalate_after_tier2_stall(op, rhs, **kwargs) == "direct-result"
+        assert direct_calls[0]["direct_backend"] == "mumps"
+        assert direct_calls[0]["direct_memory_budget_gb"] == 2.0
+    else:
+        with pytest.raises(RuntimeError, match=message):
+            solve_module._escalate_after_tier2_stall(op, rhs, **kwargs)
+        assert direct_calls == []
+
+
+@pytest.mark.parametrize("budget", [0.0, -1.0, np.nan, np.inf])
+def test_invalid_mumps_budget_is_rejected_before_auto_escalation(
+    monkeypatch, budget
+) -> None:
+    import importlib
+
+    solve_module = importlib.import_module("dkx.solve")
+    monkeypatch.setattr(
+        solve_module,
+        "_escalate_after_tier2_stall",
+        lambda *args, **kwargs: pytest.fail("invalid budget reached escalation"),
+    )
+    op = _load_op("quick_2species_FPCollisions_noEr")
+    with pytest.raises(ValueError, match="finite and positive"):
+        solve(
+            op,
+            op.rhs(),
+            method="auto",
+            direct_backend="mumps",
+            direct_memory_budget_gb=budget,
+        )
+
+
+def test_mumps_reuse_admission_accounts_for_rhs_width_and_float64_conversion(
+    monkeypatch,
+) -> None:
+    import importlib
+
+    import dkx.batch as batch_module
+
+    solve_module = importlib.import_module("dkx.solve")
+    live_rss = 128 * 2**20
+    rhs = np.empty((11, 5), dtype=np.float32)
+    rhs_work_nbytes = rhs.size * np.dtype(np.float64).itemsize
+    transient = (
+        solve_module._MUMPS_TRANSIENT_RHS_COPIES * rhs_work_nbytes
+        + batch_module._RUNTIME_OVERHEAD_BYTES
+    )
+    monkeypatch.setattr(
+        solve_module, "_process_rss_bytes", lambda: (live_rss, "current RSS")
+    )
+    monkeypatch.setattr(solve_module, "_available_memory_bytes", lambda: transient)
+
+    # Equality is admitted; either process or host headroom one byte below the
+    # conservative estimate is refused before a native solve starts.
+    solve_module._admit_mumps_reuse(
+        rhs_nbytes=rhs_work_nbytes,
+        memory_budget_bytes=live_rss + transient,
+    )
+    with pytest.raises(MemoryError, match="transient RHS/runtime reserve"):
+        solve_module._admit_mumps_reuse(
+            rhs_nbytes=rhs_work_nbytes,
+            memory_budget_bytes=live_rss + transient - 1,
+        )
+    monkeypatch.setattr(solve_module, "_available_memory_bytes", lambda: transient - 1)
+    with pytest.raises(MemoryError, match="current host availability"):
+        solve_module._admit_mumps_reuse(
+            rhs_nbytes=rhs_work_nbytes,
+            memory_budget_bytes=live_rss + transient,
         )
 
 
