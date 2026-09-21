@@ -350,6 +350,9 @@ def _cmd_converge(args: argparse.Namespace) -> int:
                 "observables": _json_finite(r.observables),
                 "original_residuals": _json_finite(r.original_residuals),
                 "original_residual_norm": r.original_residual_norm,
+                "original_residual_tolerance": r.original_residual_tolerance,
+                "original_residual_complete_state": r.original_residual_complete_state,
+                "original_residual_status": r.residual_evidence_status,
                 "status": r.status,
                 "refusal": r.refusal,
                 "third_rung": (_rung_json(r.third_rung)
@@ -362,10 +365,16 @@ def _cmd_converge(args: argparse.Namespace) -> int:
                 "observables": _json_finite(report.baseline_observables),
                 "original_residuals": _json_finite(report.baseline_original_residuals),
                 "original_residual_norm": report.baseline_original_residual_norm,
+                "original_residual_tolerance": report.baseline_original_residual_tolerance,
+                "original_residual_complete_state": (
+                    report.baseline_original_residual_complete_state
+                ),
+                "original_residual_status": report.baseline_residual_evidence_status,
                 "status": "accepted",
             },
             "tolerance": report.tolerance,
             "converged": bool(report.converged),
+            "original_equations_accepted": bool(report.original_equations_accepted),
             "axes_understate_the_joint_change": bool(report.axes_understate_the_joint_change),
             "refinements": [_rung_json(r) for r in rows],
         }, indent=2, sort_keys=True, allow_nan=False))
@@ -401,10 +410,18 @@ def _cmd_converge(args: argparse.Namespace) -> int:
                 "the axes together before treating it as converged.[/yellow]"
             )
         console.print(
-            f"converged at tolerance {report.tolerance:g}: "
+            f"grid changes within tolerance {report.tolerance:g}: "
             + ("[green]yes[/green]" if report.converged else "[red]no[/red]")
         )
-    return 0 if report.converged else 1
+        console.print(
+            "original equations accepted: "
+            + (
+                "[green]yes[/green]"
+                if report.original_equations_accepted
+                else "[yellow]no[/yellow]"
+            )
+        )
+    return 0 if report.converged and report.original_equations_accepted else 1
 
 
 def _cmd_roots(args: argparse.Namespace) -> int:
