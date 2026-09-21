@@ -467,27 +467,30 @@ def test_the_generated_route_is_jit_safe_over_traced_operator_leaves(
 
 
 @pytest.mark.parametrize("route", sorted(FALLBACK_ROUTES))
-def test_the_generated_route_carries_the_transposed_solve(route: str, monkeypatch):
+@pytest.mark.parametrize("case", ("full_fp", "pas_ramp"))
+def test_the_generated_route_carries_the_transposed_solve(route: str, case: str, monkeypatch):
     """The adjoint runs on ``precond_t``, so it needs its own residual.
 
     ``SolveResult.adjoint`` records ``||A^T y - g|| / ||g||`` recomputed from
     the operator once the backward pass has executed, which is the transposed
     statement of the test above: the generated route has to reach the same
     transposed residual as the dense one, and produce the same gradient.  The
-    scalar is threaded through ``THat`` and the cotangent is a fixed
-    pseudo-random vector — a generic linear functional, which is the hardest
-    case for the adjoint solve and the one a composed objective produces.
+    full-FP case varies the explicit ``THat`` coefficient with prepared collision
+    data fixed; the ramped PAS case scales only the RHS and exercises trimmed
+    chains. Neither is a complete physical temperature derivative. A fixed
+    pseudo-random cotangent also checks general linear objectives.
     """
     import jax  # noqa: PLC0415
 
-    op0 = _load_op("quick_2species_FPCollisions_noEr")
+    op0 = _ramped_op() if case == "pas_ramp" else _load_op("quick_2species_FPCollisions_noEr")
     w = jnp.asarray(np.random.default_rng(11).standard_normal(op0.total_size))
     captured: dict[str, object] = {}
 
     def loss(scale: jnp.ndarray) -> jnp.ndarray:
-        op = replace(op0, t_hat=op0.t_hat * scale)
+        op = op0 if case == "pas_ramp" else replace(op0, t_hat=op0.t_hat * scale)
+        rhs = op.rhs() * scale if case == "pas_ramp" else op.rhs()
         result = solve(
-            op, op.rhs(), method="gmres", tol=1e-10, differentiable=True,
+            op, rhs, method="gmres", tol=1e-10, differentiable=True,
             preconditioner="coarse",
         )  # fmt: skip
         captured["result"] = result
@@ -512,6 +515,8 @@ def test_the_generated_route_carries_the_transposed_solve(route: str, monkeypatc
     assert 0.0 < generated_adjoint < 1e-8
     assert abs(generated_adjoint - dense_adjoint) < 1e-8
     assert abs(generated_grad - dense_grad) <= 1e-6 * max(abs(dense_grad), 1.0)
+    if case == "pas_ramp":
+        np.testing.assert_allclose(generated_grad, float(loss(jnp.asarray(1.0))), rtol=1e-8, atol=1e-12)
 
 
 def test_the_generated_route_solves_a_phi1_deck_to_the_same_state(monkeypatch):
