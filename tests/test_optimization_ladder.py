@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from dkx.workflows.optimization import (
     dense_matrix_gib,
     estimate_rhs1_active_size,
@@ -91,6 +93,105 @@ def test_evaluate_promotion_ladder_fails_backend_mismatch(tmp_path: Path) -> Non
 
     assert summary["status"] == "fail"
     assert any("cpu_gpu" in failure for failure in summary["failures"])
+
+
+def test_evaluate_promotion_ladder_requires_refinement_beyond_baseline(tmp_path: Path) -> None:
+    config = {
+        "tiers": [
+            {
+                "name": "production_baseline",
+                "resolution": {"Ntheta": 25, "Nzeta": 51, "Nxi": 100, "NL": 4, "Nx": 4},
+                "promotions": {"cpu": _write(tmp_path / "cpu.json", _promotion_payload(0.4))},
+            }
+        ]
+    }
+
+    summary = evaluate_promotion_ladder(config)
+
+    assert summary["status"] == "deferred"
+    assert summary["refinement_comparisons"] == 0
+    assert summary["tiers"][0]["backend_comparison_gate"]["status"] == "untested"
+    assert any("no refinement comparison" in blocker for blocker in summary["blockers"])
+
+
+def test_evaluate_promotion_ladder_allows_refined_cpu_only_evidence(tmp_path: Path) -> None:
+    config = {
+        "tiers": [
+            {
+                "name": "baseline",
+                "resolution": {"Ntheta": 23, "Nzeta": 49, "Nxi": 90, "NL": 4, "Nx": 4},
+                "promotions": {"cpu": _write(tmp_path / "low_cpu.json", _promotion_payload(0.4))},
+            },
+            {
+                "name": "production",
+                "resolution": {"Ntheta": 25, "Nzeta": 51, "Nxi": 100, "NL": 4, "Nx": 4},
+                "promotions": {"cpu": _write(tmp_path / "high_cpu.json", _promotion_payload(0.401))},
+            },
+        ]
+    }
+
+    summary = evaluate_promotion_ladder(config)
+
+    assert summary["status"] == "pass"
+    assert summary["refinement_comparisons"] == 1
+    assert summary["tiers"][1]["convergence_gate"]["resolution_refined"] is True
+    assert all(
+        tier["backend_comparison_gate"]["status"] == "untested"
+        for tier in summary["tiers"]
+    )
+
+
+@pytest.mark.parametrize(
+    "second_resolution",
+    [
+        {"Ntheta": 27, "Nzeta": 53, "Nxi": 102, "NL": 4, "Nx": 4},
+        {"Ntheta": 25, "Nzeta": 51, "Nxi": 100, "NL": 4, "Nx": 4},
+    ],
+    ids=["identical", "coarsened"],
+)
+def test_evaluate_promotion_ladder_rejects_non_refinement_grids(
+    tmp_path: Path, second_resolution: dict[str, int]
+) -> None:
+    baseline_resolution = {"Ntheta": 27, "Nzeta": 53, "Nxi": 102, "NL": 4, "Nx": 4}
+    config = {
+        "tiers": [
+            {
+                "name": "baseline",
+                "resolution": baseline_resolution,
+                "promotions": {"cpu": _write(tmp_path / "low.json", _promotion_payload(0.4))},
+            },
+            {
+                "name": "candidate",
+                "resolution": second_resolution,
+                "promotions": {"cpu": _write(tmp_path / "high.json", _promotion_payload(0.4))},
+            },
+        ]
+    }
+
+    summary = evaluate_promotion_ladder(config)
+
+    assert summary["status"] == "deferred"
+    assert summary["refinement_comparisons"] == 0
+    assert summary["tiers"][1]["convergence_gate"]["resolution_refined"] is False
+
+
+@pytest.mark.parametrize("name", ["backend_root_atol", "root_drift_atol"])
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -1.0])
+def test_evaluate_promotion_ladder_rejects_invalid_tolerances(
+    tmp_path: Path, name: str, value: float
+) -> None:
+    config = {
+        "tiers": [
+            {
+                "name": "baseline",
+                "resolution": {"Ntheta": 25, "Nzeta": 51, "Nxi": 100, "NL": 4, "Nx": 4},
+                "promotions": {"cpu": _write(tmp_path / "cpu.json", _promotion_payload(0.4))},
+            }
+        ]
+    }
+
+    with pytest.raises(ValueError, match="finite and non-negative"):
+        evaluate_promotion_ladder(config, **{name: value})
 
 
 def test_public_ladder_script_writes_summary_and_figures(tmp_path: Path) -> None:
