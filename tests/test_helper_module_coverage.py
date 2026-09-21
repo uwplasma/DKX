@@ -143,7 +143,7 @@ def test_profiling_and_verbose_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
     import dkx.profiling as profiling
 
     fake_psutil = SimpleNamespace(
-        Process=lambda: SimpleNamespace(memory_info=lambda: SimpleNamespace(rss=12_500_000))
+        Process=lambda: SimpleNamespace(memory_info=lambda: SimpleNamespace(rss=12.5 * 1024**2))
     )
     monkeypatch.setitem(sys.modules, "psutil", fake_psutil)
     assert _rss_mb() == pytest.approx(12.5)
@@ -151,7 +151,7 @@ def test_profiling_and_verbose_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
     device_mem_calls: list[int] = []
     monkeypatch.setattr(
         "jax.devices",
-        lambda: device_mem_calls.append(1) or [SimpleNamespace(memory_stats=lambda: {"bytes_active": 3_000_000})],
+        lambda: device_mem_calls.append(1) or [SimpleNamespace(memory_stats=lambda: {"bytes_active": 3 * 1024**2})],
     )
     assert _device_mem_mb() == pytest.approx(3.0)
 
