@@ -149,6 +149,9 @@ physics envelope.
   fluxes separately; convergence of one does not admit the others.
 - Publish NCSX and W7-X tables with all attempted rungs, including refusals and
   non-monotone ladders. Preserve branch-search scope for W7-X roots.
+- Before repeating a budget-limited large rung, capture compilation,
+  preconditioner-build and Krylov phase costs separately. Memory admission
+  alone does not establish affordable completion.
 
 **Acceptance:** each quoted NCSX and W7-X observable has a reproducible relative
 uncertainty of at most 1%, or the workflow refuses to quote it. The existing NCSX
