@@ -247,14 +247,17 @@ scan or Newton :math:`\Phi_1` iteration converge in a handful of iterations.
 Sparse direct (host fallback and independent cross-check)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-As an escape hatch the operator is materialized (vmapped unit vectors, guarded
-by ``max_dense_size``) into CSR and factored by SuperLU on the host. This route
-is non-differentiable and non-jittable and prints a one-line notice; it is used
-on explicit request (``method="direct"``) or when the recycled Krylov route
-breaches its iteration cap under ``method="auto"``. Because it inverts the
-assembled operator with a general-purpose factorization, it also serves as the
-independent cross-check on answers from the other two routes; the case-file
-value ``sparse_direct_referee`` names that role.
+As an escape hatch the operator is assembled into CSR; small operators may
+instead be sampled column by column. ``max_dense_size`` limits that columnwise
+sampling, not grouped assembly. The CSR matrix is factored on the host.
+SuperLU remains the default; the optional source-only MUMPS adapter is an
+explicit experimental choice. This route is non-differentiable and
+non-jittable and prints a one-line notice; it is used on explicit request
+(``method="direct"``) or when the recycled Krylov route breaches its iteration
+cap under ``method="auto"``.
+Because it inverts the assembled operator with a general-purpose factorization,
+it also serves as the independent cross-check on answers from the other two
+routes; the case-file value ``sparse_direct_referee`` names that role.
 
 .. admonition:: Where in the code
 
