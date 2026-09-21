@@ -16,12 +16,16 @@ of iterations failing at another
 
 from __future__ import annotations
 
+import importlib
 from dataclasses import replace
 
+import jax
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
 import dkx
+from dkx.run import profile_moments_from_operator
 from dkx.solve import DirectFactors, Tier1Solver, _pinned_matvecs, solve
 
 _DECK = dict(
@@ -73,12 +77,20 @@ def test_a_factoring_route_returns_its_factorization(operators, label, method, k
 def test_another_right_hand_side_reuses_them_exactly(operators, label, method, kw):
     """The transport matrix's columns need not arrive together."""
     op = operators[method]
-    together = _solve(op, _columns(op), method, kw)
+    rhs = _columns(op)
+    assert np.max(np.linalg.norm(rhs, axis=0)) > 1e3 * np.min(
+        np.linalg.norm(rhs, axis=0)
+    )
+    together = _solve(op, rhs, method, kw)
     assert together.converged
+    assert np.all(
+        np.asarray(together.residual_norms)
+        <= 1e-10 * np.linalg.norm(rhs, axis=0)
+    )
     for j in range(3):
-        apart = _solve(op, _columns(op)[:, j], method, kw,
-                       factors=together.factors)
+        apart = _solve(op, rhs[:, j], method, kw, factors=together.factors)
         assert apart.converged
+        assert float(apart.residual_norms[0]) <= 1e-10 * np.linalg.norm(rhs[:, j])
         # Reuse is not an approximation of the same operator: it is the same
         # elimination, so the two answers differ by round-off alone.
         reference = np.asarray(together.x)[:, j]
@@ -110,6 +122,102 @@ def test_the_adjoint_comes_from_the_same_factors(operators, label, method, kw):
     left = float(np.dot(y, np.asarray(apply(x))))
     right = float(np.dot(np.asarray(apply_t(y)), x))
     assert abs(left - right) <= 1e-9 * abs(left)
+
+
+@pytest.fixture(scope="module")
+def recorded_sparse_adjoint():
+    """A full-FP case at the factor-reuse study's 1,962-unknown resolution."""
+    op = dkx.run(
+        **dict(
+            _DECK,
+            RHSMode=1,
+            collisionOperator=0,
+            Ntheta=7,
+            Nzeta=7,
+            Nxi=8,
+            Nx=5,
+        )
+    ).operator
+    primal = _solve(op, np.asarray(op.rhs(1)), "direct", {"max_dense_size": 64})
+    assert primal.converged
+    return op, primal
+
+
+@pytest.mark.parametrize(
+    "observable", ("particleFlux_vm_psiHat", "heatFlux_vm_psiHat", "FSABjHat")
+)
+def test_sparse_transpose_accepts_physical_moment_cotangents(
+    recorded_sparse_adjoint, observable
+):
+    """A transport objective, rather than a manufactured range vector, works."""
+    op, primal = recorded_sparse_adjoint
+    assert op.total_size == 1962
+    # Every speed point retains all eight Legendre modes.  This case therefore
+    # measures transpose accuracy, not a convention for unphysical padding.
+    assert op.active_dof_mask() is None
+
+    def objective(state):
+        moments = profile_moments_from_operator(op, state)
+        return jnp.ravel(moments[observable])[0]
+
+    cotangent = np.asarray(jax.grad(objective)(primal.x))
+    adjoint = _solve(
+        op,
+        cotangent,
+        "direct",
+        {"max_dense_size": 64},
+        factors=primal.factors,
+        transpose=True,
+    )
+    assert adjoint.converged
+    assert adjoint.timings["build"] == 0.0
+
+    apply_t = _pinned_matvecs(op)[1]
+    residual = np.asarray(apply_t(adjoint.x)) - cotangent
+    assert np.linalg.norm(residual) <= 1e-10 * np.linalg.norm(cotangent)
+
+    rhs = np.asarray(op.rhs(1))
+    objective_from_primal = float(np.dot(cotangent, np.asarray(primal.x)))
+    objective_from_adjoint = float(np.dot(np.asarray(adjoint.x), rhs))
+    np.testing.assert_allclose(
+        objective_from_adjoint, objective_from_primal, rtol=1e-10, atol=1e-14
+    )
+
+
+def test_sparse_transpose_accepts_a_general_cotangent_and_reports_its_floor(
+    recorded_sparse_adjoint,
+):
+    """A success flag follows the true residual even below the numerical floor."""
+    op, primal = recorded_sparse_adjoint
+    cotangent = np.random.default_rng(0).standard_normal(op.total_size)
+    accepted = _solve(
+        op, cotangent, "direct", {"max_dense_size": 64},
+        factors=primal.factors, transpose=True,
+    )
+    accepted_residual = np.asarray(_pinned_matvecs(op)[1](accepted.x)) - cotangent
+    assert accepted.converged
+    assert accepted.timings["build"] == 0.0
+    assert np.linalg.norm(accepted_residual) <= 1e-10 * np.linalg.norm(cotangent)
+
+    requested = 1e-14
+    adjoint = solve(
+        op,
+        cotangent,
+        method="direct",
+        tol=requested,
+        emit=None,
+        max_dense_size=64,
+        factors=primal.factors,
+        transpose=True,
+    )
+
+    residual = np.asarray(_pinned_matvecs(op)[1](adjoint.x)) - cotangent
+    target = requested * np.linalg.norm(cotangent)
+    # The roundoff floor varies with the BLAS/JAX build. Admission must agree
+    # with the original residual whether this stricter request passes or fails.
+    assert bool(adjoint.converged) == bool(np.linalg.norm(residual) <= target)
+    if not adjoint.converged:
+        assert adjoint.timings["build"] > 0.0, "it did not perform bounded recovery"
 
 
 @pytest.mark.parametrize(("label", "method", "kw"), _ROUTES)
@@ -154,6 +262,35 @@ def test_a_distant_one_is_refused_and_recovered_in_one_factorization(
     assert np.max(np.abs(np.asarray(result.x) - reference)) <= 1e-7 * np.max(
         np.abs(reference)
     )
+
+
+def test_reuse_rejects_a_small_column_failure_hidden_by_a_large_rhs(
+    operators, monkeypatch
+):
+    solve_module = importlib.import_module("dkx.solve")
+    op = operators["direct"]
+    first = _solve(op, _columns(op, 1), "direct", {"max_dense_size": 32})
+    small = np.asarray(op.rhs(1))
+    large = np.asarray(op.rhs(2))
+    rhs = np.stack(
+        [small / np.linalg.norm(small), 1e6 * large / np.linalg.norm(large)], axis=1
+    )
+    original_refine = solve_module._direct_refine
+
+    def inject_small_column_failure(current_op, factors, current_rhs, **kwargs):
+        x, defect = original_refine(current_op, factors, current_rhs, **kwargs)
+        if factors is first.factors:
+            defect = np.zeros_like(defect)
+            defect[0, 0] = 1e-5
+        return x, defect
+
+    monkeypatch.setattr(solve_module, "_direct_refine", inject_small_column_failure)
+    result = _solve(
+        op, rhs, "direct", {"max_dense_size": 32}, factors=first.factors
+    )
+    assert result.converged
+    assert result.factors is not first.factors
+    assert result.timings["build"] > 0.0
 
 
 @pytest.mark.parametrize(("label", "method", "kw"), _ROUTES)
