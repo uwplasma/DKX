@@ -75,11 +75,30 @@ The quick ``solve_method``/``tol`` arguments of the run drivers cover most
 scripts.  The full typed knob set of :func:`dkx.solve.solve` is
 :class:`dkx.api.SolverOptions`: ``method``, ``tol``, ``atol``, ``restart``,
 ``recycle_dim``, ``max_restarts``, ``differentiable``, ``use_preconditioner``,
-``device``, and ``memory_budget_gb``.  Pass it as ``solver=SolverOptions(...)``
+``device``, ``memory_budget_gb``, and ``direct_backend``.  Pass it as
+``solver=SolverOptions(...)``
 to ``run_profile``, ``run_transport_matrix``, or ``run_from_namelist``; when
 given, it supersedes ``solve_method`` and ``tol``.  Environment variables keep
 acting as overrides for knobs left at ``None`` (``memory_budget_gb=None`` reads
 ``DKX_TIER1_MEMORY_BUDGET_GB``).
+
+The source-only experimental adapter in `SOLVAX PR #118
+<https://github.com/uwplasma/SOLVAX/pull/118>`_ can be selected explicitly;
+released SOLVAX 0.24 remains SuperLU-only::
+
+   solver = SolverOptions(
+       method="direct", direct_backend="mumps", memory_budget_gb=2.0
+   )
+
+Here ``memory_budget_gb`` is a whole-process envelope in the project's
+historical GB spelling: one unit is :math:`2^{30}` bytes (one GiB). It is not
+the amount passed directly to MUMPS. DKX subtracts measured process memory and
+assembly/runtime reserves, then intersects the remainder with current host
+availability. Process memory is current RSS when ``psutil`` is available; on
+platforms without it, DKX uses the process high-water RSS as a conservative
+fallback. Adapter memory values are bytes; divide by :math:`2^{20}` to report
+MiB. This host sparse-direct backend is not available under JAX transformations
+or automatic differentiation.
 
 Runtime messages name the route that ran: ``structured direct``,
 ``memory-bounded structured direct``, ``recycled Krylov``, or ``sparse

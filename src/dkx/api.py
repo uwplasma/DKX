@@ -63,7 +63,12 @@ class SolverOptions:
         memory_budget_gb: budget above which ``method="auto"`` prefers the
             memory-lean truncated structured-direct kernel over the full-band
             factorization; ``None`` reads ``DKX_TIER1_MEMORY_BUDGET_GB``,
-            else the solve's default applies.
+            else the solve's default applies. With ``direct_backend="mumps"``
+            this is also the process budget from which DKX reserves its live
+            operator, sparse matrices, projected COO and runtime headroom.
+        direct_backend: optional sparse-direct factor backend. ``None`` keeps
+            released SOLVAX 0.24's SuperLU behavior; ``"mumps"`` explicitly
+            requests the optional SOLVAX MUMPS adapter.
         cores: host CPU threadpool width.  XLA sizes its threadpool once,
             before the first JAX device use, so a value stored here CANNOT
             change a process whose JAX backend is already initialized; it is
@@ -89,6 +94,7 @@ class SolverOptions:
     memory_budget_gb: float | None = None
     cores: int | None = None
     keep_lowest: int = 3
+    direct_backend: str | None = None
 
     def solve_kwargs(self) -> dict[str, Any]:
         """Keyword arguments for :func:`dkx.solve.solve` (``cores`` excluded)."""
@@ -107,6 +113,12 @@ class SolverOptions:
             "device": self.device,
             "tier1_keep_lowest": int(self.keep_lowest),
             "tier1_memory_budget_gb": (
+                None if self.memory_budget_gb is None else float(self.memory_budget_gb)
+            ),
+            "direct_backend": (
+                None if self.direct_backend is None else str(self.direct_backend)
+            ),
+            "direct_memory_budget_gb": (
                 None if self.memory_budget_gb is None else float(self.memory_budget_gb)
             ),
         }
