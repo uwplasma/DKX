@@ -956,10 +956,11 @@ That is 12x less memory and roughly 4x faster on the same deck. The autodiff
 gradient through the ramped route still matches finite differences at rtol
 ``1e-6``.
 
-The second is that the cold ``232 s`` :math:`\Phi_1` Newton solve is the top
-remaining runtime target. It is an unpreconditioned, restart-capped GCROT inner
-solve at only 4.5k unknowns, and its warm re-solve is already ``0.04 s``, so
-the cost is entirely first-call iteration count rather than steady state.
+The ``232 s`` :math:`\Phi_1` Newton measurement combines compilation and
+iteration work. Its ``0.04 s`` repeat starts from the converged state
+(``x0=res.x``), so it does not measure a new nearby problem or isolate either
+cost. Profile those phases separately before selecting an optimization; compare
+neighboring-state reuse against independently converged cold solves.
 
 Example-suite benchmark
 -----------------------
