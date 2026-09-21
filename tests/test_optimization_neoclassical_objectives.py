@@ -86,6 +86,34 @@ def test_kinetic_validation_gate_requires_residual_and_cpu_gpu_agreement() -> No
     assert len(bad["failures"]) == 2
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("residual_norm", float("nan")),
+        ("residual_norm", float("inf")),
+        ("residual_norm", -1.0e-10),
+        ("residual_target", float("nan")),
+        ("residual_target", float("inf")),
+        ("residual_target", 0.0),
+        ("residual_target", -1.0e-8),
+        ("cpu_gpu_relative_difference", float("nan")),
+        ("cpu_gpu_relative_difference", float("inf")),
+        ("cpu_gpu_relative_difference", -1.0e-8),
+        ("max_cpu_gpu_relative_difference", float("nan")),
+        ("max_cpu_gpu_relative_difference", float("inf")),
+        ("max_cpu_gpu_relative_difference", -1.0e-7),
+    ],
+)
+def test_kinetic_validation_gate_rejects_invalid_numeric_fields(
+    field: str, value: float
+) -> None:
+    arguments = {"residual_norm": 1.0e-10, "residual_target": 1.0e-8}
+    arguments[field] = value
+    gate = kinetic_validation_gate(**arguments)
+
+    assert gate["status"] == "fail"
+
+
 def test_qa_proxy_gradient_gate_passes() -> None:
     gate = qa_proxy_gradient_gate(n_theta=20, n_zeta=16)
 
