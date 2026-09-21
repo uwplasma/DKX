@@ -255,6 +255,21 @@ explicit experimental choice. This route is non-differentiable and
 non-jittable and prints a one-line notice; it is used on explicit request
 (``method="direct"``) or when the recycled Krylov route breaches its iteration
 cap under ``method="auto"``.
+For a large automatic fallback, DKX keeps the existing SuperLU size protection:
+grouped assembly is attempted only when MUMPS was selected explicitly with a
+positive memory budget. MUMPS may then admit or refuse the factorization from
+current process and host-memory evidence. This preflight occurs after grouped
+assembly, so it estimates factorization and solve headroom; it does not bound
+the memory used to construct the assembled matrix.
+
+The MUMPS admission calculation is conservative rather than a hard RSS bound.
+Besides assembly and native workspace, it reserves seven equivalent full-RHS
+buffers for scaling, the adapter's per-column results and stacked result,
+host/JAX conversion, the equilibrated solution, operator application, and
+defect correction. Retained factors repeat the current-RSS and host-headroom
+check for each new RHS width. Allocator caching, JAX runtime behavior, and
+third-party native allocations can still make observed RSS differ from this
+estimate.
 Because it inverts the assembled operator with a general-purpose factorization,
 it also serves as the independent cross-check on answers from the other two
 routes; the case-file value ``sparse_direct_referee`` names that role.

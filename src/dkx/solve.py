@@ -1232,10 +1232,13 @@ def _escalate_after_tier2_stall(
     except Exception as exc:
         print(f"[dkx.solve]   widened retry failed: {exc}")
 
-    # Rung 3: sparse direct, but only where it can actually run.  Announcing a
-    # fallback that the size guard will refuse is what produced the original
-    # crash, so the size is checked here rather than discovered downstream.
-    if op.total_size <= max_dense_size:
+    # Rung 3: sparse direct.  Keep the historical large-SuperLU protection, but
+    # an explicitly selected, budgeted MUMPS backend may use grouped assembly;
+    # max_dense_size limits only the column-sampling fallback in that case.
+    large_mumps_requested = (
+        direct_backend == "mumps" and direct_memory_budget_gb is not None
+    )
+    if op.total_size <= max_dense_size or large_mumps_requested:
         print("[dkx.solve]   falling back to the sparse direct host solve ...")
         return _solve_tier3(
             op, rhs2d, tol=tol, atol=atol, max_dense_size=max_dense_size,
@@ -1244,12 +1247,22 @@ def _escalate_after_tier2_stall(
         )
 
     best_label, best = min(attempts, key=lambda item: _residual(item[1]))
+    if direct_backend == "mumps" and direct_memory_budget_gb is None:
+        direct_refusal = (
+            "The large host direct fallback was not attempted because explicit "
+            "MUMPS requires a positive direct_memory_budget_gb."
+        )
+    else:
+        direct_refusal = (
+            f"The default SuperLU host fallback is protected above "
+            f"max_dense_size={max_dense_size}; it was not attempted. Select "
+            "direct_backend='mumps' with a memory budget to admit grouped assembly."
+        )
     raise RuntimeError(
         f"the linear solve did not converge at total_size={op.total_size}.\n"
         f"Tried: {'; '.join(label for label, _ in attempts)}.\n"
         f"Best final residual {_residual(best):.3e} ({best_label}), tolerance {tol:.1e}.\n"
-        f"The host direct fallback exceeds max_dense_size={max_dense_size}; "
-        "it was not attempted. Check memory requirements before changing this limit.\n"
+        f"{direct_refusal}\n"
         "Nonconvergence alone does not identify under-resolution, an ill-conditioned "
         "operator, or a preconditioner problem, and does not establish that the "
         "physical model has no solution.\n"
@@ -1351,6 +1364,12 @@ class DirectFactors:
 
 _MUMPS_MEMORY_SAFETY_FACTOR = 1.2
 _MUMPS_MINIMUM_BUDGET_BYTES = 1_000_000
+# Conservative equivalent full-RHS buffers beyond the caller-owned RHS, which
+# current RSS already includes: scaled RHS; native per-column results; native
+# stacked result; host/JAX conversion; equilibrated solution; JAX apply output;
+# and defect/correction destination.  These do not all peak simultaneously, but
+# summing them avoids claiming allocator/JAX lifetime precision we do not have.
+_MUMPS_TRANSIENT_RHS_COPIES = 7
 
 
 def _process_rss_bytes() -> tuple[int | None, str]:
@@ -1391,8 +1410,12 @@ def _mumps_workspace_limit_bytes(
     coo_bytes = int(scaled_matrix.data.nbytes + 2 * scaled_matrix.nnz * index_bytes)
     # RSS already includes the operator, both CSR matrices, JAX caches, unrelated
     # arrays and any stale native factors. Reserve the future PyMUMPS COO copy,
-    # solution/defect buffers, and the measured runtime/allocator allowance.
-    future_reserve = int(coo_bytes + 2 * rhs_nbytes + _RUNTIME_OVERHEAD_BYTES)
+    # conservative solve transients, and the measured runtime/allocator allowance.
+    future_reserve = int(
+        coo_bytes
+        + _MUMPS_TRANSIENT_RHS_COPIES * rhs_nbytes
+        + _RUNTIME_OVERHEAD_BYTES
+    )
     process_remaining = int(memory_budget_bytes) - int(live_rss) - future_reserve
     available_remaining = float(available) - future_reserve
     workspace = int(min(process_remaining, available_remaining))
@@ -1405,6 +1428,36 @@ def _mumps_workspace_limit_bytes(
             f"{available_remaining:.0f} bytes"
         )
     return workspace
+
+
+def _admit_mumps_reuse(*, rhs_nbytes: int, memory_budget_bytes: int) -> None:
+    """Recheck solve-only headroom when retained MUMPS factors take a new RHS.
+
+    Factor-build admission remains separate because it also reserves projected
+    COO storage and derives the native workspace limit after grouped assembly.
+    """
+    from .batch import _RUNTIME_OVERHEAD_BYTES  # local: batch imports solve
+
+    live_rss, rss_metric = _process_rss_bytes()
+    available = _available_memory_bytes()
+    if live_rss is None or available is None:
+        raise RuntimeError(
+            f"MUMPS factor reuse requires process RSS evidence ({rss_metric}) "
+            "and current host available memory"
+        )
+    transient = int(
+        _MUMPS_TRANSIENT_RHS_COPIES * rhs_nbytes + _RUNTIME_OVERHEAD_BYTES
+    )
+    process_remaining = int(memory_budget_bytes) - int(live_rss) - transient
+    available_remaining = float(available) - transient
+    if process_remaining < 0 or available_remaining < 0:
+        raise MemoryError(
+            "MUMPS factor reuse refused before solve: "
+            f"process budget {int(memory_budget_bytes)} bytes minus {rss_metric} "
+            f"{int(live_rss)} bytes and transient RHS/runtime reserve {transient} "
+            f"leaves {process_remaining} bytes; current host availability leaves "
+            f"{available_remaining:.0f} bytes"
+        )
 
 
 def _factor_direct(
@@ -1558,6 +1611,9 @@ def _solve_tier3(
     rhs = np.asarray(rhs2d)
     if rhs.ndim == 1:
         rhs = rhs[:, None]
+    # The native matrix is float64 in DKX.  Account for conversion to that dtype
+    # when a caller supplies narrower RHS storage.
+    rhs_work_nbytes = int(rhs.size * max(rhs.dtype.itemsize, np.dtype(np.float64).itemsize))
 
     requested_budget_bytes = (
         None if direct_memory_budget_gb is None
@@ -1588,10 +1644,15 @@ def _solve_tier3(
             return _factor_direct(op, max_dense_size=max_dense_size, emit=emit)
         return _factor_direct(
             op, max_dense_size=max_dense_size, direct_backend=backend,
-            memory_budget_bytes=memory_budget_bytes, rhs_nbytes=rhs.nbytes, emit=emit,
+            memory_budget_bytes=memory_budget_bytes, rhs_nbytes=rhs_work_nbytes, emit=emit,
         )
 
     reused = factors is not None
+    if reused and backend == "mumps":
+        _admit_mumps_reuse(
+            rhs_nbytes=rhs_work_nbytes,
+            memory_budget_bytes=memory_budget_bytes,
+        )
     t0 = time.perf_counter()
     if factors is None:
         factors = _build_factors()
