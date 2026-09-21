@@ -325,22 +325,50 @@ def _cmd_converge(args: argparse.Namespace) -> int:
 
     rows = [*report.refinements] + ([report.joint] if report.joint is not None else [])
     if args.format == "json":
+        def _json_finite(value):
+            if isinstance(value, dict):
+                return {key: _json_finite(item) for key, item in value.items()}
+            if isinstance(value, np.ndarray):
+                return _json_finite(value.tolist())
+            if isinstance(value, (list, tuple)):
+                return [_json_finite(item) for item in value]
+            if isinstance(value, (float, np.floating)):
+                return float(value) if np.isfinite(value) else None
+            if isinstance(value, np.integer):
+                return int(value)
+            if isinstance(value, np.bool_):
+                return bool(value)
+            return value
+
+        def _rung_json(r):
+            return {
+                "label": r.label,
+                "resolution": r.resolution,
+                "changes": _json_finite(r.changes),
+                "worst": _json_finite(r.worst),
+                "seconds": r.seconds,
+                "observables": _json_finite(r.observables),
+                "original_residuals": _json_finite(r.original_residuals),
+                "original_residual_norm": r.original_residual_norm,
+                "status": r.status,
+                "refusal": r.refusal,
+                "third_rung": (_rung_json(r.third_rung)
+                               if r.third_rung is not None else None),
+            }
+
         print(json.dumps({
             "baseline": report.baseline,
+            "baseline_evidence": {
+                "observables": _json_finite(report.baseline_observables),
+                "original_residuals": _json_finite(report.baseline_original_residuals),
+                "original_residual_norm": report.baseline_original_residual_norm,
+                "status": "accepted",
+            },
             "tolerance": report.tolerance,
-            "converged": report.converged,
-            "axes_understate_the_joint_change": report.axes_understate_the_joint_change,
-            "refinements": [
-                {
-                    "label": r.label,
-                    "resolution": r.resolution,
-                    "changes": r.changes,
-                    "worst": r.worst,
-                    "seconds": r.seconds,
-                }
-                for r in rows
-            ],
-        }, indent=2, sort_keys=True))
+            "converged": bool(report.converged),
+            "axes_understate_the_joint_change": bool(report.axes_understate_the_joint_change),
+            "refinements": [_rung_json(r) for r in rows],
+        }, indent=2, sort_keys=True, allow_nan=False))
     else:
         console = Console()
         console.print(f"baseline {report.baseline}", highlight=False)
@@ -350,6 +378,14 @@ def _cmd_converge(args: argparse.Namespace) -> int:
         table.add_column("worst relative change", justify="right")
         table.add_column("", justify="left")
         for row in rows:
+            if row.status != "accepted":
+                table.add_row(
+                    row.label,
+                    ", ".join(f"{k}={v}" for k, v in row.resolution.items()),
+                    row.status,
+                    f"[yellow]{row.refusal}[/yellow]",
+                )
+                continue
             inside = row.worst < report.tolerance
             table.add_row(
                 row.label,
