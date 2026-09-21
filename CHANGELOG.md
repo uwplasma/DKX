@@ -1,5 +1,78 @@
 # Changelog
 
+## v2.6.0 — 2026-09-21
+
+Acceptance tightened where it could pass a wrong answer, MUMPS as an explicit
+direct backend, and convergence and optimization reports that no longer claim
+more than their evidence supports.
+
+### Correctness
+
+- Admit each right-hand side against its own norm (#265). A multi-column solve
+  admitted every column against the *largest* right-hand side's norm, so with
+  norms `[1, 1e6]`, residuals `[1e-5, 0]` and a tolerance of `1e-10` the small
+  column passed while missing its own target by a factor of 100,000. Each
+  column now meets `max(atol, tol * ||b_j||)`, reused factors included; zero
+  columns use the requested absolute tolerance, and nonfinite inputs, negative
+  residual norms and invalid tolerances are refused.
+- Include the magnetic drift's upwind support in the sparse assembly (#268).
+  Streaming uses centred derivatives and the tangential magnetic drift separate
+  upwind ones, whose toroidal radius is three points rather than two on the
+  public reduced W7-X case; the pattern and the column groups now use the union
+  of the active supports. The assembly's own `1e-10` check against the operator
+  refused the old pattern, so no wrong matrix was ever factored; decks without
+  magnetic drifts assemble exactly as before.
+- Reject invalid optimization evidence and require a genuine refinement before
+  promotion (#264): nonfinite or negative residuals, a single baseline grid
+  labelled as a ladder, and a refinement that changes radius or species count
+  are refused, and an absent backend comparison is reported as `untested`.
+
+### Execution
+
+- Select MUMPS explicitly as the sparse direct backend,
+  `SolverOptions(method="direct", direct_backend="mumps", memory_budget_gb=...)`
+  (#267). SuperLU stays the default and the default path is unchanged. The
+  budget is checked after assembly and before factorization, against measured
+  process memory, the COO storage, the right-hand-side buffers and the host's
+  currently available memory, and again before a retained factorization is
+  applied to a wider right-hand side. An explicit MUMPS request that cannot be
+  met is refused and never silently falls back to SuperLU. It needs the MUMPS
+  adapter of SOLVAX 0.25.0 and PyMUMPS; with SOLVAX 0.24 it raises an
+  `ImportError` naming what is missing.
+
+### Reporting
+
+- Report grid convergence and original-equation acceptance as separate
+  verdicts (#269). `dkx converge` keeps `converged` for the observable changes
+  and adds `original_equations_accepted`, which requires complete, finite,
+  typed residual evidence within the requested tolerance on every rung; the
+  exit status is zero only when both pass. Native runs reapply the operator to
+  the returned state and reject a false solver success.
+- Compare bootstrap current in `dkx converge`, keep earlier rungs when a later
+  one fails, and record failed and refused refinements without claiming
+  convergence (#266). The NCSX record gains an executable reconstruction from
+  pinned public sources with four SHA-256 checks.
+- Report memory in one unit (#271). Traces mixed decimal MB with MiB and could
+  present device capacity or a historical peak as current usage; profiling now
+  uses MiB throughout and keeps current RSS, peak RSS and current device usage
+  distinct.
+
+### Development
+
+- Let a cancelled CI run stop before the final gate (#270).
+
+### Known limitation
+
+- The sparse direct route's transposed solve can stall above its tolerance for
+  a general cotangent. On the operator of
+  `tests/test_operator_assembly.py::DECK` (1,204 unknowns) with the cotangent
+  `numpy.random.default_rng(0).standard_normal(1204)`, it reaches a relative
+  residual of `3.18e-8` against the forward solve's `1e-10` on the same
+  factors, in 2.5.0 and here alike; further refinement sweeps do not move it.
+  The route reports `converged=False` rather than a value, so this is an
+  accuracy limit that is reported, not a wrong answer. The 1,962-unknown
+  full-FP grid of #265 reaches `2e-13`, so the limit depends on the operator.
+
 ## v2.5.0 — 2026-09-20
 
 The production solver program of #253: the operator assembled from products
