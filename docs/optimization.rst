@@ -1,145 +1,80 @@
 Optimization Workflows
 ======================
 
-``dkx`` supports optimization workflows in two layers:
+This guide covers fast, differentiable proxy objectives, teaching examples that
+differentiate a kinetic solve, and completed drift-kinetic electric-field scans
+for accepting a candidate.
 
-1. **Fast differentiable proxies** used inside a stellarator optimizer.
-2. **High-fidelity kinetic checks** run on accepted designs before making a
-   physics or publication claim.
+The proxy is useful for ranking geometry changes and checking JAX derivatives.
+It does not establish bootstrap current, ambipolar roots, transport fluxes, or
+VMEC-boundary-to-SFINCS kinetic gradients. A candidate needs the second layer
+before it supports a physics, engineering, or publication claim. The detailed
+VMEC/Boozer differentiability boundary is maintained in :doc:`vmex_workflow`;
+the release evidence and deferred research plan are maintained in
+:doc:`validation_matrix`.
 
-The split is deliberate.  A full neoclassical solve at every VMEC objective
-evaluation is usually too expensive, and it can make optimizer behavior depend
-on solver tolerances, branch choices, and one-off failed scans.  Optimize with
-cheap JAX-native terms, and promote only selected candidates to full ``dkx``
-scans.
+Fast QA proxy
+-------------
 
-The implementation lives in
-``dkx.workflows.optimization`` and the public example is
-``examples/optimization/qa_nfp2_dkx_objectives.py``.
-
-QA nfp=2 Example
-----------------
-
-Run the fast QA optimization workflow from the repository root:
+The repository-local QA example is the quickest runnable workflow. It writes
+PNG/PDF diagnostics and a JSON provenance record:
 
 .. code-block:: bash
 
    python examples/optimization/qa_nfp2_dkx_objectives.py \
      --objective balanced \
      --steps 120 \
-     --out-dir docs/_static/figures/optimization \
-     --stem qa_nfp2_dkx_optimization_lane
-
-This produces a JSON provenance file plus PNG/PDF figures:
+     --out-dir optimization-output \
+     --stem qa_proxy
 
 .. figure:: _static/figures/optimization/qa_nfp2_dkx_optimization_lane.png
    :alt: QA nfp=2 dkx optimization proxy dashboard.
    :align: center
    :width: 95%
 
-   Fast QA nfp=2 neoclassical optimization proxy.  Panels A-B: differentiable
-   JAX objective and gradient norm.  Panel C: proxy terms before and after
-   optimization.  Panels D-E: initial and optimized normalized Boozer field
-   strength.  Panel F: proxy electron-root and impurity-flux target
-   amplitudes.  This figure is an optimizer-design diagnostic, not a
-   replacement for high-fidelity SFINCS kinetic validation.
+   A differentiable QA proxy diagnostic. It records objective and gradient
+   behavior, field-strength terms, and proxy targets; it is not a kinetic
+   transport validation artifact.
 
-Available objective presets are:
+The presets are ``bootstrap``, ``electron-root``, ``flux-selective``, and
+``balanced``. They combine normalized Boozer-field variance, angular
+roughness, non-QA spectral content, and smooth target penalties. The proxy
+holds the :math:`B_{00}` component fixed and treats modes with :math:`n\ne0`
+as non-QA content. It is checked by finite differences through
+``qa_proxy_gradient_gate``.
 
-``bootstrap``
-   Prioritize small bootstrap-current and QA-like geometry penalties.
-
-``electron-root``
-   Reward a proxy for a resolved positive ambipolar root.
-
-``flux-selective``
-   Penalize main-species heat and particle flux while encouraging outward
-   impurity flux.
-
-``balanced``
-   Combine all terms in one tradeoff objective for demonstrations and optimizer
-   smoke tests.
-
-Bootstrap-Current Comparison Example
-------------------------------------
-
-This example walks the geometry-to-transport workflow: start from the real
-``vmex`` QA optimization output, verify that the VMEC equilibrium has the
-intended finite rotational transform, then use that equilibrium as the input to
-kinetic ``dkx`` promotion scans.  The checked figure below uses
-``vmex/examples/optimization/QA_optimization.py``, whose public target is aspect
-ratio 5 and mean iota 0.41.
-
-.. code-block:: bash
-
-   python examples/optimization/qa_nfp2_bootstrap_current_comparison.py \
-     --vmex-root /path/to/vmex \
-     --out-dir docs/_static/figures/optimization \
-     --stem qa_nfp2_bootstrap_current_comparison
-
-.. figure:: _static/figures/optimization/qa_nfp2_bootstrap_current_comparison.png
-   :alt: VMEC-backed QA nfp=2 optimization current diagnostic.
-   :align: center
-   :width: 95%
-
-   VMEC-backed QA nfp=2 optimization diagnostic.  Panels A-B: the real VMEC
-   last-closed-flux-surface and LCFS field strength.  Panel C: LCFS cuts.
-   Panel D: the finite rotational-transform profile from the final VMEC
-   ``wout``.  Panel E: the VMEC equilibrium current diagnostic
-   :math:`J\cdot B/\sqrt{B\cdot B}` versus normalized toroidal-flux radius.
-   Panel F audits the ``QA_optimization.py`` objective and the final
-   aspect/iota check.  The checked artifact has aspect ratio 4.999999 and mean
-   iota 0.4097.
-
-Pass ``--comparison-result-dir`` to overlay a second ``vmex`` result, for
-example a QA run in which ``QA_optimization.py`` has been edited to add
-``JDotB`` or ``RedlBootstrapMismatch`` to ``objective_tuples``.  Accept that
-overlay only if it reduces the VMEC current diagnostic while preserving the
-finite-iota/aspect check.
-
-The plotted current profile is still not a completed kinetic SFINCS current, so
-promote a candidate selected from this step with completed ``dkx scan-er``
-outputs.  The corresponding kinetic observable is ``FSABjHatOverRootFSAB2``,
+The proxy scalar is an optimizer aid, not a surrogate kinetic solve. It cannot
+resolve the radial current
 
 .. math::
 
-   \frac{\langle\mathbf{J}\cdot\mathbf{B}\rangle}
-        {\sqrt{\langle B^2\rangle}},
+   j_r(E_r) = \sum_s Z_s\Gamma_s(E_r),
 
-and it should be checked together with:
+or demonstrate a positive ambipolar root, solver convergence, backend
+agreement, or kinetic-resolution convergence.
 
-- residual convergence;
-- CPU/GPU agreement;
-- radial and velocity-space convergence;
-- SFINCS Fortran v3 comparison when the input lies in shared model scope.
+VMEC and analytic-current diagnostics
+-------------------------------------
 
-For a directly editable script, use
-``examples/optimization/QA_optimization_bootstrap_current.py``.  It follows the
-same workflow as ``vmex/examples/optimization/QA_optimization.py`` but sets
-``MAX_MODE = 3`` for faster iteration and exposes
-``INCLUDE_BOOTSTRAP_CURRENT_OBJECTIVE`` at the top of the file.  Run once with
-the flag disabled, once with it enabled, then compare the two result
-directories:
+The VMEC-backed QA diagnostic reads a real ``vmex`` optimization result and
+plots its equilibrium current indicator and finite-iota/aspect checks:
 
 .. code-block:: bash
 
-   DKX_VMEX_ROOT=/path/to/vmex \
-     python examples/optimization/QA_optimization_bootstrap_current.py
-
    python examples/optimization/qa_nfp2_bootstrap_current_comparison.py \
      --vmex-root /path/to/vmex \
-     --qa-result-dir results/qa_opt_bootstrap_current_maxmode3/qa_only \
-     --comparison-result-dir results/qa_opt_bootstrap_current_maxmode3/with_jdotb_current_objective
+     --out-dir optimization-output \
+     --stem qa_vmec_diagnostic
 
-Kinetic Bootstrap Current Inside A VMEX Optimization
-----------------------------------------------------
+The plotted quantity is VMEC ``jdotb / sqrt(bdotb)``. It is useful for
+inspecting a current-sensitive equilibrium objective, but it is not a completed
+``dkx`` or SFINCS bootstrap-current result. An optional
+``--comparison-result-dir`` overlays another VMEC result; accept an apparent
+improvement only after the finite-iota/aspect checks and the kinetic promotion
+workflow below.
 
-The second layer above can also be run *inside* the optimizer rather than after
-it, when the bootstrap current is the quantity being designed against.
-:class:`dkx.bootstrap.KineticBootstrapCurrent` is an objective term with the
-interface ``vmex.core.optimize`` expects, so turning an existing
-``vmex/examples/optimization`` script into a drift-kinetic one is one import and
-one tuple:
+``KineticBootstrapCurrent`` can instead be placed directly in a VMEX
+least-squares objective:
 
 .. code-block:: python
 
@@ -148,754 +83,186 @@ one tuple:
    kinetic = KineticBootstrapCurrent(profiles, surfaces=[0.25, 0.5, 0.75])
    objective_function_terms.append((kinetic, 0.0, 1.0))
 
-``profiles`` is the same ``vmex.core.bootstrap.KineticProfiles`` object the Redl
-term takes --- polynomial coefficients in :math:`s` for
-:math:`n_e`, :math:`T_e` and :math:`T_i` --- so both models describe one plasma.
-The term returns :math:`\langle j_\parallel B\rangle` per surface in
-A T/m\ :sup:`2`, the unit of the VMEC ``jdotb`` profile, divided by a fixed
-``reference_current``; with target 0 the optimizer *minimizes* the kinetic
-bootstrap current.
+``profiles`` may be the ``vmex.core.bootstrap.KineticProfiles`` object used by
+the Redl term. Its polynomial coefficients describe :math:`n_e`, :math:`T_e`,
+and :math:`T_i` in :math:`s`; the DKX term converts their derivatives to the
+SFINCS radial convention. The term returns residuals based on
+:math:`\langle j_\parallel B\rangle` in A T/m\ :sup:`2`, divided by its
+``reference_current``. This is the VMEC ``jdotb`` unit. The normalized
+``FSABjHatOverRootFSAB2`` value in an output file is dimensionless. Multiply
+it by ``units.CURRENT_DENSITY`` to obtain A/m\ :sup:`2`; see :doc:`outputs`
+for the required ``Hat``-to-SI conversions.
 
-Two constraints follow from DKX being a host code rather than a traced one:
+This is an expensive host-code objective: it requires
+``derivative_method="finite_difference"`` and runs a drift-kinetic solve per
+surface (and per electric-field value with ``ambipolar=True``). The shipped
+``QA_optimization_bootstrap_dkx.py``, ``QH_optimization_bootstrap_dkx.py``,
+and ``QI_optimization_bootstrap_dkx.py`` examples are research workflows. In
+particular, Redl is an analytic model fitted in quasisymmetric settings, while
+DKX evaluates the selected drift-kinetic model on the supplied geometry; their
+agreement is a useful QA normalization check, not a replacement for a
+resolution and model-scope qualification. QI results require their own
+kinetic evidence.
 
-- the problem must be built with ``derivative_method="finite_difference"``;
-  the implicit derivative path needs a traceable ``(state, runtime)`` term,
-  which ``RedlBootstrapMismatch.residuals_state`` provides and this term
-  cannot.
-- each residual evaluation is one drift-kinetic solve per surface (per
-  ``E_r`` point with ``ambipolar=True``), so the cost is minutes per evaluation.
-  Keep ``surfaces`` short.
+Teaching kinetic derivatives
+----------------------------
 
-The three shipped pairings are
-``examples/optimization/QA_optimization_bootstrap_dkx.py``,
-``QH_optimization_bootstrap_dkx.py`` and ``QI_optimization_bootstrap_dkx.py``,
-each the ``*_optimization_bootstrap.py`` script from the ``vmex`` examples with
-that one term swapped in and the Redl term kept in the reporter for comparison.
-Set ``DKX_VMEX_ROOT`` when ``vmex`` was installed from a wheel rather than a
-checkout.
-
-The substitution matters most for QI: the Redl formulae were fitted to
-quasisymmetric calculations, and a quasi-isodynamic field is not
-quasisymmetric, so there the analytic profile is an extrapolation while the DKX
-profile is a solve of the drift-kinetic equation on the actual geometry.
-
-Cross-check against Redl
-~~~~~~~~~~~~~~~~~~~~~~~~
-
-On a *quasi-axisymmetric* boundary the two should agree, and that is the check
-that the coupling carries the right units, radial coordinate and gradient
-convention.  Measured on the finite-beta precise-QA equilibrium
-``wout_LandremanPaul2021_QA_beta2p5_bootstrap`` (beta = 2.5%) at
-:math:`s = 0.25, 0.5, 0.75`, with ``KineticProfiles`` amplitudes fixed by that
-equilibrium's own :math:`p(0) = 721` kPa and :math:`E_r = 0`:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 40 36 24
-
-   * - ``collisionOperator``
-     - DKX / Redl
-     - cost (3 surfaces)
-   * - 1, pitch-angle scattering
-     - 1.47, 1.42, 1.35
-     - 29 s
-   * - 3, Sugama
-     - 0.74, 0.77, 0.80
-     - 62 s
-   * - **0, full linearized Fokker-Planck** (default)
-     - **0.93, 0.95, 0.98**
-     - 56 s
-
-Redl is a fit to Fokker-Planck calculations, so 2-7% is the agreement to expect.
-The 35-47% excess from pitch-angle scattering is a bias, not a physical
-difference: the bootstrap current *is* the parallel-momentum moment, and PAS has
-no momentum-restoring term.  That is why
-:data:`dkx.bootstrap.DEFAULT_COLLISION_OPERATOR` is 0 despite costing more.
-Doubling the grid moved the Fokker-Planck numbers by under 3.5%, so the
-comparison is resolution-converged rather than a coincidence of the coarse grid.
-
-Objective Terms
----------------
-
-Bootstrap current
-~~~~~~~~~~~~~~~~~
-
-For a set of radial surfaces :math:`\rho_i`, the high-fidelity bootstrap-current
-objective is
-
-.. math::
-
-   J_\mathrm{boot}
-   =
-   \sum_i w_i
-   \left(
-   \frac{\langle \mathbf{J}\cdot\mathbf{B}\rangle_i}
-        {J_0 \sqrt{\langle B^2\rangle_i}}
-   \right)^2 .
-
-In ``dkx`` output this uses ``FSABjHatOverRootFSAB2``.  The helper
-``bootstrap_current_objective`` evaluates the normalized least-squares penalty
-from completed kinetic outputs or cached radial profiles.
-
-Ambipolar electron root
-~~~~~~~~~~~~~~~~~~~~~~~
-
-The radial current used for ambipolarity is
-
-.. math::
-
-   j_r(E_r) = \sum_s Z_s \Gamma_s(E_r),
-
-where :math:`\Gamma_s` is the radial particle flux for species :math:`s`.  An
-electron-root objective requires a resolved positive root
-
-.. math::
-
-   j_r(E_r^\star)=0,\qquad E_r^\star > 0 .
-
-The helper ``find_ambipolar_roots`` sorts the scan, finds bracketed roots, and
-classifies each root as ion, near-zero, or electron.  The helper
-``electron_root_penalty`` returns zero only when a positive root exists with a
-finite local slope.  This avoids promoting flat or unbracketed ambipolar curves
-as meaningful electron-root evidence.
-
-Flux selectivity
-~~~~~~~~~~~~~~~~
-
-For main species :math:`m` and an impurity species :math:`Z`, the selected flux
-objective is
-
-.. math::
-
-   J_\mathrm{flux}
-   =
-   w_\Gamma \left\langle \Gamma_m^2 \right\rangle
-   +
-   w_Q \left\langle Q_m^2 \right\rangle
-   +
-   w_Z
-   \left[
-   \max\left(0,\Gamma_Z^\mathrm{target}-\Gamma_Z^\mathrm{out}\right)
-   \right]^2 .
-
-The last term is written as a shortfall penalty rather than an unbounded
-``maximize impurity flux`` objective.  This keeps the optimizer well-scaled and
-prevents it from increasing impurity transport at any cost.
-
-Differentiable Proxy
---------------------
-
-The public proxy path uses a Boozer spectrum
-
-.. math::
-
-   B(\theta,\zeta) =
-   \sum_k B_k \cos(m_k\theta - n_k\zeta)
-
-with the :math:`B_{00}` component fixed.  For QA optimization, terms with
-:math:`n_k \ne 0` are treated as non-QA content.  The differentiable proxy
-combines field-strength variance, angular roughness, non-QA spectral energy,
-and smooth hinge penalties for electron-root and impurity-flux targets.
-
-The proxy layer is evaluated with JAX and checked by finite differences through
-``qa_proxy_gradient_gate``.  It is appropriate for optimizer steering, unit
-tests, and rapid design iteration.  It is not a high-fidelity kinetic transport
-claim, and it does not make the later promoted kinetic ``scan-er`` outputs
-differentiable.
-
-High-Fidelity Promotion Checks
-------------------------------
-
-Accepted designs should be promoted to actual ``dkx`` solves before
-publication or engineering decisions.  Real promotion starts only after the
-candidate has completed ``dkx scan-er`` outputs containing
-``sfincsOutput.h5`` files for the requested electric-field grid.  The minimum
-promotion evidence is:
-
-- Same-profile ``dkx`` electric-field scans over each selected radius.
-- Ambipolar root bracketing with a positive electron root when requested.
-- Bootstrap-current normalization audit using ``FSABjHatOverRootFSAB2``.
-- Particle, heat, and impurity flux sign-convention audit.
-- Linear residual convergence and solver-path provenance.
-- CPU/GPU agreement for selected final designs.
-- SFINCS Fortran v3 comparison when the case lies in the shared model scope.
-
-The helper ``kinetic_validation_gate`` records residual and CPU/GPU agreement
-checks for promoted designs.  For production optimization campaigns, store the
-JSON summary generated by each proxy run together with the completed SFINCS
-scan outputs and solver traces.  The synthetic scan generated when
-``evaluate_dkx_promotion_scan.py`` is run without ``--scan-dir`` is only
-a plotting/API demonstration and must not be treated as promotion evidence.
-
-Real Promotion Checklist
-~~~~~~~~~~~~~~~~~~~~~~~~
-
-Replace the paths and electric-field grid with the accepted candidate's actual
-VMEC geometry, profiles, species, radial surface, and campaign tolerances.  The
-promotion boundary is the first command that evaluates a completed ``scan-er``
-directory; anything before that is proxy provenance or scan planning.
+Two compact examples differentiate through an actual DKX kinetic solve. They
+are teaching configurations, so their finite-difference agreement is a
+derivative check rather than a resolution certificate.
 
 .. code-block:: bash
 
-   mkdir -p runs/qa_candidate01/proxy runs/qa_candidate01/audit
-   python examples/optimization/qa_nfp2_dkx_objectives.py \
-     --objective balanced \
-     --steps 120 \
-     --out-dir runs/qa_candidate01/proxy \
-     --stem candidate01_proxy
-   python examples/optimization/launch_dkx_candidate_scan.py \
-     --proxy-summary runs/qa_candidate01/proxy/candidate01_proxy.json \
-     --input runs/qa_candidate01/input_r0p50.namelist \
-     --out-dir runs/qa_candidate01/scan_cpu/r0p50 \
-     --er-min -3 \
-     --er-max 3 \
-     --n-er 7 \
-     --jobs 4 \
-     --impurity-species-index 2 \
-     --target-impurity-flux 0.01
+   python examples/07_gradients/run.py
+   python examples/08_vmex_optimization/run.py
 
-Run production evidence as explicit scan, audit, and comparison commands. This
-keeps the stable examples small and makes each expensive CPU, GPU, or optional
-Fortran-v3 stage scheduler-friendly. Fortran-v3 HDF5 files often do not contain
-the JAX linear-residual datasets, so only relax residual requirements for
-Fortran-derived promotion JSON files when that absence is documented.
+``07_gradients`` differentiates normalized bootstrap current with respect to
+temperature for a one-species circular-tokamak PAS case. It refreshes the
+pitch-angle collision coefficients inside JAX while holding density, gradients,
+geometry, and ``nu_n`` fixed, then compares the derivative with a central
+difference. It does not cover full-Fokker--Planck temperature derivatives or
+the host Case runner.
+
+``08_vmex_optimization`` differentiates particle flux with respect to an
+analytic Boozer ``|B|`` Fourier amplitude, checks the original kinetic
+residual and finite-difference derivative, then descends that amplitude. The
+kinetic geometry derivative is real, but its analytic surface is not a VMEC
+boundary derivative. The optional VMEC/Boozer hand-off remains the scoped
+proxy workflow described below.
+
+Optional VMEC/Boozer JAX path
+-----------------------------
+
+The optional coupling remains a Boozer-spectrum proxy-gradient workflow. Run
+its dependency-safe preflight before installing optional geometry packages:
+
+.. code-block:: bash
+
+   python examples/optimization/vmex_workflow_status.py --json
+
+For an available VMEC ``wout`` file, the documented file-backed command is:
+
+.. code-block:: bash
+
+   python examples/autodiff/vmex_to_boozer_sfincs_pipeline.py \
+     --wout /path/to/wout.nc \
+     --mboz 3 --nboz 3 --surface 0.5 --steps 0 \
+     --summary-json vmec_boozer_proxy.json
+
+The written payload must retain a passing ``no_solve_provenance_gate``. It
+records the VMEC/Boozer provenance and a gradient check for the proxy scalar;
+``kinetic_solve_executed`` remains false. Do not describe this path as an
+end-to-end VMEC-boundary-to-kinetic-transport gradient until every required
+geometry, operator, solve, reduction, and gradient-validation stage in
+:doc:`vmex_workflow` has been qualified.
+
+Promoting an accepted candidate
+-------------------------------
+
+Only a completed ``dkx scan-er`` directory is kinetic promotion evidence. It
+must use the accepted geometry, profiles, species, radial surface, and kinetic
+resolution. The scan outputs contain ``sfincsOutput.h5`` at every requested
+electric field. An accepted electron-root result needs a bracketed positive
+root with a finite local slope, not merely a sampled point with small radial
+current.
+
+Start by writing an auditable scan plan from the proxy JSON. Without
+``--execute`` this command starts no solve:
+
+.. code-block:: bash
+
+   python examples/optimization/launch_dkx_candidate_scan.py \
+     --proxy-summary optimization-output/qa_proxy.json \
+     --input candidate/input_r0p50.namelist \
+     --out-dir candidate/scan_cpu/r0p50 \
+     --er-min -3 --er-max 3 --n-er 7 --jobs 4 \
+     --impurity-species-index 2 --target-impurity-flux 0.01
+
+The plan records exact scan and audit commands in
+``candidate_scan_plan.json``. Review the electric-field interval, resolution,
+species index, and flux convention before adding ``--execute``. A direct CPU
+scan is equivalent to:
 
 .. code-block:: bash
 
    JAX_PLATFORM_NAME=cpu dkx scan-er \
-     --input runs/qa_candidate01/input_r0p50.namelist \
-     --out-dir runs/qa_candidate01/scan_cpu/r0p50 \
+     --input candidate/input_r0p50.namelist \
+     --out-dir candidate/scan_cpu/r0p50 \
      --values -3 -2 -1 0 1 2 3 \
-     --compute-solution \
-     --skip-existing \
-     --jobs 4
+     --compute-solution --skip-existing --jobs 4
+
+For ``RHSMode=2`` or ``RHSMode=3`` inputs, use
+``--compute-transport-matrix`` in place of ``--compute-solution``. The
+required angular, pitch, speed, radial, and profile convergence studies depend
+on the claim; the discretization and solver routes are described in
+:doc:`numerics`.
+
+Audit the completed scan:
+
+.. code-block:: bash
+
    python examples/optimization/evaluate_dkx_promotion_scan.py \
-     --scan-dir runs/qa_candidate01/scan_cpu/r0p50 \
-     --out-dir runs/qa_candidate01/audit \
-     --stem candidate01_r0p50_cpu \
+     --scan-dir candidate/scan_cpu/r0p50 \
+     --out-dir candidate/audit \
+     --stem r0p50_cpu \
      --require-electron-root \
-     --impurity-species-index 2 \
-     --target-impurity-flux 0.01
+     --impurity-species-index 2 --target-impurity-flux 0.01
+
+The audit evaluates :math:`\sum_s Z_s\Gamma_s`, root brackets,
+``FSABjHatOverRootFSAB2``, selected particle and heat fluxes, and recorded
+linear-residual diagnostics. It uses the output coordinate and sign
+conventions described in :doc:`outputs`. ``evaluate_dkx_promotion_scan.py``
+without ``--scan-dir`` creates a small synthetic scan for a runnable plotting
+and API demonstration. That mode cannot promote a candidate.
+
+Promotion evidence
+------------------
+
+For a physics claim, retain the proxy JSON, input namelists, all completed
+outputs, solver traces, audit JSON, and declared acceptance tolerances. The
+minimum checks are:
+
+- completed residual and acceptance diagnostics for each DKX scan point;
+- electric-field coverage that brackets every selected root and preserves its
+  branch identity under refinement;
+- convergence in the velocity, angular, and radial/profile choices relevant to
+  the result;
+- bootstrap-current normalization and particle/heat/impurity-flux sign audits;
+- CPU/GPU comparison for selected final points; and
+- SFINCS Fortran v3 comparison when the physics options lie in the shared
+  model scope.
+
+Use separate CPU and GPU completed scans, then compare their promotion JSON:
+
+.. code-block:: bash
+
    CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu dkx scan-er \
-     --input runs/qa_candidate01/input_r0p50.namelist \
-     --out-dir runs/qa_candidate01/scan_gpu/r0p50 \
+     --input candidate/input_r0p50.namelist \
+     --out-dir candidate/scan_gpu/r0p50 \
      --values -3 -2 -1 0 1 2 3 \
-     --compute-solution \
-     --skip-existing \
-     --jobs 1
+     --compute-solution --skip-existing --jobs 1
    python examples/optimization/evaluate_dkx_promotion_scan.py \
-     --scan-dir runs/qa_candidate01/scan_gpu/r0p50 \
-     --out-dir runs/qa_candidate01/audit \
-     --stem candidate01_r0p50_gpu \
+     --scan-dir candidate/scan_gpu/r0p50 \
+     --out-dir candidate/audit --stem r0p50_gpu \
      --require-electron-root \
-     --impurity-species-index 2 \
-     --target-impurity-flux 0.01
+     --impurity-species-index 2 --target-impurity-flux 0.01
    python examples/optimization/compare_dkx_promotion_runs.py \
-     --cpu runs/qa_candidate01/audit/candidate01_r0p50_cpu.json \
-     --gpu runs/qa_candidate01/audit/candidate01_r0p50_gpu.json \
-     --out-dir runs/qa_candidate01/audit \
-     --stem candidate01_r0p50_comparison
-
-If the case is in shared SFINCS Fortran v3 scope, add a Fortran-derived scan
-audit before the final comparison:
-
-.. code-block:: bash
-
-   for run_dir in runs/qa_candidate01/scan_cpu/r0p50/Er*; do
-     er_dir=$(basename "${run_dir}")
-     mkdir -p "runs/qa_candidate01/scan_fortran/r0p50/${er_dir}"
-     dkx run-fortran \
-       --exe /path/to/sfincs \
-       --input "${run_dir}/input.namelist" \
-       --workdir "runs/qa_candidate01/scan_fortran/r0p50/${er_dir}"
-   done
-   python examples/optimization/evaluate_dkx_promotion_scan.py \
-     --scan-dir runs/qa_candidate01/scan_fortran/r0p50 \
-     --out-dir runs/qa_candidate01/audit \
-     --stem candidate01_r0p50_fortran \
-     --require-electron-root \
-     --impurity-species-index 2 \
-     --target-impurity-flux 0.01
-   python examples/optimization/compare_dkx_promotion_runs.py \
-     --cpu runs/qa_candidate01/audit/candidate01_r0p50_cpu.json \
-     --gpu runs/qa_candidate01/audit/candidate01_r0p50_gpu.json \
-     --fortran runs/qa_candidate01/audit/candidate01_r0p50_fortran.json \
-     --out-dir runs/qa_candidate01/audit \
-     --stem candidate01_r0p50_comparison
-
-Promotion Scan Example
-~~~~~~~~~~~~~~~~~~~~~~
-
-After running an electric-field scan for an accepted candidate, evaluate it with:
-
-.. code-block:: bash
-
-   python examples/optimization/evaluate_dkx_promotion_scan.py \
-     --scan-dir /path/to/completed/scan-er-directory \
-     --out-dir promotion_audit \
-     --stem candidate01_promotion
-
-The script reads each completed ``sfincsOutput.h5`` file, computes
-:math:`\sum_s Z_s\Gamma_s(E_r)`, classifies ambipolar roots, audits bootstrap
-current and species fluxes, and checks linear residual diagnostics.  If
-``--scan-dir`` is omitted, it creates a tiny synthetic SFINCS-style scan so the
-plotting and pass/fail logic can be demonstrated without a long solve.  That
-synthetic mode is demo-only and cannot promote an optimization candidate.
-
-.. figure:: _static/figures/optimization/qa_nfp2_dkx_promotion_scan.png
-   :alt: High-fidelity dkx promotion scan dashboard.
-   :align: center
-   :width: 90%
-
-   Promotion dashboard for an optimization candidate.  Panel A: the ambipolar
-   radial-current bracket and selected electron root.  Panel B: the
-   bootstrap-current observable.  Panels C-D: particle and heat fluxes by
-   species, together with the promotion check status.  Real optimization
-   campaigns should use completed ``dkx scan-er`` outputs rather than the
-   synthetic demonstration scan used to generate this documentation artifact.
-
-Practical End-To-End Workflow
------------------------------
-
-Use this workflow when a QA optimizer has produced a small set of accepted
-``vmex`` candidates and you want a reproducible path from proxy evidence to
-kinetic validation.  The repository does not make ``vmex`` or
-``booz_xform_jax`` hard dependencies; a production campaign may run the VMEC
-optimization in a separate checkout and hand this repository an accepted
-``wout`` plus the SFINCS profiles, species, radial surface, and resolution.
-
-The scalar optimized in the proxy stage has the same role as the terms above:
-
-.. math::
-
-   J_\mathrm{proxy}(\mathbf{a})
-   =
-   w_B \operatorname{var}(\widehat B)
-   + w_R \|\nabla_{\theta,\zeta}\widehat B\|_2^2
-   + w_\mathrm{QA}\sum_{k:n_k\ne 0} a_k^2
-   + w_e \left[\max(0,d_e^\mathrm{target}-d_e(\mathbf{a}))\right]^2
-   + w_Z \left[\max(0,\Gamma_Z^\mathrm{target}
-     -\Gamma_Z^\mathrm{out}(\mathbf{a}))\right]^2 .
-
-Here :math:`\mathbf{a}` are the active Boozer-spectrum coefficients and
-:math:`\widehat B = B/B_{00}`.  This objective is an optimizer-steering scalar,
-not a kinetic solve.  It can rank candidates and record a gradient/provenance
-check, but it cannot by itself establish ambipolar roots, bootstrap-current
-accuracy, flux sign conventions, CPU/GPU agreement, or Fortran parity.
-
-1. Run the optional VMEC/Boozer preflight and proxy-gradient workflow.
-
-   The status command is safe when optional geometry packages are absent:
-
-   .. code-block:: bash
-
-      python examples/optimization/vmex_workflow_status.py --json
-
-   For an accepted ``vmex`` candidate with a written ``wout`` file, persist
-   the file-backed proxy-gradient provenance:
-
-   .. code-block:: bash
-
-      mkdir -p runs/qa_candidate01/proxy
-      python examples/autodiff/vmex_to_boozer_sfincs_pipeline.py \
-        --wout /path/to/vmex/run/wout_candidate01.nc \
-        --mboz 3 \
-        --nboz 3 \
-        --surface 0.5 \
-        --steps 0 \
-        --summary-json runs/qa_candidate01/proxy/vmec_boozer_proxy_gradient.json
-
-   For the repository-local QA nfp=2 proxy smoke test, run:
-
-   .. code-block:: bash
-
-      python examples/optimization/qa_nfp2_dkx_objectives.py \
-        --objective balanced \
-        --steps 120 \
-        --out-dir runs/qa_candidate01/proxy \
-        --stem candidate01_proxy
-
-   The resulting ``candidate01_proxy.json`` is provenance for the proxy
-   objective, not a SFINCS input file.  It should travel with the accepted
-   candidate so later audits can see the weights, final proxy coefficients,
-   finite-difference gradient check, and required promotion plan.
-
-2. Build the SFINCS input and run the high-fidelity electric-field scan.
-
-   Create a normal SFINCS ``input.namelist`` for the accepted VMEC geometry and
-   selected radial surface.  The input must encode the same profiles and species
-   used for the physics claim.  To create an auditable scan plan without
-   starting a long run, use:
-
-   .. code-block:: bash
-
-      python examples/optimization/launch_dkx_candidate_scan.py \
-        --proxy-summary runs/qa_candidate01/proxy/candidate01_proxy.json \
-        --input runs/qa_candidate01/input_r0p50.namelist \
-        --out-dir runs/qa_candidate01/scan_cpu/r0p50 \
-        --er-min -3 \
-        --er-max 3 \
-        --n-er 7 \
-        --jobs 4 \
-        --impurity-species-index 2 \
-        --target-impurity-flux 0.01
-
-   This writes ``candidate_scan_plan.json`` with the exact ``scan-er`` command
-   and the follow-up promotion-audit command.  Add ``--execute`` only when you
-   are ready to launch the scan.  The equivalent direct command is:
-
-   .. code-block:: bash
-
-      mkdir -p runs/qa_candidate01/scan_cpu/r0p50
-      JAX_PLATFORM_NAME=cpu dkx scan-er \
-        --input runs/qa_candidate01/input_r0p50.namelist \
-        --out-dir runs/qa_candidate01/scan_cpu/r0p50 \
-        --values -3 -2 -1 0 1 2 3 \
-        --compute-solution \
-        --skip-existing \
-        --jobs 4
-
-   For ``RHSMode=2`` or ``RHSMode=3`` transport-matrix inputs, use
-   ``--compute-transport-matrix`` instead of ``--compute-solution``:
-
-   .. code-block:: bash
-
-      JAX_PLATFORM_NAME=cpu dkx scan-er \
-        --input runs/qa_candidate01/input_r0p50.namelist \
-        --out-dir runs/qa_candidate01/scan_cpu/r0p50 \
-        --min -3 \
-        --max 3 \
-        --n 13 \
-        --compute-transport-matrix \
-        --skip-existing \
-        --jobs 4
-
-   The scan directory contains subdirectories such as ``Er1/`` and
-   ``Er-1/``.  Each completed point must contain ``sfincsOutput.h5``.  The
-   ambipolar curve audited downstream is
-
-   .. math::
-
-      j_r(E_r) = \sum_s Z_s\Gamma_s(E_r),
-      \qquad
-      j_r(E_r^\star)=0 .
-
-   A claimed electron root additionally needs :math:`E_r^\star>0` and a
-   bracketed sign change with finite local slope.
-
-3. Audit the promoted scan.
-
-   The promotion audit reads the completed scan outputs, computes the
-   ambipolar roots, checks bootstrap-current and flux observables, and records
-   residual diagnostics:
-
-   .. code-block:: bash
-
-      python examples/optimization/evaluate_dkx_promotion_scan.py \
-        --scan-dir runs/qa_candidate01/scan_cpu/r0p50 \
-        --out-dir runs/qa_candidate01/audit \
-        --stem candidate01_r0p50_cpu \
-        --require-electron-root
-
-   If you also want upstream-style ambipolar root files in the scan directory,
-   run:
-
-   .. code-block:: bash
-
-      dkx ambipolar-solve \
-        --scan-dir runs/qa_candidate01/scan_cpu/r0p50 \
-        --n-fine 1000
-
-   For ``RHSMode=1`` inputs where the root should be solved directly instead
-   of inferred from a precomputed scan, use the in-process Brent driver:
-
-   .. code-block:: bash
-
-      dkx ambipolar \
-        --input runs/qa_candidate01/input_r0p50.namelist \
-        --out-dir runs/qa_candidate01/ambipolar_cpu/r0p50 \
-        --er-min -3 --er-max 3 --er-initial 0
-
-   This direct path writes per-evaluation ``sfincsOutput.h5`` files and solver
-   traces, then summarizes the selected solver route, residual, timing, active
-   size, cache provenance, and shape-checked Krylov state reuse in
-   ``ambipolar_result.json``.
-
-   Passing this audit means the specific completed scan has internally
-   consistent promotion evidence.  It does not imply convergence with respect
-   to kinetic resolution, radial grid choice, profile uncertainty, or optimizer
-   robustness unless those studies are run and stored separately.
-
-4. Compare CPU, GPU, and Fortran evidence at selected final points.
-
-   Re-run the same scan on a GPU-capable installation:
-
-   .. code-block:: bash
-
-      mkdir -p runs/qa_candidate01/scan_gpu/r0p50
-      CUDA_VISIBLE_DEVICES=0 JAX_PLATFORM_NAME=gpu dkx scan-er \
-        --input runs/qa_candidate01/input_r0p50.namelist \
-        --out-dir runs/qa_candidate01/scan_gpu/r0p50 \
-        --values -3 -2 -1 0 1 2 3 \
-        --compute-solution \
-        --skip-existing \
-        --jobs 1
-
-   Compare matching CPU/GPU scan points near the selected ambipolar root:
-
-   .. code-block:: bash
-
-      ER_DIR=Er1
-      dkx compare-h5 \
-        --a runs/qa_candidate01/scan_cpu/r0p50/${ER_DIR}/sfincsOutput.h5 \
-        --b runs/qa_candidate01/scan_gpu/r0p50/${ER_DIR}/sfincsOutput.h5 \
-        --rtol 1e-8 \
-        --atol 1e-10 \
-        --show-all
-
-   When the case lies in the shared ``dkx``/SFINCS Fortran v3 model
-   scope and a compiled Fortran executable is available, run the same selected
-   point through Fortran and compare the HDF5 outputs:
-
-   .. code-block:: bash
-
-      mkdir -p runs/qa_candidate01/fortran/r0p50_${ER_DIR}
-      dkx run-fortran \
-        --input runs/qa_candidate01/scan_cpu/r0p50/${ER_DIR}/input.namelist \
-        --workdir runs/qa_candidate01/fortran/r0p50_${ER_DIR}
-      dkx compare-h5 \
-        --a runs/qa_candidate01/scan_cpu/r0p50/${ER_DIR}/sfincsOutput.h5 \
-        --b runs/qa_candidate01/fortran/r0p50_${ER_DIR}/sfincsOutput.h5 \
-        --rtol 1e-8 \
-        --atol 1e-10 \
-        --show-all
-
-   A compact way to describe the numerical comparison is
-
-   .. math::
-
-      \delta_y(A,B)
-      =
-      \frac{\|y_A-y_B\|_\infty}
-           {\max(\|y_B\|_\infty, y_\mathrm{floor})}.
-
-   Set the actual tolerances in the campaign record before looking at the
-   results, and keep them observable-specific.  What each comparison
-   establishes:
-
-   - CPU/GPU agreement: backend reproducibility for the compared inputs.
-   - Fortran agreement: reference parity only for keys and physics options
-     supported by both implementations.
-
-   Neither comparison upgrades a proxy-only candidate to a publication claim
-   unless the promoted kinetic scans, convergence evidence, and claim-specific
-   tolerances are all archived.
-
-   Once the CPU, GPU, and optional Fortran promotion JSON files exist, create a
-   compact comparison report:
-
-   .. code-block:: bash
-
-      python examples/optimization/compare_dkx_promotion_runs.py \
-        --cpu runs/qa_candidate01/audit/candidate01_r0p50_cpu.json \
-        --gpu runs/qa_candidate01/audit/candidate01_r0p50_gpu.json \
-        --fortran runs/qa_candidate01/audit/candidate01_r0p50_fortran.json \
-        --out-dir runs/qa_candidate01/audit \
-        --stem candidate01_r0p50_comparison
-
-   .. figure:: _static/figures/optimization/qa_nfp2_dkx_promotion_comparison_w7x_reduced_real.png
-      :alt: CPU/GPU/Fortran promotion-comparison report.
-      :align: center
-      :width: 90%
-
-      Real reduced-W7-X promotion comparison generated from separate completed
-      CPU, GPU, and SFINCS Fortran v3 promotion JSON files.  The scan used the
-      shared PAS/DKES two-species model scope with
-      :math:`N_\theta=7`, :math:`N_\zeta=11`, :math:`N_\xi=10`, and
-      :math:`N_x=4`.  The selected root is an ion root,
-      :math:`E_r=-33.714544096`, so this artifact validates backend/reference
-      agreement for the promotion machinery and shared model outputs; it is not
-      an electron-root or finite-beta QA optimization claim.
-
-   The reduced-W7-X comparison passed the default strict checks without relaxed
-   tolerances: CPU/GPU root, bootstrap-objective, and flux-objective relative
-   differences were below :math:`5\times 10^{-13}`, and the DKX versus
-   Fortran-v3 differences were below :math:`8\times 10^{-11}`.  The checked
-   demo/format-only comparison remains available as
-   ``qa_nfp2_dkx_promotion_comparison.*`` for fast documentation and
-   script-layout regression checks.
-
-   .. figure:: _static/figures/optimization/qa_nfp2_finite_beta_electron_root_promotion_comparison.png
-      :alt: Finite-beta QA CPU/GPU/Fortran positive electron-root promotion comparison.
-      :align: center
-      :width: 90%
-
-      Finite-beta QA positive-electron-root promotion comparison generated
-      from separate CPU, GPU, and SFINCS Fortran v3 promotion JSON files.  This
-      low-resolution validation used a VMEC finite-beta QA geometry,
-      :math:`N_\theta=7`, :math:`N_\zeta=7`, :math:`N_\xi=5`,
-      :math:`N_L=4`, :math:`N_x=4`, ``solverTolerance = 1e-8``,
-      ``dNHatdrHats = (0, -5)``, and ``dTHatdrHats = (0, -10)``.  All three
-      runs selected a positive electron root in the bracket
-      :math:`E_r\in[0.25,0.5]`; the JAX CPU/GPU roots agreed to
-      :math:`3.1\times10^{-13}` absolute difference, and the DKX versus
-      Fortran-v3 root differed by :math:`7.1\times10^{-8}`.  The comparison
-      used explicit promotion tolerances ``selected_root_er_atol = 1e-7``,
-      ``bootstrap_objective_rtol = 1e-5``, and
-      ``flux_objective_total_rtol = 1e-6``.  This closes the first finite-beta
-      QA positive-electron-root promotion artifact; production-resolution
-      radial/profile convergence remains a separate validation requirement
-      before making an engineering or publication claim about an optimized
-      configuration.
-
-   .. figure:: _static/figures/optimization/qa_nfp2_finite_beta_electron_root_convergence_ladder.png
-      :alt: Finite-beta QA electron-root convergence ladder.
-      :align: center
-      :width: 90%
-
-      Bounded finite-beta QA electron-root convergence ladder at
-      :math:`r_N=0.5`.  The first level is the checked
-      :math:`7\times7\times5\times4` CPU/GPU/Fortran promotion artifact above;
-      the second level is a completed :math:`9\times9\times7\times4`
-      CPU/GPU/Fortran scan.  That second level remains backend-clean:
-      CPU/GPU root agreement is :math:`8.94\times10^{-14}` and
-      DKX/Fortran-v3 root agreement is :math:`1.91\times10^{-7}`.  The
-      root moved from :math:`E_r=0.4136092671` to
-      :math:`E_r=0.4006366757`, so the ladder is useful evidence but not a
-      final physics claim.  The summary is intentionally marked ``deferred``
-      because the final checked level is below the declared production floor
-      :math:`N_\theta=25`, :math:`N_\zeta=51`, :math:`N_\xi=100`,
-      :math:`N_L=4`, :math:`N_x=4`.
-
-   A medium-resolution solver-policy probe covers the next non-dense
-   refinement level for this same finite-beta QA deck, at
-   :math:`N_\theta=17`, :math:`N_\zeta=21`, :math:`N_\xi=12`,
-   :math:`N_L=4`, :math:`N_x=4` with two species:
-
-   - ``solve_method="auto"`` selected the (since-deleted)
-     ``xblock_sparse_pc_gmres`` route at the time of the recorded audit.
-   - The CPU run wrote output in about 7 seconds and required 139
-     matrix-vector products.
-   - It reached a true residual :math:`1.44\times10^{-13}` against a target
-     :math:`2.71\times10^{-13}`.
-   - The same point matched the written Fortran-v3 output to better than
-     :math:`1.6\times10^{-6}` relative over the bootstrap-current, flow,
-     particle-flux, and heat-flux observables.
-
-   This validates the bounded medium-resolution solver policy and keeps the
-   production floor honest: the full :math:`25\times51\times100\times4` ladder
-   has :math:`1{,}020{,}004` active unknowns, so it still requires a larger
-   non-dense campaign before being promoted as a production convergence claim.
-
-   The solver-policy audit is stored in
-   ``docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_xblock_policy_probe.json``.
-
-   The next refinement level, above the policy window as it stood at the time
-   of that first probe, is
-   :math:`N_\theta=21`, :math:`N_\zeta=25`, :math:`N_\xi=14`,
-   :math:`N_L=4`, :math:`N_x=4`.  It has :math:`58{,}804` active unknowns and
-   was run on local CPU, one office GPU, and SFINCS Fortran v3:
-
-   - The CPU path converged in 18.8 seconds wall time and the GPU path in
-     86.0 seconds wall time; both reached the requested true residual.
-   - CPU/GPU agreement was better than :math:`2.7\times10^{-8}` relative on
-     current and flux observables.
-   - GPU/Fortran-v3 agreement was better than :math:`2.7\times10^{-6}`
-     relative.
-
-   This probe widened the validated x-block window to
-   :math:`30{,}000 \le n_\mathrm{active} \le 60{,}000`,
-   :math:`12 \le N_\xi \le 14` (the ``policy_after_probe`` block of the audit
-   below); the :math:`25\times31\times16\times4` probe further down widens it
-   again.  The two figures quoted on this page are successive states of the
-   same ladder, not competing claims.  Neither covers the million-unknown
-   production floor, and neither is meant to.
-
-   The above-window solver-policy audit is stored in
-   ``docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_xblock_policy_probe_21x25x14.json``.
-
-   The next medium refinement level,
-   :math:`N_\theta=25`, :math:`N_\zeta=31`, :math:`N_\xi=16`,
-   :math:`N_L=4`, :math:`N_x=4`, has :math:`99{,}204` active unknowns and
-   estimated dense storage of about 73 GiB.  With the (since-deleted) forced
-   ``xblock_sparse_pc_gmres`` route:
-
-   - local CPU converged in 68.1 seconds wrapper time with residual
-     :math:`2.74\times10^{-14}` against target :math:`4.00\times10^{-13}`;
-   - the same input converged on one office GPU in 232 seconds wrapper time
-     with residual :math:`1.75\times10^{-13}`;
-   - CPU/GPU agreement was better than :math:`3.2\times10^{-8}` relative on
-     current and flux observables, and GPU/Fortran-v3 agreement was better
-     than :math:`4.5\times10^{-7}` relative on those observables.
-
-   Since this path uses host sparse factors, it is a correctness-safe GPU
-   route but not a GPU-performance claim at this size; the CPU path is faster
-   for this refinement level.  This is the last probe in the ladder, so its
-   ``policy_after_probe`` block records the widest validated window:
-   :math:`30{,}000 \le n_\mathrm{active} \le 100{,}000`,
-   :math:`12 \le N_\xi \le 16`.
-
-   That window is the range these probes cover, not a check the solver
-   applies.  Nothing in ``src/dkx`` reads an :math:`n_\mathrm{active}` or
-   :math:`N_\xi` bound; ``solve(method="auto")`` chooses its route from a
-   memory budget (:func:`dkx.solve.tier1_peak_memory_bytes` against
-   ``DKX_TIER1_MEMORY_BUDGET_GB``).  Read the window as evidence of where
-   the x-block route has been measured, and expect no error outside it.
-
-   The medium-level solver-policy audit is stored in
-   ``docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_xblock_policy_probe_25x31x16.json``.
-
-   These checked finite-beta artifacts are QA electron-root evidence only.  They
-   do not close production-resolution QI seed ladders, true differentiable
-   device-QI, or a generic QI electron-root optimization claim.  Treat the
-   non-dense x-block policy window as bounded to the archived
-   :math:`17\times21\times12\times4`,
-   :math:`21\times25\times14\times4`, and
-   :math:`25\times31\times16\times4` probes until a larger checked campaign
-   writes matching promotion and convergence artifacts.
-
-   Regenerate the ladder summary from archived promotion JSON files with:
-
-   .. code-block:: bash
-
-      python examples/optimization/summarize_finite_beta_electron_root_ladder.py \
-        --config docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_ladder_config.json \
-        --out-dir docs/_static/figures/optimization \
-        --stem qa_nfp2_finite_beta_electron_root_convergence_ladder \
-        --backend-root-atol 1e-6 \
-        --root-drift-atol 2e-2
-
-QI/device-QI optimization research
-----------------------------------
-
-QI electron-root screening, QI kinetic promotion ladders, and true device-QI
-operator-reuse experiments are preserved on the
-``research/qi-device-hard-seed`` branch. They are not part of the stable
-examples or release-facing optimization evidence until the same checks used for
-the QA workflows pass at production resolution: strict true residuals,
-CPU/GPU agreement, resolution convergence, runtime/memory budgets, and
-Fortran-v3 comparison where the models overlap.
-
-VMEC JAX Integration
---------------------
-
-The shipped ``vmex`` QA script already exposes objective tuples such as
-aspect ratio, mean iota, and quasisymmetry.  Add the neoclassical stage as an
-outer-loop or accepted-candidate check:
-
-.. code-block:: python
-
-   from dkx.workflows.optimization import (
-       bootstrap_current_objective,
-       find_ambipolar_roots,
-       flux_selectivity_objective,
-       qa_proxy_neoclassical_objective,
-   )
-
-Inside every VMEC optimizer residual evaluation, use the differentiable proxy
-if a transport-informed term is needed.  After a candidate is accepted, write a
-VMEC ``wout``, transform or load the geometry, run the selected ``dkx``
-surfaces, and evaluate the high-fidelity checks above.
-
-This keeps the optimizer fast while preserving a clear evidence path from
-geometry optimization to validated neoclassical transport metrics.
+     --cpu candidate/audit/r0p50_cpu.json \
+     --gpu candidate/audit/r0p50_gpu.json \
+     --out-dir candidate/audit --stem r0p50_comparison
+
+For a shared-model Fortran v3 comparison, create a matching reference scan and
+audit it with ``--allow-missing-residuals`` only when its output format lacks
+DKX residual datasets. This is diagnostic-only: it can help compare written
+observables but cannot admit the reference result as promotion evidence. A
+reference-admission comparison still requires original-equation residual and
+complete-state evidence, alongside the output comparison. Missing residual data
+is not a reason to relax the residual requirement for the DKX result.
+
+The comparison tolerances are part of the campaign record and must be chosen
+per observable before interpreting a result. Backend parity establishes
+reproducibility for the compared inputs; it does not by itself establish
+resolution convergence or validate a proxy-selected configuration. Refer to
+:doc:`validation_matrix` for preserved evidence, bounded claims, and deferred
+QI/device-QI work. Performance and storage reports belong in
+:doc:`performance`, not in candidate-admission evidence.
