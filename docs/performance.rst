@@ -15,7 +15,7 @@ live in :doc:`numerics` and :doc:`differentiability`.
 
 ``SimpleProfiler`` is an explicit Python helper, not automatic CLI
 instrumentation. Its new traces label memory as ``memory_unit=MiB``; their legacy
-``*_mb`` keys now consistently use bytes/2**20. Current RSS requires psutil;
+``*_mb`` keys consistently use bytes/2**20. Current RSS requires psutil;
 the OS high-water mark remains a separate metric. Device samples describe
 current usage on the first JAX device; capacity or peak-only statistics yield
 an unavailable sample. Older traces mixed decimal MB and MiB and must be
