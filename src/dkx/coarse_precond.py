@@ -311,105 +311,61 @@ def _coarse_factors_fit(op: KineticOperator) -> bool:
     )
 
 def _coarse_route_preamble(op: KineticOperator) -> str:
-    """What did not fit, and on what machine -- shared by both fallback messages."""
-    total = _host_memory_bytes()
+    """Report allocation estimates in the units used by the guard."""
+    budget = _coarse_memory_budget()
     return (
-        f"the coarse preconditioner's dense (Ntheta*Nzeta) bands would take "
-        f"{coarse_preconditioner_band_bytes(op) / 2**30:.1f} GB ({op.n_theta}x{op.n_zeta} "
-        f"angular grid, Nxi={op.n_xi}, {op.n_species} species, Nx={op.n_x}) on a machine "
-        f"with {'unknown' if total is None else format(total / 2**30, '.1f')} GB of RAM, "
+        f"coarse dense-band estimate {coarse_preconditioner_band_bytes(op) / 2**30:.1f} GiB "
+        f"({op.n_theta}x{op.n_zeta} angular grid, Nxi={op.n_xi}, "
+        f"{op.n_species} species, Nx={op.n_x}); memory guard budget "
+        f"{'unknown' if budget is None else format(budget / 2**30, '.1f')} GiB. "
     )
 
-def _coarse_other_routes_note() -> str:
-    """The two other preconditioners that are still not a way out at this size."""
+def _coarse_memory_scope() -> str:
+    """Keep allocation estimates separate from solve qualification."""
     return (
-        "\nThe other preconditioners are still not a way out at this size: "
-        "'sparse' stores far less but was measured killed or timed out on all five "
-        "decks this size (tools/benchmarks/tier2_sparse_vs_coarse.py), and 'multigrid' "
-        "fits but does not reach tolerance on this physics (docs/performance.rst)."
+        " Estimates exclude full process RSS; convergence and runtime are not guaranteed. "
+        "Use more available memory or reduce Ntheta/Nzeta or Nxi and recheck resolution. "
+        "Changing factor precision requires independent residual and observable checks "
+        "(docs/experiments/2026-09-07-float32-factor-scope.md)."
     )
 
 def _coarse_reusable_fallback_message(op: KineticOperator) -> str:
-    """Say what the reusable-factor route costs before it starts costing it.
-
-    This is the route that made the oversized decks runnable, so the message says
-    what it retains and what it does *not* claim: the applications are more
-    expensive than the dense route's, just not by the order of magnitude the
-    one-shot route costs.
-    """
+    """Describe retained factors and the extra work per substitution."""
     dtype = _coarse_factor_dtype()
     return (
-        f"{_coarse_route_preamble(op)}"
-        f"so the solve keeps only the Schur LU factors (solvax block_thomas_factor_fn "
-        f"with store_offdiagonals=False, "
-        f"{coarse_preconditioner_factor_bytes(op, dtype) / 2**30:.1f} GB at "
-        f"{jnp.dtype(dtype).name}) and regenerates the off-diagonal blocks during each "
-        f"substitution sweep.\nThe elimination still runs once and the factors are "
-        f"reused across Krylov applications, so this is the dense route's cost model "
-        f"with a third of its storage, not the one-shot fallback: an application pays "
-        f"two block regenerations per row and no factorization."
-        f"{_coarse_other_routes_note()}\nTo get the dense route back, reduce "
-        f"Ntheta/Nzeta or Nxi, or run where the bands fit. DKX_TIER2_MEMORY_GUARD=off "
-        f"allocates them here anyway; DKX_COARSE_FACTOR_DTYPE=float32 halves the "
-        f"factors again, and on the deck this was measured on it was better on every "
-        f"axis --- 14% fewer iterations, 12% less wall time (docs/performance.rst)."
+        f"{_coarse_route_preamble(op)}Keeping Schur LU factors with "
+        f"solvax block_thomas_factor_fn(store_offdiagonals=False): "
+        f"{coarse_preconditioner_factor_bytes(op, dtype) / 2**30:.1f} GiB at "
+        f"{jnp.dtype(dtype).name}. Factors are reused across Krylov applications; "
+        f"each substitution regenerates the off-diagonal blocks without refactorization."
+        f"{_coarse_memory_scope()}"
     )
 
 def _coarse_downgrade_hint(op: KineticOperator, dtype: object) -> str:
-    """Lead with float32 when that is the difference between reusable and one-shot.
-
-    Falling from reusable factors to the checkpointed route costs an order of
-    magnitude per application, and here that fall is avoidable by halving the
-    factors rather than by changing machine.  Saying so first matters because the
-    alternative --- the message below --- describes a route the caller does not
-    have to take.
-    """
+    """Report a smaller factor estimate without promising numerical acceptance."""
     if dtype is jnp.float32:
         return ""
     budget = _coarse_memory_budget()
-    if budget is None:
-        return ""
     small = coarse_preconditioner_factor_bytes(op, jnp.float32) * _COARSE_RESIDENT_OVERHEAD
-    if small > _TIER2_GUARD_FRACTION * budget:
+    if budget is None or small > _TIER2_GUARD_FRACTION * budget:
         return ""
     return (
-        f"DKX_COARSE_FACTOR_DTYPE=float32 would keep the reusable-factor route on "
-        f"this machine ({coarse_preconditioner_factor_bytes(op, jnp.float32) / 2**30:.1f} GB "
-        f"of factors, ~{small / 2**30:.1f} GB resident, against "
-        f"{_coarse_memory_budget() / 2**30:.1f} GB available), and it is very likely "
-        f"what you want: on filteredW7XNetCDF_2species_magneticDrifts_noEr it "
-        f"completed in 2 h 50 min at 1041 iterations to a residual of 1.6e-14, where "
-        f"float64 factors did not fit and thrashed for six hours without finishing. "
-        f"The route described next is the one-shot fallback, which is slower still.\n"
+        f"DKX_COARSE_FACTOR_DTYPE=float32 estimates {small / 2**30:.1f} GiB "
+        f"with resident overhead, within the {budget / 2**30:.1f} GiB guard budget; "
+        f"this is not a generally qualified precision change. "
     )
 
 def _coarse_generated_fallback_message(op: KineticOperator) -> str:
-    """Say what the one-shot fallback costs before it starts costing it.
-
-    Reached only when even the Schur LU alone does not fit, which is the one thing
-    the reusable-factor route cannot do.  The claim to make is "completes", never
-    "fast".  It still recommends neither ``preconditioner="sparse"``, killed on
-    three of five decks and timed out on two, nor ``multigrid``, which fits without
-    reaching tolerance (docs/performance.rst).
-    """
+    """Describe checkpointed recomputation without promising completion."""
     dtype = _coarse_factor_dtype()
     return (
-        f"{_coarse_downgrade_hint(op, dtype)}"
-        f"{_coarse_route_preamble(op)}"
-        f"and even their Schur LU factors alone would take "
-        f"{coarse_preconditioner_factor_bytes(op, dtype) / 2**30:.1f} GB, so the solve "
-        f"falls back to generating each block row on demand (solvax "
-        f"block_thomas_checkpointed_fn, at most "
-        f"{_coarse_generated_peak_bytes(op) / 2**30:.2f} GB of dense factors per "
-        f"(species, x) subsystem, materializing no band).\nExpect an order of magnitude "
-        f"more time per Krylov application than the dense route (measured 1.46 s against "
-        f"47 ms on geometryScheme4_2species_withEr_fullTrajectories): it returns a "
-        f"solution rather than reusable factors, so each application repeats the "
-        f"elimination. It completes; it is not fast."
-        f"{_coarse_other_routes_note()}\nTo get a route that keeps its elimination, "
-        f"set DKX_COARSE_FACTOR_DTYPE=float32 (halves the Schur LU), reduce "
-        f"Ntheta/Nzeta or Nxi, or run where the bands fit. "
-        f"DKX_TIER2_MEMORY_GUARD=off allocates them here anyway."
+        f"{_coarse_downgrade_hint(op, dtype)}{_coarse_route_preamble(op)}"
+        f"Schur LU estimate {coarse_preconditioner_factor_bytes(op, dtype) / 2**30:.1f} GiB "
+        f"at {jnp.dtype(dtype).name} also fails admission. Using solvax "
+        f"block_thomas_checkpointed_fn, estimated dense-factor storage "
+        f"{_coarse_generated_peak_bytes(op) / 2**30:.2f} GiB per (species, x) subsystem. "
+        f"Each Krylov application repeats the elimination instead of reusing factors."
+        f"{_coarse_memory_scope()}"
     )
 
 #: Legendre rows that keep the magnetic drifts in the coarse operator, matching
