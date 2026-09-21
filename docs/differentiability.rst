@@ -337,6 +337,19 @@ complete native profile builder or a reusable-factor certificate.
 Native fixed-geometry profile scans
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+A bounded full-FP field-derivative audit at ``psi_N=0.16`` (``r_N=0.4``),
+``E_r=0.2 kV/m`` and grid ``(9,1,8,4)`` used the native analytic-tokamak
+fixture with deuterium and electrons, fixed profiles, DKES trajectories and
+Phi1 off. Original packed primal, tangent and transpose residuals were below
+``1e-11``. For normalized ``FSABjHat``, the reverse derivative was
+``-2.305674823e-4 (kV/m)^-1``; centered differences over four halved steps
+approached it to ``6.6e-7`` relative and Taylor orders were ``2.00–2.02``.
+The adjoint identity defect was explained by its residual-weighted terms,
+closing to ``1.1e-17``. This verifies a discrete fixed-geometry field derivative,
+not profile/geometry derivatives, root behavior or grid uncertainty.
+`Pinned source, full results and executable audit
+<https://github.com/uwplasma/DKX/pull/263>`_ retain the exact scope.
+
 Use ``dkx.prepare_er_scan(case, surface_index=..., differentiable_profiles=True)``
 to prepare profile updates from a native Case. The returned problem's
 ``with_profiles(density_m3=..., temperature_keV=...)`` method accepts positive
