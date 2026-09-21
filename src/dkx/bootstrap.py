@@ -161,8 +161,8 @@ class KineticBootstrapCurrent:
     is the standard choice for a bootstrap-current objective, because
     :math:`\\langle j_\\parallel B\\rangle` depends on :math:`E_r` far more
     weakly than the radial fluxes do.  Set ``ambipolar=True`` to solve for the
-    ambipolar root at every surface instead --- physically the better answer,
-    and ``len(er_values)`` times the cost.
+    ambipolar root at every surface instead --- physically the better answer
+    for regular stellarator roots, and ``len(er_values)`` times the cost.
     """
 
     profiles: Any
@@ -179,6 +179,9 @@ class KineticBootstrapCurrent:
 
     def __post_init__(self) -> None:
         self.surfaces = np.atleast_1d(np.asarray(self.surfaces, dtype=float))
+        self.reference_current = float(self.reference_current)
+        if not np.isfinite(self.reference_current) or self.reference_current <= 0.0:
+            raise ValueError("reference_current must be finite and positive.")
         self._cache: tuple[Any, np.ndarray] | None = None
 
     # -- plasma and deck ------------------------------------------------------
@@ -233,18 +236,30 @@ class KineticBootstrapCurrent:
 
     def residuals(self, eq: Any) -> np.ndarray:
         """``<j.B> / reference_current`` per surface; target 0."""
-        values = self._evaluate(eq)
-        return np.nan_to_num(values, nan=0.0) / float(self.reference_current)
+        values = np.asarray(self._evaluate(eq), dtype=float)
+        if not np.all(np.isfinite(values)):
+            raise RuntimeError("bootstrap-current evaluation returned a nonfinite surface value.")
+        with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+            residuals = values / self.reference_current
+        if not np.all(np.isfinite(residuals)):
+            raise RuntimeError("bootstrap-current residuals must be finite.")
+        return residuals
 
     def profile(self, eq: Any) -> np.ndarray:
         """Per-surface squared residuals (``sum = total``)."""
         r = self.residuals(eq)
-        return r * r
+        with np.errstate(over="ignore", invalid="ignore"):
+            squared = r * r
+        if not np.all(np.isfinite(squared)):
+            raise RuntimeError("bootstrap-current objective profile must be finite.")
+        return squared
 
     def total(self, eq: Any) -> float:
         """Scalar objective ``sum(residuals**2)``."""
-        r = self.residuals(eq)
-        return float(np.sum(r * r))
+        total = float(np.sum(self.profile(eq)))
+        if not np.isfinite(total):
+            raise RuntimeError("bootstrap-current objective total must be finite.")
+        return total
 
     def J(self, eq: Any) -> np.ndarray:
         """Objective-term entry point for ``vmex.optimize`` least squares."""
@@ -296,12 +311,23 @@ class KineticBootstrapCurrent:
                 if self.ambipolar:
                     er = np.asarray(self.er_values, dtype=float)
                     deck.write_text(self.namelist(equilibrium, s, er=0.0, a_hat=a_hat))
-                    scan = batched_er_scan(deck, er)
+                    scan = batched_er_scan(deck, er, retain_full_state=True)
+                    accepted = np.asarray(scan.algebraic_converged)
                     current = np.asarray(scan.radial_current, dtype=float).ravel()
+                    j_par = np.asarray(scan.moments["FSABjHat"], dtype=float).ravel()
+                    if (
+                        accepted.dtype != np.dtype(bool)
+                        or accepted.shape != er.shape
+                        or current.shape != er.shape
+                        or j_par.shape != er.shape
+                        or not np.all(accepted)
+                        or not np.all(np.isfinite(current))
+                        or not np.all(np.isfinite(j_par))
+                    ):
+                        return float("nan")
                     root = self._ion_root(er, current)
                     if root is None:
                         return float("nan")
-                    j_par = np.asarray(scan.moments["FSABjHat"], dtype=float).ravel()
                     order = np.argsort(er)
                     value = float(np.interp(root, er[order], j_par[order]))
                 else:
@@ -319,7 +345,7 @@ class KineticBootstrapCurrent:
 
     @staticmethod
     def _ion_root(er: np.ndarray, radial_current: np.ndarray) -> float | None:
-        """Most negative bracketed zero of ``J_r(E_r)``, by linear interpolation."""
+        """Provisional most-negative bracketed ``J_r(E_r)`` zero by interpolation."""
         order = np.argsort(er)
         x, y = er[order], radial_current[order]
         for i in range(x.size - 1):

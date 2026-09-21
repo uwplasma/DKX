@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
@@ -75,13 +77,90 @@ def test_residuals_scale_by_the_reference_current(monkeypatch):
     assert term(None) == pytest.approx(term.residuals(None))
 
 
-def test_unsolvable_surface_is_nan_in_the_profile_and_zero_in_the_residual(monkeypatch):
+@pytest.mark.parametrize("failed_current", [np.nan, np.inf, -np.inf])
+def test_unsolvable_surface_remains_diagnostic_and_cannot_promote_zero_objective(
+    monkeypatch, failed_current
+):
     """A failed solve must not read as "this device has no bootstrap current"."""
     term = KineticBootstrapCurrent(_Profiles(), surfaces=[0.3, 0.6])
-    monkeypatch.setattr(term, "_evaluate", lambda eq: np.array([1.0e5, np.nan]))
+    monkeypatch.setattr(term, "_evaluate", lambda eq: np.array([1.0e5, failed_current]))
     _s, profile = term.current_profile(None)
-    assert np.isnan(profile[1])
-    assert np.all(np.isfinite(term.residuals(None)))
+    assert not np.isfinite(profile[1])
+    with pytest.raises(RuntimeError, match="nonfinite"):
+        term.residuals(None)
+    with pytest.raises(RuntimeError, match="nonfinite"):
+        term.J(None)
+    with pytest.raises(RuntimeError, match="nonfinite"):
+        term.profile(None)
+    with pytest.raises(RuntimeError, match="nonfinite"):
+        term.total(None)
+
+
+@pytest.mark.parametrize("reference_current", [0.0, -1.0, np.nan, np.inf])
+def test_reference_current_must_be_finite_and_positive(reference_current):
+    with pytest.raises(ValueError, match="finite and positive"):
+        KineticBootstrapCurrent(_Profiles(), reference_current=reference_current)
+
+
+def test_nonfinite_normalized_residual_cannot_promote_objective(monkeypatch):
+    term = KineticBootstrapCurrent(_Profiles(), reference_current=1.0e-320)
+    monkeypatch.setattr(term, "_evaluate", lambda eq: np.array([np.finfo(float).max]))
+    with pytest.raises(RuntimeError, match="residuals must be finite"):
+        term.total(None)
+
+
+def test_finite_residuals_cannot_overflow_profile_or_total(monkeypatch):
+    term = KineticBootstrapCurrent(_Profiles())
+    monkeypatch.setattr(term, "_evaluate", lambda eq: np.array([1.0e308]))
+    with pytest.raises(RuntimeError, match="profile must be finite"):
+        term.profile(None)
+    with pytest.raises(RuntimeError, match="profile must be finite"):
+        term.total(None)
+
+
+def test_ambipolar_rejects_finite_current_from_an_unconverged_scan_point(monkeypatch, tmp_path):
+    """Interpolation is inadmissible unless every full-state scan point passed."""
+    from dkx import api
+
+    term = KineticBootstrapCurrent(_Profiles(), surfaces=[0.4], ambipolar=True,
+                                   er_values=[-2.0, 0.0, 2.0])  # fmt: skip
+    scan = SimpleNamespace(
+        algebraic_converged=np.array([True, False, True]),
+        radial_current=np.array([-1.0, 1.0, 2.0]),
+        moments={"FSABjHat": np.array([2.0, 3.0, 4.0])},
+    )
+    captured = {}
+
+    def fake_scan(*args, **kwargs):
+        captured.update(kwargs)
+        return scan
+
+    monkeypatch.setattr(api, "batched_er_scan", fake_scan)
+    monkeypatch.setattr(term, "namelist", lambda *args, **kwargs: "&general\n/\n")
+    value = term._one_surface(tmp_path / "wout.nc", 0.4, tmp_path)
+    assert captured["retain_full_state"] is True
+    assert np.isnan(value)
+    monkeypatch.setattr(term, "_evaluate", lambda eq: np.array([value]))
+    _s, profile = term.current_profile(None)
+    assert np.isnan(profile[0])
+    with pytest.raises(RuntimeError, match="nonfinite"):
+        term.J(None)
+
+
+@pytest.mark.parametrize("status", [np.array([1, 0, 1]), np.array([True, np.nan, True])])
+def test_ambipolar_requires_boolean_scan_admission_status(monkeypatch, tmp_path, status):
+    from dkx import api
+
+    term = KineticBootstrapCurrent(_Profiles(), surfaces=[0.4], ambipolar=True,
+                                   er_values=[-2.0, 0.0, 2.0])  # fmt: skip
+    scan = SimpleNamespace(
+        algebraic_converged=status,
+        radial_current=np.array([-1.0, 1.0, 2.0]),
+        moments={"FSABjHat": np.array([2.0, 3.0, 4.0])},
+    )
+    monkeypatch.setattr(api, "batched_er_scan", lambda *args, **kwargs: scan)
+    monkeypatch.setattr(term, "namelist", lambda *args, **kwargs: "&general\n/\n")
+    assert np.isnan(term._one_surface(tmp_path / "wout.nc", 0.4, tmp_path))
 
 
 @pytest.mark.parametrize(
