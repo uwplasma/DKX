@@ -12,7 +12,7 @@ and returns particle and heat fluxes, parallel flows, bootstrap current, transpo
 matrices and ambipolar radial electric fields. Its compatibility interface covers
 SFINCS Fortran v3 physics including full Fokker–Planck collisions and Phi1, and it
 reads and writes SFINCS decks. Native workflows, CPU/GPU execution, and derivatives
-have narrower qualified domains; see the [capability record](docs/capabilities.rst).
+have narrower qualified domains; see the [capability record](validation/capabilities.toml).
 
 ![W7-X standard configuration: |B| and parallel current density on the boundary, bootstrap current profile, ambipolar Er against Pablant et al. 2018](docs/_static/figures/readme/w7x_showcase.png)
 
@@ -87,7 +87,7 @@ is a linear-algebra capability, not by itself an autodiff or exact-gradient clai
 | Derivatives | implicit gradients for named prepared inputs, moments and regular roots; finite-difference checks on named cases |
 | Hardware | CPU and qualified single-device GPU workflows; experimental multi-device sharding |
 
-Exact model, interface, derivative and validation scope: [capability record](docs/capabilities.rst).
+Exact model, interface, derivative and validation scope: [capability record](validation/capabilities.toml).
 
 ## Verified
 
