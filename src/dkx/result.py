@@ -139,6 +139,7 @@ class Result:
             "solver_route",
             "route_reason",
             "residual_norm",
+            "original_residual_evidence",
             "iterations",
             "ambipolar_all_surfaces_bracketed",
             "ambipolar_search",
@@ -165,6 +166,11 @@ class Result:
                 key: _jsonable(self.metadata[key])
                 for key in keys
                 if key in self.metadata
+            },
+            **{
+                key: self.arrays[key].tolist()
+                for key in ("primal_residual", "primal_rhs_norm")
+                if key in self.arrays
             },
             "warnings": list(self.warnings),
         }
