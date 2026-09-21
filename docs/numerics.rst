@@ -425,7 +425,9 @@ complete-state original residual for the baseline and every attempted rung.
 Missing evidence leaves the grid diagnostic available but returns exit status 1.
 For native prescribed-field runs DKX independently reapplies the operator to the
 complete returned state. Native ambipolar runs reuse the batch path's independent
-full-equation audit rather than trusting its solver convergence flag.
+full-equation acceptance verdict, including state-finiteness and underflow-safe
+checks, in both the initial batch and any recovery. A small residual norm cannot
+override a rejected batch state.
 
 For linear SFINCS decks, ``dkx converge input.namelist`` uses the canonical
 namelist runner, including finite-Er full trajectories and the deck's VMEC
