@@ -106,8 +106,17 @@ Make reference and result admission uniform before producing more performance or
 optimization claims.
 
 - Require the original unscaled residual, complete-state status, requested norm,
-  and per-column acceptance for forward and transposed solves. Never infer
+  and per-column acceptance for forward and transposed solves. Preserve this
+  typed evidence through native Result and convergence reporting; a successful
+  grid-change diagnostic without it is not a research certificate. Never infer
   observable correctness from a solver success flag.
+- Resolve the reduced public W7-X assembly discrepancy before timing larger
+  direct solves. CPU float64 with JAX 0.9.2 and SOLVAX 0.24 reproduced a
+  `2.33e-7` matrix/operator difference on the 2,104-unknown fixture named in
+  item 3, above the unchanged `1e-10` check. Replay without cached executables
+  in a pinned environment, compare against column sampling, and identify the
+  responsible terms before changing the sparsity pattern or numerical policy.
+  Passing analytic assembly tests does not qualify this full-FP VMEC case.
 - Qualify sparse-direct transpose solves on general cotangents, not only
   cotangents constructed in the transpose range. The v2.5.0 release audit
   reported stagnation near `3e-8`, but its exact deck and random seed were not
