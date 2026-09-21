@@ -222,6 +222,49 @@ after session termination. This is a time-limit outcome, not evidence of
 numerical nonconvergence. Phase timing is required before another large
 attempt; combined-grid acceptance and uncertainty remain unestablished.
 
+### Instrumented reporting-grid attempt (2026-09-21)
+
+The same input hash and resource limits were replayed with the isolated wheel
+from [a8530d56](https://github.com/uwplasma/DKX/commit/a8530d5655a7051dfa199be6c1841d663fe66ed6),
+including [phase reporting #272](https://github.com/uwplasma/DKX/pull/272).
+The wheel is 620,712 bytes, SHA-256
+`0e65a33bdfef6eaadcf4b444513c5fd2bae92a7c4a21f240b19c1943a5650fa1`;
+its 2.5.0 metadata identifies an unreleased candidate, not the released wheel.
+Python 3.11.15, JAX 0.10.2, NumPy 2.4.6, SciPy 1.17.1 and SOLVAX 0.24.0
+were used. The live process's isolated import environment and SOLVAX version
+were checked. CPU/thread settings remained as above. Add
+`DKX_PROFILE=1 JAX_LOG_COMPILES=1 JAX_ENABLE_COMPILATION_CACHE=false` to the
+single-solve command above; persistent compilation caching was disabled.
+
+| Recorded phase | Wall time | Completed XLA compile records / summed reported duration |
+| --- | ---: | ---: |
+| Operator construction | 0.964 s | 27 / 0.375 s |
+| Preconditioner construction | 384.462 s | 373 / 14.757 s |
+| Krylov compilation and execution | started, no completion | 79 / 4.824 s |
+
+Compile records are assigned only between matching start/completion markers
+(or the unfinished Krylov interval). Another 50 records totaling 1.085 s fall
+outside those intervals. These sums are log-event durations, not disjoint
+wall-time attribution; do not subtract them from phase times. The large Krylov
+`while` compilation completed in 1.596 s. A further 28.548 s elapsed between
+preconditioner completion and the Krylov start marker and remains unattributed.
+
+The selected route retained about 21.7 GiB of float64 Schur LU factors through
+`block_thomas_factor_fn(store_offdiagonals=False)`. It regenerated off-diagonal
+blocks during substitution without refactorization; it was neither the stored
+dense-band route nor the one-shot checkpointed route. The watchdog stopped the
+run at 1,200.296 s. Sampled session peak RSS was 27.06 GiB and minimum host
+available memory 18.79 GiB. All owned processes terminated. No completed HDF5
+state, solver-trace JSON, final residual or observables were produced.
+
+The result remains a time-budget refusal, not numerical nonconvergence.
+Compilation alone does not explain the observed cost. Next isolate factor
+construction, border preparation and substitution work. In particular, check
+whether the generated-factor route can omit the same inactive, uncoupled pitch
+rows already omitted by the dense route, preserving the original pins, scaled
+identity tails, primal and transpose actions. Require equivalence and measured
+storage/runtime evidence before promoting that change or repeating a large run.
+
 ## Public reconstruction and next refinement
 
 The exact equilibrium and source input are in
@@ -283,7 +326,7 @@ python -m dkx converge input.namelist --cores 4 \
 
 The reporting grid is `(33,49,101,11)`; separate refinements reach theta 37,
 zeta 55, pitch 111 and speed 12; the joint grid is `(37,55,111,12)`.
-The reporting grid was attempted once and stopped at the time limit above;
+Both reporting-grid attempts stopped at the time limit above;
 the separate refinements and larger joint have **not** been run in this update.
 Current route estimates
 require about 27 GiB available for reusable factors at the reporting grid and
