@@ -473,29 +473,26 @@ roughly one forward solve, as predicted.
 The differentiable optimization chain
 -------------------------------------
 
-Stellarator optimization with a *kinetic* objective closes the loop from the
-plasma boundary to a neoclassical figure of merit and back, entirely under
-automatic differentiation:
+``examples/optimization/optimize_QA_bootstrap.py`` implements the full proposed
+chain from boundary coefficients to a kinetic objective:
 
 .. math::
 
    \text{boundary } \partial\Omega
-   \;\xrightarrow[\text{equilibrium}]{\texttt{vmec\_jax}}\;
-   \{ \hat B_{mn} \}
+   \;\xrightarrow[\text{equilibrium}]{\texttt{vmex.core.implicit}}\;
+   \text{spectral tables}
    \;\xrightarrow[\text{Boozer transform}]{\texttt{booz\_xform\_jax}}\;
    \text{geometry}
-   \;\xrightarrow[\text{kinetic solve}]{\texttt{sfincs\_jax}}\;
-   \langle \mathbf{j}\cdot\mathbf{B}\rangle,\ D_{ij},\ \Gamma_s .
+   \;\xrightarrow[\text{kinetic solve}]{\texttt{dkx}}\;
+   \langle \mathbf{j}\cdot\mathbf{B}\rangle .
 
-Each arrow is a JAX transformation, so ``jax.grad`` of the bootstrap current
-:math:`\langle \mathbf{j}\cdot\mathbf{B}\rangle` (or a transport coefficient)
-with respect to the boundary Fourier modes propagates through the equilibrium
-solve, the Boozer transform, and the drift-kinetic solve without any finite
-differences. ``examples/optimization/optimize_QA_bootstrap.py`` drives a
-quasi-axisymmetric, low-bootstrap optimization on exactly this chain with warm
-starts and finite-difference-verified gradients; the geometry link on its own is
-demonstrated in ``examples/autodiff/vmex_to_boozer_sfincs_pipeline.py``. See
-:doc:`optimization` and :doc:`vmex_workflow` for the full workflow.
+The driver calls ``jax.value_and_grad`` across these components, uses warm
+starts, and contains central finite-difference checks. Its presence establishes
+an implementation path, not a qualified optimization result. Qualification
+still requires an installed-artifact run that satisfies the research plan's
+objective, constraint, equilibrium-residual, derivative, finer-grid, and
+independent-reference acceptance criteria. See :doc:`optimization` and
+:doc:`vmex_workflow` for the surrounding workflow.
 
 Cost against a non-differentiable reference
 -------------------------------------------
