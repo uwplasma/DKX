@@ -124,7 +124,7 @@ def test_generating_the_rows_stores_an_order_of_magnitude_less():
     turns 53.3 GB into something a 24 GB machine can run.
     """
     op = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
-    tall = replace(op, n_xi=400)
+    tall = replace(op, n_xi=400, n_xi_for_x=jnp.full(op.n_x, 400))
     per_subsystem = coarse_preconditioner_band_bytes(tall) / (tall.n_species * tall.n_x)
     assert _coarse_generated_peak_bytes(tall) < 0.1 * per_subsystem
 
@@ -140,7 +140,7 @@ def test_keeping_only_the_schur_lu_is_a_third_of_the_bands():
     slack in the estimate.
     """
     op = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
-    tall = replace(op, n_xi=400)
+    tall = replace(op, n_xi=400, n_xi_for_x=jnp.full(op.n_x, 400))
     m = tall.n_theta * tall.n_zeta
     ratio = coarse_preconditioner_factor_bytes(tall) / coarse_preconditioner_band_bytes(tall)
     assert ratio == pytest.approx(1.0 / 3.0 + 1.0 / (6.0 * m))
@@ -440,7 +440,9 @@ def test_the_generated_route_is_jit_safe_over_traced_operator_leaves(monkeypatch
     op = _ramped_op()
     leaves, treedef = jax.tree_util.tree_flatten(op)
     v = jnp.asarray(np.linspace(-1.0, 1.0, op.total_size), dtype=jnp.float64)
-    monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: 1.0)
+    # The traced layout must retain the full rectangle, while still taking the
+    # reusable generated route rather than the checkpointed one.
+    monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: _ram_for_reusable(op))
 
     def action(values: list) -> jnp.ndarray:
         precond, _ = build_coarse_preconditioner(jax.tree_util.tree_unflatten(treedef, values))
