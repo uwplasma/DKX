@@ -1822,7 +1822,7 @@ def evaluate_promotion_ladder(
     failures: list[str] = []
     blockers: list[str] = []
     previous_root: float | None = None
-    previous_resolution: Mapping[str, int] | None = None
+    previous_tier: Mapping[str, Any] | None = None
     refinement_comparisons = 0
 
     for index, raw_tier in enumerate(raw_tiers):
@@ -1842,23 +1842,33 @@ def evaluate_promotion_ladder(
         if lane_failures:
             failures.extend(str(item) for item in lane_failures)
         resolution_refined = _is_strict_refinement(
-            tier["resolution"], previous_resolution
+            tier["resolution"],
+            None if previous_tier is None else previous_tier["resolution"],
         )
         tier["convergence_gate"]["resolution_refined"] = resolution_refined
+        physics_mismatches: list[str] = []
+        if previous_tier is not None:
+            for field in ("r_n", "n_species"):
+                if tier[field] != previous_tier[field]:
+                    physics_mismatches.append(
+                        f"{tier['name']}: {field}={tier[field]} differs from previous tier "
+                        f"{field}={previous_tier[field]}"
+                    )
+        blockers.extend(physics_mismatches)
         if tier["convergence_gate"]["status"] == "fail":
             blockers.append(
                 f"{tier['name']}: root drift {tier['convergence_gate']['root_drift_from_previous']:.6g} "
                 f"exceeds {root_drift_atol:.6g}"
             )
         elif tier["convergence_gate"]["status"] == "pass":
-            if resolution_refined:
+            if resolution_refined and not physics_mismatches:
                 refinement_comparisons += 1
-            else:
+            elif not resolution_refined:
                 blockers.append(
                     f"{tier['name']}: resolution does not refine the previous tier"
                 )
         previous_root = _reference_root(tier)
-        previous_resolution = tier["resolution"]
+        previous_tier = tier
 
     final_tier = tiers[-1]
     if not final_tier["production_floor_met"]:

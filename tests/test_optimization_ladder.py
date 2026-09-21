@@ -175,6 +175,40 @@ def test_evaluate_promotion_ladder_rejects_non_refinement_grids(
     assert summary["tiers"][1]["convergence_gate"]["resolution_refined"] is False
 
 
+@pytest.mark.parametrize(
+    ("field", "candidate_value"),
+    [("r_n", 0.8), ("n_species", 3)],
+)
+def test_evaluate_promotion_ladder_requires_fixed_physics_across_refinement(
+    tmp_path: Path, field: str, candidate_value: float | int
+) -> None:
+    baseline = {"r_n": 0.5, "n_species": 2}
+    candidate = {**baseline, field: candidate_value}
+    config = {
+        "tiers": [
+            {
+                "name": "baseline",
+                **baseline,
+                "resolution": {"Ntheta": 23, "Nzeta": 49, "Nxi": 90, "NL": 4, "Nx": 4},
+                "promotions": {"cpu": _write(tmp_path / "low.json", _promotion_payload(0.4))},
+            },
+            {
+                "name": "candidate",
+                **candidate,
+                "resolution": {"Ntheta": 25, "Nzeta": 51, "Nxi": 100, "NL": 4, "Nx": 4},
+                "promotions": {"cpu": _write(tmp_path / "high.json", _promotion_payload(0.4))},
+            },
+        ]
+    }
+
+    summary = evaluate_promotion_ladder(config)
+
+    assert summary["status"] == "deferred"
+    assert summary["refinement_comparisons"] == 0
+    assert summary["tiers"][1]["convergence_gate"]["resolution_refined"] is True
+    assert any(f"{field}=" in blocker for blocker in summary["blockers"])
+
+
 @pytest.mark.parametrize("name", ["backend_root_atol", "root_drift_atol"])
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), -1.0])
 def test_evaluate_promotion_ladder_rejects_invalid_tolerances(
