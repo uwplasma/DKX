@@ -40,12 +40,13 @@ Recycled Krylov — preconditioned, with subspace recycling (``solvax.krylov.gcr
     preconditioner itself, its pins and the routing between its three storage
     policies live in :mod:`dkx.coarse_precond`.
 
-Sparse direct — host fallback and cross-check (``solvax.native.splu_solve``)
-    Materializes the operator (vmapped unit vectors; guarded by
-    ``max_dense_size``) into CSR and hands it to SuperLU on the host.
-    Non-differentiable, non-jittable; prints a loud one-line notice.  Used on
-    explicit request (``method="direct"``) or when the recycled Krylov route
-    breaches its iteration cap under ``method="auto"``.
+Sparse direct — host fallback and cross-check (``solvax.native.SpluFactorization``)
+    Assembles the operator into CSR and factors it on the host; small operators
+    may instead use column sampling, limited by ``max_dense_size``. SuperLU remains
+    the default; the optional MUMPS adapter is an explicit experimental choice.
+    Non-differentiable, non-jittable; prints a loud one-line notice. Used on
+    explicit request (``method="direct"``) or when recycled Krylov breaches
+    its iteration cap under ``method="auto"``.
 
 Differentiability: full-state structured and recycled Krylov routes use
 ``solvax.implicit.linear_solve`` when ``differentiable=True``. Full-factor
@@ -69,6 +70,7 @@ and the PETSc ``Pmat`` idiom of production SFINCS.
 from __future__ import annotations
 
 import functools
+import inspect
 import os
 import time
 from dataclasses import dataclass, field, replace
@@ -118,8 +120,9 @@ except ImportError:
     sparse_operator_matrix = None  # type: ignore[assignment]
     equilibrate = None  # type: ignore[assignment]
 
-from dkx import require_float64
+from dkx import require_float64  # noqa: E402
 from dkx.coarse_precond import (  # noqa: E402
+    _available_memory_bytes,
     _require_solvax,
     _transposed_apply,
     _truncated_block_fn,
@@ -1098,6 +1101,8 @@ def _escalate_after_tier2_stall(
     check_adjoint: bool,
     adjoint_residual_factor: float,
     max_dense_size: int,
+    direct_backend: str | None = None,
+    direct_memory_budget_gb: float | None = None,
 ) -> SolveResult:
     """Try alternate preconditioners and a larger iteration budget at fixed physics.
 
@@ -1227,22 +1232,37 @@ def _escalate_after_tier2_stall(
     except Exception as exc:
         print(f"[dkx.solve]   widened retry failed: {exc}")
 
-    # Rung 3: sparse direct, but only where it can actually run.  Announcing a
-    # fallback that the size guard will refuse is what produced the original
-    # crash, so the size is checked here rather than discovered downstream.
-    if op.total_size <= max_dense_size:
+    # Rung 3: sparse direct.  Keep the historical large-SuperLU protection, but
+    # an explicitly selected, budgeted MUMPS backend may use grouped assembly;
+    # max_dense_size limits only the column-sampling fallback in that case.
+    large_mumps_requested = (
+        direct_backend == "mumps" and direct_memory_budget_gb is not None
+    )
+    if op.total_size <= max_dense_size or large_mumps_requested:
         print("[dkx.solve]   falling back to the sparse direct host solve ...")
         return _solve_tier3(
-            op, rhs2d, tol=tol, atol=atol, max_dense_size=max_dense_size
+            op, rhs2d, tol=tol, atol=atol, max_dense_size=max_dense_size,
+            direct_backend=direct_backend,
+            direct_memory_budget_gb=direct_memory_budget_gb,
         )
 
     best_label, best = min(attempts, key=lambda item: _residual(item[1]))
+    if direct_backend == "mumps" and direct_memory_budget_gb is None:
+        direct_refusal = (
+            "The large host direct fallback was not attempted because explicit "
+            "MUMPS requires a positive direct_memory_budget_gb."
+        )
+    else:
+        direct_refusal = (
+            f"The default SuperLU host fallback is protected above "
+            f"max_dense_size={max_dense_size}; it was not attempted. Select "
+            "direct_backend='mumps' with a memory budget to admit grouped assembly."
+        )
     raise RuntimeError(
         f"the linear solve did not converge at total_size={op.total_size}.\n"
         f"Tried: {'; '.join(label for label, _ in attempts)}.\n"
         f"Best final residual {_residual(best):.3e} ({best_label}), tolerance {tol:.1e}.\n"
-        f"The host direct fallback exceeds max_dense_size={max_dense_size}; "
-        "it was not attempted. Check memory requirements before changing this limit.\n"
+        f"{direct_refusal}\n"
         "Nonconvergence alone does not identify under-resolution, an ill-conditioned "
         "operator, or a preconditioner problem, and does not establish that the "
         "physical model has no solution.\n"
@@ -1257,7 +1277,7 @@ def _escalate_after_tier2_stall(
 
 @dataclass(frozen=True)
 class DirectFactors:
-    """SuperLU factors of the equilibrated assembled operator, kept to reuse.
+    """Sparse factors of the equilibrated assembled operator, kept to reuse.
 
     The sparse direct route spends nearly all of its time building this: the
     assembly, the Ruiz scaling and the factorization. The solve that follows is
@@ -1268,8 +1288,8 @@ class DirectFactors:
 
     The transpose comes from the same factors. With ``A_s = D_r A D_c`` the
     scaled system that was factored, ``A^T y = g`` is ``A_s^T z = D_c g`` with
-    ``y = D_r z``: SuperLU substitutes through ``L`` and ``U`` in the other
-    order and the factorization is never repeated.
+    ``y = D_r z``. The backend applies its transpose solve and the
+    factorization is never repeated.
 
     Attributes:
         lu: the stored :class:`solvax.native.SpluFactorization`.
@@ -1287,6 +1307,31 @@ class DirectFactors:
     total_size: int
     products: int
     nnz: int
+    backend: str = "superlu"
+    memory_budget_bytes: int | None = None
+    workspace_limit_bytes: int | None = None
+
+    @property
+    def symbolic_memory_bytes(self) -> int | None:
+        """Backend symbolic estimate, when the backend exposes one."""
+        return getattr(self.lu, "symbolic_memory_bytes", None)
+
+    @property
+    def effective_memory_bytes(self) -> int | None:
+        """Backend effective factor memory, when the backend exposes one."""
+        return getattr(self.lu, "effective_memory_bytes", None)
+
+    def close(self) -> None:
+        """Release native factor storage when the backend supports it."""
+        close = getattr(self.lu, "close", None)
+        if close is not None:
+            close()
+
+    def __enter__(self) -> DirectFactors:
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        self.close()
 
     def solve(self, rhs: np.ndarray, *, transpose: bool = False) -> np.ndarray:
         """Apply the stored factors to ``rhs`` (all columns at once).
@@ -1317,10 +1362,123 @@ class DirectFactors:
         return x[:, 0] if squeeze else x
 
 
+_MUMPS_MEMORY_SAFETY_FACTOR = 1.2
+_MUMPS_MINIMUM_BUDGET_BYTES = 1_000_000
+# Conservative equivalent full-RHS buffers beyond the caller-owned RHS, which
+# current RSS already includes: scaled RHS; native per-column results; native
+# stacked result; host/JAX conversion; equilibrated solution; JAX apply output;
+# and defect/correction destination.  These do not all peak simultaneously, but
+# summing them avoids claiming allocator/JAX lifetime precision we do not have.
+_MUMPS_TRANSIENT_RHS_COPIES = 7
+
+
+def _process_rss_bytes() -> tuple[int | None, str]:
+    """RSS evidence in bytes and its metric: current, peak fallback, or unavailable."""
+    try:
+        import psutil  # type: ignore[import-not-found]  # noqa: PLC0415
+
+        return int(psutil.Process().memory_info().rss), "current RSS"
+    except Exception:
+        from .profiling import _peak_rss_mb  # noqa: PLC0415
+
+        peak_mib = _peak_rss_mb()
+        # _peak_rss_mb converts Linux KiB/macOS bytes to MiB-like units. This
+        # fallback is deliberately a high-water value, hence conservative.
+        if peak_mib is None:
+            return None, "RSS unavailable"
+        return int(float(peak_mib) * 2.0**20), "peak RSS fallback"
+
+
+def _mumps_workspace_limit_bytes(
+    scaled_matrix,
+    *,
+    rhs_nbytes: int,
+    memory_budget_bytes: int,
+) -> int:
+    """MUMPS workspace left after DKX's live host allocations and headroom."""
+    from .batch import _RUNTIME_OVERHEAD_BYTES  # local: batch imports solve
+
+    live_rss, rss_metric = _process_rss_bytes()
+    available = _available_memory_bytes()
+    if live_rss is None or available is None:
+        raise RuntimeError(
+            f"MUMPS memory admission requires process RSS evidence ({rss_metric}) "
+            "and current host available memory; neither physical RAM nor the "
+            "process budget alone is a safe shared-host guard"
+        )
+    index_bytes = int(scaled_matrix.indices.dtype.itemsize)
+    coo_bytes = int(scaled_matrix.data.nbytes + 2 * scaled_matrix.nnz * index_bytes)
+    # RSS already includes the operator, both CSR matrices, JAX caches, unrelated
+    # arrays and any stale native factors. Reserve the future PyMUMPS COO copy,
+    # conservative solve transients, and the measured runtime/allocator allowance.
+    future_reserve = int(
+        coo_bytes
+        + _MUMPS_TRANSIENT_RHS_COPIES * rhs_nbytes
+        + _RUNTIME_OVERHEAD_BYTES
+    )
+    process_remaining = int(memory_budget_bytes) - int(live_rss) - future_reserve
+    available_remaining = float(available) - future_reserve
+    workspace = int(min(process_remaining, available_remaining))
+    if workspace < _MUMPS_MINIMUM_BUDGET_BYTES:
+        raise MemoryError(
+            "MUMPS factorization refused before symbolic analysis: "
+            f"process budget {int(memory_budget_bytes)} bytes minus {rss_metric} "
+            f"{int(live_rss)} bytes and future COO/RHS/runtime reserve {future_reserve} "
+            f"leaves {process_remaining} bytes; current host availability leaves "
+            f"{available_remaining:.0f} bytes"
+        )
+    return workspace
+
+
+def _admit_mumps_reuse(*, rhs_nbytes: int, memory_budget_bytes: int) -> None:
+    """Recheck solve-only headroom when retained MUMPS factors take a new RHS.
+
+    Factor-build admission remains separate because it also reserves projected
+    COO storage and derives the native workspace limit after grouped assembly.
+    """
+    from .batch import _RUNTIME_OVERHEAD_BYTES  # local: batch imports solve
+
+    live_rss, rss_metric = _process_rss_bytes()
+    available = _available_memory_bytes()
+    if live_rss is None or available is None:
+        raise RuntimeError(
+            f"MUMPS factor reuse requires process RSS evidence ({rss_metric}) "
+            "and current host available memory"
+        )
+    transient = int(
+        _MUMPS_TRANSIENT_RHS_COPIES * rhs_nbytes + _RUNTIME_OVERHEAD_BYTES
+    )
+    process_remaining = int(memory_budget_bytes) - int(live_rss) - transient
+    available_remaining = float(available) - transient
+    if process_remaining < 0 or available_remaining < 0:
+        raise MemoryError(
+            "MUMPS factor reuse refused before solve: "
+            f"process budget {int(memory_budget_bytes)} bytes minus {rss_metric} "
+            f"{int(live_rss)} bytes and transient RHS/runtime reserve {transient} "
+            f"leaves {process_remaining} bytes; current host availability leaves "
+            f"{available_remaining:.0f} bytes"
+        )
+
+
 def _factor_direct(
-    op: KineticOperator, *, max_dense_size: int, emit: Callable[[str], None] | None
+    op: KineticOperator,
+    *,
+    max_dense_size: int,
+    direct_backend: str = "superlu",
+    memory_budget_bytes: int | None = None,
+    rhs_nbytes: int = 0,
+    emit: Callable[[str], None] | None,
 ) -> DirectFactors:
     """Assemble, equilibrate and factor the operator once."""
+    if direct_backend == "mumps":
+        if "backend" not in inspect.signature(SpluFactorization).parameters:
+            raise ImportError(
+                "direct_backend='mumps' requires a SOLVAX release containing "
+                "the optional MUMPS adapter; released SOLVAX 0.24 supports the "
+                "default SuperLU backend only"
+            )
+        if memory_budget_bytes is None:
+            raise ValueError("direct_backend='mumps' requires a memory budget")
     n = op.total_size
     assembled = None
     if n > max_dense_size:
@@ -1343,14 +1501,14 @@ def _factor_direct(
     if assembled is None:
         _say(
             emit,
-            f"[dkx.solve] sparse direct route (host SuperLU, n={n}): "
+            f"[dkx.solve] sparse direct route (host {direct_backend}, n={n}): "
             "non-differentiable fallback path.",
         )
         matrix = materialize_csr(op, pin_masked_dofs=True)
     else:
         _say(
             emit,
-            f"[dkx.solve] sparse direct route (host SuperLU, n={n}): assembled "
+            f"[dkx.solve] sparse direct route (host {direct_backend}, n={n}): assembled "
             f"from {assembled.products} products, {assembled.matrix.nnz} "
             "nonzeros; non-differentiable fallback path.",
         )
@@ -1359,13 +1517,31 @@ def _factor_direct(
     # rows carry streaming, collision and constraint terms at once. Scaling
     # first is what keeps those pivots meaningful.
     scaling = equilibrate(matrix)
+    workspace_limit = None
+    if direct_backend == "superlu":
+        # Keep the released SOLVAX 0.24 constructor path byte-for-byte simple.
+        lu = SpluFactorization(scaling.matrix)
+    else:
+        workspace_limit = _mumps_workspace_limit_bytes(
+            scaling.matrix, rhs_nbytes=rhs_nbytes,
+            memory_budget_bytes=memory_budget_bytes,
+        )
+        lu = SpluFactorization(
+            scaling.matrix,
+            backend="mumps",
+            memory_limit_bytes=workspace_limit,
+            memory_safety_factor=_MUMPS_MEMORY_SAFETY_FACTOR,
+        )
     return DirectFactors(
-        lu=SpluFactorization(scaling.matrix),
+        lu=lu,
         row_scale=np.asarray(scaling.row_scale),
         column_scale=np.asarray(scaling.column_scale),
         total_size=n,
         products=0 if assembled is None else int(assembled.products),
         nnz=int(matrix.nnz),
+        backend=direct_backend,
+        memory_budget_bytes=memory_budget_bytes,
+        workspace_limit_bytes=workspace_limit,
     )
 
 
@@ -1412,6 +1588,8 @@ def _solve_tier3(
     tol: float,
     atol: float,
     max_dense_size: int,
+    direct_backend: str | None = None,
+    direct_memory_budget_gb: float | None = None,
     factors: DirectFactors | None = None,
     transpose: bool = False,
     emit: Callable[[str], None] | None = print,
@@ -1419,7 +1597,7 @@ def _solve_tier3(
     _require_solvax()
     if _is_traced(rhs2d):
         raise RuntimeError(
-            "the sparse direct (host SuperLU) solve is non-differentiable and "
+            "the host sparse-direct solve is non-differentiable and "
             "cannot run "
             "under jit/vmap/grad; use method='block_tridiagonal' or 'gmres' with "
             "differentiable=True."
@@ -1433,11 +1611,51 @@ def _solve_tier3(
     rhs = np.asarray(rhs2d)
     if rhs.ndim == 1:
         rhs = rhs[:, None]
+    # The native matrix is float64 in DKX.  Account for conversion to that dtype
+    # when a caller supplies narrower RHS storage.
+    rhs_work_nbytes = int(rhs.size * max(rhs.dtype.itemsize, np.dtype(np.float64).itemsize))
+
+    requested_budget_bytes = (
+        None if direct_memory_budget_gb is None
+        else int(float(direct_memory_budget_gb) * 2.0**30)
+    )
+    if factors is not None:
+        if direct_backend is not None and direct_backend != factors.backend:
+            raise ValueError(
+                f"stored factors use {factors.backend!r}, not requested "
+                f"direct_backend={direct_backend!r}"
+            )
+        if (requested_budget_bytes is not None
+                and factors.memory_budget_bytes is not None
+                and requested_budget_bytes != factors.memory_budget_bytes):
+            raise ValueError("a reused factorization retains its original memory budget")
+        backend = factors.backend
+        memory_budget_bytes = factors.memory_budget_bytes
+    else:
+        backend = "superlu" if direct_backend is None else direct_backend
+        memory_budget_bytes = requested_budget_bytes
+    if backend == "mumps" and memory_budget_bytes is None:
+        raise ValueError("direct_backend='mumps' requires a memory budget")
+
+    def _build_factors() -> DirectFactors:
+        if backend == "superlu":
+            # Preserve the original internal call shape for released defaults
+            # and tests/downstream code that monkeypatch the private builder.
+            return _factor_direct(op, max_dense_size=max_dense_size, emit=emit)
+        return _factor_direct(
+            op, max_dense_size=max_dense_size, direct_backend=backend,
+            memory_budget_bytes=memory_budget_bytes, rhs_nbytes=rhs_work_nbytes, emit=emit,
+        )
 
     reused = factors is not None
+    if reused and backend == "mumps":
+        _admit_mumps_reuse(
+            rhs_nbytes=rhs_work_nbytes,
+            memory_budget_bytes=memory_budget_bytes,
+        )
     t0 = time.perf_counter()
     if factors is None:
-        factors = _factor_direct(op, max_dense_size=max_dense_size, emit=emit)
+        factors = _build_factors()
     t1 = time.perf_counter()
     x2d, defect = _direct_refine(
         op, factors, rhs, transpose=transpose,
@@ -1460,7 +1678,7 @@ def _solve_tier3(
             f"{_DIRECT_REUSE_REFINEMENT_SWEEPS} corrections); factorizing it.",
         )
         t0 = time.perf_counter()
-        factors = _factor_direct(op, max_dense_size=max_dense_size, emit=emit)
+        factors = _build_factors()
         t1 = time.perf_counter()
         x2d, defect = _direct_refine(
             op, factors, rhs, transpose=transpose,
@@ -2732,6 +2950,8 @@ def solve(
     max_restarts: int = 200,
     max_dense_size: int = 8192,
     tier1_memory_budget_gb: float | None = None,
+    direct_backend: str | None = None,
+    direct_memory_budget_gb: float | None = None,
     tier1_keep_lowest: int = _TIER1_KEEP_LOWEST_DEFAULT,
     subsystem_batch: int | str = "auto",
     tier1_adjoint_window: int | None = None,
@@ -2752,8 +2972,9 @@ def solve(
        the matrix-free operator, right-preconditioned by an exact structured
        direct solve of the Fortran-style simplified coarse operator;
     3. **sparse direct** (``"direct"``) on explicit request, or automatically
-       when recycled Krylov breaches its iteration cap — host SuperLU on the
-       materialized matrix, non-differentiable, loud.
+       when recycled Krylov breaches its iteration cap — host factorization of
+       the materialized matrix, non-differentiable, loud. SuperLU is the
+       default; MUMPS is an explicit experimental option.
 
     Args:
         op: the kinetic operator (:class:`dkx.drift_kinetic.KineticOperator`).
@@ -2871,6 +3092,14 @@ def solve(
             the full-band factorization.  ``None`` reads the ``DKX_TIER1_MEMORY_BUDGET_GB``
             environment variable, else the 8 GB default.  The full-band peak is
             estimated by :func:`tier1_peak_memory_bytes`.
+        direct_backend: sparse-direct factor backend. ``None`` preserves the
+            released default, SuperLU; ``"mumps"`` explicitly selects the
+            optional SOLVAX MUMPS adapter. Stored factors retain their backend.
+        direct_memory_budget_gb: process budget for an explicit MUMPS backend.
+            DKX subtracts measured current process RSS (or a conservative
+            process high-water fallback), projected COO, RHS-shaped buffers and
+            runtime headroom, intersects that remainder with current host
+            availability, and passes only the result to MUMPS. Ignored by SuperLU.
         tier1_keep_lowest: number of Legendre blocks the truncated structured
             direct kernel computes exactly (default 3 — the RHSMode 1/2/3 drives and
             output moments live on ``l <= 2``).
@@ -3000,6 +3229,15 @@ def solve(
         raise ValueError(f"tol must be finite and nonnegative; got {tol!r}")
     if not np.isfinite(atol) or atol < 0.0:
         raise ValueError(f"atol must be finite and nonnegative; got {atol!r}")
+    if direct_backend is not None:
+        direct_backend = str(direct_backend).strip().lower()
+        if direct_backend not in {"superlu", "mumps"}:
+            raise ValueError("direct_backend must be None, 'superlu', or 'mumps'")
+    if direct_memory_budget_gb is not None:
+        if (isinstance(direct_memory_budget_gb, (bool, np.bool_))
+                or not np.isfinite(direct_memory_budget_gb)
+                or direct_memory_budget_gb <= 0.0):
+            raise ValueError("direct_memory_budget_gb must be finite and positive")
     if method == "block_tridiagonal_truncated":
         ok, reason = tier1_available(op)
         if not ok:
@@ -3146,6 +3384,8 @@ def solve(
                 check_adjoint=check_adjoint,
                 adjoint_residual_factor=adjoint_residual_factor,
                 max_dense_size=max_dense_size,
+                direct_backend=direct_backend,
+                direct_memory_budget_gb=direct_memory_budget_gb,
             )
     else:  # direct
         if differentiable:
@@ -3154,6 +3394,8 @@ def solve(
             )
         result = _solve_tier3(
             op, rhs2d, tol=tol, atol=atol, max_dense_size=max_dense_size,
+            direct_backend=direct_backend,
+            direct_memory_budget_gb=direct_memory_budget_gb,
             factors=factors, transpose=transpose, emit=emit,
         )
 

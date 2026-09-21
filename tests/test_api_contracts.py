@@ -157,7 +157,8 @@ def test_flagship_capabilities_are_exported_from_top_level_package() -> None:
 def test_solver_options_is_a_frozen_contract_with_solve_kwargs() -> None:
     from dkx.api import SolverOptions
 
-    options = SolverOptions(method="gmres", tol=1e-8, differentiable=True, memory_budget_gb=4.0)
+    options = SolverOptions(method="gmres", tol=1e-8, differentiable=True,
+                            memory_budget_gb=4.0, direct_backend="mumps")
     with pytest.raises(FrozenInstanceError):
         options.tol = 1e-6  # type: ignore[misc]
 
@@ -166,6 +167,8 @@ def test_solver_options_is_a_frozen_contract_with_solve_kwargs() -> None:
     assert kwargs["tol"] == 1e-8
     assert kwargs["differentiable"] is True
     assert kwargs["tier1_memory_budget_gb"] == 4.0
+    assert kwargs["direct_backend"] == "mumps"
+    assert kwargs["direct_memory_budget_gb"] == 4.0
     assert "cores" not in kwargs  # honest: threads are pinned pre-import (DKX_CORES/--cores)
 
 
