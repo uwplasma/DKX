@@ -126,8 +126,8 @@ optimization claims.
   `default_rng(0).standard_normal(2104)` gives original transpose residuals
   near `6.1e-10` with both SuperLU and MUMPS at requested `1e-10`, while the
   physical forward RHS passes below `3e-13`. The ion-flow cotangent also fails
-  near `2.75e-9`, while bootstrap current passes near `5.71e-13`. Original,
-  CSR and extended-precision CSR residual evaluation show similar general
+  near `2.75e-9`, while bootstrap current passes near `5.71e-13`. Original
+  and CSR residual evaluation show similar general
   cotangent errors; eight corrections do not meet the request. Diagnose the
   conditioning before another refinement policy or larger benchmark; do not
   infer an identified near-null mode from this evidence alone. Keep the
