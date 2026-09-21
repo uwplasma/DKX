@@ -109,10 +109,12 @@ optimization claims.
   and per-column acceptance for forward and transposed solves. Never infer
   observable correctness from a solver success flag.
 - Qualify sparse-direct transpose solves on general cotangents, not only
-  cotangents constructed in the transpose range. The v2.5.0 artifact reported a
-  conservative non-convergence near `3e-8` for a general cotangent while the
-  forward solve reached `1e-10`; investigate transpose-aware scaling or a
-  justified residual criterion.
+  cotangents constructed in the transpose range. The v2.5.0 release audit
+  reported stagnation near `3e-8`, but its exact deck and random seed were not
+  retained and a bounded search could not recover them. Keep that observation
+  unresolved; qualify pinned, seeded cases and physical moment cotangents.
+  Change transpose scaling only against a reproducible failure, without
+  weakening the requested original-equation tolerance.
 - Qualify observable adjoints independently on PAS and full-Fokker–Planck decks.
   Compare the adjoint identity, finite differences over a step window, and a
   second-order Taylor remainder. Record branch and active-state assumptions.
