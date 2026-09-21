@@ -1,8 +1,7 @@
-"""The plan-§2.3 three-route auto-policy linear solver over a :class:`KineticOperator`.
+"""Solver policy for a :class:`KineticOperator`.
 
-This module is the Phase-3.3 solve track: given the consolidated v3
-drift-kinetic operator (:mod:`dkx.drift_kinetic`) and one or more right-hand
-sides, pick and run the cheapest adequate linear solver.
+Given the drift-kinetic operator (:mod:`dkx.drift_kinetic`) and one or more
+right-hand sides, select a supported route and verify its original equations.
 
 The three routes are named as a case file's ``[solver] method`` names them:
 ``structured_direct``, ``recycled_krylov``, ``sparse_direct_referee``.  Code
@@ -41,8 +40,8 @@ Recycled Krylov — preconditioned, with subspace recycling (``solvax.krylov.gcr
     policies live in :mod:`dkx.coarse_precond`.
 
 Sparse direct — host fallback and cross-check (``solvax.native.splu_solve``)
-    Materializes the operator (vmapped unit vectors; guarded by
-    ``max_dense_size``) into CSR and hands it to SuperLU on the host.
+    Builds CSR from grouped operator actions where supported, with guarded
+    column sampling as a fallback, and factors it using SuperLU on the host.
     Non-differentiable, non-jittable; prints a loud one-line notice.  Used on
     explicit request (``method="direct"``) or when the recycled Krylov route
     breaches its iteration cap under ``method="auto"``.
@@ -327,8 +326,9 @@ class SolveResult:
             original ``||b - A x||``; moment-only truncated states report only
             the rows determined by the retained head. Certify full equations
             using complete recovery or an independent original residual.
-        converged: every residual below ``max(atol, tol * ||b||)``.  ``True``
-            by construction for the direct routes when residuals are finite.
+        converged: whether residuals meet their per-column targets
+            ``max(atol, tol * ||b||)``; a finite direct result alone does not
+            imply convergence.
         recycle: GCROT recycle pair ``(C, U)`` from the last right-hand side
             (recycled Krylov), for warm-starting the next solve of a
             continuation.
@@ -2747,7 +2747,7 @@ def solve(
     factors: Any = None,
     transpose: bool = False,
 ) -> SolveResult:
-    """Solve ``K x = rhs`` with the plan-§2.3 three-route auto-policy.
+    """Solve ``K x = rhs`` with the selected solver policy.
 
     Policy (``method="auto"``):
 
