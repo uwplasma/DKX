@@ -4,23 +4,23 @@
 
 Phase 1 step 2 and item Q9 of the #230 handoff. Two NCSX resolution checks were blocked on memory: theta25 was gated at "56.1 GiB available", and the baseline adjoint campaign at 42 GiB. With #231, #233 and single-threaded BLAS, those grids should fit in 20 GiB. Three things are tested:
 
-- The refinement ladder and the four baseline adjoints run on one shared office CPU host, with unchanged physics and tolerances.
+- The refinement ladder and the four baseline adjoints run on one shared CPU host, with unchanged physics and tolerances.
 - The code changes reproduce the archived moments to rounding.
 - The ladder yields per-axis error bars, or states which axes are not yet in the asymptotic range.
 
-Owner: independent review. Budget: one afternoon of office CPU.
+Owner: independent review. Budget: one afternoon of CPU time.
 
 ## Admission test
 
 **Setup.**
-- Deck: NCSX single-species, full Fokker–Planck with full-trajectory `E_r` (the Phase 1 baseline; `ncsx_baseline.namelist`). Only the resolution is changed.
+- Deck: NCSX single-species, full Fokker–Planck with full-trajectory `E_r` (the historical baseline reconstructed below). Only the resolution is changed.
 - Code: DKX `main` `2b7641d`, SOLVAX 0.21.0 (PyPI), JAX 0.10.2, x64.
-- Host: office Xeon W-2295, cores 8–11. Environment `DKX_CORES=4` with `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS` and `MKL_NUM_THREADS` all set to 1. One fresh process per point.
+- Host: Xeon W-2295, cores 8–11. Environment `DKX_CORES=4` with `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS` and `MKL_NUM_THREADS` all set to 1. One fresh process per point.
 - Watchdog: stops a point above 30 GiB RSS, below 8 GiB host-available, or at the time cap.
 
 **Acceptance per point.** Original relative residual ≤ 1e-10, with the complete state returned by the Krylov route.
 
-**Reproduction.** Points that also exist in the archived campaign (`dkx-phase1-completion/qualification-summary.json`) must agree with it to ≤ 1e-12 relative.
+**Reproduction.** Points repeated from the earlier campaign must agree to ≤ 1e-12 relative. The public input reconstruction below identifies the case; the historical raw campaign is not bundled.
 
 **Error bars.**
 - Discretization: `dkx.workflows.converge.richardson_uncertainty` (fine-grid GCI; it refuses non-monotone ladders).
@@ -100,11 +100,11 @@ Both points converged, with original residuals of 9.6e-11 and 5.9e-11.
 | particle flux | 30 / 37 | 7.6e-11 / 4.7e-13 | −8.407e-17 | −1.6e-10 |
 | heat flux | 28 / 34 | 9.7e-11 / 8.9e-13 | −8.362e-17 | −4.5e-11 |
 
-- **Acceptance.** All eight audits pass their original primal and transpose residual gates.
-- **Stability.** Tightening the adjoint from 1e-10 to 1e-12 changes each correction by less than 3e-11 of itself. The flow adjoint at 1e-12 stopped at its restart cap with residual 6.4e-12; that residual passes the audit and gives the same estimate.
+- **Requested-tolerance acceptance.** The flow transpose at a requested `1e-12` reached `6.4e-12`, so it did not meet that request. Its stable correction is diagnostic evidence, not an admitted `1e-12` solve. The listed `1e-10` transposes and the tighter particle/heat-flux transposes meet their requests.
+- **Stability.** Tightening the adjoint from 1e-10 to 1e-12 changes each correction by less than 3e-11 of itself. The flow adjoint at 1e-12 stopped at its restart cap with residual 6.4e-12; the estimate remained stable despite missing the requested tolerance.
 - **Interpretation.** These are estimates, not bounds. The algebraic error of every reported moment is about 1e-10 relative: eight orders of magnitude below the discretization differences above.
 
-Scripts, records and logs are kept outside Git in `dkx-review-evidence-20260913/q9/` (`q9_ladder.py`, `q9_adjoints.py`, `run_ladder.sh`, `run_ladder2.sh`, `run_speed_rungs.sh`, `run_adjoints.sh`, `speed_ladder_analysis.py`, `*.json`, `run.log`, `run_speed.log`).
+Raw states and historical logs remain outside Git. The public reconstruction below permits independent reruns; it does not recreate unavailable timing logs.
 
 ## Decision
 
@@ -119,9 +119,225 @@ Continue Phase 1 at a revised reporting grid, and record three follow-ups.
 | θ | ≲ 7e-4 | — |
 | x | oscillates ≲ 4e-4 | −0.135% (the baseline understates \|flow\|), even-ladder GCI 1.6e-3 |
 
-**Reporting grid.** For the positioning figure use at least `Nxi = 101` and `Nzeta = 49` for the fluxes, and `Nx ≥ 11` for the flow. Each of these rungs fits in ≤ 17 GiB and runs in ≤ 4 min on four cores.
+**Reporting grid.** For the positioning figure use at least `Nxi = 101` and `Nzeta = 49` for the fluxes, and `Nx ≥ 11` for the flow. Those bounds describe separate historical rungs, not a grid combining all refinements. A combined reporting grid and its joint refinement need fresh memory admission.
 
 **Follow-ups:**
 1. Done in #239. `richardson_uncertainty` reports monotone ladders faster than `max_order` with `max(safety, 3)` times the last difference, instead of refusing them.
-2. Diagnosed in #240 (`2026-09-14-ntheta-iteration-growth.md`). The growth in iterations with `Ntheta` comes from the Fokker–Planck speed coupling the coarse preconditioner drops.
+2. The coupling attribution proposed in #240 is historical. Later exact-retention and balancing experiments did not support it as a successful remedy; follow the bounded diagnostic in `plan.md` instead.
 3. Repeat the ladder on a two-species deck and on the collaborator's HSX-like deck at its resonant `E_*`, where the SFINCS manual expects the speed resolution to matter most.
+
+
+## Installed-candidate replay (2026-09-21)
+
+The installed DKX 2.5.0 candidate from public source
+[`a48c94e5`](https://github.com/uwplasma/dkx/commit/a48c94e5cec0b5425e0c3a503defc80935dd5fe7)
+replayed only the baseline and pitch81 pair. The installed wheel's SHA256 was
+`96c6ad67731c11e6f1fea2a69c81f6aed2c1e0fd5fdf078629f6046407d75908`.
+Runtime: Xeon W-2295 CPU, four CPUs, single-threaded BLAS, Python 3.11.15,
+JAX/jaxlib 0.10.2 with x64 enabled, and SOLVAX 0.24.0.
+The reconstructed baseline input SHA256 was
+`78dc5d545409cec765bebb0a7a02f43e897070a7a415fdc372d0a92ac6a340a9`.
+Physics and solver tolerance `1e-10` were unchanged.
+
+| Quantity | Baseline (21, 37, 61, 8) | Pitch81 (21, 37, 81, 8) | Signed change / absolute baseline |
+| --- | ---: | ---: | ---: |
+| Complete-state original relative L2 residual | 8.539365599620979e-11 | 9.504394422102867e-11 | — |
+| `FSABFlow` = `FSABjHat` | -0.06860781541031573 | -0.06860203463881590 | +0.008426% |
+| `particleFlux_vm_psiHat` | 5.198212888227198e-7 | 5.161234890990345e-7 | -0.711360% |
+| `heatFlux_vm_psiHat` | 1.857282155175711e-6 | 1.843674992420304e-6 | -0.732638% |
+
+Both points passed the original-equation gate. Total wall time was 91.60 s;
+the pitch refinement recorded 49.40 s. Peak RSS was 11,024,564 KiB (10.51 GiB)
+from GNU time; the sampled sum over the run's processes peaked at 10.52 GiB.
+The runner uses one process for both points, so baseline-only wall time and
+separate per-point RSS were not recorded.
+
+After reconstructing the inputs below, the replay command is:
+
+```bash
+JAX_PLATFORMS=cpu JAX_ENABLE_X64=1 DKX_CORES=4 \
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+DKX_TIER2_MEMORY_GUARD=on DKX_COARSE_FACTOR_DTYPE=float64 \
+/usr/bin/time -v timeout --signal=TERM --kill-after=30s 20m \
+python -m dkx converge baseline.input.namelist --cores 4 \
+  --axes pitch --factor 1.3278688524590163 --no-joint \
+  --tolerance 0.01 --format json > report.json 2> run.log
+```
+
+The CLI tolerance is the 1% observable-change criterion, not the solver
+tolerance. External monitoring required at least 32 GiB host-available memory
+at admission, and imposed 20 GiB summed run RSS, 12 GiB minimum host-available
+memory, and a 20-minute wall limit, targeting only the run's process groups.
+Start availability was 47.65 GiB; the monitored minimum was 34.15 GiB.
+The initial group monitor omitted the child group created by `timeout`;
+session-wide monitoring corrected that omission during execution. No limit
+violation was observed, and the command exited successfully. The command
+above includes the wall limit and DKX's route admission guard; it does not
+implement the external RSS/host-memory watchdog.
+
+This is an accepted partial replay with pairwise changes below 1%. It does
+not rerun the historical ladder or adjoints, establish joint convergence,
+or supply a three-grid uncertainty estimate. The combined reporting grid,
+joint refinement, and revised-grid uncertainty/adjoint evidence remain pending.
+
+### Reporting-grid attempt: time limit
+
+One subsequent `(33,49,101,11)` attempt used the same installed candidate,
+wheel, runtime and unchanged physics/tolerance above. The reporting input
+SHA256 was `edde8b27a69c81d0d02af9e19e716bb333f77caccec254890ecad601e3b0c8c2`.
+The guard selected reusable float64 Schur factors: 21.650 GiB factor storage,
+27.063 GiB with the route's resident multiplier, versus 94.149 GiB for dense
+bands with their multiplier. These estimates do not bound whole-process RSS.
+
+| Outcome | Wall at watchdog stop | Peak sampled run RSS | Minimum sampled host available |
+| --- | ---: | ---: | ---: |
+| Time limit; no accepted result | 1200.23 s | 26.94 GiB | 17.25 GiB |
+
+Admission required 44 GiB available and observed 44.49 GiB. An external
+watchdog sampled all processes in the created session before releasing the
+solver, including the child process group created by `timeout`, at roughly
+0.5-second intervals (maximum observed interval 0.573 s). Limits were 40 GiB
+summed RSS, 12 GiB host reserve and 20 minutes wall time. Only owned session
+groups were targeted at the deadline; no memory-limit violation was observed, and no
+session members remained afterward. No restart or larger joint run followed.
+
+The exact public command, under that external watchdog, was:
+
+```bash
+JAX_PLATFORMS=cpu JAX_ENABLE_X64=1 DKX_CORES=4 \
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+DKX_TIER2_MEMORY_GUARD=on DKX_COARSE_FACTOR_DTYPE=float64 \
+/usr/bin/time -v timeout --signal=TERM --kill-after=2s 20m \
+python -m dkx write-output --input input.namelist \
+  --out reporting.h5 --solver-trace reporting.json --cores 4 \
+  --no-overwrite > reporting.log 2>&1
+```
+
+The command alone does not implement the external RSS/reserve watchdog.
+Neither the requested HDF5 result nor the solver-trace JSON was produced;
+no normalized original residual, complete returned state or moments were
+available. The log confirms route selection but does not separate assembly,
+preconditioner build and solve time; GNU time's final summary was also absent
+after session termination. This is a time-limit outcome, not evidence of
+numerical nonconvergence. Phase timing is required before another large
+attempt; combined-grid acceptance and uncertainty remain unestablished.
+
+### Instrumented reporting-grid attempt (2026-09-21)
+
+The same input hash and resource limits were replayed with the isolated wheel
+from [a8530d56](https://github.com/uwplasma/DKX/commit/a8530d5655a7051dfa199be6c1841d663fe66ed6),
+including [phase reporting #272](https://github.com/uwplasma/DKX/pull/272).
+The wheel is 620,712 bytes, SHA-256
+`0e65a33bdfef6eaadcf4b444513c5fd2bae92a7c4a21f240b19c1943a5650fa1`;
+its 2.5.0 metadata identifies an unreleased candidate, not the released wheel.
+Python 3.11.15, JAX 0.10.2, NumPy 2.4.6, SciPy 1.17.1 and SOLVAX 0.24.0
+were used. The live process's isolated import environment and SOLVAX version
+were checked. CPU/thread settings remained as above. Add
+`DKX_PROFILE=1 JAX_LOG_COMPILES=1 JAX_ENABLE_COMPILATION_CACHE=false` to the
+single-solve command above; persistent compilation caching was disabled.
+
+| Recorded phase | Wall time | Completed XLA compile records / summed reported duration |
+| --- | ---: | ---: |
+| Operator construction | 0.964 s | 27 / 0.375 s |
+| Preconditioner construction | 384.462 s | 373 / 14.757 s |
+| Krylov compilation and execution | started, no completion | 79 / 4.824 s |
+
+Compile records are assigned only between matching start/completion markers
+(or the unfinished Krylov interval). Another 50 records totaling 1.085 s fall
+outside those intervals. These sums are log-event durations, not disjoint
+wall-time attribution; do not subtract them from phase times. The large Krylov
+`while` compilation completed in 1.596 s. A further 28.548 s elapsed between
+preconditioner completion and the Krylov start marker and remains unattributed.
+
+The selected route retained about 21.7 GiB of float64 Schur LU factors through
+`block_thomas_factor_fn(store_offdiagonals=False)`. It regenerated off-diagonal
+blocks during substitution without refactorization; it was neither the stored
+dense-band route nor the one-shot checkpointed route. The watchdog stopped the
+run at 1,200.296 s. Sampled session peak RSS was 27.06 GiB and minimum host
+available memory 18.79 GiB. All owned processes terminated. No completed HDF5
+state, solver-trace JSON, final residual or observables were produced.
+
+The result remains a time-budget refusal, not numerical nonconvergence.
+Compilation alone does not explain the observed cost. Next isolate factor
+construction, border preparation and substitution work. In particular, check
+whether the generated-factor route can omit the same inactive, uncoupled pitch
+rows already omitted by the dense route, preserving the original pins, scaled
+identity tails, primal and transpose actions. Require equivalence and measured
+storage/runtime evidence before promoting that change or repeating a large run.
+
+## Public reconstruction and next refinement
+
+The exact equilibrium and source input are in
+[yancc commit `33e1ce9`](https://github.com/f0uriest/yancc/tree/33e1ce9b208f6d3209fdb55aeba8712e6d6a4223),
+under its [MIT license](https://github.com/f0uriest/yancc/blob/33e1ce9b208f6d3209fdb55aeba8712e6d6a4223/LICENSE).
+This preparation downloads them into the current directory, verifies both
+upstream files, and reconstructs the historical baseline before changing only
+its grid. Run it in an empty directory outside the repository. It runs no solver.
+
+```python
+from hashlib import sha256
+from pathlib import Path
+import re
+from urllib.request import urlopen
+
+base = "https://raw.githubusercontent.com/f0uriest/yancc/33e1ce9b208f6d3209fdb55aeba8712e6d6a4223/"
+source = ("publications/conlin2026/20251212-01-sfincs_for_yancc_benchmarks/"
+          "20251212-01-030_collisionality_scan/10/input.namelist")
+
+def download(path, expected):
+    with urlopen(base + path, timeout=60) as response:
+        data = response.read()
+    assert sha256(data).hexdigest() == expected, path
+    return data
+
+equilibrium = download("tests/data/wout_NCSX.nc",
+    "78e60753b960e1e50c5e320e06e7485bd573d37c72dec97dbc4de39c1f182f02")
+text = download(source,
+    "4c50a95d0cb079ec5679a9c1351a47af20c48c304db3b603c4e0b64a708dd2fe").decode()
+
+def set_value(text, key, value):
+    text, count = re.subn(rf"(?im)^(\s*{key}\s*=\s*).+$",
+                          lambda match: match[1] + str(value), text)
+    assert count == 1, key
+    return text
+
+for key, value in dict(equilibriumFile='"equilibrium.nc"', Ntheta=21,
+                       Nzeta=37, Nxi=61, Nx=8, solverTolerance="1d-10").items():
+    text = set_value(text, key, value)
+assert sha256(text.encode()).hexdigest() == "78dc5d545409cec765bebb0a7a02f43e897070a7a415fdc372d0a92ac6a340a9"
+Path("baseline.input.namelist").write_text(text)
+for key, value in dict(Ntheta=33, Nzeta=49, Nxi=101, Nx=11).items():
+    text = set_value(text, key, value)
+assert sha256(text.encode()).hexdigest() == "edde8b27a69c81d0d02af9e19e716bb333f77caccec254890ecad601e3b0c8c2"
+Path("equilibrium.nc").write_bytes(equilibrium)
+Path("input.namelist").write_text(text)
+```
+
+After checking available memory and reserving the machine, the existing runner
+can attempt this next study with an installed, pinned DKX version:
+
+```bash
+JAX_PLATFORMS=cpu JAX_ENABLE_X64=1 DKX_CORES=4 \
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+python -m dkx converge input.namelist --cores 4 \
+  --axes theta zeta pitch speed --factor 1.1 --tolerance 0.01 \
+  --format json > report.json 2> run.log
+```
+
+The reporting grid is `(33,49,101,11)`; separate refinements reach theta 37,
+zeta 55, pitch 111 and speed 12; the joint grid is `(37,55,111,12)`.
+Both reporting-grid attempts stopped at the time limit above;
+the separate refinements and larger joint have **not** been run in this update.
+Current route estimates
+require about 27 GiB available for reusable factors at the reporting grid and
+52 GiB at the joint grid, excluding additional reservation headroom. Retaining
+the historical dense route instead requires roughly 179 GiB available at the
+joint grid. These are admission estimates, not measured peak RSS or guarantees.
+A route change must be recorded and timed afresh.
+
+Require complete states and original relative residuals at most `1e-10` for
+every RHS, and finite signed flow, bootstrap current, particle flux and heat
+flux. The separate and joint observable changes must meet the application
+budget. One refinement per axis measures change; it does not supply a
+three-grid uncertainty estimate or the revised-grid observable adjoints.
+Those remain required before claiming the plan's 1% uncertainty milestone.

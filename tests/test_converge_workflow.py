@@ -30,9 +30,12 @@ class FakeCase:
 
 
 class FakeResult:
-    def __init__(self, arrays):
+    def __init__(self, arrays, *, typed_residuals=True):
         self.arrays = arrays
         self.metadata = {"converged": True}
+        if typed_residuals:
+            self.metadata.update(original_residuals=[1e-10],
+                                 original_residual_norm="relative_l2")
 
 
 def study(monkeypatch, response, *, case=None, **kwargs):
@@ -115,6 +118,9 @@ def test_a_solution_independent_of_resolution_is_converged(monkeypatch) -> None:
     report, calls = study(monkeypatch, lambda r: 3.0)
     assert report.per_axis_worst == 0.0
     assert report.converged
+    np.testing.assert_array_equal(report.baseline_observables["particle_flux_m2_s"], [3.0])
+    assert report.baseline_original_residuals == (1e-10,)
+    assert report.refinements[0].observables["particle_flux_m2_s"].tolist() == [3.0]
 
 
 def test_a_single_unconverged_axis_fails_the_whole_study(monkeypatch) -> None:
@@ -206,6 +212,48 @@ def test_the_cli_axis_list_matches_the_workflow(monkeypatch) -> None:
 
     assert cli._CONVERGE_AXES == cv.AXES
 
+
+def test_cli_json_contains_raw_values_and_typed_residual_evidence(monkeypatch, capsys):
+    import json
+    from types import SimpleNamespace
+
+    from dkx import cli
+
+    rung = cv.AxisRefinement(
+        "theta", {"theta": 15, "zeta": 4, "pitch": 10, "speed": 10},
+        {"particle_flux_m2_s": float("inf")}, 0.2,
+        observables={"particle_flux_m2_s": np.array([1.01]),
+                     "FSABjHat": np.asarray(np.nan)},
+        original_residuals=(2e-11,), original_residual_norm="relative_l2",
+        status="refused", refusal="observable shapes changed across the refinement",
+    )
+    report = cv.ConvergenceReport(
+        {"theta": 10, "zeta": 4, "pitch": 10, "speed": 10},
+        (rung,), None, 0.02,
+        baseline_observables={"particle_flux_m2_s": np.array([1.0]),
+                              "FSABjHat": np.asarray(4.0)},
+        baseline_original_residuals=(1e-11,),
+        baseline_original_residual_norm="relative_l2",
+    )
+    monkeypatch.setattr(cv, "converge_sfincs_input", lambda *args, **kwargs: report)
+    code = cli._cmd_converge(SimpleNamespace(
+        case="input.namelist", axes=["theta"], factor=1.5, tolerance=0.02,
+        no_joint=True, quiet=True, format="json",
+    ))
+    def reject_nonstandard_number(value):
+        raise AssertionError(f"nonstandard JSON number: {value}")
+
+    payload = json.loads(capsys.readouterr().out, parse_constant=reject_nonstandard_number)
+    assert code == 1
+    assert payload["baseline_evidence"]["observables"]["particle_flux_m2_s"] == [1.0]
+    assert payload["baseline_evidence"]["observables"]["FSABjHat"] == 4.0
+    assert payload["refinements"][0]["observables"]["particle_flux_m2_s"] == [1.01]
+    assert payload["refinements"][0]["observables"]["FSABjHat"] is None
+    assert payload["refinements"][0]["original_residuals"] == [2e-11]
+    assert payload["refinements"][0]["original_residual_norm"] == "relative_l2"
+    assert payload["refinements"][0]["changes"]["particle_flux_m2_s"] is None
+    assert payload["refinements"][0]["worst"] is None
+
 @pytest.mark.parametrize('ref, got', [
     ([1., -1.], [-1., 1.]),
     ([[1., 2.], [3., 4.]], [[4., 3.], [2., 1.]]),
@@ -222,6 +270,7 @@ def test_invalid_or_misaligned_observables_cannot_pass(monkeypatch, got):
     report, _ = study(monkeypatch, lambda r: [1., 2.] if r.theta == 10 else got,
                       axes=('theta',))
     assert not report.converged
+    assert report.refinements[0].status == "refused"
 
 
 def test_no_refinable_axes_does_not_certify_resolution(monkeypatch):
@@ -237,7 +286,44 @@ def test_a_failed_solve_cannot_certify_resolution(monkeypatch):
     result.metadata["converged"] = False
     monkeypatch.setattr("dkx.execution.run_case", lambda case: result)
     with pytest.raises(ValueError, match="failed solve"):
-        cv.converge_case(FakeCase(FakeResolution(10, 4, 10, 10)))
+        cv.converge_case(FakeCase(FakeResolution(10, 4, 10, 10)),
+                         observables=("particle_flux_m2_s",))
+
+
+def test_failed_and_exception_rungs_are_retained_and_do_not_stop_later_runs(monkeypatch):
+    calls = []
+
+    def fake_run(case, **_):
+        calls.append(case.resolution)
+        if case.resolution.pitch > 10 and case.resolution.theta == 10:
+            raise RuntimeError("pitch solver stopped")
+        result = FakeResult({"particle_flux_m2_s": np.ones(1)})
+        if case.resolution.theta > 10 and case.resolution.pitch == 10:
+            result.metadata["converged"] = False
+        return result
+
+    monkeypatch.setattr("dkx.execution.run_case", fake_run)
+    report = cv.converge_case(
+        FakeCase(FakeResolution(10, 4, 10, 10)),
+        observables=("particle_flux_m2_s",),
+    )
+    assert [r.status for r in report.refinements] == ["failed", "accepted", "failed", "accepted"]
+    assert "RuntimeError: pitch solver stopped" in report.refinements[2].refusal
+    assert report.joint is not None
+    assert len(calls) == 6
+    assert not report.converged
+
+
+def test_native_aggregate_residual_is_not_relabelled_as_original_evidence(monkeypatch):
+    result = FakeResult({"particle_flux_m2_s": np.ones(1)}, typed_residuals=False)
+    result.metadata["residual_norm"] = 2e-12
+    monkeypatch.setattr("dkx.execution.run_case", lambda case, **_: result)
+    report = cv.converge_case(
+        FakeCase(FakeResolution(10, 4, 10, 10)), axes=("theta",),
+        observables=("particle_flux_m2_s",),
+    )
+    assert report.baseline_original_residuals is None
+    assert report.baseline_original_residual_norm is None
 
 
 @pytest.mark.parametrize("tolerance", [0., -1., np.inf, np.nan])
@@ -300,6 +386,7 @@ def test_namelist_refinement_preserves_physics_and_checks_each_rhs(monkeypatch, 
             operator=SimpleNamespace(rhs=lambda i: np.ones(2), apply=lambda x: x),
             solve_result=SimpleNamespace(converged=True), state_vector=states[0],
             state_vectors=states, moments={'FSABFlow': np.array([-2.]),
+                'FSABjHat': np.array([5.]),
                 'particleFlux_vm_psiHat': np.array([3.]), 'heatFlux_vm_psiHat': np.array([4.])},
             transport_matrix=np.eye(mode),
         )
@@ -311,6 +398,11 @@ def test_namelist_refinement_preserves_physics_and_checks_each_rhs(monkeypatch, 
     assert calls[0].resolution == inp.resolution
     assert calls[1].resolution.n_theta == report.refinements[0].resolution["theta"] == 7
     assert calls[1].resolution.n_xi == inp.resolution.n_xi
+    assert set(report.baseline_observables) == ({
+        "FSABFlow", "FSABjHat", "particleFlux_vm_psiHat", "heatFlux_vm_psiHat"
+    } if mode == 1 else {"transport_matrix"})
+    assert report.baseline_original_residual_norm == "relative_l2"
+    assert len(report.baseline_original_residuals) == mode
     invalid = True
     with pytest.raises(ValueError, match='failed solve'):
         cv.converge_sfincs_input(inp, axes=('theta',))
@@ -553,6 +645,27 @@ def test_without_the_third_rung_no_uncertainty_is_claimed(monkeypatch) -> None:
     report, _ = study(monkeypatch, lambda r: 1.0 + 1.0 / r.theta)
     assert all(r.uncertainties is None for r in report.refinements)
     assert np.isnan(report.worst_grid_uncertainty)
+
+
+def test_a_failed_third_rung_is_evidence_and_cannot_report_converged(monkeypatch) -> None:
+    calls = []
+
+    def fake_run(case, **_):
+        calls.append(case.resolution)
+        if case.resolution.theta == 22:
+            raise RuntimeError("fine rung stopped")
+        return FakeResult({"particle_flux_m2_s": np.ones(1)})
+
+    monkeypatch.setattr("dkx.execution.run_case", fake_run)
+    report = cv.converge_case(
+        FakeCase(FakeResolution(10, 4, 10, 10)), axes=("theta",), joint=False,
+        richardson=True, observables=("particle_flux_m2_s",),
+    )
+    theta = report.refinements[0]
+    assert theta.third_rung is not None and theta.third_rung.status == "failed"
+    assert theta.worst == 0.0
+    assert report.worst_grid_uncertainty == float("inf")
+    assert not report.converged
 
 
 def test_a_refused_ladder_makes_the_reported_uncertainty_infinite(monkeypatch) -> None:
