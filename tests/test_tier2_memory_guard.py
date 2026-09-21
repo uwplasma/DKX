@@ -234,9 +234,9 @@ def test_the_warning_states_the_size_and_the_cost(monkeypatch):
     message = _coarse_generated_fallback_message(op)
     assert f"{op.n_theta}x{op.n_zeta}" in message  # the size that did not fit
     assert "block_thomas_checkpointed_fn" in message  # what runs instead
-    assert "It completes; it is not fast." in message  # what to expect of it
+    assert "repeats the elimination" in message  # cost of checkpointed recomputation
     assert "reduce Ntheta/Nzeta or Nxi" in message  # how to get the fast route back
-    assert "DKX_TIER2_MEMORY_GUARD=off" in message
+    assert "GiB" in message
 
 
 def test_the_reusable_warning_says_what_it_keeps_and_what_it_costs(monkeypatch):
@@ -253,25 +253,18 @@ def test_the_reusable_warning_says_what_it_keeps_and_what_it_costs(monkeypatch):
     assert "store_offdiagonals=False" in message  # what runs instead
     assert "reused across Krylov applications" in message  # why it is preferred
     assert "It completes; it is not fast." not in message  # not the one-shot claim
-    assert "DKX_COARSE_FACTOR_DTYPE=float32" in message  # how to shrink it further
+    assert "independent residual and observable checks" in message
 
 
 @pytest.mark.parametrize(
     "message_fn", [_coarse_generated_fallback_message, _coarse_reusable_fallback_message]
 )
-def test_no_fallback_warning_recommends_a_route_that_also_fails(message_fn, monkeypatch):
-    """Regression guard on the correction the message already carries.
-
-    An early version of this message told users to switch to
-    ``preconditioner='sparse'``; the experiment that followed found it rescues
-    none of the five decks — killed on three, timed out on two.  Neither the
-    generated fallback nor the reusable-factor route changed that measurement,
-    so re-adding the recommendation without new measurement should still fail
-    here — on both messages, since they now share the paragraph.
-    """
-    monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
+def test_fallback_estimates_do_not_guarantee_completion(message_fn, monkeypatch):
     monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: 1.0)
-    assert "'sparse' stores far less but was measured killed" in message_fn(_small_op())
+    message = message_fn(_small_op())
+    assert "full process RSS" in message
+    assert "convergence and runtime are not guaranteed" in message
+    assert "DKX_TIER2_MEMORY_GUARD=off" not in message
 
 
 def test_the_oversized_deck_builds_and_warns(monkeypatch):
@@ -610,7 +603,7 @@ def test_the_fallback_names_float32_when_that_keeps_reusable_factors(monkeypatch
     monkeypatch.setenv("DKX_COARSE_FACTOR_DTYPE", "float64")
     message = coarse_precond._coarse_generated_fallback_message(op)
     assert message.startswith("DKX_COARSE_FACTOR_DTYPE=float32")
-    assert "thrashed for six hours" in message
+    assert "not a generally qualified precision change" in message
 
 
 def test_the_float32_hint_is_absent_when_float32_would_not_help_either(monkeypatch):
