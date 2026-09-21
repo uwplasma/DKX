@@ -34,7 +34,7 @@ def test_timer_uses_perf_counter_delta(monkeypatch) -> None:
     assert timer.elapsed_s() == 0.75
 
 
-def test_rss_helpers_cover_resource_fallback_and_missing_resource(monkeypatch) -> None:
+def test_rss_helpers_distinguish_unavailable_current_from_peak(monkeypatch) -> None:
     def raise_psutil() -> None:
         raise RuntimeError("psutil unavailable")
 
@@ -46,8 +46,12 @@ def test_rss_helpers_cover_resource_fallback_and_missing_resource(monkeypatch) -
     monkeypatch.setitem(sys.modules, "resource", fake_resource)
     monkeypatch.setattr(profiling.sys, "platform", "linux")
 
-    assert _rss_mb() == 2.0
+    assert _rss_mb() is None
     assert _peak_rss_mb() == 2.0
+    monkeypatch.setitem(sys.modules, "psutil", SimpleNamespace(
+        Process=lambda: SimpleNamespace(memory_info=lambda: SimpleNamespace(rss=2 * 1024**2))))
+    assert _rss_mb() == _peak_rss_mb() == 2.0
+    monkeypatch.setitem(sys.modules, "psutil", SimpleNamespace(Process=raise_psutil))
 
     fake_broken_resource = SimpleNamespace(
         RUSAGE_SELF=0,
@@ -64,7 +68,7 @@ def test_device_memory_uses_first_numeric_jax_stat(monkeypatch) -> None:
             SimpleNamespace(
                 memory_stats=lambda: {
                     "bytes_in_use": "not-a-number",
-                    "bytes_active": 5_000_000,
+                    "bytes_active": 5 * 1024**2,
                 }
             )
         ]
@@ -73,8 +77,9 @@ def test_device_memory_uses_first_numeric_jax_stat(monkeypatch) -> None:
 
     assert _device_mem_mb() == 5.0
 
-    fake_empty_jax = SimpleNamespace(devices=lambda: [SimpleNamespace(memory_stats=lambda: {})])
-    monkeypatch.setitem(sys.modules, "jax", fake_empty_jax)
+    capacity_and_peak = {"bytes_limit": 99_000_000, "peak_bytes_in_use": 8_000_000}
+    monkeypatch.setitem(sys.modules, "jax", SimpleNamespace(
+        devices=lambda: [SimpleNamespace(memory_stats=lambda: capacity_and_peak)]))
     assert _device_mem_mb() is None
 
     fake_broken_jax = SimpleNamespace(devices=lambda: (_ for _ in ()).throw(RuntimeError("no device")))
@@ -145,6 +150,7 @@ def test_simple_profiler_mark_records_phase_memory_and_emits(monkeypatch) -> Non
     assert len(profiler.entries) == 1
     entry = profiler.entries[0]
     assert entry["label"] == "operator_build"
+    assert entry["memory_unit"] == "MiB"
     assert entry["dt_s"] == 0.75
     assert entry["total_s"] == 1.25
     assert entry["rss_mb"] == 130.0
@@ -158,3 +164,4 @@ def test_simple_profiler_mark_records_phase_memory_and_emits(monkeypatch) -> Non
     assert "profiling: operator_build" in line
     assert "dt_s=0.750" in line
     assert "device_mb=42.0" in line
+    assert "memory_unit=MiB" in line
