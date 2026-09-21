@@ -696,7 +696,7 @@ def solve_native_ambipolar_surface(
         if isinstance(problem.operator, KineticOperator):
             tail_containers = operator_containers(problem.operator)[:3]
 
-    def physical_outputs(batch):
+    def physical_outputs(batch, count):
         particle = (
             np.asarray(batch.moments["particleFlux_vm_psiHat"], dtype=np.float64)
             * float(radial_factor)
@@ -726,9 +726,17 @@ def solve_native_ambipolar_surface(
             * PARTICLE_FLUX
             * ELEMENTARY_CHARGE
         )
-        residuals = (
-            np.asarray(batch.residual_norms, dtype=np.float64).reshape((-1,)).copy()
-        )
+        residuals = np.array(batch.residual_norms, dtype=np.float64)
+        accepted = np.array(getattr(batch, "algebraic_converged", None))
+        if (residuals.shape != (count,) or accepted.shape != (count,)
+                or accepted.dtype != bool):
+            raise RuntimeError("native ambipolar scan produced invalid batch acceptance evidence")
+        if not np.all(np.isfinite(residuals)):
+            raise RuntimeError("native ambipolar scan produced a non-finite residual")
+        if np.any(residuals < 0.0):
+            raise RuntimeError("native ambipolar scan produced a negative original residual")
+        # The batch verdict also checks the state and underflow-safe exactness.
+        # A small residual norm cannot replace it, including after recovery.
         legendre_tail = None
         legendre_tail_upper_bound = getattr(
             batch, "legendre_tail_relative_l2_upper_bound", None
@@ -764,6 +772,7 @@ def solve_native_ambipolar_surface(
             parallel,
             radial_current,
             residuals,
+            accepted,
             legendre_tail,
             legendre_tail_upper_bound,
         )
@@ -789,17 +798,10 @@ def solve_native_ambipolar_surface(
                 parallel,
                 radial_current,
                 residuals,
+                accepted,
                 legendre_tail,
                 legendre_tail_upper_bound,
-            ) = physical_outputs(batch)
-            if not np.all(np.isfinite(residuals)):
-                raise RuntimeError(
-                    "native ambipolar scan produced a non-finite residual"
-                )
-            if np.any(residuals < 0.0):
-                raise RuntimeError(
-                    "native ambipolar scan produced a negative original residual"
-                )
+            ) = physical_outputs(batch, len(missing))
             requested_method = (
                 str(getattr(batch, "method", solve_method)).strip().lower()
             )
@@ -812,7 +814,7 @@ def solve_native_ambipolar_surface(
             # potentially large batched states before a targeted recovery so
             # the fallback does not overlap the primary solve's residency.
             del batch
-            targets: np.ndarray | None = None
+            targets = np.full(len(missing), np.inf)
             rhs_norms: np.ndarray | None = None
             if hasattr(problem, "operator"):
                 from dkx.er import operator_at_er
@@ -837,18 +839,15 @@ def solve_native_ambipolar_surface(
                         "native ambipolar scan produced an invalid original RHS norm"
                     )
                 targets = float(solve_tolerance) * rhs_norms
-                failed = np.flatnonzero(residuals > targets)
-            else:
-                failed = np.asarray([], dtype=np.int64)
+            accepted &= residuals <= targets
+            failed = np.flatnonzero(~accepted)
             attempts: list[list[SolverAttempt]] = [
                 [
                     SolverAttempt(
                         requested_method=requested_method,
                         executed_method=executed_method,
                         residual_norm=float(residuals[index]),
-                        accepted=(
-                            targets is None or residuals[index] <= targets[index]
-                        ),
+                        accepted=bool(accepted[index]),
                         reason="primary_batch",
                     )
                 ]
@@ -874,17 +873,14 @@ def solve_native_ambipolar_surface(
                         retry_parallel,
                         retry_current,
                         retry_residuals,
+                        retry_accepted,
                         retry_legendre_tail,
                         retry_legendre_tail_upper_bound,
-                    ) = physical_outputs(retry)
+                    ) = physical_outputs(retry, 1)
                     retry_residual = float(retry_residuals[0])
-                    if not np.isfinite(retry_residual):
-                        raise RuntimeError(
-                            "native ambipolar Krylov recovery produced a non-finite "
-                            f"residual at electric_field={missing[index]:.8g} kV/m"
-                        )
-                    assert targets is not None
-                    retry_accepted = retry_residual <= targets[index]
+                    accepted[index] = (
+                        bool(retry_accepted[0]) and retry_residual <= targets[index]
+                    )
                     retry_requested_method = (
                         str(getattr(retry, "method", "gmres")).strip().lower()
                     )
@@ -899,7 +895,7 @@ def solve_native_ambipolar_surface(
                             requested_method=retry_requested_method,
                             executed_method=retry_executed_method,
                             residual_norm=retry_residual,
-                            accepted=bool(retry_accepted),
+                            accepted=bool(accepted[index]),
                             reason="automatic_true_residual_recovery",
                         )
                     )
@@ -938,14 +934,13 @@ def solve_native_ambipolar_surface(
                         legendre_tail_upper_bound[index] = np.nan
                     chunks.append(retry_n_chunks)
                     chunk_sizes.append(retry_chunk_size)
-                failed = np.flatnonzero(residuals > targets)
+                failed = np.flatnonzero(~accepted)
             if failed.size:
                 index = int(failed[0])
                 attempt_summary = ", ".join(
                     f"{attempt.executed_method}:{attempt.residual_norm:.6g}"
                     for attempt in attempts[index]
                 )
-                assert targets is not None
                 raise RuntimeError(
                     "native ambipolar solve did not converge at "
                     f"electric_field={missing[index]:.8g} kV/m: "
