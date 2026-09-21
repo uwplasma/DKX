@@ -253,6 +253,111 @@ def test_auto_restart_budget_and_current_factors(
             np.testing.assert_array_equal(calls[1]['x0'], 0.5)
 
 
+def test_tier2_profile_events_cover_build_and_outer_gcrot(monkeypatch, capsys):
+    """Completion events follow existing build and returned GCROT leaves."""
+    import importlib
+    from types import SimpleNamespace
+
+    import jax.numpy as jnp
+
+    module = importlib.import_module('dkx.solve')
+    monkeypatch.setenv('DKX_PROFILE', '1')
+    op = SimpleNamespace(total_size=4)
+    pair = (lambda x: x, lambda x: x)
+    monkeypatch.setattr(module, '_pinned_matvecs', lambda _op: pair)
+    monkeypatch.setattr(module, 'build_tier2_preconditioner', lambda *_a, **_k: pair)
+    monkeypatch.setattr(module, 'gcrot', lambda _mv, b, **_k: SimpleNamespace(
+        x=b, recycle=(b[:, None], b[:, None]), iterations=1,
+        converged=jnp.array(True), residual_norm=jnp.array(0.),
+    ))
+
+    result = module._solve_tier2(
+        op, jnp.ones((4, 1)), tol=1e-7, atol=0., x0=None, recycle=None,
+        preconditioner='coarse', drop_l_coupling_in_precond=False,
+        restart=4, recycle_dim=1, max_restarts=1, differentiable=False,
+        check_adjoint=False,
+    )
+
+    assert result.converged
+    labels = [line.split()[1] for line in capsys.readouterr().err.splitlines()]
+    assert labels == [
+        'preconditioner_build.start',
+        'preconditioner_build.complete',
+        'krylov_compile_and_execute.start',
+        'krylov_compile_and_execute.complete',
+    ]
+
+
+@pytest.mark.parametrize(
+    ('failure', 'start_label', 'complete_label'),
+    [
+        ('preconditioner', 'preconditioner_build.start', 'preconditioner_build.complete'),
+        ('gcrot', 'krylov_compile_and_execute.start', 'krylov_compile_and_execute.complete'),
+    ],
+)
+def test_tier2_profile_start_survives_phase_failure(
+    monkeypatch, capsys, failure, start_label, complete_label,
+):
+    import importlib
+    from types import SimpleNamespace
+
+    import jax.numpy as jnp
+
+    module = importlib.import_module('dkx.solve')
+    monkeypatch.setenv('DKX_PROFILE', '1')
+    monkeypatch.setattr(module, '_pinned_matvecs', lambda _op: (lambda x: x, lambda x: x))
+    target = 'build_tier2_preconditioner' if failure == 'preconditioner' else 'gcrot'
+    monkeypatch.setattr(
+        module, target,
+        lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError('failed')),
+    )
+
+    with pytest.raises(RuntimeError, match='failed'):
+        module._solve_tier2(
+            SimpleNamespace(total_size=4), jnp.ones((4, 1)), tol=1e-7,
+            atol=0., x0=None, recycle=None,
+            preconditioner='coarse' if failure == 'preconditioner' else 'none',
+            drop_l_coupling_in_precond=False, restart=4, recycle_dim=1,
+            max_restarts=1, differentiable=False, check_adjoint=False,
+        )
+
+    lines = capsys.readouterr().err.splitlines()
+    assert any(start_label in line for line in lines)
+    assert not any(complete_label in line for line in lines)
+
+
+def test_tier2_traced_execution_does_not_create_profiler(monkeypatch):
+    import importlib
+    from types import SimpleNamespace
+
+    import jax
+    import jax.numpy as jnp
+
+    module = importlib.import_module('dkx.solve')
+    pair = (lambda x: x, lambda x: x)
+    monkeypatch.setenv('DKX_PROFILE', '1')
+    monkeypatch.setattr(
+        module, 'maybe_profiler',
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError('profiler created')),
+    )
+    monkeypatch.setattr(module, '_pinned_matvecs', lambda _op: pair)
+    monkeypatch.setattr(module, 'gcrot', lambda _mv, b, **_k: SimpleNamespace(
+        x=b, recycle=(b[:, None], b[:, None]), iterations=jnp.array(1),
+        converged=jnp.array(True), residual_norm=jnp.array(0.),
+    ))
+
+    def traced(rhs):
+        return module._solve_tier2(
+            SimpleNamespace(total_size=4), rhs, tol=1e-7, atol=0., x0=None,
+            recycle=None, preconditioner='coarse',
+            drop_l_coupling_in_precond=False, restart=4, recycle_dim=1,
+            max_restarts=1, differentiable=False, check_adjoint=False,
+            prebuilt_precond=pair,
+        ).x
+
+    jax.make_jaxpr(traced)(jnp.ones((4, 1)))
+
+
 @pytest.mark.parametrize('method,differentiable,recovery', [
     ('auto', False, True), ('auto', True, False), ('gmres', False, False),
 ])
