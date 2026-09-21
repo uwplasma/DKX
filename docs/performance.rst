@@ -13,8 +13,16 @@ The design choices behind the measured numbers are collected in the
 `Performance patterns`_ section below; the equations and derivations behind them
 live in :doc:`numerics` and :doc:`differentiability`.
 
-``SimpleProfiler`` is an explicit Python helper, not automatic CLI
-instrumentation. Its new traces label memory as ``memory_unit=MiB``; their legacy
+Set ``DKX_PROFILE=1`` to emit flushed phase progress for canonical operator
+construction, recycled-Krylov preconditioner construction, and the outer Krylov
+solve across all right-hand sides and recovery windows. A ``*.start`` line
+remains in redirected stderr when a timeout interrupts that phase. The GCROT
+interval is named ``krylov_compile_and_execute`` because
+its first call traces, compiles, and executes through JAX; this lightweight
+instrumentation cannot split those costs exactly. Use ``JAX_LOG_COMPILES=1``
+for compiler logging and an external JAX trace when that distinction is needed.
+
+``SimpleProfiler`` traces label memory as ``memory_unit=MiB``; their legacy
 ``*_mb`` keys now consistently use bytes/2**20. Current RSS requires psutil;
 the OS high-water mark remains a separate metric. Device samples describe
 current usage on the first JAX device; capacity or peak-only statistics yield

@@ -72,6 +72,7 @@ from __future__ import annotations
 import functools
 import inspect
 import os
+import sys
 import time
 from dataclasses import dataclass, field, replace
 from typing import Any, Callable
@@ -132,6 +133,7 @@ from dkx.coarse_precond import (  # noqa: E402
     build_coarse_preconditioner,
 )
 from dkx.drift_kinetic import KineticOperator  # noqa: E402
+from dkx.profiling import make_emit, maybe_profiler  # noqa: E402
 
 __all__ = [
     "DirectFactors",
@@ -2444,6 +2446,7 @@ def _solve_tier2(
             "a non-recycling solve."
         )
     traced = _is_traced(rhs2d, *jax.tree_util.tree_leaves(op))
+    profiler = None if traced else maybe_profiler(emit=make_emit(stream=sys.stderr))
     t0 = time.perf_counter()
     precond = precond_t = None
     # The escalation path deliberately does NOT pass a prebuilt pair: it is
@@ -2457,6 +2460,8 @@ def _solve_tier2(
         # single largest avoidable cost in a scan.
         precond, precond_t = prebuilt_precond
     elif preconditioner != "none":
+        if profiler is not None:
+            profiler.mark("preconditioner_build.start")
         precond, precond_t = build_tier2_preconditioner(
             op, preconditioner, drop_l_coupling=drop_l_coupling_in_precond
         )
@@ -2470,6 +2475,8 @@ def _solve_tier2(
             jax.block_until_ready(
                 precond(jnp.zeros((op.total_size,), dtype=jnp.float64))
             )
+        if profiler is not None:
+            profiler.mark("preconditioner_build.complete")
     t1 = time.perf_counter()
 
     x0_2d = None
@@ -2498,6 +2505,10 @@ def _solve_tier2(
     total_iters: int | None = 0
     converged = True
     res_norms: list[jnp.ndarray] = []
+    if profiler is not None:
+        # The first GCROT call traces, compiles, and executes through JAX; this
+        # boundary deliberately does not claim those costs can be split.
+        profiler.mark("krylov_compile_and_execute.start")
     for j in range(rhs2d.shape[1]):
         b = rhs2d[:, j]
         if differentiable:
@@ -2616,12 +2627,20 @@ def _solve_tier2(
     x_stacked = jax.block_until_ready(
         jnp.stack(cols, axis=1)
     )  # real solve time, not dispatch
+    residual_norms = jnp.stack(res_norms)
+    if profiler is not None:
+        # Do not block on the result dataclass itself: synchronize only JAX
+        # leaves already produced by GCROT, after the numerical calls finish.
+        jax.block_until_ready(
+            jax.tree_util.tree_leaves((x_stacked, residual_norms, recycle))
+        )
+        profiler.mark("krylov_compile_and_execute.complete")
     t2 = time.perf_counter()
     return SolveResult(
         x=x_stacked,
         method="gcrot",
         iterations=total_iters,
-        residual_norms=jnp.stack(res_norms),
+        residual_norms=residual_norms,
         converged=converged,
         recycle=recycle,
         timings={"build": t1 - t0, "solve": t2 - t1},

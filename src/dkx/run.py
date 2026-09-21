@@ -57,6 +57,7 @@ from dkx.moments import (
     transport_moments_table,
 )
 from dkx.phase_space import Grids, make_grids
+from dkx.profiling import make_emit, maybe_profiler
 from dkx.solve import SolveResult, solve
 from dkx.variational import d11_bounds_supported, monoenergetic_d11_bounds
 from dkx.writer import (
@@ -80,6 +81,23 @@ __all__ = [
     "run_profile",
     "run_transport_matrix",
 ]
+
+
+def _profiled_operator_build(raw: RawNamelist):
+    """Build an operator with timeout-safe, opt-in phase progress."""
+
+    profiler = maybe_profiler(emit=make_emit(stream=_sys.stderr))
+    if profiler is not None:
+        profiler.mark("operator_build.start")
+    build = kinetic_operator_build_from_namelist(raw)
+    if profiler is not None:
+        # Operator construction dispatches JAX work asynchronously. Synchronize
+        # only in profiling mode so the completion event owns that work.
+        import jax  # noqa: PLC0415
+
+        jax.block_until_ready(jax.tree_util.tree_leaves(build.operator))
+        profiler.mark("operator_build.complete")
+    return build
 
 
 @dataclass(frozen=True)
@@ -341,7 +359,7 @@ def run_transport_matrix(
         )
 
     raw = _raw_with_validated_overrides(inp)
-    build = kinetic_operator_build_from_namelist(raw)
+    build = _profiled_operator_build(raw)
     op, grids = build.operator, build.grids
     geom: FluxSurfaceGeometry = build.geometry
     radial: RadialCoordinates = build.radial
@@ -608,7 +626,7 @@ def run_profile(
     if raw is None:
         raise ValueError("run_profile requires an input parsed from a namelist file.")
 
-    build = kinetic_operator_build_from_namelist(raw)
+    build = _profiled_operator_build(raw)
     op, grids = build.operator, build.grids
     geom: FluxSurfaceGeometry = build.geometry
     radial: RadialCoordinates = build.radial

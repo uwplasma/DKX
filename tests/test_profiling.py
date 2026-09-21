@@ -4,6 +4,8 @@ import io
 import sys
 from types import SimpleNamespace
 
+import pytest
+
 import dkx.profiling as profiling
 from dkx.profiling import (
     SimpleProfiler,
@@ -165,3 +167,63 @@ def test_simple_profiler_mark_records_phase_memory_and_emits(monkeypatch) -> Non
     assert "dt_s=0.750" in line
     assert "device_mb=42.0" in line
     assert "memory_unit=MiB" in line
+
+
+def test_operator_build_profiling_is_disabled_without_opt_in(monkeypatch, capsys) -> None:
+    import importlib
+
+    run_module = importlib.import_module("dkx.run")
+
+    monkeypatch.delenv("DKX_PROFILE", raising=False)
+    expected = SimpleNamespace(operator=object())
+    monkeypatch.setattr(run_module, "kinetic_operator_build_from_namelist", lambda _raw: expected)
+
+    assert run_module._profiled_operator_build(object()) is expected
+    assert capsys.readouterr().err == ""
+
+
+def test_operator_build_start_is_emitted_before_failure(monkeypatch, capsys) -> None:
+    import importlib
+
+    run_module = importlib.import_module("dkx.run")
+
+    monkeypatch.setenv("DKX_PROFILE", "1")
+
+    def fail(_raw):
+        raise RuntimeError("build failed")
+
+    monkeypatch.setattr(run_module, "kinetic_operator_build_from_namelist", fail)
+
+    with pytest.raises(RuntimeError, match="build failed"):
+        run_module._profiled_operator_build(object())
+
+    lines = capsys.readouterr().err.splitlines()
+    assert any("profiling: operator_build.start" in line for line in lines)
+    assert not any("operator_build.complete" in line for line in lines)
+
+
+def test_operator_build_emits_completion_after_synchronization(monkeypatch, capsys) -> None:
+    import importlib
+
+    import jax
+    import jax.numpy as jnp
+
+    run_module = importlib.import_module("dkx.run")
+
+    monkeypatch.setenv("DKX_PROFILE", "1")
+    expected = SimpleNamespace(operator=jnp.ones(2))
+    monkeypatch.setattr(run_module, "kinetic_operator_build_from_namelist", lambda _raw: expected)
+    synchronized = []
+
+    def block_until_ready(leaves):
+        assert "operator_build.start" in capsys.readouterr().err
+        synchronized.append(leaves)
+        return leaves
+
+    monkeypatch.setattr(jax, "block_until_ready", block_until_ready)
+
+    assert run_module._profiled_operator_build(object()) is expected
+
+    assert synchronized
+    lines = capsys.readouterr().err.splitlines()
+    assert [line.split()[1] for line in lines] == ["operator_build.complete"]
