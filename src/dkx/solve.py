@@ -40,9 +40,9 @@ Recycled Krylov — preconditioned, with subspace recycling (``solvax.krylov.gcr
     preconditioner itself, its pins and the routing between its three storage
     policies live in :mod:`dkx.coarse_precond`.
 
-Sparse direct — host fallback and cross-check (``solvax.native.splu_solve``)
-    Materializes the operator (vmapped unit vectors; guarded by
-    ``max_dense_size``) into CSR and factors it on the host. SuperLU remains
+Sparse direct — host fallback and cross-check (``solvax.native.SpluFactorization``)
+    Assembles the operator into CSR and factors it on the host; small operators
+    may instead use column sampling, limited by ``max_dense_size``. SuperLU remains
     the default; the optional MUMPS adapter is an explicit experimental choice.
     Non-differentiable, non-jittable; prints a loud one-line notice. Used on
     explicit request (``method="direct"``) or when recycled Krylov breaches
