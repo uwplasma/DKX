@@ -1,18 +1,18 @@
 Differentiability
 =================
 
-`dkx` is differentiable end to end. Because the drift-kinetic operator,
-its right-hand side, and the moment diagnostics are all pure JAX functions, a
-scalar built from a solved distribution — a flux, a bootstrap current, an
-ambipolar :math:`E_r`, a transport coefficient — can be handed straight to
-``jax.grad`` and returns an exact derivative with respect to geometry harmonics,
-plasma profiles, or the collisionality. There is no divided-difference
-stencil in the loop and no differentiation through solver iterations.
+DKX provides implicit derivatives for supported prepared inputs, observables,
+solver routes and regular root branches. The operator, right-hand side and
+moments participate in the derivative; solving a transposed system alone does
+not establish a gradient. See :doc:`capabilities` and :doc:`validation_matrix`
+for the qualified scope. Algebraic, discretization and branch errors still
+limit the accuracy of a derivative of the discrete equations.
 
-Covered here: the gradient through the linear solve, the catalogue of
-differentiable targets, the measured gradient-vs-finite-difference agreement, and
-the differentiable geometry chain ``vmex -> booz_xform_jax -> dkx`` used for
-stellarator optimization.
+This page describes those derivatives and their finite-difference checks.
+The host sparse-direct route is not differentiable. The numbered geometry
+optimization example is an analytic proxy; a qualified installed
+``vmex -> booz_xform_jax -> dkx`` boundary optimization remains a research-plan
+deliverable.
 
 .. figure:: _static/figures/paper/dkx_autodiff_gradient_check.png
    :alt: Autodiff gradients of dkx observables overlaid on centered finite differences.
@@ -51,13 +51,12 @@ single *transposed* solve
    + \lambda^{\mathsf T}\!\left(\frac{\partial b}{\partial p}
    - \frac{\partial A}{\partial p}\,u\right).
 
-The transposed solve :math:`A^{\mathsf T}\lambda = \cdot` **reuses the
-forward factorization**. On the structured direct route the adjoint is the same
-block-Thomas sweep run with ``transpose=True`` on the factors already computed
-for the forward solve; on the recycled Krylov route it is the
-transposed-preconditioner solve seeded from the same coarse operator. A gradient
-therefore costs *one extra solve*, independent of how many iterations the forward
-solve took.
+On the structured direct route, the transposed solve reuses the forward
+block-Thomas factors. The recycled Krylov route instead solves with the
+transposed preconditioner. Reverse mode also differentiates operator coefficients
+and observables, so total gradient time and memory must be measured separately
+from the adjoint substitution. Iteration counts and factor reuse alone do not
+predict that cost.
 
 The wrappers come from the standalone ``solvax`` package: linear solves route
 through ``solvax.implicit.linear_solve`` (``jax.lax.custom_linear_solve``), and
