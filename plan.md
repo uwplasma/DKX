@@ -109,7 +109,9 @@ optimization claims.
   and per-column acceptance for forward and transposed solves. Preserve this
   typed evidence through native Result and convergence reporting; a successful
   grid-change diagnostic without it is not a research certificate. Never infer
-  observable correctness from a solver success flag.
+  observable correctness from a solver success flag. Preserve independent batch
+  rejection through root selection and recovery, including state-finiteness and
+  underflow-safe checks; a zero norm cannot override a rejected state.
 - Qualify active magnetic-upwind support in both the assembly pattern and column
   grouping against column sampling before larger direct timing.
   [Correction and public W7-X reproduction #268](https://github.com/uwplasma/DKX/pull/268)
