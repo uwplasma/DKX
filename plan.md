@@ -117,7 +117,9 @@ optimization claims.
   rejection through root selection and recovery, including state-finiteness and
   underflow-safe checks; a zero norm cannot override a rejected state.
   Host optimization objectives must also reject nonfinite surface currents and
-  independent scan failures; replacing a failed current with zero is inadmissible.
+  independent scan failures. Imported scans must contain every required observable;
+  absent bootstrap-current datasets cannot become a zero objective. Replacing
+  either missing or failed currents with zero is inadmissible.
 - Qualify active magnetic-upwind support in both the assembly pattern and column
   grouping against column sampling before larger direct timing.
   [Correction and public W7-X reproduction #268](https://github.com/uwplasma/DKX/pull/268)

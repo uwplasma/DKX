@@ -7,8 +7,8 @@ for accepting a candidate.
 
 The proxy is useful for ranking geometry changes and checking JAX derivatives.
 It does not establish bootstrap current, ambipolar roots, transport fluxes, or
-VMEC-boundary-to-SFINCS kinetic gradients. A candidate needs the second layer
-before it supports a physics, engineering, or publication claim. The detailed
+VMEC-boundary-to-SFINCS kinetic gradients. A candidate needs accepted kinetic
+calculations and uncertainty estimates before supporting a research claim. The detailed
 VMEC/Boozer differentiability boundary is maintained in :doc:`vmex_workflow`;
 the release evidence and deferred research plan are maintained in
 :doc:`validation_matrix`.
