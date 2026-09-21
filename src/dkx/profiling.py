@@ -54,27 +54,13 @@ def _rss_mb() -> float | None:
     try:
         import psutil  # type: ignore
 
-        return float(psutil.Process().memory_info().rss) / 1e6
-    except Exception:
-        pass
-    try:
-        import resource
-
-        rss = float(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
-        if sys.platform == "darwin":
-            return rss / (1024.0 * 1024.0)
-        return rss / 1024.0
+        return float(psutil.Process().memory_info().rss) / (1024.0 * 1024.0)
     except Exception:
         return None
 
 
 def _resource_maxrss_to_mb(raw_maxrss: float, platform: str | None = None) -> float:
-    """Convert ``resource.ru_maxrss`` to MB-like units.
-
-    Linux reports KiB while macOS reports bytes. The profiler historically uses
-    MB labels with psutil's decimal bytes/1e6 value; this helper keeps the same
-    practical scale while preserving the platform-specific resource semantics.
-    """
+    """Convert Linux KiB or macOS bytes to MiB; retain the legacy name."""
 
     platform = sys.platform if platform is None else platform
     if platform == "darwin":
@@ -100,10 +86,10 @@ def _device_mem_mb() -> float | None:
         stats = jax.devices()[0].memory_stats() or {}
     except Exception:
         return None
-    for key in ("bytes_in_use", "bytes_active", "bytes_limit", "peak_bytes_in_use"):
+    for key in ("bytes_in_use", "bytes_active"):
         if key in stats:
             try:
-                return float(stats[key]) / 1e6
+                return float(stats[key]) / (1024.0 * 1024.0)
             except Exception:
                 continue
     return None
@@ -141,6 +127,7 @@ class SimpleProfiler:
         dev_mb = _device_mem_mb() if self.sample_device_mem else None
         entry = {
             "label": label,
+            "memory_unit": "MiB",
             "dt_s": now - self.last,
             "total_s": now - self.t0,
             "rss_mb": rss_mb,
@@ -164,7 +151,7 @@ class SimpleProfiler:
                 0,
                 f"profiling: {label} dt_s={entry['dt_s']:.3f} total_s={entry['total_s']:.3f} "
                 f"rss_mb={rss_txt} drss_mb={drss_txt} "
-                f"peak_rss_mb={peak_txt} dpeak_rss_mb={dpeak_txt} device_mb={dev_txt}",
+                f"peak_rss_mb={peak_txt} dpeak_rss_mb={dpeak_txt} device_mb={dev_txt} memory_unit=MiB",
             )
         self.last = now
 
