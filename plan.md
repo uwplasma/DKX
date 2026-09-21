@@ -1,6 +1,6 @@
 # DKX research qualification plan
 
-**Authoritative plan as of 2026-09-20.** This file defines the active order of
+**Authoritative plan as of 2026-09-21.** This file defines the active order of
 work and its scientific acceptance criteria. Release history belongs in
 [`CHANGELOG.md`](CHANGELOG.md), implementation decisions in
 [`docs/adr/`](docs/adr/), and bounded experiments in
@@ -170,7 +170,11 @@ Keep the portable fallback.
   substitutions where the backend supports both.
 - Estimate factorization memory from measured symbolic information or a
   conservative backend query. Refuse before allocation when the configured
-  budget is exceeded. Do not use unknown count as a memory proxy.
+  budget is exceeded. Do not use unknown count as a memory proxy. The current
+  [MUMPS preflight #267](https://github.com/uwplasma/DKX/pull/267) accounts for
+  transient RHS buffers and rechecks retained-factor headroom, but runs after
+  grouped assembly. Bound assembly memory separately before claiming the entire
+  direct route fits a process budget; conservative estimates are not OS limits.
 - Compare identical matrices, permutations, scaling, tolerances, and residual
   definitions. Include fallback and missing-backend behavior.
 
