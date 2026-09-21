@@ -425,7 +425,16 @@ def test_the_generated_route_does_not_change_the_answer(
         assert float(jnp.linalg.norm(op.apply(result.x) - rhs)) / scale < 1e-9
 
 
-def test_the_generated_route_is_jit_safe_over_traced_operator_leaves(monkeypatch):
+@pytest.mark.parametrize(
+    "budget",
+    (
+        pytest.param(lambda _op: 1.0, id="checkpointed"),
+        pytest.param(_ram_for_reusable, id="reusable_factors"),
+    ),
+)
+def test_the_generated_route_is_jit_safe_over_traced_operator_leaves(
+    budget, monkeypatch
+):
     """Building it under ``jax.jit`` must compile and agree with the eager build.
 
     The generated route closes over per-subsystem coefficient arrays and jits
@@ -440,9 +449,7 @@ def test_the_generated_route_is_jit_safe_over_traced_operator_leaves(monkeypatch
     op = _ramped_op()
     leaves, treedef = jax.tree_util.tree_flatten(op)
     v = jnp.asarray(np.linspace(-1.0, 1.0, op.total_size), dtype=jnp.float64)
-    # The traced layout must retain the full rectangle, while still taking the
-    # reusable generated route rather than the checkpointed one.
-    monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: _ram_for_reusable(op))
+    monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: budget(op))
 
     def action(values: list) -> jnp.ndarray:
         precond, _ = build_coarse_preconditioner(jax.tree_util.tree_unflatten(treedef, values))
