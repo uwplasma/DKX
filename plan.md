@@ -110,28 +110,19 @@ optimization claims.
   typed evidence through native Result and convergence reporting; a successful
   grid-change diagnostic without it is not a research certificate. Never infer
   observable correctness from a solver success flag.
-- Merge and qualify [the magnetic-upwind assembly correction #268](https://github.com/uwplasma/DKX/pull/268)
-  before timing larger direct solves. The reduced public W7-X case exposed
-  missing angular support: clean-cache CPU float64 replay fell from `2.33e-7`
-  matrix/operator difference to `2.15e-16` after including active magnetic
-  stencils in both the pattern and grouping. Column sampling agrees to roundoff
-  on 2,104 unknowns. Keep the `1e-10` verification threshold; this small-case
-  result does not qualify the 66,004-unknown backend comparison in item 3.
-- Qualify sparse-direct transpose solves on general cotangents, not only
-  cotangents constructed in the transpose range. The v2.5.0 release audit
-  reported stagnation near `3e-8`, but its exact deck and random seed were not
-  retained and a bounded search could not recover them. Keep that observation
-  unresolved; qualify pinned, seeded cases and physical moment cotangents.
-  The corrected reduced W7-X fixture now provides a reproducible failure:
-  `default_rng(0).standard_normal(2104)` gives original transpose residuals
-  near `6.1e-10` with both SuperLU and MUMPS at requested `1e-10`, while the
-  physical forward RHS passes below `3e-13`. The ion-flow cotangent also fails
-  near `2.75e-9`, while bootstrap current passes near `5.71e-13`. Original
-  and CSR residual evaluation show similar general
-  cotangent errors; eight corrections do not meet the request. Diagnose the
-  conditioning before another refinement policy or larger benchmark; do not
-  infer an identified near-null mode from this evidence alone. Keep the
-  requested original-equation tolerance unchanged.
+- Qualify active magnetic-upwind support in both the assembly pattern and column
+  grouping against column sampling before larger direct timing.
+  [Correction and public W7-X reproduction #268](https://github.com/uwplasma/DKX/pull/268)
+  retain the unchanged matrix/operator verification threshold.
+- Qualify sparse-direct transposes on independent general and physical moment
+  cotangents. The reduced public W7-X case in #268 has reproducible general and
+  ion-flow failures at requested `1e-10`; bootstrap current passes. Rebuilding,
+  removing Ruiz scaling, and 50-digit refinement followed by a float64 cast did
+  not meet the original-equation request. Keep Ruiz and the explicit refusals;
+  do not weaken tolerance or claim a universal float64 floor. Require a bounded
+  reproducer before any new arithmetic policy, and verify the actual precision
+  of diagnostic dtypes. The unrecovered historical `3e-8` transpose observation
+  is retained in the PR context, not treated as a reproducible regression.
 - Qualify observable adjoints independently on PAS and full-Fokker–Planck decks.
   Compare the adjoint identity, finite differences over a step window, and a
   second-order Taylor remainder. Record branch and active-state assumptions.
