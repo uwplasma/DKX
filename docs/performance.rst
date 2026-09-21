@@ -13,6 +13,14 @@ The design choices behind the measured numbers are collected in the
 `Performance patterns`_ section below; the equations and derivations behind them
 live in :doc:`numerics` and :doc:`differentiability`.
 
+``SimpleProfiler`` is an explicit Python helper, not automatic CLI
+instrumentation. Its new traces label memory as ``memory_unit=MiB``; their legacy
+``*_mb`` keys consistently use bytes/2**20. Current RSS requires psutil;
+the OS high-water mark remains a separate metric. Device samples describe
+current usage on the first JAX device; capacity or peak-only statistics yield
+an unavailable sample. Older traces mixed decimal MB and MiB and must be
+interpreted using their source revision, not silently rescaled.
+
 
 Measured head-to-head: canonical stack vs SFINCS Fortran v3
 -----------------------------------------------------------
