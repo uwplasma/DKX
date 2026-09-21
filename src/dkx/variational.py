@@ -17,24 +17,22 @@ Both are tight at the exact solution.  Evaluated at the even/odd parts of the
 *discrete* solution, the residual equations collapse most terms and the two
 functionals sit symmetrically around the discrete ``D11``: their deviation is
 ``+-<(V + V^T_W) h, g>_W``, i.e. exactly the antisymmetry defect of the
-discrete streaming operator under the entropy weight.  The pair therefore
-brackets the computed coefficient to solver-residual precision, and the
-relative gap is an a-posteriori certificate of how well the discretization
-preserves the continuum entropy-production structure (it vanishes under
-theta/zeta/xi refinement and at high collisionality, where ``f`` is
-collision-dominated).
+discrete streaming operator under the entropy weight. At zero radial electric
+field, the pair brackets the computed coefficient to solver-residual precision.
+Its relative gap is a discrete entropy-structure diagnostic: a shrinking gap on
+a refinement ladder is evidence of improved resolution, not an enclosure of the
+continuum discretization error.
 
 The strict bound property of the continuum functionals requires a purely
 parity-flipping ``V``, which holds for the monoenergetic trajectory terms at zero
 radial electric field; with ``EStar != 0`` the (parity-preserving,
-antisymmetric) ExB term contributes to the gap as well and the certificate
-remains a consistency diagnostic.
+antisymmetric) ExB term contributes to the gap as well and it remains a
+consistency diagnostic.
 
 Primary literature: S.P. Hirshman, K.C. Shaing, W.I. van Rij, C.O. Beasley,
 and E.C. Crume, Phys. Fluids 29, 2951 (1986) (the variational principle and
 the bounding functionals); W.I. van Rij and S.P. Hirshman, Phys. Fluids B 1,
-563 (1989) (upper/lower estimates of the monoenergetic coefficients as
-convergence certificates).
+563 (1989) (upper/lower estimates of the monoenergetic coefficients).
 
 Everything here uses only canonical operator applies
 (:meth:`~dkx.drift_kinetic.KineticOperator.apply_f` and the
@@ -72,9 +70,10 @@ class MonoenergeticD11Bounds(NamedTuple):
     Attributes:
         d11: the coefficient reconstructed from the entropy-production form
             ``C <s, f>_W`` (equals ``transportMatrix[0][0]`` to roundoff).
-        lower: certified lower bound (the more negative functional value).
-        upper: certified upper bound.
-        gap: relative convergence certificate ``|upper - lower| / |d11|``.
+        lower: lower functional value (the more negative bracket endpoint).
+        upper: upper functional value.
+        gap: relative bracket width ``|upper - lower| / |d11|``; it does not
+            enclose continuum discretization error.
     """
 
     d11: jnp.ndarray
@@ -186,9 +185,10 @@ def monoenergetic_d11_bounds(
             :func:`dkx.moments.transport_matrix_from_flux_arrays`).
 
     Returns:
-        A :class:`MonoenergeticD11Bounds`; ``lower <= transportMatrix[0][0]
-        <= upper`` holds to solver-residual precision and ``gap`` is the
-        relative discretization certificate.
+        A :class:`MonoenergeticD11Bounds`. At zero radial electric field,
+        ``lower <= transportMatrix[0][0] <= upper`` holds to solver-residual
+        precision. At finite radial electric field, the functional values and
+        ``gap`` are diagnostics only; neither encloses continuum error.
     """
     _check_supported(op)
     state_vector = jnp.asarray(state_vector, dtype=jnp.float64)

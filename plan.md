@@ -53,6 +53,10 @@ discrete algebraic error. It is not a rigorous bound unless its assumptions hold
 and an approximate adjoint needs its own allowance. Nonlinear observables need a
 linearization remainder or conservative refinement evidence.
 
+The variational-structure gap alone does not certify continuum discretization
+error. Acceptance requires its stated assumptions and an independent,
+observable-specific refinement study.
+
 For a simple ambipolar root, propagate current uncertainty through
 `|dJ_r/dE_r|` and include geometry uncertainty. A slope that is zero or uncertain,
 or an error interval that overlaps another branch, is marginal rather than
