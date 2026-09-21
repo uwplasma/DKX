@@ -125,10 +125,13 @@ optimization claims.
   The corrected reduced W7-X fixture now provides a reproducible failure:
   `default_rng(0).standard_normal(2104)` gives original transpose residuals
   near `6.1e-10` with both SuperLU and MUMPS at requested `1e-10`, while the
-  physical forward RHS passes below `3e-13`. Diagnose matrix versus original
-  transpose arithmetic and physical cotangents on this case before promoting
-  the larger backend benchmark. Change scaling or refinement only against
-  reproducible evidence, without weakening the requested tolerance.
+  physical forward RHS passes below `3e-13`. The ion-flow cotangent also fails
+  near `2.75e-9`, while bootstrap current passes near `5.71e-13`. Original,
+  CSR and extended-precision CSR residual evaluation show similar general
+  cotangent errors; eight corrections do not meet the request. Diagnose the
+  conditioning before another refinement policy or larger benchmark; do not
+  infer an identified near-null mode from this evidence alone. Keep the
+  requested original-equation tolerance unchanged.
 - Qualify observable adjoints independently on PAS and full-Fokker–Planck decks.
   Compare the adjoint identity, finite differences over a step window, and a
   second-order Taylor remainder. Record branch and active-state assumptions.
