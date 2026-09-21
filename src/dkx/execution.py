@@ -1004,12 +1004,24 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
     heat_flux = np.empty(shape, dtype=np.float64)
     current = np.empty((surfaces.size,), dtype=np.float64)
     residuals = np.empty((surfaces.size,), dtype=np.float64)
+    rhs_norms = np.empty((surfaces.size,), dtype=np.float64)
+    residual_complete_state = np.zeros((surfaces.size,), dtype=bool)
     iterations = np.empty((surfaces.size,), dtype=np.int64)
     solve_seconds = np.empty((surfaces.size,), dtype=np.float64)
     retained_operator = None
     selected_routes: list[str] = []
     ambipolar_surfaces = []
     previous_root_kv_m: float | None = None
+
+    def retain_selected_original_evidence(index, selected) -> None:
+        residuals[index] = selected.residual_norm
+        rhs_norms[index] = np.nan if selected.rhs_norm is None else selected.rhs_norm
+        residual_complete_state[index] = bool(
+            selected.original_residual_complete_state
+            and selected.original_residual_norm == "absolute_l2"
+            and selected.original_residual_tolerance
+            == case.solver.relative_tolerance
+        )
 
     progress = emit if emit is not None else (print if case.run.progress else None)
     solved = None
@@ -1085,7 +1097,7 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
             particle_flux[index] = selected.particle_flux_m2_s
             heat_flux[index] = selected.heat_flux_w_m2
             current[index] = selected.parallel_current_a_t_m2
-            residuals[index] = selected.residual_norm
+            retain_selected_original_evidence(index, selected)
             iterations[index] = len(surface_result.evaluations)
             solve_seconds[index] = surface_result.solve_seconds
             selected_routes.append(problem.solve_method)
@@ -1114,6 +1126,28 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
                 f"route={solved.method}, residuals={np.asarray(solved.residual_norms)!r}"
             )
         state = np.asarray(solved.x, dtype=np.float64).reshape((-1,))
+        rhs = np.asarray(op.rhs(), dtype=np.float64).reshape((-1,))
+        defect = np.asarray(op.apply(state), dtype=np.float64).reshape((-1,)) - rhs
+        residual = float(np.linalg.norm(defect))
+        rhs_norm = float(np.linalg.norm(rhs))
+        zero_defect = bool(np.all(defect == 0.0))
+        algebraically_accepted = (
+            np.isfinite(residual)
+            and np.isfinite(rhs_norm)
+            and np.all(np.isfinite(state))
+            and (
+                zero_defect
+                if rhs_norm == 0.0
+                else residual <= case.solver.relative_tolerance * rhs_norm
+            )
+        )
+        if not algebraically_accepted:
+            raise RuntimeError(
+                "native profile state failed its independently recomputed original "
+                f"equation at geometry.surfaces[{index}]={surface}; "
+                f"residual={residual!r}, rhs_norm={rhs_norm!r}, "
+                f"relative_tolerance={case.solver.relative_tolerance!r}"
+            )
         moments = profile_moments_from_operator(op, state)
         # diagnostics.F90 uses d(rHat)/d(psiHat), not its inverse, when
         # converting particleFlux/heatFlux from psiHat to rHat.
@@ -1129,8 +1163,9 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
             * HEAT_FLUX
         )
         current[index] = float(np.asarray(moments["FSABjHat"])) * PARALLEL_CURRENT
-        norms = np.atleast_1d(np.asarray(solved.residual_norms, dtype=np.float64))
-        residuals[index] = float(np.max(norms))
+        residuals[index] = residual
+        rhs_norms[index] = rhs_norm
+        residual_complete_state[index] = True
         iterations[index] = 0 if solved.iterations is None else int(solved.iterations)
         selected_routes.append(str(solved.method))
         retained_operator = op
@@ -1155,7 +1190,7 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
             particle_flux[index] = selected.particle_flux_m2_s
             heat_flux[index] = selected.heat_flux_w_m2
             current[index] = selected.parallel_current_a_t_m2
-            residuals[index] = selected.residual_norm
+            retain_selected_original_evidence(index, selected)
 
     total_seconds = time.perf_counter() - total_start
     output_path = (
@@ -1188,6 +1223,7 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
         "heat_flux_W_m2": heat_flux,
         "parallel_current_A_T_m2": current,
         "primal_residual": residuals,
+        "primal_rhs_norm": rhs_norms,
         "solver_iterations": iterations,
         "solve_time_s": solve_seconds,
     }
@@ -1204,6 +1240,7 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
         "heat_flux_W_m2": ("surface", "species"),
         "parallel_current_A_T_m2": ("surface",),
         "primal_residual": ("surface",),
+        "primal_rhs_norm": ("surface",),
         "solver_iterations": ("surface",),
         "solve_time_s": ("surface",),
     }
@@ -1255,6 +1292,15 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
         "solver_route": route_set[0] if len(route_set) == 1 else route_set,
         "route_reason": "selected from operator structure and requested native solver method",
         "residual_norm": reported_residual,
+        "original_residual_evidence": {
+            "residual_array": "primal_residual",
+            "rhs_norm_array": "primal_rhs_norm",
+            "norm": "absolute_l2",
+            "relative_tolerance": case.solver.relative_tolerance,
+            "complete_state": bool(np.all(residual_complete_state)),
+            "scope": "one selected kinetic RHS per surface",
+            "zero_rhs_policy": "zero residual required",
+        },
         "iterations": int(np.sum(iterations)),
         "ambipolar_all_surfaces_bracketed": (
             all(result.status == "bracketed_root" for result in ambipolar_surfaces)

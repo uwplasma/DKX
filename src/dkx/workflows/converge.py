@@ -34,6 +34,36 @@ DEFAULT_OBSERVABLES: tuple[str, ...] = (
 )
 
 
+def _residual_evidence_status(
+    residuals: tuple[float, ...] | None,
+    norm: str | None,
+    tolerance: float | None,
+    complete_state: bool | None,
+) -> str:
+    """Classify typed original-equation evidence without hiding missing data."""
+    if (
+        residuals is None
+        or norm is None
+        or tolerance is None
+        or complete_state is None
+    ):
+        return "unavailable"
+    values = np.asarray(residuals, dtype=float)
+    if (
+        not residuals
+        or norm != "relative_l2"
+        or isinstance(tolerance, (bool, np.bool_))
+        or not np.isfinite(tolerance)
+        or tolerance < 0.0
+        or complete_state is not True
+        or not np.all(np.isfinite(values))
+        or not np.all(values >= 0.0)
+        or not np.all(values <= tolerance)
+    ):
+        return "failed"
+    return "qualified"
+
+
 @dataclass(frozen=True)
 class AxisRefinement:
     """One refinement run: which axes moved, to what, and what the outputs did."""
@@ -49,11 +79,22 @@ class AxisRefinement:
     status: str = "accepted"
     refusal: str | None = None
     third_rung: AxisRefinement | None = None
+    original_residual_tolerance: float | None = None
+    original_residual_complete_state: bool | None = None
 
     @property
     def worst(self) -> float:
         """Largest relative change over the observables, or 0.0 if none compared."""
         return max(self.changes.values(), default=0.0)
+
+    @property
+    def residual_evidence_status(self) -> str:
+        return _residual_evidence_status(
+            self.original_residuals,
+            self.original_residual_norm,
+            self.original_residual_tolerance,
+            self.original_residual_complete_state,
+        )
 
 
 @dataclass(frozen=True)
@@ -65,6 +106,8 @@ class ConvergenceReport:
     baseline_observables: dict[str, np.ndarray] = field(default_factory=dict)
     baseline_original_residuals: tuple[float, ...] | None = None
     baseline_original_residual_norm: str | None = None
+    baseline_original_residual_tolerance: float | None = None
+    baseline_original_residual_complete_state: bool | None = None
 
     @property
     def per_axis_worst(self) -> float:
@@ -72,7 +115,7 @@ class ConvergenceReport:
 
     @property
     def converged(self) -> bool:
-        """Every measured change, joint included, is inside the tolerance."""
+        """Every measured observable change is inside the grid tolerance."""
         if any(r.status != "accepted" or
                (r.third_rung is not None and r.third_rung.status != "accepted")
                for r in self.refinements):
@@ -83,6 +126,32 @@ class ConvergenceReport:
         if self.joint is not None:
             worst = max(worst, self.joint.worst)
         return bool(self.refinements) and np.isfinite(worst) and worst < self.tolerance
+
+    @property
+    def original_equations_accepted(self) -> bool:
+        """Whether baseline and every attempted rung pass typed original equations."""
+        if self.baseline_residual_evidence_status != "qualified":
+            return False
+        rungs = [*self.refinements]
+        if self.joint is not None:
+            rungs.append(self.joint)
+        return all(
+            rung.residual_evidence_status == "qualified"
+            and (
+                rung.third_rung is None
+                or rung.third_rung.residual_evidence_status == "qualified"
+            )
+            for rung in rungs
+        )
+
+    @property
+    def baseline_residual_evidence_status(self) -> str:
+        return _residual_evidence_status(
+            self.baseline_original_residuals,
+            self.baseline_original_residual_norm,
+            self.baseline_original_residual_tolerance,
+            self.baseline_original_residual_complete_state,
+        )
 
     @property
     def worst_grid_uncertainty(self) -> float:
@@ -373,29 +442,86 @@ def _converge(
             name: np.asarray(result.arrays[name], dtype=float).copy()
             for name in observables if name in result.arrays
         }
-        residuals = result.metadata.get("original_residuals")
-        residual_norm = result.metadata.get("original_residual_norm")
-        if residuals is not None and residual_norm is not None:
-            residuals = tuple(float(value) for value in np.ravel(residuals))
+        residuals = None
+        residual_norm = None
+        residual_tolerance = None
+        residual_complete_state = None
+        provenance = result.metadata.get("original_residual_evidence")
+        if isinstance(provenance, Mapping):
+            residual_name = provenance.get("residual_array")
+            rhs_norm_name = provenance.get("rhs_norm_array")
+            malformed = provenance.get("norm") != "absolute_l2"
+            try:
+                absolute = np.ravel(
+                    np.asarray(result.arrays[residual_name], dtype=float)
+                )
+                rhs_norms = np.ravel(
+                    np.asarray(result.arrays[rhs_norm_name], dtype=float)
+                )
+            except (KeyError, TypeError, ValueError):
+                malformed = True
+            else:
+                malformed = malformed or (
+                    absolute.size == 0
+                    or absolute.shape != rhs_norms.shape
+                    or not np.all(np.isfinite(absolute))
+                    or not np.all(np.isfinite(rhs_norms))
+                    or np.any(absolute < 0.0)
+                    or np.any(rhs_norms < 0.0)
+                )
+                if not malformed:
+                    relative = np.where(
+                        rhs_norms > 0.0,
+                        absolute / np.where(rhs_norms > 0.0, rhs_norms, 1.0),
+                        np.where(absolute == 0.0, 0.0, np.inf),
+                    )
+                    residuals = tuple(float(value) for value in relative)
+                    residual_norm = "relative_l2"
+            if malformed:
+                residuals, residual_norm = (float("nan"),), "invalid"
+            raw_tolerance = provenance.get("relative_tolerance")
+            raw_complete = provenance.get("complete_state")
         else:
-            residuals, residual_norm = None, None
+            residuals = result.metadata.get("original_residuals")
+            residual_norm = result.metadata.get("original_residual_norm")
+            if residuals is not None and residual_norm is not None:
+                residuals = tuple(float(value) for value in np.ravel(residuals))
+            else:
+                residuals, residual_norm = None, None
+            raw_tolerance = result.metadata.get("original_residual_tolerance")
+            raw_complete = result.metadata.get("original_residual_complete_state")
+        if raw_tolerance is not None:
+            try:
+                residual_tolerance = (float("nan") if isinstance(raw_tolerance, (bool, np.bool_))
+                                      else float(raw_tolerance))
+            except (TypeError, ValueError):
+                residual_tolerance = float("nan")
+        if isinstance(raw_complete, (bool, np.bool_)):
+            residual_complete_state = bool(raw_complete)
+        elif raw_complete is not None:
+            residual_complete_state = False
         missing = set(observables) - set(result.arrays)
         if missing:
-            return values, residuals, residual_norm, "refused", \
+            return values, residuals, residual_norm, residual_tolerance, \
+                residual_complete_state, "refused", \
                 f"requested observables are missing: {sorted(missing)}"
         if any(value.size == 0 or not np.all(np.isfinite(value)) for value in values.values()):
-            return values, residuals, residual_norm, "refused", \
+            return values, residuals, residual_norm, residual_tolerance, \
+                residual_complete_state, "refused", \
                 "requested observables are empty or nonfinite"
         if not result.metadata.get("converged", False):
-            return values, residuals, residual_norm, "failed", \
+            return values, residuals, residual_norm, residual_tolerance, \
+                residual_complete_state, "failed", \
                 "a failed solve cannot establish resolution convergence"
-        return values, residuals, residual_norm, "accepted", None
+        return values, residuals, residual_norm, residual_tolerance, \
+            residual_complete_state, "accepted", None
 
     def _attempt(label: str, attempted_resolution) -> AxisRefinement:
         started = time.perf_counter()
         try:
             result = run_at_resolution(attempted_resolution)
-            values, residuals, residual_norm, status, refusal = _evidence_of(result)
+            (values, residuals, residual_norm, residual_tolerance,
+             residual_complete_state, status, refusal) = _evidence_of(result)
             changes = ({name: float("inf") for name in reference} if status != "accepted"
                        else _relative_changes(
                            reference, values, tolerance=tolerance,
@@ -405,6 +531,7 @@ def _converge(
                 status, refusal = "refused", "observable shapes changed across the refinement"
         except Exception as exc:  # noqa: BLE001 - a failed bounded rung is report evidence
             values, residuals, residual_norm = {}, None, None
+            residual_tolerance, residual_complete_state = None, None
             status, refusal = "failed", f"{type(exc).__name__}: {exc}"
             changes = {name: float("inf") for name in reference}
         return AxisRefinement(
@@ -412,13 +539,16 @@ def _converge(
             seconds=time.perf_counter() - started, observables=values,
             original_residuals=residuals, original_residual_norm=residual_norm,
             status=status, refusal=refusal,
+            original_residual_tolerance=residual_tolerance,
+            original_residual_complete_state=residual_complete_state,
         )
 
     resolution = normalize_resolution(resolution)
     _say(f"baseline {_resolution_dict(resolution)}")
     baseline_result = run_at_resolution(resolution)
-    reference, baseline_residuals, baseline_residual_norm, status, refusal = \
-        _evidence_of(baseline_result)
+    (reference, baseline_residuals, baseline_residual_norm,
+     baseline_residual_tolerance, baseline_residual_complete_state,
+     status, refusal) = _evidence_of(baseline_result)
     if status != "accepted":
         raise ValueError(refusal)
     if not reference:
@@ -480,6 +610,8 @@ def _converge(
         baseline_observables=reference,
         baseline_original_residuals=baseline_residuals,
         baseline_original_residual_norm=baseline_residual_norm,
+        baseline_original_residual_tolerance=baseline_residual_tolerance,
+        baseline_original_residual_complete_state=baseline_residual_complete_state,
     )
 
 
@@ -555,6 +687,8 @@ def converge_sfincs_input(source, **kwargs) -> ConvergenceReport:
             "converged": accepted,
             "original_residuals": residuals,
             "original_residual_norm": "relative_l2",
+            "original_residual_tolerance": inp.resolution.solver_tolerance,
+            "original_residual_complete_state": True,
         })
 
     def normalize(r):

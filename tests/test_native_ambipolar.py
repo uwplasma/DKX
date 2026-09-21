@@ -2,6 +2,7 @@ from dataclasses import replace
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from dkx.result import Result
 from dkx.workflows.ambipolar_native import (
@@ -31,6 +32,7 @@ def _fake_batch(current_function):
             },
             radial_current=current_function(fields),
             residual_norms=np.full(fields.shape, 1.0e-12),
+            algebraic_converged=np.ones(fields.shape, dtype=bool),
             chunk_size=len(fields),
             n_chunks=1,
             method=requested,
@@ -547,6 +549,7 @@ def test_native_ambipolar_rejects_nonfinite_or_unconverged_batch(monkeypatch):
         fields = np.asarray(values, dtype=np.float64)
         batch = _fake_batch(lambda field: field)(None, fields)
         batch.residual_norms[0] = np.nan
+        batch.algebraic_converged[0] = False
         return batch
 
     monkeypatch.setattr("dkx.batch.batched_er_scan", nonfinite)
@@ -561,6 +564,7 @@ def test_native_ambipolar_rejects_nonfinite_or_unconverged_batch(monkeypatch):
         fields = np.asarray(values, dtype=np.float64)
         batch = _fake_batch(lambda field: field)(None, fields)
         batch.residual_norms[:] = 1.0
+        batch.algebraic_converged[:] = False
         return batch
 
     monkeypatch.setattr("dkx.batch.batched_er_scan", unconverged)
@@ -569,6 +573,107 @@ def test_native_ambipolar_rejects_nonfinite_or_unconverged_batch(monkeypatch):
     )
     with np.testing.assert_raises_regex(RuntimeError, "did not converge"):
         _solve(problem=SimpleNamespace(operator=FakeOperator(), dphi_per_er=1.0))
+
+    class NonfiniteRhsOperator:
+        def rhs(self):
+            return np.asarray([np.nan])
+
+    monkeypatch.setattr("dkx.batch.batched_er_scan", _fake_batch(lambda field: field))
+    monkeypatch.setattr(
+        "dkx.er.operator_at_er", lambda *_args, **_kwargs: NonfiniteRhsOperator()
+    )
+    with np.testing.assert_raises_regex(RuntimeError, "invalid original RHS norm"):
+        _solve(
+            problem=SimpleNamespace(
+                operator=NonfiniteRhsOperator(), dphi_per_er=1.0
+            )
+        )
+
+
+@pytest.mark.parametrize(
+    ("verdict", "message"),
+    [
+        ("false", "did not converge"),
+        ("missing", "invalid batch acceptance evidence"),
+        ("non_boolean", "invalid batch acceptance evidence"),
+        ("wrong_shape", "invalid batch acceptance evidence"),
+    ],
+)
+def test_native_ambipolar_rejects_untrusted_primary_algebraic_verdict(
+    monkeypatch, verdict, message,
+):
+    class FakeOperator:
+        def rhs(self):
+            return np.asarray([1.0])
+
+    def rejected(_problem, values, **kwargs):
+        fields = np.asarray(values, dtype=np.float64)
+        batch = _fake_batch(lambda field: field)(
+            None, fields, solve_method=kwargs["solve_method"]
+        )
+        batch.residual_norms[:] = 0.0  # A nonzero defect can have an underflowed norm.
+        if verdict == "false":
+            batch.algebraic_converged[:] = False
+        elif verdict == "missing":
+            del batch.algebraic_converged
+        elif verdict == "non_boolean":
+            batch.algebraic_converged = np.ones(fields.shape, dtype=np.int8)
+        else:
+            batch.algebraic_converged = np.ones((fields.size, 1), dtype=bool)
+        return batch
+
+    monkeypatch.setattr("dkx.batch.batched_er_scan", rejected)
+    monkeypatch.setattr(
+        "dkx.er.operator_at_er", lambda *_args, **_kwargs: FakeOperator()
+    )
+    with pytest.raises(RuntimeError, match=message):
+        _solve(
+            problem=SimpleNamespace(operator=FakeOperator(), dphi_per_er=1.0),
+            solve_method="block_tridiagonal",
+        )
+
+
+@pytest.mark.parametrize(
+    ("recovery", "message"),
+    [
+        ("false_zero", "did not converge"),
+        ("negative_residual", "negative original residual"),
+    ],
+)
+def test_native_ambipolar_rejects_invalid_recovery_evidence(
+    monkeypatch, recovery, message,
+):
+    class FakeOperator:
+        def rhs(self):
+            return np.asarray([1.0])
+
+    def recover(_problem, values, **kwargs):
+        fields = np.asarray(values, dtype=np.float64)
+        method = str(kwargs["solve_method"])
+        batch = _fake_batch(lambda field: field)(
+            None, fields, solve_method=method
+        )
+        if method == "auto":
+            failed = fields == 0.0
+            batch.residual_norms[failed] = 1.0
+            batch.algebraic_converged[failed] = False
+        elif recovery == "false_zero":
+            batch.residual_norms[:] = 0.0
+            batch.algebraic_converged[:] = False
+        else:
+            batch.residual_norms[:] = -1.0
+            batch.algebraic_converged[:] = False
+        return batch
+
+    monkeypatch.setattr("dkx.batch.batched_er_scan", recover)
+    monkeypatch.setattr(
+        "dkx.er.operator_at_er", lambda *_args, **_kwargs: FakeOperator()
+    )
+    with pytest.raises(RuntimeError, match=message):
+        _solve(
+            problem=SimpleNamespace(operator=FakeOperator(), dphi_per_er=1.0),
+            previous_root_kv_m=None,
+        )
 
 
 def test_auto_route_recovers_only_failed_points_and_retains_every_attempt(
@@ -586,7 +691,9 @@ def test_auto_route_recovers_only_failed_points_and_retains_every_attempt(
         calls.append((method, fields.tolist(), kwargs.get("max_batch")))
         batch = _fake_batch(lambda field: field)(None, fields, solve_method=method)
         if method != "gmres":
-            batch.residual_norms[fields == 0.0] = 1.0
+            failed = fields == 0.0
+            batch.residual_norms[failed] = 0.0
+            batch.algebraic_converged[failed] = False
         return batch
 
     monkeypatch.setattr("dkx.batch.batched_er_scan", recover)
@@ -597,6 +704,10 @@ def test_auto_route_recovers_only_failed_points_and_retains_every_attempt(
         problem=SimpleNamespace(operator=FakeOperator(), dphi_per_er=1.0),
         previous_root_kv_m=None,
     )
+    assert result.selected.rhs_norm == 1.0
+    assert result.selected.original_residual_norm == "absolute_l2"
+    assert result.selected.original_residual_complete_state is True
+    assert result.selected.original_residual_tolerance == 1.0e-10
 
     zero = next(
         evaluation
