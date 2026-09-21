@@ -9,9 +9,10 @@
 
 DKX solves the radially local, linearized drift-kinetic equation on a flux surface
 and returns particle and heat fluxes, parallel flows, bootstrap current, transport
-matrices and ambipolar radial electric fields. It implements the SFINCS Fortran v3
-model, including full Fokker–Planck collisions and Phi1, reads and writes SFINCS decks,
-runs on CPU or GPU, and every output is differentiable in every input.
+matrices and ambipolar radial electric fields. Its compatibility interface covers
+SFINCS Fortran v3 physics including full Fokker–Planck collisions and Phi1, and it
+reads and writes SFINCS decks. Native workflows, CPU/GPU execution, and derivatives
+have narrower qualified domains; see the [capability record](docs/capabilities.rst).
 
 ![W7-X standard configuration: |B| and parallel current density on the boundary, bootstrap current profile, ambipolar Er against Pablant et al. 2018](docs/_static/figures/readme/w7x_showcase.png)
 
@@ -59,9 +60,10 @@ def bootstrap_current(er_kv_m):
 j, dj_der = jax.jit(jax.value_and_grad(bootstrap_current))(jnp.array([-0.2, 0.0, 0.2]))
 ```
 
-The derivative passes through the linear solve by the implicit function theorem, and
-every returned state has satisfied the original kinetic equation. Profiles and geometry
-differentiate the same way: [differentiability](docs/differentiability.rst).
+This prepared-scan example differentiates its admitted moment through the linear
+solve. Supported profile and geometry inputs are listed in
+[differentiability](docs/differentiability.rst). An explicit sparse transpose solve
+is a linear-algebra capability, not by itself an autodiff or exact-gradient claim.
 
 ## Choose a workflow
 
@@ -75,53 +77,52 @@ differentiate the same way: [differentiability](docs/differentiability.rst).
 | Geometry sensitivity and descent (analytic proxy) | `examples/08_vmex_optimization` |
 | Phi1 and impurities (expert path) | `examples/09_phi1_and_impurities` |
 
-## Why DKX
+## What works
 
-| | DKX | SFINCS v3 | MONKES | yancc |
-| --- | :---: | :---: | :---: | :---: |
-| Full linearized Fokker–Planck, multispecies | ✅ | ✅ | ❌ | ✅ |
-| Analytic, VMEC, Boozer and `lasym` geometry | ✅ | ✅ | ✅ | ✅ |
-| Phi1 quasineutrality; Tangential magnetic drifts; `export_f` | ✅ | ✅ | ❌ | ❌ |
-| Ambipolar `E_r` root with retained branch evidence | ✅ | ✅ | ❌ | ❌ |
-| Transport matrices (RHSMode 2/3) and SFINCS deck/HDF5 I/O | ✅ | ✅ | ❌ | ❌ |
-| GPU, JIT-compiled scans, Krylov recycling | ✅ | ❌ | ❌ | ✅ |
-| Exact gradients of any output w.r.t. any input | ✅ | adjoint branches | ❌ | claimed |
-| Gradients verified against finite differences | ✅ | | | |
+| Workflow | DKX scope |
+| --- | --- |
+| Native research path | analytic, VMEC and Boozer profiles; PAS/full-FP subsets; regular ambipolar roots |
+| SFINCS compatibility | decks and HDF5; RHSMode 2/3; Phi1, Tangential magnetic drifts, `export_f` and `lasym` expert paths |
+| Repeated calculations | transport matrices, prepared scans, guarded Krylov recycling and direct factor reuse |
+| Derivatives | implicit gradients for named prepared inputs, moments and regular roots; finite-difference checks on named cases |
+| Hardware | CPU and qualified single-device GPU workflows; experimental multi-device sharding |
+
+Exact model, interface, derivative and validation scope: [capability record](docs/capabilities.rst).
 
 ## Verified
 
 ![DKX against SFINCS Fortran v3, MONKES and YANCC: scaled differences on matched full Fokker-Planck decks, and Beidler-normalized monoenergetic coefficients](docs/_static/figures/readme/cross_code_validation.png)
 
-Against SFINCS Fortran v3 on 38 upstream decks with the same discretization, DKX
-agrees to solver tolerance: median 4e-6, full Fokker–Planck decks to 1e-8. Against the
-independent codes MONKES and YANCC, the four Beidler-normalized monoenergetic coefficients
-agree within 6 percent and `D33` within 0.1 percent on three configurations. Gradients
-agree with central finite differences over a step window on every shipped derivative
-example. Details, tolerances and scope: [validation matrix](docs/validation_matrix.rst).
+The archived 38-deck same-discretization regression has median scaled difference
+4e-6, with admitted full Fokker–Planck rows reaching 1e-8. Three named
+monoenergetic comparisons with MONKES and YANCC place four Beidler-normalized
+coefficients within 6 percent and `D33` within 0.1 percent. These are scoped
+cross-code checks, not universal model validation. Derivative coverage is limited
+to the inputs and outputs in the [validation matrix](docs/validation_matrix.rst).
 
-## Fast
+## Recorded performance
 
 ![Runtime and peak memory, DKX against SFINCS Fortran v3, on the 744k-unknown HSX PAS case](docs/_static/figures/readme/tier1_hsx_runtime_memory.png)
 
-`HSX_PASCollisions_DKESTrajectories`, RHSMode=1, **744,610 unknowns**, one machine, against the
-PETSc 3.23 / MUMPS 5.8.2 build of SFINCS v3. Warm is the second solve in a process, after XLA has compiled.
+Archived `HSX_PASCollisions_DKESTrajectories`, RHSMode=1, **744,610 unknowns**.
+CPU reference runs used Apple M4 and PETSc 3.23 / MUMPS 5.8.2; the GPU row is
+a separate RTX A4000 measurement. DKX warm timings exclude compilation.
 
-| Configuration | Warm solve | Peak RSS |
+| Measurement | Recorded time | Peak RSS |
 | --- | ---: | ---: |
-| DKX, `Nxi`-for-`x` ramp | **27.2 s** | **0.93 GB** |
-| DKX, uniform `Nxi` | 44.3 s | 1.16 GB |
-| DKX, RTX A4000 GPU | 45.0 s | — |
-| SFINCS Fortran v3, 1 rank | 463.6 s | 3.98 GB |
-| SFINCS Fortran v3, 2 ranks (its best) | 229.5 s | 2.86 GB |
+| DKX M4 CPU, ramped pitch, warm | **27.2 s** | **0.93 GB** |
+| DKX M4 CPU, uniform pitch, warm | 44.3 s | 1.16 GB |
+| DKX RTX A4000 GPU, warm | 45.0 s | — |
+| SFINCS v3 reference, 1 rank | 463.6 s | 3.98 GB |
+| SFINCS v3 reference, 2 ranks | 229.5 s | 2.86 GB |
 
-| Cold versus warm, M3 Max CPU | Unknowns | Cold | Warm |
-| --- | ---: | ---: | ---: |
-| HSX PAS reduced | 40,584 | 1.72 s | 0.12 s |
-| HSX PAS, `25x51x100x5` | 744,610 | 23.6 s | 20.0 s |
+A separate M3 Max run measured **23.6 s cold / 20.0 s warm** on the large grid.
 
-That is **one measured 744k-unknown HSX PAS case**, chosen because DKX has an exact structured
-solver for it. Across all 38 upstream decks: structured route faster on 9 of 9; Krylov route faster
-on 7 of 23, six not completed. Every deck, hardware string and method: [performance](docs/performance.rst).
+That is **one measured 744k-unknown HSX PAS case**, chosen for the structured
+PAS route. The archived 38-deck campaign reports the structured route faster on
+9 of 9 completed comparisons and the Krylov route faster on 7 of 23, with six
+incomplete cases. It does not establish a universal speed ordering. Every deck,
+hardware string and method: [performance](docs/performance.rst).
 
 ![Measured parity envelopes of DKX against SFINCS Fortran v3](docs/_static/figures/readme/canonical_parity.png)
 
