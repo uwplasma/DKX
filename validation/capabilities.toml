@@ -1,6 +1,6 @@
 schema_version = 1
-baseline_commit = "6c4614d7414fb279cf54ce6c44d79c07dddb0a4c"
-recorded_at = "2026-09-05"
+baseline_commit = "87d4c0b7a6a2258dfcb65e70f8755103172adb3c"
+recorded_at = "2026-09-20"
 status_values = [
   "stable",
   "stable_candidate",
@@ -48,7 +48,7 @@ name = "Full linearized Fokker-Planck collisions"
 status = "stable_candidate"
 owners = ["src/dkx/collisions.py", "src/dkx/drift_kinetic.py"]
 evidence = ["tests/test_collisions_improved_sugama.py", "tests/test_collision_physics_gates.py"]
-gaps = ["broader independent multispecies convergence matrix"]
+gaps = ["NCSX and W7-X per-observable uncertainty matrix", "independent multispecies convergence beyond named decks"]
 
 [[capability]]
 id = "monoenergetic"
@@ -56,7 +56,7 @@ name = "Monoenergetic coefficients and databases"
 status = "stable_candidate"
 owners = ["src/dkx/monoenergetic.py", "src/dkx/run.py"]
 evidence = ["tests/test_monoenergetic_database.py", "tests/test_paper_benchmark_monoenergetic.py"]
-gaps = ["R6: broaden existing matched YANCC/MONKES evidence beyond the admitted cases; bounds-checked MONKES reader and DKES comparison"]
+gaps = ["broaden matched YANCC/MONKES evidence beyond the named cases", "bounds-checked MONKES reader and DKES comparison"]
 
 [[capability]]
 id = "transport_matrix"
@@ -64,7 +64,7 @@ name = "Thermal transport matrices"
 status = "stable_candidate"
 owners = ["src/dkx/run.py", "src/dkx/moments.py", "src/dkx/writer.py"]
 evidence = ["tests/test_run_transport.py", "tests/test_transport_matrix_write_output_end_to_end.py"]
-gaps = ["native NetCDF schema and installed-wheel gate"]
+gaps = ["native NetCDF schema and installed-wheel gate", "per-observable NCSX and W7-X uncertainty"]
 
 [[capability]]
 id = "bootstrap_current"
@@ -72,7 +72,7 @@ name = "Kinetic bootstrap current"
 status = "stable_candidate"
 owners = ["src/dkx/bootstrap.py", "src/dkx/moments.py"]
 evidence = ["tests/test_bootstrap_objective.py", "tests/test_examples_bootstrap_dkx.py"]
-gaps = ["R6: BOOTSJ comparison and independently specified profiles/scale", "R1/R6: whole-profile parallel-current uncertainty certificate"]
+gaps = ["BOOTSJ comparison with independently specified profiles and scale", "whole-profile parallel-current uncertainty certificate"]
 
 [[capability]]
 id = "ambipolar_roots"
@@ -85,26 +85,34 @@ gaps = ["R1/R6: independent branch-event and joint-grid uncertainty", "R1: margi
 [[capability]]
 id = "phi1"
 name = "Phi1 quasineutrality workflow"
-status = "stable_candidate"
+status = "compatibility_only"
 owners = ["src/dkx/phi1.py", "src/dkx/collisions.py"]
 evidence = ["tests/test_phi1.py", "tests/test_rhsmode1_phi1_write_output_end_to_end.py"]
-gaps = ["R5: native Phi1 exposure and coupled residual/adjoint", "R6: independently converged geometry and collision-model matrix"]
+gaps = ["native Phi1 exposure with coupled kinetic, quasineutrality and gauge residual", "coupled adjoint", "independently converged geometry and collision-model matrix"]
 
 [[capability]]
 id = "implicit_gradients"
 name = "Implicit linear and ambipolar-root derivatives"
 status = "validated_limited"
 owners = ["src/dkx/sensitivity.py", "src/dkx/er.py", "src/dkx/solve.py", "SOLVAX"]
-evidence = ["tests/test_sensitivity.py", "tests/test_er.py", "tests/test_optimization_comparison.py"]
-gaps = ["R2/R7: installed full-chain JVP/VJP/Taylor gates", "R1: branch-event nonsmooth refusal", "R3/R4: peak gradient memory and transformation-aware sharding"]
+evidence = ["tests/test_sensitivity.py", "tests/test_er.py", "tests/test_optimization_comparison.py", "tests/test_factor_reuse_contract.py"]
+gaps = ["installed full-chain JVP/VJP/Taylor gates", "general-cotangent sparse-transpose qualification", "branch-event nonsmooth refusal", "peak gradient memory and transformation-aware sharding", "explicit transpose support is not evidence of autodiff through operator construction"]
 
 [[capability]]
 id = "structured_direct"
 name = "Structured block-elimination solver route"
 status = "validated_limited"
 owners = ["src/dkx/solve.py", "SOLVAX"]
-evidence = ["tests/test_solve.py", "tests/test_tier1_refinement.py"]
-gaps = ["explicit reuse contract", "complete cold/warm and memory matrix"]
+evidence = ["tests/test_solve.py", "tests/test_tier1_refinement.py", "tests/test_factor_reuse_contract.py", "docs/experiments/2026-09-20-one-factorization-many-solves.md"]
+gaps = ["idle-host explicit-adjoint timing qualification", "complete cold/warm and memory matrix", "autodiff cost outside the factorized solve"]
+
+[[capability]]
+id = "sparse_direct"
+name = "Assembled sparse-direct solver and factor reuse"
+status = "experimental"
+owners = ["src/dkx/assembly.py", "src/dkx/solve.py", "SOLVAX"]
+evidence = ["tests/test_direct_route_assembles.py", "tests/test_operator_assembly.py", "tests/test_factor_reuse_contract.py", "docs/experiments/2026-09-20-one-factorization-many-solves.md"]
+gaps = ["general-cotangent transpose residual qualification", "optional production backend in SOLVAX", "factorization memory estimate and pre-allocation guard", "large public-deck uncertainty evidence"]
 
 [[capability]]
 id = "recycled_krylov"
@@ -112,7 +120,7 @@ name = "Recycled Krylov and physics preconditioners"
 status = "validated_limited"
 owners = ["src/dkx/solve.py", "src/dkx/coarse_precond.py", "SOLVAX"]
 evidence = ["tests/test_solve.py", "tests/test_tier2_memory_guard.py"]
-gaps = ["bounded-memory completion for every stable deck", "matched YANCC study"]
+gaps = ["bounded-memory completion for admitted decks", "hard-regime Nx growth", "matched YANCC study"]
 
 [[capability]]
 id = "batch_scans"
@@ -128,7 +136,7 @@ name = "VMEX geometry and bootstrap objective coupling"
 status = "validated_limited"
 owners = ["src/dkx/workflows/geometry_adapters.py", "src/dkx/workflows/optimization.py"]
 evidence = ["tests/test_vmex_workflow.py", "tests/test_finite_beta_vmec_example.py"]
-gaps = ["R7: actual installed VMEX boundary optimization; numbered example is an analytic proxy", "R7: profile/current protocol and bootstrap-consistent equilibrium", "R7: complete-chain derivatives and independently validated final design"]
+gaps = ["actual installed VMEX boundary optimization; numbered example is an analytic proxy", "profile/current protocol and bootstrap-consistent equilibrium", "complete-chain derivatives and independently validated final design"]
 
 [[capability]]
 id = "representative_vmec_profile"
@@ -136,7 +144,7 @@ name = "Representative VMEC radial-profile panels"
 status = "validated_limited"
 owners = ["src/dkx/representative.py"]
 evidence = ["tests/test_representative.py", "tests/ref/wout_up_down_asymmetric_tokamak.nc"]
-gaps = ["standard wout lacks separate density and temperature profiles", "independent converged stellarator profile comparison"]
+gaps = ["standard wout lacks separate density and temperature profiles", "independent converged stellarator profile comparison", "workflow output is illustrative rather than a qualification benchmark"]
 
 [[capability]]
 id = "gpu_single_device"
@@ -144,7 +152,7 @@ name = "Single-device GPU execution"
 status = "validated_limited"
 owners = ["src/dkx/solve.py", "src/dkx/batch.py"]
 evidence = ["tests/test_gpu_solver_path_artifacts.py"]
-gaps = ["R3/R6: fresh controlled production throughput and measured peak memory; office GPU is available", "R2: full prepared dynamic-physics API beyond the staged-layout prototype"]
+gaps = ["fresh installed-artifact CPU/GPU agreement at accepted resolution", "controlled throughput and measured device/host memory", "full prepared dynamic-physics API beyond the staged-layout prototype"]
 
 [[capability]]
 id = "multi_device"
