@@ -4,15 +4,20 @@ Differentiability
 DKX provides implicit derivatives for supported prepared inputs, observables,
 solver routes and regular root branches. The operator, right-hand side and
 moments participate in the derivative; solving a transposed system alone does
-not establish a gradient. See :doc:`capabilities` and :doc:`validation_matrix`
-for the qualified scope. Algebraic, discretization and branch errors still
-limit the accuracy of a derivative of the discrete equations.
+not establish a gradient. See the `capability record
+<https://github.com/uwplasma/DKX/blob/main/validation/capabilities.toml>`_ and
+:doc:`validation_matrix` for the qualified scope. Algebraic, discretization and
+branch errors still limit the accuracy of a derivative of the discrete equations.
 
 This page describes those derivatives and their finite-difference checks.
 The host sparse-direct route is not differentiable. The numbered geometry
 optimization example is an analytic proxy; a qualified installed
 ``vmex -> booz_xform_jax -> dkx`` boundary optimization remains a research-plan
 deliverable.
+
+For CUDA residual checks, retain a CPU backend for host callbacks with
+``JAX_PLATFORMS=cuda,cpu``. To qualify GPU execution explicitly, set
+``DKX_SOLVE_DEVICE=gpu`` and record the result array placement.
 
 .. figure:: _static/figures/paper/dkx_autodiff_gradient_check.png
    :alt: Autodiff gradients of dkx observables overlaid on centered finite differences.
@@ -114,8 +119,8 @@ field/current/slope, ``abs(Jr) <= current_tol`` (default 1e-12),
 prepared problem's units; current is normalized and the slope is normalized
 current per field unit. These controls are static under JIT.
 
-Failure raises an exception, including under JIT, AD and vmap; the runtime
-callback needs an available CPU backend on GPU hosts (``JAX_PLATFORMS=cuda,cpu``).
+Failure raises an exception, including under JIT, AD and vmap; the host
+callback uses the CPU backend described above.
 Acceptance adds a final current/field-tangent evaluation. A zero default slope
 threshold rejects exactly flat roots but does not certify a nearly marginal
 root: choose a positive threshold from the application's current uncertainty
@@ -131,9 +136,8 @@ HLO replaces the global 2358-by-2358 LU with batches of 49-by-49 factors.
 XLA temporary-buffer estimates decrease from about 266 MB to 4.3 MB; these
 are not allocator peak measurements. The trace confirms GPU execution of
 both expressions; the routed expression launches more, smaller kernels.
-Inputs, wheel checksum, HLO, trace and raw timings remain outside Git in
-``dkx-review-evidence-20260905/routed-ambipolar-ad``. This measures an inner
-current evaluation, not a full optimizer iteration or production scaling.
+This historical measurement covers an inner current evaluation, not a full
+optimizer iteration or production scaling.
 The paired local CPU probe gives forward 51.6 -> 2.63 ms and value/gradient
 58.6 -> 3.01 ms. The GPU regression selection takes 419 seconds overall;
 full-root setup/compilation and repeated execution costs remain to be separated.
