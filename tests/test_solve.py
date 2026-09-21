@@ -89,9 +89,11 @@ def _rel_err(x: np.ndarray, ref: np.ndarray) -> float:
 def test_tier1_matches_dense_monoenergetic_rhsmode3() -> None:
     op = _load_op("monoenergetic_PAS_tiny_scheme1")
     rhs = jnp.stack([op.rhs(1), op.rhs(2)], axis=1)  # both transport drives
-    result = solve(op, rhs, method="block_tridiagonal")
+    result = solve(op, rhs, method="block_tridiagonal", tol=1e-10, atol=0.0)
     assert result.method == "block_tridiagonal"
     assert result.converged
+    targets = 1e-10 * np.linalg.norm(np.asarray(rhs), axis=0)
+    assert np.all(np.asarray(result.residual_norms) <= targets)
     x_ref = _dense_solve(op, np.asarray(rhs))
     assert _rel_err(np.asarray(result.x), x_ref) < 1e-10
 
@@ -1748,54 +1750,45 @@ def test_tier1_adjoint_window_is_reverse_mode_only() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Convergence is judged on a shared column scale
+# Convergence is judged independently for each right-hand side
 # ---------------------------------------------------------------------------
-def test_a_small_norm_column_is_not_held_to_an_unachievable_target() -> None:
-    """Columns share a factorization, so they share an accuracy scale.
-
-    The monoenergetic decks carry two right-hand sides differing by 3000x in
-    norm.  Judged per-column with atol=0 the small one got a target of 4.2e-14 --
-    below what double precision delivers here -- came in at 7.7e-14, missed by
-    1.8x, and vetoed an exact direct solve.  The auto policy then paid a full
-    Krylov re-solve: 41 s where the direct answer was already in hand.
-    """
-    import numpy as np
-
+def test_each_rhs_column_has_its_own_relative_target() -> None:
     from dkx.solve import _converged_flag
 
-    rhs = np.zeros((10, 2))
-    rhs[:, 0] = 4.23e-04 / np.sqrt(10)   # the small column
-    rhs[:, 1] = 1.277 / np.sqrt(10)
-    assert _converged_flag(np.array([7.66e-14, 2.04e-13]), rhs, 1e-10, 0.0)
+    rhs = np.diag([1.0, 1e6])
+    residuals = np.array([1e-5, 0.0])
+    assert not _converged_flag(residuals, rhs, tol=1e-10, atol=0.0)
+    assert _converged_flag(residuals, rhs, tol=1e-10, atol=1e-5)
 
 
-def test_a_genuinely_bad_solve_is_still_rejected() -> None:
-    """The relaxation must not swallow a real failure.
-
-    A wrong solve misses by orders of magnitude, not by 1.8x, so sharing the
-    column scale costs no diagnostic power.
-    """
-    import numpy as np
-
+def test_zero_rhs_requires_the_explicit_absolute_tolerance() -> None:
     from dkx.solve import _converged_flag
 
-    rhs = np.zeros((10, 2))
-    rhs[:, 0] = 4.23e-04 / np.sqrt(10)
-    rhs[:, 1] = 1.277 / np.sqrt(10)
-    assert not _converged_flag(np.array([1e-3, 2e-13]), rhs, 1e-10, 0.0)
-    assert not _converged_flag(np.array([np.nan, 2e-13]), rhs, 1e-10, 0.0)
+    rhs = np.zeros((2, 1))
+    assert _converged_flag(np.array([0.0]), rhs, tol=1e-10, atol=0.0)
+    assert not _converged_flag(np.array([1e-30]), rhs, tol=1e-10, atol=0.0)
+    assert _converged_flag(np.array([1e-12]), rhs, tol=1e-10, atol=1e-12)
 
 
-def test_a_single_column_is_unaffected() -> None:
-    """One column means max(||b||) is its own norm: the old behaviour exactly."""
-    import numpy as np
-
+def test_invalid_residual_or_rhs_norm_is_rejected() -> None:
     from dkx.solve import _converged_flag
 
-    rhs = np.ones((10, 1))
-    norm = float(np.linalg.norm(rhs))
-    assert _converged_flag(np.array([0.9e-10 * norm]), rhs, 1e-10, 0.0)
-    assert not _converged_flag(np.array([1.1e-10 * norm]), rhs, 1e-10, 0.0)
+    rhs = np.diag([1.0, 1e6])
+    assert not _converged_flag(np.array([np.nan, 0.0]), rhs, tol=1e-10, atol=0.0)
+    assert not _converged_flag(np.array([-1.0, 0.0]), rhs, tol=1e-10, atol=0.0)
+    rhs[0, 0] = np.inf
+    assert not _converged_flag(np.array([0.0, 0.0]), rhs, tol=1e-10, atol=0.0)
+
+
+@pytest.mark.parametrize(
+    ("tolerance", "value"),
+    [("tol", -1e-10), ("tol", np.nan), ("atol", -1e-10), ("atol", np.nan)],
+)
+def test_invalid_residual_tolerances_are_rejected(tolerance, value) -> None:
+    op = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
+    kwargs = {tolerance: value}
+    with pytest.raises(ValueError, match=rf"{tolerance} must be finite and nonnegative"):
+        solve(op, op.rhs(), method="block_tridiagonal", **kwargs)
 
 
 # ---------------------------------------------------------------------------
