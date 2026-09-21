@@ -1,18 +1,23 @@
 Differentiability
 =================
 
-`dkx` is differentiable end to end. Because the drift-kinetic operator,
-its right-hand side, and the moment diagnostics are all pure JAX functions, a
-scalar built from a solved distribution — a flux, a bootstrap current, an
-ambipolar :math:`E_r`, a transport coefficient — can be handed straight to
-``jax.grad`` and returns an exact derivative with respect to geometry harmonics,
-plasma profiles, or the collisionality. There is no divided-difference
-stencil in the loop and no differentiation through solver iterations.
+DKX provides implicit derivatives for supported prepared inputs, observables,
+solver routes and regular root branches. The operator, right-hand side and
+moments participate in the derivative; solving a transposed system alone does
+not establish a gradient. See the `capability record
+<https://github.com/uwplasma/DKX/blob/main/validation/capabilities.toml>`_ and
+:doc:`validation_matrix` for the qualified scope. Algebraic, discretization and
+branch errors still limit the accuracy of a derivative of the discrete equations.
 
-Covered here: the gradient through the linear solve, the catalogue of
-differentiable targets, the measured gradient-vs-finite-difference agreement, and
-the differentiable geometry chain ``vmex -> booz_xform_jax -> dkx`` used for
-stellarator optimization.
+This page describes those derivatives and their finite-difference checks.
+The host sparse-direct route is not differentiable. The numbered geometry
+optimization example is an analytic proxy; a qualified installed
+``vmex -> booz_xform_jax -> dkx`` boundary optimization remains a research-plan
+deliverable.
+
+For CUDA residual checks, retain a CPU backend for host callbacks with
+``JAX_PLATFORMS=cuda,cpu``. To qualify GPU execution explicitly, set
+``DKX_SOLVE_DEVICE=gpu`` and record the result array placement.
 
 .. figure:: _static/figures/paper/dkx_autodiff_gradient_check.png
    :alt: Autodiff gradients of dkx observables overlaid on centered finite differences.
@@ -51,13 +56,12 @@ single *transposed* solve
    + \lambda^{\mathsf T}\!\left(\frac{\partial b}{\partial p}
    - \frac{\partial A}{\partial p}\,u\right).
 
-The transposed solve :math:`A^{\mathsf T}\lambda = \cdot` **reuses the
-forward factorization**. On the structured direct route the adjoint is the same
-block-Thomas sweep run with ``transpose=True`` on the factors already computed
-for the forward solve; on the recycled Krylov route it is the
-transposed-preconditioner solve seeded from the same coarse operator. A gradient
-therefore costs *one extra solve*, independent of how many iterations the forward
-solve took.
+On the structured direct route, the transposed solve reuses the forward
+block-Thomas factors. The recycled Krylov route instead solves with the
+transposed preconditioner. Reverse mode also differentiates operator coefficients
+and observables, so total gradient time and memory must be measured separately
+from the adjoint substitution. Iteration counts and factor reuse alone do not
+predict that cost.
 
 The wrappers come from the standalone ``solvax`` package: linear solves route
 through ``solvax.implicit.linear_solve`` (``jax.lax.custom_linear_solve``), and
@@ -115,8 +119,8 @@ field/current/slope, ``abs(Jr) <= current_tol`` (default 1e-12),
 prepared problem's units; current is normalized and the slope is normalized
 current per field unit. These controls are static under JIT.
 
-Failure raises an exception, including under JIT, AD and vmap; the runtime
-callback needs an available CPU backend on GPU hosts (``JAX_PLATFORMS=cuda,cpu``).
+Failure raises an exception, including under JIT, AD and vmap; the host
+callback uses the CPU backend described above.
 Acceptance adds a final current/field-tangent evaluation. A zero default slope
 threshold rejects exactly flat roots but does not certify a nearly marginal
 root: choose a positive threshold from the application's current uncertainty
@@ -132,9 +136,8 @@ HLO replaces the global 2358-by-2358 LU with batches of 49-by-49 factors.
 XLA temporary-buffer estimates decrease from about 266 MB to 4.3 MB; these
 are not allocator peak measurements. The trace confirms GPU execution of
 both expressions; the routed expression launches more, smaller kernels.
-Inputs, wheel checksum, HLO, trace and raw timings remain outside Git in
-``dkx-review-evidence-20260905/routed-ambipolar-ad``. This measures an inner
-current evaluation, not a full optimizer iteration or production scaling.
+This historical measurement covers an inner current evaluation, not a full
+optimizer iteration or production scaling.
 The paired local CPU probe gives forward 51.6 -> 2.63 ms and value/gradient
 58.6 -> 3.01 ms. The GPU regression selection takes 419 seconds overall;
 full-root setup/compilation and repeated execution costs remain to be separated.
@@ -338,6 +341,19 @@ complete native profile builder or a reusable-factor certificate.
 Native fixed-geometry profile scans
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+A bounded full-FP field-derivative audit at ``psi_N=0.16`` (``r_N=0.4``),
+``E_r=0.2 kV/m`` and grid ``(9,1,8,4)`` used the native analytic-tokamak
+fixture with deuterium and electrons, fixed profiles, DKES trajectories and
+Phi1 off. Original packed primal, tangent and transpose residuals were below
+``1e-11``. For normalized ``FSABjHat``, the reverse derivative was
+``-2.305674823e-4 (kV/m)^-1``; centered differences over four halved steps
+approached it to ``6.6e-7`` relative and Taylor orders were ``2.00–2.02``.
+The adjoint identity defect was explained by its residual-weighted terms,
+closing to ``1.1e-17``. This verifies a discrete fixed-geometry field derivative,
+not profile/geometry derivatives, root behavior or grid uncertainty.
+`Pinned source, full results and executable audit
+<https://github.com/uwplasma/DKX/pull/263>`_ retain the exact scope.
+
 Use ``dkx.prepare_er_scan(case, surface_index=..., differentiable_profiles=True)``
 to prepare profile updates from a native Case. The returned problem's
 ``with_profiles(density_m3=..., temperature_keV=...)`` method accepts positive
@@ -461,29 +477,26 @@ roughly one forward solve, as predicted.
 The differentiable optimization chain
 -------------------------------------
 
-Stellarator optimization with a *kinetic* objective closes the loop from the
-plasma boundary to a neoclassical figure of merit and back, entirely under
-automatic differentiation:
+``examples/optimization/optimize_QA_bootstrap.py`` implements the full proposed
+chain from boundary coefficients to a kinetic objective:
 
 .. math::
 
    \text{boundary } \partial\Omega
-   \;\xrightarrow[\text{equilibrium}]{\texttt{vmec\_jax}}\;
-   \{ \hat B_{mn} \}
+   \;\xrightarrow[\text{equilibrium}]{\texttt{vmex.core.implicit}}\;
+   \text{spectral tables}
    \;\xrightarrow[\text{Boozer transform}]{\texttt{booz\_xform\_jax}}\;
    \text{geometry}
-   \;\xrightarrow[\text{kinetic solve}]{\texttt{sfincs\_jax}}\;
-   \langle \mathbf{j}\cdot\mathbf{B}\rangle,\ D_{ij},\ \Gamma_s .
+   \;\xrightarrow[\text{kinetic solve}]{\texttt{dkx}}\;
+   \langle \mathbf{j}\cdot\mathbf{B}\rangle .
 
-Each arrow is a JAX transformation, so ``jax.grad`` of the bootstrap current
-:math:`\langle \mathbf{j}\cdot\mathbf{B}\rangle` (or a transport coefficient)
-with respect to the boundary Fourier modes propagates through the equilibrium
-solve, the Boozer transform, and the drift-kinetic solve without any finite
-differences. ``examples/optimization/optimize_QA_bootstrap.py`` drives a
-quasi-axisymmetric, low-bootstrap optimization on exactly this chain with warm
-starts and finite-difference-verified gradients; the geometry link on its own is
-demonstrated in ``examples/autodiff/vmex_to_boozer_sfincs_pipeline.py``. See
-:doc:`optimization` and :doc:`vmex_workflow` for the full workflow.
+The driver calls ``jax.value_and_grad`` across these components, uses warm
+starts, and contains central finite-difference checks. Its presence establishes
+an implementation path, not a qualified optimization result. Qualification
+still requires an installed-artifact run that satisfies the research plan's
+objective, constraint, equilibrium-residual, derivative, finer-grid, and
+independent-reference acceptance criteria. See :doc:`optimization` and
+:doc:`vmex_workflow` for the surrounding workflow.
 
 Cost against a non-differentiable reference
 -------------------------------------------

@@ -6,9 +6,8 @@ make the monoenergetic layer of the theory directly usable:
 
 - **monoenergetic-database mode** — the community-standard
   :math:`(\nu'/v,\ E_r/v)` scan and energy convolution;
-- **variational bounds** — an upper and a lower bound bracketing the
-  monoenergetic :math:`D_{11}`, computed from the solution itself with no
-  reference run;
+- **variational functionals** — :math:`D_{11}` estimates from the computed
+  monoenergetic state;
 - **Shaing-Callen collisionless-limit** evaluator — the bootstrap coefficient,
   with an analytic axisymmetric cross-check.
 
@@ -85,12 +84,12 @@ classic variational structure :math:`M = V + P`, with :math:`P` (collisions)
 symmetric positive semidefinite and :math:`V` (streaming + mirror + :math:`E\times
 B`) antisymmetric under the entropy inner product. Two quadratic functionals then
 bound the diffusion coefficient :math:`D_{11}` from below and above for any trial
-field, and both are tight at the exact solution. Evaluated at the even and odd
-Legendre-parity parts of the *discrete* solution, they sit symmetrically around
-the computed :math:`D_{11}`. Their relative gap measures how well the
-discretization preserves the continuum entropy-production structure; it shrinks
-under :math:`\theta`/:math:`\zeta`/:math:`\xi` refinement and at high
-collisionality.
+field at zero radial electric field, and both are tight at the exact solution.
+Evaluating them at the even and odd Legendre-parity parts of the *discrete*
+solution produces a bracket around the computed :math:`D_{11}`. Its relative
+gap is a discrete entropy-structure diagnostic. A shrinking gap on a refinement
+ladder is evidence of improved resolution; it is not an enclosure of continuum
+discretization error.
 
 :func:`dkx.variational.monoenergetic_d11_bounds` returns this bracket from a
 converged monoenergetic state:
@@ -105,28 +104,32 @@ converged monoenergetic state:
        b0_over_bbar=b0_over_bbar,
    )
    print(bounds.lower, bounds.d11, bounds.upper)
-   print("convergence certificate:", bounds.gap)  # |upper - lower| / |d11|
+   print("relative bracket width:", bounds.gap)  # |upper - lower| / |d11|
 
-The returned :class:`~dkx.variational.MonoenergeticD11Bounds` guarantees
-``lower <= transportMatrix[0][0] <= upper`` to solver-residual precision, so
-``gap`` is an error bound computed from this run alone, with no reference
-solution: a small gap means a converged discretization, a large gap flags an
-under-resolved one. The functionals are the upper/lower estimates of `van Rij &
+At zero radial electric field, the returned
+:class:`~dkx.variational.MonoenergeticD11Bounds` brackets the computed
+``transportMatrix[0][0]`` to solver-residual precision. Its ``gap`` is the
+relative width of that discrete bracket. At finite radial electric field, the
+functional values and gap are diagnostics only. Neither use bounds the
+difference from the continuum coefficient; establish that with an
+observable-specific resolution study. The functionals are the upper/lower
+estimates of `van Rij &
 Hirshman, Phys. Fluids B 1, 563 (1989) <https://doi.org/10.1063/1.859116>`_,
-built on the variational principle of Hirshman et al. (1986). The strict-bound
-property holds for purely parity-flipping trajectories (:math:`E_\* = 0`); with a
-finite radial electric field the gap remains a consistency diagnostic.
+built on the variational principle of Hirshman et al. (1986). The continuum
+strict-bound property holds for purely parity-flipping trajectories
+(:math:`E_\* = 0`); with a finite radial electric field the gap remains a
+consistency diagnostic.
 
 Shaing-Callen collisionless limit
 ---------------------------------
 
-At asymptotically low collisionality the monoenergetic bootstrap coefficient (the
-RHSMode=3 ``transportMatrix[1][0]`` entry) approaches a collisionality-independent
-value fixed purely by the flux-surface geometry. :mod:`dkx.shaing_callen`
-evaluates this limit directly from the geometry — the analytic result of `Shaing &
+The Shaing-Callen formula is a collisionless geometrical reference for the
+monoenergetic bootstrap coefficient (the RHSMode=3
+``transportMatrix[1][0]`` entry). :mod:`dkx.shaing_callen` evaluates it directly
+from the geometry — the analytic result of `Shaing &
 Callen, Phys. Fluids 26, 3315 (1983) <https://doi.org/10.1063/1.864108>`_, in the
 closed form of Albert, Beidler, Kapper, Kasilov & Kernbichler, arXiv:2407.21599
-(2024) — by solving the geodesic-curvature magnetic differential equations
+(2025) — by solving the geodesic-curvature magnetic differential equations
 spectrally on a Fourier-upsampled ``(theta, zeta)`` grid:
 
 .. code-block:: python
@@ -144,10 +147,13 @@ For an axisymmetric field the geometric factor collapses analytically to
 fraction — the tokamak banana-regime value of `Boozer & Gardner, Phys. Fluids B
 2, 2408 (1990) <https://doi.org/10.1063/1.859506>`_. That closed form is an
 independent cross-check on the spectral evaluator and is exposed as
-:func:`~dkx.shaing_callen.trapped_fraction`. The module underpins the
-package's collisionless-limit physics tests, which confirm that a
-:math:`\nu'`-scan of the full monoenergetic solve envelopes the analytic value as
-collisionality drops.
+:func:`~dkx.shaing_callen.trapped_fraction`. A finite-collisionality scan is
+not generally expected to converge to this reference: Albert et al. show that
+at zero radial electric field in the :math:`1/\nu` regime its offset can
+oscillate rather than vanish as collisionality decreases. Convergence requires
+additional conditions, including significant orbit precession such as finite
+radial electric field; see `Albert et al., arXiv:2407.21599
+<https://arxiv.org/abs/2407.21599>`_.
 
 See :doc:`numerics` for the solver, :doc:`differentiability` for gradients through
 these tools, and :doc:`references` for the full literature.

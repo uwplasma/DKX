@@ -33,9 +33,9 @@ Performance evidence
 .. figure:: _static/figures/paper/dkx_fortran_suite_benchmark_summary.png
 
 Fortran reference runtime clears a ``10 s`` reference-runtime-window, so
-process-launch and JIT-amortization noise does not dominate the bars.
-
-.. figure:: _static/figures/paper/dkx_fortran_suite_benchmark_summary.png
+process-launch and JIT-amortization noise does not dominate the bars. This is a
+release-scoped regression artifact; it does not establish a universal runtime
+ordering or solution uncertainty.
 
 Choose a starting point
 -----------------------
@@ -54,6 +54,12 @@ need separate and joint resolution studies for each observable. A successful
 linear solve alone does not certify fluxes, bootstrap current or a root branch.
 The compatibility/expert interface covers more physics than native Case execution;
 see :doc:`capabilities` before selecting an advanced model.
+
+Derivative support is scoped by input, output, solver route and branch. An
+explicit sparse solve of ``A.T x = b`` is a transpose operation, not by itself
+autodiff; a gradient also needs verified pullbacks through operator construction,
+observables and any root. The ranked qualification work and acceptance criteria
+live in the repository's `research plan <../plan.md>`_.
 
 .. toctree::
    :maxdepth: 1

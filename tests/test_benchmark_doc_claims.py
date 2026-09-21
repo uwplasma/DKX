@@ -172,7 +172,9 @@ def test_readme_canonical_benchmark_claims_match_recorded_measurements() -> None
     # is pinned the same way: the README may not state a number the recorded
     # source does not carry. Without this the cold figures would be the only
     # unbacked ones on the page.
-    for token in ("1.72", "0.12", "23.6", "20.0", "40,584"):
+    # The concise README retains the large-grid pair; the teaching-grid
+    # timings remain in the figure source and need not be repeated in prose.
+    for token in ("23.6", "20.0"):
         assert token in readme, token
         assert token.replace(",", "_") in figures_source, token
     assert "744,610 unknowns" in readme
