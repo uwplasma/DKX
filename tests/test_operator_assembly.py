@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import itertools
 from pathlib import Path
+from types import SimpleNamespace
 
 import jax
 import numpy as np
@@ -148,6 +149,51 @@ def test_no_group_holds_two_columns_that_share_a_row(operator) -> None:
         assert np.unique(rows).size == rows.size
 
 
+def test_pattern_and_groups_include_the_wider_magnetic_upwind_stencil() -> None:
+    """Magnetic-drift upwinding can reach farther than the centred derivative."""
+
+    def cyclic_stencil(n: int, offsets: tuple[int, ...]) -> np.ndarray:
+        matrix = np.zeros((n, n))
+        rows = np.arange(n)
+        for offset in offsets:
+            matrix[rows, (rows + offset) % n] = 1.0
+        return matrix
+
+    n_theta, n_zeta = 5, 9
+    op = SimpleNamespace(
+        n_theta=n_theta,
+        n_zeta=n_zeta,
+        f_shape=(1, 1, 3, n_theta, n_zeta),
+        with_magnetic_drifts=True,
+        ddtheta=cyclic_stencil(n_theta, (-1, 1)),
+        ddzeta=cyclic_stencil(n_zeta, (-1, 1)),
+        ddtheta_magdrift_plus=None,
+        ddtheta_magdrift_minus=None,
+        ddzeta_magdrift_plus=cyclic_stencil(n_zeta, (-3, -2, -1, 0, 1, 2)),
+        ddzeta_magdrift_minus=cyclic_stencil(n_zeta, (-2, -1, 0, 1, 2, 3)),
+    )
+    op.f_size = int(np.prod(op.f_shape))
+    index = np.arange(op.f_size).reshape(op.f_shape)
+    pattern = f_block_pattern(op).tocsc()
+
+    row = index[0, 0, 1, 2, 0]
+    plus_column = index[0, 0, 1, 2, 3]
+    minus_column = index[0, 0, 1, 2, 6]
+    assert pattern[row, plus_column]
+    assert pattern[row, minus_column]
+
+    for group in f_block_groups(op):
+        rows = np.concatenate(
+            [pattern.indices[pattern.indptr[j] : pattern.indptr[j + 1]] for j in group]
+        )
+        assert np.unique(rows).size == rows.size
+
+    op.with_magnetic_drifts = False
+    centred_pattern = f_block_pattern(op)
+    assert not centred_pattern[row, plus_column]
+    assert not centred_pattern[row, minus_column]
+
+
 @pytest.mark.parametrize(
     "n, radius", [(11, 2), (15, 2), (5, 2), (12, 1), (7, 3), (16, 2), (13, 1)]
 )
@@ -196,3 +242,31 @@ def test_the_border_survives_the_assembly(operator) -> None:
     matrix = result.matrix.toarray()
     np.testing.assert_allclose(matrix[:f_size, f_size:], np.asarray(b_cols), atol=0.0)
     np.testing.assert_allclose(matrix[f_size:, :f_size], np.asarray(c_rows), atol=0.0)
+
+
+def test_public_w7x_full_fp_operator_assembles_with_magnetic_drifts() -> None:
+    """The checked reduced W7-X deck exercises the real upwind drift support."""
+    from dkx.validation.data_fetch import resolve_external_equilibrium
+
+    equilibrium = resolve_external_equilibrium(
+        "wout_w7x_standardConfig.nc", fetch=False
+    )
+    if equilibrium is None:
+        pytest.skip("optional public W7-X equilibrium data is not cached")
+
+    deck = (
+        Path(__file__).parent
+        / "reduced_inputs"
+        / "filteredW7XNetCDF_2species_magneticDrifts_withEr.input.namelist"
+    )
+    raw = load_sfincs_input(deck).raw
+    raw.group("geometryParameters")["EQUILIBRIUMFILE"] = str(equilibrium)
+    public_operator = kinetic_operator_from_namelist(raw)
+
+    result = assemble_operator(public_operator)
+    reference = _sampled(public_operator)
+    difference = result.matrix - reference
+
+    assert result.relative_error < 1e-12
+    assert result.matrix.nnz == reference.nnz
+    assert np.max(np.abs(difference.data), initial=0.0) < 1e-15

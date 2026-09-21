@@ -68,17 +68,29 @@ def _angular_pattern(op: KineticOperator, sparse):
     eye_theta = sparse.identity(op.n_theta, format="csr", dtype=bool)
     eye_zeta = sparse.identity(op.n_zeta, format="csr", dtype=bool)
     eye = sparse.kron(eye_theta, eye_zeta, format="csr").astype(bool)
-    # The derivatives act on one angle each; the block they build is their
-    # Kronecker lift onto (theta, zeta).
+    # Streaming uses the centred derivatives while tangential magnetic drifts
+    # use separate plus/minus upwind derivatives.  Their supports need not be
+    # equal: at low odd resolution the upwind stencil can reach one point
+    # farther around the periodic grid.
     d_theta = sparse.kron(
-        sparse.csr_matrix(np.asarray(op.ddtheta) != 0.0), eye_zeta, format="csr"
+        sparse.csr_matrix(_angular_support(op, "theta")), eye_zeta, format="csr"
     ).astype(bool)
     d_zeta = sparse.kron(
-        eye_theta, sparse.csr_matrix(np.asarray(op.ddzeta) != 0.0), format="csr"
+        eye_theta, sparse.csr_matrix(_angular_support(op, "zeta")), format="csr"
     ).astype(bool)
-    # Each term applies one derivative to the block; the union covers them all,
-    # and squaring covers a term that composes two.
     return (eye + d_theta + d_zeta).astype(bool)
+
+
+def _angular_support(op: KineticOperator, axis: str) -> np.ndarray:
+    """Union of the active centred and magnetic-upwind derivative supports."""
+    matrices = [getattr(op, f"dd{axis}")]
+    if getattr(op, "with_magnetic_drifts", False):
+        matrices.extend(
+            matrix
+            for suffix in ("plus", "minus")
+            if (matrix := getattr(op, f"dd{axis}_magdrift_{suffix}", None)) is not None
+        )
+    return np.logical_or.reduce([np.asarray(matrix) != 0.0 for matrix in matrices])
 
 
 def _cyclic_radius(matrix) -> int:
@@ -170,8 +182,8 @@ def f_block_groups(op: KineticOperator, *, l_bandwidth: int = _L_BANDWIDTH) -> l
     coupling forbids, so ``(s, x)`` enters the group key.
     """
     n_s, n_x, n_xi, n_theta, n_zeta = op.f_shape
-    theta_classes = _angular_classes(n_theta, _cyclic_radius(op.ddtheta))
-    zeta_classes = _angular_classes(n_zeta, _cyclic_radius(op.ddzeta))
+    theta_classes = _angular_classes(n_theta, _cyclic_radius(_angular_support(op, "theta")))
+    zeta_classes = _angular_classes(n_zeta, _cyclic_radius(_angular_support(op, "zeta")))
     # Legendre is a band, not a circle, so a stride past the bandwidth is enough.
     stride_l = min(2 * l_bandwidth + 1, n_xi)
     index = np.arange(op.f_size).reshape(n_s * n_x, n_xi, n_theta, n_zeta)
