@@ -127,6 +127,59 @@ Continue Phase 1 at a revised reporting grid, and record three follow-ups.
 3. Repeat the ladder on a two-species deck and on the collaborator's HSX-like deck at its resonant `E_*`, where the SFINCS manual expects the speed resolution to matter most.
 
 
+## Installed-candidate replay (2026-09-21)
+
+The installed DKX 2.5.0 candidate from public source
+[`a48c94e5`](https://github.com/uwplasma/dkx/commit/a48c94e5cec0b5425e0c3a503defc80935dd5fe7)
+replayed only the baseline and pitch81 pair. The installed wheel's SHA256 was
+`96c6ad67731c11e6f1fea2a69c81f6aed2c1e0fd5fdf078629f6046407d75908`.
+Runtime: Xeon W-2295 CPU, four CPUs, single-threaded BLAS, Python 3.11.15,
+JAX/jaxlib 0.10.2 with x64 enabled, and SOLVAX 0.24.0.
+The reconstructed baseline input SHA256 was
+`78dc5d545409cec765bebb0a7a02f43e897070a7a415fdc372d0a92ac6a340a9`.
+Physics and solver tolerance `1e-10` were unchanged.
+
+| Quantity | Baseline (21, 37, 61, 8) | Pitch81 (21, 37, 81, 8) | Signed change / absolute baseline |
+| --- | ---: | ---: | ---: |
+| Complete-state original relative L2 residual | 8.539365599620979e-11 | 9.504394422102867e-11 | — |
+| `FSABFlow` = `FSABjHat` | -0.06860781541031573 | -0.06860203463881590 | +0.008426% |
+| `particleFlux_vm_psiHat` | 5.198212888227198e-7 | 5.161234890990345e-7 | -0.711360% |
+| `heatFlux_vm_psiHat` | 1.857282155175711e-6 | 1.843674992420304e-6 | -0.732638% |
+
+Both points passed the original-equation gate. Total wall time was 91.60 s;
+the pitch refinement recorded 49.40 s. Peak RSS was 11,024,564 KiB (10.51 GiB)
+from GNU time; the sampled sum over the run's processes peaked at 10.52 GiB.
+The runner uses one process for both points, so baseline-only wall time and
+separate per-point RSS were not recorded.
+
+After reconstructing the inputs below, the replay command is:
+
+```bash
+JAX_PLATFORMS=cpu JAX_ENABLE_X64=1 DKX_CORES=4 \
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+DKX_TIER2_MEMORY_GUARD=on DKX_COARSE_FACTOR_DTYPE=float64 \
+/usr/bin/time -v timeout --signal=TERM --kill-after=30s 20m \
+python -m dkx converge baseline.input.namelist --cores 4 \
+  --axes pitch --factor 1.3278688524590163 --no-joint \
+  --tolerance 0.01 --format json > report.json 2> run.log
+```
+
+The CLI tolerance is the 1% observable-change criterion, not the solver
+tolerance. External monitoring required at least 32 GiB host-available memory
+at admission, and imposed 20 GiB summed run RSS, 12 GiB minimum host-available
+memory, and a 20-minute wall limit, targeting only the run's process groups.
+Start availability was 47.65 GiB; the monitored minimum was 34.15 GiB.
+The initial group monitor omitted the child group created by `timeout`;
+session-wide monitoring corrected that omission during execution. No limit
+violation was observed, and the command exited successfully. The command
+above includes the wall limit and DKX's route admission guard; it does not
+implement the external RSS/host-memory watchdog.
+
+This is an accepted partial replay with pairwise changes below 1%. It does
+not rerun the historical ladder or adjoints, establish joint convergence,
+or supply a three-grid uncertainty estimate. The combined reporting grid,
+joint refinement, and revised-grid uncertainty/adjoint evidence remain pending.
+
 ## Public reconstruction and next refinement
 
 The exact equilibrium and source input are in
@@ -167,6 +220,7 @@ for key, value in dict(equilibriumFile='"equilibrium.nc"', Ntheta=21,
                        Nzeta=37, Nxi=61, Nx=8, solverTolerance="1d-10").items():
     text = set_value(text, key, value)
 assert sha256(text.encode()).hexdigest() == "78dc5d545409cec765bebb0a7a02f43e897070a7a415fdc372d0a92ac6a340a9"
+Path("baseline.input.namelist").write_text(text)
 for key, value in dict(Ntheta=33, Nzeta=49, Nxi=101, Nx=11).items():
     text = set_value(text, key, value)
 assert sha256(text.encode()).hexdigest() == "edde8b27a69c81d0d02af9e19e716bb333f77caccec254890ecad601e3b0c8c2"
