@@ -4,23 +4,23 @@
 
 Phase 1 step 2 and item Q9 of the #230 handoff. Two NCSX resolution checks were blocked on memory: theta25 was gated at "56.1 GiB available", and the baseline adjoint campaign at 42 GiB. With #231, #233 and single-threaded BLAS, those grids should fit in 20 GiB. Three things are tested:
 
-- The refinement ladder and the four baseline adjoints run on one shared office CPU host, with unchanged physics and tolerances.
+- The refinement ladder and the four baseline adjoints run on one shared CPU host, with unchanged physics and tolerances.
 - The code changes reproduce the archived moments to rounding.
 - The ladder yields per-axis error bars, or states which axes are not yet in the asymptotic range.
 
-Owner: independent review. Budget: one afternoon of office CPU.
+Owner: independent review. Budget: one afternoon of CPU time.
 
 ## Admission test
 
 **Setup.**
-- Deck: NCSX single-species, full Fokker–Planck with full-trajectory `E_r` (the Phase 1 baseline; `ncsx_baseline.namelist`). Only the resolution is changed.
+- Deck: NCSX single-species, full Fokker–Planck with full-trajectory `E_r` (the historical baseline reconstructed below). Only the resolution is changed.
 - Code: DKX `main` `2b7641d`, SOLVAX 0.21.0 (PyPI), JAX 0.10.2, x64.
-- Host: office Xeon W-2295, cores 8–11. Environment `DKX_CORES=4` with `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS` and `MKL_NUM_THREADS` all set to 1. One fresh process per point.
+- Host: Xeon W-2295, cores 8–11. Environment `DKX_CORES=4` with `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS` and `MKL_NUM_THREADS` all set to 1. One fresh process per point.
 - Watchdog: stops a point above 30 GiB RSS, below 8 GiB host-available, or at the time cap.
 
 **Acceptance per point.** Original relative residual ≤ 1e-10, with the complete state returned by the Krylov route.
 
-**Reproduction.** Points that also exist in the archived campaign (`dkx-phase1-completion/qualification-summary.json`) must agree with it to ≤ 1e-12 relative.
+**Reproduction.** Points repeated from the earlier campaign must agree to ≤ 1e-12 relative. The public input reconstruction below identifies the case; the historical raw campaign is not bundled.
 
 **Error bars.**
 - Discretization: `dkx.workflows.converge.richardson_uncertainty` (fine-grid GCI; it refuses non-monotone ladders).
@@ -100,11 +100,11 @@ Both points converged, with original residuals of 9.6e-11 and 5.9e-11.
 | particle flux | 30 / 37 | 7.6e-11 / 4.7e-13 | −8.407e-17 | −1.6e-10 |
 | heat flux | 28 / 34 | 9.7e-11 / 8.9e-13 | −8.362e-17 | −4.5e-11 |
 
-- **Acceptance.** All eight audits pass their original primal and transpose residual gates.
-- **Stability.** Tightening the adjoint from 1e-10 to 1e-12 changes each correction by less than 3e-11 of itself. The flow adjoint at 1e-12 stopped at its restart cap with residual 6.4e-12; that residual passes the audit and gives the same estimate.
+- **Requested-tolerance acceptance.** The flow transpose at a requested `1e-12` reached `6.4e-12`, so it did not meet that request. Its stable correction is diagnostic evidence, not an admitted `1e-12` solve. The listed `1e-10` transposes and the tighter particle/heat-flux transposes meet their requests.
+- **Stability.** Tightening the adjoint from 1e-10 to 1e-12 changes each correction by less than 3e-11 of itself. The flow adjoint at 1e-12 stopped at its restart cap with residual 6.4e-12; the estimate remained stable despite missing the requested tolerance.
 - **Interpretation.** These are estimates, not bounds. The algebraic error of every reported moment is about 1e-10 relative: eight orders of magnitude below the discretization differences above.
 
-Scripts, records and logs are kept outside Git in `dkx-review-evidence-20260913/q9/` (`q9_ladder.py`, `q9_adjoints.py`, `run_ladder.sh`, `run_ladder2.sh`, `run_speed_rungs.sh`, `run_adjoints.sh`, `speed_ladder_analysis.py`, `*.json`, `run.log`, `run_speed.log`).
+Raw states and historical logs remain outside Git. The public reconstruction below permits independent reruns; it does not recreate unavailable timing logs.
 
 ## Decision
 
@@ -119,9 +119,84 @@ Continue Phase 1 at a revised reporting grid, and record three follow-ups.
 | θ | ≲ 7e-4 | — |
 | x | oscillates ≲ 4e-4 | −0.135% (the baseline understates \|flow\|), even-ladder GCI 1.6e-3 |
 
-**Reporting grid.** For the positioning figure use at least `Nxi = 101` and `Nzeta = 49` for the fluxes, and `Nx ≥ 11` for the flow. Each of these rungs fits in ≤ 17 GiB and runs in ≤ 4 min on four cores.
+**Reporting grid.** For the positioning figure use at least `Nxi = 101` and `Nzeta = 49` for the fluxes, and `Nx ≥ 11` for the flow. Those bounds describe separate historical rungs, not a grid combining all refinements. A combined reporting grid and its joint refinement need fresh memory admission.
 
 **Follow-ups:**
 1. Done in #239. `richardson_uncertainty` reports monotone ladders faster than `max_order` with `max(safety, 3)` times the last difference, instead of refusing them.
-2. Diagnosed in #240 (`2026-09-14-ntheta-iteration-growth.md`). The growth in iterations with `Ntheta` comes from the Fokker–Planck speed coupling the coarse preconditioner drops.
+2. The coupling attribution proposed in #240 is historical. Later exact-retention and balancing experiments did not support it as a successful remedy; follow the bounded diagnostic in `plan.md` instead.
 3. Repeat the ladder on a two-species deck and on the collaborator's HSX-like deck at its resonant `E_*`, where the SFINCS manual expects the speed resolution to matter most.
+
+
+## Public reconstruction and next refinement
+
+The exact equilibrium and source input are in
+[yancc commit `33e1ce9`](https://github.com/f0uriest/yancc/tree/33e1ce9b208f6d3209fdb55aeba8712e6d6a4223),
+under its [MIT license](https://github.com/f0uriest/yancc/blob/33e1ce9b208f6d3209fdb55aeba8712e6d6a4223/LICENSE).
+This preparation downloads them into the current directory, verifies both
+upstream files, and reconstructs the historical baseline before changing only
+its grid. Run it in an empty directory outside the repository. It runs no solver.
+
+```python
+from hashlib import sha256
+from pathlib import Path
+import re
+from urllib.request import urlopen
+
+base = "https://raw.githubusercontent.com/f0uriest/yancc/33e1ce9b208f6d3209fdb55aeba8712e6d6a4223/"
+source = ("publications/conlin2026/20251212-01-sfincs_for_yancc_benchmarks/"
+          "20251212-01-030_collisionality_scan/10/input.namelist")
+
+def download(path, expected):
+    with urlopen(base + path, timeout=60) as response:
+        data = response.read()
+    assert sha256(data).hexdigest() == expected, path
+    return data
+
+equilibrium = download("tests/data/wout_NCSX.nc",
+    "78e60753b960e1e50c5e320e06e7485bd573d37c72dec97dbc4de39c1f182f02")
+text = download(source,
+    "4c50a95d0cb079ec5679a9c1351a47af20c48c304db3b603c4e0b64a708dd2fe").decode()
+
+def set_value(text, key, value):
+    text, count = re.subn(rf"(?im)^(\s*{key}\s*=\s*).+$",
+                          lambda match: match[1] + str(value), text)
+    assert count == 1, key
+    return text
+
+for key, value in dict(equilibriumFile='"equilibrium.nc"', Ntheta=21,
+                       Nzeta=37, Nxi=61, Nx=8, solverTolerance="1d-10").items():
+    text = set_value(text, key, value)
+assert sha256(text.encode()).hexdigest() == "78dc5d545409cec765bebb0a7a02f43e897070a7a415fdc372d0a92ac6a340a9"
+for key, value in dict(Ntheta=33, Nzeta=49, Nxi=101, Nx=11).items():
+    text = set_value(text, key, value)
+assert sha256(text.encode()).hexdigest() == "edde8b27a69c81d0d02af9e19e716bb333f77caccec254890ecad601e3b0c8c2"
+Path("equilibrium.nc").write_bytes(equilibrium)
+Path("input.namelist").write_text(text)
+```
+
+After checking available memory and reserving the machine, the existing runner
+can attempt this next study with an installed, pinned DKX version:
+
+```bash
+JAX_PLATFORMS=cpu JAX_ENABLE_X64=1 DKX_CORES=4 \
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+python -m dkx converge input.namelist --cores 4 \
+  --axes theta zeta pitch speed --factor 1.1 --tolerance 0.01 \
+  --format json > report.json 2> run.log
+```
+
+The reporting grid is `(33,49,101,11)`; separate refinements reach theta 37,
+zeta 55, pitch 111 and speed 12; the joint grid is `(37,55,111,12)`.
+These points have **not** been run in this update. Current route estimates
+require about 27 GiB available for reusable factors at the reporting grid and
+52 GiB at the joint grid, excluding additional reservation headroom. Retaining
+the historical dense route instead requires roughly 179 GiB available at the
+joint grid. These are admission estimates, not measured peak RSS or guarantees.
+A route change must be recorded and timed afresh.
+
+Require complete states and original relative residuals at most `1e-10` for
+every RHS, and finite signed flow, bootstrap current, particle flux and heat
+flux. The separate and joint observable changes must meet the application
+budget. One refinement per axis measures change; it does not supply a
+three-grid uncertainty estimate or the revised-grid observable adjoints.
+Those remain required before claiming the plan's 1% uncertainty milestone.

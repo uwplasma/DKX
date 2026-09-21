@@ -18,7 +18,7 @@ letting the per-axis table imply a convergence the case has not demonstrated.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Callable, Mapping
 
 import numpy as np
@@ -43,6 +43,12 @@ class AxisRefinement:
     changes: dict[str, float]
     seconds: float
     uncertainties: dict[str, GridUncertainty] | None = None
+    observables: dict[str, np.ndarray] = field(default_factory=dict)
+    original_residuals: tuple[float, ...] | None = None
+    original_residual_norm: str | None = None
+    status: str = "accepted"
+    refusal: str | None = None
+    third_rung: AxisRefinement | None = None
 
     @property
     def worst(self) -> float:
@@ -56,6 +62,9 @@ class ConvergenceReport:
     refinements: tuple[AxisRefinement, ...]
     joint: AxisRefinement | None
     tolerance: float
+    baseline_observables: dict[str, np.ndarray] = field(default_factory=dict)
+    baseline_original_residuals: tuple[float, ...] | None = None
+    baseline_original_residual_norm: str | None = None
 
     @property
     def per_axis_worst(self) -> float:
@@ -64,6 +73,12 @@ class ConvergenceReport:
     @property
     def converged(self) -> bool:
         """Every measured change, joint included, is inside the tolerance."""
+        if any(r.status != "accepted" or
+               (r.third_rung is not None and r.third_rung.status != "accepted")
+               for r in self.refinements):
+            return False
+        if self.joint is not None and self.joint.status != "accepted":
+            return False
         worst = self.per_axis_worst
         if self.joint is not None:
             worst = max(worst, self.joint.worst)
@@ -353,21 +368,59 @@ def _converge(
         if emit is not None:
             emit(message)
 
-    def _observables_of(result) -> dict[str, np.ndarray]:
-        if not result.metadata.get("converged", False):
-            raise ValueError("a failed solve cannot establish resolution convergence")
+    def _evidence_of(result):
+        values = {
+            name: np.asarray(result.arrays[name], dtype=float).copy()
+            for name in observables if name in result.arrays
+        }
+        residuals = result.metadata.get("original_residuals")
+        residual_norm = result.metadata.get("original_residual_norm")
+        if residuals is not None and residual_norm is not None:
+            residuals = tuple(float(value) for value in np.ravel(residuals))
+        else:
+            residuals, residual_norm = None, None
         missing = set(observables) - set(result.arrays)
         if missing:
-            raise ValueError(f"requested observables are missing: {sorted(missing)}")
-        return {
-            name: np.asarray(result.arrays[name], dtype=float).copy()
-            for name in observables
-        }
+            return values, residuals, residual_norm, "refused", \
+                f"requested observables are missing: {sorted(missing)}"
+        if any(value.size == 0 or not np.all(np.isfinite(value)) for value in values.values()):
+            return values, residuals, residual_norm, "refused", \
+                "requested observables are empty or nonfinite"
+        if not result.metadata.get("converged", False):
+            return values, residuals, residual_norm, "failed", \
+                "a failed solve cannot establish resolution convergence"
+        return values, residuals, residual_norm, "accepted", None
+
+    def _attempt(label: str, attempted_resolution) -> AxisRefinement:
+        started = time.perf_counter()
+        try:
+            result = run_at_resolution(attempted_resolution)
+            values, residuals, residual_norm, status, refusal = _evidence_of(result)
+            changes = ({name: float("inf") for name in reference} if status != "accepted"
+                       else _relative_changes(
+                           reference, values, tolerance=tolerance,
+                           absolute_tolerances=absolute_tolerances,
+                       ))
+            if status == "accepted" and any(not np.isfinite(v) for v in changes.values()):
+                status, refusal = "refused", "observable shapes changed across the refinement"
+        except Exception as exc:  # noqa: BLE001 - a failed bounded rung is report evidence
+            values, residuals, residual_norm = {}, None, None
+            status, refusal = "failed", f"{type(exc).__name__}: {exc}"
+            changes = {name: float("inf") for name in reference}
+        return AxisRefinement(
+            label=label, resolution=_resolution_dict(attempted_resolution), changes=changes,
+            seconds=time.perf_counter() - started, observables=values,
+            original_residuals=residuals, original_residual_norm=residual_norm,
+            status=status, refusal=refusal,
+        )
 
     resolution = normalize_resolution(resolution)
     _say(f"baseline {_resolution_dict(resolution)}")
     baseline_result = run_at_resolution(resolution)
-    reference = _observables_of(baseline_result)
+    reference, baseline_residuals, baseline_residual_norm, status, refusal = \
+        _evidence_of(baseline_result)
+    if status != "accepted":
+        raise ValueError(refusal)
     if not reference:
         raise ValueError(
             "at least one requested observable is required"
@@ -380,63 +433,53 @@ def _converge(
             _say(f"{axis}: not refinable for this case, skipped")
             continue
         _say(f"refining {axis} -> {getattr(refined, axis)}")
-        started = time.perf_counter()
-        result = run_at_resolution(refined)
-        medium = _observables_of(result)
+        attempt = _attempt(axis, refined)
         uncertainties: dict[str, GridUncertainty] | None = None
+        third_rung: AxisRefinement | None = None
         if richardson:
             finer = normalize_resolution(_refined(resolution, axis, factor * factor))
             if getattr(finer, axis) <= getattr(refined, axis):
                 _say(f"{axis}: no third rung available, no grid uncertainty")
             else:
                 _say(f"third rung {axis} -> {getattr(finer, axis)}")
-                fine = _observables_of(run_at_resolution(finer))
+                third_rung = _attempt(f"{axis} third rung", finer)
                 sizes = (
                     int(getattr(resolution, axis)),
                     int(getattr(refined, axis)),
                     int(getattr(finer, axis)),
                 )
-                uncertainties = {
-                    name: richardson_uncertainty(
-                        reference[name], medium[name], fine[name], sizes=sizes,
-                        absolute_tolerance=(absolute_tolerances or {}).get(name, 0.0),
-                    )
-                    for name in reference
-                }
-        refinements.append(
-            AxisRefinement(
-                label=axis,
-                resolution=_resolution_dict(refined),
-                changes=_relative_changes(
-                    reference, medium, tolerance=tolerance,
-                    absolute_tolerances=absolute_tolerances,
-                ),
-                seconds=time.perf_counter() - started,
-                uncertainties=uncertainties,
-            )
-        )
+                if attempt.status == third_rung.status == "accepted":
+                    uncertainties = {
+                        name: richardson_uncertainty(
+                            reference[name], attempt.observables[name],
+                            third_rung.observables[name], sizes=sizes,
+                            absolute_tolerance=(absolute_tolerances or {}).get(name, 0.0),
+                        )
+                        for name in reference
+                    }
+                else:
+                    reason = third_rung.refusal or attempt.refusal or "rung failed"
+                    uncertainties = {
+                        name: GridUncertainty(reason, float("nan"), float("inf"))
+                        for name in reference
+                    }
+        refinements.append(replace(attempt, uncertainties=uncertainties,
+                                   third_rung=third_rung))
 
     joint_refinement: AxisRefinement | None = None
     if joint and len(refinements) > 1:
         refined = normalize_resolution(_refined(resolution, tuple(axes), factor))
         _say(f"refining every axis together -> {_resolution_dict(refined)}")
-        started = time.perf_counter()
-        result = run_at_resolution(refined)
-        joint_refinement = AxisRefinement(
-            label="all axes",
-            resolution=_resolution_dict(refined),
-            changes=_relative_changes(
-                    reference, _observables_of(result), tolerance=tolerance,
-                    absolute_tolerances=absolute_tolerances,
-                ),
-            seconds=time.perf_counter() - started,
-        )
+        joint_refinement = _attempt("all axes", refined)
 
     return ConvergenceReport(
         baseline=_resolution_dict(resolution),
         refinements=tuple(refinements),
         joint=joint_refinement,
         tolerance=tolerance,
+        baseline_observables=reference,
+        baseline_original_residuals=baseline_residuals,
+        baseline_original_residual_norm=baseline_residual_norm,
     )
 
 
@@ -486,7 +529,7 @@ def converge_sfincs_input(source, **kwargs) -> ConvergenceReport:
         raise ValueError("the canonical runner requires forceOddNthetaAndNzeta=true")
     names = dict(theta="n_theta", zeta="n_zeta", pitch="n_xi", speed="n_x")
     resolution = ResolutionConfig(**{k: getattr(inp.resolution, v) for k, v in names.items()})
-    kwargs.setdefault("observables", ("FSABFlow", "particleFlux_vm_psiHat", "heatFlux_vm_psiHat")
+    kwargs.setdefault("observables", ("FSABFlow", "FSABjHat", "particleFlux_vm_psiHat", "heatFlux_vm_psiHat")
                       if mode == 1 else ("transport_matrix",))
 
     def run_at_resolution(r):
@@ -497,16 +540,22 @@ def converge_sfincs_input(source, **kwargs) -> ConvergenceReport:
             tol=inp.resolution.solver_tolerance, keep_lowest=r.pitch), emit=None)
         states = [run.state_vector] if mode == 1 else run.state_vectors
         accepted = bool(run.solve_result.converged)
+        residuals = []
         for i, state in enumerate(states, 1):
             rhs = np.asarray(run.operator.rhs(i))
             defect = np.asarray(run.operator.apply(state)) - rhs
             norm_b, norm_r = np.linalg.norm(rhs), np.linalg.norm(defect)
             residual = norm_r / norm_b if norm_b else (0.0 if norm_r == 0 else np.inf)
+            residuals.append(float(residual))
             accepted = accepted and np.isfinite(residual) and residual <= inp.resolution.solver_tolerance
         arrays = dict(run.moments)
         if mode != 1:
             arrays["transport_matrix"] = run.transport_matrix
-        return SimpleNamespace(arrays=arrays, metadata={"converged": accepted})
+        return SimpleNamespace(arrays=arrays, metadata={
+            "converged": accepted,
+            "original_residuals": residuals,
+            "original_residual_norm": "relative_l2",
+        })
 
     def normalize(r):
         return replace(r, theta=r.theta + (r.theta % 2 == 0),
