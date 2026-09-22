@@ -229,3 +229,8 @@ to confuse the two.
 - Qualify the structured route's explicit adjoint on an idle host before calling
   1.3 either way.
 - GPU behaviour is untouched here; every number above is CPU.
+
+## Correction, 2026-09-22
+
+The explanation this record gives for item B's miss on the automatic-differentiation routes is wrong. The 2.0–2.6× was measured in eager, operation-by-operation execution. Under `jax.jit` the same `jax.grad` of `FSABjHat` on the 16,230-unknown structured-direct deck costs 1.00× (median) and 1.11× (minimum) of its primal, inside the 1.3× gate with no code change: the existing implicit solve already takes one transposed solve plus one residual vector–Jacobian product, and the unused derivative of the factorization is removed at compile time. The eager cost is the number of individually dispatched operations — 13,698 for one gradient against 5,783 for a plain primal — not reverse mode re-executing the forward pass. The eager primal is itself 3.5–4× slower than the compiled one. Measured on the office host, pinned to four cores with one thread, nine repeats, in #279 (`2026-09-22-derivative-cost.md` on its branch). The recycled Krylov route and the ambipolar root have not been measured under `jit`.
+
