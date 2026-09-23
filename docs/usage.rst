@@ -82,9 +82,10 @@ given, it supersedes ``solve_method`` and ``tol``.  Environment variables keep
 acting as overrides for knobs left at ``None`` (``memory_budget_gb=None`` reads
 ``DKX_TIER1_MEMORY_BUDGET_GB``).
 
-The source-only experimental adapter in `SOLVAX PR #118
-<https://github.com/uwplasma/SOLVAX/pull/118>`_ can be selected explicitly;
-released SOLVAX 0.24 remains SuperLU-only::
+SuperLU is the default sparse direct backend. MUMPS is selected explicitly and
+needs SOLVAX 0.25.0 or later and PyMUMPS (with SOLVAX 0.24 the request raises an
+``ImportError`` naming what is missing); a request the budget refuses fails
+rather than falling back to SuperLU::
 
    solver = SolverOptions(
        method="direct", direct_backend="mumps", memory_budget_gb=2.0

@@ -1,6 +1,40 @@
 Release notes
 =============
 
+v2.6.0
+------
+
+Acceptance tightened where it could pass a wrong answer, MUMPS as an explicit
+direct backend, and convergence reports that separate grid convergence from
+original-equation acceptance. ``CHANGELOG.md`` lists each change with its pull
+request.
+
+- Each right-hand-side column of a multi-column solve is accepted against its
+  own norm, ``max(atol, tol * ||b_j||)``, reused factors included.
+- The sparse assembly includes the magnetic drift's upwind support.
+- ``SolverOptions(method="direct", direct_backend="mumps", memory_budget_gb=...)``
+  selects MUMPS; it needs SOLVAX 0.25.0 and PyMUMPS, and a refused request never
+  falls back to SuperLU.
+- ``dkx converge`` reports ``converged`` and ``original_equations_accepted``
+  separately and exits zero only when both pass.
+- Known limitation: the sparse transposed solve reaches ``3.18e-8`` against
+  ``1e-10`` on the 1,204-unknown assembly test deck and reports
+  ``converged=False`` (:doc:`numerics`).
+
+v2.5.0
+------
+
+The sparse direct route rebuilt on an operator assembly and made reusable.
+
+- ``SolveResult.factors`` returns the direct routes' factorization and
+  ``solve(..., factors=..., transpose=True)`` reuses it; three right-hand sides
+  in three calls cost 0.28 s instead of 0.96 s on a 16,230-unknown deck.
+- The sparse direct matrix is assembled from grouped operator products, Ruiz
+  scaled and corrected once: the 66,004-unknown collaborator grid solves to
+  ``1.3e-14`` in 846 s. The gap deck assembles from 4,800 products.
+- The exact speed triangle is applied by back-substitution, and a stalled Krylov
+  solve escalates to it before ``sparse`` and ``multigrid``.
+
 v2.4.0
 ------
 

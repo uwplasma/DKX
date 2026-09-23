@@ -17,6 +17,8 @@ Examples:
 - `generate_er_trajectory_sweep.py`
 - `generate_autodiff_sensitivity_validation.py`
 - `generate_w7x_high_nu_performance.py`
+- `generate_readme_showcase.py` (the README's reference-limits and factor-reuse figures,
+  from recorded measurements; writes to `docs/_static/figures/readme/`)
 
 Reference trajectory-sweep figure commands:
 

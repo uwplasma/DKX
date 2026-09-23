@@ -76,6 +76,13 @@ moving. It refines the axes jointly as well as one at a time, because one at a
 time can mislead: on the shipped analytic tokamak deck the theta axis looks
 settled to 0.2% at ``pitch = 8`` and moves the outputs 74% at ``pitch = 40``.
 
+It reports two verdicts. ``converged`` says the observables stopped changing
+under refinement; ``original_equations_accepted`` says every rung's returned
+state satisfies the original kinetic equation within the requested tolerance,
+from complete, finite, typed residual evidence. The exit status is zero only
+when both pass, because a grid that has stopped moving is no evidence that the
+solves on it were accepted (:doc:`numerics`, "Observable resolution checks").
+
 Reading results
 ---------------
 

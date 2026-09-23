@@ -59,6 +59,12 @@ transposed-preconditioner solve seeded from the same coarse operator. A gradient
 therefore costs *one extra solve*, independent of how many iterations the forward
 solve took.
 
+The sparse direct route refuses ``jax.grad``. When a host workflow needs the
+adjoint there, it passes the primal's stored factors back with
+``solve(..., factors=result.factors, transpose=True)``; the transposed solve
+costs 0.15 of a primal and is checked against its own tolerance, which it can
+miss for a general cotangent (:doc:`numerics`, "Reusing a factorization").
+
 The wrappers come from the standalone ``solvax`` package: linear solves route
 through ``solvax.implicit.linear_solve`` (``jax.lax.custom_linear_solve``), and
 the outer root problems — the ambipolar :math:`E_r` and the nonlinear
