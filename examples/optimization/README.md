@@ -37,34 +37,33 @@ optimization example test suite under the repository ``tests`` directory.
 
 ## VMEX optimization with a kinetic bootstrap current
 
-Three scripts that are their `vmex/examples/optimization` counterparts with a
-single objective term replaced: instead of driving the VMEC equilibrium current
-toward the Redl *analytic* bootstrap current, they drive the *kinetic* bootstrap
-current DKX computes on the same equilibrium toward zero.  The Redl term stays
-in the reporter, so both estimates print at every stage.
-
-- `QA_optimization_bootstrap_dkx.py` — nfp=2 quasi-axisymmetric.
-- `QH_optimization_bootstrap_dkx.py` — nfp=4 quasi-helical.
-- `QI_optimization_bootstrap_dkx.py` — nfp=2 quasi-isodynamic, where the
-  substitution matters most: Redl is a fit to quasisymmetric calculations and a
-  QI field is not quasisymmetric.
-
-Adding the term to any other `vmex` optimization script is one import and one
-tuple:
+`QA_optimization_bootstrap_dkx.py` is the flagship: VMEX's
+`examples/optimization/QA_optimization_bootstrap.py` with the Redl bootstrap
+row swapped for the drift-kinetic one DKX computes on each trial equilibrium.
+The row is traced (boundary -> VMEX -> `booz_xform_jax` -> DKX), so VMEX's
+implicit Jacobian carries it; `BOOTSTRAP_MODEL` selects `"dkx"`, `"redl"` or
+`"both"`.  Adding the row to any other `vmex` optimization script is one
+import and one tuple:
 
 ```python
-from dkx.bootstrap import KineticBootstrapCurrent
+from dkx.bootstrap import KineticBootstrapMismatch
 
-kinetic = KineticBootstrapCurrent(profiles, surfaces=[0.25, 0.5, 0.75])
+kinetic = KineticBootstrapMismatch(profiles, surfaces=[0.25, 0.5, 0.75])
 objective_function_terms.append((kinetic, 0.0, 1.0))
 ```
 
 `profiles` is the same `vmex.core.bootstrap.KineticProfiles` the Redl term
-takes, so both models describe one plasma.  DKX is a host code, so the problem
-must be built with `derivative_method="finite_difference"`; each residual
-evaluation is one drift-kinetic solve per surface, which is minutes, not
-milliseconds.  Set `DKX_VMEX_ROOT` when `vmex` came from a wheel rather than a
-checkout, and `DKX_EXAMPLES_CI=1` for a smoke run.
+takes, so both models describe one plasma, and the residual is Redl's
+normalized mismatch, so the weights compare.  The default collision operator
+is pitch-angle scattering, which has no momentum restoration and overestimates
+`<j.B>`; `collision_operator=0` is Fokker-Planck.  Needs `vmex` and
+`booz_xform_jax >= 0.4`; `DKX_EXAMPLES_CI=1` is a smoke pass.
+
+`QH_optimization_bootstrap_dkx.py` (nfp=4) and `QI_optimization_bootstrap_dkx.py`
+(nfp=2, where Redl, a fit to quasisymmetric calculations, is an extrapolation)
+use the host term `KineticBootstrapCurrent` instead: DKX on the written wout,
+under a finite-difference Jacobian.  Set `DKX_VMEX_ROOT` when `vmex` came from
+a wheel rather than a checkout.
 
 Examples:
 - `qa_nfp2_dkx_objectives.py` — fast JAX proxy lane for adding

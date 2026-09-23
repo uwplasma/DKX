@@ -1,5 +1,33 @@
 # Changelog
 
+## v2.7.0 — unreleased
+
+### Optimization
+
+- `dkx.bootstrap.KineticBootstrapMismatch`: the drift-kinetic bootstrap
+  current as a traced VMEX objective term, with the interface and normalized
+  residual of VMEX's `RedlBootstrapMismatch`. On each kinetic surface the chain
+  VMEX state -> `boozer_input_tables` -> `booz_xform_jax` -> DKX structured
+  solve -> `<j.B>` is traced, so VMEX's implicit Jacobian differentiates it;
+  `mismatch=False` gives a pure `<j.B>` row. Pitch-angle scattering is the
+  default collision operator (cheap, no momentum restoration).
+- `examples/optimization/QA_optimization_bootstrap_dkx.py` is VMEX's
+  `QA_optimization_bootstrap.py` with the DKX row in place of Redl's
+  (`BOOTSTRAP_MODEL = "dkx" | "redl" | "both"`), replacing the
+  finite-difference version; the seed deck ships in `examples/data`.
+
+### Correctness
+
+- Convert the handedness of the Boozer route in one place
+  (`boozer_route_psi_a_hat`, and its traced form
+  `convert_boozer_route_handedness`): `psiAHat = |phi_edge|/(2 pi) signgs
+  sign(G + iota I)`. A VMEX equilibrium has `signgs = -1` and `booz_xform`
+  returns `G > 0`, so taking `psiAHat = +|phi_edge|/(2 pi)` flipped every flux
+  and `<j.B>` on that route against the VMEC-file route and Redl.
+  `optimize_QA_bootstrap.py`, `optimize_QH_bootstrap.py` and the gradient hook
+  of `bootstrap_consistency_kinetic_loop.py` printed the flipped sign; their
+  objectives were squares or magnitudes, so the optimizations were unaffected.
+
 ## v2.6.0 — 2026-09-21
 
 Acceptance tightened where it could pass a wrong answer, MUMPS as an explicit
