@@ -124,7 +124,7 @@ def test_generating_the_rows_stores_an_order_of_magnitude_less():
     turns 53.3 GB into something a 24 GB machine can run.
     """
     op = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
-    tall = replace(op, n_xi=400)
+    tall = replace(op, n_xi=400, n_xi_for_x=jnp.full(op.n_x, 400))
     per_subsystem = coarse_preconditioner_band_bytes(tall) / (tall.n_species * tall.n_x)
     assert _coarse_generated_peak_bytes(tall) < 0.1 * per_subsystem
 
@@ -140,7 +140,7 @@ def test_keeping_only_the_schur_lu_is_a_third_of_the_bands():
     slack in the estimate.
     """
     op = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
-    tall = replace(op, n_xi=400)
+    tall = replace(op, n_xi=400, n_xi_for_x=jnp.full(op.n_x, 400))
     m = tall.n_theta * tall.n_zeta
     ratio = coarse_preconditioner_factor_bytes(tall) / coarse_preconditioner_band_bytes(tall)
     assert ratio == pytest.approx(1.0 / 3.0 + 1.0 / (6.0 * m))
@@ -425,7 +425,16 @@ def test_the_generated_route_does_not_change_the_answer(
         assert float(jnp.linalg.norm(op.apply(result.x) - rhs)) / scale < 1e-9
 
 
-def test_the_generated_route_is_jit_safe_over_traced_operator_leaves(monkeypatch):
+@pytest.mark.parametrize(
+    "budget",
+    (
+        pytest.param(lambda _op: 1.0, id="checkpointed"),
+        pytest.param(_ram_for_reusable, id="reusable_factors"),
+    ),
+)
+def test_the_generated_route_is_jit_safe_over_traced_operator_leaves(
+    budget, monkeypatch
+):
     """Building it under ``jax.jit`` must compile and agree with the eager build.
 
     The generated route closes over per-subsystem coefficient arrays and jits
@@ -440,7 +449,7 @@ def test_the_generated_route_is_jit_safe_over_traced_operator_leaves(monkeypatch
     op = _ramped_op()
     leaves, treedef = jax.tree_util.tree_flatten(op)
     v = jnp.asarray(np.linspace(-1.0, 1.0, op.total_size), dtype=jnp.float64)
-    monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: 1.0)
+    monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: budget(op))
 
     def action(values: list) -> jnp.ndarray:
         precond, _ = build_coarse_preconditioner(jax.tree_util.tree_unflatten(treedef, values))
@@ -458,27 +467,30 @@ def test_the_generated_route_is_jit_safe_over_traced_operator_leaves(monkeypatch
 
 
 @pytest.mark.parametrize("route", sorted(FALLBACK_ROUTES))
-def test_the_generated_route_carries_the_transposed_solve(route: str, monkeypatch):
+@pytest.mark.parametrize("case", ("full_fp", "pas_ramp"))
+def test_the_generated_route_carries_the_transposed_solve(route: str, case: str, monkeypatch):
     """The adjoint runs on ``precond_t``, so it needs its own residual.
 
     ``SolveResult.adjoint`` records ``||A^T y - g|| / ||g||`` recomputed from
     the operator once the backward pass has executed, which is the transposed
     statement of the test above: the generated route has to reach the same
     transposed residual as the dense one, and produce the same gradient.  The
-    scalar is threaded through ``THat`` and the cotangent is a fixed
-    pseudo-random vector — a generic linear functional, which is the hardest
-    case for the adjoint solve and the one a composed objective produces.
+    full-FP case varies the explicit ``THat`` coefficient with prepared collision
+    data fixed; the ramped PAS case scales only the RHS and exercises trimmed
+    chains. Neither is a complete physical temperature derivative. A fixed
+    pseudo-random cotangent also checks general linear objectives.
     """
     import jax  # noqa: PLC0415
 
-    op0 = _load_op("quick_2species_FPCollisions_noEr")
+    op0 = _ramped_op() if case == "pas_ramp" else _load_op("quick_2species_FPCollisions_noEr")
     w = jnp.asarray(np.random.default_rng(11).standard_normal(op0.total_size))
     captured: dict[str, object] = {}
 
     def loss(scale: jnp.ndarray) -> jnp.ndarray:
-        op = replace(op0, t_hat=op0.t_hat * scale)
+        op = op0 if case == "pas_ramp" else replace(op0, t_hat=op0.t_hat * scale)
+        rhs = op.rhs() * scale if case == "pas_ramp" else op.rhs()
         result = solve(
-            op, op.rhs(), method="gmres", tol=1e-10, differentiable=True,
+            op, rhs, method="gmres", tol=1e-10, differentiable=True,
             preconditioner="coarse",
         )  # fmt: skip
         captured["result"] = result
@@ -503,6 +515,8 @@ def test_the_generated_route_carries_the_transposed_solve(route: str, monkeypatc
     assert 0.0 < generated_adjoint < 1e-8
     assert abs(generated_adjoint - dense_adjoint) < 1e-8
     assert abs(generated_grad - dense_grad) <= 1e-6 * max(abs(dense_grad), 1.0)
+    if case == "pas_ramp":
+        np.testing.assert_allclose(generated_grad, float(loss(jnp.asarray(1.0))), rtol=1e-8, atol=1e-12)
 
 
 def test_the_generated_route_solves_a_phi1_deck_to_the_same_state(monkeypatch):
