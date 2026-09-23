@@ -1,5 +1,18 @@
 # Changelog
 
+## v2.7.0 — unreleased
+
+### Correctness
+
+- Refuse failed bootstrap-current evidence (#274). `KineticBootstrapCurrent`
+  replaced a nonfinite surface current with zero, so an unsuccessful solve
+  looked like an optimal one; nonfinite currents, residuals and squared terms
+  and a non-positive reference current are now refused, and the ambipolar
+  interpolation requires every scan point to be accepted and finite. The
+  scan-promotion audit likewise substituted zero when an output had neither
+  `FSABjHatOverRootFSAB2` nor `FSABjHat`, passing the gate with a zero
+  objective; a missing or nonfinite bootstrap current is now refused.
+
 ## v2.6.0 — 2026-09-21
 
 Acceptance tightened where it could pass a wrong answer, MUMPS as an explicit

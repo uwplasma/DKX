@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from dkx.io import write_sfincs_h5
 from dkx.workflows.optimization import evaluate_sfincs_scan_promotion
@@ -20,6 +21,7 @@ def _write_scan_point(
     er: float,
     current: float,
     residual: float | None = 1.0e-10,
+    bootstrap: dict[str, float] | None = None,
 ) -> None:
     run_dir = scan_dir / f"Er{er:.4g}"
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -34,8 +36,10 @@ def _write_scan_point(
         "includePhi1": np.asarray(0, dtype=np.int32),
         "particleFlux_vm_rHat": np.asarray([[gamma_i], [gamma_e], [gamma_z]], dtype=np.float64),
         "heatFlux_vm_rHat": np.asarray([[0.03], [0.02], [0.004]], dtype=np.float64),
-        "FSABjHatOverRootFSAB2": np.asarray([0.04 + 0.015 * er], dtype=np.float64),
     }
+    if bootstrap is None:
+        bootstrap = {"FSABjHatOverRootFSAB2": 0.04 + 0.015 * er}
+    data.update({key: np.asarray([value], dtype=np.float64) for key, value in bootstrap.items()})
     if residual is not None:
         data["linearSolverResidualNorm"] = np.asarray(residual, dtype=np.float64)
         data["linearSolverResidualTarget"] = np.asarray(1.0e-8, dtype=np.float64)
@@ -113,6 +117,35 @@ def test_evaluate_sfincs_scan_promotion_can_allow_reference_outputs_without_resi
     assert strict.as_dict()["gate_status"] == "fail"
     assert any("missing linear residual" in failure for failure in strict.as_dict()["failures"])
     assert relaxed.as_dict()["gate_status"] == "pass"
+
+
+def test_promotion_falls_back_to_fsabjhat(tmp_path: Path) -> None:
+    scan = tmp_path / "scan"
+    for er, current in [(-1.0, -1.0), (1.0, 1.0)]:
+        _write_scan_point(scan, er=er, current=current, bootstrap={"FSABjHat": 0.25})
+
+    summary = evaluate_sfincs_scan_promotion(scan)
+
+    assert [run.bootstrap_current for run in summary.runs] == [0.25, 0.25]
+
+
+@pytest.mark.parametrize(
+    ("bootstrap", "error"),
+    [
+        ({}, KeyError),
+        ({"FSABjHatOverRootFSAB2": np.nan}, ValueError),
+        ({"FSABjHat": np.inf}, ValueError),
+    ],
+)
+def test_promotion_refuses_missing_or_nonfinite_bootstrap_current(
+    tmp_path: Path, bootstrap: dict[str, float], error: type[Exception]
+) -> None:
+    scan = tmp_path / "scan"
+    _write_scan_point(scan, er=-1.0, current=-1.0)
+    _write_scan_point(scan, er=1.0, current=1.0, bootstrap=bootstrap)
+
+    with pytest.raises(error, match="FSABjHat|bootstrap current"):
+        evaluate_sfincs_scan_promotion(scan)
 
 
 def test_public_promotion_example_runs_demo(tmp_path: Path) -> None:
