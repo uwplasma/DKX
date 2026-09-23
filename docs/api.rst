@@ -23,6 +23,12 @@ The result contract is :class:`dkx.Result`.
 .. automodule:: dkx.api
    :members:
 
+Bootstrap-current objective terms for ``vmex`` optimizations
+(:doc:`optimization`):
+
+.. automodule:: dkx.bootstrap
+   :members: KineticBootstrapMismatch, KineticBootstrapCurrent
+
 High-level runners live in :mod:`dkx.run` (``run_profile``,
 ``run_transport_matrix``) and the CLI in :mod:`dkx.cli`; see :doc:`usage`.
 

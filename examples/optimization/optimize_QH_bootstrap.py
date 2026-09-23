@@ -328,7 +328,8 @@ def objective(dofs, warm=None):
         n=jnp.asarray(BOOZ_XN // NFP), nfp=NFP, iota=booz["iota_b"][0],
         g_hat=booz["bvco_b"][0], i_hat=booz["buco_b"][0],
         theta=_g.theta, zeta=_g.zeta,
-        theta_weights=_g.theta_weights, zeta_weights=_g.zeta_weights)
+        theta_weights=_g.theta_weights, zeta_weights=_g.zeta_weights,
+        signgs=int(rt.setup.signgs))  # Boozer-route handedness, as in Redl
     mom, result = ob.solve_and_moments(
         op, tol=KIN_TOL, x0=(warm or {}).get("x0"), recycle=(warm or {}).get("recycle"))
     kinetic_term = KINETIC_OBJECTIVES[KINETIC_OBJECTIVE](mom)

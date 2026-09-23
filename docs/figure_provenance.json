@@ -119,6 +119,9 @@
     "docs/_static/figures/readme/canonical_parity.png": {
       "generator": "tools/benchmarks/readme_figures.py"
     },
+    "docs/_static/figures/readme/QA_optimization_bootstrap_dkx.png": {
+      "generator": "examples/optimization/QA_optimization_bootstrap_dkx.py"
+    },
     "docs/_static/figures/readme/cross_code_validation.png": {
       "generator": "tools/benchmarks/cross_code_readme_figure.py"
     },
