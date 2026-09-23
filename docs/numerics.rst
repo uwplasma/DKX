@@ -157,7 +157,8 @@ block (when :math:`\Phi_1` is active), and the :math:`c` rows/columns imposing
 density, energy, and gauge constraints. The operator is applied **matrix-free**
 as a composition of tensor contractions and directional derivatives rather than
 an assembled sparse matrix, so it JIT-compiles for CPU or GPU and differentiates
-cleanly.
+cleanly. Only the sparse direct route assembles it, from products with this
+matrix-free action.
 
 .. admonition:: Where in the code
 
@@ -244,35 +245,91 @@ itself a structured direct solve. The recycle pair :math:`(C,U)` is returned for
 warm-starting continuation, which makes neighbouring points in an :math:`E_r`
 scan or Newton :math:`\Phi_1` iteration converge in a handful of iterations.
 
-Sparse direct (host fallback and independent cross-check)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Sparse direct (assembled, scaled, host-factored)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-As an escape hatch the operator is assembled into CSR; small operators may
-instead be sampled column by column. ``max_dense_size`` limits that columnwise
-sampling, not grouped assembly. The CSR matrix is factored on the host.
-SuperLU remains the default; the optional source-only MUMPS adapter is an
-explicit experimental choice. This route is non-differentiable and
-non-jittable and prints a one-line notice; it is used on explicit request
-(``method="direct"``) or when the recycled Krylov route breaches its iteration
-cap under ``method="auto"``.
-For a large automatic fallback, DKX keeps the existing SuperLU size protection:
-grouped assembly is attempted only when MUMPS was selected explicitly with a
-positive memory budget. MUMPS may then admit or refuse the factorization from
-current process and host-memory evidence. This preflight occurs after grouped
-assembly, so it estimates factorization and solve headroom; it does not bound
-the memory used to construct the assembled matrix.
+This route factors the whole operator, so it answers decks the structured route
+refuses and serves as the independent cross-check on the other two; the
+case-file value ``sparse_direct_referee`` names that role. It runs on explicit
+request (``method="direct"``) or when the recycled Krylov route breaches its
+iteration cap under ``method="auto"``, and prints a one-line notice.
 
-The MUMPS admission calculation is conservative rather than a hard RSS bound.
-Besides assembly and native workspace, it reserves seven equivalent full-RHS
-buffers for scaling, the adapter's per-column results and stacked result,
-host/JAX conversion, the equilibrated solution, operator application, and
-defect correction. Retained factors repeat the current-RSS and host-headroom
-check for each new RHS width. Allocator caching, JAX runtime behavior, and
-third-party native allocations can still make observed RSS differ from this
-estimate.
-Because it inverts the assembled operator with a general-purpose factorization,
-it also serves as the independent cross-check on answers from the other two
-routes; the case-file value ``sparse_direct_referee`` names that role.
+1. **Assembly from operator products.** The couplings of the operator are
+   known, so columns that share no row are grouped and one application of the
+   matrix-free operator recovers a whole group (``solvax.compression``). The
+   66,004-unknown collaborator grid assembles from 5,508 products and the
+   633,604-unknown HSX-like gap deck from 4,800, against one product per
+   column when sampled. The assembled matrix is checked against the operator
+   (``1e-10``) before it is returned; small operators may still be sampled
+   column by column, which is what ``max_dense_size`` bounds.
+2. **Ruiz equilibration.** Rows and columns are scaled before the
+   factorization. On the collaborator grid, PARDISO without the scaling
+   perturbed nine pivots and returned a relative residual of ``9.4e-2``; with
+   it, ``1.2e-10`` after refinement
+   (``docs/experiments/2026-09-19-sfincs-on-the-gap-deck.md``).
+3. **Factorization and one defect correction.** SuperLU is the default. The
+   solution is corrected once against the original operator, and each
+   right-hand-side column is accepted against its own norm,
+   ``max(atol, tol * ||b_j||)``.
+
+The collaborator grid solves to a relative residual of ``1.3e-14`` in 846 s.
+The cost grows as the 2.8 power of the unknowns in time and the 1.6 power in
+memory, so the route reaches a few hundred thousand unknowns on a 62 GiB host
+and is the wrong tool for the gap deck.
+
+**MUMPS backend.** ``SolverOptions(method="direct", direct_backend="mumps",
+memory_budget_gb=...)`` selects MUMPS instead of SuperLU. It needs SOLVAX
+0.25.0 or later and PyMUMPS; with SOLVAX 0.24 it raises an ``ImportError``
+naming what is missing. The budget is checked after assembly and before
+factorization against measured process memory, the assembled storage, the
+right-hand-side buffers and the host's available memory, and again before
+retained factors serve a wider right-hand side. An explicit MUMPS request that
+the budget refuses fails loudly and never falls back to SuperLU. Under
+``method="auto"`` a large fallback is assembled only when MUMPS was selected
+with a positive budget; otherwise the SuperLU size guard applies. The
+admission estimate reserves seven full right-hand-side buffers for scaling,
+per-column results, conversion, operator application and defect correction; it
+is conservative, not a hard RSS bound.
+
+**Differentiation.** The route refuses ``jax.grad``. It has an explicit adjoint
+instead: ``solve(..., factors=..., transpose=True)`` solves
+:math:`A^{\mathsf T}x=b` from the stored factors (next section).
+
+Reusing a factorization
+~~~~~~~~~~~~~~~~~~~~~~~
+
+The two direct routes return what they factored in ``SolveResult.factors``: a
+``Tier1Solver`` on the structured route, a ``DirectFactors`` (the sparse
+factors and the two Ruiz diagonals) on the sparse one. Passing it back makes
+the next solve a pair of triangular substitutions:
+
+.. code-block:: python
+
+   from dkx.solve import solve
+
+   first = solve(op, rhs_1, method="direct")
+   second = solve(op, rhs_2, method="direct", factors=first.factors)
+   adjoint = solve(op, cotangent, method="direct", factors=first.factors, transpose=True)
+
+- Three right-hand sides in three calls cost three factorizations without
+  reuse and none with it: 0.96 s against 0.28 s on a 16,230-unknown structured
+  deck. The sparse transposed solve costs 0.15 of a primal
+  (``docs/experiments/2026-09-20-one-factorization-many-solves.md``).
+- Factors of a *neighbouring* operator are accepted as an approximate inverse.
+  The original residual is recomputed against the operator passed in, and a
+  solve that misses its tolerance refactorizes once. On the direct routes this
+  reuse is narrow: the sparse route reuses through a ``1e-3`` relative change
+  in ``THat`` and the structured one through ``1e-6``.
+- ``transpose=True`` excludes ``differentiable=True``, which builds its own
+  transposed solve; the recycled Krylov route reuses its preconditioner
+  (``precond=``) instead of factors.
+- **Known limitation.** The sparse transposed solve can stop above its
+  tolerance for a general cotangent: on ``tests/test_operator_assembly.py::DECK``
+  (1,204 unknowns) with ``numpy.random.default_rng(0).standard_normal(1204)``
+  it reaches ``3.18e-8`` against the forward solve's ``1e-10``, and further
+  refinement sweeps do not move it. It reports ``converged=False`` rather than a
+  value. The 1,962-unknown full Fokker--Planck grid reaches ``2e-13``, so the
+  floor depends on the operator.
 
 .. admonition:: Where in the code
 
@@ -335,8 +392,8 @@ When to use which route
      - yes
    * - Ill-conditioned / small, or a recycled Krylov stall
      - Sparse direct
-     - Host SuperLU direct
-     - no (loud escape hatch)
+     - Assembled, Ruiz-scaled SuperLU (or explicit MUMPS)
+     - explicit adjoint only (``transpose=True`` on stored factors)
 
 Resolution guidance
 -------------------
