@@ -205,17 +205,27 @@ def test_the_old_misleading_advice_is_gone() -> None:
     assert "raise max_dense_size explicitly if you really want this" not in str(excinfo.value)
 
 
-@pytest.mark.parametrize('restart,cap,size,prebuilt,nonfinite,expected', [
-    (30, 30, 4, False, False, [(30, 5), (100, 7)]),
-    (30, 30, 4, False, True, [(30, 5), (100, 7)]),
-    (30, 5, 4, False, False, [(30, 5)]),
-    (1, 6, 4, False, False, [(1, 6)]),
-    (100, 30, 4, False, False, [(100, 30)]),
-    (30, 30, 167773, False, False, [(30, 30)]),
-    (30, 30, 4, True, False, [(30, 30)]),
+_BIG = 1.0e3  # GB: the basis budget never binds
+
+
+@pytest.mark.parametrize('restart,cap,size,budget,prebuilt,nonfinite,expected', [
+    (30, 200, 4000, _BIG, False, False, [(30, 5), (100, 2), (1000, 5)]),
+    (30, 200, 4000, _BIG, False, True, [(30, 5), (100, 2), (1000, 5)]),
+    # The budget binds: 400 steps of a 4,000-unknown V and Z basis.
+    (30, 200, 4000, 400 * 2 * 4000 * 8 / 2**30, False, False,
+     [(30, 5), (100, 2), (400, 14)]),
+    (30, 200, 4000, 20 * 2 * 4000 * 8 / 2**30, False, False, [(30, 200)]),
+    (30, 30, 4000, _BIG, False, False, [(30, 5), (100, 2)]),
+    (30, 5, 4000, _BIG, False, False, [(30, 5)]),
+    (1, 6, 4000, _BIG, False, False, [(1, 6)]),
+    # Never wider than the system.
+    (30, 200, 400, _BIG, False, False, [(30, 5), (100, 2), (400, 14)]),
+    (30, 200, 60, _BIG, False, False, [(30, 5), (60, 97)]),
+    (30, 200, 4, _BIG, False, False, [(30, 200)]),
+    (30, 200, 4000, _BIG, True, False, [(30, 200)]),
 ])
 def test_auto_restart_budget_and_current_factors(
-    monkeypatch, restart, cap, size, prebuilt, nonfinite, expected,
+    monkeypatch, restart, cap, size, budget, prebuilt, nonfinite, expected,
 ):
     """Probe/retry costs, factor identity, and unsafe-state cold fallback."""
     import importlib
@@ -233,20 +243,21 @@ def test_auto_restart_budget_and_current_factors(
         x = jnp.full_like(b, jnp.nan if nonfinite and len(calls) == 1 else 0.5)
         return SimpleNamespace(x=x, recycle=(x[:, None], x[:, None]),
                                iterations=kwargs['m'] * kwargs['max_restarts'],
-                               converged=len(calls) > 1, residual_norm=jnp.array(1.))
+                               converged=len(calls) == len(expected),
+                               residual_norm=jnp.array(1.))
     monkeypatch.setattr(module, 'gcrot', gcrot)
     result = module._solve_tier2(
         op, jnp.ones((size, 1)), tol=1e-7, atol=0., x0=None, recycle=None,
         preconditioner='coarse', drop_l_coupling_in_precond=False,
         restart=restart, recycle_dim=8, max_restarts=cap, differentiable=False,
         check_adjoint=False, prebuilt_precond=pair if prebuilt else None,
-        auto_restart_recovery=True,
+        auto_restart_recovery=True, krylov_memory_budget_gb=budget,
     )
     assert [(c['m'], c['max_restarts']) for c in calls] == expected
     assert result.iterations == sum(m * n for m, n in expected) <= restart * cap
     assert len(builds) == (0 if prebuilt else 1)
     assert all(c['precond'] is pair[0] and c['rtol'] == 1e-7 for c in calls)
-    if len(calls) == 2:
+    if len(calls) >= 2:
         assert (calls[1]['x0'] is None) == nonfinite
         assert (calls[1]['recycle'] is None) == nonfinite
         if not nonfinite:
@@ -358,10 +369,13 @@ def test_tier2_traced_execution_does_not_create_profiler(monkeypatch):
     jax.make_jaxpr(traced)(jnp.ones((4, 1)))
 
 
-@pytest.mark.parametrize('method,differentiable,recovery', [
-    ('auto', False, True), ('auto', True, False), ('gmres', False, False),
+@pytest.mark.parametrize('method,differentiable,restart,recovery', [
+    ('auto', False, None, True), ('auto', True, None, False),
+    ('gmres', False, None, False), ('auto', False, 30, False),
 ])
-def test_restart_recovery_is_only_auto_host_policy(monkeypatch, method, differentiable, recovery):
+def test_restart_recovery_is_only_auto_host_policy(
+    monkeypatch, method, differentiable, restart, recovery,
+):
     import importlib
     from types import SimpleNamespace
     module = importlib.import_module('dkx.solve')
@@ -370,6 +384,64 @@ def test_restart_recovery_is_only_auto_host_policy(monkeypatch, method, differen
     monkeypatch.setattr(module, '_resolve_solve_device', lambda *a: None)
     def tier2(op, rhs, **kwargs):
         assert kwargs['auto_restart_recovery'] is recovery
+        assert kwargs['restart'] == 30  # the policy's first cycles, or the explicit size
         return SolveResult(rhs, 'gcrot', 0, np.array([0.]), True, None, {})
     monkeypatch.setattr(module, '_solve_tier2', tier2)
-    assert module.solve(op, np.ones(4), method=method, differentiable=differentiable).converged
+    assert module.solve(
+        op, np.ones(4), method=method, differentiable=differentiable, restart=restart,
+    ).converged
+
+
+@pytest.mark.parametrize('restart', [0, -3, 2.5, True])
+def test_restart_must_be_none_or_a_positive_integer(restart):
+    import importlib
+    module = importlib.import_module('dkx.solve')
+    with pytest.raises(ValueError, match='restart must be None or a positive integer'):
+        module.solve(_operator(), np.ones(1), restart=restart)
+
+
+def test_wide_restart_budget_resolution(monkeypatch):
+    """Argument, then environment, then a quarter of available memory, capped."""
+    import importlib
+    module = importlib.import_module('dkx.solve')
+    monkeypatch.delenv('DKX_KRYLOV_MEMORY_BUDGET_GB', raising=False)
+    per_step = 2 * 100_000 * 8
+    monkeypatch.setattr(module, '_available_memory_bytes', lambda: 4.0 * 600 * per_step)
+    assert module._auto_wide_restart(100_000, 8, None) == 600
+    monkeypatch.setattr(module, '_available_memory_bytes', lambda: 1e15)
+    assert module._auto_wide_restart(100_000, 8, None) == 1000
+    assert module._auto_wide_restart(500, 8, None) == 500
+    monkeypatch.setattr(module, '_available_memory_bytes', lambda: None)
+    assert module._auto_wide_restart(100_000, 8, None) == (256 * 1024**2) // per_step
+    monkeypatch.setenv('DKX_KRYLOV_MEMORY_BUDGET_GB', str(300 * per_step / 2**30))
+    assert module._auto_wide_restart(100_000, 8, None) == 300
+    assert module._auto_wide_restart(100_000, 8, 700 * per_step / 2**30) == 700
+    with pytest.raises(ValueError, match='krylov_memory_budget_gb'):
+        module._auto_wide_restart(100_000, 8, -1.0)
+
+
+@pytest.mark.parametrize('auto_restart,expected', [(True, (1000, 24)), (False, (30, 800))])
+def test_larger_budget_rung_uses_the_wide_restart(monkeypatch, auto_restart, expected):
+    """The stall ladder's larger-budget rung spends it at the wide restart."""
+    import importlib
+    module = importlib.import_module('dkx.solve')
+    op = _operator()
+    monkeypatch.setattr(module, '_auto_wide_restart', lambda *a: 1000)
+    windows = []
+
+    def tier2(op, rhs, **kwargs):
+        windows.append((kwargs['restart'], kwargs['max_restarts']))
+        return SolveResult(rhs, 'gcrot', 0, np.array([1.]), False, None, {})
+
+    monkeypatch.setattr(module, '_solve_tier2', tier2)
+    monkeypatch.setattr(module, '_solve_tier3', lambda *a, **k: 'direct')
+    stalled = SolveResult(np.zeros((op.total_size, 1)), 'gcrot', 0, np.array([1.]),
+                          False, None, {})
+    assert module._escalate_after_tier2_stall(
+        op, np.ones((op.total_size, 1)), stalled=stalled, tol=1e-10, atol=0.,
+        x0=None, recycle=None, preconditioner='coarse',
+        drop_l_coupling_in_precond=False, restart=30, recycle_dim=8,
+        max_restarts=200, check_adjoint=False, adjoint_residual_factor=1.,
+        max_dense_size=10**9, auto_restart=auto_restart,
+    ) == 'direct'
+    assert windows[-1] == expected

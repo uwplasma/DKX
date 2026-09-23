@@ -1063,7 +1063,8 @@ def solve_collocation(
         options: Discretization and multigrid settings; defaults to
             :class:`CollocationOptions`.
         solver: Outer Krylov settings; ``tol``, ``restart``, ``recycle_dim`` and
-            ``max_restarts`` are used.  Defaults to :class:`dkx.api.SolverOptions`.
+            ``max_restarts`` are used (``restart=None`` means 30 here).
+            Defaults to :class:`dkx.api.SolverOptions`.
 
     Returns:
         A :class:`CollocationSolution`.
@@ -1087,7 +1088,7 @@ def solve_collocation(
         jax.jit(op.apply),
         b,
         precond=None if precond is None else jax.jit(precond),
-        m=int(solver.restart),
+        m=30 if solver.restart is None else int(solver.restart),
         k=int(solver.recycle_dim),
         rtol=float(solver.tol),
         atol=float(solver.atol),
