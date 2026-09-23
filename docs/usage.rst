@@ -75,12 +75,22 @@ The quick ``solve_method``/``tol`` arguments of the run drivers cover most
 scripts.  The full typed knob set of :func:`dkx.solve.solve` is
 :class:`dkx.api.SolverOptions`: ``method``, ``tol``, ``atol``, ``restart``,
 ``recycle_dim``, ``max_restarts``, ``differentiable``, ``use_preconditioner``,
-``device``, ``memory_budget_gb``, and ``direct_backend``.  Pass it as
-``solver=SolverOptions(...)``
+``device``, ``memory_budget_gb``, ``direct_backend`` and
+``krylov_memory_budget_gb``.  Pass it as ``solver=SolverOptions(...)``
 to ``run_profile``, ``run_transport_matrix``, or ``run_from_namelist``; when
 given, it supersedes ``solve_method`` and ``tol``.  Environment variables keep
 acting as overrides for knobs left at ``None`` (``memory_budget_gb=None`` reads
-``DKX_TIER1_MEMORY_BUDGET_GB``).
+``DKX_TIER1_MEMORY_BUDGET_GB``, ``krylov_memory_budget_gb=None`` reads
+``DKX_KRYLOV_MEMORY_BUDGET_GB``).
+
+``restart=None``, the default, is a memory-aware restart policy for the
+recycled Krylov route. A solve runs five cycles of 30 steps and two of 100; if
+it has not converged, it continues from its iterate at the longest restart, at
+most 1,000, whose flexible-GMRES basis fits the Krylov budget. That basis costs
+``2 * restart * unknowns * 8`` bytes, and the default budget is a quarter of the
+memory available at that point. On a 105,604-unknown deck a restart of 1,000
+therefore takes 1.6 GiB. An integer ``restart`` fixes the cycle size and
+disables the policy.
 
 SuperLU is the default sparse direct backend. MUMPS is selected explicitly and
 needs SOLVAX 0.25.0 or later and PyMUMPS (with SOLVAX 0.24 the request raises an

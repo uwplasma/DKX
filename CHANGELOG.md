@@ -1,5 +1,33 @@
 # Changelog
 
+## v2.7.0 — unreleased
+
+### Performance
+
+- Memory-aware Krylov restart by default. `solve(restart=None)` and
+  `SolverOptions(restart=None)`, the new defaults, run five FGMRES cycles of
+  30 and two of 100, then continue from the iterate at the longest restart, at
+  most 1,000, whose basis (`2 * restart * unknowns * 8` bytes, since flexible
+  GMRES stores `V` and `Z`) fits `krylov_memory_budget_gb`
+  (`DKX_KRYLOV_MEMORY_BUDGET_GB`, else a quarter of available memory). The
+  previous policy widened only to 100 and only while two such bases fit in
+  256 MiB, so decks above 167,772 unknowns never widened. On the HSX-like
+  `Nx` ladder the iteration growth from `Nx = 10` to 16 was restart
+  stagnation: 2,788 iterations at restart 200 against 357 at 1,000, and 7,167
+  against 390 at `(Nxi, Nx) = (40, 16)`
+  (`docs/experiments/2026-09-23-restart-and-direct-reach.md`). On the public
+  tokamak full-Fokker-Planck deck at `(Nx, Nxi) = (24, 40)`, 87,362 unknowns,
+  the default converges in 1,736 iterations where the previous one stalled
+  and failed every rung of the stall ladder (`docs/performance.rst`, "Krylov
+  restart length"). Decks that converged within 350 iterations follow the
+  same path as before. The stall
+  ladder's larger-budget rung spends its budget at the wide restart. An integer
+  `restart` fixes the cycle size as before; explicit `method="gmres"`,
+  differentiable and traced solves, and caller-supplied preconditioners keep a
+  fixed size of 30 unless given one.
+- `dkx solve-v3 --restart` was printed but never applied; its default reads
+  `auto` and its help says so.
+
 ## v2.6.0 — 2026-09-21
 
 Acceptance tightened where it could pass a wrong answer, MUMPS as an explicit
