@@ -81,8 +81,8 @@ TRAJECTORY_MODELS: tuple[TrajectoryModel, ...] = (
 
 
 PRESETS = {
-    "tokamak_like": _REPO_ROOT / "examples" / "upstream" / "fortran_v3" / "tokamak_1species_FPCollisions_withEr_fullTrajectories" / "input.namelist",
-    "stellarator_like": _REPO_ROOT / "examples" / "upstream" / "fortran_v3" / "sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories" / "input.namelist",
+    "tokamak_like": _REPO_ROOT / "examples" / "sfincs_examples" / "tokamak_1species_FPCollisions_withEr_fullTrajectories" / "input.namelist",
+    "stellarator_like": _REPO_ROOT / "examples" / "sfincs_examples" / "sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories" / "input.namelist",
 }
 
 

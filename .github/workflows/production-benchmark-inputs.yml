@@ -32,7 +32,7 @@ jobs:
           python -m pytest -q tests/test_create_production_benchmark_inputs.py
       - name: Regenerate production-resolution input manifest
         run: |
-          python scripts/create_production_benchmark_inputs.py \
+          python -m tools.release.release production-inputs \
             --out-root "$RUNNER_TEMP/production_resolution_inputs" \
             --clean
       - name: Validate generated manifest scope
@@ -54,9 +54,14 @@ jobs:
               "NXI": 100,
           }
           assert manifest["minimum_tokamak_resolution"] == {
-              "NTHETA": 25,
-              "NX": 4,
-              "NXI": 100,
+              "NTHETA": 33,
+              "NX": 12,
+              "NXI": 140,
+          }
+          assert manifest["minimum_tokamak_pas_noer_resolution"] == {
+              "NTHETA": 89,
+              "NX": 24,
+              "NXI": 300,
           }
           assert manifest["target_fortran_min_runtime_s"] == 10.0
           assert {case["source_group"] for case in cases} == {"examples"}

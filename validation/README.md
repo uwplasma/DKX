@@ -1,466 +1,77 @@
-# DKX 3 planning and validation evidence
+# Validation evidence
 
-`registry.toml` is the single index of registered evidence. Every artifact in
-this directory has one entry there naming its capability, its status, the claim
-it makes, the inputs and command that produced it, the checksum that seals it,
-and the limits of what it establishes. One runner checks them all::
+This folder holds the recorded evidence behind DKX's validation claims. Nothing
+in it is imported at runtime or shipped in the wheel. It is checked in CI by
+`tests/test_validation.py` and `tests/test_planning_evidence.py`.
 
-    python -m tools.release.registry
+Audit every registered artifact with one command:
 
-`tests/test_validation.py` is the one test module that consumes the registry.
-Do not add a per-campaign registry, runner, or test module: add an entry.
+```bash
+python -m tools.release.registry                       # every entry
+python -m tools.release.registry --entry full_kinetic_sfincs
+```
 
-Status vocabulary for a registry entry:
+That runner checks what is common to every entry (the artifact exists and its
+SHA-256 matches the registry, claim scope, schema, exclusions, inputs and
+capability agree), then calls the entry's own `audit()`. That audit recomputes
+the campaign's gates from the sealed numbers. Most audits also accept
+`--results-root <dir>` to re-verify the raw HDF5/NetCDF outputs, which are kept
+outside Git and referenced by checksum.
 
-- `accepted`: the claim passes its declared gates and is usable evidence.
+## What is here
+
+| Path | What it is |
+| --- | --- |
+| `registry.toml` | The index: one entry per artifact with its capability, status, claim, limitations, inputs, command, commits and checksum. |
+| `*_v1.json` (20) | Sealed evidence summaries, one per registry entry. Do not edit: the checksum in the registry is the seal. |
+| `inputs/` | The exact DKX decks and native cases each artifact was produced from. Artifacts record these paths and checksums, so they cannot move without resealing. |
+| `capabilities.toml` | Capability status and open evidence gaps; every registry entry names one. |
+| `hardware.toml` | Named measurement hosts; every entry names the host that produced it. |
+| `benchmark_schema.toml`, `benchmarks/` | Required fields of a comparable benchmark row, and two measured rows (tier-1 HSX re-measurement; collocation/multigrid h-independence ladder). |
+| `baseline.toml` | The Phase A inventory of DKX 2.3.1 (2026-08-30), with the later `[review]` data. |
+| `package_size_contract.toml` | Size limits the CI wheel job enforces through `tools/release_contracts.py`. |
+
+The audit code for each entry lives at `tools/paper_benchmarks/audit_*.py` and
+is named by the entry's `audit_script`.
+
+## Status vocabulary
+
+- `accepted`: the claim passes its declared gates.
 - `accepted_limited`: the claim passes inside an explicitly narrower scope.
 - `diagnostic`: the run localizes or bounds a problem without admitting a claim.
-- `negative_result`: the run rules a route or resolution out. These are kept
-  deliberately, so a route that has already been shown to be infeasible is not
-  retried.
-
-The remaining files freeze the DKX 2.3.1 starting point for the DKX 3 roadmap
-defined in the repository-root `plan.md`. They are planning and release
-evidence, not runtime package data. Large outputs, profiler traces, and
-external-code builds stay outside Git; records refer to them by checksum or
-stable artifact identifier.
-
-- `registry.toml`: every registered evidence artifact and its claim boundary.
-- `capabilities.toml`: initial capability status and evidence gaps.
-- `baseline.toml`: the Phase A current-state inventory -- repository and
-  branch protection, source and import side effects, tests and coverage,
-  public API and CLI status, examples, docs, dependencies, package sizes, CI,
-  and the known gaps. The artifact-to-generator map it used to carry now lives
-  in `registry.toml`.
-- `hardware.toml`: named measurement hosts and availability.
-- `benchmark_schema.toml`: fields required of comparable benchmark rows.
-- `benchmarks/`: measured benchmark rows conforming to that schema, each naming
-  the host it ran on. A row here is a measurement on a registered host under the
-  declared protocol; a number quoted in the documentation without one is not.
-- `independent_cross_code_v1.json`: the accepted, bounded DSHAPE/NCSX/W7-X
-  monoenergetic PAS/DKES cross-code rung.
-- `native_ambipolar_profile_v1.json`: compact native five-surface W7-X
-  PAS/DKES whole-profile workflow certificate.
-- `ambipolar_phase_space_ladder_v1.json`: bounded coarse/reference/fine W7-X
-  PAS/DKES kinetic-grid ladder that truthfully records exhausted convergence
-  gates rather than promoting the reference profile.
-- `ambipolar_phase_space_axes_v1.json`: separate theta and pitch rungs that
-  diagnose pitch as the dominant unresolved direction and reject a blind
-  pitch-48 escalation.
-- `ambipolar_pitch_budget_v1.json`: exact full-versus-bounded uniform-pitch
-  route parity plus a bounded pitch-22/26/30 ladder that retains its changing
-  topology and `refinement_exhausted` outcome.
-- `ambipolar_pitch_speed_groups_v1.json`: fixed-work uniform, linear-ramp,
-  and quadratic-ramp pitch allocations on a common W7-X surface pair,
-  retaining the topology changes rather than promoting convergence.
-- `ambipolar_pitch_explicit_groups_v1.json`: exact-total, exact-high-work
-  explicit allocations that isolate low- and intermediate-speed sensitivity
-  while retaining the unresolved root and flux movement.
-- `ambipolar_pitch_combined_v1.json`: bounded follow-up that raises low and
-  intermediate pitch work together, retains the failed intermediate-refinement
-  gates, and records the pinned SFINCS/YANCC/MONKES/PENTA source review that
-  motivated compact per-speed flux diagnostics.
-- `ambipolar_speed_local_pitch_v1.json`: five narrow common-field probes that
-  localize the initial change to one intermediate-speed node, then retain the
-  failed pitch-36 ceiling and pitch-44 high-speed-tail gates without claiming
-  full-profile or phase-space convergence.
-- `ambipolar_joint_pitch_speed_v1.json`: speed-6/8 and pitch-44/52 common-field
-  probes with route-aware modal-tail evidence. Full states retain the compact
-  L2 tail; zero-padded truncated states explicitly mark it unavailable.
-- `ambipolar_joint_speed_zeta_tail_v1.json`: a fixed-pitch 2x2 speed/zeta
-  matrix with selected-tail upper bounds, exact cold/warm reproducibility, and
-  an explicit failed phase-space-convergence outcome.
-- `inputs/*`: the exact DKX decks and native cases used by these rungs.
-
-## Independent cross-code audit
-
-The first independent device-family rung compares the same zero-field
-monoenergetic drift-kinetic equation, Lorentz pitch-angle scattering, and DKES
-trajectories in all codes. DSHAPE and NCSX use YANCC; W7-X EIM uses the pinned
-MONKES database. The artifact records external commits, geometry/reference
-checksums, the applied-collision-frequency mapping, the local-radius Beidler
-normalization, handedness conversion, four coefficients, solver residuals,
-wall time, and process peak RSS.
-
-Audit every stored number and, when the adjacent YANCC checkout is present,
-all external inputs:
-
-```bash
-python tools/paper_benchmarks/audit_independent_cross_code_validation.py \
-  --yancc-root ../YANCC
-```
-
-The 6% gate bounds the recorded cross-discretization spread across ``D11*``,
-``D31*``, ``D13*``, and ``D33*`` and may not be relaxed to admit a later
-regression. The artifact explicitly excludes full-Fokker-Planck, finite-field,
-ambipolar-profile, experimental, and performance-comparison claims. Those
-remain separate promotion gates.
-
-## Matched full-kinetic SFINCS rung
-
-`full_kinetic_sfincs_v1.json` closes the next, deliberately narrow gate: a
-one-species analytic-tokamak surface with physical density and temperature
-gradients, the full linearized Fokker--Planck collision operator, full
-trajectories, zero electric field, and SFINCS's recommended automatic
-constraint. The `high` and `ultra` decks are exact checked inputs for both DKX
-and SFINCS v3.
-
-Audit the compact evidence and DKX-owned input checksums:
-
-```bash
-python tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py
-```
-
-When the external run tree is available, also verify every raw HDF5 and log:
-
-```bash
-python tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py \
-  --results-root ../runtime/evidence/full-fp
-```
-
-At the finest rung, the largest scaled cross-code error over nonzero scalar and
-speed-resolved observables is `2.69e-10`. From `6887` to `12509` unknowns, the
-largest retained nonzero-observable movement is `0.280%`; every completed true
-residual is below `1.82e-11`. Axisymmetric particle flux and NTV are
-cancellation-level quantities, so they are gated by a `1e-12` absolute bound
-instead of an unstable relative error. Timings and memory are recorded for
-reproducibility but do not support a cross-code performance claim.
-
-This rung does not validate multispecies or stellarator full-Fokker--Planck
-physics, finite electric field, Phi1, ambipolar profiles, experiment, or
-cross-code performance.
-
-## Matched finite-Er full-kinetic rung
-
-`full_kinetic_sfincs_finite_er_v1.json` applies the same independent workflow
-to the pinned upstream one-species full-FP tokamak case at normalized
-`Er = -30`. The high and ultra decks use full trajectories, a `1e-13` solver
-tolerance, and the exact MUMPS-enabled SFINCS reference build recorded above.
-Audit the compact evidence with:
-
-```bash
-python tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py \
-  --artifact validation/full_kinetic_sfincs_finite_er_v1.json
-```
-
-At the finest rung, the maximum scaled difference across flow/current,
-momentum flux, heat flux, and the retained speed spectra is `1.88e-9`.
-High-to-ultra movement is at most `0.326%`, and every completed true residual
-is below `5.25e-11`. Axisymmetric intrinsic ambipolarity leaves the summed
-particle flux and NTV at cancellation scale, so they use a `2e-11` absolute
-gate. This is one prescribed finite field, not an Er scan or an ambipolar-root
-validation, and it does not itself validate stellarator full-FP physics.
-
-## Matched stellarator full-kinetic rung
-
-`full_kinetic_sfincs_stellarator_v1.json` closes the next separate gate on the
-checksummed W7-X SC1 Boozer surface at `rN = 0.5`. Both codes use exact
-relative-path decks, physical density and temperature gradients, full
-linearized Fokker--Planck collisions, full trajectories, zero electric field,
-automatic constraint 1, and a `1e-12` solver tolerance. Obtain
-`equilibria/w7x-sc1.bc` from the pinned SFINCS commit and verify the SHA-256
-recorded in the artifact before running either checked deck.
-
-Audit the compact and deck evidence with:
-
-```bash
-python tools/paper_benchmarks/audit_full_kinetic_sfincs_validation.py \
-  --artifact validation/full_kinetic_sfincs_stellarator_v1.json
-```
-
-When the external run tree is available, append
-`--results-root ../runtime/evidence/full-fp-stellarator/accepted` to verify the
-raw HDF5, cold/warm outputs, and logs. The largest high-to-ultra movement is
-`0.444%`; the maximum retained scalar/spectral DKX/SFINCS error is `1.37e-8`,
-set by an `8.31e-13` absolute NTV difference, and all completed true residuals
-are below `1.82e-12`. Momentum flux is a near-zero absolute gate. Timing and
-memory are reproduction metadata, not a cross-code performance claim.
-
-This is a one-species, zero-field surface-profile comparison. It is not an Er
-scan, ambipolar root/profile, Phi1, multispecies, experimental, or second
-stellarator-family full-FP validation.
-
-## Native whole-profile ambipolar certificate
-
-`native_ambipolar_profile_v1.json` pins the portable physical-unit TOML, W7-X
-standard-configuration Boozer checksum, merged DKX commit, compact five-surface
-profile, cold/warm native NetCDF checksums, environment, timing, and memory.
-Audit the checked compact evidence with:
-
-```bash
-python tools/paper_benchmarks/audit_native_ambipolar_profile.py
-```
-
-When the staged raw run tree is available, append
-`--results-root ../runtime/evidence/native-ambipolar-profile-v1` to verify both
-NetCDF files, the external geometry, the compact extraction, and cold/warm
-scientific-array identity. The admitted PAS/DKES method case retains all roots,
-selected SI fluxes, adaptive evidence, branch events, and both attempts at its
-one recovered field. It is not phase-space-converged, continuously localized,
-experimental, full-FP, Phi1, independent cross-code ambipolar, or second-family
-stellarator validation.
-
-The controlling definitions and acceptance gates are in `../plan.md`.
-
-## Bounded ambipolar phase-space ladder
-
-`ambipolar_phase_space_ladder_v1.json` separates kinetic-grid resolution from
-the electric-field midpoint hierarchy. Its three checked physical-unit TOMLs
-use `(theta, zeta, pitch, speed)` resolutions `(13, 31, 32, 5)`,
-`(15, 37, 36, 6)`, and `(17, 37, 40, 6)` on the same five-surface W7-X
-PAS/DKES profile. Audit the compact arithmetic with:
-
-```bash
-python tools/paper_benchmarks/audit_ambipolar_phase_space_ladder.py
-```
-
-All rungs preserve root counts `[1, 1, 3, 1, 1]`, classifications, branch
-identities, and selected branches. The reference-to-fine comparison still
-moves one root by `1.6259765625 kV/m`, selected particle flux by `4.08%`, and
-selected heat flux by `7.81%`. Those values exceed the unchanged `0.005 kV/m`
-and `2%` gates even though every accepted true residual is below `3.92e-13`.
-The recorded outcome is therefore `refinement_exhausted`, not phase-space
-convergence. The fine rung does not refine zeta or speed beyond the reference,
-so it cannot support a hidden full-grid convergence claim.
-
-## Theta/pitch resolution diagnosis
-
-`ambipolar_phase_space_axes_v1.json` retains four exact rungs: the
-`(15, 37, 36, 6)` reference, theta-only `(17, 37, 36, 6)`, pitch-only
-`(15, 37, 40, 6)`, and the next pitch rung `(15, 37, 44, 6)`. Audit every
-root, selected flux, checksum, residual, timing, and memory field with:
-
-```bash
-python tools/paper_benchmarks/audit_ambipolar_phase_space_axes.py
-```
-
-Theta-only keeps selected particle and heat-flux movement below `2%`, but its
-maximum root movement is still `0.1611328125 kV/m`. Pitch-only moves a root by
-`1.7333984375 kV/m` and selected heat flux by `9.47%`. Pitch 40 to 44 remains
-far outside the gates: `0.205078125 kV/m`, `13.52%` selected particle flux,
-and `14.07%` selected heat flux. The pitch-44 process reached a
-`22,275,409,800 B` footprint, so a brute-force pitch-48 run is not admitted.
-The status remains `refinement_exhausted`; zeta and speed remain untested.
-
-## Bounded uniform-pitch route and ladder
-
-`ambipolar_pitch_budget_v1.json` first checks the memory contract independently
-of phase-space convergence. The exact uniform-pitch-22 case switches from 139
-full-factor solves to 139 memory-bounded structured solves while retaining
-every root and bracket exactly. Selected particle and heat fluxes differ by at
-most `3.58e-11` relative, all retained evaluation fluxes by at most `1.53e-10`,
-and the bounded maximum true residual is `5.28e-14`. Its cold process takes
-`176.33 s`; the retained warm result takes `184.81 s`, so no warm-cache speedup
-is claimed. Peak footprint falls from `31,859,925,880 B` to at most
-`2,923,810,392 B` in the retained bounded runs.
-
-Audit the compact record, or additionally check all external NetCDF files and
-the geometry, with:
-
-```bash
-python tools/paper_benchmarks/audit_ambipolar_pitch_budget.py
-```
-
-The same bounded route then evaluates uniform pitch 22, 26, and 30 on the
-three-surface profile. Root counts change from `[3, 1, 1]` to `[1, 1, 1]` to
-`[1, 3, 1]`; adjacent selected fields move by as much as `9.599609375` and
-`7.7001953125 kV/m`, and selected heat-flux movements reach `55.72%` and
-`45.25%`. Every accepted residual remains below `5.65e-14`, so this is a
-discretization failure rather than a solver failure. The artifact keeps the
-unchanged `0.005 kV/m`, `2%`, and `1e-12` gates, rejects uniform pitch 34 or
-higher, and directs the next diagnostic to isolate speed-node groups at fixed
-bounded work. It does not establish phase-space, zeta, speed, independent-code,
-full-FP, Phi1, experiment, or performance validation.
-
-## Fixed-work pitch-by-speed diagnosis
-
-`ambipolar_pitch_speed_groups_v1.json` compares only already-supported
-allocation rules. Uniform pitch 22, linear-ramp pitch 36, and quadratic-ramp
-pitch 44 retain `[22,22,22,22,22,22]`, `[4,9,17,27,36,36]`, and
-`[4,5,11,25,44,44]` modes by speed: 132, 129, and 133 active modes in total.
-Audit the compact record, or additionally supply its four external NetCDF
-files and the pinned Boozer geometry, with:
-
-```bash
-python tools/paper_benchmarks/audit_ambipolar_pitch_speed_groups.py
-```
-
-On the two common surfaces, root counts change `[3,1] -> [1,3] -> [1,1]`.
-Uniform-to-linear holds the intermediate-speed group at exactly 44 modes while
-shifting work from low to high speed; selected electric field and heat flux
-move by as much as `12.20703125 kV/m` and `68.35%`. Linear-to-quadratic still
-changes topology and moves them by `2.177734375 kV/m` and `17.93%`. Every
-accepted true residual is below `7.04e-14`, all measured footprints remain
-below 4.14 GB, and the quadratic cold/warm scientific arrays are exact apart
-from the timing array. The populated-cache process is slower, so no warm
-speedup is claimed.
-
-This closes the supported-rule allocation diagnosis, not phase-space
-convergence. A subsequent bounded two-surface slice must separate low from
-intermediate sensitivity with high-speed work held fixed. Zeta, speed,
-independent-code, experiment, full-FP, Phi1, and performance validation remain
-open.
-
-## Explicit fixed-high-work diagnosis
-
-`ambipolar_pitch_explicit_groups_v1.json` uses the new deterministic
-`resolution.pitch_modes_by_speed` contract to compare the supported linear-36
-allocation `[4,9,17,27,36,36]` with low-heavy `[12,12,16,17,36,36]` and
-intermediate-heavy `[4,4,24,25,36,36]` allocations. Every allocation has
-exactly 129 active modes and exactly 72 modes in the final two speed nodes.
-Audit the compact record, or additionally verify all four raw NetCDF files and
-the pinned Boozer geometry, with:
-
-```bash
-python tools/paper_benchmarks/audit_ambipolar_pitch_explicit_groups.py
-```
-
-All three allocations preserve root counts `[1,3]` on the bounded surface
-pair, so fixing high-speed work removes the topology change seen between the
-supported allocation rules. It does not make the observables converged:
-pairwise selected electric-field, particle-flux, and heat-flux movements reach
-`1.064453125 kV/m`, `9.89%`, and `9.08%`. All 98 solves in each new result use
-the bounded structured route, every accepted residual stays below
-`3.05e-14`, and every measured footprint stays below 4.01 GB. The
-intermediate-heavy cold/warm scientific arrays are exact apart from timing;
-the retained timings support no warm-speedup claim.
-
-The checked outcome remains `refinement_exhausted`. The next bounded pair must
-raise low and intermediate work together while retaining the admitted
-high-speed group. Zeta, speed, independent-code, experiment, full-FP, Phi1,
-and performance validation remain open.
-
-## Joint speed/zeta selected-tail diagnosis
-
-`ambipolar_joint_speed_zeta_tail_v1.json` completes the smallest fixed-pitch
-2x2 matrix at speed 8/10 and zeta 37/45. It holds the two W7-X surfaces, three
-sampled electric fields, pitch ceiling 52, profiles, physics, and solver policy
-fixed. Audit the compact record, or additionally verify all eight cold/warm
-NetCDF results and the adjacent pinned geometry, with:
-
-```bash
-python tools/paper_benchmarks/audit_ambipolar_joint_speed_zeta_tail.py \
-  --results-root ../runtime/evidence/joint-speed-zeta-v1
-```
-
-At the common `8.55 kV/m` field, speed refinement changes particle and heat
-fluxes by as much as 7.55% and 6.56%; zeta refinement changes them by as much
-as 9.32% and 9.41%. Every accepted true residual stays below `1.23e-15`, every
-process stays below 2.29 GB RSS, and each cold/warm scientific result is exact
-apart from timing. Selected-tail upper bounds remain finite from 7.96% to
-9.71%, but decrease on one zeta refinement, so they are not promoted as a
-standalone convergence oracle.
-
-The narrow field window observes no bracket by design. This artifact records
-`phase_space_converged=false`, admits no full-profile escalation, and directs
-the next slice to a matched fixed-field YANCC/SFINCS or MONKES reference before
-another DKX grid increase.
-
-## Native physical-flux conversion and matched SFINCS referee
-
-`native_physical_flux_sfincs_v1.json` records the matched finite-field referee
-that exposed and certifies the correction of native physical radial fluxes.
-The native route had multiplied `psiHat`-directed particle and heat fluxes by
-`d(psiHat)/d(rHat)`, the inverse of the SFINCS diagnostic conversion
-`d(rHat)/d(psiHat)`. Audit the compact record, or additionally verify the raw
-SFINCS HDF5/log and native NetCDF results, with:
-
-```bash
-python tools/paper_benchmarks/audit_native_physical_flux_sfincs.py \
-  --results-root ../runtime/evidence/native-physical-flux-sfincs-v1
-```
-
-The independently built SFINCS v3 executable and fixed DKX code solve the same
-two-species W7-X surface at `8.55 kV/m`, with PAS collisions, DKES ExB drift,
-Phi1 off, and the exact ramp `[6, 11, 19, 30, 42, 52, 52, 52]`. Particle and
-heat fluxes agree within 0.32%, parallel current within 0.024%, the DKX primal
-residual is `6.79e-16`, and the final SFINCS KSP residual is `5.77e-15`.
-
-This closes the physical-unit conversion and one matched fixed-field parity
-gate. It does not close whole-profile phase-space convergence, ambipolar-root,
-full-Fokker-Planck, Phi1, experiment, or cross-code performance gates.
-
-## W7-X fixed-field resolution referee
-
-`w7x_fixed_field_resolution_referee_v1.json` extends the matched W7-X
-`8.55 kV/m` case with one-axis phase-space ladders. Audit the compact record,
-or additionally verify all external SFINCS and DKX inputs, logs, HDF5, and
-NetCDF results, with:
-
-```bash
-python tools/paper_benchmarks/audit_w7x_fixed_field_resolution_referee.py \
-  --results-root ../runtime/evidence/w7x-fixed-field-resolution-referee-v1
-```
-
-Pinned SFINCS pitch 120 to 150 moves every retained particle/heat/current
-observable by at most 0.191%. At pitch 150 and zeta 37, DKX agrees with that
-independent high rung within 0.269%. The bounded DKX ladder then admits the
-fixed-field particle and heat fluxes at theta 15, zeta 85, pitch 150, and speed
-8: the joint pitch-180, zeta-109, speed-10, and theta-19 checks each remain
-below the unchanged 2% gate.
-
-Parallel current is deliberately not promoted. Theta 15 to 19, 19 to 23, and
-23 to 29 move it by 7.35%, 7.15%, and 5.46%, respectively, despite converged
-particle and heat fluxes. The certificate therefore records
-`parallel_current_status = "refinement_exhausted"` and does not admit a
-whole-profile, ambipolar-root, or bootstrap-current claim.
-
-## Admitted-grid uniform launch no-go
-
-`w7x_admitted_grid_uniform_probe_no_go_v1.json` records the bounded two-surface
-launch attempted after the fixed-field transport grid was admitted. The case
-passed the retained-evidence preflight, but the reusable dense coarse bands
-would require 87.2 GB and their Schur factors 29.1 GB on the 24 GiB host. The
-memory guard correctly selected checkpointed row-on-demand elimination; after
-2551.33 s it had completed no surface and reached 10.21 GB maximum RSS and
-21.88 GB peak process footprint, so the exact process was stopped without a
-result. This is an operational route no-go, not a numerical failure or no-root
-claim. The next route uses independently reviewed low-cost discovery followed
-by explicitly scoped high-resolution seeded-bracket promotion.
-
-## W7-X bounded bracket discovery and seeded replay
-
-`w7x_seeded_bracket_discovery_v1.json` records the cheapest reviewed
-two-surface discovery grid and a separate real-solve replay of every discovered
-bracket endpoint. Audit the compact record, or additionally verify the
-checksummed external inputs, logs, and NetCDF results, with:
-
-```bash
-python tools/paper_benchmarks/audit_w7x_seeded_bracket_discovery.py \
-  --results-root ../runtime/evidence/w7x-seeded-bracket-discovery-v1
-```
-
-The theta-15, zeta-37, pitch-36, speed-6 discovery retained topology `[1, 3]`
-on the two inner W7-X surfaces in both cold and warm processes. The separate
-seeded run evaluated the eight distinct endpoints, retained a strict current
-sign change in all four intervals, and reproduced the roots and final brackets
-exactly while reducing the measured solve from 98 to 8 kinetic evaluations.
-
-This evidence is deliberately limited to low-resolution discovery and endpoint
-replay. It does not promote admitted-grid ambipolar roots, prove there are no
-unsampled crossings, or admit whole-profile, bootstrap-current, full-FP, Phi1,
-experimental, second-family, or performance-equivalence claims.
-
-## W7-X admitted-grid seeded envelopes
-
-`w7x_admitted_grid_seeded_envelope_v1.json` promotes the low-cost discovery to
-the fixed-field-admitted theta-15, zeta-85, pitch-150, speed-8 transport grid.
-Audit the compact record and, optionally, all broad-envelope, extension, and
-cold/warm final NetCDF results with:
-
-```bash
-python tools/paper_benchmarks/audit_w7x_admitted_grid_seeded_envelope.py \
-  --results-root ../runtime/evidence/w7x-admitted-grid-seeded-envelope-v1
-```
-
-The broad run resolved the inner-surface root at `12.681640625 kV/m` and
-retained explicit failed signs for the three original outer-surface envelopes.
-A targeted `[11, 14] kV/m` extension found the moved outer root at
-`11.533203125 kV/m`. The final four-endpoint cold/warm replay retained strict
-sign changes, topology `[1, 1]`, exact arrays except solve timing, and residuals
-below `2.99e-14`.
-
-This is an explicit-interval result, not a global all-root search. Unsampled
-crossings, five-surface convergence, bootstrap current, full-FP, Phi1,
-experiment, a second stellarator family, and performance equivalence remain
-outside the claim.
+- `negative_result`: the run rules a route or resolution out. Kept on purpose
+  so that it is not retried.
+
+## Entries
+
+The full claim and limitations of each entry are in `registry.toml`. The
+longer write-ups are in `docs/validation_matrix.rst`.
+
+| Entry | Status | Headline |
+| --- | --- | --- |
+| `independent_cross_code` | accepted_limited | Monoenergetic `D11*`, `D31*`, `D13*`, `D33*` on DSHAPE/NCSX (YANCC) and W7-X EIM (MONKES) within 6%; PAS + DKES only. |
+| `full_kinetic_sfincs` | accepted | Full linearized FP, tokamak, `Er = 0`: max scaled DKX/SFINCS error `2.69e-10`, rung movement ≤ `0.280%`. |
+| `full_kinetic_sfincs_finite_er` | accepted | Same at normalized `Er = -30`: max error `1.88e-9`, movement ≤ `0.326%`. |
+| `full_kinetic_sfincs_stellarator` | accepted | W7-X SC1 at `rN = 0.5`, `Er = 0`: max error `1.37e-8`, movement ≤ `0.444%`. |
+| `native_physical_flux_sfincs` | accepted | Corrected native `psiHat → rHat` flux conversion; W7-X at 8.55 kV/m, fluxes within 0.32%, current within 0.024%. |
+| `w7x_fixed_field_resolution_referee` | accepted_limited | Fixed-field fluxes admitted at theta15/zeta85/pitch150/speed8 (DKX vs SFINCS pitch-150 within 0.269%); parallel current still theta-sensitive. |
+| `native_ambipolar_profile` | accepted_limited | Five-surface W7-X PAS/DKES profile with every root, bracket and recovery retained; not phase-space converged. |
+| `w7x_seeded_bracket_discovery` | accepted_limited | Low-resolution discovery gives topology `[1, 3]`; every candidate is replayed to a strict sign change in 8 instead of 98 solves. |
+| `w7x_admitted_grid_seeded_envelope` | accepted_limited | Admitted-grid roots 12.681640625 and 11.533203125 kV/m in explicit intervals; not a global root search. |
+| `w7x_admitted_grid_uniform_probe_no_go` | negative_result | Uniform all-root search at the admitted grid stopped after 2551 s at 21.9 GB with no surface done: an operational no-go. |
+| `ambipolar_phase_space_ladder` | negative_result | Coarse/reference/fine ladder keeps topology, but a root moves 1.626 kV/m and heat flux 7.81%: `refinement_exhausted`. |
+| `ambipolar_phase_space_axes` | negative_result | Pitch is the dominant unresolved axis; pitch 44 reached 22.3 GB, so pitch 48 is not admitted. |
+| `ambipolar_pitch_budget` | negative_result | Bounded route matches full-factor exactly (≤ `3.6e-11`) at under a tenth of the memory; uniform pitch 22→26→30 changes topology. |
+| `ambipolar_pitch_speed_groups` | diagnostic | Three supported pitch-by-speed rules at fixed work give three different root topologies. |
+| `ambipolar_pitch_explicit_groups` | diagnostic | Fixing high-speed work holds topology `[1, 3]`, but fields and fluxes still move by up to 1.06 kV/m and 9.9%. |
+| `ambipolar_pitch_combined` | negative_result | Raising low and intermediate pitch together keeps `[1, 3]`; further intermediate refinement fails every gate. |
+| `ambipolar_speed_local_pitch` | diagnostic | Sensitivity localizes to speed node 3; raising the pitch ceiling exposes high-speed movement. |
+| `ambipolar_joint_pitch_speed` | diagnostic | Both the speed 6→8 and pitch 44→52 gates fail; the truncated route reports its modal tail as unavailable. |
+| `ambipolar_joint_speed_zeta_tail` | diagnostic | Speed and zeta refinement move fluxes 6.6–9.4%, above the 2% gate; tail bounds are not monotone. |
+| `ambipolar_selected_tail_bound` | diagnostic | Rigorous upper bound on the truncated route's Legendre tail at each selected field; supporting evidence only. |
+
+## Adding evidence
+
+Add an entry to `registry.toml` and an `audit()`. Do not add a per-campaign
+runner, test module, or README section. Large raw outputs belong in release
+assets, referenced by checksum.
