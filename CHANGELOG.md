@@ -13,6 +13,17 @@
   `FSABjHatOverRootFSAB2` nor `FSABjHat`, passing the gate with a zero
   objective; a missing or nonfinite bootstrap current is now refused.
 
+### Performance
+
+- Retain only the active pitch rows in reusable coarse factors (#273). The
+  generated reusable preconditioner factored every subsystem through all `Nxi`
+  rows, including the masked identity rows past `Nxi_for_x`; it now factors
+  `max(1, Nxi_for_x)` rows and applies the uncoupled tails as
+  `r / (1 + floor)` at factor precision. On the recorded NCSX layout that is
+  744 rows instead of 1,111 (predicted float64 LU and pivots 14.5 GiB instead of
+  21.7 GiB); a traced `Nxi_for_x` keeps the rectangular layout. The operator,
+  masks, pinning and residual acceptance are unchanged.
+
 ## v2.6.0 — 2026-09-21
 
 Acceptance tightened where it could pass a wrong answer, MUMPS as an explicit
