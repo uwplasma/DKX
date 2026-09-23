@@ -37,8 +37,8 @@ optimization example test suite under the repository ``tests`` directory.
 
 ## VMEX optimization with a kinetic bootstrap current
 
-`QA_optimization_bootstrap_dkx.py` is the flagship: VMEX's
-`examples/optimization/QA_optimization_bootstrap.py` with the Redl bootstrap
+`QA_optimization_bootstrap_dkx.py` is the flagship: VMEX's QA
+bootstrap-current optimization example (`QA_optimization_bootstrap`) with the Redl bootstrap
 row swapped for the drift-kinetic one DKX computes on each trial equilibrium.
 The row is traced (boundary -> VMEX -> `booz_xform_jax` -> DKX), so VMEX's
 implicit Jacobian carries it; `BOOTSTRAP_MODEL` selects `"dkx"`, `"redl"` or
@@ -58,6 +58,16 @@ normalized mismatch, so the weights compare.  The default collision operator
 is pitch-angle scattering, which has no momentum restoration and overestimates
 `<j.B>`; `collision_operator=0` is Fokker-Planck.  Needs `vmex` and
 `booz_xform_jax >= 0.4`; `DKX_EXAMPLES_CI=1` is a smoke pass.
+
+At the committed parameters (three kinetic surfaces, `11 x 11 x 16 x 4`,
+modes 1 then 2, ten evaluations each) one run on four laptop CPU threads took
+30 minutes and 4.6 GB: objective 1.78 -> 0.0061, quasisymmetry 6.7e-2 ->
+5.7e-3, and the DKX mismatch `f_boot` 1.2e-3 -> 1.2e-4 on the `ns = 101`
+re-solve. The optimized equilibrium carries the pitch-angle-scattering
+current, 1.5-1.6 times Redl's at `s = 0.25-0.75`: the operator's known excess,
+not a physical difference.
+
+![Bootstrap current before and after](../../docs/_static/figures/readme/QA_optimization_bootstrap_dkx.png)
 
 `QH_optimization_bootstrap_dkx.py` (nfp=4) and `QI_optimization_bootstrap_dkx.py`
 (nfp=2, where Redl, a fit to quasisymmetric calculations, is an extrapolation)

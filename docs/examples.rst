@@ -121,6 +121,13 @@ at shrunken resolution (``DKX_CI=1``) in
    operator and overestimates the current (no momentum restoration).
    Requires ``vmex`` and ``booz_xform_jax``.
 
+   .. figure:: _static/figures/readme/QA_optimization_bootstrap_dkx.png
+      :alt: Bootstrap current of the equilibrium, of Redl and of DKX before and after the optimization, and the objective history.
+      :align: center
+      :width: 90%
+
+      Output figure of ``examples/optimization/QA_optimization_bootstrap_dkx.py``.
+
 ``examples/optimization/optimize_QA_bootstrap.py`` — gradient-based optimization
    Optimizes a quasi-axisymmetric stellarator boundary for low bootstrap
    current: boundary Fourier coefficients ->
