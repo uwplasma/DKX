@@ -28,6 +28,7 @@ import types as _types
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable
 
+import jax
 import numpy as np
 
 from dkx import console
@@ -501,6 +502,11 @@ def profile_moments_from_operator(
     Returns:
         The h5-named moment table with the species axis leading.
     """
+    return dict(_profile_moments_compiled(op, state_vector, ntv_kernel_tz))
+
+
+def _profile_moments(op: KineticOperator, state_vector, ntv_kernel_tz):
+    """The body of :func:`profile_moments_from_operator`."""
     import jax.numpy as jnp  # noqa: PLC0415
 
     layout, vgrid, surface, species = operator_containers(op)
@@ -517,6 +523,13 @@ def profile_moments_from_operator(
         table["NTVBeforeSurfaceIntegral"] = before
         table["NTV"] = ntv
     return table
+
+
+# The moment integrals are several hundred small primitives. Compiled, a caller
+# that does not ``jit`` (an eager ``jax.value_and_grad`` of an objective built on
+# them, say) dispatches, linearizes and transposes them once instead of one at a
+# time.
+_profile_moments_compiled = jax.jit(_profile_moments)
 
 
 def _ntv_kernel_for(inp: SfincsInput, op: KineticOperator, geom: FluxSurfaceGeometry):
