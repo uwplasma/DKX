@@ -41,7 +41,10 @@ class SolverOptions:
             ``"direct"`` (the route policy of :func:`dkx.solve.solve`).
         tol: relative residual tolerance (per RHS column).
         atol: absolute residual floor.
-        restart: FGMRES cycle size ``m`` (recycled Krylov route).
+        restart: FGMRES cycle size ``m`` (recycled Krylov route). ``None``
+            selects the memory-aware policy of :func:`dkx.solve.solve`: short
+            cycles, then a restart of up to 1,000 sized to
+            ``krylov_memory_budget_gb``.
         recycle_dim: GCROT recycle directions ``k`` (recycled Krylov route).
         max_restarts: recycled-Krylov outer-cycle cap; exceeding it is what
             makes ``auto`` fall through to the sparse direct route.
@@ -77,6 +80,9 @@ class SolverOptions:
             ``--cores`` flag before ``import dkx`` (see
             ``docs/parallelism.rst``); :meth:`solve_kwargs` deliberately
             excludes this field.
+        krylov_memory_budget_gb: memory (GB) the widened FGMRES basis of the
+            ``restart=None`` policy may take; ``None`` reads
+            ``DKX_KRYLOV_MEMORY_BUDGET_GB``, else a quarter of available memory.
         keep_lowest: Legendre blocks recovered by the memory-saving structured
             route. Set to the input Nxi for original-equation residual audits.
     """
@@ -84,7 +90,7 @@ class SolverOptions:
     method: str = "auto"
     tol: float = 1.0e-10
     atol: float = 0.0
-    restart: int = 30
+    restart: int | None = None
     recycle_dim: int = 8
     max_restarts: int = 200
     differentiable: bool = False
@@ -95,6 +101,7 @@ class SolverOptions:
     cores: int | None = None
     keep_lowest: int = 3
     direct_backend: str | None = None
+    krylov_memory_budget_gb: float | None = None
 
     def solve_kwargs(self) -> dict[str, Any]:
         """Keyword arguments for :func:`dkx.solve.solve` (``cores`` excluded)."""
@@ -102,7 +109,7 @@ class SolverOptions:
             "method": str(self.method),
             "tol": float(self.tol),
             "atol": float(self.atol),
-            "restart": int(self.restart),
+            "restart": None if self.restart is None else int(self.restart),
             "recycle_dim": int(self.recycle_dim),
             "max_restarts": int(self.max_restarts),
             "differentiable": bool(self.differentiable),
@@ -120,6 +127,11 @@ class SolverOptions:
             ),
             "direct_memory_budget_gb": (
                 None if self.memory_budget_gb is None else float(self.memory_budget_gb)
+            ),
+            "krylov_memory_budget_gb": (
+                None
+                if self.krylov_memory_budget_gb is None
+                else float(self.krylov_memory_budget_gb)
             ),
         }
 

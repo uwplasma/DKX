@@ -162,6 +162,34 @@ __all__ = [
 _TIER1_BUDGET_GB_DEFAULT = 8.0
 _TIER1_BUDGET_ENV = "DKX_TIER1_MEMORY_BUDGET_GB"
 
+# Recycled-Krylov restart policy, used when ``solve(restart=None)`` (the
+# default).  The first cycles run at a short restart, where an easy deck
+# converges and every Arnoldi step is cheap; a solve still unconverged after
+# them continues from its iterate at the longest restart whose FGMRES basis fits
+# the memory budget, capped at ``_AUTO_RESTART_CAP``, after two cycles of 100.
+# A longer restart is not free: its basis is allocated whole, and every step
+# orthogonalizes against all of it.  The cap is the measured
+# one: on the HSX-like ``Nx`` ladder, restart 200 needs 2,788 iterations at
+# ``Nx = 16`` where 1,000 needs 357 and 2,000 gives the same 357 at a higher
+# cost per step, because SOLVAX orthogonalizes against the whole padded basis
+# (docs/experiments/2026-09-23-restart-and-direct-reach.md).  The basis costs
+# ``2 * restart * total_size * itemsize`` bytes: flexible GMRES stores both the
+# Arnoldi basis ``V`` and the preconditioned basis ``Z``.
+_AUTO_RESTART_PROBE = 30
+_AUTO_RESTART_PROBE_CYCLES = 5
+# Between the two, the pre-2.7 widened cycle: a deck that the earlier policy
+# (five cycles of 30, then cycles of 100) converged within two cycles of 100
+# takes exactly the same path, without paying the wide basis.
+_AUTO_RESTART_MIDDLE = 100
+_AUTO_RESTART_MIDDLE_CYCLES = 2
+_AUTO_RESTART_CAP = 1000
+# Share of the memory available when the solve widens that its basis may take,
+# unless an explicit budget (argument or environment variable) is given.
+_KRYLOV_BASIS_MEMORY_FRACTION = 0.25
+# Used only where available memory cannot be read: the pre-2.7 256 MiB guard.
+_KRYLOV_BASIS_FALLBACK_BYTES = 256 * 1024**2
+_KRYLOV_BUDGET_ENV = "DKX_KRYLOV_MEMORY_BUDGET_GB"
+
 # Defect-correction sweeps after the structured direct factor solve.  One
 # reproduces the hand-rolled pass this replaced and already reaches O(1e-16)
 # relative residual in float64; the knob exists because the float32-factor variant needs more.
@@ -859,6 +887,35 @@ def _tier1_budget_bytes(budget_gb: float | None) -> tuple[float, float]:
     return float(budget_gb) * 2.0**30, float(budget_gb)
 
 
+def _krylov_basis_budget_bytes(budget_gb: float | None) -> float:
+    """Bytes the widened FGMRES basis may take: argument, environment, or a
+    quarter of the memory available now (the pre-2.7 256 MiB where that cannot
+    be read)."""
+    if budget_gb is None:
+        env = os.environ.get(_KRYLOV_BUDGET_ENV)
+        budget_gb = float(env) if env not in (None, "") else None
+    if budget_gb is not None:
+        if not np.isfinite(budget_gb) or budget_gb < 0.0:
+            raise ValueError(
+                f"krylov_memory_budget_gb must be finite and nonnegative; got {budget_gb!r}"
+            )
+        return float(budget_gb) * 2.0**30
+    available = _available_memory_bytes()
+    if available is None:
+        return float(_KRYLOV_BASIS_FALLBACK_BYTES)
+    return _KRYLOV_BASIS_MEMORY_FRACTION * float(available)
+
+
+def _auto_wide_restart(
+    total_size: int, itemsize: int, budget_gb: float | None
+) -> int:
+    """Longest restart, at most ``_AUTO_RESTART_CAP`` and ``total_size``, whose
+    FGMRES basis (``2 * restart * total_size * itemsize`` bytes) fits the budget."""
+    per_step = 2 * max(int(total_size), 1) * int(itemsize)
+    fit = int(_krylov_basis_budget_bytes(budget_gb) // per_step)
+    return max(0, min(_AUTO_RESTART_CAP, int(total_size), fit))
+
+
 def _truncation_supported(op: KineticOperator, keep: int) -> tuple[bool, str]:
     """Structural check that the truncated structured direct kernel applies.
 
@@ -1105,6 +1162,8 @@ def _escalate_after_tier2_stall(
     max_dense_size: int,
     direct_backend: str | None = None,
     direct_memory_budget_gb: float | None = None,
+    auto_restart: bool = False,
+    krylov_memory_budget_gb: float | None = None,
 ) -> SolveResult:
     """Try alternate preconditioners and a larger iteration budget at fixed physics.
 
@@ -1199,7 +1258,19 @@ def _escalate_after_tier2_stall(
 
     # Rung 2: more iterations.  Cheap to ask for, and the remedy when the
     # preconditioner is adequate but the cap was simply too low for this Er.
+    # Under the restart=None policy the budget is spent at the wide restart:
+    # the measured stalls of this route are restart stagnation
+    # (docs/experiments/2026-09-23-restart-and-direct-reach.md), which more
+    # short cycles do not cure.
     widened = max(max_restarts * 4, max_restarts + 1)
+    rung_restart = restart
+    if auto_restart:
+        wide = _auto_wide_restart(
+            op.total_size, rhs2d.dtype.itemsize, krylov_memory_budget_gb
+        )
+        if wide > restart:
+            rung_restart = wide
+            widened = max(1, restart * widened // wide)
     best_label_so_far, best_so_far = max(attempts, key=lambda item: -_residual(item[1]))
     best_kind = best_label_so_far.split()[0]
     if best_kind not in _TIER2_PRECONDITIONERS:
@@ -1209,7 +1280,7 @@ def _escalate_after_tier2_stall(
     try:
         print(
             f"[dkx.solve]   retrying the iterative solve with the {best_kind} preconditioner "
-            f"and {widened} restarts (was {max_restarts}) ..."
+            f"and {widened} restarts of {rung_restart} (was {max_restarts} of {restart}) ..."
         )
         candidate = _solve_tier2(
             op,
@@ -1220,7 +1291,7 @@ def _escalate_after_tier2_stall(
             recycle=recycle,
             preconditioner=best_kind,
             drop_l_coupling_in_precond=drop_l_coupling_in_precond,
-            restart=restart,
+            restart=rung_restart,
             recycle_dim=recycle_dim,
             max_restarts=widened,
             differentiable=False,
@@ -2494,6 +2565,7 @@ def _solve_tier2(
     adjoint_residual_factor: float = DEFAULT_ADJOINT_RESIDUAL_FACTOR,
     prebuilt_precond: tuple[Callable, Callable] | None = None,
     auto_restart_recovery: bool = False,
+    krylov_memory_budget_gb: float | None = None,
 ) -> SolveResult:
     if int(recycle_dim) < 1:
         # solvax's GCROT scatters the recycled subspace into a (n, k) array, so
@@ -2562,6 +2634,26 @@ def _solve_tier2(
         if differentiable
         else None
     )
+    # The widened windows of the host restart policy, sized once per call from
+    # the memory available after the preconditioner is built, within the
+    # original inner-step cap ``restart * max_restarts``.
+    windows_after_probe: list[tuple[int, int]] = []
+    if (
+        auto_restart_recovery and not differentiable and not traced
+        and prebuilt_precond is None and restart > 0
+        and max_restarts > _AUTO_RESTART_PROBE_CYCLES
+    ):
+        wide = _auto_wide_restart(
+            op.total_size, rhs2d.dtype.itemsize, krylov_memory_budget_gb
+        )
+        steps = restart * (max_restarts - _AUTO_RESTART_PROBE_CYCLES)
+        if restart < _AUTO_RESTART_MIDDLE < wide:
+            middle = min(_AUTO_RESTART_MIDDLE_CYCLES, steps // _AUTO_RESTART_MIDDLE)
+            if middle > 0:
+                windows_after_probe.append((_AUTO_RESTART_MIDDLE, middle))
+                steps -= _AUTO_RESTART_MIDDLE * middle
+        if wide > restart and steps // wide > 0:
+            windows_after_probe.append((wide, steps // wide))
     cols: list[jnp.ndarray] = []
     total_iters: int | None = 0
     converged = True
@@ -2648,16 +2740,16 @@ def _solve_tier2(
             )
             recycle, iterations, col_converged, residual_norm = aux
         else:
-            # Host-controlled recovery with factors built for this exact operator.
-            # Reserve whole wide cycles within the original inner-step cap;
+            # Host-controlled restart policy with factors built for this exact
+            # operator: a few short cycles, then the longest restart whose basis
+            # fits the memory budget, continuing from the iterate. Whole wide
+            # cycles are reserved within the original inner-step cap;
             # caller-supplied (possibly stale) factors keep the explicit path.
-            wide_cycles = restart * (max_restarts - 5) // 100
-            recover = (
-                auto_restart_recovery and not traced and prebuilt_precond is None
-                and 0 < restart < 100 and max_restarts > 5 and wide_cycles > 0
-                and 2 * 100 * op.total_size * rhs2d.dtype.itemsize <= 256 * 1024**2
+            recover = bool(windows_after_probe)
+            windows = (
+                [(restart, _AUTO_RESTART_PROBE_CYCLES), *windows_after_probe]
+                if recover else [(restart, max_restarts)]
             )
-            windows = [(restart, 5), (100, wide_cycles)] if recover else [(restart, max_restarts)]
             guess = None if x0_2d is None else x0_2d[:, j]
             iterations = 0
             for window, cycles in windows:
@@ -2964,10 +3056,11 @@ def solve(
     use_preconditioner: bool = True,
     preconditioner: str | None = None,
     drop_l_coupling_in_precond: bool = False,
-    restart: int = 30,
+    restart: int | None = None,
     recycle_dim: int = 8,
     max_restarts: int = 200,
     max_dense_size: int = 8192,
+    krylov_memory_budget_gb: float | None = None,
     tier1_memory_budget_gb: float | None = None,
     direct_backend: str | None = None,
     direct_memory_budget_gb: float | None = None,
@@ -3093,19 +3186,31 @@ def solve(
         drop_l_coupling_in_precond: sever the L±1 coupling in the coarse
             operator.  Not Fortran's ``preconditioner_xi``, which drops L±2,
             and expensive; see :func:`dkx.coarse_precond.build_coarse_preconditioner`.
-        restart: FGMRES cycle size ``m``. Host-controlled, non-differentiable auto
-            solves with freshly built factors may probe five cycles then widen
-            to 100 when two 100-vector bases fit in 256 MiB (a basis estimate,
-            not a bound on total solver memory). The probe plus
-            retry uses at most ``restart * max_restarts`` inner steps per RHS
-            (remaining work rounded down to whole wide cycles). Explicit
-            methods, traced solves and caller-supplied factors retain this size.
-            This bounds the initial preconditioner attempt; the existing auto
-            escalation ladder can still allocate additional iteration budgets.
+        restart: FGMRES cycle size ``m``. ``None`` (the default) selects the
+            memory-aware policy: cycles of 30. A host-controlled,
+            non-differentiable ``method="auto"`` solve with freshly built
+            factors runs five of them, then two cycles of 100, then continues
+            from its iterate at the longest restart, at most 1,000 and at most
+            ``total_size``, whose
+            flexible-GMRES basis (``2 * restart * total_size * 8`` bytes, since
+            both ``V`` and ``Z`` are stored) fits ``krylov_memory_budget_gb``.
+            Probe and wide cycles together use at most ``30 * max_restarts``
+            inner steps per RHS (the remainder rounded down to whole wide
+            cycles), and the escalation ladder's larger-budget rung uses the
+            same wide restart. An integer fixes the cycle size everywhere;
+            explicit methods, traced and differentiable solves and
+            caller-supplied preconditioners always use a fixed size.
         recycle_dim: GCROT recycle directions ``k``.
         max_restarts: recycled-Krylov outer-cycle cap (what makes ``auto``
             fall through to the sparse direct route).
         max_dense_size: sparse direct materialization guard.
+        krylov_memory_budget_gb: memory (GB, ``2**30`` bytes) the widened
+            FGMRES basis of the ``restart=None`` policy may take. ``None`` reads
+            the ``DKX_KRYLOV_MEMORY_BUDGET_GB`` environment variable, else a
+            quarter of the memory available when the solve widens (256 MiB
+            where available memory cannot be read). It bounds the basis
+            estimate, not the solver's total memory. Ignored with an integer
+            ``restart``.
         tier1_memory_budget_gb: budget (GB) above which ``method="auto"``
             prefers the memory-lean truncated structured direct kernel over
             the full-band factorization.  ``None`` reads the ``DKX_TIER1_MEMORY_BUDGET_GB``
@@ -3252,6 +3357,14 @@ def solve(
         direct_backend = str(direct_backend).strip().lower()
         if direct_backend not in {"superlu", "mumps"}:
             raise ValueError("direct_backend must be None, 'superlu', or 'mumps'")
+    auto_restart = restart is None
+    if auto_restart:
+        restart = _AUTO_RESTART_PROBE
+    elif isinstance(restart, (bool, np.bool_)) or int(restart) != restart or restart < 1:
+        raise ValueError(f"restart must be None or a positive integer; got {restart!r}")
+    restart = int(restart)
+    if krylov_memory_budget_gb is not None:
+        _krylov_basis_budget_bytes(krylov_memory_budget_gb)  # validate early
     if direct_memory_budget_gb is not None:
         if (isinstance(direct_memory_budget_gb, (bool, np.bool_))
                 or not np.isfinite(direct_memory_budget_gb)
@@ -3376,7 +3489,8 @@ def solve(
             recycle=recycle,
             preconditioner=_resolve_preconditioner(preconditioner, use_preconditioner),
             prebuilt_precond=precond,
-            auto_restart_recovery=method == "auto" and not differentiable,
+            auto_restart_recovery=method == "auto" and not differentiable and auto_restart,
+            krylov_memory_budget_gb=krylov_memory_budget_gb,
             drop_l_coupling_in_precond=drop_l_coupling_in_precond,
             restart=restart,
             recycle_dim=recycle_dim,
@@ -3405,6 +3519,8 @@ def solve(
                 max_dense_size=max_dense_size,
                 direct_backend=direct_backend,
                 direct_memory_budget_gb=direct_memory_budget_gb,
+                auto_restart=auto_restart,
+                krylov_memory_budget_gb=krylov_memory_budget_gb,
             )
     else:  # direct
         if differentiable:

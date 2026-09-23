@@ -1024,6 +1024,95 @@ The process maximum-RSS row is kept in the summary JSON audit fields. That
 summary, together with the top runtime and memory cases, is recorded in
 ``tools/publication_figures/artifacts/dkx_fortran_suite_benchmark_summary.json``.
 
+Krylov restart length
+---------------------
+
+The recycled Krylov route is GCROT-recycled flexible GMRES, and its restart
+length decides more of its iteration count than the speed grid does. On the
+HSX-like deck of ``docs/experiments/2026-09-19-nx-drives-the-iteration-growth.md``
+(``Nxi = 20``, ``coarse`` preconditioner, ``tol = 1e-10``, 8 recycled
+directions, office Xeon, one core per point), the iterations to tolerance were:
+
+.. list-table::
+   :header-rows: 1
+
+   * - ``Nx``
+     - unknowns
+     - restart 200
+     - restart 1,000
+     - restart 2,000
+   * - 10
+     - 66,004
+     - 174
+     - 174
+     - 174
+   * - 13
+     - 85,804
+     - 969
+     - 259
+     - 259
+   * - 16
+     - 105,604
+     - 2,788
+     - 357
+     - 357
+
+The 16-fold growth from ``Nx = 10`` to 16 at restart 200 is restart
+stagnation: unrestarted, it is 2.05-fold. At ``(Nxi, Nx) = (40, 16)`` restart
+1,000 takes 390 iterations against 7,167 at 200. At ``Nx = 16`` the Krylov
+phase took 216 s at restart 1,000 against 733 s at 200, with a peak RSS of
+3.11 GiB against 2.06 GiB (shared host; the record has the load).
+
+A longer restart has two costs. Flexible GMRES stores both the Arnoldi basis
+``V`` and the preconditioned basis ``Z``, so the basis takes
+``2 * restart * unknowns * 8`` bytes. SOLVAX also orthogonalizes each step
+against the whole allocated basis, so an unused restart still costs time: the
+same 174 iterations at ``Nx = 10`` took 42 s at restart 200, 84 s at 1,000
+and 111 s at 2,000.
+
+The default, ``restart=None``, follows from both. A ``method="auto"`` solve
+runs five cycles of 30 and two of 100. A deck that converges within those 350
+steps never allocates a long basis. If it has not converged, the solve
+continues from its iterate and recycled subspace at the longest restart, at
+most 1,000 and at most the number of unknowns, whose basis fits
+``krylov_memory_budget_gb`` (``DKX_KRYLOV_MEMORY_BUDGET_GB``, else a quarter
+of the memory available at that point). The total stays within
+``30 * max_restarts`` inner steps. The stall ladder's larger-budget rung uses
+the same restart. An integer ``restart`` fixes the cycle size. Two
+public reduced decks at refined grids, before (five cycles of 30, then cycles
+of 100) and after, on a shared 14-core laptop with one BLAS and XLA thread per run
+(``tests/reduced_inputs/``, grids overridden as shown):
+
+.. list-table::
+   :header-rows: 1
+
+   * - deck
+     - unknowns
+     - before
+     - after
+   * - HSX FP full trajectories, ``Nx = 16``, ``Nxi = 20``
+     - 40,324
+     - 222 iterations, Krylov 21 s, 0.84 GiB
+     - 222 iterations, Krylov 20 s, 0.57 GiB
+   * - tokamak FP with ``Er``, ``Nx = 16``, ``Nxi = 40``
+     - 58,242
+     - 545 iterations, Krylov 72 s, 0.62 GiB
+     - 460 iterations, Krylov 72 s, 1.37 GiB
+   * - tokamak FP with ``Er``, ``Nx = 24``, ``Nxi = 40``
+     - 87,362
+     - no answer: 5,950 iterations, then every rung of the stall ladder
+       failed; best residual 5.8e-3, 1,459 s, 2.80 GiB
+     - 1,736 iterations, Krylov 276 s, 1.85 GiB
+
+Memory is peak RSS of the whole process. The first deck converges inside the
+short cycles and takes the same path either way, so its memory difference is
+run-to-run variation, not the policy. The second pays 0.75 GiB for a basis it
+fills only in part. The third is the case the policy exists for: at restart
+100 the solve stagnates and the ladder's remaining rungs cannot rescue it.
+The laptop's load average was 74 to 157 throughout, so wall times are
+indicative; the iteration counts are not affected. Every converged solve
+reached a true relative residual below ``1e-10``.
+
 Krylov preconditioners: coarse block-Thomas vs multigrid
 --------------------------------------------------------
 
