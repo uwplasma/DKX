@@ -3,7 +3,8 @@ Performance and differentiability
 
 `dkx` is designed around a few principles that enable both speed and gradients:
 
-1) **Matrix-free operators**: avoid assembling sparse matrices; apply the discrete operator as a pure function.
+1) **Matrix-free operators where they pay**: the structured and Krylov routes apply the discrete operator as a pure function;
+   the sparse direct route assembles it exactly from operator products when a factorization is cheaper (:doc:`numerics`).
 2) **JIT compilation**: compile hot kernels (matvecs, residuals, linear solves) with `jax.jit`.
 3) **Vectorization**: prefer `vmap`, `einsum`, and batched linear algebra over Python loops.
 4) **Explicit separations of concerns**: non-differentiable I/O (reading `.bc`/`wout_*.nc`) is isolated from

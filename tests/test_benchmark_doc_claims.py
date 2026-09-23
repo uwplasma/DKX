@@ -201,8 +201,10 @@ def test_readme_canonical_benchmark_claims_match_recorded_measurements() -> None
     # a comment explaining why that particular addition was worth it, which is
     # how a budget becomes a rubber stamp. The rewrite that restored the cap
     # kept every measured number and both figures above; what it dropped was
-    # prose, not evidence.
-    assert len(readme.splitlines()) <= 250
+    # prose, not evidence. On 2026-09-23 the owner raised the page to VMEX's
+    # figure-led scale (tests/test_readme_budget.py), so the cap is 330, the
+    # same ceiling that test enforces.
+    assert len(readme.splitlines()) <= 330
 
     # The canonical evidence also lands in the performance docs page.
     performance = (REPO_ROOT / "docs" / "performance.rst").read_text()

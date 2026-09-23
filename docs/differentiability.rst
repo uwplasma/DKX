@@ -526,6 +526,11 @@ optimization run at :math:`k` in the tens, where the slope dominates; the
 figure shades that range and marks the line there as fitted rather than
 measured.
 
+Against its own primal, a compiled gradient costs 1.00--1.11x on a
+16,230-unknown deck. Uncompiled calls pay per-operation dispatch instead, and
+measure 2.0--2.6x on the same deck, so wrap objectives in ``jax.jit``
+(`#279 <https://github.com/uwplasma/DKX/pull/279>`_).
+
 Agreement with the finite-difference gradient is ``4.7e-10`` to ``4.8e-07``
 across the four configurations.  Finite differences have no exact answer to
 converge to -- the step size trades truncation error against solver noise --
