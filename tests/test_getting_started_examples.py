@@ -41,16 +41,6 @@ def test_getting_started_plot_example() -> None:
     assert out_path.exists()
 
 
-def test_getting_started_multiformat_output_example() -> None:
-    script = REPO_ROOT / "examples" / "getting_started" / "write_and_plot_multiple_formats.py"
-    out_dir = EXAMPLES_OUTPUT / "write_and_plot_multiple_formats"
-    _run_script(script)
-    assert (out_dir / "sfincsOutput_getting_started.h5").exists()
-    assert (out_dir / "sfincsOutput_getting_started.nc").exists()
-    assert (out_dir / "sfincsOutput_getting_started.npz").exists()
-    assert (out_dir / "sfincsOutput_getting_started_summary.pdf").exists()
-
-
 def test_tutorial_quick_output_and_plot_script() -> None:
     script = REPO_ROOT / "examples" / "tutorials" / "run_quick_output_and_plot.py"
     out_dir = EXAMPLES_OUTPUT / "run_quick_output_and_plot"

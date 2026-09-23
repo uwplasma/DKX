@@ -7,7 +7,9 @@ The finite-difference window checks the same physical parameter dependence.
 
 This expert-operator example does not differentiate the host Case runner or
 claim full-FP temperature derivatives. Its grid is a teaching configuration;
-research use requires resolution and observable-error checks.
+research use requires resolution and observable-error checks. There is no
+case.toml: a derivative is not a case, and the native case schema has no way
+to ask for one, so this rung is Python only.
 
 Physics: single-species PAS in a circular tokamak; normalized bootstrap current.
 Expected runtime: tens of seconds on a laptop CPU, depending on compilation.

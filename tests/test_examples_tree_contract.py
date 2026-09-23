@@ -60,6 +60,10 @@ LADDER_FOLDERS_BLOCKED_BY_THE_SCHEMA = (
     "09_phi1_and_impurities",
 )
 
+# Rungs without a case file by design whose docstring still has to say so,
+# because the examples README tells readers every such rung explains itself.
+LADDER_FOLDERS_WITHOUT_A_CASE_BY_DESIGN = ("07_gradients",)
+
 # Older topic folders, kept while their content is folded into the ladder.
 # Several are still executed by other tests, by .github/workflows/ci.yml, or by
 # argv strings inside src/dkx/workflows/optimization.py, so they outlive the
@@ -138,16 +142,23 @@ def _workflow_catalog() -> dict:
     return json.loads(WORKFLOW_CATALOG.read_text(encoding="utf-8"))
 
 
-def test_examples_top_level_folders_are_intentional() -> None:
-    """A new folder is a decision, so it has to be made here too."""
-    folders = {
+def _present_folders() -> set[str]:
+    return {
         path.name
         for path in EXAMPLES_ROOT.iterdir()
         # "output" holds generated (gitignored, examples/**/output/) artifacts.
         if path.is_dir() and path.name not in {".ipynb_checkpoints", "__pycache__", "output"}
     }
 
-    assert folders == ALLOWED_EXAMPLE_FOLDERS
+
+def test_examples_top_level_folders_are_intentional() -> None:
+    """A new folder is a decision, so it has to be made here too.
+
+    Only additions are pinned. Retiring a legacy folder is the direction plan.md
+    section 9.1 asks for, so an exact folder inventory would veto it.
+    """
+    unexpected = _present_folders() - ALLOWED_EXAMPLE_FOLDERS
+    assert unexpected == set()
 
 
 def test_the_ladder_is_complete_and_linked_from_the_top_readme() -> None:
@@ -197,7 +208,9 @@ def test_ladder_case_files_exist_and_the_rest_say_why_they_do_not() -> None:
         if case_file.is_file():
             unexpected.append(folder)
             continue
-        if folder not in LADDER_FOLDERS_BLOCKED_BY_THE_SCHEMA:
+        if folder not in (
+            LADDER_FOLDERS_BLOCKED_BY_THE_SCHEMA + LADDER_FOLDERS_WITHOUT_A_CASE_BY_DESIGN
+        ):
             continue
         docstring = ast.get_docstring(ast.parse((EXAMPLES_ROOT / folder / "run.py").read_text()))
         if not docstring or "case.toml" not in docstring:
@@ -212,7 +225,7 @@ def test_every_legacy_folder_introduces_itself() -> None:
     """The ladder rungs introduce themselves in their module docstring instead."""
     missing = [
         folder
-        for folder in sorted(LEGACY_FOLDERS)
+        for folder in sorted(set(LEGACY_FOLDERS) & _present_folders())
         if not (EXAMPLES_ROOT / folder / "README.md").is_file()
     ]
     assert missing == []
@@ -279,7 +292,7 @@ def test_docs_examples_page_names_every_folder() -> None:
     docs = DOCS_EXAMPLES.read_text(encoding="utf-8")
     missing = [
         folder
-        for folder in sorted(ALLOWED_EXAMPLE_FOLDERS)
+        for folder in sorted(_present_folders())
         if f"examples/{folder}" not in docs
     ]
     assert missing == []
