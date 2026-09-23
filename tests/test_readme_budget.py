@@ -9,6 +9,12 @@ contracts in this repository force its shape: ``test_readme_quickstart_runs``
 requires a self-contained quickstart that prints a flux and a solver route, and
 ``test_benchmark_doc_claims`` pins fourteen measured tokens, the capability
 families and the figures. A budget the page cannot meet is not a budget.
+
+On 2026-09-23 the owner set VMEX's README (about 300 lines, 1,650 words,
+18 figures) as the reference scale for a figure-led front page, so the budget
+rose from 160 lines and 1,000 words to 330 and 1,800. It is still a budget:
+sections stay short and self-contained, and prose that explains belongs in the
+documentation.
 """
 
 from __future__ import annotations
@@ -20,8 +26,8 @@ import pytest
 
 README = Path(__file__).resolve().parents[1] / "README.md"
 
-MAX_LINES = 160
-MAX_WORDS = 1_000
+MAX_LINES = 330
+MAX_WORDS = 1_800
 MAX_PYTHON_BLOCKS = 2
 MAX_BLOCK_LINES = 16
 

@@ -32,10 +32,15 @@ Performance evidence
 
 .. figure:: _static/figures/paper/dkx_fortran_suite_benchmark_summary.png
 
-Fortran reference runtime clears a ``10 s`` reference-runtime-window, so
-process-launch and JIT-amortization noise does not dominate the bars.
+   Upstream decks whose Fortran reference runtime clears a ``10 s``
+   reference-runtime-window, so process-launch and JIT-amortization noise does
+   not dominate the bars.
 
-.. figure:: _static/figures/paper/dkx_fortran_suite_benchmark_summary.png
+The solver route decides the outcome: the structured direct route is faster
+than SFINCS v3 on 9 of 9 decks, the recycled Krylov route on 7 of 23, and
+memory is the weak axis. On the 744,610-unknown HSX PAS case the warm solve is
+27.2 s against 229.5 s for SFINCS on two ranks. :doc:`performance` has every
+deck and method; :doc:`differentiability` the cost of a gradient.
 
 Choose a starting point
 -----------------------
