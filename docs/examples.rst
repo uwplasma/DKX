@@ -202,9 +202,6 @@ frozen-reference or benchmark workflow.
    * - Write output files and a diagnostics panel
      - ``examples/tutorials/run_quick_output_and_plot.py``
      - ``python examples/tutorials/run_quick_output_and_plot.py``
-   * - Inspect HDF5, NetCDF, NPZ, and plotting
-     - ``examples/getting_started/write_and_plot_multiple_formats.py``
-     - ``python examples/getting_started/write_and_plot_multiple_formats.py``
    * - Load VMEC geometry through ``wout_path``
      - ``examples/getting_started/write_sfincs_output_vmec.py``
      - ``python examples/getting_started/write_sfincs_output_vmec.py``
@@ -281,7 +278,7 @@ detail.
      - Research workflow
    * - CLI output and diagnostics panel
      - ``examples/tutorials/run_quick_output_and_plot.py``
-     - ``examples/getting_started/write_and_plot_multiple_formats.py``
+     - ``examples/getting_started/plot_sfincs_output.py``
    * - Analytic tokamak input
      - ``examples/getting_started/write_sfincs_output_tokamak.py``
      - ``examples/sfincs_examples/tokamak_1species_FPCollisions_noEr/input.namelist``

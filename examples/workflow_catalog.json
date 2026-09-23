@@ -107,22 +107,6 @@
       "requires_fortran_v3": false
     },
     {
-      "id": "multi_format_output",
-      "goal": "Inspect HDF5, NetCDF, NPZ, and plotting.",
-      "entrypoint": "getting_started/write_and_plot_multiple_formats.py",
-      "command": "python examples/getting_started/write_and_plot_multiple_formats.py",
-      "topic": "getting_started",
-      "keywords": [
-        "output",
-        "hdf5",
-        "netcdf",
-        "npz",
-        "plot"
-      ],
-      "runtime_budget": "seconds",
-      "requires_fortran_v3": false
-    },
-    {
       "id": "vmec_wout_path",
       "goal": "Load VMEC geometry through wout_path.",
       "entrypoint": "getting_started/write_sfincs_output_vmec.py",
