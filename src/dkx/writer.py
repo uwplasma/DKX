@@ -735,22 +735,16 @@ def _rhsmode1_iteration_fields(
     if moments_table is not None:
         d = dict(moments_table)
     else:
-        d = dict(
-            rhsmode1_moments(
-                layout, vgrid, surface, species, x_full,
-                delta=op.delta, alpha=op.alpha, phi1_from_state=bool(op.include_phi1),
-                phi1_hat=op.external_phi1_hat,
-            )  # fmt: skip
-        )
+        from dkx.run import profile_moments_from_operator  # noqa: PLC0415 - dkx.run imports this module
 
         # NTV torque (zero for VMEC scheme 5, where v3 does not populate uHat).
         if inp.geometry.geometry_scheme == 5:
             kernel = jnp.zeros_like(jnp.asarray(op.b_hat))
         else:
             kernel = ntv_kernel(surface, u_hat=u_hat, g_hat=g_eff, i_hat=i_eff, iota=float(geom.iota))
-        ntv_before, ntv_s = ntv_moments(layout, vgrid, surface, species, x_full, kernel=kernel)
-        d["NTVBeforeSurfaceIntegral"] = ntv_before
-        d["NTV"] = ntv_s
+        # The run drivers' own moment table, so a file written here and the
+        # one a run writes hold the same numbers.
+        d = profile_moments_from_operator(op, x_full, ntv_kernel_tz=kernel)
 
     out: Dict[str, np.ndarray] = {}
     for key in _RHSMODE1_ZTSN_KEYS:

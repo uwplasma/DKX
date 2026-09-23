@@ -71,6 +71,9 @@ from __future__ import annotations
 
 import functools
 import inspect
+import itertools
+import threading
+from collections import OrderedDict
 import os
 import sys
 import time
@@ -166,6 +169,9 @@ _TIER1_BUDGET_ENV = "DKX_TIER1_MEMORY_BUDGET_GB"
 # reproduces the hand-rolled pass this replaced and already reaches O(1e-16)
 # relative residual in float64; the knob exists because the float32-factor variant needs more.
 _TIER1_REFINEMENT_SWEEPS = 1
+# Further sweeps a plain solve takes, on the same factors, when the first misses
+# the tolerance; each is two substitutions and one operator application.
+_TIER1_EXTRA_SWEEPS = 3
 
 # RHSMode 1/2/3 drives (radial gradient on L=0,2; inductive E_parallel on L=1)
 # and every RHSMode 1/2/3 output moment (fluxes, flows, sources, FSA
@@ -906,6 +912,7 @@ def _rhs_confined_to_lowest_blocks(
     return bool(np.max(np.abs(f[:, :, keep:])) == 0.0)
 
 
+@jax.tree_util.register_dataclass
 @dataclass(frozen=True)
 class Tier1Solver:
     """Factored per-(species, x) bordered block-tridiagonal solver.
@@ -915,6 +922,10 @@ class Tier1Solver:
     plus the presolved border columns ``z = A~^{-1} B`` (forward) and
     ``z_t = A~^{-T} C^T`` (transpose), so both the forward and the adjoint
     bordered solve reuse the same elimination.
+
+    A pytree (the operator's own static layout is its only static data), so
+    the compiled kernels below take it as an argument and ``jit`` caches one
+    executable per operator structure rather than one per solve.
     """
 
     op: KineticOperator
@@ -985,6 +996,12 @@ def build_tier1_solver(op: KineticOperator) -> Tier1Solver:
     — and absorbs the ``constraintScheme=2`` border with the exact rank-one
     trick ``A~ = A + gamma B C`` documented in the module docstring.
 
+    The assembly and the elimination run as one compiled program
+    (:func:`_factor_tier1_compiled`), cached per operator structure, so a caller
+    that does not ``jit`` does not dispatch the band assembly and the unrolled
+    border presolves one primitive at a time. Under an enclosing trace the
+    compiled program nests like any other function.
+
     Raises:
         NotImplementedError: when :func:`tier1_available` says no.
     """
@@ -1001,7 +1018,11 @@ def build_tier1_solver(op: KineticOperator) -> Tier1Solver:
             "truncated DOFs); ramped decks "
             "route through the truncated kernel (method='block_tridiagonal_truncated')"
         )
+    return _factor_tier1_compiled(op)
 
+
+def _factor_tier1(op: KineticOperator) -> Tier1Solver:
+    """The body of :func:`build_tier1_solver`, after its applicability checks."""
     n_s, n_x, n_xi, n_t, n_z = op.f_shape
     n_tz = n_t * n_z
     batch = n_s * n_x
@@ -1036,6 +1057,153 @@ def build_tier1_solver(op: KineticOperator) -> Tier1Solver:
     return Tier1Solver(
         op=op, factors=factors, z_fwd=z_fwd, z_t=z_t, gamma=gamma, b0=b0, c0=c0
     )
+
+
+# One executable per operator structure (static layout plus array shapes); the
+# physical coefficients are arguments, so an optimizer's or an Er scan's next
+# operator reuses it.
+_factor_tier1_compiled = jax.jit(_factor_tier1)
+
+
+def _stop_gradient_tree(tree: Any) -> Any:
+    """``stop_gradient`` on every traced inexact leaf of a pytree.
+
+    Concrete leaves carry no derivative and are returned as they are, so an
+    eager caller pays for the few leaves it differentiates, not for all of
+    them.
+    """
+
+    def stop(leaf: Any) -> Any:
+        if isinstance(leaf, jax.core.Tracer) and jnp.issubdtype(leaf.dtype, jnp.inexact):
+            return jax.lax.stop_gradient(leaf)
+        return leaf
+
+    return jax.tree_util.tree_map(stop, tree)
+
+
+def _column_apply(
+    matvec: Callable[[jnp.ndarray], jnp.ndarray], v: jnp.ndarray
+) -> jnp.ndarray:
+    return matvec(v) if v.ndim == 1 else jax.vmap(matvec, in_axes=1, out_axes=1)(v)
+
+
+def _operator_apply(op: KineticOperator, v: jnp.ndarray, transpose: bool) -> jnp.ndarray:
+    return _column_apply(_transposed_apply(op) if transpose else op.apply, v)
+
+
+def _tier1_refined_solve(
+    op: KineticOperator, t1_solver: Tier1Solver, b: jnp.ndarray, transpose: bool
+) -> jnp.ndarray:
+    """Structured direct substitution plus defect correction against ``op``.
+
+    ``op`` is the operator being solved and ``t1_solver`` the elimination
+    applied to it, which is a neighbour's when stored factors are reused.
+
+    Fenced by optimization barriers, so XLA compiles the region the same way in
+    every program that contains it: the plain solve and the forward pass of the
+    differentiable one return the same bits for the same right-hand side.
+    """
+    op, t1_solver, b = jax.lax.optimization_barrier((op, t1_solver, b))
+    x, _residual_norms = iterative_refinement(
+        lambda v: _operator_apply(op, v, transpose),
+        b,
+        lambda r: t1_solver.solve(r, transpose=transpose),
+        iterations=_TIER1_REFINEMENT_SWEEPS,
+    )
+    return jax.lax.optimization_barrier(x)
+
+
+_tier1_refined_solve_compiled = jax.jit(_tier1_refined_solve, static_argnames=("transpose",))
+
+
+# Residual guards of compiled implicit solves, by token. The compiled program
+# carries an integer token rather than the guard itself, so one executable
+# serves every call whatever its tolerances and diagnostics sink; the callback
+# looks the guard up when it fires, which for the adjoint is during the
+# backward pass. Bounded: the oldest are dropped first, long after any
+# backward pass that could still need them has run.
+_GUARD_REGISTRY_SIZE = 1 << 14
+_guard_registry: OrderedDict[int, Callable[[str, int], Callable[..., None]]] = OrderedDict()
+_guard_tokens = itertools.count(1)
+_guard_lock = threading.Lock()
+
+
+def _register_guard(make_guard: Callable[[str, int], Callable[..., None]]) -> int:
+    with _guard_lock:
+        token = next(_guard_tokens) % (2**31 - 1)
+        _guard_registry[token] = make_guard
+        while len(_guard_registry) > _GUARD_REGISTRY_SIZE:
+            _guard_registry.popitem(last=False)
+    return token
+
+
+def _dispatch_guard(label: str, rhs_index: int, token: Any, *stats: Any) -> None:
+    make_guard = _guard_registry.get(int(np.asarray(token)))
+    if make_guard is None:
+        raise RuntimeError(
+            "[dkx.solve] the residual guard of a differentiable structured "
+            f"solve (token {int(np.asarray(token))}) is no longer registered; "
+            "the gradient cannot be certified"
+        )
+    make_guard(label, rhs_index)(*stats)
+
+
+def _tier1_implicit(
+    op: KineticOperator,
+    op_const: KineticOperator,
+    t1_solver: Tier1Solver,
+    rhs2d: jnp.ndarray,
+    token: jnp.ndarray,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """A differentiable structured direct solve of every column, as one program.
+
+    ``custom_linear_solve`` defines the derivative (the adjoint pattern: one
+    transposed substitution on the same factors, and the operator's action
+    differentiated at the converged state), and ``op`` is the operator the
+    gradient flows to. ``op_const`` and ``t1_solver`` are the gradient-free
+    operator and elimination the substitutions use. Compiled as a whole, an
+    eager caller linearizes and transposes it from cached programs instead of
+    re-tracing the implicit solve and evaluating its rules primitive by
+    primitive on every call.
+
+    Every substitution measures its true residual and hands each column's to
+    the registered guard. Returns the solution and the forward residual norms.
+    """
+
+    def solve_measured(b: jnp.ndarray, *, transpose: bool) -> tuple[jnp.ndarray, jnp.ndarray]:
+        x = _tier1_refined_solve(op_const, t1_solver, b, transpose)
+        apply = _transposed_apply(op_const) if transpose else op_const.apply
+        residual = _column_apply(apply, x) - b
+        norms = [jnp.linalg.norm(v, axis=0) for v in (residual, b, x)]
+        op_norm = _operator_norm_estimate(apply, b.shape[0])
+        label = "adjoint (transposed)" if transpose else "forward"
+        for j in range(b.shape[1]):
+            jax.debug.callback(
+                functools.partial(_dispatch_guard, label, j), token,
+                *(n[j] for n in norms), op_norm, jnp.all(residual[:, j] == 0),
+            )  # fmt: skip
+        return x, norms[0]
+
+    return _implicit_solve(
+        lambda v: _operator_apply(op, v, False),
+        lambda v: _operator_apply(op, v, True),
+        rhs2d,
+        functools.partial(solve_measured, transpose=False),
+        functools.partial(solve_measured, transpose=True),
+        has_aux=True,
+    )
+
+
+_tier1_implicit_compiled = jax.jit(_tier1_implicit)
+
+
+def _residual_norms_of(
+    op: KineticOperator, x2d: jnp.ndarray, rhs2d: jnp.ndarray, transpose: bool
+) -> jnp.ndarray:
+    return jnp.linalg.norm(_operator_apply(op, x2d, transpose) - rhs2d, axis=0)
+
+
+_residual_norms_compiled = jax.jit(_residual_norms_of, static_argnames=("transpose",))
 
 
 # =============================================================================
@@ -1905,16 +2073,26 @@ def _solve_tier1(
             f"this operator is {op.total_size}; a factorization is only "
             "reusable for an operator of its own shape"
         )
-    t1_solver = factors if reused else build_tier1_solver(op)
+    # The elimination is not differentiated: ``custom_linear_solve`` discards
+    # the tangents of whatever its solve closes over, and handing the
+    # factorization a gradient-free operator keeps an eager ``jax.grad`` from
+    # linearizing an elimination whose derivative is then thrown away.
+    op_const = _stop_gradient_tree(op) if differentiable else op
+    t1_solver = factors if reused else build_tier1_solver(op_const)
     # Force the async block-Thomas factorization to complete so the "build"
-    # timing reflects real compute, not JAX dispatch latency.  We block on the
-    # array fields (the Tier1Solver dataclass itself is not a pytree, so
-    # block_until_ready would treat it as an opaque leaf); a no-op under
+    # timing reflects real compute, not JAX dispatch latency; a no-op under
     # jit/grad tracing.
     jax.block_until_ready(
         (t1_solver.factors, t1_solver.z_fwd, t1_solver.z_t, t1_solver.gamma)
     )
     t1 = time.perf_counter()
+
+    # The library's own elimination runs through compiled programs: the
+    # substitution with its defect correction and residual measurement, and the
+    # operator actions the implicit solve differentiates. Anything else in the
+    # ``factors`` slot (a test double, say) keeps the uncompiled reference path
+    # below, which computes the same thing one primitive at a time.
+    compiled = isinstance(t1_solver, Tier1Solver)
 
     # ``_transposed_apply`` lowers a fresh ``jax.linear_transpose`` of the
     # operator every time it is called, so the refinement, the guard and the
@@ -1958,12 +2136,25 @@ def _solve_tier1(
             )
         return x
 
-    if differentiable:
-        apply_t = _apply_for(True)
+    if compiled and differentiable:
+        def make_guard(label: str, rhs_index: int) -> Callable[..., None]:
+            return _residual_guard(
+                label, rhs_index, tol=tol, atol=atol, factor=adjoint_residual_factor,
+                raise_on_failure=check_adjoint, diagnostics=diagnostics,
+                solver_name="structured",
+            )
+
+        x2d, res = _tier1_implicit_compiled(
+            op, op_const, t1_solver, rhs2d,
+            jnp.asarray(_register_guard(make_guard), dtype=jnp.int32),
+        )
+    elif compiled:
+        x2d = _tier1_refined_solve_compiled(op, t1_solver, rhs2d, transpose=transpose)
+    elif differentiable:
         cols = [
             _implicit_solve(
                 op.apply,
-                apply_t,
+                _apply_for(True),
                 rhs2d[:, j],
                 lambda b, j=j: _solve_refined(b, rhs_index=j),
                 lambda b, j=j: _solve_refined(b, transpose=True, rhs_index=j),
@@ -1975,8 +2166,31 @@ def _solve_tier1(
         x2d = _solve_refined(rhs2d, transpose=transpose)
     x2d = jax.block_until_ready(x2d)  # real solve compute, not just dispatch
     t2 = time.perf_counter()
-    res = _residual_norms(_apply_for(transpose), x2d, rhs2d)
-    if reused and not _converged_flag(res, rhs2d, tol, atol):
+    # The residual is a diagnostic, not part of the differentiated answer, so
+    # it is measured on values alone. An eager ``jax.grad`` holds those
+    # concretely, which keeps the convergence flag below a real test there
+    # too. The compiled differentiable program measured it already.
+    rhs2d_value = jax.lax.stop_gradient(rhs2d)
+    if not compiled:
+        res = _residual_norms(_apply_for(transpose), x2d, rhs2d)
+    elif not differentiable:
+        res = _residual_norms_compiled(
+            _stop_gradient_tree(op), jax.lax.stop_gradient(x2d), rhs2d_value,
+            transpose=transpose,
+        )
+        # The elimination does not pivot across blocks, and where it grew one
+        # sweep of defect correction can leave the residual short of the
+        # tolerance: each sweep gains only two digits on the checked-in
+        # non-stellarator-symmetric Boozer deck. Further sweeps on the same
+        # factors cost far less than the Krylov fallback that would follow.
+        for _ in range(0 if reused else _TIER1_EXTRA_SWEEPS):
+            if _converged_flag(res, rhs2d_value, tol, atol):
+                break
+            defect = rhs2d - _operator_apply(op, x2d, transpose)
+            x2d = x2d + _tier1_refined_solve_compiled(op, t1_solver, defect, transpose=transpose)
+            res = _residual_norms_compiled(op, x2d, rhs2d, transpose=transpose)
+            t2 = time.perf_counter()
+    if reused and not _converged_flag(res, rhs2d_value, tol, atol):
         # The stored elimination belongs to a neighbouring operator and the
         # refinement above did not make up the difference. The staleness test is
         # this residual; the recovery is one factorization, bounded, not an
@@ -1998,7 +2212,7 @@ def _solve_tier1(
         method="block_tridiagonal",
         iterations=None,
         residual_norms=res,
-        converged=_converged_flag(res, rhs2d, tol, atol),
+        converged=_converged_flag(res, rhs2d_value, tol, atol),
         recycle=None,
         adjoint=diagnostics,
         timings={"build": 0.0 if reused else t1 - t0, "solve": t2 - t1},

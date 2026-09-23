@@ -13,6 +13,28 @@
   `FSABjHatOverRootFSAB2` nor `FSABjHat`, passing the gate with a zero
   objective; a missing or nonfinite bootstrap current is now refused.
 
+### Performance
+
+- The structured direct route compiles itself for callers that do not `jit`
+  (#279). The factorization, the refined substitution, the whole
+  differentiable solve (one `custom_linear_solve` with the residual guard
+  inside it), `KineticOperator.rhs` and `profile_moments_from_operator` each
+  run as one cached executable per operator structure, so an eager
+  `jax.value_and_grad` of an objective no longer dispatches, linearizes and
+  transposes thousands of small operations one at a time. On the
+  16,230-unknown structured deck, on heavily loaded hosts, the eager primal
+  went from 5.0–5.9× to 1.18–1.30× of its compiled time and the eager
+  gradient from 7.3–9.6× to 1.24–1.38×; the fixed eager overhead fell from
+  1.33 s to 0.017 s (primal) and from 2.5 s to 0.10 s (gradient). Answers are
+  unchanged to round-off, and the plain and differentiable solves return the
+  same bits. The first call of each new operator structure pays a one-time
+  compile.
+- A plain structured direct solve whose one refinement sweep misses the
+  tolerance takes up to three more on the same factors before `auto` falls
+  back to the Krylov route (#279). The elimination does not pivot across
+  blocks, and on the checked-in non-stellarator-symmetric Boozer deck each
+  sweep gains only two digits.
+
 ## v2.6.0 — 2026-09-21
 
 Acceptance tightened where it could pass a wrong answer, MUMPS as an explicit
