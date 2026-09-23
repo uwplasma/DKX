@@ -124,7 +124,7 @@ at shrunken resolution (``DKX_CI=1``) in
    ship commented and CI-tested. Requires ``vmex`` and ``booz_xform_jax``.
 
    .. figure:: _static/figures/readme/optimize_QA_bootstrap.png
-      :alt: QA low-bootstrap optimization dashboard: objective history, boundary cross-sections, |B| spectrum, and <j.B> profile.
+      :alt: Bootstrap current and quasisymmetry residual before and after optimization at held precise QA, and the optimized boundary coloured by |B|.
       :align: center
       :width: 90%
 
