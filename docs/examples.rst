@@ -109,6 +109,18 @@ at shrunken resolution (``DKX_CI=1``) in
    temperature and ``Er`` drives through the implicit-differentiation solve
    path, and verifies every gradient against central finite differences.
 
+``examples/optimization/QA_optimization_bootstrap_dkx.py`` — a VMEX optimization with a kinetic bootstrap row
+   VMEX's ``QA_optimization_bootstrap.py`` with its Redl bootstrap row replaced
+   by :class:`dkx.bootstrap.KineticBootstrapMismatch`: a Redl-consistent
+   Picard seed, then a boundary and current-profile optimization in which the
+   equilibrium's :math:`\langle j\cdot B\rangle` is driven toward the one DKX
+   solves for on three surfaces of every trial equilibrium.  The chain
+   boundary -> VMEX -> ``booz_xform_jax`` -> DKX is traced, so VMEX's implicit
+   Jacobian carries the DKX row; ``BOOTSTRAP_MODEL`` selects ``"dkx"``,
+   ``"redl"`` or ``"both"``.  Pitch-angle scattering is the default collision
+   operator and overestimates the current (no momentum restoration).
+   Requires ``vmex`` and ``booz_xform_jax``.
+
 ``examples/optimization/optimize_QA_bootstrap.py`` — gradient-based optimization
    Optimizes a quasi-axisymmetric stellarator boundary for low bootstrap
    current: boundary Fourier coefficients ->
