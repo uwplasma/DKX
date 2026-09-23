@@ -7,22 +7,17 @@
 
 **Differentiable neoclassical transport for stellarators and tokamaks, in JAX.**
 
-DKX solves the radially local, linearized drift-kinetic equation on a flux surface
-and returns particle and heat fluxes, parallel flows, bootstrap current, transport
-matrices and ambipolar radial electric fields. It implements the SFINCS Fortran v3
-model, including full Fokker–Planck collisions and Phi1, reads and writes SFINCS decks,
-runs on CPU or GPU, and every output is differentiable in every input.
+DKX solves the SFINCS v3 drift-kinetic equation on a flux surface for fluxes, flows, bootstrap
+current, transport matrices and ambipolar `E_r`, on CPU or GPU, differentiably.
 
 ![W7-X standard configuration: |B| and parallel current density on the boundary, bootstrap current profile, ambipolar Er against Pablant et al. 2018](docs/_static/figures/readme/w7x_showcase.png)
 
-## Install
+## Install and run
 
 ```bash
 pip install dkx                    # CPU
 pip install -U "jax[cuda12]"       # add for NVIDIA GPUs
 ```
-
-## Run
 
 ```python
 import dkx
@@ -41,8 +36,8 @@ print("solver route:", result.metadata["solver_route"])
 print("particle flux:", float(result.arrays["particle_flux_m2_s"][1, 0]))
 ```
 
-From the shell: `dkx run case.toml`, `dkx converge case.toml` (check the resolution before
-trusting a number), `dkx wout_w7x.nc`, or `dkx input.namelist` for a SFINCS deck.
+Shell: `dkx run case.toml`, `dkx converge case.toml`, `dkx wout_w7x.nc`, `dkx input.namelist`.
+[Examples](examples/) `01_tokamak_profile` to `09_phi1_and_impurities` are the learning path.
 
 ## Gradients
 
@@ -59,80 +54,91 @@ def bootstrap_current(er_kv_m):
 j, dj_der = jax.jit(jax.value_and_grad(bootstrap_current))(jnp.array([-0.2, 0.0, 0.2]))
 ```
 
-The derivative passes through the linear solve by the implicit function theorem, and
-every returned state has satisfied the original kinetic equation. Profiles and geometry
-differentiate the same way: [differentiability](docs/differentiability.rst).
+Implicit differentiation through the solve; compiled, a gradient costs 1.00–1.11× its primal on a
+16,230-unknown deck ([#279](https://github.com/uwplasma/DKX/pull/279), [more](docs/differentiability.rst)).
 
-## Choose a workflow
+## Capabilities
 
-| Calculation | Start from |
-| --- | --- |
-| Tokamak profile with prescribed `E_r` | `examples/01_tokamak_profile` |
-| Stellarator from VMEC or Boozer files | `examples/02_vmec_stellarator`, `examples/03_boozer_stellarator` |
-| Monoenergetic transport scan | `examples/04_monoenergetic_scan` |
-| Ambipolar roots and branch selection | `examples/05_ambipolar_profile` |
-| Resolution study, gradient checks | `examples/06_convergence_certificate`, `examples/07_gradients` |
-| Geometry sensitivity and descent (analytic proxy) | `examples/08_vmex_optimization` |
-| Phi1 and impurities (expert path) | `examples/09_phi1_and_impurities` |
+| Capability | Status | Scope |
+| --- | --- | --- |
+| RHSMode 1 profiles; RHSMode 2/3 transport matrices | ✅ | SFINCS deck, HDF5 and `export_f` I/O |
+| Pitch-angle scattering; full linearized Fokker–Planck, multispecies | ✅ | FP decks agree with SFINCS v3 to 1e-8 |
+| Analytic, VMEC, Boozer and `lasym` geometry | ✅ | Tangential magnetic drifts, DKES and full trajectories |
+| Ambipolar `E_r` root with branch evidence | ✅ | Seeded-interval search; 9.7× a solve on W7-X |
+| Phi1 quasineutrality, impurities | ✅ | Expert path, `09_phi1_and_impurities` |
+| Direct routes: structured, assembled sparse (Ruiz-scaled), MUMPS | ✅ | Sparse direct to a few 1e5 unknowns; MUMPS needs SOLVAX ≥ 0.25 + PyMUMPS |
+| Recycled Krylov route, CPU and GPU | ✅ | Stalls at high `Nx` on the HSX-like gap deck (below) |
+| Gradients of any output | ✅ | Finite-difference checked on every derivative example |
 
-## Why DKX
+## Where the reference falls short
 
-| | DKX | SFINCS v3 | MONKES | yancc |
-| --- | :---: | :---: | :---: | :---: |
-| Full linearized Fokker–Planck, multispecies | ✅ | ✅ | ❌ | ✅ |
-| Analytic, VMEC, Boozer and `lasym` geometry | ✅ | ✅ | ✅ | ✅ |
-| Phi1 quasineutrality; Tangential magnetic drifts; `export_f` | ✅ | ✅ | ❌ | ❌ |
-| Ambipolar `E_r` root with retained branch evidence | ✅ | ✅ | ❌ | ❌ |
-| Transport matrices (RHSMode 2/3) and SFINCS deck/HDF5 I/O | ✅ | ✅ | ❌ | ❌ |
-| GPU, JIT-compiled scans, Krylov recycling | ✅ | ❌ | ❌ | ✅ |
-| Exact gradients of any output w.r.t. any input | ✅ | adjoint branches | ❌ | claimed |
-| Gradients verified against finite differences | ✅ | | | |
+![Left: bootstrap-current gap between released SFINCS and DKX on HSX, closed by removing SFINCS's matrix cutoff. Right: residual reached by each route on the HSX-like gap deck](docs/_static/figures/readme/sfincs_reference_limits.png)
 
-## Verified
+On an HSX deck, released SFINCS v3 and DKX differ by **12–19 %** in bootstrap current.
+SFINCS drops matrix entries below `1e-12`, which removes the ion–electron collision coupling of a
+cold-ion, hot-electron plasma. With that cutoff set to zero, the two codes agree to **7e-11**
+([record](docs/experiments/2026-09-13-sfincs-sparsify-threshold.md), fix proposed as
+[landreman/sfincs#27](https://github.com/landreman/sfincs/pull/27)).
+
+The HSX-like gap deck (633,604 unknowns, `Nx = 16`) is **open in both codes** on a 36 GiB host:
+two SFINCS routes run out of memory, its GMRES stagnates at 0.9955, and DKX's Krylov route
+reaches 2.5e-5. DKX assembles its operator exactly from 4,800 products and solves the
+66,004-unknown reduction to 1.3e-14
+([record](docs/experiments/2026-09-19-sfincs-on-the-gap-deck.md)).
+
+## One factorization, many solves
+
+![Wall time and factorization count for one to three right-hand sides and an adjoint, structured and sparse direct routes](docs/_static/figures/readme/factor_reuse.png)
+
+`solve` returns `SolveResult.factors`; pass them back with `factors=`, and `transpose=True`
+solves the adjoint. Three right-hand sides in three calls drop from three
+factorizations to none, 0.96 s to 0.28 s; the sparse adjoint costs 0.15 of a primal
+([record](docs/experiments/2026-09-20-one-factorization-many-solves.md)).
+
+## Proved against analytic limits
+
+| Limit | Reference | Measured |
+| --- | --- | --- |
+| Spitzer–Härm conductivity, full FP, `Z` = 1, 2, 4, 16 | Spitzer & Härm 1953 | within 0.36 % |
+| Lorentz conductivity, thermal factor `8/√π` | Braginskii 1965 | 1.7e-13 |
+| Pfirsch–Schlüter approach, `O(ε²/ν²)` | Helander & Sigmar 2002 | order 1.99 |
+| Shaing–Callen / Boozer–Gardner collisionless bootstrap | Shaing & Callen 1983 | `√ν` approach, 4 % at `ν′ = 1e-4` |
+| Onsager `L_ij = L_ji`, thermal matrix under refinement | Onsager 1931 | ≥ 3× per rung, to 7e-5 |
+| FP conserves density, momentum, energy | Rosenbluth et al. 1957 | 1e-15 |
+| Monoenergetic-to-thermal convolution, manufactured `D*` | Beidler et al. 2011 | 1.5e-15 |
+
+Tests: [`test_physics_limits.py`](tests/test_physics_limits.py), [`test_transport_limits.py`](tests/test_transport_limits.py),
+[`test_shaing_callen.py`](tests/test_shaing_callen.py), [`test_collision_physics_gates.py`](tests/test_collision_physics_gates.py).
+
+## Verified against other codes
 
 ![DKX against SFINCS Fortran v3, MONKES and YANCC: scaled differences on matched full Fokker-Planck decks, and Beidler-normalized monoenergetic coefficients](docs/_static/figures/readme/cross_code_validation.png)
 
-Against SFINCS Fortran v3 on 38 upstream decks with the same discretization, DKX
-agrees to solver tolerance: median 4e-6, full Fokker–Planck decks to 1e-8. Against the
-independent codes MONKES and YANCC, the four Beidler-normalized monoenergetic coefficients
-agree within 6 percent and `D33` within 0.1 percent on three configurations. Gradients
-agree with central finite differences over a step window on every shipped derivative
-example. Details, tolerances and scope: [validation matrix](docs/validation_matrix.rst).
+38 upstream decks agree with SFINCS v3 to solver tolerance (median 4e-6); monoenergetic
+coefficients agree with MONKES and YANCC within 6 %, `D33` within 0.1 % ([scope](docs/validation_matrix.rst)).
+
+![Measured parity envelopes of DKX against SFINCS Fortran v3](docs/_static/figures/readme/canonical_parity.png)
 
 ## Fast
 
 ![Runtime and peak memory, DKX against SFINCS Fortran v3, on the 744k-unknown HSX PAS case](docs/_static/figures/readme/tier1_hsx_runtime_memory.png)
 
-`HSX_PASCollisions_DKESTrajectories`, RHSMode=1, **744,610 unknowns**, one machine, against the
-PETSc 3.23 / MUMPS 5.8.2 build of SFINCS v3. Warm is the second solve in a process, after XLA has compiled.
+`HSX_PASCollisions_DKESTrajectories`, **744,610 unknowns**, against PETSc 3.23 / MUMPS 5.8.2 SFINCS v3.
 
 | Configuration | Warm solve | Peak RSS |
 | --- | ---: | ---: |
 | DKX, `Nxi`-for-`x` ramp | **27.2 s** | **0.93 GB** |
 | DKX, uniform `Nxi` | 44.3 s | 1.16 GB |
 | DKX, RTX A4000 GPU | 45.0 s | — |
-| SFINCS Fortran v3, 1 rank | 463.6 s | 3.98 GB |
-| SFINCS Fortran v3, 2 ranks (its best) | 229.5 s | 2.86 GB |
+| SFINCS v3, 1 rank / 2 ranks | 463.6 s / 229.5 s | 3.98 / 2.86 GB |
 
-| Cold versus warm, M3 Max CPU | Unknowns | Cold | Warm |
-| --- | ---: | ---: | ---: |
-| HSX PAS reduced | 40,584 | 1.72 s | 0.12 s |
-| HSX PAS, `25x51x100x5` | 744,610 | 23.6 s | 20.0 s |
+Cold and warm, M3 Max: 1.72 s and 0.12 s at 40,584 unknowns; 23.6 s and 20.0 s at 744,610.
+That is **one measured 744k-unknown HSX PAS case**; every deck and method: [performance](docs/performance.rst).
 
-That is **one measured 744k-unknown HSX PAS case**, chosen because DKX has an exact structured
-solver for it. Across all 38 upstream decks: structured route faster on 9 of 9; Krylov route faster
-on 7 of 23, six not completed. Every deck, hardware string and method: [performance](docs/performance.rst).
+## Documentation and citation
 
-![Measured parity envelopes of DKX against SFINCS Fortran v3](docs/_static/figures/readme/canonical_parity.png)
-
-## Documentation
-
-[Tutorial: first W7-X result](docs/usage.rst) ·
-[How-to: resolution, wout files, SFINCS decks](docs/case_files.rst) ·
-[Reference: schema, CLI, API](docs/api.rst) ·
-[Explanation: physics models, solver routes, limitations](docs/physics_models.rst)
-
-## Cite
+[Tutorial](docs/usage.rst) · [How-to](docs/case_files.rst) · [Reference](docs/api.rst) ·
+[Physics and limitations](docs/physics_models.rst) · [Solver routes](docs/numerics.rst)
 
 ```bibtex
 @software{dkx,
@@ -143,8 +149,6 @@ on 7 of 23, six not completed. Every deck, hardware string and method: [performa
 }
 ```
 
-Please also cite SFINCS (Landreman, Smith, Mollén & Helander, Phys. Plasmas 21, 042503,
-2014) when you use its decks or model. Metadata: [CITATION.cff](CITATION.cff).
-
-[Examples](examples/) · [Research plan](plan.md) · [Contributing](docs/contributing.rst) ·
-[SOLVAX](https://github.com/uwplasma/SOLVAX) owns the reusable solver algorithms · [LICENSE](LICENSE)
+Please also cite SFINCS (Landreman, Smith, Mollén & Helander, Phys. Plasmas 21, 042503, 2014).
+Metadata: [CITATION.cff](CITATION.cff). [Research plan](plan.md) · [Contributing](docs/contributing.rst) ·
+[SOLVAX](https://github.com/uwplasma/SOLVAX) · [LICENSE](LICENSE)
