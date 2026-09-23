@@ -18,7 +18,7 @@ python examples/01_tokamak_profile/run.py
 | [`05_ambipolar_profile/`](05_ambipolar_profile) | solving for `E_r` from ambipolarity: every root, classified, with the selection recorded | ~8 s |
 | [`06_convergence_certificate/`](06_convergence_certificate) | refining every phase-space axis, and why a small residual is not a converged answer | ~12 s |
 | [`07_gradients/`](07_gradients) | `jax.grad` through the solve, checked against central differences | ~17 s |
-| [`08_vmex_optimization/`](08_vmex_optimization) | a shape derivative: differentiate the kinetic solve with respect to the `\|B\|` spectrum and descend | ~12 s |
+| [`08_vmex_optimization/`](08_vmex_optimization) | a VMEX boundary optimization with a DKX bootstrap-current row in its least-squares residual, differentiated through VMEX, `booz_xform_jax` and the kinetic solve; needs `vmex` and `booz_xform_jax` | minutes |
 | [`09_phi1_and_impurities/`](09_phi1_and_impurities) | multi-species impurity transport, with and without in-surface potential variation | ~12 s |
 
 ## Conventions
@@ -40,7 +40,9 @@ a constant and pressing run. The visible sequence is always the same:
 ```
 
 Each rung is sized to run in seconds at the resolution it ships with, so CI
-runs the same code a reader does. That resolution buys speed, not accuracy —
+runs the same code a reader does. Rung 08 is the exception: it compiles a
+VMEX equilibrium and a kinetic solve into one Jacobian, which takes minutes,
+and it runs only where `vmex` and `booz_xform_jax` are installed. That resolution buys speed, not accuracy —
 rung 06 measures how far from converged the small cases are, and the answer is
 "very". Refine before quoting a number.
 

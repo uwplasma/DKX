@@ -127,12 +127,13 @@ LADDER_CASES = {
     ),
     "08_vmex_optimization": (
         (
-            "optional geometry backends:",
-            "vmex hand-off claim scope: geometry_proxy_gradient_only",
-            "full VMEC-boundary transport gradients claimed: False",
-            "initial geometry gradient checked over three finite-difference steps",
-            "physics check: removing helical ripple lowered the neoclassical flux",
-            "kinetic solve executed: True",
+            "d<j.B>_DKX / d(coefficient) [MA T/m^2 per m]: VMEX implicit Jacobian vs central FD",
+            "Jacobian row verified against central differences",
+            "objective 0.5*|r|^2:",
+            "VMEX re-solve converged at ns = ",
+            "<j.B> DKX  seed",
+            "<j.B> Redl seed",
+            "original-equation residual",
         ),
         OUT_DIR / "08_vmex_optimization" / "optimization.nc",
         OUT_DIR / "08_vmex_optimization" / "optimization.png",
@@ -149,6 +150,13 @@ LADDER_CASES = {
         OUT_DIR / "09_phi1_and_impurities" / "phi1_and_impurities.png",
     ),
 }
+
+# Rungs that need optional packages default CI does not install.  They run
+# wherever those packages import and are skipped, not failed, elsewhere.
+LADDER_OPTIONAL_PACKAGES = {"08_vmex_optimization": ("vmex", "booz_xform_jax")}
+# Rung 08 compiles a VMEX equilibrium and a kinetic solve into one Jacobian,
+# which is minutes, not seconds, on a laptop CPU.
+LADDER_TIMEOUT_SECONDS = {"08_vmex_optimization": 1800}
 
 # script name -> (expected stdout fragments, expected plot file)
 LEGACY_CASES = {
@@ -213,7 +221,7 @@ LEGACY_CASES = {
 }
 
 
-def _run(script: Path, *, ci: bool) -> subprocess.CompletedProcess[str]:
+def _run(script: Path, *, ci: bool, timeout: int = 600) -> subprocess.CompletedProcess[str]:
     env = dict(os.environ)
     if ci:
         env["DKX_CI"] = "1"
@@ -226,20 +234,22 @@ def _run(script: Path, *, ci: bool) -> subprocess.CompletedProcess[str]:
         text=True,
         cwd=REPO_ROOT,
         env=env,
-        timeout=600,
+        timeout=timeout,
     )
 
 
 @pytest.mark.parametrize("rung", sorted(LADDER_CASES))
 def test_ladder_example_runs_and_reports(rung: str) -> None:
     expected_lines, result_path, plot_path = LADDER_CASES[rung]
+    for package in LADDER_OPTIONAL_PACKAGES.get(rung, ()):
+        pytest.importorskip(package)
     for path in (result_path, plot_path):
         path.unlink(missing_ok=True)
 
     script = EXAMPLES / rung / "run.py"
     # No DKX_CI: the ladder is sized to run at the resolution it ships with, so
     # CI exercises exactly the code a reader runs (plan.md section 9.2).
-    proc = _run(script, ci=False)
+    proc = _run(script, ci=False, timeout=LADDER_TIMEOUT_SECONDS.get(rung, 600))
 
     assert proc.returncode == 0, f"{rung} failed:\n{proc.stdout}\n{proc.stderr}"
     for fragment in expected_lines:
@@ -276,11 +286,13 @@ def test_ladder_example_obeys_the_style_contract(rung: str) -> None:
     assert positions == sorted(positions), f"{rung}: the eight steps are out of order"
 
     # The only module-level functions allowed are the differentiable objectives
-    # rungs 07 and 08 have to define to hand to jax.grad; anything else is a
-    # helper that belongs in the library rather than in a teaching script.
+    # rungs 07 and 08 have to define to hand to jax.grad or to VMEX's objective
+    # tuples; anything else is a helper that belongs in the library rather than
+    # in a teaching script.
     functions = [node.name for node in tree.body if isinstance(node, ast.FunctionDef)]
     assert "main" not in functions, f"{rung}: no main(); the script runs top to bottom"
-    allowed = {"bootstrap_current", "particle_flux"}
+    allowed = {"bootstrap_current", "particle_flux", "kinetic_bootstrap", "redl_bootstrap",
+               "iota_floor"}
     assert set(functions) <= allowed, f"{rung}: unexpected helper functions {functions}"
 
     # Parameters live at the top, above the marker every rung carries.

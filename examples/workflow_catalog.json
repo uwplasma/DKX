@@ -39,7 +39,7 @@
     },
     "08_vmex_optimization": {
       "category": "learning",
-      "role": "Shape gradient through the kinetic solve, and the vmex hand-off contract.",
+      "role": "A VMEX boundary optimization whose least-squares residual includes a DKX bootstrap-current row.",
       "start_here": "08_vmex_optimization/run.py"
     },
     "09_phi1_and_impurities": {
@@ -331,7 +331,7 @@
     },
     {
       "id": "08_vmex_optimization",
-      "goal": "Descend a shape gradient taken through the kinetic solve.",
+      "goal": "Optimize a VMEX boundary with a DKX bootstrap-current row carried by the exact implicit Jacobian.",
       "entrypoint": "08_vmex_optimization/run.py",
       "command": "python examples/08_vmex_optimization/run.py",
       "topic": "08_vmex_optimization",
@@ -340,9 +340,10 @@
         "vmex",
         "shape gradient",
         "boozer",
-        "spectrum"
+        "bootstrap",
+        "redl"
       ],
-      "runtime_budget": "seconds",
+      "runtime_budget": "minutes",
       "requires_fortran_v3": false
     },
     {
