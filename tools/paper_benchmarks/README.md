@@ -9,6 +9,12 @@ Scripts are flat and self-documenting: parameters at the top, printed progress,
 and a single figure + JSON pair written to
 `docs/_static/figures/paper_benchmarks/`.
 
+The `audit_*.py` files in this folder are not benchmarks. Each is the `audit()`
+for one entry of `validation/registry.toml`, re-checking a sealed evidence
+artifact; run all of them with `python -m tools.release.registry` (see
+`validation/README.md`). Their paths are pinned by the registry and by
+`tools/publication_figures/validation_manifest.json`.
+
 ## Cases
 
 - `monoenergetic_icnts_w7x.py`: ICNTS-style monoenergetic transport
@@ -20,9 +26,6 @@ and a single figure + JSON pair written to
   the Boozer |B| spectrum supplied through `geometryScheme = 13` and the same
   Fortran v3 cross-check recipe (plus a MUMPS pivot/refinement note recorded
   in the JSON).
-- `monoenergetic_icnts_hsx.py`: the same scan on the HSX quasi-helically
-  symmetric configuration at r/a = 0.5 (`hsx3free.bc`), showing the
-  QH-suppressed 1/nu branch in contrast to W7-X and TJ-II.
 - `shaing_callen_convergence.py`: the low-collisionality "hard mode" test --
   the bootstrap coefficient `D31*` on the W7-X standard configuration scanned
   to `nuPrime = 3e-4` at `EStar = 0` and a small finite `EStar`, compared
@@ -30,19 +33,6 @@ and a single figure + JSON pair written to
   surface [K.C. Shaing and J.D. Callen, Phys. Fluids 26, 3315 (1983)], with a
   per-point `Nxi` resolution schedule, split 1.3x convergence gates, and
   Fortran v3 cross-check points.
-- `low_collisionality_validity.py`: the companion local-validity case on the
-  same W7-X standard surface -- overlays the `dkx.validity` collisionality-regime
-  classifier (Pfirsch-Schlueter / plateau / banana / 1/nu / sqrt-nu /
-  superbanana-plateau), the E x B resonance-layer parameter
-  `k_ExB = omega_E/nu_eff` marking the 1/nu -> sqrt(nu) boundary, the
-  drift-resonance ratio `k_res`, and the finite-orbit-width parameter
-  `delta_FOW = w_b/L` on the `D31*(nuPrime)` scan at `EStar = 0, 3e-3, 1e-2`.
-  Shows that the measured plateau -> 1/nu transition and the finite-`EStar`
-  detachment line up with the classifier's boundaries [F.L. Hinton &
-  R.D. Hazeltine, Rev. Mod. Phys. 48, 239 (1976); K.C. Shaing, Phys. Fluids 27,
-  1567 (1984); D.-I. Ho & R.M. Kulsrud, Phys. Fluids 30, 442 (1987); C.D. Beidler
-  et al., Nucl. Fusion 51, 076001 (2011)].  Modest 17 x 31 grid, checkpointed and
-  resumable (`LOW_COLL_VALIDITY_MAX_NEW_POINTS`).
 - `gradient_verification.py`: the AD-vs-FD gradient-verification table
   (three derivatives through the monoenergetic-database, RHSMode=1 solve,
   and ambipolar-root paths; JSON + rst snippet).
@@ -128,3 +118,13 @@ points (skipped otherwise).  Equilibrium files are fetched into the local
 `dkx` data cache on first use.  Expect several minutes per script at
 production resolution; the CI-sized regression version of each case lives in
 the test suite (tests/test_paper_benchmark_monoenergetic in the repo root).
+
+## Retired scripts
+
+`monoenergetic_icnts_hsx.py` (HSX companion of the W7-X and TJ-II scans) and
+`low_collisionality_validity.py` (validity-classifier overlay on the W7-X
+`D31*` scan) were removed on 2026-09-22: no test, figure, CI step, or registry
+entry used them, and neither figure was tracked. Their recorded results stay in
+`docs/_static/figures/paper_benchmarks/monoenergetic_icnts_hsx.json` and
+`low_collisionality_validity.json`; recover a script from git history to rerun
+one.

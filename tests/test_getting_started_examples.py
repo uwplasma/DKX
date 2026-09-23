@@ -61,17 +61,6 @@ def test_tutorial_quick_output_and_plot_script() -> None:
     assert (out_dir / "sfincsOutput_tutorial_summary.pdf").exists()
 
 
-def test_output_format_benchmark_example(tmp_path: Path) -> None:
-    repo = Path(__file__).resolve().parents[1]
-    script = repo / "tools" / "performance" / "benchmark_output_formats.py"
-    out_json = tmp_path / "output_benchmark.json"
-    _run_script(script, "--repeats", "1", "--out-dir", str(tmp_path), "--json", str(out_json))
-    text = out_json.read_text(encoding="utf-8")
-    assert ".h5" in text
-    assert ".nc" in text
-    assert ".npz" in text
-
-
 def test_cli_plot_shortcut_on_fixture(tmp_path: Path) -> None:
     repo = Path(__file__).resolve().parents[1]
     input_h5 = repo / "tests" / "ref" / "output_scheme4_2species_quick.sfincsOutput.h5"

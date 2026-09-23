@@ -75,12 +75,6 @@ For a publication-style PDF diagnostics panel from an existing output file:
 Use ``--equilibrium-file`` for a generic Boozer or VMEC override, or ``--wout-path``
 as a compatibility alias for VMEC-centered workflows.
 
-To time writer/readback overhead independently from JAX compile and solve cost:
-
-.. code-block:: bash
-
-   python tools/performance/benchmark_output_formats.py --repeats 5
-
 For transport-matrix runs (``RHSMode=2`` or ``RHSMode=3``), the Fortran code loops over
 multiple right-hand sides (``whichRHS``) and assembles a ``transportMatrix`` in the output.
 To replicate that end-to-end behavior in `dkx`, enable:

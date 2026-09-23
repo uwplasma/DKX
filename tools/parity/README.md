@@ -1,13 +1,16 @@
-# Parity & validation
+# Parity
 
-These examples focus on parity validation:
-- comparing against frozen Fortran v3 fixtures in `tests/ref/`
-- reproducing upstream example inputs
-- sanity-checking output key coverage
+Two scripts that compare a DKX `sfincsOutput.h5` against the frozen SFINCS
+Fortran v3 fixture in `tests/ref/`, and one Fortran control inventory.
 
-Most scripts run without the Fortran executable, but a few call it (or rely on its outputs) for comparisons.
+- `output_parity_vs_fortran_fixture.py`: writes the output through the Python
+  API and compares it dataset by dataset; exits non-zero on a mismatch.
+- `output_parity_cli_driver.py`: the same comparison through the `dkx` CLI;
+  exits non-zero on a mismatch. CI runs it.
+- `output_key_coverage_report.py`: output-key coverage and the Fortran
+  namelist-control inventory (`--namelist-source`) cited in
+  `validation/baseline.toml` and imported by `tests/test_validation.py`.
 
-Suggested starting points:
-- `output_parity_vs_fortran_fixture.py` — dataset-by-dataset parity vs a frozen `sfincsOutput.h5`.
-- `collisionless_operator_matvec_parity.py` — operator parity vs PETSc binaries.
-- `solve_scheme5_tiny_parity.py` — end-to-end GMRES solve parity for a tiny VMEC case.
+The operator, residual, and solve parity against the frozen PETSc binaries is
+asserted by `tests/test_kinetic_operator_fortran_parity.py`; output parity by
+`tests/test_output_h5_scheme4_parity.py`.

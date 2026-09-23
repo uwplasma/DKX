@@ -217,9 +217,6 @@ frozen-reference or benchmark workflow.
    * - Compare kinetic bootstrap current with Redl
      - ``examples/vmex_finite_beta/compare_qs_paper_dkx_redl.py``
      - ``python examples/vmex_finite_beta/compare_qs_paper_dkx_redl.py --case QA --quick --jax-vs-redl --solve-method auto``
-   * - Time output formats and memory behavior
-     - ``tools/performance/benchmark_output_formats.py``
-     - ``python tools/performance/benchmark_output_formats.py --repeats 2``
    * - Check a frozen Fortran-v3 output fixture
      - ``tools/parity/output_parity_vs_fortran_fixture.py``
      - ``python tools/parity/output_parity_vs_fortran_fixture.py``
@@ -309,9 +306,6 @@ detail.
    * - QA/QI optimization objective
      - ``examples/optimization/qa_nfp2_dkx_objectives.py``
      - ``examples/optimization/QA_optimization_bootstrap_current.py``
-   * - CPU/GPU timing and output I/O
-     - ``tools/performance/benchmark_output_formats.py``
-     - ``tools/performance/benchmark_transport_l11_vs_fortran.py``
    * - Frozen Fortran-v3 parity check
      - ``tools/parity/output_parity_vs_fortran_fixture.py``
      - ``examples/sfincs_examples/`` for retained upstream-style decks
@@ -336,7 +330,7 @@ not the recommended first stop for new workflows.
      - ``examples/transport/``, ``examples/autodiff/``, ``examples/optimization/``, ``examples/vmex_finite_beta/``
      - You need a specific physics, optimization, VMEC, Redl, bootstrap-current, or differentiability workflow.
    * - ``validation``
-     - ``tools/parity/``, ``tools/performance/``, ``tools/publication_figures/``, ``tools/paper_benchmarks/``
+     - ``tools/parity/``, ``tools/publication_figures/``, ``tools/paper_benchmarks/``
      - You need parity checks, runtime/memory evidence, CPU/GPU benchmark drivers, regenerated documentation figures, or methods-paper benchmark cases.
    * - ``reference``
      - ``examples/data/``, ``examples/sfincs_examples/``
@@ -792,7 +786,6 @@ Matrix-free linear solve demo (using frozen PETSc binaries):
 
 .. code-block:: bash
 
-   python tools/parity/solve_fortran_matrix_with_gmres.py
    python examples/autodiff/autodiff_gradient_nu_n_residual.py
 
 Transport matrices (RHSMode=2/3)
