@@ -689,7 +689,11 @@ def _read_run(path: Path, *, max_residual_ratio: float) -> ScanPromotionRun:
     radial_current = radial_current_from_output(data)
     bootstrap = _scalar(data, "FSABjHatOverRootFSAB2", default=None)
     if bootstrap is None:
-        bootstrap = _scalar(data, "FSABjHat", default=0.0) or 0.0
+        bootstrap = _scalar(data, "FSABjHat", default=None)
+    if bootstrap is None:
+        raise KeyError(f"{path} is missing FSABjHatOverRootFSAB2 and FSABjHat")
+    if not isfinite(bootstrap):
+        raise ValueError(f"{path} has a nonfinite bootstrap current")
     particle = _last_species_values(data, "particleFlux_vm_rHat", n_species=n_species)
     heat = _last_species_values(data, "heatFlux_vm_rHat", n_species=n_species)
     residual_norm = _scalar(data, "linearSolverResidualNorm", default=None)
