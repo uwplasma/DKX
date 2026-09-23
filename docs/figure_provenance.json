@@ -123,7 +123,7 @@
       "generator": "tools/benchmarks/cross_code_readme_figure.py"
     },
     "docs/_static/figures/readme/optimize_QA_bootstrap.png": {
-      "generator": "examples/optimization/optimize_QH_bootstrap.py"
+      "generator": "examples/optimization/optimize_QA_bootstrap.py"
     },
     "docs/_static/figures/readme/tier1_hsx_runtime_memory.png": {
       "generator": "tools/benchmarks/readme_figures.py"
