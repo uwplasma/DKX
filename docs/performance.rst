@@ -1438,9 +1438,11 @@ and neither ever materializes a band.
 ``solvax.direct.block_thomas_factor_fn(..., store_offdiagonals=False)`` keeps
 the Schur LU factors and drops the two off-diagonal bands, regenerating them one
 block at a time inside each substitution sweep.  Retained state is one
-``(Nxi, m, m)`` array per subsystem instead of three.  That is a third of the
-bands, exactly ``1/3 + 1/(6m)`` once the pivots are counted, and a sixth with
-``DKX_COARSE_FACTOR_DTYPE=float32``.  The elimination still runs
+``(max(1, Nxi_for_x), m, m)`` array per subsystem instead of three: masked identity
+tails are applied analytically as ``r / (1 + floor)``.  For uniform
+``Nxi_for_x`` that is a third of the bands, exactly ``1/3 + 1/(6m)`` once the
+pivots are counted, and a sixth with ``DKX_COARSE_FACTOR_DTYPE=float32``.  The
+elimination still runs
 **once**: an application is two triangular solves and two block regenerations
 per row, and no factorization, so the factors amortize over the tens of Krylov
 applications a solve makes.  This is the route the oversized decks take

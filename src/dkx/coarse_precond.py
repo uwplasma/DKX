@@ -216,20 +216,23 @@ def _coarse_memory_budget() -> float | None:
     return available if available is not None else _host_memory_bytes()
 
 def coarse_preconditioner_factor_bytes(op: KineticOperator, dtype=jnp.float64) -> float:
-    """Bytes the reusable Schur-LU-only factors retain, over every subsystem at once.
+    """Bytes the reusable Schur-LU-only factors retain.
 
-    One dense ``(Ntheta*Nzeta)`` LU per ``(species, x, L)`` plus its pivots --- the
+    One dense ``(Ntheta*Nzeta)`` LU per active ``(species, x, L)`` row plus its pivots --- the
     two off-diagonal bands are not stored, because
     :func:`_coarse_subsystem_block_fn` regenerates them.  That is
     :func:`coarse_preconditioner_band_bytes` divided by three at float64, or by six
-    at float32, plus the pivots both policies keep.
+    at float32, plus the pivots both policies keep on an untruncated deck.
 
-    Exact rather than estimated, for the same reason the band size is: the factors
-    are allocated up front and held for the life of the preconditioner, because
-    reuse across Krylov applications is the whole point of taking this route.
+    Exact for static ``Nxi_for_x``: each subsystem retains ``max(1, Nxi_for_x)``
+    rows, and truncated identity tails have no factor. A
+    traced ``Nxi_for_x`` uses the rectangular layout, since its active lengths are
+    not available while compiling. The dense-band and checkpointed-route sizing
+    policies intentionally remain rectangular.
     """
-    n_s, n_x, n_xi, n_t, n_z = op.f_shape
-    blocks = float(n_s * n_x * n_xi)
+    _n_s, _n_x, _n_xi, n_t, n_z = op.f_shape
+    _order, counts = _coarse_row_layout(op)
+    blocks = float(sum(counts))
     m = float(n_t * n_z)
     itemsize = float(jnp.dtype(dtype).itemsize)
     return blocks * (m * m * itemsize + m * 4.0)  # LU + int32 pivots
@@ -825,6 +828,27 @@ def _coarse_row_layout(op: KineticOperator) -> tuple[tuple[int, ...], tuple[int,
     return order, counts
 
 
+def _coarse_chain_lengths(rows: tuple[tuple[int, ...], tuple[int, ...]]) -> tuple[int, ...]:
+    """Static active-chain length for each original subsystem index."""
+    order, counts = rows
+    lengths = [0] * len(order)
+    for count in counts:
+        for subsystem in order[:count]:
+            lengths[subsystem] += 1
+    return tuple(lengths)
+
+
+def _factor_coarse_active_chains(pinned, *, rows: tuple, factor_dtype):
+    """Factor each generated chain through its last non-identity row only."""
+    lengths = _coarse_chain_lengths(rows)
+    return tuple(
+        block_thomas_factor_fn(
+            block_fn, length, factor_dtype=factor_dtype, store_offdiagonals=False
+        )
+        for block_fn, length in zip(pinned, lengths, strict=True)
+    ), lengths
+
+
 @functools.partial(
     jax.jit, static_argnames=("n_xi", "rows", "drop_l_coupling", "factor_dtype")
 )
@@ -1340,19 +1364,17 @@ def build_coarse_preconditioner(
         )  # fmt: skip
 
         if reusable:
-            # Keep the Schur LU and nothing else: one (Nxi, TZ, TZ) array per
+            # Keep the Schur LU and nothing else: one (active Nxi, TZ, TZ) array per
             # subsystem instead of three, with the off-diagonal blocks regenerated
             # from the same pinned generator inside each substitution sweep.  The
             # elimination runs here, once, and every later application is two
             # triangular solves and two block regenerations per row -- so unlike the
             # checkpointed route below these factors amortize over a Krylov solve.
             factor_dtype = _coarse_factor_dtype()
-            factors = [
-                block_thomas_factor_fn(
-                    f, n_xi, factor_dtype=factor_dtype, store_offdiagonals=False
-                )
-                for f in pinned
-            ]
+            rows = _coarse_row_layout(op)
+            factors, lengths = _factor_coarse_active_chains(
+                pinned, rows=rows, factor_dtype=factor_dtype
+            )
 
             def _a_inv(transpose: bool) -> Callable[[jnp.ndarray], jnp.ndarray]:
                 # Both the factors and the arrays the generators rebuild blocks
@@ -1368,17 +1390,26 @@ def build_coarse_preconditioner(
                 # generators here, from traced leaves, is what makes the storage
                 # claim true (tests/test_coarse_precond_constants.py).
                 @jax.jit
-                def apply(facs: list, gen: tuple, v: jnp.ndarray) -> jnp.ndarray:
+                def apply(facs: tuple, gen: tuple, v: jnp.ndarray) -> jnp.ndarray:
                     coef_t, subs_t, floor_t, gamma_t = gen
-                    rows = _coarse_pinned_block_fns(
+                    block_fns = _coarse_pinned_block_fns(
                         coef_t, n_xi, subs_t, floor_t, gamma_t, drop_l_coupling
                     )
                     # Serial over the 5-10 subsystems for the same reason as below.
                     g = v.reshape(batch, n_xi, n_tz)
-                    return jnp.stack([
-                        block_thomas_solve(replace(fac, block_fn=row), g[b], transpose=transpose)
-                        for b, (fac, row) in enumerate(zip(facs, rows, strict=True))
-                    ]).reshape(v.shape)
+                    low = facs[0].delta_lu.dtype
+                    out = (g.astype(low) / (1.0 + floor_t).astype(low)[:, None, None]).astype(g.dtype)
+                    solved = [
+                        block_thomas_solve(
+                            replace(fac, block_fn=block_fn), g[b, :length], transpose=transpose
+                        )
+                        for b, (fac, block_fn, length) in enumerate(
+                            zip(facs, block_fns, lengths, strict=True)
+                        )
+                    ]
+                    for b, (solution, length) in enumerate(zip(solved, lengths, strict=True)):
+                        out = out.at[b, :length].set(solution)
+                    return out.reshape(v.shape)
 
                 return functools.partial(apply, factors, (coef, *gen_data))
 
