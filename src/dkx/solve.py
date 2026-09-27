@@ -197,13 +197,6 @@ _KRYLOV_BUDGET_ENV = "DKX_KRYLOV_MEMORY_BUDGET_GB"
 # reproduces the hand-rolled pass this replaced and already reaches O(1e-16)
 # relative residual in float64; the knob exists because the float32-factor variant needs more.
 _TIER1_REFINEMENT_SWEEPS = 1
-# Further sweeps a plain solve takes, on the same factors, while the first leaves
-# the relative residual above ``_TIER1_SWEEP_TARGET`` (or the caller's tighter
-# tolerance); each is two substitutions and one operator application. The target
-# is fixed, not the caller's tolerance, so the same operator gets the same sweeps
-# and the same bits whatever tolerance a run asked for.
-_TIER1_EXTRA_SWEEPS = 3
-_TIER1_SWEEP_TARGET = 1e-14
 
 # RHSMode 1/2/3 drives (radial gradient on L=0,2; inductive E_parallel on L=1)
 # and every RHSMode 1/2/3 output moment (fluxes, flows, sources, FSA
@@ -2268,20 +2261,6 @@ def _solve_tier1(
             _stop_gradient_tree(op), jax.lax.stop_gradient(x2d), rhs2d_value,
             transpose=transpose,
         )
-        # The elimination does not pivot across blocks, and where it grew one
-        # sweep of defect correction can leave the residual short of the
-        # tolerance: each sweep gains only two digits on the checked-in
-        # non-stellarator-symmetric Boozer deck. Further sweeps on the same
-        # factors cost far less than the Krylov fallback that would follow.
-        # They stop at a fixed target, so runs of the same operator at
-        # different tolerances return the same solution.
-        for _ in range(0 if reused else _TIER1_EXTRA_SWEEPS):
-            if _converged_flag(res, rhs2d_value, min(tol, _TIER1_SWEEP_TARGET), atol):
-                break
-            defect = rhs2d - _operator_apply(op, x2d, transpose)
-            x2d = x2d + _tier1_refined_solve_compiled(op, t1_solver, defect, transpose=transpose)
-            res = _residual_norms_compiled(op, x2d, rhs2d, transpose=transpose)
-            t2 = time.perf_counter()
     if reused and not _converged_flag(res, rhs2d_value, tol, atol):
         # The stored elimination belongs to a neighbouring operator and the
         # refinement above did not make up the difference. The staleness test is
