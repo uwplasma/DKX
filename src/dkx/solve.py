@@ -197,9 +197,13 @@ _KRYLOV_BUDGET_ENV = "DKX_KRYLOV_MEMORY_BUDGET_GB"
 # reproduces the hand-rolled pass this replaced and already reaches O(1e-16)
 # relative residual in float64; the knob exists because the float32-factor variant needs more.
 _TIER1_REFINEMENT_SWEEPS = 1
-# Further sweeps a plain solve takes, on the same factors, when the first misses
-# the tolerance; each is two substitutions and one operator application.
+# Further sweeps a plain solve takes, on the same factors, while the first leaves
+# the relative residual above ``_TIER1_SWEEP_TARGET`` (or the caller's tighter
+# tolerance); each is two substitutions and one operator application. The target
+# is fixed, not the caller's tolerance, so the same operator gets the same sweeps
+# and the same bits whatever tolerance a run asked for.
 _TIER1_EXTRA_SWEEPS = 3
+_TIER1_SWEEP_TARGET = 1e-14
 
 # RHSMode 1/2/3 drives (radial gradient on L=0,2; inductive E_parallel on L=1)
 # and every RHSMode 1/2/3 output moment (fluxes, flows, sources, FSA
@@ -1149,7 +1153,8 @@ def _operator_apply(op: KineticOperator, v: jnp.ndarray, transpose: bool) -> jnp
 
 
 def _tier1_refined_solve(
-    op: KineticOperator, t1_solver: Tier1Solver, b: jnp.ndarray, transpose: bool
+    op: KineticOperator, t1_solver: Tier1Solver, b: jnp.ndarray, transpose: bool,
+    fenced: bool = True,
 ) -> jnp.ndarray:
     """Structured direct substitution plus defect correction against ``op``.
 
@@ -1159,7 +1164,17 @@ def _tier1_refined_solve(
     Fenced by optimization barriers, so XLA compiles the region the same way in
     every program that contains it: the plain solve and the forward pass of the
     differentiable one return the same bits for the same right-hand side.
+    ``fenced=False`` leaves the region to a caller's own ``jit``: fences there
+    constrain how XLA fuses it around a sharded batch, and the one-device and
+    two-device programs of the same scan then round differently.
     """
+    if not fenced:
+        return iterative_refinement(
+            lambda v: _operator_apply(op, v, transpose),
+            b,
+            lambda r: t1_solver.solve(r, transpose=transpose),
+            iterations=_TIER1_REFINEMENT_SWEEPS,
+        )[0]
     op, t1_solver, b = jax.lax.optimization_barrier((op, t1_solver, b))
     x, _residual_norms = iterative_refinement(
         lambda v: _operator_apply(op, v, transpose),
@@ -1170,7 +1185,9 @@ def _tier1_refined_solve(
     return jax.lax.optimization_barrier(x)
 
 
-_tier1_refined_solve_compiled = jax.jit(_tier1_refined_solve, static_argnames=("transpose",))
+_tier1_refined_solve_compiled = jax.jit(
+    _tier1_refined_solve, static_argnames=("transpose", "fenced")
+)
 
 
 # Residual guards of compiled implicit solves, by token. The compiled program
@@ -2220,7 +2237,9 @@ def _solve_tier1(
             jnp.asarray(_register_guard(make_guard), dtype=jnp.int32),
         )
     elif compiled:
-        x2d = _tier1_refined_solve_compiled(op, t1_solver, rhs2d, transpose=transpose)
+        x2d = _tier1_refined_solve_compiled(
+            op, t1_solver, rhs2d, transpose=transpose, fenced=not _is_traced(rhs2d)
+        )
     elif differentiable:
         cols = [
             _implicit_solve(
@@ -2254,8 +2273,10 @@ def _solve_tier1(
         # tolerance: each sweep gains only two digits on the checked-in
         # non-stellarator-symmetric Boozer deck. Further sweeps on the same
         # factors cost far less than the Krylov fallback that would follow.
+        # They stop at a fixed target, so runs of the same operator at
+        # different tolerances return the same solution.
         for _ in range(0 if reused else _TIER1_EXTRA_SWEEPS):
-            if _converged_flag(res, rhs2d_value, tol, atol):
+            if _converged_flag(res, rhs2d_value, min(tol, _TIER1_SWEEP_TARGET), atol):
                 break
             defect = rhs2d - _operator_apply(op, x2d, transpose)
             x2d = x2d + _tier1_refined_solve_compiled(op, t1_solver, defect, transpose=transpose)

@@ -179,7 +179,7 @@ admission.** Process-CPU-time median (minimum in parentheses):
   0.37 s above was load. The compiled gradient has 374 triangular solves and
   still 2 LU call sites: one factorization.
 
-A second measurement after rebasing onto current main, with the fenced
+A second measurement after rebasing onto the main branch, with the fenced
 substitution: an Apple-silicon laptop, one process at a time on one XLA/BLAS
 thread (macOS cannot pin cores), main `95aa5286` and the branch alternated
 A/B/A/B, 15 interleaved repeats each. **One-minute load 62 to 108 on 14 cores

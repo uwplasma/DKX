@@ -85,9 +85,11 @@
   unchanged to round-off, and the plain and differentiable solves return the
   same bits. The first call of each new operator structure pays a one-time
   compile.
-- A plain structured direct solve whose one refinement sweep misses the
-  tolerance takes up to three more on the same factors before `auto` falls
-  back to the Krylov route (#279). The elimination does not pivot across
+- A plain structured direct solve whose one refinement sweep leaves the
+  relative residual above `1e-14` (or a tighter tolerance) takes up to three
+  more on the same factors before `auto` falls back to the Krylov route
+  (#279). The target does not follow the caller's tolerance, so runs at
+  different tolerances return the same solution. The elimination does not pivot across
   blocks, and on the checked-in non-stellarator-symmetric Boozer deck each
   sweep gains only two digits.
 
