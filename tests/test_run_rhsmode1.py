@@ -356,9 +356,11 @@ def test_run_profile_write_path_builds_operator_once(
     extras = counting("extras", wr._geometry_extras)
     monkeypatch.setattr(wr, "_geometry_extras", extras)
     monkeypatch.setattr(rn, "_geometry_extras", extras)
-    moments = counting("moments", rn.rhsmode1_moments)
-    monkeypatch.setattr(rn, "rhsmode1_moments", moments)
-    monkeypatch.setattr(wr, "rhsmode1_moments", moments)
+    # The moment table is counted at its entry point: its integrals run as one
+    # compiled program, so ``rhsmode1_moments`` itself executes only when that
+    # program is traced, not once per call.
+    moments = counting("moments", rn.profile_moments_from_operator)
+    monkeypatch.setattr(rn, "profile_moments_from_operator", moments)
 
     run = run_profile(
         REF / "pas_1species_PAS_noEr_tiny_scheme1.input.namelist",

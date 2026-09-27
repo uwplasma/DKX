@@ -1690,7 +1690,16 @@ Measured through the production recycled Krylov path.  On the tiny drift
         - zeros on the constraint rows.
 
         ``which_rhs`` selects the RHSMode 2/3 transport-matrix drive column.
+
+        Runs as one compiled program per operator structure: the drive is a few
+        hundred small primitives, and a caller that does not ``jit`` (an eager
+        ``jax.grad`` of an objective) would otherwise dispatch, linearize and
+        transpose them one at a time.
         """
+        return _rhs_compiled(self, which_rhs)
+
+    def _rhs(self, which_rhs: int | None = None) -> jnp.ndarray:
+        """The body of :meth:`rhs`."""
         if self.external_phi1_hat is not None:
             # readExternalPhi1 is a single-RHS (RHSMode=1) linear system whose drive
             # is evaluated at the fixed external Phi1 field.
@@ -2193,6 +2202,11 @@ def _load_external_phi1(*, nml: Any, phys: dict, grids: Grids) -> jnp.ndarray:
                 "interpolation is a documented follow-up (make the external grid equal the run grid)."
             )
     return jnp.asarray(phi1, dtype=jnp.float64)
+
+
+# One executable per operator structure and drive column; see KineticOperator.rhs.
+_rhs_compiled = jax.jit(KineticOperator._rhs, static_argnums=(1,))
+
 
 class KineticOperatorBuild(NamedTuple):
     """One operator build together with the grids/geometry it was derived from.
