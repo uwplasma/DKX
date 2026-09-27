@@ -1,6 +1,26 @@
 Release notes
 =============
 
+v2.7.0
+------
+
+Faster by default and ready for optimization. ``CHANGELOG.md`` lists each
+change with its pull request.
+
+- Krylov solves default to a memory-aware restart of up to 1,000 within
+  ``krylov_memory_budget_gb`` (a quarter of available memory by default); the
+  high-``Nx`` iteration growth was restart stagnation (``Nx = 16``: 357
+  iterations against 2,788 at restart 200).
+- The structured direct route compiles itself for callers that do not ``jit``;
+  eager primal and gradient run within about 1.2–1.4× of their compiled time.
+- ``dkx.bootstrap.KineticBootstrapMismatch`` adds the drift-kinetic bootstrap
+  current to VMEX optimizations through its implicit Jacobian;
+  ``examples/optimization/QA_optimization_bootstrap_dkx.py`` shows it.
+- The Boozer route's handedness is converted in one place; flux and ``<j.B>``
+  signs agree with the VMEC-file route and Redl.
+- Failed bootstrap-current evidence is refused instead of scored as zero;
+  reusable coarse factors keep only active pitch rows.
+
 v2.6.0
 ------
 
