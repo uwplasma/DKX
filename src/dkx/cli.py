@@ -1975,7 +1975,12 @@ def _add_compat_parsers(sub) -> None:
     p_solve.add_argument("--out-state", default="stateVector.npy", help="Where to write the solution vector (NumPy .npy)")
     p_solve.add_argument("--tol", default="1e-10", help="GMRES relative tolerance")
     p_solve.add_argument("--atol", default="0.0", help="GMRES absolute tolerance")
-    p_solve.add_argument("--restart", default="80", help="GMRES restart")
+    p_solve.add_argument(
+        "--restart",
+        default="auto",
+        help="accepted for compatibility and not applied: the recycled Krylov "
+        "route uses the library's memory-aware restart policy",
+    )
     p_solve.add_argument("--maxiter", default=None, help="GMRES maxiter (default: library default)")
     p_solve.add_argument(
         "--solve-method",
