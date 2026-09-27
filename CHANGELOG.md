@@ -1,6 +1,11 @@
 # Changelog
 
-## v2.7.0 — unreleased
+## v2.7.0 — 2026-09-27
+
+Faster by default and ready for optimization: a memory-aware Krylov restart
+that removes the high-`Nx` stall, a self-compiling structured route for
+callers that do not `jit`, and a drift-kinetic bootstrap-current objective for
+VMEX optimization.
 
 ### Correctness
 
