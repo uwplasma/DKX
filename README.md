@@ -128,19 +128,19 @@ prints them. Rung `05_ambipolar_profile`.
 Multispecies runs carry impurities; Phi1 adds the in-surface potential and its quasineutrality
 equation. Rung `09_phi1_and_impurities`.
 
-<!-- FLAGSHIP-OPTIMIZATION: replace the figure path, caption and numbers below with the output of
-examples/optimization/QA_optimization_bootstrap_dkx.py once its before/after figure is committed. -->
+<!-- FLAGSHIP-OPTIMIZATION -->
 ## Stellarator optimization with a kinetic bootstrap current
 
-![Bootstrap current and quasisymmetry before and after optimization](docs/_static/figures/readme/optimize_QA_bootstrap.png)
+![Bootstrap current profiles and objective history of the QA optimization with a DKX row](docs/_static/figures/readme/QA_optimization_bootstrap_dkx.png)
 
-The gradient runs VMEX → `booz_xform_jax` → DKX → `⟨j·B⟩`, so a DKX bootstrap-current objective
-sits beside quasisymmetry, aspect ratio and rotational transform in one differentiable
-least-squares problem. The figure lowers the bootstrap current of a precise QA while holding its
-quasisymmetry residual below a cap
-([`optimize_QA_bootstrap.py`](examples/optimization/optimize_QA_bootstrap.py)). Rung
-`08_vmex_optimization` takes the same shape derivative on an analytic `|B|` spectrum in seconds
-([optimization](docs/optimization.rst)).
+VMEX's self-consistent QA bootstrap example with one added row,
+`dkx.bootstrap.KineticBootstrapMismatch`: the mismatch between the equilibrium's `⟨j·B⟩` and
+the DKX kinetic one, traced VMEX → `booz_xform_jax` → DKX so VMEX's implicit Jacobian carries it
+(finite differences agree to 5.7e-5–1.8e-3). On a laptop CPU (30 min, 4.6 GB) the objective falls
+from 1.78 to 0.0061 and the DKX mismatch from 1.2e-3 to 1.2e-4
+([`QA_optimization_bootstrap_dkx.py`](examples/optimization/QA_optimization_bootstrap_dkx.py)).
+The default pitch-angle-scattering operator does not conserve momentum: its current is
+1.5–1.6× Redl's.
 <!-- /FLAGSHIP-OPTIMIZATION -->
 
 ## Proved against analytic limits
@@ -198,8 +198,9 @@ DKX picks its route from the operator's structure ([solver routes](docs/numerics
 | Assembled sparse direct | any operator, to a few 1e5 unknowns | exact assembly, Ruiz equilibration, LU or MUMPS |
 | Recycled Krylov (GCROT) | full FP, tangential drifts, `E_r` terms, Phi1 | coarse-operator preconditioner, subspace recycled across solves |
 
-Direct routes converge because they are exact; the Krylov route stalls at high `Nx` on the gap
-deck. Every route reports the original-equation residual of what it returns.
+Direct routes converge because they are exact. The Krylov route's high-`Nx` stall was restart
+stagnation; the default restart grows to 1,000 within a memory budget (`Nx = 16`: 357 iterations
+against 2,788 at restart 200). Every route reports the original-equation residual of what it returns.
 
 ## One factorization, many solves
 
