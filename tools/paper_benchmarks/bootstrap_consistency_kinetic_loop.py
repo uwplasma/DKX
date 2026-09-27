@@ -133,6 +133,7 @@ from dkx.magnetic_geometry import FluxSurfaceGeometry  # noqa: E402
 from dkx.phase_space import make_grids  # noqa: E402
 from dkx.run import profile_moments_from_operator, run_profile  # noqa: E402
 from dkx.solve import solve as kinetic_solve  # noqa: E402
+from dkx.workflows.geometry_adapters import convert_boozer_route_handedness  # noqa: E402
 
 # jax 0.6.x compatibility: ``register_dataclass``'s drop_fields validation
 # unpacks the sequence with ``*`` (``difference_update(*drop_fields)``), so a
@@ -736,6 +737,11 @@ if "value" not in cache["gradient"]:
             b_hat_sub_theta=geom.b_hat_sub_theta, b_hat_sub_zeta=geom.b_hat_sub_zeta,
             fsab_hat2=fsab2,
         )  # fmt: skip
+        # psi_a_hat > 0 in the template: convert the Boozer route's handedness
+        # so <J.B> carries the equilibrium-file route's sign.
+        op = convert_boozer_route_handedness(
+            op, signgs=int(rt.setup.signgs), g_hat=booz["bvco_b"][0],
+            iota=booz["iota_b"][0], i_hat=booz["buco_b"][0])  # fmt: skip
         result = kinetic_solve(op, op.rhs(), method="gmres", tol=GRAD_TOL,
                                differentiable=True)  # fmt: skip
         mom = profile_moments_from_operator(op, result.x)
@@ -747,10 +753,9 @@ if "value" not in cache["gradient"]:
         dI/ds ~ 2 pi psi_a <J.B>/<B^2> (the mu0*I*dp/ds correction, ~2% at
         this beta, is dropped in this scalar); trapezoid over the quadrature
         surfaces with the profile pinned to zero at s = 0 and s = 1.  The
-        magnitude is used because the traceable Boozer-transform route and
-        the equilibrium-file route carry opposite parallel-current sign
-        conventions (coordinate handedness); |I_bs| is convention-free and
-        is what a bootstrap-targeting objective would use.
+        Boozer route's handedness is converted above, so <J.B> has the
+        equilibrium-file sign; the magnitude is returned so the value compares
+        with |curtor| whatever the sign convention of the total current.
         """
         rbc = params0.rbc.at[int(inp_final.ntor), 1].set(coefficient)
         params = dataclasses.replace(params0, rbc=rbc)

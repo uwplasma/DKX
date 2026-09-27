@@ -39,6 +39,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from dkx.magnetic_geometry import FluxSurfaceGeometry
+from dkx.workflows.geometry_adapters import convert_boozer_route_handedness
 from dkx.run import profile_moments_from_operator
 from dkx.solve import solve as kinetic_solve
 
@@ -55,7 +56,8 @@ _GEOMETRY_LEAVES = (
 # Plumbing: put a differentiable Boozer |B| spectrum onto a kinetic operator
 # ---------------------------------------------------------------------------
 def operator_with_boozer_geometry(op_template, *, bmnc, m, n, nfp, iota, g_hat,
-                                  i_hat, theta, zeta, theta_weights, zeta_weights):
+                                  i_hat, theta, zeta, theta_weights, zeta_weights,
+                                  signgs=None):
     """Return ``op_template`` with its geometry replaced by a ``|B|`` spectrum.
 
     ``bmnc`` are the cosine amplitudes for mode numbers ``(m, n)`` (``n`` WITHOUT
@@ -63,6 +65,12 @@ def operator_with_boozer_geometry(op_template, *, bmnc, m, n, nfp, iota, g_hat,
     the surface's rotational transform and Boozer ``G``/``I``.  Traceable in
     every one of those (the ``geometryScheme = 13`` pure-JAX path), so gradients
     w.r.t. the spectrum flow through the returned operator.
+
+    For a ``booz_xform`` spectrum of a VMEC equilibrium, pass its ``signgs``
+    and build ``op_template`` at ``psiAHat = +|phi_edge|/(2 pi)``: the
+    handedness of the Boozer route is then converted
+    (``dkx.workflows.geometry_adapters.convert_boozer_route_handedness``), and
+    ``<j.B>`` carries the sign of the VMEC-file route and of Redl.
     """
     geom = FluxSurfaceGeometry.from_fourier(
         theta=theta, zeta=zeta, bmnc=jnp.asarray(bmnc), m=jnp.asarray(m),
@@ -70,7 +78,11 @@ def operator_with_boozer_geometry(op_template, *, bmnc, m, n, nfp, iota, g_hat,
     )
     fsab2 = geom.fsab_hat2(theta_weights=theta_weights, zeta_weights=zeta_weights)
     leaves = {name: getattr(geom, name) for name in _GEOMETRY_LEAVES}
-    return dataclasses.replace(op_template, fsab_hat2=fsab2, **leaves)
+    op = dataclasses.replace(op_template, fsab_hat2=fsab2, **leaves)
+    if signgs is None:
+        return op
+    return convert_boozer_route_handedness(op, signgs=signgs, g_hat=g_hat, iota=iota,
+                                           i_hat=i_hat)
 
 
 def solve_and_moments(op, *, tol=1e-9, x0=None, recycle=None,
