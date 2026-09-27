@@ -502,34 +502,44 @@ def profile_moments_from_operator(
     Returns:
         The h5-named moment table with the species axis leading.
     """
-    return dict(_profile_moments_compiled(op, state_vector, ntv_kernel_tz))
+    table = dict(_profile_moments_compiled(op, state_vector))
+    if ntv_kernel_tz is not None:
+        table.update(_profile_ntv_compiled(op, state_vector, ntv_kernel_tz))
+    return table
 
 
-def _profile_moments(op: KineticOperator, state_vector, ntv_kernel_tz):
-    """The body of :func:`profile_moments_from_operator`."""
+def _profile_moments(op: KineticOperator, state_vector):
+    """The moment table of :func:`profile_moments_from_operator`, NTV aside."""
     import jax.numpy as jnp  # noqa: PLC0415
 
     layout, vgrid, surface, species = operator_containers(op)
-    x_full = jnp.asarray(state_vector, dtype=jnp.float64)
-    table = dict(
+    return dict(
         rhsmode1_moments(
-            layout, vgrid, surface, species, x_full,
+            layout, vgrid, surface, species, jnp.asarray(state_vector, dtype=jnp.float64),
             delta=op.delta, alpha=op.alpha, phi1_from_state=bool(op.include_phi1),
             phi1_hat=op.external_phi1_hat,
         )  # fmt: skip
     )
-    if ntv_kernel_tz is not None:
-        before, ntv = ntv_moments(layout, vgrid, surface, species, x_full, kernel=ntv_kernel_tz)
-        table["NTVBeforeSurfaceIntegral"] = before
-        table["NTV"] = ntv
-    return table
+
+
+def _profile_ntv(op: KineticOperator, state_vector, ntv_kernel_tz):
+    """The ``NTV`` entries of :func:`profile_moments_from_operator`."""
+    import jax.numpy as jnp  # noqa: PLC0415
+
+    layout, vgrid, surface, species = operator_containers(op)
+    x_full = jnp.asarray(state_vector, dtype=jnp.float64)
+    before, ntv = ntv_moments(layout, vgrid, surface, species, x_full, kernel=ntv_kernel_tz)
+    return {"NTVBeforeSurfaceIntegral": before, "NTV": ntv}
 
 
 # The moment integrals are several hundred small primitives. Compiled, a caller
 # that does not ``jit`` (an eager ``jax.value_and_grad`` of an objective built on
 # them, say) dispatches, linearizes and transposes them once instead of one at a
-# time.
+# time. The NTV entries are a separate program so that asking for them does not
+# change how XLA fuses the fluxes: a run with and one without the NTV kernel
+# (``run_profile`` and ``run_case``) get bitwise-identical flux integrals.
 _profile_moments_compiled = jax.jit(_profile_moments)
+_profile_ntv_compiled = jax.jit(_profile_ntv)
 
 
 def _ntv_kernel_for(inp: SfincsInput, op: KineticOperator, geom: FluxSurfaceGeometry):
