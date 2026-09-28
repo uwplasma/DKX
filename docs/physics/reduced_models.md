@@ -50,12 +50,14 @@ $E\times B$ part $V$ is antisymmetric in the entropy inner product. Two quadrati
 functionals then bound $D_{11}$ from below and above for any trial function and coincide
 at the exact solution (Hirshman et al. 1986; van Rij & Hirshman, Phys. Fluids B 1, 563,
 1989). Evaluated on the even and odd Legendre-parity parts of the discrete solution, they
-bracket the computed $D_{11}$.
+bracket the computed $D_{11}$ at zero radial electric field.
 
 `monoenergetic_d11_bounds(op, state, ...)` returns `lower`, `d11`, `upper` and
 `gap = |upper - lower| / |d11|`; `d11_bounds_supported(op)` checks the preconditions
-(`RHSMode = 3`, pitch-angle scattering, monoenergetic trajectories). The gap is an error
-indicator from one run with no reference solution: `tests/test_variational_bounds.py`
+(`RHSMode = 3`, pitch-angle scattering, monoenergetic trajectories). The gap is a discrete
+entropy-structure diagnostic from one run: a gap that shrinks on a refinement ladder is
+evidence of improved resolution, not an enclosure of the continuum discretization error,
+which needs an observable-specific resolution study. `tests/test_variational_bounds.py`
 checks that the bounds bracket $D_{11}$, that the gap shrinks with resolution, and that it
 is tight at high collisionality. The strict bound holds for purely parity-flipping
 trajectories ($E^* = 0$); at finite $E^*$ the gap is a consistency diagnostic only.
@@ -74,6 +76,13 @@ $f_t$ the trapped-particle fraction (Boozer & Gardner, Phys. Fluids B 2, 2408, 1
 exposed as `trapped_fraction`. `tests/test_shaing_callen.py` checks that closed form and
 that a $\nu'$ scan of the full monoenergetic solve approaches the limit in the
 axisymmetric case (and behaves qualitatively in a helical case).
+
+The limit is a collisionless geometric reference, not a value every finite-collisionality
+scan must reach. Albert et al. show that at zero radial electric field in the $1/\nu$
+regime the offset from it can oscillate rather than vanish as collisionality decreases;
+convergence needs additional conditions such as significant orbit precession, for example
+from a finite radial electric field. The scan in {doc}`../benchmarks/analytic_limits` uses
+$E^* = 0.003$, a finite radial electric field.
 
 ## Bounce-averaged $1/\nu$ transport
 

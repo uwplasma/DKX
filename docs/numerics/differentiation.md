@@ -286,6 +286,12 @@ each surface. `examples/optimization/QA_optimization_bootstrap_dkx.py` runs it;
 the geometry link alone is `examples/autodiff/vmex_to_boozer_sfincs_pipeline.py`.
 The workflow is in {doc}`../tutorials/vmex_optimization`.
 
+These scripts implement the full differentiable chain; running one is not by itself a
+qualified optimization. A qualified result also needs the converged final equilibrium,
+the original-equation residual of every kinetic solve, derivative checks against finite
+differences, a finer-grid repeat of the objective and an independent reference, as set out
+in `plan.md`.
+
 ## Algebraic error of a linear moment
 
 `dkx.sensitivity.linear_observable_algebraic_error` uses the same adjoint to
