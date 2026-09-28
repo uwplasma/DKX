@@ -66,7 +66,7 @@ DOC_TREE_STALE_FRAGMENTS = (
     "not a public performance row",
 )
 REQUIRED_CI_JOB_TIMEOUTS = {
-    "coverage": 10,
+    "coverage": 15,
     "coverage-report": 10,
     "examples-smoke": 10,
     "external-data-smoke": 10,
