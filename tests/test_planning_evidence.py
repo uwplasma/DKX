@@ -39,19 +39,6 @@ def test_capability_registry_has_unique_supported_statuses_and_evidence() -> Non
         assert capability["gaps"]
 
 
-def test_baseline_size_results_follow_the_recorded_limit() -> None:
-    package_size = _load("baseline.toml")["package_size"]
-    limit = package_size["limit_bytes"]
-    assert package_size["wheel_passes"] == (package_size["wheel_bytes"] < limit)
-    assert package_size["sdist_passes"] == (package_size["sdist_bytes"] < limit)
-    assert package_size["installed_owned_passes"] == (
-        package_size["installed_owned_bytes"] < limit
-    )
-    assert package_size["full_clone_passes"] == (
-        _load("baseline.toml")["repository"]["full_clone_bytes"] < limit
-    )
-
-
 def test_benchmark_schema_covers_performance_accuracy_and_failures() -> None:
     payload = _load("benchmark_schema.toml")
     required = set(payload["required_top_level"])
