@@ -11,7 +11,7 @@ Foundational neoclassical theory
   *Collisional Transport in Magnetized Plasmas*, Cambridge University Press (2002).
   The standard textbook derivation of the drift-kinetic equation, the linearized
   Fokker--Planck collision operator, and the neoclassical flux/flow moments that
-  underpin :doc:`physics_reference`.
+  underpin :doc:`physics/drift_kinetic_equation`.
 - P. Helander,
   `Theory of plasma confinement in non-axisymmetric magnetic fields <https://doi.org/10.1088/0034-4885/77/8/087001>`_,
   Rep. Prog. Phys. **77**, 087001 (2014). Review of stellarator neoclassical
@@ -38,7 +38,7 @@ SFINCS model, collision operator, and speed grid
   :mod:`dkx.collisions`. This is a separate work from the 2014 *Physics of
   Plasmas* SFINCS paper above, and from the unpublished upstream
   Fokker--Planck operator implementation note summarized in
-  :doc:`theory_from_upstream`.
+  :doc:`physics/index`.
 - M. Landreman and D. R. Ernst,
   `New velocity-space discretization for continuum kinetic calculations and Fokker--Planck collisions <https://arxiv.org/abs/1210.5289>`_,
   J. Comput. Phys. **243**, 130 (2013). The non-classical orthogonal-polynomial
@@ -57,10 +57,10 @@ SFINCS model, collision operator, and speed grid
 Block-tridiagonal Legendre solver and variational bounds
 --------------------------------------------------------
 
-The structured direct solve (:doc:`numerics`) eliminates the Legendre chain of
+The structured direct solve (:doc:`numerics/index`) eliminates the Legendre chain of
 the monoenergetic drift-kinetic equation with a block-tridiagonal factorization
 and a truncated-storage back-substitution; the variational transport-coefficient
-bounds (:doc:`capabilities`) bracket the monoenergetic :math:`D_{11}` from the
+bounds (:doc:`physics/reduced_models`) bracket the monoenergetic :math:`D_{11}` from the
 same discrete operator:
 
 - S. P. Hirshman, K. C. Shaing, W. I. van Rij, C. O. Beasley Jr., and E. C. Crume Jr.,
@@ -109,7 +109,7 @@ their archival home is the upstream SFINCS project repository:
 
 The peer-reviewed reference for the model is the 2014 *Physics of Plasmas* paper
 cited above, and the physics/numerics that `dkx` relies on are reproduced in
-:doc:`theory_from_upstream`, :doc:`system_equations`, and :doc:`physics_reference`.
+:doc:`physics/index`, :doc:`physics/drives_and_rhs_modes`, and :doc:`physics/drift_kinetic_equation`.
 
 JAX and differentiable programming
 ----------------------------------

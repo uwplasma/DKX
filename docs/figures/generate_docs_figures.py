@@ -2,7 +2,8 @@
 
 Every figure is reproducible from this script and lands compressed (< 150 kB)
 under ``docs/_static/figures/docs/``. The pages that embed them are
-:doc:`geometry`, :doc:`numerics`, and :doc:`physics_reference`.
+``docs/physics/geometry.md``, ``docs/physics/drives_and_rhs_modes.md`` and
+``docs/physics/electric_field.md``.
 
 Figures
 -------

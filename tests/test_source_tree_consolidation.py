@@ -12,7 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_ROOT = REPO_ROOT / "src" / "dkx"
 SCRIPT_ROOT = REPO_ROOT / "scripts"
 PACKAGE_README = PACKAGE_ROOT / "README.md"
-SOURCE_MAP_DOC = REPO_ROOT / "docs" / "source_map.rst"
+SOURCE_MAP_DOC = REPO_ROOT / "docs" / "how_it_works.md"
 PACKAGE_README_REQUIRED_SECTIONS = (
     "## The Canonical Stack (the architecture)",
     "## Other Root Modules",

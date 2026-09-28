@@ -8,7 +8,7 @@
    "evidence": [
     {
      "claim": "Research-lane documentation now defines QI/device-QI as preserved research material rather than stable release evidence.",
-     "path": "docs/research_lanes.rst"
+     "path": "docs/benchmarks/validation_matrix.md"
     },
     {
      "claim": "The core-slim inventory records QI/device-QI artifacts as extract-research material outside stable defaults.",
@@ -16,7 +16,7 @@
     },
     {
      "claim": "The final plan requires QI/device-QI source, tests, docs, and artifacts to pass strict release gates before returning to stable.",
-     "path": "docs/development_roadmap.rst"
+     "path": "docs/design_decisions.md"
     }
    ],
    "gates": [
@@ -41,15 +41,15 @@
    "evidence": [
     {
      "claim": "Performance documentation preserves supported PAS memory/runtime routes and separates them from rejected experimental routes.",
-     "path": "docs/performance.rst"
+     "path": "docs/benchmarks/performance.md"
     },
     {
      "claim": "Matrix-free PAS policy and correction code own byte-budget and fail-fast guards.",
-     "path": "docs/research_lanes.rst"
+     "path": "docs/benchmarks/validation_matrix.md"
     },
     {
      "claim": "PAS matrix-free tests cover fail-fast allocation gates without launching slow production solves.",
-     "path": "docs/dev/trim_ledger.md"
+     "path": "docs/how_it_works.md"
     }
    ],
    "gates": [
@@ -74,11 +74,11 @@
    "evidence": [
     {
      "claim": "Transport-worker parallelism is documented separately from experimental single-case sharding.",
-     "path": "docs/parallelism.rst"
+     "path": "docs/numerics/compilation_and_parallelism.md"
     },
     {
      "claim": "Runtime policy code owns worker-count, backend, and claim-scope decisions.",
-     "path": "docs/dev/trim_ledger.md"
+     "path": "docs/how_it_works.md"
     },
     {
      "claim": "Release-facing GPU transport-worker figure is checked in.",
@@ -107,11 +107,11 @@
    "evidence": [
     {
      "claim": "The final plan defines the line-level code-audit and extraction contract for the refactor PR.",
-     "path": "docs/development_roadmap.rst"
+     "path": "docs/design_decisions.md"
     },
     {
      "claim": "The source-map documentation identifies canonical domain owners.",
-     "path": "docs/source_map.rst"
+     "path": "docs/how_it_works.md"
     },
     {
      "claim": "Source-tree consolidation tests enforce the refactor branch structure and extraction rules.",
@@ -140,7 +140,7 @@
    "evidence": [
     {
      "claim": "VMEC/Boozer workflow documentation states the skip-safe workflow and differentiability contract.",
-     "path": "docs/vmex_workflow.rst"
+     "path": "docs/tutorials/vmex_optimization.md"
     },
     {
      "claim": "JAX geometry adapters isolate optional differentiable geometry handoff utilities.",
@@ -173,7 +173,7 @@
    "evidence": [
     {
      "claim": "Performance documentation records keep/reject gates for optional JAX-ecosystem solver candidates.",
-     "path": "docs/performance.rst"
+     "path": "docs/benchmarks/performance.md"
     },
     {
      "claim": "Solver path policy is isolated enough to host future library experiments behind measured residual, runtime, and memory gates.",
@@ -181,7 +181,7 @@
     },
     {
      "claim": "Research-lane documentation keeps optional solver-library evaluations outside stable dependencies until admitted.",
-     "path": "docs/research_lanes.rst"
+     "path": "docs/benchmarks/validation_matrix.md"
     }
    ],
    "gates": [

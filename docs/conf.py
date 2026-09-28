@@ -15,25 +15,24 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
     "sphinx.ext.mathjax",
-    # MyST is the narrative format plan.md section 8.1 moves to. Enabling the
-    # parser now means Phase F can convert pages one at a time instead of in a
-    # single unreviewable commit; the .rst pages keep building unchanged.
     "myst_parser",
 ]
 
+# Narrative pages are MyST Markdown; math uses $...$ and $$...$$.
+myst_enable_extensions = ["amsmath", "colon_fence", "dollarmath", "deflist"]
+myst_heading_anchors = 3
+
+autodoc_member_order = "bysource"
+autodoc_typehints = "description"
+
 templates_path = ["_templates"]
-# docs/dev/ holds internal ledgers, not user documentation. They were invisible
-# to Sphinx until MyST was enabled because nothing parsed .md; they are excluded
-# rather than added to a toctree, because plan.md section 8.2 keeps campaign
-# diaries out of user navigation. Phase F decides whether they survive at all.
-exclude_patterns: list[str] = ["dev/**"]
+exclude_patterns: list[str] = ["_build", "figures/**"]
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
+html_title = "DKX"
 
-# Furo, per plan.md section 8.1. There is deliberately no fallback theme: the
-# docs extra installs it, and silently building with a different theme than the
-# one the pages are designed against is the kind of quiet downgrade the plan
-# forbids. A missing theme should fail the build and say so.
+# Furo is the only theme: the docs extra installs it, and a missing theme
+# should fail the build rather than silently fall back.
 html_theme = "furo"
 
 # Read the Docs and some locked-down environments can block certain CDNs or inline styles.

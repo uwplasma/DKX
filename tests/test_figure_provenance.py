@@ -31,7 +31,12 @@ def _referenced_figures() -> set[str]:
     """Figures actually shown by the README or a docs page."""
     text = " ".join(
         path.read_text()
-        for path in [*(REPO_ROOT / "docs").glob("*.rst"), REPO_ROOT / "README.md"]
+        for path in [
+            *(REPO_ROOT / "docs").rglob("*.md"),
+            *(REPO_ROOT / "docs").rglob("*.rst"),
+            REPO_ROOT / "README.md",
+        ]
+        if "_build" not in path.parts
     )
     return {
         str(path.relative_to(REPO_ROOT))

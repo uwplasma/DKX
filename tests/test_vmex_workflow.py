@@ -73,10 +73,10 @@ def test_vmex_workflow_status_scaffold_is_skip_safe(tmp_path: Path) -> None:
 
 
 def test_vmex_workflow_docs_are_indexed_and_command_complete() -> None:
-    index = (_REPO / "docs" / "index.rst").read_text(encoding="utf-8")
-    page = (_REPO / "docs" / "vmex_workflow.rst").read_text(encoding="utf-8")
+    index = (_REPO / "docs" / "tutorials" / "index.md").read_text(encoding="utf-8")
+    page = (_REPO / "docs" / "tutorials" / "vmex_optimization.md").read_text(encoding="utf-8")
 
-    assert "vmex_workflow" in index
+    assert "vmex_optimization" in index
     assert "python examples/optimization/vmex_workflow_status.py --json" in page
     assert "python examples/autodiff/vmex_to_boozer_sfincs_pipeline.py" in page
     assert "--check-backends" in page
