@@ -1100,6 +1100,11 @@ Append-only. One row per merged change or killed hypothesis, newest last. Detail
 | 2026-09-23 | Paused by the owner. Merge queue at pause: #278 → #280 → #283 → #272, each squash-merged when green. In flight as drafts, each with a handoff header: #279 (compile the structured route), #281 (bootstrap sign and residual), the restart-test and MUMPS-analysis PR, and the README expansion | — | resume from section 13; read each draft's body first |
 | 2026-09-23 | Steps 2–3: `dkx.bootstrap.KineticBootstrapMismatch`, a traced `RedlBootstrapMismatch` counterpart, and `examples/optimization/QA_optimization_bootstrap_dkx.py` (VMEX's QA bootstrap example with the DKX row). Jacobian row vs central differences 5.7e-5–1.8e-3; one laptop run 30 min, objective 1.78 → 0.0061, DKX `f_boot` 1.2e-3 → 1.2e-4; PAS current 1.5–1.6× Redl on the optimum. Handedness converted in the three scripts that printed a flipped sign | #287 | #281 closed into #287; rung 08 stays the Boozer proxy; QH/QI pairings still on the host term |
 | 2026-09-23 | **Step 7 landed:** the structured route compiles itself — the factorization, the refined substitution, the whole differentiable solve (one `custom_linear_solve` with the residual guard inside, reached by token), `KineticOperator.rhs` and the moment table. Eager/compiled on the 16,230-unknown deck, office host at load 55–100 (indicative only): primal 5.0× → 1.18–1.30×, gradient 7.3× → 1.24–1.36×; fixed eager overhead 1.33 s → 0.017 s (primal), 2.5 s → 0.10 s (gradient). The 0.53 vs 0.37 s anomaly was load: both compiled programs hold the same 2 LU sites and 188 triangular solves | #279 | quiet-host rerun decides the 1.3× gate; the Krylov route and the root under `jit`, the FD check and the `3.18e-8` transposed floor remain |
+| 2026-09-27 | #273 merged (active pitch rows in reusable coarse factors; its float32 test compares within 1 ulp because JAX 0.10.2 divides float32 by a broadcast value as multiply-by-reciprocal). #288 merged: memory-aware Krylov restart default (five cycles of 30, two of 100, then up to 1,000 within `krylov_memory_budget_gb`, default a quarter of available memory); the tokamak full-FP deck at `(Nx, Nxi) = (24, 40)` converges in 1,736 iterations where the old default failed every stall-ladder rung; `solve-v3 --restart` applied. Supersedes #285 (closed) | #273, #288 | gap deck `(120, 16)` at the new default; MUMPS `JOB=1` |
+| 2026-09-27 | #287 merged: `dkx.bootstrap.KineticBootstrapMismatch` and `examples/optimization/QA_optimization_bootstrap_dkx.py`; Jacobian of the DKX row matches finite differences to 5.7e-5–1.8e-3; laptop run 30 min, 4.6 GB, objective 1.78 → 0.0061; PAS current 1.5–1.6× Redl's. Supersedes #281 (closed) | #287 | Fokker–Planck row; `Le1`/`Li1` rows |
+| 2026-09-27 | #279 merged: the structured route compiles itself. On x86 the PR's extra refinement sweeps made plain and differentiable solves take different routes and were removed; branch solution vectors are bit-identical to `main`'s. `test_a_boozer_deck_converts_and_reproduces_its_fluxes` stays flaky on `main` too: its fluxes are round-off (~1e-20), so a 1e-8 comparison holds only for identical arithmetic | #279 | replace the test's deck with one whose flux is resolved; quiet-host eager/jit ratio |
+| 2026-09-27 | #286 merged: README at VMEX scale (277 lines, 16 figures, optimization figure and restart wording). **DKX 2.7.0 released** (PyPI and GitHub) | #286, #289 | — |
+| 2026-09-27 | **Owner decision:** historical development files (handoffs, superseded plans, experiment logs, sealed JSON, validation and tool scripts no longer cited) are to be deleted from the tree; `plan.md` stays as the one plan and logbook. Dead branches deleted; the clone is 18 MB with no blob above 0.3 MB, so history is not rewritten. Documentation to be restructured on the JAX-in-Cell model; README to define the input schema up front | — | section 14 |
 
 ## 13. Steps ahead, in order (2026-09-22)
 
@@ -1150,3 +1155,24 @@ One queue across every phase, ordered by what blocks what. Correctness blockers 
 **H. Then Phases 3, 4 and 5 as written above**, on a code whose gradient is compiled, whose bootstrap sign is settled, and whose hard deck either converges or is honestly scoped.
 
 **Resuming.** Heavy runs go to the office host (62 GiB, two A4000s), each in a checkout and virtual environment of its own. Pin cores, use one BLAS thread, set a time cap, check free memory and the GPUs first, and never stop another user's job. The laptop is shared with other sessions and can be saturated by them; when it is, move the work rather than wait. The draft PRs #278–#281 each carry their own handoff: what is done, what was measured with host and load, what is next, and what is half-finished.
+
+## 14. Steps ahead, in order (2026-09-27, after 2.7.0)
+
+Supersedes section 13's queue where they overlap; section 13 steps 1–3, 5, 7, 8, 14 and G are done.
+
+1. **Remove historical files** from the tree (owner decision above): handoffs, superseded plans and
+   records, unreferenced JSON, `validation/` and `tools/` entries no test, doc or workflow uses.
+   Each deletion checked against references; scientific assertions kept.
+2. **Source review for readability**: module map, names and entry points a new user can follow;
+   the README defines the input schema (`case.toml` / namelist) before it is used.
+3. **Documentation rebuilt on the JAX-in-Cell model**: inputs, outputs, tutorials, how the code
+   works, physics and models, numerics and algorithms, benchmarks, examples, features, and design
+   decisions; Sphinx with warnings as errors.
+4. **Deflake the Boozer round-trip test** with a deck whose flux is resolved.
+5. **Gap deck `(120, 16)`** at the 2.7.0 restart default, and **MUMPS `JOB=1`** analysis, on the
+   office host.
+6. **Quiet-host eager/jit ratio** for #279's gate.
+7. **SOLVAX**: orthogonalize only against the filled Krylov basis; drop `Z` for a fixed
+   preconditioner.
+8. Then section 13 steps 9–13 and 17–19 (`Le1`/`Li1`, ambipolar root at optimization speed, the
+   SFINCS-fails case, the validation matrix, `solve.py` split, test tree).
