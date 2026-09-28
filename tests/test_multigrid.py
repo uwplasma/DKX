@@ -329,7 +329,7 @@ def test_adjoint_diagnostics_are_recorded_for_the_multigrid_route() -> None:
 # ---------------------------------------------------------------------------
 # Why the multigrid route stalls: the pitch basis.  These pin the structural
 # facts behind the negative result documented in ``dkx/multigrid.py`` and
-# ``docs/performance.rst``, so it stays a measurement rather than a claim.
+# ``docs/benchmarks/performance.md``, so it stays a measurement rather than a claim.
 # ---------------------------------------------------------------------------
 
 

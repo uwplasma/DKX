@@ -298,7 +298,7 @@ surface (`src/dkx/workflows/ambipolar_native.py`).
 | field | type | default | meaning |
 |---|---|---|---|
 | `file` | string | `"dkx_result.nc"` | NetCDF path, relative to the case file's directory; `dkx run` writes it unless `--out` is given |
-| `plots` | boolean | `true` | recorded in the case; execution does not plot on its own, use `dkx plot` or `Result.plot` |
+| `plots` | boolean | `true` | `dkx run` writes a `.png` summary beside the Result; the Python `dkx.run` never plots (use `Result.plot`) |
 
 ## `[scan]`
 

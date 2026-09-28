@@ -147,7 +147,7 @@ mode -- are represented by no coarse grid this hierarchy can build.
 :func:`line_diagonal_dominance` and :func:`line_smoother_spectral_radius` say
 why in one number, and the next section is that measurement.
 
-The consequence, measured end to end and reported in ``docs/performance.rst``:
+The consequence, measured end to end and reported in ``docs/benchmarks/performance.md``:
 on the full-Fokker-Planck ladder the multigrid route is affordable where the
 classical preconditioner is not, but it does not reach the Krylov tolerance,
 while the exact block-Thomas of the same simplified operator does so in 21
@@ -527,7 +527,7 @@ def simplified_operator(
             strictly more aggressive, and it removes the dominant term.  It is
             off by default and measured expensive: on the Krylov truncation
             study it takes 6000 iterations to a residual of 0.77 where keeping
-            the coupling converges in 19 (``docs/performance.rst``).  Kept as a
+            the coupling converges in 19 (``docs/benchmarks/performance.md``).  Kept as a
             knob because a multigrid smoother at fixed ``L`` cannot see the
             coupling anyway.
 

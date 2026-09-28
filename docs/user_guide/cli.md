@@ -93,7 +93,8 @@ dkx run CASE [--out RESULT.nc]
 
 Solves one case and prints the workflow, convergence flag, true residual,
 solver route, wall time and output path, then the result summary. It writes the
-NetCDF result to `--out`, or to `[output].file` resolved beside the case file.
+NetCDF result to `--out`, or to `[output].file` resolved beside the case file,
+plus a `.png` summary beside it when `[output].plots = true`.
 Progress goes to stderr. A case with `[scan]` is refused; use `dkx scan`.
 
 ### `dkx scan`

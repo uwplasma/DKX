@@ -8,14 +8,14 @@ script runs no solve, so it regenerates the figures in seconds on any machine::
 ``sfincs_reference_limits.png``
     Left: the HSX bootstrap-current gap between released SFINCS v3 and DKX, and
     what is left of it once SFINCS's ``1d-12`` matrix-entry cutoff is set to
-    zero (docs/experiments/2026-09-13-sfincs-sparsify-threshold.md).  Right:
+    zero (2026-09-13 sfincs-sparsify-threshold study).  Right:
     the HSX-like gap deck, 633,604 unknowns, where every SFINCS route and the
     DKX Krylov route stop short of the requested tolerance on a 36 GiB host
-    (docs/experiments/2026-09-19-sfincs-on-the-gap-deck.md).
+    (2026-09-19 sfincs-on-the-gap-deck study).
 
 ``factor_reuse.png``
     Wall time of one factorization serving many solves, on the structured and
-    sparse direct routes (docs/experiments/2026-09-20-one-factorization-many-solves.md).
+    sparse direct routes (2026-09-20 one-factorization-many-solves study).
 """
 
 from __future__ import annotations

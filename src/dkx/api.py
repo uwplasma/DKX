@@ -78,7 +78,7 @@ class SolverOptions:
             carried for provenance and planning only.  To actually pin
             threads, set the ``DKX_CORES`` environment variable or the CLI
             ``--cores`` flag before ``import dkx`` (see
-            ``docs/parallelism.rst``); :meth:`solve_kwargs` deliberately
+            ``docs/numerics/compilation_and_parallelism.md``); :meth:`solve_kwargs` deliberately
             excludes this field.
         krylov_memory_budget_gb: memory (GB) the widened FGMRES basis of the
             ``restart=None`` policy may take; ``None`` reads

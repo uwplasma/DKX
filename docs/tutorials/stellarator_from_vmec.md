@@ -49,7 +49,8 @@ dkx inspect examples/output/02_vmec_stellarator/result.nc
 ```{note}
 The test equilibria under `tests/ref/` are stored compressed as `*.nc.xz`. If
 `wout_up_down_asymmetric_tokamak.nc` is missing in a fresh checkout,
-decompress it once with `xz -dk tests/ref/wout_up_down_asymmetric_tokamak.nc.xz`.
+`examples/02_vmec_stellarator/run.py` decompresses it for you on first run;
+for the CLI route decompress it once with `xz -dk tests/ref/wout_up_down_asymmetric_tokamak.nc.xz`.
 ```
 
 To use your own equilibrium, point `file` at its `wout` and choose surfaces

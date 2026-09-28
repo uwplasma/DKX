@@ -80,4 +80,4 @@ python examples/list_workflows.py --list-topics
 python examples/list_workflows.py --search "VMEC geometry"
 ```
 
-Prose documentation lives in `docs/examples.rst`.
+Prose documentation lives in `docs/examples/index.md`.

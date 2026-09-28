@@ -5,9 +5,14 @@ call ``dkx.run``, read SI moments off the ``dkx.Result``, print the certificate
 that says whether to believe them, save NetCDF, plot.  Every later rung changes
 one thing about this script and leaves the rest alone.
 
-Physics: concentric circular-cross-section tokamak, one deuterium species,
-pitch-angle-scattering collisions, three flux surfaces, no radial electric
-field.  Axisymmetric, so a single toroidal grid point resolves it exactly.
+Physics: the built-in ``tokamak`` analytic field, which is SFINCS
+``geometryScheme = 1`` at its namelist defaults -- a large-aspect-ratio
+tokamak-like field that still carries the small l=2, n=10 helical term
+(epsilon_h = 0.05067), so it is not strictly axisymmetric.  One deuterium
+species, pitch-angle-scattering collisions, three flux surfaces, no radial
+electric field.  The single toroidal grid point keeps the example fast; it
+samples the field at zeta = 0 only and is a teaching case, not a converged
+axisymmetric tokamak result.
 
 Expected runtime: ~4 s on a laptop CPU, nearly all of it JAX compilation.
 

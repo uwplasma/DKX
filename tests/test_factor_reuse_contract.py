@@ -11,7 +11,7 @@ an approximate inverse and the route checks the original residual; a solve that
 misses factorizes once and repeats. Both halves are tested, because a reuse
 policy without a bounded recovery is how a solve at one field spends thousands
 of iterations failing at another
-(``docs/experiments/2026-09-07-recycling-and-preconditioner-reuse.md``).
+(2026-09-07 recycling-and-preconditioner-reuse study).
 """
 
 from __future__ import annotations

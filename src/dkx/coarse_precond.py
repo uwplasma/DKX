@@ -29,7 +29,7 @@ Exact, reusable and iteration-for-iteration identical to the dense route where
 both fit.  Its storage claim holds only because the generators are rebuilt from
 traced leaves inside the application: closed over, their ``(Ntheta*Nzeta)``
 blocks become captured constants and the unstored bands reappear
-(docs/performance.rst).
+(docs/benchmarks/performance.md).
 
 **Checkpointed, one-shot.**  ``solvax.direct.block_thomas_checkpointed_fn``
 retains no band-sized state at all, at the cost of re-eliminating on every
@@ -277,7 +277,7 @@ def _coarse_factor_dtype() -> object:
     served by being told to set it than by having their preconditioner silently
     change precision under them.  A float32 Schur LU is exact enough to
     precondition with --- GCROT still reaches ``1e-10`` --- but it is not free in
-    iterations (docs/performance.rst), so it is opt-in via
+    iterations (docs/benchmarks/performance.md), so it is opt-in via
     ``DKX_COARSE_FACTOR_DTYPE=float32``.
     """
     name = os.environ.get(_COARSE_FACTOR_DTYPE_ENV, "").strip().lower()
@@ -329,7 +329,7 @@ def _coarse_memory_scope() -> str:
         " Estimates exclude full process RSS; convergence and runtime are not guaranteed. "
         "Use more available memory or reduce Ntheta/Nzeta or Nxi and recheck resolution. "
         "Changing factor precision requires independent residual and observable checks "
-        "(docs/experiments/2026-09-07-float32-factor-scope.md)."
+        "(2026-09-07 float32-factor-scope study)."
     )
 
 def _coarse_reusable_fallback_message(op: KineticOperator) -> str:
@@ -1161,7 +1161,7 @@ def _strict_upper_speed_coupling(op: KineticOperator, mask: jnp.ndarray):
     Fokker-Planck operator that is very nearly the whole coupling, because the
     Rosenbluth potentials make it an integral operator in speed whose strict
     lower triangle is four to five orders of magnitude smaller
-    (``docs/experiments/2026-09-07-collision-speed-structure.md``).
+    (2026-09-07 collision-speed-structure study).
 
     ``None`` when there is no dense collision operator to retain.
     """
@@ -1217,7 +1217,7 @@ def build_coarse_preconditioner(
     :func:`_coarse_subsystem_block_fn` instead --- keeping only the Schur LU
     (:func:`_coarse_factors_fit`, a third of the bands, still reusable), or, where
     even that does not fit, re-eliminating on every application through
-    ``solvax.direct.block_thomas_checkpointed_fn`` (docs/performance.rst, "Running
+    ``solvax.direct.block_thomas_checkpointed_fn`` (docs/benchmarks/performance.md, "Running
     the decks the bands do not fit").
 
     Every route uses the *same* pinned generator or its dense equivalent, because
@@ -1483,7 +1483,7 @@ def _lazy_projected_precond(
     the transposed preconditioner those are transposed coarse applications that a
     non-differentiable solve never uses: on the NCSX ``(21, 37, 61, 8)`` baseline
     about 6 s and a 6.5 GiB transient per build, root retries included
-    (``docs/experiments/2026-09-13-preconditioner-cost-anatomy.md``).
+    (2026-09-13 preconditioner-cost-anatomy study).
 
     A first call on a concrete vector builds the projection exactly as the eager
     route did. A first call inside a trace (a jitted Krylov loop) builds under

@@ -24,8 +24,8 @@ In general, you should expect:
 
 For the support matrix, see:
 
-- `docs/parity.rst`
-- `docs/fortran_examples.rst` (auto-generated audit table)
+- `docs/benchmarks/sfincs.md`
+- `docs/benchmarks/sfincs.md` (auto-generated audit table)
 
 ## Running the vendored suite
 

@@ -898,6 +898,14 @@ def _cmd_run_case(args: argparse.Namespace) -> int:
         return 2
     elapsed = time.perf_counter() - started
 
+    # `[output].plots` asks for the summary figure next to the Result.
+    plot_path = None
+    if case.output.plots:
+        try:
+            plot_path = result.plot(out_path.with_suffix(".png"))
+        except (ImportError, ValueError) as exc:
+            print(f"dkx run: plot skipped: {exc}", file=sys.stderr)
+
     console.print(
         f"{result.case_name} ({result.case_id[:12]})", markup=False, highlight=False
     )
@@ -913,6 +921,8 @@ def _cmd_run_case(args: argparse.Namespace) -> int:
     table.add_row("solver route", str(result.metadata.get("solver_route", "unknown")))
     table.add_row("wall time", f"{elapsed:.2f} s")
     table.add_row("result", str(out_path))
+    if plot_path is not None:
+        table.add_row("plot", str(plot_path))
     console.print(table)
 
     if not args.quiet:
@@ -1985,7 +1995,7 @@ def _add_compat_parsers(sub) -> None:
     p_solve.add_argument(
         "--solve-method",
         default="auto",
-        help="Advanced solver override. Default 'auto' is recommended for normal runs; see docs/usage.rst.",
+        help="Advanced solver override. Default 'auto' is recommended for normal runs; see docs/numerics/solver_routes.md.",
     )
     p_solve.add_argument(
         "--which-rhs",
@@ -2139,7 +2149,7 @@ def _add_compat_parsers(sub) -> None:
     p_out.add_argument(
         "--solve-method",
         default="auto",
-        help="Advanced RHSMode=1 solver override. Default 'auto' is recommended for normal runs; see docs/usage.rst.",
+        help="Advanced RHSMode=1 solver override. Default 'auto' is recommended for normal runs; see docs/numerics/solver_routes.md.",
     )
     _add_equilibrium_override_args(p_out)
     p_out.set_defaults(func=_cmd_write_output)
@@ -2166,7 +2176,7 @@ def _add_compat_parsers(sub) -> None:
     p_tm.add_argument(
         "--solve-method",
         default="auto",
-        help="Advanced solver-route override (dkx.solve). Default 'auto' is recommended; see docs/usage.rst.",
+        help="Advanced solver-route override (dkx.solve). Default 'auto' is recommended; see docs/numerics/solver_routes.md.",
     )
     _add_equilibrium_override_args(p_tm)
     p_tm.set_defaults(func=_cmd_transport_matrix_v3)
@@ -2398,7 +2408,11 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument(
         "--out",
         default=None,
-        help="Write the NetCDF Result here. Omitted, nothing is saved.",
+        help=(
+            "Write the NetCDF Result here. Omitted, the case's [output].file is used "
+            "(relative to the case file). With [output].plots = true a .png summary "
+            "is written beside it."
+        ),
     )
     p_run.set_defaults(func=_cmd_run_case)
 

@@ -2,7 +2,7 @@
 
 SFINCS inserts every entry through ``sparsify.F90``, skipping ``|value| <= 1d-12``.
 With hot electrons the ion->electron field-particle block falls below that level
-(docs/experiments/2026-09-13-sfincs-sparsify-threshold.md), so the switch exists
+(2026-09-13 sfincs-sparsify-threshold study), so the switch exists
 for parity with such references and is off by default.
 """
 

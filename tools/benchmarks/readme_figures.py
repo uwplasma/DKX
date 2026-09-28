@@ -2,12 +2,12 @@
 
 Every number in this file is a recorded measurement; nothing is estimated.
 The two figures land in ``docs/_static/figures/readme/`` and are referenced by
-``README.md`` and ``docs/performance.rst``.
+``README.md`` and ``docs/benchmarks/performance.md``.
 
 Provenance
 ----------
 Runtime/memory bars (``tier1_hsx_runtime_memory.png``):
-  ``docs/dev/failure_analysis.md`` sections "Phase 5.1 Fortran strong-scaling
+  the pre-rebuild failure-analysis log (git history), sections "Phase 5.1 Fortran strong-scaling
   baseline" and "Phase-4 head-to-head" — ``HSX_PASCollisions_DKESTrajectories``
   at Ntheta=25, Nzeta=51, Nxi=100, Nx=5 (744,610 unknowns), RHSMode=1.
   - dkx truncated structured direct Legendre elimination (canonical stack), warm
@@ -29,7 +29,7 @@ Parity chart (``canonical_parity.png``):
     depending on case/conditioning (``tests/test_run_transport.py``; the
     scheme-1 monoenergetic [0,1] element is pinned to upstream's expected
     value because that element is tolerance-unstable in the Fortran build
-    itself, see ``docs/dev/failure_analysis.md``).
+    itself, see the pre-rebuild failure-analysis log in git history).
 
 Run:
   python tools/benchmarks/readme_figures.py

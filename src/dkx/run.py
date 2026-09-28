@@ -1008,8 +1008,8 @@ def run(
     keep the run in memory.
 
     ``method`` selects the linear solve: ``"auto"`` (default) picks a route
-    from the operator's structure, ``"direct"`` forces the structured direct
-    factorization, ``"iterative"`` forces the preconditioned Krylov route.
+    from the operator's structure, ``"direct"`` forces the sparse direct
+    (host SuperLU) factorization of the assembled matrix, ``"iterative"`` forces the preconditioned Krylov route.
 
     Args:
         case: native :class:`dkx.Case`, deck path, an in-memory

@@ -7,7 +7,7 @@ choose a scan type. The actual work is done in ``sfincsScan_<type>``, which
 creates subdirectories, edits ``input.namelist`` for each run, and calls
 ``dkx`` through the sibling ``dkx_driver.py`` helper.
 
-To customize a scan, edit the ``!ss`` lines in the namelist (see docs/utils.rst).
+To customize a scan, edit the ``!ss`` lines in the namelist (see docs/user_guide/scans_and_parallelism.md).
 Use ``--yes`` to skip the interactive "launch runs?" prompt.
 """
 

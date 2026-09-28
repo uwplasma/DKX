@@ -48,12 +48,22 @@ def test_run_reports_the_solver_route_and_residual(tmp_path, capsys) -> None:
     assert "block_tridiagonal" in captured
 
 
-def test_run_without_out_does_not_write_anything(tmp_path, capsys) -> None:
-    """Omitting --out runs the case and saves nothing, rather than guessing."""
-    before = set(tmp_path.iterdir())
-    code = cli.main(["run", str(ANALYTIC_CASE), "--quiet"])
+def test_run_without_out_writes_the_case_output_file(tmp_path, capsys) -> None:
+    """Omitting --out saves to the case's [output].file, beside the case file."""
+    case = tmp_path / "case.toml"
+    case.write_text(ANALYTIC_CASE.read_text())
+    code = cli.main(["run", str(case), "--quiet"])
     assert code == 0
-    assert set(tmp_path.iterdir()) == before
+    assert (tmp_path / "analytic_tokamak_profile.nc").is_file()
+    assert (tmp_path / "analytic_tokamak_profile.png").is_file(), "[output].plots = true writes the figure"
+
+
+def test_run_skips_the_plot_when_output_plots_is_false(tmp_path, capsys) -> None:
+    case = tmp_path / "case.toml"
+    case.write_text(ANALYTIC_CASE.read_text().replace("plots = true", "plots = false"))
+    assert cli.main(["run", str(case), "--out", str(tmp_path / "r.nc"), "--quiet"]) == 0
+    assert (tmp_path / "r.nc").is_file()
+    assert not (tmp_path / "r.png").exists()
 
 
 def test_run_refuses_a_missing_case(tmp_path, capsys) -> None:

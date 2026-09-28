@@ -651,7 +651,7 @@ def test_a_ladder_faster_than_max_order_reports_its_last_difference() -> None:
 def test_the_ncsx_pitch_ladder_gets_the_last_difference_bar() -> None:
     """Heat flux relative to ``Nxi = 61`` on the NCSX rungs ``81, 101, 121``.
 
-    From ``docs/experiments/2026-09-14-ncsx-refinement-ladder.md``: ``R = 0.048``
+    From 2026-09-14 ncsx-refinement-ladder study: ``R = 0.048``
     and an apparent order of 17, which the power-law check alone refused.
     """
     ladder = (1.0 - 7.33e-3, 1.0 - 7.75e-3, 1.0 - 7.77e-3)
