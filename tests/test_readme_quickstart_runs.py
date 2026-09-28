@@ -62,28 +62,23 @@ def test_the_quickstart_uses_the_entry_point_we_document():
 # The documentation landing page
 # ---------------------------------------------------------------------------
 
-INDEX = REPO_ROOT / "docs" / "index.rst"
+INDEX = REPO_ROOT / "docs" / "index.md"
 
 
 def _index_snippet() -> str:
-    """The first python code-block on the landing page."""
+    """The first python code block on the landing page."""
     text = INDEX.read_text(encoding="utf-8")
-    match = re.search(r"\.\. code-block:: python\n\n((?:   .*\n|\n)+)", text)
+    match = re.search(r"```python\n(.*?)```", text, re.S)
     if match is None:
-        pytest.fail("no python code-block found on the documentation landing page")
-    return "\n".join(
-        line[3:] if line.startswith("   ") else line
-        for line in match.group(1).split("\n")
-    )
+        pytest.fail("no python code block found on the documentation landing page")
+    return match.group(1)
 
 
 def test_the_landing_page_quickstart_runs(tmp_path):
     """The docs landing page must execute, for the same reason the README does.
 
-    It was SFINCS-namelist-first until 2026-09-01 and showed ``run_profile``
-    against an ``input.namelist`` the reader did not have. The replacement is
-    self-contained on purpose -- it names no equilibrium file -- so there is no
-    excuse for it not to run in CI.
+    It is self-contained on purpose -- it names no equilibrium file -- so it
+    runs in CI exactly as a reader pastes it.
     """
     script = tmp_path / "landing.py"
     script.write_text(_index_snippet(), encoding="utf-8")
@@ -99,10 +94,9 @@ def test_the_landing_page_quickstart_runs(tmp_path):
 
 
 def test_the_landing_page_does_not_lead_with_a_namelist():
-    """plan.md Phase F: no stale SFINCS-first quickstart.
+    """The first thing a reader sees is the native case API.
 
-    The compatibility path is still documented further down; what this pins is
-    that the *first* thing a reader sees is the native case API.
+    The SFINCS compatibility path is documented in the user guide.
     """
     snippet = _index_snippet()
     assert "input.namelist" not in snippet

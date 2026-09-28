@@ -47,7 +47,7 @@ from dkx.paths import repository_root
 #: sent `git ls-files` into a directory that is not a repository at all.
 REPO_ROOT = repository_root() or Path.cwd()
 DEFAULT_VALIDATION_MANIFEST = REPO_ROOT / "tools" / "publication_figures" / "validation_manifest.json"
-DEFAULT_VALIDATION_DOCS = (REPO_ROOT / "docs" / "validation_matrix.rst",)
+DEFAULT_VALIDATION_DOCS = (REPO_ROOT / "docs" / "benchmarks" / "validation_matrix.md",)
 DEFAULT_RESEARCH_MANIFEST = REPO_ROOT / "docs" / "_static" / "research_lane_completion_2026_05_12.json"
 DEFAULT_SIZE_THRESHOLD_MIB = 2.0
 RASTER_EXTENSIONS = {".png", ".jpg", ".jpeg"}

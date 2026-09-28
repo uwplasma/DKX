@@ -21,7 +21,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES_ROOT = REPO_ROOT / "examples"
-DOCS_EXAMPLES = REPO_ROOT / "docs" / "examples.rst"
+DOCS_EXAMPLES = REPO_ROOT / "docs" / "examples" / "index.md"
 WORKFLOW_CATALOG = EXAMPLES_ROOT / "workflow_catalog.json"
 
 # The canonical example ladder (plan.md section 9.1), in order.  Each rung is

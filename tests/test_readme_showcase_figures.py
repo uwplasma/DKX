@@ -1,9 +1,10 @@
-"""The README showcase numbers, their figures and their records agree.
+"""The README showcase numbers, their figures and their documentation agree.
 
 ``tools/publication_figures/generate_readme_showcase.py`` draws two README
-figures from numbers copied out of three experiment records.  The README
-quotes the same numbers in prose.  This pins all three places together, and
-regenerates both figures to check they stay within the README figure budget.
+figures from measured numbers that ``docs/benchmarks/sfincs.md`` records with
+their provenance.  The README quotes the same numbers in prose.  This pins all
+three places together, and regenerates both figures to check they stay within
+the README figure budget.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 GENERATOR = REPO_ROOT / "tools" / "publication_figures" / "generate_readme_showcase.py"
 README = REPO_ROOT / "README.md"
-RECORDS = REPO_ROOT / "docs" / "experiments"
+RECORD_PAGE = REPO_ROOT / "docs" / "benchmarks" / "sfincs.md"
 FIGURE_BUDGET_BYTES = 150 * 1024
 
 
@@ -29,18 +30,22 @@ def _generator():
 
 
 @pytest.mark.parametrize(
-    ("record", "tokens"),
+    "tokens",
     [
-        ("2026-09-13-sfincs-sparsify-threshold.md", ("12–19%", "6.6e-11", "1.4e-11", "7e-11")),
-        ("2026-09-19-sfincs-on-the-gap-deck.md", ("22.5 min", "0.9955", "30.6 min", "2.5e-5", "20,000")),
-        ("2026-09-20-assembly-products-and-the-divisibility-rule.md", ("4,800",)),
-        ("2026-09-20-one-factorization-many-solves.md", ("0.9593", "0.2822", "1.1931", "0.2779", "0.15 of")),
+        # SFINCS matrix sparsify threshold on HSX
+        ("12–19%", "6.6e-11", "1.4e-11", "7e-11"),
+        # SFINCS on the HSX-like gap deck
+        ("22.5 min", "0.9955", "30.6 min", "2.5e-5", "20,000"),
+        # exact operator assembly
+        ("4,800",),
+        # one factorization, many solves
+        ("0.9593", "0.2822", "1.1931", "0.2779", "0.15 of"),
     ],
 )
-def test_every_showcase_number_is_in_its_record(record: str, tokens: tuple[str, ...]) -> None:
-    text = (RECORDS / record).read_text(encoding="utf-8")
+def test_every_showcase_number_is_in_the_benchmark_page(tokens: tuple[str, ...]) -> None:
+    text = RECORD_PAGE.read_text(encoding="utf-8")
     for token in tokens:
-        assert token in text, (record, token)
+        assert token in text, token
 
 
 def test_the_readme_quotes_what_the_generator_plots() -> None:

@@ -47,7 +47,7 @@ def _sources() -> list[Path]:
         path
         for folder in ("dkx", "docs")
         for path in (ROOT / folder).rglob("*")
-        if path.suffix in {".py", ".rst"} and path.is_file()
+        if path.suffix in {".py", ".rst", ".md"} and path.is_file()
     ]
 
 
@@ -74,7 +74,7 @@ def test_no_dkx_text_calls_drop_l_coupling_the_preconditioner_xi_knob():
 
 
 def test_the_docs_say_preconditioner_xi_drops_the_off_by_two_terms():
-    text = (ROOT / "docs" / "inputs.rst").read_text()
+    text = (ROOT / "docs" / "user_guide" / "sfincs_namelist.md").read_text()
     assert "L±2" in text and "populateMatrix.F90" in text
     assert "preconditioner_xi=1`` drops the **L±2** terms" in text
 
