@@ -165,6 +165,18 @@ def test_a_boozer_deck_converts_and_reproduces_its_fluxes(tmp_path: Path) -> Non
     The deck is the checked-in ``geometryScheme=12`` fixture with its two
     blockers removed, which is also a compact statement of what stands between a
     real deck and conversion.
+
+    The checked-in ``.bc`` is axisymmetric (``n0b = 0``: only ``(m, n) = (1, 0)``
+    modes), and on it this single-species deck's fluxes vanish: both routes gave
+    ~1e-20 in ``psiHat`` units, round-off, so a 1e-8 comparison held only when
+    the two routes happened to do identical arithmetic and failed intermittently
+    on x86 (0.90, 0.84). The copy used here adds one helical ``(1, 1)`` mode to
+    ``B`` on both surfaces (cosine and sine parts, so the file stays
+    non-stellarator-symmetric), which makes the fluxes resolved: -4.5e-7
+    (particle) and -5.5e-7 (heat) in ``psiHat`` units, 1.0e20 m^-2 s^-1 and
+    4.0e4 W m^-2 in SI. The routes then agree to 6e-15 and 7e-14, so
+    ``ROUND_TRIP_RTOL`` keeps its meaning; the magnitude floor below is what
+    stops this test from ever comparing round-off again.
     """
     from dkx.execution import run_case  # noqa: PLC0415
     from dkx.magnetic_geometry import read_native_boozer  # noqa: PLC0415
@@ -182,7 +194,15 @@ def test_a_boozer_deck_converts_and_reproduces_its_fluxes(tmp_path: Path) -> Non
     # wheel deliberately, so the test passed from a source tree and failed in
     # CI. Copying it makes the test measure conversion rather than path search.
     equilibrium = tmp_path / "nonStelSym_tiny_geometryScheme12.bc"
-    equilibrium.write_bytes((REF / "nonStelSym_tiny_geometryScheme12.bc").read_bytes())
+    bc = (REF / "nonStelSym_tiny_geometryScheme12.bc").read_text()
+    bc = bc.replace("   2    0    2    1", "   2    1    2    1", 1)  # n0b: 0 -> 1
+    for axisymmetric, helical in (
+        ("    1    0  0.1  0  0  0.1  0  0.2  0.05  0\n", "    1    1  0  0  0  0  0  0  0.1  0.02\n"),
+        ("    1    0  0.15  0  0  0.15  0  0.25  0.075  0\n", "    1    1  0  0  0  0  0  0  0.15  0.03\n"),
+    ):
+        assert bc.count(axisymmetric) == 1, axisymmetric
+        bc = bc.replace(axisymmetric, axisymmetric + helical)
+    equilibrium.write_text(bc, encoding="utf-8")
 
     boozer = read_native_boozer(equilibrium)
     radial = RadialCoordinates(
@@ -202,13 +222,14 @@ def test_a_boozer_deck_converts_and_reproduces_its_fluxes(tmp_path: Path) -> Non
     deck_run = run_profile(deck, emit=None, tol=1.0e-11)
     factor = radial.d_dr_hat_to_d_dpsi_hat
     result = run_case(Case.from_file(written), emit=_quiet)
-    assert (
-        _relative_difference(
-            np.asarray(deck_run.moments["particleFlux_vm_psiHat"]) * factor * PARTICLE_FLUX,
-            result["particle_flux_m2_s"][index],
-        )
-        < ROUND_TRIP_RTOL
-    )
+    for moment, output, unit in (
+        ("particleFlux_vm_psiHat", "particle_flux_m2_s", PARTICLE_FLUX),
+        ("heatFlux_vm_psiHat", "heat_flux_W_m2", HEAT_FLUX),
+    ):
+        normalized = np.asarray(deck_run.moments[moment])
+        # Resolved, not round-off: measured 4.5e-7 and 5.5e-7 in magnitude.
+        assert np.all(np.abs(normalized) > 1.0e-8), (moment, normalized)
+        assert _relative_difference(normalized * factor * unit, result[output][index]) < ROUND_TRIP_RTOL
 
 
 @pytest.mark.xfail(
