@@ -1875,7 +1875,7 @@ def test_solve_device_thresholds_read_env(monkeypatch: pytest.MonkeyPatch) -> No
     )
 
     # Auto-routing is OFF by default: the same-host measurements (see
-    # docs/performance.rst) found the GPU faster at every practical size, so
+    # docs/benchmarks/performance.md) found the GPU faster at every practical size, so
     # a nonzero default is unsupported by data.  Users opt in via the envs.
     assert _SOLVE_CPU_MAX_TIER1_DEFAULT == 0
     assert _SOLVE_CPU_MAX_TIER2_DEFAULT == 0

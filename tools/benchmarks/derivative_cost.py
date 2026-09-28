@@ -1,6 +1,6 @@
 """Eager against compiled primal and gradient of a DKX observable, interleaved.
 
-The harness behind ``docs/experiments/2026-09-22-derivative-cost.md``. The
+The harness behind 2026-09-22 derivative-cost study. The
 objective is ``FSABjHat`` of a pitch-angle-scattering tokamak-like deck, as a
 function of multiplicative scalings of ``THat``, ``nHat`` and ``dTHat/dpsiHat``
 threaded through the operator. Every arm is called once to compile, then all

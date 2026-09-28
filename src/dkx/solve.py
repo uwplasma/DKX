@@ -175,7 +175,7 @@ _TIER1_BUDGET_ENV = "DKX_TIER1_MEMORY_BUDGET_GB"
 # one: on the HSX-like ``Nx`` ladder, restart 200 needs 2,788 iterations at
 # ``Nx = 16`` where 1,000 needs 357 and 2,000 gives the same 357 at a higher
 # cost per step, because SOLVAX orthogonalizes against the whole padded basis
-# (docs/experiments/2026-09-23-restart-and-direct-reach.md).  The basis costs
+# (2026-09-23 restart-and-direct-reach study).  The basis costs
 # ``2 * restart * total_size * itemsize`` bytes: flexible GMRES stores both the
 # Arnoldi basis ``V`` and the preconditioned basis ``Z``.
 _AUTO_RESTART_PROBE = 30
@@ -208,7 +208,7 @@ _TIER1_KEEP_LOWEST_DEFAULT = 3
 # host, ``device="auto"`` runs systems at or below these sizes on the host CPU
 # instead.  Both thresholds default to 0 — auto-routing OFF — because the
 # same-host measurements do not support a nonzero default (36-core Pop!_OS box
-# with an RTX A4000, 2026-07-17, docs/performance.rst "Same-host CPU/GPU
+# with an RTX A4000, 2026-07-17, docs/benchmarks/performance.md "Same-host CPU/GPU
 # crossover"): the GPU won every structured direct warm solve measured down to
 # 6.5k DOFs (2.7x-39x) and every preconditioned recycled Krylov warm solve down
 # to 2.8k DOFs (1.5x-2.7x).  The one CPU-wins case — the small unpreconditioned
@@ -1388,11 +1388,11 @@ def _escalate_after_tier2_stall(
     # When the stall comes from the Fokker-Planck speed coupling that
     # ``preconditioner_x = 1`` drops, none of them can fix it: on NCSX that
     # coupling is what makes GCROT iterations grow with Ntheta
-    # (docs/experiments/2026-09-14-ntheta-iteration-growth.md).  Retaining its
+    # (2026-09-14 ntheta-iteration-growth study).  Retaining its
     # upper triangle changes the operator being inverted and cuts iterations
     # 2.3-4.1x there, and it reuses the factors the coarse route already built,
     # so it is both the matched remedy and the cheapest rung to try
-    # (docs/experiments/2026-09-18-speed-triangle-back-substitution.md).  It is
+    # (2026-09-18 speed-triangle-back-substitution study).  It is
     # skipped where there is no dense collision operator to retain, such as
     # pitch-angle scattering, since there it repeats the stalled solve.
     #
@@ -1438,7 +1438,7 @@ def _escalate_after_tier2_stall(
     # preconditioner is adequate but the cap was simply too low for this Er.
     # Under the restart=None policy the budget is spent at the wide restart:
     # the measured stalls of this route are restart stagnation
-    # (docs/experiments/2026-09-23-restart-and-direct-reach.md), which more
+    # (2026-09-23 restart-and-direct-reach study), which more
     # short cycles do not cure.
     widened = max(max_restarts * 4, max_restarts + 1)
     rung_restart = restart
@@ -3378,7 +3378,7 @@ def solve(
                 factorization is not.  It buys that affordability at the cost
                 of preconditioner quality — on the measured NCSX
                 full-Fokker-Planck ladder it does *not* reach the Krylov
-                tolerance, and ``docs/performance.rst`` records both the table
+                tolerance, and ``docs/benchmarks/performance.md`` records both the table
                 and the diagnosis — so it stays opt-in.
             ``"sparse"``
                 the same simplified operator, inverted *exactly* but in a
@@ -3483,7 +3483,7 @@ def solve(
             ``DKX_SOLVE_CPU_MAX_SIZE_TIER1`` / ``_TIER2`` thresholds
             to the host CPU on accelerator-default hosts — but both
             thresholds default to 0 (no routing), because the same-host
-            measurements in docs/performance.rst found the GPU faster at
+            measurements in docs/benchmarks/performance.md found the GPU faster at
             every practical size; the knobs exist for hosts where that
             balance differs.  ``"default"`` disables all movement.  Under
             ``jit``/``grad`` tracing the knob is inert (arrays cannot move
@@ -3510,7 +3510,7 @@ def solve(
             factorizes once and repeats, at a cost of one factorization and a
             few applies.  Stale factors have been measured to cost a Krylov
             solve 6,000 iterations before it gave up
-            (``docs/experiments/2026-09-07-recycling-and-preconditioner-reuse.md``);
+            (2026-09-07 recycling-and-preconditioner-reuse study);
             this route cannot, because it never iterates.  Reuse across
             operators is a host decision --- nothing here refreshes on its own,
             and no default changes.

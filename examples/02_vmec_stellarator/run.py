@@ -19,6 +19,8 @@ Equivalent CLI:
 """
 
 # 1. Imports
+import lzma
+import shutil
 from pathlib import Path
 
 import numpy as np
@@ -63,6 +65,13 @@ ELECTRIC_FIELD = {"mode": "prescribed", "value_kV_m": 0.0}
 RESOLUTION = {"theta": 9, "zeta": 9, "pitch": 8, "speed": 4}
 SOLVER = {"method": "auto", "relative_tolerance": 1.0e-8, "memory_fraction": 0.75, "reuse": "auto"}
 # end of parameters
+
+# The shipped equilibrium is stored as ``*.nc.xz``; decompress it once, beside
+# the archive, so the case (and case.toml) can name the plain ``.nc`` file.
+_wout = (HERE / GEOMETRY["file"]).resolve()
+if not _wout.exists() and _wout.with_name(_wout.name + ".xz").exists():
+    with lzma.open(_wout.with_name(_wout.name + ".xz")) as src, open(_wout, "wb") as dst:
+        shutil.copyfileobj(src, dst)
 
 case = dkx.Case.from_mapping(
     {

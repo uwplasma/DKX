@@ -30,7 +30,7 @@ ambipolar ``E_r`` per surface come from the committed benchmark record
 so panel (c) is the bootstrap-current output of exactly that validated setup.
 The SI conversion ``<j.B> = FSABjHat * vBar * nBar * e`` (kA T m^-2 with
 ``vBar = 437695 m/s``, ``nBar = 1e20 m^-3``) is the one documented in
-``docs/examples.rst``.  The local ``j_par`` of panel (b) uses the same
+``docs/examples/index.md``.  The local ``j_par`` of panel (b) uses the same
 ``vBar * nBar * e`` normalization without the extra ``B`` weighting, so it is
 in ``kA m^-2``.
 
@@ -78,7 +78,7 @@ QUANTIZE_COLORS = 64
 EQUILIBRIUM = "w7x_standardConfig.bc"  # geometryScheme = 11 Boozer spectrum
 SOLVER = "block_tridiagonal"  # structured direct block-Thomas solve
 N_PERIODS = 5  # W7-X field periods
-# SI conversion, documented in docs/examples.rst: <j.B> = FSABjHat * vBar *
+# SI conversion, documented in docs/examples/index.md: <j.B> = FSABjHat * vBar *
 # nBar * e with vBar = 437695 m/s (TBar = 1 keV, proton mBar), nBar = 1e20
 # m^-3.  In kA T m^-2 (bootstrap) or kA m^-2 (local jHat, no B weighting):
 JBOOT_KA_PER_HAT = 437695.0 * 1e20 * 1.602176634e-19 / 1e3

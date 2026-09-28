@@ -182,7 +182,7 @@ def test_the_manifest_prose_names_the_same_device_the_data_does() -> None:
     """The manifest's English must agree with the computed inverse-nu gate.
 
     Regression. The suite already recomputed the gate from the raw scans and
-    pinned LHD passing and W7-X not, and ``docs/paper_figures.rst`` said so --
+    pinned LHD passing and W7-X not, and the former paper-figures page said so --
     but the release manifest's claim strings had the two devices exactly
     reversed, and had for as long as they existed. Nothing compared the prose
     to the numbers, so a release artifact asserted the opposite of its own

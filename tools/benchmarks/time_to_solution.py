@@ -9,7 +9,7 @@ factorization plus a handful of Krylov applications, while the dkx
 auto route solves the same system directly; internal phase timers are not
 comparable one-to-one.
 
-This is the harness behind the measured table in ``docs/performance.rst``.
+This is the harness behind the measured table in ``docs/benchmarks/performance.md``.
 The community convention for kinetic-solver comparisons is time-to-solution
 tables plus throughput (coefficients/second for database scans — see
 ``tools/benchmarks/batched_scan.py`` for that axis), not classic speedup

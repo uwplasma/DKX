@@ -6,7 +6,7 @@ regularization, same border elimination, and therefore the same linear map up
 to factorization round-off.  These tests pin that equivalence, and the one
 structural fact the module is for — that the angular blocks keep the
 ``createGrids.F90`` stencils instead of being filled in by eliminating ``L``
-first.  Timings live in ``docs/performance.rst``.
+first.  Timings live in ``docs/benchmarks/performance.md``.
 """
 
 from __future__ import annotations

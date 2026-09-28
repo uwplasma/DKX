@@ -40,7 +40,9 @@ The runtimes are the ones each script states in its docstring.
 
 ### 01 Tokamak profile
 
-`examples/01_tokamak_profile`. A concentric circular tokamak, one deuterium
+`examples/01_tokamak_profile`. The built-in `tokamak` field (SFINCS scheme 1 at its
+defaults, which keeps a small $l=2$, $n=10$ helical term, so not strictly
+axisymmetric; see {doc}`../physics/geometry`), one deuterium
 species, pitch-angle scattering, three flux surfaces, no radial electric field.
 The script builds the case in Python, checks that its case ID equals the one of
 `case.toml` beside it, runs it, prints particle flux, heat flux and

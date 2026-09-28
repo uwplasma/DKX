@@ -6,7 +6,7 @@ Fokker-Planck operator is an integral operator in speed, and so upper triangular
 in this basis, retaining its upper triangle (``preconditioner_x = 2``) is very
 nearly the full coupling. These tests pin that the option is correct and off by
 default; whether it is *worth* enabling is a measurement, recorded in
-``docs/experiments/``.
+``docs/benchmarks/performance.md``.
 """
 
 from __future__ import annotations
@@ -153,7 +153,7 @@ def test_the_cross_species_block_is_left_out_deliberately(tmp_path: Path) -> Non
     option's 5,799 on that deck at ``(Nxi, Nx) = (40, 16)``, because the exact
     inverse of ``D + U`` is ill-conditioned once ``U`` exceeds ``D`` by four to
     five orders of magnitude
-    (``docs/experiments/2026-09-19-collision-coupling-is-cross-species.md``).
+    (2026-09-19 collision-coupling-is-cross-species study).
     A closer ``M`` is not a better preconditioner here, so the block is left
     out on purpose rather than by oversight.
     """

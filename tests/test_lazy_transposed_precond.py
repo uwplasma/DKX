@@ -3,7 +3,7 @@
 ``build_coarse_preconditioner`` returns ``(precond, precond_t)``. Building the
 bordered projection applies the coarse inverse to every border column, and for
 ``precond_t`` a non-differentiable solve never needs that work
-(docs/experiments/2026-09-13-preconditioner-cost-anatomy.md).
+(2026-09-13 preconditioner-cost-anatomy study).
 """
 
 from __future__ import annotations

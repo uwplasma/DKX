@@ -178,7 +178,7 @@ def configure(*, jax_x64: bool | None = None) -> None:
     #                        already set: the measured optimum is 4-8 threads on
     #                        8-36-core hosts, and a full-width threadpool on a
     #                        many-core box is several times slower than 8 threads
-    #                        (docs/performance.rst).
+    #                        (docs/benchmarks/performance.md).
     #
     # In every case the host BLAS pools default to one thread; see
     # _default_single_thread_blas.  Forcing multiple host *devices* is a separate,

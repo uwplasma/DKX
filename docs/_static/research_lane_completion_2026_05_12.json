@@ -11,10 +11,6 @@
      "path": "docs/benchmarks/validation_matrix.md"
     },
     {
-     "claim": "The core-slim inventory records QI/device-QI artifacts as extract-research material outside stable defaults.",
-     "path": "tests/fixtures/core_slim_inventory.json"
-    },
-    {
      "claim": "The final plan requires QI/device-QI source, tests, docs, and artifacts to pass strict release gates before returning to stable.",
      "path": "docs/design_decisions.md"
     }

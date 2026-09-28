@@ -2558,8 +2558,7 @@ def kinetic_operator_build_from_namelist(nml: Any) -> KineticOperatorBuild:
     # default.  SFINCS v3 inserts every matrix entry through sparsify.F90, which
     # skips |value| <= 1d-12; on hot-electron decks that deletes part of the
     # ion->electron field-particle collision block, and the electron flow and
-    # bootstrap current follow it (docs/experiments/2026-09-13-sfincs-sparsify-
-    # threshold.md).  Applied to the dense Fokker-Planck matrix, where the
+    # bootstrap current follow it (2026-09-13 sfincs-sparsify-threshold study).  Applied to the dense Fokker-Planck matrix, where the
     # difference has been measured; physics results keep every entry.
     sfincs_threshold = _get_float(other, "SfincsMatrixThreshold", 0.0)
     if not math.isfinite(sfincs_threshold) or sfincs_threshold < 0.0:

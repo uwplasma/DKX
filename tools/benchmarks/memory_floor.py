@@ -59,7 +59,7 @@ DECK_STAGES: dict[str, str] = {
 
 #: XLA allocator knobs, against the fullest stage.  None of them moves the floor
 #: -- run them repeatedly rather than once, because a single sample of each is
-#: how a 50 MB difference gets mistaken for a lever it is not (docs/performance.rst).
+#: how a 50 MB difference gets mistaken for a lever it is not (docs/benchmarks/performance.md).
 ALLOCATOR_VARIANTS: dict[str, dict[str, str]] = {
     "default": {},
     "XLA_PYTHON_CLIENT_PREALLOCATE=false": {"XLA_PYTHON_CLIENT_PREALLOCATE": "false"},

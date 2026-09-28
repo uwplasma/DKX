@@ -12,8 +12,8 @@ solves of HSX-family decks:
   the inversion past it.
 
 The measured values are transcribed from the GPU-campaign JSON records (the
-memory ladder in ``docs/performance.rst`` and the CPU thread-scaling prose in
-``docs/parallelism.rst``); this generator embeds them so the figure is
+memory ladder in ``docs/benchmarks/performance.md`` and the CPU thread-scaling prose in
+``docs/numerics/compilation_and_parallelism.md``); this generator embeds them so the figure is
 reproducible from the repository. Regenerate with::
 
     python tools/benchmarks/gpu_anatomy_figure.py

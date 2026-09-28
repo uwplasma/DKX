@@ -64,15 +64,17 @@ Read it top to bottom:
   the same order, and radial gradients are taken across them, so at least two
   surfaces are needed. For `format = "analytic"`, `file` names a built-in
   configuration (`tokamak`, `lhd_standard`, `lhd_inward`, `w7x_standard`), not
-  a path.
+  a path. `tokamak` is SFINCS scheme 1 at its defaults, which keeps a small
+  helical term, so it is not strictly axisymmetric (see the geometry page).
 - `species` are in SI and keV. Add a second `[[species]]` table for a
   multi-species run.
 - `physics.collisions = "pitch_angle_scattering"` is fast but has no momentum
   restoring term. Use `"linearized_fokker_planck"` for anything whose headline
   number is a current ({doc}`../physics/collisions`).
 - `resolution` sets the grid in poloidal angle, toroidal angle, Legendre pitch
-  modes and speed. `zeta = 1` is exact here only because the field is
-  axisymmetric.
+  modes and speed. `zeta = 1` keeps this teaching case fast; it samples
+  the small helical term at one toroidal angle only, so raise `zeta` before
+  quoting numbers.
 - `solver.method = "auto"` lets DKX pick the route from the operator's
   structure ({doc}`../numerics/solver_routes`).
 
