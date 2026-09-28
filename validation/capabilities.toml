@@ -15,7 +15,7 @@ id = "native_case_result"
 name = "Native Case execution and Result/NetCDF contract"
 status = "validated_limited"
 owners = ["src/dkx/config.py", "src/dkx/execution.py", "src/dkx/result.py", "src/dkx/run.py", "src/dkx/workflows/ambipolar_native.py"]
-evidence = ["tests/test_validation.py", "tests/test_case_config.py", "tests/test_magnetic_geometry.py", "tests/test_native_execution_result.py", "tests/test_native_ambipolar.py", "validation/native_physical_flux_sfincs_v1.json", "validation/w7x_fixed_field_resolution_referee_v1.json", "validation/w7x_admitted_grid_uniform_probe_no_go_v1.json", "validation/w7x_seeded_bracket_discovery_v1.json", "validation/w7x_admitted_grid_seeded_envelope_v1.json", "validation/inputs/w7x_standard_native_ambipolar_discovery_pair.toml", "validation/inputs/w7x_standard_native_ambipolar_seeded_replay.toml", "validation/inputs/w7x_standard_native_ambipolar_admitted_seeded_envelopes.toml", "validation/inputs/w7x_standard_native_ambipolar_admitted_seeded_extension.toml", "validation/inputs/w7x_standard_native_ambipolar_admitted_seeded_final.toml", "examples/cases/analytic_tokamak_profile.toml", "examples/cases/analytic_ambipolar_profile.toml", "examples/cases/vmec_profile.toml", "examples/cases/boozer_profile.toml"]
+evidence = ["tests/test_validation.py", "tests/test_case_config.py", "tests/test_magnetic_geometry.py", "tests/test_native_execution_result.py", "tests/test_native_ambipolar.py", "validation/native_physical_flux_sfincs_v1.json", "validation/w7x_fixed_field_resolution_referee_v1.json", "validation/w7x_admitted_grid_uniform_probe_no_go_v1.json", "validation/w7x_seeded_bracket_discovery_v1.json", "validation/w7x_admitted_grid_seeded_envelope_v1.json", "validation/inputs/w7x_standard_native_ambipolar_discovery_pair.toml", "validation/inputs/w7x_standard_native_ambipolar_seeded_replay.toml", "validation/inputs/w7x_standard_native_ambipolar_admitted_seeded_envelopes.toml", "validation/inputs/w7x_standard_native_ambipolar_admitted_seeded_extension.toml", "validation/inputs/w7x_standard_native_ambipolar_admitted_seeded_final.toml", "examples/01_tokamak_profile/case.toml", "examples/05_ambipolar_profile/case.toml", "examples/02_vmec_stellarator/case.toml", "examples/03_boozer_stellarator/case.toml"]
 gaps = ["R2: certified reusable prepared state and atomic scan resume", "R5: native monoenergetic/transport matrix, Phi1/full drifts and single-surface workflows", "R4: explicit native sharding execution"]
 
 [[capability]]
@@ -79,7 +79,7 @@ id = "ambipolar_roots"
 name = "Ambipolar electric-field roots"
 status = "validated_limited"
 owners = ["src/dkx/er.py", "src/dkx/ambipolar.py", "src/dkx/workflows/ambipolar_native.py", "src/dkx/execution.py", "src/dkx/result.py"]
-evidence = ["tests/test_er_scan_and_ambipolar.py", "tests/test_paper_benchmark_w7x_ambipolar.py", "tests/test_native_ambipolar.py", "tests/test_native_execution_result.py", "examples/cases/analytic_ambipolar_profile.toml"]
+evidence = ["tests/test_er_scan_and_ambipolar.py", "tests/test_paper_benchmark_w7x_ambipolar.py", "tests/test_native_ambipolar.py", "tests/test_native_execution_result.py", "examples/05_ambipolar_profile/case.toml"]
 gaps = ["R1/R6: independent branch-event and joint-grid uncertainty", "R1: marginal slopes and intrinsically ambipolar tokamak handling", "R6: model-matched PENTA comparison; seeded roots retain interval scope"]
 
 [[capability]]
@@ -143,7 +143,7 @@ id = "gpu_single_device"
 name = "Single-device GPU execution"
 status = "validated_limited"
 owners = ["src/dkx/solve.py", "src/dkx/batch.py"]
-evidence = ["tests/test_gpu_solver_path_artifacts.py"]
+evidence = ["validation/hardware.toml"]
 gaps = ["R3/R6: fresh controlled production throughput and measured peak memory; office GPU is available", "R2: full prepared dynamic-physics API beyond the staged-layout prototype"]
 
 [[capability]]

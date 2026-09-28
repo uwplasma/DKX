@@ -1,4 +1,4 @@
-"""End-to-end workflows for scans, optimization, and publication figures."""
+"""End-to-end workflows: scans, convergence, ambipolar profiles, geometry adapters, optimization."""
 
 from __future__ import annotations
 

@@ -27,8 +27,7 @@ outside Git and referenced by checksum.
 | `inputs/` | The exact DKX decks and native cases each artifact was produced from. Artifacts record these paths and checksums, so they cannot move without resealing. |
 | `capabilities.toml` | Capability status and open evidence gaps; every registry entry names one. |
 | `hardware.toml` | Named measurement hosts; every entry names the host that produced it. |
-| `benchmark_schema.toml`, `benchmarks/` | Required fields of a comparable benchmark row, and two measured rows (tier-1 HSX re-measurement; collocation/multigrid h-independence ladder). |
-| `baseline.toml` | The Phase A inventory of DKX 2.3.1 (2026-08-30), with the later `[review]` data. |
+| `benchmark_schema.toml` | Required fields of a comparable benchmark row. |
 | `package_size_contract.toml` | Size limits the CI wheel job enforces through `tools/release_contracts.py`. |
 
 The audit code for each entry lives at `tools/paper_benchmarks/audit_*.py` and

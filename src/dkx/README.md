@@ -5,16 +5,8 @@ so that a test run from the repository root imports the *installed* package
 rather than the source tree sitting in the working directory. The architecture
 is the canonical stack of flat, physics-named root modules: one input file plus one geometry
 runs through `inputs -> drift_kinetic -> solve -> moments -> writer/console`,
-and the public API/CLI route every supported case through that chain. The
-legacy pipeline (the transitional `problems/`, `operators/`, `solvers/`,
-`outputs/`, `discretization/`, `geometry/`, and `physics/` packages that were
-explicitly transitional interim owners while the vertical slices landed) was
-deleted once every SFINCS v3 physics family became canonical: RHSMode 1/2/3,
-PAS and full Fokker-Planck collisions, geometry schemes 1-5/11/12/13 (with
-lasym), Phi1 (kinetic/collision/readExternalPhi1), constraint schemes -1..4,
-export_f, `.npz`/NetCDF output, solver traces, xGridScheme 1-8 with
-`xDotDerivativeScheme` -2..11, and magneticDriftScheme 0-9. Only two one-level
-packages remain: `validation/` and `workflows/`.
+and the public API/CLI route every supported case through that chain. Only two
+one-level packages exist: `validation/` and `workflows/`.
 
 ## The Canonical Stack (the architecture)
 
@@ -61,7 +53,6 @@ errors raised by `inputs.load_sfincs_input`. There is no legacy fallback.
 | `__init__.py` | Public package exports. Deliberately inert: no JAX import, no environment mutation, no cache directory (plan.md 6.4). |
 | `runtime.py` | Explicit runtime configuration -- numpy check, distributed bootstrap, XLA threadpool sizing, compilation cache, and float64 -- applied by `configure()`. Called by the CLI bootstrap and by every module that imports the JAX backend. |
 | `_version.py` | Single source of truth for the package and release version. |
-| `config.py` | Native schema-v1 `Case` and its typed physical/numerical submodels. |
 | `ambipolar.py` | Scanplot-compatible ambipolar post-processing (`solve_ambipolar_from_scan_dir`, `radial_current_from_output`) over precomputed scan directories; in-process ambipolar solves live in `er.py`. |
 | `batch.py` | First-class batched-solve API over the two canonical batch axes — an `E_r` scan on one geometry (`batched_er_scan`) and a batch of flux surfaces sharing discretization (`batched_surface_scan`) — via `jax.vmap` over the varying `KineticOperator` leaves (`batched_solve`). Reuses `solve.py`/the operator read-only, stays differentiable and jit-safe, and auto-chunks with `jax.lax.map` to a memory-budgeted batch size from the structured direct footprint model (`solve.tier1_peak_memory_bytes`) and the device/host memory. |
 | `sensitivity.py` | JVP/VJP, adjoint, and implicit differentiation helpers. |
@@ -76,13 +67,17 @@ errors raised by `inputs.load_sfincs_input`. There is no legacy fallback.
 
 ## Remaining Domain Packages
 
-- `validation/`: frozen-reference loading, Fortran/PETSc fixture readers,
-  release-data manifest/fetching, evidence gates, release orchestration.
-- `workflows/`: scan-er orchestration (`scans.py`), optimization support
-  (`optimization.py`), and the JAX-native geometry adapters for external
-  producers (`geometry_adapters.py`).
+- `validation/`: frozen-reference loading, Fortran/PETSc fixture readers
+  (`fortran.py`) and release-asset equilibrium fetching (`data_fetch.py`).
+  Release gates and the evidence registry live in `tools/release/`, outside
+  the wheel.
+- `workflows/`: native declarative scans over a case (`scan.py`), the
+  scan-er orchestration with progress reporting (`scans.py`), resolution
+  convergence (`converge.py`), the native ambipolar-profile solve
+  (`ambipolar_native.py`), optimization support (`optimization.py`), and the
+  JAX-native geometry adapters for external producers (`geometry_adapters.py`).
 
-The deleted legacy stack (the `problems/`, `operators/`, `solvers/`,
+The removed pre-2.0 stack (the `problems/`, `operators/`, `solvers/`,
 `outputs/`, `discretization/`, `geometry/`, and `physics/` packages, the
 sparse-direct/CSR-assembly solver families, and the root `grids.py` /
 `diagnostics.py` helpers) must not be reintroduced; the canonical `solve.py`

@@ -168,7 +168,6 @@ def test_package_readme_describes_current_source_layout() -> None:
     text = PACKAGE_README.read_text(encoding="utf-8")
 
     assert "flat, physics-named root modules" in text
-    assert "explicitly transitional" in text
     for section in PACKAGE_README_REQUIRED_SECTIONS:
         assert section in text
     for package in _package_packages():
@@ -192,7 +191,6 @@ def test_package_readme_explains_public_surface_and_implementation_boundaries() 
     text = PACKAGE_README.read_text(encoding="utf-8")
     expected_phrases = (
         "canonical stack of flat, physics-named root modules",
-        "transitional interim owners while the vertical slices landed",
         "one folder below `dkx/`, no nested",
         "canonical root modules are the stable import surface",
         "Compatibility aliases may remain",
