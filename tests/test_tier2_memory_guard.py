@@ -654,7 +654,7 @@ def test_the_band_route_carries_its_own_resident_overhead():
 
 
 def test_the_42gb_bands_are_refused_on_a_62gb_box(monkeypatch):
-    """The exact configuration that was OOM-killed on office."""
+    """The exact configuration that was OOM-killed on benchmark."""
     op = _load_op("quick_2species_FPCollisions_noEr")
     bands = coarse_precond.coarse_preconditioner_band_bytes(op)
     # A budget that the raw band size clears but the real transient does not.

@@ -105,9 +105,9 @@
   },
   "failures": [],
   "inputs": {
-    "cpu": "/Users/rogeriojorge/local/tests/dkx/docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_cpu_promotion.json",
-    "fortran": "/Users/rogeriojorge/local/tests/dkx/docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_fortran_v3_promotion.json",
-    "gpu": "/Users/rogeriojorge/local/tests/dkx/docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_gpu_promotion.json"
+    "cpu": "../tests/dkx/docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_cpu_promotion.json",
+    "fortran": "../tests/dkx/docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_fortran_v3_promotion.json",
+    "gpu": "../tests/dkx/docs/_static/figures/optimization/qa_nfp2_finite_beta_electron_root_gpu_promotion.json"
   },
   "status": "pass",
   "tolerances": {

@@ -35,7 +35,7 @@
   },
   "jax_gpu_forced_xblock": {
     "backend": "gpu",
-    "device": "office:CUDA_VISIBLE_DEVICES=0",
+    "device": "benchmark:CUDA_VISIBLE_DEVICES=0",
     "linear_solver_method": "xblock_sparse_pc_gmres",
     "wrapper_elapsed_s": 85.95,
     "logged_total_elapsed_s": 85.021,
@@ -47,7 +47,7 @@
     "FSABjHat": -0.08795881635946394
   },
   "fortran_v3": {
-    "executable": "/Users/rogeriojorge/local/sfincs/fortran/version3/sfincs",
+    "executable": "../sfincs/fortran/version3/sfincs",
     "output_written": true,
     "cli_return_code": 1,
     "failure_after_output": "MPI_Finalize returned exit status 143 after writing sfincsOutput.h5.",

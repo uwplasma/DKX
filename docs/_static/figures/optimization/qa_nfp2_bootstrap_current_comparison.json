@@ -162,11 +162,11 @@
   },
   "source": {
     "comparison_result_dir": null,
-    "qa_history": "/Users/rogeriojorge/local/vmex/examples/optimization/results/qa_opt/ess/history.json",
-    "qa_optimization_script": "/Users/rogeriojorge/local/vmex/examples/optimization/QA_optimization.py",
-    "qa_result_dir": "/Users/rogeriojorge/local/vmex/examples/optimization/results/qa_opt/ess",
-    "qa_wout": "/Users/rogeriojorge/local/vmex/examples/optimization/results/qa_opt/ess/wout_final.nc",
-    "vmex_root": "/Users/rogeriojorge/local/vmex"
+    "qa_history": "vmex/examples/optimization/results/qa_opt/ess/history.json",
+    "qa_optimization_script": "vmex/examples/optimization/QA_optimization.py",
+    "qa_result_dir": "vmex/examples/optimization/results/qa_opt/ess",
+    "qa_wout": "vmex/examples/optimization/results/qa_opt/ess/wout_final.nc",
+    "vmex_root": "vmex"
   },
   "targets": {
     "aspect_ratio": 5.0,

@@ -69,7 +69,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--vmex-root",
         type=Path,
-        default=Path(os.environ.get("DKX_VMEX_ROOT", "/Users/rogeriojorge/local/vmex")),
+        default=Path(os.environ.get("DKX_VMEX_ROOT", "../vmex")),
         help="Local vmex checkout containing the Landreman-Paul QA example data.",
     )
     parser.add_argument(

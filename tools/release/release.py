@@ -667,27 +667,27 @@ DEFAULT_ADDITIONAL_INPUT = REPO_ROOT / "examples" / "data" / "geometryScheme4_qu
 # default and should not depend on another repository.
 DEFAULT_ARCHIVED_NTX_INPUTS = (
     Path(
-        "/Users/rogeriojorge/local/NTX/examples/outputs/"
+        "../NTX/examples/outputs/"
         "owned_finite_beta_dkx_profile_current_audit/"
         "finite_beta_qa_pressure_current/rho_0p142857/nu_n_0p00831565/input.namelist"
     ),
     Path(
-        "/Users/rogeriojorge/local/NTX/examples/outputs/"
+        "../NTX/examples/outputs/"
         "dkx_rhsmode1_profile_current_profiling/cpu_17x21x12_deck/"
         "finite_beta_qa_pressure_current/rho_0p142857/nu_n_0p00831565/input.namelist"
     ),
     Path(
-        "/Users/rogeriojorge/local/NTX/examples/outputs/"
+        "../NTX/examples/outputs/"
         "owned_finite_beta_dkx_inputs/finite_beta_qa_pressure_current/"
         "rho_0p5/nuPrime_0p01/EStar_0/input.namelist"
     ),
     Path(
-        "/Users/rogeriojorge/local/NTX/examples/outputs/"
+        "../NTX/examples/outputs/"
         "owned_finite_beta_dkx_inputs/finite_beta_nfp3_qh_stage1/"
         "rho_0p5/nuPrime_0p01/EStar_0/input.namelist"
     ),
     Path(
-        "/Users/rogeriojorge/local/NTX/examples/outputs/"
+        "../NTX/examples/outputs/"
         "owned_finite_beta_dkx_inputs_production_probe/grid_35_43_48/"
         "finite_beta_qa_pressure_current/rho_0p142857/nuPrime_0p01/EStar_0/input.namelist"
     ),

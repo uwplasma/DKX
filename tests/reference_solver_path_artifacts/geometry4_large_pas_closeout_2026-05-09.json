@@ -87,7 +87,7 @@
       "preconditioner": "schur",
       "preconditioner_build_s": 87.287,
       "rss_after_preconditioner_mb": 5512.3,
-      "hardware": "office RTX A4000 GPU 0"
+      "hardware": "benchmark RTX A4000 GPU 0"
     }
   ],
   "required_future_algorithm": [

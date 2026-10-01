@@ -32,7 +32,7 @@ import numpy as np
 
 # Local vmex checkout.  Override without editing this file with:
 #   DKX_VMEX_ROOT=/path/to/vmex python examples/optimization/QA_optimization_bootstrap_current.py
-VMEX_ROOT_HINT = Path(os.environ.get("DKX_VMEX_ROOT", "/Users/rogeriojorge/local/vmex"))
+VMEX_ROOT_HINT = Path(os.environ.get("DKX_VMEX_ROOT", "../vmex"))
 
 # Use the same QA seeds as vmex's public QA_optimization.py.
 USE_SIMPLE_SEED = True  # Start from near-circular RBC(0,0), RBC(0,1), ZBS(0,1).
