@@ -21,7 +21,7 @@ import numpy as np
 import pytest
 
 REF = Path(__file__).parent / "ref"
-_REFERENCE = Path("/Users/rogerio/local/reference-data-v2")
+_REFERENCE = Path("../reference-data-v2")
 
 WITH_ER_BASE = "pas_dkes_withEr_tiny"
 FIXTURES = (

@@ -988,7 +988,7 @@
       "solverTolerance": 1e-06
     }
   },
-  "fortran_case_root": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5",
+  "fortran_case_root": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5",
   "fortran_errorbars": {
     "available_points": 11,
     "definition": "Optional SFINCS Fortran v3 error bars are loaded from an explicit sidecar. When absent, no Fortran uncertainty is plotted or inferred from a single archived run.",
@@ -1022,7 +1022,7 @@
   },
   "paper": {
     "arxiv": "https://arxiv.org/abs/2205.02914",
-    "zenodo_root": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current"
+    "zenodo_root": "../20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current"
   },
   "performance": {
     "memory_definition": "JAX: factor+CSR estimate. Fortran: parsed MUMPS memory metric or process RSS from logs.",
@@ -1167,7 +1167,7 @@
       "jdotb_si_errorbar": 131788.47125824913,
       "memory_mb": 91.0,
       "memory_metric": "mumps_effective_total_mb",
-      "output_path": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.1/sfincsOutput.h5",
+      "output_path": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.1/sfincsOutput.h5",
       "profile": {
         "analysis_s": 0.1122,
         "elapsed_s": 0.5230349999997088,
@@ -1180,8 +1180,8 @@
         "mumps_memory_effective_max_rank_mb": null,
         "mumps_memory_effective_total_mb": 91.0,
         "mumps_solve_space_mb": 126.0,
-        "profile_log": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.1/sfincs_fortran_stdout.txt",
-        "profile_stderr": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.1/sfincs_fortran_stderr.txt",
+        "profile_log": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.1/sfincs_fortran_stdout.txt",
+        "profile_stderr": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.1/sfincs_fortran_stderr.txt",
         "solve_driver_s": 0.0077
       },
       "redl_jdotb_si": -3879025.0,
@@ -1201,7 +1201,7 @@
       "jdotb_si_errorbar": 113148.31160400528,
       "memory_mb": 91.0,
       "memory_metric": "mumps_effective_total_mb",
-      "output_path": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.15/sfincsOutput.h5",
+      "output_path": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.15/sfincsOutput.h5",
       "profile": {
         "analysis_s": 0.109,
         "elapsed_s": 0.5065780000000011,
@@ -1214,8 +1214,8 @@
         "mumps_memory_effective_max_rank_mb": null,
         "mumps_memory_effective_total_mb": 91.0,
         "mumps_solve_space_mb": 126.0,
-        "profile_log": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.15/sfincs_fortran_stdout.txt",
-        "profile_stderr": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.15/sfincs_fortran_stderr.txt",
+        "profile_log": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.15/sfincs_fortran_stdout.txt",
+        "profile_stderr": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.15/sfincs_fortran_stderr.txt",
         "solve_driver_s": 0.0065
       },
       "redl_jdotb_si": -4604334.0,
@@ -1235,7 +1235,7 @@
       "jdotb_si_errorbar": 146240.24526804965,
       "memory_mb": 91.0,
       "memory_metric": "mumps_effective_total_mb",
-      "output_path": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.25/sfincsOutput.h5",
+      "output_path": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.25/sfincsOutput.h5",
       "profile": {
         "analysis_s": 0.1171,
         "elapsed_s": 0.5673510000001443,
@@ -1248,8 +1248,8 @@
         "mumps_memory_effective_max_rank_mb": null,
         "mumps_memory_effective_total_mb": 91.0,
         "mumps_solve_space_mb": 126.0,
-        "profile_log": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.25/sfincs_fortran_stdout.txt",
-        "profile_stderr": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.25/sfincs_fortran_stderr.txt",
+        "profile_log": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.25/sfincs_fortran_stdout.txt",
+        "profile_stderr": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.25/sfincs_fortran_stderr.txt",
         "solve_driver_s": 0.0066
       },
       "redl_jdotb_si": -5617985.0,
@@ -1269,7 +1269,7 @@
       "jdotb_si_errorbar": 167647.58315478172,
       "memory_mb": 91.0,
       "memory_metric": "mumps_effective_total_mb",
-      "output_path": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.3/sfincsOutput.h5",
+      "output_path": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.3/sfincsOutput.h5",
       "profile": {
         "analysis_s": 0.1148,
         "elapsed_s": 1.2290670000000006,
@@ -1282,8 +1282,8 @@
         "mumps_memory_effective_max_rank_mb": null,
         "mumps_memory_effective_total_mb": 91.0,
         "mumps_solve_space_mb": 126.0,
-        "profile_log": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.3/sfincs_fortran_stdout.txt",
-        "profile_stderr": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.3/sfincs_fortran_stderr.txt",
+        "profile_log": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.3/sfincs_fortran_stdout.txt",
+        "profile_stderr": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.3/sfincs_fortran_stderr.txt",
         "solve_driver_s": 0.0082
       },
       "redl_jdotb_si": -6025299.0,
@@ -1303,7 +1303,7 @@
       "jdotb_si_errorbar": 207805.9524891572,
       "memory_mb": 91.0,
       "memory_metric": "mumps_effective_total_mb",
-      "output_path": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.45/sfincsOutput.h5",
+      "output_path": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.45/sfincsOutput.h5",
       "profile": {
         "analysis_s": 0.1129,
         "elapsed_s": 0.8128399999999942,
@@ -1316,8 +1316,8 @@
         "mumps_memory_effective_max_rank_mb": null,
         "mumps_memory_effective_total_mb": 91.0,
         "mumps_solve_space_mb": 126.0,
-        "profile_log": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.45/sfincs_fortran_stdout.txt",
-        "profile_stderr": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.45/sfincs_fortran_stderr.txt",
+        "profile_log": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.45/sfincs_fortran_stdout.txt",
+        "profile_stderr": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.45/sfincs_fortran_stderr.txt",
         "solve_driver_s": 0.0076
       },
       "redl_jdotb_si": -7031038.0,
@@ -1337,7 +1337,7 @@
       "jdotb_si_errorbar": 212490.04917015973,
       "memory_mb": 91.0,
       "memory_metric": "mumps_effective_total_mb",
-      "output_path": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.5/sfincsOutput.h5",
+      "output_path": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.5/sfincsOutput.h5",
       "profile": {
         "analysis_s": 0.1147,
         "elapsed_s": 1.1840040000000158,
@@ -1350,8 +1350,8 @@
         "mumps_memory_effective_max_rank_mb": null,
         "mumps_memory_effective_total_mb": 91.0,
         "mumps_solve_space_mb": 126.0,
-        "profile_log": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.5/sfincs_fortran_stdout.txt",
-        "profile_stderr": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.5/sfincs_fortran_stderr.txt",
+        "profile_log": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.5/sfincs_fortran_stdout.txt",
+        "profile_stderr": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.5/sfincs_fortran_stderr.txt",
         "solve_driver_s": 0.0077
       },
       "redl_jdotb_si": -7255612.0,
@@ -1371,7 +1371,7 @@
       "jdotb_si_errorbar": 194872.79117374774,
       "memory_mb": 91.0,
       "memory_metric": "mumps_effective_total_mb",
-      "output_path": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.6/sfincsOutput.h5",
+      "output_path": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.6/sfincsOutput.h5",
       "profile": {
         "analysis_s": 0.1136,
         "elapsed_s": 0.7526939999999911,
@@ -1384,8 +1384,8 @@
         "mumps_memory_effective_max_rank_mb": null,
         "mumps_memory_effective_total_mb": 91.0,
         "mumps_solve_space_mb": 126.0,
-        "profile_log": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.6/sfincs_fortran_stdout.txt",
-        "profile_stderr": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.6/sfincs_fortran_stderr.txt",
+        "profile_log": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.6/sfincs_fortran_stdout.txt",
+        "profile_stderr": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.6/sfincs_fortran_stderr.txt",
         "solve_driver_s": 0.0068
       },
       "redl_jdotb_si": -7330532.5,
@@ -1405,7 +1405,7 @@
       "jdotb_si_errorbar": 118077.42489362601,
       "memory_mb": 91.0,
       "memory_metric": "mumps_effective_total_mb",
-      "output_path": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.7/sfincsOutput.h5",
+      "output_path": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.7/sfincsOutput.h5",
       "profile": {
         "analysis_s": 0.1155,
         "elapsed_s": 1.3668430000000171,
@@ -1418,8 +1418,8 @@
         "mumps_memory_effective_max_rank_mb": null,
         "mumps_memory_effective_total_mb": 91.0,
         "mumps_solve_space_mb": 126.0,
-        "profile_log": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.7/sfincs_fortran_stdout.txt",
-        "profile_stderr": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.7/sfincs_fortran_stderr.txt",
+        "profile_log": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.7/sfincs_fortran_stdout.txt",
+        "profile_stderr": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.7/sfincs_fortran_stderr.txt",
         "solve_driver_s": 0.0084
       },
       "redl_jdotb_si": -6562160.5,
@@ -1439,7 +1439,7 @@
       "jdotb_si_errorbar": 58052.97161564231,
       "memory_mb": 91.0,
       "memory_metric": "mumps_effective_total_mb",
-      "output_path": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.75/sfincsOutput.h5",
+      "output_path": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.75/sfincsOutput.h5",
       "profile": {
         "analysis_s": 0.1111,
         "elapsed_s": 0.5535360000003493,
@@ -1452,8 +1452,8 @@
         "mumps_memory_effective_max_rank_mb": null,
         "mumps_memory_effective_total_mb": 91.0,
         "mumps_solve_space_mb": 126.0,
-        "profile_log": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.75/sfincs_fortran_stdout.txt",
-        "profile_stderr": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.75/sfincs_fortran_stderr.txt",
+        "profile_log": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.75/sfincs_fortran_stdout.txt",
+        "profile_stderr": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.75/sfincs_fortran_stderr.txt",
         "solve_driver_s": 0.0077
       },
       "redl_jdotb_si": -5747437.5,
@@ -1473,7 +1473,7 @@
       "jdotb_si_errorbar": 33784.14901657868,
       "memory_mb": 91.0,
       "memory_metric": "mumps_effective_total_mb",
-      "output_path": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.85/sfincsOutput.h5",
+      "output_path": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.85/sfincsOutput.h5",
       "profile": {
         "analysis_s": 0.123,
         "elapsed_s": 0.7474640000000079,
@@ -1486,8 +1486,8 @@
         "mumps_memory_effective_max_rank_mb": null,
         "mumps_memory_effective_total_mb": 91.0,
         "mumps_solve_space_mb": 126.0,
-        "profile_log": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.85/sfincs_fortran_stdout.txt",
-        "profile_stderr": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.85/sfincs_fortran_stderr.txt",
+        "profile_log": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.85/sfincs_fortran_stdout.txt",
+        "profile_stderr": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.85/sfincs_fortran_stderr.txt",
         "solve_driver_s": 0.0079
       },
       "redl_jdotb_si": -3271415.25,
@@ -1507,7 +1507,7 @@
       "jdotb_si_errorbar": 17070.756019398803,
       "memory_mb": 91.0,
       "memory_metric": "mumps_effective_total_mb",
-      "output_path": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.9/sfincsOutput.h5",
+      "output_path": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.9/sfincsOutput.h5",
       "profile": {
         "analysis_s": 0.1113,
         "elapsed_s": 0.596190000000206,
@@ -1520,8 +1520,8 @@
         "mumps_memory_effective_max_rank_mb": null,
         "mumps_memory_effective_total_mb": 91.0,
         "mumps_solve_space_mb": 126.0,
-        "profile_log": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.9/sfincs_fortran_stdout.txt",
-        "profile_stderr": "/Users/rogeriojorge/local/tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.9/sfincs_fortran_stderr.txt",
+        "profile_log": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.9/sfincs_fortran_stdout.txt",
+        "profile_stderr": "../tests/dkx/outputs/qs_paper_fortran_reduced_resolution/QA_Ntheta13_Nzeta13_Nxi21_Nx5/psiN_0.9/sfincs_fortran_stderr.txt",
         "solve_driver_s": 0.008
       },
       "redl_jdotb_si": -1814052.25,
@@ -1993,5 +1993,5 @@
   },
   "sfincs_resolution_label": "13x13x21x5",
   "workflow": "qs_paper_dkx_fortran_v3_redl_bootstrap_current",
-  "wout_path": "/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/wout_new_QA_aScaling.nc"
+  "wout_path": "../20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current/calculations/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/wout_new_QA_aScaling.nc"
 }

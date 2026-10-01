@@ -16,8 +16,8 @@ def _local_vmex_root() -> Path | None:
     env_root = os.environ.get("DKX_VMEX_ROOT")
     candidates = [
         Path(env_root).expanduser() if env_root else None,
-        Path("/Users/rogeriojorge/local/vmex"),
-        Path("/Users/rogeriojorge/vmex"),
+        Path("../vmex"),
+        Path("../vmex"),
     ]
     for candidate in candidates:
         if candidate is None:

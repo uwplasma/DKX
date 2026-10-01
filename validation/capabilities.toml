@@ -144,7 +144,7 @@ name = "Single-device GPU execution"
 status = "validated_limited"
 owners = ["src/dkx/solve.py", "src/dkx/batch.py"]
 evidence = ["validation/hardware.toml"]
-gaps = ["R3/R6: fresh controlled production throughput and measured peak memory; office GPU is available", "R2: full prepared dynamic-physics API beyond the staged-layout prototype"]
+gaps = ["R3/R6: fresh controlled production throughput and measured peak memory; benchmark GPU is available", "R2: full prepared dynamic-physics API beyond the staged-layout prototype"]
 
 [[capability]]
 id = "multi_device"

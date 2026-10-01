@@ -34,8 +34,8 @@ Usage::
 
     /usr/bin/time -l micromamba run -n dkx python \
         tools/benchmarks/tier1_hsx_head_to_head.py \
-        --input /Users/rogerio/local/fortran_scaling_baseline/sized/input.namelist \
-        --fortran-h5 /Users/rogerio/local/fortran_scaling_baseline/sized/sfincsOutput.h5
+        --input ../fortran_scaling_baseline/sized/input.namelist \
+        --fortran-h5 ../fortran_scaling_baseline/sized/sfincsOutput.h5
 
     # cross-check of the truncated kernel against the full structured direct factorization
     # on a reduced grid (memory-safe):

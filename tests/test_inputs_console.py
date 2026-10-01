@@ -26,8 +26,8 @@ from dkx.inputs import (
     sfincs_input_from_raw,
 )
 
-_EXAMPLES = Path("/Users/rogerio/local/sfincs/fortran/version3/examples")
-_REFERENCE = Path("/Users/rogerio/local/reference-data-v2")
+_EXAMPLES = Path("../sfincs/fortran/version3/examples")
+_REFERENCE = Path("../reference-data-v2")
 
 # The upstream geometryScheme4_2species_noEr_withPhi1 example directory has no
 # input.namelist (only job scripts); use the equivalent Phi1 deck captured in

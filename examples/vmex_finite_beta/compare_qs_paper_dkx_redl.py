@@ -54,7 +54,7 @@ from dkx.api import write_output  # noqa: E402
 
 ELEMENTARY_CHARGE = 1.602177e-19
 SFINCS_PAPER_CURRENT_FACTOR = 437695.0 * 1.0e20 * ELEMENTARY_CHARGE
-DEFAULT_ZENODO_ROOT = Path("/Users/rogeriojorge/local/20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current")
+DEFAULT_ZENODO_ROOT = Path("../20220708-01-zenodo_for_QS_optimization_with_self_consistent_bootstrap_current")
 BENCHMARK_REL = Path("calculations/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark")
 DEFAULT_S_VALUES = "all"
 QUICK_S_VALUES = "0.3,0.5,0.7"
@@ -105,7 +105,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--vmex-root",
         type=Path,
-        default=Path(os.environ.get("DKX_VMEX_ROOT", "/Users/rogeriojorge/local/vmex")),
+        default=Path(os.environ.get("DKX_VMEX_ROOT", "../vmex")),
         help="Local vmex checkout used for the Redl algebra.",
     )
     parser.add_argument(
