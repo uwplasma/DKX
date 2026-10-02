@@ -58,10 +58,10 @@ CASES = {
 }
 
 
-def _agreement(op: KineticOperator, seed: int = 0) -> float:
+def _agreement(op: KineticOperator, seed: int = 0, *, triangle: bool = False) -> float:
     """Worst relative difference between the two preconditioners, both directions."""
-    coarse, coarse_t = build_coarse_preconditioner(op)
-    sparse, sparse_t = build_sparse_preconditioner(op)
+    coarse, coarse_t = build_coarse_preconditioner(op, retain_speed_triangle=triangle)
+    sparse, sparse_t = build_sparse_preconditioner(op, retain_speed_triangle=triangle)
     rng = np.random.default_rng(seed)
     worst = 0.0
     for _ in range(3):
@@ -99,6 +99,35 @@ def test_sparse_preconditioner_is_the_same_map_as_the_coarse_one(case: str) -> N
     dropped term, a mis-sized floor or a transposed block.
     """
     assert _agreement(CASES[case]()) < AGREEMENT_BOUND.get(case, 1e-8)
+
+
+@pytest.mark.parametrize("case", WELL_CONDITIONED)
+def test_sparse_speed_triangle_matches_the_dense_map(case: str) -> None:
+    """Both directions and batched border solves; PAS/Phi1-only remain inert."""
+    assert _agreement(CASES[case](), triangle=True) < AGREEMENT_BOUND.get(case, 1e-8)
+
+
+def test_sparse_speed_triangle_is_an_opt_in_named_route() -> None:
+    op = CASES["fokker_planck"]()
+    v = jnp.asarray(np.random.default_rng(413).normal(size=op.total_size))
+    default, _ = build_sparse_preconditioner(op)
+    explicit, _ = build_sparse_preconditioner(op, retain_speed_triangle=False)
+    np.testing.assert_array_equal(default(v), explicit(v))
+    named = build_tier2_preconditioner(op, "sparse_triangle")
+    direct = build_sparse_preconditioner(op, retain_speed_triangle=True)
+    for a, b in zip(named, direct):
+        np.testing.assert_array_equal(a(v), b(v))
+
+
+def test_sparse_speed_triangle_solves_the_original_full_fp_operator() -> None:
+    op = CASES["fokker_planck"]()
+    rhs = op.rhs()
+    results = [solve(op, rhs, method="gmres", tol=1e-10, preconditioner=kind)
+               for kind in ("coarse_triangle", "sparse_triangle")]
+    for result in results:
+        assert result.converged
+        assert float(jnp.linalg.norm(op.apply(result.x) - rhs) / jnp.linalg.norm(rhs)) < 1e-9
+    np.testing.assert_allclose(results[1].x, results[0].x, rtol=1e-6, atol=1e-8)
 
 
 # The Phi1 deck's solve is a Newton iteration owned by ``dkx.phi1.solve_phi1``
