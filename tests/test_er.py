@@ -339,6 +339,87 @@ def test_host_root_classification_is_radial_chart_invariant(monkeypatch, radial_
                                [.5+1e-8, -.25+1e-8, .5+1e-8], atol=1e-12)
 
 
+@pytest.mark.parametrize("radial_factor", [-7., -1., 1., 7.])
+def test_host_classification_agrees_with_polarization_dynamics(monkeypatch, radial_factor):
+    """Independent two-flux oracle with positive diffusivities, not stored labels.
+
+    Velasco et al. PPCF55,124044(2013), Eq3 gives C_pol*dEr/dt=-J_out
+    at fixed profiles, C_pol>0. The manufactured diffusivities below are
+    positive, with separate ion/electron thermodynamic drives. They give
+    roots -1,0,1; directly perturbing the polarization equation determines
+    stability without invoking dkx's classifier or its finite-difference slope.
+    """
+    from dkx import er
+    problem = er.ErProblem(None, -radial_factor, np.array([1., -1.]), .9, -1.2, 1.2)
+    monkeypatch.setattr(er, "_check_host_kinetic_state", lambda *args: None)
+    def outward_fluxes(field):
+        x = field + 1.
+        return np.array([(x + 3.)/(1. + x*x), -x + 3.])
+    def current(problem, field, **kwargs):
+        flux = outward_fluxes(field)/radial_factor
+        return float(flux[0] - flux[1]), flux, None
+    monkeypatch.setattr(er, "radial_current", current)
+    result = er.find_ambipolar_er(problem, all_roots=True, n_scan=13, slope_step=1e-5,
+                                current_tol=1e-11, field_tol=1e-11, max_iter=80, emit=None)
+    assert result.converged
+    np.testing.assert_allclose([r.er for r in result.roots], [-1., 0., 1.], atol=1e-9)
+    for root in result.roots:
+        field = root.er + 1e-4
+        gamma = outward_fluxes(field)
+        # Positive-capacity Euler step in outward physical current units.
+        after = field - .01*(gamma[0] - gamma[1])
+        restoring = abs(after-root.er) < abs(field-root.er)
+        assert (root.root_type in {"ion", "electron"}) == restoring
+        expected = ("ion" if root.er < 0 else "electron") if restoring else "unstable"
+        assert root.root_type == expected
+
+
+@pytest.mark.parametrize("case", ["iter", "ncsx", "qhs46", "lhd", "iter_asym", "solovev"])
+def test_catalog_geometry_current_is_outward_chart_invariant(tmp_path, case):
+    """Actual-field projections obey the independent psi,theta reversal map.
+
+    These small source-hashed fixtures qualify finite-model integration, not
+    converged transport: omitted Fourier norms are recorded in each fixture.
+    (psi,theta)->(-psi,-theta) implies (iota,I,n,b_sin)->(-iota,-I,-n,-b_sin).
+    State reflection must preserve Ax=b and outward charge-current moments.
+    """
+    import json
+    from dkx import er
+    from dkx.run import profile_moments_from_operator
+    data = json.loads((Path(__file__).parent/"ref/ambipolar/geometry-projections.json").read_text())[case]
+    operators = []
+    for chart in (1, -1):
+        deck = _pas_deck(er=.7, collision_operator=0, n_theta=7, n_zeta=13, n_xi=4, n_x=3)
+        deck = deck.replace("rN_wish = 0.3", "rN_wish = 0.5")
+        deck = deck.replace("geometryScheme = 1", "geometryScheme = 13")
+        for key,old,value in [("GHat",1.,data["G"]), ("IHat",0.,chart*data["I"]),
+                              ("iota",1.31,chart*data["iota"]), ("psiAHat",.045,chart*data["psi0"]),
+                              ("aHat",.1,data["a"])]:
+            deck = deck.replace(f"{key} = {old}", f"{key} = {value:.17g}")
+        modes = [f"  Nperiods = {data['nfp']}"]
+        for m,n,c,s in data["spectrum"]:
+            modes.append(f"  boozer_bmnc({m},{chart*n}) = {c:.17g}")
+            if s:
+                modes.append(f"  boozer_bmns({m},{chart*n}) = {chart*s:.17g}")
+        deck = deck.replace("&geometryParameters", "&geometryParameters\n"+"\n".join(modes))
+        operators.append(er.prepare(_write(tmp_path, deck, f"{case}_{chart}.nml")))
+    pos,neg = operators
+    op = pos.operator
+    indices = (-np.arange(op.n_theta)) % op.n_theta
+    def reflect(vector):
+        f = np.asarray(vector[:op.f_size]).reshape(op.f_shape)[:,:,:,indices,:]
+        return np.r_[f.ravel(), np.asarray(vector[op.f_size:])]
+    probe = np.random.default_rng(413).normal(size=op.total_size)
+    np.testing.assert_allclose(neg.operator.rhs(), reflect(pos.operator.rhs()), rtol=1e-12, atol=1e-20)
+    np.testing.assert_allclose(neg.operator.apply(reflect(probe)), reflect(pos.operator.apply(probe)),
+                               rtol=1e-11, atol=1e-10)
+    currents = []
+    for problem,state in [(pos,probe), (neg,reflect(probe))]:
+        gamma = profile_moments_from_operator(problem.operator, state)["particleFlux_vm_psiHat"]
+        currents.append(-problem.dphi_per_er * float(problem.z_s @ gamma))
+    np.testing.assert_allclose(currents[0], currents[1], rtol=1e-12, atol=1e-20)
+
+
 @pytest.mark.parametrize("value", [np.nan, np.inf])
 def test_host_rejects_nonfinite_current(host_current, value):
     with pytest.raises(RuntimeError, match="Nonfinite ambipolar"):

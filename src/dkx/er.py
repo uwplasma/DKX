@@ -25,7 +25,7 @@ Public entry points:
   operator's parameters.
 - :func:`find_ambipolar_er` — the Fortran-parity Brent root solve with bracket
   expansion, per-species fluxes, an iteration history, and
-  ion / electron / unstable classification from the sign of ``dJr/dEr``.
+  ion / electron / unstable classification from the outward-current slope.
 - :func:`ambipolar_er` — the *differentiable* ambipolar ``E_r``: the root
   condition is wrapped with :func:`solvax.implicit.root_solve` so ``jax.grad``
   flows through ``E_r`` via the implicit function theorem
@@ -34,8 +34,12 @@ Public entry points:
 
 Units follow SFINCS: ``E_r`` is the deck's normalized ``Er`` entry and the
 per-species fluxes are ``particleFlux_vm_psiHat`` (the ``sum_s Z_s Gamma_s``
-root is coordinate-independent because the ``psiHat`` <-> ``rHat`` Jacobian is a
-positive species-independent factor).
+root is coordinate-independent because the signed ``psiHat`` <-> ``rHat``
+Jacobian is species-independent). Stability uses outward current:
+``C_pol dEr/dt = -J_out`` for fixed profiles and positive polarization
+capacity, so a positive outward-current slope is restoring. See Velasco
+et al., Plasma Phys. Control. Fusion 55, 124044 (2013), equation (3),
+https://arxiv.org/abs/1307.1658.
 """
 
 from __future__ import annotations
