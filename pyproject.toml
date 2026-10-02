@@ -43,6 +43,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+booz = ["booz_xform_jax>=0.4.3"]
 # `structured` is gone. It was an alias for a dependency that has been core
 # since solvax moved into the required list, so installing it changed nothing;
 # pip warns about the unknown extra and installs the same environment.
