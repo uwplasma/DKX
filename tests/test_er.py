@@ -9,7 +9,7 @@ Pins the ``er.py`` slice against the legacy path it replaces:
   deletion and hard-coded here);
 - warm starts / GCROT recycling reduce the total Krylov iteration count on a
   Fokker-Planck (recycled Krylov) Er scan;
-- ion / electron / unstable classification from the sign of ``dJr/dEr``;
+- ion / electron / unstable classification from the outward-current slope;
 - the differentiable :func:`dkx.er.ambipolar_er` gradient matches a
   central finite difference (implicit function theorem, not FD roots).
 """
@@ -215,7 +215,8 @@ def test_root_classification_ion(tmp_path: Path) -> None:
     assert result.roots[0].slope > 0.0
 
 
-def test_classify_unit_logic() -> None:
+@pytest.mark.parametrize("radial_factor", [-7., -1., 1., 7.])
+def test_classify_unit_logic(radial_factor) -> None:
     from dkx.er import _classify
 
     assert _classify(-0.4, 1.0) == "ion"        # stable, Er < 0
@@ -225,6 +226,10 @@ def test_classify_unit_logic() -> None:
     assert _classify(-0.1, 0.0) == "marginal"
     assert _classify(0.1, np.nan) == "unknown"
     assert _classify(np.inf, 1.0) == "unknown"
+    for field, slope, label in [(-.4, 1., "ion"), (.4, 1., "electron"),
+                                (.1, -1., "unstable"), (.1, 0., "marginal"),
+                                (.1, np.nan, "unknown"), (np.inf, 1., "unknown")]:
+        assert _classify(field, slope/radial_factor, radial_factor=radial_factor) == label
 
 
 def test_brent_rejects_narrow_discontinuous_bracket():
@@ -249,7 +254,8 @@ def test_brent_bracketing_does_not_multiply_tiny_currents():
 @pytest.fixture
 def host_current(monkeypatch):
     from dkx import er
-    problem = er.ErProblem(None, 1., np.array([1.]), 0., -1., 1.)
+    # The synthetic callback returns outward current: -dphi_per_er = +1.
+    problem = er.ErProblem(None, -1., np.array([1.]), 0., -1., 1.)
     monkeypatch.setattr(er, "_check_host_kinetic_state", lambda *args: None)
     def install(function):
         def current(p, e, **kwargs):
@@ -312,6 +318,106 @@ def test_host_selected_classification_is_not_replaced_by_nearby_root(host_curren
     assert result.converged and result.er == .001
     assert result.root_type == "electron"
     assert [r.root_type for r in result.roots] == ["ion", "unstable", "electron"]
+
+
+@pytest.mark.parametrize("radial_factor", [-7., -1., 1., 7.])
+def test_host_root_classification_is_radial_chart_invariant(monkeypatch, radial_factor):
+    from dkx import er
+    problem = er.ErProblem(None, -radial_factor, np.array([1.]), .5, -.75, .75)
+    monkeypatch.setattr(er, "_check_host_kinetic_state", lambda *args: None)
+    def current(problem, field, **kwargs):
+        raw = (field+.5)*field*(field-.5)/radial_factor
+        return raw, np.array([raw]), None
+    monkeypatch.setattr(er, "radial_current", current)
+    result = er.find_ambipolar_er(problem, all_roots=True, n_scan=7, slope_step=1e-4,
+                                current_tol=1e-12, field_tol=1e-12, emit=None)
+    assert result.converged and result.er == .5 and result.root_type == "electron"
+    np.testing.assert_allclose([r.er for r in result.roots], [-.5, 0., .5], atol=1e-12)
+    assert [r.root_type for r in result.roots] == ["ion", "unstable", "electron"]
+    # Stored slopes retain native psiHat-current units.
+    np.testing.assert_allclose([r.slope*radial_factor for r in result.roots],
+                               [.5+1e-8, -.25+1e-8, .5+1e-8], atol=1e-12)
+
+
+@pytest.mark.parametrize("radial_factor", [-7., -1., 1., 7.])
+def test_host_classification_agrees_with_polarization_dynamics(monkeypatch, radial_factor):
+    """Independent two-flux oracle with positive diffusivities, not stored labels.
+
+    Velasco et al. PPCF55,124044(2013), Eq3 gives C_pol*dEr/dt=-J_out
+    at fixed profiles, C_pol>0. The manufactured diffusivities below are
+    positive, with separate ion/electron thermodynamic drives. They give
+    roots -1,0,1; directly perturbing the polarization equation determines
+    stability without invoking dkx's classifier or its finite-difference slope.
+    """
+    from dkx import er
+    problem = er.ErProblem(None, -radial_factor, np.array([1., -1.]), .9, -1.2, 1.2)
+    monkeypatch.setattr(er, "_check_host_kinetic_state", lambda *args: None)
+    def outward_fluxes(field):
+        x = field + 1.
+        return np.array([(x + 3.)/(1. + x*x), -x + 3.])
+    def current(problem, field, **kwargs):
+        flux = outward_fluxes(field)/radial_factor
+        return float(flux[0] - flux[1]), flux, None
+    monkeypatch.setattr(er, "radial_current", current)
+    result = er.find_ambipolar_er(problem, all_roots=True, n_scan=13, slope_step=1e-5,
+                                current_tol=1e-11, field_tol=1e-11, max_iter=80, emit=None)
+    assert result.converged
+    np.testing.assert_allclose([r.er for r in result.roots], [-1., 0., 1.], atol=1e-9)
+    for root in result.roots:
+        field = root.er + 1e-4
+        gamma = outward_fluxes(field)
+        # Positive-capacity Euler step in outward physical current units.
+        after = field - .01*(gamma[0] - gamma[1])
+        restoring = abs(after-root.er) < abs(field-root.er)
+        assert (root.root_type in {"ion", "electron"}) == restoring
+        expected = ("ion" if root.er < 0 else "electron") if restoring else "unstable"
+        assert root.root_type == expected
+
+
+@pytest.mark.parametrize("case", ["iter", "ncsx", "qhs46", "lhd", "iter_asym", "solovev"])
+def test_catalog_geometry_current_is_outward_chart_invariant(tmp_path, case):
+    """Actual-field projections obey the independent psi,theta reversal map.
+
+    These small source-hashed fixtures qualify finite-model integration, not
+    converged transport: omitted Fourier norms are recorded in each fixture.
+    (psi,theta)->(-psi,-theta) implies (iota,I,n,b_sin)->(-iota,-I,-n,-b_sin).
+    State reflection must preserve Ax=b and outward charge-current moments.
+    """
+    import json
+    from dkx import er
+    from dkx.run import profile_moments_from_operator
+    data = json.loads((Path(__file__).parent/"ref/ambipolar/geometry-projections.json").read_text())[case]
+    operators = []
+    for chart in (1, -1):
+        deck = _pas_deck(er=.7, collision_operator=0, n_theta=7, n_zeta=13, n_xi=4, n_x=3)
+        deck = deck.replace("rN_wish = 0.3", "rN_wish = 0.5")
+        deck = deck.replace("geometryScheme = 1", "geometryScheme = 13")
+        for key,old,value in [("GHat",1.,data["G"]), ("IHat",0.,chart*data["I"]),
+                              ("iota",1.31,chart*data["iota"]), ("psiAHat",.045,chart*data["psi0"]),
+                              ("aHat",.1,data["a"])]:
+            deck = deck.replace(f"{key} = {old}", f"{key} = {value:.17g}")
+        modes = [f"  Nperiods = {data['nfp']}"]
+        for m,n,c,s in data["spectrum"]:
+            modes.append(f"  boozer_bmnc({m},{chart*n}) = {c:.17g}")
+            if s:
+                modes.append(f"  boozer_bmns({m},{chart*n}) = {chart*s:.17g}")
+        deck = deck.replace("&geometryParameters", "&geometryParameters\n"+"\n".join(modes))
+        operators.append(er.prepare(_write(tmp_path, deck, f"{case}_{chart}.nml")))
+    pos,neg = operators
+    op = pos.operator
+    indices = (-np.arange(op.n_theta)) % op.n_theta
+    def reflect(vector):
+        f = np.asarray(vector[:op.f_size]).reshape(op.f_shape)[:,:,:,indices,:]
+        return np.r_[f.ravel(), np.asarray(vector[op.f_size:])]
+    probe = np.random.default_rng(413).normal(size=op.total_size)
+    np.testing.assert_allclose(neg.operator.rhs(), reflect(pos.operator.rhs()), rtol=1e-12, atol=1e-20)
+    np.testing.assert_allclose(neg.operator.apply(reflect(probe)), reflect(pos.operator.apply(probe)),
+                               rtol=1e-11, atol=1e-10)
+    currents = []
+    for problem,state in [(pos,probe), (neg,reflect(probe))]:
+        gamma = profile_moments_from_operator(problem.operator, state)["particleFlux_vm_psiHat"]
+        currents.append(-problem.dphi_per_er * float(problem.z_s @ gamma))
+    np.testing.assert_allclose(currents[0], currents[1], rtol=1e-12, atol=1e-20)
 
 
 @pytest.mark.parametrize("value", [np.nan, np.inf])

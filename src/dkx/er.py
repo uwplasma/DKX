@@ -25,7 +25,7 @@ Public entry points:
   operator's parameters.
 - :func:`find_ambipolar_er` — the Fortran-parity Brent root solve with bracket
   expansion, per-species fluxes, an iteration history, and
-  ion / electron / unstable classification from the sign of ``dJr/dEr``.
+  ion / electron / unstable classification from the outward-current slope.
 - :func:`ambipolar_er` — the *differentiable* ambipolar ``E_r``: the root
   condition is wrapped with :func:`solvax.implicit.root_solve` so ``jax.grad``
   flows through ``E_r`` via the implicit function theorem
@@ -34,8 +34,12 @@ Public entry points:
 
 Units follow SFINCS: ``E_r`` is the deck's normalized ``Er`` entry and the
 per-species fluxes are ``particleFlux_vm_psiHat`` (the ``sum_s Z_s Gamma_s``
-root is coordinate-independent because the ``psiHat`` <-> ``rHat`` Jacobian is a
-positive species-independent factor).
+root is coordinate-independent because the signed ``psiHat`` <-> ``rHat``
+Jacobian is species-independent). Stability uses outward current:
+``C_pol dEr/dt = -J_out`` for fixed profiles and positive polarization
+capacity, so a positive outward-current slope is restoring. See Velasco
+et al., Plasma Phys. Control. Fusion 55, 124044 (2013), equation (3),
+https://arxiv.org/abs/1307.1658.
 """
 
 from __future__ import annotations
@@ -96,10 +100,10 @@ class AmbipolarRoot:
     Attributes:
         er: the root ``E_r``.
         radial_current: ``J_r`` at the root (residual; near zero).
-        slope: ``dJr/dEr`` at the root (central finite difference, used only to
-            classify the root — the differentiable gradient uses autodiff).
+        slope: native psiHat-current ``dJr/dEr`` (central finite difference).
+            Classification converts it to outward current; AD uses autodiff.
         root_type: ``"ion"`` (stable, ``E_r < 0``), ``"electron"`` (stable,
-            ``E_r > 0``), ``"unstable"`` (``dJr/dEr < 0``), ``"marginal"``
+            ``E_r > 0``), ``"unstable"`` (outward-current slope < 0), ``"marginal"``
             (zero slope), or ``"unknown"`` (nonfinite field/slope).
     """
 
@@ -490,8 +494,8 @@ def _same_sign(a: float, b: float) -> bool:
     return (a > 0.0 and b > 0.0) or (a < 0.0 and b < 0.0)
 
 
-def _classify(er: float, slope: float) -> str:
-    """ion / electron / unstable from ``E_r`` sign and the ``dJr/dEr`` sign.
+def _classify(er: float, slope: float, *, radial_factor: float = 1.0) -> str:
+    """ion / electron / unstable from ``E_r`` and outward-current slope.
 
     The radial field relaxes as ``dEr/dt ~ -J_r``, so a root is *stable* iff
     ``dJr/dEr > 0``.  On the standard stellarator S-curve the outer stable ion
@@ -499,6 +503,8 @@ def _classify(er: float, slope: float) -> str:
     middle root has ``dJr/dEr < 0`` (unstable). Root count alone does not
     determine stability; a zero slope is marginal.
     """
+    # Stability uses outward current; psiHat may increase inward.
+    slope *= radial_factor
     if not math.isfinite(er) or not math.isfinite(slope):
         return "unknown"
     if slope == 0.0:
@@ -823,7 +829,7 @@ def find_ambipolar_er(
     span = max(abs(er_max - er_min), 1.0)
     h = float(slope_step) if slope_step is not None else 1e-3 * span
     slope = (eval_jr(root_er + h, "slope_plus") - eval_jr(root_er - h, "slope_minus")) / (2.0 * h)
-    root_type = _classify(root_er, slope)
+    root_type = _classify(root_er, slope, radial_factor=-problem.dphi_per_er)
 
     roots: list[AmbipolarRoot] = [AmbipolarRoot(root_er, jr_root, slope, root_type)]
     if all_roots and n_scan >= 3:
@@ -836,6 +842,7 @@ def find_ambipolar_er(
             field_tol=field_tol,
             slope_step=h,
             primary=roots[0],
+            radial_factor=-problem.dphi_per_er,
         )
 
     if emit is not None:
@@ -903,6 +910,7 @@ def _enumerate_roots(
     slope_step: float,
     primary: AmbipolarRoot,
     field_tol: float = 1e-10,
+    radial_factor: float = 1.0,
 ) -> list[AmbipolarRoot]:
     """Classify accepted sampled zeros and sign-changing scan intervals."""
     grid = np.linspace(float(er_min), float(er_max), int(n_scan))
@@ -927,7 +935,7 @@ def _enumerate_roots(
             eval_jr(er + slope_step, "scan_slope_plus")
             - eval_jr(er - slope_step, "scan_slope_minus")
         ) / (2.0 * slope_step)
-        roots.append(AmbipolarRoot(er, jr, slope, _classify(er, slope)))
+        roots.append(AmbipolarRoot(er, jr, slope, _classify(er, slope, radial_factor=radial_factor)))
     if not roots:
         roots.append(primary)
     return roots
