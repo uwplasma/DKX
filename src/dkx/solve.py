@@ -232,7 +232,7 @@ _SOLVE_CPU_MAX_TIER2_DEFAULT = 0
 # the semicoarsened V-cycle of :mod:`dkx.multigrid`; ``"sparse"`` keeps the
 # inverse exact but eliminates in a fill-reducing order on the host
 # (:mod:`dkx.sparse_precond`), which is what the Fortran reference does.
-_TIER2_PRECONDITIONERS = ("coarse", "coarse_triangle", "multigrid", "sparse", "none")
+_TIER2_PRECONDITIONERS = ("coarse", "coarse_triangle", "multigrid", "sparse", "sparse_triangle", "none")
 
 # =============================================================================
 # Result container
@@ -2742,7 +2742,8 @@ def build_tier2_preconditioner(
     not; ``"sparse"`` is :func:`dkx.sparse_precond.build_sparse_preconditioner`,
     which keeps the inverse exact but eliminates in a fill-reducing order on the
     host instead of eliminating ``L`` first, so the angular stencils stay sparse.
-    All three eliminate the bordered constraint / ``Phi1`` rows identically, and
+    ``"sparse_triangle"`` retains the same speed triangle as ``"coarse_triangle"``
+    using these sparse factors. All routes eliminate the border identically, and
     none changes the solution: they change how fast the Krylov route gets
     there.
     """
@@ -2752,10 +2753,13 @@ def build_tier2_preconditioner(
         return build_coarse_preconditioner(
             op, drop_l_coupling=drop_l_coupling, retain_speed_triangle=True
         )
-    if kind == "sparse":
+    if kind in ("sparse", "sparse_triangle"):
         from dkx.sparse_precond import build_sparse_preconditioner  # noqa: PLC0415
 
-        return build_sparse_preconditioner(op, drop_l_coupling=drop_l_coupling)
+        return build_sparse_preconditioner(
+            op, drop_l_coupling=drop_l_coupling,
+            retain_speed_triangle=kind == "sparse_triangle",
+        )
     from dkx.multigrid import build_multigrid_preconditioner  # noqa: PLC0415
 
     return build_multigrid_preconditioner(op, drop_l_coupling=drop_l_coupling)
@@ -3392,6 +3396,11 @@ def solve(
                 leaves, since the assembly reads values on the host.
             ``"none"``
                 unpreconditioned GCROT.
+
+            ``"sparse_triangle"``
+                sparse LU with the self-species collision operator's upper
+                speed triangle retained. Same map as ``"coarse_triangle"``;
+                reads each existing sparse factor once by back-substitution.
 
             ``None`` (the default) keeps the historical behaviour selected by
             ``use_preconditioner``, so nothing changes silently.  A
