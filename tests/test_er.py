@@ -9,7 +9,7 @@ Pins the ``er.py`` slice against the legacy path it replaces:
   deletion and hard-coded here);
 - warm starts / GCROT recycling reduce the total Krylov iteration count on a
   Fokker-Planck (recycled Krylov) Er scan;
-- ion / electron / unstable classification from the sign of ``dJr/dEr``;
+- ion / electron / unstable classification from the outward-current slope;
 - the differentiable :func:`dkx.er.ambipolar_er` gradient matches a
   central finite difference (implicit function theorem, not FD roots).
 """
@@ -215,7 +215,8 @@ def test_root_classification_ion(tmp_path: Path) -> None:
     assert result.roots[0].slope > 0.0
 
 
-def test_classify_unit_logic() -> None:
+@pytest.mark.parametrize("radial_factor", [-7., -1., 1., 7.])
+def test_classify_unit_logic(radial_factor) -> None:
     from dkx.er import _classify
 
     assert _classify(-0.4, 1.0) == "ion"        # stable, Er < 0
@@ -225,6 +226,10 @@ def test_classify_unit_logic() -> None:
     assert _classify(-0.1, 0.0) == "marginal"
     assert _classify(0.1, np.nan) == "unknown"
     assert _classify(np.inf, 1.0) == "unknown"
+    for field, slope, label in [(-.4, 1., "ion"), (.4, 1., "electron"),
+                                (.1, -1., "unstable"), (.1, 0., "marginal"),
+                                (.1, np.nan, "unknown"), (np.inf, 1., "unknown")]:
+        assert _classify(field, slope/radial_factor, radial_factor=radial_factor) == label
 
 
 def test_brent_rejects_narrow_discontinuous_bracket():
@@ -249,7 +254,8 @@ def test_brent_bracketing_does_not_multiply_tiny_currents():
 @pytest.fixture
 def host_current(monkeypatch):
     from dkx import er
-    problem = er.ErProblem(None, 1., np.array([1.]), 0., -1., 1.)
+    # The synthetic callback returns outward current: -dphi_per_er = +1.
+    problem = er.ErProblem(None, -1., np.array([1.]), 0., -1., 1.)
     monkeypatch.setattr(er, "_check_host_kinetic_state", lambda *args: None)
     def install(function):
         def current(p, e, **kwargs):
@@ -312,6 +318,25 @@ def test_host_selected_classification_is_not_replaced_by_nearby_root(host_curren
     assert result.converged and result.er == .001
     assert result.root_type == "electron"
     assert [r.root_type for r in result.roots] == ["ion", "unstable", "electron"]
+
+
+@pytest.mark.parametrize("radial_factor", [-7., -1., 1., 7.])
+def test_host_root_classification_is_radial_chart_invariant(monkeypatch, radial_factor):
+    from dkx import er
+    problem = er.ErProblem(None, -radial_factor, np.array([1.]), .5, -.75, .75)
+    monkeypatch.setattr(er, "_check_host_kinetic_state", lambda *args: None)
+    def current(problem, field, **kwargs):
+        raw = (field+.5)*field*(field-.5)/radial_factor
+        return raw, np.array([raw]), None
+    monkeypatch.setattr(er, "radial_current", current)
+    result = er.find_ambipolar_er(problem, all_roots=True, n_scan=7, slope_step=1e-4,
+                                current_tol=1e-12, field_tol=1e-12, emit=None)
+    assert result.converged and result.er == .5 and result.root_type == "electron"
+    np.testing.assert_allclose([r.er for r in result.roots], [-.5, 0., .5], atol=1e-12)
+    assert [r.root_type for r in result.roots] == ["ion", "unstable", "electron"]
+    # Stored slopes retain native psiHat-current units.
+    np.testing.assert_allclose([r.slope*radial_factor for r in result.roots],
+                               [.5+1e-8, -.25+1e-8, .5+1e-8], atol=1e-12)
 
 
 @pytest.mark.parametrize("value", [np.nan, np.inf])
