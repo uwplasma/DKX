@@ -62,6 +62,7 @@ dkx doctor                         # checks the environment
 ```
 
 Python ≥ 3.11. From source: `pip install -e .` in a clone.
+Optional Boozer transforms: `pip install -e ".[booz]"`.
 
 ## Quickstart
 
