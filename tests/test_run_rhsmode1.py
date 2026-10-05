@@ -32,7 +32,7 @@ FIXTURES = (
 
 EXPECTED_SOLVE_METHOD = {
     "pas_1species_PAS_noEr_tiny_scheme1": "block_tridiagonal",
-    "quick_2species_FPCollisions_noEr": "gcrot",
+    "quick_2species_FPCollisions_noEr": "block_tridiagonal",  # speed-coupled
     WITH_ER_BASE: "block_tridiagonal",
 }
 
@@ -227,7 +227,7 @@ def test_console_species_results_block_quick2species(
 
 
 # ---------------------------------------------------------------------------
-# Solver policy: structured direct for PAS, recycled Krylov for Fokker-Planck
+# Solver policy: structured direct for PAS and small Fokker-Planck decks
 # ---------------------------------------------------------------------------
 
 

@@ -171,8 +171,8 @@ def test_brent_expands_bracket_and_finds_analytic_root() -> None:
 def test_warm_start_reduces_solver_iterations(tmp_path: Path) -> None:
     from dkx import er as er_mod
 
-    # Fokker-Planck collisions route the auto policy to the recycled
-    # GCROT solver, where warm starts and recycling pay off.
+    # Warm starts and recycling are recycled-Krylov features; this small
+    # Fokker-Planck deck would take the speed-coupled direct route under auto.
     deck = _pas_deck(collision_operator=0, n_theta=5, n_zeta=5, n_xi=16, n_x=4)
     prob = er_mod.prepare(_write(tmp_path, deck), er_bracket=(-3.0, 1.0))
     er_seq = list(np.linspace(-0.6, -0.35, 5))
@@ -184,7 +184,7 @@ def test_warm_start_reduces_solver_iterations(tmp_path: Path) -> None:
             x0 = state.x if (warm and state is not None) else None
             recycle = state.recycle if (warm and state is not None) else None
             _j, _g, state = er_mod.radial_current(
-                prob, float(er_val), x0=x0, recycle=recycle, solve_method="auto", tol=1e-9
+                prob, float(er_val), x0=x0, recycle=recycle, solve_method="gmres", tol=1e-9
             )
             assert state.result.converged
             total += int(state.result.iterations or 0)

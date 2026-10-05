@@ -1014,7 +1014,7 @@ def _tier1_implicit(
 
     def solve_measured(b: jnp.ndarray, *, transpose: bool) -> tuple[jnp.ndarray, jnp.ndarray]:
         x = _tier1_refined_solve(op_const, t1_solver, b, transpose)
-        apply = _transposed_apply(op_const) if transpose else op_const.apply
+        apply = _pinned_matvecs(op_const)[1 if transpose else 0]
         residual = _column_apply(apply, x) - b
         norms = [jnp.linalg.norm(v, axis=0) for v in (residual, b, x)]
         op_norm = _operator_norm_estimate(apply, b.shape[0])

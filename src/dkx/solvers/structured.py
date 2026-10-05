@@ -66,12 +66,12 @@ def _stripped(op: KineticOperator) -> KineticOperator:
 
 
 def _layout(op: KineticOperator) -> list[np.ndarray]:
-    """Active flat ``(species, x)`` pair indices at every ``l`` (static)."""
-    n_s, n_x, n_xi = op.n_species, op.n_x, op.n_xi
+    """Active flat ``(species, x)`` pair indices at every ``l`` that has any (static)."""
+    n_s, n_x = op.n_species, op.n_x
     nxi = np.asarray(op.n_xi_for_x)
     return [
-        np.array([s * n_x + x for s in range(n_s) for x in range(n_x) if nxi[x] > l])
-        for l in range(n_xi)
+        np.array([s * n_x + x for s in range(n_s) for x in range(n_x) if nxi[x] > l], dtype=int)
+        for l in range(min(op.n_xi, int(nxi.max())))
     ]
 
 
@@ -134,8 +134,9 @@ class CoupledSolver:
         tz = n_t * n_z
         layout = _layout(op)
         g = r.reshape(n_s * n_x, n_xi, tz)
-        rows = [g[layout[l], l].reshape(-1) for l in range(n_xi)]
-        sel = [np.searchsorted(layout[l - 1], layout[l]) for l in range(1, n_xi)]
+        n_l = len(layout)
+        rows = [g[layout[l], l].reshape(-1) for l in range(n_l)]
+        sel = [np.searchsorted(layout[l - 1], layout[l]) for l in range(1, n_l)]
 
         def lo(l: int, y: jnp.ndarray) -> jnp.ndarray:  # Lo_l y_(l-1)
             yk = y.reshape(-1, tz)[sel[l - 1]]
@@ -160,26 +161,26 @@ class CoupledSolver:
         # A = U~ L~: U~ unit upper with U_l S_(l+1)^-1 above the diagonal, L~
         # lower with S_l on it and Lo_l below; elimination runs from l = Nxi - 1
         # down, so the singular l = 0 collision block is reached last.
-        sol: list = [None] * n_xi
+        sol: list = [None] * n_l
         if not transpose:
             y = rows[:]
-            for l in range(n_xi - 2, -1, -1):
+            for l in range(n_l - 2, -1, -1):
                 y[l] = rows[l] - up(l, lu_solve(self.lu[l + 1], y[l + 1]))
             sol[0] = lu_solve(self.lu[0], y[0])
-            for l in range(1, n_xi):
+            for l in range(1, n_l):
                 sol[l] = lu_solve(self.lu[l], y[l] - lo(l, sol[l - 1]))
         else:
             w = rows[:]
             w[-1] = lu_solve(self.lu[-1], rows[-1], trans=1)
-            for l in range(n_xi - 2, -1, -1):
+            for l in range(n_l - 2, -1, -1):
                 w[l] = lu_solve(self.lu[l], rows[l] - lo_t(l + 1, w[l + 1]), trans=1)
             sol[0] = w[0]
-            for l in range(n_xi - 1):
+            for l in range(n_l - 1):
                 sol[l + 1] = w[l + 1] - lu_solve(self.lu[l + 1], up_t(l, sol[l]), trans=1)
         # The truncated (x, l >= Nxi_for_x) DOFs carry identity rows: this is the
         # inverse of the pinned operator of dkx.solve._pinned_matvecs.
         out = g
-        for l in range(n_xi):
+        for l in range(n_l):
             out = out.at[layout[l], l].set(sol[l].reshape(-1, tz))
         return out.reshape(-1)
 
@@ -248,16 +249,17 @@ def _factor(op: KineticOperator) -> CoupledSolver:
     # angle; the Schur complement from l >= 2 lifts all of that but a parallel
     # flow per species, which g Q Q^T lifts and _a_solve restores (Woodbury).
     q = None
-    if n_xi > 1 and len(layout[1]) == n_s * n_x:
+    if len(layout) > 1:
         ang = (op._fs_average_factor() * op.b_hat).reshape(-1)
         prof = op.x**3 * op.x_weights
-        q = jnp.einsum("st,x,a->sxat", jnp.eye(n_s), prof, ang).reshape(-1, n_s)
+        q_all = jnp.einsum("st,x,a->sxat", jnp.eye(n_s), prof, ang).reshape(n_s * n_x, tz, n_s)
+        q = q_all[layout[1]].reshape(-1, n_s)  # the speeds that carry l = 1
         qq = q @ q.T
-    lowers = [jnp.zeros((0, tz, tz))] + [lower_all[l, layout[l]] for l in range(1, n_xi)]
-    uppers = [upper_all[l, layout[l + 1]] for l in range(n_xi - 1)] + [jnp.zeros((0, tz, tz))]
-    lus: list = [None] * n_xi
-    lus[-1] = lu_factor(d0 if n_xi == 1 else diag_block(n_xi - 1))
-    for l in range(n_xi - 2, -1, -1):
+    lowers = [jnp.zeros((0, tz, tz))] + [lower_all[l, layout[l]] for l in range(1, len(layout))]
+    uppers = [upper_all[l, layout[l + 1]] for l in range(len(layout) - 1)] + [jnp.zeros((0, tz, tz))]
+    lus: list = [None] * len(layout)
+    lus[-1] = lu_factor(d0 if len(layout) == 1 else diag_block(len(layout) - 1))
+    for l in range(len(layout) - 2, -1, -1):
         sel = np.searchsorted(layout[l], layout[l + 1])
         k_l, k_n = len(layout[l]), len(sel)
         # W = S_(l+1)^-1 Lo_(l+1), then S_l = D_l - U_l W on the rows U_l reaches.
@@ -273,7 +275,7 @@ def _factor(op: KineticOperator) -> CoupledSolver:
         lus[l] = lu_factor(d.at[sel].add(-uw).reshape(k_l * tz, k_l * tz))
     solver = CoupledSolver(op, tuple(lus), tuple(lowers), tuple(uppers), (b, c, gamma) + (None,) * 4)
     if q is not None:
-        qf = jnp.zeros((n_s * n_x, n_xi, tz, n_s)).at[:, 1].set(q.reshape(n_s * n_x, tz, n_s))
+        qf = jnp.zeros((n_s * n_x, n_xi, tz, n_s)).at[layout[1], 1].set(q.reshape(-1, tz, n_s))
         qf = qf.reshape(-1, n_s)
         zq, zqt = (
             jax.vmap(lambda v, t=t: solver._lifted_solve(v, t), in_axes=1, out_axes=1)(qf)
