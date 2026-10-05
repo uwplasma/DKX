@@ -392,17 +392,19 @@ class Case:
 
 
 def migrate_case_data(raw: Mapping[str, Any]) -> dict[str, Any]:
-    """Return schema-v1 data or reject versions without a defined migration."""
+    """Return case data; a legacy ``schema = 1`` key is accepted and ignored."""
 
     data = dict(raw)
-    supplied = data.get("schema")
-    if supplied != SCHEMA_VERSION:
+    legacy = data.pop("schema", SCHEMA_VERSION)
+    if type(legacy) is not int or legacy != SCHEMA_VERSION:
         raise CaseValidationError(
             "schema",
-            supplied,
-            f"integer {SCHEMA_VERSION}",
-            "Set schema = 1; no migration from this version is defined yet.",
+            legacy,
+            f"absent (legacy files may say {SCHEMA_VERSION})",
+            "Delete the schema key; DKX cases carry no version field.",
         )
+    # The internal field keeps canonical content, and so case IDs, unchanged.
+    data["schema"] = SCHEMA_VERSION
     return data
 
 
@@ -421,7 +423,6 @@ def case_json_schema() -> dict[str, Any]:
         "type": "object",
         "additionalProperties": False,
         "required": [
-            "schema",
             "name",
             "run",
             "geometry",
@@ -601,7 +602,6 @@ COMMENTED_TOML_EXAMPLE = """# DKX case schema version 1.
 # rather than a file that runs unedited: it names a VMEC equilibrium you have
 # to supply, and it turns on convergence refinement and sharding. Edit it down
 # to what you need. `dkx validate` will tell you what is left to fix.
-schema = 1
 name = "w7x_ambipolar_profile"
 
 [run]

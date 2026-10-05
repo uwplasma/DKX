@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Case inputs no longer carry a `schema` key. Older files with `schema = 1`
+  still load (the key is ignored); other values are refused. Case IDs are
+  unchanged.
+
 ## v2.8.0 — 2026-10-05
 
 A converged kinetic bootstrap row compiled as one program, a momentum-conserving

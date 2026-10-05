@@ -1,6 +1,5 @@
 # Complete native schema-v1 profile example. Validation is intentionally
 # independent of whether this illustrative equilibrium has been downloaded.
-schema = 1
 name = "w7x_ambipolar_profile"
 
 [run]

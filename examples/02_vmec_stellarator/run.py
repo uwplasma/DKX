@@ -75,7 +75,6 @@ if not _wout.exists() and _wout.with_name(_wout.name + ".xz").exists():
 
 case = dkx.Case.from_mapping(
     {
-        "schema": 1,
         "name": "native_vmec_profile",
         "run": {"workflow": "profile", "progress": True},
         "geometry": GEOMETRY,

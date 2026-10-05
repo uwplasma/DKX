@@ -1,5 +1,4 @@
 # Small, directly executable native schema-v1 profile (no SFINCS namelist).
-schema = 1
 name = "analytic_tokamak_profile"
 
 [run]

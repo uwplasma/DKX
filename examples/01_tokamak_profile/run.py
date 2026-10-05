@@ -76,7 +76,6 @@ SOLVER = {"method": "auto", "relative_tolerance": 1.0e-8, "memory_fraction": 0.7
 
 case = dkx.Case.from_mapping(
     {
-        "schema": 1,
         "name": "analytic_tokamak_profile",
         "run": {"workflow": "profile", "progress": True},
         "geometry": GEOMETRY,

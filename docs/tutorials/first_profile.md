@@ -11,7 +11,6 @@ A native case is a TOML (or JSON) file with one table per concern. This is
 `examples/01_tokamak_profile/case.toml`, without its comments:
 
 ```toml
-schema = 1
 name = "analytic_tokamak_profile"
 
 [run]

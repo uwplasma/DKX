@@ -1,5 +1,4 @@
 # Native schema-v1 Boozer profile. The relative path is resolved beside this file.
-schema = 1
 name = "native_boozer_profile"
 
 [run]

@@ -86,7 +86,6 @@ CONVERGENCE = {
 
 case = dkx.Case.from_mapping(
     {
-        "schema": 1,
         "name": "analytic_ambipolar_profile",
         "run": {"workflow": "ambipolar_profile", "precision": "float64",
                 "device": "auto", "progress": True},
