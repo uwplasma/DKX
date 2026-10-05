@@ -33,8 +33,9 @@ def test_native_phi1_kinetic_solves_the_coupled_residual(tmp_path):
     off = run_case(_case(tmp_path, "off"))
     on = run_case(_case(tmp_path, "kinetic"))
     # Accepted by the original nonlinear residual F(x) = A(x) - b(x).
-    assert np.all(on.residuals <= 1.0e-8 * on.rhs_norms)
-    flux_off, flux_on = np.asarray(off.particle_flux), np.asarray(on.particle_flux)
+    assert np.all(on.primal_residual <= 1.0e-8 * on.primal_rhs_norm)
+    flux_off, flux_on = off.particle_flux_m2_s, on.particle_flux_m2_s
+    print(on.primal_residual, on.primal_rhs_norm, flux_off, flux_on)
     assert np.all(np.isfinite(flux_on))
     # Phi1 changes the solution, but only as a correction on this weak-E_r case.
     assert not np.allclose(flux_on, flux_off, rtol=1e-12, atol=0.0)
