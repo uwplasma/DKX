@@ -1397,10 +1397,12 @@ def _escalate_after_tier2_stall(
     # pitch-angle scattering, since there it repeats the stalled solve.
     #
     # "sparse" follows because it eliminates in a fill-reducing order where
-    # "coarse" eliminates L first and fills the angular stencils in.
+    # "coarse" eliminates L first and fills the angular stencils in; with a
+    # dense collision operator it keeps the same triangle (2.9-3.1x fewer
+    # iterations on HSX Fokker-Planck decks, 2026-10-05 ladder of #303).
     kinds = ("sparse", "multigrid")
     if op.fp is not None or op.sugama is not None:
-        kinds = ("coarse_triangle", *kinds)
+        kinds = ("coarse_triangle", "sparse_triangle", "multigrid")
     for kind in kinds:
         if kind == preconditioner:
             continue

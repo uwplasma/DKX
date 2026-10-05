@@ -47,6 +47,18 @@
   that names the replacement; `dkx.api.momentum_corrected_bootstrap` now takes the
   pitch-angle operator and its Fokker–Planck twin.
 
+### Performance
+
+- Retain the Fokker-Planck speed triangle in the sparse Krylov preconditioner
+  (#303). `solve(preconditioner="sparse_triangle")` keeps the self-species
+  upper speed triangle that `"sparse"` drops, reusing the same sparse LU
+  factors by back-substitution over speed. The stalled-solve escalation now
+  tries it in place of `"sparse"` on Fokker-Planck and Sugama decks; an
+  explicit `preconditioner="sparse"` is unchanged. On the HSX Fokker-Planck
+  DKES deck it cut GCROT iterations from 46-55 to 16-18 across a four-rung
+  ladder (54,564 to 786,244 unknowns) and on the W7-X paper deck from 22-26
+  to 10-11, with currents and fluxes equal to the solver tolerance.
+
 ## v2.7.0 — 2026-09-27
 
 Faster by default and ready for optimization: a memory-aware Krylov restart
