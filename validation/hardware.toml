@@ -27,13 +27,11 @@ solvax = "0.20.0"
 notes = "Observed during the September 5 review. Local timing probes had uncontrolled background load and are diagnostic only."
 
 [[host]]
-id = "office-nvidia"
+id = "nvidia-a4000"
 role = "maintained_gpu"
 official_release_baseline = true
 availability = "available"
-connection = "ssh office"
 last_check = "2026-09-05"
-hostname = "pop-os"
 operating_system = "Pop!_OS 22.04 LTS"
 cpu_cores = 36
 memory_bytes = 66571993088
@@ -43,7 +41,6 @@ gpu_driver = "580.173.02"
 device_count = 2
 python_system = "3.10.12"
 python_dkx = "3.11.15"
-python_environment = "/home/rjorge/venvs/dkx-gpu"
 jax = "0.10.2"
 jaxlib = "0.10.2"
 solvax = "0.20.0"

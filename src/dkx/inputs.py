@@ -1,6 +1,6 @@
 """SFINCS v3 ``input.namelist`` reading, defaults, and validation.
 
-Fortran counterparts (``/Users/rogerio/local/sfincs/fortran/version3``):
+Fortran counterparts (``../sfincs/fortran/version3``):
 
 - ``readInput.F90``   — namelist group membership and species-array handling.
 - ``globalVariables.F90`` (``gV`` in comments below) — the default value of

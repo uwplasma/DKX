@@ -1,6 +1,6 @@
 """Render the RTX A4000 GPU anatomy / memory-headroom figure for the docs.
 
-Two panels, both measured on one office host (RTX A4000 16 GB, 12.56 GB usable
+Two panels, both measured on one benchmark host (RTX A4000 16 GB, 12.56 GB usable
 device budget, 36-core CPU), warm best-of-N ``block_tridiagonal_truncated``
 solves of HSX-family decks:
 

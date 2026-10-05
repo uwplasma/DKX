@@ -105,9 +105,9 @@
   },
   "failures": [],
   "inputs": {
-    "cpu": "/Users/rogeriojorge/local/tests/dkx/docs/_static/figures/optimization/qa_nfp2_dkx_promotion_scan.json",
-    "fortran": "/Users/rogeriojorge/local/tests/dkx/docs/_static/figures/optimization/qa_nfp2_dkx_promotion_scan.json",
-    "gpu": "/Users/rogeriojorge/local/tests/dkx/docs/_static/figures/optimization/qa_nfp2_dkx_promotion_scan.json"
+    "cpu": "../tests/dkx/docs/_static/figures/optimization/qa_nfp2_dkx_promotion_scan.json",
+    "fortran": "../tests/dkx/docs/_static/figures/optimization/qa_nfp2_dkx_promotion_scan.json",
+    "gpu": "../tests/dkx/docs/_static/figures/optimization/qa_nfp2_dkx_promotion_scan.json"
   },
   "status": "pass",
   "tolerances": {

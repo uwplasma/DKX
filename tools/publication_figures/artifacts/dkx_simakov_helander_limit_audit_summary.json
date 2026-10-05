@@ -31,7 +31,7 @@
           "Coefficients follow the Appendix-B structure using checked-in normalized dkx output fields.",
           "Use these values as an audit of normalization and geometry ingredients, not as a final analytic-limit acceptance gate."
         ],
-        "source_output": "/Users/rogeriojorge/local/tests/dkx/tools/publication_figures/output/lhd_co0/nu_n_2.668/sfincsOutput.h5",
+        "source_output": "../tests/dkx/tools/publication_figures/output/lhd_co0/nu_n_2.668/sfincsOutput.h5",
         "transport_matrix_coefficients_over_nuprime": {
           "L11": -0.0361716627961521,
           "L12": -0.15529406407239038,
@@ -179,7 +179,7 @@
           "Coefficients follow the Appendix-B structure using checked-in normalized dkx output fields.",
           "Use these values as an audit of normalization and geometry ingredients, not as a final analytic-limit acceptance gate."
         ],
-        "source_output": "/Users/rogeriojorge/local/tests/dkx/tools/publication_figures/output/w7x_co0/nu_n_1.727/sfincsOutput.h5",
+        "source_output": "../tests/dkx/tools/publication_figures/output/w7x_co0/nu_n_1.727/sfincsOutput.h5",
         "transport_matrix_coefficients_over_nuprime": {
           "L11": -0.0028885696480061653,
           "L12": -0.012508189410501611,

@@ -90,8 +90,8 @@ def test_vmex_workflow_docs_are_indexed_and_command_complete() -> None:
 
 def _optional_wout_fixture() -> Path | None:
     candidates = [
-        Path("/Users/rogeriojorge/local/vmex/examples/data/wout_circular_tokamak.nc"),
-        Path("/Users/rogeriojorge/local/booz_xform_jax/tests/test_files/wout_circular_tokamak.nc"),
+        Path("../vmex/examples/data/wout_circular_tokamak.nc"),
+        Path("../booz_xform_jax/tests/test_files/wout_circular_tokamak.nc"),
     ]
     for candidate in candidates:
         if candidate.exists():

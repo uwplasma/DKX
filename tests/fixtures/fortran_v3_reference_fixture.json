@@ -79,7 +79,7 @@
           }
         ],
         "date": "2026-06-22",
-        "fortran_executable": "/Users/rogeriojorge/local/sfincs/fortran/version3/sfincs",
+        "fortran_executable": "../sfincs/fortran/version3/sfincs",
         "kind": "sfincs_fortran_v3_ambipolar_production_probe_summary",
         "notes": [
           "The production probe was launched before the checked-in runner gained /usr/bin/time -lp wrapping, so peak RSS is not available in this summary.",
@@ -692,7 +692,7 @@
             "timed_out": false
           }
         ],
-        "fortran_executable": "/Users/rogeriojorge/local/sfincs/fortran/version3/sfincs",
+        "fortran_executable": "../sfincs/fortran/version3/sfincs",
         "kind": "sfincs_fortran_v3_ambipolar_reference",
         "tier": "production"
       },
@@ -839,7 +839,7 @@
           }
         ],
         "date": "2026-06-22",
-        "fortran_executable": "/Users/rogeriojorge/local/sfincs/fortran/version3/sfincs",
+        "fortran_executable": "../sfincs/fortran/version3/sfincs",
         "kind": "sfincs_fortran_v3_ambipolar_probe_summary",
         "notes": [
           "Scratch logs were intentionally not committed because MUMPS/PETSc output is verbose.",
@@ -1295,7 +1295,7 @@
             "timed_out": false
           }
         ],
-        "fortran_executable": "/Users/rogeriojorge/local/sfincs/fortran/version3/sfincs",
+        "fortran_executable": "../sfincs/fortran/version3/sfincs",
         "kind": "sfincs_fortran_v3_ambipolar_reference",
         "tier": "small"
       }
@@ -1896,7 +1896,7 @@
             "wall_time_s": 0.27
           }
         ],
-        "fortran_executable": "/Users/rogeriojorge/local/sfincs/fortran/version3/sfincs",
+        "fortran_executable": "../sfincs/fortran/version3/sfincs",
         "kind": "sfincs_fortran_v3_rhsmode45_sensitivity_reference",
         "tier": "small"
       },
@@ -1905,7 +1905,7 @@
         "finite_difference_times_s": [
           0.11030400000004192
         ],
-        "fortran_executable": "/Users/rogeriojorge/local/sfincs/fortran/version3/sfincs",
+        "fortran_executable": "../sfincs/fortran/version3/sfincs",
         "hdf5_fields": {
           "RHSMode": {
             "shape": [],

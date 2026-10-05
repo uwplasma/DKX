@@ -33,7 +33,7 @@
     "residual_target": 2.7119146635082425e-13
   },
   "fortran_v3": {
-    "executable": "/Users/rogeriojorge/local/sfincs/fortran/version3/sfincs",
+    "executable": "../sfincs/fortran/version3/sfincs",
     "output_written": true,
     "cli_return_code": 1,
     "failure_after_output": "MPI_Finalize returned exit status 143 after writing sfincsOutput.h5.",

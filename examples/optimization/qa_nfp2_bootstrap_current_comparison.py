@@ -133,8 +133,8 @@ def _candidate_vmex_roots(explicit: Path | None) -> list[Path | None]:
         roots.append(Path(env_root).expanduser().resolve())
     roots.extend(
         [
-            Path("/Users/rogeriojorge/local/vmex"),
-            Path("/Users/rogeriojorge/vmex"),
+            Path("../vmex"),
+            Path("../vmex"),
             None,
         ]
     )

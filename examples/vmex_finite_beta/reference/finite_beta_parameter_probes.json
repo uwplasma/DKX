@@ -3,7 +3,7 @@
     "baseline": "Ntheta=7,Nzeta=7,Nxi=7,NL=6,Nx=6",
     "description": "Finite-beta VMEX to dkx one-parameter resolution probes at r_N=0.50.",
     "normalization": "Er and FSABjHat are normalized dkx output quantities.",
-    "source": "Generated on office RTX A4000 GPUs during the high-resolution finite-beta documentation campaign."
+    "source": "Generated on benchmark RTX A4000 GPUs during the high-resolution finite-beta documentation campaign."
   },
   "profiles": {
     "7/6/6": {

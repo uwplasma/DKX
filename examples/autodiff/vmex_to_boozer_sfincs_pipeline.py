@@ -59,7 +59,7 @@ def _default_wout_candidates() -> list[Path]:
         candidates.append(Path(env_path))
     candidates.extend(
         [
-            Path("/Users/rogeriojorge/local/vmex/examples/data/wout_circular_tokamak.nc"),
+            Path("../vmex/examples/data/wout_circular_tokamak.nc"),
             _REPO_ROOT / "dkx" / "data" / "equilibria" / "wout_w7x_standardConfig.nc",
         ]
     )
