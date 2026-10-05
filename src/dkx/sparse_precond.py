@@ -30,9 +30,11 @@ already uses, factor it on the host with SuperLU, and apply it through
 
 Three facts make this admissible where a host callback would not otherwise be:
 
-* The ``(species, x)`` subsystems are **uncoupled** in the simplified operator,
+* The ``(species, x)`` subsystems are **uncoupled** by default,
   so this is ``Nspecies * Nx`` independent factorizations of ``Nxi *
   Ntheta * Nzeta`` rows each, not one factorization of the whole system.
+  The optional self-species upper speed triangle reuses those factors in
+  back-substitution; it does not add a larger sparse factorization.
 * A preconditioner is never differentiated.  The recycled Krylov implicit-diff
   wrapper differentiates the *solution*; the preconditioner enters only the forward and
   transposed linear solves, whose derivatives the implicit function theorem
@@ -325,7 +327,7 @@ def assemble_simplified(
 
 
 def build_sparse_f_inverse(
-    op: KineticOperator, *, drop_l_coupling: bool = False
+    op: KineticOperator, *, drop_l_coupling: bool = False, retain_speed_triangle: bool = False
 ) -> tuple[Callable, Callable, SparseSimplified]:
     """``(a_inv, a_inv_t, assembled)`` — host sparse-LU inverse of the f-block.
 
@@ -336,7 +338,10 @@ def build_sparse_f_inverse(
     ``(A + u v^T)^{-1} r = A^{-1} r - A^{-1} u (v^T A^{-1} r) / (1 + v^T A^{-1} u)``,
 
     which needs one extra triangular solve per subsystem, done once at build
-    time for ``A^{-1} u``.
+    time for ``A^{-1} u``. ``retain_speed_triangle=True`` additionally retains
+    the self-species collision operator's strict upper speed triangle. The
+    existing factors then solve each speed once by back-substitution; the
+    transposed inverse traverses the speeds in the opposite order.
     """
     import scipy.sparse.linalg as spla  # noqa: PLC0415
 
@@ -360,6 +365,11 @@ def build_sparse_f_inverse(
         at_inv_v = lu.solve(v_full, trans="T")
         carry.append((u_full, v_full, a_inv_u, at_inv_v))
 
+    from dkx.coarse_precond import _strict_upper_speed_coupling  # noqa: PLC0415
+
+    upper = _strict_upper_speed_coupling(op, op._mask()) if retain_speed_triangle else None
+    upper = None if upper is None else _np(upper)
+
     def _apply(v: np.ndarray, transpose: bool) -> np.ndarray:
         # ``v`` carries any number of leading batch axes (``schur_projected_precond``
         # vmaps the inverse over the border columns), so flatten them into one
@@ -368,10 +378,23 @@ def build_sparse_f_inverse(
         a = np.asarray(v, dtype=np.float64)
         lead = a.shape[:-1]
         g = a.reshape(-1, n_sub, width)  # (R, subsystem, row)
-        out = np.empty_like(g)
+        out = np.zeros_like(g) if upper is not None else np.empty_like(g)
         trans = "T" if transpose else "N"
-        for i, (lu, c) in enumerate(zip(factors, carry)):
+        # D + U is upper triangular in speed. Read every factor once, including
+        # all broadcast RHS columns, and preserve the exact rank-one pin below.
+        speeds = range(op.n_x) if transpose else range(op.n_x - 1, -1, -1)
+        order = range(n_sub) if upper is None else [
+            s * op.n_x + x for s in range(op.n_species) for x in speeds
+        ]
+        for i in order:
+            lu, c = factors[i], carry[i]
             rhs = g[:, i, :].T  # (row, R)
+            if upper is not None:
+                species, speed = divmod(i, op.n_x)
+                coefficient = upper[species, :, :, speed] if transpose else upper[species, :, speed, :]
+                solved = out.reshape(-1, op.n_species, op.n_x, op.n_xi, assembled.n_tz)[:, species]
+                coupling = np.einsum("lx,rxlt->rlt", coefficient, solved).reshape(-1, width)
+                rhs = (g[:, i, :] - coupling).T
             y = lu.solve(rhs, trans=trans)
             if c is not None:
                 u_full, v_full, a_inv_u, at_inv_v = c
@@ -401,13 +424,15 @@ def build_sparse_f_inverse(
 
 
 def build_sparse_preconditioner(
-    op: KineticOperator, *, drop_l_coupling: bool = False
+    op: KineticOperator, *, drop_l_coupling: bool = False, retain_speed_triangle: bool = False
 ) -> tuple[Callable[[jnp.ndarray], jnp.ndarray], Callable[[jnp.ndarray], jnp.ndarray]]:
     """Drop-in sparse replacement for :func:`dkx.coarse_precond.build_coarse_preconditioner`.
 
     Same simplified operator, same regularization, same exact elimination of the
     bordered constraint / ``Phi1`` rows — only the inner f-block inverse changes
-    from a dense block-Thomas factorization to a host sparse LU.
+    from a dense block-Thomas factorization to a host sparse LU. The opt-in
+    ``retain_speed_triangle`` additionally keeps upper speed coupling, matching
+    the dense ``coarse_triangle`` map without allocating its angular bands.
 
     Requires a host CPU device: the sparse LU runs on the host through
     ``jax.pure_callback``. Under ``JAX_PLATFORMS=cuda`` no CPU backend exists
@@ -430,7 +455,7 @@ def build_sparse_preconditioner(
         schur_projected_precond,
     )
 
-    a_inv, a_inv_t, _ = build_sparse_f_inverse(op, drop_l_coupling=drop_l_coupling)
+    a_inv, a_inv_t, _ = build_sparse_f_inverse(op, drop_l_coupling=drop_l_coupling, retain_speed_triangle=retain_speed_triangle)
     if op.include_phi1:
         b_cols, c_rows, d_block = _materialize_full_border(op)
         return (

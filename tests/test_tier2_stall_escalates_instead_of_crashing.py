@@ -117,7 +117,7 @@ def test_the_ladder_restores_the_dropped_speed_coupling_first(monkeypatch) -> No
     assert op.fp is not None or op.sugama is not None
     kinds = _spy_on_rungs(monkeypatch)
     _escalate(op)
-    assert kinds[0] == "coarse_triangle", kinds
+    assert kinds[0] == "coarse_triangle" and "sparse" not in kinds, kinds
 
 
 def test_pitch_angle_scattering_skips_the_triangle_rung(monkeypatch) -> None:

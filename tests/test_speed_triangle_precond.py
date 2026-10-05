@@ -23,6 +23,9 @@ from dkx.coarse_precond import (
     _strict_upper_speed_coupling,
     build_coarse_preconditioner,
 )
+from dkx.sparse_precond import build_sparse_preconditioner
+
+BUILDERS = [build_coarse_preconditioner, build_sparse_preconditioner]
 
 DECK = """&general
 /
@@ -118,11 +121,12 @@ def _triangular_operator(op):
     return replace(base, **{field: retained})
 
 
-def test_the_option_is_off_by_default(tmp_path: Path) -> None:
+@pytest.mark.parametrize("build", BUILDERS)
+def test_the_option_is_off_by_default(tmp_path: Path, build) -> None:
     """The default preconditioner must be byte-for-byte the one in use."""
     op = _operator(tmp_path)
-    default, _ = build_coarse_preconditioner(op)
-    explicit, _ = build_coarse_preconditioner(op, retain_speed_triangle=False)
+    default, _ = build(op)
+    explicit, _ = build(op, retain_speed_triangle=False)
     v = jnp.asarray(np.random.default_rng(0).standard_normal(op.total_size))
     assert float(jnp.linalg.norm(default(v) - explicit(v))) == 0.0
 
@@ -136,11 +140,15 @@ def test_the_retained_block_is_strictly_upper(tmp_path: Path) -> None:
     assert np.any(upper != 0.0), "a full-Fokker-Planck deck has coupling above it"
 
 
-def test_pitch_angle_scattering_has_nothing_to_retain(tmp_path: Path) -> None:
+@pytest.mark.parametrize("build", BUILDERS)
+def test_pitch_angle_scattering_has_nothing_to_retain(tmp_path: Path, build) -> None:
     """Pitch-angle scattering is already speed-diagonal, so the option is inert."""
     op = _operator(tmp_path, collision=1)
     upper = _strict_upper_speed_coupling(op, op._mask())
     assert upper is None or float(jnp.linalg.norm(upper)) == 0.0
+    v = jnp.asarray(np.random.default_rng(413).normal(size=op.total_size))
+    for default, triangle in zip(build(op), build(op, retain_speed_triangle=True)):
+        np.testing.assert_array_equal(default(v), triangle(v))
 
 
 def test_the_cross_species_block_is_left_out_deliberately(tmp_path: Path) -> None:
@@ -168,11 +176,12 @@ def test_the_cross_species_block_is_left_out_deliberately(tmp_path: Path) -> Non
     assert upper.shape[0] == n_s
 
 
-def test_it_inverts_the_operator_it_claims_to(tmp_path: Path) -> None:
+@pytest.mark.parametrize("build", BUILDERS)
+def test_it_inverts_the_operator_it_claims_to(tmp_path: Path, build) -> None:
     """``D^-1 U`` is nilpotent of index ``n_x``, so the sweeps reach the exact
     inverse of ``D + U`` rather than an approximation of it."""
     op = _operator(tmp_path)
-    precond, _ = build_coarse_preconditioner(op, retain_speed_triangle=True)
+    precond, _ = build(op, retain_speed_triangle=True)
     triangular = _triangular_operator(op)
     v = jnp.asarray(np.random.default_rng(0).standard_normal(op.total_size))
     recovered = precond(triangular.apply(v))
@@ -259,17 +268,35 @@ def test_back_substitution_and_the_full_series_are_the_same_map(tmp_path) -> Non
         assert difference / float(jnp.linalg.norm(series(v))) < 1e-10, difference
 
 
-def test_the_exact_triangle_adjoint_is_its_transpose(tmp_path) -> None:
+@pytest.mark.parametrize("build", BUILDERS)
+def test_the_exact_triangle_adjoint_is_its_transpose(tmp_path, build) -> None:
     """The adjoint runs the substitution the other way over ``x``, on the
     transposed couplings. That is only right if it is the transposed map."""
     op = _operator(tmp_path, nx=4)
-    precond, precond_t = build_coarse_preconditioner(op, retain_speed_triangle=True)
+    precond, precond_t = build(op, retain_speed_triangle=True)
     rng = np.random.default_rng(6)
     u = jnp.asarray(rng.standard_normal(op.total_size))
     w = jnp.asarray(rng.standard_normal(op.total_size))
     left = float(jnp.dot(precond(u), w))
     right = float(jnp.dot(u, precond_t(w)))
     assert abs(left - right) <= 1e-9 * max(abs(left), abs(right)), (left, right)
+
+
+@pytest.mark.parametrize("nx", [1, 4])
+def test_sparse_triangle_handles_one_speed_and_ramped_pitch(tmp_path, nx) -> None:
+    op = _operator(tmp_path, nx=nx)
+    op = replace(op, n_xi_for_x=jnp.asarray([max(4, op.n_xi - nx + x) for x in range(nx)]))
+    v = jnp.asarray(np.random.default_rng(414).normal(size=op.total_size))
+    dense = build_coarse_preconditioner(op, retain_speed_triangle=True)
+    sparse = build_sparse_preconditioner(op, retain_speed_triangle=True)
+    if nx == 1:
+        # Density and energy constraints are dependent with one speed. Compare
+        # the option with its own default, rather than two singular inverses.
+        for default, triangle in zip(build_sparse_preconditioner(op), sparse):
+            np.testing.assert_array_equal(default(v), triangle(v))
+        return
+    for expected, actual in zip(dense, sparse):
+        np.testing.assert_allclose(actual(v), expected(v), rtol=1e-7, atol=1e-7)
 
 
 def test_it_refuses_the_route_it_does_not_implement(tmp_path, monkeypatch) -> None:
