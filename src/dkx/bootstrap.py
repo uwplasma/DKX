@@ -366,6 +366,35 @@ class KineticBootstrapCurrent:
 #: converged one: refine ``Nxi`` first at low collisionality.
 DEFAULT_TRACED_RESOLUTION: dict[str, int] = {"Ntheta": 11, "Nzeta": 11, "Nxi": 16, "NL": 4, "Nx": 4}
 
+def batched_with_reverse_jvp(function: Any, stacked: Any) -> Any:
+    """``jit(vmap(function))(stacked, a, b)`` over axis 0 of ``stacked`` and ``a``, ``b`` shared.
+
+    ``function`` returns one scalar per row, so its exact Jacobian is one
+    reverse pass per row.  The forward derivative applies that Jacobian to
+    the tangent instead of pushing the tangent through ``function``: a caller
+    that batches many tangents (VMEX's block Jacobian, one per boundary dof)
+    then pays one adjoint solve per row, not one tangent solve per dof, and
+    compiles the reverse pass once instead of a batched forward one.
+    """
+    import jax  # noqa: PLC0415
+    import jax.numpy as jnp  # noqa: PLC0415
+
+    batched = jax.vmap(function, (0, 0, None))
+    gradients = jax.vmap(jax.value_and_grad(function, (1, 2)), (0, 0, None))
+
+    @jax.custom_jvp
+    def rows(a: Any, b: Any) -> Any:
+        return batched(stacked, a, b)
+
+    @rows.defjvp
+    def _(primals: tuple, tangents: tuple) -> tuple:
+        value, derivative = gradients(stacked, *primals)
+        dot = lambda d, t: jnp.sum((d * t).reshape(value.size, -1), axis=1)  # noqa: E731
+        return value, sum(jax.tree_util.tree_leaves(jax.tree_util.tree_map(dot, derivative, tangents)))
+
+    return jax.jit(rows)
+
+
 class KineticBootstrapMismatch:
     r"""DKX ``<j.B>`` as a traceable VMEX objective term, the kinetic ``RedlBootstrapMismatch``.
 
@@ -397,7 +426,9 @@ class KineticBootstrapMismatch:
     equilibrium, where VMEX's field tables live; :meth:`current_profiles`
     reports the row values.  The per-row operator templates and the Boozer
     plan are built on the host the first time a radial grid and mode set are
-    seen and cached, so a traced call is pure arithmetic.
+    seen and cached, so a traced call is pure arithmetic: one compiled program
+    for all surfaces, whose forward derivative applies the reverse-mode
+    Jacobian (one adjoint solve per surface) to every tangent.
 
     **Collision operator.**  The default, pitch-angle scattering
     (``collision_operator=1``), is solved by the exact structured route, so a
@@ -460,6 +491,8 @@ class KineticBootstrapMismatch:
         self._templates: dict[int, tuple[np.ndarray, np.ndarray, list[Any]]] = {}
         self._friction: dict[int, list[Any]] = {}
         self._plans: dict[tuple[Any, ...], Any] = {}
+        self._chains: dict[tuple[Any, ...], Any] = {}
+        self._eager: tuple[Any, Any] = (None, None)
 
     # -- host-side set-up, cached ---------------------------------------------
 
@@ -506,19 +539,22 @@ class KineticBootstrapMismatch:
         return self._templates[ns]
 
     def _plan(self, xm: np.ndarray, xn: np.ndarray, nfp: int) -> Any:
+        import jax  # noqa: PLC0415
         from booz_xform_jax.jax_api import BoozerConfig, prepare_booz_xform_plan  # noqa: PLC0415
 
         key = (nfp, xm.tobytes(), xn.tobytes())
         if key not in self._plans:
-            self._plans[key] = prepare_booz_xform_plan(
-                nfp=nfp, asym=False, xm=xm, xn=xn, xm_nyq=xm, xn_nyq=xn,
-                config=BoozerConfig.from_env(mboz=self.mboz, nboz=self.nboz))  # fmt: skip
+            with jax.ensure_compile_time_eval():  # host constants, even under an outer jit
+                self._plans[key] = prepare_booz_xform_plan(
+                    nfp=nfp, asym=False, xm=xm, xn=xn, xm_nyq=xm, xn_nyq=xn,
+                    config=BoozerConfig.from_env(mboz=self.mboz, nboz=self.nboz))  # fmt: skip
         return self._plans[key]
 
     # -- traced evaluation ----------------------------------------------------
 
     def _kinetic(self, state: Any, rt: Any) -> tuple[np.ndarray, Any]:
         """``(s_rows, <j.B>_kinetic)`` [A T/m^2], traced in ``state``."""
+        import jax  # noqa: PLC0415
         import jax.numpy as jnp  # noqa: PLC0415
         from booz_xform_jax.jax_api import booz_xform_jax_impl  # noqa: PLC0415
         from vmex.core.boozer_tables import boozer_input_tables  # noqa: PLC0415
@@ -532,47 +568,62 @@ class KineticBootstrapMismatch:
 
         setup = rt.setup
         s_full = np.asarray(setup.s_full)
-        nfp = int(rt.resolution.nfp)
+        if not any(isinstance(v, jax.core.Tracer) for v in jax.tree_util.tree_leaves(state)):
+            # An eager caller (VMEX's set-up preflight, a reporter) would
+            # dispatch the Boozer tables op by op; compile the whole row once
+            # per runtime instead.  The runtime is held so its id stays unique.
+            if self._eager[0] is not rt:
+                self._eager = (rt, jax.jit(lambda st: self._kinetic(st, rt)[1]))
+            return self._setup(int(s_full.size))[1], self._eager[1](state)
+        nfp, signgs = int(rt.resolution.nfp), int(np.sign(setup.signgs))
         rows, s_rows, templates = self._setup(int(s_full.size))
         # |psi_a| = |phi_edge|/(2 pi) in Wb/rad, as VMEX's bootstrap lane forms it.
         psi_a = jnp.abs((s_full[1] - s_full[0]) * jnp.sum(jnp.asarray(setup.phipf)[1:]))
-        currents = []
-        frictions = self._friction.get(int(s_full.size), [None] * len(rows))
-        for row, template, friction in zip(rows, templates, frictions):
-            tables = boozer_input_tables(state, rt, int(row))
-            xm, xn = np.asarray(tables["xm"]), np.asarray(tables["xn"])
+        tables = [boozer_input_tables(state, rt, int(row)) for row in rows]
+        xm, xn = np.asarray(tables[0]["xm"]), np.asarray(tables[0]["xn"])
+        names = ("rmnc", "zmns", "lmns", "bmnc", "bsubumnc", "bsubvmnc", "iota")
+        spectra = {k: jnp.stack([jnp.asarray(t[k]) for t in tables]) for k in names}
+        key = (int(s_full.size), nfp, signgs, xm.tobytes(), xn.tobytes())
+        if key not in self._chains:
             plan = self._plan(xm, xn, nfp)
-            booz = booz_xform_jax_impl(
-                **{k: jnp.asarray(tables[k])[None] for k in (
-                    "rmnc", "zmns", "lmns", "bmnc", "bsubumnc", "bsubvmnc", "iota")},
-                xm=jnp.asarray(xm), xn=jnp.asarray(xn), xm_nyq=jnp.asarray(xm),
-                xn_nyq=jnp.asarray(xn), constants=plan.constants, grids=plan.grids, plan=plan,
-            )  # fmt: skip
-            g, i, iota = booz["bvco_b"][0], booz["buco_b"][0], booz["iota_b"][0]
-            # The template holds d/ds gradients (psiAHat = 1); dividing by
-            # |psi_a| and converting the handedness gives the signed psiAHat
-            # of boozer_route_psi_a_hat, traced.
-            operator = kinetic_operator_on_boozer_surface(
-                replace(template, **{leaf: getattr(template, leaf) / psi_a
-                                     for leaf in PSI_A_HAT_LEAVES}),
-                bmnc_b=booz["bmnc_b"][0], ixm_b=np.asarray(plan.grids.xm_b),
-                ixn_b=np.asarray(plan.grids.xn_b), nfp=nfp, iota=iota, g_hat=g, i_hat=i,
-                signgs=int(np.sign(setup.signgs)))  # fmt: skip
-            if friction is not None:
-                from dkx.momentum_correction import momentum_corrected_solve  # noqa: PLC0415
+            frictions = self._friction.get(int(s_full.size), [None] * len(rows))
+            with jax.ensure_compile_time_eval():  # constants, even under an outer trace
+                stacked = jax.tree_util.tree_map(lambda *v: jnp.stack(v), *zip(templates, frictions))
 
-                corrected = momentum_corrected_solve(operator, friction=friction, n_sonine=3,
-                                                     tol=self.tol)  # fmt: skip
-                currents.append(corrected.fsab_j * PARALLEL_CURRENT)
-                continue
-            rhs = operator.rhs()
-            # tier1_keep_lowest = Nxi keeps every Legendre block, so the
-            # solution satisfies the original equation, not a truncation.
-            solved = solve(operator, rhs, method="auto", tol=self.tol, differentiable=True,
-                           tier1_keep_lowest=operator.n_xi, emit=None)  # fmt: skip
-            moments = profile_moments_from_operator(operator, solved.x.reshape(-1))
-            currents.append(moments["FSABjHat"].reshape(()) * PARALLEL_CURRENT)
-        return s_rows, jnp.stack(currents)
+            def surface(inputs: tuple, spectrum: dict, psi: Any) -> Any:
+                template, friction = inputs
+                booz = booz_xform_jax_impl(
+                    **{k: v[None] for k, v in spectrum.items()},
+                    xm=jnp.asarray(xm), xn=jnp.asarray(xn), xm_nyq=jnp.asarray(xm),
+                    xn_nyq=jnp.asarray(xn), constants=plan.constants, grids=plan.grids, plan=plan,
+                )  # fmt: skip
+                g, i, iota = booz["bvco_b"][0], booz["buco_b"][0], booz["iota_b"][0]
+                # The template holds d/ds gradients (psiAHat = 1); dividing by
+                # |psi_a| and converting the handedness gives the signed psiAHat
+                # of boozer_route_psi_a_hat, traced.
+                operator = kinetic_operator_on_boozer_surface(
+                    replace(template, **{leaf: getattr(template, leaf) / psi
+                                         for leaf in PSI_A_HAT_LEAVES}),
+                    bmnc_b=booz["bmnc_b"][0], ixm_b=np.asarray(plan.grids.xm_b),
+                    ixn_b=np.asarray(plan.grids.xn_b), nfp=nfp, iota=iota, g_hat=g, i_hat=i,
+                    signgs=signgs)  # fmt: skip
+                if friction is not None:
+                    from dkx.momentum_correction import momentum_corrected_solve  # noqa: PLC0415
+
+                    corrected = momentum_corrected_solve(operator, friction=friction, n_sonine=3,
+                                                         tol=self.tol)  # fmt: skip
+                    return corrected.fsab_j * PARALLEL_CURRENT
+                # tier1_keep_lowest = Nxi keeps every Legendre block, so the
+                # solution satisfies the original equation, not a truncation.
+                solved = solve(operator, operator.rhs(), method="auto", tol=self.tol,
+                               differentiable=True, tier1_keep_lowest=operator.n_xi, emit=None)  # fmt: skip
+                moments = profile_moments_from_operator(operator, solved.x.reshape(-1))
+                return moments["FSABjHat"].reshape(()) * PARALLEL_CURRENT
+
+            # The surfaces share their shapes, so they are one batch axis of one
+            # compiled program rather than an unrolled loop.
+            self._chains[key] = batched_with_reverse_jvp(surface, stacked)
+        return s_rows, self._chains[key](spectra, psi_a)
 
     def current_profiles(self, state: Any, rt: Any) -> tuple[np.ndarray, Any, Any]:
         """``(s, <j.B>_VMEX, <j.B>_DKX)`` in A T/m^2 on the kinetic rows."""
