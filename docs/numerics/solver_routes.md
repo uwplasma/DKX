@@ -5,7 +5,7 @@ Every linear solve in DKX goes through one function, `dkx.solve.solve`, over a
 route that can answer the operator in front of it. There are three routes. The
 factorizations, the Krylov method and the implicit-differentiation wrappers
 underneath them come from the SOLVAX library, a required dependency
-(`solvax>=0.28.0` in `pyproject.toml`).
+(`solvax>=0.28.1` in `pyproject.toml`).
 
 ```{list-table}
 :header-rows: 1
