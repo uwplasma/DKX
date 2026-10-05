@@ -210,3 +210,36 @@ goes like $n/T^2$ at fixed pressure; pin `--density-m3` to the design point
 before comparing with an optimizer. The survey is a first look, not a study:
 for results, write a case with the real profiles, then `dkx validate` and
 `dkx converge` it.
+
+Each surface of the radial scan is solved with that surface's own $n$, $T$
+and gradients. The evaluated field is the most negative *stable* root of
+$J_r(E_r)$; stability comes from the outward-current slope, as in
+`dkx.er`. The ambipolarity panel labels every root ion, unstable or
+electron.
+
+From Python, `dkx.representative.run_representative` takes the plasma
+directly instead of assuming one. This is how VMEX's `vmex --neoclassical`
+calls it:
+
+```python
+from dkx.representative import run_representative
+
+run_representative(
+    "wout_XXX.nc",
+    surfaces=(0.25, 0.5, 0.75),          # r/a of the radial scan
+    er=None,                             # None: ambipolar root; float: prescribed kV/m
+    collision_operator="fp",             # "fp" | "pas" | "pas+momentum_correction"
+    profiles=kinetic_profiles,           # ne_coeffs [m^-3], Te_coeffs/Ti_coeffs [eV]
+    redl_jdotb=(s, jdotb_redl),          # optional external Redl <j.B> [A T/m^2]
+)
+```
+
+`profiles` is any object or mapping with `ne_coeffs`, `Te_coeffs` and
+`Ti_coeffs`, polynomials in $s$ with the lowest order first (VMEX's
+`KineticProfiles`). It replaces the pressure split, so the kinetic and
+equilibrium currents then describe the same plasma, and $T_i \ne T_e$ is
+allowed. DKX has no Redl implementation of its own. `redl_jdotb` draws a
+caller's Redl curve on the bootstrap panel. With
+`"pas+momentum_correction"`, the $E_r$ scan uses pitch-angle scattering, and
+the bootstrap current at the evaluated field is corrected by the
+Sugama–Nishimura moment method. The defaults reproduce `dkx wout_XXX.nc`.

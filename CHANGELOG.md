@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### Representative run
+
+- `run_representative` accepts `surfaces`, `er` (ambipolar root or a
+  prescribed kV/m), `collision_operator` (`fp`, `pas`,
+  `pas+momentum_correction`), explicit `profiles` (`ne_coeffs`, `Te_coeffs`,
+  `Ti_coeffs` polynomials in s, as VMEX's `KineticProfiles`; T_i may differ
+  from T_e) and `redl_jdotb`, an external Redl curve drawn on the bootstrap
+  panel. Defaults are unchanged.
+- Fix: the radial scan solved every surface with the n, T and gradients of
+  r/a = 0.5. Each surface now uses its own plasma. On the VMEX QA beta = 2.5%
+  bootstrap deck this removes the r/a = 0.55 outlier (-46 kV/m between -31
+  and -28). The Er profile is now monotone: -13, -27, -50, -60, -61 kV/m at
+  r/a = 0.25 to 0.85. A dense scan confirmed that the root itself was a real
+  crossing for the plasma it was given, not a root-pick or bracket error.
+- The evaluated root is the most negative *stable* root under the
+  outward-current rule of #301. The ambipolarity panel is now drawn for every
+  surface, with each root labelled ion, unstable or electron.
+- Fix: the caption no longer clips at the canvas edges. Long lines wrap, and
+  the layout rect's height no longer runs past the top of the figure.
+
 ### Physics
 
 - Rewrite `dkx.momentum_correction` as the Sugama–Nishimura moment method on the
