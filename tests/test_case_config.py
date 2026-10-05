@@ -294,7 +294,6 @@ def test_scan_rejects_unknown_paths_and_unknown_species() -> None:
 
 def test_schema_outputs_are_complete_and_machine_readable(capsys) -> None:
     schema = case_json_schema()
-    assert schema["properties"]["format_version"] == {"const": 1}
     assert "schema" not in schema["required"]
     assert "species" in schema["required"]
     assert schema["properties"]["scan"]["properties"]["axis"]["minItems"] == 1
@@ -471,7 +470,7 @@ def test_validate_cli_returns_two_for_precise_error(tmp_path: Path, capsys) -> N
     path.write_text(json.dumps(data), encoding="utf-8")
 
     assert cli.main(["validate", str(path), "--quiet"]) == 2
-    assert "schema: supplied 2; expected integer 1" in capsys.readouterr().err
+    assert "schema: supplied 2" in capsys.readouterr().err
 
 
 def test_native_case_is_reexported_from_top_level() -> None:
@@ -480,15 +479,12 @@ def test_native_case_is_reexported_from_top_level() -> None:
     assert dkx.case_json_schema is case_json_schema
 
 
-@pytest.mark.parametrize("key", ["format_version", "schema"])
-def test_format_version_is_optional_and_legacy_schema_is_accepted(key) -> None:
+def test_legacy_schema_key_is_ignored_when_one() -> None:
     implicit = Case.from_mapping(_mapping())
-    explicit = Case.from_mapping({key: 1, **_mapping()})
-    assert explicit == implicit and explicit.case_id == implicit.case_id
-    with pytest.raises(CaseValidationError, match=key):
-        Case.from_mapping({key: 2, **_mapping()})
-    with pytest.raises(CaseValidationError, match="disagree"):
-        Case.from_mapping({"format_version": 1, "schema": 1.0, **_mapping()})
+    legacy = Case.from_mapping({"schema": 1, **_mapping()})
+    assert legacy == implicit and legacy.case_id == implicit.case_id
+    with pytest.raises(CaseValidationError, match="schema"):
+        Case.from_mapping({"schema": 2, **_mapping()})
 
 
 def test_recorded_example_case_ids_survive_the_implicit_version() -> None:

@@ -10,10 +10,8 @@ fields and both pass through one validation boundary,
 
 ## The case model
 
-- **No version key needed.** A case without one is read as the current format
-  (version 1). An optional `format_version = 1` pins it; the legacy key
-  `schema = 1` is still accepted. Any other value is refused; no migration is
-  defined.
+- **No version key.** Cases carry no version field. Older files that still
+  say `schema = 1` load unchanged; any other value is refused.
 - **Unknown keys are errors.** A misspelled field is refused with the list of
   accepted names, at every level of nesting.
 - **Precise errors.** A `dkx.CaseValidationError` names the field path (for
@@ -103,7 +101,6 @@ and `[scan]` are optional.
 
 | field | type | default | meaning and rule |
 |---|---|---|---|
-| `format_version` | integer | `1` | optional; legacy name `schema` |
 | `name` | string | required | non-empty after trimming; recorded in the result |
 
 ## `[run]`

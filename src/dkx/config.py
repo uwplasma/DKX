@@ -392,30 +392,19 @@ class Case:
 
 
 def migrate_case_data(raw: Mapping[str, Any]) -> dict[str, Any]:
-    """Return format-v1 data; the version is optional and defaults to current.
-
-    ``format_version`` is the user-facing key; legacy ``schema`` is accepted.
-    """
+    """Return case data; a legacy ``schema = 1`` key is accepted and ignored."""
 
     data = dict(raw)
-    supplied = {k: data.pop(k) for k in ("format_version", "schema") if k in data}
-    if len(set(map(repr, supplied.values()))) > 1:
+    legacy = data.pop("schema", SCHEMA_VERSION)
+    if type(legacy) is not int or legacy != SCHEMA_VERSION:
         raise CaseValidationError(
-            "format_version",
-            supplied,
-            "one version",
-            "Drop the legacy schema key; format_version and schema disagree.",
+            "schema",
+            legacy,
+            f"absent (legacy files may say {SCHEMA_VERSION})",
+            "Delete the schema key; DKX cases carry no version field.",
         )
-    version = next(iter(supplied.values()), SCHEMA_VERSION)
-    if type(version) is not int or version != SCHEMA_VERSION:
-        raise CaseValidationError(
-            next(iter(supplied), "format_version"),
-            version,
-            f"integer {SCHEMA_VERSION}",
-            "Omit the version (it defaults to the current format); "
-            "no migration from this version is defined yet.",
-        )
-    data["schema"] = version
+    # The internal field keeps canonical content, and so case IDs, unchanged.
+    data["schema"] = SCHEMA_VERSION
     return data
 
 
@@ -444,7 +433,6 @@ def case_json_schema() -> dict[str, Any]:
             "solver",
         ],
         "properties": {
-            "format_version": {"const": SCHEMA_VERSION},
             "schema": {"const": SCHEMA_VERSION},
             "name": {"type": "string", "minLength": 1},
             "run": _object_schema(
