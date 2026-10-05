@@ -1,50 +1,57 @@
-"""Native ``physics.phi1 = "kinetic"`` route: coupled kinetic + QN + gauge solve."""
+"""Native ``physics.phi1 = "kinetic"``: parity with the SFINCS-namelist Phi1 route."""
 
 from __future__ import annotations
 
-import tomllib
+import re
+import shutil
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-from dkx.config import Case
 from dkx.execution import run_case
+from dkx.input_compat import case_from_sfincs_namelist
+from dkx.phi1 import solve_phi1
+from dkx.run import profile_moments_from_operator
 
-_CASE = Path(__file__).resolve().parents[1] / "examples" / "01_tokamak_profile" / "case.toml"
+_DECK = (
+    Path(__file__).resolve().parents[1]
+    / "examples/sfincs_examples/geometryScheme4_2species_noEr_withPhi1InDKE"
+)
 
 
-def _case(tmp_path, phi1, **physics):
-    data = tomllib.loads(_CASE.read_text())
-    data["geometry"]["surfaces"] = [0.16, 0.25]
-    ion = data["species"][0]
-    ion["density_m3"], ion["temperature_keV"] = [8.0e19, 6.0e19], [1.0, 0.7]
-    data["species"].append(
-        {"name": "electron", "charge": -1, "mass_amu": 5.48579909e-4,
-         "density_m3": [8.0e19, 6.0e19], "temperature_keV": [1.0, 0.7]}
+def _deck(tmp_path, **resolution):
+    shutil.copytree(_DECK, tmp_path, dirs_exist_ok=True)
+    path = tmp_path / "input.namelist"
+    text = path.read_text()
+    for key, value in resolution.items():
+        text = re.sub(rf"(?m)^\s*{key}\s*=.*$", f"  {key} = {value}", text)
+    path.write_text(text)
+    return path
+
+
+def test_native_phi1_matches_the_namelist_newton_route(tmp_path):
+    deck = _deck(tmp_path, Ntheta=9, Nzeta=9, Nxi=12, Nx=4)
+    case = case_from_sfincs_namelist(deck, name="phi1")
+    assert case.physics.phi1 == "kinetic"
+    native = run_case(case, out=tmp_path / "native.nc")
+    # Accepted by the original coupled residual (kinetic + QN + gauge).
+    assert np.all(native.primal_residual <= case.solver.relative_tolerance * native.primal_rhs_norm)
+    reference = solve_phi1(deck, tol=1.0e-12)
+    flux = np.asarray(
+        profile_moments_from_operator(reference.operator, reference.x)["particleFlux_vm_psiHat"]
     )
-    data["physics"].update(phi1=phi1, **physics)
-    data["electric_field"]["value_kV_m"] = 2.0
-    data["output"].update(file=f"{phi1}.nc", plots=False)
-    return Case.from_mapping(data, source_path=tmp_path / "case.toml")
+    # The deck's own surface is the middle of the converted three-surface stencil;
+    # the native flux is the psiHat flux times one species-independent unit factor.
+    ratio = np.asarray(native.particle_flux_m2_s)[1] / flux
+    np.testing.assert_allclose(ratio[0], ratio[1], rtol=1.0e-8)
 
 
-def test_native_phi1_kinetic_solves_the_coupled_residual(tmp_path):
-    off = run_case(_case(tmp_path, "off"))
-    on = run_case(_case(tmp_path, "kinetic"))
-    # Accepted by the original nonlinear residual F(x) = A(x) - b(x).
-    assert np.all(on.primal_residual <= 1.0e-8 * on.primal_rhs_norm)
-    flux_off, flux_on = off.particle_flux_m2_s, on.particle_flux_m2_s
-    print(on.primal_residual, on.primal_rhs_norm, flux_off, flux_on)
-    assert np.all(np.isfinite(flux_on))
-    # Phi1 changes the solution, but only as a correction on this weak-E_r case.
-    assert not np.allclose(flux_on, flux_off, rtol=1e-12, atol=0.0)
-    assert np.allclose(flux_on, flux_off, rtol=0.5, atol=0.0)
-
-
-@pytest.mark.parametrize(("phi1", "workflow"), [("full", "profile"), ("kinetic", "ambipolar_profile")])
-def test_native_phi1_refuses_unsupported_routes(tmp_path, phi1, workflow):
-    case = _case(tmp_path, phi1)
-    object.__setattr__(case.run, "workflow", workflow)
-    with pytest.raises(Exception, match="physics.phi1"):
-        run_case(case)
+def test_native_phi1_refuses_what_it_does_not_implement(tmp_path):
+    deck = _deck(tmp_path)
+    text = deck.read_text().replace(
+        "includePhi1 = .true.", "includePhi1 = .true.\n  quasineutralityOption = 2"
+    )
+    deck.write_text(text)
+    with pytest.raises(Exception, match="includePhi1"):
+        case_from_sfincs_namelist(deck)

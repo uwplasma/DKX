@@ -1125,8 +1125,8 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
 
             # Coupled kinetic + quasineutrality + gauge Newton-Krylov solve;
             # accepted below by the original nonlinear residual F(x) = A(x) - b(x).
-            phi1_solved = solve_phi1(op, tol=0.1 * case.solver.relative_tolerance * float(
-                np.linalg.norm(np.asarray(op.rhs_phi1()))))
+            rhs_scale = float(np.linalg.norm(np.asarray(op.rhs_phi1())))
+            phi1_solved = solve_phi1(op, tol=0.1 * case.solver.relative_tolerance * rhs_scale)
             op = phi1_solved.operator
             state = np.asarray(phi1_solved.x, dtype=np.float64).reshape((-1,))
             converged, method = phi1_solved.converged, "phi1_newton_krylov"
