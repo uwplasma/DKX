@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `dkx.phi1.phi1_solution` gives the converged Phi1 state with a matrix-free implicit adjoint: GMRES on the transposed Jacobian (a VJP of the coupled residual) on the active Legendre-truncated subspace, preconditioned by the last Newton step's transpose preconditioner. On a native `phi1 = "kinetic"` case the gradient matches central finite differences to 1.2e-9 and the Taylor remainder falls as h^2 (ratios 4.02, 4.01).
 - Case inputs no longer carry a `schema` key. Older files with `schema = 1`
   still load (the key is ignored); other values are refused. Case IDs are
   unchanged.
