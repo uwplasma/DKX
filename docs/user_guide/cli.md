@@ -216,6 +216,9 @@ and gradients. The evaluated field is the most negative *stable* root of
 $J_r(E_r)$; stability comes from the outward-current slope, as in
 `dkx.er`. The ambipolarity panel labels every root ion, unstable or
 electron.
+The evaluated root is refined from its scan bracket by Brent's method (at
+most four more solves per surface) and the moments are read there, not
+interpolated across the bracket.
 
 From Python, `dkx.representative.run_representative` takes the plasma
 directly instead of assuming one. This is how VMEX's `vmex --neoclassical`

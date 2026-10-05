@@ -1210,7 +1210,7 @@ def test_radial_profiles_pick_the_stable_ion_root_with_local_plasma(monkeypatch)
     out = radial_profiles(Path("w.nc"), surfaces=(0.4, 0.7), er_values=er, emit=None)
     assert [p["root_types"] for p in out] == [["ion", "unstable", "electron"]] * 2
     assert -6.0 < out[0]["er_ambipolar"] < -2.0 and out[1]["er_ambipolar"] < -6.0
-    assert "THats = 0.4 0.4" in decks[0] and "THats = 0.7 0.7" in decks[1]
+    assert "THats = 0.4 0.4" in decks[0] and "THats = 0.7 0.7" in decks[-1]
 
 
 def test_radial_profiles_prescribed_er_and_explicit_profiles(monkeypatch):

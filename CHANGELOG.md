@@ -4,6 +4,18 @@
 
 ### Representative run
 
+- The ambipolar root of each surface is refined after bracketing: Brent's
+  method on the bracket, at most 4 more single-field solves, stopping at
+  |J_r| <= 1e-6 max|J_r| or a 0.01 kV/m bracket. Moments are read at the
+  refined root instead of interpolated across a 10-20 kV/m bracket. On the
+  VMEX QA beta = 2.5% bootstrap deck with its published profiles (default
+  grid) the roots move from -11.8, -25.8, -49.0, -39.8, -43.3 to -11.9, -26.1,
+  -46.5, -43.4, -39.0 kV/m, and <j.B> at r/a = 0.55 from -4755 to -3192
+  kA/m^2, for 18 extra solves (radial-scan wall time 59 s to 117 s). The
+  outer roots stay non-monotone: there J_r is within 1-5% of zero over tens
+  of kV/m and its crossings move by tens of kV/m on the `full` grid, so that
+  spread is a resolution effect, not a bracket artifact.
+- The ambipolarity panel spans its row; the two empty slots beside it are gone.
 - `run_representative` accepts `surfaces`, `er` (ambipolar root or a
   prescribed kV/m), `collision_operator` (`fp`, `pas`,
   `pas+momentum_correction`), explicit `profiles` (`ne_coeffs`, `Te_coeffs`,

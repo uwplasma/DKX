@@ -548,7 +548,7 @@ def plot_representative(
         "boot": fig.add_subplot(gs[1, 1]), "flux": fig.add_subplot(gs[1, 2]),
     }  # fmt: skip
     if ambipolar:
-        axes["ambi"] = fig.add_subplot(gs[2, 0])
+        axes["ambi"] = fig.add_subplot(gs[2, :])  # one panel, the whole row
 
     drawn = {}
     drawn["monoenergetic"] = _panel_monoenergetic(
@@ -1487,6 +1487,54 @@ ER_EXTENSION_MAX_PROBES = 6
 ER_EXTENSION_MIN_STEP_KV_M = 2.0
 
 
+#: Root refinement after bracketing: SciPy's Brent method on the bracket, at
+#: most this many extra solves, stopping once |J_r| <= ER_ROOT_RTOL max|J_r|
+#: (far above the 1e-10 kinetic residual, so solver noise cannot stall it) or
+#: the bracket is narrower than ER_ROOT_XTOL_KV_M.
+ER_ROOT_MAX_SOLVES = 4
+ER_ROOT_RTOL = 1.0e-6
+ER_ROOT_XTOL_KV_M = 0.01
+
+
+def _refine_root(solve: Callable[[float], tuple[float, Any]], er: np.ndarray,
+                 j_r: np.ndarray, root: float) -> tuple[float, list[tuple[float, float, Any]]]:
+    """Refine a bracketed linear-interpolation root of ``J_r(E_r)``.
+
+    A 10-20 kV/m bracket interpolated linearly misplaces a curved ``J_r`` by
+    several kV/m, enough to make a radial ``E_r`` profile non-monotone.
+    ``solve(er)`` returns ``(J_r, scan)`` for one field; every evaluation is
+    returned so the caller reads moments *at* the root, not interpolated.
+    """
+    from scipy.optimize import brentq  # noqa: PLC0415
+
+    known = dict(zip(np.asarray(er, float).tolist(), np.asarray(j_r, float).tolist()))
+    e = np.array(sorted(known))
+    i = int(np.clip(np.searchsorted(e, root) - 1, 0, e.size - 2))
+    ftol = ER_ROOT_RTOL * float(np.nanmax(np.abs(list(known.values()))))
+    evals: list[tuple[float, float, Any]] = []
+
+    class _Done(Exception):
+        pass
+
+    def f(x: float) -> float:
+        if x in known:  # brentq re-reads the bracket ends: already solved
+            return known[x]
+        if len(evals) == ER_ROOT_MAX_SOLVES:
+            raise _Done
+        fx, scan = solve(x)
+        evals.append((x, fx, scan))
+        if not np.isfinite(fx) or abs(fx) <= ftol:
+            raise _Done
+        return fx
+
+    try:
+        x = brentq(f, e[i], e[i + 1], xtol=ER_ROOT_XTOL_KV_M, maxiter=ER_ROOT_MAX_SOLVES + 1, disp=False)
+    except _Done:
+        x = root
+    finite = [(abs(fx), x_) for x_, fx, _ in evals if np.isfinite(fx)]
+    return (min(finite)[1] if finite else x), evals
+
+
 def _next_er_probe(er: np.ndarray, j_r: np.ndarray) -> float:
     """Where to sample next: the linear extrapolation to ``J_r = 0``.
 
@@ -1727,7 +1775,7 @@ def radial_profiles(
                     j_r = np.asarray(scan.radial_current, dtype=float).ravel()
                     roots = _ambipolar_roots([{"er": float(e), "J_r": float(j)}
                                               for e, j in zip(er_used, j_r)])  # fmt: skip
-            er_grid = er_used
+            er_grid, moments = er_used, scan.moments
             types = _root_types(er_grid, j_r, radial_factor)
             record: dict[str, Any] = {
                 "r": float(radius), "er_scan": er_grid.tolist(),
@@ -1747,6 +1795,21 @@ def radial_profiles(
                 # unstable middle root is never a state the plasma occupies.
                 stable = [x for x, t in zip(roots, types) if t in ("ion", "electron")]
                 root = min(stable or roots)
+
+                def one(e, d=deck):
+                    sc = _quiet(lambda: batched_er_scan(d, np.array([e])))
+                    return float(np.asarray(sc.radial_current).ravel()[0]), sc
+
+                bracketed, (root, evals) = root, _refine_root(one, er_grid, j_r, root)
+                record["roots"] = [root if r == bracketed else r for r in roots]
+                if evals:
+                    er_grid = np.concatenate([er_grid, [x for x, _, _ in evals]])
+                    j_r = np.concatenate([j_r, [f for _, f, _ in evals]])
+                    moments = {k: np.concatenate([np.asarray(v)] + [np.asarray(sc.moments[k]) for _, _, sc in evals])
+                               for k, v in moments.items()
+                               if np.ndim(v) and len(v) == len(er_used) and all(k in sc.moments for _, _, sc in evals)}
+                    record["er_scan"], record["J_r"] = er_grid.tolist(), j_r.tolist()
+                record["er_root_refine_solves"] = len(evals)
                 record["er_ambipolar"] = root
                 record["evaluation_status"] = "bracketed_root"
                 record["evaluation_is_root"] = True
@@ -1767,7 +1830,7 @@ def radial_profiles(
                     )
             if evaluation_er is not None:
                 record["er_evaluated"] = evaluation_er
-                mom = scan.moments
+                mom = moments
                 boot = mom.get("FSABjHatOverRootFSAB2", mom.get("FSABjHat"))
                 if boot is not None:
                     value = _interp_at_root(er_grid, np.asarray(boot).ravel(), evaluation_er)
