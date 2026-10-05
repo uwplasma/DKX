@@ -58,6 +58,23 @@
   DKES deck it cut GCROT iterations from 46-55 to 16-18 across a four-rung
   ladder (54,564 to 786,244 unknowns) and on the W7-X paper deck from 22-26
   to 10-11, with currents and fluxes equal to the solver tolerance.
+- Compile the kinetic bootstrap-current row of a VMEX optimization as one
+  program. `KineticBootstrapMismatch` traced one Boozer transform and one
+  kinetic solve per surface as an unrolled loop, was dispatched op by op when
+  VMEX evaluated it eagerly at set-up, and was differentiated forward through
+  the kinetic solve once per boundary dof by VMEX's block Jacobian. The
+  surfaces are now one batch axis of one compiled program, an eager call
+  compiles once per runtime, and the forward derivative applies the
+  reverse-mode Jacobian (one adjoint solve per surface) to every tangent
+  (`batched_with_reverse_jvp`). The Boozer plan is also built under an outer
+  `jit`, which used to raise. Values and Jacobian rows are unchanged to
+  3e-14 and 1.4e-12 relative (8.6e-6 for the Fokker-Planck Krylov route,
+  whose tangent solves become adjoint solves at the same tolerance). On a
+  shared 36-core host (8 pinned cores, load 8-33), the row's added cost over
+  the same VMEX problem without it fell from 92-122 s to 56-74 s for set-up
+  plus one residual and one Jacobian (three surfaces, default grid); an eager evaluation from 68-80 s cold and
+  6-7 s warm to 20-26 s and 0.6 s; the example's CI smoke pass from 358 s
+  to 298 s.
 
 ## v2.7.0 — 2026-09-27
 

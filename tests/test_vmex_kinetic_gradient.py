@@ -30,7 +30,7 @@ import dkx
 from dkx.run import profile_moments_from_operator
 from dkx.solve import solve
 from dkx.units import PARALLEL_CURRENT
-from dkx.bootstrap import KineticBootstrapMismatch
+from dkx.bootstrap import KineticBootstrapMismatch, batched_with_reverse_jvp
 from dkx.drift_kinetic import kinetic_operator_from_namelist
 from dkx.inputs import SfincsInput
 from dkx.namelist import parse_sfincs_input_text
@@ -98,6 +98,13 @@ def test_boozer_spectrum_to_bootstrap_gradient_matches_central_differences() -> 
         e = jnp.zeros(3).at[k].set(step)
         central = (float(value(p0 + e)) - float(value(p0 - e))) / (2 * step)
         assert _relative(gradient[k], central) < 1e-2, (k, gradient[k], central)
+
+    # The objective's batched form: its forward derivative is the reverse
+    # Jacobian applied to the tangent, so jacfwd and jacrev agree to round-off.
+    rows = batched_with_reverse_jvp(lambda _, p, scale: scale * current(p), jnp.zeros(1))
+    forward = np.asarray(jax.jacfwd(rows, argnums=(0, 1))(p0[None], 2.0)[0])
+    np.testing.assert_allclose(forward[0, 0], 2.0 * gradient, rtol=1e-10)
+    np.testing.assert_allclose(rows(p0[None], 2.0), [2.0 * float(value(p0))], rtol=1e-12)
 
 
 def _float_leaves(operator) -> dict[str, np.ndarray]:
