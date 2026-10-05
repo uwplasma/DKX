@@ -171,7 +171,7 @@ def _case_with(tmp_path, **overrides):
 @pytest.mark.parametrize(
     ("field", "value", "named"),
     [
-        ("phi1", "kinetic", "physics.phi1"),
+        ("phi1", "full", "physics.phi1"),
         ("magnetic_drifts", "full", "physics.magnetic_drifts"),
     ],
 )
@@ -181,7 +181,7 @@ def test_validate_refuses_a_schema_valid_case_the_executor_cannot_run(
     """The schema is deliberately wider than the executor; validate closes the gap.
 
     ``magnetic_drifts = "full"``, ``workflow = "monoenergetic"`` and
-    ``phi1 = "kinetic"`` all pass the JSON schema and are then refused by
+    ``phi1 = "full"`` all pass the JSON schema and are then refused by
     execution. Without this preflight a user discovers which of the advertised
     enum values are real only after ``dkx run`` has set up and failed --- and
     ``dkx validate`` reporting success on a case that cannot run is worse than

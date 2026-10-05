@@ -28,6 +28,7 @@
 - `dkx.solve` keeps its API; the structured route's applicability tests and
   memory model moved to `dkx.structured_direct`. Structured solves refine
   against the pinned operator (identity rows on truncated `Nxi_for_x` DOFs).
+- Native `[physics] phi1 = "kinetic"` runs the coupled kinetic + quasineutrality + gauge Newton–Krylov solve on `profile` cases and is accepted by the nonlinear residual; `dkx convert` maps kinetic-only Phi1 decks to it. `"full"`, adiabatic species, quasineutrality option 2 and the ambipolar workflow stay refused. Status remains `compatibility_only`.
 
 ## v2.8.0 — 2026-10-05
 

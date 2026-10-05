@@ -83,12 +83,15 @@ def _validate_native_slice(case: Case) -> None:
             "dkes",
             "Set magnetic_drifts = 'dkes' for the supported local analytic route.",
         )
-    if case.physics.phi1 != "off":
+    if case.physics.phi1 == "full" or (
+        case.physics.phi1 == "kinetic"
+        and (case.run.workflow != "profile" or case.convergence.enabled)
+    ):
         _unsupported(
             "physics.phi1",
             case.physics.phi1,
-            "off",
-            "Set phi1 = 'off' for this route.",
+            "'off', or 'kinetic' with workflow = 'profile' and no convergence ladder",
+            "Use phi1 = 'kinetic' on a profile run, or the SFINCS namelist route.",
         )
     expected_field_mode = (
         "ambipolar" if case.run.workflow == "ambipolar_profile" else "prescribed"
@@ -440,6 +443,15 @@ def _make_operator(
         e_parallel_hat_spec=jnp.zeros((len(case.species),), dtype=jnp.float64),
         pas=pas,
         fp=fp,
+        # phi1 = "kinetic": SFINCS includePhi1 + includePhi1InKineticEquation,
+        # quasineutralityOption 1, no adiabatic species (dkx.phi1 Newton solve).
+        include_phi1=case.physics.phi1 == "kinetic",
+        include_phi1_in_kinetic=case.physics.phi1 == "kinetic",
+        phi1_hat_base=(
+            jnp.zeros((grids.n_theta, grids.n_zeta), dtype=jnp.float64)
+            if case.physics.phi1 == "kinetic"
+            else None
+        ),
     )
     return op, grids, geometry, radial
 
@@ -1108,26 +1120,42 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
             retained_operator = op
             continue
         solve_start = time.perf_counter()
-        solved = solve(
-            op,
-            op.rhs(),
-            method=_route_name(case.solver.method),
-            tol=case.solver.relative_tolerance,
-            device=None if case.run.device == "auto" else case.run.device,
-            tier1_keep_lowest=op.n_xi,
-            tier1_memory_budget_gb=case.solver.memory_fraction
-            * _total_host_memory_bytes()
-            / (1024**3),
-        )
+        if op.include_phi1:
+            from dkx.phi1 import solve_phi1  # noqa: PLC0415
+
+            # Coupled kinetic + quasineutrality + gauge Newton-Krylov solve;
+            # accepted below by the original nonlinear residual F(x) = A(x) - b(x).
+            rhs_scale = float(np.linalg.norm(np.asarray(op.rhs_phi1())))
+            phi1_solved = solve_phi1(op, tol=0.1 * case.solver.relative_tolerance * rhs_scale)
+            op = phi1_solved.operator
+            state = np.asarray(phi1_solved.x, dtype=np.float64).reshape((-1,))
+            converged, method = phi1_solved.converged, "phi1_newton_krylov"
+            route_iterations, residual_norms = phi1_solved.n_newton, phi1_solved.residual_norms
+            rhs = np.asarray(op.rhs_phi1(), dtype=np.float64).reshape((-1,))
+            defect = np.asarray(op.residual_phi1(state), dtype=np.float64).reshape((-1,))
+        else:
+            solved = solve(
+                op,
+                op.rhs(),
+                method=_route_name(case.solver.method),
+                tol=case.solver.relative_tolerance,
+                device=None if case.run.device == "auto" else case.run.device,
+                tier1_keep_lowest=op.n_xi,
+                tier1_memory_budget_gb=case.solver.memory_fraction
+                * _total_host_memory_bytes()
+                / (1024**3),
+            )
+            state = np.asarray(solved.x, dtype=np.float64).reshape((-1,))
+            converged, method = solved.converged, str(solved.method)
+            route_iterations, residual_norms = solved.iterations, solved.residual_norms
+            rhs = np.asarray(op.rhs(), dtype=np.float64).reshape((-1,))
+            defect = np.asarray(op.apply(state), dtype=np.float64).reshape((-1,)) - rhs
         solve_seconds[index] = time.perf_counter() - solve_start
-        if not solved.converged:
+        if not converged:
             raise RuntimeError(
                 f"native profile solve did not converge at geometry.surfaces[{index}]={surface}; "
-                f"route={solved.method}, residuals={np.asarray(solved.residual_norms)!r}"
+                f"route={method}, residuals={np.asarray(residual_norms)!r}"
             )
-        state = np.asarray(solved.x, dtype=np.float64).reshape((-1,))
-        rhs = np.asarray(op.rhs(), dtype=np.float64).reshape((-1,))
-        defect = np.asarray(op.apply(state), dtype=np.float64).reshape((-1,)) - rhs
         residual = float(np.linalg.norm(defect))
         rhs_norm = float(np.linalg.norm(rhs))
         zero_defect = bool(np.all(defect == 0.0))
@@ -1166,8 +1194,8 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
         residuals[index] = residual
         rhs_norms[index] = rhs_norm
         residual_complete_state[index] = True
-        iterations[index] = 0 if solved.iterations is None else int(solved.iterations)
-        selected_routes.append(str(solved.method))
+        iterations[index] = 0 if route_iterations is None else int(route_iterations)
+        selected_routes.append(method)
         retained_operator = op
 
     if ambipolar_surfaces:

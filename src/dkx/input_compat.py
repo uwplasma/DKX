@@ -837,16 +837,23 @@ def _refuse_unconvertible_physics(
             "the native operator with e_parallel_hat_spec = 0.",
         )
 
-    if bool(config_bool(nml, (phys,), "includePhi1", False)):
+    phi1_on = bool(config_bool(nml, (phys,), "includePhi1", False))
+    phi1_native = (
+        bool(config_bool(nml, (phys,), "includePhi1InKineticEquation", False))
+        and not bool(config_bool(nml, (phys,), "includePhi1InCollisionOperator", False))
+        and not bool(config_bool(nml, (phys,), "readExternalPhi1", False))
+        and config_int(nml, (phys,), "quasineutralityOption", 1) == 1
+        and not bool(config_bool(nml, ("speciesParameters",), "withAdiabatic", False))
+    )
+    if phi1_on and not phi1_native:
         _refuse(
             phys,
             "includePhi1",
             True,
-            ".false.",
-            "physics.phi1 = 'kinetic'/'full' is in the case schema but "
-            "dkx.execution.run_case refuses it: the native route solves the LINEAR "
-            "drift-kinetic equation with no quasineutrality block. Converting would "
-            "produce a case that cannot run.",
+            ".false., or includePhi1InKineticEquation = .true. with quasineutralityOption = 1",
+            "The native route implements physics.phi1 = 'kinetic' only: Phi1 in the "
+            "kinetic equation, full quasineutrality, no adiabatic species, no Phi1 in "
+            "the collision operator, no external Phi1.",
         )
 
     drift_scheme = config_int(nml, (phys,), "magneticDriftScheme", 0)
@@ -1340,7 +1347,11 @@ def case_from_sfincs_namelist(
             # guarded above; magneticDriftScheme=0 plus those switches is exactly
             # what 'dkes' names.
             "magnetic_drifts": "dkes",
-            "phi1": "off",
+            "phi1": (
+                "kinetic"
+                if config_bool(nml, ("physicsParameters",), "includePhi1", False)
+                else "off"
+            ),
             # A deck states collisionality as nu_n; a case states the Coulomb
             # logarithm it came from. dkx.execution scales the pinned
             # DEFAULT_NU_N by ln(Lambda)/17, so inverting that exact expression

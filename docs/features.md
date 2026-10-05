@@ -41,7 +41,7 @@ Details in {doc}`physics/geometry` and {doc}`tutorials/stellarator_from_vmec`.
 | Trajectory models | `magnetic_drifts = "dkes"` or `"full"`; SFINCS DKES, partial and full trajectories; tangential magnetic drifts (`magneticDriftScheme`) | trajectory sweep reproduced ({doc}`benchmarks/cross_code`) |
 | Radial electric field | prescribed, or ambipolar with every root classified ion, electron or unstable; uniform or seeded bracket search | {doc}`physics/electric_field` |
 | Species and impurities | any number of species; trace or finite impurities; classical impurity flux (`dkx.classical_impurity_flux`); `dkx.build_impurity_plasma` | impurity flux against Fortran golden data ({doc}`benchmarks/cross_code`); `examples/09_phi1_and_impurities` |
-| $\Phi_1$, in-surface potential | quasineutrality options 1 and 2, $\Phi_1$ in the kinetic equation and in the collision operator, Newton–Krylov solve (`dkx.phi1`) | namelist route; native executor has `phi1 = "off"` only; {doc}`physics/phi1_and_impurities` |
+| $\Phi_1$, in-surface potential | quasineutrality options 1 and 2, $\Phi_1$ in the kinetic equation and in the collision operator, Newton–Krylov solve (`dkx.phi1`) | namelist route; native `physics.phi1 = "kinetic"` (Phi1 in the kinetic equation, quasineutrality option 1, `profile` workflow) matches it to 1e-8 (`tests/test_native_phi1.py`); {doc}`physics/phi1_and_impurities` |
 | Inductive parallel electric field | `inductiveE` decks | vendored upstream deck `inductiveE_noEr` |
 | Distribution function export | SFINCS `export_f` | written by the SFINCS-compatible writer |
 
