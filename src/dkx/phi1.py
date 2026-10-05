@@ -105,6 +105,7 @@ class Phi1Result:
     iterations: tuple[NewtonIteration, ...] = ()
     inner_iterations_total: int | None = None
     timings: dict[str, float] | None = None
+    precond: Any = None  # last inner-solve preconditioner pair, reused by the adjoint
 
     @property
     def residual_norms(self) -> tuple[float, ...]:
@@ -326,6 +327,7 @@ def _newton_solve_phi1(
             raise ValueError(f"x0 must have shape {(op.total_size,)}, got {x.shape}")
 
     recycle: tuple[jnp.ndarray, jnp.ndarray] | None = None
+    precond: Any = None
     iterations: list[NewtonIteration] = []
     history: list[jnp.ndarray] = []
     inner_total: int | None = 0
@@ -355,6 +357,7 @@ def _newton_solve_phi1(
             recycle=recycle if warm_start else None,
         )
         recycle = res.recycle
+        precond = res.precond if res.precond is not None else precond
         if res.iterations is None or inner_total is None:
             inner_total = None
         else:
@@ -390,6 +393,7 @@ def _newton_solve_phi1(
         iterations=tuple(iterations),
         inner_iterations_total=inner_total,
         timings={"solve": elapsed},
+        precond=precond,
     )
     return result, history
 
@@ -464,3 +468,65 @@ def phi1_state(
         return x_root
 
     return root_solve(residual, x_init, solver)
+
+
+# ---------------------------------------------------------------------------
+# Matrix-free adjoint through the converged coupled state
+# ---------------------------------------------------------------------------
+
+def phi1_solution(op: KineticOperator, *, tol: float = 1e-11, adjoint_tol: float = 1e-11):
+    """Converged Phi1 state ``x*(op)`` with a matrix-free implicit adjoint.
+
+    The forward pass is the Newton-Krylov :func:`solve_phi1` (Legendre truncation
+    and the coarse bordered-Schur preconditioner allowed). The backward pass
+    solves ``J(x*)^T lam = g`` by GMRES on the matrix-free transposed Jacobian
+    (a VJP of the residual), preconditioned by the transpose half of the last
+    Newton step's preconditioner pair (no refactorization), checks the true
+    adjoint residual,
+    and returns ``-lam^T dF/dop`` (implicit function theorem). Call it eagerly:
+    the forward Newton loop runs on concrete arrays inside ``jax.grad``.
+    """
+
+    reuse: list[Any] = [None]  # preconditioner pair (callables) kept off the tape
+
+    @jax.custom_vjp
+    def _x(o):
+        return _fwd(o)[0]
+
+    def _fwd(o):
+        res = solve_phi1(o, tol=tol)
+        if not res.converged:
+            raise RuntimeError(f"Phi1 Newton did not converge: |F|={res.residual_norm!r}")
+        reuse[0] = res.precond
+        return res.x, (o, res.x)
+
+    def _bwd(saved, g):
+        (o, x), precond = saved, reuse[0]
+        g = jnp.reshape(jnp.asarray(g, dtype=jnp.float64), (-1,))
+        _, vjp_x = jax.vjp(o.residual_phi1, x)  # J(x*)^T v, matrix-free
+
+        # Legendre-truncated layouts carry inactive DOFs: zero rows and columns.
+        # Solve on the active subspace so the Krylov basis never sees them.
+        mask = o.active_dof_mask()
+        active = (
+            jnp.ones((x.shape[0],), dtype=bool) if mask is None
+            else jnp.asarray(mask, dtype=bool).reshape((-1,))
+        )
+        where = lambda v: jnp.where(active, v, 0.0)  # noqa: E731
+
+        def matvec_t(v):
+            return where(vjp_x(where(v))[0])
+
+        m_t = None if precond is None else (lambda v: where(precond[1](where(v))))
+        lam, _ = jax.scipy.sparse.linalg.gmres(
+            matvec_t, where(g), tol=adjoint_tol, atol=0.0,
+            restart=_inner_restart(o, None, True), maxiter=40, M=m_t,
+        )
+        defect = float(jnp.linalg.norm(matvec_t(lam) - g))
+        if not defect <= 10.0 * adjoint_tol * float(jnp.linalg.norm(g)):
+            raise RuntimeError(f"Phi1 adjoint solve did not converge: |J^T lam - g|={defect!r}")
+        _, vjp = jax.vjp(lambda oo: oo.residual_phi1(x), o)
+        return vjp(-lam)
+
+    _x.defvjp(_fwd, _bwd)
+    return _x(op)

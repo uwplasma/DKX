@@ -55,3 +55,35 @@ def test_native_phi1_refuses_what_it_does_not_implement(tmp_path):
     deck.write_text(text)
     with pytest.raises(Exception, match="includePhi1"):
         case_from_sfincs_namelist(deck)
+
+
+def test_native_phi1_adjoint_matches_finite_differences_and_taylor(tmp_path):
+    import jax
+    import jax.numpy as jnp
+    from dataclasses import replace
+
+    from dkx.execution import _make_operator, _prepare_profile
+    from dkx.phi1 import phi1_solution
+
+    case = case_from_sfincs_namelist(_deck(tmp_path, Ntheta=7, Nzeta=7, Nxi=8, Nx=3))
+    geometry, grids, density, temperature, dn, dt = _prepare_profile(case)
+    base, *_ = _make_operator(
+        case, surface_index=1, n_hat=density / 1.0e20, t_hat=temperature,
+        dn_dr_hat=dn, dt_dr_hat=dt, grids=grids, geometry_state=geometry,
+    )
+    assert base.active_dof_mask() is not None  # Legendre-truncated layout
+
+    def objective(p):
+        op = replace(base, dt_hat_dpsi_hat=base.dt_hat_dpsi_hat * p)
+        x = phi1_solution(op, tol=1e-13)
+        moments = profile_moments_from_operator(replace(op, phi1_lin_state=x), x)
+        return moments["particleFlux_vm_psiHat"][0]
+
+    p0 = jnp.asarray(1.0)
+    value, grad = jax.value_and_grad(objective)(p0)
+    h = 1.0e-3
+    fd = (objective(p0 + h) - objective(p0 - h)) / (2 * h)
+    np.testing.assert_allclose(float(grad), float(fd), rtol=1e-5)
+    # Taylor test: the first-order remainder falls as h^2.
+    rem = [abs(float(objective(p0 + e) - value - e * grad)) for e in (4e-2, 2e-2, 1e-2)]
+    assert rem[0] / rem[1] > 3.5 and rem[1] / rem[2] > 3.5

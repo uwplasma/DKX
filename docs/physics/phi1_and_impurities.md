@@ -83,6 +83,8 @@ is in `dkx.moments.electric_drift_flux_moments` ({doc}`drives_and_rhs_modes`).
 - The native case accepts `physics.phi1 = "kinetic"` on a `profile` workflow: $\Phi_1$ in
   the kinetic equation, quasineutrality option 1, no adiabatic species. It runs the same
   Newton–Krylov solve as the namelist route and is accepted by the nonlinear residual.
+  `dkx.phi1.phi1_solution` differentiates through the converged state with a
+  matrix-free implicit adjoint that works with Legendre truncation.
   `"full"`, option 2, adiabatic species and `ambipolar_profile` go through a SFINCS namelist
   ({doc}`../user_guide/sfincs_namelist`).
 - Full $\Phi_1$ coupling with the collision operator is verified as a full-system matvec
