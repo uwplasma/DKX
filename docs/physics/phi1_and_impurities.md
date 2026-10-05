@@ -81,7 +81,7 @@ is in `dkx.moments.electric_drift_flux_moments` ({doc}`drives_and_rhs_modes`).
 ## Scope
 
 - The native case accepts `physics.phi1 = "off"` only; `"kinetic"` and `"full"` validate
-  in the schema but the executor refuses them. $\Phi_1$ runs go through a SFINCS namelist
+  in the case format but the executor refuses them. $\Phi_1$ runs go through a SFINCS namelist
   ({doc}`../user_guide/sfincs_namelist`).
 - Full $\Phi_1$ coupling with the collision operator is verified as a full-system matvec
   and residual against the v3 fixture `fp_1species_FPCollisions_noEr_tiny_withPhi1_inCollision`

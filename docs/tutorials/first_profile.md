@@ -77,7 +77,7 @@ Read it top to bottom:
 - `solver.method = "auto"` lets DKX pick the route from the operator's
   structure ({doc}`../numerics/solver_routes`).
 
-Every field is documented in {doc}`../user_guide/inputs`; `dkx schema` prints a
+Every field is documented in {doc}`../user_guide/inputs`; `dkx template` prints a
 complete example.
 
 ## Run it

@@ -5,6 +5,9 @@
 - Case inputs no longer carry a `schema` key. Older files with `schema = 1`
   still load (the key is ignored); other values are refused. Case IDs are
   unchanged.
+- `dkx schema` is renamed `dkx template` (`schema` stays a hidden alias for one
+  release). `Case` no longer has a `schema` attribute and `SCHEMA_VERSION` is
+  no longer exported; case IDs are unchanged.
 
 ## v2.8.0 — 2026-10-05
 

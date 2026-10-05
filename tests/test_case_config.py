@@ -55,7 +55,6 @@ def test_representative_toml_is_a_frozen_typed_case() -> None:
     case = Case.from_file(EXAMPLE)
 
     assert is_dataclass(case)
-    assert case.schema == 1
     assert case.run.workflow == "ambipolar_profile"
     assert case.geometry.surfaces == (0.2, 0.35, 0.5, 0.65, 0.8)
     assert case.geometry_path == EXAMPLE.parent / "wout_w7x.nc"
@@ -306,7 +305,7 @@ def test_schema_outputs_are_complete_and_machine_readable(capsys) -> None:
     }
     assert "[[species]]" in COMMENTED_TOML_EXAMPLE
 
-    assert cli.main(["schema", "--format", "json", "--quiet"]) == 0
+    assert cli.main(["template", "--format", "json", "--quiet"]) == 0
     rendered = json.loads(capsys.readouterr().out)
     assert rendered["$id"].endswith("case-v1.json")
 

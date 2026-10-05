@@ -32,7 +32,7 @@ dict. `dkx.Case` validates it and hashes it to a `case_id`. Profiles hold one va
 | `[solver]` | `method` (`auto` picks the route), `relative_tolerance`, `memory_fraction` |
 | optional | `[parallel]`, `[convergence]`, `[output]`, `[scan]` |
 
-`dkx schema` prints every field with its default; `dkx validate case.toml` checks a file. A run
+`dkx template` prints every field with its default; `dkx validate case.toml` checks a file. A run
 returns a `Result`, saved as NetCDF, whose arrays carry units in their names:
 `particle_flux_m2_s` and `heat_flux_W_m2` (surface × species), `parallel_current_A_T_m2`
 (`⟨j·B⟩`), `electric_field_kV_m`, the equation residual per surface and, for ambipolar runs,

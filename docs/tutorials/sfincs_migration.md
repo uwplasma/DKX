@@ -86,7 +86,7 @@ dkx run case.toml --out result.nc
 The extension of the destination picks TOML or JSON; `--name` sets the case
 name and `--force` overwrites. A deck is dimensionless and describes one
 surface; a case is in SI and profile-shaped, so the conversion is a translation
-of units and conventions rather than a renaming. Anything the case schema
+of units and conventions rather than a renaming. Anything the case format
 cannot carry makes the conversion fail with the namelist key named, rather than
 producing a case that runs and answers a different question. The main
 limitations of the native executor are:
@@ -95,7 +95,7 @@ limitations of the native executor are:
 | --- | --- | --- |
 | `RHSMode = 2` or `3` | refused | `dkx sfincs transport-matrix-v3`, `dkx sfincs monoenergetic-database` ({doc}`transport_matrix`) |
 | $\Phi_1$ in the kinetic equation or quasineutrality | refused; the executor implements `phi1 = "off"` | the namelist route, as `examples/09_phi1_and_impurities` does |
-| RHSMode 4/5 adjoint sensitivities | not in the case schema | the namelist route and `dkx.sensitivity` |
+| RHSMode 4/5 adjoint sensitivities | not in the case format | the namelist route and `dkx.sensitivity` |
 
 Multi-species runs without $\Phi_1$ are fully native. The native result is a
 NetCDF file with SI arrays such as `particle_flux_m2_s` and `heat_flux_W_m2`

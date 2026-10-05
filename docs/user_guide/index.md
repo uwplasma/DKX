@@ -4,7 +4,7 @@ DKX has two input routes and one solver underneath them.
 
 | route | input | entry points | returns |
 |---|---|---|---|
-| native case | a schema-1 TOML or JSON file, or a Python mapping, in SI units | `dkx run CASE`, `dkx.run(dkx.Case.from_file(...))` | `dkx.Result`, written as NetCDF4 |
+| native case | a TOML or JSON case file, or a Python mapping, in SI units | `dkx run CASE`, `dkx.run(dkx.Case.from_file(...))` | `dkx.Result`, written as NetCDF4 |
 | SFINCS namelist | a SFINCS v3 `input.namelist`, dimensionless | `dkx input.namelist`, `dkx sfincs ...`, `dkx.run("input.namelist")` | `ProfileRun` / `TransportRun`, written as `sfincsOutput.h5` (or `.nc`, `.npz`) |
 
 The native case states a physical profile (densities in m$^{-3}$, temperatures

@@ -146,8 +146,8 @@ def _cmd_validate_case(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_schema(args: argparse.Namespace) -> int:
-    """Print the complete human or machine-readable case schema."""
+def _cmd_template(args: argparse.Namespace) -> int:
+    """Print the commented case template or the case JSON Schema."""
     from .config import COMMENTED_TOML_EXAMPLE, case_json_schema  # noqa: PLC0415
 
     if args.format == "toml":
@@ -951,7 +951,7 @@ def _cmd_inspect_result(args: argparse.Namespace) -> int:
     header.add_column("quantity", style="bold")
     header.add_column("value")
     header.add_row("workflow", str(result.workflow))
-    header.add_row("schema", str(result.schema_version))
+    header.add_row("result format", str(result.schema_version))
     header.add_row("converged", "yes" if result.metadata.get("converged") else "no")
     console.print(header)
 
@@ -1768,7 +1768,7 @@ _CONVERGE_AXES: tuple[str, ...] = ("theta", "zeta", "pitch", "speed")
 #: hidden top-level aliases, but are deliberately absent here: listing 21
 #: choices is what the compatibility group exists to avoid.
 _USER_COMMANDS: tuple[str, ...] = (
-    "doctor", "schema", "validate", "run", "roots", "converge", "inspect",
+    "doctor", "template", "validate", "run", "roots", "converge", "inspect",
     "compare", "plot", "scan", "convert", "sfincs",
 )
 
@@ -1777,7 +1777,7 @@ _USER_COMMANDS: tuple[str, ...] = (
 #: the parser's own ``sub.choices`` -- so the runtime behaviour cannot drift
 #: from the registered set. It exists for direct callers and as documentation.
 _KNOWN_COMMANDS: frozenset[str] = frozenset({
-    "validate", "doctor", "converge", "roots", "compare", "plot", "scan", "convert", "schema", "run", "inspect", "solve-v3", "ambipolar",
+    "validate", "doctor", "converge", "roots", "compare", "plot", "scan", "convert", "template", "schema", "run", "inspect", "solve-v3", "ambipolar",
     "scan-er", "ambipolar-solve", "run-fortran", "write-output",
     "transport-matrix-v3", "monoenergetic-database", "dump-h5", "plot-output",
     "compare-h5", "postprocess-upstream",
@@ -2297,7 +2297,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p_validate = sub.add_parser(
         "validate",
-        help="Validate a versioned case file and print its deterministic ID.",
+        help="Validate a case file and print its deterministic ID.",
     )
     _add_common_cli_args(p_validate)
     _add_parallel_cli_args(p_validate)
@@ -2389,14 +2389,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_scan_case.set_defaults(func=_cmd_scan)
 
-    p_schema = sub.add_parser(
-        "schema",
-        help="Print the complete case example or machine-readable JSON Schema.",
-    )
-    _add_common_cli_args(p_schema)
-    _add_parallel_cli_args(p_schema)
-    p_schema.add_argument("--format", choices=("toml", "json"), default="toml")
-    p_schema.set_defaults(func=_cmd_schema)
+    # ``schema`` is a hidden alias of ``template``, kept for one release.
+    for name, extra in (
+        ("template", {"help": "Print the commented case template or its JSON Schema."}),
+        ("schema", {}),
+    ):
+        p_template = sub.add_parser(name, **extra)
+        _add_common_cli_args(p_template)
+        _add_parallel_cli_args(p_template)
+        p_template.add_argument("--format", choices=("toml", "json"), default="toml")
+        p_template.set_defaults(func=_cmd_template)
 
     p_run = sub.add_parser(
         "run",

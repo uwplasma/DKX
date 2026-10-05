@@ -1477,7 +1477,6 @@ def write_case_file(case: Any, destination: str | Path, *, overwrite: bool = Fal
             "Choose another destination, or pass --force to overwrite it.",
         )
     data = _without_none(case.to_dict())
-    data.pop("schema")  # implicit current format version
     if suffix == ".toml":
         lines: list[str] = ["# DKX case converted from a SFINCS input.namelist."]
         _emit_toml(data, prefix=(), lines=lines)

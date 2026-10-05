@@ -5,7 +5,7 @@ files lives under `dkx sfincs`, so `dkx --help` stays short.
 
 ```text
 dkx doctor              check that this install can run
-dkx schema              print the case template or JSON Schema
+dkx template              print the case template or JSON Schema
 dkx validate CASE       validate a case and print its ID
 dkx run CASE            solve one case
 dkx scan CASE           solve every point of a [scan]
@@ -61,14 +61,15 @@ Checks Python, DKX, SOLVAX and the required packages, whether JAX arrays
 actually materialize in float64, and which devices JAX sees
 ({doc}`../getting_started/installation`). Exits 1 on a blocking failure.
 
-### `dkx schema`
+### `dkx template`
 
 ```console
-dkx schema [--format toml|json]
+dkx template [--format toml|json]
 ```
 
 `toml` (default) prints a commented case using every field; `json` prints the
-JSON Schema (draft 2020-12) for editors and validators.
+JSON Schema (draft 2020-12) for editors and validators. The old name
+`dkx schema` still works as a hidden alias for one release.
 
 ### `dkx validate`
 
