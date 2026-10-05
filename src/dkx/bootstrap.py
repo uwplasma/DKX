@@ -66,7 +66,11 @@ DEFAULT_ER_BRACKET: tuple[float, ...] = (-8.0, -4.0, -2.0, -1.0, -0.4, 0.4, 1.0,
 #:
 #: Redl is a fit to Fokker-Planck calculations, so 2-7% is the agreement to
 #: expect and 35-47% is a bias, not a physical difference.  Under 2x the cost
-#: buys it.
+#: buys it.  The traced term's "1.5-1.6x Redl" (``examples/optimization``) is the
+#: same bias on the optimized equilibrium at its coarse traced grid.  With
+#: n0 = 2e20 m^-3 and the equilibrium's own p(0) (T0 = 11 keV), at this
+#: resolution, PAS is 1.85x and 1.28x full Fokker-Planck at s = 0.25 and 0.75 and
+#: the momentum-corrected PAS route (``dkx.momentum_correction``) 0.89x and 0.93x.
 DEFAULT_COLLISION_OPERATOR: int = 0
 
 #: Residual scale in A T/m^2: one MA T/m^2, so a residual row *is* the surface's
@@ -399,9 +403,16 @@ class KineticBootstrapMismatch:
     (``collision_operator=1``), is solved by the exact structured route, so a
     residual and its derivative are cheap.  It has no momentum-restoring
     term, and ``<j.B>`` is a parallel-momentum moment: it overestimates Redl
-    by 35-47% on a precise-QA equilibrium (see ``DEFAULT_COLLISION_OPERATOR``).
-    ``collision_operator=0`` (Fokker-Planck) conserves momentum and costs a
-    Krylov solve.
+    by 1.35-1.47x on the precise-QA ``beta = 2.5 %`` equilibrium at the host
+    term's resolution (``DEFAULT_COLLISION_OPERATOR``) and by 1.5-1.6x on the
+    optimized QA equilibrium at the coarse ``11 x 11 x 16 x 4`` traced grid of
+    ``examples/optimization`` -- the same bias on a different equilibrium and grid.
+    ``collision_model="pas+momentum_correction"`` keeps the structured PAS route
+    and restores momentum by the Sugama-Nishimura moment method
+    (:mod:`dkx.momentum_correction`, three Sonine flow moments per species, two
+    more PAS right-hand sides per species and moment, one more solve);
+    ``collision_operator=0`` (Fokker-Planck) conserves momentum exactly and
+    costs a Krylov solve.
 
     **Handedness.**  The Boozer route converts VMEC's handedness through
     ``psiAHat = |psi_a| signgs sign(G + iota I)``
@@ -424,6 +435,7 @@ class KineticBootstrapMismatch:
         mismatch: bool = True,
         resolution: dict[str, int] | None = None,
         collision_operator: int = 1,
+        collision_model: str | None = None,
         er_kV_per_m: float = 0.0,
         minor_radius: float = 1.0,
         mboz: int = 6,
@@ -436,12 +448,17 @@ class KineticBootstrapMismatch:
             raise ValueError("surfaces must lie strictly inside (0, 1)")
         self.mismatch = bool(mismatch)
         self.resolution = dict(DEFAULT_TRACED_RESOLUTION if resolution is None else resolution)
-        self.collision_operator = int(collision_operator)
+        if collision_model not in (None, "pas", "fokker_planck", "pas+momentum_correction"):
+            raise ValueError(f"unknown collision_model {collision_model!r}")
+        self.momentum_correction = collision_model == "pas+momentum_correction"
+        self.collision_operator = (int(collision_operator) if collision_model is None
+                                   else int(collision_model != "fokker_planck"))  # fmt: skip
         self.er_kV_per_m = float(er_kV_per_m)
         self.minor_radius = float(minor_radius)
         self.mboz, self.nboz = int(mboz), int(nboz)
         self.tol = float(tol)
         self._templates: dict[int, tuple[np.ndarray, np.ndarray, list[Any]]] = {}
+        self._friction: dict[int, list[Any]] = {}
         self._plans: dict[tuple[Any, ...], Any] = {}
 
     # -- host-side set-up, cached ---------------------------------------------
@@ -452,7 +469,7 @@ class KineticBootstrapMismatch:
         rows = np.unique(rows)
         return rows, (rows - 0.5) / (ns - 1)
 
-    def _template(self, s: float) -> Any:
+    def _template(self, s: float, collision_operator: int | None = None) -> Any:
         """Operator at ``psiAHat = 1``: its gradient leaves hold ``d/ds`` values."""
         from dkx.drift_kinetic import kinetic_operator_from_namelist  # noqa: PLC0415
         from dkx.inputs import SfincsInput  # noqa: PLC0415
@@ -468,7 +485,8 @@ class KineticBootstrapMismatch:
             Zs=[1.0, -1.0], mHats=[1.0, 5.446170214e-4], nHats=[ne / 1e20] * 2,
             THats=[ti / 1e3, te / 1e3], dNHatdrHats=[dne / 1e20 * to_r_hat] * 2,
             dTHatdrHats=[dti / 1e3 * to_r_hat, dte / 1e3 * to_r_hat],
-            collisionOperator=self.collision_operator, Delta=4.5694e-3, alpha=1.0,
+            collisionOperator=(self.collision_operator if collision_operator is None
+                               else collision_operator), Delta=4.5694e-3, alpha=1.0,
             nu_n=8.330e-3, Er=self.er_kV_per_m, **self.resolution,
         )  # fmt: skip
         return kinetic_operator_from_namelist(parse_sfincs_input_text(deck.to_namelist()))
@@ -476,7 +494,15 @@ class KineticBootstrapMismatch:
     def _setup(self, ns: int) -> tuple[np.ndarray, np.ndarray, list[Any]]:
         if ns not in self._templates:
             rows, s_rows = self.rows(ns)
-            self._templates[ns] = (rows, s_rows, [self._template(float(s)) for s in s_rows])
+            templates = [self._template(float(s)) for s in s_rows]
+            if self.momentum_correction:
+                from dkx.momentum_correction import friction_drives  # noqa: PLC0415
+
+                # Collisions are local: the friction needs species and speed
+                # grid only, so it is computed once per row on the template.
+                self._friction[ns] = [friction_drives(t, self._template(float(s), 0), 3)
+                                      for t, s in zip(templates, s_rows)]  # fmt: skip
+            self._templates[ns] = (rows, s_rows, templates)
         return self._templates[ns]
 
     def _plan(self, xm: np.ndarray, xn: np.ndarray, nfp: int) -> Any:
@@ -511,7 +537,8 @@ class KineticBootstrapMismatch:
         # |psi_a| = |phi_edge|/(2 pi) in Wb/rad, as VMEX's bootstrap lane forms it.
         psi_a = jnp.abs((s_full[1] - s_full[0]) * jnp.sum(jnp.asarray(setup.phipf)[1:]))
         currents = []
-        for row, template in zip(rows, templates):
+        frictions = self._friction.get(int(s_full.size), [None] * len(rows))
+        for row, template, friction in zip(rows, templates, frictions):
             tables = boozer_input_tables(state, rt, int(row))
             xm, xn = np.asarray(tables["xm"]), np.asarray(tables["xn"])
             plan = self._plan(xm, xn, nfp)
@@ -531,6 +558,13 @@ class KineticBootstrapMismatch:
                 bmnc_b=booz["bmnc_b"][0], ixm_b=np.asarray(plan.grids.xm_b),
                 ixn_b=np.asarray(plan.grids.xn_b), nfp=nfp, iota=iota, g_hat=g, i_hat=i,
                 signgs=int(np.sign(setup.signgs)))  # fmt: skip
+            if friction is not None:
+                from dkx.momentum_correction import momentum_corrected_solve  # noqa: PLC0415
+
+                corrected = momentum_corrected_solve(operator, friction=friction, n_sonine=3,
+                                                     tol=self.tol)  # fmt: skip
+                currents.append(corrected.fsab_j * PARALLEL_CURRENT)
+                continue
             rhs = operator.rhs()
             # tier1_keep_lowest = Nxi keeps every Legendre block, so the
             # solution satisfies the original equation, not a truncation.

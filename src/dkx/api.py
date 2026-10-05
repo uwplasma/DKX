@@ -477,74 +477,29 @@ def run_monoenergetic_database(
     return database
 
 
-def momentum_corrected_bootstrap(
-    database: Any,
-    *,
-    z_s: Any,
-    m_hats: Any,
-    n_hats: Any,
-    t_hats: Any,
-    nu_n: Any,
-    dn_hat_dpsi_hat: Any,
-    dt_hat_dpsi_hat: Any,
-    dphi_hat_dpsi_hat: Any = 0.0,
-    e_par_b: Any = 0.0,
-    uncorrected_flows: Any = None,
-    x: Any = None,
-    x_weights: Any = None,
-    n_x: int = 64,
-    x_max: float = 5.0,
-) -> Any:
-    """Momentum-corrected bootstrap current (stable public facade).
+def momentum_corrected_bootstrap(pas_operator: Any, fp_operator: Any = None, **kwargs: Any) -> Any:
+    """Momentum-corrected bootstrap current from a pitch-angle solve (stable facade).
 
-    Routes to :func:`dkx.momentum_correction.momentum_corrected_bootstrap`,
-    the Sugama-Nishimura moment-method parallel-momentum correction on the
-    monoenergetic transport coefficients (H. Sugama and S. Nishimura, Phys.
-    Plasmas 9, 4637 (2002); 15, 042502 (2008); H. Maassberg, C. D. Beidler,
-    and Y. Turkin, Phys. Plasmas 16, 072504 (2009)).  The heavy JAX stack is
-    imported lazily so ``dkx.api`` stays cheap to import.
+    Routes to :func:`dkx.momentum_correction.momentum_corrected_solve`: the
+    Sugama-Nishimura moment method (Phys. Plasmas 9, 4637, 2002) with the
+    particle and heat flows and higher Sonine moments of every species, the
+    friction evaluated from DKX's Fokker-Planck operator.  ``.fsab_j`` is the
+    corrected ``FSABjHat``; ``.state`` feeds the ordinary moment table.
 
-    Args:
-        database: a
-            :class:`dkx.monoenergetic.MonoenergeticDatabase` (from
-            :func:`run_monoenergetic_database`).
-        z_s, m_hats, n_hats, t_hats: species parameters, shape ``(S,)``.
-        nu_n: deck normalized collisionality.
-        dn_hat_dpsi_hat, dt_hat_dpsi_hat: radial gradients ``dn/dpsiHat``,
-            ``dT/dpsiHat`` per species (shape ``(S,)``).
-        dphi_hat_dpsi_hat, e_par_b: radial-electric-field and inductive
-            parallel-field drives (default 0).
-        uncorrected_flows: optional ``(S,)`` override for the uncorrected
-            parallel-flow moments (e.g. from a kinetic solve).
-        x, x_weights, n_x, x_max: speed quadrature controls.
-
-    Returns:
-        A :class:`dkx.momentum_correction.MomentumCorrectionResult`
-        (``.corrected_bootstrap``, ``.uncorrected_bootstrap``,
-        ``.delta_bootstrap``, ``.corrected_flows``, ...).
+    The former database signature (``momentum_corrected_bootstrap(db, z_s=...)``)
+    is retired: it carried the parallel particle flow only and lost the
+    temperature-gradient drive.
     """
+    from .monoenergetic import MonoenergeticDatabase  # noqa: PLC0415
 
-    from .momentum_correction import (  # noqa: PLC0415
-        momentum_corrected_bootstrap as _momentum_corrected_bootstrap,
-    )
+    if isinstance(pas_operator, MonoenergeticDatabase):
+        raise TypeError(
+            "momentum_corrected_bootstrap no longer takes a monoenergetic database; pass the "
+            "collisionOperator=1 KineticOperator of the deck and its collisionOperator=0 twin."
+        )
+    from .momentum_correction import momentum_corrected_solve  # noqa: PLC0415
 
-    return _momentum_corrected_bootstrap(
-        database,
-        z_s=z_s,
-        m_hats=m_hats,
-        n_hats=n_hats,
-        t_hats=t_hats,
-        nu_n=nu_n,
-        dn_hat_dpsi_hat=dn_hat_dpsi_hat,
-        dt_hat_dpsi_hat=dt_hat_dpsi_hat,
-        dphi_hat_dpsi_hat=dphi_hat_dpsi_hat,
-        e_par_b=e_par_b,
-        uncorrected_flows=uncorrected_flows,
-        x=x,
-        x_weights=x_weights,
-        n_x=n_x,
-        x_max=x_max,
-    )
+    return momentum_corrected_solve(pas_operator, fp_operator, **kwargs)
 
 
 def bounce_averaged_transport(

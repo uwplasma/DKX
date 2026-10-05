@@ -118,30 +118,77 @@ not a finite-$\nu$ prediction, and it has no $\sqrt\nu$ or $E_r$ physics.
 
 ## Parallel-momentum correction
 
-Pitch-angle scattering conserves particles but not parallel momentum, so flows and
-bootstrap currents from a monoenergetic database are momentum-deficient.
-`dkx.momentum_correction` applies the moment method of Sugama & Nishimura (Phys. Plasmas 9,
-4637, 2002; 15, 042502, 2008) as used by Maassberg, Beidler & Turkin (Phys. Plasmas 16,
-072504, 2009). For species parallel flows $V_a = \langle BV_{\parallel a}\rangle$:
+Pitch-angle scattering (PAS) conserves particles but not parallel momentum, so its flows
+and bootstrap current are biased. `dkx.momentum_correction` keeps the cheap structured PAS
+solve and restores momentum by the moment method of Sugama & Nishimura (Phys. Plasmas 9,
+4637, 2002), the method Maassberg, Beidler & Turkin (Phys. Plasmas 16, 072504, 2009) apply
+to stellarators. With $K_{\mathrm{PAS}}$ and $K_{\mathrm{FP}}$ the kinetic operators of one
+deck under PAS and under the full linearized Fokker–Planck operator, the model equation is
 
 $$
-\bigl(\operatorname{diag}(M_a) + \Lambda\bigr)\,V = \operatorname{diag}(M_a^{(0)})\,V^{\mathrm{unc}},
-\qquad
-\Lambda_{ab} = \delta_{ab}\sum_c\gamma_{ac} - \gamma_{ab},
+K_{\mathrm{PAS}}\,f = S + D\,P f, \qquad D = K_{\mathrm{PAS}} - K_{\mathrm{FP}},
 $$
 
-where $M_a$ is the parallel viscosity from an energy convolution of $D_{33}$, $M_a^{(0)}$
-the same without the like-particle momentum restoration, and $\gamma_{ab} = \gamma_{ba}$
-the parallel friction coefficients. The corrected bootstrap current is
-$\langle Bj_\parallel\rangle = \sum_a Z_a V_a$ (`momentum_corrected_bootstrap`).
+the full operator on the Sonine part $Pf$ of the $\ell = 1$ distribution and PAS on the
+rest. $Pf = \sum_k \alpha_{ak}(\theta,\zeta)\, x L_k^{(3/2)}(x^2) e^{-x^2}$ carries the
+parallel particle flow ($k = 0$), heat flow ($k = 1$) and, by default, the next Sonine
+moment ($k = 2$, Maassberg's $j_x = 2$); two terms are the 13-moment approximation.
+$D$ applied to a unit Sonine flow holds the Hirshman–Sigmar friction coefficients
+$l^{ab}_{ij}$ and the field-particle momentum restoration, evaluated from DKX's own
+Rosenbluth-potential operator (`friction_drives`; velocity space only, so it is computed
+once and cached). The coefficients $\alpha$ are matched on the $\nu_D$-weighted moments
+$\sum_x w\,\nu_D x^3 L_k f$, which leaves the remainder $f - Pf$ without PAS momentum: the
+model conserves total parallel momentum exactly, so fluxes in a symmetric field are
+intrinsically ambipolar. The local flow is a surface part $A_{ak}B/\langle B^2\rangle$ plus
+a Pfirsch–Schlüter part set by the gradients alone, which the corrected state shares with
+the plain PAS solution $g_0$; so
 
-Measured in `tests/test_momentum_correction.py` (module docstring): single-species
-restoring factor $M^{(0)}/M = 0.9310$ on the scheme 1 test deck; friction-matrix momentum
-conservation $\le 10^{-18}$; for a two-species H + C$^{6+}$ deck the bootstrap difference
-from a full Fokker-Planck solve drops from $3.81\times10^{-2}$ (uncorrected pitch-angle
-scattering) to $6.9\times10^{-3}$ (corrected). The correction is the single-moment
-restoration and does not capture the energy-scattering difference between the operators, so
-it does not reach the Fokker-Planck value.
+$$
+f = g_0 + p + \sum_{bk} A_{bk} h_{bk}, \qquad
+(I - W)A = \langle B\alpha(g_0 + p)\rangle, \quad W_{ij} = \langle B\alpha_i(h_j)\rangle,
+$$
+
+with $h_{bk}$ the PAS responses to the unit drives $D\phi_{bk}B/\langle B^2\rangle$ (their
+surface flows are the energy-convolved viscosity coefficients, the monoenergetic
+convolution done on DKX's speed grid) and $p$ the response to the friction of $g_0$'s
+Pfirsch–Schlüter flow. $\langle j\cdot B\rangle$, the flows and the radial fluxes are then
+read off $f$ with the ordinary moment table, so the fluxes carry their back-substituted
+correction. Cost: one PAS elimination with $1 + NS$ right-hand sides and one more solve,
+for $N$ Sonine terms and $S$ species, plus an $NS \times NS$ dense solve; everything is
+traceable and differentiable (`momentum_corrected_solve`; in a VMEX objective,
+`KineticBootstrapMismatch(..., collision_model="pas+momentum_correction")`).
+
+Measured against full Fokker–Planck on the same grid (`tests/test_momentum_correction.py`
+and the validation in the pull request that introduced it):
+
+| Deck | PAS / FP − 1 | corrected / FP − 1 |
+| --- | --- | --- |
+| p + e tokamak, test deck (3 Sonine) | +8.4 % | −5.6 % |
+| H + C$^{6+}$ tokamak, test deck (1–5 Sonine) | −84 % | −2.4 to −3.1 % |
+| p + e tokamak, $\epsilon_t = 0.05$, Maassberg gradients, $15\times1\times48\times10$; $\nu_n = 8.3\times10^{-5}, 10^{-4}, 10^{-3}, 10^{-2}$ (×8.33) | +55, +45, +64, +146 % | −9.1, −7.2, −5.3, +2.6 % |
+| W7-X standard (geometryScheme 4), same plasma, $15\times25\times48\times8$; $\nu_n = 8.3\times10^{-5}, 10^{-4}, 10^{-3}$ (×8.33) | +9.2, +39, +264 % | −9.4, −2.7, +18 % |
+| precise QA, $\beta = 2.5\,\%$ (VMEC), $21\times31\times32\times5$, $s = 0.25, 0.75$ | +85, +28 % | −11, −7.0 % |
+
+The W7-X row at $\nu_n = 8.3\times10^{-3}$ sits next to the sign change of the current, so
+its relative error is of a small number. On the QA equilibrium the same grid puts full
+Fokker–Planck at 0.895 and 0.915 of Redl; the $s = 0.5$ surface is not resolved on it
+(Fokker–Planck at 2.1 times Redl) and is left out. The high- and low-mirror W7-X
+configurations of Maassberg et al. are not among DKX's decks, so their 88/104 kA and
+19.5/28.4 kA totals were not reproduced. The published admission is 5 % in the banana
+and plateau regimes; the tokamak and QA banana rows miss it by a few percent, so full
+Fokker–Planck stays the default for bootstrap rows. Nor is the corrected route cheaper on
+these grids: on four shared host cores it took 47–101 s per surface on the QA deck and
+46–53 s on the W7-X deck, against 22–37 s for the Fokker–Planck Krylov solve, because
+the structured elimination of $1 + NS$ columns over dense $(\theta,\zeta)$ blocks dominates.
+
+Fluxes: on the p + e test deck $\sum_a Z_a\Gamma_a/\Gamma_i$ is 0.96 for PAS and
+$-2\times10^{-3}$ corrected, at the deck's discretization level ($3\times10^{-3}$ for FP);
+the corrected ion flux is within 3.2 % of FP's. Limits: the radial electric field enters
+only through the PAS operator, so $E^* \ll 1$ is assumed (Maassberg et al.); PAS on the
+$\ell \ne 1$ part leaves a few-percent residual in the tokamak banana regime that more
+Sonine terms do not remove; and Mollén et al. (Phys. Plasmas 22, 112508, 2015) report a
+low-collisionality inter-species coefficient at $E_r = 0$ that no moment correction
+reproduces.
 
 ## Local validity flags
 
