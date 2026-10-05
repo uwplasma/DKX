@@ -190,16 +190,16 @@ _PROFILE_TEMPLATE = """&general
   Zs = 1.0d+0 -1.0d+0
   mHats = 1.0d+0 5.446170214d-4
   nHats = {n_hat:.6g} {n_hat:.6g}
-  THats = {t_hat:.6g} {t_hat:.6g}
+  THats = {ti_hat:.6g} {te_hat:.6g}
   dNHatdrHats = {dn_drhat:.6g} {dn_drhat:.6g}
-  dTHatdrHats = {dt_drhat:.6g} {dt_drhat:.6g}
+  dTHatdrHats = {dti_drhat:.6g} {dte_drhat:.6g}
 /
 &physicsParameters
   Delta = 4.5694d-3
   alpha = 1.0d+0
   nu_n = 8.4774d-3
   Er = 0.0d+0
-  collisionOperator = 0
+  collisionOperator = {collision_operator}
 /
 &resolutionParameters
   Ntheta = {n_theta}
@@ -470,8 +470,10 @@ def figure_caption(plasma: dict | None, plasma_source: str = "",
         source = plasma_source or (
             "p(s) from the equilibrium" if "p_pa" in plasma else "generic reference"
         )
-        caption += (f"\nplasma source: {source}   |   n and T are an assumed split of p,"
-                    " so the kinetic and equilibrium currents need not coincide")  # fmt: skip
+        caption += f"\nplasma source: {source}"
+        if not source.startswith("explicit"):
+            caption += ("   |   n and T are an assumed split of p,"
+                        " so the kinetic and equilibrium currents need not coincide")  # fmt: skip
     return caption
 
 
@@ -590,7 +592,11 @@ def plot_representative(
     # a transport number without knowing the n, T and grid behind it, and the
     # split of pressure into n and T is an assumption, not a measurement.
     if plasma or resolutions:
-        caption = figure_caption(plasma, plasma_source, resolutions)
+        import textwrap  # noqa: PLC0415
+
+        # Wrap rather than let a long provenance line run off both canvas edges.
+        caption = "\n".join(textwrap.fill(line, 170) for line in
+                            figure_caption(plasma, plasma_source, resolutions).split("\n"))  # fmt: skip
         # Reserve the strip rather than drawing into it: constrained_layout owns
         # the whole canvas, so a bare fig.text lands on top of the bottom row's
         # x-labels.  Older matplotlib has no layout engine to ask; there the
@@ -600,7 +606,7 @@ def plot_representative(
         if engine is not None:
             # Reserve the title strip as well: rect hands the engine the whole
             # remaining canvas, and suptitle is not one of the artists it packs.
-            engine.set(rect=(0.0, band, 1.0, 1.0 - _TITLE_BAND / rows))
+            engine.set(rect=(0.0, band, 1.0, 1.0 - band - _TITLE_BAND / rows))
         fig.text(0.5, band * 0.5, caption, ha="center", va="center",
                  fontsize=7.5, color="0.35", linespacing=1.5)  # fmt: skip
     fig.suptitle(title, fontsize=12)
@@ -717,8 +723,25 @@ def run_representative(
     full: bool = False,
     quick: bool = False,
     emit: Callable[[str], None] | None = print,
+    surfaces: Sequence[float] | None = None,
+    er: float | None = None,
+    collision_operator: str = "fp",
+    profiles: Any = None,
+    redl_jdotb: tuple[Sequence[float], Sequence[float]] | None = None,
 ) -> Path:
     """Solve the representative set for one equilibrium and plot it.
+
+    Options (defaults reproduce ``dkx wout.nc``):
+
+    - ``surfaces``: ``r/a`` values of the radial scan.
+    - ``er``: ``None`` searches each surface for the ambipolar root; a float
+      prescribes ``E_r`` in kV/m.
+    - ``collision_operator``: ``"fp"``, ``"pas"`` or ``"pas+momentum_correction"``.
+    - ``profiles``: explicit ``ne_coeffs`` [m^-3], ``Te_coeffs``/``Ti_coeffs``
+      [eV], polynomials in ``s`` lowest order first (VMEX ``KineticProfiles``
+      or a mapping), replacing the pressure split (:func:`profile_plasma`).
+    - ``redl_jdotb``: ``(s, <j.B>)`` in A T/m^2 from an external Redl model,
+      drawn beside the kinetic current (DKX has no Redl implementation).
 
     ``full`` widens the monoenergetic grid; the default keeps the whole run
     inside the one-minute budget the module docstring measures.  ``quick``
@@ -770,16 +793,32 @@ def run_representative(
     # three "not present in this output" boxes, which is not a representative
     # run of anything.
     done = stage("  profile solve for |B|")
-    data = _profile_data(equilibrium, full=full, quick=quick, emit=emit)
+    plasma, plasma_source = resolve_plasma(equilibrium)
+    if profiles is not None:
+        a_hat = equilibrium_scalars(equilibrium)["a_hat"]
+        plasma = profile_plasma(profiles, 0.5, a_hat)
+        plasma_source = "explicit n, T profiles (polynomials in s)"
+    data = _profile_data(equilibrium, full=full, quick=quick, emit=emit,
+                         plasma=(plasma, plasma_source),
+                         collision_operator=collision_operator)  # fmt: skip
     done()
     done = stage("  radial scan: ambipolar Er, bootstrap and fluxes at the root")
-    profiles = radial_profiles(equilibrium, full=full, quick=quick, emit=emit)
+    kinetic = profiles
+    profiles = radial_profiles(equilibrium, surfaces=surfaces, full=full, quick=quick,
+                               emit=emit, profiles=kinetic, er=er,
+                               collision_operator=collision_operator)  # fmt: skip
     done()
-    plasma, plasma_source = resolve_plasma(equilibrium)
+    if redl_jdotb is not None:
+        s_redl, j_redl = (np.asarray(v, dtype=float) for v in redl_jdotb)
+        for p in profiles:
+            if p.get("root_fsab2"):
+                p["jdotb_redl_kA_m2"] = float(
+                    np.interp(p["r"] ** 2, s_redl, j_redl)) / p["root_fsab2"] / 1.0e3
 
     out = Path(out_path) if out_path else Path(f"{equilibrium.stem}.panels.png")
     figure = plot_representative(
         out, data=data, scan=scan, profiles=profiles,
+        ambipolar=profiles if er is None and any(p.get("er_scan") for p in profiles) else None,
         plasma=plasma, plasma_source=plasma_source,
         resolutions={"monoenergetic": mono_resolution,
                      "profiles": profile_resolution},
@@ -903,14 +942,53 @@ def plasma_summary(plasma: dict, source: str = "") -> str:
     here rather than twice.  Two separate f-strings drifted apart across a key
     rename and broke the run at the last line of a 60-second job, twice.
     """
-    text = (f"n={plasma['n_hat']:.3g}e20 m^-3, T_i=T_e={plasma['t_hat']:.3g} keV, "
+    temps = (f"T_i=T_e={plasma['t_hat']:.3g} keV" if "te_hat" not in plasma else
+             f"T_i={plasma['ti_hat']:.3g}, T_e={plasma['te_hat']:.3g} keV")  # fmt: skip
+    text = (f"n={plasma['n_hat']:.3g}e20 m^-3, {temps}, "
             f"dn/drHat={plasma['dn_drhat']:+.3g}, dT/drHat={plasma['dt_drhat']:+.3g}")  # fmt: skip
     return f"{text} ({source})" if source else text
 
 
-def _plasma_keys(plasma: dict) -> dict:
-    """Only the keys the namelist template interpolates."""
-    return {k: plasma[k] for k in ("n_hat", "t_hat", "dn_drhat", "dt_drhat")}
+def _plasma_keys(plasma: dict, collision_operator: str | int = 0) -> dict:
+    """Only the keys the namelist template interpolates (``T_i = T_e`` unless split)."""
+    return {"n_hat": plasma["n_hat"], "dn_drhat": plasma["dn_drhat"],
+            "ti_hat": plasma.get("ti_hat", plasma["t_hat"]),
+            "te_hat": plasma.get("te_hat", plasma["t_hat"]),
+            "dti_drhat": plasma.get("dti_drhat", plasma["dt_drhat"]),
+            "dte_drhat": plasma.get("dte_drhat", plasma["dt_drhat"]),
+            "collision_operator": COLLISION_OPERATORS[collision_operator]
+            if isinstance(collision_operator, str) else int(collision_operator)}  # fmt: skip
+
+
+#: ``collision_operator`` names accepted by :func:`run_representative`, and the
+#: ``collisionOperator`` each one solves with.  ``pas+momentum_correction``
+#: scans ``E_r`` with PAS and corrects the bootstrap current at the evaluated
+#: field by the Sugama-Nishimura moment method (:mod:`dkx.momentum_correction`).
+COLLISION_OPERATORS = {"fp": 0, "pas": 1, "pas+momentum_correction": 1}
+
+
+def profile_plasma(profiles: Any, radius: float, a_hat: float) -> dict[str, float]:
+    """``&speciesParameters`` values at ``r/a`` from explicit kinetic profiles.
+
+    ``profiles`` carries ``ne_coeffs`` [m^-3], ``Te_coeffs`` and ``Ti_coeffs``
+    [eV] as polynomials in ``s``, lowest order first --- attributes (VMEX's
+    ``KineticProfiles``) or mapping keys.  This replaces the pressure split of
+    :func:`plasma_parameters`, so DKX solves the plasma the equilibrium was
+    built with.  Gradients are ``d/drHat = (2 rN / aHat) d/ds``.
+    """
+    from dkx.bootstrap import _polynomial  # noqa: PLC0415
+
+    def poly(key: str) -> tuple[float, float]:
+        coeffs = profiles[key] if isinstance(profiles, Mapping) else getattr(profiles, key)
+        return _polynomial(coeffs, float(radius) ** 2)
+
+    (ne, dne), (te, dte), (ti, dti) = poly("ne_coeffs"), poly("Te_coeffs"), poly("Ti_coeffs")
+    to_r_hat = 2.0 * float(radius) / float(a_hat)
+    return {"n_hat": ne / 1.0e20, "dn_drhat": dne / 1.0e20 * to_r_hat,
+            "ti_hat": ti / 1.0e3, "dti_drhat": dti / 1.0e3 * to_r_hat,
+            "te_hat": te / 1.0e3, "dte_drhat": dte / 1.0e3 * to_r_hat,
+            "t_hat": ti / 1.0e3, "dt_drhat": dti / 1.0e3 * to_r_hat,
+            "radius": float(radius)}  # fmt: skip
 
 
 #: Smallest on-axis density (in 1e20 m^-3) the pressure split may produce.
@@ -1179,7 +1257,9 @@ def _field_periods(equilibrium: Path) -> int:
 
 
 def _profile_data(equilibrium: Path, *, full: bool = False, quick: bool = False,
-                  emit: Callable[[str], None] | None = None) -> dict:  # fmt: skip
+                  emit: Callable[[str], None] | None = None,
+                  plasma: tuple[dict, str] | None = None,
+                  collision_operator: str = "fp") -> dict:  # fmt: skip
     """Geometry plus one RHSMode=1 solve, for the panels the scan cannot fill.
 
     Returns ``{}`` rather than raising if the profile solve does not apply to
@@ -1189,12 +1269,12 @@ def _profile_data(equilibrium: Path, *, full: bool = False, quick: bool = False,
     from dkx.run import run_profile  # noqa: PLC0415
 
     resolution = _profile_resolution(full=full, quick=quick)
-    plasma, derived = resolve_plasma(equilibrium)
+    plasma, derived = plasma or resolve_plasma(equilibrium)
     if emit:
         emit(f"    plasma: {plasma_summary(plasma, derived)}")
         emit(f"    profile resolution: {resolution}")
     text = _PROFILE_TEMPLATE.format(
-        equilibrium=str(equilibrium), **resolution, **_plasma_keys(plasma)
+        equilibrium=str(equilibrium), **resolution, **_plasma_keys(plasma, collision_operator)
     )
     try:
         # run_profile takes a path or an SfincsInput; parse_sfincs_input_text
@@ -1217,7 +1297,7 @@ def _profile_data(equilibrium: Path, *, full: bool = False, quick: bool = False,
         try:
             inp = sfincs_input_from_raw(parse_sfincs_input_text(
                 _PROFILE_TEMPLATE.format(equilibrium=str(equilibrium), **reduced,
-                                         **_plasma_keys(plasma))
+                                         **_plasma_keys(plasma, collision_operator))
             ))  # fmt: skip
             run = _quiet(lambda: run_profile(inp, out_path=None, emit=None))
         except Exception as exc2:
@@ -1286,19 +1366,72 @@ def _ambipolar_roots(records: list[dict[str, Any]]) -> list[float]:
     return roots
 
 
+def _root_types(er: Sequence[float], j_r: Sequence[float],
+                radial_factor: float = 1.0) -> list[str]:  # fmt: skip
+    """ion / unstable / electron for each root of :func:`_ambipolar_roots`.
+
+    The bracket's secant slope, converted to outward current by
+    ``radial_factor`` (the sign of ``drHat/dpsiHat``), feeds the same rule as
+    :func:`dkx.er._classify`: a positive outward-current slope is restoring.
+    """
+    from dkx.er import _classify  # noqa: PLC0415
+
+    types = []
+    for ea, eb, ja, jb in zip(er, er[1:], j_r, j_r[1:]):
+        if np.isfinite(ja) and np.isfinite(jb) and ja * jb < 0.0:
+            root = ea + (eb - ea) * ja / (ja - jb)
+            types.append(_classify(float(root), float((jb - ja) / (eb - ea)),
+                                   radial_factor=radial_factor))  # fmt: skip
+    return types
+
+
+def _momentum_corrected_fsab_j(deck_text: str, er: float) -> float:
+    """``FSABjHat`` of the PAS deck at ``er``, momentum-corrected against its FP twin."""
+    from dkx.api import momentum_corrected_bootstrap  # noqa: PLC0415
+    from dkx.drift_kinetic import kinetic_operator_from_namelist  # noqa: PLC0415
+    from dkx.namelist import parse_sfincs_input_text  # noqa: PLC0415
+
+    at_er = deck_text.replace("Er = 0.0d+0", f"Er = {float(er)!r}")
+    pas, fp = (kinetic_operator_from_namelist(parse_sfincs_input_text(
+        at_er.replace("collisionOperator = 1", f"collisionOperator = {c}"))) for c in (1, 0))  # fmt: skip
+    return float(np.asarray(_quiet(lambda: momentum_corrected_bootstrap(pas, fp)).fsab_j).ravel()[0])
+
+
 def _panel_ambipolarity(ax, records: list[dict[str, Any]]) -> bool:
-    if not records:
+    """``J_r(E_r)`` with each root labelled ion / unstable / electron.
+
+    ``records`` is either one scan (``{"er", "J_r"}`` rows) or the radial
+    profiles, which carry ``er_scan``/``J_r``/``root_types`` per surface; the
+    latter are drawn normalized to each surface's ``max|J_r|``.
+    """
+    if records and "er_scan" in records[0]:
+        curves = [(p["er_scan"], p["J_r"], p.get("root_types"), f"r/a={p['r']:.2f}")
+                  for p in records if len(p.get("er_scan", ())) > 1]  # fmt: skip
+        ylabel = r"$J_r / \max|J_r|$"
+    else:
+        curves = [([r["er"] for r in records], [r["J_r"] for r in records], None, None)]
+        ylabel = r"$J_r$"
+    if not records or not curves:
         return False
-    er = [r["er"] for r in records]
-    jr = [r["J_r"] for r in records]
-    ax.plot(er, jr, "o-", ms=3, color="tab:purple")
     ax.axhline(0.0, color="0.5", lw=0.8)
-    for root in _ambipolar_roots(records):
-        ax.axvline(root, color="tab:red", ls="--", lw=0.9)
-        ax.annotate(f"{root:+.2f}", (root, 0.0), fontsize=7, color="tab:red",
-                    xytext=(2, 6), textcoords="offset points")  # fmt: skip
+    for er, jr, types, label in curves:
+        er, jr = np.asarray(er, dtype=float), np.asarray(jr, dtype=float)
+        order = np.argsort(er)
+        er, jr = er[order], jr[order]
+        if label is not None:
+            jr = jr / max(float(np.nanmax(np.abs(jr))), np.finfo(float).tiny)
+        (line,) = ax.plot(er, jr, "o-", ms=3, label=label)
+        roots = _ambipolar_roots([{"er": e, "J_r": j} for e, j in zip(er, jr)])
+        types = types if types and len(types) == len(roots) else _root_types(er, jr)
+        for root, kind in zip(roots, types):
+            ax.axvline(root, color=line.get_color(), ls="--", lw=0.8)
+            ax.annotate(f"{kind} {root:+.1f}", (root, 0.0), fontsize=7,
+                        color=line.get_color(), rotation=90, xytext=(2, 6),
+                        textcoords="offset points")  # fmt: skip
+    if curves[0][3] is not None:
+        ax.legend(fontsize=7)
     ax.set_xlabel(r"$E_r$ [kV/m]")
-    ax.set_ylabel(r"$J_r$")
+    ax.set_ylabel(ylabel)
     ax.set_title("ambipolarity: roots of $J_r(E_r)$", fontsize=9)
     ax.grid(alpha=0.3)
     return True
@@ -1460,11 +1593,19 @@ def radial_profiles(
     full: bool = False,
     quick: bool = False,
     emit: Callable[[str], None] | None = None,
+    profiles: Any = None,
+    er: float | None = None,
+    collision_operator: str = "fp",
 ) -> list[dict[str, Any]]:
     """Ambipolar ``E_r`` and evaluated moments, per surface.
 
-    Prefer a bracketed root; otherwise retain the sampled point with smallest
-    ``|J_r|`` and mark ``evaluation_is_root=False``.
+    Prefer the most negative *stable* bracketed root (stability from the
+    outward-current slope, :func:`dkx.er._classify`); otherwise retain the
+    sampled point with smallest ``|J_r|`` and mark ``evaluation_is_root=False``.
+    ``er`` (kV/m) prescribes the field instead of searching for a root.  Each
+    surface is solved with its *own* ``n``, ``T`` and gradients: from
+    ``profiles`` (:func:`profile_plasma`) when given, else the pressure split
+    evaluated at that radius.
     """
     import tempfile  # noqa: PLC0415
 
@@ -1478,11 +1619,19 @@ def radial_profiles(
     # default would already have chosen for it.
     if surfaces is None:
         surfaces = QUICK_SURFACES if quick else DEFAULT_SURFACES
+    if collision_operator not in COLLISION_OPERATORS:
+        raise ValueError(f"collision_operator must be one of {sorted(COLLISION_OPERATORS)}")
     plasma, _derived = resolve_plasma(equilibrium)
+    geometry = equilibrium_scalars(equilibrium)
+    prescribed_er = er
+    if er is not None:
+        er_values = [float(er)]
     if er_values is None:
         base = QUICK_ER_BRACKET if quick else DEFAULT_ER_BRACKET
         # Scale to this plasma, not to the 2 keV one the tuple was tuned on.
-        er_values = _scaled_er_bracket(_t_axis_kev(_P_AXIS_SEEN.get("pa", 0.0)))
+        t_axis = (profile_plasma(profiles, 0.0, 1.0)["te_hat"] if profiles is not None
+                  else _t_axis_kev(_P_AXIS_SEEN.get("pa", 0.0)))  # fmt: skip
+        er_values = _scaled_er_bracket(t_axis)
         if len(base) != len(DEFAULT_ER_BRACKET):
             er_values = np.asarray(base, dtype=float) * (
                 float(er_values[0]) / float(DEFAULT_ER_BRACKET[0])
@@ -1493,16 +1642,23 @@ def radial_profiles(
              f"{len(er)} Er points per surface over "
              f"[{er.min():.3g}, {er.max():.3g}] kV/m")  # fmt: skip
     profile_input = vmec_profile_status(equilibrium)
-    geometry = equilibrium_scalars(equilibrium)
-    template = _PROFILE_TEMPLATE.format(
-        equilibrium=str(equilibrium), **resolution, **_plasma_keys(plasma)
-    ).replace("rN_wish = 0.5", "rN_wish = {radius}")  # fmt: skip
+    if profiles is not None:
+        profile_input = {"status": "available", "pressure_representation": "explicit",
+                         "detail": "explicit n, T profiles (polynomials in s)"}  # fmt: skip
+    # Outward-current sign of the psiHat current: psiHat = psiAHat rN^2.
+    radial_factor = -1.0 if geometry.get("psi_a_hat", 1.0) < 0.0 else 1.0
 
     out: list[dict[str, Any]] = []
     with tempfile.TemporaryDirectory() as work:
         for radius in surfaces:
+            local = (profile_plasma(profiles, radius, geometry["a_hat"]) if profiles is not None
+                     else plasma_parameters(equilibrium, radius) or plasma)  # fmt: skip
+            text = _PROFILE_TEMPLATE.format(
+                equilibrium=str(equilibrium), **resolution,
+                **_plasma_keys(local, collision_operator),
+            ).replace("rN_wish = 0.5", f"rN_wish = {radius}")  # fmt: skip
             deck = Path(work) / f"in_{radius}.namelist"
-            deck.write_text(template.format(radius=radius))
+            deck.write_text(text)
             try:
                 scan = _quiet(lambda d=deck: batched_er_scan(d, er))
             except Exception as exc:  # pragma: no cover - geometry-dependent
@@ -1535,7 +1691,8 @@ def radial_profiles(
             # there and stop as soon as one is bracketed.
             probes: list[float] = []
             while (
-                not roots
+                prescribed_er is None
+                and not roots
                 and len(probes) < ER_EXTENSION_MAX_PROBES
                 and _wants_more_negative_er(er_used, j_r)
             ):
@@ -1570,20 +1727,26 @@ def radial_profiles(
                     j_r = np.asarray(scan.radial_current, dtype=float).ravel()
                     roots = _ambipolar_roots([{"er": float(e), "J_r": float(j)}
                                               for e, j in zip(er_used, j_r)])  # fmt: skip
-            er = er_used
+            er_grid = er_used
+            types = _root_types(er_grid, j_r, radial_factor)
             record: dict[str, Any] = {
-                "r": float(radius), "er_scan": er.tolist(),
-                "J_r": j_r.tolist(), "roots": roots,
+                "r": float(radius), "er_scan": er_grid.tolist(),
+                "J_r": j_r.tolist(), "roots": roots, "root_types": types,
                 "profile_input_status": profile_input["status"],
                 "pressure_representation": profile_input["pressure_representation"],
                 "profile_input_detail": profile_input["detail"],
             }  # fmt: skip
             evaluation_er: float | None = None
-            if roots:
-                # The ion root is the most negative crossing; a device in the
-                # electron-root regime has a positive one too, and reporting
-                # only the first found would hide that.
-                root = min(roots)
+            if prescribed_er is not None:
+                record["evaluation_status"] = "prescribed_er"
+                record["evaluation_is_root"] = False
+                record["er_prescribed"] = evaluation_er = float(prescribed_er)
+            elif roots:
+                # The ion root is the most negative *stable* crossing; a device
+                # in the electron-root regime has a positive one too, and the
+                # unstable middle root is never a state the plasma occupies.
+                stable = [x for x, t in zip(roots, types) if t in ("ion", "electron")]
+                root = min(stable or roots)
                 record["er_ambipolar"] = root
                 record["evaluation_status"] = "bracketed_root"
                 record["evaluation_is_root"] = True
@@ -1592,7 +1755,7 @@ def radial_profiles(
                 finite = np.flatnonzero(np.isfinite(j_r))
                 if finite.size:
                     closest = int(finite[np.argmin(np.abs(j_r[finite]))])
-                    evaluation_er = float(er[closest])
+                    evaluation_er = float(er_grid[closest])
                     record["evaluation_status"] = "no_bracketed_root"
                     record["evaluation_is_root"] = False
                     record["radial_current_evaluated"] = float(j_r[closest])
@@ -1607,7 +1770,7 @@ def radial_profiles(
                 mom = scan.moments
                 boot = mom.get("FSABjHatOverRootFSAB2", mom.get("FSABjHat"))
                 if boot is not None:
-                    value = _interp_at_root(er, np.asarray(boot).ravel(), evaluation_er)
+                    value = _interp_at_root(er_grid, np.asarray(boot).ravel(), evaluation_er)
                     record["bootstrap"] = value
                     # <j.B>/sqrt(<B^2>) carries e nBar vBar (documentation
                     # eq. 196), so this is the same current in kA/m^2.
@@ -1618,6 +1781,10 @@ def radial_profiles(
                     vmec = _vmec_current_kA_m2(geometry, radius, root_fsab2)
                     if vmec is not None:
                         record["jdotb_vmec_kA_m2"] = vmec
+                    if collision_operator == "pas+momentum_correction":
+                        value = _momentum_corrected_fsab_j(text, evaluation_er) / root_fsab2
+                        record["bootstrap"] = value
+                        record["bootstrap_kA_m2"] = value * CURRENT_DENSITY / 1.0e3
                 # Fluxes are computed in the psiHat coordinate; the radial flux
                 # density a reader wants is the rHat one (eq. 175), and the RBar
                 # in its normalization then cancels (see dkx.units).
@@ -1635,7 +1802,7 @@ def radial_profiles(
                     if key in mom:
                         arr = np.asarray(mom[key])
                         values = [
-                            _interp_at_root(er, arr[:, s], evaluation_er)
+                            _interp_at_root(er_grid, arr[:, s], evaluation_er)
                             for s in range(arr.shape[1])
                         ]
                         record[name] = values
@@ -1713,6 +1880,10 @@ def _panel_radial_bootstrap(ax, profiles: list[dict[str, Any]]) -> bool:
     if dimensional and len(vmec) >= 2:
         ax.plot([v[0] for v in vmec], [v[1] for v in vmec], "^:", ms=4,
                 color="tab:green", label="VMEC equilibrium")  # fmt: skip
+    redl = [(p["r"], p["jdotb_redl_kA_m2"]) for p in pts if "jdotb_redl_kA_m2" in p]
+    if dimensional and len(redl) >= 2:
+        ax.plot([v[0] for v in redl], [v[1] for v in redl], "v-.", ms=4,
+                color="tab:orange", label="Redl (same profiles)")  # fmt: skip
     ax.axhline(0.0, color="0.7", lw=0.8)
     ax.set_xlabel("$r/a$")
     ax.set_ylabel(label, color="tab:blue")
@@ -1720,9 +1891,12 @@ def _panel_radial_bootstrap(ax, profiles: list[dict[str, Any]]) -> bool:
     ax.grid(alpha=0.3)
 
     twin = ax.twinx()
-    all_roots = all(bool(p.get("evaluation_is_root", "er_ambipolar" in p)) for p in pts)
+    prescribed = all("er_prescribed" in p for p in pts)
+    all_roots = prescribed or all(
+        bool(p.get("evaluation_is_root", "er_ambipolar" in p)) for p in pts)
     er = [p.get("er_ambipolar", p.get("er_evaluated", float("nan"))) for p in pts]
-    er_label = r"$E_r$ (ambipolar)" if all_roots else r"$E_r$ (root / closest scanned)"
+    er_label = (r"$E_r$ (prescribed)" if prescribed else r"$E_r$ (ambipolar)" if all_roots
+                else r"$E_r$ (root / closest scanned)")  # fmt: skip
     twin.plot(r, er, "s--", ms=4, color="tab:red", label=er_label)
     twin.set_ylabel(r"$E_r$ [kV/m]", color="tab:red")
     twin.tick_params(axis="y", labelcolor="tab:red")
@@ -1753,10 +1927,8 @@ def _panel_radial_bootstrap(ax, profiles: list[dict[str, Any]]) -> bool:
             edgecolors="tab:red",
             zorder=4,
         )
-    handles = (
-        ax.get_lines()[: 2 if (dimensional and len(vmec) >= 2) else 1]
-        + twin.get_lines()[:1]
-    )
+    handles = [h for h in ax.get_lines() if not h.get_label().startswith("_")]
+    handles += twin.get_lines()[:1]
     # "best" put the box on the Er curve on every device tried; the three curves
     # here all trend downward, so the upper-left corner is the reliable gap.
     ax.legend(handles, [h.get_label() for h in handles], fontsize=7,
@@ -1874,7 +2046,8 @@ def write_representative_output(
     if profiles:
         payload["profiles/r"] = [p["r"] for p in profiles]
         for key in ("er_ambipolar", "radial_current_evaluated", "bootstrap",
-                    "bootstrap_kA_m2", "jdotb_vmec_kA_m2", "root_fsab2"):  # fmt: skip
+                    "bootstrap_kA_m2", "jdotb_vmec_kA_m2", "jdotb_redl_kA_m2",
+                    "root_fsab2", "er_prescribed"):  # fmt: skip
             payload[f"profiles/{key}"] = [p.get(key, float("nan")) for p in profiles]
         # ``er_evaluated`` was added after ``er_ambipolar``.  Preserve older
         # callers that provide a root-only profile: a known root is necessarily

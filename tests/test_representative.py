@@ -838,7 +838,7 @@ def test_every_preset_threads_its_grid_through_both_solve_stages(monkeypatch, tm
 
     seen: dict[str, dict] = {}
 
-    def fake_profile_data(equilibrium, *, full=False, quick=False, emit=None):
+    def fake_profile_data(equilibrium, *, full=False, quick=False, emit=None, **kwargs):
         seen["profile"] = rep._profile_resolution(full=full, quick=quick)
         return {}
 
@@ -1144,3 +1144,100 @@ def test_the_cli_parses_a_density_flag() -> None:
         _density_override(["wout.nc", "--density-m3", "abc"])
     with pytest.raises(ValueError, match="needs a value"):
         _density_override(["wout.nc", "--density-m3"])
+
+
+def test_explicit_profiles_set_per_species_temperatures_and_gradients():
+    """VMEX-style polynomials in s become n, T_i, T_e and d/drHat = (2 rN/aHat) d/ds."""
+    from dkx.representative import _PROFILE_TEMPLATE, _plasma_keys, profile_plasma
+
+    prof = {"ne_coeffs": [2.0e20, 0.0, -2.0e20], "Te_coeffs": [8.0e3, -8.0e3],
+            "Ti_coeffs": [4.0e3, -4.0e3]}  # fmt: skip
+    p = profile_plasma(prof, 0.5, a_hat=2.0)  # s = 0.25, d/drHat = 0.5 d/ds
+    assert p["n_hat"] == pytest.approx(2.0 * (1 - 0.0625))
+    assert p["dn_drhat"] == pytest.approx(2.0 * -2 * 0.25 * 0.5)
+    assert (p["te_hat"], p["ti_hat"]) == pytest.approx((6.0, 3.0))
+    assert (p["dte_drhat"], p["dti_drhat"]) == pytest.approx((-4.0, -2.0))
+    text = _PROFILE_TEMPLATE.format(equilibrium="w", n_theta=1, n_zeta=1, n_xi=1, n_x=1,
+                                    **_plasma_keys(p, "pas+momentum_correction"))  # fmt: skip
+    assert "THats = 3 6" in text and "dTHatdrHats = -2 -4" in text
+    assert "collisionOperator = 1" in text
+
+
+def test_root_types_follow_the_outward_current_slope():
+    """S-curve: ion / unstable / electron; a reversed psiHat flips stability."""
+    from dkx.representative import _root_types
+
+    er = np.array([-10.0, -5.0, 0.0, 5.0, 10.0])
+    j_r = np.array([-1.0, 1.0, -1.0, -1.0, 1.0])
+    assert _root_types(er, j_r) == ["ion", "unstable", "electron"]
+    assert _root_types(er, j_r, radial_factor=-1.0) == ["unstable", "ion", "unstable"]
+
+
+class _FakeScan:
+    def __init__(self, er, root):
+        self.radial_current = (np.asarray(er) - root) * (np.asarray(er) - 1.0) * (np.asarray(er) - 6.0)
+        self.moments = {"FSABjHat": 2.0 * np.ones_like(er), "FSABjHatOverRootFSAB2": np.ones_like(er)}
+
+
+def _patch_radial(monkeypatch, decks):
+    import dkx.api
+    import dkx.representative as rep
+
+    def fake(deck, er):
+        text = Path(deck).read_text()
+        decks.append(text)
+        root = -4.0 if "rN_wish = 0.4" in text else -8.0
+        return _FakeScan(np.asarray(er, dtype=float), root)
+
+    monkeypatch.setattr(dkx.api, "batched_er_scan", fake)
+    monkeypatch.setattr(rep, "resolve_plasma", lambda eq: (dict(rep.FALLBACK_PLASMA), "x"))
+    monkeypatch.setattr(rep, "equilibrium_scalars", lambda eq: {"a_hat": 1.0, "psi_a_hat": 0.1})
+    monkeypatch.setattr(rep, "vmec_profile_status", lambda eq: {
+        "status": "available", "pressure_representation": "x", "detail": "x"})
+    monkeypatch.setattr(rep, "plasma_parameters",
+                        lambda eq, radius=0.5: {**rep.FALLBACK_PLASMA, "t_hat": radius})
+
+
+def test_radial_profiles_pick_the_stable_ion_root_with_local_plasma(monkeypatch):
+    """Three roots per surface: the evaluated one is the stable ion root, and each
+    surface carries its *own* plasma (the r/a=0.55 outlier on the QA beta=2.5%
+    deck came from solving every surface with the r/a=0.5 n, T and gradients)."""
+    from dkx.representative import radial_profiles
+
+    decks: list[str] = []
+    _patch_radial(monkeypatch, decks)
+    er = (-12.0, -6.0, -2.0, 0.5, 3.0, 9.0)
+    out = radial_profiles(Path("w.nc"), surfaces=(0.4, 0.7), er_values=er, emit=None)
+    assert [p["root_types"] for p in out] == [["ion", "unstable", "electron"]] * 2
+    assert -6.0 < out[0]["er_ambipolar"] < -2.0 and out[1]["er_ambipolar"] < -6.0
+    assert "THats = 0.4 0.4" in decks[0] and "THats = 0.7 0.7" in decks[1]
+
+
+def test_radial_profiles_prescribed_er_and_explicit_profiles(monkeypatch):
+    from dkx.representative import radial_profiles
+
+    decks: list[str] = []
+    _patch_radial(monkeypatch, decks)
+    prof = {"ne_coeffs": [1e20], "Te_coeffs": [2e3], "Ti_coeffs": [1e3]}
+    out = radial_profiles(Path("w.nc"), surfaces=(0.4,), er=-3.0, profiles=prof,
+                          collision_operator="pas", emit=None)  # fmt: skip
+    assert out[0]["evaluation_status"] == "prescribed_er"
+    assert out[0]["er_evaluated"] == -3.0 and out[0]["root_fsab2"] == pytest.approx(2.0)
+    assert "THats = 1 2" in decks[0] and "collisionOperator = 1" in decks[0]
+    with pytest.raises(ValueError):
+        radial_profiles(Path("w.nc"), surfaces=(0.4,), collision_operator="bgk")
+
+
+def test_ambipolar_panel_labels_roots_and_bootstrap_panel_draws_redl(tmp_path):
+    prof = [{"r": r, "er_scan": [-10.0, -5.0, 0.0, 5.0, 10.0], "J_r": [-1.0, 1.0, -1.0, -1.0, 1.0],
+             "root_types": ["ion", "unstable", "electron"], "er_ambipolar": -7.5,
+             "evaluation_is_root": True, "bootstrap_kA_m2": -4.0e3, "bootstrap": -1.0,
+             "jdotb_vmec_kA_m2": -3.0e3, "jdotb_redl_kA_m2": -3.5e3} for r in (0.4, 0.7)]  # fmt: skip
+    from dkx.representative import _panel_ambipolarity, _panel_radial_bootstrap
+
+    fig, (a, b) = plt.subplots(1, 2)
+    assert _panel_ambipolarity(a, prof) and _panel_radial_bootstrap(b, prof)
+    labels = {t.get_text().split()[0] for t in a.texts}
+    assert labels == {"ion", "unstable", "electron"}
+    assert "Redl (same profiles)" in [line.get_label() for line in b.get_lines()]
+    plt.close(fig)
