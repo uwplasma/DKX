@@ -209,7 +209,7 @@ subpackage.
 * - `monoenergetic`
   - Monoenergetic database scans and energy convolution to thermal transport matrices
 * - `momentum_correction`
-  - Sugama–Nishimura parallel-momentum correction for monoenergetic transport
+  - Sugama–Nishimura momentum correction of pitch-angle solves: particle, heat and higher Sonine flows, friction from the Fokker–Planck operator
 * - `bounce_averaged`
   - Differentiable bounce-averaged $1/\nu$ transport and effective ripple
 * - `shaing_callen`

@@ -47,7 +47,9 @@ system is block-tridiagonal in $L$ and admits the structured direct solve
 
 Pitch-angle scattering does not conserve parallel momentum. Flows and bootstrap currents
 computed with it are momentum-deficient; {doc}`reduced_models` describes the
-Sugama-Nishimura correction in `dkx.momentum_correction`.
+Sugama-Nishimura correction in `dkx.momentum_correction`, which keeps the structured
+pitch-angle solve and restores momentum through the projection of
+$C_{\mathrm{FP}} - C_{\mathrm{PAS}}$ onto the Sonine flow moments of every species.
 
 ## Full linearized Fokker-Planck
 

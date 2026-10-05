@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased
+
+### Physics
+
+- Rewrite `dkx.momentum_correction` as the Sugama–Nishimura moment method on the
+  structured pitch-angle solve (Phys. Plasmas 9, 4637 (2002); Maassberg, Beidler &
+  Turkin, Phys. Plasmas 16, 072504 (2009)). The parallel particle flow, heat flow and
+  next Sonine moment of every species are coupled through the full Fokker–Planck
+  operator (friction `l^ab_ij` and field-particle restoration from DKX's own
+  Rosenbluth-potential operator), the projection is weighted by `nu_D` so the model
+  conserves total parallel momentum exactly, and `<j.B>`, flows and back-substituted
+  radial fluxes are read off one corrected state. `momentum_corrected_solve(pas, fp)`
+  is traceable and differentiable; `friction_drives` caches the velocity-space part.
+  `KineticBootstrapMismatch(collision_model="pas+momentum_correction")` uses it as a
+  VMEX objective row. Accuracy against full Fokker–Planck on the same grid is in
+  `docs/physics/reduced_models.md`.
+
+### Removed
+
+- The single-moment, database-based correction (`ParallelViscosity`,
+  `parallel_viscosity`, `parallel_friction_matrix`, `solve_corrected_flows` and the
+  database signature of `momentum_corrected_bootstrap`). It carried the parallel
+  particle flow only, so the temperature-gradient bootstrap drive was lost, and closed
+  the system with an ad hoc `M0 V_unc` drive. Accessing the old names raises an error
+  that names the replacement; `dkx.api.momentum_corrected_bootstrap` now takes the
+  pitch-angle operator and its Fokker–Planck twin.
+
 ## v2.7.0 — 2026-09-27
 
 Faster by default and ready for optimization: a memory-aware Krylov restart
