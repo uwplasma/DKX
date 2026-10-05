@@ -195,8 +195,8 @@ __all__ = [
 # ``Nx = 16`` where 1,000 needs 357 and 2,000 gives the same 357 at a higher
 # cost per step (2026-09-23 restart-and-direct-reach study; SOLVAX then
 # orthogonalized against the whole padded basis, since 0.28 only its filled
-# rows).  The basis costs ``restart * total_size * itemsize`` bytes: DKX's own
-# preconditioners are fixed linear maps, so GCROT runs with
+# rows).  The wide basis costs ``restart * total_size * itemsize`` bytes: DKX's
+# own preconditioners are fixed linear maps, so the wide window runs GCROT with
 # ``fixed_precond=True`` and stores only the Arnoldi basis ``V``, not ``Z``.
 _AUTO_RESTART_PROBE = 30
 _AUTO_RESTART_PROBE_CYCLES = 5
@@ -2647,8 +2647,12 @@ def _solve_tier2(
                 steps -= _AUTO_RESTART_MIDDLE * middle
         if wide > restart and steps // wide > 0:
             windows_after_probe.append((wide, steps // wide))
-    # DKX's preconditioners are fixed linear maps: keep one Krylov basis.
-    # Caller-supplied ones may be flexible and keep the stored Z basis.
+    # DKX's preconditioners are fixed linear maps, so the wide window (the one
+    # the memory budget sizes) keeps one Krylov basis. Short windows and the
+    # differentiable route keep Z: forming M^{-1}(V y) amplifies roundoff by
+    # ||M^{-1}||, about 1e8 on the near-singular coarse chains, and there a
+    # 30-step cycle diverged where the stored-Z cycle converged.
+    # Caller-supplied preconditioners may be flexible and always keep Z.
     fixed_precond = prebuilt_precond is None
     cols: list[jnp.ndarray] = []
     total_iters: int | None = 0
@@ -2701,7 +2705,6 @@ def _solve_tier2(
                     atol=atol,
                     max_restarts=max_restarts,
                     recycle=warm,
-                    fixed_precond=fixed_precond,
                 )
                 measured = _guarded_solve(
                     label,
@@ -2754,7 +2757,7 @@ def _solve_tier2(
                     matvec, b, x0=guess, precond=precond, m=window,
                     k=recycle_dim, rtol=tol, atol=atol,
                     max_restarts=cycles, recycle=recycle,
-                    fixed_precond=fixed_precond,
+                    fixed_precond=fixed_precond and window > _AUTO_RESTART_MIDDLE,
                 )
                 iterations = iterations + sol.iterations
                 recycle = sol.recycle
