@@ -330,8 +330,7 @@ class KineticBootstrapCurrent:
                     root = self._ion_root(er, current)
                     if root is None:
                         return float("nan")
-                    order = np.argsort(er)
-                    value = float(np.interp(root, er[order], j_par[order]))
+                    value = self._refined_root_current(deck, er, current, j_par, root)
                 else:
                     deck.write_text(
                         self.namelist(equilibrium, s, er=self.er_kV_per_m, a_hat=a_hat))
@@ -344,6 +343,34 @@ class KineticBootstrapCurrent:
                 print(f"  {self.name}: s={s:.3f} unavailable ({type(exc).__name__}: {exc})")
             return float("nan")
         return value * PARALLEL_CURRENT
+
+    @staticmethod
+    def _refined_root_current(deck: Path, er: np.ndarray, current: np.ndarray,
+                              j_par: np.ndarray, root: float) -> float:
+        """``FSABjHat`` solved at the Brent-refined root, not interpolated in a wide bracket.
+
+        The bracket root is refined by :func:`dkx.representative._refine_root`
+        (the radial scan's refinement, same budget and tolerances).  The
+        current is read from the refining solve closest to ``J_r = 0``; when
+        no refining solve was needed or admitted, it is interpolated.
+        """
+        from dkx.api import batched_er_scan  # noqa: PLC0415
+        from dkx.representative import _refine_root  # noqa: PLC0415
+
+        def one(x: float) -> tuple[float, Any]:
+            scan = batched_er_scan(deck, np.array([x]), retain_full_state=True)
+            ok = np.asarray(scan.algebraic_converged)
+            fx = float(np.asarray(scan.radial_current, dtype=float).ravel()[0])
+            jx = float(np.asarray(scan.moments["FSABjHat"], dtype=float).ravel()[0])
+            admitted = ok.dtype == np.dtype(bool) and bool(np.all(ok)) and np.isfinite(jx)
+            return (fx if admitted else float("nan")), jx
+
+        refined, evals = _refine_root(one, er, current, root)
+        for x, fx, jx in evals:
+            if x == refined and np.isfinite(fx):
+                return float(jx)
+        order = np.argsort(er)
+        return float(np.interp(refined, er[order], j_par[order]))
 
     @staticmethod
     def _ion_root(er: np.ndarray, radial_current: np.ndarray) -> float | None:
