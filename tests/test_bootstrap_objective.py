@@ -163,6 +163,25 @@ def test_ambipolar_requires_boolean_scan_admission_status(monkeypatch, tmp_path,
     assert np.isnan(term._one_surface(tmp_path / "wout.nc", 0.4, tmp_path))
 
 
+def test_ambipolar_current_is_solved_at_the_brent_refined_root(monkeypatch, tmp_path):
+    """A curved J_r in a wide bracket: the current comes from a solve at the refined root."""
+    from dkx import api
+
+    jr = lambda e: np.tanh((e + 3.3) / 2.0) + 0.05 * (e + 3.3)  # noqa: E731
+    term = KineticBootstrapCurrent(_Profiles(), surfaces=[0.4], ambipolar=True,
+                                   er_values=[-8.0, 0.0, 8.0])  # fmt: skip
+
+    def fake_scan(deck, er, **kwargs):
+        er = np.asarray(er, dtype=float)
+        return SimpleNamespace(algebraic_converged=np.ones(er.shape, bool),
+                               radial_current=jr(er), moments={"FSABjHat": er ** 2})  # fmt: skip
+
+    monkeypatch.setattr(api, "batched_er_scan", fake_scan)
+    monkeypatch.setattr(term, "namelist", lambda *args, **kwargs: "&general\n/\n")
+    value = term._one_surface(tmp_path / "wout.nc", 0.4, tmp_path) / PARALLEL_CURRENT
+    assert value == pytest.approx(3.3**2, rel=5e-3)  # linear interpolation gives ~ 4.5, not 10.9
+
+
 @pytest.mark.parametrize(
     ("current", "expected"),
     [

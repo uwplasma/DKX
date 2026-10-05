@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Bootstrap objective
+
+- `KineticBootstrapCurrent(ambipolar=True)` refines its bracketed ion root
+  with the same Brent refinement as the representative radial scan (at most
+  4 more single-field solves) and reads `<j.B>` from the solve at the refined
+  root instead of interpolating across the scan bracket.
+
 ### Representative run
 
 - The ambipolar root of each surface is refined after bracketing: Brent's
