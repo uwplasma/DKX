@@ -1,6 +1,22 @@
 # Changelog
 
-## Unreleased
+## v2.8.0 — 2026-10-05
+
+A converged kinetic bootstrap row compiled as one program, a momentum-conserving
+correction for pitch-angle-scattering solves, refined ambipolar roots, and the
+options `vmex --neoclassical` uses.
+
+### Documentation and repository
+
+- Documentation rebuilt (#292): getting started, user guide (every case field,
+  outputs, CLI, Python API), tutorials, how DKX works, physics, numerics,
+  benchmarks, examples, features and design decisions. The README defines the
+  case schema before using it.
+- Historical development files removed (#293, #298); dead doc citations
+  repointed; `dkx run --out` help, the `dkx.run` method docstring and the
+  analytic tokamak wording corrected; `[output].plots` wired.
+- Ambipolar root stability is classified from the outward current (#301); the
+  optional Boozer backend is declared as the `booz` extra (#302).
 
 ### Bootstrap objective
 
