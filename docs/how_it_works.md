@@ -32,7 +32,7 @@ case.toml / Case            input.namelist / SfincsInput
 
 There are two front doors, and both end in the same kernels.
 
-- **Native case.** `dkx.Case` (`dkx.config`) is an immutable, versioned schema
+- **Native case.** `dkx.Case` (`dkx.config`) is an immutable, validated model
   in physical units: surfaces, species in m⁻³ and keV, electric field in kV/m,
   resolution, solver options. `Case.from_file` reads TOML or JSON, validates it,
   and gives it a deterministic case ID. `dkx.run(case)` dispatches to
@@ -155,7 +155,7 @@ subpackage.
 * - `runtime`
   - `configure()`: numpy check, float64, XLA threadpool, BLAS threads, compilation cache, distributed bootstrap
 * - `config`
-  - Native versioned `Case` schema, validation, case IDs, schema generation
+  - Native `Case` model, validation, case IDs, template and JSON Schema export
 * - `execution`
   - Native `Case` normalization and execution without a namelist
 * - `namelist`

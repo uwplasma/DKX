@@ -17,7 +17,7 @@ in the same row.
 | Adjoint sensitivities (SFINCS `RHSMode = 4/5`) | `dkx.sensitivity` | input validation, output field names and ranks, and compact Fortran replay fixtures; production-grid parity is not claimed |
 
 The native case executor implements the profile and ambipolar workflows. The
-`transport_matrix` and `monoenergetic` workflows are in the case schema but run
+`transport_matrix` and `monoenergetic` workflows are in the case format but run
 through the SFINCS-deck entry points above.
 
 ## Geometry
@@ -88,7 +88,7 @@ transport gradients; its scope is machine-checked
 
 | Capability | How |
 | --- | --- |
-| Native cases | TOML or JSON, schema-versioned, deterministic case ID; `dkx schema`, `dkx validate` ({doc}`user_guide/inputs`) |
+| Native cases | TOML or JSON, deterministic case ID; `dkx template`, `dkx validate` ({doc}`user_guide/inputs`) |
 | SFINCS v3 decks | `dkx input.namelist`, `dkx.load_sfincs_input`, `dkx convert` to a native case ({doc}`user_guide/sfincs_namelist`, {doc}`tutorials/sfincs_migration`) |
 | Outputs | native NetCDF result in SI; SFINCS-layout HDF5, NetCDF4 or NPZ selected by suffix; `dkx.read_output` ({doc}`user_guide/outputs`) |
 | Result certificate | `Result.certificate()`: convergence, route, residual, version, device, precision |

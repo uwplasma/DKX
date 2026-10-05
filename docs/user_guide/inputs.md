@@ -34,14 +34,14 @@ fields and both pass through one validation boundary,
 Two commands support writing a case:
 
 ```console
-dkx schema > case.toml                   # every accepted field, commented
-dkx schema --format json > case.schema.json   # JSON Schema (draft 2020-12) for editors
-dkx validate case.toml                   # schema + executor preflight, no solve
+dkx template > case.toml                   # every accepted field, commented
+dkx template --format json > case.schema.json   # JSON Schema (draft 2020-12) for editors
+dkx validate case.toml                   # field checks + executor preflight, no solve
 ```
 
-The template printed by `dkx schema` names a VMEC file and enables sharding and
+The template printed by `dkx template` names a VMEC file and enables sharding and
 convergence refinement, so it is a reference to edit down, not a file that runs
-unchanged. `dkx validate` runs the schema check and then the executor's own
+unchanged. `dkx validate` checks every field and then the executor's own
 preflight, so a case it accepts will not be refused at run time for an
 unsupported option. It does not open the geometry file.
 
@@ -130,7 +130,7 @@ surface. The Boozer reader detects the six-column stellarator-symmetric and the
 ten-column non-symmetric SFINCS `.bc` conventions. The file is read once per
 profile and its SHA-256 is recorded in the result (`geometry_sha256`).
 
-Execution adds two rules the schema does not: at least **two** surfaces, and
+Execution adds two rules the case format does not: at least **two** surfaces, and
 the surfaces must be **strictly increasing and above zero** (the magnetic axis
 has a singular radial Jacobian).
 
@@ -322,12 +322,12 @@ A case with `[scan]` is run with `dkx scan`, not `dkx run`
 
 ## What the native executor runs
 
-The schema is deliberately wider than the executor, so that a case can name a
+The case format is deliberately wider than the executor, so that a case can name a
 model before the native route implements it. `dkx validate` and `dkx run`
 refuse these values with the field path and a correction; they are never
 silently replaced:
 
-| field | schema accepts | native executor accepts |
+| field | case format accepts | native executor accepts |
 |---|---|---|
 | `run.workflow` | `profile`, `ambipolar_profile`, `transport_matrix`, `monoenergetic` | `profile`, `ambipolar_profile` |
 | `physics.magnetic_drifts` | `dkes`, `full` | `dkes` |

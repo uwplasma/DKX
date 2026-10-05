@@ -208,14 +208,14 @@ operator and a miss raises.
 - The sparse direct route is host code and is not differentiable under
   `jax.grad`; it offers an explicit transposed solve instead.
 
-## A native case schema beside the namelist route
+## A native case format beside the namelist route
 
 **Context.** A SFINCS namelist is in normalized units, mixes physics and
 numerics, and depends on external files named by path. That is right for parity
 and migration and awkward for scans, optimization and reproducible records.
 
 **Choice.** Two front doors to the same kernels. The native `dkx.Case` is an
-immutable, versioned schema in physical units with a deterministic case ID,
+immutable model in physical units with a deterministic case ID,
 executed without a namelist round-trip. The namelist route reads SFINCS decks
 exactly as the Fortran code would and writes `sfincsOutput` files.
 

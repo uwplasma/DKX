@@ -30,7 +30,7 @@ print("particle flux:", float(result.arrays["particle_flux_m2_s"][1, 0]))
 
 What each piece does:
 
-- `Case.from_mapping` validates the mapping against case schema 1 and returns
+- `Case.from_mapping` validates the mapping against the case format and returns
   an immutable `Case`. Omitted optional tables (`[parallel]`, `[convergence]`,
   `[output]`) take their defaults. `case.case_id` is the SHA-256 of the
   normalized content, so the same physics always has the same ID.

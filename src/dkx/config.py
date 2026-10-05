@@ -20,7 +20,8 @@ from typing import Any, Mapping, Sequence
 import tomllib
 
 
-SCHEMA_VERSION = 1
+#: Format of case content; hashed into every case ID, never user input.
+_CASE_FORMAT = 1
 DEFAULT_MAX_SCAN_CASES = 10_000
 
 
@@ -75,9 +76,9 @@ class PhysicsConfig:
     model: str = "full_local"
     collisions: str = "linearized_fokker_planck"
     #: "dkes" is the default because it is the route execution implements. The
-    #: schema still admits "full" (tangential magnetic drifts) so a case can
+    #: case format still admits "full" (tangential magnetic drifts) so a case can
     #: name it once the executor supports it, but defaulting to it meant every
-    #: case that omitted the field -- including the template `dkx schema`
+    #: case that omitted the field -- including the template `dkx template`
     #: prints -- was refused at run time.
     magnetic_drifts: str = "dkes"
     phi1: str = "off"
@@ -213,7 +214,6 @@ class Case:
     identifies.
     """
 
-    schema: int
     name: str
     run: RunConfig
     geometry: GeometryConfig
@@ -237,7 +237,7 @@ class Case:
             )
         _validate_case(self)
         canonical = json.dumps(
-            self.to_dict(), sort_keys=True, separators=(",", ":"), allow_nan=False
+            {"schema": _CASE_FORMAT, **self.to_dict()}, sort_keys=True, separators=(",", ":"), allow_nan=False
         ).encode("utf-8")
         object.__setattr__(self, "_case_id", hashlib.sha256(canonical).hexdigest())
 
@@ -294,7 +294,7 @@ class Case:
 
     @classmethod
     def from_file(cls, path: str | Path) -> "Case":
-        """Read and validate a schema-v1 TOML or JSON case."""
+        """Read and validate a TOML or JSON case."""
 
         source = Path(path).expanduser().resolve()
         suffix = source.suffix.lower()
@@ -335,7 +335,6 @@ class Case:
             data,
             "$",
             {
-                "schema",
                 "name",
                 "run",
                 "geometry",
@@ -350,7 +349,6 @@ class Case:
                 "scan",
             },
         )
-        schema = _integer(data, "schema", "$", required=True)
         name = _string(data, "name", "$", required=True)
         run = _parse_run(_table(data, "run", "$", required=True))
         geometry = _parse_geometry(_table(data, "geometry", "$", required=True))
@@ -374,7 +372,6 @@ class Case:
             None if source_path is None else Path(source_path).expanduser().resolve()
         )
         return cls(
-            schema=schema,
             name=name,
             run=run,
             geometry=geometry,
@@ -392,24 +389,22 @@ class Case:
 
 
 def migrate_case_data(raw: Mapping[str, Any]) -> dict[str, Any]:
-    """Return case data; a legacy ``schema = 1`` key is accepted and ignored."""
+    """Return case data; a legacy ``schema = 1`` key is accepted and dropped."""
 
     data = dict(raw)
-    legacy = data.pop("schema", SCHEMA_VERSION)
-    if type(legacy) is not int or legacy != SCHEMA_VERSION:
+    legacy = data.pop("schema", _CASE_FORMAT)
+    if type(legacy) is not int or legacy != _CASE_FORMAT:
         raise CaseValidationError(
             "schema",
             legacy,
-            f"absent (legacy files may say {SCHEMA_VERSION})",
+            f"absent (legacy files may say {_CASE_FORMAT})",
             "Delete the schema key; DKX cases carry no version field.",
         )
-    # The internal field keeps canonical content, and so case IDs, unchanged.
-    data["schema"] = SCHEMA_VERSION
     return data
 
 
 def case_json_schema() -> dict[str, Any]:
-    """Return the machine-readable JSON Schema for case schema version 1."""
+    """Return the machine-readable JSON Schema for a DKX case."""
 
     positive_numbers = {
         "type": "array",
@@ -433,7 +428,7 @@ def case_json_schema() -> dict[str, Any]:
             "solver",
         ],
         "properties": {
-            "schema": {"const": SCHEMA_VERSION},
+            "schema": {"const": _CASE_FORMAT},  # legacy key, ignored
             "name": {"type": "string", "minLength": 1},
             "run": _object_schema(
                 ["workflow"],
@@ -596,9 +591,9 @@ def case_json_schema() -> dict[str, Any]:
     }
 
 
-COMMENTED_TOML_EXAMPLE = """# DKX case schema version 1.
+COMMENTED_TOML_EXAMPLE = """# DKX case template.
 #
-# This template shows every field the schema accepts, so it is a reference
+# This template shows every field a case accepts, so it is a reference
 # rather than a file that runs unedited: it names a VMEC equilibrium you have
 # to supply, and it turns on convergence refinement and sharding. Edit it down
 # to what you need. `dkx validate` will tell you what is left to fix.
@@ -943,7 +938,6 @@ def _parse_scan(data: Mapping[str, Any]) -> ScanConfig:
 
 
 def _validate_case(case: Case) -> None:
-    _choice("schema", case.schema, (SCHEMA_VERSION,))
     if not case.name.strip():
         _fail(
             "name", case.name, "a non-empty string", "Give the case a descriptive name."
@@ -1305,7 +1299,7 @@ def _validate_case(case: Case) -> None:
                 _fail(
                     f"scan.axis[{index}].path",
                     axis.path,
-                    "a unique non-empty schema path",
+                    "a unique non-empty field path",
                     "Use a distinct field path for every axis.",
                 )
             if not _is_supported_scan_path(axis.path, names):
@@ -1641,7 +1635,6 @@ __all__ = [
     "PhysicsConfig",
     "ResolutionConfig",
     "RunConfig",
-    "SCHEMA_VERSION",
     "ScanAxis",
     "ScanConfig",
     "SolverConfig",

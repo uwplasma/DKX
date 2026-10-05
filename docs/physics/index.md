@@ -56,7 +56,7 @@ SFINCS namelist (expert path)
   - `linearized_fokker_planck` (default) or `pitch_angle_scattering`
   - `collisionOperator` 0, 1, 3
 * - `RHSMode`
-  - 1 only (the schema also lists `transport_matrix` and `monoenergetic` workflows; the executor refuses them)
+  - 1 only (the case format also lists `transport_matrix` and `monoenergetic` workflows; the executor refuses them)
   - 1, 2, 3
 * - $\Phi_1$
   - no (`physics.phi1 = "off"` is the only value the executor runs)
@@ -69,7 +69,7 @@ SFINCS namelist (expert path)
   - `dkx.er.find_ambipolar_er`, `dkx.er.ambipolar_er`
 ```
 
-The case schema (`src/dkx/config.py`) accepts `physics.magnetic_drifts = "full"` and
+The case format (`src/dkx/config.py`) accepts `physics.magnetic_drifts = "full"` and
 `physics.phi1 = "kinetic"` or `"full"`, but the executor refuses them with a
 `CaseValidationError` that names the field. Use the namelist route for those models.
 

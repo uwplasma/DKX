@@ -75,7 +75,7 @@ def test_run_refuses_a_missing_case(tmp_path, capsys) -> None:
 def test_run_refuses_an_invalid_case(tmp_path, capsys) -> None:
     """A malformed Case fails during validation, not deep inside a solve."""
     bad = tmp_path / "bad.toml"
-    bad.write_text('schema = 1\nname = "broken"\n', encoding="utf-8")
+    bad.write_text('name = "broken"\n', encoding="utf-8")
     code = cli.main(["run", str(bad)])
     assert code == 2
     assert "dkx run failed" in capsys.readouterr().err
