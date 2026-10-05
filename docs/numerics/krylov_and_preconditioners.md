@@ -144,6 +144,18 @@ SOLVAX orthogonalizes each step against the whole allocated basis, so an unused
 restart still costs time: the same 174 iterations at `Nx = 10` took 42 s at
 restart 200, 84 s at 1,000 and 111 s at 2,000.
 
+Those measurements predate SOLVAX 0.28. Flexible GMRES stored both $V$ and the
+preconditioned basis $Z$, and orthogonalized against the whole allocated basis.
+DKX's preconditioners are fixed linear maps, so since SOLVAX 0.28 the wide window
+runs GCROT with `fixed_precond=True`: it keeps only $V$ ($\texttt{restart} \times N \times 8$
+bytes) and orthogonalizes against the filled rows only. On SOLVAX's own
+restart-1,000 benchmark (90,000 unknowns, 663 iterations either way) that took
+the solve from 211 s and 2.83 GiB to 70 s and 1.32 GiB. A caller-supplied
+preconditioner (`prebuilt_precond`) may be flexible and keeps both bases, as do
+the short windows and the differentiable route: forming `M^{-1}(V y)` amplifies
+roundoff by `||M^{-1}||`, about 1e8 on the near-singular coarse chains, where a
+30-step single-basis cycle diverged.
+
 ### The memory-aware default
 
 `restart=None` follows from both measurements. A host-controlled `method="auto"`
