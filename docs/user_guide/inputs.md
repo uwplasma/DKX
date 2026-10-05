@@ -10,8 +10,10 @@ fields and both pass through one validation boundary,
 
 ## The case model
 
-- **One schema version.** Every case starts with `schema = 1`. Any other value
-  is refused; no migration is defined.
+- **No version key needed.** A case without one is read as the current format
+  (version 1). An optional `format_version = 1` pins it; the legacy key
+  `schema = 1` is still accepted. Any other value is refused; no migration is
+  defined.
 - **Unknown keys are errors.** A misspelled field is refused with the list of
   accepted names, at every level of nesting.
 - **Precise errors.** A `dkx.CaseValidationError` names the field path (for
@@ -48,7 +50,6 @@ unsupported option. It does not open the geometry file.
 ## A complete example
 
 ```toml
-schema = 1
 name = "analytic_ambipolar_profile"
 
 [run]
@@ -102,7 +103,7 @@ and `[scan]` are optional.
 
 | field | type | default | meaning and rule |
 |---|---|---|---|
-| `schema` | integer | required | must be `1` |
+| `format_version` | integer | `1` | optional; legacy name `schema` |
 | `name` | string | required | non-empty after trimming; recorded in the result |
 
 ## `[run]`
@@ -361,7 +362,6 @@ objects:
 
 ```json
 {
-  "schema": 1,
   "name": "tokamak",
   "run": {"workflow": "profile"},
   "geometry": {"format": "analytic", "file": "tokamak", "surfaces": [0.16, 0.25]},

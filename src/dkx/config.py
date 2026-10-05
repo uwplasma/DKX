@@ -392,17 +392,30 @@ class Case:
 
 
 def migrate_case_data(raw: Mapping[str, Any]) -> dict[str, Any]:
-    """Return schema-v1 data or reject versions without a defined migration."""
+    """Return format-v1 data; the version is optional and defaults to current.
+
+    ``format_version`` is the user-facing key; legacy ``schema`` is accepted.
+    """
 
     data = dict(raw)
-    supplied = data.get("schema")
-    if supplied != SCHEMA_VERSION:
+    supplied = {k: data.pop(k) for k in ("format_version", "schema") if k in data}
+    if len(set(map(repr, supplied.values()))) > 1:
         raise CaseValidationError(
-            "schema",
+            "format_version",
             supplied,
-            f"integer {SCHEMA_VERSION}",
-            "Set schema = 1; no migration from this version is defined yet.",
+            "one version",
+            "Drop the legacy schema key; format_version and schema disagree.",
         )
+    version = next(iter(supplied.values()), SCHEMA_VERSION)
+    if type(version) is not int or version != SCHEMA_VERSION:
+        raise CaseValidationError(
+            next(iter(supplied), "format_version"),
+            version,
+            f"integer {SCHEMA_VERSION}",
+            "Omit the version (it defaults to the current format); "
+            "no migration from this version is defined yet.",
+        )
+    data["schema"] = version
     return data
 
 
@@ -421,7 +434,6 @@ def case_json_schema() -> dict[str, Any]:
         "type": "object",
         "additionalProperties": False,
         "required": [
-            "schema",
             "name",
             "run",
             "geometry",
@@ -432,6 +444,7 @@ def case_json_schema() -> dict[str, Any]:
             "solver",
         ],
         "properties": {
+            "format_version": {"const": SCHEMA_VERSION},
             "schema": {"const": SCHEMA_VERSION},
             "name": {"type": "string", "minLength": 1},
             "run": _object_schema(
@@ -601,7 +614,6 @@ COMMENTED_TOML_EXAMPLE = """# DKX case schema version 1.
 # rather than a file that runs unedited: it names a VMEC equilibrium you have
 # to supply, and it turns on convergence refinement and sharding. Edit it down
 # to what you need. `dkx validate` will tell you what is left to fix.
-schema = 1
 name = "w7x_ambipolar_profile"
 
 [run]

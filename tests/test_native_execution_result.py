@@ -17,7 +17,6 @@ from dkx.units import HEAT_FLUX, PARALLEL_CURRENT, PARTICLE_FLUX, flux_psi_hat_t
 def _case():
     return dkx.Case.from_mapping(
         {
-            "schema": 1,
             "name": "native_tokamak_profile",
             "run": {"workflow": "profile", "progress": False},
             "geometry": {

@@ -21,7 +21,7 @@ converged.
 import dkx
 
 case = dkx.Case.from_mapping({
-    "schema": 1, "name": "tokamak", "run": {"workflow": "profile", "progress": False},
+    "name": "tokamak", "run": {"workflow": "profile", "progress": False},
     "geometry": {"format": "analytic", "file": "tokamak", "surfaces": [0.16, 0.25, 0.36]},
     "species": [{"name": "deuterium", "charge": 1, "mass_amu": 2.014,
                  "density_m3": [8.0e19, 7.0e19, 6.0e19], "temperature_keV": [1.0, 0.8, 0.6]}],

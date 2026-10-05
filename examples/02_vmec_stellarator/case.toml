@@ -1,5 +1,4 @@
 # Native schema-v1 VMEC profile. The relative path is resolved beside this file.
-schema = 1
 name = "native_vmec_profile"
 
 [run]

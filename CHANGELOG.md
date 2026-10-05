@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Case inputs no longer need `schema = 1`: an omitted version means the current
+  format. The optional key is now `format_version`; legacy `schema` is still
+  accepted (both must agree if given). Case IDs are unchanged.
+
 ## v2.8.0 — 2026-10-05
 
 A converged kinetic bootstrap row compiled as one program, a momentum-conserving

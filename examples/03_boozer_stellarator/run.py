@@ -69,7 +69,6 @@ SOLVER = {"method": "auto", "relative_tolerance": 1.0e-10, "memory_fraction": 0.
 
 case = dkx.Case.from_mapping(
     {
-        "schema": 1,
         "name": "native_boozer_profile",
         "run": {"workflow": "profile", "progress": True},
         "geometry": GEOMETRY,

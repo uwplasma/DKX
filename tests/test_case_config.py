@@ -25,7 +25,6 @@ EXAMPLE = REPO_ROOT / "examples" / "05_ambipolar_profile" / "w7x_case.toml"
 
 def _mapping() -> dict:
     return {
-        "schema": 1,
         "name": "ordered-independent",
         "run": {"workflow": "profile"},
         "geometry": {"format": "vmec", "file": "wout.nc", "surfaces": [0.25, 0.75]},
@@ -295,7 +294,8 @@ def test_scan_rejects_unknown_paths_and_unknown_species() -> None:
 
 def test_schema_outputs_are_complete_and_machine_readable(capsys) -> None:
     schema = case_json_schema()
-    assert schema["properties"]["schema"] == {"const": 1}
+    assert schema["properties"]["format_version"] == {"const": 1}
+    assert "schema" not in schema["required"]
     assert "species" in schema["required"]
     assert schema["properties"]["scan"]["properties"]["axis"]["minItems"] == 1
     assert (
@@ -478,3 +478,25 @@ def test_native_case_is_reexported_from_top_level() -> None:
     assert dkx.Case is Case
     assert "Case" in dkx.__all__
     assert dkx.case_json_schema is case_json_schema
+
+
+@pytest.mark.parametrize("key", ["format_version", "schema"])
+def test_format_version_is_optional_and_legacy_schema_is_accepted(key) -> None:
+    implicit = Case.from_mapping(_mapping())
+    explicit = Case.from_mapping({key: 1, **_mapping()})
+    assert explicit == implicit and explicit.case_id == implicit.case_id
+    with pytest.raises(CaseValidationError, match=key):
+        Case.from_mapping({key: 2, **_mapping()})
+    with pytest.raises(CaseValidationError, match="disagree"):
+        Case.from_mapping({"format_version": 1, "schema": 1.0, **_mapping()})
+
+
+def test_recorded_example_case_ids_survive_the_implicit_version() -> None:
+    recorded = {
+        "01_tokamak_profile/case.toml": "2ca9e2e8db568238b5230334709e5141b9ca13149f63d0caeae86632f3a86343",
+        "02_vmec_stellarator/case.toml": "03029b2fd01389a1f0d6905acfce010de38a65be8b9fecdc591d1d5dfeca853c",
+        "05_ambipolar_profile/w7x_case.toml": "508e9513e8e4e0859deac7fe3743a47eff6949c1201d49085ec55940b240f5f2",
+        "06_convergence_certificate/case.toml": "cca55b87b8d5040229ef398facc0553c8b93e02b3505a5cf135f777f97a43505",
+    }
+    for name, case_id in recorded.items():
+        assert Case.from_file(REPO_ROOT / "examples" / name).case_id == case_id

@@ -18,7 +18,7 @@ W7-X from its VMEC equilibrium; `E_r` beside Pablant et al. (2018)
 
 ## Inputs and outputs
 
-A DKX calculation is one **case**: a versioned document (`schema = 1`) in TOML, JSON or a Python
+A DKX calculation is one **case**: a document in TOML, JSON or a Python
 dict. `dkx.Case` validates it and hashes it to a `case_id`. Profiles hold one value per surface.
 
 | Section | Sets |
@@ -70,7 +70,7 @@ Optional Boozer transforms: `pip install -e ".[booz]"`.
 import dkx
 
 case = dkx.Case.from_mapping({           # analytic tokamak, teaching grid: seconds, not converged
-    "schema": 1, "name": "tokamak", "run": {"workflow": "profile", "progress": False},
+    "name": "tokamak", "run": {"workflow": "profile", "progress": False},
     "geometry": {"format": "analytic", "file": "tokamak", "surfaces": [0.16, 0.25, 0.36]},
     "species": [{"name": "deuterium", "charge": 1, "mass_amu": 2.014,
                  "density_m3": [8.0e19, 7.0e19, 6.0e19], "temperature_keV": [1.0, 0.8, 0.6]}],

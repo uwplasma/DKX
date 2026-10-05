@@ -1,6 +1,5 @@
 # The case rung 06 refines. Deliberately under-resolved: the point of the rung
 # is to measure how far off it is, not to be right.
-schema = 1
 name = "convergence_certificate"
 
 [run]
