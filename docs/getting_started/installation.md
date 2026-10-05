@@ -7,7 +7,7 @@ pip install dkx
 ```
 
 The install pulls in everything a run needs: `jax`, `numpy>=2.1`, `scipy`,
-`h5py`, `netCDF4`, `matplotlib`, `rich` and `solvax>=0.24.0`
+`h5py`, `netCDF4`, `matplotlib`, `rich` and `solvax>=0.28.0`
 (`pyproject.toml`). No optional extra is required to solve a case, write a
 NetCDF or HDF5 file, or plot one.
 

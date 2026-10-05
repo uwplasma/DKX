@@ -212,9 +212,9 @@ _BIG = 1.0e3  # GB: the basis budget never binds
     (30, 200, 4000, _BIG, False, False, [(30, 5), (100, 2), (1000, 5)]),
     (30, 200, 4000, _BIG, False, True, [(30, 5), (100, 2), (1000, 5)]),
     # The budget binds: 400 steps of a 4,000-unknown V and Z basis.
-    (30, 200, 4000, 400 * 2 * 4000 * 8 / 2**30, False, False,
+    (30, 200, 4000, 400 * 4000 * 8 / 2**30, False, False,
      [(30, 5), (100, 2), (400, 14)]),
-    (30, 200, 4000, 20 * 2 * 4000 * 8 / 2**30, False, False, [(30, 200)]),
+    (30, 200, 4000, 20 * 4000 * 8 / 2**30, False, False, [(30, 200)]),
     (30, 30, 4000, _BIG, False, False, [(30, 5), (100, 2)]),
     (30, 5, 4000, _BIG, False, False, [(30, 5)]),
     (1, 6, 4000, _BIG, False, False, [(1, 6)]),
@@ -405,7 +405,7 @@ def test_wide_restart_budget_resolution(monkeypatch):
     import importlib
     module = importlib.import_module('dkx.solve')
     monkeypatch.delenv('DKX_KRYLOV_MEMORY_BUDGET_GB', raising=False)
-    per_step = 2 * 100_000 * 8
+    per_step = 100_000 * 8  # one Krylov basis: fixed preconditioners drop Z
     monkeypatch.setattr(module, '_available_memory_bytes', lambda: 4.0 * 600 * per_step)
     assert module._auto_wide_restart(100_000, 8, None) == 600
     monkeypatch.setattr(module, '_available_memory_bytes', lambda: 1e15)

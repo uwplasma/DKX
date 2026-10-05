@@ -28,7 +28,9 @@ dependencies = [
   "rich>=13.0",
   # solvax (PyPI) owns the structured linear-algebra solver routes (block-Thomas
   # elimination, recycled GCROT, implicit differentiation) that every canonical
-  # solve uses; it is a core dependency, not optional. 0.24.0 is the floor:
+  # solve uses; it is a core dependency, not optional. 0.28.0 is the floor:
+  # `gcrot(fixed_precond=True)` keeps one Krylov basis instead of two, which the
+  # restart memory budget in `dkx.solve` assumes. Before that, 0.24.0:
   # `solvax.equilibration` scales the assembled operator before it is factored,
   # without which a factorization picks its pivots from rows carrying streaming,
   # collision and constraint terms at once. 0.23.0 added `solvax.compression`,
@@ -39,7 +41,7 @@ dependencies = [
   # inverse once per Krylov iteration instead of twice (SOLVAX #101), and every
   # published DKX Krylov timing since 2026-09-12 was measured with that
   # behaviour.
-  "solvax>=0.24.0",
+  "solvax>=0.28.0",
 ]
 
 [project.optional-dependencies]

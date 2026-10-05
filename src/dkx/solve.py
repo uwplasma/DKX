@@ -193,10 +193,11 @@ __all__ = [
 # orthogonalizes against all of it.  The cap is the measured
 # one: on the HSX-like ``Nx`` ladder, restart 200 needs 2,788 iterations at
 # ``Nx = 16`` where 1,000 needs 357 and 2,000 gives the same 357 at a higher
-# cost per step, because SOLVAX orthogonalizes against the whole padded basis
-# (2026-09-23 restart-and-direct-reach study).  The basis costs
-# ``2 * restart * total_size * itemsize`` bytes: flexible GMRES stores both the
-# Arnoldi basis ``V`` and the preconditioned basis ``Z``.
+# cost per step (2026-09-23 restart-and-direct-reach study; SOLVAX then
+# orthogonalized against the whole padded basis, since 0.28 only its filled
+# rows).  The basis costs ``restart * total_size * itemsize`` bytes: DKX's own
+# preconditioners are fixed linear maps, so GCROT runs with
+# ``fixed_precond=True`` and stores only the Arnoldi basis ``V``, not ``Z``.
 _AUTO_RESTART_PROBE = 30
 _AUTO_RESTART_PROBE_CYCLES = 5
 # Between the two, the pre-2.7 widened cycle: a deck that the earlier policy
@@ -735,8 +736,8 @@ def _auto_wide_restart(
     total_size: int, itemsize: int, budget_gb: float | None
 ) -> int:
     """Longest restart, at most ``_AUTO_RESTART_CAP`` and ``total_size``, whose
-    FGMRES basis (``2 * restart * total_size * itemsize`` bytes) fits the budget."""
-    per_step = 2 * max(int(total_size), 1) * int(itemsize)
+    single-basis GCROT basis (``restart * total_size * itemsize`` bytes) fits the budget."""
+    per_step = max(int(total_size), 1) * int(itemsize)
     fit = int(_krylov_basis_budget_bytes(budget_gb) // per_step)
     return max(0, min(_AUTO_RESTART_CAP, int(total_size), fit))
 
@@ -2646,6 +2647,9 @@ def _solve_tier2(
                 steps -= _AUTO_RESTART_MIDDLE * middle
         if wide > restart and steps // wide > 0:
             windows_after_probe.append((wide, steps // wide))
+    # DKX's preconditioners are fixed linear maps: keep one Krylov basis.
+    # Caller-supplied ones may be flexible and keep the stored Z basis.
+    fixed_precond = prebuilt_precond is None
     cols: list[jnp.ndarray] = []
     total_iters: int | None = 0
     converged = True
@@ -2697,6 +2701,7 @@ def _solve_tier2(
                     atol=atol,
                     max_restarts=max_restarts,
                     recycle=warm,
+                    fixed_precond=fixed_precond,
                 )
                 measured = _guarded_solve(
                     label,
@@ -2749,6 +2754,7 @@ def _solve_tier2(
                     matvec, b, x0=guess, precond=precond, m=window,
                     k=recycle_dim, rtol=tol, atol=atol,
                     max_restarts=cycles, recycle=recycle,
+                    fixed_precond=fixed_precond,
                 )
                 iterations = iterations + sol.iterations
                 recycle = sol.recycle
@@ -3200,8 +3206,8 @@ def solve(
             factors runs five of them, then two cycles of 100, then continues
             from its iterate at the longest restart, at most 1,000 and at most
             ``total_size``, whose
-            flexible-GMRES basis (``2 * restart * total_size * 8`` bytes, since
-            both ``V`` and ``Z`` are stored) fits ``krylov_memory_budget_gb``.
+            GCROT basis (``restart * total_size * 8`` bytes: DKX's fixed
+            preconditioners let SOLVAX keep only ``V``) fits ``krylov_memory_budget_gb``.
             Probe and wide cycles together use at most ``30 * max_restarts``
             inner steps per RHS (the remainder rounded down to whole wide
             cycles), and the escalation ladder's larger-budget rung uses the
