@@ -141,6 +141,10 @@ Fokker–Planck collisions, tangential magnetic drifts, the $E_r$
 recycled Krylov, where the reference's factorization-based preconditioner is
 usually faster.
 
+Since this sweep, small and medium Fokker–Planck decks with DKES trajectories
+take a speed-coupled structured direct route instead
+({doc}`../numerics/solver_routes`); the table above is the sweep as run.
+
 - **Memory is the weak axis.** DKX uses less memory on 3 of the 32 decks it
   completed. Below about 10k unknowns the JAX runtime floor (about 0.5 GB)
   exceeds the whole Fortran process (0.1–0.2 GB). Above about 1M unknowns the

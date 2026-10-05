@@ -87,6 +87,7 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "sparse_precond.py": "stable solver kernel",
     "units.py": "stable physics kernel",
     "solve.py": "stable solver kernel",
+    "structured_direct.py": "stable solver kernel",
     "solver_trace.py": "stable support utility",
     "species.py": "stable physics kernel",
     "vmec_ascii.py": "stable geometry kernel",

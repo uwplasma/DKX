@@ -130,10 +130,11 @@ print("Step 2: solving with run_profile(solve_method='auto')")
 run = run_profile(DECK_PATH, solve_method="auto", out_path=H5_PATH)
 
 # The auto policy has three routes: structured direct (block-Thomas,
-# "block_tridiagonal") for the PAS/DKES family, recycled Krylov (GCROT/FGMRES,
-# "gcrot") when the operator couples (species, x) densely, and sparse direct
-# (host SuperLU, "direct") as a loud fallback.  Ask why the structured direct
-# route was rejected:
+# "block_tridiagonal"), recycled Krylov (GCROT/FGMRES, "gcrot") and sparse
+# direct (host SuperLU, "direct") as a loud fallback.  Fokker-Planck couples
+# (species, x), so the per-(species, x) structured chains do not apply; small
+# decks take the speed-coupled structured elimination and production-size
+# ones recycled Krylov.  Ask why the per-(species, x) chains were rejected:
 tier1_ok, tier1_reason = tier1_available(run.operator)
 print(f"  Solver route used: {run.solve_result.method}")
 print(f"  structured direct applicable: {tier1_ok}")

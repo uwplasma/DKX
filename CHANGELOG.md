@@ -9,6 +9,26 @@
   release). `Case` no longer has a `schema` attribute and `SCHEMA_VERSION` is
   no longer exported; case IDs are unchanged.
 
+### Solvers
+
+- Full Fokker–Planck and improved Sugama decks with DKES trajectories, no
+  tangential drifts and no Phi1 now have an exact structured direct route: a
+  block elimination along the Legendre index whose blocks couple all species
+  and speeds (`dkx.structured_direct.build_coupled_solver`). It eliminates from
+  the highest Legendre mode down, lifts the momentum null space of the `L = 1`
+  block with a rank-`Nspecies` term removed again by Woodbury, and handles every
+  `constraintScheme` border. `method="auto"` takes it within the structured
+  memory budget and 150 GFlop per right-hand side; on the upstream suite it
+  solves `transportMatrix_geometryScheme2` in 2.8 s against 33 s (1,181 GCROT
+  iterations) and `transportMatrix_geometryScheme11` in 9.9 s against 48 s, and
+  leaves `geometryScheme4_2species_noEr` and the W7-X/HSX decks, where Krylov is
+  faster or the blocks do not fit, on recycled Krylov. A speed-triangular sweep
+  was measured first and is not exact in this speed basis (lower triangle 1-3%
+  of the diagonal, electron-ion block as large as its diagonal).
+- `dkx.solve` keeps its API; the structured route's applicability tests and
+  memory model moved to `dkx.structured_direct`. Structured solves refine
+  against the pinned operator (identity rows on truncated `Nxi_for_x` DOFs).
+
 ## v2.8.0 — 2026-10-05
 
 A converged kinetic bootstrap row compiled as one program, a momentum-conserving

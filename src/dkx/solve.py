@@ -23,6 +23,11 @@ Structured direct (``solvax.direct`` block Thomas over Legendre modes)
     inherited from the retired probing-based RHSMode=3 solver POC) and
     the batch is solved by ``vmap``-ed ``solvax.block_thomas_factor`` /
     ``block_thomas_solve``.  Multi-RHS shares one elimination.
+    Full Fokker-Planck and improved Sugama decks of the same trajectory
+    family take the speed-coupled form of this route
+    (:mod:`dkx.structured_direct`): one chain whose blocks couple every
+    (species, x) pair, taken by ``auto`` when it fits the memory budget and
+    its flop cap.
 
 Recycled Krylov — preconditioned, with subspace recycling (``solvax.krylov.gcrot``)
     Matrix-free FGMRES+recycling on :meth:`KineticOperator.apply`,
@@ -135,6 +140,28 @@ from dkx.coarse_precond import (  # noqa: E402
     build_coarse_preconditioner,
 )
 from dkx.drift_kinetic import KineticOperator  # noqa: E402
+from dkx.structured_direct import (  # noqa: E402,F401  (re-exported: dkx.solve API)
+    _TIER1_BUDGET_ENV,
+    _TIER1_BUDGET_GB_DEFAULT,
+    _TIER1_KEEP_LOWEST_DEFAULT,
+    CoupledSolver,
+    _coupled_route_fits,
+    _is_traced,
+    _resolve_subsystem_batch,
+    _rhs_confined_to_lowest_blocks,
+    _tier1_budget_bytes,
+    _truncation_supported,
+    _uniform_nxi_for_x,
+    build_coupled_solver,
+    coupled_available,
+    coupled_flops,
+    coupled_peak_memory_bytes,
+    tier1_available,
+    tier1_full_band_bytes,
+    tier1_peak_memory_bytes,
+    tier1_truncated_peak_memory_bytes,
+    tier1_truncated_subsystem_width,
+)
 from dkx.profiling import make_emit, maybe_profiler  # noqa: E402
 
 __all__ = [
@@ -156,13 +183,6 @@ __all__ = [
     "tier1_truncated_tail_blocks",
 ]
 
-# Default memory budget above which ``solve(method="auto")`` prefers the
-# memory-lean truncated structured direct kernel over the full-band
-# factorization.  Chosen to match the validated HSX head-to-head benchmark
-# (tools/benchmarks/tier1_hsx_head_to_head.py).  Overridable per call via the
-# ``tier1_memory_budget_gb`` argument or the environment variable below.
-_TIER1_BUDGET_GB_DEFAULT = 8.0
-_TIER1_BUDGET_ENV = "DKX_TIER1_MEMORY_BUDGET_GB"
 
 # Recycled-Krylov restart policy, used when ``solve(restart=None)`` (the
 # default).  The first cycles run at a short restart, where an easy deck
@@ -196,12 +216,15 @@ _KRYLOV_BUDGET_ENV = "DKX_KRYLOV_MEMORY_BUDGET_GB"
 # reproduces the hand-rolled pass this replaced and already reaches O(1e-16)
 # relative residual in float64; the knob exists because the float32-factor variant needs more.
 _TIER1_REFINEMENT_SWEEPS = 1
+# The speed-coupled elimination meets the electron-ion mass ratio in its
+# pivots, and one substitution lands near 1e-6 on two-species decks; each sweep
+# gains about two digits.
+_COUPLED_REFINEMENT_SWEEPS = 3
 
-# RHSMode 1/2/3 drives (radial gradient on L=0,2; inductive E_parallel on L=1)
-# and every RHSMode 1/2/3 output moment (fluxes, flows, sources, FSA
-# constraints) live on the lowest three Legendre modes, so keeping three
-# solution blocks is exact for the standard transport quantities.
-_TIER1_KEEP_LOWEST_DEFAULT = 3
+
+def _refinement_sweeps(t1_solver: Any) -> int:
+    return _COUPLED_REFINEMENT_SWEEPS if isinstance(t1_solver, CoupledSolver) else _TIER1_REFINEMENT_SWEEPS
+
 
 # Size-aware device routing (``solve(device=...)``): on an accelerator-default
 # host, ``device="auto"`` runs systems at or below these sizes on the host CPU
@@ -428,10 +451,6 @@ def _as_columns(rhs: jnp.ndarray) -> tuple[jnp.ndarray, bool]:
     if rhs.ndim == 2:
         return rhs, False
     raise ValueError(f"rhs must be (n,) or (n, n_rhs); got shape {rhs.shape}")
-
-
-def _is_traced(*arrays: Any) -> bool:
-    return any(isinstance(a, jax.core.Tracer) for a in arrays)
 
 
 def _residual_norms(
@@ -685,209 +704,12 @@ def _guarded_solve(
     return x
 
 
-# =============================================================================
-# Structured direct (block Thomas over Legendre modes)
-# =============================================================================
-
-
-def tier1_available(op: KineticOperator) -> tuple[bool, str]:
-    """Check whether the structured direct family applies to ``op``.
-
-    The decision is driven by the operator's own block extraction: if
-    :meth:`KineticOperator.legendre_blocks` refuses (Er L±2 terms,
-    Fokker-Planck collisions), the structured direct route is off.  On top of
-    that the bordered constraint machinery must be diagonal over (species, x)
-    (``constraintScheme`` 0 or 2 without ``point_at_x0``).  Non-uniform
-    ``Nxi_for_x`` (the production speed-dependent Legendre ramp) is accepted:
-    every (species, x) subsystem is closed, so the truncated structured direct
-    kernel solves it with its own ``n_blocks = Nxi_for_x[ix]`` — exactly the
-    packed Fortran system.  Only the full-band factorization
-    (:func:`build_tier1_solver`) additionally requires uniform ``Nxi_for_x``;
-    ramped decks always route through the truncated kernel.
-    """
-    try:
-        op._check_block_extraction_supported()
-    except NotImplementedError as exc:
-        return False, str(exc)
-    if op.constraint_scheme not in (0, 2):
-        return False, (
-            f"constraintScheme={op.constraint_scheme} borders couple speed nodes; "
-            "only 0 and 2 keep the (species, x) block split exact"
-        )
-    if op.constraint_scheme == 2 and op.point_at_x0:
-        return False, "point_at_x0 x-grids give the x=0 constraint row a different form"
-    return True, ""
-
-
-def _uniform_nxi_for_x(op: KineticOperator) -> bool:
-    """Whether every speed node retains the full Legendre resolution."""
-    return int(np.min(np.asarray(op.n_xi_for_x))) >= op.n_xi
-
-
-# =============================================================================
-# Structured direct memory model and the full-vs-truncated route decision
-# =============================================================================
-
-
-def tier1_full_band_bytes(op: KineticOperator) -> float:
-    """Bytes of the structured direct Legendre bands (``lower``/``diag``/``upper``).
-
-    :func:`build_tier1_solver` materializes the three block-tridiagonal bands
-    of :meth:`KineticOperator.to_block_tridiagonal`, each of shape
-    ``(n_xi, n_species, n_x, m, m)`` with block dimension ``m = n_theta *
-    n_zeta`` (the dense theta*zeta angular block per Legendre mode, per
-    (species, x) subsystem), in float64::
-
-        bytes = 3 * sum_x(Nxi_for_x) * n_species * (n_theta * n_zeta)**2 * 8
-
-    The leading ``3`` counts ``lower``, ``diag`` and ``upper``; a subsystem at
-    speed node ``ix`` carries only its own ``Nxi_for_x[ix]`` Legendre blocks
-    (``sum_x(Nxi_for_x) = n_xi * n_x`` for uniform ``Nxi_for_x``).  This is
-    the ~39 GB figure for the 744k-unknown uniform HSX case (n_theta=25,
-    n_zeta=51, n_xi=100, n_x=5, n_species=2).
-    """
-    m = float(op.n_theta * op.n_zeta)
-    n_blocks_total = float(np.sum(np.asarray(op.n_xi_for_x)))
-    return 3.0 * n_blocks_total * float(op.n_species) * m * m * 8.0
-
-
-def tier1_peak_memory_bytes(op: KineticOperator) -> float:
-    """Peak-memory estimate of the full structured direct factorization.
-
-    Adds the block-Thomas LU factors and elimination temporaries on top of the
-    three input bands (:func:`tier1_full_band_bytes`).  The
-    ``BlockTridiagFactors`` store the per-block LU factors plus the two
-    off-diagonal bands (~2x the band storage), and the vmapped sweep holds a
-    few block temporaries live, so the peak is estimated at ``2.5x`` the band
-    storage — the multiplier used by the validated HSX benchmark.
-    """
-    return 2.5 * tier1_full_band_bytes(op)
-
-
-def tier1_truncated_peak_memory_bytes(
-    op: KineticOperator,
-    keep_lowest: int = _TIER1_KEEP_LOWEST_DEFAULT,
-    subsystem_batch: int | str = "auto",
-) -> float:
-    """Working-set estimate of :func:`_solve_tier1_truncated` (structured direct).
-
-    The truncated route never materializes the full Legendre bands, so the
-    ~``tier1_peak_memory_bytes`` full-band peak wildly overestimates it (46x on
-    the 1.27M-DOF production deck).  Its live buffers, with block dimension
-    ``m = n_theta * n_zeta``, subsystem batch ``B = n_species * n_x``, and
-    concurrent elimination width ``w = subsystem_batch`` (float64, 8 bytes
-    each):
-
-    * the compact coefficient set (:func:`_truncated_coefficients`): the two
-      angular derivative matrices, the ExB matrix, the kron assembly
-      temporaries, and the per-species streaming matrices —
-      ``(5 + n_species) * m^2`` entries;
-    * the per-subsystem broadcast of the streaming matrix
-      (``jnp.repeat`` to the ``B`` axis) — ``B * m^2`` entries;
-    * ``w`` concurrent ``solvax.direct.block_thomas_truncated_fn`` sweeps
-      (the batched ``jax.lax.map(..., batch_size=w)`` elimination in
-      :func:`_solve_tier1_truncated`): per subsystem the LU carry, the
-      assembled ``(L, D, U)`` block triple, elimination temporaries, and the
-      stacked ``keep`` head factors — ``w * (2 * keep + 8) * m^2`` entries,
-      doubled for the ``jax.lax.map`` pipeline (one batch in flight while the
-      next is staged; ``w = 1`` is the fully serial sweep);
-    * the state buffers (zero-padded full-shape solution, its RHS reshape,
-      and the assembly/concat copies) — ``4 * total_size`` entries.
-
-    ``subsystem_batch="auto"`` models the width the solve itself resolves
-    (:func:`_resolve_subsystem_batch`: width 1 on the CPU backend, the
-    memory-budgeted :func:`tier1_truncated_subsystem_width` on accelerators);
-    an integer models that fixed width (clamped to ``[1, B]``).  The sum is
-    doubled as a safety margin for allocator slack and XLA fusion
-    temporaries.  Validated against measured process peaks on the profiling
-    deck ladder (production 1.27M / mid 337k / small 41k DOFs): the estimate
-    lands within about 1.1-1.5x of measurement, on the high side.
-    """
-    m = float(op.n_theta * op.n_zeta)
-    mm_bytes = m * m * 8.0
-    n_s = float(op.n_species)
-    batch = n_s * float(op.n_x)
-    keep = float(min(int(keep_lowest), int(op.n_xi)))
-    if isinstance(subsystem_batch, str):
-        width = float(_resolve_subsystem_batch(op, subsystem_batch, int(keep)))
-    else:
-        width = float(max(1, min(int(subsystem_batch), int(batch))))
-    coeff_bytes = (5.0 + n_s) * mm_bytes
-    stream_broadcast_bytes = batch * mm_bytes
-    sweep_bytes = 2.0 * width * (2.0 * keep + 8.0) * mm_bytes
-    state_bytes = 4.0 * float(op.total_size) * 8.0
-    return 2.0 * (coeff_bytes + stream_broadcast_bytes + sweep_bytes + state_bytes)
-
-
-def tier1_truncated_subsystem_width(
-    op: KineticOperator,
-    keep_lowest: int = _TIER1_KEEP_LOWEST_DEFAULT,
-    memory_budget_gb: float | None = None,
-) -> int:
-    """Largest subsystem batch width whose modeled footprint fits the budget.
-
-    The memory-aware chooser behind ``subsystem_batch="auto"`` on accelerator
-    backends: the widest ``w in [1, B]`` (``B = n_species * n_x``) such that
-    :func:`tier1_truncated_peak_memory_bytes` with ``subsystem_batch=w`` stays
-    within :func:`dkx.batch.resolve_memory_budget_bytes` — an explicit
-    ``memory_budget_gb``, else a fraction of the device/host memory.  Width 1
-    reproduces the fully serial per-subsystem elimination, so a tight budget
-    degrades gracefully to the minimum-memory behavior.
-    """
-    from .batch import resolve_memory_budget_bytes  # local import: batch imports solve
-
-    budget = resolve_memory_budget_bytes(memory_budget_gb)
-    b = max(1, int(op.n_species) * int(op.n_x))
-    for width in range(b, 1, -1):
-        if (
-            tier1_truncated_peak_memory_bytes(op, keep_lowest, subsystem_batch=width)
-            <= budget
-        ):
-            return width
-    return 1
-
-
-def _resolve_subsystem_batch(
-    op: KineticOperator, subsystem_batch: int | str, keep: int
-) -> int:
-    """Map the ``solve(subsystem_batch=...)`` knob to a concrete width.
-
-    ``"auto"`` is backend-aware:
-
-    * CPU backend — width 1, the fully serial sweep.  Measured on the
-      10-core M4 profiling host (336,610-DOF hsx_pas_dkes_mid warm solves,
-      8 threads): every width > 1 is neutral-to-slower than width 1 (ramped
-      deck 10.3 s at width 1 vs 11.4 s grouped width 2; uniform-Nxi variant
-      16.6 s at width 1 vs 20.5 s at width 10), because XLA:CPU executes the
-      batch axis of the LAPACK factor/solve custom calls serially per
-      element with extra cache pressure — the batched sweep adds memory,
-      not CPU parallelism.
-    * accelerator backends — the widest width whose modeled footprint fits
-      the memory budget (:func:`tier1_truncated_subsystem_width`); batched
-      scans raise device occupancy there, and the budget clamp bounds the
-      working set.
-    """
-    if isinstance(subsystem_batch, str):
-        if subsystem_batch.strip().lower() != "auto":
-            raise ValueError(
-                f"unknown subsystem_batch {subsystem_batch!r}; expected 'auto' "
-                "or a positive integer width"
-            )
-        if jax.default_backend() == "cpu":
-            return 1
-        return tier1_truncated_subsystem_width(op, keep_lowest=keep)
-    width = int(subsystem_batch)
-    if width < 1:
-        raise ValueError(f"subsystem_batch must be >= 1, got {width}")
-    return min(width, max(1, int(op.n_species) * int(op.n_x)))
-
-
-def _tier1_budget_bytes(budget_gb: float | None) -> tuple[float, float]:
-    """Resolve the truncation budget (bytes, GB) from arg / env / default."""
-    if budget_gb is None:
-        env = os.environ.get(_TIER1_BUDGET_ENV)
-        budget_gb = float(env) if env not in (None, "") else _TIER1_BUDGET_GB_DEFAULT
-    return float(budget_gb) * 2.0**30, float(budget_gb)
+def build_structured_solver(op: KineticOperator) -> "Tier1Solver | CoupledSolver":
+    """Factor the exact structured direct solver: per ``(species, x)`` for
+    pitch-angle scattering, speed-coupled for Fokker-Planck and Sugama."""
+    if coupled_available(op)[0]:
+        return build_coupled_solver(op)
+    return build_tier1_solver(op)
 
 
 def _krylov_basis_budget_bytes(budget_gb: float | None) -> float:
@@ -917,53 +739,6 @@ def _auto_wide_restart(
     per_step = 2 * max(int(total_size), 1) * int(itemsize)
     fit = int(_krylov_basis_budget_bytes(budget_gb) // per_step)
     return max(0, min(_AUTO_RESTART_CAP, int(total_size), fit))
-
-
-def _truncation_supported(op: KineticOperator, keep: int) -> tuple[bool, str]:
-    """Structural check that the truncated structured direct kernel applies.
-
-    Assumes :func:`tier1_available` already passed (PAS/DKES family,
-    constraintScheme in {0, 2}, no point_at_x0).  Additionally every closed
-    (species, x) subsystem must retain at least ``keep`` Legendre blocks,
-    unless full recovery (``keep == n_xi``) is requested. Full recovery retains
-    each chain's own ``Nxi_for_x[ix]`` blocks and pads only inactive DOFs.
-    """
-    if op.constraint_scheme not in (0, 2):
-        return (
-            False,
-            f"constraintScheme={op.constraint_scheme} border couples Legendre modes",
-        )
-    if op.point_at_x0:
-        return False, "point_at_x0 x-grids are not handled by the truncated kernel"
-    if keep > op.n_xi:
-        return False, f"keep_lowest={keep} exceeds Nxi={op.n_xi}"
-    if keep != op.n_xi and int(np.min(np.asarray(op.n_xi_for_x))) < keep:
-        return (
-            False,
-            f"min Nxi_for_x={int(np.min(np.asarray(op.n_xi_for_x)))} < keep_lowest={keep}",
-        )
-    return True, ""
-
-
-def _rhs_confined_to_lowest_blocks(
-    op: KineticOperator, rhs2d: jnp.ndarray, keep: int
-) -> bool | None:
-    """Whether the RHS has Legendre support only on modes ``l < keep``.
-
-    Returns ``None`` when ``rhs2d`` is a tracer (support cannot be read under
-    jit/grad); callers then fall back to the structural ``rhs_mode`` guarantee.
-    The truncated kernel computes exactly the lowest ``keep`` Legendre blocks
-    and zero-pads the rest, so it is exact iff both the drive and the requested
-    output moments live on ``l < keep`` — true for the RHSMode 1/2/3 transport
-    drives and their fluxes/flows/sources, which touch only ``l <= 2``.
-    """
-    if _is_traced(rhs2d):
-        return None
-    n_s, n_x, n_xi, n_t, n_z = op.f_shape
-    if keep >= n_xi:
-        return True
-    f = np.asarray(rhs2d)[: op.f_size].reshape(n_s, n_x, n_xi, n_t * n_z, -1)
-    return bool(np.max(np.abs(f[:, :, keep:])) == 0.0)
 
 
 @jax.tree_util.register_dataclass
@@ -1142,7 +917,7 @@ def _column_apply(
 
 
 def _operator_apply(op: KineticOperator, v: jnp.ndarray, transpose: bool) -> jnp.ndarray:
-    return _column_apply(_transposed_apply(op) if transpose else op.apply, v)
+    return _column_apply(_pinned_matvecs(op)[1 if transpose else 0], v)
 
 
 def _tier1_refined_solve(
@@ -1166,14 +941,14 @@ def _tier1_refined_solve(
             lambda v: _operator_apply(op, v, transpose),
             b,
             lambda r: t1_solver.solve(r, transpose=transpose),
-            iterations=_TIER1_REFINEMENT_SWEEPS,
+            iterations=_refinement_sweeps(t1_solver),
         )[0]
     op, t1_solver, b = jax.lax.optimization_barrier((op, t1_solver, b))
     x, _residual_norms = iterative_refinement(
         lambda v: _operator_apply(op, v, transpose),
         b,
         lambda r: t1_solver.solve(r, transpose=transpose),
-        iterations=_TIER1_REFINEMENT_SWEEPS,
+        iterations=_refinement_sweeps(t1_solver),
     )
     return jax.lax.optimization_barrier(x)
 
@@ -1239,7 +1014,7 @@ def _tier1_implicit(
 
     def solve_measured(b: jnp.ndarray, *, transpose: bool) -> tuple[jnp.ndarray, jnp.ndarray]:
         x = _tier1_refined_solve(op_const, t1_solver, b, transpose)
-        apply = _transposed_apply(op_const) if transpose else op_const.apply
+        apply = _pinned_matvecs(op_const)[1 if transpose else 0]
         residual = _column_apply(apply, x) - b
         norms = [jnp.linalg.norm(v, axis=0) for v in (residual, b, x)]
         op_norm = _operator_norm_estimate(apply, b.shape[0])
@@ -2161,13 +1936,10 @@ def _solve_tier1(
     # factorization a gradient-free operator keeps an eager ``jax.grad`` from
     # linearizing an elimination whose derivative is then thrown away.
     op_const = _stop_gradient_tree(op) if differentiable else op
-    t1_solver = factors if reused else build_tier1_solver(op_const)
-    # Force the async block-Thomas factorization to complete so the "build"
-    # timing reflects real compute, not JAX dispatch latency; a no-op under
-    # jit/grad tracing.
-    jax.block_until_ready(
-        (t1_solver.factors, t1_solver.z_fwd, t1_solver.z_t, t1_solver.gamma)
-    )
+    t1_solver = factors if reused else build_structured_solver(op_const)
+    # Force the async factorization to complete so the "build" timing reflects
+    # real compute, not JAX dispatch latency; a no-op under jit/grad tracing.
+    jax.block_until_ready(t1_solver)
     t1 = time.perf_counter()
 
     # The library's own elimination runs through compiled programs: the
@@ -2175,16 +1947,16 @@ def _solve_tier1(
     # operator actions the implicit solve differentiates. Anything else in the
     # ``factors`` slot (a test double, say) keeps the uncompiled reference path
     # below, which computes the same thing one primitive at a time.
-    compiled = isinstance(t1_solver, Tier1Solver)
+    compiled = isinstance(t1_solver, (Tier1Solver, CoupledSolver))
 
     # ``_transposed_apply`` lowers a fresh ``jax.linear_transpose`` of the
     # operator every time it is called, so the refinement, the guard and the
     # residual check must share one rather than build three.
-    _applies: dict[bool, Callable[[jnp.ndarray], jnp.ndarray]] = {False: op.apply}
+    _applies: dict[bool, Callable[[jnp.ndarray], jnp.ndarray]] = {}
 
     def _apply_for(transposed: bool) -> Callable[[jnp.ndarray], jnp.ndarray]:
-        if transposed not in _applies:
-            _applies[transposed] = _transposed_apply(op)
+        if not _applies:
+            _applies[False], _applies[True] = _pinned_matvecs(op)
         return _applies[transposed]
 
     def _solve_refined(b: jnp.ndarray, *, transpose: bool = False, rhs_index: int = 0) -> jnp.ndarray:
@@ -2209,7 +1981,7 @@ def _solve_tier1(
             apply2d,
             b,
             lambda r: t1_solver.solve(r, transpose=transpose),
-            iterations=_TIER1_REFINEMENT_SWEEPS,
+            iterations=_refinement_sweeps(t1_solver),
         )
         if differentiable:
             x = _guarded_solve(
@@ -2238,7 +2010,7 @@ def _solve_tier1(
     elif differentiable:
         cols = [
             _implicit_solve(
-                op.apply,
+                _apply_for(False),
                 _apply_for(True),
                 rhs2d[:, j],
                 lambda b, j=j: _solve_refined(b, rhs_index=j),
@@ -3051,7 +2823,7 @@ def _auto_route_structural(
     """
     ok, _reason = tier1_available(op)
     if not ok:
-        return "gmres"
+        return "block_tridiagonal" if _coupled_route_fits(op, budget_gb) else "gmres"
     budget_bytes, _ = _tier1_budget_bytes(budget_gb)
     if _uniform_nxi_for_x(op) and tier1_peak_memory_bytes(op) <= budget_bytes:
         return "block_tridiagonal"
@@ -3081,6 +2853,8 @@ def auto_solve_peak_memory_bytes(
     smaller, but it has no validated model of its own).
     """
     route = _auto_route_structural(op, budget_gb, keep_lowest)
+    if route == "block_tridiagonal" and not tier1_available(op)[0]:
+        return coupled_peak_memory_bytes(op)
     if route == "block_tridiagonal_truncated":
         peak = tier1_truncated_peak_memory_bytes(op, keep_lowest=keep_lowest)
         # Full-state AD can retain Schur factors across primal/transpose calls.
@@ -3107,6 +2881,15 @@ def _auto_route(
     """
     ok, _reason = tier1_available(op)
     if not ok:
+        if _coupled_route_fits(op, budget_gb, int(rhs2d.shape[1])):
+            if emit is not None:
+                emit(
+                    "[dkx.solve] structured direct route: speed-coupled block "
+                    f"elimination over L; peak estimate "
+                    f"{coupled_peak_memory_bytes(op) / 2.0**30:.2f} GB, "
+                    f"{coupled_flops(op) / 1e9:.0f} GFlop."
+                )
+            return "block_tridiagonal"
         return "gmres"
 
     peak = tier1_peak_memory_bytes(op)
@@ -3630,7 +3413,11 @@ def solve(
     if method == "auto" and factors is not None:
         # A factorization in hand names its own route: the policy that would
         # otherwise choose one cannot pick a route that then ignores it.
-        chosen = "block_tridiagonal" if isinstance(factors, Tier1Solver) else "direct"
+        chosen = (
+            "block_tridiagonal"
+            if isinstance(factors, (Tier1Solver, CoupledSolver))
+            else "direct"
+        )
     elif method == "auto":
         chosen = _auto_route(
             op,
@@ -3641,7 +3428,7 @@ def solve(
             emit,
         )
     if factors is not None and not isinstance(
-        factors, Tier1Solver if chosen == "block_tridiagonal" else DirectFactors
+        factors, (Tier1Solver, CoupledSolver) if chosen == "block_tridiagonal" else DirectFactors
     ):
         raise TypeError(
             f"the {chosen!r} route factors a "

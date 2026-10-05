@@ -17,7 +17,7 @@ underneath them come from the SOLVAX library, a required dependency
 * - Structured direct
   - `structured_direct`
   - `"block_tridiagonal"`, `"block_tridiagonal_truncated"`
-  - Exact block elimination along the Legendre index, one chain per (species, speed) pair
+  - Exact block elimination along the Legendre index: one chain per (species, speed) pair, or one speed-coupled chain for Fokker–Planck and Sugama collisions
 * - Recycled Krylov
   - `recycled_krylov`
   - `"iterative"` (alias `"gmres"`)
@@ -48,9 +48,12 @@ uses the route names.
 * - Same family, ramped `Nxi_for_x` or full-band estimate over budget, RHSMode 1, 2 or 3
   - structured direct, truncated
   - drives and output moments live on $L \le 2$
-* - Full Fokker–Planck or improved Sugama collisions
+* - Full Fokker–Planck or improved Sugama collisions, DKES trajectories, no tangential drifts, no $\Phi_1$, elimination within 150 GFlop per right-hand side and within budget
+  - structured direct, speed-coupled
+  - block tridiagonal in $L$ with $(s, x)$-coupled blocks
+* - Same, larger
   - recycled Krylov
-  - dense speed and species coupling
+  - dense speed and species coupling makes the blocks $N_s N_x$ times wider
 * - Full-trajectory $E_r$ terms, magnetic drifts
   - recycled Krylov
   - $L \pm 2$ couplings
@@ -112,6 +115,80 @@ tridiagonal Legendre structure and its elimination follow Escoto's thesis
 (arXiv:2510.27513) and the block-tridiagonal treatment of the monoenergetic
 equation by Hirshman, Shaing, van Rij, Beasley & Crume, *Phys. Fluids* **29**,
 2951 (1986).
+
+### Speed-coupled elimination for Fokker–Planck collisions
+
+The linearized Fokker–Planck and improved Sugama operators are diagonal in $L$
+and in the angles but dense in $(s, x)$. With DKES trajectories and no
+tangential drifts every other term stays block tridiagonal in $L$, so
+`dkx.structured_direct.build_coupled_solver` eliminates one chain whose blocks
+have size $n_L = (\text{active } (s,x) \text{ pairs at } L)\,N_\theta N_\zeta$,
+shrinking where the `Nxi_for_x` ramp drops speeds. Three details make it exact
+and stable:
+
+- It eliminates from $L = N_\xi - 1$ down. The $L = 0$ collision block is
+  singular (density and energy), so the recursion must reach it last.
+- Momentum conservation leaves the $L = 1$ block singular at every angle. The
+  Schur complement from $L \ge 2$ lifts all of it but one parallel flow per
+  species; a rank-$N_s$ term $g\,QQ^T$ is added there and removed again with the
+  Woodbury identity.
+- The constraint border of any `constraintScheme` is eliminated with
+  $\tilde A = A + \gamma BC$ and a $2N_s \times 2N_s$ Schur solve.
+
+A sweep over speed with the upper speed triangle moved to the right-hand side
+would be cheaper, but it is not exact in DKX's speed basis: the strict lower
+self-species triangle is 1–3% of the diagonal at $L = 0$, and the electron–ion
+block's is as large as its diagonal. That is why `coarse_triangle` remains a
+Krylov preconditioner rather than a solver.
+
+The elimination costs $\sum_L (\tfrac23 n_L^3 + 2 n_L^2 n_{L+1})$ flops and
+stores one LU per $L$. Three refinement sweeps against the operator take the
+residual to its conditioning floor ($\mathrm{cond} \approx 10^{10}$ on two-species
+decks). Measured on eight cores of the benchmark host against recycled Krylov
+(warm solve; refactorization included):
+
+```{list-table}
+:header-rows: 1
+
+* - Deck (upstream suite)
+  - GFlop
+  - Coupled direct
+  - Recycled Krylov
+* - `tokamak_1species_FPCollisions_withEr_DKESTrajectories`
+  - 0.13
+  - 0.07 s
+  - 0.82 s (45 iterations)
+* - `quick_2species_FPCollisions_noEr`
+  - 0.83
+  - 0.18 s
+  - 0.50 s (90)
+* - `transportMatrix_geometryScheme2`, 3 right-hand sides
+  - 60
+  - 2.8 s, 1.1 GB RSS
+  - 33 s (1,181), 0.9 GB
+* - `transportMatrix_geometryScheme11`, 2 right-hand sides
+  - 279
+  - 9.9 s, 2.5 GB
+  - 48 s (372), 1.7 GB
+* - `geometryScheme4_2species_noEr`
+  - 560
+  - 19.8 s
+  - 7.1 s (26)
+* - `filteredW7XNetCDF_2species_noEr`
+  - 4,470
+  - 116 s, 15.7 GB
+  - 26 s (20), 5.7 GB
+```
+
+A stored factorization re-solves `transportMatrix_geometryScheme2` in 0.37 s and
+`geometryScheme11` in 1.2 s, which is what an $E_r$ scan or an adjoint reuses.
+`method="auto"` takes the route when the estimate (`coupled_peak_memory_bytes`)
+fits the structured budget and the elimination is at most 150 GFlop per
+right-hand side. The large Fokker–Planck decks stay on recycled Krylov: the
+estimate is 81 GB and 67 TFlop for
+`sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_DKESTrajectories` and
+259 GB and 246 TFlop for `HSX_FPCollisions_DKESTrajectories`, and the gap deck
+`(Nxi, Nx) = (120, 16)` is larger still.
 
 ### Truncated storage
 
