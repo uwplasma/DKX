@@ -153,6 +153,9 @@ def test_kinetic_surfaces_move_to_the_nearest_half_mesh_rows() -> None:
     np.testing.assert_allclose(s, (rows - 0.5) / 12)
     with pytest.raises(ValueError):
         KineticBootstrapMismatch(Profiles(), surfaces=[0.0, 0.5])
+    # plan.md 16.7: Nxi = 48 is within 1-3% of the converged pitch answer on
+    # the QA beta = 2.5% deck; Nxi = 16 was 16-44% low.
+    assert KineticBootstrapMismatch(Profiles()).resolution["Nxi"] == 48
 
 
 @pytest.mark.slow
