@@ -663,10 +663,9 @@ def test_sugama_collisionop3_routes_tier2_matches_tier3_and_differentiates() -> 
 
     rhs = op.rhs()
     tol = 1e-10
-    # The auto policy must pick the differentiable recycled Krylov, NOT the
-    # non-differentiable sparse direct host fallback.
+    # The auto policy takes the exact speed-coupled structured direct route.
     r_auto = solve(op, rhs, method="auto", tol=tol)
-    assert r_auto.method == "gcrot"
+    assert r_auto.method == "block_tridiagonal"
     assert r_auto.converged
 
     # Recycled Krylov == sparse direct (host SuperLU) element-wise.
@@ -686,7 +685,7 @@ def test_sugama_collisionop3_routes_tier2_matches_tier3_and_differentiates() -> 
         sol = solve(op_s, rhs, method="gmres", tol=1e-11, differentiable=True)
         return jnp.dot(g, sol.x)
 
-    # auto + differentiable stays on recycled Krylov (the production path).
+    # auto + differentiable takes the same structured direct route.
     r_auto_diff = solve(
         replace(op, sugama=replace(op.sugama, mat=1.0 * base_mat)),
         rhs,
@@ -694,7 +693,8 @@ def test_sugama_collisionop3_routes_tier2_matches_tier3_and_differentiates() -> 
         tol=1e-9,
         differentiable=True,
     )
-    assert r_auto_diff.method == "gcrot"
+    assert r_auto_diff.method == "block_tridiagonal"
+    assert _rel_err(np.asarray(r_auto_diff.x), np.asarray(r_direct.x)) < 1e-8
 
     grad_ad = float(jax.grad(moment)(1.0))
     eps = 1e-4
@@ -708,15 +708,17 @@ def test_sugama_collisionop3_routes_tier2_matches_tier3_and_differentiates() -> 
 # ---------------------------------------------------------------------------
 
 
-def test_auto_policy_selects_tier1_for_pas_and_tier2_for_fp() -> None:
+def test_auto_policy_selects_structured_direct_for_pas_and_fp() -> None:
     op_pas = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
     r_pas = solve(op_pas, op_pas.rhs(), method="auto")
     assert r_pas.method == "block_tridiagonal"
 
     op_fp = _load_op("quick_2species_FPCollisions_noEr")
     r_fp = solve(op_fp, op_fp.rhs(), method="auto", tol=1e-8)
-    assert r_fp.method == "gcrot"
+    assert r_fp.method == "block_tridiagonal"  # the speed-coupled elimination
     assert r_fp.converged
+    x_ref = _dense_solve(op_fp, np.asarray(op_fp.rhs())[:, None])[:, 0]
+    assert _rel_err(np.asarray(r_fp.x), x_ref) < 1e-8
 
 
 def test_tier1_refuses_er_xdot_l2_coupling() -> None:
@@ -749,8 +751,8 @@ def test_auto_policy_recovers_a_starved_tier2_solve() -> None:
     assert _rel_err(np.asarray(result.x), x_ref) < 1e-8
 
 
-def test_explicit_tier1_request_raises_on_fp() -> None:
-    op = _load_op("quick_2species_FPCollisions_noEr")
+def test_explicit_structured_request_raises_on_er_xdot() -> None:
+    op = _load_op("er_xdot_1species_tiny")
     with pytest.raises(NotImplementedError):
         solve(op, op.rhs(), method="block_tridiagonal")
 

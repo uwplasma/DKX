@@ -325,3 +325,51 @@ def test_the_solver_offers_it_as_a_named_krylov_preconditioner(tmp_path) -> None
     assert float(jnp.linalg.norm(precond(v) - direct(v))) == 0.0
     # the transpose is a distinct operator, not the forward one returned twice
     assert float(jnp.linalg.norm(precond_t(v) - precond(v))) > 0.0
+
+
+# -- The speed-coupled exact route (dkx.solvers.coupled) -----------------------
+#
+# The triangle above is only approximate: in this speed basis the strict lower
+# self-species triangle is 1-3% of the diagonal at l = 0 and the electron-ion
+# block's is as large as its diagonal. The exact structured route instead
+# factors the (species, x)-coupled blocks over l.
+
+
+@pytest.mark.parametrize("species, ramp", [(1, False), (2, False), (2, True)])
+def test_the_coupled_route_solves_full_fokker_planck_exactly(tmp_path, species, ramp) -> None:
+    from dkx.solve import (
+        _COUPLED_REFINEMENT_SWEEPS,
+        _pinned_matvecs,
+        build_structured_solver,
+    )
+    from dkx.solvers.structured import CoupledSolver
+
+    op = (_operator if species == 1 else _two_species_operator)(tmp_path, nx=4)
+    if ramp:
+        op = replace(op, n_xi_for_x=jnp.asarray([3, 4, 5, 6]))
+    solver = build_structured_solver(op)
+    assert isinstance(solver, CoupledSolver)
+    rng = np.random.default_rng(7)
+    for transpose, matvec in zip((False, True), _pinned_matvecs(op)):
+        b = jnp.asarray(rng.standard_normal(op.total_size))
+        x = solver.solve(b, transpose=transpose)
+        # Defect correction, as the route runs it: the electron-ion blocks
+        # leave a single substitution near 1e-6 on this deck.
+        for _ in range(_COUPLED_REFINEMENT_SWEEPS):
+            x = x + solver.solve(b - matvec(x), transpose=transpose)
+        error = float(jnp.linalg.norm(matvec(x) - b) / jnp.linalg.norm(b))
+        # cond(K) = 3.8e10 here; dense partial-pivoting LU leaves 2.5e-10
+        # (forward) and 2.8e-8 (transposed) on the same right-hand side.
+        assert error < (1e-7 if transpose else 1e-9), (transpose, error)
+
+
+def test_auto_takes_the_coupled_route_and_matches_krylov(tmp_path) -> None:
+    from dkx.solve import solve
+
+    op = _two_species_operator(tmp_path, nx=4)
+    rhs = op.rhs()
+    direct = solve(op, rhs, emit=None)
+    krylov = solve(op, rhs, method="iterative", tol=1e-12, emit=None)
+    assert direct.method == "block_tridiagonal" and bool(np.all(direct.converged))
+    scale = float(jnp.linalg.norm(krylov.x))
+    assert float(jnp.linalg.norm(direct.x - krylov.x)) / scale < 1e-8

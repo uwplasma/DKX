@@ -77,11 +77,14 @@ errors raised by `inputs.load_sfincs_input`. There is no legacy fallback.
   (`ambipolar_native.py`), optimization support (`optimization.py`), and the
   JAX-native geometry adapters for external producers (`geometry_adapters.py`).
 
-The removed pre-2.0 stack (the `problems/`, `operators/`, `solvers/`,
+The removed pre-2.0 stack (the `problems/`, `operators/`, the old `solvers/`,
 `outputs/`, `discretization/`, `geometry/`, and `physics/` packages, the
 sparse-direct/CSR-assembly solver families, and the root `grids.py` /
-`diagnostics.py` helpers) must not be reintroduced; the canonical `solve.py`
-routes and the flat root modules own the entire supported surface.
+`diagnostics.py` helpers) must not be reintroduced. `solve.py` is being split
+into the plan section 11.2 `solvers/` owners as its routes are touched:
+`solvers/structured.py` holds the structured direct route's applicability,
+memory model and speed-coupled Fokker–Planck elimination, re-exported by
+`dkx.solve`.
 
 ## Design Rules
 
