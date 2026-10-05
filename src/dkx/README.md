@@ -19,6 +19,7 @@ one-level packages exist: `validation/` and `workflows/`.
 | `collisions.py` | Pitch-angle scattering and full Fokker-Planck with Rosenbluth terms. |
 | `drift_kinetic.py` | The `KineticOperator`: term assembly, matrix-free apply, analytic Legendre blocks, RHS drives, bordered constraints. |
 | `solve.py` | Three-route policy (structured direct block elimination, preconditioned recycled Krylov, sparse direct referee) on the `solvax` library (a core dependency); implicit differentiation. |
+| `structured_direct.py` | The structured direct route's applicability tests and memory model, and the speed-coupled block elimination along the Legendre index for Fokker–Planck and Sugama decks; re-exported by `solve.py`. |
 | `assembly.py` | The bordered operator as a sparse matrix, recovered from products with it rather than one column at a time. The couplings are known (angular stencil and `|l' - l| <= 2` at one speed; every species and speed at one angular point), so one product carries a whole group of columns that share no row: 8,800 products for 633,600 unknowns. The truncated `Nxi_for_x` rows are pinned as the solver pins them, the dense border is probed separately, and the result is checked against the operator before it is returned. |
 | `coarse_precond.py` | The coarse preconditioner of the recycled Krylov route: the SFINCS-simplified operator, the three pins its chain is singular without (diagonal floor, `Nxi_for_x` identity rows, rank-one `l = 0` pin), and the routing between its three storage policies by measured size — dense bands, reusable Schur-LU-only factors, or one-shot checkpointed elimination. `multigrid.py` and `sparse_precond.py` are drop-in alternatives to it and import its pins. |
 | `multigrid.py` | Semicoarsened geometric-multigrid preconditioner for the recycled Krylov solve: rediscretized coarse operators on coarsened (theta, zeta[, xi]) grids, pitch-collocation and Legendre-plane relaxations, and the existing block-Thomas solve on the coarsest grid. Also the pitch-basis diagnostics (`pitch_collocation_surrogate`, `line_diagonal_dominance`, `line_smoother_spectral_radius`) that measure why that route cannot reach tolerance on a Legendre-modal pitch discretization. |
@@ -77,14 +78,11 @@ errors raised by `inputs.load_sfincs_input`. There is no legacy fallback.
   (`ambipolar_native.py`), optimization support (`optimization.py`), and the
   JAX-native geometry adapters for external producers (`geometry_adapters.py`).
 
-The removed pre-2.0 stack (the `problems/`, `operators/`, the old `solvers/`,
+The removed pre-2.0 stack (the `problems/`, `operators/`, `solvers/`,
 `outputs/`, `discretization/`, `geometry/`, and `physics/` packages, the
 sparse-direct/CSR-assembly solver families, and the root `grids.py` /
-`diagnostics.py` helpers) must not be reintroduced. `solve.py` is being split
-into the plan section 11.2 `solvers/` owners as its routes are touched:
-`solvers/structured.py` holds the structured direct route's applicability,
-memory model and speed-coupled Fokker–Planck elimination, re-exported by
-`dkx.solve`.
+`diagnostics.py` helpers) must not be reintroduced; the canonical `solve.py`
+routes and the flat root modules own the entire supported surface.
 
 ## Design Rules
 

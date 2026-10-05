@@ -25,7 +25,7 @@ Structured direct (``solvax.direct`` block Thomas over Legendre modes)
     ``block_thomas_solve``.  Multi-RHS shares one elimination.
     Full Fokker-Planck and improved Sugama decks of the same trajectory
     family take the speed-coupled form of this route
-    (:mod:`dkx.solvers.structured`): one chain whose blocks couple every
+    (:mod:`dkx.structured_direct`): one chain whose blocks couple every
     (species, x) pair, taken by ``auto`` when it fits the memory budget and
     its flop cap.
 
@@ -140,7 +140,7 @@ from dkx.coarse_precond import (  # noqa: E402
     build_coarse_preconditioner,
 )
 from dkx.drift_kinetic import KineticOperator  # noqa: E402
-from dkx.solvers.structured import (  # noqa: E402,F401  (re-exported: dkx.solve API)
+from dkx.structured_direct import (  # noqa: E402,F401  (re-exported: dkx.solve API)
     _TIER1_BUDGET_ENV,
     _TIER1_BUDGET_GB_DEFAULT,
     _TIER1_KEEP_LOWEST_DEFAULT,

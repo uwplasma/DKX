@@ -342,7 +342,7 @@ def test_the_coupled_route_solves_full_fokker_planck_exactly(tmp_path, species, 
         _pinned_matvecs,
         build_structured_solver,
     )
-    from dkx.solvers.structured import CoupledSolver
+    from dkx.structured_direct import CoupledSolver
 
     op = (_operator if species == 1 else _two_species_operator)(tmp_path, nx=4)
     if ramp:

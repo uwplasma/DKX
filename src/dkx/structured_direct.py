@@ -3,7 +3,8 @@
 The applicability tests and memory model of the per-``(species, x)``
 block-Thomas route live here, beside the speed-coupled elimination below; the
 factorizations and solves of the per-``(species, x)`` route stay in
-:mod:`dkx.solve` until they are moved too (plan section 11.2).
+:mod:`dkx.solve` until they are moved too (plan section 11.2 ``solvers/structured``;
+the old ``solvers/`` package name stays retired).
 
 **Speed-coupled elimination.**
 The per-``(species, x)`` structured route (:func:`dkx.solve.build_tier1_solver`)

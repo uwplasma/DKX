@@ -121,7 +121,7 @@ equation by Hirshman, Shaing, van Rij, Beasley & Crume, *Phys. Fluids* **29**,
 The linearized Fokker–Planck and improved Sugama operators are diagonal in $L$
 and in the angles but dense in $(s, x)$. With DKES trajectories and no
 tangential drifts every other term stays block tridiagonal in $L$, so
-`dkx.solvers.structured.build_coupled_solver` eliminates one chain whose blocks
+`dkx.structured_direct.build_coupled_solver` eliminates one chain whose blocks
 have size $n_L = (\text{active } (s,x) \text{ pairs at } L)\,N_\theta N_\zeta$,
 shrinking where the `Nxi_for_x` ramp drops speeds. Three details make it exact
 and stable:

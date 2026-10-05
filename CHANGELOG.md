@@ -11,7 +11,7 @@
 - Full Fokker–Planck and improved Sugama decks with DKES trajectories, no
   tangential drifts and no Phi1 now have an exact structured direct route: a
   block elimination along the Legendre index whose blocks couple all species
-  and speeds (`dkx.solvers.structured.build_coupled_solver`). It eliminates from
+  and speeds (`dkx.structured_direct.build_coupled_solver`). It eliminates from
   the highest Legendre mode down, lifts the momentum null space of the `L = 1`
   block with a rank-`Nspecies` term removed again by Woodbury, and handles every
   `constraintScheme` border. `method="auto"` takes it within the structured
@@ -23,7 +23,7 @@
   was measured first and is not exact in this speed basis (lower triangle 1-3%
   of the diagonal, electron-ion block as large as its diagonal).
 - `dkx.solve` keeps its API; the structured route's applicability tests and
-  memory model moved to `dkx.solvers.structured`. Structured solves refine
+  memory model moved to `dkx.structured_direct`. Structured solves refine
   against the pinned operator (identity rows on truncated `Nxi_for_x` DOFs).
 
 ## v2.8.0 — 2026-10-05

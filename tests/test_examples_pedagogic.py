@@ -139,7 +139,7 @@ LADDER_CASES = {
     ),
     "09_phi1_and_impurities": (
         (
-            "Phi1 off: solver route gcrot",
+            "Phi1 off: solver route block_tridiagonal",
             "Phi1 on:  solver route phi1_newton_krylov",
             "impurity particle flux changes by",
             "every species moved: Phi1 is not an impurity-only correction on this deck",
@@ -174,7 +174,7 @@ LEGACY_CASES = {
     ),
     "getting_started/run_w7x.py": (
         (
-            "Solver route used: gcrot",  # FP collisions must take the recycled Krylov route
+            "Solver route used: block_tridiagonal",  # CI resolution: speed-coupled direct
             "structured direct applicable: False",
             "particleFlux_vm_psiHat[ions] =",
             "particleFlux_vm_psiHat[electrons] =",
