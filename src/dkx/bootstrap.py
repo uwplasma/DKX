@@ -386,12 +386,12 @@ class KineticBootstrapCurrent:
 
 
 
-#: Kinetic grid of :class:`KineticBootstrapMismatch`: the coarsest grid on which
-#: the Boozer route agrees in sign with the VMEC-file route and with Redl
-#: (``tests/test_boozer_route_sign.py``; coarser than ``Nxi = 16, Nx = 4`` the
-#: pitch-angle-scattering current changes sign).  A teaching grid, not a
-#: converged one: refine ``Nxi`` first at low collisionality.
-DEFAULT_TRACED_RESOLUTION: dict[str, int] = {"Ntheta": 11, "Nzeta": 11, "Nxi": 16, "NL": 4, "Nx": 4}
+#: Kinetic grid of :class:`KineticBootstrapMismatch`.  ``Nxi = 48``: on the VMEX
+#: QA beta = 2.5% deck (published profiles, 13 x 19 angles, PAS) ``<j.B>`` is
+#: within 1.1% of ``Nxi = 96-128`` at ``|E_r| >= 5`` kV/m and 3% at
+#: ``|E_r| <= 1`` kV/m, where ``Nxi = 16`` was 16-44% low (plan.md 16.7).  The
+#: angular grid is not converged here: refine ``Ntheta``/``Nzeta`` next.
+DEFAULT_TRACED_RESOLUTION: dict[str, int] = {"Ntheta": 11, "Nzeta": 11, "Nxi": 48, "NL": 4, "Nx": 4}
 
 def batched_with_reverse_jvp(function: Any, stacked: Any) -> Any:
     """``jit(vmap(function))(stacked, a, b)`` over axis 0 of ``stacked`` and ``a``, ``b`` shared.

@@ -4,6 +4,14 @@
 
 ### Bootstrap objective
 
+- `KineticBootstrapMismatch` defaults to `Nxi = 48` (was 16). Pitch-angle
+  convergence study (plan.md 16.7): on the VMEX QA beta = 2.5% deck with its
+  published profiles, `<j.B>` at `Nxi = 48` is within 1.1% of `Nxi = 96-128`
+  for |E_r| >= 5 kV/m and within 3% at |E_r| <= 1 kV/m; `Nxi = 16` was 16-44%
+  low. A realistic E_r does not converge at far lower `Nxi` (one step of the
+  ladder at most), so the row keeps `E_r = 0` by default. Rows built with an
+  explicit `resolution` are unchanged.
+
 - `KineticBootstrapCurrent(ambipolar=True)` refines its bracketed ion root
   with the same Brent refinement as the representative radial scan (at most
   4 more single-field solves) and reads `<j.B>` from the solve at the refined
