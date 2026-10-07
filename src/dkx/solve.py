@@ -2494,6 +2494,8 @@ def _auto_preconditioner(op: KineticOperator, budget_gb: float | None) -> str:
     """
     from dkx.structured_direct import coupled_precond_peak_bytes  # noqa: PLC0415
 
+    if not isinstance(op, KineticOperator):  # stand-ins in policy tests
+        return "coarse"
     base = replace(op, with_er_xidot=False, with_er_xdot=False, with_magnetic_drifts=False)
     if _is_traced(*jax.tree_util.tree_leaves(op)) or not coupled_available(base)[0]:
         return "coarse"
