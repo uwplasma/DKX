@@ -31,6 +31,9 @@
   (float32) in the tail; `E_r` and drift `L ± 2` terms are dropped from the
   factored operator. Iterations fall from 46 to 17 on a 396k-unknown HSX FP
   deck at equal wall time; opt-in, `auto` is unchanged.
+  It keeps the `L`-diagonal magnetic drifts at `L <= 2` (23 to 17 iterations on
+  the reduced W7-X drift deck) and stores tail bands as per-species blocks times
+  the speed scale, `Nx` times smaller.
 - `dkx.solve` keeps its API; the structured route's applicability tests and
   memory model moved to `dkx.structured_direct`. Structured solves refine
   against the pinned operator (identity rows on truncated `Nxi_for_x` DOFs).
