@@ -44,6 +44,9 @@
   Its tail and dense `L < 2` blocks are now factored in float32: on the
   production HSX FP deck (1.88M unknowns, 8 cores) 17 iterations, 508 s and
   16.6 GB, against 1,100 s and 15.0 GB for the coarse preconditioner.
+- `method="auto"` now preconditions Fokker–Planck and Sugama Krylov solves with
+  `coupled` when its estimated peak fits the Krylov memory budget (default: half
+  the available memory), else `coarse`.
 - `dkx.solve` keeps its API; the structured route's applicability tests and
   memory model moved to `dkx.structured_direct`. Structured solves refine
   against the pinned operator (identity rows on truncated `Nxi_for_x` DOFs).

@@ -545,6 +545,22 @@ def build_coupled_solver(
     return _factor_compiled(op, keep=keep, drifts=drifts, f32=f32)
 
 
+def coupled_precond_peak_bytes(op: KineticOperator, keep: int) -> float:
+    """Peak RSS estimate of the float32 coupled preconditioner build.
+
+    Stored float32 factors (tail per pair, dense ``l < keep``), three float64
+    dense blocks of elimination temporaries and a 2.5 GB floor (JAX, operator,
+    Krylov basis). Calibrated on office, 2026-10-07: 17.0 vs 16.6 GB measured on
+    HSX_FPCollisions_DKESTrajectories, 17.4 vs 17.0 GB on W7-X drifts noEr.
+    """
+    tz = op.n_theta * op.n_zeta
+    pairs = np.array([len(a) for a in _layout(op)], dtype=float)
+    k = min(max(int(keep), 2), len(pairs))
+    tail = pairs[k:].sum() * tz * tz * 4.0
+    dense = np.sum((pairs[:k] * tz) ** 2) * 4.0
+    return float(tail + dense + 3.0 * (pairs[0] * tz) ** 2 * 8.0 + 2.5 * 2.0**30)
+
+
 def coupled_preconditioner(op: KineticOperator, keep: int, f32: bool = False) -> tuple:
     """``(precond, precond_t)`` from the truncated coupled factorization.
 

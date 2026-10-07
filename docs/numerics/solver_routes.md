@@ -201,7 +201,15 @@ The tail is eliminated and swept by `lax.scan`, padded with identity blocks
 where `Nxi_for_x` truncates; its bands are two scalars per $L$ over shared
 streaming and mirror blocks. The dense $L < 2$ Schur step is formed one column
 pair at a time, never as the full $W = S^{-1} L_o$. All its factors are float32
-(`dkx.solve._COUPLED_PRECOND_F32`); production HSX FP keeps 17 iterations. Warm
+(`dkx.solve._COUPLED_PRECOND_F32`); production HSX FP keeps 17 iterations.
+
+`method="auto"` takes `coupled` instead of `coarse` for Fokker–Planck and
+Sugama decks when `coupled_precond_peak_bytes` fits `krylov_memory_budget_gb`
+(or `DKX_KRYLOV_MEMORY_BUDGET_GB`), and otherwise half the memory available at
+the call. The estimate (stored float32 factors, three float64 dense blocks, a
+2.5 GB floor) is 17.0 GB against 16.6 GB measured on HSX FP and 17.4 GB against
+17.0 GB on W7-X drifts. This trades memory for speed: on HSX FP, 508 s and
+16.6 GB against 1,100 s and 15.0 GB for `coarse`. Warm
 solves on a laptop (14 cores, shared), recycled GCROT to 1e-10:
 
 | deck | `coarse` | `coupled` |

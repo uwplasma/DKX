@@ -2484,6 +2484,29 @@ def _truncated_partial_residual(
     return jnp.sqrt(jnp.sum(sq, axis=0))
 
 
+def _auto_preconditioner(op: KineticOperator, budget_gb: float | None) -> str:
+    """``"coupled"`` for Fokker-Planck/Sugama decks whose coupled build fits, else ``"coarse"``.
+
+    The estimate is a whole-process peak, so it is held against
+    ``krylov_memory_budget_gb`` (or ``DKX_KRYLOV_MEMORY_BUDGET_GB``) when given,
+    and otherwise against half the memory available now: the program trades
+    memory for speed (17 vs 46 iterations, 508 vs 1,100 s on HSX FP).
+    """
+    from dkx.structured_direct import coupled_precond_peak_bytes  # noqa: PLC0415
+
+    if not isinstance(op, KineticOperator):  # stand-ins in policy tests
+        return "coarse"
+    base = replace(op, with_er_xidot=False, with_er_xdot=False, with_magnetic_drifts=False)
+    if _is_traced(*jax.tree_util.tree_leaves(op)) or not coupled_available(base)[0]:
+        return "coarse"
+    if budget_gb is not None or os.environ.get(_KRYLOV_BUDGET_ENV) not in (None, ""):
+        budget = _krylov_basis_budget_bytes(budget_gb)
+    else:
+        available = _available_memory_bytes()
+        budget = 0.5 * available if available is not None else 0.0
+    return "coupled" if coupled_precond_peak_bytes(op, _COUPLED_PRECOND_KEEP) <= budget else "coarse"
+
+
 def _resolve_preconditioner(
     preconditioner: str | None, use_preconditioner: bool
 ) -> str:
@@ -3521,7 +3544,12 @@ def solve(
             atol=atol,
             x0=x0,
             recycle=recycle,
-            preconditioner=_resolve_preconditioner(preconditioner, use_preconditioner),
+            preconditioner=(
+                _auto_preconditioner(op, krylov_memory_budget_gb)
+                if method == "auto" and preconditioner is None and use_preconditioner
+                and not differentiable and precond is None
+                else _resolve_preconditioner(preconditioner, use_preconditioner)
+            ),
             prebuilt_precond=precond,
             auto_restart_recovery=method == "auto" and not differentiable and auto_restart,
             krylov_memory_budget_gb=krylov_memory_budget_gb,
