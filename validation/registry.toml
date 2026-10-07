@@ -659,7 +659,8 @@ claim = "DKX's Phi1 solve (Phi1 in the kinetic equation, full quasineutrality, g
 artifact = "validation/phi1_sfincs_benchmark_v1.json"
 artifact_sha256 = "4bf259e0a2365917e0ffd999ebcac4f68bcb7400f75b426f3477be03f283619d"
 artifact_schema = "dkx.phi1_sfincs_benchmark.v1"
-command = "python tools/benchmarks/phi1_sfincs_ladder.py main_A imp_A main_B imp_B main_C imp_C"
+audit_script = "tools/paper_benchmarks/audit_phi1_sfincs_benchmark.py"
+command = "python tools/paper_benchmarks/audit_phi1_sfincs_benchmark.py --artifact validation/phi1_sfincs_benchmark_v1.json"
 inputs = []
 dkx_commit = "d5a0eb1b778b4f46390722382b8bede8cd922281"
 generated_on_host = "official-laptop-cpu"
@@ -673,3 +674,8 @@ limitations = [
   "experimental validation",
   "cross-code performance equivalence",
 ]
+
+[entry.corruption]
+path = "rows.0.dkx_phi1_rms"
+operation = "scale"
+value = 1.001
