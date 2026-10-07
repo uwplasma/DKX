@@ -48,9 +48,9 @@ tangential drifts, Phi1 and transport matrices: `dkx input.namelist` writes SFIN
 | Pitch-angle scattering; linearized Fokker–Planck, multispecies | FP decks match SFINCS v3 to 1e-8 |
 | Analytic, VMEC, Boozer and `lasym` geometry | Tangential magnetic drifts, DKES and full trajectories |
 | Ambipolar `E_r` roots with branch evidence | Seeded search: 9.7× a solve on W7-X |
-| Phi1 quasineutrality, impurities | Namelist route, rung 09 |
-| Direct routes: structured, sparse (Ruiz-scaled), MUMPS | Sparse to a few 1e5 unknowns; MUMPS via SOLVAX ≥ 0.25 |
-| Recycled Krylov route, CPU and GPU | Memory-aware restart; the HSX-like gap deck stays open (below) |
+| Phi1 quasineutrality, impurities | Native `phi1 = "kinetic"`; matches SFINCS v3 to 2e-6 |
+| Direct routes: structured (PAS and Fokker–Planck), sparse, MUMPS | Sparse to a few 1e5 unknowns |
+| Recycled Krylov route, CPU and GPU | Coupled preconditioner, memory-aware restart |
 | Gradients of any output | Checked against finite differences |
 
 ## Install
@@ -86,10 +86,10 @@ print("particle flux:", float(result.arrays["particle_flux_m2_s"][1, 0]))
 From a file, then the check to run before quoting a number:
 
 ```console
-dkx run examples/01_tokamak_profile/case.toml --out result.nc
+dkx run examples/tutorials/02_cli_case.toml --out result.nc
 dkx plot result.nc                      # profile panel; E_r roots when the run was ambipolar
-dkx converge examples/01_tokamak_profile/case.toml
-dkx input.namelist                      # a SFINCS v3 deck, unchanged
+dkx converge examples/tutorials/02_cli_case.toml
+dkx examples/tutorials/03_sfincs_namelist.namelist   # a SFINCS v3 deck, unchanged
 ```
 
 `dkx converge` exits zero only when refining every axis leaves the observables unchanged.
@@ -99,7 +99,7 @@ dkx input.namelist                      # a SFINCS v3 deck, unchanged
 ```python
 import jax, jax.numpy as jnp, dkx
 
-case = dkx.Case.from_file("examples/05_ambipolar_profile/case.toml")
+case = dkx.Case.from_file("examples/tutorials/08_ambipolar_er.toml")
 problem = dkx.prepare_er_scan(case, surface_index=1)          # geometry, grids, collisions once
 
 def bootstrap_current(er_kv_m):
@@ -125,7 +125,7 @@ Every derivative example is checked against central differences.
 ![D11 and D31 against collisionality on W7-X, with SFINCS points](docs/_static/figures/paper_benchmarks/monoenergetic_icnts_w7x.png)
 
 `RHSMode = 3` gives `D11*`, `D31*`, `D33*` (Beidler et al. 2011); `RHSMode = 2` the thermal
-matrix. Boxes: SFINCS v3. Rung `04_monoenergetic_scan`.
+matrix. Boxes: SFINCS v3. Spectral angles, as in MONKES.
 
 ### Collision operators
 
@@ -138,13 +138,13 @@ Full linearized Fokker–Planck conserves momentum; pitch-angle scattering is fa
 ![W7-X ambipolar Er roots against published profiles](docs/_static/figures/paper_benchmarks/w7x_ambipolar_er.png)
 
 W7-X program 20160309.010: electron roots in the core, ion roots at the edge; `dkx roots` prints
-every classified root. Rung `05_ambipolar_profile`.
+every classified root.
 
 ### Phi1 and impurities
 
 ![C6+ impurity flux against collisionality on W7-X](docs/_static/figures/paper_benchmarks/impurity_transport.png)
 
-Phi1 adds the in-surface potential and its quasineutrality equation. Rung `09_phi1_and_impurities`.
+Phi1 adds the in-surface potential and its quasineutrality equation, with an adjoint.
 
 <!-- FLAGSHIP-OPTIMIZATION -->
 ## Stellarator optimization with a kinetic bootstrap current
@@ -155,7 +155,7 @@ VMEX's QA bootstrap example plus `dkx.bootstrap.KineticBootstrapMismatch` (equil
 against DKX's), traced VMEX → `booz_xform_jax` → DKX (finite differences
 agree to 5.7e-5–1.8e-3). On a laptop CPU (30 min, 4.6 GB) the objective falls
 from 1.78 to 0.0061 and the DKX mismatch from 1.2e-3 to 1.2e-4
-([`QA_optimization_bootstrap_dkx.py`](examples/optimization/QA_optimization_bootstrap_dkx.py)).
+([`QA_optimization_bootstrap_dkx.py`](examples/advanced/QA_optimization_bootstrap_dkx.py)).
 Pitch-angle scattering does not conserve momentum: its current is 1.5–1.6× Redl's.
 <!-- /FLAGSHIP-OPTIMIZATION -->
 
@@ -209,9 +209,9 @@ DKX picks its route from the operator's structure ([solver routes](docs/numerics
 
 | Route | When it applies | How it solves |
 | --- | --- | --- |
-| Structured direct | block-tridiagonal in the Legendre index: PAS, DKES drifts | exact block elimination; nothing to stall |
+| Structured direct | block-tridiagonal in the Legendre index: PAS or Fokker–Planck, DKES drifts | exact block elimination; nothing to stall |
 | Assembled sparse direct | any operator, to a few 1e5 unknowns | exact assembly, Ruiz equilibration, LU or MUMPS |
-| Recycled Krylov (GCROT) | full FP, tangential drifts, `E_r` terms, Phi1 | coarse-operator preconditioner, subspace recycled across solves |
+| Recycled Krylov (GCROT) | larger FP, tangential drifts, `E_r` terms, Phi1 | coupled or coarse preconditioner, recycled subspace |
 
 Direct routes are exact. The Krylov restart grows to 1,000 within a memory budget (`Nx = 16`:
 357 iterations against 2,788 at restart 200). Every route reports its true residual.
@@ -250,25 +250,17 @@ lighter on 3 of the 32 decks it completed ([performance](docs/benchmarks/perform
 
 Keeping only the Legendre blocks the moments need, 2.53M unknowns fit in 2.21 GB on one RTX A4000.
 
-## Examples
+## Learn DKX
 
-| Rung | What it shows | Runs in |
-| --- | --- | --- |
-| [`01_tokamak_profile`](examples/01_tokamak_profile) | build, run, read, save, plot | ~4 s |
-| [`02_vmec_stellarator`](examples/02_vmec_stellarator) | the same solve on a VMEC `wout` | ~3 s |
-| [`03_boozer_stellarator`](examples/03_boozer_stellarator) | Boozer geometry, route selection | ~4 s |
-| [`04_monoenergetic_scan`](examples/04_monoenergetic_scan) | `D11*`, `D31*`, `D33*` against collisionality | ~5 s |
-| [`05_ambipolar_profile`](examples/05_ambipolar_profile) | every `E_r` root, classified | ~8 s |
-| [`06_convergence_certificate`](examples/06_convergence_certificate) | refine every axis | ~12 s |
-| [`07_gradients`](examples/07_gradients) | `jax.grad` against central differences | ~17 s |
-| [`08_vmex_optimization`](examples/08_vmex_optimization) | a shape derivative on an analytic `\|B\|` spectrum | ~12 s |
-| [`09_phi1_and_impurities`](examples/09_phi1_and_impurities) | impurity transport with and without Phi1 | ~12 s |
-
-Rung 06 shows how far these fast grids are from converged. Gallery: [examples](docs/examples/index.md).
+The [tutorial track](docs/tutorials/index.md) runs from a first case to ambipolar `E_r`,
+transport coefficients, Phi1, bootstrap current against Redl, gradients and optimization,
+with the equations and the output of every step. Its scripts are
+[`examples/tutorials/01_first_run.py`](examples/tutorials) to `15_optimization.py`;
+`13_convergence.py` shows how far their fast grids are from converged.
 
 ## Documentation, development and citation
 
-[Getting started](docs/getting_started/first_run.md) · [User guide](docs/user_guide/index.md) ·
+[Install](docs/getting_started/installation.md) · [User guide](docs/user_guide/index.md) ·
 [Tutorials](docs/tutorials/index.md) · [Physics](docs/physics/index.md) · [Numerics](docs/numerics/index.md) ·
 [Benchmarks](docs/benchmarks/index.md) · [Design decisions](docs/design_decisions.md) ·
 [API](docs/api.md) · [Contributing](docs/contributing.md)

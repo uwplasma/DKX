@@ -8,12 +8,12 @@ in the same row.
 
 | Workflow | Entry points | Scope and evidence |
 | --- | --- | --- |
-| Profile solve (SFINCS `RHSMode = 1`): fluxes, flows, currents per surface and species | native case `run.workflow = "profile"`; `dkx run`; `dkx.run(case)`; `dkx input.namelist` | native SI result; SFINCS parity to 8e-14 on output tables ({doc}`benchmarks/sfincs`); `examples/01_tokamak_profile` |
-| Ambipolar profile: $E_r$ from $J_r(E_r) = 0$ on every surface | `run.workflow = "ambipolar_profile"`; `dkx roots`; `dkx.find_ambipolar_er`; `dkx.ambipolar_er` | every root kept and classified; {doc}`tutorials/ambipolar_er`, `examples/05_ambipolar_profile` |
+| Profile solve (SFINCS `RHSMode = 1`): fluxes, flows, currents per surface and species | native case `run.workflow = "profile"`; `dkx run`; `dkx.run(case)`; `dkx input.namelist` | native SI result; SFINCS parity to 8e-14 on output tables ({doc}`benchmarks/sfincs`); `examples/tutorials/01_first_run.py` |
+| Ambipolar profile: $E_r$ from $J_r(E_r) = 0$ on every surface | `run.workflow = "ambipolar_profile"`; `dkx roots`; `dkx.find_ambipolar_er`; `dkx.ambipolar_er` | every root kept and classified; {doc}`tutorials/transport_physics`, `examples/05_ambipolar_profile` |
 | Thermal transport matrix (`RHSMode = 2`) | `dkx sfincs transport-matrix-v3`; `dkx.run.run_transport_matrix` | 3×3 Onsager matrix; golden-data parity 6e-13 to 9e-9 ({doc}`benchmarks/sfincs`); namelist route only |
-| Monoenergetic coefficients (`RHSMode = 3`) and databases over $(\nu', E^*)$ | `dkx sfincs monoenergetic-database`; `dkx.run_monoenergetic_database` | $D_{11}^*$, $D_{31}^*$, $D_{33}^*$ in the Beidler normalization, with variational $D_{11}$ bounds; MONKES/YANCC within 6% ({doc}`benchmarks/cross_code`); `examples/04_monoenergetic_scan` |
+| Monoenergetic coefficients (`RHSMode = 3`) and databases over $(\nu', E^*)$ | `dkx sfincs monoenergetic-database`; `dkx.run_monoenergetic_database` | $D_{11}^*$, $D_{31}^*$, $D_{33}^*$ in the Beidler normalization, with variational $D_{11}$ bounds; MONKES/YANCC within 6% ({doc}`benchmarks/cross_code`); `examples/tutorials/09_monoenergetic.py` |
 | Parameter scans | `[scan]` table and `dkx scan`; `dkx sfincs scan-er`; `dkx.batched_er_scan`, `dkx.batched_surface_scan` | Cartesian or zipped axes, resumable ({doc}`user_guide/scans_and_parallelism`) |
-| Convergence study | `dkx converge`; `[convergence]` table | refines each axis and all jointly; {doc}`user_guide/convergence`, `examples/06_convergence_certificate` |
+| Convergence study | `dkx converge`; `[convergence]` table | refines each axis and all jointly; {doc}`user_guide/convergence`, `examples/tutorials/13_convergence.py` |
 | Adjoint sensitivities (SFINCS `RHSMode = 4/5`) | `dkx.sensitivity` | input validation, output field names and ranks, and compact Fortran replay fixtures; production-grid parity is not claimed |
 
 The native case executor implements the profile and ambipolar workflows. The
@@ -25,12 +25,12 @@ through the SFINCS-deck entry points above.
 | Route | How to select it | Notes |
 | --- | --- | --- |
 | Analytic configurations | `geometry.format = "analytic"`, `file` = `tokamak`, `lhd_standard`, `lhd_inward`, `w7x_standard` | built in; no file needed |
-| VMEC `wout` | `format = "vmec"` | stellarator-symmetric and `lasym` equilibria; the LIBSTELL text form is read by `dkx.vmec_ascii`; `examples/02_vmec_stellarator` |
-| Boozer `.bc` | `format = "boozer"` | symmetric or asymmetric column layout detected from the file; `examples/03_boozer_stellarator` |
+| VMEC `wout` | `format = "vmec"` | stellarator-symmetric and `lasym` equilibria; the LIBSTELL text form is read by `dkx.vmec_ascii`; `examples/tutorials/04_vmec_geometry.py` |
+| Boozer `.bc` | `format = "boozer"` | symmetric or asymmetric column layout detected from the file; `examples/tutorials/05_boozer_geometry.py` |
 | SFINCS geometry schemes | `geometryScheme` 1–5, 11, 12, 13 in a namelist | {doc}`user_guide/sfincs_namelist` |
-| Differentiable Fourier geometry | `FluxSurfaceGeometry.from_fourier` | $\lvert B\rvert$ spectrum as a traced input; `examples/08_vmex_optimization` |
+| Differentiable Fourier geometry | `FluxSurfaceGeometry.from_fourier` | $\lvert B\rvert$ spectrum as a traced input; `examples/tutorials/15_optimization.py` |
 
-Details in {doc}`physics/geometry` and {doc}`tutorials/stellarator_from_vmec`.
+Details in {doc}`physics/geometry` and {doc}`tutorials/building_a_case`.
 
 ## Physics
 
@@ -40,8 +40,8 @@ Details in {doc}`physics/geometry` and {doc}`tutorials/stellarator_from_vmec`.
 | Rosenbluth potentials | `quadpack`, `analytic` and `hybrid` routes | agree with each other to 1e-12 on the HSX case of {doc}`benchmarks/sfincs` |
 | Trajectory models | `magnetic_drifts = "dkes"` or `"full"`; SFINCS DKES, partial and full trajectories; tangential magnetic drifts (`magneticDriftScheme`) | trajectory sweep reproduced ({doc}`benchmarks/cross_code`) |
 | Radial electric field | prescribed, or ambipolar with every root classified ion, electron or unstable; uniform or seeded bracket search | {doc}`physics/electric_field` |
-| Species and impurities | any number of species; trace or finite impurities; classical impurity flux (`dkx.classical_impurity_flux`); `dkx.build_impurity_plasma` | impurity flux against Fortran golden data ({doc}`benchmarks/cross_code`); `examples/09_phi1_and_impurities` |
-| $\Phi_1$, in-surface potential | quasineutrality options 1 and 2, $\Phi_1$ in the kinetic equation and in the collision operator, Newton–Krylov solve (`dkx.phi1`) | namelist route; native `physics.phi1 = "kinetic"` (Phi1 in the kinetic equation, quasineutrality option 1, `profile` workflow) matches it to 1e-8 (`tests/test_native_phi1.py`); {doc}`physics/phi1_and_impurities` |
+| Species and impurities | any number of species; trace or finite impurities; classical impurity flux (`dkx.classical_impurity_flux`); `dkx.build_impurity_plasma` | impurity flux against Fortran golden data ({doc}`benchmarks/cross_code`); `examples/tutorials/07_species_and_impurity.py`, `examples/tutorials/11_phi1.py` |
+| $\Phi_1$, in-surface potential | quasineutrality options 1 and 2, $\Phi_1$ in the kinetic equation and in the collision operator, Newton–Krylov solve (`dkx.phi1`) | `validated_limited`: matches Fortran SFINCS v3 to 2.0e-6 over an eight-rung ladder on one geometry (`validation/phi1_sfincs_benchmark_v1.json`); native `physics.phi1 = "kinetic"` (Phi1 in the kinetic equation, quasineutrality option 1, `profile` workflow) matches the namelist route to 1e-8 (`tests/test_native_phi1.py`); differentiable through `dkx.phi1.phi1_solution`; {doc}`physics/phi1_and_impurities` |
 | Inductive parallel electric field | `inductiveE` decks | vendored upstream deck `inductiveE_noEr` |
 | Distribution function export | SFINCS `export_f` | written by the SFINCS-compatible writer |
 
@@ -49,8 +49,8 @@ Details in {doc}`physics/geometry` and {doc}`tutorials/stellarator_from_vmec`.
 
 | Route | `solve()` method / case `solver.method` | When it applies | Evidence |
 | --- | --- | --- | --- |
-| Structured direct | `"block_tridiagonal"` / `structured_direct` | operators block-tridiagonal in the Legendre index (pitch-angle scattering, DKES trajectories); truncated kernel keeps $O(K m^2)$ memory | 744,610 unknowns in 27.2 s against 463.6 s for SFINCS ({doc}`benchmarks/performance`) |
-| Recycled Krylov | `"gmres"` / `recycled_krylov` | everything else: full Fokker–Planck, tangential drifts, $E_r$ terms, $\Phi_1$; GCROT recycling across solves under a coarse-operator preconditioner | {doc}`numerics/krylov_and_preconditioners` |
+| Structured direct | `"block_tridiagonal"` / `structured_direct` | operators block-tridiagonal in the Legendre index: pitch-angle scattering with uncoupled (species, speed) chains, and full Fokker–Planck or improved Sugama with DKES trajectories, no tangential drifts and no $\Phi_1$ through one speed-coupled chain (`build_coupled_solver`); truncated kernel keeps $O(K m^2)$ memory | 744,610 unknowns in 27.2 s against 463.6 s for SFINCS ({doc}`benchmarks/performance`) |
+| Recycled Krylov | `"gmres"` / `recycled_krylov` | everything else: Fokker–Planck decks too large for the coupled direct route, tangential drifts, $E_r$ terms, $\Phi_1$; GCROT recycling across solves; `auto` preconditions FP and Sugama with the speed-coupled elimination (`coupled`) when it fits half the memory, else `coarse`; memory-aware restart up to 1,000 vectors on SOLVAX 0.28's single basis | {doc}`numerics/krylov_and_preconditioners` |
 | Sparse direct | `"direct"` / `sparse_direct_referee` | any operator up to a few $10^5$ unknowns; exact assembly from operator products, Ruiz equilibration, SuperLU (optional MUMPS) | 66,004 unknowns to 1.3e-14 ({doc}`benchmarks/sfincs`) |
 | Factor reuse | `SolveResult.factors`, `solve(..., factors=...)`, `transpose=True` | further right-hand sides and adjoints without refactoring | three solves from zero factorizations ({doc}`numerics/factor_reuse`) |
 
@@ -72,16 +72,16 @@ original equation. The routes and their limits are in
 
 | Capability | How | Evidence |
 | --- | --- | --- |
-| Gradients of any solved output | `solve(..., differentiable=True)` under `jax.grad`, `jax.jacfwd`, `jax.jvp`; implicit differentiation with one transposed solve | AD against central differences 4.3e-10, 4.2e-9, 7.9e-11 on three paths ({doc}`tutorials/gradients`) |
+| Gradients of any solved output | `solve(..., differentiable=True)` under `jax.grad`, `jax.jacfwd`, `jax.jvp`; implicit differentiation with one transposed solve | AD against central differences 4.3e-10, 4.2e-9, 7.9e-11 on three paths ({doc}`tutorials/bootstrap_gradients_optimization`) |
 | Differentiable ambipolar root | `dkx.ambipolar_er` | implicit function theorem; `tests/test_er.py` |
-| Differentiable $E_r$ and profile scans | `dkx.prepare_er_scan(..., differentiable_profiles=True)`, `dkx.batched_er_scan(..., differentiable=True)` | {doc}`tutorials/gradients` |
-| Shape derivatives | `FluxSurfaceGeometry.from_fourier` | `examples/08_vmex_optimization` |
-| Kinetic bootstrap row in VMEX optimization | `dkx.bootstrap.KineticBootstrapMismatch`, `KineticBootstrapCurrent` | QA objective 1.78 → 0.0061 ({doc}`tutorials/vmex_optimization`) |
-| Optimization scripts | `examples/optimization/optimize_*.py` | bootstrap current, electron root, impurity screening |
+| Differentiable $E_r$ and profile scans | `dkx.prepare_er_scan(..., differentiable_profiles=True)`, `dkx.batched_er_scan(..., differentiable=True)` | {doc}`tutorials/bootstrap_gradients_optimization` |
+| Shape derivatives | `FluxSurfaceGeometry.from_fourier` | `examples/tutorials/15_optimization.py` |
+| Kinetic bootstrap row in VMEX optimization | `dkx.bootstrap.KineticBootstrapMismatch`, `KineticBootstrapCurrent` | QA objective 1.78 → 0.0061 ({doc}`tutorials/bootstrap_gradients_optimization`) |
+| Optimization scripts | `examples/advanced/optimize_*.py` | bootstrap current, electron root, impurity screening |
 
 The VMEC-to-Boozer proxy workflow does not claim full VMEC-boundary-to-kinetic
 transport gradients; its scope is machine-checked
-({doc}`tutorials/vmex_optimization`). The derivation is in
+({doc}`tutorials/bootstrap_gradients_optimization`). The derivation is in
 {doc}`numerics/differentiation`.
 
 ## Input, output and tools
@@ -89,7 +89,7 @@ transport gradients; its scope is machine-checked
 | Capability | How |
 | --- | --- |
 | Native cases | TOML or JSON, deterministic case ID; `dkx template`, `dkx validate` ({doc}`user_guide/inputs`) |
-| SFINCS v3 decks | `dkx input.namelist`, `dkx.load_sfincs_input`, `dkx convert` to a native case ({doc}`user_guide/sfincs_namelist`, {doc}`tutorials/sfincs_migration`) |
+| SFINCS v3 decks | `dkx input.namelist`, `dkx.load_sfincs_input`, `dkx convert` to a native case ({doc}`user_guide/sfincs_namelist`, {doc}`tutorials/first_steps`) |
 | Outputs | native NetCDF result in SI; SFINCS-layout HDF5, NetCDF4 or NPZ selected by suffix; `dkx.read_output` ({doc}`user_guide/outputs`) |
 | Result certificate | `Result.certificate()`: convergence, route, residual, version, device, precision |
 | Comparison | `dkx compare` (NetCDF or HDF5, non-zero exit on difference), `dkx sfincs compare-h5` |
@@ -130,8 +130,9 @@ Upstream suite parity for all of the above is recorded in
 
 ## Not supported
 
-- Native-case execution of $\Phi_1$ and of the transport-matrix and
-  monoenergetic workflows (use the SFINCS-deck route).
+- Native-case execution of the transport-matrix and monoenergetic workflows,
+  and of $\Phi_1$ beyond `phi1 = "kinetic"` on profile cases (use the
+  SFINCS-deck route).
 - Production-resolution `RHSMode = 4/5` parity with Fortran.
 - Full VMEC-boundary-to-kinetic-transport gradients in the proxy workflow.
 - Single-case strong scaling across several GPUs.

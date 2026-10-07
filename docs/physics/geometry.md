@@ -119,9 +119,8 @@ The toroidal flux at the boundary, $\hat\psi_a$, keeps the sign of the file
 (`psi_a_hat_from_wout`). {doc}`normalizations` explains why reported $\hat r$ fluxes are
 outward-positive regardless.
 
-A JAX-native equilibrium code can feed the same formulas; the finite-beta example
-`examples/vmex_finite_beta/finite_beta_vmec_to_sfincs.py` builds a `wout` with `vmex` and
-scans $E_r$ on several surfaces.
+A JAX-native equilibrium code can feed the same formulas: `vmex --neoclassical` hands its
+`wout` to `dkx.representative.run_representative`, which scans $E_r$ on several surfaces.
 
 ## Differentiable geometry
 
@@ -129,7 +128,8 @@ scans $E_r$ on several surfaces.
 by `jit` and `grad`. `from_fourier` is the geometry entry point for optimization:
 gradients with respect to `bmnc` and `bmns` flow through $\hat B$, $\hat D$ and the
 flux-surface averages. Grid truncation is applied by zeroing amplitudes so shapes stay
-static. `examples/autodiff/differentiable_geometry_gradients.py` checks these gradients.
+static. `examples/tutorials/15_optimization.py` checks these gradients against central
+differences.
 VMEC and `.bc` readers are NumPy file parsers and are not differentiated.
 
 ## Container fields

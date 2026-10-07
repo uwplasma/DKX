@@ -102,7 +102,7 @@ and status.
 
 Axes couple. A resolution that looks adequate in $\theta$ may only look so
 because $N_\xi$ is too coarse to expose the error. The checked-in
-`examples/01_tokamak_profile/case.toml` records the case: at `pitch = 8` the
+`examples/tutorials/02_cli_case.toml` records the case: at `pitch = 8` the
 `theta` refinement moves the outputs by 0.2%, and at `pitch = 40` the same
 refinement moves them by 74%. On that teaching grid `theta` 9 → 14 alone moves
 the particle flux by 1187%. When the joint change exceeds twice the largest
