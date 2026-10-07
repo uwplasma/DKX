@@ -91,7 +91,7 @@ speed = 4
 relative_tolerance = 1.0e-8
 ```
 
-This is `examples/05_ambipolar_profile/case.toml` with defaulted fields
+This is `examples/tutorials/08_ambipolar_er.toml` with defaulted fields
 omitted. The tables `[run]`, `[geometry]`, `[[species]]`, `[physics]`,
 `[electric_field]`, `[resolution]` and `[solver]` are required, even when every
 field inside them takes its default; `[parallel]`, `[convergence]`, `[output]`
@@ -159,7 +159,7 @@ finite difference represents the profile you mean.
 | `model` | string | `"full_local"` | `full_local` | radially local $\delta f$ drift-kinetic model |
 | `collisions` | string | `"linearized_fokker_planck"` | `linearized_fokker_planck`, `pitch_angle_scattering` | full linearized Fokker–Planck operator (SFINCS `collisionOperator = 0`) or pitch-angle scattering (`collisionOperator = 1`) |
 | `magnetic_drifts` | string | `"dkes"` | `dkes`, `full` | trajectory model; only `dkes` runs |
-| `phi1` | string | `"off"` | `off`, `kinetic`, `full` | poloidal/toroidal variation of the electrostatic potential; only `off` runs |
+| `phi1` | string | `"off"` | `off`, `kinetic`, `full` | poloidal/toroidal variation of the electrostatic potential; `off` and `kinetic` ($\Phi_1$ in the kinetic equation, quasineutrality option 1, `profile` workflow) run |
 | `coulomb_logarithm` | number | `17.0` | $5 \le \ln\Lambda \le 30$ | the normalized collisionality is proportional to it; this is how a case expresses a SFINCS `nu_n` override |
 
 `dkes` means the DKES trajectory model: the $E\times B$ drift divided by
@@ -331,7 +331,7 @@ silently replaced:
 |---|---|---|
 | `run.workflow` | `profile`, `ambipolar_profile`, `transport_matrix`, `monoenergetic` | `profile`, `ambipolar_profile` |
 | `physics.magnetic_drifts` | `dkes`, `full` | `dkes` |
-| `physics.phi1` | `off`, `kinetic`, `full` | `off` |
+| `physics.phi1` | `off`, `kinetic`, `full` | `off`; `kinetic` on `profile` cases |
 | `electric_field.mode` | `prescribed`, `ambipolar` | the one matching the workflow |
 | `geometry.surfaces` | one or more, in $[0,1]$ | two or more, strictly increasing, above zero |
 | `parallel.strategy`, `parallel.shard` | as tabled above | `auto`/`serial`, no shard axes |
@@ -345,7 +345,7 @@ For the calculations outside this set, use the SFINCS namelist route
 | calculation | namelist route |
 |---|---|
 | Onsager transport matrix | `RHSMode = 2`; `dkx sfincs transport-matrix-v3`, `dkx.run_transport_matrix` |
-| monoenergetic coefficients $D_{11}^*, D_{31}^*, D_{33}^*$ | `RHSMode = 3`; `dkx sfincs monoenergetic-database`, `dkx.run_monoenergetic_database` (`examples/04_monoenergetic_scan`) |
+| monoenergetic coefficients $D_{11}^*, D_{31}^*, D_{33}^*$ | `RHSMode = 3`; `dkx sfincs monoenergetic-database`, `dkx.run_monoenergetic_database` (`examples/tutorials/09_monoenergetic.py`) |
 | full trajectories ($E_r$ terms in $\dot x$, $\dot\xi$; $B^2$ in the $E\times B$ drift) | `useDKESExBDrift`, `includeXDotTerm`, `includeElectricFieldTermInXiDot` |
 | tangential magnetic drifts | `magneticDriftScheme` 1–9 |
 | $\Phi_1$ and quasineutrality | `includePhi1 = .true.` |

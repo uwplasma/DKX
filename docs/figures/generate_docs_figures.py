@@ -16,13 +16,13 @@ Figures
 ``transport_coeff_vs_collisionality.png``
     Monoenergetic (``RHSMode = 3``) transport-matrix entries versus normalized
     collisionality ``nuPrime`` for a three-helicity model field
-    (``geometryScheme = 1``). Reproduces the physics of
-    ``examples/transport/transport_coefficients.py`` at documentation resolution.
+    (``geometryScheme = 1``). Same physics as
+    ``examples/tutorials/09_monoenergetic.py``, at documentation resolution.
 
 ``ambipolar_er_roots.png``
     Species radial fluxes and the radial current ``J_r(E_r) = sum_s Z_s Gamma_s``
-    for an ion + electron pair, with the ambipolar root marked. Reproduces
-    ``examples/vmex_finite_beta/ambipolar_er_scan.py`` at documentation resolution.
+    for an ion + electron pair, with the ambipolar root marked. Same physics as
+    ``examples/tutorials/08_ambipolar_er.py``, at documentation resolution.
 
 Run
 ---

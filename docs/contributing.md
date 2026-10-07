@@ -10,7 +10,7 @@ script or deck that produces it.
 | --- | --- |
 | `src/dkx/` | the package ({doc}`how_it_works` maps every module) |
 | `tests/` | unit, regression, physics-limit and documentation-contract tests, with frozen SFINCS v3 reference fixtures |
-| `examples/` | the numbered example ladder and workflow scripts ({doc}`examples/index`) |
+| `examples/` | the numbered tutorial scripts and advanced workflows ({doc}`tutorials/index`) |
 | `tools/` | benchmark, figure and release scripts that regenerate the evidence |
 | `docs/` | this documentation (Sphinx, MyST Markdown) |
 

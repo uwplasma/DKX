@@ -143,7 +143,7 @@ For `RHSMode = 3` the $2\times2$ matrix is the monoenergetic (DKES-normalized) o
 to the $D_{11}$, $D_{31}$, $D_{13}$, $D_{33}$ coefficients of Beidler et al., Nucl. Fusion
 51, 076001 (2011), and Hirshman et al., Phys. Fluids 29, 2951 (1986). With the
 normalization above the matrix is Onsager-symmetric, $L_{12} = L_{21}$;
-`examples/transport/transport_coefficients.py` prints the measured asymmetry.
+`tests/test_transport_limits.py` measures the asymmetry under refinement.
 
 ```{figure} ../_static/figures/docs/transport_coeff_vs_collisionality.png
 :alt: Monoenergetic transport coefficients versus normalized collisionality for a three-helicity model field.

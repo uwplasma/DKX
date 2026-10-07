@@ -68,7 +68,7 @@ differ only in a few physics leaves:
 ```python
 import dkx, jax.numpy as jnp
 
-case = dkx.Case.from_file("examples/05_ambipolar_profile/case.toml")
+case = dkx.Case.from_file("examples/tutorials/08_ambipolar_er.toml")
 problem = dkx.prepare_er_scan(case, surface_index=1)     # geometry, grids, collisions once
 
 scan = dkx.batched_er_scan(problem, jnp.linspace(-5.0, 5.0, 21), devices="auto")
@@ -152,13 +152,15 @@ dkx --cores 4 run case.toml        # or: export DKX_CORES=4 before starting Pyth
 ```
 
 `DKX_CORES=N` pins the pool to N threads (applied as `NPROC`, which XLA reads,
-together with the OpenMP/OpenBLAS pools); `0` lets XLA size it. When unset, DKX
-clamps the pool to `min(8, cpu_count)`: the measured optimum is 4–8 threads
-and a full-width pool on a many-core host is slower (`--cores` help in
-`src/dkx/cli.py`; {doc}`../benchmarks/performance`). Host BLAS pools
-(`OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, `MKL_NUM_THREADS`) default to one
-thread, because a multithreaded BLAS inside each batched LAPACK call
-oversubscribes the XLA pool. `DKX_CPU_DEVICES` forces several host devices for
+together with the OpenMP/OpenBLAS pools, which then get one thread); `0` lets
+XLA size it. With neither `DKX_CORES` nor `NPROC` set, DKX gives XLA
+`min(8, cores)` threads and the host BLAS (`OMP_NUM_THREADS`,
+`OPENBLAS_NUM_THREADS`, `MKL_NUM_THREADS`) `min(4, cores)`, counting the cores
+`taskset` allows: the measured XLA optimum is 4–8 threads, a full-width pool on
+a many-core host is slower, and a single BLAS thread would leave the
+sequential LAPACK calls of the structured elimination on one core
+({doc}`../numerics/compilation_and_parallelism`). Explicit BLAS variables
+always win. `DKX_CPU_DEVICES` forces several host devices for
 multi-device tests; it shares the same pool and does not speed anything up.
 
 ### Subsystem batching
