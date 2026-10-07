@@ -26,6 +26,11 @@
   faster or the blocks do not fit, on recycled Krylov. A speed-triangular sweep
   was measured first and is not exact in this speed basis (lower triangle 1-3%
   of the diagonal, electron-ion block as large as its diagonal).
+- `preconditioner="coupled"`: the speed-coupled elimination as a Krylov
+  preconditioner, exact for Legendre blocks `L < 2` and `(species, x)`-diagonal
+  (float32) in the tail; `E_r` and drift `L ± 2` terms are dropped from the
+  factored operator. Iterations fall from 46 to 17 on a 396k-unknown HSX FP
+  deck at equal wall time; opt-in, `auto` is unchanged.
 - `dkx.solve` keeps its API; the structured route's applicability tests and
   memory model moved to `dkx.structured_direct`. Structured solves refine
   against the pinned operator (identity rows on truncated `Nxi_for_x` DOFs).

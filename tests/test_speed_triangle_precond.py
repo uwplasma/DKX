@@ -373,3 +373,17 @@ def test_auto_takes_the_coupled_route_and_matches_krylov(tmp_path) -> None:
     assert direct.method == "block_tridiagonal" and bool(np.all(direct.converged))
     scale = float(jnp.linalg.norm(krylov.x))
     assert float(jnp.linalg.norm(direct.x - krylov.x)) / scale < 1e-8
+
+
+def test_the_truncated_coupled_factorization_preconditions_krylov(tmp_path) -> None:
+    """Exact speed coupling at l < 2, (species, x) diagonal in a float32 tail."""
+    from dkx.solve import solve
+
+    op = _two_species_operator(tmp_path, nx=4)
+    rhs = op.rhs()
+    direct = solve(op, rhs, emit=None)
+    runs = {k: solve(op, rhs, method="iterative", tol=1e-12, preconditioner=k, emit=None)
+            for k in ("coarse", "coupled")}
+    assert runs["coupled"].iterations < runs["coarse"].iterations
+    scale = float(jnp.linalg.norm(direct.x))
+    assert float(jnp.linalg.norm(runs["coupled"].x - direct.x)) / scale < 1e-8
