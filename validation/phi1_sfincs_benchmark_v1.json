@@ -1,0 +1,260 @@
+{
+ "schema": "dkx.phi1_sfincs_benchmark.v1",
+ "claim_scope": "geometry_scheme4_fp_noEr_phi1_in_kinetic_two_and_three_species_resolution_ladder",
+ "source": {
+  "dkx_commit": "d5a0eb1b778b4f46390722382b8bede8cd922281",
+  "sfincs_commit": "8df5453472e982df0f6ae005243ce38d57a83711",
+  "solvax": "0.28.1"
+ },
+ "decks": {
+  "main": "examples/sfincs_examples/geometryScheme4_2species_noEr_withPhi1InDKE",
+  "imp": "main deck with C6+: Zs 1 -1 6, mHats 1 0.000545509 6, nHats 0.94 1 0.01, THats 1 1 1, dNHatdrHats -0.47 -0.5 -0.005, dTHatdrHats -2 -2 -2"
+ },
+ "sfincs_run": "1 MPI rank, MUMPS with -mat_mumps_icntl_7 2 (the default METIS ordering hangs), solverTolerance 1e-6",
+ "dkx_run": "dkx.phi1.solve_phi1 on the deck, tol 1e-11; native physics.phi1 = 'kinetic' equals this route to 1e-8 (tests/test_native_phi1.py)",
+ "rows": [
+  {
+   "case": "main_A",
+   "Ntheta_Nzeta_Nxi_Nx": [
+    9,
+    13,
+    32,
+    4
+   ],
+   "dkx_particleFlux_vm_psiHat": [
+    -1.0691291310604802e-07,
+    2.1364256146359942e-08
+   ],
+   "dkx_phi1_rms": 0.000444802837066761,
+   "sfincs_particleFlux_vm_psiHat": [
+    -1.0691291262385853e-07,
+    2.1364253548203886e-08
+   ],
+   "sfincs_phi1_rms": 0.00044480284658007823,
+   "max_relative_difference": 1.2161230208968274e-07
+  },
+  {
+   "case": "main_B",
+   "Ntheta_Nzeta_Nxi_Nx": [
+    13,
+    19,
+    48,
+    5
+   ],
+   "dkx_particleFlux_vm_psiHat": [
+    -1.1344044640501433e-07,
+    2.165108367953202e-08
+   ],
+   "dkx_phi1_rms": 0.0004514071890888688,
+   "sfincs_particleFlux_vm_psiHat": [
+    -1.1344044498658771e-07,
+    2.165107793800077e-08
+   ],
+   "sfincs_phi1_rms": 0.0004514072262733038,
+   "max_relative_difference": 2.6518454490972955e-07
+  },
+  {
+   "case": "main_C",
+   "Ntheta_Nzeta_Nxi_Nx": [
+    17,
+    25,
+    64,
+    6
+   ],
+   "dkx_particleFlux_vm_psiHat": [
+    -1.1395429505144433e-07,
+    2.155013838056714e-08
+   ],
+   "dkx_phi1_rms": 0.00045073526511807486,
+   "sfincs_particleFlux_vm_psiHat": [
+    -1.1395429521069706e-07,
+    2.1550126071874135e-08
+   ],
+   "sfincs_phi1_rms": 0.000450735256810268,
+   "max_relative_difference": 5.711657075415338e-07
+  },
+  {
+   "case": "imp_A",
+   "Ntheta_Nzeta_Nxi_Nx": [
+    9,
+    13,
+    32,
+    4
+   ],
+   "dkx_particleFlux_vm_psiHat": [
+    -9.747654004505574e-08,
+    1.4062551847808615e-08,
+    2.5342318538690976e-11
+   ],
+   "dkx_phi1_rms": 0.00030718238361531977,
+   "sfincs_particleFlux_vm_psiHat": [
+    -9.747653974100899e-08,
+    1.4062549074566623e-08,
+    2.534232564545195e-11
+   ],
+   "sfincs_phi1_rms": 0.0003071823921390971,
+   "max_relative_difference": 2.804304969462903e-07
+  },
+  {
+   "case": "imp_B",
+   "Ntheta_Nzeta_Nxi_Nx": [
+    13,
+    19,
+    48,
+    5
+   ],
+   "dkx_particleFlux_vm_psiHat": [
+    -1.028559288375861e-07,
+    1.3874905087290037e-08,
+    2.1706068234059957e-11
+   ],
+   "dkx_phi1_rms": 0.0003059014606925561,
+   "sfincs_particleFlux_vm_psiHat": [
+    -1.0285592737187479e-07,
+    1.3874896967738127e-08,
+    2.1706085952620905e-11
+   ],
+   "sfincs_phi1_rms": 0.00030590150757709507,
+   "max_relative_difference": 8.16294609108105e-07
+  },
+  {
+   "case": "imp_C",
+   "Ntheta_Nzeta_Nxi_Nx": [
+    17,
+    25,
+    64,
+    6
+   ],
+   "dkx_particleFlux_vm_psiHat": [
+    -1.0303043188785069e-07,
+    1.4000644875649532e-08,
+    2.582247282895755e-11
+   ],
+   "dkx_phi1_rms": 0.00030604759963035307,
+   "sfincs_particleFlux_vm_psiHat": [
+    -1.0303043126867886e-07,
+    1.4000631520902138e-08,
+    2.58225241530344e-11
+   ],
+   "sfincs_phi1_rms": 0.0003060476065030695,
+   "max_relative_difference": 1.9875700975572216e-06
+  },
+  {
+   "case": "imp_Bx",
+   "Ntheta_Nzeta_Nxi_Nx": [
+    13,
+    19,
+    48,
+    6
+   ],
+   "dkx_particleFlux_vm_psiHat": [
+    -1.0295266474487308e-07,
+    1.3967299578162516e-08,
+    2.5575830166561567e-11
+   ],
+   "dkx_phi1_rms": 0.0003060308308767087,
+   "sfincs_particleFlux_vm_psiHat": [
+    -1.0295266407178798e-07,
+    1.3967286343111921e-08,
+    2.5575880114125046e-11
+   ],
+   "sfincs_phi1_rms": 0.0003060308370430775,
+   "max_relative_difference": 1.952916703417678e-06
+  },
+  {
+   "case": "imp_Bx7",
+   "Ntheta_Nzeta_Nxi_Nx": [
+    13,
+    19,
+    48,
+    7
+   ],
+   "dkx_particleFlux_vm_psiHat": [
+    -1.0288708718187127e-07,
+    1.403824098239983e-08,
+    2.4357534575112874e-11
+   ],
+   "dkx_phi1_rms": 0.00030624873115331136,
+   "sfincs_particleFlux_vm_psiHat": [
+    -1.0288708743449428e-07,
+    1.4038237368601684e-08,
+    2.435756312164977e-11
+   ],
+   "sfincs_phi1_rms": 0.00030624876951795366,
+   "max_relative_difference": 1.1719783606695048e-06
+  },
+  {
+   "case": "imp_Bx8",
+   "Ntheta_Nzeta_Nxi_Nx": [
+    13,
+    19,
+    48,
+    8
+   ],
+   "dkx_particleFlux_vm_psiHat": [
+    -1.0292707401634399e-07,
+    1.3950215295488848e-08,
+    2.3280596520984772e-11
+   ],
+   "dkx_phi1_rms": 0.0003063920624666446,
+   "sfincs": "not run"
+  },
+  {
+   "case": "imp_Bx10",
+   "Ntheta_Nzeta_Nxi_Nx": [
+    13,
+    19,
+    48,
+    10
+   ],
+   "dkx_particleFlux_vm_psiHat": [
+    -1.0289493687760888e-07,
+    1.400642015831701e-08,
+    2.482474140133489e-11
+   ],
+   "dkx_phi1_rms": 0.00030613759675414577,
+   "sfincs": "not run"
+  },
+  {
+   "case": "imp_Bx12",
+   "Ntheta_Nzeta_Nxi_Nx": [
+    13,
+    19,
+    48,
+    12
+   ],
+   "dkx_particleFlux_vm_psiHat": [
+    -1.0286539905480076e-07,
+    1.404104382604994e-08,
+    2.4079664656681417e-11
+   ],
+   "dkx_phi1_rms": 0.0003075006110988046,
+   "sfincs": "not run"
+  }
+ ],
+ "results": {
+  "max_relative_difference_dkx_vs_sfincs": 1.9875700975572216e-06,
+  "main_deck_B_to_C_relative_change": {
+   "ion_flux": 0.0045,
+   "electron_flux": 0.0047,
+   "phi1_rms": 0.0015
+  },
+  "carbon_flux_vs_Nx_at_B": {
+   "5": 2.171e-11,
+   "6": 2.558e-11,
+   "7": 2.436e-11,
+   "8": 2.328e-11,
+   "10": 2.482e-11,
+   "12": 2.408e-11
+  },
+  "carbon_flux_explanation": "The B to C step changes Nx 5 to 6, which alone moves the trace carbon flux by 18%. The flux oscillates in Nx with decaying amplitude (3% from Nx 10 to 12) while ion and electron fluxes move under 0.5%. The carbon flux is about 4e-4 of the ion flux, so the speed-grid error of the main species is amplified in it. Both codes show the same oscillation rung by rung."
+ },
+ "exclusions": [
+  "one geometry (geometryScheme 4) and one collision model (Fokker-Planck)",
+  "Phi1 in the kinetic equation only; not Phi1 in the collision operator, quasineutrality option 2 or adiabatic species",
+  "zero radial electric field",
+  "trace carbon flux resolved only to about 3% in Nx",
+  "experimental validation",
+  "cross-code performance equivalence"
+ ]
+}

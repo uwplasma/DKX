@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Phi1 is promoted from `compatibility_only` to `validated_limited`. On the geometryScheme 4 Phi1 example deck and a trace-carbon variant, DKX matches Fortran SFINCS v3 to 2.0e-6 over an eight-rung resolution ladder (`validation/phi1_sfincs_benchmark_v1.json`). `stable_candidate` is withheld: there is one geometry, Fokker-Planck collisions only, zero Er, and the trace-impurity flux is resolved only to about 3% in Nx.
 - `dkx.phi1.phi1_solution` gives the converged Phi1 state with a matrix-free implicit adjoint: GMRES on the transposed Jacobian (a VJP of the coupled residual) on the active Legendre-truncated subspace, preconditioned by the last Newton step's transpose preconditioner. On a native `phi1 = "kinetic"` case the gradient matches central finite differences to 1.2e-9 and the Taylor remainder falls as h^2 (ratios 4.02, 4.01).
 - Case inputs no longer carry a `schema` key. Older files with `schema = 1`
   still load (the key is ignored); other values are refused. Case IDs are

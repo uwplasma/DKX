@@ -85,10 +85,10 @@ gaps = ["R1/R6: independent branch-event and joint-grid uncertainty", "R1: margi
 [[capability]]
 id = "phi1"
 name = "Phi1 quasineutrality workflow"
-status = "compatibility_only"
-owners = ["src/dkx/phi1.py", "src/dkx/collisions.py"]
-evidence = ["tests/test_phi1.py", "tests/test_rhsmode1_phi1_write_output_end_to_end.py"]
-gaps = ["native Phi1 exposure with coupled kinetic, quasineutrality and gauge residual", "coupled adjoint", "independently converged geometry and collision-model matrix"]
+status = "validated_limited"
+owners = ["src/dkx/phi1.py", "src/dkx/collisions.py", "src/dkx/execution.py", "src/dkx/input_compat.py"]
+evidence = ["tests/test_phi1.py", "tests/test_rhsmode1_phi1_write_output_end_to_end.py", "tests/test_native_phi1.py", "validation/phi1_sfincs_benchmark_v1.json"]
+gaps = ["independently converged geometry and collision-model matrix (one geometry, Fokker-Planck only, zero Er)", "native phi1 = 'full', quasineutrality option 2, adiabatic species and ambipolar workflow", "trace-impurity flux convergence in Nx (about 3%)"]
 
 [[capability]]
 id = "implicit_gradients"
