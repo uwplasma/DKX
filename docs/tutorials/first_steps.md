@@ -195,8 +195,8 @@ workflow: profile; surfaces: 3; species: 1
 and `dkx inspect` lists the stored arrays and shapes without recomputing
 (`particle_flux_m2_s (3, 1)`, `parallel_current_A_T_m2 (3,)`, ...). The file in
 Python is `dkx.Case.from_file("examples/tutorials/02_cli_case.toml")`.
-Relative paths inside a case resolve beside the case file. Case files written
-for older releases with `schema = 1` still load; the key is ignored. Every field
+Relative paths inside a case resolve beside the case file. Case files that still
+say `schema = 1` load; the key is ignored. Every field
 is in {doc}`../user_guide/inputs`; every command in {doc}`../user_guide/cli`.
 
 ## Step 4: a SFINCS v3 namelist
@@ -245,6 +245,16 @@ ion–electron collision coupling ({doc}`../benchmarks/sfincs`). The whole
 namelist reference, including the `dkx sfincs` subcommands for transport
 matrices, monoenergetic databases and $E_r$ scans, is
 {doc}`../user_guide/sfincs_namelist`.
+
+Upstream SFINCS plotting scripts read DKX output too:
+`dkx sfincs postprocess-upstream --case-dir DIR --util sfincsScanPlot_1 -- pdf`.
+
+```{figure} ../_static/figures/utils/sfincsScanPlot_1.png
+:alt: Upstream sfincsScanPlot_1 output generated from DKX sfincsOutput.h5 files.
+:width: 75%
+
+An upstream `sfincsScanPlot_1` figure drawn from DKX output.
+```
 
 ## Step 5: is the answer resolved?
 
