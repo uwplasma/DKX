@@ -222,6 +222,8 @@ def measure(args):
 
     def one(stage, code, case, res, points, repeats=1, gpu=None):
         env = dict(base, JAX_PLATFORMS="cuda" if gpu is not None else "cpu")
+        if code == "dkx" and args.dkx_xla_threads:  # DKX's LAPACK calls share the cores with XLA's pool
+            env["NPROC"] = str(args.dkx_xla_threads)
         if stage in ("cached", "fill"):
             env.pop("DKX_DISABLE_COMPILATION_CACHE")
             env["DKX_COMPILATION_CACHE_DIR"] = str(work / "jax_cache")
@@ -392,7 +394,7 @@ def main():
     ap.add_argument("--monkes"), ap.add_argument("--yancc-python"), ap.add_argument("--data")
     ap.add_argument("--ncores", type=int, default=4), ap.add_argument("--physical", type=int, default=18)
     ap.add_argument("--gpu", type=int, default=0), ap.add_argument("--xla-threads", type=int, default=16)
-    ap.add_argument("--cases", default="")
+    ap.add_argument("--cases", default=""), ap.add_argument("--dkx-xla-threads", type=int, default=0)
     ap.add_argument("--work", default="cross_code_speed_work"), ap.add_argument("--timeout", type=float, default=1800)
     ap.add_argument("--repeats", type=int, default=3), ap.add_argument("--stages", default="ladder,time,gpu")
     args = ap.parse_args()
