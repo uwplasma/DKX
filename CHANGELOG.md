@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `monoenergetic_database` now uses spectral (Fourier) angular derivatives when the deck does not set `thetaDerivativeScheme`/`zetaDerivativeScheme`. A deck that sets them keeps its choice. On the matched W7-X/HSX benchmark this is the discretization MONKES uses, and it converges like MONKES: HSX reaches 3% at 19x41x64 instead of 25x51x96, and W7-X is at 4e-5 one rung above 15x31x48 (finite differences: 0.6% at 25x51x96). Values at a fixed grid change within discretization error. To pair a database with a full-kinetic solve of the same deck, set the schemes in the deck.
+- The full-band structured direct route (`build_tier1_solver`) builds its Legendre rows one at a time inside the elimination scan, stores only the Schur LUs, and regenerates the off-diagonal blocks in the substitution sweeps. Answers are unchanged (1e-12). On W7-X 15x31x48 the peak RSS falls from 1.95 GB to 0.94 GB and the first solve without a compilation cache from 8.2 s to 3.7 s; the warm solve is 8% slower. With the default persistent cache the first solve takes 1.4 s.
+- `tools/benchmarks/cross_code_speed.py` has a `cached` stage that times DKX's first solve with the persistent compilation cache on.
+
 - Phi1 is promoted from `compatibility_only` to `validated_limited`. On the geometryScheme 4 Phi1 example deck and a trace-carbon variant, DKX matches Fortran SFINCS v3 to 2.0e-6 over an eight-rung resolution ladder (`validation/phi1_sfincs_benchmark_v1.json`). `stable_candidate` is withheld: there is one geometry, Fokker-Planck collisions only, zero Er, and the trace-impurity flux is resolved only to about 3% in Nx.
 - `dkx.phi1.phi1_solution` gives the converged Phi1 state with a matrix-free implicit adjoint: GMRES on the transposed Jacobian (a VJP of the coupled residual) on the active Legendre-truncated subspace, preconditioned by the last Newton step's transpose preconditioner. On a native `phi1 = "kinetic"` case the gradient matches central finite differences to 1.2e-9 and the Taylor remainder falls as h^2 (ratios 4.02, 4.01).
 - Case inputs no longer carry a `schema` key. Older files with `schema = 1`

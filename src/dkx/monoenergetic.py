@@ -616,7 +616,12 @@ def _mono_raw_namelist(inp: SfincsInput, raw: Any) -> Any:
     phys["INCLUDEELECTRICFIELDTERMINXIDOT"] = False
     phys["INCLUDEPHI1"] = False
     groups.setdefault("resolutionparameters", {})["NX"] = 1
-    groups.setdefault("othernumericalparameters", {})["NXI_FOR_X_OPTION"] = 0
+    other = groups.setdefault("othernumericalparameters", {})
+    other["NXI_FOR_X_OPTION"] = 0
+    # Spectral (Fourier) angles unless the deck chooses: at equal accuracy they
+    # take a coarser grid than the SFINCS finite-difference default, as in MONKES.
+    other.setdefault("THETADERIVATIVESCHEME", 0)
+    other.setdefault("ZETADERIVATIVESCHEME", 0)
     return replace(raw, groups=groups)
 
 def _grids_for_mono(inp: SfincsInput, raw: Any) -> Any:
@@ -625,7 +630,13 @@ def _grids_for_mono(inp: SfincsInput, raw: Any) -> Any:
 
     res = replace(inp.resolution, n_x=1)
     gen = replace(inp.general, rhs_mode=3)
-    other = replace(inp.other, n_xi_for_x_option=0)
+    o = raw.groups["othernumericalparameters"]
+    other = replace(
+        inp.other,
+        n_xi_for_x_option=0,
+        theta_derivative_scheme=int(o["THETADERIVATIVESCHEME"]),
+        zeta_derivative_scheme=int(o["ZETADERIVATIVESCHEME"]),
+    )
     return _grids_from_input(replace(inp, resolution=res, general=gen, other=other), raw)
 
 def monoenergetic_database(

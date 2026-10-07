@@ -11,7 +11,9 @@ equal to the core count and an XLA pool of NPROC=16 threads; the codes alternate
 per repeat. Cold is the first solve in the process (JAX tracing and
 compilation included, no persistent cache); warm is the identical second solve. MONKES
 has no compile step: cold is its process wall time, warm its own reported solve time.
-Peak RSS comes from wait4. Accuracy is the largest relative change of D11, D31, D33
+Peak RSS comes from wait4.
+The ``cached`` stage re-times DKX with its persistent compilation cache on (the
+default outside this harness), after one untimed process has filled it. Accuracy is the largest relative change of D11, D31, D33
 (monoenergetic) or of the flow and fluxes (full DKE) against the same code's finest rung.
 """
 
@@ -220,6 +222,9 @@ def measure(args):
 
     def one(stage, code, case, res, points, repeats=1, gpu=None):
         env = dict(base, JAX_PLATFORMS="cuda" if gpu is not None else "cpu")
+        if stage in ("cached", "fill"):
+            env.pop("DKX_DISABLE_COMPILATION_CACHE")
+            env["DKX_COMPILATION_CACHE_DIR"] = str(work / "jax_cache")
         done = [r for r in recs if (r["stage"], r["code"], r["case"], r["res"], r["status"]) ==
                 (stage, code, case, list(res), 0) and sorted(q["point"] for q in r["results"]) == sorted(points)]
         if stage == "ladder" and done:
@@ -256,7 +261,7 @@ def measure(args):
         for res in DKE_LADDER:
             for code in ("dkx", "yancc"):
                 one("ladder", code, "DKE", res, [[0, 0]])
-    if "time" in stages or "gpu" in stages:
+    if {"time", "gpu", "cached"} & set(stages):
         recs = [json.loads(ln) for ln in log.read_text().splitlines()]
         pick = select(recs)
         for rep in range(args.repeats if "time" in stages else 0):
@@ -267,6 +272,11 @@ def measure(args):
                 for p in pts[case]:
                     for code in order:
                         one("time", code, case, codes[code], [p], repeats=2)
+        for rep in range(args.repeats + 1 if "cached" in stages else 0):  # the first fills the cache
+            for case, codes in pick.items():
+                if "dkx" in codes and (not args.cases or case in args.cases.split(",")):
+                    for p in pts[case]:
+                        one("cached" if rep else "fill", "dkx", case, codes["dkx"], [p], repeats=2)
         if "gpu" in stages:
             for case, codes in pick.items():
                 if args.cases and case not in args.cases.split(","):
@@ -327,6 +337,9 @@ def summary(recs):
                                                      [r["results"][0]["times"][0] for r in rs])),
                                 warm=float(np.median(t[:, 1])), rss=max(r["peak_rss"] for r in rs) / 2**30,
                                 gpu_mem=max((r["gpu_peak_bytes"] or 0) for r in rs) / 2**30, n=len(rs))
+            rs = [r for r in recs if r["stage"] == "cached" and r["case"] == case and r["code"] == code and r["results"]]
+            if rs and "cpu" in row:
+                row["cpu"]["cold_cached"] = float(np.median([r["results"][0]["times"][0] for r in rs]))
             rows.append(row)
     return rows
 
@@ -339,12 +352,12 @@ def report(path):
 
     recs = json.loads(path.read_text())["records"]
     rows = summary(recs)
-    print("| Case | Code | Resolution | Error vs finest | CPU cold [s] | CPU warm [s] | Peak RSS [GB] | GPU warm [s] | GPU peak [GB] |")
-    print("| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |")
+    print("| Case | Code | Resolution | Error vs finest | CPU cold [s] | CPU cold, cached [s] | CPU warm [s] | Peak RSS [GB] | GPU warm [s] | GPU peak [GB] |")
+    print("| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
     for r in rows:
         c, g = r.get("cpu", {}), r.get("gpu", {})
         f = lambda d, k, fmt: format(d[k], fmt) if k in d else "-"  # noqa: E731
-        print(f"| {r['case']} | {r['code']} | {'x'.join(map(str, r['res']))} | {r['error']:.2%} | {f(c, 'cold', '.2f')} | "
+        print(f"| {r['case']} | {r['code']} | {'x'.join(map(str, r['res']))} | {r['error']:.2%} | {f(c, 'cold', '.2f')} | {f(c, 'cold_cached', '.2f')} | "
               f"{f(c, 'warm', '.2f')} | {f(c, 'rss', '.2f')} | {f(g, 'warm', '.2f')} | {f(g, 'gpu_mem', '.2f')} |")
     print("\nConvergence (largest relative change against the finest rung):")
     for case, codes in convergence(recs).items():

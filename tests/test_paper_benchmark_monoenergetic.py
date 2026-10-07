@@ -85,7 +85,7 @@ def test_tiny_w7x_monoenergetic_benchmark_scan(tmp_path: Path) -> None:
     from dkx.monoenergetic import monoenergetic_database
 
     deck = tmp_path / "monoenergetic_icnts_w7x_tiny.input.namelist"
-    deck.write_text(DECK_TEMPLATE)
+    deck.write_text(_fd(DECK_TEMPLATE))
     db = monoenergetic_database(deck, NU_PRIMES, E_STARS)
 
     d11 = np.asarray(db.d11_star)
@@ -121,6 +121,14 @@ def test_tiny_w7x_monoenergetic_benchmark_scan(tmp_path: Path) -> None:
     # Frozen-tolerance regression value (deterministic direct solve; the
     # loose-ish tolerance absorbs BLAS/platform drift, not physics changes).
     assert abs(d11[0, 0] - D11_STAR_FROZEN) / D11_STAR_FROZEN < 1e-5
+
+
+def _fd(deck: str) -> str:
+    """Pin the finite-difference angles the frozen values were generated with.
+
+    The database defaults to spectral angles; these goldens predate that.
+    """
+    return re.sub(r"(?i)&otherNumericalParameters", "&otherNumericalParameters\n  thetaDerivativeScheme = 2\n  zetaDerivativeScheme = 2", deck, count=1)
 
 
 def _tjii_tiny_deck() -> str:
@@ -182,7 +190,7 @@ def test_tiny_tjii_monoenergetic_benchmark_scan(tmp_path: Path) -> None:
     from dkx.monoenergetic import monoenergetic_database
 
     deck = tmp_path / "monoenergetic_icnts_tjii_tiny.input.namelist"
-    deck.write_text(_tjii_tiny_deck())
+    deck.write_text(_fd(_tjii_tiny_deck()))
     nu_primes = [3e-2, 1e-1]
     db = monoenergetic_database(deck, nu_primes, [0.0])
 
@@ -221,7 +229,7 @@ def test_tiny_hsx_monoenergetic_benchmark_scan(tmp_path: Path) -> None:
     from dkx.monoenergetic import monoenergetic_database
 
     deck = tmp_path / "monoenergetic_icnts_hsx_tiny.input.namelist"
-    deck.write_text(HSX_DECK)
+    deck.write_text(_fd(HSX_DECK))
     nu_primes = [1.0, 10.0]
     db = monoenergetic_database(deck, nu_primes, [0.0])
 
@@ -281,7 +289,7 @@ def test_tiny_shaing_callen_convergence_scan(tmp_path: Path) -> None:
     from dkx.shaing_callen import shaing_callen_d31_limit
 
     deck = tmp_path / "shaing_callen_convergence_tiny.input.namelist"
-    deck.write_text(DECK_TEMPLATE)
+    deck.write_text(_fd(DECK_TEMPLATE))
     nu_primes = [1e-2, 3e-3]  # descending: toward the collisionless limit
     db = monoenergetic_database(deck, nu_primes, [0.0])
     d31 = np.asarray(db.d31_star)[:, 0]

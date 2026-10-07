@@ -762,7 +762,7 @@ class Tier1Solver:
     """
 
     op: KineticOperator
-    factors: BlockTridiagFactors  # leading batch axis B = S*X
+    factors: tuple[jnp.ndarray, jnp.ndarray]  # Schur LUs and pivots, leading batch axis B = S*X
     z_fwd: jnp.ndarray  # (B, L, TZ)
     z_t: jnp.ndarray  # (B, L, TZ)
     gamma: jnp.ndarray  # (B,)
@@ -791,10 +791,7 @@ class Tier1Solver:
         b_f = rhs2d[: op.f_size].reshape(n_s, n_x, n_xi, n_tz, n_rhs)
         b_f = b_f.reshape(batch, n_xi, n_tz, n_rhs)
 
-        solve_batched = jax.vmap(
-            lambda f, r: block_thomas_solve(f, r, transpose=transpose)
-        )
-        y = solve_batched(self.factors, b_f)  # (B, L, TZ, n_rhs)
+        y = _tier1_f_solve(op, self.factors, self.gamma, b_f, transpose)  # (B, L, TZ, n_rhs)
 
         if op.constraint_scheme == 0:
             x = y.reshape(op.f_size, n_rhs)
@@ -854,17 +851,40 @@ def build_tier1_solver(op: KineticOperator) -> Tier1Solver:
     return _factor_tier1_compiled(op)
 
 
+def _tier1_block_fn(op: KineticOperator, k: Any, gamma: Any) -> Callable[[Any], tuple]:
+    """Legendre row ``l`` of subsystem ``k`` (one (species, x) pair) of ``A + gamma B C``.
+
+    The full-band route generates its rows on demand, one per scan step, in the
+    elimination and in both substitution sweeps: only the Schur LUs are kept
+    (a third of the bands), and no program unrolls a loop over L.
+    """
+    n_tz = op.n_theta * op.n_zeta
+    border = jnp.outer(jnp.ones((n_tz,), dtype=jnp.float64), op._fs_average_factor().reshape(-1))
+
+    def block_fn(l: Any) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+        blk = op.legendre_blocks(l)
+        lower, diag, upper = (a.reshape(-1, n_tz, n_tz)[k] for a in (blk.lower, blk.diag, blk.upper))
+        if op.constraint_scheme == 2:
+            diag = diag + jnp.where(l == 0, gamma, 0.0) * border
+        return lower, diag, upper
+
+    return block_fn
+
+
+def _tier1_f_solve(op: KineticOperator, factors: tuple, gamma: Any, b_f: Any, transpose: bool) -> Any:
+    """Batched f-block solve ``(B, L, TZ, n_rhs)`` from the stored Schur LUs."""
+    def solve_one(k: Any, lu: Any, piv: Any, g: Any, r: Any) -> Any:
+        state = GeneratedBlockTridiagFactors(lu, piv, _tier1_block_fn(op, k, g), op.n_xi, r.dtype)
+        return block_thomas_solve(state, r, transpose=transpose)
+
+    return jax.vmap(solve_one)(jnp.arange(b_f.shape[0]), *factors, gamma, b_f)
+
+
 def _factor_tier1(op: KineticOperator) -> Tier1Solver:
     """The body of :func:`build_tier1_solver`, after its applicability checks."""
     n_s, n_x, n_xi, n_t, n_z = op.f_shape
     n_tz = n_t * n_z
     batch = n_s * n_x
-
-    blocks = op.to_block_tridiagonal()  # (L, S, X, TZ, TZ)
-    lower, diag, upper = (
-        jnp.transpose(a, (1, 2, 0, 3, 4)).reshape(batch, n_xi, n_tz, n_tz)
-        for a in blocks
-    )
 
     b0 = jnp.ones((n_tz,), dtype=jnp.float64)  # source shape on the l=0 rows
     c0 = op._fs_average_factor().reshape(-1)  # flux-surface-average constraint row
@@ -872,21 +892,27 @@ def _factor_tier1(op: KineticOperator) -> Tier1Solver:
     if op.constraint_scheme == 2:
         # Conditioning-friendly rank-one scale per (species, x): mean |diag entry|
         # of the bands over the max magnitude of the rank-one update.
-        scale = jnp.mean(jnp.abs(jnp.diagonal(diag, axis1=2, axis2=3)), axis=(1, 2))
-        scale = jnp.where(scale > 0.0, scale, jnp.mean(jnp.abs(diag), axis=(1, 2, 3)))
+        def sums(l: Any) -> tuple[jnp.ndarray, jnp.ndarray]:
+            d = op.legendre_blocks(l).diag.reshape(batch, n_tz, n_tz)
+            return jnp.abs(jnp.diagonal(d, axis1=1, axis2=2)).sum(1), jnp.abs(d).sum((1, 2))
+
+        s_diag, s_all = (v.sum(0) for v in jax.lax.map(sums, jnp.arange(n_xi)))
+        scale = s_diag / (n_xi * n_tz)
+        scale = jnp.where(scale > 0.0, scale, s_all / (n_xi * n_tz * n_tz))
         outer_max = jnp.max(jnp.abs(b0)) * jnp.max(jnp.abs(c0))
         gamma = scale / outer_max
-        diag = diag.at[:, 0].add(gamma[:, None, None] * jnp.outer(b0, c0)[None, :, :])
     else:
         gamma = jnp.ones((batch,), dtype=jnp.float64)
 
-    factors = jax.vmap(block_thomas_factor)(lower, diag, upper)
+    def factor_one(k: jnp.ndarray, g: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+        state = block_thomas_factor_fn(_tier1_block_fn(op, k, g), n_xi, store_offdiagonals=False)
+        return state.delta_lu, state.delta_piv
 
-    e0 = jnp.zeros((batch, n_xi, n_tz), dtype=jnp.float64)
-    z_fwd = jax.vmap(block_thomas_solve)(factors, e0.at[:, 0, :].set(b0[None, :]))
-    z_t = jax.vmap(lambda f, r: block_thomas_solve(f, r, transpose=True))(
-        factors, e0.at[:, 0, :].set(c0[None, :])
-    )
+    factors = jax.vmap(factor_one)(jnp.arange(batch), gamma)
+
+    e0 = jnp.zeros((batch, n_xi, n_tz, 1), dtype=jnp.float64)
+    z_fwd = _tier1_f_solve(op, factors, gamma, e0.at[:, 0, :, 0].set(b0[None, :]), False)[..., 0]
+    z_t = _tier1_f_solve(op, factors, gamma, e0.at[:, 0, :, 0].set(c0[None, :]), True)[..., 0]
     return Tier1Solver(
         op=op, factors=factors, z_fwd=z_fwd, z_t=z_t, gamma=gamma, b0=b0, c0=c0
     )
