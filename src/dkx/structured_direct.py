@@ -105,11 +105,20 @@ def _lus(f: tuple, y: jnp.ndarray, trans: int = 0) -> jnp.ndarray:
     return out.reshape(-1).astype(y.dtype)
 
 
+def _species_block(band: tuple) -> tuple:
+    """``(B_s, scale)`` of a tail band, ``(B_s, scale)`` or ``(stream, mirror, ab, scale)``
+    with ``B_s = a stream + b diag(mirror)``."""
+    if len(band) == 2:
+        return band
+    st, mi, ab, sc = band
+    return ab[0] * st + ab[1] * jax.vmap(jnp.diag)(mi), sc
+
+
 def _bdense(band: Any) -> jnp.ndarray:
     """Per-pair ``(k, TZ, TZ)`` blocks of a band; a tail band is ``(B_s, x-scale)``."""
     if not isinstance(band, tuple):
         return band
-    b, sc = band
+    b, sc = _species_block(band)
     return (b[:, None] * sc[:, :, None, None].astype(b.dtype)).reshape(-1, *b.shape[1:])
 
 
@@ -117,9 +126,14 @@ def _bmul(band: Any, y: jnp.ndarray, transpose: bool = False) -> jnp.ndarray:
     """``band @ y`` per pair, ``y`` of shape ``(k, TZ)``."""
     if not isinstance(band, tuple):
         return jnp.einsum("kba,kb->ka" if transpose else "kab,kb->ka", band, y)
-    b, sc = band
+    sc = band[-1]
     yy = y.reshape(*sc.shape, -1)
-    out = jnp.einsum("sba,sxb->sxa" if transpose else "sab,sxb->sxa", b, yy)
+    if len(band) == 4:  # a stream + b diag(mirror), never formed
+        st, mi, ab, _ = band
+        out = ab[0] * jnp.einsum("sba,sxb->sxa" if transpose else "sab,sxb->sxa", st, yy)
+        out = out + ab[1] * mi[:, None, :] * yy
+    else:
+        out = jnp.einsum("sba,sxb->sxa" if transpose else "sab,sxb->sxa", band[0], yy)
     return (out * sc[:, :, None]).reshape(y.shape)
 
 
@@ -134,7 +148,8 @@ class CoupledSolver:
     upper: tuple  # per l: (k_(l+1), TZ, TZ) blocks coupling row l to l + 1
     bc: tuple  # (B, C, gamma, Z, M_lu, Zt, Mt_lu)
     mom: tuple = ()  # (Q, gamma1, Zq, K_lu, Zqt, Kt_lu): the l = 1 momentum lift
-    # Scanned tail l >= len(lu): stacked (LU, piv, Lo_s, U_s, Lo scale, U scale).
+    # Scanned tail l >= len(lu): stacked (LU, piv, Lo ab, U ab, Lo scale, U scale),
+    # then the float32 per-species streaming blocks and mirror diagonals.
     tail: tuple = ()
 
     def tree_flatten(self):
@@ -146,11 +161,11 @@ class CoupledSolver:
 
     def _lo(self, l: int) -> Any:
         n = len(self.lower)
-        return self.lower[l] if l < n else (self.tail[2][l - n], self.tail[4][l - n])
+        return self.lower[l] if l < n else (*self.tail[6:], self.tail[2][l - n], self.tail[4][l - n])
 
     def _up(self, l: int) -> Any:
         n = len(self.upper)
-        return self.upper[l] if l < n else (self.tail[3][l - n], self.tail[5][l - n])
+        return self.upper[l] if l < n else (*self.tail[6:], self.tail[3][l - n], self.tail[5][l - n])
 
     @classmethod
     def tree_unflatten(cls, _aux, children):
@@ -209,10 +224,10 @@ class CoupledSolver:
         k = len(self.lu) if self.tail else n_l - 1
         sol: list = [None] * (k + 1)
         if self.tail:
-            lu_s, piv_s, lo_b, up_b, lo_s, up_s = self.tail
+            lu_s, piv_s, lo_b, up_b, lo_s, up_s, st, mi = self.tail
             rows_t = jnp.stack(rows[k:])  # (L_t, P*TZ)
             at = lambda i: (lu_s[i], piv_s[i])  # noqa: E731
-            band = lambda b, sc, i: (b[i], sc[i])  # noqa: E731
+            band = lambda ab, sc, i: (st, mi, ab[i], sc[i])  # noqa: E731
             pr = lambda v: v.reshape(-1, tz)  # noqa: E731
         if not transpose:
             y = rows[: k + 1]
@@ -417,14 +432,19 @@ def _factor(op: KineticOperator, keep: int | None = None, drifts: Any = None) ->
         x0 = (act % n_x).reshape(n_s, -1)
         cd_all = jnp.diagonal(cmat[:, act][:, :, act], axis1=1, axis2=2)  # (L, P)
 
-        xm = int(np.argmax(np.asarray(op.n_xi_for_x)))  # active at every tail l
         mask = op._mask()
 
-        def fac(full: jnp.ndarray, l: Any, step: int) -> tuple:
-            """Per-species block and per-pair scale ``x`` times the row/column masks."""
-            col = mask[x0, jnp.clip(l + step, 0, n_xi - 1)] * jnp.where((l + step >= 0) & (l + step < n_xi), 1.0, 0.0)
-            blk_s = full.reshape(n_s, n_x, tz, tz)[:, xm] / op.x[xm]
-            return blk_s.astype(jnp.float32), op.x[x0] * mask[x0, l] * col
+        def fac(l: Any, step: int) -> tuple:
+            """``(a, b)`` of ``a stream + b mirror`` and the per-pair scale ``x`` times masks."""
+            inside = jnp.where((l + step >= 0) & (l + step < n_xi), 1.0, 0.0)
+            col = mask[x0, jnp.clip(l + step, 0, n_xi - 1)] * inside
+            if step < 0:
+                a = op.xi_coupling_lower[l]
+                ab = jnp.stack([a, -a * (l - 1.0)])
+            else:
+                a = op.xi_coupling_upper[l] * inside
+                ab = jnp.stack([a, a * (l + 2.0)])
+            return ab, op.x[x0] * mask[x0, l] * col
 
         def body(carry, l):
             lu1, piv1, lo1 = carry
@@ -435,7 +455,7 @@ def _factor(op: KineticOperator, keep: int | None = None, drifts: Any = None) ->
             d = bl.diag.reshape(-1, tz, tz)[act] + (m * cd_all[l][:, None, None] + 1.0 - m) * eye_tz
             d = d + m * drift_diag(l, act) - jnp.einsum("kab,kbc->kac", up[act], w.astype(jnp.float64))
             lu, piv = _tail_lu(d)
-            (lo_b, lo_s), (up_b, up_s) = fac(lo, l, -1), fac(up, l, 1)
+            (lo_b, lo_s), (up_b, up_s) = fac(l, -1), fac(l, 1)
             return (lu, piv, lo[act].astype(jnp.float32)), (lu, piv, lo_b, up_b, lo_s, up_s)
 
         k_p = len(act)
@@ -447,7 +467,8 @@ def _factor(op: KineticOperator, keep: int | None = None, drifts: Any = None) ->
         (lu_k, piv_k, lo_k), stacked = jax.lax.scan(body, init, jnp.arange(keep, n_l), reverse=True)
         lus[keep] = (lu_k, piv_k)
         lowers.append(lo_k)
-        tail = stacked
+        st, mi = stripped.streaming_mirror_blocks()
+        tail = stacked + (st.astype(jnp.float32), mi.astype(jnp.float32))
     else:
         last = d0 if n_l == 1 else diag_block(n_l - 1)
         lus[-1] = _tail_lu(last) if last.ndim == 3 else lu_factor(last)
