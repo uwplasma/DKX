@@ -154,18 +154,19 @@ def _default_single_thread_blas(threads: int = 1) -> None:
 def _default_thread_split() -> tuple[int, int]:
     """``(XLA threads, BLAS threads)`` for the cores this process may run on.
 
-    The two pools share the cores: XLA's LAPACK custom calls run inside its
-    threadpool, so their product is kept within the core count. Measured on four
-    pinned Xeon cores (8 XLA threads by default before): W7-X monoenergetic warm
-    2.8 s at (8, 1), 1.9 s at (1, 4), 1.6 s at (2, 2); NCSX full-FP 5.9, 6.4 and 5.2 s.
+    XLA's LAPACK custom calls (``getrf``, ``trsm``) run on one XLA thread with the
+    BLAS pool's threads, so a single-threaded BLAS leaves a sequential Legendre
+    elimination on one core. Measured on four pinned Xeon cores against the old
+    ``(8, 1)``: W7-X monoenergetic warm 2.51 -> 1.60 s, NCSX full FP 5.13 -> 4.57 s
+    (21x37x61x8: 63.5 -> 61.8 s), the bounce-averaged surrogate unchanged. Forced
+    host devices (``DKX_CPU_DEVICES``) keep one BLAS thread.
     """
     try:
         cores = len(os.sched_getaffinity(0))  # taskset/cgroup aware, unlike os.cpu_count()
     except AttributeError:
         cores = os.cpu_count() or 1
-    xla = min(8, max(1, cores // 2))
-    return xla, max(1, cores // xla)
-
+    blas = 1 if os.environ.get("DKX_CPU_DEVICES", "").strip() else min(4, cores)
+    return min(8, cores), blas
 
 
 def configure(*, jax_x64: bool | None = None) -> None:
@@ -191,9 +192,9 @@ def configure(*, jax_x64: bool | None = None) -> None:
     #
     #   DKX_CORES=N (N > 0)  pin the solver threadpool to N threads (NPROC);
     #   DKX_CORES=0          let XLA size the threadpool itself (full width);
-    #   unset                unless NPROC is set, split the usable cores (taskset
-    #                        aware): XLA gets min(8, cores // 2), BLAS the rest
-    #                        per XLA thread (_default_thread_split).  A full-width
+    #   unset                unless NPROC is set, XLA gets min(8, cores) and BLAS
+    #                        min(4, cores), counting the cores taskset allows
+    #                        (_default_thread_split).  A full-width
     #                        threadpool on a many-core box is several times slower
     #                        than 8 threads (docs/benchmarks/performance.md).
     #

@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Default CPU threads: with neither `DKX_CORES` nor `NPROC` set, DKX splits the cores it may run on (taskset aware, not `os.cpu_count()`) between XLA's pool, `min(8, cores // 2)`, and BLAS, the remaining cores per XLA thread, instead of 8 XLA threads and single-threaded BLAS. Explicit `DKX_CORES`, `NPROC` and BLAS variables are unchanged. On four pinned Xeon cores, warm W7-X monoenergetic goes from 2.58 to 1.53 s, NCSX full-FP (Krylov, coupled preconditioner) from 5.7 to 5.1 s, sparse direct from 25.2 to 24.4 s; unpinned on 36 threads 2.73 to 1.96 s and 6.13 to 5.58 s; on a 14-core laptop all within noise.
+- Default CPU threads: with neither `DKX_CORES` nor `NPROC` set, XLA's pool gets `min(8, cores)` and BLAS `min(4, cores)` threads, counting the cores the process may run on (taskset aware, not `os.cpu_count()`). Before, BLAS was single-threaded, which left XLA's sequential LAPACK custom calls (`getrf`, `trsm`) on one core. Explicit `DKX_CORES`, `NPROC` and BLAS variables are unchanged, and forced host devices keep one BLAS thread. Office Xeon, warm, main to this change: W7-X monoenergetic 2.55 to 1.67 s pinned to 4 cores and 2.60 to 1.75 s unpinned; NCSX full FP 5.2 to 5.0 s and 5.3 to 4.8 s; sparse direct unchanged at 23.4 s; the bounce-averaged surrogate unchanged. A 14-core laptop is within noise.
 
 - `tools/benchmarks/cross_code_speed.py --dkx-xla-threads N` sets DKX's XLA pool apart from YANCC's. On four pinned x86 cores, XLA's pool and OpenBLAS compete inside every LAPACK call, and one XLA thread makes DKX's warm monoenergetic solve 2–3× faster (W7-X 3.4 to 1.6 s, HSX 19.5 to 6.8 s; MONKES 0.32 s and 1.5 s).
 

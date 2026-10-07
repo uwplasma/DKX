@@ -228,8 +228,8 @@ def test_runtime_env_controls_solver_threads_and_compilation_cache(
 def test_runtime_default_thread_clamp_and_zero_opt_out(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DKX_DISABLE_COMPILATION_CACHE", "1")
 
-    # No DKX_CORES and no NPROC: the import splits the usable cores between
-    # XLA's pool and BLAS (``_default_thread_split``) and marks the clamp dkx-owned.
+    # No DKX_CORES and no NPROC: the import sizes XLA's pool and BLAS from the
+    # usable cores (``_default_thread_split``) and marks the clamp dkx-owned.
     from dkx.runtime import _default_thread_split
 
     xla, blas = _default_thread_split()
@@ -271,8 +271,8 @@ def test_runtime_blas_pools_default_to_one_thread_unless_set(
     for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
         monkeypatch.delenv(name, raising=False)
 
-    # The default path (no DKX_CORES, no NPROC) gives BLAS the cores XLA's
-    # pool leaves, so XLA threads times BLAS threads stay within the cores.
+    # The default path (no DKX_CORES, no NPROC) gives BLAS up to four threads,
+    # so XLA's sequential LAPACK custom calls are not left on one core.
     from dkx.runtime import _default_thread_split
 
     monkeypatch.delenv("NPROC", raising=False)
