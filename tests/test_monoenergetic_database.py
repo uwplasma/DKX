@@ -58,6 +58,8 @@ def _write_mono_deck(tmp_path: Path, *, nu_prime: float, e_star: float, name: st
     text = sub("saveMatricesAndVectorsInBinary", ".false.", text)
     text = sub("nuPrime", f"{nu_prime!r}", text)
     text = sub("EStar", f"{e_star!r}", text)
+    # The database defaults to spectral angles; a direct solve takes them from the deck.
+    text = text.replace("&otherNumericalParameters", "&otherNumericalParameters\n  thetaDerivativeScheme = 0\n  zetaDerivativeScheme = 0", 1)
     path = tmp_path / name
     path.write_text(text)
     return path
@@ -110,6 +112,23 @@ def test_database_points_match_direct_transport_matrix_solves(tmp_path: Path) ->
                 scanned = float(np.asarray(getattr(db, key))[i, j])
                 rel = abs(scanned - float(direct)) / max(abs(float(direct)), 1e-300)
                 assert rel < 1e-12, f"{key} at ({nu_prime}, {e_star}): rel={rel:.3e}"
+
+
+def test_database_defaults_to_spectral_angles(tmp_path: Path) -> None:
+    """Undeclared angle schemes are spectral (0); a deck that names one keeps it."""
+    from dkx.monoenergetic import monoenergetic_database
+
+    def deck(scheme: int) -> Path:
+        path = tmp_path / f"scheme{scheme}.namelist"
+        path.write_text(MONO_DECK.read_text().replace(
+            "&otherNumericalParameters", "&otherNumericalParameters\n  thetaDerivativeScheme = "
+            f"{scheme}\n  zetaDerivativeScheme = {scheme}", 1))
+        return path
+
+    d11 = [float(np.asarray(monoenergetic_database(p, [0.3], [0.0], tol=1e-11).d11_star)[0, 0])
+           for p in (MONO_DECK, deck(0), deck(2))]
+    assert d11[0] == pytest.approx(d11[1], rel=1e-10)
+    assert abs(d11[0] - d11[2]) > 1e-6 * abs(d11[2])
 
 
 def test_normalization_physics_gates() -> None:
@@ -219,7 +238,7 @@ def _mapped_nu_primes(op) -> np.ndarray:
     return (g_plus / b0) * (1.0 / nud_ref) * nu_n * nud / (x * vth)
 
 
-def test_energy_convolution_reproduces_full_kinetic_transport_matrix() -> None:
+def test_energy_convolution_reproduces_full_kinetic_transport_matrix(tmp_path: Path) -> None:
     """Convolved database == full RHSMode=2 3x3 matrix (PAS/DKES identity).
 
     With the database evaluated at the exact node-equivalent nuPrime values
@@ -233,7 +252,10 @@ def test_energy_convolution_reproduces_full_kinetic_transport_matrix() -> None:
     op = run.operator
     nu_map = _mapped_nu_primes(op)
 
-    db = monoenergetic_database(RHS2_DECK, sorted(float(v) for v in nu_map), [0.0])
+    fd_deck = tmp_path / "rhs2_fd.input.namelist"  # the full solve's own (deck default) angles
+    fd_deck.write_text(RHS2_DECK.read_text().replace(
+        "&otherNumericalParameters", "&otherNumericalParameters\n  thetaDerivativeScheme = 2\n  zetaDerivativeScheme = 2", 1))
+    db = monoenergetic_database(fd_deck, sorted(float(v) for v in nu_map), [0.0])
     assert db.x0 == pytest.approx(1.0)
 
     thermal = energy_convolution(
