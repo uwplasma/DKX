@@ -209,6 +209,15 @@ DKX's. Without VMEX, `dkx wout_XXX.nc` runs the same survey from a `wout` with
 assumed profiles ({doc}`../user_guide/cli`). It is a first look; for results,
 write a case with the real profiles, then `dkx validate` and `dkx converge` it.
 
+```{figure} ../_static/figures/finite_beta_vmex_sfincs_bootstrap_er.png
+:alt: Ambipolar radial electric field and bootstrap current profiles for the finite-beta QA equilibrium.
+:width: 85%
+
+`examples/advanced/finite_beta_vmec_to_sfincs.py`: ambipolar $E_r$ and
+bootstrap-current profiles on a finite-beta QA equilibrium. Nothing in this
+workflow is differentiated.
+```
+
 ## Where to go from here
 
 - Every case field: {doc}`../user_guide/inputs`; every output: {doc}`../user_guide/outputs`.

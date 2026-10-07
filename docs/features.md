@@ -9,7 +9,7 @@ in the same row.
 | Workflow | Entry points | Scope and evidence |
 | --- | --- | --- |
 | Profile solve (SFINCS `RHSMode = 1`): fluxes, flows, currents per surface and species | native case `run.workflow = "profile"`; `dkx run`; `dkx.run(case)`; `dkx input.namelist` | native SI result; SFINCS parity to 8e-14 on output tables ({doc}`benchmarks/sfincs`); `examples/tutorials/01_first_run.py` |
-| Ambipolar profile: $E_r$ from $J_r(E_r) = 0$ on every surface | `run.workflow = "ambipolar_profile"`; `dkx roots`; `dkx.find_ambipolar_er`; `dkx.ambipolar_er` | every root kept and classified; {doc}`tutorials/transport_physics`, `examples/05_ambipolar_profile` |
+| Ambipolar profile: $E_r$ from $J_r(E_r) = 0$ on every surface | `run.workflow = "ambipolar_profile"`; `dkx roots`; `dkx.find_ambipolar_er`; `dkx.ambipolar_er` | every root kept and classified; {doc}`tutorials/transport_physics`, `examples/tutorials/08_ambipolar_er.py` |
 | Thermal transport matrix (`RHSMode = 2`) | `dkx sfincs transport-matrix-v3`; `dkx.run.run_transport_matrix` | 3×3 Onsager matrix; golden-data parity 6e-13 to 9e-9 ({doc}`benchmarks/sfincs`); namelist route only |
 | Monoenergetic coefficients (`RHSMode = 3`) and databases over $(\nu', E^*)$ | `dkx sfincs monoenergetic-database`; `dkx.run_monoenergetic_database` | $D_{11}^*$, $D_{31}^*$, $D_{33}^*$ in the Beidler normalization, with variational $D_{11}$ bounds; MONKES/YANCC within 6% ({doc}`benchmarks/cross_code`); `examples/tutorials/09_monoenergetic.py` |
 | Parameter scans | `[scan]` table and `dkx scan`; `dkx sfincs scan-er`; `dkx.batched_er_scan`, `dkx.batched_surface_scan` | Cartesian or zipped axes, resumable ({doc}`user_guide/scans_and_parallelism`) |

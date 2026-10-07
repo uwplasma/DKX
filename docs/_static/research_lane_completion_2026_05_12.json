@@ -135,8 +135,8 @@
    "current_percent": 96,
    "evidence": [
     {
-     "claim": "VMEC/Boozer workflow documentation states the skip-safe workflow and differentiability contract.",
-     "path": "docs/tutorials/vmex_optimization.md"
+     "claim": "The bootstrap and optimization tutorial states the VMEX/Boozer chain, its optional dependencies and what is differentiated.",
+     "path": "docs/tutorials/bootstrap_gradients_optimization.md"
     },
     {
      "claim": "JAX geometry adapters isolate optional differentiable geometry handoff utilities.",
