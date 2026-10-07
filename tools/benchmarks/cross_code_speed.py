@@ -26,7 +26,7 @@ DEVICES = {"W7-X": ("boozmn_wout_w7x_eim.nc", 0.2, (1e-1, 1e-2, 1e-3), (0.0, 1e-
 LADDER = [(11, 23, 32), (15, 31, 48), (19, 41, 64), (25, 51, 96), (31, 63, 128)]
 DKE_LADDER = [(9, 19, 31, 4), (13, 25, 41, 5), (15, 31, 61, 6), (19, 41, 81, 7), (25, 51, 101, 8)]
 DKE_ER = -3.0  # kV/m, row 10 of YANCC's SFINCS NCSX one-species table
-TARGET, NUD_X0 = 0.03, 0.8360276804879032
+TARGET, DKE_TARGET, NUD_X0 = 0.03, 0.10, 0.8360276804879032  # DKE: particle flux nearly cancels
 
 
 def spectrum(booz, s, cutoff=1e-5):
@@ -261,12 +261,16 @@ def measure(args):
         pick = select(recs)
         for rep in range(args.repeats if "time" in stages else 0):
             for case, codes in pick.items():
+                if args.cases and case not in args.cases.split(","):
+                    continue
                 order = list(codes)[rep % len(codes):] + list(codes)[: rep % len(codes)]
                 for p in pts[case]:
                     for code in order:
                         one("time", code, case, codes[code], [p], repeats=2)
         if "gpu" in stages:
             for case, codes in pick.items():
+                if args.cases and case not in args.cases.split(","):
+                    continue
                 for p in pts[case]:
                     for code in ("dkx", "yancc"):
                         if code in codes:
@@ -298,7 +302,7 @@ def select(recs):
     pick = {}
     for case, codes in convergence(recs).items():
         for code, rows in codes.items():
-            ok = [res for res, e in rows if e <= TARGET]
+            ok = [res for res, e in rows if e <= (DKE_TARGET if case == "DKE" else TARGET)]
             if ok:
                 pick.setdefault(case, {})[code] = ok[0]
     return pick
@@ -375,6 +379,7 @@ def main():
     ap.add_argument("--monkes"), ap.add_argument("--yancc-python"), ap.add_argument("--data")
     ap.add_argument("--ncores", type=int, default=4), ap.add_argument("--physical", type=int, default=18)
     ap.add_argument("--gpu", type=int, default=0), ap.add_argument("--xla-threads", type=int, default=16)
+    ap.add_argument("--cases", default="")
     ap.add_argument("--work", default="cross_code_speed_work"), ap.add_argument("--timeout", type=float, default=1800)
     ap.add_argument("--repeats", type=int, default=3), ap.add_argument("--stages", default="ladder,time,gpu")
     args = ap.parse_args()

@@ -408,3 +408,90 @@ between zero and 26% more iterations, and every case still reaches 1e-10.
 `DKX_PROFILE=1` emits flushed phase timings for operator construction,
 preconditioner construction and the outer Krylov solve; `JAX_LOG_COMPILES=1`
 logs compilation.
+
+## Against MONKES and YANCC
+
+This section compares speed and memory only. Agreement between the codes is
+covered on {doc}`cross_code`. Each code was run on the same `booz_xform` files:
+W7-X EIM at $s = 0.2$ and HSX QHS at $s = 0.25$. Both devices were run at
+$\nu^* = \nu R_0/(v\iota) = 0.672, 0.0672, 0.00672$ and at
+$v_E = E_r/(vB_{00}) = 0$ and $4.1\times10^{-4}$, giving six points per device.
+A seventh case is the full-Fokker–Planck NCSX problem from YANCC's own
+SFINCS test ($r_N = 0.5$, $E_r = -3$ kV/m), compared with YANCC only.
+
+Each code first ran a resolution ladder $(N_\theta, N_\zeta, N_\xi)$ from
+$11\times23\times32$ to $31\times63\times128$. The table uses, for each code, the
+cheapest rung that comes within 3% of that code's own finest rung, as the
+largest change over $D_{11}$, $D_{31}$, $D_{33}$ and the six points. The NCSX
+case uses 10% because its particle flux nearly cancels. At the matched rung,
+the NCSX flow and heat flux from both codes are within 3% of SFINCS's tabulated
+values. All runs used the office host, a Xeon W-2295 shared with other users
+(load 18–36 during the runs). Each run is a fresh process pinned to the four
+least busy physical cores. The values are medians of three repeats per point,
+with the order of the codes alternated between repeats. The JAX codes each had
+16 XLA threads, and MONKES had 4 OpenBLAS threads. Cold is the first solve,
+including tracing and compilation. Warm is the same solve repeated. For MONKES,
+which has no compile step, cold is the process wall time. GPU runs used one
+A4000 at low utilization.
+
+| Case | Code | Resolution | Error vs finest | CPU cold [s] | CPU warm [s] | Peak RSS [GB] | GPU warm [s] | GPU peak [GB] |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| W7-X | MONKES | 15x31x48 | 0.34% | 0.77 | 0.56 | 0.05 | - | - |
+| W7-X | DKX | 15x31x48 | 1.39% | 32.1 | 3.62 | 2.08 | 0.65 | 0.52 |
+| W7-X | YANCC | 25x51x96 | 1.70% | 105.7 | 29.1 | 2.43 | 9.20 | 0.42 |
+| HSX | MONKES | 19x41x64 | 1.77% | 2.53 | 2.17 | 0.09 | - | - |
+| HSX | DKX | 25x51x96 | 2.92% | 42.2 | 32.1 | 1.14 | 9.10 | 0.30 |
+| HSX | YANCC | 19x41x64 | 1.80% | 68.8 | 11.6 | 2.27 | 5.51 | 0.20 |
+| NCSX full FP | DKX | 19x41x81x7 | 5.12% | 115.8 | 73.3 | 8.86 | 40.6 | 6.93 |
+| NCSX full FP | YANCC | 19x41x81x7 | 8.57% | 178.1 | 59.8 | 5.73 | 14.0 | 1.38 |
+
+```{figure} ../_static/figures/benchmarks/cross_code_speed.png
+:alt: Wall time per solve (cold light, warm solid) and peak RSS for MONKES, DKX and YANCC on W7-X, HSX and the NCSX full-DKE case.
+:width: 90%
+
+Matched-accuracy wall time and peak RSS on four pinned cores. Run
+`python tools/benchmarks/cross_code_speed.py` to regenerate the figure and the
+table from `docs/_static/figures/benchmarks/cross_code_speed.json`, which also
+holds every ladder and repeat. Add `measure --help` to re-measure.
+```
+
+**Where DKX loses.** On the monoenergetic problem on a CPU, MONKES is faster
+than DKX by 6× (W7-X warm) to 15× (HSX warm), and by 40× cold. It also uses
+about 13–40× less memory. Two separate causes are behind this.
+
+1. *Angular discretization.* MONKES uses Fourier collocation in $\theta$ and
+   $\zeta$. DKX uses the finite-difference stencils of SFINCS v3. On W7-X,
+   MONKES's error falls from 0.34% at $15\times31\times48$ to $4\times10^{-5}$
+   one rung higher. DKX's error is still 0.6% at $25\times51\times96$. On HSX,
+   DKX needs one rung more than MONKES for 3% (its block size
+   $m = N_\theta N_\zeta$ is 1,275 instead of 779). The block elimination costs
+   $N_\xi m^3$, so that rung costs about 6× more. This accounts for the warm gap.
+   *Lever:* a Fourier-collocation option for the angular derivatives in the
+   monoenergetic (PAS, DKES) route. It would keep the same block-tridiagonal
+   Legendre solve and reach the 3% rung at about 0.3 of the current $m$.
+2. *Compilation and process start.* DKX's cold time (32–42 s) is mostly JAX
+   tracing and XLA compilation of the structured solve. A Fortran binary pays
+   none of this. *Levers:* the persistent compilation cache, which these runs
+   disabled on purpose and which turns a repeat cold start into a cache load;
+   batched points (`dkx.batched_er_scan` and database scans reuse one compiled
+   solve); and compiling once per shape rather than once per parameter value.
+
+The memory gap is DKX keeping factored Legendre blocks for reuse and
+differentiation, plus the JAX runtime's baseline of about 1 GB. MONKES streams
+its blocks.
+
+**Where DKX wins.** DKX's warm solve is 8× faster than YANCC's on W7-X, and its
+cold start is about 3× faster on every case. On the GPU, DKX's warm W7-X solve
+takes 0.65 s, close to MONKES's CPU time, while DKX's CPU warm is 3.6 s. On the
+full-FP case, DKX reaches a lower error than YANCC at the same grid (5.1% vs
+8.6% against each code's finest rung). DKX has the faster cold start there,
+but YANCC is 1.2× faster warm and 2.9× faster on the GPU, with 1.5–5× less
+memory. YANCC's matrix-free multigrid avoids DKX's dense $(N_\theta N_\zeta)^2$
+preconditioner bands. *Lever:* the coarse-operator preconditioner bands
+dominate DKX's footprint on this route, so a matrix-free smoother at the finest
+level is the memory lever there.
+
+**Trap found on the way.** YANCC 6f399a2 deadlocks in its preconditioner setup
+when XLA's CPU thread pool has 4 or fewer threads. This happens whether the
+pool is set with `NPROC` or comes from `taskset` alone. Both JAX codes were
+therefore given 16 threads on the same four cores.
