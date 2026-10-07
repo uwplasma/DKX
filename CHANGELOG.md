@@ -46,9 +46,7 @@
   16.6 GB, against 1,100 s and 15.0 GB for the coarse preconditioner.
 - `method="auto"` now preconditions Fokker–Planck and Sugama Krylov solves with
   `coupled` when its estimated peak fits the Krylov memory budget (default: half
-  the available memory), else `coarse`. With `E_r` or drifts, the coupled
-  preconditioner adds one Richardson sweep with the full operator for the
-  `L ± 2` terms (reduced W7-X drift decks: 17 to 11 and 14 iterations).
+  the available memory), else `coarse`.
 - `dkx.solve` keeps its API; the structured route's applicability tests and
   memory model moved to `dkx.structured_direct`. Structured solves refine
   against the pinned operator (identity rows on truncated `Nxi_for_x` DOFs).

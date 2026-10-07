@@ -2557,17 +2557,7 @@ def build_tier2_preconditioner(
     if kind == "coupled":
         from dkx.structured_direct import coupled_preconditioner  # noqa: PLC0415
 
-        p, pt = coupled_preconditioner(op, _COUPLED_PRECOND_KEEP, _COUPLED_PRECOND_F32)
-        if not (op.with_magnetic_drifts or op.with_er_xidot or op.with_er_xdot):
-            return p, pt
-        # The l +- 2 drift and E_r terms are left out of the factors; one
-        # Richardson sweep with the full operator applies them outside.
-        mv, mv_t = _pinned_matvecs(op)
-
-        def two(m, a):
-            return lambda r: (lambda x: x + m(r - a(x)))(m(r))
-
-        return two(p, mv), two(pt, mv_t)
+        return coupled_preconditioner(op, _COUPLED_PRECOND_KEEP, _COUPLED_PRECOND_F32)
     if kind in ("sparse", "sparse_triangle"):
         from dkx.sparse_precond import build_sparse_preconditioner  # noqa: PLC0415
 
