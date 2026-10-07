@@ -41,6 +41,9 @@
   step is formed one column pair at a time: the compiled HSX FP production
   factorization drops from 11.5 GB output + 26.6 GB temporaries to
   11.7 GB + 4.4 GB.
+  Its tail and dense `L < 2` blocks are now factored in float32: on the
+  production HSX FP deck (1.88M unknowns, 8 cores) 17 iterations, 508 s and
+  16.6 GB, against 1,100 s and 15.0 GB for the coarse preconditioner.
 - `dkx.solve` keeps its API; the structured route's applicability tests and
   memory model moved to `dkx.structured_direct`. Structured solves refine
   against the pinned operator (identity rows on truncated `Nxi_for_x` DOFs).

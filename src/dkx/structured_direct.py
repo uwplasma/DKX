@@ -100,7 +100,7 @@ def coupled_flops(op: KineticOperator) -> float:
 def _lus(f: tuple, y: jnp.ndarray, trans: int = 0) -> jnp.ndarray:
     """``S^-1 y`` for a dense LU or a per-pair batch of ``(TZ, TZ)`` LUs (the tail)."""
     if f[0].ndim == 2:
-        return lu_solve(f, y, trans=trans)
+        return lu_solve(f, y.astype(f[0].dtype), trans=trans).astype(y.dtype)
     out = lu_solve(f, y.reshape(f[0].shape[0], -1, 1).astype(f[0].dtype), trans=trans)
     return out.reshape(-1).astype(y.dtype)
 
@@ -334,7 +334,7 @@ def _schur_update(d, lu_next, lo, up, sel) -> jnp.ndarray:
 
     def body(j, d):
         rhs = jnp.zeros((k_n, tz, tz), lo.dtype).at[j].set(lo[j]).reshape(k_n * tz, tz)
-        w = lu_solve(lu_next, rhs).reshape(k_n, tz, tz)
+        w = lu_solve(lu_next, rhs.astype(lu_next[0].dtype)).astype(d.dtype).reshape(k_n, tz, tz)
         return d.at[sel, :, sel[j], :].add(-jnp.einsum("kab,kbc->kac", up, w))
 
     return jax.lax.fori_loop(0, k_n, body, d)
@@ -342,11 +342,12 @@ def _schur_update(d, lu_next, lo, up, sel) -> jnp.ndarray:
 
 def _tail_lu(d: jnp.ndarray) -> tuple:
     """Per-pair tail LUs, stored in float32: they only precondition (SOLVAX #133)."""
-    lu, piv = lu_factor(d)
-    return lu.astype(jnp.float32), piv
+    return lu_factor(d.astype(jnp.float32))
 
 
-def _factor(op: KineticOperator, keep: int | None = None, drifts: Any = None) -> CoupledSolver:
+def _factor(
+    op: KineticOperator, keep: int | None = None, drifts: Any = None, f32: bool = False
+) -> CoupledSolver:
     n_s, n_x, n_xi, n_t, n_z = op.f_shape
     tz = n_t * n_z
     layout = _layout(op)
@@ -363,6 +364,9 @@ def _factor(op: KineticOperator, keep: int | None = None, drifts: Any = None) ->
     eye_tz = jnp.eye(tz, dtype=jnp.float64)
 
     keep = len(layout) if keep is None else max(2, min(int(keep), len(layout)))
+
+    def dense_lu(d: jnp.ndarray) -> tuple:  # float32 only when preconditioning
+        return lu_factor(d.astype(jnp.float32)) if f32 else lu_factor(d)
 
     def pair_diag(l: int, act: np.ndarray) -> jnp.ndarray:
         """Per-pair angular diagonal blocks, plus the L-diagonal magnetic drifts
@@ -489,14 +493,14 @@ def _factor(op: KineticOperator, keep: int | None = None, drifts: Any = None) ->
                 gamma1 = jnp.mean(jnp.abs(jnp.diagonal(d))) / jnp.max(jnp.abs(qq))
                 d = d + gamma1 * qq
             d = d.reshape(k_l, tz, k_l, tz).at[sel, :, sel, :].add(-uw)
-            lus[l] = lu_factor(d.reshape(k_l * tz, k_l * tz))
+            lus[l] = dense_lu(d.reshape(k_l * tz, k_l * tz))
             continue
         d = d0 if l == 0 else diag_block(l)
         if l == 1 and q is not None:
             gamma1 = jnp.mean(jnp.abs(jnp.diagonal(d))) / jnp.max(jnp.abs(qq))
             d = d + gamma1 * qq
         d = _schur_update(d.reshape(k_l, tz, k_l, tz), lus[l + 1], lowers[l + 1], uppers[l], sel)
-        lus[l] = lu_factor(d.reshape(k_l * tz, k_l * tz))
+        lus[l] = dense_lu(d.reshape(k_l * tz, k_l * tz))
     lus, lowers = lus[:n_chain], lowers[:n_chain]
     solver = CoupledSolver(
         op, tuple(lus), tuple(lowers), tuple(uppers), (b, c, gamma) + (None,) * 4, tail=tail
@@ -519,7 +523,7 @@ def _factor(op: KineticOperator, keep: int | None = None, drifts: Any = None) ->
     return replace(solver, bc=bc)
 
 
-_factor_compiled = jax.jit(_factor, static_argnames="keep")
+_factor_compiled = jax.jit(_factor, static_argnames=("keep", "f32"))
 
 
 def _drift_parts(op: KineticOperator) -> Any:
@@ -527,7 +531,7 @@ def _drift_parts(op: KineticOperator) -> Any:
 
 
 def build_coupled_solver(
-    op: KineticOperator, keep: int | None = None, drifts: Any = None
+    op: KineticOperator, keep: int | None = None, drifts: Any = None, f32: bool = False
 ) -> CoupledSolver:
     """Factor the speed-coupled structured direct solver for ``op``.
 
@@ -538,10 +542,10 @@ def build_coupled_solver(
     ok, reason = coupled_available(op)
     if not ok:
         raise NotImplementedError(f"speed-coupled structured direct route unavailable: {reason}")
-    return _factor_compiled(op, keep=keep, drifts=drifts)
+    return _factor_compiled(op, keep=keep, drifts=drifts, f32=f32)
 
 
-def coupled_preconditioner(op: KineticOperator, keep: int) -> tuple:
+def coupled_preconditioner(op: KineticOperator, keep: int, f32: bool = False) -> tuple:
     """``(precond, precond_t)`` from the truncated coupled factorization.
 
     The bootstrap- and flux-carrying low ``l`` keep the full speed coupling; the
@@ -550,7 +554,7 @@ def coupled_preconditioner(op: KineticOperator, keep: int) -> tuple:
     operator, so those decks precondition with their DKES part.
     """
     base = replace(op, with_er_xidot=False, with_er_xdot=False, with_magnetic_drifts=False)
-    solver = build_coupled_solver(base, keep, _drift_parts(op))
+    solver = build_coupled_solver(base, keep, _drift_parts(op), f32)
     return (lambda r: solver.solve(r)), (lambda r: solver.solve(r, transpose=True))
 
 
