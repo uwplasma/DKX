@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `tools/benchmarks/cross_code_speed.py --dkx-xla-threads N` sets DKX's XLA pool apart from YANCC's. On four pinned x86 cores, XLA's pool and OpenBLAS compete inside every LAPACK call, and one XLA thread makes DKX's warm monoenergetic solve 2–3× faster (W7-X 3.4 to 1.6 s, HSX 19.5 to 6.8 s; MONKES 0.32 s and 1.5 s).
+
 - `monoenergetic_database` now uses spectral (Fourier) angular derivatives when the deck does not set `thetaDerivativeScheme`/`zetaDerivativeScheme`. A deck that sets them keeps its choice. On the matched W7-X/HSX benchmark this is the discretization MONKES uses, and it converges like MONKES: HSX reaches 3% at 19x41x64 instead of 25x51x96, and W7-X is at 4e-5 one rung above 15x31x48 (finite differences: 0.6% at 25x51x96). Values at a fixed grid change within discretization error. To pair a database with a full-kinetic solve of the same deck, set the schemes in the deck.
 - The full-band structured direct route (`build_tier1_solver`) builds its Legendre rows one at a time inside the elimination scan, stores only the Schur LUs, and regenerates the off-diagonal blocks in the substitution sweeps. Answers are unchanged (1e-12). On W7-X 15x31x48 the peak RSS falls from 1.95 GB to 0.94 GB and the first solve without a compilation cache from 8.2 s to 3.7 s; the warm solve is 8% slower. With the default persistent cache the first solve takes 1.4 s.
 - `tools/benchmarks/cross_code_speed.py` has a `cached` stage that times DKX's first solve with the persistent compilation cache on.
