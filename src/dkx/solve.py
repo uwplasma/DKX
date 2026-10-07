@@ -2484,6 +2484,27 @@ def _truncated_partial_residual(
     return jnp.sqrt(jnp.sum(sq, axis=0))
 
 
+def _auto_preconditioner(op: KineticOperator, budget_gb: float | None) -> str:
+    """``"coupled"`` for Fokker-Planck/Sugama decks whose coupled build fits, else ``"coarse"``.
+
+    The estimate is a whole-process peak, so it is held against
+    ``krylov_memory_budget_gb`` (or ``DKX_KRYLOV_MEMORY_BUDGET_GB``) when given,
+    and otherwise against half the memory available now: the program trades
+    memory for speed (17 vs 46 iterations, 508 vs 1,100 s on HSX FP).
+    """
+    from dkx.structured_direct import coupled_precond_peak_bytes  # noqa: PLC0415
+
+    base = replace(op, with_er_xidot=False, with_er_xdot=False, with_magnetic_drifts=False)
+    if _is_traced(*jax.tree_util.tree_leaves(op)) or not coupled_available(base)[0]:
+        return "coarse"
+    if budget_gb is not None or os.environ.get(_KRYLOV_BUDGET_ENV) not in (None, ""):
+        budget = _krylov_basis_budget_bytes(budget_gb)
+    else:
+        available = _available_memory_bytes()
+        budget = 0.5 * available if available is not None else 0.0
+    return "coupled" if coupled_precond_peak_bytes(op, _COUPLED_PRECOND_KEEP) <= budget else "coarse"
+
+
 def _resolve_preconditioner(
     preconditioner: str | None, use_preconditioner: bool
 ) -> str:
@@ -2534,7 +2555,17 @@ def build_tier2_preconditioner(
     if kind == "coupled":
         from dkx.structured_direct import coupled_preconditioner  # noqa: PLC0415
 
-        return coupled_preconditioner(op, _COUPLED_PRECOND_KEEP, _COUPLED_PRECOND_F32)
+        p, pt = coupled_preconditioner(op, _COUPLED_PRECOND_KEEP, _COUPLED_PRECOND_F32)
+        if not (op.with_magnetic_drifts or op.with_er_xidot or op.with_er_xdot):
+            return p, pt
+        # The l +- 2 drift and E_r terms are left out of the factors; one
+        # Richardson sweep with the full operator applies them outside.
+        mv, mv_t = _pinned_matvecs(op)
+
+        def two(m, a):
+            return lambda r: (lambda x: x + m(r - a(x)))(m(r))
+
+        return two(p, mv), two(pt, mv_t)
     if kind in ("sparse", "sparse_triangle"):
         from dkx.sparse_precond import build_sparse_preconditioner  # noqa: PLC0415
 
@@ -3521,7 +3552,12 @@ def solve(
             atol=atol,
             x0=x0,
             recycle=recycle,
-            preconditioner=_resolve_preconditioner(preconditioner, use_preconditioner),
+            preconditioner=(
+                _auto_preconditioner(op, krylov_memory_budget_gb)
+                if method == "auto" and preconditioner is None and use_preconditioner
+                and not differentiable and precond is None
+                else _resolve_preconditioner(preconditioner, use_preconditioner)
+            ),
             prebuilt_precond=precond,
             auto_restart_recovery=method == "auto" and not differentiable and auto_restart,
             krylov_memory_budget_gb=krylov_memory_budget_gb,

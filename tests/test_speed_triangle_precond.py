@@ -387,3 +387,14 @@ def test_the_truncated_coupled_factorization_preconditions_krylov(tmp_path) -> N
     assert runs["coupled"].iterations < runs["coarse"].iterations
     scale = float(jnp.linalg.norm(direct.x))
     assert float(jnp.linalg.norm(runs["coupled"].x - direct.x)) / scale < 1e-8
+
+
+def test_auto_picks_coupled_only_when_its_peak_fits(tmp_path) -> None:
+    import dkx.solve as S
+    from dkx.structured_direct import coupled_precond_peak_bytes
+
+    op = _two_species_operator(tmp_path, nx=4)
+    peak = coupled_precond_peak_bytes(op, S._COUPLED_PRECOND_KEEP) / 2.0**30
+    assert S._auto_preconditioner(op, peak * 1.01) == "coupled"
+    assert S._auto_preconditioner(op, peak * 0.99) == "coarse"
+    assert S._auto_preconditioner(_operator(tmp_path, collision=1), 1e3) == "coarse"  # PAS
