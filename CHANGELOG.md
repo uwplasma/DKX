@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## v2.9.0 — 2026-10-07
+
+Exact direct solves for Fokker–Planck decks that fit, a coupled preconditioner
+that `auto` chooses when memory allows, native and validated Phi1 with an
+adjoint, spectral angles for monoenergetic databases, a better default CPU
+thread split, and case inputs without a `schema` key.
 
 - Default CPU threads: with neither `DKX_CORES` nor `NPROC` set, XLA's pool gets `min(8, cores)` and BLAS `min(4, cores)` threads, counting the cores the process may run on (taskset aware, not `os.cpu_count()`). Before, BLAS was single-threaded, which left XLA's sequential LAPACK custom calls (`getrf`, `trsm`) on one core. Explicit `DKX_CORES`, `NPROC` and BLAS variables are unchanged, and forced host devices keep one BLAS thread. Office Xeon, warm, main to this change: W7-X monoenergetic 2.55 to 1.67 s pinned to 4 cores and 2.60 to 1.75 s unpinned; NCSX full FP 5.2 to 5.0 s and 5.3 to 4.8 s; sparse direct unchanged at 23.4 s; the bounce-averaged surrogate unchanged. A 14-core laptop is within noise.
 
@@ -39,7 +44,7 @@
   preconditioner, exact for Legendre blocks `L < 2` and `(species, x)`-diagonal
   (float32) in the tail; `E_r` and drift `L ± 2` terms are dropped from the
   factored operator. Iterations fall from 46 to 17 on a 396k-unknown HSX FP
-  deck at equal wall time; opt-in, `auto` is unchanged.
+  deck at equal wall time.
   It keeps the `L`-diagonal magnetic drifts at `L <= 2` (23 to 17 iterations on
   the reduced W7-X drift deck) and stores tail bands as per-species blocks times
   the speed scale, `Nx` times smaller.
