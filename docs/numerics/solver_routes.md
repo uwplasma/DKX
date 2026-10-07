@@ -190,6 +190,24 @@ estimate is 81 GB and 67 TFlop for
 259 GB and 246 TFlop for `HSX_FPCollisions_DKESTrajectories`, and the gap deck
 `(Nxi, Nx) = (120, 16)` is larger still.
 
+`preconditioner="coupled"` uses the same elimination as a Krylov preconditioner
+for those decks: the blocks $L < 2$, which carry the drives, fluxes and flows,
+keep the full species-speed coupling, and the tail keeps only the
+$(s, x)$-diagonal of the collision operator, so its Schur complements stay one
+$(N_\theta N_\zeta)^2$ block per pair, stored in float32. $E_r$ xiDot/xDot terms
+and tangential drifts ($L \pm 2$) are left out of the factored operator. Warm
+solves on a laptop (14 cores, shared), recycled GCROT to 1e-10:
+
+| deck | `coarse` | `coupled` |
+| --- | --- | --- |
+| HSX FP DKES, $11 \times 45$ angles, $N_\xi = 80$ (396k) | 46 it, 7.6 s, 6.5 GB | 17 it, 7.6 s, 6.9 GB |
+| `filteredW7XNetCDF_2species_noEr` (300k, cold) | 20 it, 17 s, 3.5 GB | 13 it, 23 s, 5.5 GB |
+| reduced `HSX_FPCollisions_fullTrajectories` | 30 it | 16 it |
+| reduced `filteredW7XNetCDF_2species_magneticDrifts_withEr` | 23 it | 25 it |
+
+It cuts iterations two to three times but costs a little more memory than the
+coarse bands, so it is not an `auto` choice; it pays where iterations dominate.
+
 ### Truncated storage
 
 The drives of RHSMode 1, 2 and 3 (radial gradients on $L = 0, 2$, the inductive

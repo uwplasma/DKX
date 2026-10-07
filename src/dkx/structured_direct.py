@@ -97,6 +97,14 @@ def coupled_flops(op: KineticOperator) -> float:
     return float(sum((2.0 / 3.0) * a**3 + 2.0 * a * a * b for a, b in zip(n, n[1:] + [0])))
 
 
+def _lus(f: tuple, y: jnp.ndarray, trans: int = 0) -> jnp.ndarray:
+    """``S^-1 y`` for a dense LU or a per-pair batch of ``(TZ, TZ)`` LUs (the tail)."""
+    if f[0].ndim == 2:
+        return lu_solve(f, y, trans=trans)
+    out = lu_solve(f, y.reshape(f[0].shape[0], -1, 1).astype(f[0].dtype), trans=trans)
+    return out.reshape(-1).astype(y.dtype)
+
+
 @jtu.register_pytree_node_class
 @dataclass(frozen=True)
 class CoupledSolver:
@@ -166,18 +174,18 @@ class CoupledSolver:
         if not transpose:
             y = rows[:]
             for l in range(n_l - 2, -1, -1):
-                y[l] = rows[l] - up(l, lu_solve(self.lu[l + 1], y[l + 1]))
-            sol[0] = lu_solve(self.lu[0], y[0])
+                y[l] = rows[l] - up(l, _lus(self.lu[l + 1], y[l + 1]))
+            sol[0] = _lus(self.lu[0], y[0])
             for l in range(1, n_l):
-                sol[l] = lu_solve(self.lu[l], y[l] - lo(l, sol[l - 1]))
+                sol[l] = _lus(self.lu[l], y[l] - lo(l, sol[l - 1]))
         else:
             w = rows[:]
-            w[-1] = lu_solve(self.lu[-1], rows[-1], trans=1)
+            w[-1] = _lus(self.lu[-1], rows[-1], trans=1)
             for l in range(n_l - 2, -1, -1):
-                w[l] = lu_solve(self.lu[l], rows[l] - lo_t(l + 1, w[l + 1]), trans=1)
+                w[l] = _lus(self.lu[l], rows[l] - lo_t(l + 1, w[l + 1]), trans=1)
             sol[0] = w[0]
             for l in range(n_l - 1):
-                sol[l + 1] = w[l + 1] - lu_solve(self.lu[l + 1], up_t(l, sol[l]), trans=1)
+                sol[l + 1] = w[l + 1] - _lus(self.lu[l + 1], up_t(l, sol[l]), trans=1)
         # The truncated (x, l >= Nxi_for_x) DOFs carry identity rows: this is the
         # inverse of the pinned operator of dkx.solve._pinned_matvecs.
         out = g
@@ -219,12 +227,21 @@ def _border(op: KineticOperator) -> tuple[jnp.ndarray, jnp.ndarray]:
     return b, c
 
 
-def _factor(op: KineticOperator) -> CoupledSolver:
+def _tail_lu(d: jnp.ndarray) -> tuple:
+    """Per-pair tail LUs, stored in float32: they only precondition (SOLVAX #133)."""
+    lu, piv = lu_factor(d)
+    return lu.astype(jnp.float32), piv
+
+
+def _factor(op: KineticOperator, keep: int | None = None) -> CoupledSolver:
     n_s, n_x, n_xi, n_t, n_z = op.f_shape
     tz = n_t * n_z
     layout = _layout(op)
-    blocks = _stripped(op).to_block_tridiagonal()  # (L, S, X, TZ, TZ)
-    lower_all, diag_all, upper_all = (a.reshape(n_xi, n_s * n_x, tz, tz) for a in blocks)
+    stripped = _stripped(op)
+
+    def blk(l: int, part: str) -> jnp.ndarray:  # one Legendre row, so its bands die early
+        return getattr(stripped.legendre_blocks(l), part).reshape(n_s * n_x, tz, tz)
+
     coll = op.fp if op.fp is not None else op.sugama
     cmat = jnp.transpose(coll.mat, (2, 0, 3, 1, 4)).reshape(n_xi, n_s * n_x, n_s * n_x)
     b, c = _border(op)
@@ -232,10 +249,15 @@ def _factor(op: KineticOperator) -> CoupledSolver:
     c0 = c.reshape(-1, n_s * n_x, n_xi, tz)[:, :, 0].reshape(-1, n_s * n_x * tz)
     eye_tz = jnp.eye(tz, dtype=jnp.float64)
 
+    keep = len(layout) if keep is None else max(2, min(int(keep), len(layout)))
+
     def diag_block(l: int) -> jnp.ndarray:
         act = layout[l]
         k = len(act)
-        d = jnp.einsum("kab,kj->kajb", diag_all[l, act], jnp.eye(k))
+        if l >= keep:  # tail: the (species, x)-diagonal collision part only, per pair
+            cd = jnp.diagonal(cmat[l][np.ix_(act, act)])
+            return blk(l, "diag")[act] + cd[:, None, None] * eye_tz
+        d = jnp.einsum("kab,kj->kajb", blk(l, "diag")[act], jnp.eye(k))
         d = d + cmat[l][np.ix_(act, act)][:, None, :, None] * eye_tz[None, :, None, :]
         return d.reshape(k * tz, k * tz)
 
@@ -256,13 +278,37 @@ def _factor(op: KineticOperator) -> CoupledSolver:
         q_all = jnp.einsum("st,x,a->sxat", jnp.eye(n_s), prof, ang).reshape(n_s * n_x, tz, n_s)
         q = q_all[layout[1]].reshape(-1, n_s)  # the speeds that carry l = 1
         qq = q @ q.T
-    lowers = [jnp.zeros((0, tz, tz))] + [lower_all[l, layout[l]] for l in range(1, len(layout))]
-    uppers = [upper_all[l, layout[l + 1]] for l in range(len(layout) - 1)] + [jnp.zeros((0, tz, tz))]
+    # Tail bands are stored in float32 with the tail LUs (preconditioner only).
+    def band(l: int, part: str, rows: np.ndarray, tail: bool) -> jnp.ndarray:
+        b = blk(l, part)[rows]
+        return b.astype(jnp.float32) if tail else b
+
+    n_l = len(layout)
+    lowers = [jnp.zeros((0, tz, tz))] + [band(l, "lower", layout[l], l >= keep) for l in range(1, n_l)]
+    uppers = [band(l, "upper", layout[l + 1], l + 1 >= keep) for l in range(n_l - 1)]
+    uppers.append(jnp.zeros((0, tz, tz)))
     lus: list = [None] * len(layout)
-    lus[-1] = lu_factor(d0 if len(layout) == 1 else diag_block(len(layout) - 1))
+    last = d0 if len(layout) == 1 else diag_block(len(layout) - 1)
+    lus[-1] = _tail_lu(last) if last.ndim == 3 else lu_factor(last)
     for l in range(len(layout) - 2, -1, -1):
         sel = np.searchsorted(layout[l], layout[l + 1])
         k_l, k_n = len(layout[l]), len(sel)
+        if l + 1 >= keep:  # S_(l+1) per pair: so is U_l S_(l+1)^-1 Lo_(l+1)
+            w = jax.vmap(lambda f0, f1, b: lu_solve((f0, f1), b.astype(f0.dtype)))(
+                *lus[l + 1], lowers[l + 1]
+            ).astype(jnp.float64)
+            uw = jnp.einsum("kab,kbc->kac", uppers[l], w)
+            d = diag_block(l)
+            if l >= keep:
+                lus[l] = _tail_lu(d.at[sel].add(-uw))
+                continue
+            d = d0 if l == 0 else d
+            if l == 1 and q is not None:
+                gamma1 = jnp.mean(jnp.abs(jnp.diagonal(d))) / jnp.max(jnp.abs(qq))
+                d = d + gamma1 * qq
+            d = d.reshape(k_l, tz, k_l, tz).at[sel, :, sel, :].add(-uw)
+            lus[l] = lu_factor(d.reshape(k_l * tz, k_l * tz))
+            continue
         # W = S_(l+1)^-1 Lo_(l+1), then S_l = D_l - U_l W on the rows U_l reaches.
         place = jnp.eye(k_l)[:, sel].T  # (k_(l+1), k_l)
         lo_dense = jnp.einsum("kab,kj->kajb", lowers[l + 1], place).reshape(k_n * tz, k_l * tz)
@@ -293,15 +339,33 @@ def _factor(op: KineticOperator) -> CoupledSolver:
     return replace(solver, bc=bc)
 
 
-_factor_compiled = jax.jit(_factor)
+_factor_compiled = jax.jit(_factor, static_argnames="keep")
 
 
-def build_coupled_solver(op: KineticOperator) -> CoupledSolver:
-    """Factor the speed-coupled structured direct solver for ``op``."""
+def build_coupled_solver(op: KineticOperator, keep: int | None = None) -> CoupledSolver:
+    """Factor the speed-coupled structured direct solver for ``op``.
+
+    ``keep``: factor Legendre blocks ``l < keep`` exactly and the tail with the
+    ``(species, x)``-diagonal of the collision operator only, per pair (a Krylov
+    preconditioner, see :func:`coupled_preconditioner`); ``None`` is exact.
+    """
     ok, reason = coupled_available(op)
     if not ok:
         raise NotImplementedError(f"speed-coupled structured direct route unavailable: {reason}")
-    return _factor_compiled(op)
+    return _factor_compiled(op, keep=keep)
+
+
+def coupled_preconditioner(op: KineticOperator, keep: int) -> tuple:
+    """``(precond, precond_t)`` from the truncated coupled factorization.
+
+    The bootstrap- and flux-carrying low ``l`` keep the full speed coupling; the
+    tail keeps its PAS-like ``(species, x)`` diagonal. ``E_r`` xiDot/xDot terms
+    and tangential magnetic drifts (``l +- 2``) are dropped from the factored
+    operator, so those decks precondition with their DKES part.
+    """
+    base = replace(op, with_er_xidot=False, with_er_xdot=False, with_magnetic_drifts=False)
+    solver = build_coupled_solver(base, keep)
+    return (lambda r: solver.solve(r)), (lambda r: solver.solve(r, transpose=True))
 
 
 # Default memory budget above which ``solve(method="auto")`` prefers the

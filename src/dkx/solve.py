@@ -255,7 +255,9 @@ _SOLVE_CPU_MAX_TIER2_DEFAULT = 0
 # the semicoarsened V-cycle of :mod:`dkx.multigrid`; ``"sparse"`` keeps the
 # inverse exact but eliminates in a fill-reducing order on the host
 # (:mod:`dkx.sparse_precond`), which is what the Fortran reference does.
-_TIER2_PRECONDITIONERS = ("coarse", "coarse_triangle", "multigrid", "sparse", "sparse_triangle", "none")
+# Legendre blocks the "coupled" preconditioner factors with full speed coupling.
+_COUPLED_PRECOND_KEEP = 2
+_TIER2_PRECONDITIONERS = ("coarse", "coarse_triangle", "coupled", "multigrid", "sparse", "sparse_triangle", "none")
 
 # =============================================================================
 # Result container
@@ -2528,6 +2530,10 @@ def build_tier2_preconditioner(
         return build_coarse_preconditioner(
             op, drop_l_coupling=drop_l_coupling, retain_speed_triangle=True
         )
+    if kind == "coupled":
+        from dkx.structured_direct import coupled_preconditioner  # noqa: PLC0415
+
+        return coupled_preconditioner(op, _COUPLED_PRECOND_KEEP)
     if kind in ("sparse", "sparse_triangle"):
         from dkx.sparse_precond import build_sparse_preconditioner  # noqa: PLC0415
 
@@ -3190,6 +3196,12 @@ def solve(
                 leaves, since the assembly reads values on the host.
             ``"none"``
                 unpreconditioned GCROT.
+
+            ``"coupled"``
+                the speed-coupled elimination of
+                :mod:`dkx.structured_direct`, exact at ``l < 2`` and
+                ``(species, x)``-diagonal in the tail, for Fokker-Planck and
+                Sugama decks (``E_r``/drift ``l +- 2`` terms left out).
 
             ``"sparse_triangle"``
                 sparse LU with the self-species collision operator's upper
