@@ -1288,3 +1288,40 @@ Measured on the shared benchmark host (one pinned core per run unless stated; ti
 
 1. **16.5 item 3 done.** SOLVAX 0.28.0 (#132) adds `gcrot(fixed_precond=True)`: one basis `V` instead of `V` and `Z`, and CGS2 against the filled rows only. SOLVAX's restart-1,000 benchmark (8 office cores): 90,000 unknowns, 663 iterations in every build, 211 s and 2.83 GiB (0.27) to 70 s and 1.32 GiB; 250,000 unknowns, 459 s and 2.6 GiB (0.27 did not finish in 30 min). DKX passes the flag in the wide window only (short windows and the differentiable route keep `Z`: with `||M^{-1}||` near 1e8 on the near-singular coarse chains a 30-step single-basis cycle diverged to 1e80 on `er_xdot`) and charges one basis in `_auto_wide_restart`, so the same budget buys twice the wide restart (cap 1,000 unchanged). Next: rerun the gap deck `(120, 16)` at the default restart (14 step 5).
 2. **16.5 item 5, GMRES-IR measured (SOLVAX #133), not wired as a default.** Float32 block-Thomas factors preconditioning float64 GCROT reach 1e-12 in 9-21 iterations where float32 refinement stalls (1e-6 to 1e-11 after two sweeps). CPU: a win only where the float64 factorization dominates (128 blocks of 256: 2.5 s against 4.0 s). A4000: the float32 factor is 2-3x faster, but the Krylov iterations cost more than float64 substitution (0.42 s against 0.21 s total), and JAX's default TF32 matmul degrades float32 factors (refinement diverges, 150 instead of 21 iterations) unless matmul precision is `highest`.
+
+## 17. GPU performance with Pallas (2026-10-07, DRAFT, paused)
+
+Status: draft. Profiling was cut short; the GPU table has one deck. Nothing here is adopted yet.
+
+### 17.1 Measured kernel shares (warm solve, `tools/benchmarks/kernel_shares.py`)
+
+Shares are fractions of summed XLA-thunk time (CPU) or device-kernel time (GPU) in one traced warm solve. Shared host, 8 pinned cores, JAX 0.10.2, float64.
+
+| Deck (unknowns) | Warm / cold [s] | getrf | trsm/getrs | gemm | other fusions | Krylov reduce |
+| --- | --- | --- | --- | --- | --- | --- |
+| CPU, monoenergetic W7-X (19, 41, 64), nu* 0.067 | 21.3 / 26.7 | 74% | 6% | 6% | 14% | 0 |
+| CPU, monoenergetic HSX, same rung | 10.1 / 16.2 | 68% | 5% | 9% | 18% | 0 |
+| CPU, bootstrap row, nfp2 13x13, Nxi 48, Nx 5 (81,130) | 4.8 / 9.1 | 6% | 43% | 6% | 45% | 0 |
+| CPU, NCSX FP (15, 31, 61, 6), GCROT 12 its (170,192) | 20.6 / 35.2 | 29% | 19% | 17% | 34% | 0.7% |
+| GPU A4000, monoenergetic W7-X (19, 41, 64) | 1.46 / 18.0 | 18% | 23% | 49% | 10% | 0.9% |
+
+Not measured yet: GPU bootstrap row, GPU NCSX FP, HSX FP production (CPU run killed at the pause), monoenergetic HSX on GPU.
+
+Reading: on CPU the monoenergetic decks are getrf-bound (one 779x779 LU per Legendre step, batch 1); on the A4000 the same solve is fp64-gemm-bound (cutlass d884 tensor-op DGEMM inside cuSOLVER getrf and the Schur updates). The bootstrap row is triangular-solve and small-fusion bound (blocks 169x169, batch 10): latency, not flops. Compile is 5–17 s of every cold solve.
+
+### 17.2 Kernel plan (ordered by measured share)
+
+1. **Block cyclic reduction across l** (SOLVAX, plain JAX first): log2(L) levels of batched LUs instead of L serial steps. About 2.5x the Thomas flops, so it only pays where the serial chain underuses the device: small m (bootstrap row, m <= ~800). Not for HSX production (m = 1275, fp64-bound on the A4000). Micro-benchmark `tools/benchmarks/block_cr_vs_thomas.py` written, not yet run to completion.
+2. **Precision strategy for the A4000 (fp64 = 1/32 fp32):** the GPU monoenergetic solve is 49% fp64 gemm, so the lever is precision, not fusion. fp32 factors under float64 GCROT (GMRES-IR, SOLVAX #133) with `jax.default_matmul_precision("highest")` (TF32 ruins the factors); then Ozaki-style emulated DGEMM on int8 tensor cores for the Schur gemm only (literature: Uchino, Ozaki, Imamura; cuBLAS FP64 emulation is Blackwell-only).
+3. **Pallas (Triton backend; Mosaic GPU is Hopper/Blackwell only, Triton is deprecated upstream):** a fused per-step Schur update + small batched LU for m <= 256 blocks (bootstrap row, where trsm + small fusions are 88%), and a fused triangular solve for the substitution sweeps. Pallas fp64 `dot` is not tensor-core and is unverified; prototype in fp32 first. Not for large m: cuSOLVER/cutlass are already near fp64 peak.
+4. **Operator apply for Krylov** (NCSX FP "other" 34%): fuse spectral derivatives + collision matvec; profile its split first.
+
+### 17.3 Where kernels live, gates, first prototype
+
+- Generic kernels (cyclic reduction, fused small-block LU/trsm) go in SOLVAX beside `block_thomas_*`, behind the same factors API; DKX selects by device and block size.
+- Gates: residual of the original equation <= the current route's on every reference deck; bitwise-independent physics outputs within 1e-10 relative; a warm-time win on one A4000 on two decks; CPU path unchanged.
+- First prototype: block cyclic reduction against block Thomas on the bootstrap-row shape (48, 169, 10) on one idle A4000.
+
+### 17.4 Next steps
+
+Rerun `kernel_shares.py` for every deck on an idle A4000 and HSX FP on CPU; run `block_cr_vs_thomas.py` on CPU and GPU; then fill 17.2 expected gains from the numbers.
