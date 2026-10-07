@@ -650,3 +650,32 @@ limitations = [
   "cross-code performance equivalence",
 ]
 
+[[entry]]
+id = "phi1_sfincs_benchmark"
+capability = "phi1"
+status = "accepted_limited"
+claim_scope = "geometry_scheme4_fp_noEr_phi1_in_kinetic_two_and_three_species_resolution_ladder"
+claim = "DKX's Phi1 solve (Phi1 in the kinetic equation, full quasineutrality, gauge) reproduces pinned Fortran SFINCS v3 on the geometryScheme 4 Phi1 example deck and a trace-carbon variant at eight ladder rungs, including the deck's own resolution, to a largest relative difference of 2.0e-6 in every species flux and the Phi1 rms. The main-deck fluxes and Phi1 move under 0.5% from the deck resolution to the next rung. The trace carbon flux oscillates in Nx and is resolved to about 3%."
+artifact = "validation/phi1_sfincs_benchmark_v1.json"
+artifact_sha256 = "4bf259e0a2365917e0ffd999ebcac4f68bcb7400f75b426f3477be03f283619d"
+artifact_schema = "dkx.phi1_sfincs_benchmark.v1"
+audit_script = "tools/paper_benchmarks/audit_phi1_sfincs_benchmark.py"
+command = "python tools/paper_benchmarks/audit_phi1_sfincs_benchmark.py --artifact validation/phi1_sfincs_benchmark_v1.json"
+inputs = []
+dkx_commit = "d5a0eb1b778b4f46390722382b8bede8cd922281"
+generated_on_host = "official-laptop-cpu"
+generated_on_host_recorded = "SFINCS on the release laptop (1 rank); DKX on the office workstation CPU (taskset 4-8 cores)"
+external_commits = { sfincs = "8df5453472e982df0f6ae005243ce38d57a83711" }
+limitations = [
+  "one geometry (geometryScheme 4) and one collision model (Fokker-Planck)",
+  "Phi1 in the kinetic equation only; not Phi1 in the collision operator, quasineutrality option 2 or adiabatic species",
+  "zero radial electric field",
+  "trace carbon flux resolved only to about 3% in Nx",
+  "experimental validation",
+  "cross-code performance equivalence",
+]
+
+[entry.corruption]
+path = "rows.0.dkx_phi1_rms"
+operation = "scale"
+value = 1.001

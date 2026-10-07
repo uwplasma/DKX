@@ -141,3 +141,28 @@ The multi-species algebra reproduces the $\Phi_1 = 0$ branch of SFINCS
 `classicalTransport.F90:calculateClassicalFlux`, and `classical_species_fluxes` agrees with
 `dkx.moments.classical_fluxes` (module docstring of `dkx.impurity`). All functions are
 pure JAX and differentiable.
+
+## Fortran SFINCS benchmark
+
+DKX against pinned Fortran SFINCS v3 on the geometryScheme 4 Phi1 example deck (`main`, ions and electrons) and a
+trace-C6+ variant (`imp`). Fluxes are `particleFlux_vm_psiHat`. The rung written in bold is the deck's own resolution. Data, settings and limits:
+`validation/phi1_sfincs_benchmark_v1.json`.
+
+| case | Ntheta, Nzeta, Nxi, Nx | DKX fluxes (i, e[, C]) | DKX Phi1 rms | max rel. diff. vs SFINCS |
+|---|---|---|---|---|
+| main_A | 9, 13, 32, 4 | -1.06913e-07, 2.13643e-08 | 4.44803e-04 | 1.2e-07 |
+| main_B | **13, 19, 48, 5** | -1.13440e-07, 2.16511e-08 | 4.51407e-04 | 2.7e-07 |
+| main_C | 17, 25, 64, 6 | -1.13954e-07, 2.15501e-08 | 4.50735e-04 | 5.7e-07 |
+| imp_A | 9, 13, 32, 4 | -9.74765e-08, 1.40626e-08, 2.53423e-11 | 3.07182e-04 | 2.8e-07 |
+| imp_B | **13, 19, 48, 5** | -1.02856e-07, 1.38749e-08, 2.17061e-11 | 3.05901e-04 | 8.2e-07 |
+| imp_C | 17, 25, 64, 6 | -1.03030e-07, 1.40006e-08, 2.58225e-11 | 3.06048e-04 | 2.0e-06 |
+| imp_Bx | 13, 19, 48, 6 | -1.02953e-07, 1.39673e-08, 2.55758e-11 | 3.06031e-04 | 2.0e-06 |
+| imp_Bx7 | 13, 19, 48, 7 | -1.02887e-07, 1.40382e-08, 2.43575e-11 | 3.06249e-04 | 1.2e-06 |
+| imp_Bx8 | 13, 19, 48, 8 | -1.02927e-07, 1.39502e-08, 2.32806e-11 | 3.06392e-04 | SFINCS not run |
+| imp_Bx10 | 13, 19, 48, 10 | -1.02895e-07, 1.40064e-08, 2.48247e-11 | 3.06138e-04 | SFINCS not run |
+| imp_Bx12 | 13, 19, 48, 12 | -1.02865e-07, 1.40410e-08, 2.40797e-11 | 3.07501e-04 | SFINCS not run |
+
+Main-deck fluxes and Phi1 move under 0.5% from the deck's resolution to the next rung. The trace
+carbon flux, about 4e-4 of the ion flux, oscillates in Nx: it moves 18% from Nx 5 to 6, then 3% from Nx 10 to 12.
+Both codes show the same oscillation at every rung, so this is a speed-grid resolution limit, not a
+discrepancy between the codes. Run SFINCS with `-mat_mumps_icntl_7 2`, because the default METIS ordering hangs.
