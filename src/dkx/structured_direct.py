@@ -134,7 +134,7 @@ class CoupledSolver:
     upper: tuple  # per l: (k_(l+1), TZ, TZ) blocks coupling row l to l + 1
     bc: tuple  # (B, C, gamma, Z, M_lu, Zt, Mt_lu)
     mom: tuple = ()  # (Q, gamma1, Zq, K_lu, Zqt, Kt_lu): the l = 1 momentum lift
-    # Scanned uniform tail l >= len(lu): stacked (LU, piv, Lo_s, U_s), speed scale.
+    # Scanned tail l >= len(lu): stacked (LU, piv, Lo_s, U_s, Lo scale, U scale).
     tail: tuple = ()
 
     def tree_flatten(self):
@@ -146,11 +146,11 @@ class CoupledSolver:
 
     def _lo(self, l: int) -> Any:
         n = len(self.lower)
-        return self.lower[l] if l < n else (self.tail[2][l - n], self.tail[4])
+        return self.lower[l] if l < n else (self.tail[2][l - n], self.tail[4][l - n])
 
     def _up(self, l: int) -> Any:
         n = len(self.upper)
-        return self.upper[l] if l < n else (self.tail[3][l - n], self.tail[4])
+        return self.upper[l] if l < n else (self.tail[3][l - n], self.tail[5][l - n])
 
     @classmethod
     def tree_unflatten(cls, _aux, children):
@@ -174,6 +174,9 @@ class CoupledSolver:
         n_s, n_x, n_xi, n_t, n_z = op.f_shape
         tz = n_t * n_z
         layout = _layout(op)
+        if self.tail:  # the scanned tail is padded to the pairs of its first l
+            k = len(self.lu)
+            layout = layout[:k] + [layout[k]] * (len(layout) - k)
         g = r.reshape(n_s * n_x, n_xi, tz)
         n_l = len(layout)
         rows = [g[layout[l], l].reshape(-1) for l in range(n_l)]
@@ -355,7 +358,9 @@ def _factor(op: KineticOperator, keep: int | None = None, drifts: Any = None) ->
     n_l = len(layout)
     # A tail with the same pairs at every l is eliminated in one lax.scan, so its
     # per-l temporaries are freed (the unrolled chain kept tens of GB alive).
-    scanned = keep < n_l and all(np.array_equal(layout[l], layout[keep]) for l in range(keep, n_l))
+    # A ramped tail (Nxi_for_x) is padded to the pairs of l = keep: truncated
+    # DOFs get identity blocks, the inverse of the pinned operator there.
+    scanned = keep < n_l and all(np.isin(layout[l], layout[keep]).all() for l in range(keep, n_l))
     n_chain = keep if scanned else n_l
     lowers = [jnp.zeros((0, tz, tz))] + [band(l, "lower", layout[l], l >= keep) for l in range(1, n_chain)]
     uppers = [band(l, "upper", layout[l + 1], l + 1 >= keep) for l in range(n_chain - 1)]
@@ -367,18 +372,26 @@ def _factor(op: KineticOperator, keep: int | None = None, drifts: Any = None) ->
         x0 = (act % n_x).reshape(n_s, -1)
         cd_all = jnp.diagonal(cmat[:, act][:, :, act], axis1=1, axis2=2)  # (L, P)
 
-        def fac(full: jnp.ndarray) -> jnp.ndarray:
-            return (full.reshape(n_s, n_x, tz, tz)[:, x0[0, 0]] / op.x[x0[0, 0]]).astype(jnp.float32)
+        xm = int(np.argmax(np.asarray(op.n_xi_for_x)))  # active at every tail l
+        mask = op._mask()
+
+        def fac(full: jnp.ndarray, l: Any, step: int) -> tuple:
+            """Per-species block and per-pair scale ``x`` times the row/column masks."""
+            col = mask[x0, jnp.clip(l + step, 0, n_xi - 1)] * jnp.where((l + step >= 0) & (l + step < n_xi), 1.0, 0.0)
+            blk_s = full.reshape(n_s, n_x, tz, tz)[:, xm] / op.x[xm]
+            return blk_s.astype(jnp.float32), op.x[x0] * mask[x0, l] * col
 
         def body(carry, l):
             lu1, piv1, lo1 = carry
             bl = stripped.legendre_blocks(l)
             up, lo = (getattr(bl, k).reshape(-1, tz, tz) for k in ("upper", "lower"))
             w = jax.vmap(lambda f0, f1, r: lu_solve((f0, f1), r))(lu1, piv1, lo1)
-            d = bl.diag.reshape(-1, tz, tz)[act] + cd_all[l][:, None, None] * eye_tz
-            d = d + drift_diag(l, act) - jnp.einsum("kab,kbc->kac", up[act], w.astype(jnp.float64))
+            m = op._mask()[act % n_x, l][:, None, None]  # 0 on truncated (x, l)
+            d = bl.diag.reshape(-1, tz, tz)[act] + (m * cd_all[l][:, None, None] + 1.0 - m) * eye_tz
+            d = d + m * drift_diag(l, act) - jnp.einsum("kab,kbc->kac", up[act], w.astype(jnp.float64))
             lu, piv = _tail_lu(d)
-            return (lu, piv, lo[act].astype(jnp.float32)), (lu, piv, fac(lo), fac(up))
+            (lo_b, lo_s), (up_b, up_s) = fac(lo, l, -1), fac(up, l, 1)
+            return (lu, piv, lo[act].astype(jnp.float32)), (lu, piv, lo_b, up_b, lo_s, up_s)
 
         k_p = len(act)
         init = (
@@ -389,7 +402,7 @@ def _factor(op: KineticOperator, keep: int | None = None, drifts: Any = None) ->
         (lu_k, piv_k, lo_k), stacked = jax.lax.scan(body, init, jnp.arange(keep, n_l), reverse=True)
         lus[keep] = (lu_k, piv_k)
         lowers.append(lo_k)
-        tail = stacked + (op.x[x0],)
+        tail = stacked
     else:
         last = d0 if n_l == 1 else diag_block(n_l - 1)
         lus[-1] = _tail_lu(last) if last.ndim == 3 else lu_factor(last)
