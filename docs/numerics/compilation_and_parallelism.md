@@ -159,8 +159,9 @@ backend-aware:
 XLA sizes its host threadpool once, when the CPU backend initializes, so thread
 control must be set before JAX is imported. `dkx --cores N` and `DKX_CORES=N`
 pin the solver threadpool to `N` threads (applied as `NPROC`, the variable XLA
-reads); `DKX_CORES=0` lets XLA size it; unset, the pool is clamped to
-`min(8, cpu_count)`.
+reads); `DKX_CORES=0` lets XLA size it. With neither `DKX_CORES` nor `NPROC`
+set, XLA gets `min(8, cores)` threads and the host BLAS `min(4, cores)`, counting
+the cores the process may run on (`taskset` aware, not `os.cpu_count()`).
 
 The clamp is measured. On a 36-core workstation the mid HSX deck's warm
 structured solve takes 9.7 s at 1 thread, 7.8 s at 2, 5.6 s at 4 and 4.87 s at
@@ -169,7 +170,15 @@ operator build stays near 8 s at every count, so the inversion is XLA fork-join
 overhead over the sequential Legendre sweep. Set `--cores` to about 4 to 8 on
 many-core hosts, not to `nproc`.
 
-Host BLAS pools default to one thread (`dkx.runtime`). JAX's CPU LAPACK kernels
+When `DKX_CORES` or `NPROC` is set, and whenever host devices are forced, the
+BLAS pools default to one thread (`dkx.runtime`); explicit `OMP_NUM_THREADS`,
+`OPENBLAS_NUM_THREADS` and `MKL_NUM_THREADS` always win. The unset default
+gives BLAS several threads because XLA's sequential LAPACK custom calls
+(`getrf`, `trsm`) inside the structured elimination otherwise run on one core:
+on a Xeon pinned to four cores the warm W7-X monoenergetic solve went from
+2.55 s to 1.67 s and NCSX full FP from 5.2 s to 5.0 s, with the sparse direct
+route and a 14-core laptop unchanged. One BLAS thread remains right for batched
+kernels. JAX's CPU LAPACK kernels
 already run a batch across XLA's threadpool, and a multithreaded BLAS inside
 each element oversubscribes it: on a 36-thread Xeon W-2295 a batched
 $777\times777$ `lu_factor` took 284 to 756 ms per matrix with eight BLAS threads

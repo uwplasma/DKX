@@ -259,7 +259,7 @@ conversions.
 The monoenergetic database holds the grids `nu_prime` ($n_\nu$) and `e_star`
 ($n_E$), the star-normalized coefficients `d11_star`, `d13_star`, `d31_star`,
 `d33_star` (each $n_\nu\times n_E$), `nu_star`, `v_e`, the geometry scalars as
-`metadata_json`, and the deck text. `examples/04_monoenergetic_scan` plots
+`metadata_json`, and the deck text. `examples/tutorials/09_monoenergetic.py` plots
 $D_{11}^*$, $D_{31}^*$ and $D_{33}^*$ against $\nu'$.
 
 ## Inspecting and comparing results

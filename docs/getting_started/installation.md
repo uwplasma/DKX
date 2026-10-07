@@ -25,7 +25,7 @@ environment requests:
 |---|---|
 | `python` | the interpreter version is below 3.11 |
 | `dkx` | warns (does not fail) when running from a source checkout rather than an installed distribution |
-| `solvax` | missing, or below the 0.24.0 floor |
+| `solvax` | missing, or below the 0.19.0 floor the doctor checks (the package itself requires 0.28.1) |
 | `jax`, `jaxlib`, `numpy`, `scipy`, `rich` | missing |
 | `h5py`, `netCDF4`, `matplotlib` | missing (warning only) |
 | `float64` | a JAX array requested as `float64` materializes as another dtype |
@@ -38,9 +38,11 @@ environment requests:
 The structured linear-algebra routes (block-tridiagonal Legendre elimination,
 recycled Krylov, implicit differentiation, sparse assembly by compression) live
 in the external [solvax](https://pypi.org/project/solvax/) package. It is a
-core dependency and installs with DKX. The floor is 0.24.0 because that release
-adds the operator equilibration applied before a factorization
-(`pyproject.toml`). The sparse direct route can use MUMPS instead of SuperLU
+core dependency and installs with DKX. `pyproject.toml` requires `solvax>=0.28.1`:
+0.24 added the operator equilibration applied before a factorization, and 0.28
+the single-basis GCROT window (`fixed_precond=True`) that lets the recycled
+Krylov restart grow to 1,000 vectors at half the memory
+({doc}`../numerics/krylov_and_preconditioners`). The sparse direct route can use MUMPS instead of SuperLU
 only with SOLVAX 0.25.0 or later and PyMUMPS installed; see
 {doc}`python_api <../user_guide/python_api>`.
 

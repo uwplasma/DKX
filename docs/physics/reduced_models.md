@@ -25,7 +25,12 @@ normalization (Beidler et al., Nucl. Fusion 51, 076001, 2011): $D_{11}$ against 
 equivalent-tokamak plateau value, $D_{31}$ and $D_{13}$ against the banana-regime bootstrap
 value, and $D^*_{33} \to 1$ in the collisional limit. `energy_convolution` integrates the
 database over a Maxwellian to give the thermal transport matrix per species.
-`save_database` and `load_database` use a portable `.npz` with a schema tag. The CLI
+Unless the deck sets `thetaDerivativeScheme`/`zetaDerivativeScheme`, the
+database uses spectral (Fourier) angular derivatives, the discretization MONKES
+uses; it converges like MONKES (HSX to 3% at $19\times41\times64$ instead of
+$25\times51\times96$ with finite differences; {doc}`../benchmarks/performance`).
+Set the schemes in the deck to pair a database with a full-kinetic solve of the
+same deck. `save_database` and `load_database` use a portable `.npz` with a schema tag. The CLI
 equivalent is `dkx monoenergetic-database`.
 
 Measured checks (`tests/test_monoenergetic_database.py`, module docstring):
@@ -225,4 +230,4 @@ Phys. Plasmas 28, 022502, 2021). `KineticBootstrapMismatch` is traced through th
 equilibrium and differentiated with the VMEX implicit Jacobian;
 `KineticBootstrapCurrent` evaluates a written `wout`, optionally at the ambipolar root.
 The default grid is $N_\theta = 21$, $N_\zeta = 31$, $N_\xi = 32$, $N_x = 5$
-(`DEFAULT_RESOLUTION`). See {doc}`../tutorials/vmex_optimization`.
+(`DEFAULT_RESOLUTION`). See {doc}`../tutorials/bootstrap_gradients_optimization`.

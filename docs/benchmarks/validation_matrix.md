@@ -197,7 +197,7 @@ These are not release blockers, and none is claimed:
 - KNOSOS overlap and low-collisionality trend comparison with MONKES;
 - production-resolution QI ladders and a true device-resident QI route;
 - single-case multi-device strong scaling;
-- full VMEC-boundary-to-kinetic-transport gradients ({doc}`../tutorials/vmex_optimization`).
+- full VMEC-boundary-to-kinetic-transport gradients ({doc}`../tutorials/bootstrap_gradients_optimization`).
 
 A new entry is added to both this page and the manifest in the same change,
 with its `release_gate` block.

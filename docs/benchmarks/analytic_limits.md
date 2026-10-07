@@ -70,7 +70,7 @@ Pfirsch–Schlüter regimes.
 The three low-to-high collisionality regimes are distinguishable in the
 monoenergetic $D_{11}^*$: a $1/\nu$ rise in a stellarator at $E^* = 0$, a
 plateau, and a collisional tail. A finite $E^*$ removes the $1/\nu$ branch by
-$E\times B$ detrapping. Rung `examples/04_monoenergetic_scan` checks two of
+$E\times B$ detrapping. `examples/tutorials/09_monoenergetic.py` checks two of
 these trends on every run: $D_{11}^*$ must be monotone in $\nu'$ at $E^* = 0$,
 and $D_{33}^*$ must approach its collisional value of 1 from below.
 

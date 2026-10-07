@@ -173,7 +173,7 @@ input.namelist` is the replacement ({doc}`convergence`).
 
 | name | default | meaning |
 |---|---|---|
-| `thetaDerivativeScheme` / `zetaDerivativeScheme` | `2` / `2` | angular finite differences; `±103`/`±104` select DKX's widened upwind stencils |
+| `thetaDerivativeScheme` / `zetaDerivativeScheme` | `2` / `2` | angular finite differences; `±103`/`±104` select DKX's widened upwind stencils. `monoenergetic_database` uses spectral angles when the deck leaves both unset |
 | `ExBDerivativeSchemeTheta` / `ExBDerivativeSchemeZeta` | `0` / `0` | only `0` is supported (see below) |
 | `magneticDriftDerivativeScheme` | `3` | magnetic-drift upwinding; also accepts `±103`/`±104` |
 | `xDotDerivativeScheme` | `0` | speed-derivative scheme |
@@ -323,6 +323,9 @@ For `RHSMode = 2` and `3` the solver loops over `whichRHS`, overwriting the
 drives before building each right-hand side exactly as SFINCS v3 does, and all
 drives share one multi-right-hand-side solve. For `RHSMode = 3` the speed grid
 collapses to the single node $x = 1$ (`Nx = 1`), matching `createGrids.F90`.
+A `monoenergetic-database` scan of a deck that does not set
+`thetaDerivativeScheme`/`zetaDerivativeScheme` uses spectral (Fourier) angles,
+as MONKES does; a deck that sets them keeps its choice.
 
 ```console
 dkx sfincs transport-matrix-v3 --input input.namelist --out-matrix L.npy
