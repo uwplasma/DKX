@@ -245,6 +245,24 @@ def _border(op: KineticOperator) -> tuple[jnp.ndarray, jnp.ndarray]:
     return b, c
 
 
+def _schur_update(d, lu_next, lo, up, sel) -> jnp.ndarray:
+    """``D_l - U_l S_(l+1)^-1 Lo_(l+1)``, one column pair at a time.
+
+    ``Lo`` and ``U`` are pair-diagonal, so column pair ``sel[j]`` needs only
+    ``S^-1`` applied to ``Lo_j`` placed at row block ``j``: the dense ``Lo`` and
+    ``W`` (each a full ``n_l x n_l`` matrix) are never formed.
+    """
+    k_n, tz = lo.shape[0], lo.shape[1]
+    sel = jnp.asarray(sel)
+
+    def body(j, d):
+        rhs = jnp.zeros((k_n, tz, tz), lo.dtype).at[j].set(lo[j]).reshape(k_n * tz, tz)
+        w = lu_solve(lu_next, rhs).reshape(k_n, tz, tz)
+        return d.at[sel, :, sel[j], :].add(-jnp.einsum("kab,kbc->kac", up, w))
+
+    return jax.lax.fori_loop(0, k_n, body, d)
+
+
 def _tail_lu(d: jnp.ndarray) -> tuple:
     """Per-pair tail LUs, stored in float32: they only precondition (SOLVAX #133)."""
     lu, piv = lu_factor(d)
@@ -344,17 +362,12 @@ def _factor(op: KineticOperator, keep: int | None = None, drifts: Any = None) ->
             d = d.reshape(k_l, tz, k_l, tz).at[sel, :, sel, :].add(-uw)
             lus[l] = lu_factor(d.reshape(k_l * tz, k_l * tz))
             continue
-        # W = S_(l+1)^-1 Lo_(l+1), then S_l = D_l - U_l W on the rows U_l reaches.
-        place = jnp.eye(k_l)[:, sel].T  # (k_(l+1), k_l)
-        lo_dense = jnp.einsum("kab,kj->kajb", lowers[l + 1], place).reshape(k_n * tz, k_l * tz)
-        w = lu_solve(lus[l + 1], lo_dense).reshape(k_n, tz, k_l * tz)
-        uw = jnp.einsum("kab,kbn->kan", uppers[l], w)
         d = d0 if l == 0 else diag_block(l)
         if l == 1 and q is not None:
             gamma1 = jnp.mean(jnp.abs(jnp.diagonal(d))) / jnp.max(jnp.abs(qq))
             d = d + gamma1 * qq
-        d = d.reshape(k_l, tz, k_l * tz)
-        lus[l] = lu_factor(d.at[sel].add(-uw).reshape(k_l * tz, k_l * tz))
+        d = _schur_update(d.reshape(k_l, tz, k_l, tz), lus[l + 1], lowers[l + 1], uppers[l], sel)
+        lus[l] = lu_factor(d.reshape(k_l * tz, k_l * tz))
     solver = CoupledSolver(op, tuple(lus), tuple(lowers), tuple(uppers), (b, c, gamma) + (None,) * 4)
     if q is not None:
         qf = jnp.zeros((n_s * n_x, n_xi, tz, n_s)).at[layout[1], 1].set(q.reshape(-1, tz, n_s))
