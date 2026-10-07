@@ -35,6 +35,12 @@
   It keeps the `L`-diagonal magnetic drifts at `L <= 2` (23 to 17 iterations on
   the reduced W7-X drift deck) and stores tail bands as per-species blocks times
   the speed scale, `Nx` times smaller.
+  The tail is now eliminated and swept with `lax.scan` (padded with identity
+  blocks where `Nxi_for_x` truncates), its bands are kept as two scalars per `L`
+  over shared float32 streaming and mirror blocks, and the dense `L < 2` Schur
+  step is formed one column pair at a time: the compiled HSX FP production
+  factorization drops from 11.5 GB output + 26.6 GB temporaries to
+  11.7 GB + 4.4 GB.
 - `dkx.solve` keeps its API; the structured route's applicability tests and
   memory model moved to `dkx.structured_direct`. Structured solves refine
   against the pinned operator (identity rows on truncated `Nxi_for_x` DOFs).

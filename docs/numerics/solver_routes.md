@@ -197,7 +197,10 @@ $(s, x)$-diagonal of the collision operator, so its Schur complements stay one
 $(N_\theta N_\zeta)^2$ block per pair, stored in float32. $E_r$ xiDot/xDot terms
 and the $L \pm 2$ half of the tangential drifts are left out of the factored
 operator; the $L$-diagonal drift half is kept at $L \le 2$, as in the coarse route.
-Tail bands are stored as one block per species times the speed scale $x$. Warm
+The tail is eliminated and swept by `lax.scan`, padded with identity blocks
+where `Nxi_for_x` truncates; its bands are two scalars per $L$ over shared
+streaming and mirror blocks. The dense $L < 2$ Schur step is formed one column
+pair at a time, never as the full $W = S^{-1} L_o$. Warm
 solves on a laptop (14 cores, shared), recycled GCROT to 1e-10:
 
 | deck | `coarse` | `coupled` |

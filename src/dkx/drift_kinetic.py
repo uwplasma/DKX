@@ -1808,6 +1808,26 @@ Measured through the production recycled Krylov path.  On the tiny drift
                 "(the recycled Krylov route owns these decks)."
             )
 
+    def streaming_mirror_blocks(self) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """Per-species streaming ``(S, TZ, TZ)`` and mirror diagonal ``(S, TZ)``.
+
+        Every ``L +- 1`` block of :meth:`legendre_blocks` is ``x`` times the row
+        and column masks times ``a(L) stream + b(L) diag(mirror)``.
+        """
+        n_tz = self.n_theta * self.n_zeta
+        d_theta_tz = jnp.kron(self.ddtheta, jnp.eye(self.n_zeta, dtype=jnp.float64))
+        d_zeta_tz = jnp.kron(jnp.eye(self.n_theta, dtype=jnp.float64), self.ddzeta)
+        sqrt_t_over_m = jnp.sqrt(self.t_hat / self.m_hat)  # (S,)
+        v_theta = (self.b_hat_sup_theta / self.b_hat).reshape((-1,))  # (TZ,)
+        v_zeta = (self.b_hat_sup_zeta / self.b_hat).reshape((-1,))
+        # Streaming operator per species: rowscale(v)·D, summed over both angles.
+        stream_tz = sqrt_t_over_m[:, None, None] * (
+            v_theta[:, None] * d_theta_tz + v_zeta[:, None] * d_zeta_tz
+        )[None, :, :]
+        mirror_geom = self.b_hat_sup_theta * self.db_hat_dtheta + self.b_hat_sup_zeta * self.db_hat_dzeta
+        mirror_diag = -sqrt_t_over_m[:, None] * (mirror_geom / (2.0 * self.b_hat**2)).reshape((n_tz,))[None, :]
+        return stream_tz, mirror_diag
+
     def legendre_blocks(self, ell: int) -> LegendreBlocks:
         """Dense (theta*zeta) blocks of Legendre row ``ell`` of the f-block.
 
@@ -1822,9 +1842,11 @@ Measured through the production recycled Krylov path.  On the tiny drift
         :meth:`apply_f` exactly.
         """
         self._check_block_extraction_supported()
-        if not (0 <= int(ell) < self.n_xi):
-            raise ValueError(f"ell must be in [0, {self.n_xi}), got {ell}")
-        ell = int(ell)
+        traced = isinstance(ell, jax.core.Tracer)  # a scan over l passes a traced ell
+        if not traced:
+            if not (0 <= int(ell) < self.n_xi):
+                raise ValueError(f"ell must be in [0, {self.n_xi}), got {ell}")
+            ell = int(ell)
 
         n_tz = self.n_theta * self.n_zeta
         eye_t = jnp.eye(self.n_theta, dtype=jnp.float64)
@@ -1839,19 +1861,7 @@ Measured through the production recycled Krylov path.  On the tiny drift
         mask = self._mask()  # (X,L)
         row_mask = mask[:, ell]  # (X,)
 
-        sqrt_t_over_m = jnp.sqrt(self.t_hat / self.m_hat)  # (S,)
-        v_theta = (self.b_hat_sup_theta / self.b_hat).reshape((-1,))  # (TZ,)
-        v_zeta = (self.b_hat_sup_zeta / self.b_hat).reshape((-1,))
-        # Streaming operator per species: rowscale(v)·D, summed over both angles.
-        stream_tz = (
-            sqrt_t_over_m[:, None, None]
-            * (v_theta[None, :, None] * d_theta_tz[None, :, :] + v_zeta[None, :, None] * d_zeta_tz[None, :, :])
-        )  # (S,TZ,TZ)
-
-        mirror_geom = self.b_hat_sup_theta * self.db_hat_dtheta + self.b_hat_sup_zeta * self.db_hat_dzeta
-        mirror_diag = (
-            -sqrt_t_over_m[:, None] * (mirror_geom / (2.0 * self.b_hat**2)).reshape((-1,))[None, :]
-        )  # (S,TZ)
+        stream_tz, mirror_diag = self.streaming_mirror_blocks()
         mirror_tz = mirror_diag[:, :, None] * jnp.eye(n_tz, dtype=jnp.float64)[None, :, :]  # (S,TZ,TZ)
 
         def _shaped(block_s: jnp.ndarray, x_factor: jnp.ndarray, col_mask: jnp.ndarray) -> jnp.ndarray:
@@ -1860,19 +1870,21 @@ Measured through the production recycled Krylov path.  On the tiny drift
             return block_s[:, None, :, :] * scale[None, :, None, None]
 
         # ---- lower: row ell receives column ell-1 ----
-        if ell >= 1:
-            coef_stream = self.xi_coupling_lower[ell]  # traced 0-d scalar (static ell)
+        if traced or ell >= 1:
+            on = jnp.where(ell >= 1, 1.0, 0.0)
+            coef_stream = on * self.xi_coupling_lower[ell]  # traced 0-d scalar (static ell)
             coef_mirror = -coef_stream * (ell - 1.0)
-            col_mask = mask[:, ell - 1]
+            col_mask = mask[:, jnp.maximum(ell - 1, 0)] if traced else mask[:, ell - 1]
             lower = _shaped(coef_stream * stream_tz + coef_mirror * mirror_tz, self.x, col_mask)
         else:
             lower = jnp.zeros((self.n_species, self.n_x, n_tz, n_tz), dtype=jnp.float64)
 
         # ---- upper: row ell receives column ell+1 ----
-        if ell + 1 < self.n_xi:
-            coef_stream = self.xi_coupling_upper[ell]  # traced 0-d scalar (static ell)
+        if traced or ell + 1 < self.n_xi:
+            on = jnp.where(ell + 1 < self.n_xi, 1.0, 0.0)
+            coef_stream = on * self.xi_coupling_upper[jnp.minimum(ell, self.n_xi - 2) if traced else ell]  # traced 0-d scalar (static ell)
             coef_mirror = coef_stream * (ell + 2.0)
-            col_mask = mask[:, ell + 1]
+            col_mask = mask[:, jnp.minimum(ell + 1, self.n_xi - 1)] if traced else mask[:, ell + 1]
             upper = _shaped(coef_stream * stream_tz + coef_mirror * mirror_tz, self.x, col_mask)
         else:
             upper = jnp.zeros((self.n_species, self.n_x, n_tz, n_tz), dtype=jnp.float64)
