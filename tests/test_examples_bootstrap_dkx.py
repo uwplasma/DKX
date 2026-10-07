@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-EX_DIR = REPO_ROOT / "examples" / "optimization"
+EX_DIR = REPO_ROOT / "examples" / "advanced"
 CASES = ("QA", "QH", "QI")
 HOST_CASES = ("QH", "QI")  # the finite-difference host term
 

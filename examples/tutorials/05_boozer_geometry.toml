@@ -1,0 +1,39 @@
+# Tutorial 05: Boozer-coordinate geometry from a .bc file (|B| as a Boozer
+# spectrum, the format most stellarator neoclassical work circulates in).
+# Run with:  dkx run examples/tutorials/05_boozer_geometry.toml --out result.nc
+name = "boozer_geometry"
+
+[run]
+workflow = "profile"
+progress = true
+
+[geometry]
+format = "boozer"
+# Non-stellarator-symmetric fixture; DKX detects the column convention itself.
+file = "../../tests/ref/nonStelSym_tiny_geometryScheme12.bc"
+surfaces = [0.20, 0.30]
+
+[[species]]
+name = "deuterium"
+charge = 1
+mass_amu = 2.014
+density_m3 = [8.0e19, 7.0e19]
+temperature_keV = [1.0, 0.8]
+
+[physics]
+collisions = "pitch_angle_scattering"
+
+[electric_field]
+mode = "prescribed"
+value_kV_m = 0.0
+
+[resolution]
+theta = 9
+zeta = 9
+pitch = 12
+speed = 5
+
+[solver]
+# Non-axisymmetric geometry takes the Krylov route, where the tolerance is
+# what stops the iteration, so it is set tighter than the default.
+relative_tolerance = 1.0e-10

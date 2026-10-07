@@ -183,7 +183,7 @@ def test_public_candidate_scan_launcher_dry_run(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     input_path.write_text("&physicsParameters\n/\n", encoding="utf-8")
-    script = _REPO / "examples" / "optimization" / "launch_dkx_candidate_scan.py"
+    script = _REPO / "examples" / "advanced" / "launch_dkx_candidate_scan.py"
     subprocess.run(
         [
             sys.executable,

@@ -66,7 +66,7 @@ DEFAULT_ER_BRACKET: tuple[float, ...] = (-8.0, -4.0, -2.0, -1.0, -0.4, 0.4, 1.0,
 #:
 #: Redl is a fit to Fokker-Planck calculations, so 2-7% is the agreement to
 #: expect and 35-47% is a bias, not a physical difference.  Under 2x the cost
-#: buys it.  The traced term's "1.5-1.6x Redl" (``examples/optimization``) is the
+#: buys it.  The traced term's "1.5-1.6x Redl" (``examples/advanced``) is the
 #: same bias on the optimized equilibrium at its coarse traced grid.  With
 #: n0 = 2e20 m^-3 and the equilibrium's own p(0) (T0 = 11 keV), at this
 #: resolution, PAS is 1.85x and 1.28x full Fokker-Planck at s = 0.25 and 0.75 and
@@ -464,7 +464,7 @@ class KineticBootstrapMismatch:
     by 1.35-1.47x on the precise-QA ``beta = 2.5 %`` equilibrium at the host
     term's resolution (``DEFAULT_COLLISION_OPERATOR``) and by 1.5-1.6x on the
     optimized QA equilibrium at the coarse ``11 x 11 x 16 x 4`` traced grid of
-    ``examples/optimization`` -- the same bias on a different equilibrium and grid.
+    ``examples/advanced`` -- the same bias on a different equilibrium and grid.
     ``collision_model="pas+momentum_correction"`` keeps the structured PAS route
     and restores momentum by the Sugama-Nishimura moment method
     (:mod:`dkx.momentum_correction`, three Sonine flow moments per species, two
