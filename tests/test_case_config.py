@@ -20,7 +20,7 @@ from dkx.config import (
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-EXAMPLE = REPO_ROOT / "examples" / "05_ambipolar_profile" / "w7x_case.toml"
+EXAMPLE = REPO_ROOT / "examples" / "tutorials" / "08_ambipolar_er_w7x.toml"
 
 
 def _mapping() -> dict:
@@ -488,10 +488,10 @@ def test_legacy_schema_key_is_ignored_when_one() -> None:
 
 def test_recorded_example_case_ids_survive_the_implicit_version() -> None:
     recorded = {
-        "01_tokamak_profile/case.toml": "2ca9e2e8db568238b5230334709e5141b9ca13149f63d0caeae86632f3a86343",
-        "02_vmec_stellarator/case.toml": "03029b2fd01389a1f0d6905acfce010de38a65be8b9fecdc591d1d5dfeca853c",
-        "05_ambipolar_profile/w7x_case.toml": "508e9513e8e4e0859deac7fe3743a47eff6949c1201d49085ec55940b240f5f2",
-        "06_convergence_certificate/case.toml": "cca55b87b8d5040229ef398facc0553c8b93e02b3505a5cf135f777f97a43505",
+        "tutorials/02_cli_case.toml": "2ca9e2e8db568238b5230334709e5141b9ca13149f63d0caeae86632f3a86343",
+        "tutorials/04_vmec_geometry.toml": "579b31bb76b2482f925d5dc9e14ce7a861525acceef8ae106908278a63f18811",
+        "tutorials/08_ambipolar_er_w7x.toml": "508e9513e8e4e0859deac7fe3743a47eff6949c1201d49085ec55940b240f5f2",
+        "tutorials/13_convergence.toml": "cca55b87b8d5040229ef398facc0553c8b93e02b3505a5cf135f777f97a43505",
     }
     for name, case_id in recorded.items():
         assert Case.from_file(REPO_ROOT / "examples" / name).case_id == case_id

@@ -185,7 +185,7 @@ def test_qi_proxy_objective_decreases_along_negative_gradient() -> None:
 
 
 def test_public_qa_nfp2_optimization_example_runs(tmp_path: Path) -> None:
-    script = _REPO / "examples" / "optimization" / "qa_nfp2_dkx_objectives.py"
+    script = _REPO / "examples" / "advanced" / "qa_nfp2_dkx_objectives.py"
     subprocess.run(
         [
             sys.executable,

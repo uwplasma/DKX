@@ -945,7 +945,7 @@ def build_candidate_scan_plan(
 
     promotion_cmd = [
         sys.executable,
-        "examples/optimization/evaluate_dkx_promotion_scan.py",
+        "examples/advanced/evaluate_dkx_promotion_scan.py",
         "--scan-dir",
         str(scan_dir),
         "--out-dir",
@@ -1349,7 +1349,7 @@ def _promotion_command(
 ) -> tuple[str, ...]:
     cmd = [
         sys.executable,
-        "examples/optimization/evaluate_dkx_promotion_scan.py",
+        "examples/advanced/evaluate_dkx_promotion_scan.py",
         "--scan-dir",
         str(scan_dir),
         "--out-dir",
@@ -1383,7 +1383,7 @@ def _comparison_command(
         return None
     cmd = [
         sys.executable,
-        "examples/optimization/compare_dkx_promotion_runs.py",
+        "examples/advanced/compare_dkx_promotion_runs.py",
         "--cpu",
         str(by_label["cpu"].promotion_dir / f"{promotion_stem}.json"),
         "--gpu",

@@ -25,7 +25,7 @@ d(dln T_i/dr)`` -- the sensitivity of the impurity flux to the main-ion
 temperature gradient -- straight from autodiff.
 
 Run:
-  python examples/optimization/optimize_impurity_screening.py
+  python examples/advanced/optimize_impurity_screening.py
 """
 
 import dataclasses
@@ -97,7 +97,7 @@ STEM = "optimize_impurity_screening"
 # ----------------------------------------------------------------------------
 # 1) Kinetic operator template (3 species, Fokker-Planck)
 # ----------------------------------------------------------------------------
-print("=== examples/optimization/optimize_impurity_screening.py ===")
+print("=== examples/advanced/optimize_impurity_screening.py ===")
 DECK = f"""&general
   RHSMode = 1
 /
@@ -317,4 +317,4 @@ plot_path = OUT_DIR / f"{STEM}.png"
 fig.savefig(plot_path, dpi=130)
 plt.close(fig)
 print(f"  Saved plot: {plot_path}")
-print("Done: examples/optimization/optimize_impurity_screening.py")
+print("Done: examples/advanced/optimize_impurity_screening.py")

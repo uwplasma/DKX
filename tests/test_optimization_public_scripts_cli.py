@@ -6,10 +6,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 
 _REPO = Path(__file__).resolve().parents[1]
-_OPTIMIZATION_DIR = _REPO / "examples" / "optimization"
+_OPTIMIZATION_DIR = _REPO / "examples" / "advanced"
 
 
 def _local_vmex_root() -> Path | None:
@@ -22,7 +21,7 @@ def _local_vmex_root() -> Path | None:
     for candidate in candidates:
         if candidate is None:
             continue
-        result_dir = candidate / "examples" / "optimization" / "results" / "qa_opt" / "ess"
+        result_dir = candidate / "examples" / "advanced" / "results" / "qa_opt" / "ess"
         if (candidate / "vmex").is_dir() and (result_dir / "wout_final.nc").is_file():
             return candidate
     return None
@@ -58,10 +57,6 @@ def _assert_artifacts(out_dir: Path, stem: str) -> dict:
 def test_public_optimization_scripts_show_help() -> None:
     scripts = {
         _OPTIMIZATION_DIR / "qa_nfp2_dkx_objectives.py": ["--out-dir", "--stem"],
-        _OPTIMIZATION_DIR / "qa_nfp2_bootstrap_current_comparison.py": [
-            "--vmex-root",
-            "--comparison-result-dir",
-        ],
         _OPTIMIZATION_DIR / "evaluate_dkx_promotion_scan.py": ["--out-dir", "--stem"],
         _OPTIMIZATION_DIR / "launch_dkx_candidate_scan.py": ["--out-dir", "--promotion-stem"],
         _OPTIMIZATION_DIR / "compare_dkx_promotion_runs.py": ["--out-dir", "--stem"],
@@ -98,48 +93,6 @@ def test_qa_nfp2_public_script_writes_fast_demo_artifacts(tmp_path: Path) -> Non
     assert payload["autodiff_gradient_gate"]["status"] == "pass"
     assert len(payload["history"]) == 1
     assert "required_high_fidelity_gates" in payload["promotion_plan"]
-
-
-def test_qa_bootstrap_comparison_script_writes_fast_demo_artifacts(tmp_path: Path) -> None:
-    stem = "qa_bootstrap_comparison_cli"
-    script = _OPTIMIZATION_DIR / "qa_nfp2_bootstrap_current_comparison.py"
-    vmex_root = _local_vmex_root()
-    if vmex_root is None:
-        pytest.skip("vmex QA_optimization.py result is not available")
-
-    _run_script(
-        script,
-        [
-            "--vmex-root",
-            str(vmex_root),
-            "--out-dir",
-            str(tmp_path),
-            "--stem",
-            stem,
-        ],
-    )
-
-    payload = _assert_artifacts(tmp_path, stem)
-    assert payload["workflow"] == "dkx_vmex_qa_optimization_current_diagnostic"
-    assert payload["nfp"] == 2
-    assert payload["targets"] == {"aspect_ratio": 5.0, "iota": 0.41}
-    assert payload["qa_optimization"]["gate"]["status"] == "pass"
-    assert abs(payload["qa_optimization"]["metrics"]["mean_iota"] - 0.41) < 2.0e-2
-    assert "not a completed high-fidelity dkx kinetic bootstrap-current claim" in payload["claim_boundary"]
-    assert payload["comparison"]["status"] == "baseline_only"
-    assert "dkx scan-er" in " ".join(payload["promotion_plan"]["required_gates"])
-
-
-def test_vmex_bootstrap_optimization_script_is_reviewable_max_mode3() -> None:
-    script = _OPTIMIZATION_DIR / "QA_optimization_bootstrap_current.py"
-    text = script.read_text(encoding="utf-8")
-
-    compile(text, str(script), "exec")
-    assert "MAX_MODE = 3" in text
-    assert "INCLUDE_BOOTSTRAP_CURRENT_OBJECTIVE = False" in text
-    assert "vj.JDotB" in text
-    assert "RedlBootstrapMismatch" in text
-    assert "DKX_VMEX_ROOT" in text
 
 
 def test_promotion_public_script_writes_fast_demo_artifacts(tmp_path: Path) -> None:

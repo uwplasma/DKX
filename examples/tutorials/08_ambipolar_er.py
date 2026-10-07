@@ -1,154 +1,84 @@
-"""The radial electric field is not an input: solve for it from ambipolarity.
+"""Tutorial 08 -- the radial electric field from ambipolarity: scan, then solve.
 
-``E_r`` is fixed by the condition that no net charge leaves the flux surface,
-``J_r(E_r) = sum_s Z_s Gamma_s = 0``.  Rungs 01-04 prescribed it; this one
-searches for it.  Switching ``run.workflow`` to ``"ambipolar_profile"`` and
-``electric_field.mode`` to ``"ambipolar"`` is the entire change -- DKX then
-brackets the root on every surface, keeps the sampled roots it finds rather than
-only the first, classifies them (ion root, electron root, unstable), and records why
-it selected the one it did.
+In a stellarator the ion and electron fluxes depend on E_r, and E_r adjusts
+until no net charge leaves the surface:
 
-Physics: analytic W7-X, quasineutral deuterium and electrons, two surfaces,
-full linearized Fokker-Planck collisions with DKES trajectories, Phi1 off.
-This small grid teaches root finding; it does not establish grid convergence.
-A tokamak's intrinsic neoclassical ambipolarity cannot determine its electric
-field (Helander & Simakov, PRL 101, 145003, 2008).
+    J_r(E_r) = e sum_s Z_s Gamma_s(E_r) = 0.
 
-Expected runtime: depends on compilation and the sampled root branches.
+Step 1 scans J_r over prescribed E_r values to *see* the curve.  Step 2 runs
+``workflow = "ambipolar_profile"`` from ``08_ambipolar_er.toml``, which
+brackets every root, refines it, classifies it and records the selection:
+an *ion root* (E_r < 0, set by the ions, usual at high collisionality), an
+*electron root* (E_r > 0, from strong electron transport) and an unstable
+root between them (dJ_r/dE_r < 0 is stable).  In a tokamak J_r is ~0 for any
+E_r, so ambipolarity cannot fix the field there (Helander & Simakov 2008).
 
-Equivalent CLI:
-  dkx run examples/05_ambipolar_profile/case.toml --out examples/output/05_ambipolar_profile/result.nc
-  dkx roots examples/output/05_ambipolar_profile/result.nc
-  dkx validate examples/05_ambipolar_profile/w7x_case.toml   # the production-scale case
+Geometry: analytic W7-X, deuterium + electrons, full Fokker-Planck.  The grid
+teaches root finding; it is not a converged result.  ``08_ambipolar_er_w7x.toml``
+is a production-scale case on a real W7-X wout to ``dkx validate``.
+
+Run:              python examples/tutorials/08_ambipolar_er.py
+CLI:              dkx run examples/tutorials/08_ambipolar_er.toml --out r.nc && dkx roots r.nc
+Smoke mode:       DKX_EXAMPLES_CI=1 python examples/tutorials/08_ambipolar_er.py
+Expected runtime: see the table in examples/README.md.
 """
 
 # 1. Imports
+import os
+from dataclasses import replace
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
 
 import dkx
 
-# 2. User-editable parameters
-HERE = Path(__file__).resolve().parent
-OUT_DIR = HERE.parent / "output" / "05_ambipolar_profile"
-CASE_FILE = HERE / "case.toml"
-SHOWCASE_CASE_FILE = HERE / "w7x_case.toml"
-RESULT_FILE = OUT_DIR / "result.nc"
-PLOT_FILE = OUT_DIR / "result.png"
+# 2. Input parameters
+SMOKE = os.environ.get("DKX_EXAMPLES_CI") == "1"
+CASE_FILE = Path(__file__).with_suffix(".toml")
+OUT = Path(__file__).resolve().parents[1] / "output" / Path(__file__).stem
+ER_SCAN_KV_M = np.linspace(-5.0, 5.0, 3 if SMOKE else 9)  # prescribed fields for step 1
+E = 1.602176634e-19  # C
 
-SURFACES = (0.09, 0.16)
+# 3. Run
+base = dkx.Case.from_file(CASE_FILE)
+charges = np.array([s.charge for s in base.species], dtype=float)
+j_r = []
+for k, er in enumerate(ER_SCAN_KV_M):
+    print(f"step 1, Er scan {k + 1}/{ER_SCAN_KV_M.size}: Er = {er:+.2f} kV/m", flush=True)
+    case = replace(base, run=replace(base.run, workflow="profile", progress=False),
+                   electric_field=type(base.electric_field)(mode="prescribed", value_kV_m=float(er)))
+    j_r.append(E * np.asarray(dkx.run(case).arrays["particle_flux_m2_s"]) @ charges)
+j_r = np.array(j_r)  # (Er, surface) in A m^-2
+print("step 2, ambipolar root solve", flush=True)
+if SMOKE:  # fewer bracketing samples
+    base = replace(base, electric_field=replace(base.electric_field, search_points=3))
+result = dkx.run(base)
 
-# 3. Geometry and species construction
-GEOMETRY = {"format": "analytic", "file": "w7x_standard", "surfaces": list(SURFACES)}
-SPECIES = [
-    {
-        "name": "deuterium",
-        "charge": 1,
-        "mass_amu": 2.014,
-        "density_m3": [8.0e19, 7.0e19],
-        "temperature_keV": [1.0, 0.8],
-    },
-    {
-        "name": "electron", "charge": -1, "mass_amu": 0.000548579909,
-        "density_m3": [8.0e19, 7.0e19], "temperature_keV": [1.0, 0.8],
-    },
-]
-
-# 4. Physics and numerical configuration
-PHYSICS = {
-    "model": "full_local",
-    "collisions": "linearized_fokker_planck",
-    "magnetic_drifts": "dkes",
-    "phi1": "off",
-}
-# Widen search_kV_m if the run reports no bracketed root: a steeper profile
-# pushes the root further out, and a bracket that misses it says "no root"
-# rather than guessing.
-ELECTRIC_FIELD = {
-    "mode": "ambipolar",
-    "search_kV_m": [-5.0, 5.0],
-    "find_all_roots": True,
-    "continue_branches": True,
-    "search_points": 5,
-    "root_tolerance_kV_m": 0.05,
-    "max_root_iterations": 20,
-}
-RESOLUTION = {"theta": 5, "zeta": 5, "pitch": 8, "speed": 4}
-SOLVER = {"method": "auto", "relative_tolerance": 1.0e-8, "memory_fraction": 0.75, "reuse": "auto"}
-CONVERGENCE = {
-    "enabled": False,
-    "observables": ["particle_flux", "heat_flux", "electric_field"],
-    "relative_tolerance": 0.02,
-    "max_refinements": 1,
-}
-# end of parameters
-
-case = dkx.Case.from_mapping(
-    {
-        "name": "analytic_ambipolar_profile",
-        "run": {"workflow": "ambipolar_profile", "precision": "float64",
-                "device": "auto", "progress": True},
-        "geometry": GEOMETRY,
-        "species": SPECIES,
-        "physics": PHYSICS,
-        "electric_field": ELECTRIC_FIELD,
-        "resolution": RESOLUTION,
-        "solver": SOLVER,
-        "parallel": {"strategy": "auto"},
-        "convergence": CONVERGENCE,
-        "output": {"file": "outputs/analytic_ambipolar.nc", "plots": True},
-    },
-    source_path=CASE_FILE,
-)
-from_toml = dkx.Case.from_file(CASE_FILE)
-assert case.case_id == from_toml.case_id, "run.py and case.toml have drifted apart"
-print(f"case id = {case.case_id[:12]} (run.py and case.toml agree)")
-
-# 5. Run
-OUT_DIR.mkdir(parents=True, exist_ok=True)
-result = dkx.run(case)
-
-# 6. Print a scientific summary and certificate
-certificate = result.certificate()
-surfaces = np.asarray(result.arrays["surface"], dtype=float)
+# 4. Plot, save and print
+OUT.mkdir(parents=True, exist_ok=True)
+result.save(OUT / "result.nc")
+psi = np.asarray(result.arrays["surface"], dtype=float)
 roots = np.asarray(result.arrays["ambipolar_root_kV_m"], dtype=float)
-root_kinds = np.asarray(result.arrays["ambipolar_root_type"], dtype=object)
-root_counts = np.asarray(result.arrays["ambipolar_root_count"], dtype=int)
-root_currents = np.asarray(result.arrays["ambipolar_root_current_A_m2"], dtype=float)
-slopes = np.asarray(result.arrays["ambipolar_root_slope_A_m2_per_kV_m"], dtype=float)
-selected = np.asarray(result.arrays["selected_ambipolar_root"], dtype=int)
-field = np.asarray(result.arrays["electric_field_kV_m"], dtype=float)
-
-print("\n=== Final results ===")
-for index, psi_n in enumerate(surfaces):
-    print(f"  psi_N={psi_n:.2f}: {root_counts[index]} root(s), selected #{selected[index]}")
-    for slot in range(int(root_counts[index])):
-        print(
-            f"    Er = {roots[index, slot]:+.4f} kV/m  "
-            f"J_r = {root_currents[index, slot]:+.3e} A m^-2  "
-            f"dJ_r/dEr = {slopes[index, slot]:+.3e} A m^-2 (kV/m)^-1  "
-            f"[{root_kinds[index, slot]}]"
-        )
-    gamma = float(np.asarray(result.arrays["particle_flux_m2_s"])[index, 0])
-    heat = float(np.asarray(result.arrays["heat_flux_W_m2"])[index, 0])
-    print(
-        f"    at the selected root: Er = {field[index]:+.4f} kV/m  "
-        f"Gamma = {gamma:+.4e} m^-2 s^-1  Q = {heat:+.4e} W m^-2"
-    )
-print(f"  selection rule: {certificate['ambipolar_selection']}")
-print(f"  all surfaces bracketed: {certificate['ambipolar_all_surfaces_bracketed']}")
-print(f"  refinement: {certificate['ambipolar_refinement']}")
-print(f"  converged: {certificate['converged']}")
-print("  teaching grid: no discretization-convergence claim")
-print(f"  residual norm: {certificate['residual_norm']:.3e}")
-
-# 7. Save native result
-saved = result.save(RESULT_FILE)
-print(f"  Wrote result: {saved}")
-
-# 8. Plot publication-ready outputs
-plotted = result.plot(PLOT_FILE)
-print(f"  Saved plot: {plotted}")
-print(f"  Production-scale schema showcase: {SHOWCASE_CASE_FILE.name} (validate it, do not run it)")
-print("Done: examples/05_ambipolar_profile/run.py")
+kinds = np.asarray(result.arrays["ambipolar_root_type"], dtype=object)
+counts = np.asarray(result.arrays["ambipolar_root_count"], dtype=int)
+selected = np.asarray(result.arrays["electric_field_kV_m"], dtype=float)
+fig, axis = plt.subplots(figsize=(6, 3.8))
+for i, p in enumerate(psi):
+    line, = axis.plot(ER_SCAN_KV_M, j_r[:, i], "o-", label=rf"$\psi_N$={p:.2f}")
+    axis.plot(roots[i, : counts[i]], np.zeros(counts[i]), "x", color=line.get_color(), ms=10, mew=2)
+axis.axhline(0.0, color="k", lw=0.5)
+axis.set_xlabel(r"$E_r$ [kV/m]")
+axis.set_ylabel(r"$J_r=e\sum_s Z_s\Gamma_s$ [A m$^{-2}$]")
+axis.set_title("radial current; x = ambipolar roots")
+axis.legend(fontsize=8)
+fig.tight_layout()
+fig.savefig(OUT / "ambipolar.png", dpi=120)
+print(f"\nsaved {OUT / 'result.nc'}\nsaved {OUT / 'ambipolar.png'}")
+print("\n=== Summary ===")
+for i, p in enumerate(psi):
+    found = ", ".join(f"{roots[i, k]:+.3f} kV/m [{kinds[i, k]}]" for k in range(counts[i]))
+    print(f"  psi_N={p:.2f}: {counts[i]} root(s): {found}; selected Er = {selected[i]:+.3f} kV/m")
+cert = result.certificate()
+print(f"  selection rule: {cert['ambipolar_selection']}")
+print(f"  all surfaces bracketed: {cert['ambipolar_all_surfaces_bracketed']}")

@@ -1,4 +1,4 @@
-"""Tests for the ``examples/optimization/`` gradient-based example family.
+"""Tests for the ``examples/advanced/`` gradient-based example family.
 
 Each example is a simsopt-style single script that optimizes a neoclassical
 objective through the canonical dkx kinetic solve with ``jax.grad``.  For
@@ -37,7 +37,7 @@ import pytest
 pytestmark = pytest.mark.slow
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-EX_DIR = REPO_ROOT / "examples" / "optimization"
+EX_DIR = REPO_ROOT / "examples" / "advanced"
 
 
 def _run_example(name: str, env: dict) -> dict:

@@ -24,7 +24,7 @@ evaluations (a recycled Krylov Fokker-Planck benefit, shown below); the differen
 iteration's root.
 
 Run:
-  python examples/optimization/optimize_electron_root.py
+  python examples/advanced/optimize_electron_root.py
 """
 
 import json
@@ -92,7 +92,7 @@ STEM = "optimize_electron_root"
 # ----------------------------------------------------------------------------
 # 1) Build the ambipolar problem (base operator + Er->dPhi factor + charges)
 # ----------------------------------------------------------------------------
-print("=== examples/optimization/optimize_electron_root.py ===")
+print("=== examples/advanced/optimize_electron_root.py ===")
 DECK = f"""&general
   RHSMode = 1
 /
@@ -315,4 +315,4 @@ plot_path = OUT_DIR / f"{STEM}.png"
 fig.savefig(plot_path, dpi=130)
 plt.close(fig)
 print(f"  Saved plot: {plot_path}")
-print("Done: examples/optimization/optimize_electron_root.py")
+print("Done: examples/advanced/optimize_electron_root.py")

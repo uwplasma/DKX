@@ -1,128 +1,69 @@
-"""Analytic tokamak: one native case, one solve, one certified result.  Start here.
+"""Tutorial 01 -- your first DKX run: a tokamak, one ion species, Python only.
 
-The whole native workflow in one screen: describe the plasma as a ``dkx.Case``,
-call ``dkx.run``, read SI moments off the ``dkx.Result``, print the certificate
-that says whether to believe them, save NetCDF, plot.  Every later rung changes
-one thing about this script and leaves the rest alone.
+DKX solves the steady drift-kinetic equation for the small non-Maxwellian part
+f1 of each species on a flux surface,
 
-Physics: the built-in ``tokamak`` analytic field, which is SFINCS
-``geometryScheme = 1`` at its namelist defaults -- a large-aspect-ratio
-tokamak-like field that still carries the small l=2, n=10 helical term
-(epsilon_h = 0.05067), so it is not strictly axisymmetric.  One deuterium
-species, pitch-angle-scattering collisions, three flux surfaces, no radial
-electric field.  The single toroidal grid point keeps the example fast; it
-samples the field at zeta = 0 only and is a teaching case, not a converged
-axisymmetric tokamak result.
+    (v_par b + v_E) . grad f1  -  C(f1)  =  - v_d . grad(psi) dfM/dpsi,
 
-Expected runtime: ~4 s on a laptop CPU, nearly all of it JAX compilation.
+driven on the right by the density and temperature gradients through the
+magnetic drift v_d; C is the collision operator.  Velocity moments of f1 give
+the neoclassical particle flux Gamma, heat flux Q and bootstrap current <j.B>.
+Here: the built-in analytic ``tokamak`` field, deuterium, pitch-angle
+scattering (PAS) collisions, three surfaces, no radial electric field.
 
-Equivalent CLI:
-  dkx run examples/01_tokamak_profile/case.toml --out examples/output/01_tokamak_profile/result.nc
-  dkx plot examples/output/01_tokamak_profile/result.nc
+Read the printed table: Gamma and Q are positive (outward, down the gradient)
+and <j.B> is the bootstrap current.  The certificate says the *linear solve*
+converged; whether the *resolution* is converged is tutorial 13.
+
+Run:              python examples/tutorials/01_first_run.py
+Smoke mode:       DKX_EXAMPLES_CI=1 python examples/tutorials/01_first_run.py
+Expected runtime: see the table in examples/README.md.
 """
 
 # 1. Imports
+import os
 from pathlib import Path
 
 import numpy as np
 
 import dkx
 
-# 2. User-editable parameters
-HERE = Path(__file__).resolve().parent
-OUT_DIR = HERE.parent / "output" / "01_tokamak_profile"
-CASE_FILE = HERE / "case.toml"
-RESULT_FILE = OUT_DIR / "result.nc"
-PLOT_FILE = OUT_DIR / "result.png"
-
-# The surfaces are normalized toroidal flux, psi_N = psi/psi_edge, and the
-# profiles below carry one value per surface in that same order.  Gradients are
-# taken across them, so at least two are required.
-SURFACES = (0.09, 0.16, 0.25)
-
-# 3. Geometry and species construction
-GEOMETRY = {
-    # "analytic" takes a configuration *name*, not a path: tokamak,
-    # lhd_standard, lhd_inward or w7x_standard.
-    "format": "analytic",
-    "file": "tokamak",
-    "surfaces": list(SURFACES),
+# 2. Input parameters
+SMOKE = os.environ.get("DKX_EXAMPLES_CI") == "1"  # tiny grids, for CI
+OUT = Path(__file__).resolve().parents[1] / "output" / Path(__file__).stem
+CASE = {
+    "name": "first_run",
+    "run": {"workflow": "profile", "progress": True},  # progress: print every phase
+    # Surfaces are normalized toroidal flux psi_N = psi/psi_edge; profiles give
+    # one value per surface, and their radial gradients drive the transport.
+    "geometry": {"format": "analytic", "file": "tokamak", "surfaces": [0.09, 0.16, 0.25]},
+    "species": [
+        {"name": "deuterium", "charge": 1, "mass_amu": 2.014,
+         "density_m3": [8.0e19, 7.0e19, 5.8e19], "temperature_keV": [1.0, 0.8, 0.6]},
+    ],
+    # PAS keeps only pitch-angle scattering in C(f1): cheap, but it does not
+    # conserve momentum.  Tutorial 06 compares it with full Fokker-Planck.
+    "physics": {"collisions": "pitch_angle_scattering"},
+    "electric_field": {"mode": "prescribed", "value_kV_m": 0.0},
+    "solver": {"method": "auto"},  # "auto" picks the linear-solver route from the operator
+    # Poloidal/toroidal grid points, Legendre modes in pitch, speed nodes.
+    "resolution": {"theta": 13, "zeta": 1, "pitch": 16, "speed": 5},
 }
-SPECIES = [
-    {
-        "name": "deuterium",
-        "charge": 1,
-        "mass_amu": 2.014,
-        "density_m3": [8.0e19, 7.0e19, 5.8e19],
-        "temperature_keV": [1.0, 0.8, 0.6],
-    },
-]
+if SMOKE:
+    CASE["resolution"] = {"theta": 9, "zeta": 1, "pitch": 8, "speed": 4}
 
-# 4. Physics and numerical configuration
-PHYSICS = {
-    "model": "full_local",
-    # pitch_angle_scattering is cheap but has no momentum-restoring term; use
-    # linearized_fokker_planck for anything whose headline number is a current.
-    "collisions": "pitch_angle_scattering",
-    "magnetic_drifts": "dkes",
-    "phi1": "off",
-}
-ELECTRIC_FIELD = {"mode": "prescribed", "value_kV_m": 0.0}
-# Deliberately small so this runs in seconds.  It is *not* converged: rung 06
-# measures how far off it is.  Refine before quoting any number from it.
-RESOLUTION = {"theta": 9, "zeta": 1, "pitch": 8, "speed": 4}
-SOLVER = {"method": "auto", "relative_tolerance": 1.0e-8, "memory_fraction": 0.75, "reuse": "auto"}
-# end of parameters
+# 3. Run
+result = dkx.run(dkx.Case.from_mapping(CASE))
 
-case = dkx.Case.from_mapping(
-    {
-        "name": "analytic_tokamak_profile",
-        "run": {"workflow": "profile", "progress": True},
-        "geometry": GEOMETRY,
-        "species": SPECIES,
-        "physics": PHYSICS,
-        "electric_field": ELECTRIC_FIELD,
-        "resolution": RESOLUTION,
-        "solver": SOLVER,
-        "output": {"file": "analytic_tokamak_profile.nc", "plots": True},
-    },
-    source_path=CASE_FILE,
-)
-
-# The case ID is a hash of the case content, so this proves the dict above and
-# case.toml beside it are the same physics -- the CLI line in the docstring
-# solves exactly what this script does.
-from_toml = dkx.Case.from_file(CASE_FILE)
-print(f"case id (Python) = {case.case_id[:12]}")
-print(f"case id (TOML)   = {from_toml.case_id[:12]}")
-assert case.case_id == from_toml.case_id, "run.py and case.toml have drifted apart"
-
-# 5. Run
-OUT_DIR.mkdir(parents=True, exist_ok=True)
-result = dkx.run(case)
-
-# 6. Print a scientific summary and certificate
-certificate = result.certificate()
-print("\n=== Final results ===")
-print(f"  workflow: {result.workflow} on {len(SURFACES)} surfaces, {len(SPECIES)} species")
-for index, psi_n in enumerate(np.asarray(result.arrays["surface"], dtype=float)):
-    gamma = float(np.asarray(result.arrays["particle_flux_m2_s"])[index, 0])
-    heat = float(np.asarray(result.arrays["heat_flux_W_m2"])[index, 0])
-    current = float(np.asarray(result.arrays["parallel_current_A_T_m2"])[index])
-    print(
-        f"  psi_N={psi_n:.2f}  Gamma = {gamma:+.4e} m^-2 s^-1"
-        f"  Q = {heat:+.4e} W m^-2  <j.B> = {current:+.4e} A T m^-2"
-    )
-print(f"  converged: {certificate['converged']}")
-print(f"  solver route: {certificate['solver_route']}")
-print(f"  residual norm: {certificate['residual_norm']:.3e}")
-print(f"  dkx {certificate['dkx_version']} on {certificate['device']}, {certificate['precision']}")
-
-# 7. Save native result
-saved = result.save(RESULT_FILE)
-print(f"  Wrote result: {saved}")
-
-# 8. Plot publication-ready outputs
-plotted = result.plot(PLOT_FILE)
-print(f"  Saved plot: {plotted}")
-print("Done: examples/01_tokamak_profile/run.py")
+# 4. Plot, save and print
+OUT.mkdir(parents=True, exist_ok=True)
+print(f"\nsaved {result.save(OUT / 'result.nc')}")
+print(f"saved {result.plot(OUT / 'result.png')}")
+cert = result.certificate()
+print("\n=== Summary ===")
+for i, psi in enumerate(np.asarray(result.arrays["surface"], dtype=float)):
+    print(f"  psi_N={psi:.2f}  Gamma={result.arrays['particle_flux_m2_s'][i, 0]:+.3e} m^-2 s^-1"
+          f"  Q={result.arrays['heat_flux_W_m2'][i, 0]:+.3e} W m^-2"
+          f"  <j.B>={result.arrays['parallel_current_A_T_m2'][i]:+.3e} A T m^-2")
+print(f"  converged: {cert['converged']}  route: {cert['solver_route']}"
+      f"  residual: {cert['residual_norm']:.1e}")

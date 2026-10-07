@@ -29,7 +29,7 @@ equilibrium feedback.
 
 Documented configuration limitations (measured while building this case):
   - the repository's other finite-beta QA deck
-    (examples/vmex_finite_beta/input.nfp2_QA_finite_beta) has almost
+    (examples/advanced/input.nfp2_QA_finite_beta) has almost
     entirely current-driven rotational transform (iota ~ 0.02 without its
     6.1 MA current), so a from-scratch zero-current Picard start is
     degenerate there (the equilibrium solve stalls at fsq ~ 1e-4);
@@ -91,7 +91,7 @@ nu_n = 8.31565e-3 (fixed reference Coulomb logarithm); SI conversion
 computes its own Sauter per-surface Coulomb logarithms, so the two lanes'
 effective collisionalities differ at the few-percent level -- part of the
 recorded proxy-vs-kinetic contract, as in the sibling Redl-comparison
-example (examples/vmex_finite_beta/).  Er = 0 is the standard convention
+example (examples/advanced/).  Er = 0 is the standard convention
 for proxy comparisons (the Redl fit carries no Er dependence).
 
 Expected runtime: ~20 min for the Picard loop on a 10-core laptop CPU

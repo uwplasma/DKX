@@ -1,164 +1,76 @@
-"""Compute v3 transport matrices (RHSMode=2 and RHSMode=3) with the JAX driver.
+"""Tutorial 10 -- transport matrices: SFINCS ``RHSMode = 2`` and ``RHSMode = 3``.
 
-What this example teaches:
-  - how ``dkx.run.run_transport_matrix`` runs the SFINCS v3 ``whichRHS`` loop
-    (one solve per right-hand side) and assembles the ``transportMatrix``,
-  - the two transport-matrix conventions: RHSMode=2 builds the 3x3
-    energy-integrated matrix, RHSMode=3 the 2x2 monoenergetic matrix,
-  - how to render each matrix as a heatmap.
+Because the drift-kinetic equation is linear in its drives, the fluxes are a
+matrix times the thermodynamic forces.  With RHSMode = 2 DKX solves once per
+force (density gradient, temperature gradient, inductive E_par) and assembles
+the 3x3 energy-integrated matrix
 
-Physics context: the transport matrix relates the thermodynamic forces
-(density/temperature gradients and the parallel electric field) to the fluxes
-(radial particle/heat flux and the parallel bootstrap current) on one flux
-surface; it is the compact, force-free summary of the neoclassical solve
-[M. Landreman, H. M. Smith, A. Mollen and P. Helander, Phys. Plasmas 21,
-042503 (2014); SFINCS technical documentation,
-https://github.com/landreman/sfincs].  The RHSMode=3 monoenergetic form is the
-one used in the ICNTS benchmark database.  Both runs here use tiny grids so
-they finish in a couple of seconds -- they teach the workflow, not production
-physics.
+    [ particle flux ]   [L11 L12 L13] [ A1 (dn/dpsi, dPhi/dpsi) ]
+    [ heat flux     ] = [L21 L22 L23] [ A2 (dT/dpsi)            ]
+    [ parallel flow ]   [L31 L32 L33] [ A3 (<E_par B>)          ]
 
-Run:
-  python examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py
+so any gradient combination is a matrix-vector product rather than a new
+solve.  Onsager symmetry (L12 = L21 up to normalization) is a check on the
+solution.  RHSMode = 3 is the 2x2 *monoenergetic* matrix at one (nu', E*):
+L11 ~ D11*, L12 ~ L21 ~ D31*, L22 ~ D33* (tutorial 09 scans it).
+Both runs pass SFINCS parameters as keywords to ``dkx.run`` -- no deck file.
+Geometry: geometryScheme = 2 (a simplified LHD model) and = 1 (analytic
+helical field).
+
+Run:              python examples/tutorials/10_transport_matrix.py
+CLI:              dkx sfincs transport-matrix-v3 --input input.namelist
+Smoke mode:       DKX_EXAMPLES_CI=1 python examples/tutorials/10_transport_matrix.py
+Expected runtime: see the table in examples/README.md.
 """
 
-from __future__ import annotations
-
+# 1. Imports
+import os
 from pathlib import Path
 
-import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
 
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-import numpy as np  # noqa: E402
+import dkx
 
-from dkx.run import run_transport_matrix  # noqa: E402
+# 2. Input parameters
+SMOKE = os.environ.get("DKX_EXAMPLES_CI") == "1"
+OUT = Path(__file__).resolve().parents[1] / "output" / Path(__file__).stem
+GRID = dict(Ntheta=9, Nzeta=9, Nxi=6, NL=3) if SMOKE else dict(Ntheta=15, Nzeta=15, Nxi=24, NL=4)
+CASES = {
+    "RHSMode=2 (3x3, LHD model)": dict(
+        RHSMode=2, geometryScheme=2, Zs=[1.0], mHats=[1.0], nHats=[1.0], THats=[1.0],
+        Delta=4.5694e-3, alpha=1.0, nu_n=0.15, Er=0.0, collisionOperator=1,
+        includeXDotTerm=False, includeElectricFieldTermInXiDot=False, useDKESExBDrift=True,
+        Nx=3 if SMOKE else 5, solverTolerance=1e-10, **GRID),
+    "RHSMode=3 (2x2, monoenergetic)": dict(
+        RHSMode=3, geometryScheme=1, epsilon_t=-0.07053, epsilon_h=0.05067, iota=0.4542,
+        GHat=3.7481, IHat=0.0, helicity_l=2, helicity_n=10, B0OverBBar=1.0,
+        nuPrime=1.0, EStar=0.1, collisionOperator=1, includeXDotTerm=False,
+        includeElectricFieldTermInXiDot=False, useDKESExBDrift=True, Nx=1,
+        solverTolerance=1e-10, **GRID),
+}
 
-# ----------------------------------------------------------------------------
-# Parameters
-# ----------------------------------------------------------------------------
-SOLVER_TOLERANCE = 1e-10  # Krylov tolerance for each whichRHS solve
+# 3. Run -- one solve per right-hand side, progress printed
+matrices = {}
+for label, parameters in CASES.items():
+    print(f"\n--- {label} ---", flush=True)
+    matrices[label] = np.asarray(dkx.run(emit=print, **parameters).transport_matrix, dtype=float)
 
-# RHSMode=2 (3x3) energy-integrated transport matrix, simplified LHD model
-# (geometryScheme=2).
-DECK_RHSMODE2 = """\
-&general
-  RHSMode = 2
-/
-&geometryParameters
-  geometryScheme = 2
-/
-&speciesParameters
-  Zs = 1
-  mHats = 1
-  nHats = 1.0d+0
-  THats = 1.0d+0
-/
-&physicsParameters
-  Delta = 4.5694d-3
-  alpha = 1.0d+0
-  nu_n = 0.15d+0
-  Er = 0.0d+0
-  collisionOperator = 1
-  includeXDotTerm = .false.
-  includeElectricFieldTermInXiDot = .false.
-  useDKESExBDrift = .true.
-  includePhi1 = .false.
-/
-&resolutionParameters
-  Ntheta = 9
-  Nzeta = 9
-  Nxi = 6
-  NL = 3
-  Nx = 3
-  solverTolerance = 1d-10
-/
-&otherNumericalParameters
-  Nxi_for_x_option = 0
-/
-"""
-
-# RHSMode=3 (2x2) monoenergetic transport matrix, 3-helicity analytic model
-# (geometryScheme=1).
-DECK_RHSMODE3 = """\
-&general
-  RHSMode = 3
-/
-&geometryParameters
-  geometryScheme = 1
-  epsilon_t = -0.07053d+0
-  epsilon_h = 0.05067d+0
-  iota = 0.4542d+0
-  GHat = 3.7481d+0
-  IHat = 0d+0
-  helicity_l = 2
-  helicity_n = 10
-  B0OverBBar = 1d+0
-/
-&physicsParameters
-  nuPrime = 1.0d+0
-  EStar = 0.1d+0
-  collisionOperator = 1
-  includeXDotTerm = .false.
-  includeElectricFieldTermInXiDot = .false.
-  useDKESExBDrift = .true.
-  includePhi1 = .false.
-/
-&resolutionParameters
-  Ntheta = 9
-  Nzeta = 9
-  Nxi = 6
-  NL = 3
-  Nx = 1
-  solverTolerance = 1d-10
-/
-&otherNumericalParameters
-  Nxi_for_x_option = 0
-/
-"""
-
-CASES = (("RHSMode=2", DECK_RHSMODE2), ("RHSMode=3", DECK_RHSMODE3))
-
-OUTPUT_DIR = Path(__file__).resolve().parents[1] / "output" / "transport_matrix_rhsmode2_and_rhsmode3"
-
-# ----------------------------------------------------------------------------
-# 1) Run both transport-matrix cases and collect the matrices
-# ----------------------------------------------------------------------------
-print("=== examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py ===")
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-matrices: dict[str, np.ndarray] = {}
-for label, deck_text in CASES:
-    print(f"Step 1[{label}]: writing the deck and running the whichRHS loop")
-    deck_path = OUTPUT_DIR / f"{label.replace('=', '').lower()}.input.namelist"
-    deck_path.write_text(deck_text, encoding="utf-8")
-    result = run_transport_matrix(deck_path, tol=SOLVER_TOLERANCE, emit=None)
-    tm = np.asarray(result.transport_matrix)
-    matrices[label] = tm
-    print(f"  {label} transportMatrix ({tm.shape[0]}x{tm.shape[1]}, mathematical row/col order):")
-    print("   " + np.array2string(tm, prefix="   "))
-
-# ----------------------------------------------------------------------------
-# 2) Plot each transport matrix as a heatmap
-# ----------------------------------------------------------------------------
-print("Step 2: plotting the transport matrices")
-fig, axes = plt.subplots(1, len(CASES), figsize=(9.0, 3.8), constrained_layout=True)
-for ax, (label, _) in zip(np.atleast_1d(axes), CASES):
-    tm = matrices[label]
-    im = ax.imshow(tm, cmap="coolwarm", interpolation="nearest")
-    ax.set_title(f"{label} transportMatrix")
-    ax.set_xlabel("column (whichRHS)")
-    ax.set_ylabel("row")
-    fig.colorbar(im, ax=ax, shrink=0.85)
-PLOT_PATH = OUTPUT_DIR / "transport_matrix_rhsmode2_and_rhsmode3.png"
-fig.savefig(PLOT_PATH, dpi=150)
-plt.close(fig)
-
-# ----------------------------------------------------------------------------
-# 3) Results
-# ----------------------------------------------------------------------------
-print("=== Final results ===")
-for label, _ in CASES:
-    tm = matrices[label]
-    print(f"  {label}: L11 (D11-like) = {float(tm[0, 0]):.6e}, shape = {tm.shape}")
-print(f"  Saved plot: {PLOT_PATH.name}")
-print("Done: examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py")
+# 4. Plot, save and print
+OUT.mkdir(parents=True, exist_ok=True)
+fig, axes = plt.subplots(1, 2, figsize=(9, 3.8), constrained_layout=True)
+for axis, (label, matrix) in zip(axes, matrices.items()):
+    image = axis.imshow(matrix, cmap="coolwarm", vmin=-abs(matrix).max(), vmax=abs(matrix).max())
+    for (i, j), value in np.ndenumerate(matrix):
+        axis.text(j, i, f"{value:.2e}", ha="center", va="center", fontsize=7)
+    axis.set_title(label, fontsize=9)
+    axis.set_xlabel("drive (whichRHS)")
+    axis.set_ylabel("flux")
+    fig.colorbar(image, ax=axis, shrink=0.8)
+fig.savefig(OUT / "transport_matrix.png", dpi=120)
+np.savez(OUT / "transport_matrix.npz", **{k.split()[0].replace("=", ""): v for k, v in matrices.items()})
+print(f"\nsaved {OUT / 'transport_matrix.npz'}\nsaved {OUT / 'transport_matrix.png'}")
+print("\n=== Summary ===")
+for label, matrix in matrices.items():
+    print(f"  {label}:\n    " + np.array2string(matrix, precision=4, prefix="    "))
+    print(f"    Onsager check |L12 - L21| / |L12| = {abs(matrix[0, 1] - matrix[1, 0]) / abs(matrix[0, 1]):.2e}")

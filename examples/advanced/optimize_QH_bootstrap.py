@@ -1,6 +1,6 @@
 """Quasi-helical (QH) stellarator with low bootstrap current.
 
-The quasi-helical analog of ``examples/optimization/optimize_QA_bootstrap.py`` and the
+The quasi-helical analog of ``examples/advanced/optimize_QA_bootstrap.py`` and the
 kinetic sibling of ``vmex/examples/optimization/QH_optimization.py``.  Same
 differentiable chain -- boundary Fourier coefficients -> vmex implicit
 fixed-boundary equilibrium (custom-VJP adjoint) -> traceable VMEC spectral
@@ -60,7 +60,7 @@ Requires the optional companions vmex (new core API with core.boozer_tables)
 and booz_xform_jax: pip install -e /path/to/vmex /path/to/booz_xform_jax
 
 Run:
-  python examples/optimization/optimize_QH_bootstrap.py
+  python examples/advanced/optimize_QH_bootstrap.py
 """
 
 import dataclasses
@@ -207,7 +207,7 @@ STEM = "optimize_QH_bootstrap"
 # ----------------------------------------------------------------------------
 # 1) Differentiable fixed-boundary equilibrium (vmex.core.implicit)
 # ----------------------------------------------------------------------------
-print("=== examples/optimization/optimize_QH_bootstrap.py ===")
+print("=== examples/advanced/optimize_QH_bootstrap.py ===")
 print("Step 1: differentiable QH equilibrium (vmex.core.implicit)")
 if not VMEC_INPUT.exists():
     raise SystemExit(f"VMEC input not found: {VMEC_INPUT}")
@@ -508,4 +508,4 @@ fig.savefig(plot_path, dpi=130)
 plt.close(fig)
 print(f"  Saved plot: {plot_path}")
 print(f"  Wrote: {input_path.name}, {history_path.name}")
-print("Done: examples/optimization/optimize_QH_bootstrap.py")
+print("Done: examples/advanced/optimize_QH_bootstrap.py")

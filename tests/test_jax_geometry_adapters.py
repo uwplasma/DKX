@@ -3,7 +3,6 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -444,102 +443,11 @@ def test_boozer_proxy_transport_normalized_invariants_are_no_solve_gates() -> No
     np.testing.assert_allclose(np.asarray(constant_gradient), np.zeros(4), rtol=0.0, atol=1.0e-10)
 
 
-def test_public_vmex_boozer_example_backend_check_is_runnable() -> None:
-    script = (
-        Path(__file__).parents[1]
-        / "examples"
-        / "autodiff"
-        / "vmex_to_boozer_sfincs_pipeline.py"
-    )
-    result = subprocess.run(
-        [sys.executable, str(script), "--check-backends"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-
-    assert "Optional JAX geometry backend status:" in result.stdout
-    assert "vmex:" in result.stdout
-    assert "booz_xform_jax:" in result.stdout
-    assert "file-backed/setup only:" in result.stdout
-    assert "not claimed: full VMEC-boundary-to-SFINCS-transport gradients" in result.stdout
-    assert "Public workflow contract:" in result.stdout
-    assert "default CI requires vmex: false" in result.stdout
-    assert "default CI requires booz_xform_jax: false" in result.stdout
-    assert "no-overclaim gate: pass" in result.stdout
-    assert "kinetic scalar contract gate: pass" in result.stdout
-    assert "no-solve provenance gate: pass" in result.stdout
-    assert "numerical gradient gate: not_run" in result.stdout
-    assert "pass --json with --check-backends" in result.stdout
-    assert "pass --summary-json PATH" in result.stdout
-
-
-def test_public_vmex_boozer_example_backend_check_json_is_runnable() -> None:
-    script = (
-        Path(__file__).parents[1]
-        / "examples"
-        / "autodiff"
-        / "vmex_to_boozer_sfincs_pipeline.py"
-    )
-    result = subprocess.run(
-        [sys.executable, str(script), "--check-backends", "--json"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-
-    report = json.loads(result.stdout)
-    assert set(report["backends"]) == {"vmex", "booz_xform_jax"}
-    assert report["workflow_contract"]["ci_dependency_policy"]["default_ci_requires_vmex"] is False
-    assert report["gradient_availability"]["vmec_file_io"] == "setup_only_not_differentiated"
-    assert report["gradient_availability"]["sfincs_kinetic_transport_solve"] == "not_covered_by_this_lane"
-    assert report["no_overclaim_gate"]["full_transport_gradients_claimed"] is False
-    assert report["no_solve_provenance_gate"]["status"] == "pass"
-    assert report["no_solve_provenance_gate"]["kinetic_solve_executed"] is False
-    assert report["no_solve_provenance_gate"]["requires_file_provenance"] is False
-    assert report["kinetic_transport_scalar_contract"]["no_overclaim_gate"]["status"] == "pass"
-    assert report["no_solve_provenance_gate"]["kinetic_transport_scalar_contract_gate"]["status"] == "pass"
-    assert "linear_kinetic_solve" in report["no_solve_provenance_gate"][
-        "required_kinetic_transport_scalar_stages"
-    ]
-
-
-def test_public_vmex_boozer_example_backend_check_writes_summary_json(tmp_path: Path) -> None:
-    script = (
-        Path(__file__).parents[1]
-        / "examples"
-        / "autodiff"
-        / "vmex_to_boozer_sfincs_pipeline.py"
-    )
-    summary_path = tmp_path / "workflow-summary.json"
-    result = subprocess.run(
-        [sys.executable, str(script), "--check-backends", "--summary-json", str(summary_path)],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-
-    summary = json.loads(summary_path.read_text(encoding="utf-8"))
-    assert "pass --summary-json PATH" in result.stdout
-    assert summary["workflow"] == "vmex_to_boozer_sfincs_geometry_proxy"
-    assert summary["workflow_contract"]["contract_version"] >= 1
-    assert summary["numerical_gradient_gate"]["status"] == "not_run"
-    assert summary["no_solve_provenance_gate"]["status"] == "pass"
-    assert summary["no_solve_provenance_gate"]["kinetic_solve_executed"] is False
-    assert summary["no_solve_provenance_gate"]["requires_file_provenance"] is False
-    assert summary["kinetic_transport_scalar_contract"]["no_overclaim_gate"]["status"] == "pass"
-    assert summary["no_solve_provenance_gate"]["kinetic_transport_scalar_contract_gate"]["status"] == "pass"
-    assert summary["claims"]["not_claimed"] == (
-        "full VMEC-boundary-to-SFINCS kinetic transport gradients"
-    )
-    assert summary["no_overclaim_gate"]["kinetic_gradient_status"] == "deferred_not_covered_by_this_lane"
-
-
 def _load_finite_beta_example_module() -> ModuleType:
     script = (
         Path(__file__).parents[1]
         / "examples"
-        / "vmex_finite_beta"
+        / "advanced"
         / "finite_beta_vmec_to_sfincs.py"
     )
     spec = importlib.util.spec_from_file_location("finite_beta_vmec_to_sfincs_contract_test", script)

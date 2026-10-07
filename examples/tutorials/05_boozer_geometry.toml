@@ -1,5 +1,7 @@
-# Native schema-v1 Boozer profile. The relative path is resolved beside this file.
-name = "native_boozer_profile"
+# Tutorial 05: Boozer-coordinate geometry from a .bc file (|B| as a Boozer
+# spectrum, the format most stellarator neoclassical work circulates in).
+# Run with:  dkx run examples/tutorials/05_boozer_geometry.toml --out result.nc
+name = "boozer_geometry"
 
 [run]
 workflow = "profile"
@@ -7,6 +9,7 @@ progress = true
 
 [geometry]
 format = "boozer"
+# Non-stellarator-symmetric fixture; DKX detects the column convention itself.
 file = "../../tests/ref/nonStelSym_tiny_geometryScheme12.bc"
 surfaces = [0.20, 0.30]
 
@@ -18,27 +21,19 @@ density_m3 = [8.0e19, 7.0e19]
 temperature_keV = [1.0, 0.8]
 
 [physics]
-model = "full_local"
 collisions = "pitch_angle_scattering"
-magnetic_drifts = "dkes"
-phi1 = "off"
 
 [electric_field]
 mode = "prescribed"
 value_kV_m = 0.0
 
 [resolution]
-theta = 5
-zeta = 5
-pitch = 8
-speed = 4
+theta = 9
+zeta = 9
+pitch = 12
+speed = 5
 
 [solver]
-method = "auto"
+# Non-axisymmetric geometry takes the Krylov route, where the tolerance is
+# what stops the iteration, so it is set tighter than the default.
 relative_tolerance = 1.0e-10
-memory_fraction = 0.75
-reuse = "auto"
-
-[output]
-file = "native_boozer_profile.nc"
-plots = true
