@@ -257,6 +257,7 @@ _SOLVE_CPU_MAX_TIER2_DEFAULT = 0
 # (:mod:`dkx.sparse_precond`), which is what the Fortran reference does.
 # Legendre blocks the "coupled" preconditioner factors with full speed coupling.
 _COUPLED_PRECOND_KEEP = 2
+_COUPLED_PRECOND_F32 = False  # float32 dense L < keep factors too
 _TIER2_PRECONDITIONERS = ("coarse", "coarse_triangle", "coupled", "multigrid", "sparse", "sparse_triangle", "none")
 
 # =============================================================================
@@ -2533,7 +2534,7 @@ def build_tier2_preconditioner(
     if kind == "coupled":
         from dkx.structured_direct import coupled_preconditioner  # noqa: PLC0415
 
-        return coupled_preconditioner(op, _COUPLED_PRECOND_KEEP)
+        return coupled_preconditioner(op, _COUPLED_PRECOND_KEEP, _COUPLED_PRECOND_F32)
     if kind in ("sparse", "sparse_triangle"):
         from dkx.sparse_precond import build_sparse_preconditioner  # noqa: PLC0415
 
