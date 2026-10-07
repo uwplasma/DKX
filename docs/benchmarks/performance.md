@@ -479,7 +479,11 @@ also uses 18–20× less memory. The causes:
    OpenBLAS's threads compete with XLA's own pool: a $465\times465$ LU takes
    25 ms with a 4-thread pool and 2.6 ms with one. With one XLA thread DKX's
    warm solve is 2–3× faster than with the 16 that YANCC needs, which is why
-   the harness gives DKX its own `--dkx-xla-threads`. Moving the Schur steps to
+   the harness gives DKX its own `--dkx-xla-threads`. Outside the harness DKX
+   splits the cores itself when neither `DKX_CORES` nor `NPROC` is set: XLA gets
+   `min(8, cores // 2)` threads and BLAS the remaining cores per XLA thread, so
+   on four pinned cores (2, 2) runs the warm W7-X solve in 1.5 s against 2.6 s
+   for 8 XLA threads with single-threaded BLAS. Moving the Schur steps to
    SciPy through a host callback did not help: the same contention made them
    slower. The remaining gap is BLAS speed: on these cores SciPy's bundled
    OpenBLAS takes 9 ms per Schur step and the conda OpenBLAS MONKES links

@@ -135,7 +135,7 @@ def initialize_distributed_runtime_from_env() -> bool:
 _BLAS_THREAD_ENV = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
 
 
-def _default_single_thread_blas() -> None:
+def _default_single_thread_blas(threads: int = 1) -> None:
     """Default the host BLAS pools to one thread; explicit settings win.
 
     JAX's CPU LAPACK kernels run a batch across XLA's intra-op threadpool, and a
@@ -148,7 +148,24 @@ def _default_single_thread_blas() -> None:
     libraries loaded after DKX configures its runtime.
     """
     for name in _BLAS_THREAD_ENV:
-        os.environ.setdefault(name, "1")
+        os.environ.setdefault(name, str(threads))
+
+
+def _default_thread_split() -> tuple[int, int]:
+    """``(XLA threads, BLAS threads)`` for the cores this process may run on.
+
+    The two pools share the cores: XLA's LAPACK custom calls run inside its
+    threadpool, so their product is kept within the core count. Measured on four
+    pinned Xeon cores (8 XLA threads by default before): W7-X monoenergetic warm
+    2.8 s at (8, 1), 1.9 s at (1, 4), 1.6 s at (2, 2); NCSX full-FP 5.9, 6.4 and 5.2 s.
+    """
+    try:
+        cores = len(os.sched_getaffinity(0))  # taskset/cgroup aware, unlike os.cpu_count()
+    except AttributeError:
+        cores = os.cpu_count() or 1
+    xla = min(8, max(1, cores // 2))
+    return xla, max(1, cores // xla)
+
 
 
 def configure(*, jax_x64: bool | None = None) -> None:
@@ -174,19 +191,20 @@ def configure(*, jax_x64: bool | None = None) -> None:
     #
     #   DKX_CORES=N (N > 0)  pin the solver threadpool to N threads (NPROC);
     #   DKX_CORES=0          let XLA size the threadpool itself (full width);
-    #   unset                clamp to min(8, os.cpu_count()) unless NPROC is
-    #                        already set: the measured optimum is 4-8 threads on
-    #                        8-36-core hosts, and a full-width threadpool on a
-    #                        many-core box is several times slower than 8 threads
-    #                        (docs/benchmarks/performance.md).
+    #   unset                unless NPROC is set, split the usable cores (taskset
+    #                        aware): XLA gets min(8, cores // 2), BLAS the rest
+    #                        per XLA thread (_default_thread_split).  A full-width
+    #                        threadpool on a many-core box is several times slower
+    #                        than 8 threads (docs/benchmarks/performance.md).
     #
-    # In every case the host BLAS pools default to one thread; see
+    # Otherwise the host BLAS pools default to one thread; see
     # _default_single_thread_blas.  Forcing multiple host *devices* is a separate,
     # test-oriented concern: it is available only through an explicit
     # DKX_CPU_DEVICES (below) and has no measured benefit for solves (all forced
     # host devices share one threadpool).
-    _default_single_thread_blas()
     _cores_env = os.environ.get("DKX_CORES", "").strip()
+    _split = _default_thread_split() if not _cores_env and "NPROC" not in os.environ else None
+    _default_single_thread_blas(_split[1] if _split else 1)
     if _cores_env:
         try:
             _cores_val = int(_cores_env)
@@ -202,8 +220,8 @@ def configure(*, jax_x64: bool | None = None) -> None:
             if os.environ.pop("_DKX_NPROC_DEFAULTED", None):
                 os.environ.pop("NPROC", None)
     else:
-        if "NPROC" not in os.environ:
-            os.environ["NPROC"] = str(min(8, os.cpu_count() or 1))
+        if _split:
+            os.environ["NPROC"] = str(_split[0])
             os.environ["_DKX_NPROC_DEFAULTED"] = "1"
 
     # Explicit opt-in: force multiple host CPU devices (JAX SPMD / multi-device

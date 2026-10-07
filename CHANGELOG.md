@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Default CPU threads: with neither `DKX_CORES` nor `NPROC` set, DKX splits the cores it may run on (taskset aware, not `os.cpu_count()`) between XLA's pool, `min(8, cores // 2)`, and BLAS, the remaining cores per XLA thread, instead of 8 XLA threads and single-threaded BLAS. Explicit `DKX_CORES`, `NPROC` and BLAS variables are unchanged. On four pinned Xeon cores, warm W7-X monoenergetic goes from 2.58 to 1.53 s, NCSX full-FP (Krylov, coupled preconditioner) from 5.7 to 5.1 s, sparse direct from 25.2 to 24.4 s; unpinned on 36 threads 2.73 to 1.96 s and 6.13 to 5.58 s; on a 14-core laptop all within noise.
+
 - `tools/benchmarks/cross_code_speed.py --dkx-xla-threads N` sets DKX's XLA pool apart from YANCC's. On four pinned x86 cores, XLA's pool and OpenBLAS compete inside every LAPACK call, and one XLA thread makes DKX's warm monoenergetic solve 2–3× faster (W7-X 3.4 to 1.6 s, HSX 19.5 to 6.8 s; MONKES 0.32 s and 1.5 s).
 
 - `monoenergetic_database` now uses spectral (Fourier) angular derivatives when the deck does not set `thetaDerivativeScheme`/`zetaDerivativeScheme`. A deck that sets them keeps its choice. On the matched W7-X/HSX benchmark this is the discretization MONKES uses, and it converges like MONKES: HSX reaches 3% at 19x41x64 instead of 25x51x96, and W7-X is at 4e-5 one rung above 15x31x48 (finite differences: 0.6% at 25x51x96). Values at a fixed grid change within discretization error. To pair a database with a full-kinetic solve of the same deck, set the schemes in the deck.

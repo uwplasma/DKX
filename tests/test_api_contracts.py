@@ -228,13 +228,17 @@ def test_runtime_env_controls_solver_threads_and_compilation_cache(
 def test_runtime_default_thread_clamp_and_zero_opt_out(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DKX_DISABLE_COMPILATION_CACHE", "1")
 
-    # No DKX_CORES and no NPROC: the import clamps the threadpool to
-    # min(8, cpu_count) and marks the clamp as dkx-owned.
+    # No DKX_CORES and no NPROC: the import splits the usable cores between
+    # XLA's pool and BLAS (``_default_thread_split``) and marks the clamp dkx-owned.
+    from dkx.runtime import _default_thread_split
+
+    xla, blas = _default_thread_split()
+    assert 1 <= xla <= 8 and blas >= 1
     monkeypatch.delenv("DKX_CORES", raising=False)
     monkeypatch.delenv("NPROC", raising=False)
     monkeypatch.delenv("_DKX_NPROC_DEFAULTED", raising=False)
     _reconfigure()
-    assert os.environ["NPROC"] == str(min(8, os.cpu_count() or 1))
+    assert os.environ["NPROC"] == str(xla)
     assert os.environ["_DKX_NPROC_DEFAULTED"] == "1"
 
     # A user-set NPROC always wins over the default clamp.
@@ -267,12 +271,16 @@ def test_runtime_blas_pools_default_to_one_thread_unless_set(
     for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
         monkeypatch.delenv(name, raising=False)
 
-    # The default path (no DKX_CORES) also leaves BLAS single-threaded: the
-    # XLA threadpool, not BLAS, parallelizes the batched LAPACK calls.
+    # The default path (no DKX_CORES, no NPROC) gives BLAS the cores XLA's
+    # pool leaves, so XLA threads times BLAS threads stay within the cores.
+    from dkx.runtime import _default_thread_split
+
+    monkeypatch.delenv("NPROC", raising=False)
     _reconfigure()
-    assert os.environ["OMP_NUM_THREADS"] == "1"
-    assert os.environ["OPENBLAS_NUM_THREADS"] == "1"
-    assert os.environ["MKL_NUM_THREADS"] == "1"
+    blas = str(_default_thread_split()[1])
+    assert os.environ["OMP_NUM_THREADS"] == blas
+    assert os.environ["OPENBLAS_NUM_THREADS"] == blas
+    assert os.environ["MKL_NUM_THREADS"] == blas
 
     # A value the user chose is never overridden, with or without DKX_CORES.
     monkeypatch.setenv("OPENBLAS_NUM_THREADS", "6")
