@@ -257,7 +257,7 @@ _SOLVE_CPU_MAX_TIER2_DEFAULT = 0
 # (:mod:`dkx.sparse_precond`), which is what the Fortran reference does.
 # Legendre blocks the "coupled" preconditioner factors with full speed coupling.
 _COUPLED_PRECOND_KEEP = 2
-_COUPLED_PRECOND_F32 = False  # float32 dense L < keep factors too
+_COUPLED_PRECOND_F32 = True  # float32 dense L < keep factors too (same iterations on HSX FP)
 _TIER2_PRECONDITIONERS = ("coarse", "coarse_triangle", "coupled", "multigrid", "sparse", "sparse_triangle", "none")
 
 # =============================================================================
