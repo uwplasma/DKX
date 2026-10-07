@@ -204,28 +204,73 @@ class CoupledSolver:
 
         # A = U~ L~: U~ unit upper with U_l S_(l+1)^-1 above the diagonal, L~
         # lower with S_l on it and Lo_l below; elimination runs from l = Nxi - 1
-        # down, so the singular l = 0 collision block is reached last.
-        sol: list = [None] * n_l
+        # down, so the singular l = 0 collision block is reached last.  A
+        # scanned tail (l > k) is swept by lax.scan over its stacked factors.
+        k = len(self.lu) if self.tail else n_l - 1
+        sol: list = [None] * (k + 1)
+        if self.tail:
+            lu_s, piv_s, lo_b, up_b, lo_s, up_s = self.tail
+            rows_t = jnp.stack(rows[k:])  # (L_t, P*TZ)
+            at = lambda i: (lu_s[i], piv_s[i])  # noqa: E731
+            band = lambda b, sc, i: (b[i], sc[i])  # noqa: E731
+            pr = lambda v: v.reshape(-1, tz)  # noqa: E731
         if not transpose:
-            y = rows[:]
-            for l in range(n_l - 2, -1, -1):
+            y = rows[: k + 1]
+            if self.tail:  # y_i = r_i - U_i S_(i+1)^-1 y_(i+1), from the top down
+
+                def back(yn, i):
+                    yi = rows_t[i] - _bmul(band(up_b, up_s, i), pr(_lus(at(i + 1), yn))).reshape(-1)
+                    return yi, yi
+
+                ys = jax.lax.scan(back, rows_t[-1], jnp.arange(len(rows_t) - 1), reverse=True)[1]
+                ys_all = jnp.concatenate([ys, rows_t[-1:]])
+                y[k] = ys_all[0]
+            for l in range(k - 1, -1, -1):
                 y[l] = rows[l] - up(l, _lus(self._lu(l + 1), y[l + 1]))
             sol[0] = _lus(self._lu(0), y[0])
-            for l in range(1, n_l):
+            for l in range(1, k + 1):
                 sol[l] = _lus(self._lu(l), y[l] - lo(l, sol[l - 1]))
+            if self.tail:
+
+                def fwd(sp, i):
+                    si = _lus(at(i), ys_all[i] - _bmul(band(lo_b, lo_s, i), pr(sp)).reshape(-1))
+                    return si, si
+
+                sol_t = jax.lax.scan(fwd, sol[k], jnp.arange(1, len(rows_t)))[1]
         else:
-            w = rows[:]
-            w[-1] = _lus(self._lu(len(rows) - 1), rows[-1], trans=1)
-            for l in range(n_l - 2, -1, -1):
+            if self.tail:  # w_i = S_i^-T (r_i - Lo_(i+1)^T w_(i+1))
+
+                def back_t(wn, i):
+                    v = rows_t[i] - _bmul(band(lo_b, lo_s, i + 1), pr(wn), True).reshape(-1)
+                    wi = _lus(at(i), v, trans=1)
+                    return wi, wi
+
+                w_top = _lus(at(len(rows_t) - 1), rows_t[-1], trans=1)
+                ws = jax.lax.scan(back_t, w_top, jnp.arange(len(rows_t) - 1), reverse=True)[1]
+                ws_all = jnp.concatenate([ws, w_top[None]])
+            w = rows[: k + 1]
+            w[k] = ws_all[0] if self.tail else _lus(self._lu(k), rows[k], trans=1)
+            for l in range(k - 1, -1, -1):
                 w[l] = _lus(self._lu(l), rows[l] - lo_t(l + 1, w[l + 1]), trans=1)
             sol[0] = w[0]
-            for l in range(n_l - 1):
+            for l in range(k):
                 sol[l + 1] = w[l + 1] - _lus(self._lu(l + 1), up_t(l, sol[l]), trans=1)
+            if self.tail:
+
+                def fwd_t(sp, i):
+                    v = _bmul(band(up_b, up_s, i - 1), pr(sp), True).reshape(-1)
+                    si = ws_all[i] - _lus(at(i), v, trans=1)
+                    return si, si
+
+                sol_t = jax.lax.scan(fwd_t, sol[k], jnp.arange(1, len(rows_t)))[1]
         # The truncated (x, l >= Nxi_for_x) DOFs carry identity rows: this is the
         # inverse of the pinned operator of dkx.solve._pinned_matvecs.
         out = g
-        for l in range(n_l):
+        for l in range(k + 1):
             out = out.at[layout[l], l].set(sol[l].reshape(-1, tz))
+        if self.tail and len(rows_t) > 1:
+            blocks = jnp.moveaxis(sol_t.reshape(len(rows_t) - 1, -1, tz), 0, 1)
+            out = out.at[layout[k][:, None], np.arange(k + 1, n_l)[None, :]].set(blocks)
         return out.reshape(-1)
 
     def _solve1(self, r: jnp.ndarray, transpose: bool) -> jnp.ndarray:
