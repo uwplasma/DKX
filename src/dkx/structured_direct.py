@@ -134,9 +134,23 @@ class CoupledSolver:
     upper: tuple  # per l: (k_(l+1), TZ, TZ) blocks coupling row l to l + 1
     bc: tuple  # (B, C, gamma, Z, M_lu, Zt, Mt_lu)
     mom: tuple = ()  # (Q, gamma1, Zq, K_lu, Zqt, Kt_lu): the l = 1 momentum lift
+    # Scanned uniform tail l >= len(lu): stacked (LU, piv, Lo_s, U_s), speed scale.
+    tail: tuple = ()
 
     def tree_flatten(self):
-        return (self.op, self.lu, self.lower, self.upper, self.bc, self.mom), None
+        return (self.op, self.lu, self.lower, self.upper, self.bc, self.mom, self.tail), None
+
+    def _lu(self, l: int) -> tuple:
+        n = len(self.lu)
+        return self.lu[l] if l < n else (self.tail[0][l - n], self.tail[1][l - n])
+
+    def _lo(self, l: int) -> Any:
+        n = len(self.lower)
+        return self.lower[l] if l < n else (self.tail[2][l - n], self.tail[4])
+
+    def _up(self, l: int) -> Any:
+        n = len(self.upper)
+        return self.upper[l] if l < n else (self.tail[3][l - n], self.tail[4])
 
     @classmethod
     def tree_unflatten(cls, _aux, children):
@@ -167,23 +181,23 @@ class CoupledSolver:
 
         def lo(l: int, y: jnp.ndarray) -> jnp.ndarray:  # Lo_l y_(l-1)
             yk = y.reshape(-1, tz)[sel[l - 1]]
-            return _bmul(self.lower[l], yk).reshape(-1)
+            return _bmul(self._lo(l), yk).reshape(-1)
 
         def lo_t(l: int, x: jnp.ndarray) -> jnp.ndarray:  # Lo_l^T x_l -> l - 1
             out = jnp.zeros((len(layout[l - 1]), tz), dtype=x.dtype)
             return out.at[sel[l - 1]].set(
-                _bmul(self.lower[l], x.reshape(-1, tz), True)
+                _bmul(self._lo(l), x.reshape(-1, tz), True)
             ).reshape(-1)
 
         def up(l: int, x: jnp.ndarray) -> jnp.ndarray:  # U_l x_(l+1)
             out = jnp.zeros((len(layout[l]), tz), dtype=x.dtype)
             return out.at[sel[l]].set(
-                _bmul(self.upper[l], x.reshape(-1, tz))
+                _bmul(self._up(l), x.reshape(-1, tz))
             ).reshape(-1)
 
         def up_t(l: int, y: jnp.ndarray) -> jnp.ndarray:  # U_l^T y_l -> l + 1
             yk = y.reshape(-1, tz)[sel[l]]
-            return _bmul(self.upper[l], yk, True).reshape(-1)
+            return _bmul(self._up(l), yk, True).reshape(-1)
 
         # A = U~ L~: U~ unit upper with U_l S_(l+1)^-1 above the diagonal, L~
         # lower with S_l on it and Lo_l below; elimination runs from l = Nxi - 1
@@ -192,18 +206,18 @@ class CoupledSolver:
         if not transpose:
             y = rows[:]
             for l in range(n_l - 2, -1, -1):
-                y[l] = rows[l] - up(l, _lus(self.lu[l + 1], y[l + 1]))
-            sol[0] = _lus(self.lu[0], y[0])
+                y[l] = rows[l] - up(l, _lus(self._lu(l + 1), y[l + 1]))
+            sol[0] = _lus(self._lu(0), y[0])
             for l in range(1, n_l):
-                sol[l] = _lus(self.lu[l], y[l] - lo(l, sol[l - 1]))
+                sol[l] = _lus(self._lu(l), y[l] - lo(l, sol[l - 1]))
         else:
             w = rows[:]
-            w[-1] = _lus(self.lu[-1], rows[-1], trans=1)
+            w[-1] = _lus(self._lu(len(rows) - 1), rows[-1], trans=1)
             for l in range(n_l - 2, -1, -1):
-                w[l] = _lus(self.lu[l], rows[l] - lo_t(l + 1, w[l + 1]), trans=1)
+                w[l] = _lus(self._lu(l), rows[l] - lo_t(l + 1, w[l + 1]), trans=1)
             sol[0] = w[0]
             for l in range(n_l - 1):
-                sol[l + 1] = w[l + 1] - _lus(self.lu[l + 1], up_t(l, sol[l]), trans=1)
+                sol[l + 1] = w[l + 1] - _lus(self._lu(l + 1), up_t(l, sol[l]), trans=1)
         # The truncated (x, l >= Nxi_for_x) DOFs carry identity rows: this is the
         # inverse of the pinned operator of dkx.solve._pinned_matvecs.
         out = g
@@ -290,14 +304,16 @@ def _factor(op: KineticOperator, keep: int | None = None, drifts: Any = None) ->
     def pair_diag(l: int, act: np.ndarray) -> jnp.ndarray:
         """Per-pair angular diagonal blocks, plus the L-diagonal magnetic drifts
         at ``l <= 2`` that the coarse route and Fortran's preconditioner keep."""
-        d = blk(l, "diag")[act]
-        if drifts is None or l > 2:
-            return d
+        return blk(l, "diag")[act] + drift_diag(l, act)
+
+    def drift_diag(l: Any, act: np.ndarray) -> Any:
+        if drifts is None or (isinstance(l, int) and l > 2):
+            return 0.0
         dc = KineticOperator.magnetic_drift_diagonal_coefficients(l)
         m = sum(dc[f"c{i}"] * (drifts[f"mt{i}"] + drifts[f"mz{i}"]) for i in (1, 2, 3))
         m = m + dc["xi"] * jax.vmap(jnp.diag)(drifts["xi"])  # (S, TZ, TZ)
         x2 = jnp.tile(op.x * op.x, n_s)[act]
-        return d + x2[:, None, None] * m[act // n_x]
+        return jnp.where(l <= 2, 1.0, 0.0) * x2[:, None, None] * m[act // n_x]
 
     def diag_block(l: int) -> jnp.ndarray:
         act = layout[l]
@@ -337,13 +353,47 @@ def _factor(op: KineticOperator, keep: int | None = None, drifts: Any = None) ->
         return (full[:, xs[0, 0]] / op.x[xs[0, 0]]).astype(jnp.float32), op.x[xs]
 
     n_l = len(layout)
-    lowers = [jnp.zeros((0, tz, tz))] + [band(l, "lower", layout[l], l >= keep) for l in range(1, n_l)]
-    uppers = [band(l, "upper", layout[l + 1], l + 1 >= keep) for l in range(n_l - 1)]
-    uppers.append(jnp.zeros((0, tz, tz)))
-    lus: list = [None] * len(layout)
-    last = d0 if len(layout) == 1 else diag_block(len(layout) - 1)
-    lus[-1] = _tail_lu(last) if last.ndim == 3 else lu_factor(last)
-    for l in range(len(layout) - 2, -1, -1):
+    # A tail with the same pairs at every l is eliminated in one lax.scan, so its
+    # per-l temporaries are freed (the unrolled chain kept tens of GB alive).
+    scanned = keep < n_l and all(np.array_equal(layout[l], layout[keep]) for l in range(keep, n_l))
+    n_chain = keep if scanned else n_l
+    lowers = [jnp.zeros((0, tz, tz))] + [band(l, "lower", layout[l], l >= keep) for l in range(1, n_chain)]
+    uppers = [band(l, "upper", layout[l + 1], l + 1 >= keep) for l in range(n_chain - 1)]
+    uppers.append(jnp.zeros((0, tz, tz)) if not scanned else band(keep - 1, "upper", layout[keep], True))
+    lus: list = [None] * n_l
+    tail: tuple = ()
+    if scanned:
+        act = layout[keep]
+        x0 = (act % n_x).reshape(n_s, -1)
+        cd_all = jnp.diagonal(cmat[:, act][:, :, act], axis1=1, axis2=2)  # (L, P)
+
+        def fac(full: jnp.ndarray) -> jnp.ndarray:
+            return (full.reshape(n_s, n_x, tz, tz)[:, x0[0, 0]] / op.x[x0[0, 0]]).astype(jnp.float32)
+
+        def body(carry, l):
+            lu1, piv1, lo1 = carry
+            bl = stripped.legendre_blocks(l)
+            up, lo = (getattr(bl, k).reshape(-1, tz, tz) for k in ("upper", "lower"))
+            w = jax.vmap(lambda f0, f1, r: lu_solve((f0, f1), r))(lu1, piv1, lo1)
+            d = bl.diag.reshape(-1, tz, tz)[act] + cd_all[l][:, None, None] * eye_tz
+            d = d + drift_diag(l, act) - jnp.einsum("kab,kbc->kac", up[act], w.astype(jnp.float64))
+            lu, piv = _tail_lu(d)
+            return (lu, piv, lo[act].astype(jnp.float32)), (lu, piv, fac(lo), fac(up))
+
+        k_p = len(act)
+        init = (
+            jnp.broadcast_to(jnp.eye(tz, dtype=jnp.float32), (k_p, tz, tz)),
+            jnp.broadcast_to(jnp.arange(tz, dtype=jnp.int32), (k_p, tz)),
+            jnp.zeros((k_p, tz, tz), jnp.float32),
+        )
+        (lu_k, piv_k, lo_k), stacked = jax.lax.scan(body, init, jnp.arange(keep, n_l), reverse=True)
+        lus[keep] = (lu_k, piv_k)
+        lowers.append(lo_k)
+        tail = stacked + (op.x[x0],)
+    else:
+        last = d0 if n_l == 1 else diag_block(n_l - 1)
+        lus[-1] = _tail_lu(last) if last.ndim == 3 else lu_factor(last)
+    for l in range(n_chain - 2 if not scanned else keep - 1, -1, -1):
         sel = np.searchsorted(layout[l], layout[l + 1])
         k_l, k_n = len(layout[l]), len(sel)
         if l + 1 >= keep:  # S_(l+1) per pair: so is U_l S_(l+1)^-1 Lo_(l+1)
@@ -368,7 +418,10 @@ def _factor(op: KineticOperator, keep: int | None = None, drifts: Any = None) ->
             d = d + gamma1 * qq
         d = _schur_update(d.reshape(k_l, tz, k_l, tz), lus[l + 1], lowers[l + 1], uppers[l], sel)
         lus[l] = lu_factor(d.reshape(k_l * tz, k_l * tz))
-    solver = CoupledSolver(op, tuple(lus), tuple(lowers), tuple(uppers), (b, c, gamma) + (None,) * 4)
+    lus, lowers = lus[:n_chain], lowers[:n_chain]
+    solver = CoupledSolver(
+        op, tuple(lus), tuple(lowers), tuple(uppers), (b, c, gamma) + (None,) * 4, tail=tail
+    )
     if q is not None:
         qf = jnp.zeros((n_s * n_x, n_xi, tz, n_s)).at[layout[1], 1].set(q.reshape(-1, tz, n_s))
         qf = qf.reshape(-1, n_s)

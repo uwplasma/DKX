@@ -1822,9 +1822,11 @@ Measured through the production recycled Krylov path.  On the tiny drift
         :meth:`apply_f` exactly.
         """
         self._check_block_extraction_supported()
-        if not (0 <= int(ell) < self.n_xi):
-            raise ValueError(f"ell must be in [0, {self.n_xi}), got {ell}")
-        ell = int(ell)
+        traced = isinstance(ell, jax.core.Tracer)  # a scan over l passes a traced ell
+        if not traced:
+            if not (0 <= int(ell) < self.n_xi):
+                raise ValueError(f"ell must be in [0, {self.n_xi}), got {ell}")
+            ell = int(ell)
 
         n_tz = self.n_theta * self.n_zeta
         eye_t = jnp.eye(self.n_theta, dtype=jnp.float64)
@@ -1860,19 +1862,21 @@ Measured through the production recycled Krylov path.  On the tiny drift
             return block_s[:, None, :, :] * scale[None, :, None, None]
 
         # ---- lower: row ell receives column ell-1 ----
-        if ell >= 1:
-            coef_stream = self.xi_coupling_lower[ell]  # traced 0-d scalar (static ell)
+        if traced or ell >= 1:
+            on = jnp.where(ell >= 1, 1.0, 0.0)
+            coef_stream = on * self.xi_coupling_lower[ell]  # traced 0-d scalar (static ell)
             coef_mirror = -coef_stream * (ell - 1.0)
-            col_mask = mask[:, ell - 1]
+            col_mask = mask[:, jnp.maximum(ell - 1, 0)] if traced else mask[:, ell - 1]
             lower = _shaped(coef_stream * stream_tz + coef_mirror * mirror_tz, self.x, col_mask)
         else:
             lower = jnp.zeros((self.n_species, self.n_x, n_tz, n_tz), dtype=jnp.float64)
 
         # ---- upper: row ell receives column ell+1 ----
-        if ell + 1 < self.n_xi:
-            coef_stream = self.xi_coupling_upper[ell]  # traced 0-d scalar (static ell)
+        if traced or ell + 1 < self.n_xi:
+            on = jnp.where(ell + 1 < self.n_xi, 1.0, 0.0)
+            coef_stream = on * self.xi_coupling_upper[jnp.minimum(ell, self.n_xi - 2) if traced else ell]  # traced 0-d scalar (static ell)
             coef_mirror = coef_stream * (ell + 2.0)
-            col_mask = mask[:, ell + 1]
+            col_mask = mask[:, jnp.minimum(ell + 1, self.n_xi - 1)] if traced else mask[:, ell + 1]
             upper = _shaped(coef_stream * stream_tz + coef_mirror * mirror_tz, self.x, col_mask)
         else:
             upper = jnp.zeros((self.n_species, self.n_x, n_tz, n_tz), dtype=jnp.float64)
