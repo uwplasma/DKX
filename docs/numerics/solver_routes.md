@@ -200,7 +200,8 @@ operator; the $L$-diagonal drift half is kept at $L \le 2$, as in the coarse rou
 The tail is eliminated and swept by `lax.scan`, padded with identity blocks
 where `Nxi_for_x` truncates; its bands are two scalars per $L$ over shared
 streaming and mirror blocks. The dense $L < 2$ Schur step is formed one column
-pair at a time, never as the full $W = S^{-1} L_o$. Warm
+pair at a time, never as the full $W = S^{-1} L_o$. All its factors are float32
+(`dkx.solve._COUPLED_PRECOND_F32`); production HSX FP keeps 17 iterations. Warm
 solves on a laptop (14 cores, shared), recycled GCROT to 1e-10:
 
 | deck | `coarse` | `coupled` |
