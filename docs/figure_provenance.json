@@ -3,6 +3,9 @@
   "purpose": "Every figure shown in the README or the docs, and the checked-in script that produces it. A figure a reader cannot regenerate is a claim they cannot check, so this file is enforced by tests/test_figure_provenance.py rather than kept by hand.",
   "unresolved_budget": 2,
   "figures": {
+    "docs/_static/figures/benchmarks/cross_code_speed.png": {
+      "generator": "tools/benchmarks/cross_code_speed.py"
+    },
     "docs/_static/figures/docs/ambipolar_er_roots.png": {
       "generator": "docs/figures/generate_docs_figures.py"
     },
