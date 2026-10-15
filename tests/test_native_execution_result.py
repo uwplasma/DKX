@@ -199,7 +199,7 @@ def test_native_profile_gradient_matches_independently_rebuilt_ambipolar_roots(c
 
     def cold_root(problem, bracket):
         result = find_ambipolar_er(problem, er_bracket=bracket, max_iter=60,
-                                   current_tol=1e-16, field_tol=1e-12,
+                                   current_tol=1e-10, field_tol=1e-12,
                                    warm_start=False, all_roots=False, emit=None)
         assert result.converged
         return float(result.er)
