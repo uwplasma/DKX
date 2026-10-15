@@ -1567,6 +1567,8 @@ def _cmd_ambipolar(args: argparse.Namespace) -> int:
             }
             for root in result.roots
         ],
+        "n_solves": result.n_solves,
+        "failures": list(result.failures),
         "elapsed_s": float(_now() - t0),
     }
     summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True))

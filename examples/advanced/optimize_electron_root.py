@@ -17,9 +17,9 @@ from autodiff of the kinetic solve, not finite differences).  The decision
 variables are three ``|B|`` amplitudes (a mirror term and two helical ripple
 terms); the objective is a plain function of the resulting ``E_r``.
 
-Warm starts: the ambipolar *root finding* (``find_ambipolar_er``) threads the
-previous solve's ``x0`` and GCROT recycle pair across its ``E_r`` bracket
-evaluations (a recycled Krylov Fokker-Planck benefit, shown below); the differentiable
+Warm starts: the ambipolar *root finding* (``find_ambipolar_er``) seeds each
+``E_r`` evaluation from the nearest solved field, reusing a preconditioner and
+recycle pair only nearby (a recycled Krylov Fokker-Planck benefit); the differentiable
 ``ambipolar_er`` additionally seeds its secant from the previous optimizer
 iteration's root.
 
