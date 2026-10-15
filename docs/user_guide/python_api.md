@@ -21,7 +21,7 @@ again = dkx.Result.load("result.nc")
 | `Case` | immutable case; `from_file`, `from_mapping`, `to_dict`, `case_id`, `geometry_path` |
 | `RunConfig`, `GeometryConfig`, `SpeciesConfig`, `PhysicsConfig`, `ElectricFieldConfig`, `ResolutionConfig`, `SolverConfig`, `ParallelConfig`, `ConvergenceConfig`, `OutputConfig`, `ScanConfig`, `ScanAxis` | the frozen dataclasses of each table ({doc}`inputs`) |
 | `CaseValidationError` | raised with `path`, `value`, `expected`, `correction` attributes |
-| `case_json_schema()` | the JSON Schema that `dkx schema --format json` prints |
+| `case_json_schema()` | the JSON Schema that `dkx template --format json` prints |
 | `run(case, out=None, emit=None)` | solve a case; returns `Result` |
 | `Result`, `RESULT_SCHEMA_VERSION` | the result object and its file schema ({doc}`outputs`) |
 
@@ -104,7 +104,7 @@ A preconditioner changes iteration count, time and memory, not the answer.
 ```python
 import jax, jax.numpy as jnp, dkx
 
-case = dkx.Case.from_file("examples/05_ambipolar_profile/case.toml")
+case = dkx.Case.from_file("examples/tutorials/08_ambipolar_er.toml")
 problem = dkx.prepare_er_scan(case, surface_index=1)
 
 def bootstrap_current(er_kv_m):

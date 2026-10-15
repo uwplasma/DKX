@@ -14,7 +14,7 @@ implicit function theorem, not from differentiating solver iterations.
 Reverse-mode `jax.grad` derivatives of kinetic observables (points) against
 centered finite differences (line). Regenerate with
 `tools/publication_figures/generate_autodiff_sensitivity_validation.py`;
-`examples/autodiff/gradients_tour.py` runs the same check interactively.
+`examples/tutorials/14_gradients.py` runs the same kind of check on one output.
 ```
 
 ## Implicit differentiation through the solve
@@ -282,9 +282,8 @@ $$
 $\langle \mathbf{j}\cdot\mathbf{B}\rangle$ as a VMEX objective term with the
 interface of VMEX's Redl term, so VMEX's implicit Jacobian differentiates
 through the Boozer transform and an exact structured drift-kinetic solve on
-each surface. `examples/optimization/QA_optimization_bootstrap_dkx.py` runs it;
-the geometry link alone is `examples/autodiff/vmex_to_boozer_sfincs_pipeline.py`.
-The workflow is in {doc}`../tutorials/vmex_optimization`.
+each surface. `examples/advanced/QA_optimization_bootstrap_dkx.py` runs it.
+The workflow is in {doc}`../tutorials/bootstrap_gradients_optimization`.
 
 These scripts implement the full differentiable chain; running one is not by itself a
 qualified optimization. A qualified result also needs the converged final equilibrium,
@@ -306,13 +305,8 @@ not an error bound; its use in convergence reports is in
 
 ## Worked examples
 
-- `examples/07_gradients/run.py`: gradients on the operator lane.
-- `examples/autodiff/gradients_tour.py`: `jax.grad` of kinetic outputs checked
-  against finite differences.
-- `examples/autodiff/matrix_free_residual_and_jvp.py`: matrix-free residual and
-  Jacobian-vector products.
-- `examples/autodiff/implicit_diff_through_gmres_solve_scheme5.py`: implicit
-  differentiation through a Krylov solve on a VMEC geometry.
-- `examples/autodiff/differentiable_geometry_gradients.py`: a geometry scalar
-  differentiated with respect to harmonic amplitudes.
-- {doc}`../tutorials/gradients`.
+- `examples/tutorials/14_gradients.py`: gradients on the operator lane.
+- `examples/tutorials/15_optimization.py`: a shape derivative through
+  `FluxSurfaceGeometry.from_fourier` and the kinetic solve, checked against
+  central differences.
+- {doc}`../tutorials/bootstrap_gradients_optimization`.

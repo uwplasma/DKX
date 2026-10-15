@@ -4,7 +4,11 @@ Heavy impurities respond strongly to small variations of the electrostatic poten
 flux surface, because the Boltzmann factor $e^{-Z e\Phi_1/T}$ grows with charge. SFINCS
 includes this variation as an extra unknown closed by quasineutrality (Mollén et al.,
 Plasma Phys. Control. Fusion 60, 084001, 2018). DKX implements the same model on the
-namelist route. It also provides the classical (friction-driven) impurity flux, which is
+namelist route, and its kinetic-equation form natively (`physics.phi1 = "kinetic"`).
+Its validation status is `validated_limited`: it matches Fortran SFINCS v3 to 2.0e-6
+on one geometry with Fokker–Planck collisions and zero $E_r$ (the benchmark below);
+`stable_candidate` is withheld until more geometries, collision operators and finite
+$E_r$ are covered. It also provides the classical (friction-driven) impurity flux, which is
 algebraic and needs no kinetic solve.
 
 ## Potential split

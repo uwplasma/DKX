@@ -11,7 +11,7 @@ input decks run unchanged.
 
 ## Quickstart
 
-A calculation is one *case*: a versioned mapping with a geometry, species
+A calculation is one *case*: a mapping with a geometry, species
 profiles, a physics model, an electric field, a phase-space resolution and a
 solver choice ({doc}`user_guide/inputs` lists every field). This one is an
 analytic tokamak at a teaching resolution; it runs in seconds and is not
@@ -34,8 +34,8 @@ print("solver route:", result.metadata["solver_route"])
 print(float(result.arrays["particle_flux_m2_s"][1, 0]))   # particle flux, m^-2 s^-1
 ```
 
-The same case lives in `examples/01_tokamak_profile/case.toml`. Before quoting a
-number, run `dkx converge examples/01_tokamak_profile/case.toml`: it refines every
+The same case lives in `examples/tutorials/02_cli_case.toml`. Before quoting a
+number, run `dkx converge examples/tutorials/02_cli_case.toml`: it refines every
 phase-space axis and exits zero only when the observables stop moving and every
 returned state satisfies the kinetic equation ({doc}`user_guide/convergence`).
 
@@ -55,14 +55,13 @@ returned state satisfies the kinetic equation ({doc}`user_guide/convergence`).
 
 | Section | Read it to |
 | --- | --- |
-| {doc}`getting_started/installation`, {doc}`getting_started/first_run` | install DKX and run, read and check a first case |
+| {doc}`getting_started/installation` | install DKX and check the environment |
+| {doc}`tutorials/index` | **learn DKX**: a step-by-step track from a first run to ambipolar $E_r$, transport coefficients, $\Phi_1$, bootstrap current, gradients and optimization, with the equations at each step |
 | {doc}`user_guide/index` | look up every input field, output array, CLI command and Python entry point |
-| {doc}`tutorials/index` | follow complete calculations: profiles, $E_r$ roots, transport matrices, VMEC stellarators, gradients, optimization, SFINCS decks |
 | {doc}`how_it_works` | see the pipeline from a case to a result, module by module |
 | {doc}`physics/index` | read the equations, collision operators, drives, electric field, $\Phi_1$ and geometry models |
 | {doc}`numerics/index` | understand the discretization, the solver routes, preconditioners, factor reuse and adjoints |
 | {doc}`benchmarks/index` | check the analytic limits, the SFINCS, MONKES and YANCC comparisons and the performance record |
-| {doc}`examples/index` | browse the example ladder |
 | {doc}`features`, {doc}`design_decisions` | see what the code can do and why it is built the way it is |
 | {doc}`api`, {doc}`changelog` | the reference API and the release history |
 
@@ -85,11 +84,11 @@ script or deck that produces it.
 
 ```{toctree}
 :maxdepth: 2
-:caption: Getting started
+:caption: Getting started and tutorials
 :hidden:
 
 getting_started/installation
-getting_started/first_run
+tutorials/index
 ```
 
 ```{toctree}
@@ -98,7 +97,6 @@ getting_started/first_run
 :hidden:
 
 user_guide/index
-tutorials/index
 ```
 
 ```{toctree}
@@ -113,11 +111,10 @@ numerics/index
 
 ```{toctree}
 :maxdepth: 2
-:caption: Evidence and examples
+:caption: Evidence
 :hidden:
 
 benchmarks/index
-examples/index
 features
 design_decisions
 ```

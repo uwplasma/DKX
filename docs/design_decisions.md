@@ -77,8 +77,9 @@ upstream cannot collide with) are opt-in and never defaults.
 
 **Context.** The operator family is wide. Pitch-angle scattering with DKES
 trajectories is block tridiagonal in $L$ with uncoupled speed and species; full
-Fokker–Planck collisions, $L\pm2$ $E_r$ terms, magnetic drifts and $\Phi_1$ are
-not. No single method is both exact and affordable across that family.
+Fokker–Planck and Sugama collisions keep that structure but couple every species
+and speed inside each block; $L\pm2$ $E_r$ terms, tangential magnetic drifts and
+$\Phi_1$ break it. No single method is both exact and affordable across that family.
 
 **Choice.** Three routes behind one `solve` call: an exact structured direct
 elimination for the block-tridiagonal family, a preconditioned recycled Krylov
@@ -222,11 +223,11 @@ exactly as the Fortran code would and writes `sfincsOutput` files.
 **Consequence.**
 
 - Case files are portable, validated on load, and identified by content; the
-  example ladder asserts that each `case.toml` and its Python script share one
+  tutorial scripts assert that each case file and its Python script share one
   case ID.
 - The native executor covers a subset of the namelist physics. The
-  monoenergetic workflow and $\Phi_1$ run only through the namelist or the
-  operator API ({doc}`user_guide/inputs`, {doc}`user_guide/sfincs_namelist`).
+  monoenergetic and transport-matrix workflows and the $\Phi_1$ options
+  beyond `phi1 = "kinetic"` run only through the namelist or the operator API ({doc}`user_guide/inputs`, {doc}`user_guide/sfincs_namelist`).
 - Two input paths must stay equivalent where they overlap, which is a maintenance cost.
 
 ## Convergence certificates
