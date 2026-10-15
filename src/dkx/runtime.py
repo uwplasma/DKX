@@ -254,13 +254,9 @@ def configure(*, jax_x64: bool | None = None) -> None:
                 except OSError:
                     return False
 
-            # Versioned because the cache is bounded now (see the cap below) and
-            # JAX's LRU keeps a sidecar "-atime" file per entry.  A directory
-            # filled in before the cap existed has none, so every eviction pass
-            # tries to touch a file that was never written and warns -- measured,
-            # 12 warnings on a single small solve against a legacy cache, and 0
-            # against a fresh one.  Starting a new directory is what makes the
-            # bound work; the old one simply stops being written to.
+            # The cache is not size-capped (see the note after the jax config
+            # update below), so entries accumulate here until the directory is
+            # deleted; deleting it loses only compile time.
             _CACHE_DIR_NAME = "jax_compilation_cache"
 
             cache_override = os.environ.get("DKX_COMPILATION_CACHE_DIR", "").strip()
