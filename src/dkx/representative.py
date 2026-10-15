@@ -1650,7 +1650,15 @@ def radial_profiles(
     Prefer the most negative *stable* bracketed root (stability from the
     outward-current slope, :func:`dkx.er._classify`); otherwise retain the
     sampled point with smallest ``|J_r|`` and mark ``evaluation_is_root=False``.
-    ``er`` (kV/m) prescribes the field instead of searching for a root.  Each
+    ``er`` (kV/m) prescribes the field instead of searching for a root.
+
+    Only fields whose solve passes the original-equation check
+    (``algebraic_converged``) are bracketed; the others are listed in
+    ``uncertified_er``. Each surface's scan also samples the previous surface's
+    root (``er_seed``), and a failure on one surface is recorded as
+    ``evaluation_status="solve_failure"`` without stopping the others. Each
+    record carries the ``resolution`` it was solved at; that is not a
+    resolution-convergence certificate.  Each
     surface is solved with its *own* ``n``, ``T`` and gradients: from
     ``profiles`` (:func:`profile_plasma`) when given, else the pressure split
     evaluated at that radius.
@@ -1696,7 +1704,32 @@ def radial_profiles(
     # Outward-current sign of the psiHat current: psiHat = psiAHat rN^2.
     radial_factor = -1.0 if geometry.get("psi_a_hat", 1.0) < 0.0 else 1.0
 
+    def certified(deck: Path, fields: Any) -> tuple:
+        """One batched scan, keeping only fields that passed the original-equation check.
+
+        Returns ``(er, J_r, moments, uncertified_er)``. An uncertified field is
+        reported, never bracketed: a failed solve can manufacture a sign change.
+        """
+        fields = np.asarray(fields, dtype=float).ravel()
+        sc = _quiet(lambda: batched_er_scan(deck, fields, retain_full_state=True))
+        j = np.asarray(sc.radial_current, dtype=float).ravel()
+        ok = getattr(sc, "algebraic_converged", None)
+        keep = np.isfinite(j) & (True if ok is None else np.asarray(ok, dtype=bool).ravel())
+        moments = {k: np.asarray(v)[keep] if np.ndim(v) and len(v) == len(fields) else v
+                   for k, v in sc.moments.items()}  # fmt: skip
+        return fields[keep], j[keep], moments, fields[~keep].tolist()
+
+    def merge(a: tuple, b: tuple) -> tuple:
+        """Two certified scans as one, sorted by field."""
+        er_ab = np.concatenate([a[0], b[0]])
+        order = np.argsort(er_ab, kind="stable")
+        per_field = lambda m, n: {k: np.asarray(v) for k, v in m.items() if np.ndim(v) and len(v) == n}  # noqa: E731
+        ma, mb = per_field(a[2], len(a[0])), per_field(b[2], len(b[0]))
+        moments = {**a[2], **{k: np.concatenate([ma[k], mb[k]])[order] for k in ma if k in mb}}
+        return er_ab[order], np.concatenate([a[1], b[1]])[order], moments, a[3] + b[3]
+
     out: list[dict[str, Any]] = []
+    seed: float | None = None  # radial continuation: the neighbouring surface's root
     with tempfile.TemporaryDirectory() as work:
         for radius in surfaces:
             local = (profile_plasma(profiles, radius, geometry["a_hat"]) if profiles is not None
@@ -1707,127 +1740,88 @@ def radial_profiles(
             ).replace("rN_wish = 0.5", f"rN_wish = {radius}")  # fmt: skip
             deck = Path(work) / f"in_{radius}.namelist"
             deck.write_text(text)
+            base = {"r": float(radius), "profile_input_status": profile_input["status"],
+                    "pressure_representation": profile_input["pressure_representation"],
+                    "profile_input_detail": profile_input["detail"],
+                    "resolution": dict(resolution), "er_seed": seed}  # fmt: skip
+            fields = er if prescribed_er is not None or seed is None else np.unique(np.r_[er, seed])
             try:
-                scan = _quiet(lambda d=deck: batched_er_scan(d, er))
-            except Exception as exc:  # pragma: no cover - geometry-dependent
-                if emit:
-                    emit(f"    r/a={radius:.2f}: solve failure ({type(exc).__name__})")
-                out.append(
-                    {
-                        "r": float(radius),
-                        "profile_input_status": profile_input["status"],
-                        "pressure_representation": profile_input[
-                            "pressure_representation"
-                        ],
-                        "profile_input_detail": profile_input["detail"],
-                        "evaluation_status": "solve_failure",
-                        "failure_type": type(exc).__name__,
-                        "failure_detail": str(exc),
-                    }
-                )
-                continue
-            j_r = np.asarray(scan.radial_current, dtype=float).ravel()
-            er_used = np.asarray(er, dtype=float)
-            roots = _ambipolar_roots([{"er": float(e), "J_r": float(j)}
-                                      for e, j in zip(er_used, j_r)])  # fmt: skip
-            # A root just past the negative edge is common on a device whose ion
-            # root deepens with radius: the surface at r/a = 0.25 brackets its
-            # root at -9.9 kV/m while the outer four sit at the -12 edge with
-            # J_r still approaching zero. Reporting those as "no root" and then
-            # quoting a bootstrap current at the edge is worse than spending a
-            # few more solves, so extend while the evidence says a root is out
-            # there and stop as soon as one is bracketed.
-            probes: list[float] = []
-            while (
-                prescribed_er is None
-                and not roots
-                and len(probes) < ER_EXTENSION_MAX_PROBES
-                and _wants_more_negative_er(er_used, j_r)
-            ):
-                edge = _next_er_probe(er_used, j_r)
-                if edge < ER_EXTENSION_FLOOR_KV_M:
-                    break
-                try:
-                    extra = _quiet(lambda d=deck, e=edge: batched_er_scan(d, np.array([e])))
-                except Exception:  # noqa: BLE001 - a failed extension is not fatal
-                    break
-                extra_j = np.asarray(extra.radial_current, dtype=float).ravel()
-                if not np.all(np.isfinite(extra_j)):
-                    break
-                probes.append(edge)
-                er_used = np.concatenate([[edge], er_used])
-                j_r = np.concatenate([extra_j, j_r])
+                scan = certified(deck, fields)
+                er_used, j_r, moments, uncertified = scan
                 roots = _ambipolar_roots([{"er": float(e), "J_r": float(j)}
                                           for e, j in zip(er_used, j_r)])  # fmt: skip
-            if probes:
-                # Re-scan once over the extended field list. The probes above
-                # only carry J_r, while every moment interpolated onto the root
-                # below indexes the scan's own arrays, so er and scan.moments
-                # have to describe the same set of fields -- appending to one
-                # and not the other reads back as an out-of-bounds index.
-                try:
-                    scan = _quiet(lambda d=deck, e=er_used: batched_er_scan(d, e))
-                    j_r = np.asarray(scan.radial_current, dtype=float).ravel()
+                # A root just past the negative edge is common on a device whose
+                # ion root deepens with radius; extend while the evidence says a
+                # root is out there and stop as soon as one is bracketed. Probe
+                # moments merge into the scan, so no field is solved twice.
+                probes: list[float] = []
+                while (
+                    prescribed_er is None
+                    and not roots
+                    and len(probes) < ER_EXTENSION_MAX_PROBES
+                    and _wants_more_negative_er(er_used, j_r)
+                ):
+                    edge = _next_er_probe(er_used, j_r)
+                    if edge < ER_EXTENSION_FLOOR_KV_M:
+                        break
+                    probes.append(edge)
+                    probe = certified(deck, [edge])
+                    er_used, j_r, moments, uncertified = merge((er_used, j_r, moments, uncertified), probe)
+                    if probe[3]:
+                        break  # an uncertified edge ends the extension; it is reported
                     roots = _ambipolar_roots([{"er": float(e), "J_r": float(j)}
                                               for e, j in zip(er_used, j_r)])  # fmt: skip
-                except Exception:  # noqa: BLE001 - fall back to the original bracket
-                    er_used = np.asarray(er, dtype=float)
-                    j_r = np.asarray(scan.radial_current, dtype=float).ravel()
-                    roots = _ambipolar_roots([{"er": float(e), "J_r": float(j)}
-                                              for e, j in zip(er_used, j_r)])  # fmt: skip
-            er_grid, moments = er_used, scan.moments
-            types = _root_types(er_grid, j_r, radial_factor)
-            record: dict[str, Any] = {
-                "r": float(radius), "er_scan": er_grid.tolist(),
-                "J_r": j_r.tolist(), "roots": roots, "root_types": types,
-                "profile_input_status": profile_input["status"],
-                "pressure_representation": profile_input["pressure_representation"],
-                "profile_input_detail": profile_input["detail"],
-            }  # fmt: skip
-            evaluation_er: float | None = None
-            if prescribed_er is not None:
-                record["evaluation_status"] = "prescribed_er"
-                record["evaluation_is_root"] = False
-                record["er_prescribed"] = evaluation_er = float(prescribed_er)
-            elif roots:
-                # The ion root is the most negative *stable* crossing; a device
-                # in the electron-root regime has a positive one too, and the
-                # unstable middle root is never a state the plasma occupies.
-                stable = [x for x, t in zip(roots, types) if t in ("ion", "electron")]
-                root = min(stable or roots)
+                er_grid = er_used
+                types = _root_types(er_grid, j_r, radial_factor)
+                record: dict[str, Any] = {
+                    **base, "er_scan": er_grid.tolist(), "J_r": j_r.tolist(),
+                    "roots": roots, "root_types": types, "uncertified_er": uncertified,
+                }  # fmt: skip
+                evaluation_er: float | None = None
+                if prescribed_er is not None:
+                    record["evaluation_status"] = "prescribed_er"
+                    record["evaluation_is_root"] = False
+                    record["er_prescribed"] = evaluation_er = float(prescribed_er)
+                elif roots:
+                    # The ion root is the most negative *stable* crossing; a device
+                    # in the electron-root regime has a positive one too, and the
+                    # unstable middle root is never a state the plasma occupies.
+                    stable = [x for x, t in zip(roots, types) if t in ("ion", "electron")]
+                    root = min(stable or roots)
 
-                def one(e, d=deck):
-                    sc = _quiet(lambda: batched_er_scan(d, np.array([e])))
-                    return float(np.asarray(sc.radial_current).ravel()[0]), sc
+                    def one(e, d=deck):
+                        point = certified(d, [e])
+                        uncertified.extend(point[3])
+                        return (float(point[1][0]) if point[1].size else float("nan")), point
 
-                bracketed, (root, evals) = root, _refine_root(one, er_grid, j_r, root)
-                record["roots"] = [root if r == bracketed else r for r in roots]
-                if evals:
-                    er_grid = np.concatenate([er_grid, [x for x, _, _ in evals]])
-                    j_r = np.concatenate([j_r, [f for _, f, _ in evals]])
-                    moments = {k: np.concatenate([np.asarray(v)] + [np.asarray(sc.moments[k]) for _, _, sc in evals])
-                               for k, v in moments.items()
-                               if np.ndim(v) and len(v) == len(er_used) and all(k in sc.moments for _, _, sc in evals)}
+                    bracketed, (root, evals) = root, _refine_root(one, er_grid, j_r, root)
+                    record["roots"] = [root if r == bracketed else r for r in roots]
+                    for _x, _f, point in evals:
+                        er_grid, j_r, moments, _ = merge((er_grid, j_r, moments, []), point)
                     record["er_scan"], record["J_r"] = er_grid.tolist(), j_r.tolist()
-                record["er_root_refine_solves"] = len(evals)
-                record["er_ambipolar"] = root
-                record["evaluation_status"] = "bracketed_root"
-                record["evaluation_is_root"] = True
-                evaluation_er = root
-            else:
-                finite = np.flatnonzero(np.isfinite(j_r))
-                if finite.size:
-                    closest = int(finite[np.argmin(np.abs(j_r[finite]))])
+                    record["er_root_refine_solves"] = len(evals)
+                    record["er_ambipolar"] = seed = root
+                    record["evaluation_status"] = "bracketed_root"
+                    record["evaluation_is_root"] = True
+                    evaluation_er = root
+                elif j_r.size:
+                    closest = int(np.argmin(np.abs(j_r)))
                     evaluation_er = float(er_grid[closest])
                     record["evaluation_status"] = "no_bracketed_root"
                     record["evaluation_is_root"] = False
                     record["radial_current_evaluated"] = float(j_r[closest])
                 else:
                     record["evaluation_status"] = "solve_failure"
-                    record["failure_type"] = "NonFiniteRadialCurrent"
+                    record["failure_type"] = "NoCertifiedRadialCurrent"
                     record["failure_detail"] = (
-                        "the electric-field scan returned no finite radial current"
+                        "no field of the electric-field scan passed the original-equation check"
                     )
+            except Exception as exc:  # noqa: BLE001 - recorded per surface, the scan goes on
+                if emit:
+                    emit(f"    r/a={radius:.2f}: solve failure ({type(exc).__name__})")
+                out.append({**base, "evaluation_status": "solve_failure",
+                            "failure_type": type(exc).__name__, "failure_detail": str(exc)})  # fmt: skip
+                continue
             if evaluation_er is not None:
                 record["er_evaluated"] = evaluation_er
                 mom = moments
@@ -1887,6 +1881,8 @@ def radial_profiles(
                     # occupies, and quoting it beside genuine roots invites
                     # exactly the comparison it cannot support.
                     line += "  [NOT an ambipolar root: J_r != 0 here]"
+                if record["uncertified_er"]:
+                    line += f"  [{len(record['uncertified_er'])} uncertified fields excluded]"
                 emit(line)
             out.append(record)
     return out

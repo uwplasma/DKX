@@ -1183,7 +1183,7 @@ def _patch_radial(monkeypatch, decks):
     import dkx.api
     import dkx.representative as rep
 
-    def fake(deck, er):
+    def fake(deck, er, **_kwargs):
         text = Path(deck).read_text()
         decks.append(text)
         root = -4.0 if "rN_wish = 0.4" in text else -8.0
