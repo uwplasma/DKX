@@ -149,8 +149,9 @@ and refines the selected root. Its defaults:
   manufacture a sign change, so uncertified fields are listed in
   `uncertified_er` and never interpolated.
 - Each surface also samples the previous surface's root (`er_seed`). The
-  ion root moves smoothly with radius, so the seed usually brackets the
-  next root tightly and saves extension probes.
+  root moves continuously with radius, so the seed narrows the bracket that
+  root refinement starts from, and a root found past the negative edge is
+  sampled directly on the next surface instead of probed for again.
 - Extension probes past the negative edge merge into the scan instead of
   triggering a second full scan.
 - A surface that fails is recorded with `evaluation_status = "solve_failure"`
