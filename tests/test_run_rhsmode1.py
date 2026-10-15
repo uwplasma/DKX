@@ -261,7 +261,7 @@ def test_run_profile_magnetic_drifts_end_to_end(
     collisionless fixture).  The drift assembly is validated element-wise
     against Fortran v3 in ``tests/test_magnetic_drifts_parity.py`` and the
     scheme 2-9 output families against Fortran goldens in
-    ``tests/test_output_h5_magdrift_schemes_parity.py``.
+    ``tests/test_output_h5_parity.py``.
     """
     from dkx.run import run_profile
 

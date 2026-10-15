@@ -61,7 +61,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         "tests/test_transport_matrix_rhsmode3_parity.py::",
         "tests/test_transport_matrix_write_output_end_to_end.py::",
         "tests/test_transport_parallel.py::",
-        "tests/test_output_h5_scheme11_parity.py::",
+        "tests/test_output_h5_parity.py::test_writer_output_matches_fortran[scheme11]",
         "test_full_system_newton_krylov",
         "test_full_system_gmres_solution_parity",
     )

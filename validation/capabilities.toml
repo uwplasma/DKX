@@ -31,7 +31,7 @@ id = "sfincs_hdf5"
 name = "SFINCS-compatible HDF5 output"
 status = "stable_candidate"
 owners = ["src/dkx/writer.py", "src/dkx/io.py"]
-evidence = ["tests/test_h5_parity.py", "tests/test_output_h5_scheme5_parity.py"]
+evidence = ["tests/test_h5_parity.py", "tests/test_output_h5_parity.py"]
 gaps = ["R5: complete native Result units/schema and compatible HDF5 mapping; reject partial reference output"]
 
 [[capability]]

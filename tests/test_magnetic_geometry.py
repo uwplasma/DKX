@@ -2,7 +2,7 @@
 
 The analytic schemes are pinned against independent evaluations of the
 ``geometry.F90`` formulas; the VMEC/Boozer file paths are pinned against the
-recorded Fortran output goldens (``tests/test_output_h5_scheme*_parity.py``
+recorded Fortran output goldens (``tests/test_output_h5_parity.py``
 and ``tests/test_geometry_scheme11_parity.py``).  Includes a
 differentiability gate for the ``from_fourier`` (geometryScheme 13)
 constructor used by optimization.
@@ -207,7 +207,7 @@ def test_flux_surface_average_methods() -> None:
 
 # ---------------------------------------------------------------------------
 # VMEC wout path (geometryScheme 5) — end-to-end Fortran parity lives in
-# tests/test_output_h5_scheme5_parity.py and the nonstelsym scheme-5 golden.
+# tests/test_output_h5_parity.py and the nonstelsym scheme-5 golden.
 # ---------------------------------------------------------------------------
 
 
