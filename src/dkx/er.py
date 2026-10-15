@@ -101,7 +101,9 @@ class AmbipolarRoot:
     Attributes:
         er: the root ``E_r``.
         radial_current: ``J_r`` at the root (residual; near zero).
-        slope: native psiHat-current ``dJr/dEr`` (central finite difference).
+        slope: native psiHat-current ``dJr/dEr``: a one-sided difference to the
+            nearest solved field within 1e-3 of the bracket width when one exists
+            and no ``slope_step`` is given, else a central difference.
             Classification converts it to outward current; AD uses autodiff.
         root_type: ``"ion"`` (stable, ``E_r < 0``), ``"electron"`` (stable,
             ``E_r > 0``), ``"unstable"`` (outward-current slope < 0), ``"marginal"``
@@ -871,7 +873,14 @@ def find_ambipolar_er(
         except _PointFailure:
             return math.nan
 
-    slope = (safe(root_er + h, "slope_plus") - safe(root_er - h, "slope_minus")) / (2.0 * h)
+    # Brent's last fields usually sit within h of the root: by default their
+    # one-sided difference classifies it without two more solves.
+    near = [e for e in memo if 1e-3 * h <= abs(e - root_er) <= h]
+    if slope_step is None and near:
+        e = min(near, key=lambda e: abs(e - root_er))
+        slope = (memo[e][0] - jr_root) / (e - root_er)
+    else:
+        slope = (safe(root_er + h, "slope_plus") - safe(root_er - h, "slope_minus")) / (2.0 * h)
     root_type = _classify(root_er, slope, radial_factor=-problem.dphi_per_er)
     roots = [AmbipolarRoot(root_er, jr_root, slope, root_type)]
     if all_roots and n_scan >= 3:
