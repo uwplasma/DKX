@@ -67,6 +67,8 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "inputs.py": "public input API",
     "io.py": "public API",
     "magnetic_geometry.py": "stable geometry kernel",
+    "boozer_bc.py": "stable geometry kernel",
+    "vmec_wout.py": "stable geometry kernel",
     "moments.py": "stable physics kernel",
     "multigrid.py": "stable solver kernel",
     "momentum_correction.py": "stable physics kernel",

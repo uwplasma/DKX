@@ -17,7 +17,8 @@ from pathlib import Path
 
 import numpy as np
 
-from dkx.magnetic_geometry import VmecWout, resolve_existing_path
+from dkx.paths import resolve_existing_path
+from dkx.vmec_wout import VmecWout
 
 __all__ = ["read_vmec_wout_ascii"]
 
