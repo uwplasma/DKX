@@ -672,11 +672,8 @@ def _check_kinetic_solution(op, er, x, tol):
 
 #: Krylov iterations a solve on a reused preconditioner may take before the
 #: field is retried with a fresh one. A preconditioner built at -12 kV/m and
-#: reused at +12 kV/m stalled a W7-X FP solve for over 550 s; a fresh build
-#: costs seconds, so a stale one gets about 200 iterations.
+#: reused at +12 kV/m stalled a W7-X FP solve for over 2,400 s.
 _REUSE_STALL_ITERATIONS = 200
-#: Reuse window for a preconditioner, as a fraction of the field bracket.
-_PRECOND_WINDOW_FRACTION = 0.125
 
 
 class _PointFailure(RuntimeError):
@@ -694,7 +691,7 @@ def find_ambipolar_er(
     solve_method: str | None = None,
     tol: float | None = None,
     warm_start: bool = True,
-    precond_window: float | None = None,
+    precond_window: float = 0.0,
     max_restarts: int = 200,
     reuse_max_restarts: int | None = None,
     all_roots: bool = False,
@@ -720,11 +717,14 @@ def find_ambipolar_er(
     state, current and fluxes, so the selected root is not solved again.
 
     Reuse (``warm_start``): the nearest accepted state seeds each Krylov solve.
-    A recycled-Krylov preconditioner is reused only within ``precond_window``
-    of the field it was built at (default one eighth of the bracket), with a
-    fresh Krylov solve each time and a recycle space only from inside that
-    window. A reused-preconditioner solve is capped at ``reuse_max_restarts``
-    (default about 200 iterations) on explicit GMRES, under ``auto`` too.
+    Preconditioners are rebuilt at every field by default: on HSX and W7-X FP
+    decks a fresh build costs fewer seconds than the extra iterations of a
+    reused one, even 0.4 kV/m away (``docs/numerics/factor_reuse.md``). A
+    positive ``precond_window`` reuses a recycled-Krylov preconditioner within
+    that distance of the field it was built at, with the recycle space from
+    inside the window, as bounded GMRES capped at ``reuse_max_restarts``
+    (default about 200 iterations), under ``auto`` too; a capped solve is
+    retried with a fresh build.
 
     Failures: a rejected or raising solve is retried cold, then under ``auto``
     with a 100x tighter kinetic tolerance. If all attempts at a Brent field
@@ -750,9 +750,10 @@ def find_ambipolar_er(
     for name, value in (("current_tol", current_tol), ("field_tol", field_tol)):
         if not math.isfinite(value) or value <= 0:
             raise ValueError(f"{name} must be finite and positive")
-    for name, value in (("slope_step", slope_step), ("precond_window", precond_window)):
-        if value is not None and (not math.isfinite(value) or value <= 0):
-            raise ValueError(f"{name} must be finite and positive")
+    if slope_step is not None and (not math.isfinite(slope_step) or slope_step <= 0):
+        raise ValueError("slope_step must be finite and positive")
+    if not math.isfinite(precond_window) or precond_window < 0:
+        raise ValueError("precond_window must be finite and nonnegative")
     problem = (
         inp
         if isinstance(inp, ErProblem)
@@ -774,7 +775,7 @@ def find_ambipolar_er(
     if not math.isfinite(kinetic_tol) or kinetic_tol <= 0:
         raise ValueError("tol must be finite and positive")
     method = solve_method or problem.solve_method
-    window = precond_window if precond_window is not None else _PRECOND_WINDOW_FRACTION * (er_max - er_min)
+    window = float(precond_window)
     reuse_cap = min(max_restarts, reuse_max_restarts or -(-_REUSE_STALL_ITERATIONS // 30))
 
     iterations: list[AmbipolarIteration] = []
@@ -795,7 +796,7 @@ def find_ambipolar_er(
         if not math.isfinite(er):
             raise _PointFailure(f"Nonfinite ambipolar field at stage {stage}: Er={er}")
         near = min(memo, key=lambda e: abs(e - er)) if warm_start and memo else None
-        precond = anchor[1] if anchor[1] is not None and abs(er - anchor[0]) <= window else None
+        precond = anchor[1] if window > 0 and anchor[1] is not None and abs(er - anchor[0]) <= window else None
         cold = dict(x0=None, recycle=None, precond=None, solve_method=solve_method, tol=tol,
                     max_restarts=max_restarts)
         plan = []

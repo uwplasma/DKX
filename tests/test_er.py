@@ -311,6 +311,9 @@ def test_host_preconditioner_reuse_stays_inside_its_window(monkeypatch):
     monkeypatch.setattr(er, "radial_current", current)
     problem = er.ErProblem(None, 1., np.array([1.]), 0., -12., 12.)
     result = er.find_ambipolar_er(problem, all_roots=False, emit=None)
+    assert result.converged and all(k["precond"] is None for _, k in calls)  # default: rebuild
+    calls.clear()
+    result = er.find_ambipolar_er(problem, all_roots=False, emit=None, precond_window=3.)
     assert result.converged and abs(result.er + 3.) < 1e-9
     reused = [(f, k) for f, k in calls if k["precond"] is not None]
     assert reused and all(abs(f - built[id(k["precond"])]) <= 3. for f, k in reused)
@@ -895,7 +898,7 @@ def test_bounded_full_fp_root_matches_independent_cold_solutions(tmp_path):
         solve_method="gmres", tol=1e-12, er_bracket=(-3., 1.))
     options = dict(all_roots=False, emit=None, max_restarts=12)
     cold = er.find_ambipolar_er(problem, warm_start=False, **options)
-    bounded = er.find_ambipolar_er(problem, reuse_max_restarts=1, **options)
+    bounded = er.find_ambipolar_er(problem, reuse_max_restarts=1, precond_window=1., **options)
     assert cold.converged and bounded.converged
     np.testing.assert_allclose(bounded.er, cold.er, atol=1e-8, rtol=1e-8)
     np.testing.assert_allclose(bounded.per_species_flux, cold.per_species_flux, atol=1e-14, rtol=1e-7)
@@ -914,7 +917,7 @@ def test_full_fp_wide_bracket_reuses_preconditioners_only_nearby(tmp_path, monke
         solves.append((field, kwargs["precond"], out[2]))
         return out
     monkeypatch.setattr(er, "radial_current", current)
-    warm = er.find_ambipolar_er(problem, emit=None)
+    warm = er.find_ambipolar_er(problem, emit=None, precond_window=3.)
     built = {id(state.precond): field for field, precond, state in solves if precond is None}
     reused = [(field, precond, state) for field, precond, state in solves if precond is not None]
     assert warm.converged and reused and len({f for f, _, _ in solves}) == len(solves)
