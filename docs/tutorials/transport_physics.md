@@ -237,17 +237,23 @@ $\Phi_1$ matters most for high-$Z$ impurities, whose Boltzmann factor carries
 $Z$ and whose radial flux picks up $\mathbf{v}_{E1}\cdot\nabla\psi$.
 
 Natively it is one field: `[physics] phi1 = "kinetic"` on a `profile` case.
-Hydrogen and electrons on the analytic W7-X field with FP collisions, the
-particle flux on two surfaces:
+`11_phi1.py` passes SFINCS keywords to `dkx.run` instead: a circular tokamak at
+$r/a = 0.3$, hydrogen, 1.25% carbon and electrons, FP collisions, solved with
+`includePhi1` off and on at the same grid:
 
 ```text
-off      route=block_tridiagonal   Gamma_H = ['+1.088e+18', '+7.231e+17']
-kinetic  route=phi1_newton_krylov  Gamma_H = ['+1.391e+18', '+9.117e+17']
+=== Summary ===
+  Phi1 off: solver route block_tridiagonal, converged True
+  Phi1 on : solver route phi1_newton_krylov, converged True
+  hydrogen Z=+1   Gamma off=-1.0008e-06  on=-1.6454e-06  change=+64.4%  peak |dn/n|=2.59e-02
+  carbon Z=+6     Gamma off=+1.9442e-07  on=+1.6222e-07  change=-16.6%  peak |dn/n|=6.42e-03
+  electron Z=-1   Gamma off=+1.7719e-07  on=-6.6438e-07  change=-475.0%  peak |dn/n|=9.83e-04
 ```
 
-$\Phi_1$ changes the main-ion flux by about 25% on this coarse grid. The route
-is no longer a single linear solve but the Newton–Krylov iteration.
-`11_phi1.py` runs the same comparison with a carbon impurity.
+The route changes from one linear solve to a Newton–Krylov iteration (four
+Newton steps to $10^{-15}$ here). On this coarse grid $\Phi_1$ changes the
+hydrogen flux by 64% and reverses the small electron flux, while the density
+varies on the surface by at most 2.6%.
 
 Status, stated precisely: $\Phi_1$ is `validated_limited`. On the
 `geometryScheme = 4` $\Phi_1$ example deck and a trace-carbon variant, DKX

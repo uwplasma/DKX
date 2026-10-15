@@ -48,6 +48,23 @@ at PAS cost ({doc}`../physics/reduced_models`). Converge `pitch` before
 comparing: at low collisionality the bootstrap current needs far more Legendre
 modes than the fluxes (`KineticBootstrapMismatch` defaults to 48).
 
+`12_bootstrap_vs_redl.py` takes the surface $s = 0.46$ of the two-field-period
+VMEX seed of script `04`, with $T_e = T_i$, $n = n_0(1 - s^5)$ and
+$T = T_0(1 - s)$, at $17\times17\times32\times5$:
+
+```text
+=== Summary ===
+  Redl fit               <j.B> = +1.5465e+06 A T m^-2
+  DKX Fokker-Planck          <j.B> = +9.9108e+05 A T m^-2  ratio to Redl = 0.641
+  DKX pitch-angle scattering <j.B> = +1.4226e+06 A T m^-2  ratio to Redl = 0.920
+```
+
+The seed is not quasi-symmetric, so Redl is an extrapolation on this surface
+and the gap is not a DKX error. PAS sits closer to Redl than FP does only
+because it overestimates the current. The FP value is the reference; at the
+smoke grid ($11\times11\times16\times4$) its ratio is 0.53, so part of the
+gap is still resolution.
+
 ## Gradients through the solve
 
 The kinetic equation is linear in $f$: $K(p)\,f = b(p)$ for inputs $p$

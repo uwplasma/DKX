@@ -159,7 +159,7 @@ from 1.78 to 0.0061 and the DKX mismatch from 1.2e-3 to 1.2e-4
 Pitch-angle scattering does not conserve momentum: its current is 1.5–1.6× Redl's.
 <!-- /FLAGSHIP-OPTIMIZATION -->
 
-## Proved against analytic limits
+## Checked against analytic limits
 
 | Limit | Reference | Measured |
 | --- | --- | --- |
@@ -246,9 +246,8 @@ Across the upstream suite structured direct is faster on 9 of 9 decks, recycled 
 six decks did not complete. Memory is the weak axis: the JAX floor is about 0.5 GB, and DKX is
 lighter on 3 of the 32 decks it completed ([performance](docs/benchmarks/performance.md)).
 
-![GPU memory and CPU cores](docs/_static/figures/gpu_anatomy_memory.png)
-
-Keeping only the Legendre blocks the moments need, 2.53M unknowns fit in 2.21 GB on one RTX A4000.
+On a GPU, keeping only the Legendre blocks the moments need fits 2.53M unknowns in 2.21 GB on
+one RTX A4000.
 
 ## Learn DKX
 

@@ -153,18 +153,23 @@ diagonal in Legendre modes and in speed. The full linearized Fokker–Planck
 operator adds energy scattering and the field-particle terms built from the
 Rosenbluth potentials of $f_{b1}$; it conserves momentum, couples all speeds
 and species, and is what a bootstrap current needs. `06_fokker_planck_vs_pas.py`
-runs the same deuterium–electron case with both:
+runs the same deuterium–electron case on the analytic tokamak with both and
+prints FP/PAS on three surfaces ($\psi_N$ = 0.09, 0.16, 0.25):
 
 ```text
-pitch_angle_scattering     route=block_tridiagonal_truncated      <j.B>=['-5.360e+05', '-3.585e+05', '-2.346e+05']
-linearized_fokker_planck   route=block_tridiagonal                <j.B>=['-5.035e+05', '-3.344e+05', '-2.170e+05']
+=== Summary (FP / PAS ratio per surface) ===
+  particle_flux_m2_s         [0.566 0.551 0.541]
+  heat_flux_W_m2             [1.39  1.339 1.301]
+  parallel_current_A_T_m2    [0.95  0.947 0.937]
 ```
 
 Two things to read here:
 
-- **Physics.** PAS overestimates the bootstrap current (here by 6–8%) because
-  it has no momentum restoring term: the friction between species that should
-  return momentum is missing. Quote currents from FP. When FP is too
+- **Physics.** PAS puts the ion particle flux almost a factor of two too high:
+  like-particle collisions that conserve momentum drive no net flux in a
+  tokamak, and PAS does not conserve momentum. It overestimates the bootstrap
+  current by 5–7% for the same reason: the friction between species that
+  should return momentum is missing. Quote currents from FP. When FP is too
   expensive, `dkx.momentum_correction` restores momentum to a PAS solve with
   the Sugama–Nishimura moment method, using DKX's own FP friction coefficients;
   it is `collision_model="pas+momentum_correction"` in the bootstrap objective
@@ -215,16 +220,19 @@ species = [
 With FP collisions on the analytic tokamak:
 
 ```text
-route block_tridiagonal
-deuterium  Gamma(psi_N=0.16)=+9.385e+19 m^-2 s^-1
-carbon     Gamma(psi_N=0.16)=-1.264e+18 m^-2 s^-1
-electron   Gamma(psi_N=0.16)=+1.062e+19 m^-2 s^-1
+=== Summary ===
+  psi_N=0.09  Gamma: deuterium=+1.903e+20  carbon=-1.088e+18  electron=+1.904e+19  |sum_s Z_s Gamma_s| / Gamma_D = 8.66e-01
+  psi_N=0.16  Gamma: deuterium=+1.240e+20  carbon=-1.318e+18  electron=+1.194e+19  |sum_s Z_s Gamma_s| / Gamma_D = 8.40e-01
+  psi_N=0.25  Gamma: deuterium=+8.476e+19  carbon=-1.175e+18  electron=+8.051e+18  |sum_s Z_s Gamma_s| / Gamma_D = 8.22e-01
+  carbon flux is inward (accumulating) on every surface: True
 ```
 
-The carbon flux is **inward**. This is the classic neoclassical impurity
-accumulation: friction with the main ions pushes a high-$Z$ impurity up the
-main-ion density gradient. The sum $\sum_s Z_s\Gamma_s$ is not zero here: $E_r$
-was prescribed, not solved for. The next part makes it ambipolar. With more
+The carbon flux is **inward**. This is neoclassical impurity accumulation:
+friction with the main ions pushes a high-$Z$ impurity up the main-ion density
+gradient. In an exactly axisymmetric tokamak the fluxes would be ambipolar for
+any $E_r$. The built-in `tokamak` field carries a small $l = 2$, $n = 10$
+helical ripple, so $\sum_s Z_s\Gamma_s$ is about 0.8 of $\Gamma_D$ here; the
+next part finds the $E_r$ that zeroes it. With more
 than a trace of impurity, the in-surface potential $\Phi_1$ can matter too;
 that is also in the next part.
 

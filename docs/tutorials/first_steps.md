@@ -187,9 +187,9 @@ workflow: profile; surfaces: 3; species: 1
 │ surfaces      │ 3                           │
 │ species       │ 1                           │
 │ converged     │ yes                         │
-│ true residual │ 4.090e-15                   │
+│ true residual │ 4.274e-15                   │
 │ solver route  │ block_tridiagonal_truncated │
-│ wall time     │ 3.55 s                      │
+│ wall time     │ 7.76 s                      │
 ```
 
 and `dkx inspect` lists the stored arrays and shapes without recomputing
@@ -213,19 +213,27 @@ dkx sfincs write-output --input examples/tutorials/03_sfincs_namelist.namelist -
 ```
 
 With no subcommand, `dkx` treats its argument as a deck and prints what the
-Fortran code prints. The end of the log of the bundled `geometryScheme = 4`
-(W7-X-like three-harmonic field) deck:
+Fortran code prints. The bundled deck is the `geometryScheme = 4` (W7-X-like
+three-harmonic) field at $r/a = 0.5$, protons and electrons, pitch-angle
+scattering, `nu_n = 8.48e-3` and `Er = 0`. The fluxes at the end of its log:
 
 ```text
-    particleFlux_vm_psiHat     -9.7065631036157259E-021
-    heatFlux_vm_psiHat         -2.3928340768017112E-020
- FSABjHat (bootstrap current):   -2.3421933067597170E-005
+ Results for species            1 :
+    particleFlux_vm_psiHat     -4.7081253917256228E-008
+    heatFlux_vm_psiHat         -1.0634864018021175E-007
+ Results for species            2 :
+    particleFlux_vm_psiHat     -1.2250112692580886E-009
+    heatFlux_vm_psiHat         -2.8061718498864329E-009
+ FSABjHat (bootstrap current):   -5.0728520231679559E-006
  Goodbye!
  wrote output -> sfincsOutput.h5
 ```
 
-`FSABjHat` is $\langle j_\parallel B\rangle$ in SFINCS units. The deck sets
-`nu_n = 0`, a collisionless deck: a smoke test of the I/O, not a physics case.
+`FSABjHat` is $\langle j_\parallel B\rangle$ in SFINCS units. The
+charge-weighted sum $\sum_s Z_s\Gamma_s = -4.59\times10^{-8}$ is not zero:
+`Er = 0` is not the ambipolar field; script `08` finds the one that is.
+`python examples/tutorials/03_sfincs_namelist.py` runs the same deck and plots
+the fluxes.
 
 To leave the namelist world, convert the deck to a native case. The conversion
 is a translation of units, not a renaming, and it fails, naming the key, on
