@@ -73,6 +73,53 @@ upstream cannot collide with) are opt-in and never defaults.
   rows instead of the packed Fortran indexing; solutions and adjoints match the
   packed system ({doc}`numerics/discretization`).
 
+## Legendre modes in pitch, a polynomial grid in speed
+
+**Context.** The distribution depends on two velocity coordinates, pitch
+$\xi$ and speed $x$. The discretization of each decides both the accuracy per
+unknown and the structure the solvers can use.
+
+**Choice.** Expand in Legendre polynomials in $\xi$, and collocate in $x$ at the
+nodes of polynomials orthogonal with weight $e^{-x^2}x^k$ (Landreman & Ernst,
+*J. Comput. Phys.* **243**, 130 (2013)), as SFINCS v3 does.
+
+**Consequence.**
+
+- Each term has a fixed reach in $L$: streaming and mirror couple $L\pm1$,
+  pitch-angle scattering and $E\times B$ are diagonal. That makes the common
+  operator block tridiagonal, which the structured direct route eliminates
+  exactly ({doc}`numerics/discretization`).
+- Pitch-angle scattering is diagonal with eigenvalue $L(L+1)/2$, and the drives
+  and every output moment live in $L \le 2$.
+- Maxwellian-weighted moments are spectrally accurate in speed: the tutorials
+  use 4 to 5 nodes.
+- Streaming has no diagonal in $L$, so no multigrid smoother exists in this
+  basis ({doc}`numerics/krylov_and_preconditioners`). The bootstrap current at
+  low collisionality needs many more Legendre modes than the fluxes.
+
+## Fokker–Planck by default, DKES trajectories in the native case
+
+**Context.** Pitch-angle scattering is cheap but conserves only particles. The
+full trajectory model adds $E_r$ terms that couple $L\pm2$ and the speed
+grid.
+
+**Choice.** A native case defaults to linearized Fokker–Planck collisions and
+builds only DKES trajectories (incompressible $E\times B$, no $\dot\xi$ or
+$\dot x$ $E_r$ terms). Pitch-angle scattering, full trajectories and the Sugama
+operator remain available, the last two from a namelist.
+
+**Consequence.**
+
+- Currents and multi-species fluxes come out right by default. On the analytic
+  tokamak of tutorial 06, PAS puts the ion particle flux 1.8× too high and
+  $\langle j\cdot B\rangle$ 5–7 % too high.
+- With DKES trajectories, Fokker–Planck stays block tridiagonal in $L$, so the
+  structured direct route solves it exactly when it fits
+  ({doc}`numerics/solver_routes`).
+- DKES and full trajectories differ most at low collisionality and finite
+  $E_r$ (Landreman et al., *Phys. Plasmas* **21**, 042503 (2014)). A study that
+  needs the full model writes a namelist and takes the Krylov route.
+
 ## Several solver routes instead of one
 
 **Context.** The operator family is wide. Pitch-angle scattering with DKES
