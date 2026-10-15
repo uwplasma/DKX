@@ -77,6 +77,21 @@ same discrete operator:
   elimination that :meth:`dkx.drift_kinetic.KineticOperator.to_block_tridiagonal`
   and :func:`dkx.solve.solve` exploit.
 
+- F. J. Escoto, J. L. Velasco, I. Calvo, M. Landreman, and F. I. Parra,
+  `MONKES: a fast neoclassical code for the evaluation of monoenergetic transport coefficients <https://arxiv.org/abs/2312.12248>`_,
+  Nucl. Fusion **64**, 076030 (2024). Legendre pitch, Fourier angles and
+  block-Thomas; the monoenergetic speed reference DKX benchmarks against.
+- R. Conlin and M. Landreman,
+  `yancc: a GPU-accelerated, differentiable solver for neoclassical transport <https://arxiv.org/abs/2607.20861>`_,
+  arXiv:2607.20861 (2026). Finite differences in pitch and angles, line
+  smoothers, geometric multigrid and GCROT(m,k).
+- W. Kernbichler, S. V. Kasilov, G. O. Leitold, V. V. Nemov, and K. Allmaier,
+  "Recent progress in NEO-2", Plasma Fusion Res. **3**, S1061 (2008).
+  Field-line integration with a sparse direct solve per field-line piece.
+- J. L. Velasco, I. Calvo, F. I. Parra, and J. M. García-Regaña,
+  `KNOSOS: a fast orbit-averaging neoclassical code for stellarator geometry <https://doi.org/10.1016/j.jcp.2020.109512>`_,
+  J. Comput. Phys. **418**, 109512 (2020). Bounce-averaged, low-collisionality.
+
 Geometry and benchmark configurations
 -------------------------------------
 

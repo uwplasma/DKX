@@ -1118,6 +1118,7 @@ Append-only. One row per merged change or killed hypothesis, newest last. Detail
 | 2026-10-07 | Spectral angles for `monoenergetic_database`, generated-row full-band factorization, cached-cold harness stage | #327 | DKX's angular ladder matches MONKES (HSX 3% at 19x41x64, not 25x51x96; W7-X 0.44% then 6e-5). Office warm/cold-cached/RSS: W7-X 3.4 s/4.8 s/1.02 GB, HSX 19.5 s/13.0 s/1.67 GB against MONKES 0.31 s/0.45 s/0.05 GB and 2.96 s/3.24 s/0.09 GB. The full-band route keeps only the Schur LUs: laptop A/B at W7-X 15x31x48 gives cold without cache 8.2 to 3.7 s, RSS 1.95 to 0.94 GB, warm +8%. Open: the x86 JAX LU/triangular-solve kernels are 2-3x slower than LAPACK (equal on Apple silicon); the JAX runtime floor is about 0.35 GB; GPU not re-measured |
 | 2026-10-07 | x86 warm gap: XLA pool vs OpenBLAS threads; `--dkx-xla-threads` harness flag | #328 | XLA already calls LAPACK getrf/trsm, but a 4-thread XLA pool on 4 pinned cores makes one 465x465 LU 25 ms vs 2.6 ms. A SciPy host-callback Schur sweep was slower for the same reason and was dropped. One XLA thread: W7-X warm 1.64 s, HSX 6.84 s (MONKES 0.32/1.52). Left: SciPy's bundled OpenBLAS is 9 ms per Schur step against 6 ms for MONKES's conda OpenBLAS |
 | 2026-10-07 | Coupled Legendre preconditioner (`preconditioner="coupled"`, `auto` when its peak fits half the available memory) | #321, #322, #323, #325, #326 | Office, 8 pinned cores, cold, RSS guard. HSX FP DKES (1.88M): coarse 46 it, 1,100 s, 15.0 GB; coupled 17 it, 508 s, 16.6 GB. W7-X drifts noEr (1.52M): coarse 120 it, 1,635 s, 13.1 GB; coupled 93 it, 1,252 s, 17.0 GB. W7-X drifts withEr (1.52M): coarse 120 it, 1,725 s, 13.2 GB; coupled 100 it, 1,429 s, 17.2 GB. A one-sweep Richardson correction for the `L ± 2` terms ran past 2 h on W7-X drifts and was dropped. Gap deck `(120, 16)` (pointA, rN 0.1871, Er 15; 633,604 unknowns) under `auto` (coupled): no result, stopped by the 2.5 h guard at 17.3 GB peak; it is still open. |
+| 2026-10-15 | Algorithm review against DKES, MONKES, SFINCS, yancc, NEO-2, KNOSOS and the PETSc options; route per run type in `docs/design_decisions.md`; Pallas plan of draft #333 revisited | section 17 | Legendre + block-Thomas stays the core; structured Schur update measured 1.13–1.23× on the A4000 (contended); no Pallas kernel for mono |
 
 ## 13. Steps ahead, in order (2026-09-22)
 
@@ -1288,3 +1289,35 @@ Measured on the shared benchmark host (one pinned core per run unless stated; ti
 
 1. **16.5 item 3 done.** SOLVAX 0.28.0 (#132) adds `gcrot(fixed_precond=True)`: one basis `V` instead of `V` and `Z`, and CGS2 against the filled rows only. SOLVAX's restart-1,000 benchmark (8 office cores): 90,000 unknowns, 663 iterations in every build, 211 s and 2.83 GiB (0.27) to 70 s and 1.32 GiB; 250,000 unknowns, 459 s and 2.6 GiB (0.27 did not finish in 30 min). DKX passes the flag in the wide window only (short windows and the differentiable route keep `Z`: with `||M^{-1}||` near 1e8 on the near-singular coarse chains a 30-step single-basis cycle diverged to 1e80 on `er_xdot`) and charges one basis in `_auto_wide_restart`, so the same budget buys twice the wide restart (cap 1,000 unchanged). Next: rerun the gap deck `(120, 16)` at the default restart (14 step 5).
 2. **16.5 item 5, GMRES-IR measured (SOLVAX #133), not wired as a default.** Float32 block-Thomas factors preconditioning float64 GCROT reach 1e-12 in 9-21 iterations where float32 refinement stalls (1e-6 to 1e-11 after two sweeps). CPU: a win only where the float64 factorization dominates (128 blocks of 256: 2.5 s against 4.0 s). A4000: the float32 factor is 2-3x faster, but the Krylov iterations cost more than float64 substitution (0.42 s against 0.21 s total), and JAX's default TF32 matmul degrades float32 factors (refinement diverges, 150 instead of 21 iterations) unless matmul precision is `highest`.
+
+## 17. Algorithm choice, full-FP defaults and the GPU kernel question (2026-10-15)
+
+Additive; nothing above is superseded. Draft #333 also proposes a section 17; it renumbers on rebase.
+
+### 17.1 Decisions
+
+1. **Core stays Legendre pitch + block-Thomas.** For PAS and DKES trajectories the Legendre chain is exactly block-tridiagonal (Hirshman et al. 1986; Escoto et al. 2024), so a direct sweep has no iteration count to lose. Finite-difference pitch (yancc, arXiv:2607.20861) converges algebraically and needs multigrid; #319 measured DKX 8× faster warm than yancc on W7-X monoenergetic, yancc faster and leaner on full-FP NCSX.
+2. **Route per run type** (table in `docs/design_decisions.md`): monoenergetic and PAS by block-Thomas with spectral angles; full FP by GCROT with a single basis (`fixed_precond`) and the `coupled` preconditioner when it fits, else coarse chains; small full-FP decks by SOLVAX sparse direct; `E_r` trajectories by GCROT with DKES chains as preconditioner; Phi1 by Newton with recycled GMRES; transport matrix and ambipolar scans by factor reuse and warm starts; gradients by implicit differentiation on the same factors.
+3. **Not adopted:** PETSc GAMG/`fieldsplit` (advective streaming defeats algebraic smoothing), geometric multigrid without yancc's upwinded smoothing discretization, FFTW (angles enter as small dense differentiation matrices). MUMPS BLR/out-of-core with the Legendre-pair order and SuperLU_DIST 3-D stay referee routes for the gap deck (16.5 item 2), not defaults.
+
+### 17.2 Full-FP defaults
+
+Already on `main`: FP collisions in the native case, GCROT restart default from #288, single basis in the wide window (16.8), `coupled` preconditioner under `auto` (#321–#326). Remaining, in order:
+1. The gap deck `(120, 16)` still has no result under any default (section 12, 2026-10-07). Rerun with `coupled` + single basis when ≥ 30 GiB is free for 3 h; if it fails, the fallback is MUMPS out-of-core with the pair order (3.7 GB estimate).
+2. Keep float64 factors. GMRES-IR (16.8 item 2) and float32 refinement (16.7 item 5) did not win on either device.
+3. Stellarator-symmetry halving at `E_r = 0` (16.7 item 6) is the largest untaken algorithmic saving for PAS/mono scans.
+
+### 17.3 GPU kernels and Pallas
+
+Measured (office A4000, JAX 0.11.2, float64, GPU shared with two other jobs at 89–100% utilization; script in the SOLVAX draft PR): one full block-Thomas Schur sweep with the off-diagonal product `U_k X` applied as `a S X + b M X`, `S = diag(w)(ι D_θ⊗I + I⊗D_ζ)`, instead of a dense gemm. m = 465, 48 blocks: 0.538 → 0.476 s (1.13×). m = 779, 64 blocks: 1.089 → 0.888 s (1.23×). Final Schur LU agrees to 1.5e-15. The trsm and getrf remain; the CPU run was stopped at 20 min under load 37 and is not reported.
+
+Consequences for #333:
+1. **No Pallas kernel for monoenergetic blocks.** Mosaic GPU targets sm90+, so on Ampere only the Triton backend applies; the A4000 has no float64 tensor cores, and cuBLAS/cuSOLVER already run the 465–779 blocks near the float64 peak. Pallas wins on many small independent systems (SOLVAX #143: 2–5× from about 1e4 columns), not on a few large dense blocks.
+2. **Cut flops instead.** The structured `U_k X` product needs `block_fn` to return the off-diagonal blocks as `(a, b)` coefficients over fixed `S`, `M`; that is an interface change in SOLVAX block-Thomas (lane L5's file) and is handed to that lane with these numbers.
+3. **CPU mono is 60% data movement.** Pallas does not target CPU; the lever is not regenerating or copying blocks per step (`store_offdiagonals=False`, #144) and one XLA thread pool sized to the pinned cores (#328, #344).
+4. Pallas practice when it is used: interpret-mode test against the `lax` reference on CPU, size-keyed block table from autotuning (untuned blocks were 3× slower in #143), `jax.default_matmul_precision("highest")` around any float32 path (TF32 broke refinement, 16.8).
+
+### 17.4 Later work
+
+Gyrokinetic or finite-`k_perp` Coulomb collisions (Li and Ernst, PRL 106, 195002 (2011)) are not in scope for DKX's drift-kinetic equation; they enter only if DKX couples to a gyrokinetic solver.
+
