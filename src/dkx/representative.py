@@ -1654,7 +1654,7 @@ def radial_profiles(
 
     Only fields whose solve passes the original-equation check
     (``algebraic_converged``) are bracketed; the others are listed in
-    ``uncertified_er``. Each surface's scan also samples the previous surface's
+    ``uncertified_er``. Each surface's scan also samples the neighbouring surface's
     root (``er_seed``), and a failure on one surface is recorded as
     ``evaluation_status="solve_failure"`` without stopping the others. Each
     record carries the ``resolution`` it was solved at; that is not a

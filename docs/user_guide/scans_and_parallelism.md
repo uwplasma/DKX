@@ -148,7 +148,7 @@ and refines the selected root. Its defaults:
 - Only fields with `algebraic_converged` are bracketed. A failed solve can
   manufacture a sign change, so uncertified fields are listed in
   `uncertified_er` and never interpolated.
-- Each surface also samples the previous surface's root (`er_seed`). The
+- Each surface also samples the neighbouring surface's root (`er_seed`). The
   root moves continuously with radius, so the seed narrows the bracket that
   root refinement starts from, and a root found past the negative edge is
   sampled directly on the next surface instead of probed for again.
