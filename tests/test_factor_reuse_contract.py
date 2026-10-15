@@ -16,7 +16,6 @@ of iterations failing at another
 
 from __future__ import annotations
 
-import importlib
 from dataclasses import replace
 
 import jax
@@ -26,7 +25,9 @@ import pytest
 
 import dkx
 from dkx.run import profile_moments_from_operator
-from dkx.solve import DirectFactors, Tier1Solver, _pinned_matvecs, solve
+from dkx.solve import DirectFactors, Tier1Solver, solve
+from dkx.solve_common import _pinned_matvecs
+from _solve_modules import solve_modules
 
 _DECK = dict(
     geometryScheme=1, inputRadialCoordinate=3, rN_wish=0.3,
@@ -267,7 +268,7 @@ def test_a_distant_one_is_refused_and_recovered_in_one_factorization(
 def test_reuse_rejects_a_small_column_failure_hidden_by_a_large_rhs(
     operators, monkeypatch
 ):
-    solve_module = importlib.import_module("dkx.solve")
+    solve_module = solve_modules
     op = operators["direct"]
     first = _solve(op, _columns(op, 1), "direct", {"max_dense_size": 32})
     small = np.asarray(op.rhs(1))

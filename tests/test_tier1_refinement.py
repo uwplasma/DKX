@@ -23,7 +23,8 @@ from solvax.refine import iterative_refinement
 
 from dkx.drift_kinetic import KineticOperator
 from dkx.namelist import read_sfincs_input
-from dkx.solve import _TIER1_REFINEMENT_SWEEPS, build_tier1_solver, solve
+from dkx.solve_common import _TIER1_REFINEMENT_SWEEPS
+from dkx.solve import build_tier1_solver, solve
 
 REF = Path(__file__).parent / "ref"
 
@@ -92,7 +93,7 @@ def test_transposed_solve_is_refined_too():
     notice."""
     op = _op()
     solver = build_tier1_solver(op)
-    from dkx.solve import _transposed_apply
+    from dkx.coarse_precond import _transposed_apply
 
     apply_t = _transposed_apply(op)
     b = jnp.asarray(np.random.default_rng(2).standard_normal(op.total_size))

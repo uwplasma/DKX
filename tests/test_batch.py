@@ -19,6 +19,7 @@ Gates for the first-class batched-solve API:
 """
 
 from __future__ import annotations
+from _solve_modules import solve_modules
 
 import dataclasses
 import os
@@ -459,7 +460,7 @@ def test_solve_footprint_models_the_truncated_route(tmp_path: Path) -> None:
     jax.config.update("jax_enable_x64", True)
 
     from dkx import batch as batch_mod
-    from dkx import solve as solve_mod
+    solve_mod = solve_modules
     from dkx.drift_kinetic import kinetic_operator_from_namelist
     from dkx.inputs import load_sfincs_input
 

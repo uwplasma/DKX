@@ -16,6 +16,7 @@ Adding a campaign means adding a registry entry, not a new test module.
 """
 
 from __future__ import annotations
+from _solve_modules import solve_modules
 
 import json
 from pathlib import Path
@@ -2001,7 +2002,7 @@ def test_conditioning_builds_without_solving_and_caps_before_materializing(monke
     def forbidden(*args, **kwargs):
         raise AssertionError('conditioning inventory must not solve or materialize above its cap')
 
-    solve_mod = importlib.import_module('dkx.solve')
+    solve_mod = solve_modules
     run_mod = importlib.import_module('dkx.run')
     monkeypatch.setattr(solve_mod, 'solve', forbidden)
     monkeypatch.setattr(run_mod, 'solve', forbidden)
@@ -2167,12 +2168,11 @@ def test_warm_observable_audit_checks_equations_and_reuse_modes(tmp_path):
 
 @pytest.mark.parametrize('failure', ['singular', 'working_precision', 'nonfinite'])
 def test_warm_audit_rejects_unreliable_referee(monkeypatch, failure):
-    import importlib
     import numpy as np
     from scipy.linalg import lapack
     from tools.benchmarks import operator_conditioning as probe
     from dkx import batch  # Load this consumer before patching its solve provider.
-    solver = importlib.import_module('dkx.solve')
+    solver = solve_modules
     assert batch.solve is solver.solve
     original = lapack.dgesvx
 
@@ -2194,14 +2194,13 @@ def test_warm_audit_rejects_unreliable_referee(monkeypatch, failure):
 
 
 def test_warm_audit_dual_identity_sign_with_deliberately_inaccurate_states(monkeypatch):
-    import importlib
     from types import SimpleNamespace
     from tools.benchmarks import operator_conditioning as probe
     import jax.numpy as jnp
     # warm_audit lazily imports batch for layout validation. Load that consumer
     # before patching its provider, or batch permanently captures this mock.
     from dkx import batch as batch_mod
-    original_solve = importlib.import_module('dkx.solve').solve
+    original_solve = solve_modules.solve
     assert batch_mod.solve is original_solve
 
     calls = []
@@ -2209,7 +2208,7 @@ def test_warm_audit_dual_identity_sign_with_deliberately_inaccurate_states(monke
         calls.append(None)
         return SimpleNamespace(x=jnp.full((op.total_size, 1), float(len(calls))),
                                recycle=None, method='manufactured', iterations=0, converged=False)
-    monkeypatch.setattr(importlib.import_module('dkx.solve'), 'solve', inaccurate)
+    monkeypatch.setattr(solve_modules, 'solve', inaccurate)
     deck = str(ROOT / 'tests/ref/pas_1species_PAS_noEr_tiny_scheme1.input.namelist')
     audit = probe.warm_audit(deck, deck, tolerances=(1e-10,))
     assert batch_mod.solve is original_solve
