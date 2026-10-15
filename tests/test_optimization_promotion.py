@@ -149,7 +149,7 @@ def test_promotion_refuses_missing_or_nonfinite_bootstrap_current(
 
 
 def test_public_promotion_example_runs_demo(tmp_path: Path) -> None:
-    script = _REPO / "examples" / "optimization" / "evaluate_dkx_promotion_scan.py"
+    script = _REPO / "examples" / "advanced" / "evaluate_dkx_promotion_scan.py"
     subprocess.run(
         [
             sys.executable,

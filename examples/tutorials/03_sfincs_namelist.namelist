@@ -1,0 +1,41 @@
+! Tutorial 03: a SFINCS v3 input deck, run unchanged by DKX.
+! W7-X standard configuration (geometryScheme = 4, a three-harmonic |B| model),
+! protons and electrons, pitch-angle-scattering collisions, no radial field.
+&general
+  RHSMode = 1            ! 1 = fluxes from the given gradients; 2/3 = transport matrix
+/
+&geometryParameters
+  geometryScheme = 4
+  inputRadialCoordinate = 3   ! rN = r/a
+  rN_wish = 0.5
+/
+&speciesParameters
+  Zs    = 1 -1
+  mHats = 1 5.446170214d-4    ! masses in proton masses
+  nHats = 1.0d+0 1.0d+0       ! 1e20 m^-3
+  THats = 1.0d+0 1.0d+0       ! keV
+  dNHatdrHats = -0.5d+0 -0.5d+0
+  dTHatdrHats = -1.0d+0 -1.0d+0
+/
+&physicsParameters
+  Delta = 4.5694d-3
+  alpha = 1.0d+0
+  nu_n = 8.4774d-3            ! collisionality
+  Er = 0.0d+0
+  collisionOperator = 1       ! 0 = full Fokker-Planck, 1 = pitch-angle scattering
+  includeXDotTerm = .false.
+  includeElectricFieldTermInXiDot = .false.
+  includePhi1 = .false.
+/
+&resolutionParameters
+  Ntheta = 11
+  Nzeta = 13
+  Nxi = 16
+  NL = 4
+  Nx = 5
+  solverTolerance = 1d-8
+/
+&otherNumericalParameters
+/
+&preconditionerOptions
+/

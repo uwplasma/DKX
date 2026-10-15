@@ -27,7 +27,7 @@ def test_plot_sfincs_output_summary_writes_pdf_panel(tmp_path: Path) -> None:
 
 def test_plot_sfincs_output_summary_accepts_geometry_only_output(tmp_path: Path) -> None:
     repo = Path(__file__).resolve().parents[1]
-    input_namelist = repo / "examples" / "getting_started" / "input.namelist"
+    input_namelist = repo / "tests" / "ref" / "minimal_output_geometryScheme4.input.namelist"
     output_h5 = tmp_path / "geometry_only.h5"
     output_png = tmp_path / "geometry_only.png"
     write_output(input_namelist, output_h5)

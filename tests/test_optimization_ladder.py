@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -228,43 +226,3 @@ def test_evaluate_promotion_ladder_rejects_invalid_tolerances(
         evaluate_promotion_ladder(config, **{name: value})
 
 
-def test_public_ladder_script_writes_summary_and_figures(tmp_path: Path) -> None:
-    cpu = _write(tmp_path / "cpu.json", _promotion_payload(0.4136))
-    gpu = _write(tmp_path / "gpu.json", _promotion_payload(0.4136000000001))
-    config = tmp_path / "ladder_config.json"
-    config.write_text(
-        json.dumps(
-            {
-                "tiers": [
-                    {
-                        "name": "low",
-                        "resolution": {"Ntheta": 7, "Nzeta": 7, "Nxi": 5, "NL": 4, "Nx": 4},
-                        "promotions": {"cpu": cpu, "gpu": gpu},
-                    }
-                ]
-            }
-        ),
-        encoding="utf-8",
-    )
-    script = _REPO / "examples" / "optimization" / "summarize_finite_beta_electron_root_ladder.py"
-
-    subprocess.run(
-        [
-            sys.executable,
-            str(script),
-            "--config",
-            str(config),
-            "--out-dir",
-            str(tmp_path / "out"),
-            "--stem",
-            "ladder",
-        ],
-        cwd=_REPO,
-        check=True,
-        timeout=20,
-    )
-
-    payload = json.loads((tmp_path / "out" / "ladder.json").read_text(encoding="utf-8"))
-    assert payload["status"] == "deferred"
-    assert (tmp_path / "out" / "ladder.png").exists()
-    assert (tmp_path / "out" / "ladder.pdf").exists()

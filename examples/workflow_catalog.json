@@ -1,346 +1,299 @@
 {
   "schema_version": 1,
-  "purpose": "Machine-readable navigation map for public dkx examples.",
+  "purpose": "Machine-readable index of the dkx examples (python examples/list_workflows.py).",
   "folders": {
-    "01_tokamak_profile": {
+    "tutorials": {
       "category": "learning",
-      "role": "Native Case end to end: build, solve, certify, save, plot.",
-      "start_here": "01_tokamak_profile/run.py"
+      "role": "The numbered tutorial ladder, simple runs to optimization; start at 01.",
+      "start_here": "tutorials/01_first_run.py"
     },
-    "02_vmec_stellarator": {
-      "category": "learning",
-      "role": "The same native solve on a VMEC wout equilibrium.",
-      "start_here": "02_vmec_stellarator/run.py"
-    },
-    "03_boozer_stellarator": {
-      "category": "learning",
-      "role": "The same native solve on Boozer-coordinate .bc geometry.",
-      "start_here": "03_boozer_stellarator/run.py"
-    },
-    "04_monoenergetic_scan": {
-      "category": "learning",
-      "role": "Monoenergetic D11/D31/D33 across collisionality and E*.",
-      "start_here": "04_monoenergetic_scan/run.py"
-    },
-    "05_ambipolar_profile": {
-      "category": "learning",
-      "role": "Ambipolar radial electric field: all roots, classified and selected.",
-      "start_here": "05_ambipolar_profile/run.py"
-    },
-    "06_convergence_certificate": {
-      "category": "learning",
-      "role": "Phase-space refinement and the result certificate.",
-      "start_here": "06_convergence_certificate/run.py"
-    },
-    "07_gradients": {
-      "category": "learning",
-      "role": "Exact derivatives through the drift-kinetic solve with jax.grad.",
-      "start_here": "07_gradients/run.py"
-    },
-    "08_vmex_optimization": {
-      "category": "learning",
-      "role": "Shape gradient through the kinetic solve, and the vmex hand-off contract.",
-      "start_here": "08_vmex_optimization/run.py"
-    },
-    "09_phi1_and_impurities": {
-      "category": "learning",
-      "role": "Multi-species impurity transport with and without Phi1.",
-      "start_here": "09_phi1_and_impurities/run.py"
-    },
-    "autodiff": {
+    "advanced": {
       "category": "capability",
-      "role": "JAX gradients, JVP/VJP examples, and implicit differentiation.",
-      "start_here": "autodiff/autodiff_gradient_nu_n_residual.py"
+      "role": "Heavier VMEX-chain optimization scripts and the scan-er promotion audit.",
+      "start_here": "advanced/README.md"
     },
     "data": {
       "category": "reference",
-      "role": "Small shared input files used by public examples.",
-      "start_here": "data/geometryScheme4_quick_2species.input.namelist"
-    },
-    "getting_started": {
-      "category": "learning",
-      "role": "Minimal CLI and Python workflows for outputs, plots, and geometry setup.",
-      "start_here": "getting_started/write_sfincs_output_python.py"
-    },
-    "optimization": {
-      "category": "capability",
-      "role": "Optimization objectives, candidate screening, and kinetic-promotion helpers.",
-      "start_here": "optimization/qa_nfp2_dkx_objectives.py"
+      "role": "Small shared input decks.",
+      "start_here": "data/README.md"
     },
     "sfincs_examples": {
       "category": "reference",
-      "role": "Vendored upstream SFINCS v3 examples for parity and benchmark audits.",
+      "role": "Vendored upstream SFINCS v3 example decks for parity and benchmark audits.",
       "start_here": "sfincs_examples/quick_2species_FPCollisions_noEr/input.namelist"
-    },
-    "transport": {
-      "category": "capability",
-      "role": "RHSMode=2/3 transport-matrix workflows and scan utilities.",
-      "start_here": "transport/transport_matrix_rhsmode2_and_rhsmode3.py"
-    },
-    "tutorials": {
-      "category": "learning",
-      "role": "Notebook-led learning path and fast tutorial output writer.",
-      "start_here": "tutorials/00_start_here.ipynb"
-    },
-    "vmex_finite_beta": {
-      "category": "capability",
-      "role": "Finite-beta VMEC, ambipolar electric field, Redl, and bootstrap-current workflows.",
-      "start_here": "vmex_finite_beta/compare_qs_paper_dkx_redl.py"
     }
   },
   "workflows": [
     {
-      "id": "cli_output_panel",
-      "goal": "Write output files and a diagnostics panel.",
-      "entrypoint": "tutorials/run_quick_output_and_plot.py",
-      "command": "python examples/tutorials/run_quick_output_and_plot.py",
-      "topic": "getting_started",
+      "id": "01_first_run",
+      "goal": "First native run: analytic tokamak, deuterium, pitch-angle scattering.",
+      "entrypoint": "tutorials/01_first_run.py",
+      "command": "python examples/tutorials/01_first_run.py",
+      "topic": "tutorials",
       "keywords": [
-        "cli",
-        "plot",
-        "hdf5",
-        "netcdf",
-        "npz",
-        "diagnostics"
-      ],
-      "runtime_budget": "seconds",
-      "requires_fortran_v3": false
-    },
-    {
-      "id": "vmec_wout_path",
-      "goal": "Load VMEC geometry through wout_path.",
-      "entrypoint": "getting_started/write_sfincs_output_vmec.py",
-      "command": "python examples/getting_started/write_sfincs_output_vmec.py",
-      "topic": "geometry",
-      "keywords": [
-        "vmec",
-        "wout",
-        "geometry",
-        "scheme5"
-      ],
-      "runtime_budget": "seconds",
-      "requires_fortran_v3": false
-    },
-    {
-      "id": "transport_matrix",
-      "goal": "Compute a RHSMode=2/3 transport matrix.",
-      "entrypoint": "transport/transport_matrix_rhsmode2_and_rhsmode3.py",
-      "command": "python examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py",
-      "topic": "transport",
-      "keywords": [
-        "transport",
-        "rhsmode2",
-        "rhsmode3",
-        "coefficients",
-        "matrix"
-      ],
-      "runtime_budget": "seconds",
-      "requires_fortran_v3": false
-    },
-    {
-      "id": "jax_residual_gradient",
-      "goal": "Differentiate a residual with JAX.",
-      "entrypoint": "autodiff/autodiff_gradient_nu_n_residual.py",
-      "command": "python examples/autodiff/autodiff_gradient_nu_n_residual.py",
-      "topic": "autodiff",
-      "keywords": [
-        "autodiff",
-        "jax",
-        "gradient",
-        "jvp",
-        "residual"
-      ],
-      "runtime_budget": "seconds",
-      "requires_fortran_v3": false
-    },
-    {
-      "id": "bootstrap_redl",
-      "goal": "Compare kinetic bootstrap current with Redl.",
-      "entrypoint": "vmex_finite_beta/compare_qs_paper_dkx_redl.py",
-      "command": "python examples/vmex_finite_beta/compare_qs_paper_dkx_redl.py --case QA --quick --jax-vs-redl --solve-method auto",
-      "topic": "bootstrap_current",
-      "keywords": [
-        "bootstrap",
-        "redl",
-        "vmec",
-        "finite-beta",
-        "qa",
-        "qh"
-      ],
-      "runtime_budget": "bounded; use --quick for first run",
-      "requires_fortran_v3": false
-    },
-    {
-      "id": "qa_optimization_objective",
-      "goal": "Add neoclassical objectives to QA/QI optimization.",
-      "entrypoint": "optimization/qa_nfp2_dkx_objectives.py",
-      "command": "python examples/optimization/qa_nfp2_dkx_objectives.py --help",
-      "topic": "optimization",
-      "keywords": [
-        "optimization",
-        "qa",
-        "qi",
-        "bootstrap",
-        "objectives"
-      ],
-      "runtime_budget": "seconds for proxy setup; kinetic promotion is explicit",
-      "requires_fortran_v3": false
-    },
-    {
-      "id": "vmec_boozer_jax_pipeline",
-      "goal": "Inspect the VMEX to Boozer/DKX differentiable workflow.",
-      "entrypoint": "autodiff/vmex_to_boozer_sfincs_pipeline.py",
-      "command": "python examples/autodiff/vmex_to_boozer_sfincs_pipeline.py --help",
-      "topic": "autodiff_geometry",
-      "keywords": [
-        "vmex",
-        "booz_xform_jax",
-        "boozer",
-        "autodiff",
-        "geometry"
-      ],
-      "runtime_budget": "optional dependency workflow",
-      "requires_fortran_v3": false
-    },
-    {
-      "id": "01_tokamak_profile",
-      "goal": "Solve one native Case end to end and read its certificate.",
-      "entrypoint": "01_tokamak_profile/run.py",
-      "command": "python examples/01_tokamak_profile/run.py",
-      "topic": "01_tokamak_profile",
-      "keywords": [
-        "case",
+        "start",
         "tokamak",
-        "profile",
-        "native",
-        "getting started"
-      ],
-      "runtime_budget": "seconds",
-      "requires_fortran_v3": false
-    },
-    {
-      "id": "02_vmec_stellarator",
-      "goal": "Run the native profile workflow on a VMEC wout equilibrium.",
-      "entrypoint": "02_vmec_stellarator/run.py",
-      "command": "python examples/02_vmec_stellarator/run.py",
-      "topic": "02_vmec_stellarator",
-      "keywords": [
-        "vmec",
-        "wout",
-        "geometry",
-        "stellarator",
+        "python",
+        "pas",
         "profile"
       ],
-      "runtime_budget": "seconds",
+      "runtime_budget": "14 s",
       "requires_fortran_v3": false
     },
     {
-      "id": "03_boozer_stellarator",
-      "goal": "Run the native profile workflow on Boozer .bc geometry.",
-      "entrypoint": "03_boozer_stellarator/run.py",
-      "command": "python examples/03_boozer_stellarator/run.py",
-      "topic": "03_boozer_stellarator",
+      "id": "02_cli_case",
+      "goal": "The same kind of run from the command line with a TOML case file.",
+      "entrypoint": "tutorials/02_cli_case.py",
+      "command": "python examples/tutorials/02_cli_case.py",
+      "topic": "tutorials",
+      "keywords": [
+        "cli",
+        "toml",
+        "case file",
+        "validate",
+        "inspect"
+      ],
+      "runtime_budget": "12 s",
+      "requires_fortran_v3": false
+    },
+    {
+      "id": "03_sfincs_namelist",
+      "goal": "Run an unchanged SFINCS input.namelist deck and read sfincsOutput.h5.",
+      "entrypoint": "tutorials/03_sfincs_namelist.py",
+      "command": "python examples/tutorials/03_sfincs_namelist.py",
+      "topic": "tutorials",
+      "keywords": [
+        "sfincs",
+        "namelist",
+        "cli",
+        "hdf5",
+        "w7-x"
+      ],
+      "runtime_budget": "6 s",
+      "requires_fortran_v3": false
+    },
+    {
+      "id": "04_vmec_geometry",
+      "goal": "Stellarator geometry from a VMEC wout file.",
+      "entrypoint": "tutorials/04_vmec_geometry.py",
+      "command": "python examples/tutorials/04_vmec_geometry.py",
+      "topic": "tutorials",
+      "keywords": [
+        "vmec",
+        "wout",
+        "geometry",
+        "stellarator"
+      ],
+      "runtime_budget": "16 s",
+      "requires_fortran_v3": false
+    },
+    {
+      "id": "05_boozer_geometry",
+      "goal": "Boozer-coordinate geometry from a .bc file; solver route selection.",
+      "entrypoint": "tutorials/05_boozer_geometry.py",
+      "command": "python examples/tutorials/05_boozer_geometry.py",
+      "topic": "tutorials",
       "keywords": [
         "boozer",
         "bc",
         "geometry",
-        "stellarator",
-        "profile"
+        "solver route"
       ],
-      "runtime_budget": "seconds",
+      "runtime_budget": "29 s",
       "requires_fortran_v3": false
     },
     {
-      "id": "04_monoenergetic_scan",
-      "goal": "Build a monoenergetic transport database across collisionality.",
-      "entrypoint": "04_monoenergetic_scan/run.py",
-      "command": "python examples/04_monoenergetic_scan/run.py",
-      "topic": "04_monoenergetic_scan",
+      "id": "06_fokker_planck_vs_pas",
+      "goal": "Full linearized Fokker-Planck versus pitch-angle scattering collisions.",
+      "entrypoint": "tutorials/06_fokker_planck_vs_pas.py",
+      "command": "python examples/tutorials/06_fokker_planck_vs_pas.py",
+      "topic": "tutorials",
       "keywords": [
-        "monoenergetic",
-        "transport",
-        "benchmark",
-        "collisionality",
-        "D11"
+        "collisions",
+        "fokker-planck",
+        "pas",
+        "momentum conservation"
       ],
-      "runtime_budget": "seconds",
+      "runtime_budget": "30 s",
       "requires_fortran_v3": false
     },
     {
-      "id": "05_ambipolar_profile",
-      "goal": "Solve for the ambipolar radial electric field and inspect every root.",
-      "entrypoint": "05_ambipolar_profile/run.py",
-      "command": "python examples/05_ambipolar_profile/run.py",
-      "topic": "05_ambipolar_profile",
+      "id": "07_species_and_impurity",
+      "goal": "Ions, electrons and a carbon impurity; radial current.",
+      "entrypoint": "tutorials/07_species_and_impurity.py",
+      "command": "python examples/tutorials/07_species_and_impurity.py",
+      "topic": "tutorials",
       "keywords": [
+        "species",
+        "impurity",
+        "electrons",
+        "multi-species"
+      ],
+      "runtime_budget": "21 s",
+      "requires_fortran_v3": false
+    },
+    {
+      "id": "08_ambipolar_er",
+      "goal": "Scan J_r(E_r) and solve for the ambipolar radial electric field roots.",
+      "entrypoint": "tutorials/08_ambipolar_er.py",
+      "command": "python examples/tutorials/08_ambipolar_er.py",
+      "topic": "tutorials",
+      "keywords": [
+        "er",
         "ambipolar",
         "electric field",
-        "roots",
-        "er",
-        "branches"
+        "ion root",
+        "electron root"
       ],
-      "runtime_budget": "seconds",
+      "runtime_budget": "36 s",
       "requires_fortran_v3": false
     },
     {
-      "id": "06_convergence_certificate",
-      "goal": "Measure how far a case is from converged in phase space.",
-      "entrypoint": "06_convergence_certificate/run.py",
-      "command": "python examples/06_convergence_certificate/run.py",
-      "topic": "06_convergence_certificate",
+      "id": "09_monoenergetic",
+      "goal": "Monoenergetic D11*, D31*, D33* database versus collisionality.",
+      "entrypoint": "tutorials/09_monoenergetic.py",
+      "command": "python examples/tutorials/09_monoenergetic.py",
+      "topic": "tutorials",
+      "keywords": [
+        "monoenergetic",
+        "d11",
+        "database",
+        "collisionality"
+      ],
+      "runtime_budget": "7 s",
+      "requires_fortran_v3": false
+    },
+    {
+      "id": "10_transport_matrix",
+      "goal": "RHSMode=2 and RHSMode=3 transport matrices with an Onsager check.",
+      "entrypoint": "tutorials/10_transport_matrix.py",
+      "command": "python examples/tutorials/10_transport_matrix.py",
+      "topic": "tutorials",
+      "keywords": [
+        "transport",
+        "transport matrix",
+        "rhsmode",
+        "onsager"
+      ],
+      "runtime_budget": "32 s",
+      "requires_fortran_v3": false
+    },
+    {
+      "id": "11_phi1",
+      "goal": "In-surface potential Phi1 with a carbon impurity (Newton-Krylov).",
+      "entrypoint": "tutorials/11_phi1.py",
+      "command": "python examples/tutorials/11_phi1.py",
+      "topic": "tutorials",
+      "keywords": [
+        "phi1",
+        "quasineutrality",
+        "impurity",
+        "nonlinear"
+      ],
+      "runtime_budget": "61 s",
+      "requires_fortran_v3": false
+    },
+    {
+      "id": "12_bootstrap_vs_redl",
+      "goal": "Kinetic bootstrap current against the Redl analytic fit on a VMEC surface.",
+      "entrypoint": "tutorials/12_bootstrap_vs_redl.py",
+      "command": "python examples/tutorials/12_bootstrap_vs_redl.py",
+      "topic": "tutorials",
+      "keywords": [
+        "bootstrap",
+        "redl",
+        "current",
+        "vmec"
+      ],
+      "runtime_budget": "37 s",
+      "requires_fortran_v3": false
+    },
+    {
+      "id": "13_convergence",
+      "goal": "Refine every phase-space axis and report a convergence certificate.",
+      "entrypoint": "tutorials/13_convergence.py",
+      "command": "python examples/tutorials/13_convergence.py",
+      "topic": "tutorials",
       "keywords": [
         "convergence",
         "resolution",
-        "certificate",
-        "refinement"
+        "certificate"
       ],
-      "runtime_budget": "seconds",
+      "runtime_budget": "12 s",
       "requires_fortran_v3": false
     },
     {
-      "id": "07_gradients",
-      "goal": "Differentiate a kinetic output through the solve with jax.grad.",
-      "entrypoint": "07_gradients/run.py",
-      "command": "python examples/07_gradients/run.py",
-      "topic": "07_gradients",
+      "id": "14_gradients",
+      "goal": "jax.grad of the bootstrap current through the solve, checked by finite differences.",
+      "entrypoint": "tutorials/14_gradients.py",
+      "command": "python examples/tutorials/14_gradients.py",
+      "topic": "tutorials",
       "keywords": [
         "autodiff",
-        "jax",
+        "jax.grad",
         "gradient",
-        "derivative",
-        "bootstrap"
+        "adjoint"
       ],
-      "runtime_budget": "seconds",
+      "runtime_budget": "16 s",
       "requires_fortran_v3": false
     },
     {
-      "id": "08_vmex_optimization",
-      "goal": "Descend a shape gradient taken through the kinetic solve.",
-      "entrypoint": "08_vmex_optimization/run.py",
-      "command": "python examples/08_vmex_optimization/run.py",
-      "topic": "08_vmex_optimization",
+      "id": "15_optimization",
+      "goal": "Gradient descent on a Boozer |B| harmonic to lower the neoclassical flux.",
+      "entrypoint": "tutorials/15_optimization.py",
+      "command": "python examples/tutorials/15_optimization.py",
+      "topic": "tutorials",
       "keywords": [
         "optimization",
-        "vmex",
         "shape gradient",
         "boozer",
-        "spectrum"
+        "autodiff"
       ],
-      "runtime_budget": "seconds",
+      "runtime_budget": "24 s",
       "requires_fortran_v3": false
     },
     {
-      "id": "09_phi1_and_impurities",
-      "goal": "Compare impurity transport with and without in-surface potential variation.",
-      "entrypoint": "09_phi1_and_impurities/run.py",
-      "command": "python examples/09_phi1_and_impurities/run.py",
-      "topic": "09_phi1_and_impurities",
+      "id": "qa_bootstrap_vmex_chain",
+      "goal": "Optimize a QA boundary for low kinetic bootstrap current through VMEX, booz_xform_jax and DKX.",
+      "entrypoint": "advanced/optimize_QA_bootstrap.py",
+      "command": "python examples/advanced/optimize_QA_bootstrap.py",
+      "topic": "advanced",
       "keywords": [
-        "phi1",
-        "impurity",
-        "quasineutrality",
-        "multi-species",
-        "carbon"
+        "optimization",
+        "bootstrap",
+        "vmex",
+        "qa",
+        "booz_xform_jax"
+      ],
+      "runtime_budget": "tens of minutes (needs vmex, booz_xform_jax)",
+      "requires_fortran_v3": false
+    },
+    {
+      "id": "qa_bootstrap_kinetic_row",
+      "goal": "VMEX QA optimization with the Redl bootstrap row replaced by DKX's kinetic one.",
+      "entrypoint": "advanced/QA_optimization_bootstrap_dkx.py",
+      "command": "python examples/advanced/QA_optimization_bootstrap_dkx.py",
+      "topic": "advanced",
+      "keywords": [
+        "optimization",
+        "bootstrap",
+        "redl",
+        "vmex"
+      ],
+      "runtime_budget": "about 30 minutes (needs vmex, booz_xform_jax)",
+      "requires_fortran_v3": false
+    },
+    {
+      "id": "qa_proxy_objectives",
+      "goal": "Differentiable proxy neoclassical objectives for QA optimization.",
+      "entrypoint": "advanced/qa_nfp2_dkx_objectives.py",
+      "command": "python examples/advanced/qa_nfp2_dkx_objectives.py --help",
+      "topic": "advanced",
+      "keywords": [
+        "optimization",
+        "objectives",
+        "electron root",
+        "proxy"
       ],
       "runtime_budget": "seconds",
       "requires_fortran_v3": false

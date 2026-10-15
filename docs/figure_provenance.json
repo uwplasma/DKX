@@ -16,7 +16,7 @@
       "generator": "docs/figures/generate_docs_figures.py"
     },
     "docs/_static/figures/finite_beta_vmex_sfincs_bootstrap_er.png": {
-      "generator": "examples/vmex_finite_beta/finite_beta_vmec_to_sfincs.py"
+      "generator": "examples/advanced/finite_beta_vmec_to_sfincs.py"
     },
     "docs/_static/figures/gpu_anatomy_memory.png": {
       "generator": "tools/benchmarks/gpu_anatomy_figure.py"
@@ -83,7 +83,7 @@
       "generator": "tools/benchmarks/readme_figures.py"
     },
     "docs/_static/figures/readme/QA_optimization_bootstrap_dkx.png": {
-      "generator": "examples/optimization/QA_optimization_bootstrap_dkx.py"
+      "generator": "examples/advanced/QA_optimization_bootstrap_dkx.py"
     },
     "docs/_static/figures/readme/cross_code_validation.png": {
       "generator": "tools/benchmarks/cross_code_readme_figure.py"

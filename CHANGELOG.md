@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `examples/` is a numbered tutorial ladder, `examples/tutorials/01..15`, from a first native run to a shape-optimization loop. Each script reads top to bottom: imports, input parameters, run with progress printed, then plot, save and print a summary. `DKX_EXAMPLES_CI=1` runs any of them in seconds. The heavy VMEX scripts moved to `examples/advanced/`; the old numbered folders, `getting_started/`, `autodiff/`, `transport/`, `vmex_finite_beta/` and the notebooks are gone.
+
 ## v2.9.0 — 2026-10-07
 
 Exact direct solves for Fokker–Planck decks that fit, a coupled preconditioner

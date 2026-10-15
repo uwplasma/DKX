@@ -13,7 +13,6 @@ pinned, but in the example that produced them, beside the code that re-checks.
 
 from __future__ import annotations
 
-import ast
 import json
 import re
 import subprocess
@@ -21,65 +20,12 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES_ROOT = REPO_ROOT / "examples"
-DOCS_EXAMPLES = REPO_ROOT / "docs" / "examples" / "index.md"
 WORKFLOW_CATALOG = EXAMPLES_ROOT / "workflow_catalog.json"
 
-# The canonical example ladder (plan.md section 9.1), in order.  Each rung is
-# one directory holding run.py and, where the case schema can express it,
-# case.toml.  The numbering is the reading order: every rung changes one thing
-# about the one before it.
-LADDER_FOLDERS = (
-    "01_tokamak_profile",
-    "02_vmec_stellarator",
-    "03_boozer_stellarator",
-    "04_monoenergetic_scan",
-    "05_ambipolar_profile",
-    "06_convergence_certificate",
-    "07_gradients",
-    "08_vmex_optimization",
-    "09_phi1_and_impurities",
-)
-
-# Rungs whose case is also expressible as a native schema-v1 case file.
-LADDER_FOLDERS_WITH_CASE_FILES = (
-    "01_tokamak_profile",
-    "02_vmec_stellarator",
-    "03_boozer_stellarator",
-    "05_ambipolar_profile",
-    "06_convergence_certificate",
-)
-
-# Rungs that have no case.toml because the *native executor* cannot run what
-# they teach -- it implements neither the monoenergetic workflow nor Phi1.  A
-# reader who goes looking for the file deserves to be told that rather than
-# left to guess, so the docstring has to name it.  (07 and 08 are different:
-# plan.md section 9.1 gives them no case file in the first place, because a
-# gradient and a descent are not a case.)
-LADDER_FOLDERS_BLOCKED_BY_THE_SCHEMA = (
-    "04_monoenergetic_scan",
-    "09_phi1_and_impurities",
-)
-
-# Rungs without a case file by design whose docstring still has to say so,
-# because the examples README tells readers every such rung explains itself.
-LADDER_FOLDERS_WITHOUT_A_CASE_BY_DESIGN = ("07_gradients",)
-
-# Older topic folders, kept while their content is folded into the ladder.
-# Several are still executed by other tests, by .github/workflows/ci.yml, or by
-# argv strings inside src/dkx/workflows/optimization.py, so they outlive the
-# ladder rungs that replaced their teaching role.
-LEGACY_FOLDERS = (
-    "autodiff",
-    "data",
-    "getting_started",
-    "optimization",
-    "sfincs_examples",
-    "transport",
-    "tutorials",
-    "vmex_finite_beta",
-)
-
-ALLOWED_EXAMPLE_FOLDERS = set(LADDER_FOLDERS) | set(LEGACY_FOLDERS)
+# One teaching ladder, one folder of heavier scripts, and two folders of inputs.
+FOLDERS_WITH_README = ("advanced", "data", "sfincs_examples")
+ALLOWED_EXAMPLE_FOLDERS = {"tutorials", *FOLDERS_WITH_README}
+TUTORIALS = sorted((EXAMPLES_ROOT / "tutorials").glob("[0-9][0-9]_*.py"))
 
 DISALLOWED_TRACKED_PARTS = {
     "__pycache__",
@@ -118,14 +64,6 @@ README_STALE_FRAGMENTS = (
 
 SCRIPT_TOKEN_RE = re.compile(r"`([^`]*?\.py)`")
 
-TUTORIAL_NOTEBOOK_REQUIREMENTS = {
-    "00_start_here.ipynb": ("drift-kinetic", "bootstrap current", "optimization"),
-    "01_cli_outputs_and_plots.ipynb": ("HDF5", "NetCDF", "diagnostics"),
-    "02_transport_and_autodiff.ipynb": ("RHSMode=2/3", "Autodiff", "JAX"),
-    "03_bootstrap_redl_and_optimization.ipynb": ("Redl", "bootstrap", "Optimization"),
-    "04_geometry_validation_and_performance.ipynb": ("VMEC", "SFINCS Fortran v3", "CPU/GPU"),
-}
-
 
 def _tracked_example_files() -> list[Path]:
     result = subprocess.run(
@@ -161,71 +99,34 @@ def test_examples_top_level_folders_are_intentional() -> None:
     assert unexpected == set()
 
 
-def test_the_ladder_is_complete_and_linked_from_the_top_readme() -> None:
-    """01 -> 09 is the path a new user is told to walk; keep it walkable."""
+def test_every_tutorial_is_indexed_in_the_examples_readme() -> None:
+    """examples/README.md is the map a new user reads; every rung is on it."""
     readme = (EXAMPLES_ROOT / "README.md").read_text(encoding="utf-8")
-
-    missing_directories: list[str] = []
-    missing_scripts: list[str] = []
-    unlinked: list[str] = []
-    for folder in LADDER_FOLDERS:
-        directory = EXAMPLES_ROOT / folder
-        if not directory.is_dir():
-            missing_directories.append(folder)
-            continue
-        if not (directory / "run.py").is_file():
-            missing_scripts.append(folder)
-        if folder not in readme:
-            unlinked.append(folder)
-
-    assert missing_directories == []
-    assert missing_scripts == []
-    assert unlinked == []
+    assert TUTORIALS, "the tutorial ladder is empty"
+    assert [path.name for path in TUTORIALS if path.name not in readme] == []
 
 
-def test_every_ladder_rung_holds_only_run_py_and_its_inputs() -> None:
-    """One rung is one lesson; a second script in a rung is a second lesson."""
-    extra_scripts: list[str] = []
-    for folder in LADDER_FOLDERS:
-        for script in sorted((EXAMPLES_ROOT / folder).glob("*.py")):
-            if script.name != "run.py":
-                extra_scripts.append(f"{folder}/{script.name}")
-
-    assert extra_scripts == []
-
-
-def test_ladder_case_files_exist_and_the_rest_say_why_they_do_not() -> None:
-    """A case.toml the schema cannot express is a fact worth stating out loud."""
-    missing: list[str] = []
-    unexpected: list[str] = []
-    unexplained: list[str] = []
-    for folder in LADDER_FOLDERS:
-        case_file = EXAMPLES_ROOT / folder / "case.toml"
-        if folder in LADDER_FOLDERS_WITH_CASE_FILES:
-            if not case_file.is_file():
-                missing.append(folder)
-            continue
-        if case_file.is_file():
-            unexpected.append(folder)
-            continue
-        if folder not in (
-            LADDER_FOLDERS_BLOCKED_BY_THE_SCHEMA + LADDER_FOLDERS_WITHOUT_A_CASE_BY_DESIGN
-        ):
-            continue
-        docstring = ast.get_docstring(ast.parse((EXAMPLES_ROOT / folder / "run.py").read_text()))
-        if not docstring or "case.toml" not in docstring:
-            unexplained.append(folder)
-
+def test_tutorial_inputs_belong_to_a_tutorial_and_cli_lines_name_real_files() -> None:
+    """Case files sit beside the script they serve, and the CLI line resolves."""
+    stems = {path.stem for path in TUTORIALS}
+    orphans = [
+        path.name
+        for path in (EXAMPLES_ROOT / "tutorials").iterdir()
+        if path.is_file() and path.suffix != ".py" and not any(path.name.startswith(s) for s in stems)
+    ]
+    assert orphans == []
+    missing = []
+    for script in TUTORIALS:
+        for token in re.findall(r"examples/tutorials/(\S+\.(?:toml|namelist))", script.read_text()):
+            if not (EXAMPLES_ROOT / "tutorials" / token).is_file():
+                missing.append(f"{script.name}: {token}")
     assert missing == []
-    assert unexpected == []
-    assert unexplained == []
 
 
-def test_every_legacy_folder_introduces_itself() -> None:
-    """The ladder rungs introduce themselves in their module docstring instead."""
+def test_every_other_folder_introduces_itself() -> None:
     missing = [
         folder
-        for folder in sorted(set(LEGACY_FOLDERS) & _present_folders())
+        for folder in sorted(set(FOLDERS_WITH_README) & _present_folders())
         if not (EXAMPLES_ROOT / folder / "README.md").is_file()
     ]
     assert missing == []
@@ -287,17 +188,6 @@ def test_workflow_catalog_points_at_files_that_exist_and_run_unaided() -> None:
         assert (EXAMPLES_ROOT / entrypoint).is_file(), entrypoint
 
 
-def test_docs_examples_page_names_every_folder() -> None:
-    """Prose docs may say more than the README, but not less."""
-    docs = DOCS_EXAMPLES.read_text(encoding="utf-8")
-    missing = [
-        folder
-        for folder in sorted(_present_folders())
-        if f"examples/{folder}" not in docs
-    ]
-    assert missing == []
-
-
 def test_examples_do_not_teach_v3_driver_facade_imports() -> None:
     """Examples should teach the public API, not the compatibility shim."""
     offenders: list[str] = []
@@ -335,36 +225,3 @@ def test_examples_do_not_track_large_files() -> None:
     ]
 
     assert oversized == []
-
-
-def test_tutorial_notebooks_are_pedagogic_and_output_free() -> None:
-    missing_topics: list[str] = []
-    structural_errors: list[str] = []
-    persisted_outputs: list[str] = []
-
-    for notebook_name, required_terms in sorted(TUTORIAL_NOTEBOOK_REQUIREMENTS.items()):
-        path = EXAMPLES_ROOT / "tutorials" / notebook_name
-        notebook = json.loads(path.read_text(encoding="utf-8"))
-        cells = notebook.get("cells", [])
-        markdown_cells = [cell for cell in cells if cell.get("cell_type") == "markdown"]
-        code_cells = [cell for cell in cells if cell.get("cell_type") == "code"]
-        joined_markdown = "\n".join("".join(cell.get("source", [])) for cell in markdown_cells)
-
-        if len(markdown_cells) < 5 or len(code_cells) < 3:
-            structural_errors.append(
-                f"{notebook_name}: markdown={len(markdown_cells)} code={len(code_cells)}"
-            )
-
-        for term in required_terms:
-            if term not in joined_markdown:
-                missing_topics.append(f"{notebook_name}: {term}")
-
-        for cell_index, cell in enumerate(code_cells):
-            if cell.get("outputs"):
-                persisted_outputs.append(f"{notebook_name}: code cell {cell_index}")
-            if cell.get("execution_count") is not None:
-                persisted_outputs.append(f"{notebook_name}: executed code cell {cell_index}")
-
-    assert structural_errors == []
-    assert missing_topics == []
-    assert persisted_outputs == []

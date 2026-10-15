@@ -25,23 +25,19 @@ def test_workflow_browser_filters_by_physics_topic() -> None:
     catalog = module._load_catalog()
 
     bootstrap = module._matching_workflows(catalog, topic="bootstrap", search="")
-    assert {workflow["id"] for workflow in bootstrap} >= {"bootstrap_redl", "qa_optimization_objective"}
+    assert {workflow["id"] for workflow in bootstrap} >= {"12_bootstrap_vs_redl", "qa_bootstrap_vmex_chain"}
 
     vmec_geometry = module._matching_workflows(catalog, topic="vmec", search="geometry")
-    assert {workflow["id"] for workflow in vmec_geometry} >= {"vmec_wout_path", "vmec_boozer_jax_pipeline"}
+    assert {workflow["id"] for workflow in vmec_geometry} >= {"04_vmec_geometry"}
 
-    # There is no "gpu" topic any more: its only workflow was the
-    # output-format benchmark, which moved to tools/performance/ along with the
-    # rest of the maintainer tooling.  The catalog indexes examples, and that
-    # script stopped being one.
     transport = module._matching_workflows(catalog, topic="transport", search="")
-    assert {workflow["id"] for workflow in transport} >= {"transport_matrix"}
+    assert {workflow["id"] for workflow in transport} >= {"10_transport_matrix"}
     assert module._matching_workflows(catalog, topic="gpu", search="") == []
 
 
 def test_workflow_browser_json_cli_is_machine_readable() -> None:
     result = subprocess.run(
-        [sys.executable, str(SCRIPT), "--topic", "redl", "--json"],
+        [sys.executable, str(SCRIPT), "--topic", "ambipolar", "--json"],
         cwd=REPO_ROOT,
         check=True,
         text=True,
@@ -49,21 +45,21 @@ def test_workflow_browser_json_cli_is_machine_readable() -> None:
     )
 
     payload = json.loads(result.stdout)
-    assert [workflow["id"] for workflow in payload["workflows"]] == ["bootstrap_redl"]
+    assert [workflow["id"] for workflow in payload["workflows"]] == ["08_ambipolar_er"]
     assert payload["workflows"][0]["command"].startswith("python examples/")
 
 
 def test_workflow_browser_text_cli_guides_first_run() -> None:
     result = subprocess.run(
-        [sys.executable, str(SCRIPT), "--topic", "transport", "--long"],
+        [sys.executable, str(SCRIPT), "--topic", "onsager", "--long"],
         cwd=REPO_ROOT,
         check=True,
         text=True,
         capture_output=True,
     )
 
-    assert "transport_matrix" in result.stdout
-    assert "python examples/transport/transport_matrix_rhsmode2_and_rhsmode3.py" in result.stdout
+    assert "10_transport_matrix" in result.stdout
+    assert "python examples/tutorials/10_transport_matrix.py" in result.stdout
     assert "local SFINCS Fortran v3 required for first run: no" in result.stdout
 
 
@@ -76,10 +72,9 @@ def test_workflow_browser_lists_topics() -> None:
         capture_output=True,
     )
 
-    assert "getting_started" in result.stdout
+    assert "tutorials" in result.stdout
     assert "[learning]" in result.stdout
-    assert "vmex_finite_beta" in result.stdout
+    assert "advanced" in result.stdout
     assert "[capability]" in result.stdout
     assert "sfincs_examples" in result.stdout
     assert "[reference]" in result.stdout
-    assert "Finite-beta VMEC" in result.stdout

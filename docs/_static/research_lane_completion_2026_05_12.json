@@ -143,8 +143,8 @@
      "path": "src/dkx/workflows/geometry_adapters.py"
     },
     {
-     "claim": "Workflow tests cover optional backend readiness and no-solve provenance.",
-     "path": "tests/test_vmex_workflow.py"
+     "claim": "Geometry-adapter tests cover optional backend readiness and no-solve provenance.",
+     "path": "tests/test_jax_geometry_adapters.py"
     }
    ],
    "gates": [
