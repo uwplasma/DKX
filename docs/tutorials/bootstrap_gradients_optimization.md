@@ -217,7 +217,9 @@ Brent's method and reads $\langle j\cdot B\rangle$ at the refined root.
 
 **`vmex --neoclassical`.** VMEX's own command line runs a DKX neoclassical
 survey of a finished equilibrium by calling
-`dkx.representative.run_representative`: on each surface it scans $E_r$, takes
+`dkx.representative.run_representative`: on each surface it scans $E_r$,
+brackets only fields whose solve passes the original-equation check, also
+samples the neighbouring surface's root, takes
 the most negative stable ambipolar root, refines it by Brent's method, and
 reads fluxes and the bootstrap current there, with the plasma's own profiles
 (`ne_coeffs`, `Te_coeffs`, `Ti_coeffs`), a choice of `fp`, `pas` or
