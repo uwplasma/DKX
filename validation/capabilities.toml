@@ -135,7 +135,7 @@ id = "vmex_coupling"
 name = "VMEX geometry and bootstrap objective coupling"
 status = "validated_limited"
 owners = ["src/dkx/workflows/geometry_adapters.py", "src/dkx/workflows/optimization.py"]
-evidence = ["tests/test_vmex_workflow.py", "tests/test_finite_beta_vmec_example.py"]
+evidence = ["tests/test_jax_geometry_adapters.py", "tests/test_finite_beta_vmec_example.py"]
 gaps = ["actual installed VMEX boundary optimization; numbered example is an analytic proxy", "profile/current protocol and bootstrap-consistent equilibrium", "complete-chain derivatives and independently validated final design"]
 
 [[capability]]

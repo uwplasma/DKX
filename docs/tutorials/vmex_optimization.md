@@ -109,7 +109,7 @@ are setup only. Its explicit non-claims:
 - no gradient through the kinetic transport solve in this workflow,
 - no production solver dependency on `vmex` or `booz_xform_jax`.
 
-The checks are `python -m pytest tests/test_vmex_workflow.py tests/test_jax_geometry_adapters.py -q`.
+The checks are `python -m pytest tests/test_jax_geometry_adapters.py -q`.
 They include an invariant check that the normalized proxy objective is unchanged
 by global scaling of the $\lvert B\rvert$ spectrum and is exactly zero, with
 zero gradient, for constant $B$. Optional ecosystem benchmark tools are not part
