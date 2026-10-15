@@ -2070,7 +2070,7 @@ def _add_compat_parsers(sub) -> None:
     p_ambi_direct.add_argument("--er-max", default="100.0", help="Upper Er bracket.")
     p_ambi_direct.add_argument("--er-initial", default="0.0", help="Initial Er evaluation.")
     p_ambi_direct.add_argument("--max-evaluations", default="20", help="Maximum Brent radial-current evaluations.")
-    p_ambi_direct.add_argument("--current-tolerance", default="1e-10", help="Radial-current convergence tolerance.")
+    p_ambi_direct.add_argument("--current-tolerance", default="1e-6", help="Radial-current tolerance, relative to the largest |J_r| seen while bracketing.")
     p_ambi_direct.add_argument("--step-tolerance", default="1e-8", help="Reserved Er-step tolerance for Newton-compatible APIs.")
     p_ambi_direct.add_argument(
         "--solve-method",

@@ -689,7 +689,7 @@ def find_ambipolar_er(
     er_bracket: tuple[float, float] | None = None,
     er_initial: float | None = None,
     max_iter: int = 20,
-    current_tol: float = 1e-10,
+    current_tol: float = 1e-6,
     field_tol: float = 1e-10,
     solve_method: str | None = None,
     tol: float | None = None,
@@ -709,9 +709,11 @@ def find_ambipolar_er(
     ``zbrent`` update. ``NEr_ambipolarSolve`` corresponds to ``max_iter``.
 
     Tolerances: ``current_tol`` is relative to the largest ``|J_r|`` seen while
-    bracketing (``AmbipolarResult.current_scale``); ``field_tol`` bounds the
-    bracket width in the problem's field units. A narrow bracket alone does not
-    establish convergence.
+    bracketing (``AmbipolarResult.current_scale``). The default ``1e-6`` sits
+    well above the current noise of a ``1e-10`` kinetic solve, so Brent stops on
+    the current rather than walking the bracket down to round-off. ``field_tol``
+    bounds the bracket width in the problem's field units. A narrow bracket
+    alone does not establish convergence.
 
     Every field is solved once (``J_r`` is memoized), and each accepted state
     satisfies the original equation ``||Ax-b|| <= tol*||b||`` with finite

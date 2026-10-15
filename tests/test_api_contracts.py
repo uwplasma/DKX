@@ -472,7 +472,7 @@ def test_public_ambipolar_facade_routes_canonical_er_solver(monkeypatch: pytest.
             "er_bracket": (-5.0, 5.0),
             "er_initial": 0.0,
             "max_iter": 7,
-            "current_tol": 1.0e-10,
+            "current_tol": 1.0e-6,
             "solve_method": "auto",
             "emit": None,
         }

@@ -394,7 +394,7 @@ def run_ambipolar_brent(
     er_max: float,
     er_initial: float = 0.0,
     max_evaluations: int = 20,
-    current_tolerance: float = 1.0e-10,
+    current_tolerance: float = 1.0e-6,
     step_tolerance: float = 1.0e-8,
     solve_method: str = "auto",
     differentiable: bool | None = None,
