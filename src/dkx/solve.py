@@ -168,26 +168,6 @@ __all__ = [
 ]
 
 
-_configure_runtime()
-
-__all__ = [
-    "DirectFactors",
-    "SolveResult",
-    "Tier1Solver",
-    "auto_solve_peak_memory_bytes",
-    "build_coarse_preconditioner",
-    "build_tier1_solver",
-    "build_tier2_preconditioner",
-    "materialize_csr",
-    "materialize_dense",
-    "solve",
-    "tier1_available",
-    "tier1_full_band_bytes",
-    "tier1_peak_memory_bytes",
-    "tier1_truncated_peak_memory_bytes",
-    "tier1_truncated_subsystem_width",
-    "tier1_truncated_tail_blocks",
-]
 
 # Size-aware device routing (``solve(device=...)``): on an accelerator-default
 # host, ``device="auto"`` runs systems at or below these sizes on the host CPU
