@@ -214,7 +214,7 @@ def test_runtime_env_controls_solver_threads_and_compilation_cache(
     assert os.environ["MKL_NUM_THREADS"] == "1"
     assert "DKX_CPU_DEVICES" not in os.environ
     assert os.environ["XLA_FLAGS"] == ""
-    assert os.environ["JAX_COMPILATION_CACHE_DIR"] == str(cache_dir)
+    assert os.environ["JAX_COMPILATION_CACHE_DIR"] == str(cache_dir / "threads2")
     assert cache_dir.is_dir()
 
     monkeypatch.delenv("DKX_CORES", raising=False)

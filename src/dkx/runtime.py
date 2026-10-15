@@ -288,6 +288,11 @@ def configure(*, jax_x64: bool | None = None) -> None:
                 if default_cache_dir and (not _is_writable_dir(default_cache_dir)):
                     default_cache_dir = ""
             if default_cache_dir:
+                # JAX's cache key omits the XLA:CPU threadpool size (NPROC),
+                # so an entry compiled under one thread count was reloaded
+                # under another. One subdirectory per count keeps them apart.
+                threads = os.environ.get("NPROC") or str(os.cpu_count() or 1)
+                default_cache_dir = os.path.join(default_cache_dir, f"threads{threads}")
                 os.environ["JAX_COMPILATION_CACHE_DIR"] = default_cache_dir
             os.environ.setdefault("JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS", "0")
             os.environ.setdefault("JAX_PERSISTENT_CACHE_MIN_ENTRY_SIZE_BYTES", "0")
