@@ -7,6 +7,7 @@
 - The persistent compilation cache keys on the XLA:CPU thread count: entries live
   under `threads<NPROC>/`, so an executable compiled under one `--cores`
   setting is not reloaded under another.
+- Smaller clone: committed PNGs are palette-quantized and recompressed (1.91 MB to 1.15 MB, same pixels to the eye, same generators), 15 evidence JSONs that nothing reads are deleted, and `tools/parity/output_parity_vs_fortran_fixture.py` is gone (the CLI driver CI runs does the same comparison).
 - `examples/` is a numbered tutorial ladder, `examples/tutorials/01..15`, from a first native run to a shape-optimization loop. Each script reads top to bottom: imports, input parameters, run with progress printed, then plot, save and print a summary. `DKX_EXAMPLES_CI=1` runs any of them in seconds. The heavy VMEX scripts moved to `examples/advanced/`; the old numbered folders, `getting_started/`, `autodiff/`, `transport/`, `vmex_finite_beta/` and the notebooks are gone.
 - The docs have a four-part tutorial track (`docs/tutorials/`) that follows the scripts: first steps, building a case, transport physics, and bootstrap current, gradients and optimization. Each part gives the equations, the command and the output it printed. The README links the new example paths and the quick start runs as written.
 - `docs/design_decisions.md` gives the reasons for the velocity discretization (Legendre modes, polynomial speed grid) and for the native defaults (Fokker–Planck collisions, DKES trajectories).
