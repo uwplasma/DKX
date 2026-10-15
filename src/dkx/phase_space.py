@@ -1026,6 +1026,13 @@ class SpeedGrid:
         w = np.exp(-(self.x * self.x)) * (self.x**k)
         return self.gaussian_weights / w
 
+    def __post_init__(self) -> None:
+        # Instances are shared by a memoizing cache; read-only arrays stop one
+        # caller's in-place edit from silently changing every later result.
+        for value in vars(self).values():
+            if isinstance(value, np.ndarray):
+                value.setflags(write=False)
+
 
 def _integrate_split(f, *, finite_bound: float = 10.0) -> float:
     """Integrate f on [0, inf), semi-infinite part first, matching v3 ordering."""

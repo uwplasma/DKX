@@ -471,6 +471,13 @@ class BoozerBcSurface:
     z_amp: np.ndarray  # (H,) float64
     dz_amp: np.ndarray  # (H,) float64
 
+    def __post_init__(self) -> None:
+        # Instances are shared by a memoizing cache; read-only arrays stop one
+        # caller's in-place edit from silently changing every later result.
+        for value in vars(self).values():
+            if isinstance(value, np.ndarray):
+                value.setflags(write=False)
+
 
 @dataclass(frozen=True)
 class BoozerBcData:
