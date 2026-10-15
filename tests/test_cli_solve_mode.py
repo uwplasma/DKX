@@ -1106,7 +1106,7 @@ def test_write_output_no_fortran_layout_reverses_axes(tmp_path: Path) -> None:
 
 def test_write_output_no_fortran_layout_covers_solution_datasets(tmp_path: Path) -> None:
     """fortran_layout=False also reverses the per-iteration solution datasets (one solve)."""
-    from dkx.drift_kinetic import _geometry_and_radial
+    from dkx.operator_build import _geometry_and_radial
     from dkx.run import _grids_from_input, run_profile
     from dkx.writer import write_profile_output
 

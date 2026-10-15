@@ -35,11 +35,8 @@ from dkx import console
 from dkx.api import SolverOptions
 from dkx.config import Case
 from dkx.constants import RadialCoordinates
-from dkx.drift_kinetic import (
-    KineticOperator,
-    _n_periods_from_namelist,
-    kinetic_operator_build_from_namelist,
-)
+from dkx.drift_kinetic import KineticOperator, kinetic_operator_build_from_namelist
+from dkx.operator_build import _n_periods_from_namelist
 from dkx.inputs import (
     RawNamelist,
     SfincsInput,

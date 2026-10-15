@@ -33,7 +33,8 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 import numpy as np
 
 from dkx.constants import RadialCoordinates, nu_n_from_nu_prime
-from dkx.drift_kinetic import KineticOperator, _resolve_equilibrium_path
+from dkx.drift_kinetic import KineticOperator
+from dkx.operator_build import _resolve_equilibrium_path
 from dkx.input_compat import (
     effective_psi_n_wish,
     infer_input_radial_coordinate_for_gradients,

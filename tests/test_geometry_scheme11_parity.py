@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from dkx.drift_kinetic import _geometry_and_radial
+from dkx.operator_build import _geometry_and_radial
 from dkx.inputs import load_sfincs_input
 from dkx.run import _grids_from_input
 

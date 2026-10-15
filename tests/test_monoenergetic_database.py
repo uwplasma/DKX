@@ -167,7 +167,7 @@ def _full_kinetic_lb_matrix():
     (rows/columns 1,2 share the radial factor; index 3 is the parallel
     channel).
     """
-    from dkx.drift_kinetic import _geometry_and_radial
+    from dkx.operator_build import _geometry_and_radial
     from dkx.inputs import load_sfincs_input
     from dkx.run import _grids_from_input, _raw_with_validated_overrides, run_transport_matrix
 
@@ -209,7 +209,7 @@ def _mapped_nu_primes(op) -> np.ndarray:
     import jax.numpy as jnp
 
     from dkx.collisions import nu_d_hat_pitch_angle_scattering_v3
-    from dkx.drift_kinetic import _geometry_and_radial
+    from dkx.operator_build import _geometry_and_radial
     from dkx.inputs import load_sfincs_input
     from dkx.run import _grids_from_input, _raw_with_validated_overrides
 
@@ -321,10 +321,8 @@ def test_gradient_of_convolved_l11_matches_finite_differences() -> None:
     import jax
     import jax.numpy as jnp
 
-    from dkx.drift_kinetic import (
-        _geometry_and_radial,
-        kinetic_operator_from_namelist,
-    )
+    from dkx.operator_build import _geometry_and_radial
+    from dkx.drift_kinetic import kinetic_operator_from_namelist
     from dkx.inputs import load_sfincs_input
     from dkx.magnetic_geometry import FluxSurfaceGeometry
     from dkx.monoenergetic import (

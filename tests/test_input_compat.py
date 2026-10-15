@@ -415,7 +415,7 @@ def test_resolve_equilibrium_prefers_vmec_netcdf_sibling(tmp_path: Path) -> None
 
 
 def test_er_coordinate_and_split_gradient_coordinates_scheme5_example() -> None:
-    from dkx.drift_kinetic import _geometry_and_radial
+    from dkx.operator_build import _geometry_and_radial
     from dkx.inputs import load_sfincs_input
     from dkx.run import _grids_from_input
 
