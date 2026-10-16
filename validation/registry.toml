@@ -679,3 +679,32 @@ limitations = [
 path = "rows.0.dkx_phi1_rms"
 operation = "scale"
 value = 1.001
+
+[[entry]]
+id = "cross_code_gaps"
+capability = "full_fokker_planck"
+status = "accepted_limited"
+claim_scope = "w7x_qa_qh_two_species_fp_sfincs_cells_ambipolar_er_sweep_rhsmode23"
+claim = "At 15x45x80x6, two species, full linearized FP, DKX matches pinned SFINCS v3 (1 rank, MUMPS) on W7-X ambipolar Er at rN 0.3/0.5/0.7 (root shift <= 1.1e-4), precise QA and QH (fluxes <= 2.7e-4, flows <= 1.9e-3 scaled), a W7-X Boozer .bc surface, the DKES/partial/full Er sweep at Er -5/0/+5 (fluxes <= 1.3e-6), and RHSMode 2 and 3 transport matrices (<= 8e-10)."
+artifact = "validation/cross_code_gaps_v1.json"
+artifact_sha256 = "0fd7db4a8e55cdc50aa9265fee306ac03f4838515943ea8078c00f9524958478"
+artifact_schema = "dkx.cross_code_gaps.v1"
+audit_script = "tools/paper_benchmarks/audit_cross_code_gaps.py"
+command = "python tools/paper_benchmarks/audit_cross_code_gaps.py --artifact validation/cross_code_gaps_v1.json"
+inputs = []
+dkx_commit = "95c71e6dfc21762d57ce7fe330ee56c01d478899"
+generated_on_host = "nvidia-a4000"
+generated_on_host_recorded = "office workstation CPU, shared (load 30-44): SFINCS 2 cores, DKX 6 cores"
+external_commits = { sfincs = "8df5453472e982df0f6ae005243ce38d57a83711" }
+limitations = [
+  "one resolution per cell, no resolution ladder",
+  "SFINCS has no Sugama operator; DKX improved Sugama against SFINCS FP is a diagnostic (fluxes 0.43%, flows 7.7%)",
+  "SFINCS RHSMode 3 is not robust on W7-X (NaN at 11x21, L12 sign flip at Nzeta 85); the gated cell is 15x45x150",
+  "local gradients repeated at each radius, not a reconstructed discharge",
+  "experimental validation",
+]
+
+[entry.corruption]
+path = "cells.0.dkx.particleFlux_vm_psiHat.0"
+operation = "scale"
+value = 1.01
