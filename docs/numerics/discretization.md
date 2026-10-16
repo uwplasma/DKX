@@ -172,7 +172,7 @@ Every upstream option is implemented: `xGridScheme` 1 to 8 (the polynomial
 grids with and without a node at $x = 0$, uniform grids, and Chebyshev
 variants) and `xDotDerivativeScheme` −2 to 11 for the upwinded $\dot x$
 derivative pairs. Parity is pinned by Fortran goldens in
-`tests/test_output_h5_xgrid_schemes_parity.py`. The grid constructors are
+`tests/test_output_h5_parity.py`. The grid constructors are
 `dkx.phase_space.make_speed_grid`, `speed_grid_diff_matrices` and
 `xdot_diff_matrices`; the polynomial kernel the collision operators consume is
 `dkx.xgrid`.

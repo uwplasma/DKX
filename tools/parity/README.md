@@ -11,4 +11,4 @@ Fortran v3 fixture in `tests/ref/`, and one Fortran control inventory.
 
 The operator, residual, and solve parity against the frozen PETSc binaries is
 asserted by `tests/test_kinetic_operator_fortran_parity.py`; output parity by
-`tests/test_output_h5_scheme4_parity.py`.
+`tests/test_output_h5_parity.py`.

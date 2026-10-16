@@ -489,7 +489,7 @@ def test_geometry_scheme3_bfield_parity_and_end_to_end() -> None:
 # cs3/4 differ from cs1 ONLY in the two source x-shapes injected into the L=0
 # DKE rows (populateMatrix.F90 lines 2915-2938); the flux-surface-averaged
 # density/pressure constraint rows are shared.  Canonical-vs-Fortran output
-# parity lives in tests/test_output_h5_constraintscheme34_parity.py (the legacy
+# parity lives in tests/test_output_h5_parity.py (the legacy
 # stack reuses the cs1 basis for cs3/4, so it is NOT a valid oracle here).
 # ---------------------------------------------------------------------------
 
