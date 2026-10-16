@@ -781,7 +781,9 @@ def find_ambipolar_er(
     reuse_cap = min(max_restarts, reuse_max_restarts or -(-_REUSE_STALL_ITERATIONS // 30))
 
     iterations: list[AmbipolarIteration] = []
-    memo: dict[float, tuple[float, np.ndarray, Any]] = {}
+    # Per field: (J_r, fluxes, x, recycle). Only the warm start is kept; the
+    # preconditioner lives in ``anchor`` alone, so memory stays flat across fields.
+    memo: dict[float, tuple[float, np.ndarray, Any, Any]] = {}
     anchor: list[Any] = [None, None]  # (field, preconditioner) of the last fresh build
     failures: list[str] = []
     solves = 0
@@ -802,11 +804,10 @@ def find_ambipolar_er(
         cold = dict(x0=None, recycle=None, precond=None, solve_method=solve_method, tol=tol,
                     max_restarts=max_restarts)
         plan = []
-        state = memo[near][2] if near is not None else None
-        if state is not None:
+        if near is not None and memo[near][2] is not None:
             plan.append(("reuse" if precond is not None else "warm", dict(
-                cold, x0=state.x, precond=precond,
-                recycle=state.recycle if precond is not None and abs(er - near) <= window else None,
+                cold, x0=memo[near][2], precond=precond,
+                recycle=memo[near][3] if precond is not None and abs(er - near) <= window else None,
                 solve_method="gmres" if precond is not None and method == "auto" else solve_method,
                 max_restarts=reuse_cap if precond is not None else max_restarts,
             )))
@@ -829,9 +830,9 @@ def find_ambipolar_er(
             break
         else:
             raise _PointFailure(f"every solve attempt failed at Er={er:.10g} (stage {stage})")
-        if options["precond"] is None and getattr(st, "precond", None) is not None:
+        if window > 0 and options["precond"] is None and getattr(st, "precond", None) is not None:
             anchor[:] = [er, st.precond]  # a fresh build: the window is centred here
-        memo[er] = (value, gamma_np, st)
+        memo[er] = (value, gamma_np, getattr(st, "x", None), getattr(st, "recycle", None) if window > 0 else None)
         iterations.append(AmbipolarIteration(len(iterations) + 1, er, value, stage))
         say(f"Solving with Er = {er:.15g}   radialCurrent = {value:.8e}")
         return value
@@ -857,7 +858,7 @@ def find_ambipolar_er(
         return finish(converged=False, status=status, er=None, radial_current=None,
                       per_species_flux=None, message=message, current_scale=scale)
 
-    jr_root, gamma_root, _ = memo[root_er]
+    jr_root, gamma_root = memo[root_er][:2]
     abs_tol = current_tol * scale
     if not converged:
         return finish(converged=False, status=status, er=float(root_er), radial_current=jr_root,
