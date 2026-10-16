@@ -24,6 +24,7 @@ from dkx.coarse_precond import (
     build_coarse_preconditioner,
 )
 from dkx.sparse_precond import build_sparse_preconditioner
+from _solve_modules import solve_modules
 
 BUILDERS = [build_coarse_preconditioner, build_sparse_preconditioner]
 
@@ -315,7 +316,8 @@ def test_it_refuses_the_route_it_does_not_implement(tmp_path, monkeypatch) -> No
 def test_the_solver_offers_it_as_a_named_krylov_preconditioner(tmp_path) -> None:
     """``coarse_triangle`` reaches the same object through the solver's factory,
     which is how a measurement selects it without importing internals."""
-    from dkx.solve import _TIER2_PRECONDITIONERS, build_tier2_preconditioner
+    from dkx.solve_krylov import _TIER2_PRECONDITIONERS
+    from dkx.solve import build_tier2_preconditioner
 
     assert "coarse_triangle" in _TIER2_PRECONDITIONERS
     op = _operator(tmp_path)
@@ -337,11 +339,8 @@ def test_the_solver_offers_it_as_a_named_krylov_preconditioner(tmp_path) -> None
 
 @pytest.mark.parametrize("species, ramp", [(1, False), (2, False), (2, True)])
 def test_the_coupled_route_solves_full_fokker_planck_exactly(tmp_path, species, ramp) -> None:
-    from dkx.solve import (
-        _COUPLED_REFINEMENT_SWEEPS,
-        _pinned_matvecs,
-        build_structured_solver,
-    )
+    from dkx.solve_common import _COUPLED_REFINEMENT_SWEEPS, _pinned_matvecs
+    from dkx.solve import build_structured_solver
     from dkx.structured_direct import CoupledSolver
 
     op = (_operator if species == 1 else _two_species_operator)(tmp_path, nx=4)
@@ -390,7 +389,7 @@ def test_the_truncated_coupled_factorization_preconditions_krylov(tmp_path) -> N
 
 
 def test_auto_picks_coupled_only_when_its_peak_fits(tmp_path) -> None:
-    import dkx.solve as S
+    S = solve_modules
     from dkx.structured_direct import coupled_precond_peak_bytes
 
     op = _two_species_operator(tmp_path, nx=4)

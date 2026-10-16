@@ -16,6 +16,7 @@ import pytest
 
 import dkx
 from dkx.solve import SolveResult, _escalate_after_tier2_stall
+from _solve_modules import solve_modules
 
 CASE = dict(
     geometryScheme=1, inputRadialCoordinate=3, rN_wish=0.3,
@@ -94,8 +95,7 @@ def test_a_deck_too_large_for_tier3_reports_the_real_problem() -> None:
 
 def _spy_on_rungs(monkeypatch) -> list[str]:
     """The preconditioner each rung asks for, in order."""
-    from dkx import solve as solve_module
-
+    solve_module = solve_modules
     kinds: list[str] = []
     real = solve_module._solve_tier2
 
@@ -132,8 +132,7 @@ def test_pitch_angle_scattering_skips_the_triangle_rung(monkeypatch) -> None:
 
 def _spy_on_starts(monkeypatch) -> list:
     """The initial guess each rung is handed."""
-    from dkx import solve as solve_module
-
+    solve_module = solve_modules
     starts: list = []
     real = solve_module._solve_tier2
 
@@ -228,10 +227,9 @@ def test_auto_restart_budget_and_current_factors(
     monkeypatch, restart, cap, size, budget, prebuilt, nonfinite, expected,
 ):
     """Probe/retry costs, factor identity, and unsafe-state cold fallback."""
-    import importlib
     from types import SimpleNamespace
     import jax.numpy as jnp
-    module = importlib.import_module('dkx.solve')
+    module = solve_modules
     op = SimpleNamespace(total_size=size)
     pair = (lambda x: x, lambda x: x)
     builds, calls = [], []
@@ -266,12 +264,11 @@ def test_auto_restart_budget_and_current_factors(
 
 def test_tier2_profile_events_cover_build_and_outer_gcrot(monkeypatch, capsys):
     """Completion events follow existing build and returned GCROT leaves."""
-    import importlib
     from types import SimpleNamespace
 
     import jax.numpy as jnp
 
-    module = importlib.import_module('dkx.solve')
+    module = solve_modules
     monkeypatch.setenv('DKX_PROFILE', '1')
     op = SimpleNamespace(total_size=4)
     pair = (lambda x: x, lambda x: x)
@@ -309,12 +306,11 @@ def test_tier2_profile_events_cover_build_and_outer_gcrot(monkeypatch, capsys):
 def test_tier2_profile_start_survives_phase_failure(
     monkeypatch, capsys, failure, start_label, complete_label,
 ):
-    import importlib
     from types import SimpleNamespace
 
     import jax.numpy as jnp
 
-    module = importlib.import_module('dkx.solve')
+    module = solve_modules
     monkeypatch.setenv('DKX_PROFILE', '1')
     monkeypatch.setattr(module, '_pinned_matvecs', lambda _op: (lambda x: x, lambda x: x))
     target = 'build_tier2_preconditioner' if failure == 'preconditioner' else 'gcrot'
@@ -338,13 +334,12 @@ def test_tier2_profile_start_survives_phase_failure(
 
 
 def test_tier2_traced_execution_does_not_create_profiler(monkeypatch):
-    import importlib
     from types import SimpleNamespace
 
     import jax
     import jax.numpy as jnp
 
-    module = importlib.import_module('dkx.solve')
+    module = solve_modules
     pair = (lambda x: x, lambda x: x)
     monkeypatch.setenv('DKX_PROFILE', '1')
     monkeypatch.setattr(
@@ -376,9 +371,8 @@ def test_tier2_traced_execution_does_not_create_profiler(monkeypatch):
 def test_restart_recovery_is_only_auto_host_policy(
     monkeypatch, method, differentiable, restart, recovery,
 ):
-    import importlib
     from types import SimpleNamespace
-    module = importlib.import_module('dkx.solve')
+    module = solve_modules
     op = SimpleNamespace(total_size=4)
     monkeypatch.setattr(module, '_auto_route', lambda *a: 'gmres')
     monkeypatch.setattr(module, '_resolve_solve_device', lambda *a: None)
@@ -394,16 +388,14 @@ def test_restart_recovery_is_only_auto_host_policy(
 
 @pytest.mark.parametrize('restart', [0, -3, 2.5, True])
 def test_restart_must_be_none_or_a_positive_integer(restart):
-    import importlib
-    module = importlib.import_module('dkx.solve')
+    module = solve_modules
     with pytest.raises(ValueError, match='restart must be None or a positive integer'):
         module.solve(_operator(), np.ones(1), restart=restart)
 
 
 def test_wide_restart_budget_resolution(monkeypatch):
     """Argument, then environment, then a quarter of available memory, capped."""
-    import importlib
-    module = importlib.import_module('dkx.solve')
+    module = solve_modules
     monkeypatch.delenv('DKX_KRYLOV_MEMORY_BUDGET_GB', raising=False)
     per_step = 100_000 * 8  # one Krylov basis: fixed preconditioners drop Z
     monkeypatch.setattr(module, '_available_memory_bytes', lambda: 4.0 * 600 * per_step)
@@ -423,8 +415,7 @@ def test_wide_restart_budget_resolution(monkeypatch):
 @pytest.mark.parametrize('auto_restart,expected', [(True, (1000, 24)), (False, (30, 800))])
 def test_larger_budget_rung_uses_the_wide_restart(monkeypatch, auto_restart, expected):
     """The stall ladder's larger-budget rung spends it at the wide restart."""
-    import importlib
-    module = importlib.import_module('dkx.solve')
+    module = solve_modules
     op = _operator()
     monkeypatch.setattr(module, '_auto_wide_restart', lambda *a: 1000)
     windows = []

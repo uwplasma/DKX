@@ -14,6 +14,7 @@ import pytest
 
 import dkx
 from dkx.solve import solve
+from _solve_modules import solve_modules
 
 CASE = dict(
     geometryScheme=1, inputRadialCoordinate=3, rN_wish=0.3,
@@ -46,8 +47,7 @@ def _spy(monkeypatch, module, name) -> list:
 def test_it_assembles_rather_than_sampling_above_the_bound(operator, monkeypatch) -> None:
     """The bound counts operator applications per column; the assembly does not
     pay them, so it is not what the bound is about."""
-    from dkx import solve as solve_module
-
+    solve_module = solve_modules
     sampled = _spy(monkeypatch, solve_module, "materialize_csr")
     result = solve(
         operator, np.asarray(operator.rhs()), method="direct",
@@ -61,8 +61,7 @@ def test_it_assembles_rather_than_sampling_above_the_bound(operator, monkeypatch
 def test_it_scales_the_matrix_before_factoring_it(operator, monkeypatch) -> None:
     """These rows carry streaming, collision and constraint terms at once, and a
     factorization picks its pivots from what it is handed."""
-    from dkx import solve as solve_module
-
+    solve_module = solve_modules
     scaled = _spy(monkeypatch, solve_module, "equilibrate")
     solve(
         operator, np.asarray(operator.rhs()), method="direct",
@@ -105,8 +104,7 @@ def test_it_refuses_clearly_when_it_can_neither_assemble_nor_sample(
 
 def test_a_small_deck_still_samples(operator, monkeypatch) -> None:
     """Below the bound nothing changes: sampling is exact and needs no pattern."""
-    from dkx import solve as solve_module
-
+    solve_module = solve_modules
     sampled = _spy(monkeypatch, solve_module, "materialize_csr")
     solve(
         operator, np.asarray(operator.rhs()), method="direct",

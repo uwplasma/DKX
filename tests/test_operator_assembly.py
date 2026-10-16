@@ -92,7 +92,7 @@ def _sampled(op, *, pinned: bool = True):
     """The matrix by its definition: one product per column."""
     import jax.numpy as jnp
 
-    from dkx.solve import _pinned_matvecs
+    from dkx.solve_common import _pinned_matvecs
     from solvax.native_eigen import sparse_operator_matrix
 
     apply = _pinned_matvecs(op)[0] if pinned else op.apply

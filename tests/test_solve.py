@@ -34,6 +34,7 @@ import scipy.sparse.linalg as sparse_linalg
 from dkx.drift_kinetic import KineticOperator
 from dkx.namelist import parse_sfincs_input_text, read_sfincs_input
 from dkx.coarse_precond import _COARSE_DIAGONAL_FLOOR, _l0_pin_gamma
+from _solve_modules import solve_modules
 from dkx.solve import (
     SolveResult,
     _resolve_subsystem_batch,
@@ -325,7 +326,7 @@ def _ramped_pas_op() -> KineticOperator:
 
 @pytest.mark.parametrize("width", [1, "auto"])
 def test_generated_factors_solve_both_physical_borders(width):
-    from dkx.solve import _build_generated_full_solver
+    from dkx.solve_structured import _build_generated_full_solver
     op = _ramped_pas_op()
     a = np.asarray(materialize_dense(op, pin_masked_dofs=True))
     exact = np.random.default_rng(77).normal(size=(op.total_size, 2))
@@ -430,8 +431,7 @@ def test_ramped_full_recovery_windowed_gradient_matches_tape_and_fd():
 
 @pytest.mark.parametrize("checked", [True, False])
 def test_generated_full_adjoint_rejects_corrupted_pullback(monkeypatch, checked, adjoint_effects):
-    import importlib
-    solver = importlib.import_module("dkx.solve")
+    solver = solve_modules
     original = solver._solve_tier1_truncated
     op = _ramped_pas_op()
     @jax.custom_vjp
@@ -466,8 +466,7 @@ def test_generated_full_adjoint_rejects_corrupted_pullback(monkeypatch, checked,
 
 @pytest.mark.parametrize("checked", [True, False])
 def test_generated_retained_adjoint_rejects_corrupted_solve(monkeypatch, checked, adjoint_effects):
-    import importlib
-    solver = importlib.import_module("dkx.solve")
+    solver = solve_modules
     build = solver._build_generated_full_solver
     def corrupted(*args):
         prepared = build(*args)
@@ -493,8 +492,7 @@ def test_generated_retained_adjoint_rejects_corrupted_solve(monkeypatch, checked
 
 
 def test_generated_factor_retention_respects_budget(monkeypatch):
-    import importlib
-    solver = importlib.import_module("dkx.solve")
+    solver = solve_modules
     build = solver._build_generated_full_solver
     calls = []
     def observed(*args):
@@ -782,9 +780,8 @@ def test_tier3_direct_solve_matches_dense() -> None:
 
 
 def test_superlu_keeps_the_released_solvax_024_constructor(monkeypatch) -> None:
-    import importlib
 
-    solve_module = importlib.import_module("dkx.solve")
+    solve_module = solve_modules
     calls = []
 
     class Released024Factorization:
@@ -804,11 +801,10 @@ def test_superlu_keeps_the_released_solvax_024_constructor(monkeypatch) -> None:
 
 
 def test_mumps_budget_reserves_live_storage_and_reuses_one_factorization(monkeypatch) -> None:
-    import importlib
 
     import dkx.batch as batch_module
 
-    solve_module = importlib.import_module("dkx.solve")
+    solve_module = solve_modules
     calls = []
 
     class FakeMumpsFactorization:
@@ -870,9 +866,8 @@ def test_mumps_budget_reserves_live_storage_and_reuses_one_factorization(monkeyp
 
 
 def test_stale_mumps_factors_refresh_once_with_the_same_backend_and_budget(monkeypatch) -> None:
-    import importlib
 
-    solve_module = importlib.import_module("dkx.solve")
+    solve_module = solve_modules
     builds = []
 
     class ZeroFactorization:
@@ -914,9 +909,8 @@ def test_stale_mumps_factors_refresh_once_with_the_same_backend_and_budget(monke
 
 
 def test_mumps_large_live_rss_refuses_without_superlu_fallthrough(monkeypatch) -> None:
-    import importlib
 
-    solve_module = importlib.import_module("dkx.solve")
+    solve_module = solve_modules
     constructor_calls = []
 
     class AdapterFactorization:
@@ -950,9 +944,8 @@ def test_mumps_large_live_rss_refuses_without_superlu_fallthrough(monkeypatch) -
 
 
 def test_mumps_capability_and_budget_fail_before_assembly(monkeypatch) -> None:
-    import importlib
 
-    solve_module = importlib.import_module("dkx.solve")
+    solve_module = solve_modules
 
     class Released024Factorization:
         def __init__(self, matrix):
@@ -984,9 +977,8 @@ def test_mumps_capability_and_budget_fail_before_assembly(monkeypatch) -> None:
 def test_large_auto_fallback_requires_explicit_budgeted_mumps(
     monkeypatch, backend, budget, falls_back, message
 ) -> None:
-    import importlib
 
-    solve_module = importlib.import_module("dkx.solve")
+    solve_module = solve_modules
     rhs = jnp.ones((2, 1))
     stalled = SolveResult(
         x=jnp.zeros_like(rhs), method="gcrot", iterations=1,
@@ -1023,9 +1015,8 @@ def test_large_auto_fallback_requires_explicit_budgeted_mumps(
 def test_invalid_mumps_budget_is_rejected_before_auto_escalation(
     monkeypatch, budget
 ) -> None:
-    import importlib
 
-    solve_module = importlib.import_module("dkx.solve")
+    solve_module = solve_modules
     monkeypatch.setattr(
         solve_module,
         "_escalate_after_tier2_stall",
@@ -1045,11 +1036,10 @@ def test_invalid_mumps_budget_is_rejected_before_auto_escalation(
 def test_mumps_reuse_admission_accounts_for_rhs_width_and_float64_conversion(
     monkeypatch,
 ) -> None:
-    import importlib
 
     import dkx.batch as batch_module
 
-    solve_module = importlib.import_module("dkx.solve")
+    solve_module = solve_modules
     live_rss = 128 * 2**20
     rhs = np.empty((11, 5), dtype=np.float32)
     rhs_work_nbytes = rhs.size * np.dtype(np.float64).itemsize
@@ -1423,7 +1413,7 @@ def adjoint_effects():
     (0., np.inf, True, 1., False),
 ])
 def test_adjoint_guard_does_not_promote_backward_error_to_acceptance(residual, rhs, zero, factor, accepted):
-    from dkx.solve import _residual_guard
+    from dkx.solve_common import _residual_guard
 
     guard = _residual_guard("adjoint (transposed)", 0, tol=1e-10, atol=0.,
                             factor=factor, raise_on_failure=True, diagnostics=None)
@@ -1436,7 +1426,7 @@ def test_adjoint_guard_does_not_promote_backward_error_to_acceptance(residual, r
 
 
 def test_jitted_adjoint_rejects_a_defect_below_the_backward_error_scale(adjoint_effects):
-    from dkx.solve import _guarded_solve, _implicit_solve
+    from dkx.solve_common import _guarded_solve, _implicit_solve
 
     diagonal = jnp.array([1., 1e-12])
     def apply(x):
@@ -1583,8 +1573,7 @@ def test_adjoint_guard_survives_jit(adjoint_effects) -> None:
 
 @pytest.mark.parametrize("checked", [True, False])
 def test_structured_adjoint_rechecks_original_equation(monkeypatch, checked, adjoint_effects):
-    import importlib
-    solver = importlib.import_module("dkx.solve")
+    solver = solve_modules
     op = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
     original = solver.build_tier1_solver
 
@@ -2065,7 +2054,7 @@ def test_tier1_adjoint_window_is_reverse_mode_only() -> None:
 # Convergence is judged independently for each right-hand side
 # ---------------------------------------------------------------------------
 def test_each_rhs_column_has_its_own_relative_target() -> None:
-    from dkx.solve import _converged_flag
+    from dkx.solve_common import _converged_flag
 
     rhs = np.diag([1.0, 1e6])
     residuals = np.array([1e-5, 0.0])
@@ -2074,7 +2063,7 @@ def test_each_rhs_column_has_its_own_relative_target() -> None:
 
 
 def test_zero_rhs_requires_the_explicit_absolute_tolerance() -> None:
-    from dkx.solve import _converged_flag
+    from dkx.solve_common import _converged_flag
 
     rhs = np.zeros((2, 1))
     assert _converged_flag(np.array([0.0]), rhs, tol=1e-10, atol=0.0)
@@ -2083,7 +2072,7 @@ def test_zero_rhs_requires_the_explicit_absolute_tolerance() -> None:
 
 
 def test_invalid_residual_or_rhs_norm_is_rejected() -> None:
-    from dkx.solve import _converged_flag
+    from dkx.solve_common import _converged_flag
 
     rhs = np.diag([1.0, 1e6])
     assert not _converged_flag(np.array([np.nan, 0.0]), rhs, tol=1e-10, atol=0.0)

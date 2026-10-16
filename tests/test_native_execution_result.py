@@ -12,6 +12,7 @@ import pytest
 import dkx
 from dkx.constants import RadialCoordinates
 from dkx.units import HEAT_FLUX, PARALLEL_CURRENT, PARTICLE_FLUX, flux_psi_hat_to_r_hat
+from _solve_modules import solve_modules
 
 
 def _case():
@@ -320,7 +321,7 @@ def test_native_profile_retains_a_state_satisfying_the_original_equation(monkeyp
     # Resolve consumers before patching, so lazy imports cannot retain the spy.
     for name in ("dkx.batch", "dkx.er", "dkx.run"):
         importlib.import_module(name)
-    solve_module = importlib.import_module("dkx.solve")
+    solve_module = solve_modules
     original = solve_module.solve
     residuals = []
     def checked(op, rhs, **kwargs):
@@ -337,9 +338,8 @@ def test_native_profile_retains_a_state_satisfying_the_original_equation(monkeyp
 
 
 def test_native_profile_rejects_a_false_converged_solver_result(monkeypatch):
-    import importlib
 
-    solve_module = importlib.import_module("dkx.solve")
+    solve_module = solve_modules
     original = solve_module.solve
 
     def corrupted(op, rhs, **kwargs):
@@ -1049,7 +1049,7 @@ def test_native_prepared_scan_matches_fresh_cases_and_field_derivative(tmp_path,
     # retain the temporary mock after this context exits.
     er_mod = importlib.import_module('dkx.er')
     with monkeypatch.context() as patch:
-        patch.setattr(importlib.import_module('dkx.solve'), 'solve', forbidden)
+        patch.setattr(solve_modules, 'solve', forbidden)
         patch.setattr(er_mod, 'solve', forbidden)
         patch.setattr(importlib.import_module('dkx.namelist'), 'read_sfincs_input', forbidden)
         patch.setattr(importlib.import_module('dkx.inputs'), 'read_sfincs_input', forbidden)
