@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Monoenergetic solves stay lean. When the truncated block-Thomas solve misses `tol` by rounding (low collisionality), `auto` now applies one defect correction before falling back to dense-preconditioned Krylov. W7-X at ν*=3e-4, grid 23×55×140, office Xeon on 8 pinned cores, NTX's cross-code harness: peak RSS 23.9 GB (recorded run) to 1.26 GB, warm 101 to 85 s. Alternating A/B/A/B at 19×41×100 with a 1 GB structured budget: 6.1–7.4 to 1.09 GB, warm 47–49 to 19–21 s. D11, D31, D33 unchanged to 1e-9.
 - Fix: the memoized speed grids (`make_x_grid`, `make_speed_grid`) and parsed `.bc` surfaces returned shared, writable arrays, so one caller's in-place edit changed every later result for the same arguments. Their arrays are now read-only.
 - `examples/` is a numbered tutorial ladder, `examples/tutorials/01..15`, from a first native run to a shape-optimization loop. Each script reads top to bottom: imports, input parameters, run with progress printed, then plot, save and print a summary. `DKX_EXAMPLES_CI=1` runs any of them in seconds. The heavy VMEX scripts moved to `examples/advanced/`; the old numbered folders, `getting_started/`, `autodiff/`, `transport/`, `vmex_finite_beta/` and the notebooks are gone.
 - The docs have a four-part tutorial track (`docs/tutorials/`) that follows the scripts: first steps, building a case, transport physics, and bootstrap current, gradients and optimization. Each part gives the equations, the command and the output it printed. The README links the new example paths and the quick start runs as written.
