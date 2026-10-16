@@ -122,6 +122,7 @@ from dkx.solve_common import (  # noqa: E402,F401  (re-exported: dkx.solve API)
     SolveResult,
     _AUTO_RESTART_PROBE,
     _as_columns,
+    _converged_flag,
     _krylov_basis_budget_bytes,
 )
 from dkx.solve_structured import (  # noqa: E402,F401  (re-exported: dkx.solve API)
