@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Monoenergetic solves stay lean. When the truncated block-Thomas solve misses `tol` by rounding (low collisionality), `auto` now applies one defect correction before falling back to dense-preconditioned Krylov. W7-X at ν*=3e-4, grid 23×55×140, office Xeon on 8 pinned cores, NTX's cross-code harness: peak RSS 23.9 GB (recorded run) to 1.26 GB, warm 101 to 85 s. Alternating A/B/A/B at 19×41×100 with a 1 GB structured budget: 6.1–7.4 to 1.09 GB, warm 47–49 to 19–21 s. D11, D31, D33 unchanged to 1e-9.
 - Fix: the memoized speed grids (`make_x_grid`, `make_speed_grid`) and parsed `.bc` surfaces returned shared, writable arrays, so one caller's in-place edit changed every later result for the same arguments. Their arrays are now read-only.
 - Fix: `KineticBootstrapCurrent` read `aHat` with netCDF4 only and fell back to `aHat = 1` on any error. A LIBSTELL text `wout` (which `geometryScheme = 5` accepts) or a missing `Aminor_p` therefore scaled every `d/drHat` gradient in the deck by `aHat` without warning. It now reads through `read_vmec_wout` and raises when `Aminor_p` is missing or not positive.
 - The persistent compilation cache keys on the XLA:CPU thread count: entries live
