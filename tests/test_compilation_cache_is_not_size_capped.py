@@ -48,7 +48,8 @@ def test_the_cache_is_still_enabled() -> None:
     directory = _in_a_fresh_process(
         "import dkx.run, os; print(os.environ.get('JAX_COMPILATION_CACHE_DIR', ''))"
     )
-    assert directory.endswith("jax_compilation_cache"), directory
+    head, tail = os.path.split(directory)
+    assert head.endswith("jax_compilation_cache") and tail.startswith("threads"), directory
 
 
 def test_solving_does_not_warn_about_the_cache(tmp_path) -> None:
