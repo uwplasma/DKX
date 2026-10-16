@@ -132,6 +132,13 @@ class XGrid:
     include_point_at_x0: bool
     x0: float
 
+    def __post_init__(self) -> None:
+        # Instances are shared by a memoizing cache; read-only arrays stop one
+        # caller's in-place edit from silently changing every later result.
+        for value in vars(self).values():
+            if isinstance(value, np.ndarray):
+                value.setflags(write=False)
+
     def dx_weights(self, k: float | None = None) -> np.ndarray:
         """Return weights for plain `dx` integrals (Fortran divides by the weight function)."""
         if k is None:
