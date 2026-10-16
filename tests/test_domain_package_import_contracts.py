@@ -59,6 +59,7 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "console.py": "stable support utility",
     "constants.py": "stable physics kernel",
     "drift_kinetic.py": "stable operator kernel",
+    "operator_build.py": "stable operator kernel",
     "er.py": "public workflow API",
     "execution.py": "public native execution API",
     "impurity.py": "public physics API",

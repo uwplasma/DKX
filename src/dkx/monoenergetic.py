@@ -122,11 +122,8 @@ from .constants import (  # noqa: E402
     d_phi_hat_d_psi_hat_from_e_star,
     nu_n_from_nu_prime,
 )
-from .drift_kinetic import (  # noqa: E402
-    KineticOperator,
-    _geometry_and_radial,
-    kinetic_operator_from_namelist,
-)
+from .drift_kinetic import KineticOperator, kinetic_operator_from_namelist
+from .operator_build import _geometry_and_radial
 from .inputs import SfincsInput, load_sfincs_input  # noqa: E402
 from .moments import transport_matrix_from_state_vectors  # noqa: E402
 from .solve import SolveResult, solve  # noqa: E402

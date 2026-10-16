@@ -153,7 +153,8 @@ import jax.numpy as jnp
 import numpy as np
 
 from dkx.api import SolverOptions
-from dkx.drift_kinetic import _geometry_and_radial, kinetic_operator_build_from_namelist
+from dkx.operator_build import _geometry_and_radial
+from dkx.drift_kinetic import kinetic_operator_build_from_namelist
 from dkx.magnetic_geometry import FluxSurfaceGeometry
 from dkx.moments import FluxSurface, SpeciesParams, StateLayout, VelocityGrid, vm_flux_moments
 from dkx.phase_space import widened_upwind_stencil

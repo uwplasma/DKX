@@ -51,10 +51,8 @@ import jax.numpy as jnp
 jax.config.update("jax_enable_x64", True)
 
 from dkx import er as er_mod  # noqa: E402
-from dkx.drift_kinetic import (  # noqa: E402
-    _geometry_and_radial,
-    kinetic_operator_from_namelist,
-)
+from dkx.operator_build import _geometry_and_radial
+from dkx.drift_kinetic import kinetic_operator_from_namelist
 from dkx.inputs import load_sfincs_input  # noqa: E402
 from dkx.magnetic_geometry import FluxSurfaceGeometry  # noqa: E402
 from dkx.moments import rhsmode1_moments  # noqa: E402

@@ -105,7 +105,7 @@ def test_scheme13_from_namelist_matches_direct_from_fourier() -> None:
     """
     import jax.numpy as jnp
 
-    from dkx.drift_kinetic import _geometry_and_radial, _get_int, _n_periods_from_namelist
+    from dkx.operator_build import _geometry_and_radial, _get_int, _n_periods_from_namelist
     from dkx.inputs import read_sfincs_input
     from dkx.magnetic_geometry import FluxSurfaceGeometry
     from dkx.phase_space import make_grids

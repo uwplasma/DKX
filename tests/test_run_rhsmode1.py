@@ -331,6 +331,7 @@ def test_run_profile_write_path_builds_operator_once(
     objects instead of re-deriving them from the namelist.
     """
     import dkx.drift_kinetic as dk
+    import dkx.operator_build as ob
     import dkx.run as rn
     import dkx.writer as wr
     from dkx.run import run_profile
@@ -345,13 +346,13 @@ def test_run_profile_write_path_builds_operator_once(
         return wrapped
 
     # The build entry run_profile uses, plus its internal grid/geometry
-    # derivations (module-global lookups inside dkx.drift_kinetic).
+    # derivations (module-global lookups inside dkx.operator_build).
     monkeypatch.setattr(
         rn, "kinetic_operator_build_from_namelist",
         counting("build", dk.kinetic_operator_build_from_namelist),
     )  # fmt: skip
-    monkeypatch.setattr(dk, "make_grids", counting("grids", dk.make_grids))
-    monkeypatch.setattr(dk, "_geometry_and_radial", counting("geometry", dk._geometry_and_radial))
+    monkeypatch.setattr(ob, "make_grids", counting("grids", ob.make_grids))
+    monkeypatch.setattr(ob, "_geometry_and_radial", counting("geometry", ob._geometry_and_radial))
     # Writer-shared helpers, counted through both by-name import sites.
     extras = counting("extras", wr._geometry_extras)
     monkeypatch.setattr(wr, "_geometry_extras", extras)
