@@ -1,0 +1,911 @@
+{
+ "schema": "dkx.cross_code_gaps.v1",
+ "created_utc": "2026-10-16T08:00:00Z",
+ "claim_scope": "w7x_qa_qh_two_species_fp_sfincs_cells_ambipolar_er_sweep_rhsmode23",
+ "source": {
+  "dkx_commit": "95c71e6dfc21762d57ce7fe330ee56c01d478899",
+  "dkx_version": "2.9.0",
+  "jax": "0.11.2",
+  "sfincs_commit": "8df5453472e982df0f6ae005243ce38d57a83711",
+  "sfincs_executable_sha256": "1ec1eac9e52141fd74b9027a006a3b0da36e3353c59a2eefd5fad2ebab2b2a02",
+  "sfincs_stack": "conda-forge petsc 3.22 real, mumps-mpi, openmpi; 1 MPI rank, -mat_mumps_icntl_7 2",
+  "equilibria_sha256": {
+   "wout_w7x_standardConfig.nc": "336a41939e88112785d4c07858ba2d42c38cf50d870bc2f44039ae58098507b8",
+   "wout_precise_QA.nc": "4d301a3c32aa6b12f0c13f2c440d223427275fb00862fac3e64e52dc8421c23c",
+   "wout_precise_QH.nc": "0358096aca3bd30975bd0453469ba72427501c9b6589572c20f4ffaf6644c810",
+   "w7x_standardConfig.bc": "81c686e5a5bd8f38d8b1f754ebe2910951f20094bab35d73d2827d9875bb6062"
+  }
+ },
+ "environment": {
+  "host": "office workstation, 36 threads, 62 GB, shared (load 30-44)",
+  "sfincs_cores": 2,
+  "dkx_cores": 6,
+  "python": "3.13.16"
+ },
+ "common_deck": {
+  "species": "H+ and e-, nHat 0.5, THat 2, dnHat/drHat -0.5, dTHat/drHat -2",
+  "collisionOperator": 0,
+  "nu_n": 0.00831565,
+  "rN": 0.5,
+  "solverTolerance": 1e-10,
+  "production_resolution": {
+   "Ntheta": 15,
+   "Nzeta": 45,
+   "Nxi": 80,
+   "Nx": 6
+  }
+ },
+ "acceptance": {
+  "flux_scaled": 0.0005,
+  "flow_scaled": 0.0025,
+  "ambipolar_root_relative": 0.0002,
+  "transport_matrix_relative": 1e-09
+ },
+ "ambipolar": [
+  {
+   "rN": 0.3,
+   "sfincs_root_er": -3.5165469360939476,
+   "dkx_flux_at_root": [
+    -8.102306614550012e-09,
+    -8.097045145663568e-09
+   ],
+   "dkx_flux_at_root_plus_0p05": [
+    -8.780134760501715e-09,
+    -8.062981578206125e-09
+   ],
+   "deck": {
+    "geom": 5,
+    "eq": "wout_w7x_standardConfig.nc",
+    "rN": 0.3,
+    "res": [
+     15,
+     45,
+     80,
+     6
+    ],
+    "ambipolar": true,
+    "er_min": -10,
+    "er_max": 10
+   }
+  },
+  {
+   "rN": 0.5,
+   "sfincs_root_er": -4.439558406266654,
+   "dkx_flux_at_root": [
+    -1.009165606715058e-08,
+    -1.0091628068937294e-08
+   ],
+   "dkx_flux_at_root_plus_0p05": [
+    -1.1339190909743317e-08,
+    -1.0049090486826146e-08
+   ],
+   "deck": {
+    "geom": 5,
+    "eq": "wout_w7x_standardConfig.nc",
+    "rN": 0.5,
+    "res": [
+     15,
+     45,
+     80,
+     6
+    ],
+    "ambipolar": true,
+    "er_min": -10,
+    "er_max": 10
+   }
+  },
+  {
+   "rN": 0.7,
+   "sfincs_root_er": -5.231008803064893,
+   "dkx_flux_at_root": [
+    -1.6043085396481562e-08,
+    -1.6042860622041914e-08
+   ],
+   "dkx_flux_at_root_plus_0p05": [
+    -1.8072817103931634e-08,
+    -1.598339319179763e-08
+   ],
+   "deck": {
+    "geom": 5,
+    "eq": "wout_w7x_standardConfig.nc",
+    "rN": 0.7,
+    "res": [
+     15,
+     45,
+     80,
+     6
+    ],
+    "ambipolar": true,
+    "er_min": -10,
+    "er_max": 10
+   }
+  }
+ ],
+ "cells": [
+  {
+   "id": "b_qa_fp",
+   "gap": "b",
+   "deck": {
+    "geom": 5,
+    "eq": "wout_precise_QA.nc",
+    "res": [
+     15,
+     45,
+     80,
+     6
+    ],
+    "Er": 1.0
+   },
+   "sfincs": {
+    "particleFlux_vm_psiHat": [
+     5.32213771321843e-08,
+     1.5600978382593336e-08
+    ],
+    "heatFlux_vm_psiHat": [
+     4.7516807227351137e-07,
+     3.956723053406342e-08
+    ],
+    "FSABFlow": [
+     -0.13156736317750742,
+     -0.05904004010644696
+    ]
+   },
+   "dkx": {
+    "particleFlux_vm_psiHat": [
+     5.320732144025592e-08,
+     1.5611391452749945e-08
+    ],
+    "heatFlux_vm_psiHat": [
+     4.751408237367843e-07,
+     3.9620488053221836e-08
+    ],
+    "FSABFlow": [
+     -0.13157291059533882,
+     -0.059277834194846085
+    ]
+   },
+   "diagnostic": false
+  },
+  {
+   "id": "b_qh_fp",
+   "gap": "b",
+   "deck": {
+    "geom": 5,
+    "eq": "wout_precise_QH.nc",
+    "res": [
+     15,
+     45,
+     80,
+     6
+    ],
+    "Er": 1.0
+   },
+   "sfincs": {
+    "particleFlux_vm_psiHat": [
+     9.997484615988262e-09,
+     1.5588636152467967e-08
+    ],
+    "heatFlux_vm_psiHat": [
+     6.144214802925788e-08,
+     7.543292745673066e-08
+    ],
+    "FSABFlow": [
+     -0.036617140070571166,
+     -0.006141750809543742
+    ]
+   },
+   "dkx": {
+    "particleFlux_vm_psiHat": [
+     9.996941369479297e-09,
+     1.558944348611892e-08
+    ],
+    "heatFlux_vm_psiHat": [
+     6.144115863077206e-08,
+     7.543718813912258e-08
+    ],
+    "FSABFlow": [
+     -0.03661781930382128,
+     -0.0061986694470594315
+    ]
+   },
+   "diagnostic": false
+  },
+  {
+   "id": "c_bc_w7x_fp",
+   "gap": "c",
+   "deck": {
+    "geom": 11,
+    "eq": "w7x_standardConfig.bc",
+    "res": [
+     15,
+     45,
+     80,
+     6
+    ],
+    "Er": 1.0
+   },
+   "sfincs": {
+    "particleFlux_vm_psiHat": [
+     -3.754771365676424e-07,
+     -6.681802856969719e-09
+    ],
+    "heatFlux_vm_psiHat": [
+     -1.7932659925503918e-06,
+     -3.825830924985022e-08
+    ],
+    "FSABFlow": [
+     -0.005175152535087235,
+     -0.001171815157333719
+    ]
+   },
+   "dkx": {
+    "particleFlux_vm_psiHat": [
+     -3.7547717378206567e-07,
+     -6.681807093723396e-09
+    ],
+    "heatFlux_vm_psiHat": [
+     -1.7932663916893281e-06,
+     -3.825830833103242e-08
+    ],
+    "FSABFlow": [
+     -0.005175253680087465,
+     -0.0011791424013221988
+    ]
+   },
+   "diagnostic": false
+  },
+  {
+   "id": "d_sweep_full_E0",
+   "gap": "d",
+   "deck": {
+    "geom": 5,
+    "eq": "wout_w7x_standardConfig.nc",
+    "res": [
+     15,
+     45,
+     80,
+     6
+    ],
+    "Er": 0.0,
+    "traj": "full"
+   },
+   "sfincs": {
+    "particleFlux_vm_psiHat": [
+     -4.3057130749822256e-07,
+     -6.2595480949293375e-09
+    ],
+    "heatFlux_vm_psiHat": [
+     -2.3511637679955496e-06,
+     -3.4025881188187925e-08
+    ],
+    "FSABFlow": [
+     -0.0041448918166353465,
+     -0.0005490041842247095
+    ]
+   },
+   "dkx": {
+    "particleFlux_vm_psiHat": [
+     -4.3057129940307833e-07,
+     -6.259529796638183e-09
+    ],
+    "heatFlux_vm_psiHat": [
+     -2.351163740576807e-06,
+     -3.402569374177125e-08
+    ],
+    "FSABFlow": [
+     -0.004144971148260692,
+     -0.0005547753637506574
+    ]
+   },
+   "diagnostic": false
+  },
+  {
+   "id": "d_sweep_dkes_E-5",
+   "gap": "d",
+   "deck": {
+    "geom": 5,
+    "eq": "wout_w7x_standardConfig.nc",
+    "res": [
+     15,
+     45,
+     80,
+     6
+    ],
+    "Er": -5.0,
+    "traj": "dkes"
+   },
+   "sfincs": {
+    "particleFlux_vm_psiHat": [
+     1.44291147328761e-09,
+     -1.0576698711830626e-08
+    ],
+    "heatFlux_vm_psiHat": [
+     -1.0676150563103006e-07,
+     -5.137723612956816e-08
+    ],
+    "FSABFlow": [
+     0.00010052845757981399,
+     0.0028588168102350584
+    ]
+   },
+   "dkx": {
+    "particleFlux_vm_psiHat": [
+     1.4429103837979468e-09,
+     -1.0576685757290202e-08
+    ],
+    "heatFlux_vm_psiHat": [
+     -1.0676150893269604e-07,
+     -5.137712152795856e-08
+    ],
+    "FSABFlow": [
+     0.00010053700098816065,
+     0.002859455975090736
+    ]
+   },
+   "diagnostic": false
+  },
+  {
+   "id": "d_sweep_dkes_E+5",
+   "gap": "d",
+   "deck": {
+    "geom": 5,
+    "eq": "wout_w7x_standardConfig.nc",
+    "res": [
+     15,
+     45,
+     80,
+     6
+    ],
+    "Er": 5.0,
+    "traj": "dkes"
+   },
+   "sfincs": {
+    "particleFlux_vm_psiHat": [
+     -1.8486508036085145e-07,
+     -1.8759377264306024e-09
+    ],
+    "heatFlux_vm_psiHat": [
+     -6.582672697999362e-07,
+     -1.613398579651498e-08
+    ],
+    "FSABFlow": [
+     -0.00916827991517193,
+     -0.004450034440756848
+    ]
+   },
+   "dkx": {
+    "particleFlux_vm_psiHat": [
+     -1.8486505689017318e-07,
+     -1.876003540260716e-09
+    ],
+    "heatFlux_vm_psiHat": [
+     -6.582672018832792e-07,
+     -1.6134515879020822e-08
+    ],
+    "FSABFlow": [
+     -0.009168479622100488,
+     -0.0044641380462083205
+    ]
+   },
+   "diagnostic": false
+  },
+  {
+   "id": "d_sweep_partial_E-5",
+   "gap": "d",
+   "deck": {
+    "geom": 5,
+    "eq": "wout_w7x_standardConfig.nc",
+    "res": [
+     15,
+     45,
+     80,
+     6
+    ],
+    "Er": -5.0,
+    "traj": "partial"
+   },
+   "sfincs": {
+    "particleFlux_vm_psiHat": [
+     2.735162855957938e-09,
+     -1.056774614591694e-08
+    ],
+    "heatFlux_vm_psiHat": [
+     -9.669205036753318e-08,
+     -5.130976020786358e-08
+    ],
+    "FSABFlow": [
+     0.00010470966670671917,
+     0.0028590817077761184
+    ]
+   },
+   "dkx": {
+    "particleFlux_vm_psiHat": [
+     2.735161699199393e-09,
+     -1.0567733474003982e-08
+    ],
+    "heatFlux_vm_psiHat": [
+     -9.66920542391924e-08,
+     -5.1309647942720344e-08
+    ],
+    "FSABFlow": [
+     0.00010471855886840672,
+     0.0028597253372771524
+    ]
+   },
+   "diagnostic": false
+  },
+  {
+   "id": "d_sweep_partial_E+5",
+   "gap": "d",
+   "deck": {
+    "geom": 5,
+    "eq": "wout_w7x_standardConfig.nc",
+    "res": [
+     15,
+     45,
+     80,
+     6
+    ],
+    "Er": 5.0,
+    "traj": "partial"
+   },
+   "sfincs": {
+    "particleFlux_vm_psiHat": [
+     -1.7438756276378235e-07,
+     -1.8719495292295724e-09
+    ],
+    "heatFlux_vm_psiHat": [
+     -6.142266700526338e-07,
+     -1.6101324033284957e-08
+    ],
+    "FSABFlow": [
+     -0.009137853132309836,
+     -0.004433602493860983
+    ]
+   },
+   "dkx": {
+    "particleFlux_vm_psiHat": [
+     -1.7438753673197546e-07,
+     -1.872016186437944e-09
+    ],
+    "heatFlux_vm_psiHat": [
+     -6.14226579354025e-07,
+     -1.6101862236203525e-08
+    ],
+    "FSABFlow": [
+     -0.0091380520812716,
+     -0.0044476668084175745
+    ]
+   },
+   "diagnostic": false
+  },
+  {
+   "id": "d_sweep_full_E-5",
+   "gap": "d",
+   "deck": {
+    "geom": 5,
+    "eq": "wout_w7x_standardConfig.nc",
+    "res": [
+     15,
+     45,
+     80,
+     6
+    ],
+    "Er": -5.0,
+    "traj": "full"
+   },
+   "sfincs": {
+    "particleFlux_vm_psiHat": [
+     2.654821929023651e-09,
+     -1.0567404731019464e-08
+    ],
+    "heatFlux_vm_psiHat": [
+     -9.718032028611079e-08,
+     -5.1308140549061755e-08
+    ],
+    "FSABFlow": [
+     0.00014985215264764942,
+     0.0028856279585195363
+    ]
+   },
+   "dkx": {
+    "particleFlux_vm_psiHat": [
+     2.6548204562178764e-09,
+     -1.0567391833249531e-08
+    ],
+    "heatFlux_vm_psiHat": [
+     -9.718032479349103e-08,
+     -5.130802665961583e-08
+    ],
+    "FSABFlow": [
+     0.0001498621532070692,
+     0.0028863535514733222
+    ]
+   },
+   "diagnostic": false
+  },
+  {
+   "id": "d_sweep_full_E+5",
+   "gap": "d",
+   "deck": {
+    "geom": 5,
+    "eq": "wout_w7x_standardConfig.nc",
+    "res": [
+     15,
+     45,
+     80,
+     6
+    ],
+    "Er": 5.0,
+    "traj": "full"
+   },
+   "sfincs": {
+    "particleFlux_vm_psiHat": [
+     -1.7453784062835996e-07,
+     -1.871940995143877e-09
+    ],
+    "heatFlux_vm_psiHat": [
+     -6.154630355152493e-07,
+     -1.610113711742685e-08
+    ],
+    "FSABFlow": [
+     -0.009228238927195565,
+     -0.00448540997312964
+    ]
+   },
+   "dkx": {
+    "particleFlux_vm_psiHat": [
+     -1.7453781704703325e-07,
+     -1.8720082577640184e-09
+    ],
+    "heatFlux_vm_psiHat": [
+     -6.154629662357691e-07,
+     -1.6101680041327477e-08
+    ],
+    "FSABFlow": [
+     -0.009228440044990908,
+     -0.004499609013070664
+    ]
+   },
+   "diagnostic": false
+  },
+  {
+   "id": "e_sugama_w7x",
+   "gap": "e",
+   "deck": {
+    "geom": 5,
+    "eq": "wout_w7x_standardConfig.nc",
+    "res": [
+     15,
+     45,
+     80,
+     6
+    ],
+    "Er": 1.0,
+    "coll": 3
+   },
+   "sfincs": {
+    "particleFlux_vm_psiHat": [
+     -3.184304557633744e-07,
+     -5.385975423499885e-09
+    ],
+    "heatFlux_vm_psiHat": [
+     -1.5089667367379685e-06,
+     -3.0472937618769275e-08
+    ],
+    "FSABFlow": [
+     -0.005107184546159633,
+     -0.0013089579642171527
+    ]
+   },
+   "dkx": {
+    "particleFlux_vm_psiHat": [
+     -3.1705973062735933e-07,
+     -5.370206846239814e-09
+    ],
+    "heatFlux_vm_psiHat": [
+     -1.5056151481582147e-06,
+     -3.044816326809108e-08
+    ],
+    "FSABFlow": [
+     -0.004713317904849402,
+     -0.0015732374941653073
+    ]
+   },
+   "diagnostic": true
+  },
+  {
+   "id": "f_rhs2_w7x",
+   "gap": "f",
+   "deck": {
+    "geom": 5,
+    "eq": "wout_w7x_standardConfig.nc",
+    "res": [
+     15,
+     45,
+     80,
+     6
+    ],
+    "ns": 1,
+    "rhs": 2
+   },
+   "sfincs": {
+    "particleFlux_vm_psiHat": [
+     -2.2784905730736093e-08,
+     -7.4797922732645e-08,
+     8.981778587593881e-05
+    ],
+    "heatFlux_vm_psiHat": [
+     -3.740353259539122e-08,
+     -1.7165383968000634e-07,
+     2.3696814702731335e-05
+    ],
+    "FSABFlow": [
+     0.0007053703164118756,
+     0.0003873238876451108,
+     484.9642239307922
+    ],
+    "transportMatrix": [
+     [
+      0.0007541470739912972,
+      0.0024760045090466225,
+      -0.01905776724104674
+     ],
+     [
+      0.0024757019070462054,
+      0.0113629823589238,
+      -0.010464756349808863
+     ],
+     [
+      -0.01887998953935769,
+      -0.009962294423993755,
+      -83.2137570551005
+     ]
+    ]
+   },
+   "dkx": {
+    "particleFlux_vm_psiHat": [
+     -2.2784905730837167e-08,
+     -7.479792273235295e-08,
+     8.98177858762639e-05
+    ],
+    "heatFlux_vm_psiHat": [
+     -3.740353259544381e-08,
+     -1.716538396792192e-07,
+     2.3696814704576562e-05
+    ],
+    "FSABFlow": [
+     0.000705370316213836,
+     0.0003873238873348261,
+     484.9642239301456
+    ],
+    "transportMatrix": [
+     [
+      0.0007541470739946424,
+      0.0024760045090501037,
+      -0.019057767235696084
+     ],
+     [
+      0.002475701907036538,
+      0.011362982358871692,
+      -0.010464756341425551
+     ],
+     [
+      -0.018879989539426,
+      -0.009962294424769487,
+      -83.21375705498944
+     ]
+    ]
+   },
+   "diagnostic": false
+  },
+  {
+   "id": "r3_15_45_150",
+   "gap": "f",
+   "deck": {
+    "geom": 5,
+    "eq": "wout_w7x_standardConfig.nc",
+    "res": [
+     15,
+     45,
+     150,
+     1
+    ],
+    "ns": 1,
+    "rhs": 3,
+    "coll": 1,
+    "phys": "nuPrime = 0.01\n EStar = 0.0"
+   },
+   "sfincs": {
+    "particleFlux_vm_psiHat": [
+     2.0330570097834754e-08,
+     2.1222937614629798e-05
+    ],
+    "heatFlux_vm_psiHat": [
+     1.0165285048917377e-08,
+     1.0611468807314899e-05
+    ],
+    "FSABFlow": [
+     0.00016732920855511667,
+     -363.9880719097934
+    ],
+    "transportMatrix": [
+     [
+      -0.0006729121521523063,
+      -0.00452091764435679
+     ],
+     [
+      -0.004461130234407075,
+      62.45577197706532
+     ]
+    ]
+   },
+   "dkx": {
+    "particleFlux_vm_psiHat": [
+     2.033057009783969e-08,
+     2.122293761575054e-05
+    ],
+    "heatFlux_vm_psiHat": [
+     1.0165285048919845e-08,
+     1.061146880787527e-05
+    ],
+    "FSABFlow": [
+     0.00016732920859292136,
+     -363.98807190980165
+    ],
+    "transportMatrix": [
+     [
+      -0.0006729121521525817,
+      -0.004520917645378198
+     ],
+     [
+      -0.004461130234642653,
+      62.455771977066654
+     ]
+    ]
+   },
+   "diagnostic": false
+  },
+  {
+   "id": "r3_15_85_80",
+   "gap": "f",
+   "deck": {
+    "geom": 5,
+    "eq": "wout_w7x_standardConfig.nc",
+    "res": [
+     15,
+     85,
+     80,
+     1
+    ],
+    "ns": 1,
+    "rhs": 3,
+    "coll": 1,
+    "phys": "nuPrime = 0.01\n EStar = 0.0"
+   },
+   "sfincs": {
+    "particleFlux_vm_psiHat": [
+     2.028943240594289e-08,
+     4.3157541882622304e-05
+    ],
+    "heatFlux_vm_psiHat": [
+     1.0144716202971444e-08,
+     2.1578770941311152e-05
+    ],
+    "FSABFlow": [
+     -0.0003304626510321915,
+     -364.07050004556265
+    ],
+    "transportMatrix": [
+     [
+      -0.0006715505546834536,
+      0.008928473652346522
+     ],
+     [
+      -0.009071855104664506,
+      62.46991560772074
+     ]
+    ]
+   },
+   "dkx": {
+    "particleFlux_vm_psiHat": [
+     2.032640905456402e-08,
+     2.1218887439237536e-05
+    ],
+    "heatFlux_vm_psiHat": [
+     1.016320452728201e-08,
+     1.0609443719618768e-05
+    ],
+    "FSABFlow": [
+     0.0001673359028620069,
+     -364.0018451600577
+    ],
+    "transportMatrix": [
+     [
+      -0.0006727744277024248,
+      -0.00452109851182397
+     ],
+     [
+      -0.004460278874419816,
+      62.458135293460096
+     ]
+    ]
+   },
+   "diagnostic": true
+  },
+  {
+   "id": "r3_11_21_30",
+   "gap": "f",
+   "deck": {
+    "geom": 5,
+    "eq": "wout_w7x_standardConfig.nc",
+    "res": [
+     11,
+     21,
+     30,
+     1
+    ],
+    "ns": 1,
+    "rhs": 3,
+    "coll": 1,
+    "phys": "nuPrime = 0.01\n EStar = 0.0"
+   },
+   "sfincs": {
+    "particleFlux_vm_psiHat": [
+     NaN,
+     NaN
+    ],
+    "heatFlux_vm_psiHat": [
+     NaN,
+     NaN
+    ],
+    "FSABFlow": [
+     Infinity,
+     Infinity
+    ],
+    "transportMatrix": [
+     [
+      NaN,
+      -Infinity
+     ],
+     [
+      NaN,
+      -Infinity
+     ]
+    ]
+   },
+   "dkx": {
+    "particleFlux_vm_psiHat": [
+     2.041759592645267e-08,
+     2.2267852256162366e-05
+    ],
+    "heatFlux_vm_psiHat": [
+     1.0208797963226335e-08,
+     1.1133926128081183e-05
+    ],
+    "FSABFlow": [
+     0.00017161387536888546,
+     -364.5603374333089
+    ],
+    "transportMatrix": [
+     [
+      -0.0006757925798453478,
+      -0.004636681209880241
+     ],
+     [
+      -0.004680774676866454,
+      62.553965540643006
+     ]
+    ]
+   },
+   "diagnostic": true
+  }
+ ],
+ "exclusions": [
+  "one resolution per cell, no resolution ladder",
+  "SFINCS has no Sugama operator; DKX improved Sugama against SFINCS FP is a diagnostic (fluxes 0.43%, flows 7.7%)",
+  "SFINCS RHSMode 3 is not robust on W7-X (NaN at 11x21, L12 sign flip at Nzeta 85); the gated cell is 15x45x150",
+  "local gradients repeated at each radius, not a reconstructed discharge",
+  "experimental validation"
+ ]
+}
