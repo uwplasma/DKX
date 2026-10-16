@@ -130,7 +130,8 @@ def test_find_ambipolar_er_matches_legacy_brent(tmp_path: Path) -> None:
         er_bracket=(-3.0, 1.0),
         er_initial=0.0,
         max_iter=20,
-        current_tol=1e-10,
+        # The legacy root accepted |J_r| <= 1e-10 absolute: 6.4e-4 of max|J_r|.
+        current_tol=6.4e-4,
         all_roots=False,
         emit=None,
     )
@@ -155,7 +156,7 @@ def test_brent_expands_bracket_and_finds_analytic_root() -> None:
     def eval_jr(er: float, _stage: str) -> float:
         return (er + 0.4) * (er * er + 1.0)
 
-    root, converged, status, _msg = _brent(
+    root, converged, status, _msg, _scale = _brent(
         eval_jr, er_min=0.0, er_max=1.0, er_initial=0.5,
         max_iter=80, current_tol=1e-12, max_expansions=50, emit=None,
     )
@@ -234,7 +235,7 @@ def test_classify_unit_logic(radial_factor) -> None:
 
 def test_brent_rejects_narrow_discontinuous_bracket():
     from dkx.er import _brent
-    root, converged, status, _ = _brent(
+    root, converged, status, _, _ = _brent(
         lambda e, _: -1. if e < 0.123 else 1.,
         er_min=-1., er_max=1., er_initial=0., max_iter=100,
         current_tol=1e-8, field_tol=1e-6, max_expansions=0, emit=None,
@@ -244,7 +245,7 @@ def test_brent_rejects_narrow_discontinuous_bracket():
 
 def test_brent_bracketing_does_not_multiply_tiny_currents():
     from dkx.er import _brent
-    root, converged, status, _ = _brent(
+    root, converged, status, _, _ = _brent(
         lambda e, _: 1e-200, er_min=-1., er_max=1., er_initial=0.,
         max_iter=100, current_tol=1e-250, max_expansions=2, emit=None,
     )
@@ -273,38 +274,58 @@ def test_host_rejected_candidate_has_no_classified_roots(host_current):
     assert abs(result.radial_current) == 1.
 
 
-def test_host_rechecks_final_current(host_current):
-    calls = 0
+def test_host_solves_each_field_once(host_current):
+    fields = []
     def current(e):
-        nonlocal calls
-        calls += 1
-        return e if calls <= 3 else 1.
-    result = host_current(current)(all_roots=False)
-    assert not result.converged and result.status == "current_tolerance"
-    assert result.roots == ()
+        fields.append(e)
+        return (e + .3) * (e * e + 1.)
+    result = host_current(current)(all_roots=True, n_scan=5, er_initial=.5)
+    assert result.converged and abs(result.er + .3) < 1e-8
+    assert len(fields) == len(set(fields)) == result.n_solves
+    # The selected root is not re-solved, and the scan reuses Brent's fields.
+    assert fields.count(result.er) == 1 and result.roots[0] == result.roots[0]
+    assert [r.er for r in result.roots] == [result.er]
 
 
-def test_host_final_acceptance_drops_warm_reuse(monkeypatch):
+def test_host_current_tolerance_is_relative_to_the_bracket():
+    from dkx.er import _brent
+    for scale in (1e-12, 1., 1e9):
+        root, converged, _, _, seen = _brent(
+            lambda e, _: scale * (e - .2), er_min=-1., er_max=1., er_initial=0.,
+            max_iter=50, current_tol=1e-10, max_expansions=0, emit=None)
+        assert converged and seen == 1.2 * scale and abs(root - .2) <= 1e-10
+
+
+def test_host_preconditioner_reuse_stays_inside_its_window(monkeypatch):
+    """The -12 -> +12 stall: Brent's first two fields are the bracket ends."""
     from types import SimpleNamespace
     from dkx import er
-    calls = []
     monkeypatch.setattr(er, "_check_host_kinetic_state", lambda *args: None)
-    state = SimpleNamespace(x=np.ones(1), recycle=object(), precond=object())
+    built, calls = {}, []
     def current(problem, field, **kwargs):
-        calls.append(kwargs)
-        return field, np.array([field]), state
+        calls.append((field, kwargs))
+        precond = kwargs["precond"] or object()
+        built.setdefault(id(precond), field)
+        return field + 3., np.array([field + 3.]), SimpleNamespace(x=np.array([field]), recycle=object(),
+                                                                   precond=precond)
     monkeypatch.setattr(er, "radial_current", current)
-    problem = er.ErProblem(None, 1., np.array([1.]), 0., -1., 1.)
+    problem = er.ErProblem(None, 1., np.array([1.]), 0., -12., 12.)
     result = er.find_ambipolar_er(problem, all_roots=False, emit=None)
-    assert result.converged
-    assert calls[1]["x0"] is state.x and calls[2]["precond"] is state.precond
-    assert all(calls[3][key] is None for key in ("x0", "recycle", "precond"))
+    assert result.converged and all(k["precond"] is None for _, k in calls)  # default: rebuild
+    calls.clear()
+    result = er.find_ambipolar_er(problem, all_roots=False, emit=None, precond_window=3.)
+    assert result.converged and abs(result.er + 3.) < 1e-9
+    reused = [(f, k) for f, k in calls if k["precond"] is not None]
+    assert reused and all(abs(f - built[id(k["precond"])]) <= 3. for f, k in reused)
+    # Under auto a reused preconditioner runs bounded GMRES, about 200 iterations.
+    assert all(k["solve_method"] == "gmres" and k["max_restarts"] == 7 for _, k in reused)
+    assert calls[1][1]["precond"] is None and calls[1][1]["x0"] is not None
 
 
 def test_host_scan_keeps_endpoints_and_rejects_false_crossing(host_current):
     # Endpoint roots plus a jump at 0.123; the discontinuity is not a root.
     result = host_current(lambda e: (e**2 - 1) * (-1 if e < .123 else 1))(
-        er_initial=-1., n_scan=9, max_iter=100,
+        er_initial=-1., n_scan=9, max_iter=100, all_roots=True,
     )
     assert result.converged
     assert [r.er for r in result.roots] == [-1., 1.]
@@ -312,7 +333,7 @@ def test_host_scan_keeps_endpoints_and_rejects_false_crossing(host_current):
 
 def test_host_selected_classification_is_not_replaced_by_nearby_root(host_current):
     result = host_current(lambda e: (e + .001) * e * (e - .001))(
-        er_bracket=(-.002, .002), er_initial=.001, n_scan=5,
+        er_bracket=(-.002, .002), er_initial=.001, n_scan=5, all_roots=True,
         slope_step=.00075, current_tol=1e-16,
     )
     assert result.converged and result.er == .001
@@ -422,8 +443,9 @@ def test_catalog_geometry_current_is_outward_chart_invariant(tmp_path, case):
 
 @pytest.mark.parametrize("value", [np.nan, np.inf])
 def test_host_rejects_nonfinite_current(host_current, value):
-    with pytest.raises(RuntimeError, match="Nonfinite ambipolar"):
-        host_current(lambda e: value)()
+    result = host_current(lambda e: value)()
+    assert not result.converged and result.status == "solve_failure" and result.er is None
+    assert result.failures and all("Nonfinite ambipolar" in line for line in result.failures)
 
 
 @pytest.mark.parametrize("options", [
@@ -549,9 +571,10 @@ def test_host_root_rejects_inaccurate_cancelling_fluxes(tmp_path, monkeypatch):
                        residual_norms=jnp.zeros_like(result.residual_norms))
 
     monkeypatch.setattr(er, "solve", corrupt)
-    with pytest.raises(RuntimeError, match="Ambipolar kinetic residual failed"):
-        er.find_ambipolar_er(problem, emit=None)
-    assert len(calls) == 1  # The invalid state never reaches continuation.
+    result = er.find_ambipolar_er(problem, emit=None)
+    assert not result.converged and result.status == "solve_failure" and result.er is None
+    # Cold, then tighter: no invalid state reaches continuation or a root.
+    assert len(calls) == 2 and all("kinetic residual failed" in f for f in result.failures)
 
 
 @pytest.fixture
@@ -677,7 +700,7 @@ def test_current_adjoint_matches_packed_original_equation(tmp_path, collision, r
                                rtol=1e-8 if tol == 1e-12 else 1e-6, atol=0)
 
 
-def test_host_root_rechecks_original_residual_on_final_cold_solve(tmp_path, monkeypatch):
+def test_host_root_reports_states_failing_the_original_equation(tmp_path, monkeypatch):
     from dkx import er
     import jax.numpy as jnp
     problem = er.prepare(_write(tmp_path, _pas_deck()))
@@ -687,14 +710,15 @@ def test_host_root_rechecks_original_residual_on_final_cold_solve(tmp_path, monk
     def current(*args, **kwargs):
         value, flux, state = original(*args, **kwargs)
         calls.append(kwargs)
-        if len(calls) > 1 and kwargs["x0"] is None:
-            state = replace(state, x=jnp.zeros_like(state.x))
+        state = replace(state, x=jnp.zeros_like(state.x))
         return value, flux, state
 
     monkeypatch.setattr(er, "radial_current", current)
-    with pytest.raises(RuntimeError, match="Ambipolar kinetic residual failed"):
-        er.find_ambipolar_er(problem, all_roots=False, emit=None)
-    assert len(calls) > 1 and calls[-1]["x0"] is None
+    result = er.find_ambipolar_er(problem, all_roots=False, emit=None)
+    # The first field fails cold, then with a tighter tolerance: a structured failure.
+    assert not result.converged and result.status == "solve_failure"
+    assert [c["tol"] for c in calls] == [None, 1e-12] and result.n_solves == 2
+    assert all("kinetic residual failed" in line for line in result.failures)
 
 
 @pytest.mark.parametrize("prepared", [False, True])
@@ -820,7 +844,7 @@ def test_ambipolar_acceptance_controls_checked_before_preparation(options):
         ambipolar_er(None, **options)
 
 
-@pytest.mark.parametrize("failure", ["residual", "current", "flux"])
+@pytest.mark.parametrize("failure", ["residual", "current", "flux", "raise"])
 @pytest.mark.parametrize("cold_fails", [False, True])
 def test_host_bounded_reuse_rebuilds_once_before_acceptance(monkeypatch, failure, cold_fails):
     from types import SimpleNamespace
@@ -834,24 +858,24 @@ def test_host_bounded_reuse_rebuilds_once_before_acceptance(monkeypatch, failure
     def current(problem, field, **kwargs):
         calls.append(kwargs)
         fail = len(calls) == 2 or (cold_fails and len(calls) == 3)
+        if fail and failure == "raise":
+            raise RuntimeError("solver resource failure")
         return (np.nan if fail and failure == "current" else field,
                 np.array([np.nan if fail and failure == "flux" else field]),
                 bad if fail and failure == "residual" else good)
     monkeypatch.setattr(er, "radial_current", current)
     problem = er.ErProblem(op, 1., np.array([1.]), 0., -1., 1., solve_method="gmres")
-    options = dict(all_roots=False, emit=None, max_restarts=12, reuse_max_restarts=2)
+    options = dict(all_roots=False, emit=None, max_restarts=12, reuse_max_restarts=2, precond_window=10.)
+    result = er.find_ambipolar_er(problem, **options)
     if cold_fails:
-        with pytest.raises(RuntimeError, match="kinetic residual failed|Nonfinite ambipolar"):
-            er.find_ambipolar_er(problem, **options)
-        assert len(calls) == 3
+        # Explicit gmres: reuse, then cold, then a structured failure.
+        assert not result.converged and result.status == "solve_failure" and len(calls) == 3
+        assert len(result.failures) == 2 and result.n_solves == 3
     else:
-        result = er.find_ambipolar_er(problem, **options)
-        assert result.converged and result.er == 0.
+        assert result.converged and result.er == 0. and len(result.failures) == 1
         # Failed factors/distribution never enter the next evaluation.
         assert all(c["x0"] is not bad.x and c["precond"] is not bad.precond for c in calls)
         assert calls[3]["precond"] is good.precond
-        # Independent final root solve still drops all retained state.
-        assert all(calls[4][key] is None for key in ("x0", "recycle", "precond"))
     assert [c["max_restarts"] for c in calls[:3]] == [12, 2, 12]
     assert all(calls[2][key] is None for key in ("x0", "recycle", "precond"))
 
@@ -867,40 +891,38 @@ def test_host_rejects_invalid_restart_budgets(options):
         er_mod.find_ambipolar_er(None, **options)
 
 
-def test_bounded_reuse_rejects_automatic_escalation():
-    from dkx import er as er_mod
-    problem = er_mod.ErProblem(None, 1., np.array([1.]), 0., -1., 1.)
-    with pytest.raises(ValueError, match="explicit gmres"):
-        er_mod.find_ambipolar_er(problem, reuse_max_restarts=2)
-
-
 def test_bounded_full_fp_root_matches_independent_cold_solutions(tmp_path):
     from dkx import er
     problem = er.prepare(_write(tmp_path, _pas_deck(
         collision_operator=0, n_theta=5, n_zeta=5, n_xi=6, n_x=3)),
-        solve_method="gmres", er_bracket=(-3., 1.))
+        solve_method="gmres", tol=1e-12, er_bracket=(-3., 1.))
     options = dict(all_roots=False, emit=None, max_restarts=12)
     cold = er.find_ambipolar_er(problem, warm_start=False, **options)
-    bounded = er.find_ambipolar_er(problem, reuse_max_restarts=1, **options)
+    bounded = er.find_ambipolar_er(problem, reuse_max_restarts=1, precond_window=1., **options)
     assert cold.converged and bounded.converged
     np.testing.assert_allclose(bounded.er, cold.er, atol=1e-8, rtol=1e-8)
     np.testing.assert_allclose(bounded.per_species_flux, cold.per_species_flux, atol=1e-14, rtol=1e-7)
     assert bounded.root_type == cold.root_type
 
 
-def test_bounded_reuse_propagates_solver_runtime_errors(monkeypatch):
-    from types import SimpleNamespace
+def test_full_fp_wide_bracket_reuses_preconditioners_only_nearby(tmp_path, monkeypatch):
+    """CI-sized -12 -> +12 case: the bracket ends must not share a preconditioner."""
     from dkx import er
-    calls = []
-    state = SimpleNamespace(x=np.ones(1), recycle=None, precond=object())
+    problem = er.prepare(_write(tmp_path, _pas_deck(
+        collision_operator=0, n_theta=5, n_zeta=5, n_xi=6, n_x=3)),
+        solve_method="gmres", er_bracket=(-12., 12.))
+    original, solves = er.radial_current, []
     def current(problem, field, **kwargs):
-        calls.append(kwargs)
-        if kwargs["precond"] is not None:
-            raise RuntimeError("solver resource failure")
-        return field, np.array([field]), state
+        out = original(problem, field, **kwargs)
+        solves.append((field, kwargs["precond"], out[2]))
+        return out
     monkeypatch.setattr(er, "radial_current", current)
-    monkeypatch.setattr(er, "_check_host_kinetic_state", lambda *args: None)
-    problem = er.ErProblem(None, 1., np.array([1.]), 0., -1., 1., solve_method="gmres")
-    with pytest.raises(RuntimeError, match="solver resource failure"):
-        er.find_ambipolar_er(problem, reuse_max_restarts=2, emit=None)
-    assert len(calls) == 2  # A runtime failure is not a rejected numerical candidate.
+    warm = er.find_ambipolar_er(problem, emit=None, precond_window=3.)
+    built = {id(state.precond): field for field, precond, state in solves if precond is None}
+    reused = [(field, precond, state) for field, precond, state in solves if precond is not None]
+    assert warm.converged and reused and len({f for f, _, _ in solves}) == len(solves)
+    assert all(abs(field - built[id(precond)]) <= 3. for field, precond, _ in reused)
+    assert all(state.result.iterations <= 7 * 30 for _, _, state in reused)
+    cold = er.find_ambipolar_er(problem, warm_start=False, emit=None)
+    np.testing.assert_allclose(warm.er, cold.er, atol=1e-7)
+    assert warm.root_type == cold.root_type == "ion"

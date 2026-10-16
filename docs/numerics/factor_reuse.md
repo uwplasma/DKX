@@ -130,11 +130,28 @@ measured:
   `ErMax`, so consecutive points are not neighbours. On a 73,444-unknown case
   bounded reuse took 33.14 s against 26.89 s cold and needed four cold retries.
   Warm starts are not a default for root finding.
+- On the production W7-X FP deck (r/a = 0.5, 15x31x32x6, 178,564 unknowns,
+  bracket -12 to +12 kV/m), reusing the preconditioner built at -12 kV/m for
+  the solve at +12 kV/m did not finish in 2,400 s on eight office cores.
+- Nearby fields do not rescue reuse. On HSX at r/a = 0.25 (same grid, four
+  cores), a fresh build plus 17 iterations took 43 s. With the preconditioner
+  from 2.1 kV/m away the solve stopped at the 210-iteration cap with a
+  relative residual of 0.68 (230 s); from 0.4 kV/m away it converged in 99
+  iterations and 123 s. One iteration costs about as much as a twentieth of a
+  build, so reuse pays only when it saves the build without adding twenty
+  iterations.
 - The same root took nine radial-current evaluations, 9.7 times its first solve.
   No factor or preconditioner policy brings a nine-evaluation root near the cost
   of one solve; fewer evaluations is the lever. The differentiable
   `dkx.er.ambipolar_er` seeds an unbracketed secant near the desired root for
   that reason.
+
+`find_ambipolar_er` therefore rebuilds the preconditioner at every field and
+seeds each Krylov solve with the state of the nearest solved field, which is
+always admissible. `precond_window` opts into reuse within a field distance of
+the build, with the recycle space only from inside that window; such a solve
+is bounded GMRES capped at about 200 iterations (`reuse_max_restarts`) even
+under `auto`, and a capped solve is retried with a fresh build.
 
 ## Limitation: the sparse transposed solve
 

@@ -24,8 +24,9 @@ Public entry points:
   :class:`ErProblem`) it is a differentiable function of ``E_r`` and of the
   operator's parameters.
 - :func:`find_ambipolar_er` — the Fortran-parity Brent root solve with bracket
-  expansion, per-species fluxes, an iteration history, and
-  ion / electron / unstable classification from the outward-current slope.
+  expansion, per-species fluxes, an iteration history,
+  ion / electron / unstable classification from the outward-current slope, and
+  a structured result instead of an exception when a field cannot be solved.
 - :func:`ambipolar_er` — the *differentiable* ambipolar ``E_r``: the root
   condition is wrapped with :func:`solvax.implicit.root_solve` so ``jax.grad``
   flows through ``E_r`` via the implicit function theorem
@@ -100,7 +101,9 @@ class AmbipolarRoot:
     Attributes:
         er: the root ``E_r``.
         radial_current: ``J_r`` at the root (residual; near zero).
-        slope: native psiHat-current ``dJr/dEr`` (central finite difference).
+        slope: native psiHat-current ``dJr/dEr``: a one-sided difference to the
+            nearest solved field within 1e-3 of the bracket width when one exists
+            and no ``slope_step`` is given, else a central difference.
             Classification converts it to outward current; AD uses autodiff.
         root_type: ``"ion"`` (stable, ``E_r < 0``), ``"electron"`` (stable,
             ``E_r > 0``), ``"unstable"`` (outward-current slope < 0), ``"marginal"``
@@ -121,7 +124,8 @@ class AmbipolarResult:
         converged: whether the primary Brent solve converged.
         method: ``"brent"``.
         status: ``"converged"`` | ``"unbracketed"`` | ``"max_evaluations"`` |
-            ``"current_tolerance"``.
+            ``"current_tolerance"`` | ``"solve_failure"`` (no attempt at a
+            Brent field passed the original-equation check).
         er: the selected (primary) root ``E_r`` (``None`` if unbracketed).
         radial_current: ``J_r`` at the selected root.
         root_type: classification of the selected root.
@@ -133,6 +137,11 @@ class AmbipolarResult:
             single-root case; the differentiable :func:`ambipolar_er` wrapper
             differentiates one *selected* root).
         message: human-readable status detail.
+        current_scale: largest ``|J_r|`` seen while bracketing; ``current_tol``
+            is relative to it.
+        n_solves: kinetic solves, including rejected attempts.
+        wall_time_s: wall time of the whole call, preparation included.
+        failures: one line per rejected solve attempt.
     """
 
     converged: bool
@@ -145,6 +154,10 @@ class AmbipolarResult:
     iterations: tuple[AmbipolarIteration, ...] = ()
     roots: tuple[AmbipolarRoot, ...] = ()
     message: str = ""
+    current_scale: float | None = None
+    n_solves: int = 0
+    wall_time_s: float = 0.0
+    failures: tuple[str, ...] = ()
 
     @property
     def er_values(self) -> tuple[float, ...]:
@@ -166,11 +179,10 @@ class ErSolveState:
             ``None`` (structured direct solves do not recycle).
         result: the underlying :class:`~dkx.solve.SolveResult`
             (``method``, ``iterations``, ``residual_norms``, ``timings``).
-        precond: the preconditioner the previous point's solve built, or
-            ``None`` when its route did not need one. Threaded forward so a
-            bracket search builds one preconditioner rather than one per point.
-            It remains an approximate inverse for subsequent operators;
-            original-residual and observable checks still govern acceptance.
+        precond: the preconditioner this solve built or used, or ``None`` when
+            its route did not need one. :func:`find_ambipolar_er` reuses it only
+            near the field it was built at; original-residual and observable
+            checks still govern acceptance.
     """
 
     x: Any
@@ -525,16 +537,18 @@ def _brent(
     max_expansions: int,
     emit: Callable[[str], None] | None,
     field_tol: float = 1e-10,
-) -> tuple[float | None, bool, str, str]:
+) -> tuple[float | None, bool, str, str, float]:
     """Bracket-expanding Numerical-Recipes zbrent (``ambipolarSolverBrent``).
 
-    Returns ``(root_er, converged, status, message)``.
+    ``current_tol`` is relative to ``scale``, the largest ``|J_r|`` evaluated
+    while bracketing. Returns ``(root_er, converged, status, message, scale)``.
     """
     eps = 1.0e-15
     a = float(er_min)
     fa = eval_jr(a, "bracket_min")
     c = float(er_max)
     fc = eval_jr(c, "bracket_max")
+    scale = max(abs(fa), abs(fc))
 
     # Expand the bracket until the radial current changes sign.
     expansions = 0
@@ -543,7 +557,7 @@ def _brent(
             return None, False, "unbracketed", (
                 "Radial current did not change sign after "
                 f"{max_expansions} bracket expansions in [{a:g}, {c:g}]."
-            )
+            ), scale
         if emit is not None:
             emit("Warning: root not bracketed in Brent solve! Expanding search bounds...")
         if abs(fa) < abs(fc):
@@ -552,7 +566,9 @@ def _brent(
         else:
             c = c + (c - a)
             fc = eval_jr(c, "expand_max")
+        scale = max(scale, abs(fa), abs(fc))
         expansions += 1
+    abs_tol = float(current_tol) * scale
 
     b = min(max(float(er_initial), a), c)
     fb = eval_jr(b, "initial")
@@ -575,10 +591,11 @@ def _brent(
             fa, fb, fc = fb, fc, fb
         tol1 = 2.0 * eps * abs(b) + 0.5 * float(field_tol)
         xm = 0.5 * (c - b)
-        if abs(fb) <= float(current_tol):
-            return b, True, "converged", "Brent algorithm successful."
+        if abs(fb) <= abs_tol:
+            return b, True, "converged", "Brent algorithm successful.", scale
         if abs(xm) <= tol1:
-            return b, False, "current_tolerance", "Field bracket closed without satisfying the current tolerance."
+            return b, False, "current_tolerance", (
+                "Field bracket closed without satisfying the current tolerance."), scale
         if abs(e) >= tol1 and abs(fa) > abs(fb):
             s = fb / fa
             if a == c:
@@ -610,7 +627,7 @@ def _brent(
 
     return b, False, "max_evaluations", (
         "The E_r search did not converge within max_iter evaluations."
-    )
+    ), scale
 
 
 def _check_host_kinetic_state(problem, er, state, tol):
@@ -655,20 +672,31 @@ def _check_kinetic_solution(op, er, x, tol):
         check(accepted, er, residual, rhs_norm)
 
 
+#: Krylov iterations a solve on a reused preconditioner may take before the
+#: field is retried with a fresh one. A preconditioner built at -12 kV/m and
+#: reused at +12 kV/m stalled a W7-X FP solve for over 2,400 s.
+_REUSE_STALL_ITERATIONS = 200
+
+
+class _PointFailure(RuntimeError):
+    """Every solve attempt at one field failed its original-equation check."""
+
+
 def find_ambipolar_er(
     inp: SfincsInput | RawNamelist | str | Path | ErProblem,
     *,
     er_bracket: tuple[float, float] | None = None,
     er_initial: float | None = None,
     max_iter: int = 20,
-    current_tol: float = 1e-10,
+    current_tol: float = 1e-6,
     field_tol: float = 1e-10,
     solve_method: str | None = None,
     tol: float | None = None,
     warm_start: bool = True,
+    precond_window: float = 0.0,
     max_restarts: int = 200,
     reuse_max_restarts: int | None = None,
-    all_roots: bool = True,
+    all_roots: bool = False,
     n_scan: int = 9,
     slope_step: float | None = None,
     emit: Callable[[str], None] | None = print,
@@ -677,40 +705,45 @@ def find_ambipolar_er(
 
     Evaluates ``E_r_min`` and ``E_r_max``, expands the bracket until the radial
     current changes sign, then refines the root with the ``ambipolarSolver.F90``
-    ``zbrent`` update. Unlike its shared stopping tolerance, ``current_tol``
-    bounds normalized radial current and ``field_tol`` bounds bracket width
-    in the prepared problem's field units. A narrow bracket alone does not
-    establish convergence. ``NEr_ambipolarSolve`` corresponds to ``max_iter``.
-    Warm starts and GCROT recycling are
-    threaded across evaluations when ``warm_start`` is set (a benefit only on
-    recycled Krylov solves; structured direct solves ignore them).
+    ``zbrent`` update. ``NEr_ambipolarSolve`` corresponds to ``max_iter``.
 
-    ``max_restarts`` sets the initial Krylov restart cap for all evaluations;
-    the existing ``auto`` route may escalate it. The bounded reuse option below
-    requires explicit GMRES, which does not escalate.
-    With explicit ``solve_method="gmres"``, ``reuse_max_restarts`` optionally
-    caps a solve using retained factors more tightly. If its original equation
-    or finite current/flux check fails, retry once with fresh factors, no guess
-    or recycle vectors, and ``max_restarts``. A second failure raises; rejected
-    states never enter continuation. This host policy does not change the
-    differentiated root or select a refresh threshold automatically.
+    Tolerances: ``current_tol`` is relative to the largest ``|J_r|`` seen while
+    bracketing (``AmbipolarResult.current_scale``). The default ``1e-6`` sits
+    well above the current noise of a ``1e-10`` kinetic solve, so Brent stops on
+    the current rather than walking the bracket down to round-off. ``field_tol``
+    bounds the bracket width in the problem's field units. A narrow bracket
+    alone does not establish convergence.
 
-    With ``all_roots`` the bracket is additionally coarse-scanned for sampled
-    zeros and sign-changing intervals. Only current-accepted candidates are
-    returned, while the selected root remains the Brent result. A finite scan
-    cannot guarantee finding tangencies or every root. Zero slope is marginal;
-    a small nonzero slope still requires an uncertainty study.
+    Every field is solved once (``J_r`` is memoized), and each accepted state
+    satisfies the original equation ``||Ax-b|| <= tol*||b||`` with finite
+    state, current and fluxes, so the selected root is not solved again.
 
-    Omitted ``solve_method`` and ``tol`` preserve a prepared problem's solver
-    policy. Unprepared inputs default to ``"auto"`` and ``1e-10``. Explicit
-    overrides apply to every kinetic solve, including the cold final check.
-    Each state must satisfy the original equation ``||Ax-b|| <= tol*||b||``
-    with finite state/RHS/residual before acceptance or reuse. A failed check
-    raises ``RuntimeError``; a zero RHS requires a zero residual. This adds one
-    operator application per field evaluation and does not certify grid accuracy.
+    Reuse (``warm_start``): the nearest accepted state seeds each Krylov solve.
+    Preconditioners are rebuilt at every field by default: on HSX and W7-X FP
+    decks a fresh build costs fewer seconds than the extra iterations of a
+    reused one, even 0.4 kV/m away (``docs/numerics/factor_reuse.md``). A
+    positive ``precond_window`` reuses a recycled-Krylov preconditioner within
+    that distance of the field it was built at, with the recycle space from
+    inside the window, as bounded GMRES capped at ``reuse_max_restarts``
+    (default about 200 iterations), under ``auto`` too; a capped solve is
+    retried with a fresh build.
+
+    Failures: a rejected or raising solve is retried cold, then under ``auto``
+    with a 100x tighter kinetic tolerance. If all attempts at a Brent field
+    fail, the result has ``status="solve_failure"`` and the attempts in
+    ``failures``; nothing raises.
+
+    ``all_roots`` (opt-in) samples ``n_scan`` fields over the bracket, merged
+    with the Brent evaluations, and refines other sign changes. The selected
+    root stays the Brent result. A finite scan cannot find tangencies or every
+    root. Zero slope is marginal.
+
+    Omitted ``solve_method`` and ``tol`` keep a prepared problem's policy;
+    unprepared inputs default to ``"auto"`` and ``1e-10``.
 
     Returns an :class:`AmbipolarResult`.
     """
+    t_start = time.perf_counter()
     for name, value in (("max_restarts", max_restarts), ("reuse_max_restarts", reuse_max_restarts)):
         if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 1):
             raise ValueError(f"{name} must be a positive integer")
@@ -721,6 +754,8 @@ def find_ambipolar_er(
             raise ValueError(f"{name} must be finite and positive")
     if slope_step is not None and (not math.isfinite(slope_step) or slope_step <= 0):
         raise ValueError("slope_step must be finite and positive")
+    if not math.isfinite(precond_window) or precond_window < 0:
+        raise ValueError("precond_window must be finite and nonnegative")
     problem = (
         inp
         if isinstance(inp, ErProblem)
@@ -732,141 +767,138 @@ def find_ambipolar_er(
             er_initial=er_initial,
         )
     )
-    if reuse_max_restarts is not None and (solve_method or problem.solve_method) != "gmres":
-        raise ValueError("reuse_max_restarts requires explicit gmres to prevent route escalation")
     er_min, er_max = problem.er_min, problem.er_max
     if er_bracket is not None:
         er_min, er_max = float(er_bracket[0]), float(er_bracket[1])
     er_init = problem.er_initial if er_initial is None else float(er_initial)
     if not all(math.isfinite(e) for e in (er_min, er_max, er_init)) or er_min >= er_max:
         raise ValueError("The field bracket must be finite and increasing, with a finite initial field")
-
-    iterations: list[AmbipolarIteration] = []
-    state_box: dict[str, Any] = {"state": None, "gamma": None}
     kinetic_tol = problem.tol if tol is None else tol
     if not math.isfinite(kinetic_tol) or kinetic_tol <= 0:
         raise ValueError("tol must be finite and positive")
+    method = solve_method or problem.solve_method
+    window = float(precond_window)
+    reuse_cap = min(max_restarts, reuse_max_restarts or -(-_REUSE_STALL_ITERATIONS // 30))
+
+    iterations: list[AmbipolarIteration] = []
+    memo: dict[float, tuple[float, np.ndarray, Any]] = {}
+    anchor: list[Any] = [None, None]  # (field, preconditioner) of the last fresh build
+    failures: list[str] = []
+    solves = 0
+
+    def say(text: str) -> None:
+        if emit is not None:
+            emit(text)
 
     def eval_jr(er: float, stage: str) -> float:
+        nonlocal solves
         er = float(er)
+        if er in memo:
+            return memo[er][0]
         if not math.isfinite(er):
-            raise RuntimeError(f"Nonfinite ambipolar field at stage {stage}: Er={er}")
-        prev = state_box["state"] if warm_start else None
-        reused = prev is not None and prev.precond is not None and reuse_max_restarts is not None
-        for attempt in range(2 if reused else 1):
-            j_r, gamma, st = radial_current(
-                problem, er,
-                x0=prev.x if prev is not None else None,
-                recycle=prev.recycle if prev is not None else None,
-                precond=prev.precond if prev is not None else None,
-                solve_method=solve_method, tol=tol,
-                max_restarts=reuse_max_restarts if reused and attempt == 0 else max_restarts,
-            )
-            gamma_np = np.asarray(gamma, dtype=np.float64).reshape((-1,))
-            value = float(j_r)
+            raise _PointFailure(f"Nonfinite ambipolar field at stage {stage}: Er={er}")
+        near = min(memo, key=lambda e: abs(e - er)) if warm_start and memo else None
+        precond = anchor[1] if window > 0 and anchor[1] is not None and abs(er - anchor[0]) <= window else None
+        cold = dict(x0=None, recycle=None, precond=None, solve_method=solve_method, tol=tol,
+                    max_restarts=max_restarts)
+        plan = []
+        state = memo[near][2] if near is not None else None
+        if state is not None:
+            plan.append(("reuse" if precond is not None else "warm", dict(
+                cold, x0=state.x, precond=precond,
+                recycle=state.recycle if precond is not None and abs(er - near) <= window else None,
+                solve_method="gmres" if precond is not None and method == "auto" else solve_method,
+                max_restarts=reuse_cap if precond is not None else max_restarts,
+            )))
+        plan.append(("cold", cold))
+        if method == "auto":
+            plan.append(("escalated", dict(cold, tol=0.01 * kinetic_tol)))
+        for label, options in plan:
+            solves += 1
             try:
+                j_r, gamma, st = radial_current(problem, er, **options)
+                gamma_np = np.asarray(gamma, dtype=np.float64).reshape((-1,))
+                value = float(j_r)
                 _check_host_kinetic_state(problem, er, st, kinetic_tol)
                 if not math.isfinite(value) or not np.all(np.isfinite(gamma_np)):
-                    raise RuntimeError(f"Nonfinite ambipolar field/current/flux at stage {stage}: Er={er}, Jr={value}")
-            except RuntimeError:
-                if not reused or attempt:
-                    raise
-                prev = None
-                if emit is not None:
-                    emit(f"Rejected reused state at Er={er}; retrying once without retained state or factors")
-            else:
-                break
-        state_box["state"] = st
-        state_box["gamma"] = gamma_np
+                    raise RuntimeError(f"Nonfinite ambipolar current/flux at stage {stage}: Er={er}, Jr={value}")
+            except RuntimeError as exc:
+                failures.append(f"Er={er:.10g} ({stage}, {label}): {exc}")
+                say(f"Rejected {label} solve at Er={er:.10g}: {str(exc).splitlines()[0]}")
+                continue
+            break
+        else:
+            raise _PointFailure(f"every solve attempt failed at Er={er:.10g} (stage {stage})")
+        if options["precond"] is None and getattr(st, "precond", None) is not None:
+            anchor[:] = [er, st.precond]  # a fresh build: the window is centred here
+        memo[er] = (value, gamma_np, st)
         iterations.append(AmbipolarIteration(len(iterations) + 1, er, value, stage))
-        if emit is not None:
-            emit(f"Solving with Er = {er:.15g}   radialCurrent = {value:.8e}")
+        say(f"Solving with Er = {er:.15g}   radialCurrent = {value:.8e}")
         return value
 
-    t0 = time.perf_counter()
-    root_er, converged, status, message = _brent(
-        eval_jr,
-        er_min=er_min,
-        er_max=er_max,
-        er_initial=er_init,
-        max_iter=max_iter,
-        current_tol=current_tol,
-        field_tol=field_tol,
-        max_expansions=50,
-        emit=emit,
-    )
-    elapsed = time.perf_counter() - t0
+    def finish(**fields: Any) -> AmbipolarResult:
+        fields.setdefault("root_type", "unknown")
+        return AmbipolarResult(
+            method="brent", iterations=tuple(iterations), failures=tuple(failures),
+            n_solves=solves, wall_time_s=time.perf_counter() - t_start, **fields,
+        )
 
+    try:
+        root_er, converged, status, message, scale = _brent(
+            eval_jr, er_min=er_min, er_max=er_max, er_initial=er_init, max_iter=max_iter,
+            current_tol=current_tol, field_tol=field_tol, max_expansions=50, emit=emit,
+        )
+    except _PointFailure as exc:
+        say(str(exc))
+        return finish(converged=False, status="solve_failure", er=None, radial_current=None,
+                      per_species_flux=None, message=str(exc))
     if root_er is None:
-        if emit is not None:
-            emit(message)
-        return AmbipolarResult(
-            converged=False,
-            method="brent",
-            status=status,
-            er=None,
-            radial_current=None,
-            root_type="unknown",
-            per_species_flux=None,
-            iterations=tuple(iterations),
-            message=message,
-        )
+        say(message)
+        return finish(converged=False, status=status, er=None, radial_current=None,
+                      per_species_flux=None, message=message, current_scale=scale)
 
-    # Accept against a cold final solve, independent of the continuation state.
-    state_box["state"] = None
-    jr_root = eval_jr(root_er, "root")
-    gamma_root = state_box["gamma"]
-    if not converged or abs(jr_root) > current_tol:
-        return AmbipolarResult(
-            converged=False, method="brent",
-            status=status if not converged else "current_tolerance",
-            er=float(root_er), radial_current=float(jr_root), root_type="unknown",
-            per_species_flux=gamma_root, iterations=tuple(iterations),
-            message=message if not converged else "Final current evaluation failed its tolerance.",
-        )
+    jr_root, gamma_root, _ = memo[root_er]
+    abs_tol = current_tol * scale
+    if not converged:
+        return finish(converged=False, status=status, er=float(root_er), radial_current=jr_root,
+                      per_species_flux=gamma_root, message=message, current_scale=scale)
 
     # Classify the selected root by the sign of dJr/dEr (central difference).
     span = max(abs(er_max - er_min), 1.0)
     h = float(slope_step) if slope_step is not None else 1e-3 * span
-    slope = (eval_jr(root_er + h, "slope_plus") - eval_jr(root_er - h, "slope_minus")) / (2.0 * h)
-    root_type = _classify(root_er, slope, radial_factor=-problem.dphi_per_er)
 
-    roots: list[AmbipolarRoot] = [AmbipolarRoot(root_er, jr_root, slope, root_type)]
+    def safe(er: float, stage: str) -> float:
+        try:
+            return eval_jr(er, stage)
+        except _PointFailure:
+            return math.nan
+
+    # Brent's last fields usually sit within h of the root: by default their
+    # one-sided difference classifies it without two more solves.
+    near = [e for e in memo if 1e-3 * h <= abs(e - root_er) <= h]
+    if slope_step is None and near:
+        e = min(near, key=lambda e: abs(e - root_er))
+        slope = (memo[e][0] - jr_root) / (e - root_er)
+    else:
+        slope = (safe(root_er + h, "slope_plus") - safe(root_er - h, "slope_minus")) / (2.0 * h)
+    root_type = _classify(root_er, slope, radial_factor=-problem.dphi_per_er)
+    roots = [AmbipolarRoot(root_er, jr_root, slope, root_type)]
     if all_roots and n_scan >= 3:
         roots = _enumerate_roots(
-            eval_jr,
-            er_min=er_min,
-            er_max=er_max,
-            n_scan=n_scan,
-            current_tol=current_tol,
-            field_tol=field_tol,
-            slope_step=h,
-            primary=roots[0],
+            safe, {e: v[0] for e, v in memo.items()}, er_min=er_min, er_max=er_max, n_scan=n_scan,
+            current_tol=abs_tol, field_tol=field_tol, slope_step=h, primary=roots[0],
             radial_factor=-problem.dphi_per_er,
         )
 
-    if emit is not None:
-        emit("Brent algorithm successful." if converged else message)
-        emit("Here are the Ers we used: " + " ".join(f"{it.er:.8g}" for it in iterations))
-        emit(
-            "Here are the radial currents: "
-            + " ".join(f"{it.radial_current:.4e}" for it in iterations)
-        )
-        emit(f"Time for ambipolar solve: {elapsed:.6g} seconds.")
-        emit(f"Ambipolar Er = {root_er:.15g}  ({root_type} root)")
-
-    return AmbipolarResult(
-        converged=converged,
-        method="brent",
-        status=status,
-        er=float(root_er),
-        radial_current=float(jr_root),
-        root_type=root_type,
-        per_species_flux=gamma_root,
-        iterations=tuple(iterations),
-        roots=tuple(roots),
-        message=message,
-    )
+    result = finish(converged=True, status=status, er=float(root_er), radial_current=jr_root,
+                    root_type=root_type, per_species_flux=gamma_root, roots=tuple(roots),
+                    message=message, current_scale=scale)
+    say(message)
+    say("Here are the Ers we used: " + " ".join(f"{it.er:.8g}" for it in iterations))
+    say("Here are the radial currents: " + " ".join(f"{it.radial_current:.4e}" for it in iterations))
+    say(f"Time for ambipolar solve: {result.wall_time_s:.6g} seconds ({solves} kinetic solves).")
+    say(f"Ambipolar Er = {root_er:.15g}  ({root_type} root)")
+    return result
 
 
 def _refine_secant(
@@ -889,6 +921,8 @@ def _refine_secant(
             if not (min(lo, hi) < mid < max(lo, hi)):
                 mid = 0.5 * (lo + hi)
         fmid = eval_jr(mid, "scan_refine")
+        if not math.isfinite(fmid):
+            return None
         if abs(fmid) <= current_tol:
             return mid
         if abs(hi - lo) <= field_tol:
@@ -902,6 +936,7 @@ def _refine_secant(
 
 def _enumerate_roots(
     eval_jr: Callable[[float, str], float],
+    known: dict[float, float],
     *,
     er_min: float,
     er_max: float,
@@ -912,22 +947,32 @@ def _enumerate_roots(
     field_tol: float = 1e-10,
     radial_factor: float = 1.0,
 ) -> list[AmbipolarRoot]:
-    """Classify accepted sampled zeros and sign-changing scan intervals."""
-    grid = np.linspace(float(er_min), float(er_max), int(n_scan))
-    fvals = np.asarray([eval_jr(float(e), "scan") for e in grid], dtype=np.float64)
-    candidates = [float(e) for e, f in zip(grid, fvals, strict=True) if f == 0.0]
-    for i in range(len(grid) - 1):
-        flo, fhi = float(fvals[i]), float(fvals[i + 1])
-        if flo == 0.0 or fhi == 0.0 or _same_sign(flo, fhi):
+    """Classify accepted sampled zeros and sign changes of the scan plus ``known``.
+
+    ``eval_jr`` returns NaN for a field that could not be solved; such samples
+    and the intervals touching them are skipped. A sign change that contains
+    the primary root reports the primary root itself.
+    """
+    samples = dict(known)
+    for e in np.linspace(float(er_min), float(er_max), int(n_scan)):
+        samples.setdefault(float(e), eval_jr(float(e), "scan"))
+    grid = sorted(samples)
+    candidates = {e for e in grid if samples[e] == 0.0}
+    for lo, hi in zip(grid, grid[1:]):
+        flo, fhi = samples[lo], samples[hi]
+        if not (math.isfinite(flo) and math.isfinite(fhi)) or flo == 0.0 or fhi == 0.0 or _same_sign(flo, fhi):
             continue
-        er = _refine_secant(
-            eval_jr, float(grid[i]), flo, float(grid[i + 1]), fhi,
-            current_tol=current_tol, field_tol=field_tol,
-        )
+        if lo <= primary.er <= hi:
+            candidates.add(primary.er)
+            continue
+        er = _refine_secant(eval_jr, lo, flo, hi, fhi, current_tol=current_tol, field_tol=field_tol)
         if er is not None:
-            candidates.append(er)
+            candidates.add(er)
     roots: list[AmbipolarRoot] = []
     for er in sorted(candidates):
+        if er == primary.er:
+            roots.append(primary)
+            continue
         jr = eval_jr(er, "scan_root")
         if not math.isfinite(jr) or abs(jr) > current_tol:
             continue

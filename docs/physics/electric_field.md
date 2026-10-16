@@ -45,11 +45,13 @@ electron pair. Right: $J_r = \sum_s Z_s\Gamma_s$ and its ambipolar root. Generat
 : The bracket-expanding Brent method of SFINCS v3 `ambipolarSolver.F90`
   (`ambipolarSolveOption = 2`). It evaluates the bracket ends, widens the bracket until
   $J_r$ changes sign, then refines with the `zbrent` update. Two tolerances are separate:
-  `current_tol` bounds $|J_r|$ (normalized) and `field_tol` bounds the bracket width
-  (defaults $10^{-10}$ each); a narrow bracket without an acceptable current is rejected.
-  With `all_roots=True` (default) the bracket is also scanned on `n_scan = 9` points and
-  each sign change is refined, so several roots can be returned. Warm starts and Krylov
-  recycling carry across evaluations.
+  `current_tol` bounds $|J_r|$ relative to the largest $|J_r|$ seen while bracketing, and
+  `field_tol` bounds the bracket width (defaults $10^{-10}$ each); a narrow bracket without
+  an acceptable current is rejected. Each field is solved once. A field whose solves all
+  fail the original-equation check ends the search with `status="solve_failure"` and the
+  attempts in `failures`, instead of raising. `all_roots=True` (opt-in) also scans the
+  bracket on `n_scan = 9` points, merged with the Brent fields, and refines each other
+  sign change. Reuse across fields is described in {doc}`../numerics/factor_reuse`.
 
 `ambipolar_er(...)`
 : The differentiable root. The forward root is a secant iteration wrapped in

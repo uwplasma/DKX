@@ -193,6 +193,26 @@ concurrency. The default `"auto"` uses width 1 on CPU, where XLA runs the batch
 axis of LAPACK calls serially, and the widest width that fits the memory budget
 on accelerators ({doc}`../numerics/compilation_and_parallelism`).
 
+## Ambipolar root search
+
+`dkx.find_ambipolar_er` runs the Brent search of SFINCS `ambipolarSolver.F90`
+one kinetic solve at a time. Its defaults, and why:
+
+- Each field is solved once and seeds the next solve from the nearest solved
+  field. The selected root is not solved again: every accepted state already
+  passes the original-equation check.
+- The preconditioner is rebuilt at every field. Brent's first two fields are
+  the bracket ends, and a preconditioner reused across them stalled a W7-X
+  solve for over 2,400 s; {doc}`../numerics/factor_reuse` has the
+  measurements. `precond_window` opts into bounded reuse.
+- `current_tol = 1e-6` is relative to the largest $|J_r|$ seen while
+  bracketing, so it means the same thing in any normalization.
+- `all_roots` is off. Turn it on to scan the bracket for further roots; the
+  scan reuses the Brent fields.
+- A field that no solve can certify ends the search with
+  `status = "solve_failure"` and the attempts in `failures`, so a loop over
+  surfaces keeps going. `wall_time_s` and `n_solves` give the cost.
+
 ## Namelist-route parallelism
 
 | control | effect |
