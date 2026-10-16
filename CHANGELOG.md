@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Validation: production-resolution DKX/SFINCS cells for W7-X ambipolar roots at three radii, precise QA and QH, a Boozer `.bc` surface, the trajectory-model Er sweep and RHSMode 2/3 (`validation/cross_code_gaps_v1.json`); fluxes agree within 2.7e-4.
+
 - Fix: the memoized speed grids (`make_x_grid`, `make_speed_grid`) and parsed `.bc` surfaces returned shared, writable arrays, so one caller's in-place edit changed every later result for the same arguments. Their arrays are now read-only.
 - Fix: `KineticBootstrapCurrent` read `aHat` with netCDF4 only and fell back to `aHat = 1` on any error. A LIBSTELL text `wout` (which `geometryScheme = 5` accepts) or a missing `Aminor_p` therefore scaled every `d/drHat` gradient in the deck by `aHat` without warning. It now reads through `read_vmec_wout` and raises when `Aminor_p` is missing or not positive.
 - The persistent compilation cache keys on the XLA:CPU thread count: entries live
