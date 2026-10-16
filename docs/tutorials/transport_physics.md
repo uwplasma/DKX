@@ -95,8 +95,12 @@ ambipolar profile still moves under refinement at the resolutions tried
 `dkx.prepare_er_scan(case, surface_index=...)` builds geometry, grids and
 collisions once and `dkx.batched_er_scan(problem, er_values)` evaluates them in
 one compiled call, reusing factors and the Krylov recycle subspace. For one
-surface from a SFINCS deck, `dkx.find_ambipolar_er` runs a Brent search, and
-`dkx sfincs scan-er` plus `dkx sfincs ambipolar-solve` reproduce the
+surface from a SFINCS deck, `dkx.find_ambipolar_er` runs a Brent search. It
+builds a fresh preconditioner at every field, stops when $|J_r|$ falls below
+`current_tol` (default $10^{-6}$) times the largest $|J_r|$ seen while
+bracketing, and reports a field it cannot solve in `failures` instead of
+raising; `all_roots=True` asks for every root.
+`dkx sfincs scan-er` and `dkx sfincs ambipolar-solve` reproduce the
 `sfincsScan` directory workflow ({doc}`../user_guide/scans_and_parallelism`).
 
 ## Monoenergetic coefficients $D_{11}$, $D_{31}$, $D_{33}$
