@@ -181,6 +181,56 @@ RHSMode 1, 2 and 3 drive and output moment lives.
   48-block coarse chain raised GCROT iterations from 26 to 133, cutting four
   prevented convergence (`tools/benchmarks/tier2_coarse_truncation.py`).
 
+## Solver per run type, against other neoclassical codes
+
+**Context.** The same drift-kinetic equation is solved by codes that chose
+differently. DKES (Hirshman et al. 1986) and MONKES (Escoto et al., *Nucl.
+Fusion* 2024) use Legendre modes in pitch and block-Thomas along $L$; MONKES
+adds Fourier angles and is the fastest monoenergetic CPU code DKX has measured.
+SFINCS (Landreman et al., *Phys. Plasmas* **21**, 042503 (2014)) assembles the
+full 4-D sparse matrix and solves it with PETSc GMRES preconditioned by a
+MUMPS or SuperLU_DIST factorization of a simplified operator. yancc (Conlin
+and Landreman, arXiv:2607.20861) uses finite differences in pitch and angles,
+line smoothers, geometric multigrid and GCROT(m,k). NEO-2 (Kernbichler et al.)
+integrates along field lines with a sparse direct solve per field-line
+piece; KNOSOS (Velasco et al., *J. Comput. Phys.* 2020) solves bounce-averaged
+equations valid only at low collisionality.
+
+**Choice.** Legendre pitch and block-Thomas stay the core, because for PAS
+and DKES trajectories the chain is exactly block-tridiagonal and a direct
+sweep has no iteration count to lose. Finite-difference pitch converges
+algebraically where Legendre modes converge spectrally, and needs an
+iterative solver; it pays where multigrid works across all four
+dimensions. The matched benchmark (#319) shows both sides: DKX is 8× faster
+warm than yancc on W7-X monoenergetic, yancc faster and leaner on full-FP
+NCSX. Route per run type:
+
+| Run type | Route | Why |
+| --- | --- | --- |
+| Monoenergetic, any $E_r$ | block-Thomas, spectral angles | exact; matches MONKES' ladder (#327) |
+| PAS, $N_x$ speeds | block-Thomas per speed chain | species and speeds decouple |
+| Full FP | GCROT, single basis, restart ≥ 1,000; `coupled` preconditioner when it fits, else coarse chains | speed coupling is dense; the restart wall is a restart artifact (#288) |
+| Full FP, small decks (≲ 7e4 unknowns) | sparse direct (SOLVAX MUMPS or SuperLU) | one factorization, reused across right-hand sides |
+| $E_r$ trajectories (`xDot`, `xiDot`) | GCROT with the DKES-trajectory chains as preconditioner | the extra terms break the tridiagonal chain |
+| Phi1 | Newton with recycled GMRES (SOLVAX `solve_phi1`) | nonlinear in $\Phi_1$; `compatibility_only` |
+| Transport matrix, ambipolar scans | one factorization, many right-hand sides; warm start across $E_r$ | factor reuse (#261) |
+| Gradients | implicit differentiation, transposed solve on the same factors | adjoint costs about one primal (#279) |
+
+**Not chosen.** PETSc `fieldsplit`, `PCMG` and `GAMG` are not a fit: GAMG
+targets near-elliptic operators and stalls on the advective streaming term;
+geometric multigrid needs the yancc-style upwinded discretization to smooth.
+MUMPS block low-rank and out-of-core, and SuperLU_DIST's 3-D algorithm,
+extend the direct reach of the full-FP matrix (out-of-core with the
+Legendre-pair ordering needs 3.7 GB on the gap deck, plan section 12) but
+remain a referee, not a default. FFTW is not needed: spectral angles enter
+the blocks as small dense differentiation matrices, applied as matrix
+products; FFTs would only cut flops on angular grids larger than DKX runs.
+
+**Consequence.** Full FP is the default collision model (see above) and its
+default solver is GCROT with the coupled preconditioner when it fits half the
+available memory. Gyrokinetic or finite-$k_\perp$ Coulomb collisions are
+later work (plan section 17).
+
 ## Float64 throughout
 
 **Context.** Drift-kinetic operators at low collisionality are badly
