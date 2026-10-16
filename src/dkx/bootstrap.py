@@ -120,15 +120,13 @@ _TEMPLATE = """&general
 
 
 def _minor_radius(equilibrium: str | Path) -> float:
-    """``aHat = Aminor_p`` from the wout (``geometry.F90:130``), 1.0 if unreadable."""
-    try:
-        import netCDF4  # noqa: PLC0415
+    """``aHat = Aminor_p`` from the wout (``geometry.F90:130``), NetCDF or text."""
+    from dkx.magnetic_geometry import read_vmec_wout  # noqa: PLC0415
 
-        with netCDF4.Dataset(str(equilibrium)) as handle:
-            value = float(np.asarray(handle.variables["Aminor_p"][...]).reshape(()))
-    except Exception:
-        return 1.0
-    return value if value > 0.0 else 1.0
+    value = float(read_vmec_wout(equilibrium).aminor_p)
+    if not value > 0.0:
+        raise ValueError(f"wout {str(equilibrium)!r} has Aminor_p={value!r}; it must be positive")
+    return value
 
 
 def _polynomial(coefficients: Any, s: float) -> tuple[float, float]:

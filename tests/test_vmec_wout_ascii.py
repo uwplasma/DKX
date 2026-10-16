@@ -197,3 +197,16 @@ def test_ascii_and_netcdf_agree_on_the_same_equilibrium():
         y = np.asarray(getattr(b, field), dtype=float)[shared, :]
         scale = max(float(np.abs(y).max()), 1e-30)
         assert np.abs(x - y).max() / scale < 1e-12, field
+
+
+def test_bootstrap_minor_radius_reads_text_wout(tmp_path):
+    """The bootstrap deck scales gradients by 1/aHat; a text wout must not fall back to aHat=1."""
+    from dkx.bootstrap import _minor_radius
+
+    path = tmp_path / "wout_text.txt"
+    expected = _synth_wout(path)
+    assert _minor_radius(path) == pytest.approx(expected["aminor_p"])
+    bad = tmp_path / "wout_bad.nc"
+    bad.write_text("not a wout")
+    with pytest.raises(Exception):
+        _minor_radius(bad)

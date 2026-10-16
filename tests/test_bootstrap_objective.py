@@ -137,6 +137,7 @@ def test_ambipolar_rejects_finite_current_from_an_unconverged_scan_point(monkeyp
 
     monkeypatch.setattr(api, "batched_er_scan", fake_scan)
     monkeypatch.setattr(term, "namelist", lambda *args, **kwargs: "&general\n/\n")
+    monkeypatch.setattr("dkx.bootstrap._minor_radius", lambda path: 1.0)
     value = term._one_surface(tmp_path / "wout.nc", 0.4, tmp_path)
     assert captured["retain_full_state"] is True
     assert np.isnan(value)
@@ -160,6 +161,7 @@ def test_ambipolar_requires_boolean_scan_admission_status(monkeypatch, tmp_path,
     )
     monkeypatch.setattr(api, "batched_er_scan", lambda *args, **kwargs: scan)
     monkeypatch.setattr(term, "namelist", lambda *args, **kwargs: "&general\n/\n")
+    monkeypatch.setattr("dkx.bootstrap._minor_radius", lambda path: 1.0)
     assert np.isnan(term._one_surface(tmp_path / "wout.nc", 0.4, tmp_path))
 
 
@@ -178,6 +180,7 @@ def test_ambipolar_current_is_solved_at_the_brent_refined_root(monkeypatch, tmp_
 
     monkeypatch.setattr(api, "batched_er_scan", fake_scan)
     monkeypatch.setattr(term, "namelist", lambda *args, **kwargs: "&general\n/\n")
+    monkeypatch.setattr("dkx.bootstrap._minor_radius", lambda path: 1.0)
     value = term._one_surface(tmp_path / "wout.nc", 0.4, tmp_path) / PARALLEL_CURRENT
     assert value == pytest.approx(3.3**2, rel=5e-3)  # linear interpolation gives ~ 4.5, not 10.9
 
