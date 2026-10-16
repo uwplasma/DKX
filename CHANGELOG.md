@@ -7,6 +7,7 @@
 - The docs have a four-part tutorial track (`docs/tutorials/`) that follows the scripts: first steps, building a case, transport physics, and bootstrap current, gradients and optimization. Each part gives the equations, the command and the output it printed. The README links the new example paths and the quick start runs as written.
 - `docs/design_decisions.md` gives the reasons for the velocity discretization (Legendre modes, polynomial speed grid) and for the native defaults (Fokker–Planck collisions, DKES trajectories).
 - `docs/design_decisions.md` compares DKX's solver with DKES, MONKES, SFINCS, yancc, NEO-2 and KNOSOS and gives the route per run type; plan section 17 records the decisions and the GPU kernel measurement.
+- `radial_profiles` brackets only fields whose solve passes the original-equation check (`algebraic_converged`, with the full state retained) and lists the rest in `uncertified_er`. Before, a failed field entered the bracketing. Each surface also samples its neighbour's root (`er_seed`), extension probes merge into the scan instead of a second full scan, and a failure anywhere on a surface, including root refinement, is recorded for that surface rather than ending the profile. The two silent `except Exception: break` fallbacks are gone. Records carry their `resolution`.
 
 ## v2.9.0 — 2026-10-07
 

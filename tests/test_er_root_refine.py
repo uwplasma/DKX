@@ -21,7 +21,7 @@ def test_radial_profiles_read_moments_at_the_refined_root(monkeypatch):
     import dkx.api
     import dkx.representative as rep
 
-    def fake(deck, er):
+    def fake(deck, er, **_kwargs):
         er = np.asarray(er, float)
         return SimpleNamespace(radial_current=np.tanh((er + 7.3) / 4.0),
                                moments={"FSABjHatOverRootFSAB2": er, "FSABjHat": er})
@@ -34,3 +34,41 @@ def test_radial_profiles_read_moments_at_the_refined_root(monkeypatch):
     assert p["er_ambipolar"] == pytest.approx(-7.3, abs=1e-2) == p["roots"][0]
     assert p["bootstrap"] == pytest.approx(p["er_ambipolar"])  # moment evaluated at the root
     assert 0 < p["er_root_refine_solves"] <= rep.ER_ROOT_MAX_SOLVES and len(p["er_scan"]) > 3
+
+
+def _patch(monkeypatch, scan):
+    import dkx.api
+    import dkx.representative as rep
+    monkeypatch.setattr(dkx.api, "batched_er_scan", scan)
+    monkeypatch.setattr(rep, "resolve_plasma", lambda eq: (dict(rep.FALLBACK_PLASMA), "x"))
+    monkeypatch.setattr(rep, "equilibrium_scalars", lambda eq: {"a_hat": 1.0, "psi_a_hat": 0.1})
+    monkeypatch.setattr(rep, "plasma_parameters", lambda eq, radius=0.5: dict(rep.FALLBACK_PLASMA))
+    return rep
+
+
+def test_radial_profiles_never_bracket_an_uncertified_field(monkeypatch):
+    def scan(deck, er, **_kwargs):
+        er = np.asarray(er, float)
+        bad = er == 4.0  # a failed solve whose garbage current would cross zero
+        return SimpleNamespace(radial_current=np.where(bad, 1.0, er + 20.0), algebraic_converged=~bad,
+                               moments={"FSABjHat": er})
+    rep = _patch(monkeypatch, scan)
+    (p,) = rep.radial_profiles(Path("w.nc"), surfaces=(0.5,), er_values=(-12.0, 0.0, 4.0, 8.0), emit=None)
+    assert p["uncertified_er"] == [4.0] and 4.0 not in p["er_scan"]
+    assert p["roots"] == [] or all(r < -12.0 for r in p["roots"])
+
+
+def test_radial_profiles_are_fault_tolerant_and_continue_from_the_neighbour(monkeypatch):
+    seen = []
+    def scan(deck, er, **_kwargs):
+        er = np.asarray(er, float)
+        r = 0.4 if "rN_wish = 0.4" in Path(deck).read_text() else 0.7
+        seen.append((r, er.tolist()))
+        if r == 0.7 and er.size == 1:
+            raise RuntimeError("refine solve failed")
+        return SimpleNamespace(radial_current=np.tanh((er + 7.3) / 4.0), moments={"FSABjHat": er})
+    rep = _patch(monkeypatch, scan)
+    first, second = rep.radial_profiles(Path("w.nc"), surfaces=(0.4, 0.7), er_values=(-12.0, -4.0, 4.0), emit=None)
+    assert first["evaluation_is_root"] and second["evaluation_status"] == "solve_failure"
+    assert "refine solve failed" in second["failure_detail"] and second["er_seed"] == first["er_ambipolar"]
+    assert first["er_ambipolar"] in [e for r, fields in seen if r == 0.7 for e in fields]

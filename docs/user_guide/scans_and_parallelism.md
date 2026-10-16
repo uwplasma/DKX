@@ -140,6 +140,26 @@ iterative and small single solves are slower on a GPU than on a CPU because
 they are dominated by serial, dispatch-bound iterations
 ({doc}`../benchmarks/performance`).
 
+### Radial ambipolar profiles
+
+`dkx.representative.radial_profiles` runs one batched $E_r$ scan per surface
+and refines the selected root. Its defaults:
+
+- Only fields with `algebraic_converged` are bracketed. A failed solve can
+  manufacture a sign change, so uncertified fields are listed in
+  `uncertified_er` and never interpolated.
+- Each surface also samples the neighbouring surface's root (`er_seed`). The
+  root moves continuously with radius, so the seed narrows the bracket that
+  root refinement starts from, and a root found past the negative edge is
+  sampled directly on the next surface instead of probed for again.
+- Extension probes past the negative edge merge into the scan instead of
+  triggering a second full scan.
+- A surface that fails is recorded with `evaluation_status = "solve_failure"`
+  and its exception; the remaining surfaces still run.
+
+Each record carries the `resolution` it was solved at. That is not a
+convergence certificate: check $E_r$ with `dkx converge`.
+
 ## Inside one solve
 
 ### CPU threads
