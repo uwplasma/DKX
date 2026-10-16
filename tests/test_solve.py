@@ -195,6 +195,15 @@ def test_auto_policy_selects_full_vs_truncated_by_budget() -> None:
     assert r_trunc.converged
 
 
+def test_truncated_defect_correction_avoids_krylov_fallback() -> None:
+    # One elimination leaves 1.7e-11 relative residual here; one defect correction 6e-13.
+    op = _load_op("monoenergetic_PAS_tiny_scheme1")
+    rhs = jnp.stack([op.rhs(1), op.rhs(2)], axis=1)
+    r = solve(op, rhs, method="auto", tier1_memory_budget_gb=1e-12, tol=1e-11)
+    assert r.method == "block_tridiagonal_truncated"
+    assert r.converged
+
+
 def test_auto_policy_truncation_invalid_falls_through_to_tier2() -> None:
     # Structured-direct-eligible operator, but the RHS carries Legendre support at l>=keep:
     # the truncated kernel would be inexact, so auto must fall back to recycled Krylov.
