@@ -82,6 +82,7 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "phi1.py": "stable solver kernel",
     "plotting.py": "public plotting API",
     "representative.py": "public plotting API",
+    "representative_plots.py": "public plotting API",
     "result.py": "public native result API",
     "profiling.py": "stable support utility",
     "run.py": "public API",
