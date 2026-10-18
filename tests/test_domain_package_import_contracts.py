@@ -82,6 +82,8 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "namelist.py": "public input API",
     "paths.py": "stable support utility",
     "phase_space.py": "stable discretization kernel",
+    "phase_space_angles.py": "stable discretization kernel",
+    "phase_space_speed.py": "stable discretization kernel",
     "phi1.py": "stable solver kernel",
     "plotting.py": "public plotting API",
     "representative.py": "public plotting API",
