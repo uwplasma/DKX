@@ -82,7 +82,7 @@ errors raised by `inputs.load_sfincs_input`. There is no legacy fallback.
 - `workflows/`: native declarative scans over a case (`scan.py`), the
   scan-er orchestration with progress reporting (`scans.py`), resolution
   convergence (`converge.py`), the native ambipolar-profile solve
-  (`ambipolar_native.py`), optimization support (`optimization.py`), and the
+  (`ambipolar_native.py`), optimization support (`optimization.py`, with `optimization_evidence.py`, `optimization_comparison.py` and `optimization_ladder.py`), and the
   JAX-native geometry adapters for external producers (`geometry_adapters.py`).
 
 The removed pre-2.0 stack (the `problems/`, `operators/`, `solvers/`,

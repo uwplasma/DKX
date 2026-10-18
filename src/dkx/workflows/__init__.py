@@ -13,9 +13,6 @@ from . import scan as scan
 # optimization owner. This keeps existing user imports working without retaining
 # one implementation file per workflow stage.
 for _name in (
-    "optimization_comparison",
-    "optimization_evidence",
-    "optimization_ladder",
     "optimization_objectives",
     "optimization_promotion",
     "optimization_workflow",
