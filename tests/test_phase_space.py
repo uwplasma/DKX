@@ -16,8 +16,7 @@ The widened upwind stencils are a dkx-only extension with no Fortran
 counterpart, so their referee is the mathematics instead: moment conditions,
 measured order of accuracy, measured diagonal dominance, dissipativity of the
 Fourier symbol, and agreement with the centered discretization on a solved
-monoenergetic transport coefficient.
-"""
+monoenergetic transport coefficient."""
 
 from __future__ import annotations
 
@@ -27,20 +26,16 @@ import numpy as np
 import pytest
 
 from dkx import phase_space
-from dkx.xgrid import make_x_grid, make_x_polynomial_diff_matrices
-from dkx.namelist import parse_sfincs_input_text
 from dkx.collisions import polynomial_interpolation_matrix_np
+from dkx.namelist import parse_sfincs_input_text
+from dkx.phase_space import make_speed_grid
+from dkx.xgrid import make_x_grid, make_x_polynomial_diff_matrices
 
 TOL = dict(rtol=0.0, atol=1e-15)
 
 
 def assert_exact(new, old) -> None:
     np.testing.assert_allclose(np.asarray(new), np.asarray(old), **TOL)
-
-
-# ---------------------------------------------------------------------------
-# Uniform periodic diff matrices vs old dkx.grids.uniform_diff_matrices
-# ---------------------------------------------------------------------------
 
 
 def test_uniform_periodic_diff_matrices_rejects_dropped_schemes() -> None:
@@ -70,15 +65,6 @@ def test_uniform_periodic_diff_matrices_rejects_dropped_schemes() -> None:
             )
 
 
-# ---------------------------------------------------------------------------
-# Widened upwind stencils (dkx-only extension, opt-in and never a default)
-# ---------------------------------------------------------------------------
-
-#: Diagonal-to-off-diagonal row-sum ratio of every first-derivative stencil the
-#: periodic builder offers, measured once and pinned here. The two centered
-#: schemes carry no diagonal weight at all, which is exactly why a relaxation
-#: smoother or a diagonal preconditioner is useless on the advection operator
-#: they generate.
 _EXPECTED_DIAGONAL_DOMINANCE = {
     0: 0.0,  # 3-point centered (thetaDerivativeScheme 1)
     10: 0.0,  # 5-point centered (thetaDerivativeScheme 2)
@@ -455,11 +441,6 @@ def test_spectral_theta_derivative_is_exact_on_fourier_modes() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# Legendre pitch machinery vs the formulas inlined in the operators modules
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.parametrize("n_xi", [1, 4, 16, 33])
 def test_legendre_couplings_match_operator_inline_formulas(n_xi: int) -> None:
     # Same expressions as operators/profile_collisionless.py lines 275-276.
@@ -474,11 +455,6 @@ def test_legendre_couplings_match_operator_inline_formulas(n_xi: int) -> None:
 
 def test_lorentz_eigenvalues_absolute_values() -> None:
     assert phase_space.lorentz_eigenvalues(4).tolist() == [0.0, 2.0, 6.0, 12.0]
-
-
-# ---------------------------------------------------------------------------
-# Speed grid vs old discretization/xgrid.py
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("n_x", [1, 4, 5, 8])
@@ -570,11 +546,6 @@ def test_rosenbluth_potential_grid_size_rules() -> None:
     assert (
         phase_space.rosenbluth_potential_grid_size(x=x, n_x=5, monoenergetic=True) == 1
     )
-
-
-# ---------------------------------------------------------------------------
-# Nxi_for_x ramps and full Grids container vs discretization/v3.py
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("option", [0, 1, 2, 3])
@@ -742,23 +713,12 @@ def test_grids_container_exposes_legendre_machinery() -> None:
     assert_exact(grids.lorentz_eigenvalues, phase_space.lorentz_eigenvalues(8))
 
 
-# ---------------------------------------------------------------------------
-# Aperiodic uniform diff matrices (xGridScheme 3/4 and the xDot upwind pairs)
-# vs the old full uniformDiffMatrices.F90 port in dkx.grids
-# ---------------------------------------------------------------------------
-
-
 def test_uniform_aperiodic_diff_matrices_rejects_other_schemes() -> None:
     for scheme in (0, 2, 3, 10, 13, 20, 30, 40, 50, 60, 80, 90, 100, 110, 122, 132):
         with pytest.raises(ValueError):
             phase_space.uniform_aperiodic_diff_matrices(
                 n=7, x_min=0.0, x_max=1.0, scheme=scheme
             )
-
-
-# ---------------------------------------------------------------------------
-# Chebyshev grid (xGridScheme 7/8): spectral exactness on polynomials
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("n", [5, 6, 9])
@@ -776,11 +736,6 @@ def test_chebyshev_grid_quadrature_and_derivative_exactness(n: int) -> None:
         np.testing.assert_allclose(
             d @ (x**deg), deg * x ** (deg - 1), rtol=1e-12, atol=1e-9
         )
-
-
-# ---------------------------------------------------------------------------
-# xdot_diff_matrices (createGrids.F90 xDotDerivativeScheme block)
-# ---------------------------------------------------------------------------
 
 
 def test_xdot_diff_matrices_scheme_m2_uses_polynomial_subsets() -> None:
@@ -912,3 +867,15 @@ def test_make_grids_xdot_pair_default_is_none() -> None:
     )
     assert g11.ddx_xdot_plus is not None
     assert_exact(g11.ddx_xdot_plus, g11.ddx_xdot_minus)
+
+
+# Memoized grids and parsed equilibria must not be mutable through a shared result.
+
+
+@pytest.mark.parametrize("make", [lambda: make_x_grid(n=5), lambda: make_speed_grid(n_x=5)])
+def test_cached_grid_arrays_are_read_only(make):
+    grid = make()
+    with pytest.raises(ValueError):
+        grid.x[0] = 99.0
+    assert make().x[0] != 99.0
+    assert not np.shares_memory(grid.dx_weights(), grid.x)
