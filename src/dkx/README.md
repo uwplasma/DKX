@@ -13,7 +13,7 @@ one-level packages exist: `validation/` and `workflows/`.
 | Canonical owner | Purpose |
 | --- | --- |
 | `constants.py`, `species.py` | Normalizations, radial-coordinate Jacobians, species pytrees, collisionality. |
-| `phase_space.py`, `xgrid.py` | Theta/zeta grids and derivative matrices, Legendre pitch machinery, speed grids (`xgrid.py` is the polynomial x-grid kernel the collision operators consume), Nxi-for-x ramps. |
+| `phase_space.py`, `xgrid.py` | Theta/zeta grids and derivative matrices, Legendre pitch machinery, speed grids (`xgrid.py` is the polynomial x-grid kernel the collision operators consume), Nxi-for-x ramps. The angle-grid derivative matrices live in `phase_space_angles.py` and the speed grid in `phase_space_speed.py`; `phase_space.py` re-exports them. |
 | `magnetic_geometry.py` | All supported geometry schemes and the differentiable Fourier path; re-exports the readers below. |
 | `boozer_bc.py` | Boozer `.bc` reader (geometryScheme 11/12): parsing, parse cache, scheme detection, bracketing surfaces. |
 | `vmec_wout.py` | VMEC `wout` reader (geometryScheme 5) and the half/full-mesh radial interpolation. |
