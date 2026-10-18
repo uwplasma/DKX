@@ -2233,3 +2233,19 @@ def test_the_er_scan_threads_the_preconditioner_it_was_given() -> None:
 
     assert "precond" in {f.name for f in dataclasses.fields(ErSolveState)}
     assert ErSolveState(x=None, recycle=None, result=None).precond is None
+
+
+def test_coupled_preconditioner_compiles_once_across_rebuilds() -> None:
+    """A rebuilt coupled preconditioner reuses the compiled sweep (no per-field executable)."""
+    from dkx.structured_direct import _solve_jit, coupled_preconditioner
+
+    op = _load_op("quick_2species_FPCollisions_noEr")
+    r = jnp.asarray(np.random.default_rng(0).standard_normal(op.total_size))
+    before = _solve_jit._cache_size()
+    outs = []
+    for _ in range(2):
+        precond, precond_t = coupled_preconditioner(op, 2)
+        outs.append(np.asarray(precond(r)))
+        precond_t(r)
+    assert _solve_jit._cache_size() - before == 2  # forward + transposed, once each
+    np.testing.assert_allclose(outs[0], outs[1])

@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, replace
+from functools import partial
 from typing import Any
 
 import jax
@@ -135,6 +136,13 @@ def _bmul(band: Any, y: jnp.ndarray, transpose: bool = False) -> jnp.ndarray:
     else:
         out = jnp.einsum("sba,sxb->sxa" if transpose else "sab,sxb->sxa", band[0], yy)
     return (out * sc[:, :, None]).reshape(y.shape)
+
+
+@partial(jax.jit, static_argnums=2)
+def _solve_jit(solver: CoupledSolver, r: jnp.ndarray, transpose: bool) -> jnp.ndarray:
+    # One compiled sweep per shape: an eager lax.scan over fresh closures would
+    # compile (and keep an executable) on every application and every field.
+    return solver.solve(r, transpose=transpose)
 
 
 @jtu.register_pytree_node_class
@@ -571,7 +579,7 @@ def coupled_preconditioner(op: KineticOperator, keep: int, f32: bool = False) ->
     """
     base = replace(op, with_er_xidot=False, with_er_xdot=False, with_magnetic_drifts=False)
     solver = build_coupled_solver(base, keep, _drift_parts(op), f32)
-    return (lambda r: solver.solve(r)), (lambda r: solver.solve(r, transpose=True))
+    return (lambda r: _solve_jit(solver, r, False)), (lambda r: _solve_jit(solver, r, True))
 
 
 # Default memory budget above which ``solve(method="auto")`` prefers the
