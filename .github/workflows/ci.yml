@@ -12,8 +12,8 @@ concurrency:
 
 jobs:
   # Working-method rule 5: the pull-request gate is tier 1, and tier 1 is the
-  # work the change can actually break. The full suite is 13 shards and about
-  # 96 runner-minutes; a change that touches no code cannot alter a solver
+  # work the change can actually break. The full suite is 9 shards on a warm
+  # compilation cache; a change that touches no code cannot alter a solver
   # result, so it runs the contract tests that read the documentation instead.
   # Pushes to main always take the full suite, so nothing reaches the default
   # branch on the reduced gate.
@@ -99,7 +99,7 @@ jobs:
         # shard at 9m53s and tipped it into the timeout on stacked PRs. This
         # reverses the 2026-07-17 decision to archive the snapshot; the file is
         # compact and bounded by tests/test_source_tree_consolidation.py.
-        group: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+        group: [1, 2, 3, 4, 5, 6, 7, 8, 9]
     env:
       JAX_ENABLE_X64: "True"
       JAX_DISABLE_JIT: "0"
@@ -151,7 +151,7 @@ jobs:
           # worker holding the heavy gradient/scan tests peaks at 5-6 GB. Four
           # of those exceed the 16 GB runner and the agent is OOM-killed, which
           # surfaces as a cancelled job rather than a test failure.
-          python -m pytest -q -n 2 --dist=loadscope --splits 13 --group ${{ matrix.group }} --splitting-algorithm least_duration -m "not slow" --cov=dkx --cov-report=
+          python -m pytest -q -n 2 --dist=loadscope --splits 9 --group ${{ matrix.group }} --splitting-algorithm least_duration -m "not slow" --cov=dkx --cov-report=
       - name: Save the JAX compilation cache
         if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.head_ref == 'ci/compilation-cache-and-job-merge'
         uses: actions/cache/save@v4
