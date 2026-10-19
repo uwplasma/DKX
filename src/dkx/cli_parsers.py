@@ -175,6 +175,24 @@ def _add_compat_parsers(sub) -> None:
     )
     p_scan.set_defaults(func=_cli._cmd_scan_er)
 
+    p_prof = sub.add_parser(
+        "scan-profile",
+        help="Radius x Er scan of a deck from a profile file (upstream sfincsScan scanType 5).",
+    )
+    _add_common_cli_args(p_prof)
+    _add_parallel_cli_args(p_prof)
+    p_prof.add_argument("--input", required=True, help="Path to input.namelist; its '!ss' lines give Nradius, rN_min, rN_max.")
+    p_prof.add_argument("--out-dir", required=True, help="Directory for the rN<radius>/Er<value> run directories.")
+    p_prof.add_argument("--profiles", default=None, help="Profile file (default: the one profile* file beside the deck).")
+    p_prof.add_argument("--radii", default=None, nargs="+", help="Explicit rN values (default: the '!ss' radii).")
+    p_prof.add_argument("--er-min", default=None, help="Er range minimum (default: the profile file's Ermin).")
+    p_prof.add_argument("--er-max", default=None, help="Er range maximum (default: the profile file's Ermax).")
+    p_prof.add_argument("--n-er", default=None, help="Er points per radius (default: the profile file's nErs).")
+    p_prof.add_argument("--skip-existing", action="store_true", help="Reuse existing sfincsOutput.h5 files.")
+    p_prof.add_argument("--jobs", type=int, default=1, help="Parallel worker processes per radius.")
+    p_prof.add_argument("--solve-method", default="auto", help="Solve method for every point.")
+    p_prof.set_defaults(func=_cli._cmd_scan_profile)
+
     p_ambi = sub.add_parser(
         "ambipolar-solve",
         help="Given an existing scan-er directory, solve for ambipolar Er roots and write ambipolarSolutions.dat.",

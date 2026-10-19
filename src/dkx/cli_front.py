@@ -143,7 +143,7 @@ _USER_COMMANDS: tuple[str, ...] = (
 #: from the registered set. It exists for direct callers and as documentation.
 _KNOWN_COMMANDS: frozenset[str] = frozenset({
     "validate", "doctor", "converge", "roots", "compare", "plot", "scan", "convert", "template", "schema", "run", "inspect", "solve-v3", "ambipolar",
-    "scan-er", "ambipolar-solve", "run-fortran", "write-output",
+    "scan-er", "scan-profile", "ambipolar-solve", "run-fortran", "write-output",
     "transport-matrix-v3", "monoenergetic-database", "dump-h5", "plot-output",
     "compare-h5", "postprocess-upstream",
 })
