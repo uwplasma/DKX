@@ -328,11 +328,28 @@ the best finite iterate reached so far:
 1. Other preconditioners of the same simplified operator: first
    `coarse_triangle` (retains the collision operator's upper speed triangle,
    Fortran `preconditioner_x = 2`) when there is a Fokker–Planck or Sugama
-   operator, then `sparse`, then `multigrid`.
+   operator, then `sparse_triangle` or `sparse`, then `multigrid`. Each rung
+   runs the restart policy of the first attempt (short probe cycles, then the
+   wide restart); an explicit `restart` stays fixed.
 2. Four times the outer-cycle budget, at the wide restart of the memory-aware
    policy.
 3. The sparse direct route, if the system has at most `max_dense_size`
    unknowns (default 8,192) or MUMPS was selected with a memory budget.
+
+The first attempt is `coupled` for Fokker–Planck and Sugama decks when its
+factorization fits, with one exception: when the $E_r$ terms are active and
+nonzero it is `coarse_triangle` (if the dense bands fit). `coupled` factors the
+operator without those terms. On an HSX QHS full Fokker–Planck deck with
+66,004 unknowns (two species, one 8-core pinned run per point on a shared
+host), `coupled` stalled at $|E_r| = 15$ and $20$ and `coarse_triangle` did not:
+
+| $E_r$ | `coupled` | `coarse_triangle` |
+|---:|---|---|
+| 0 | 23 iterations, 7 s | 29 iterations, 16 s |
+| 10 | 210 iterations, 33 s | 179 iterations, 22 s |
+| -10 | 200 iterations, 32 s | 182 iterations, 23 s |
+| -15 | stalled at 768 iterations (141 s) | 350 iterations, 65 s |
+| -20 | stalled at 1,262 iterations (258 s) | 208 iterations, 52 s (restart 1000) |
 
 If every rung fails, the solve raises with the attempts, the best residual, and
 the reminder that non-convergence alone does not identify under-resolution, ill

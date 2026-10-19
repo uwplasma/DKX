@@ -56,6 +56,7 @@ correction around the factorization instead of being assembled into it.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Callable
 
 # The JAX backend is imported below; dkx/runtime.py explains why this is here.
@@ -368,32 +369,42 @@ def build_sparse_f_inverse(
     from dkx.coarse_precond import _strict_upper_speed_coupling  # noqa: PLC0415
 
     upper = _strict_upper_speed_coupling(op, op._mask()) if retain_speed_triangle else None
-    upper = None if upper is None else _np(upper)
+    # Host state lives on one opaque object. SOLVAX's compile reuse splits a jitted
+    # function's closure and turns every array it finds, nested callbacks included,
+    # into a jit argument; arrays closed over here would reach the host callback as
+    # tracers.
+    host = SimpleNamespace(
+        factors=factors, carry=carry, upper=None if upper is None else _np(upper),
+        n_species=op.n_species, n_x=op.n_x, n_xi=op.n_xi, n_tz=assembled.n_tz,
+        n_sub=n_sub, width=width,
+    )
 
     def _apply(v: np.ndarray, transpose: bool) -> np.ndarray:
         # ``v`` carries any number of leading batch axes (``schur_projected_precond``
         # vmaps the inverse over the border columns), so flatten them into one
         # right-hand-side axis and hand each subsystem all of its columns at once
         # -- one triangular sweep over many vectors, not one sweep each.
+        h = host
+        upper = h.upper
         a = np.asarray(v, dtype=np.float64)
         lead = a.shape[:-1]
-        g = a.reshape(-1, n_sub, width)  # (R, subsystem, row)
+        g = a.reshape(-1, h.n_sub, h.width)  # (R, subsystem, row)
         out = np.zeros_like(g) if upper is not None else np.empty_like(g)
         trans = "T" if transpose else "N"
         # D + U is upper triangular in speed. Read every factor once, including
         # all broadcast RHS columns, and preserve the exact rank-one pin below.
-        speeds = range(op.n_x) if transpose else range(op.n_x - 1, -1, -1)
-        order = range(n_sub) if upper is None else [
-            s * op.n_x + x for s in range(op.n_species) for x in speeds
+        speeds = range(h.n_x) if transpose else range(h.n_x - 1, -1, -1)
+        order = range(h.n_sub) if upper is None else [
+            s * h.n_x + x for s in range(h.n_species) for x in speeds
         ]
         for i in order:
-            lu, c = factors[i], carry[i]
+            lu, c = h.factors[i], h.carry[i]
             rhs = g[:, i, :].T  # (row, R)
             if upper is not None:
-                species, speed = divmod(i, op.n_x)
+                species, speed = divmod(i, h.n_x)
                 coefficient = upper[species, :, :, speed] if transpose else upper[species, :, speed, :]
-                solved = out.reshape(-1, op.n_species, op.n_x, op.n_xi, assembled.n_tz)[:, species]
-                coupling = np.einsum("lx,rxlt->rlt", coefficient, solved).reshape(-1, width)
+                solved = out.reshape(-1, h.n_species, h.n_x, h.n_xi, h.n_tz)[:, species]
+                coupling = np.einsum("lx,rxlt->rlt", coefficient, solved).reshape(-1, h.width)
                 rhs = (g[:, i, :] - coupling).T
             y = lu.solve(rhs, trans=trans)
             if c is not None:
@@ -406,7 +417,7 @@ def build_sparse_f_inverse(
                     denom = 1.0 + float(v_full @ a_inv_u)
                     y = y - np.outer(a_inv_u, (v_full @ y) / denom)
             out[:, i, :] = y.T
-        return out.reshape(*lead, n_sub * width)
+        return out.reshape(*lead, h.n_sub * h.width)
 
     def _make(transpose: bool) -> Callable:
         def apply(v: jnp.ndarray) -> jnp.ndarray:

@@ -904,6 +904,12 @@ def solve(
     if chosen in ("block_tridiagonal", "block_tridiagonal_truncated"):
         pass  # structured direct result stands.
     elif chosen == "gmres":
+        first_kind = (
+            _auto_preconditioner(op, krylov_memory_budget_gb)
+            if method == "auto" and preconditioner is None and use_preconditioner
+            and not differentiable and precond is None
+            else _resolve_preconditioner(preconditioner, use_preconditioner)
+        )
         result = _solve_tier2(
             op,
             rhs2d,
@@ -911,12 +917,7 @@ def solve(
             atol=atol,
             x0=x0,
             recycle=recycle,
-            preconditioner=(
-                _auto_preconditioner(op, krylov_memory_budget_gb)
-                if method == "auto" and preconditioner is None and use_preconditioner
-                and not differentiable and precond is None
-                else _resolve_preconditioner(preconditioner, use_preconditioner)
-            ),
+            preconditioner=first_kind,
             prebuilt_precond=precond,
             auto_restart_recovery=method == "auto" and not differentiable and auto_restart,
             krylov_memory_budget_gb=krylov_memory_budget_gb,
@@ -929,7 +930,6 @@ def solve(
             adjoint_residual_factor=adjoint_residual_factor,
         )
         if method == "auto" and not result.converged and not differentiable:
-            requested = _resolve_preconditioner(preconditioner, use_preconditioner)
             result = _escalate_after_tier2_stall(
                 op,
                 rhs2d,
@@ -938,7 +938,7 @@ def solve(
                 atol=atol,
                 x0=x0,
                 recycle=recycle,
-                preconditioner=requested,
+                preconditioner=first_kind,
                 drop_l_coupling_in_precond=drop_l_coupling_in_precond,
                 restart=restart,
                 recycle_dim=recycle_dim,
