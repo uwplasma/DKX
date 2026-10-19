@@ -9,7 +9,7 @@ in the same row.
 | Workflow | Entry points | Scope and evidence |
 | --- | --- | --- |
 | Profile solve (SFINCS `RHSMode = 1`): fluxes, flows, currents per surface and species | native case `run.workflow = "profile"`; `dkx run`; `dkx.run(case)`; `dkx input.namelist` | native SI result; SFINCS parity to 8e-14 on output tables ({doc}`benchmarks/sfincs`); `examples/tutorials/01_first_run.py` |
-| Ambipolar profile: $E_r$ from $J_r(E_r) = 0$ on every surface | `run.workflow = "ambipolar_profile"`; `dkx roots`; `dkx.find_ambipolar_er`; `dkx.ambipolar_er` | every root kept and classified; {doc}`tutorials/transport_physics`, `examples/tutorials/08_ambipolar_er.py` |
+| Ambipolar profile: $E_r$ from $J_r(E_r) = 0$ on every surface | `run.workflow = "ambipolar_profile"`; `dkx roots`; `dkx.find_ambipolar_er`; `dkx.ambipolar_er` | every root kept and classified; {doc}`tutorials/06_ambipolar_er`, `examples/tutorials/08_ambipolar_er.py` |
 | Thermal transport matrix (`RHSMode = 2`) | `dkx sfincs transport-matrix-v3`; `dkx.run.run_transport_matrix` | 3×3 Onsager matrix; golden-data parity 6e-13 to 9e-9 ({doc}`benchmarks/sfincs`); namelist route only |
 | Monoenergetic coefficients (`RHSMode = 3`) and databases over $(\nu', E^*)$ | `dkx sfincs monoenergetic-database`; `dkx.run_monoenergetic_database` | $D_{11}^*$, $D_{31}^*$, $D_{33}^*$ in the Beidler normalization, with variational $D_{11}$ bounds; MONKES/YANCC within 6% ({doc}`benchmarks/cross_code`); `examples/tutorials/09_monoenergetic.py` |
 | Parameter scans | `[scan]` table and `dkx scan`; `dkx sfincs scan-er`; `dkx.batched_er_scan`, `dkx.batched_surface_scan` | Cartesian or zipped axes, resumable ({doc}`user_guide/scans_and_parallelism`) |
@@ -30,7 +30,7 @@ through the SFINCS-deck entry points above.
 | SFINCS geometry schemes | `geometryScheme` 1–5, 11, 12, 13 in a namelist | {doc}`user_guide/sfincs_namelist` |
 | Differentiable Fourier geometry | `FluxSurfaceGeometry.from_fourier` | $\lvert B\rvert$ spectrum as a traced input; `examples/tutorials/15_optimization.py` |
 
-Details in {doc}`physics/geometry` and {doc}`tutorials/building_a_case`.
+Details in {doc}`physics/geometry` and {doc}`tutorials/03_geometry_species`.
 
 ## Physics
 
@@ -72,16 +72,16 @@ original equation. The routes and their limits are in
 
 | Capability | How | Evidence |
 | --- | --- | --- |
-| Gradients of any solved output | `solve(..., differentiable=True)` under `jax.grad`, `jax.jacfwd`, `jax.jvp`; implicit differentiation with one transposed solve | AD against central differences 4.3e-10, 4.2e-9, 7.9e-11 on three paths ({doc}`tutorials/bootstrap_gradients_optimization`) |
+| Gradients of any solved output | `solve(..., differentiable=True)` under `jax.grad`, `jax.jacfwd`, `jax.jvp`; implicit differentiation with one transposed solve | AD against central differences 4.3e-10, 4.2e-9, 7.9e-11 on three paths ({doc}`tutorials/08_phi1_bootstrap_gradients`) |
 | Differentiable ambipolar root | `dkx.ambipolar_er` | implicit function theorem; `tests/test_er.py` |
-| Differentiable $E_r$ and profile scans | `dkx.prepare_er_scan(..., differentiable_profiles=True)`, `dkx.batched_er_scan(..., differentiable=True)` | {doc}`tutorials/bootstrap_gradients_optimization` |
+| Differentiable $E_r$ and profile scans | `dkx.prepare_er_scan(..., differentiable_profiles=True)`, `dkx.batched_er_scan(..., differentiable=True)` | {doc}`tutorials/08_phi1_bootstrap_gradients` |
 | Shape derivatives | `FluxSurfaceGeometry.from_fourier` | `examples/tutorials/15_optimization.py` |
-| Kinetic bootstrap row in VMEX optimization | `dkx.bootstrap.KineticBootstrapMismatch`, `KineticBootstrapCurrent` | QA objective 1.78 → 0.0061 ({doc}`tutorials/bootstrap_gradients_optimization`) |
+| Kinetic bootstrap row in VMEX optimization | `dkx.bootstrap.KineticBootstrapMismatch`, `KineticBootstrapCurrent` | QA objective 1.78 → 0.0061 ({doc}`tutorials/08_phi1_bootstrap_gradients`) |
 | Optimization scripts | `examples/advanced/optimize_*.py` | bootstrap current, electron root, impurity screening |
 
 The VMEC-to-Boozer proxy workflow does not claim full VMEC-boundary-to-kinetic
 transport gradients; its scope is machine-checked
-({doc}`tutorials/bootstrap_gradients_optimization`). The derivation is in
+({doc}`tutorials/08_phi1_bootstrap_gradients`). The derivation is in
 {doc}`numerics/differentiation`.
 
 ## Input, output and tools
@@ -89,7 +89,7 @@ transport gradients; its scope is machine-checked
 | Capability | How |
 | --- | --- |
 | Native cases | TOML or JSON, deterministic case ID; `dkx template`, `dkx validate` ({doc}`user_guide/inputs`) |
-| SFINCS v3 decks | `dkx input.namelist`, `dkx.load_sfincs_input`, `dkx convert` to a native case ({doc}`user_guide/sfincs_namelist`, {doc}`tutorials/first_steps`) |
+| SFINCS v3 decks | `dkx input.namelist`, `dkx.load_sfincs_input`, `dkx convert` to a native case ({doc}`user_guide/sfincs_namelist`, {doc}`tutorials/01_first_run`) |
 | Outputs | native NetCDF result in SI; SFINCS-layout HDF5, NetCDF4 or NPZ selected by suffix; `dkx.read_output` ({doc}`user_guide/outputs`) |
 | Result certificate | `Result.certificate()`: convergence, route, residual, version, device, precision |
 | Comparison | `dkx compare` (NetCDF or HDF5, non-zero exit on difference), `dkx sfincs compare-h5` |

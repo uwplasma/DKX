@@ -251,11 +251,11 @@ one RTX A4000.
 
 ## Learn DKX
 
-The [tutorial track](docs/tutorials/index.md) runs from a first case to ambipolar `E_r`,
-transport coefficients, Phi1, bootstrap current against Redl, gradients and optimization,
-with the equations and the output of every step. Its scripts are
-[`examples/tutorials/01_first_run.py`](examples/tutorials) to `15_optimization.py`;
-`13_convergence.py` shows how far their fast grids are from converged.
+The [tutorial track](docs/tutorials/index.md) is eight pages, in Python and on the CLI with
+TOML: install and first run, reading results, geometry and species, collisions and solvers,
+scans and resolution, ambipolar `E_r`, transport matrices, and Phi1, bootstrap current against
+Redl and gradients. Each page shows the code, the real output and the figure. Its scripts are
+[`examples/tutorials/01_first_run.py`](examples/tutorials) to `15_optimization.py`.
 
 ## Documentation, development and citation
 
