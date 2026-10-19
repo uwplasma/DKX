@@ -110,3 +110,12 @@ def test_run_profile_scan_rejects_unsupported_decks(tmp_path: Path) -> None:
     (tmp_path / "input.namelist").write_text(DECK.replace("dNHatdrHats", "dNHatdpsiNs"))
     with pytest.raises(ValueError, match="dNHatdrHats"):
         run_profile_scan(input_namelist=tmp_path / "input.namelist", out_dir=tmp_path / "s")
+
+
+def test_scan_profile_command_prints_the_malformed_line_and_exits(tmp_path: Path) -> None:
+    from dkx import cli
+
+    (tmp_path / "input.namelist").write_text(DECK.replace("rN_max = 0.8", "rN_max = 0:.8"))
+    (tmp_path / "profile_x").write_text(PROFILE)
+    with pytest.raises(SystemExit, match=r"scan-profile: .*input\.namelist:4: .*rN_max = 0:\.8"):
+        cli.main(["scan-profile", "--input", str(tmp_path / "input.namelist"), "--out-dir", str(tmp_path / "s"), "--quiet"])

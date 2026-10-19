@@ -22,6 +22,10 @@ _SS_LINE = re.compile(r"^\s*!ss\s+(\w+)\s*=\s*(.*?)\s*$", re.IGNORECASE)
 _STRING_KEYS = {"scanvariable", "scanvariablescale"}
 
 
+class ScanInputError(ValueError):
+    """A deck, ``!ss`` line or profile file that cannot be read; the message names the line."""
+
+
 @dataclass(frozen=True)
 class ProfileScanResult:
     scan_dir: Path
@@ -53,7 +57,7 @@ def parse_ss_lines(text: str, *, source: str = "input.namelist") -> dict[str, fl
         try:
             out[key] = _number(value)
         except ValueError:
-            raise ValueError(
+            raise ScanInputError(
                 f"{source}:{lineno}: cannot read a number from {line.strip()!r}; "
                 f"{value!r} is not a Fortran real (for example 20.0d+0)."
             ) from None
@@ -75,24 +79,24 @@ def read_profiles(path: Path) -> dict[str, np.ndarray]:
         try:
             values = [_number(token) for token in body.split()]
         except ValueError:
-            raise ValueError(f"{path}:{lineno}: cannot read numbers from {line.strip()!r}") from None
+            raise ScanInputError(f"{path}:{lineno}: cannot read numbers from {line.strip()!r}") from None
         if coordinate is None:
             if len(values) != 1 or values[0] not in (1, 3):
-                raise ValueError(
+                raise ScanInputError(
                     f"{path}:{lineno}: the first data line must be the radial coordinate, "
                     f"1 (psiN) or 3 (rN); got {line.strip()!r}"
                 )
             coordinate = int(values[0])
         elif len(values) != 8:
-            raise ValueError(f"{path}:{lineno}: expected 8 columns (rN nErs Ermin Ermax n_i T_i n_e T_e), got {len(values)}")
+            raise ScanInputError(f"{path}:{lineno}: expected 8 columns (rN nErs Ermin Ermax n_i T_i n_e T_e), got {len(values)}")
         else:
             rows.append(values)
     if coordinate is None or len(rows) < 2:
-        raise ValueError(f"{path}: need a radial coordinate line and at least two radii")
+        raise ScanInputError(f"{path}: need a radial coordinate line and at least two radii")
     table = np.asarray(rows, dtype=np.float64)
     r_n = np.sqrt(table[:, 0]) if coordinate == 1 else table[:, 0]
     if np.any(np.diff(r_n) <= 0):
-        raise ValueError(f"{path}: the radial coordinate must be strictly increasing")
+        raise ScanInputError(f"{path}: the radial coordinate must be strictly increasing")
     names = ("n_er", "er_min", "er_max", "n_i", "t_i", "n_e", "t_e")
     return {"r_n": r_n, **{name: table[:, 1 + i] for i, name in enumerate(names)}}
 
@@ -142,18 +146,18 @@ def run_profile_scan(
     txt = input_namelist.read_text()
     ss = parse_ss_lines(txt, source=str(input_namelist))
     if ss.get("scantype", 5) != 5:
-        raise ValueError(f"{input_namelist}: !ss scanType = {ss['scantype']:g}; scan-profile runs scanType 5 (use scan-er for an E_r scan)")
+        raise ScanInputError(f"{input_namelist}: !ss scanType = {ss['scantype']:g}; scan-profile runs scanType 5 (use scan-er for an E_r scan)")
     nml = read_sfincs_input(input_namelist)
     geometry, species = nml.group("geometryParameters"), nml.group("speciesParameters")
     if int(geometry.get("INPUTRADIALCOORDINATE", 3)) != 3 or "DNHATDRHATS" not in species or "DTHATDRHATS" not in species:
-        raise ValueError(
+        raise ScanInputError(
             f"{input_namelist}: scan-profile needs inputRadialCoordinate = 3 and species gradients "
             "given as dNHatdrHats and dTHatdrHats (with Er); it replaces rN_wish, nHats, THats and those gradients."
         )
     if profiles is None:
         found = sorted(input_namelist.parent.glob("profile*"))
         if len(found) != 1:
-            raise ValueError(f"pass --profiles: found {len(found)} files named profile* beside {input_namelist}")
+            raise ScanInputError(f"pass --profiles: found {len(found)} files named profile* beside {input_namelist}")
         profiles = found[0]
     table = read_profiles(Path(profiles))
     if radii is None:
@@ -164,7 +168,7 @@ def run_profile_scan(
         )
     zs = [float(z) for z in np.atleast_1d(species["ZS"])]
     if sum(z > 0 for z in zs) > 1 or sum(z < 0 for z in zs) > 1:
-        raise ValueError("scan-profile maps one ion and one electron profile; the deck has several ions or electrons")
+        raise ScanInputError("scan-profile maps one ion and one electron profile; the deck has several ions or electrons")
     a_hat = float(kinetic_operator_build_from_namelist(parse_sfincs_input_text(txt, source_path=input_namelist)).radial.a_hat)
 
     failures: list[tuple[float, float, str]] = []
