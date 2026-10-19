@@ -153,7 +153,7 @@ jobs:
           # surfaces as a cancelled job rather than a test failure.
           python -m pytest -q -n 2 --dist=loadscope --splits 9 --group ${{ matrix.group }} --splitting-algorithm least_duration -m "not slow" --cov=dkx --cov-report=
       - name: Save the JAX compilation cache
-        if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.head_ref == 'ci/compilation-cache-and-job-merge'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/cache/save@v4
         with:
           path: ${{ runner.temp }}/jax_compilation_cache
