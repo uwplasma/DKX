@@ -20,6 +20,7 @@ from tools.release.artifacts import (
 )
 from dkx.validation.fortran import PetscCSRMatrix, PetscVec, parse_fortran_v3_profile_file
 from dkx.workflows import optimization as opt
+from dkx.workflows import optimization_evidence
 from dkx.workflows.optimization import (
     AmbipolarRoot,
     AmbipolarRootSummary,
@@ -160,7 +161,7 @@ def test_optimization_evidence_and_fortran_scan_contracts(
         Path(workdir, "sfincsOutput.h5").write_bytes(b"placeholder")
 
     messages: list[str] = []
-    monkeypatch.setattr(opt, "run_sfincs_fortran", fake_run_sfincs_fortran)
+    monkeypatch.setattr(optimization_evidence, "run_sfincs_fortran", fake_run_sfincs_fortran)
     result = run_fortran_er_scan(
         input_namelist=input_path,
         out_dir=tmp_path / "fortran_scan",

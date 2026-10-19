@@ -147,9 +147,6 @@ def test_workflow_optimization_aliases_resolve_to_owner() -> None:
 
     owner = _import_module("dkx.workflows.optimization")
     for name in (
-        "optimization_comparison",
-        "optimization_evidence",
-        "optimization_ladder",
         "optimization_objectives",
         "optimization_promotion",
         "optimization_workflow",
