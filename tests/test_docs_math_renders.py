@@ -9,7 +9,13 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
+
+
+for _module in ("sphinx", "myst_parser", "furo"):
+    pytest.importorskip(_module)
 
 
 def test_built_html_has_no_raw_dollar_math(tmp_path):
