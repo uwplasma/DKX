@@ -86,6 +86,27 @@ scripts, run plans and proxy figures cannot be mistaken for closed evidence.
 
 The counts per status are printed by `python -m tools.release.release check-gates`.
 
+## Production-resolution SFINCS gap cells
+
+`validation/cross_code_gaps_v1.json` (registry `cross_code_gaps`, audit
+`tools/paper_benchmarks/audit_cross_code_gaps.py`). Two species, full linearized
+FP, 15x45x80x6, pinned SFINCS v3 on 1 rank with MUMPS. Largest DKX/SFINCS
+difference, scaled by the largest component:
+
+| Cell | Fluxes | Flows | Gate |
+| --- | --- | --- | --- |
+| W7-X ambipolar $E_r$, rN 0.3/0.5/0.7 | root shift 1.1e-4 / 2.4e-7 / 1.0e-6 | — | 2e-4 |
+| Precise QA / QH (Landreman–Paul 2022) | 2.6e-4 / 5.6e-5 | 1.8e-3 / 1.6e-3 | 5e-4 / 2.5e-3 |
+| W7-X Boozer `.bc` (geometryScheme 11) | 2.2e-7 | 1.4e-3 | 5e-4 / 2.5e-3 |
+| $E_r$ sweep DKES/partial/full, $E_r$ = −5, 0, +5 | ≤ 1.3e-6 | ≤ 1.6e-3 | 5e-4 / 2.5e-3 |
+| RHSMode 2 / RHSMode 3 transport matrix | 8.0e-10 / 2.3e-10 | — | 1e-9 |
+| Improved Sugama vs SFINCS FP (diagnostic) | 4.3e-3 | 7.7e-2 | none |
+
+SFINCS has no Sugama operator, so the last row compares models, not codes.
+SFINCS RHSMode 3 on W7-X returns NaN at 11x21x30 and flips the sign of $L_{12}$
+at Nzeta 85 with KSP converged; DKX moves by 2e-3 across the same grids. The
+monoenergetic YANCC/MONKES gate stays at 6%: its largest recorded error is 5.5%.
+
 ## Figures of the scaffold, proxy and deferred entries
 
 These artifacts are what the non-release-ready entries point at. They are kept so
