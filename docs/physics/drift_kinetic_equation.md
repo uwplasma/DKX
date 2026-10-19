@@ -67,7 +67,7 @@ Only their components tangential to the flux surface act on $f_{s1}$; the radial
 components appear in the drive and in the flux moments. This is what makes the model
 radially local.
 
-```{list-table} Terms of the operator and their Legendre coupling (`KineticOperator` docstring, `src/dkx/drift_kinetic.py`)
+:::{list-table} Terms of the operator and their Legendre coupling (`KineticOperator` docstring, `src/dkx/drift_kinetic.py`)
 :header-rows: 1
 
 * - Term
@@ -100,7 +100,7 @@ radially local.
 * - Sources and constraints
   - bordered rows and columns
   - `constraintScheme`
-```
+:::
 
 ## Streaming and mirror
 
