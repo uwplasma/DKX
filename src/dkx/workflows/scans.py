@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import os
 from pathlib import Path
 import re
 import concurrent.futures
+import json
 import subprocess
 import sys
 import textwrap
@@ -31,6 +32,7 @@ class ScanResult:
     outputs: tuple[Path, ...]
     variable: str
     values: tuple[float, ...]
+    failures: tuple[tuple[float, str], ...] = ()
 
 
 def _format_duration(seconds: float) -> str:
@@ -100,8 +102,8 @@ def _er_scan_var_name(*, nml: Namelist) -> str:
     raise ValueError(f"Invalid inputRadialCoordinateForGradients={igrad}")
 
 
-def _patch_scalar_in_group(*, txt: str, group: str, key: str, value: float) -> str:
-    """Patch a scalar assignment inside a Fortran namelist group.
+def _patch_scalar_in_group(*, txt: str, group: str, key: str, value: float | str) -> str:
+    """Patch an assignment (a number, or a string such as a species array) inside a Fortran namelist group.
 
     If the key is not present, it is appended before the group terminator `/`.
     """
@@ -122,7 +124,7 @@ def _patch_scalar_in_group(*, txt: str, group: str, key: str, value: float) -> s
     # Replace if present (handle quoted/unquoted, spacing, and fortran D exponents).
     pat = re.compile(rf"(?im)^[ \t]*{re.escape(k)}[ \t]*=[ \t]*([^!\n\r]+)[ \t]*$")
     m = pat.search(group_txt)
-    new_line = f"  {k} = {value:.16g}"
+    new_line = f"  {k} = {value if isinstance(value, str) else format(value, '.16g')}"
     if m is not None:
         group_txt2 = group_txt.replace(m.group(0), new_line)
     else:
@@ -190,11 +192,17 @@ def _run_er_scan_batched(
     solve_method: str,
     emit: EmitFn | None,
     scan_t0: float,
-) -> ScanResult:
-    """Solve a compatible profile Er scan with one shared operator/JIT program."""
+) -> ScanResult | None:
+    """Solve a compatible profile Er scan with one shared operator/JIT program.
+
+    Returns ``None`` when the shared program would be a traced GMRES: that route
+    has no preconditioner escalation and no early exit, so an ill-conditioned
+    point holds the whole batch (an HSX full-FP scan at 66,004 unknowns ran 50
+    minutes without writing a point). The caller then solves point by point.
+    """
     from types import SimpleNamespace  # noqa: PLC0415
 
-    from ..batch import batched_er_scan  # noqa: PLC0415
+    from ..batch import _auto_route_structural, batched_er_scan  # noqa: PLC0415
     from ..drift_kinetic import kinetic_operator_build_from_namelist  # noqa: PLC0415
     from ..er import ErProblem, operator_at_er  # noqa: PLC0415
     from ..inputs import load_sfincs_input, parse_sfincs_input_text  # noqa: PLC0415
@@ -208,6 +216,7 @@ def _run_er_scan_batched(
     )
 
     records: list[tuple[float, Path, Path, Path, bool]] = []
+    failures: list[tuple[float, str]] = []
     pending: list[tuple[float, Path, Path, Path]] = []
     for i, value in enumerate(values, start=1):
         run_dir = out_dir / f"Er{value:.4g}"
@@ -253,6 +262,12 @@ def _run_er_scan_batched(
             solve_method=str(solve_method),
             tol=tolerance,
         )
+        method = str(solve_method).strip().lower()
+        route = _auto_route_structural(op_base) if method == "auto" else method
+        if route in {"gmres", "iterative"}:
+            if emit is not None:
+                emit(0, "scan-er: the shared batch would be a traced GMRES; solving point by point")
+            return None
         if emit is not None:
             emit(
                 0,
@@ -304,11 +319,14 @@ def _run_er_scan_batched(
             rhs_norm = float(np.linalg.norm(np.asarray(op.rhs(), dtype=np.float64)))
             converged = bool(np.isfinite(residual) and residual <= tolerance * rhs_norm)
             if not converged:
-                raise RuntimeError(
-                    "scan-er: shared-operator solve did not converge for "
-                    f"Er={value:.16g} (residual={residual:.6g}, "
-                    f"target={tolerance * rhs_norm:.6g})"
+                failures.append(
+                    (
+                        float(value),
+                        f"batched solve did not converge (residual={residual:.6g}, "
+                        f"target={tolerance * rhs_norm:.6g})",
+                    )
                 )
+                continue
             moments = {
                 key: array[batch_index] for key, array in moment_arrays.items()
             }
@@ -391,6 +409,7 @@ def _run_er_scan_batched(
         outputs=tuple(record[2] for record in records),
         variable="Er",
         values=tuple(values),
+        failures=tuple(failures),
     )
 
 
@@ -472,8 +491,9 @@ def run_er_scan(
         jobs=jobs_val,
         solve_method=str(solve_method),
     )
+    batched = None
     if use_batched_profile:
-        return _run_er_scan_batched(
+        batched = _run_er_scan_batched(
             out_dir=out_dir,
             template_txt=template_txt,
             values=vals,
@@ -482,9 +502,27 @@ def run_er_scan(
             emit=emit,
             scan_t0=scan_t0,
         )
+        if batched is not None and not batched.failures:
+            _write_failures(out_dir, ())
+            return batched
+        if batched is not None:
+            vals = [value for value, _reason in batched.failures]
+            skip_existing = False
+            if emit is not None:
+                emit(0, f"scan-er: retrying {len(vals)} unconverged point(s) one at a time")
     del compute_solution, differentiable  # Canonical runs always solve; solve_method picks the path.
 
-    def _run_one(v: float, i: int) -> tuple[Path, Path, float, bool]:
+    failures: list[tuple[float, str]] = []
+
+    def _run_one(v: float, i: int) -> tuple[Path, Path, float, bool, str | None]:
+        """Solve one point; a failure is returned as its reason, not raised."""
+        try:
+            return (*_solve_point(v, i), None)
+        except Exception as exc:  # noqa: BLE001 - one bad point must not discard the others
+            run_dir = out_dir / f"{var}{v:.4g}"
+            return run_dir, run_dir / "sfincsOutput.h5", 0.0, False, f"{type(exc).__name__}: {exc}"
+
+    def _solve_point(v: float, i: int) -> tuple[Path, Path, float, bool]:
         point_t0 = time.perf_counter()
         run_dir = out_dir / f"{var}{v:.4g}"
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -519,9 +557,14 @@ def run_er_scan(
         )
         return run_dir, out_path, float(time.perf_counter() - point_t0), False
 
-    def _run_one_parallel(payload: tuple[float, int]) -> tuple[Path, Path, float, bool]:
+    def _run_one_parallel(payload: tuple[float, int]) -> tuple[Path, Path, float, bool, str | None]:
         v, i = payload
         return _run_one(v, i)
+
+    def _record_failure(run_dir: Path, reason: str, completed: int) -> None:
+        failures.append((float(run_dir.name.removeprefix(var)), reason))
+        if emit is not None:
+            emit(0, f"scan-er: progress {completed}/{len(vals)} {run_dir.name} FAILED: {reason}")
 
     if jobs_val > 1 and len(vals) > 1:
         with concurrent.futures.ProcessPoolExecutor(max_workers=jobs_val) as pool:
@@ -530,9 +573,12 @@ def run_er_scan(
             results: list[tuple[Path, Path, float, bool]] = []
             completed = 0
             for fut in concurrent.futures.as_completed(futures):
-                run_dir, out_path, point_elapsed_s, skipped_existing = fut.result()
+                run_dir, out_path, point_elapsed_s, skipped_existing, error = fut.result()
                 results.append((run_dir, out_path, point_elapsed_s, skipped_existing))
                 completed += 1
+                if error is not None:
+                    _record_failure(run_dir, error, completed)
+                    continue
                 if not skipped_existing:
                     solved_elapsed_s.append(float(point_elapsed_s))
                 _emit_scan_progress(
@@ -551,10 +597,13 @@ def run_er_scan(
     else:
         completed = 0
         for i, v in enumerate(vals, start=1):
-            run_dir, out_path, point_elapsed_s, skipped_existing = _run_one(v, i)
+            run_dir, out_path, point_elapsed_s, skipped_existing, error = _run_one(v, i)
             run_dirs.append(run_dir)
             outputs.append(out_path)
             completed += 1
+            if error is not None:
+                _record_failure(run_dir, error, completed)
+                continue
             if not skipped_existing:
                 solved_elapsed_s.append(float(point_elapsed_s))
             _emit_scan_progress(
@@ -568,13 +617,26 @@ def run_er_scan(
                 skipped_existing=bool(skipped_existing),
             )
 
+    _write_failures(out_dir, failures)
+    if batched is not None:
+        return replace(batched, failures=tuple(failures))
     return ScanResult(
         scan_dir=out_dir,
         run_dirs=tuple(run_dirs),
         outputs=tuple(outputs),
         variable=var,
         values=tuple(vals),
+        failures=tuple(failures),
     )
+
+
+def _write_failures(out_dir: Path, failures: Sequence[tuple[float, str]]) -> None:
+    """Write ``scan_failures.json`` beside the points, or remove a stale one."""
+    path = out_dir / "scan_failures.json"
+    if failures:
+        path.write_text(json.dumps([{"value": v, "reason": r} for v, r in failures], indent=2) + "\n")
+    else:
+        path.unlink(missing_ok=True)
 
 
 def linspace_including_endpoints(min_value: float, max_value: float, n: int) -> np.ndarray:

@@ -213,6 +213,16 @@ one kinetic solve at a time. Its defaults, and why:
   `status = "solve_failure"` and the attempts in `failures`, so a loop over
   surfaces keeps going. `wall_time_s` and `n_solves` give the cost.
 
+## Namelist-route $E_r$ scans
+
+`dkx sfincs scan-er` solves one deck at several $E_r$ values and writes
+`Er<value>/sfincsOutput.h5` per point. A point that fails is reported and the
+scan continues: the failures go to `scan_failures.json` beside the points, and
+the command exits 1. A rerun with `--skip-existing` solves only the missing
+points. Scans whose shared batch would be a traced GMRES (full Fokker–Planck
+with the $E_r$ terms) are solved point by point, so each point gets the
+preconditioner escalation of the single solve.
+
 ## Namelist-route parallelism
 
 | control | effect |

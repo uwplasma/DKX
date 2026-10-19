@@ -177,7 +177,7 @@ conversion. `dkx sfincs --help` lists them.
 | `transport-matrix-v3` | `RHSMode = 2/3` transport matrix | `--input`, `--out-matrix` (`.npy`), `--out`, `--out-state-prefix`, `--tol`, `--solve-method` |
 | `monoenergetic-database` | $D^*_{ij}(\nu', E^*)$ database | `--input`, `--nu-prime ...`, `--e-star ...`, `--out` (`.npz`), `--tol` |
 | `ambipolar` | in-process Brent ambipolar $E_r$ solve | `--input`, `--out-dir`, `--er-min`, `--er-max`, `--er-initial`, `--max-evaluations`, `--current-tolerance` |
-| `scan-er` | write one `sfincsOutput.h5` per $E_r$ value | `--input`, `--out-dir`, `--min`/`--max`/`--n` or `--values`, `--jobs`, `--index`/`--stride`, `--compute-transport-matrix` |
+| `scan-er` | write one `sfincsOutput.h5` per $E_r$ value; failed points go to `scan_failures.json`, exit 1 | `--input`, `--out-dir`, `--min`/`--max`/`--n` or `--values`, `--jobs`, `--index`/`--stride`, `--compute-transport-matrix` |
 | `ambipolar-solve` | find roots in a `scan-er` directory | `--scan-dir`, `--n-fine` |
 | `run-fortran` | run a compiled SFINCS v3 executable | `--input`, `--exe`, `--workdir` |
 | `compare-h5` | compare two SFINCS HDF5 files | `--a`, `--b`, `--rtol`, `--atol`, `--tolerances-json`, `--show-all` |

@@ -715,7 +715,7 @@ def _cmd_scan_er(args: argparse.Namespace) -> int:
     else:
         values = list(linspace_including_endpoints(float(args.min), float(args.max), int(args.n)))
 
-    run_er_scan(
+    result = run_er_scan(
         input_namelist=Path(args.input),
         out_dir=Path(args.out_dir),
         values=values,
@@ -730,6 +730,15 @@ def _cmd_scan_er(args: argparse.Namespace) -> int:
         emit=lambda level, msg: _emit(msg, level=level, args=args),
     )
     _emit(f" elapsed_s={_now()-t0:.3f}", level=1, args=args)
+    if result.failures:
+        _emit(
+            f"scan-er: {len(result.failures)} of {len(result.values)} points failed "
+            f"(see {Path(args.out_dir) / 'scan_failures.json'}): "
+            + ", ".join(f"{v:g}" for v, _ in result.failures),
+            level=0,
+            args=args,
+        )
+        return 1
     return 0
 
 def _cmd_ambipolar_solve(args: argparse.Namespace) -> int:
