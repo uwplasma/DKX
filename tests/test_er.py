@@ -305,7 +305,7 @@ def test_host_preconditioner_reuse_stays_inside_its_window(monkeypatch):
     def current(problem, field, **kwargs):
         calls.append((field, kwargs))
         precond = kwargs["precond"] or object()
-        built.setdefault(id(precond), field)
+        built.setdefault(precond, field)  # keeps it alive: ids are not reused
         return field + 3., np.array([field + 3.]), SimpleNamespace(x=np.array([field]), recycle=object(),
                                                                    precond=precond)
     monkeypatch.setattr(er, "radial_current", current)
@@ -316,10 +316,33 @@ def test_host_preconditioner_reuse_stays_inside_its_window(monkeypatch):
     result = er.find_ambipolar_er(problem, all_roots=False, emit=None, precond_window=3.)
     assert result.converged and abs(result.er + 3.) < 1e-9
     reused = [(f, k) for f, k in calls if k["precond"] is not None]
-    assert reused and all(abs(f - built[id(k["precond"])]) <= 3. for f, k in reused)
+    assert reused and all(abs(f - built[k["precond"]]) <= 3. for f, k in reused)
     # Under auto a reused preconditioner runs bounded GMRES, about 200 iterations.
     assert all(k["solve_method"] == "gmres" and k["max_restarts"] == 7 for _, k in reused)
     assert calls[1][1]["precond"] is None and calls[1][1]["x0"] is not None
+
+
+@pytest.mark.parametrize("window", [0., 3.])
+def test_host_retains_one_preconditioner_across_fields(monkeypatch, window):
+    """W7-X FP grew past 14 GB in 5 fields: each memoized state held its preconditioner."""
+    import gc
+    import weakref
+    from types import SimpleNamespace
+    from dkx import er
+    monkeypatch.setattr(er, "_check_host_kinetic_state", lambda *args: None)
+    built, live = weakref.WeakSet(), []
+    class Precond: pass
+    def current(problem, field, **kwargs):
+        gc.collect()
+        live.append(len(built))  # held by the search between fields
+        precond = kwargs["precond"] or Precond()
+        built.add(precond)
+        return field + 3., np.array([field + 3.]), SimpleNamespace(x=np.array([field]), recycle=None,
+                                                                   precond=precond)
+    monkeypatch.setattr(er, "radial_current", current)
+    result = er.find_ambipolar_er(er.ErProblem(None, 1., np.array([1.]), 0., -12., 12.),
+                                  emit=None, precond_window=window)
+    assert result.converged and result.n_solves > 4 and max(live) <= (window > 0)
 
 
 def test_host_scan_keeps_endpoints_and_rejects_false_crossing(host_current):
