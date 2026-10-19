@@ -130,7 +130,7 @@ jobs:
       - name: Point the JAX compilation cache at a restorable directory
         id: jaxcache
         run: |
-          echo "DKX_COMPILATION_CACHE_DIR=${RUNNER_TEMP}/jax_cache" >> "${GITHUB_ENV}"
+          echo "DKX_COMPILATION_CACHE_DIR=${RUNNER_TEMP}/jax_compilation_cache" >> "${GITHUB_ENV}"
           echo "jax=$(python -c 'import jax; print(jax.__version__)')" >> "${GITHUB_OUTPUT}"
       - name: Restore the JAX compilation cache
         # One cache per shard, written only by pushes to main and read by every
@@ -140,7 +140,7 @@ jobs:
         id: restore
         uses: actions/cache/restore@v4
         with:
-          path: ${{ runner.temp }}/jax_cache
+          path: ${{ runner.temp }}/jax_compilation_cache
           key: jaxcc-${{ matrix.group }}-jax${{ steps.jaxcache.outputs.jax }}-${{ hashFiles('pyproject.toml') }}-${{ github.run_id }}
           restore-keys: |
             jaxcc-${{ matrix.group }}-jax${{ steps.jaxcache.outputs.jax }}-${{ hashFiles('pyproject.toml') }}-
@@ -156,7 +156,7 @@ jobs:
         if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.head_ref == 'ci/compilation-cache-and-job-merge'
         uses: actions/cache/save@v4
         with:
-          path: ${{ runner.temp }}/jax_cache
+          path: ${{ runner.temp }}/jax_compilation_cache
           key: jaxcc-${{ matrix.group }}-jax${{ steps.jaxcache.outputs.jax }}-${{ hashFiles('pyproject.toml') }}-${{ github.run_id }}
       - name: Upload coverage data
         uses: actions/upload-artifact@v7
@@ -396,7 +396,7 @@ jobs:
           # GitHub allows there -- a workflow that does it never starts a job at
           # all, and reports only "this run likely failed because of a workflow
           # file issue".
-          echo "DKX_COMPILATION_CACHE_DIR=${RUNNER_TEMP}/jax_cache" >> "$GITHUB_ENV"
+          echo "DKX_COMPILATION_CACHE_DIR=${RUNNER_TEMP}/jax_compilation_cache" >> "$GITHUB_ENV"
       - name: Build and check the wheel and source distribution
         run: |
           python -m pip install --upgrade pip build twine
