@@ -478,13 +478,18 @@ def _solve_tier2(
     # the memory available after the preconditioner is built, within the
     # original inner-step cap ``restart * max_restarts``.
     windows_after_probe: list[tuple[int, int]] = []
+    # The float32 coupled apply is a fixed map only to single precision: reconstructing
+    # M^{-1}(V y) from V alone amplifies that error, and the first wide cycle ended at 80x
+    # ||b|| on the HSX QHS 66,004-unknown deck at |E_r| >= 15 (stalled after 892 to 1,253
+    # iterations; with Z stored it converges in 487 to 572). Its wide window keeps Z.
+    keeps_z = preconditioner == "coupled" and _COUPLED_PRECOND_F32
     if (
         auto_restart_recovery and not differentiable and not traced
         and prebuilt_precond is None and restart > 0
         and max_restarts > _AUTO_RESTART_PROBE_CYCLES
     ):
         wide = _auto_wide_restart(
-            op.total_size, rhs2d.dtype.itemsize, krylov_memory_budget_gb
+            op.total_size, rhs2d.dtype.itemsize * (2 if keeps_z else 1), krylov_memory_budget_gb
         )
         steps = restart * (max_restarts - _AUTO_RESTART_PROBE_CYCLES)
         if restart < _AUTO_RESTART_MIDDLE < wide:
@@ -500,7 +505,7 @@ def _solve_tier2(
     # ||M^{-1}||, about 1e8 on the near-singular coarse chains, and there a
     # 30-step cycle diverged where the stored-Z cycle converged.
     # Caller-supplied preconditioners may be flexible and always keep Z.
-    fixed_precond = prebuilt_precond is None
+    fixed_precond = prebuilt_precond is None and not keeps_z
     cols: list[jnp.ndarray] = []
     total_iters: int | None = 0
     converged = True
