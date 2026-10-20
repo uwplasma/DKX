@@ -715,7 +715,7 @@ def _cmd_scan_er(args: argparse.Namespace) -> int:
     else:
         values = list(linspace_including_endpoints(float(args.min), float(args.max), int(args.n)))
 
-    run_er_scan(
+    result = run_er_scan(
         input_namelist=Path(args.input),
         out_dir=Path(args.out_dir),
         values=values,
@@ -730,6 +730,45 @@ def _cmd_scan_er(args: argparse.Namespace) -> int:
         emit=lambda level, msg: _emit(msg, level=level, args=args),
     )
     _emit(f" elapsed_s={_now()-t0:.3f}", level=1, args=args)
+    if result.failures:
+        _emit(
+            f"scan-er: {len(result.failures)} of {len(result.values)} points failed "
+            f"(see {Path(args.out_dir) / 'scan_failures.json'}): "
+            + ", ".join(f"{v:g}" for v, _ in result.failures),
+            level=0,
+            args=args,
+        )
+        return 1
+    return 0
+
+def _cmd_scan_profile(args: argparse.Namespace) -> int:
+    from .workflows.profile_scan import ScanInputError, run_profile_scan  # noqa: PLC0415
+
+    er_flags = (args.er_min, args.er_max, args.n_er)
+    if any(f is not None for f in er_flags) and not all(f is not None for f in er_flags):
+        raise SystemExit("scan-profile: pass --er-min, --er-max and --n-er together, or none of them")
+    try:
+        result = run_profile_scan(
+            input_namelist=Path(args.input),
+            out_dir=Path(args.out_dir),
+            profiles=None if args.profiles is None else Path(args.profiles),
+            radii=None if args.radii is None else [float(r) for r in args.radii],
+            er_range=None if args.er_min is None else (float(args.er_min), float(args.er_max), int(args.n_er)),
+            skip_existing=bool(args.skip_existing),
+            solve_method=str(args.solve_method),
+            jobs=int(args.jobs) if args.jobs is not None else None,
+            emit=lambda level, msg: _emit(msg, level=level, args=args),
+        )
+    except ScanInputError as exc:
+        raise SystemExit(f"scan-profile: {exc}") from None
+    if result.failures:
+        _emit(
+            f"scan-profile: {len(result.failures)} of {result.n_points} points failed "
+            f"(see {Path(args.out_dir) / 'scan_failures.json'})",
+            level=0,
+            args=args,
+        )
+        return 1
     return 0
 
 def _cmd_ambipolar_solve(args: argparse.Namespace) -> int:

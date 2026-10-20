@@ -213,6 +213,42 @@ one kinetic solve at a time. Its defaults, and why:
   `status = "solve_failure"` and the attempts in `failures`, so a loop over
   surfaces keeps going. `wall_time_s` and `n_solves` give the cost.
 
+## Radius and $E_r$ scans of a SFINCS deck
+
+A deck that needs the full trajectories (`includeXDotTerm`,
+`includeElectricFieldTermInXiDot`) has no native `[scan]` equivalent: the native
+route runs DKES trajectories only. Two namelist-route commands cover it.
+
+`dkx sfincs scan-er` solves one deck at several $E_r$ values and writes
+`Er<value>/sfincsOutput.h5` per point. A point that fails is reported and the
+scan continues: the failures go to `scan_failures.json` beside the points, and
+the command exits 1. A rerun with `--skip-existing` solves only the missing
+points. Scans whose shared batch would be a traced GMRES (full Fokker–Planck
+with the $E_r$ terms) are solved point by point, so each point gets the
+preconditioner escalation of the single solve.
+
+`dkx sfincs scan-profile` is the replacement for upstream `sfincsScan` with
+`scanType = 5`. It reads the deck's `!ss` lines and a profile file, and runs
+`scan-er` at every radius:
+
+```console
+dkx sfincs scan-profile --input input.namelist --profiles profile_HH --out-dir scan
+```
+
+- Radii: `!ss Nradius`, `!ss rN_min`, `!ss rN_max`, or `--radii 0.1 0.3 0.5`.
+- Profile file: first data line is the radial coordinate (`3` rN, `1` psiN),
+  then one row per radius, `rN nErs Ermin Ermax n_i T_i n_e T_e`, with $n$ in
+  $10^{20}\,\mathrm{m^{-3}}$ and $T$ in keV. `nHats`, `THats` and the gradients
+  are interpolated and differenced from it at each radius; $E_r$ values come
+  from `nErs`, `Ermin`, `Ermax` there, or from `--er-min --er-max --n-er`.
+- The deck must use `inputRadialCoordinate = 3`, one ion and one electron
+  species, and species gradients given as `dNHatdrHats`, `dTHatdrHats` with
+  `Er`. Those keys, `rN_wish`, `nHats` and `THats` are overwritten per radius.
+- Output: `scan/rN<radius>/Er<value>/sfincsOutput.h5` and, if any point failed,
+  `scan/scan_failures.json` (`rN`, `Er`, `reason`).
+- A malformed `!ss` line stops the run before any solve and names the line, for
+  example `input.namelist:11: cannot read a number from '!ss ErMax = 20:.0d+0'`.
+
 ## Namelist-route parallelism
 
 | control | effect |

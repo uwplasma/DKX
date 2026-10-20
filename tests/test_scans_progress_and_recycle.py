@@ -393,3 +393,92 @@ def test_shared_operator_scan_matches_scalar_outputs(
     assert all(path.exists() for path in resumed.outputs)
     assert any("shared-operator batch n=1" in message for message in messages)
     assert sum("reused existing output" in message for message in messages) == 2
+
+
+def _fake_point_run(fail_at: set[float]):
+    def _run(namelist_path, *, out_path, **_kwargs) -> None:
+        value = float(namelist_path.parent.name.removeprefix("Er"))
+        if value in fail_at:
+            raise RuntimeError(f"linear solve did not converge at Er={value:g}")
+        Path(out_path).write_bytes(b"")
+
+    return _run
+
+
+def test_run_er_scan_records_failed_points_and_continues(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    template = _minimal_scan_input(tmp_path / "input.namelist")
+    monkeypatch.setattr(scans, "localize_equilibrium_file_in_place", lambda **_kwargs: None)
+    monkeypatch.setattr(scans, "run_from_namelist", _fake_point_run({1.0}))
+    messages: list[str] = []
+
+    result = scans.run_er_scan(
+        input_namelist=template,
+        out_dir=tmp_path / "scan",
+        values=[0.0, 1.0, 2.0],
+        emit=lambda _level, msg: messages.append(msg),
+    )
+
+    assert result.failures == ((1.0, "RuntimeError: linear solve did not converge at Er=1"),)
+    assert (tmp_path / "scan" / "Er0" / "sfincsOutput.h5").exists()
+    assert (tmp_path / "scan" / "Er2" / "sfincsOutput.h5").exists()
+    assert not (tmp_path / "scan" / "Er1" / "sfincsOutput.h5").exists()
+    assert json.loads((tmp_path / "scan" / "scan_failures.json").read_text()) == [
+        {"value": 1.0, "reason": "RuntimeError: linear solve did not converge at Er=1"}
+    ]
+    assert any("Er1 FAILED" in message for message in messages)
+
+    # A clean rerun removes the stale failure report.
+    monkeypatch.setattr(scans, "run_from_namelist", _fake_point_run(set()))
+    again = scans.run_er_scan(
+        input_namelist=template, out_dir=tmp_path / "scan", values=[0.0, 1.0, 2.0], skip_existing=True
+    )
+    assert again.failures == ()
+    assert not (tmp_path / "scan" / "scan_failures.json").exists()
+
+
+def test_run_er_scan_retries_unconverged_batch_points_one_at_a_time(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    template = _minimal_scan_input(tmp_path / "input.namelist")
+    solved: list[str] = []
+
+    def _batched(**kwargs):
+        run_dirs = tuple(tmp_path / "scan" / f"Er{v:g}" for v in kwargs["values"])
+        return scans.ScanResult(
+            scan_dir=tmp_path / "scan",
+            run_dirs=run_dirs,
+            outputs=tuple(d / "sfincsOutput.h5" for d in run_dirs),
+            variable="Er",
+            values=tuple(kwargs["values"]),
+            failures=((1.0, "batched solve did not converge"),),
+        )
+
+    def _run(namelist_path, *, out_path, **_kwargs) -> None:
+        solved.append(namelist_path.parent.name)
+        Path(out_path).write_bytes(b"")
+
+    monkeypatch.setattr(scans, "_can_batch_profile_scan", lambda **_kwargs: True)
+    monkeypatch.setattr(scans, "_run_er_scan_batched", _batched)
+    monkeypatch.setattr(scans, "localize_equilibrium_file_in_place", lambda **_kwargs: None)
+    monkeypatch.setattr(scans, "run_from_namelist", _run)
+
+    result = scans.run_er_scan(input_namelist=template, out_dir=tmp_path / "scan", values=[0.0, 1.0, 2.0])
+
+    assert solved == ["Er1"]
+    assert result.failures == ()
+    assert [d.name for d in result.run_dirs] == ["Er2", "Er1", "Er0"]
+
+
+def test_scan_er_command_exits_nonzero_when_points_failed(monkeypatch, tmp_path: Path) -> None:
+    from types import SimpleNamespace
+
+    from dkx import cli
+
+    monkeypatch.setattr(
+        "dkx.workflows.scans.run_er_scan",
+        lambda **_kwargs: SimpleNamespace(failures=((-20.0, "stalled"),), values=(0.0, -20.0)),
+    )
+    rc = cli.main(
+        ["scan-er", "--input", str(tmp_path / "i"), "--out-dir", str(tmp_path / "s"), "--values", "0", "-20", "--quiet"]
+    )
+    assert rc == 1

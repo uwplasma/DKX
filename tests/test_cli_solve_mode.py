@@ -725,7 +725,7 @@ def test_main_scan_er_forwards_structured_csr_solve_method(monkeypatch, tmp_path
 
     def _fake_run_er_scan(**kwargs):
         captured.update(kwargs)
-        return SimpleNamespace()
+        return SimpleNamespace(failures=(), values=())
 
     monkeypatch.setattr("dkx.workflows.scans.run_er_scan", _fake_run_er_scan)
 
