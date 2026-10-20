@@ -356,11 +356,11 @@ host), `coupled` stalled at $|E_r| = 15$ and $20$ and `coarse_triangle` did not:
 | -20 | stalled at 1,262 iterations (258 s) | 208 iterations, 52 s (restart 1000) |
 
 That stall came from the wide restart window, which kept no stored `Z` basis while
-the float32 `coupled` apply is a fixed map only to single precision; the window now
-stores `Z` for `coupled`. The same deck at $E_r = 15$ and $20$ on 4 laptop threads after the change
-converges in 487 and 572 iterations (19 s and 23 s, one rung) where the stalled
-solve and its escalation took 60 s and 67 s. The first-attempt policy above is
-unchanged: `coarse_triangle` is still chosen when its bands fit.
+the float32 `coupled` apply is a fixed map only to single precision; the window
+stores `Z` for `coupled`. With that, the same deck at $E_r = 15$ and $20$ on 4 laptop
+threads converges in 487 and 572 iterations (19 s and 23 s, one rung), where the
+stalled solve and its escalation took 60 s and 67 s. The first-attempt policy above
+is unchanged: `coarse_triangle` is still chosen when its bands fit.
 
 If every rung fails, the solve raises with the attempts, the best residual, and
 the reminder that non-convergence alone does not identify under-resolution, ill
