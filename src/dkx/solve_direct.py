@@ -309,6 +309,7 @@ def _factor_direct(
     memory_budget_bytes: int | None = None,
     rhs_nbytes: int = 0,
     emit: Callable[[str], None] | None,
+    out_of_core: bool = False,
 ) -> DirectFactors:
     """Assemble, equilibrate and factor the operator once."""
     if direct_backend == "mumps":
@@ -320,6 +321,8 @@ def _factor_direct(
             )
         if memory_budget_bytes is None:
             raise ValueError("direct_backend='mumps' requires a memory budget")
+        if out_of_core and "out_of_core" not in inspect.signature(SpluFactorization).parameters:
+            raise ImportError("direct_out_of_core requires a SOLVAX release with out_of_core")
     n = op.total_size
     assembled = None
     if n > max_dense_size:
@@ -372,6 +375,7 @@ def _factor_direct(
             backend="mumps",
             memory_limit_bytes=workspace_limit,
             memory_safety_factor=_MUMPS_MEMORY_SAFETY_FACTOR,
+            **({"out_of_core": True} if out_of_core else {}),
         )
     return DirectFactors(
         lu=lu,
@@ -429,6 +433,7 @@ def _solve_tier3(
     max_dense_size: int,
     direct_backend: str | None = None,
     direct_memory_budget_gb: float | None = None,
+    direct_out_of_core: bool = False,
     factors: DirectFactors | None = None,
     transpose: bool = False,
     emit: Callable[[str], None] | None = print,
@@ -484,6 +489,7 @@ def _solve_tier3(
         return _factor_direct(
             op, max_dense_size=max_dense_size, direct_backend=backend,
             memory_budget_bytes=memory_budget_bytes, rhs_nbytes=rhs_work_nbytes, emit=emit,
+            out_of_core=direct_out_of_core,
         )
 
     reused = factors is not None

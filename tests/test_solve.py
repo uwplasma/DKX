@@ -865,6 +865,38 @@ def test_mumps_budget_reserves_live_storage_and_reuses_one_factorization(monkeyp
     assert result.factors.lu.closed
 
 
+def test_mumps_out_of_core_is_passed_through_and_needs_a_solvax_that_has_it(monkeypatch) -> None:
+    solve_module = solve_modules
+    seen = []
+
+    class WithOutOfCore:
+        def __init__(self, matrix, *, backend, memory_limit_bytes, memory_safety_factor,
+                     out_of_core=False):
+            seen.append(out_of_core)
+            self.lu = sparse_linalg.splu(matrix.tocsc())
+            self.symbolic_memory_bytes = self.effective_memory_bytes = 0
+
+        def solve(self, rhs, *, trans="N"):
+            return self.lu.solve(np.asarray(rhs), trans=trans)
+
+    class WithoutOutOfCore(WithOutOfCore):
+        def __init__(self, matrix, *, backend, memory_limit_bytes, memory_safety_factor):
+            super().__init__(matrix, backend=backend, memory_limit_bytes=memory_limit_bytes,
+                             memory_safety_factor=memory_safety_factor)
+
+    monkeypatch.setattr(solve_module, "_available_memory_bytes", lambda: 8.0 * 2**30)
+    monkeypatch.setattr(solve_module, "_process_rss_bytes", lambda: (128 * 2**20, "RSS"))
+    op = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
+    kwargs = dict(method="direct", direct_backend="mumps", direct_memory_budget_gb=1.0)
+    monkeypatch.setattr(solve_module, "SpluFactorization", WithOutOfCore)
+    assert solve(op, op.rhs(), direct_out_of_core=True, **kwargs).converged
+    assert solve(op, op.rhs(), **kwargs).converged
+    assert seen == [True, False]
+    monkeypatch.setattr(solve_module, "SpluFactorization", WithoutOutOfCore)
+    with pytest.raises(ImportError, match="out_of_core"):
+        solve(op, op.rhs(), direct_out_of_core=True, **kwargs)
+
+
 def test_stale_mumps_factors_refresh_once_with_the_same_backend_and_budget(monkeypatch) -> None:
 
     solve_module = solve_modules

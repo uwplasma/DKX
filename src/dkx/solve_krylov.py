@@ -96,6 +96,7 @@ def _escalate_after_tier2_stall(
     max_dense_size: int,
     direct_backend: str | None = None,
     direct_memory_budget_gb: float | None = None,
+    direct_out_of_core: bool = False,
     auto_restart: bool = False,
     krylov_memory_budget_gb: float | None = None,
 ) -> SolveResult:
@@ -258,6 +259,7 @@ def _escalate_after_tier2_stall(
             op, rhs2d, tol=tol, atol=atol, max_dense_size=max_dense_size,
             direct_backend=direct_backend,
             direct_memory_budget_gb=direct_memory_budget_gb,
+            direct_out_of_core=direct_out_of_core,
         )
 
     best_label, best = min(attempts, key=lambda item: _residual(item[1]))
