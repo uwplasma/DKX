@@ -5,7 +5,7 @@ DKX has two input routes and one solver underneath them.
 | route | input | entry points | returns |
 |---|---|---|---|
 | native case | a TOML or JSON case file, or a Python mapping, in SI units | `dkx run CASE`, `dkx.run(dkx.Case.from_file(...))` | `dkx.Result`, written as NetCDF4 |
-| SFINCS namelist | a SFINCS v3 `input.namelist`, dimensionless | `dkx input.namelist`, `dkx sfincs ...`, `dkx.run("input.namelist")` | `ProfileRun` / `TransportRun`, written as `sfincsOutput.h5` (or `.nc`, `.npz`) |
+| SFINCS namelist | a SFINCS v3 `input.namelist`, dimensionless | `dkx run input.namelist`, `dkx.run("input.namelist")` | `ProfileRun` / `TransportRun`, written as `sfincsOutput.h5` (or `.nc`, `.npz`) |
 
 The native case states a physical profile (densities in m$^{-3}$, temperatures
 in keV, $E_r$ in kV/m) on several flux surfaces and is validated field by
@@ -33,5 +33,6 @@ outputs
 cli
 python_api
 scans_and_parallelism
+sfincs_workflow
 convergence
 ```

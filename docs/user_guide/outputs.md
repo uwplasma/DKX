@@ -190,7 +190,7 @@ post-processing reads it. The file suffix picks the format:
 
 ```console
 dkx input.namelist --out sfincsOutput.h5
-dkx sfincs write-output --input input.namelist --out sfincsOutput.nc
+dkx write-output --input input.namelist --out sfincsOutput.nc
 ```
 
 ```python
@@ -251,9 +251,9 @@ conversions.
 
 | command or call | output |
 |---|---|
-| `dkx sfincs transport-matrix-v3 --input D --out-matrix L.npy` | the transport matrix as `.npy`; `--out` also writes a SFINCS output file, `--out-state-prefix` the solution vectors |
+| `dkx transport-matrix-v3 --input D --out-matrix L.npy` | the transport matrix as `.npy`; `--out` also writes a SFINCS output file, `--out-state-prefix` the solution vectors |
 | `dkx.run_transport_matrix(D)` | `TransportRun`: `transport_matrix`, `state_vectors` (N, unknowns), `moments`, `solve_result`, `operator` |
-| `dkx sfincs monoenergetic-database --input D --nu-prime ... --e-star ...` | `.npz` database |
+| `dkx monoenergetic-database --input D --nu-prime ... --e-star ...` | `.npz` database |
 | `dkx.run_monoenergetic_database(D, nu_prime_grid, e_star_grid)` | `MonoenergeticDatabase` |
 
 The monoenergetic database holds the grids `nu_prime` ($n_\nu$) and `e_star`

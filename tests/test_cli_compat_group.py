@@ -126,3 +126,27 @@ def test_sfincs_is_dispatched_not_swallowed_as_a_filename() -> None:
 def test_a_bare_namelist_still_routes_to_write_output() -> None:
     """The implicit path predates the group and must survive it."""
     assert cli._normalize_default_argv(["input.namelist"])[0] == "write-output"
+
+
+def test_dkx_sfincs_group_says_it_is_deprecated(capsys, monkeypatch) -> None:
+    monkeypatch.setattr(cli, "_cmd_dump_h5", lambda args: 0)
+    assert cli.main(["sfincs", "dump-h5", "--sfincs-output", "a", "--out-json", "b"]) == 0
+    assert "deprecated; use dkx dump-h5" in capsys.readouterr().err
+
+
+def test_run_without_a_deck_fails_like_the_executable(tmp_path, monkeypatch, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+    assert cli.main(["run"]) == 2
+    assert "input.namelist not found" in capsys.readouterr().err
+
+
+def test_scan_routes_a_namelist_to_the_namelist_scans(tmp_path, monkeypatch, capsys) -> None:
+    import dkx
+
+    deck = tmp_path / "input.namelist"
+    deck.write_text("!ss scanType = 3\n&general\n/\n")
+    monkeypatch.chdir(tmp_path)
+    assert cli.main(["scan"]) == 2
+    assert "scanType = 3 is not run by dkx scan" in capsys.readouterr().err
+    with pytest.raises(ValueError, match="sfincsScan scripts"):
+        dkx.scan(deck)

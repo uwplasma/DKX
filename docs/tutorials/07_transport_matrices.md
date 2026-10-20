@@ -43,7 +43,7 @@ db = dkx.run_monoenergetic_database(
 ```
 
 CLI:
-`dkx sfincs monoenergetic-database --input DECK --nu-prime ... --e-star ... --out db.npz`.
+`dkx monoenergetic-database --input DECK --nu-prime ... --e-star ... --out db.npz`.
 Five collisionalities at $E^*=0$ (5 s for the full scan):
 
 ```text
@@ -112,7 +112,7 @@ is a resolution diagnostic: $10^{-14}$ for the thermal matrix here, $3\times10^{
 for the monoenergetic one, which falls under refinement. The three right-hand
 sides share one factorization on the structured direct route
 ({doc}`../numerics/factor_reuse`). CLI:
-`dkx sfincs transport-matrix-v3 --input DECK --out-matrix transportMatrix.npy`.
+`dkx transport-matrix-v3 --input DECK --out-matrix transportMatrix.npy`.
 
 ## Next
 

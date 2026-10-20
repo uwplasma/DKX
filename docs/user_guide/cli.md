@@ -1,25 +1,26 @@
 # Command line
 
-The `dkx` command has twelve user commands. Everything specific to SFINCS
-files lives under `dkx sfincs`, so `dkx --help` stays short.
+The `dkx` command has eleven user commands. `run` and `scan` also take a SFINCS
+`input.namelist`; the commands that only read or write SFINCS files are accepted
+by name but kept out of `dkx --help`, which stays short.
 
 ```text
 dkx doctor              check that this install can run
 dkx template              print the case template or JSON Schema
 dkx validate CASE       validate a case and print its ID
-dkx run CASE            solve one case
-dkx scan CASE           solve every point of a [scan]
+dkx run [CASE|DECK]     solve one case, or a SFINCS deck (default ./input.namelist)
+dkx scan [CASE|DECK]    solve every point of a [scan], or of a deck's !ss scan
 dkx converge CASE       refine each phase-space axis and report convergence
 dkx roots RESULT        print the ambipolar root table
 dkx inspect RESULT      print what a result contains
 dkx plot RESULT         write a figure
 dkx compare A B         compare two results
 dkx convert DECK CASE   turn a SFINCS namelist into a case file
-dkx sfincs ...          SFINCS compatibility commands
 ```
 
 Two shortcuts need no command name: `dkx input.namelist [options]` runs
-`dkx sfincs write-output --input input.namelist [options]`, and
+`dkx write-output --input input.namelist [options]`, `dkx run` with no argument in a
+folder holding `input.namelist` writes `sfincsOutput.h5` as the SFINCS executable does, and
 `dkx --plot FILE` (or `dkx FILE.h5`, `dkx FILE.nc`) plots a SFINCS output file,
 or, when the file is a VMEC equilibrium, runs a representative survey
 ([below](#from-an-equilibrium)).
@@ -165,10 +166,11 @@ single surface becomes three surfaces with a profile linear in $\hat r$. A deck
 using a model the native route does not implement is refused at convert time,
 naming the key ({doc}`sfincs_namelist`).
 
-### `dkx sfincs`
+### SFINCS file commands
 
-The compatibility commands read and write SFINCS files directly, without
-conversion. `dkx sfincs --help` lists them.
+These read and write SFINCS files directly, without conversion. They are
+spelled `dkx <command>`; the old `dkx sfincs <command>` still works for one
+release and prints a deprecation note.
 
 | command | purpose | main options |
 |---|---|---|
@@ -190,9 +192,8 @@ conversion. `dkx sfincs --help` lists them.
 ({doc}`../numerics/solver_routes`). `--equilibrium-file` (and its alias
 `--wout-path`) replaces the deck's `equilibriumFile` without editing the deck.
 
-Every `dkx sfincs` command is also accepted at the top level
-(`dkx write-output`, `dkx compare-h5`, ...) as a legacy alias hidden from
-`dkx --help`.
+`dkx scan input.namelist` replaces `scan-er` and `scan-profile`; see
+{doc}`sfincs_workflow`.
 
 ## From an equilibrium
 

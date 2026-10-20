@@ -108,5 +108,5 @@ Parity tooling can compare DKX against a local SFINCS Fortran v3 executable.
 DKX itself never needs it: frozen reference outputs ship with the test
 fixtures. A reproducible build on macOS or Linux uses a conda environment that
 provides PETSc and MUMPS together with upstream's `makefiles/makefile.conda`
-in `fortran/version3` of the SFINCS repository. `dkx sfincs run-fortran`
+in `fortran/version3` of the SFINCS repository. `dkx run-fortran`
 launches such an executable on a namelist ({doc}`../user_guide/cli`).

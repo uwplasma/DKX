@@ -62,7 +62,8 @@ print(run.moments["FSABjHat"])
 | `run_profile(deck, ...)` | `RHSMode = 1`; returns `ProfileRun` (`state_vector`, `moments`, `solve_result`, `operator`, `input`, `output_path`) |
 | `run_transport_matrix(deck, ...)` | `RHSMode = 2/3`; returns `TransportRun` (`transport_matrix`, `state_vectors`, `moments`, ...) |
 | `run_from_namelist(deck, out_path=...)` | run a deck and write its output file, dispatching on `RHSMode` |
-| `write_output(deck, path, **kwargs)` | the Python form of `dkx sfincs write-output`; accepts `equilibrium_file=` or `wout_path=` |
+| `write_output(deck, path, **kwargs)` | the Python form of `dkx write-output`; accepts `equilibrium_file=` or `wout_path=` |
+| `scan(deck, profiles=None, er=None, radii=None, out_dir=None, jobs=1)` | the Python form of `dkx scan deck`: the `sfincsScan` folder tree for the deck's `!ss` scanType 2 or 5; returns a result with `failures` |
 | `read_output(path)` | read `.h5`, `.nc` or `.npz` output into a dict |
 | `run_monoenergetic_database(deck, nu_prime_grid, e_star_grid)`, `monoenergetic_database(...)` | monoenergetic coefficient database |
 | `find_ambipolar_er(deck, er_bracket=...)`, `run_ambipolar_brent(deck, er_min=..., er_max=...)` | ambipolar $E_r$ for a deck (Brent) |

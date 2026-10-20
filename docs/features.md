@@ -10,9 +10,9 @@ in the same row.
 | --- | --- | --- |
 | Profile solve (SFINCS `RHSMode = 1`): fluxes, flows, currents per surface and species | native case `run.workflow = "profile"`; `dkx run`; `dkx.run(case)`; `dkx input.namelist` | native SI result; SFINCS parity to 8e-14 on output tables ({doc}`benchmarks/sfincs`); `examples/tutorials/01_first_run.py` |
 | Ambipolar profile: $E_r$ from $J_r(E_r) = 0$ on every surface | `run.workflow = "ambipolar_profile"`; `dkx roots`; `dkx.find_ambipolar_er`; `dkx.ambipolar_er` | every root kept and classified; {doc}`tutorials/06_ambipolar_er`, `examples/tutorials/08_ambipolar_er.py` |
-| Thermal transport matrix (`RHSMode = 2`) | `dkx sfincs transport-matrix-v3`; `dkx.run.run_transport_matrix` | 3×3 Onsager matrix; golden-data parity 6e-13 to 9e-9 ({doc}`benchmarks/sfincs`); namelist route only |
-| Monoenergetic coefficients (`RHSMode = 3`) and databases over $(\nu', E^*)$ | `dkx sfincs monoenergetic-database`; `dkx.run_monoenergetic_database` | $D_{11}^*$, $D_{31}^*$, $D_{33}^*$ in the Beidler normalization, with variational $D_{11}$ bounds; MONKES/YANCC within 6% ({doc}`benchmarks/cross_code`); `examples/tutorials/09_monoenergetic.py` |
-| Parameter scans | `[scan]` table and `dkx scan`; `dkx sfincs scan-er`; `dkx.batched_er_scan`, `dkx.batched_surface_scan` | Cartesian or zipped axes, resumable ({doc}`user_guide/scans_and_parallelism`) |
+| Thermal transport matrix (`RHSMode = 2`) | `dkx transport-matrix-v3`; `dkx.run.run_transport_matrix` | 3×3 Onsager matrix; golden-data parity 6e-13 to 9e-9 ({doc}`benchmarks/sfincs`); namelist route only |
+| Monoenergetic coefficients (`RHSMode = 3`) and databases over $(\nu', E^*)$ | `dkx monoenergetic-database`; `dkx.run_monoenergetic_database` | $D_{11}^*$, $D_{31}^*$, $D_{33}^*$ in the Beidler normalization, with variational $D_{11}$ bounds; MONKES/YANCC within 6% ({doc}`benchmarks/cross_code`); `examples/tutorials/09_monoenergetic.py` |
+| Parameter scans | `[scan]` table and `dkx scan`; `dkx scan-er`; `dkx.batched_er_scan`, `dkx.batched_surface_scan` | Cartesian or zipped axes, resumable ({doc}`user_guide/scans_and_parallelism`) |
 | Convergence study | `dkx converge`; `[convergence]` table | refines each axis and all jointly; {doc}`user_guide/convergence`, `examples/tutorials/13_convergence.py` |
 | Adjoint sensitivities (SFINCS `RHSMode = 4/5`) | `dkx.sensitivity` | input validation, output field names and ranks, and compact Fortran replay fixtures; production-grid parity is not claimed |
 
@@ -92,8 +92,8 @@ transport gradients; its scope is machine-checked
 | SFINCS v3 decks | `dkx input.namelist`, `dkx.load_sfincs_input`, `dkx convert` to a native case ({doc}`user_guide/sfincs_namelist`, {doc}`tutorials/01_first_run`) |
 | Outputs | native NetCDF result in SI; SFINCS-layout HDF5, NetCDF4 or NPZ selected by suffix; `dkx.read_output` ({doc}`user_guide/outputs`) |
 | Result certificate | `Result.certificate()`: convergence, route, residual, version, device, precision |
-| Comparison | `dkx compare` (NetCDF or HDF5, non-zero exit on difference), `dkx sfincs compare-h5` |
-| Plotting and inspection | `dkx plot`, `dkx inspect`, `dkx sfincs plot-output`, upstream `utils/` scripts via `dkx sfincs postprocess-upstream` |
+| Comparison | `dkx compare` (NetCDF or HDF5, non-zero exit on difference), `dkx compare-h5` |
+| Plotting and inspection | `dkx plot`, `dkx inspect`, `dkx plot-output`, upstream `utils/` scripts via `dkx postprocess-upstream` |
 | Environment check | `dkx doctor` |
 | Profiling | `DKX_PROFILE=1` phase timings |
 

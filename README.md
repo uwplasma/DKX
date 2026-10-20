@@ -38,7 +38,7 @@ returns a `Result`, saved as NetCDF, whose arrays carry units in their names:
 (`⟨j·B⟩`), `electric_field_kV_m`, the equation residual per surface and, for ambipolar runs,
 every root (`ambipolar_root_kV_m`). SFINCS v3 `input.namelist` decks are the second route, for
 tangential drifts, Phi1 and transport matrices: `dkx input.namelist` writes SFINCS's
-`sfincsOutput.h5`. [Inputs](docs/user_guide/inputs.md) · [outputs](docs/user_guide/outputs.md).
+`sfincsOutput.h5`; [bring your SFINCS workflow](docs/user_guide/sfincs_workflow.md) for scans and the `sfincsScan` scripts. [Inputs](docs/user_guide/inputs.md) · [outputs](docs/user_guide/outputs.md).
 
 ## At a glance
 
@@ -89,7 +89,7 @@ From a file, then the check to run before quoting a number:
 dkx run examples/tutorials/02_cli_case.toml --out result.nc
 dkx plot result.nc                      # profile panel; E_r roots when the run was ambipolar
 dkx converge examples/tutorials/02_cli_case.toml
-dkx examples/tutorials/03_sfincs_namelist.namelist   # a SFINCS v3 deck, unchanged
+dkx run examples/tutorials/03_sfincs_namelist.namelist   # a SFINCS v3 deck, unchanged
 ```
 
 `dkx converge` exits zero only when refining every axis leaves the observables unchanged.

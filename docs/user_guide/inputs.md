@@ -344,8 +344,8 @@ For the calculations outside this set, use the SFINCS namelist route
 
 | calculation | namelist route |
 |---|---|
-| Onsager transport matrix | `RHSMode = 2`; `dkx sfincs transport-matrix-v3`, `dkx.run_transport_matrix` |
-| monoenergetic coefficients $D_{11}^*, D_{31}^*, D_{33}^*$ | `RHSMode = 3`; `dkx sfincs monoenergetic-database`, `dkx.run_monoenergetic_database` (`examples/tutorials/09_monoenergetic.py`) |
+| Onsager transport matrix | `RHSMode = 2`; `dkx transport-matrix-v3`, `dkx.run_transport_matrix` |
+| monoenergetic coefficients $D_{11}^*, D_{31}^*, D_{33}^*$ | `RHSMode = 3`; `dkx monoenergetic-database`, `dkx.run_monoenergetic_database` (`examples/tutorials/09_monoenergetic.py`) |
 | full trajectories ($E_r$ terms in $\dot x$, $\dot\xi$; $B^2$ in the $E\times B$ drift) | `useDKESExBDrift`, `includeXDotTerm`, `includeElectricFieldTermInXiDot` |
 | tangential magnetic drifts | `magneticDriftScheme` 1–9 |
 | $\Phi_1$ and quasineutrality | `includePhi1 = .true.` |
