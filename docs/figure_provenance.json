@@ -79,11 +79,11 @@
     "docs/_static/figures/paper_benchmarks/w7x_ambipolar_er.png": {
       "generator": "tools/paper_benchmarks/w7x_ambipolar_er.py"
     },
-    "docs/_static/figures/readme/canonical_parity.png": {
-      "generator": "tools/benchmarks/readme_figures.py"
-    },
     "docs/_static/figures/readme/QA_optimization_bootstrap_dkx.png": {
       "generator": "examples/advanced/QA_optimization_bootstrap_dkx.py"
+    },
+    "docs/_static/figures/readme/canonical_parity.png": {
+      "generator": "tools/benchmarks/readme_figures.py"
     },
     "docs/_static/figures/readme/cross_code_validation.png": {
       "generator": "tools/benchmarks/cross_code_readme_figure.py"
@@ -103,6 +103,58 @@
     "docs/_static/figures/transport_compile_runtime_cache_2x2.png": {
       "generator": null,
       "unresolved": "no checked-in script names this figure"
+    },
+    "docs/_static/figures/tutorials/ambipolar.png": {
+      "generator": "examples/tutorials/08_ambipolar_er.py",
+      "publish": "docs/figures/publish_tutorial_figures.py"
+    },
+    "docs/_static/figures/tutorials/bootstrap.png": {
+      "generator": "examples/tutorials/12_bootstrap_vs_redl.py",
+      "publish": "docs/figures/publish_tutorial_figures.py"
+    },
+    "docs/_static/figures/tutorials/convergence.png": {
+      "generator": "examples/tutorials/13_convergence.py",
+      "publish": "docs/figures/publish_tutorial_figures.py"
+    },
+    "docs/_static/figures/tutorials/first_run.png": {
+      "generator": "examples/tutorials/01_first_run.py",
+      "publish": "docs/figures/publish_tutorial_figures.py"
+    },
+    "docs/_static/figures/tutorials/gradients.png": {
+      "generator": "examples/tutorials/14_gradients.py",
+      "publish": "docs/figures/publish_tutorial_figures.py"
+    },
+    "docs/_static/figures/tutorials/monoenergetic.png": {
+      "generator": "examples/tutorials/09_monoenergetic.py",
+      "publish": "docs/figures/publish_tutorial_figures.py"
+    },
+    "docs/_static/figures/tutorials/operators.png": {
+      "generator": "examples/tutorials/06_fokker_planck_vs_pas.py",
+      "publish": "docs/figures/publish_tutorial_figures.py"
+    },
+    "docs/_static/figures/tutorials/optimization.png": {
+      "generator": "examples/tutorials/15_optimization.py",
+      "publish": "docs/figures/publish_tutorial_figures.py"
+    },
+    "docs/_static/figures/tutorials/phi1.png": {
+      "generator": "examples/tutorials/11_phi1.py",
+      "publish": "docs/figures/publish_tutorial_figures.py"
+    },
+    "docs/_static/figures/tutorials/sfincs_namelist.png": {
+      "generator": "examples/tutorials/03_sfincs_namelist.py",
+      "publish": "docs/figures/publish_tutorial_figures.py"
+    },
+    "docs/_static/figures/tutorials/species.png": {
+      "generator": "examples/tutorials/07_species_and_impurity.py",
+      "publish": "docs/figures/publish_tutorial_figures.py"
+    },
+    "docs/_static/figures/tutorials/transport_matrix.png": {
+      "generator": "examples/tutorials/10_transport_matrix.py",
+      "publish": "docs/figures/publish_tutorial_figures.py"
+    },
+    "docs/_static/figures/tutorials/vmec.png": {
+      "generator": "examples/tutorials/04_vmec_geometry.py",
+      "publish": "docs/figures/publish_tutorial_figures.py"
     },
     "docs/_static/figures/utils/sfincsScanPlot_1.png": {
       "generator": "src/dkx/cli.py"

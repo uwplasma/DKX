@@ -36,7 +36,7 @@ the typed solver options ({doc}`numerics/solver_routes`).
 ## Optimization objectives
 
 Bootstrap-current terms for VMEX optimizations
-({doc}`tutorials/bootstrap_gradients_optimization`).
+({doc}`tutorials/08_phi1_bootstrap_gradients`).
 
 ```{eval-rst}
 .. automodule:: dkx.bootstrap

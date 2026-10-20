@@ -230,4 +230,4 @@ Phys. Plasmas 28, 022502, 2021). `KineticBootstrapMismatch` is traced through th
 equilibrium and differentiated with the VMEX implicit Jacobian;
 `KineticBootstrapCurrent` evaluates a written `wout`, optionally at the ambipolar root.
 The default grid is $N_\theta = 21$, $N_\zeta = 31$, $N_\xi = 32$, $N_x = 5$
-(`DEFAULT_RESOLUTION`). See {doc}`../tutorials/bootstrap_gradients_optimization`.
+(`DEFAULT_RESOLUTION`). See {doc}`../tutorials/08_phi1_bootstrap_gradients`.

@@ -283,7 +283,7 @@ $\langle \mathbf{j}\cdot\mathbf{B}\rangle$ as a VMEX objective term with the
 interface of VMEX's Redl term, so VMEX's implicit Jacobian differentiates
 through the Boozer transform and an exact structured drift-kinetic solve on
 each surface. `examples/advanced/QA_optimization_bootstrap_dkx.py` runs it.
-The workflow is in {doc}`../tutorials/bootstrap_gradients_optimization`.
+The workflow is in {doc}`../tutorials/08_phi1_bootstrap_gradients`.
 
 These scripts implement the full differentiable chain; running one is not by itself a
 qualified optimization. A qualified result also needs the converged final equilibrium,
@@ -309,4 +309,4 @@ not an error bound; its use in convergence reports is in
 - `examples/tutorials/15_optimization.py`: a shape derivative through
   `FluxSurfaceGeometry.from_fourier` and the kinetic solve, checked against
   central differences.
-- {doc}`../tutorials/bootstrap_gradients_optimization`.
+- {doc}`../tutorials/08_phi1_bootstrap_gradients`.

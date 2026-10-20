@@ -21,9 +21,11 @@ Expected runtime: see the table in examples/README.md.
 
 # 1. Imports
 import os
+from dataclasses import replace
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import numpy as np
 
 import dkx
 from dkx.workflows.converge import converge_case
@@ -42,10 +44,25 @@ case = dkx.Case.from_file(CASE_FILE)
 report = converge_case(case, axes=AXES, factor=FACTOR, tolerance=TOLERANCE, observables=OBSERVABLES,
                        joint=not SMOKE, emit=print)
 
+# 3b. A resolution ladder: one solve per rung, all axes refined together
+LADDER = [(9, 8, 4), (17, 16, 5)] if SMOKE else [(9, 8, 4), (17, 16, 5), (25, 24, 6), (33, 32, 6), (41, 40, 7)]
+ladder = []
+for n_theta, n_pitch, n_speed in LADDER:
+    grid = replace(case.resolution, theta=n_theta, pitch=n_pitch, speed=n_speed)
+    arrays = dkx.run(replace(case, resolution=grid)).arrays
+    ladder.append([float(arrays[k][0].sum()) for k in OBSERVABLES])
+ladder = np.array(ladder)
+
 # 4. Plot, save and print
 OUT.mkdir(parents=True, exist_ok=True)
 rows = [*report.refinements] + ([report.joint] if report.joint is not None else [])
-fig, axis = plt.subplots(figsize=(6.5, 3.8), constrained_layout=True)
+fig, (axis, rung) = plt.subplots(1, 2, figsize=(9, 3.6), constrained_layout=True)
+for column, name in enumerate(("particle flux", "heat flux", "current")):
+    rung.plot(range(len(ladder)), ladder[:, column] / ladder[-1, column], "o-", label=name)
+rung.set_xticks(range(len(ladder)), [f"{t}/{p}/{x}" for t, p, x in LADDER], fontsize=7)
+rung.set_xlabel("theta / pitch / speed")
+rung.set_ylabel("value / value on the finest rung")
+rung.legend(fontsize=8)
 axis.bar([r.label for r in rows], [r.worst for r in rows],
          color=["tab:red" if r.worst > TOLERANCE else "tab:green" for r in rows])
 axis.axhline(TOLERANCE, color="0.3", ls="--", label=f"tolerance {TOLERANCE:.0%}")
@@ -59,4 +76,7 @@ print("\n=== Summary ===")
 for r in rows:
     grid = " ".join(f"{k}={v}" for k, v in sorted(r.resolution.items()))
     print(f"  {r.label:9s} {grid:36s} worst change {r.worst:9.1%}  {r.seconds:6.1f} s")
+print("  ladder (theta/pitch/speed): particle flux, heat flux, <j.B> at the first surface")
+for (t, p, x), row in zip(LADDER, ladder):
+    print(f"  {t:3d}/{p:2d}/{x}  {row[0]:+.4e}  {row[1]:+.4e}  {row[2]:+.4e}")
 print(f"  converged at {report.tolerance:.0%}: {report.converged}")
