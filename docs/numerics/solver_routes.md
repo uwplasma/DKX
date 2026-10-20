@@ -357,7 +357,7 @@ host), `coupled` stalled at $|E_r| = 15$ and $20$ and `coarse_triangle` did not:
 
 That stall came from the wide restart window, which kept no stored `Z` basis while
 the float32 `coupled` apply is a fixed map only to single precision; the window now
-stores `Z` for `coupled`. The same deck at $E_r = 15$ and $20$ on 4 laptop threads then
+stores `Z` for `coupled`. The same deck at $E_r = 15$ and $20$ on 4 laptop threads after the change
 converges in 487 and 572 iterations (19 s and 23 s, one rung) where the stalled
 solve and its escalation took 60 s and 67 s. The first-attempt policy above is
 unchanged: `coarse_triangle` is still chosen when its bands fit.
