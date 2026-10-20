@@ -112,6 +112,13 @@ def test_run_profile_scan_rejects_unsupported_decks(tmp_path: Path) -> None:
         run_profile_scan(input_namelist=tmp_path / "input.namelist", out_dir=tmp_path / "s")
 
 
+def test_run_profile_scan_refuses_radii_outside_the_profile(tmp_path: Path) -> None:
+    (tmp_path / "input.namelist").write_text(DECK)
+    (tmp_path / "profile_x").write_text(PROFILE.replace("\n0\t", "\n0.1\t", 1))
+    with pytest.raises(ValueError, match=r"radii \[0\.05\] lie outside .*\[0\.1, 1\]"):
+        run_profile_scan(input_namelist=tmp_path / "input.namelist", out_dir=tmp_path / "s", radii=[0.05, 0.5], scan_er=None)
+
+
 def test_scan_profile_command_prints_the_malformed_line_and_exits(tmp_path: Path) -> None:
     from dkx import cli
 
