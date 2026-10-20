@@ -2272,3 +2272,17 @@ def test_coupled_preconditioner_compiles_once_across_rebuilds() -> None:
         precond_t(r)
     assert _solve_jit._cache_size() - before == 2  # forward + transposed, once each
     np.testing.assert_allclose(outs[0], outs[1])
+
+
+def test_truncated_sweeps_compile_once_across_solves_and_fields() -> None:
+    """The ramped truncated solve is one executable per layout, not one per Nxi_for_x group per call."""
+    from dkx.solve_structured import _solve_tier1_truncated, _truncated_sweeps
+
+    op = _ramped_pas_op()
+    rhs = jnp.asarray(np.random.default_rng(1).standard_normal((op.total_size, 1)))
+    before = _truncated_sweeps._cache_size()
+    first = _solve_tier1_truncated(op, rhs, keep=2, tol=1e-10, atol=0.0)
+    other = replace(op, dphi_hat_dpsi_hat=op.dphi_hat_dpsi_hat + 0.25)  # another field: same layout
+    second = _solve_tier1_truncated(other, 2.0 * rhs, keep=2, tol=1e-10, atol=0.0)
+    assert _truncated_sweeps._cache_size() - before == 1
+    np.testing.assert_allclose(np.asarray(second.x), 2.0 * np.asarray(first.x), rtol=1e-9, atol=1e-12)
