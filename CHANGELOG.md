@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## v2.10.1 — 2026-10-20
+
+One CLI: `dkx run` and `dkx scan` replace the `dkx sfincs …` spellings (kept as
+deprecated aliases), `dkx.scan(...)` drives scans from Python, and a page on
+bringing an existing SFINCS scan workflow to DKX.
 
 - One CLI: `dkx run` and `dkx scan` accept a SFINCS `input.namelist` as well as a case file. `dkx run` with no argument in a folder holding `input.namelist` writes `sfincsOutput.h5`, as the SFINCS executable does. `dkx scan` reads the deck's `!ss` lines (scanType 2: E_r, 5: radius x E_r) and writes the `sfincsScan` folder tree; `--profiles`, `--er MIN MAX N`, `--radii`, `--jobs`, `--skip-existing` override or tune it. `dkx.scan(namelist, profiles=..., er=...)` is the same from Python.
 - `dkx sfincs <command>` is hidden and prints a deprecation note; use `dkx <command>`. `scan-er` and `scan-profile` stay as hidden aliases.
