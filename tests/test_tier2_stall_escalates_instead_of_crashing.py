@@ -485,3 +485,32 @@ def test_larger_budget_rung_uses_the_wide_restart(monkeypatch, auto_restart, exp
         max_dense_size=10**9, auto_restart=auto_restart,
     ) == 'direct'
     assert windows[-1] == expected
+
+
+@pytest.mark.parametrize('kind,fixed,wide', [('coarse', True, 400), ('coupled', False, 200)])
+def test_coupled_wide_window_keeps_z_and_budgets_for_it(monkeypatch, kind, fixed, wide):
+    """The float32 coupled apply is not a fixed map to double precision: its wide
+    window stores Z (HSX QHS 66,004 unknowns, |E_r| >= 15: 80x ||b|| in the first
+    Z-free wide cycle), so the budget holds two bases, not one."""
+    from types import SimpleNamespace
+    import jax.numpy as jnp
+    module, size = solve_modules, 4000
+    pair = (lambda x: x, lambda x: x)
+    calls = []
+    monkeypatch.setattr(module, '_pinned_matvecs', lambda op: pair)
+    monkeypatch.setattr(module, 'build_tier2_preconditioner', lambda *a, **k: pair)
+    def gcrot(mv, b, **kwargs):
+        calls.append(kwargs)
+        x = jnp.zeros_like(b)
+        return SimpleNamespace(x=x, recycle=(x[:, None], x[:, None]), iterations=1,
+                               converged=False, residual_norm=jnp.array(1.))
+    monkeypatch.setattr(module, 'gcrot', gcrot)
+    module._solve_tier2(
+        SimpleNamespace(total_size=size), jnp.ones((size, 1)), tol=1e-7, atol=0.,
+        x0=None, recycle=None, preconditioner=kind, drop_l_coupling_in_precond=False,
+        restart=30, recycle_dim=8, max_restarts=200, differentiable=False,
+        check_adjoint=False, auto_restart_recovery=True,
+        krylov_memory_budget_gb=400 * size * 8 / 2**30,
+    )
+    assert calls[-1]['m'] == wide
+    assert calls[-1]['fixed_precond'] is fixed
