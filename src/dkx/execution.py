@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 import hashlib
 import math
 import os
@@ -1038,10 +1039,10 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
     progress = emit if emit is not None else (print if case.run.progress else None)
     solved = None
     for index, surface in enumerate(surfaces):
-        if index:
-            # Each surface compiles its own executables (fresh closures per field);
-            # kept, they grow the host by GBs over a profile (W7-X, 5 surfaces).
-            jax.clear_caches()
+        if retained_operator is not None:
+            # The compiled batch solves are keyed on their surface's operator: drop them with it.
+            retained_operator.__dict__.pop("_batched_solve_fns", None)
+            gc.collect()
         if progress is not None:
             progress(f"surface {index + 1}/{len(surfaces)}: psi_N={surface:.6g}")
         ambipolar = case.run.workflow == "ambipolar_profile"

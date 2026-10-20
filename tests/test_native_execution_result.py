@@ -1079,3 +1079,27 @@ def test_native_prepared_scan_matches_fresh_cases_and_field_derivative(tmp_path,
         dkx.prepare_er_scan(case, surface_index=-1)
     with pytest.raises(TypeError, match='native Case'):
         dkx.prepare_er_scan('case.toml')
+
+
+def test_ambipolar_profile_surfaces_compile_a_bounded_number_of_executables() -> None:
+    """Host memory stays flat over a profile without clearing JAX caches: later surfaces add ~2 compiles, not ~30."""
+    import jax.monitoring as monitoring
+
+    seen: list[int] = []
+    count = [0]
+    monitoring.register_event_duration_secs_listener(
+        lambda event, _d, **_k: count.__setitem__(0, count[0] + (event == "/jax/core/compile/backend_compile_duration"))
+    )
+    base = _case()
+    n = (8e19, 7e19, 6e19, 5e19)
+    species = replace(base.species[0], density_m3=n, temperature_keV=(1.0, 0.9, 0.8, 0.7))
+    case = replace(
+        base,
+        run=replace(base.run, workflow="ambipolar_profile"),
+        geometry=replace(base.geometry, surfaces=(0.09, 0.16, 0.25, 0.36)),
+        species=(species,),
+        electric_field=replace(base.electric_field, mode="ambipolar", search_kV_m=(-20.0, 20.0), search_points=5, root_tolerance_kV_m=0.01),
+    )
+    dkx.run(case, emit=lambda _line: seen.append(count[0]))
+    per_surface = np.diff(seen[1:] + [count[0]])
+    assert per_surface.max() <= 8, per_surface

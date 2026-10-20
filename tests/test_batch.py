@@ -765,14 +765,13 @@ assert close(single.radial_current, multi.radial_current)
 for key in single.moments:
     assert close(single.moments[key], multi.moments[key]), key
 
-# Matched chunk width retains bitwise states/current on this fixture. Derived
-# moment reductions/divisions can be fused differently across shard boundaries:
-# x86 CPU measurements differ by <=8.7e-19 even with identical states.
+# Matched chunk width agrees to the last ulp (3.5e-18 on states of 1e-3): the single-device map is
+# one compiled per-operator executable, the sharded one another, and XLA fuses them differently.
 single2 = batch_mod.batched_er_scan(prob, er_values, max_batch=2)
 multi2 = batch_mod.batched_er_scan(prob, er_values, max_batch=2, devices="auto")
 assert multi2.chunk_size == 2 and multi2.n_chunks == 2
-assert eq(single2.states, multi2.states)
-assert eq(single2.radial_current, multi2.radial_current)
+assert close(single2.states, multi2.states)
+assert close(single2.radial_current, multi2.radial_current)
 for key in single2.moments:
     np.testing.assert_allclose(single2.moments[key], multi2.moments[key],
                                rtol=0.0, atol=1e-12, err_msg=key)
@@ -889,3 +888,36 @@ def test_two_forced_cpu_devices_identity(tmp_path: Path) -> None:
     )
     assert proc.returncode == 0, f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
     assert "MULTI_DEVICE_IDENTITY_OK" in proc.stdout
+
+
+def _fp_deck() -> str:
+    return _pas_deck(n_theta=5, n_zeta=5, n_xi=4).replace("collisionOperator = 1", "collisionOperator = 0")
+
+
+def test_repeated_er_scans_compile_once_and_free_with_the_operator(tmp_path: Path) -> None:
+    """Memory across surfaces stays bounded: no per-call executable, nothing outliving the operator."""
+    import gc
+    import weakref
+
+    import jax
+    import jax.monitoring as monitoring
+
+    jax.config.update("jax_enable_x64", True)
+    from dkx import batch as batch_mod
+    from dkx import er as er_mod
+
+    compiles = []
+    monitoring.register_event_duration_secs_listener(
+        lambda event, _d, **_k: compiles.append(event) if event == "/jax/core/compile/backend_compile_duration" else None
+    )
+    prob = er_mod.prepare(_write(tmp_path, _fp_deck()), er_bracket=(-5.0, 5.0))
+    batch_mod.batched_er_scan(prob, np.asarray([-1.0, 0.5]))
+    first = len(compiles)
+    for er in (-0.3, 0.2, 0.4):
+        batch_mod.batched_er_scan(prob, np.asarray([er, er + 0.1]))
+    assert len(compiles) == first  # same shape, same operator: nothing is compiled again
+
+    ref = weakref.ref(prob.operator)
+    del prob
+    gc.collect()
+    assert ref() is None

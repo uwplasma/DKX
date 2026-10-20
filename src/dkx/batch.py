@@ -46,7 +46,7 @@ import dataclasses
 import math
 import os
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 # The JAX backend is imported below; dkx/runtime.py explains why this is here.
 from .runtime import configure as _configure_runtime
@@ -486,6 +486,19 @@ def batched_solve(
 
     devs = _resolve_devices(devices, batch)
 
+    def per_operator(shape_key: Any, build: Callable) -> Callable:
+        """One compiled map per operator, kept on it and freed with it.
+
+        An eager ``lax.map`` over the fresh ``solve_one`` closure compiles, and the JAX caches keep,
+        a new executable on every call: a multi-surface ambipolar run grew by GBs.  Operators
+        traced by an outer ``jit``/``grad`` are left to that trace.
+        """
+        if any(isinstance(x, jax.core.Tracer) for x in jax.tree_util.tree_leaves((op, ntv_kernel_tz))):
+            return build()
+        key = (shape_key, solve, type(op).rhs, profile_moments_from_operator, solve_method, tol, differentiable,
+               memory_budget_gb, id(ntv_kernel_tz), retain_selected_tail, retain_full_state)
+        return op.__dict__.setdefault("_batched_solve_fns", {}).setdefault(key, (jax.jit(build()), ntv_kernel_tz))[0]
+
     def solve_one(leaves: Mapping[str, Any]):
         op_i = dataclasses.replace(op, **leaves)
         rhs = op_i.rhs()
@@ -545,9 +558,8 @@ def batched_solve(
             retain_legendre_tail=retain_selected_tail,
             retain_full_state=retain_full_state,
         )
-        states, moments, residual_norms, tail_bounds, relative, accepted = jax.lax.map(
-            solve_one, leaves_map, batch_size=chunk
-        )
+        run = per_operator(chunk, lambda: lambda lv: jax.lax.map(solve_one, lv, batch_size=chunk))
+        states, moments, residual_norms, tail_bounds, relative, accepted = run(leaves_map)
         n_chunks = -(-batch // chunk)
     else:
         from jax.sharding import Mesh, PartitionSpec as P  # noqa: PLC0415
@@ -580,12 +592,15 @@ def batched_solve(
             ),
             leaves_map,
         )
-        mapped = shard_map(
-            lambda local: jax.lax.map(solve_one, local, batch_size=chunk),
-            mesh=Mesh(devs, ("device",)),
-            in_specs=P("device"),
-            out_specs=P("device"),
-            **check,
+        mapped = per_operator(
+            (chunk, tuple(devs)),
+            lambda: shard_map(
+                lambda local: jax.lax.map(solve_one, local, batch_size=chunk),
+                mesh=Mesh(devs, ("device",)),
+                in_specs=P("device"),
+                out_specs=P("device"),
+                **check,
+            ),
         )
         states, moments, residual_norms, tail_bounds, relative, accepted = jax.tree_util.tree_map(
             lambda a: a[:batch], mapped(padded)
