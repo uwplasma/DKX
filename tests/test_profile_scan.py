@@ -86,7 +86,7 @@ def test_run_profile_scan_writes_one_deck_per_radius_and_collects_failures(tmp_p
     )
 
     assert result.radii == (0.2, 0.8) and result.n_points == 6
-    assert [c[1].name for c in calls] == ["rN0.2", "rN0.8"]
+    assert [c[1].name for c in calls] == ["rN_0.2", "rN_0.8"]
     assert calls[0][2] == pytest.approx(np.linspace(-2, 2.8, 3))  # Ermax = 2 + 4 rN at rN = 0.2
     nml = read_sfincs_input(calls[0][0])
     assert float(nml.group("geometryParameters")["RN_WISH"]) == 0.2
@@ -105,7 +105,7 @@ def test_run_profile_scan_writes_one_deck_per_radius_and_collects_failures(tmp_p
 def test_run_profile_scan_rejects_unsupported_decks(tmp_path: Path) -> None:
     (tmp_path / "profile_x").write_text(PROFILE)
     (tmp_path / "input.namelist").write_text(DECK.replace("scanType = 5", "scanType = 2"))
-    with pytest.raises(ValueError, match="scanType 5"):
+    with pytest.raises(ValueError, match="scanType 4 and 5"):
         run_profile_scan(input_namelist=tmp_path / "input.namelist", out_dir=tmp_path / "s")
     (tmp_path / "input.namelist").write_text(DECK.replace("dNHatdrHats", "dNHatdpsiNs"))
     with pytest.raises(ValueError, match="dNHatdrHats"):
@@ -140,8 +140,42 @@ def test_scan_profile_solves_a_real_radius_and_er_pair(tmp_path: Path) -> None:
     assert result.failures == () and not (tmp_path / "scan" / "scan_failures.json").exists()
     expected = {"Er-1": (-1.8250051766e-4, -1.5238129984e-9), "Er1": (-2.0125118528e-4, -9.8156412919e-9)}
     for name, (current, ion_flux) in expected.items():
-        with h5py.File(tmp_path / "scan" / "rN0.5" / name / "sfincsOutput.h5") as out:
+        with h5py.File(tmp_path / "scan" / "rN_0.5" / name / "sfincsOutput.h5") as out:
             first = lambda key: float(np.asarray(out[key]).ravel()[0])  # noqa: E731
             assert first("nHats") == pytest.approx(0.75)  # 1 - rN^2 from the profile file
             assert first("FSABjHat") == pytest.approx(current, rel=1e-6)
             assert first("particleFlux_vm_psiHat") == pytest.approx(ion_flux, rel=1e-6)
+
+
+def _write(d: Path, text: str) -> Path:
+    d.mkdir()
+    (d / "input.namelist").write_text(text)
+    return d / "input.namelist"
+
+
+def test_scan_types_1_3_4_write_upstream_folders(tmp_path: Path) -> None:
+    """Each type on the tiny deck: upstream folder names, solved outputs, legacy ``rN<r>`` folders reused."""
+    from dkx.workflows.profile_scan import scan
+
+    cases = {
+        "four": (DECK.replace("scanType = 5", "scanType = 4"), {"rN0.2", "rN_0.8"}),
+        "three": (
+            DECK.replace("!ss scanType = 5", "!ss scanType = 3\n!ss scanVariable = Nxi\n!ss scanVariableMin = 3\n"
+                         "!ss scanVariableMax = 5\n!ss scanVariableN = 2\n!ss scanVariableScale = linear"),
+            {"Nxi_3", "Nxi_5"},
+        ),
+        "one": (
+            DECK.replace("!ss scanType = 5", "!ss scanType = 1\n!ss NxiMinFactor = 1.5\n!ss NxiMaxFactor = 1.5\n!ss NxiNumRuns = 1"),
+            {"baseCase", "Nxi6"},
+        ),
+    }
+    for name, (deck, folders) in cases.items():
+        path = _write(tmp_path / name, deck)
+        (path.parent / "profile_x").write_text(PROFILE)
+        if name == "four":
+            (path.parent / "out" / "rN0.2").mkdir(parents=True)  # a scan written by an earlier release
+        result = scan(path, out_dir=path.parent / "out")
+        assert result.failures == ()
+        assert {p.parent.name for p in (path.parent / "out").glob("*/sfincsOutput.h5")} == folders
+    with pytest.raises(ValueError, match="scanType 3 needs"):
+        scan(_write(tmp_path / "bad", DECK.replace("scanType = 5", "scanType = 3")), out_dir=tmp_path / "x")
