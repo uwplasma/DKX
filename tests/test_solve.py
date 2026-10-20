@@ -987,6 +987,8 @@ def test_large_auto_fallback_requires_explicit_budgeted_mumps(
     )
     op = SimpleNamespace(total_size=9000, fp=None, sugama=None)
     monkeypatch.setattr(solve_module, "_solve_tier2", lambda *args, **kwargs: stalled)
+    # A host with no memory to spare: the SuperLU estimate does not fit.
+    monkeypatch.setattr(solve_module, "_available_memory_bytes", lambda: 1.0e6)
     direct_calls = []
 
     def direct(*args, **kwargs):
@@ -1009,6 +1011,27 @@ def test_large_auto_fallback_requires_explicit_budgeted_mumps(
         with pytest.raises(RuntimeError, match=message):
             solve_module._escalate_after_tier2_stall(op, rhs, **kwargs)
         assert direct_calls == []
+
+
+def test_large_auto_fallback_runs_superlu_when_its_estimate_fits(monkeypatch) -> None:
+    solve_module = solve_modules
+    rhs = jnp.ones((2, 1))
+    stalled = SolveResult(
+        x=jnp.zeros_like(rhs), method="gcrot", iterations=1,
+        residual_norms=jnp.asarray([1.0]), converged=False,
+        recycle=None, timings={},
+    )
+    op = SimpleNamespace(total_size=9000, fp=None, sugama=None)
+    monkeypatch.setattr(solve_module, "_solve_tier2", lambda *args, **kwargs: stalled)
+    monkeypatch.setattr(solve_module, "_available_memory_bytes", lambda: 1.0e12)
+    monkeypatch.setattr(solve_module, "_solve_tier3", lambda *args, **kwargs: "direct-result")
+    result = solve_module._escalate_after_tier2_stall(
+        op, rhs, stalled=stalled, tol=1e-10, atol=0.0, x0=None, recycle=None,
+        preconditioner="coarse", drop_l_coupling_in_precond=False,
+        restart=2, recycle_dim=1, max_restarts=1, check_adjoint=True,
+        adjoint_residual_factor=1.0, max_dense_size=8192,
+    )
+    assert result == "direct-result"
 
 
 @pytest.mark.parametrize("budget", [0.0, -1.0, np.nan, np.inf])

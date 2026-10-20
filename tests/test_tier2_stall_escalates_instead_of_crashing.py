@@ -72,13 +72,42 @@ def test_escalation_recovers_a_stalled_solve() -> None:
     assert float(np.asarray(result.residual_norms)[-1]) < 1e-8
 
 
-def test_a_deck_too_large_for_tier3_reports_the_real_problem() -> None:
+def test_sparse_direct_is_the_last_rung_when_its_estimated_peak_fits(monkeypatch) -> None:
+    """Above ``max_dense_size`` SuperLU used to be refused outright. At 66,004 unknowns it
+    solved the deck below in 47 minutes at 9.9 GB, so the last rung runs it whenever the
+    estimated peak fits the memory available now, and says why when it does not."""
+    from dkx.solve_direct import superlu_peak_bytes
+
+    op = _operator()
+    assert 11e9 < superlu_peak_bytes(66004) < 13e9  # the measured 9.9 GB with the safety factor
+    assert superlu_peak_bytes(4 * 66004) > 5.0 * superlu_peak_bytes(66004)
+    calls = []
+    real = solve_modules._solve_tier3
+
+    def spy(op, rhs2d, **kwargs):
+        calls.append(kwargs["max_dense_size"])
+        return real(op, rhs2d, **kwargs)
+
+    monkeypatch.setattr(solve_modules, "_solve_tier3", spy)
+    monkeypatch.setattr(solve_modules, "_solve_tier2", lambda op, rhs2d, **kwargs: _stalled(op))
+    monkeypatch.setattr(solve_modules, "_available_memory_bytes", lambda: 1.0e12)
+    result = _escalate(op, tol=1e-10, max_dense_size=1)
+    assert calls == [1] and result.converged
+    monkeypatch.setattr(solve_modules, "_available_memory_bytes", lambda: 1.0e3)
+    calls.clear()
+    with pytest.raises(RuntimeError, match="estimated peak"):
+        _escalate(op, tol=1e-10, max_dense_size=1)
+    assert calls == []
+
+
+def test_a_deck_too_large_for_tier3_reports_the_real_problem(monkeypatch) -> None:
     """The failure the user hit: n > max_dense_size, so sparse direct cannot help.
 
     The message must not send them to max_dense_size, and must name what was
     tried and what actually helps.
     """
     op = _operator()
+    monkeypatch.setattr(solve_modules, "_available_memory_bytes", lambda: 1.0e6)
     with pytest.raises(RuntimeError) as excinfo:
         # Force every rung to fail by demanding a tolerance nothing can meet,
         # with sparse direct excluded exactly as it is at 66004 DOFs.
@@ -215,9 +244,10 @@ def test_an_unusable_iterate_is_not_used_as_a_start(monkeypatch, flaw: str) -> N
     assert starts and starts[0] is None, starts[:1]
 
 
-def test_the_old_misleading_advice_is_gone() -> None:
+def test_the_old_misleading_advice_is_gone(monkeypatch) -> None:
     """`raise max_dense_size explicitly` at 66004 DOFs asks for 32.5 GB."""
     op = _operator()
+    monkeypatch.setattr(solve_modules, "_available_memory_bytes", lambda: 1.0e6)
     with pytest.raises(RuntimeError) as excinfo:
         _escalate(op, tol=1e-300, max_dense_size=1)
     assert "raise max_dense_size explicitly if you really want this" not in str(excinfo.value)
