@@ -31,7 +31,9 @@ CASES = [(1.0e19, 3.02253e5), (1.0e20, 2.33186e6)]
 
 
 @pytest.mark.parametrize(("density", "redl"), CASES)
-def test_full_fokker_planck_matches_redl_in_a_tokamak(density: float, redl: float) -> None:
+def test_full_fokker_planck_matches_redl_in_a_tokamak(
+    density: float, redl: float
+) -> None:
     n_hat = density / 1e20
     run = dkx.run(
         geometryScheme=1, epsilon_t=0.1, epsilon_h=0.0, epsilon_antisymm=0.0, iota=0.4, GHat=3.7,
