@@ -561,15 +561,15 @@ def run_er_scan(
         v, i = payload
         return _run_one(v, i)
 
-    def _record_failure(run_dir: Path, reason: str, completed: int) -> None:
-        failures.append((float(run_dir.name.removeprefix(var)), reason))
+    def _record_failure(v: float, run_dir: Path, reason: str, completed: int) -> None:
+        failures.append((float(v), reason))
         if emit is not None:
             emit(0, f"scan-er: progress {completed}/{len(vals)} {run_dir.name} FAILED: {reason}")
 
     if jobs_val > 1 and len(vals) > 1:
         with concurrent.futures.ProcessPoolExecutor(max_workers=jobs_val) as pool:
             payloads = [(v, i) for i, v in enumerate(vals, start=1)]
-            futures = [pool.submit(_run_one_parallel, payload) for payload in payloads]
+            futures = {pool.submit(_run_one_parallel, payload): payload[0] for payload in payloads}
             results: list[tuple[Path, Path, float, bool]] = []
             completed = 0
             for fut in concurrent.futures.as_completed(futures):
@@ -577,7 +577,7 @@ def run_er_scan(
                 results.append((run_dir, out_path, point_elapsed_s, skipped_existing))
                 completed += 1
                 if error is not None:
-                    _record_failure(run_dir, error, completed)
+                    _record_failure(futures[fut], run_dir, error, completed)
                     continue
                 if not skipped_existing:
                     solved_elapsed_s.append(float(point_elapsed_s))
@@ -602,7 +602,7 @@ def run_er_scan(
             outputs.append(out_path)
             completed += 1
             if error is not None:
-                _record_failure(run_dir, error, completed)
+                _record_failure(v, run_dir, error, completed)
                 continue
             if not skipped_existing:
                 solved_elapsed_s.append(float(point_elapsed_s))

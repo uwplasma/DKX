@@ -436,6 +436,21 @@ def test_run_er_scan_records_failed_points_and_continues(tmp_path: Path, monkeyp
     assert not (tmp_path / "scan" / "scan_failures.json").exists()
 
 
+def test_failed_point_records_the_exact_er_not_the_directory_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    template = _minimal_scan_input(tmp_path / "input.namelist")
+    exact = 1.23456789012345
+    monkeypatch.setattr(scans, "localize_equilibrium_file_in_place", lambda **_kwargs: None)
+
+    def _fail(*_args, **_kwargs) -> None:
+        raise RuntimeError("stalled")
+
+    monkeypatch.setattr(scans, "run_from_namelist", _fail)
+    result = scans.run_er_scan(input_namelist=template, out_dir=tmp_path / "scan", values=[exact])
+
+    assert result.failures == ((exact, "RuntimeError: stalled"),)
+    assert json.loads((tmp_path / "scan" / "scan_failures.json").read_text())[0]["value"] == exact
+
+
 def test_run_er_scan_retries_unconverged_batch_points_one_at_a_time(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
