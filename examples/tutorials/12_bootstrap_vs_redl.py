@@ -18,8 +18,7 @@ tests/ref/boozer_route_sign_vmex_seed_nfp2.json.  That equilibrium is an
 unoptimized seed, *not* quasisymmetric, so Redl is an extrapolation here and
 the two need not agree: read the ratio as how far the fit is from the kinetic
 answer on this surface.  PAS lacks momentum restoration, so only the
-Fokker-Planck value is the kinetic reference; rerun at higher resolution to
-see how much of the gap is discretization: the default grid gives 0.64, and
+Fokker-Planck value is the kinetic reference; the default grid gives 0.64 and
 29x29 angles with Nxi=48, Nx=6 give 0.57.
 
 Run:              python examples/tutorials/12_bootstrap_vs_redl.py
