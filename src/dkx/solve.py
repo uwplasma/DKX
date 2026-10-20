@@ -458,6 +458,7 @@ def solve(
     tier1_memory_budget_gb: float | None = None,
     direct_backend: str | None = None,
     direct_memory_budget_gb: float | None = None,
+    direct_out_of_core: bool = False,
     tier1_keep_lowest: int = _TIER1_KEEP_LOWEST_DEFAULT,
     subsystem_batch: int | str = "auto",
     tier1_adjoint_window: int | None = None,
@@ -629,6 +630,9 @@ def solve(
             process high-water fallback), projected COO, RHS-shaped buffers and
             runtime headroom, intersects that remainder with current host
             availability, and passes only the result to MUMPS. Ignored by SuperLU.
+        direct_out_of_core: MUMPS only: keep the factors on disk (see
+            :class:`dkx.api.SolverOptions`); admission uses MUMPS's out-of-core
+            memory estimate.
         tier1_keep_lowest: number of Legendre blocks the truncated structured
             direct kernel computes exactly (default 3 — the RHSMode 1/2/3 drives and
             output moments live on ``l <= 2``).
@@ -948,6 +952,7 @@ def solve(
                 max_dense_size=max_dense_size,
                 direct_backend=direct_backend,
                 direct_memory_budget_gb=direct_memory_budget_gb,
+                direct_out_of_core=direct_out_of_core,
                 auto_restart=auto_restart,
                 krylov_memory_budget_gb=krylov_memory_budget_gb,
             )
@@ -960,6 +965,7 @@ def solve(
             op, rhs2d, tol=tol, atol=atol, max_dense_size=max_dense_size,
             direct_backend=direct_backend,
             direct_memory_budget_gb=direct_memory_budget_gb,
+            direct_out_of_core=direct_out_of_core,
             factors=factors, transpose=transpose, emit=emit,
         )
 

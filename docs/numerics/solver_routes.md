@@ -399,14 +399,36 @@ grows as the 2.8 power of the unknowns in time and the 1.6 power in memory, so
 the route reaches a few hundred thousand unknowns on a 62 GiB host.
 
 **MUMPS backend.** `SolverOptions(method="direct", direct_backend="mumps", memory_budget_gb=...)`
-selects MUMPS. It needs SOLVAX 0.25.0 or later and PyMUMPS; with SOLVAX 0.24
-it raises an `ImportError` naming what is missing. The budget is checked after
+selects MUMPS. It needs SOLVAX 0.25.0 or later and PyMUMPS (or, with the
+`out_of_core` option, a SOLVAX release that has it and the `python-mumps` wheels;
+under NumPy 2 set `SOLVAX_MUMPS_PYTHON` to the interpreter that has them); with
+SOLVAX 0.24 it raises an `ImportError` naming what is missing. The budget is checked after
 assembly and before factorization against measured process memory, the
 assembled storage, the right-hand-side buffers and the host's available memory,
 and again before stored factors serve a wider right-hand side. The admission
 reserves seven full right-hand-side buffers; it is a conservative estimate, not
 a hard RSS bound. A MUMPS request the budget refuses fails loudly and never
 falls back to SuperLU.
+
+MUMPS is far cheaper than SuperLU on this matrix (HSX QHS full Fokker–Planck deck,
+$E_r$ terms on, equilibrated, one process on 8 pinned cores of a shared host):
+
+| unknowns | MUMPS in core | MUMPS out of core | SuperLU |
+|---:|---|---|---|
+| 33,004 | 3.7 s, 0.90 GB | 4.5 s, 0.41 GB | 111 s, 5.7 GB |
+| 46,204 | 7.4 s, 1.7 GB | 11.9 s, 0.73 GB | 375 s, 7.8 GB |
+| 66,004 | 59 s, 3.8 GB | 66 s, 1.45 GB | 47 min, 9.9 GB |
+| 85,804 | 139 s, 6.95 GB | 132 s, 2.8 GB | 39 min, 14.4 GB |
+
+`SolverOptions(direct_out_of_core=True)` keeps the factors on disk (MUMPS
+`ICNTL(22)`), in `$MUMPS_OOC_TMPDIR` (default `/tmp`); admission then uses MUMPS's
+out-of-core estimate. The analysis phase alone (3 to 50 s, under 2 GB) predicts the
+in-core peak to 5%, so it is the way to size a deck before factoring it: the
+633,604-unknown gap deck needs an estimated 94 GB in core (86 GB with PORD ordering)
+or 13 GB of memory plus about 77 GB of disk out of core, and 1.5e14 flops, about an
+hour at the 8-core rate of the 85,804-unknown run. Block low-rank compression
+(`ICNTL(35)`) did not shrink the factors at 66,004 unknowns (406 million entries
+against 387 million) and is not exposed.
 
 **Differentiation.** The route runs on the host and refuses `jax.grad` and
 tracing. It has an explicit adjoint instead: `solve(..., factors=..., transpose=True)`

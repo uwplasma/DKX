@@ -72,6 +72,9 @@ class SolverOptions:
         direct_backend: optional sparse-direct factor backend. ``None`` keeps
             released SOLVAX 0.24's SuperLU behavior; ``"mumps"`` explicitly
             requests the optional SOLVAX MUMPS adapter.
+        direct_out_of_core: with ``direct_backend="mumps"``, keep the factors on
+            disk (``$MUMPS_OOC_TMPDIR``, default ``/tmp``): 62% less resident
+            memory at 66,004 unknowns, at the disk space of the factors.
         cores: host CPU threadpool width.  XLA sizes its threadpool once,
             before the first JAX device use, so a value stored here CANNOT
             change a process whose JAX backend is already initialized; it is
@@ -101,6 +104,7 @@ class SolverOptions:
     cores: int | None = None
     keep_lowest: int = 3
     direct_backend: str | None = None
+    direct_out_of_core: bool = False
     krylov_memory_budget_gb: float | None = None
 
     def solve_kwargs(self) -> dict[str, Any]:
@@ -125,6 +129,7 @@ class SolverOptions:
             "direct_backend": (
                 None if self.direct_backend is None else str(self.direct_backend)
             ),
+            "direct_out_of_core": bool(self.direct_out_of_core),
             "direct_memory_budget_gb": (
                 None if self.memory_budget_gb is None else float(self.memory_budget_gb)
             ),
