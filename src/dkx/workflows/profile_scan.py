@@ -311,8 +311,11 @@ def run_variable_scan(txt: str, ss: dict) -> list[tuple[str, str]]:
     return [(f"{name}_{v:.4g}", _set_in_deck(txt, name, v)) for v in values]
 
 
-def run_deck_scan(namelist: Path, out_dir: Path, kind: int, *, skip_existing: bool = False, solve_method: str = "auto", emit=None):
-    """Convergence (1) and generic-variable (3) scans of one deck."""
+def run_deck_scan(
+    namelist: Path, out_dir: Path, kind: int, *, skip_existing: bool = False, solve_method: str = "auto", jobs: int | None = None, emit=None
+):
+    """Convergence (1) and generic-variable (3) scans of one deck; the points run one after another (``jobs`` is accepted for the CLI)."""
+    del jobs
     from ..namelist import read_sfincs_input  # noqa: PLC0415
 
     txt = Path(namelist).read_text()
