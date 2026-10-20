@@ -248,7 +248,7 @@
       },
       "inputs": {
         "dkx_deck": "validation/inputs/w7x_eim_mdke.input.namelist",
-        "dkx_deck_sha256": "6d1287bc175f5c9b144b48a29c7d0b6b8670f0f334a3f3f73901e8a840a0eacd",
+        "dkx_deck_sha256": "d1de511428f3c37ad69178b52dc9c7cb827303c10d7c5fda17bce086a339848f",
         "external_booz_xform": "YANCC/tests/data/boozmn_wout_w7x_eim.nc",
         "external_booz_xform_sha256": "4b1b08d71fc1a40b3b7116f1779e42bfbeca990e0d0687d9ac0f983a6daacff6",
         "external_reference_table": "YANCC/tests/data/monkes_Monoenergetic_Database_w7x_eim.dat",
@@ -261,10 +261,11 @@
         "iota": -0.8620511711942287,
         "B0_T": 2.4312718128250173,
         "raw_B0_T": 2.4312718128250173,
-        "local_r_m": 0.2292777530642099,
+        "local_r_m": 0.22334220214590597,
         "nu_d_hat_x0": 0.8360276804879032,
         "nu_prime": 0.11098461238458954,
-        "cross_orientation": -1.0
+        "cross_orientation": -1.0,
+        "psi_p_reference": 0.5223329762463589
       },
       "reference": {
         "code": "MONKES",
@@ -278,9 +279,9 @@
         },
         "raw_output_sha256": "8a2c3f3d3b5a3f22954de8e25de5e030ef6a977987631ef9ab867f994ef487f0",
         "beidler": {
-          "D11_star": 0.29712155860372297,
-          "D31_star": 0.01381468151303156,
-          "D13_star": -0.013814681513019515,
+          "D11_star": 0.2749289264346969,
+          "D31_star": 0.013115608705983035,
+          "D13_star": -0.0131156087059716,
           "D33_star": 0.9124681813879468
         },
         "measurement": {
@@ -292,28 +293,26 @@
       },
       "dkx": {
         "solver_relative_tolerance": 1e-10,
-        "solver_route": "memory_bounded_truncated_block_thomas_keep_lowest_3",
+        "solver_route": "structured_direct_full_factorization_spectral_angular_derivatives",
         "beidler": {
-          "D11_star": 0.2807325210608256,
-          "D31_star": 0.013146533880590493,
-          "D13_star": -0.013125956753651214,
-          "D33_star": 0.9118751448543252
+          "D11_star": 0.2798535056308425,
+          "D31_star": 0.013317100068759932,
+          "D13_star": -0.013317100068752183,
+          "D33_star": 0.9118761000708375
         },
-        "output_sha256": "a22f9bb347433370b8b68a922d0d93bed315238eda0c64f584e967a64e299a31",
+        "output_sha256": "afb539e0d47b892033beecc6fdaea2fa37b3f787855d8f36aa3bddab37403701",
         "measurement": {
-          "cold_wall_seconds": 13.326047333073802,
-          "warm_wall_seconds": 9.87487516598776,
-          "process_peak_rss_bytes": 1027932160,
-          "timing_scope": "matched_same_process_cold_then_warm_with_initially_empty_external_compilation_cache"
+          "cold_wall_seconds": 57.29,
+          "timing_scope": "one cold process, 4 pinned cores of a shared host (load about 20); provenance only"
         }
       },
       "comparison": {
-        "relative_tolerance": 0.06,
+        "relative_tolerance": 0.03,
         "relative_error": {
-          "D11_star": 0.05515936850868428,
-          "D31_star": 0.04836504061355272,
-          "D13_star": 0.04985455210959577,
-          "D33_star": 0.0006499257132665994
+          "D11_star": 0.017912190106759485,
+          "D31_star": 0.01536271531835051,
+          "D13_star": 0.015362715318644965,
+          "D33_star": 0.0006488788641470172
         },
         "pass": true
       }

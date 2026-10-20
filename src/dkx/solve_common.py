@@ -338,7 +338,11 @@ def _pinned_matvecs(
     apply_t_raw = _transposed_apply(op)
     mask = op.active_dof_mask()
     if mask is None:
-        return op.apply, apply_t_raw
+
+        def matvec_plain(v: jnp.ndarray) -> jnp.ndarray:
+            return op.apply(v)
+
+        return matvec_plain, apply_t_raw
 
     def matvec(v: jnp.ndarray) -> jnp.ndarray:
         return op.apply(mask * v) + (1.0 - mask) * v

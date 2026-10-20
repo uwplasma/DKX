@@ -1559,6 +1559,7 @@ def test_cross_code_rung_recomputes_every_normalization_and_gate() -> None:
             r_hat=norm["local_r_m"],
             raw_b0_over_bbar=norm["raw_B0_T"],
             cross_orientation=norm["cross_orientation"],
+            psi_p=norm.get("psi_p_reference"),
             **d33_kwargs,
         )
         for key, expected in case["reference"]["beidler"].items():

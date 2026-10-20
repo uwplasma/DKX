@@ -77,13 +77,20 @@ def _inverses(op: KineticOperator, monkeypatch, **patches):
         captured.setdefault("a_inv", a_inv)
         return real_schur(a_inv, *args, **kwargs)
 
-    def lazy(op_, a_inv_t, *args, **kwargs):
+    real_border = cp._bordered_precond
+
+    def border(apply_fn, a_inv, *args, **kwargs):
+        captured.setdefault("a_inv", a_inv)
+        return real_border(apply_fn, a_inv, *args, **kwargs)
+
+    def lazy(op_, build, a_inv_t, *args, **kwargs):
         captured["a_inv_t"] = a_inv_t
-        return real_lazy(op_, a_inv_t, *args, **kwargs)
+        return real_lazy(op_, build, a_inv_t, *args, **kwargs)
 
     with monkeypatch.context() as patch:
         patch.setattr(cp, "schur_projected_precond", schur)
         patch.setattr(cp, "_lazy_projected_precond", lazy)
+        patch.setattr(cp, "_bordered_precond", border)
         for name, value in patches.items():
             patch.setattr(cp, name, value)
         with warnings.catch_warnings():

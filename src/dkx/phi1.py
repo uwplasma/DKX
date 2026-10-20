@@ -345,9 +345,12 @@ def _newton_solve_phi1(
             break
 
         op_k = replace(op, phi1_lin_state=x)
-        res: SolveResult = solve(
-            op_k,
-            -r,
+        # The coarse factors of the first Jacobian precondition the later ones: the
+        # Newton steps change Phi1 by a small fraction of the operator. A reused set
+        # that does not converge is replaced by a fresh one for that step.
+        frozen = precond if use_preconditioner and k > 0 else None
+        res = None  # the previous step's solve is not held while the next one runs
+        solve_kw = dict(
             method=solve_method,
             tol=float(gmres_tol),
             use_preconditioner=use_preconditioner,
@@ -356,6 +359,10 @@ def _newton_solve_phi1(
             max_restarts=int(gmres_max_restarts),
             recycle=recycle if warm_start else None,
         )
+        res: SolveResult = solve(op_k, -r, precond=frozen, **solve_kw)
+        if frozen is not None and not res.converged:
+            precond = None
+            res = solve(op_k, -r, **solve_kw)
         recycle = res.recycle
         precond = res.precond if res.precond is not None else precond
         if res.iterations is None or inner_total is None:
