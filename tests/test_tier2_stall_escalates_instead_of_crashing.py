@@ -79,8 +79,10 @@ def test_sparse_direct_is_the_last_rung_when_its_estimated_peak_fits(monkeypatch
     from dkx.solve_direct import superlu_peak_bytes
 
     op = _operator()
-    assert 11e9 < superlu_peak_bytes(66004) < 13e9  # the measured 9.9 GB with the safety factor
-    assert superlu_peak_bytes(4 * 66004) > 5.0 * superlu_peak_bytes(66004)
+    measured = {19804: 3.64, 33004: 5.70, 39604: 6.74, 46204: 7.77, 66004: 9.9, 85804: 14.36}
+    for n, gb in measured.items():  # recorded runs; the model carries a 1.25 safety factor
+        assert gb * 1e9 < superlu_peak_bytes(n) < 1.5 * 1.25 * gb * 1e9
+    assert superlu_peak_bytes(4 * 66004) > 3.0 * superlu_peak_bytes(66004)
     calls = []
     real = solve_modules._solve_tier3
 
