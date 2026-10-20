@@ -1,6 +1,15 @@
 # Changelog
 
-## Unreleased
+## v2.10.0 — 2026-10-20
+
+Production scans that finish: a robust ambipolar root search, radial profiles
+that bracket only certified points and continue between radii, scans that keep
+going past failed points, and `dkx sfincs scan-profile` for radius x Er scans
+from a SFINCS namelist and profile file. Large-|E_r| Fokker-Planck points that
+stalled for 20 minutes now solve in about a minute. Memory: monoenergetic runs
+use 1.3 GB instead of 24 GB, and multi-surface runs stay flat without clearing
+the compile cache. New cross-code validation against SFINCS, an 8-page guided
+tutorial, and a faster CI.
 
 - Fix: host memory grew with every surface of an ambipolar profile because each batched solve (`batched_solve`, one per E_r evaluation) ran an eager `lax.map` over a fresh closure: one executable compiled and kept per call, 11 per surface. The compiled map is now cached on the operator it closes over and freed with it, and `dkx run` no longer calls `jax.clear_caches()` between surfaces. W7-X wout, 5 surfaces, 15x15x12x4 FP ambipolar, 8 pinned cores of the shared office host (load 10-13), cold/warm compile cache: RSS after the last surface 1.59/1.40 GB with the clear on main, 4.5/4.4 GB without it, 0.80/0.61 GB now; wall time 198/201 s on main, 170/113 s now; backend compiles 481 (main), 82 (now). Plain profile, same case: 33.6/24.3 s to 21.0/12.4 s, 461 to 97 compiles. Single-device and sharded maps now agree to the last ulp (3.5e-18 on states of 1e-3) rather than bitwise.
 - Fix: `scan_failures.json` (and the failed-point list of `scan-er` and `scan-profile`) recorded the failed E_r rounded to 4 significant figures, read back from the point's directory name. It now records the float that was solved.
