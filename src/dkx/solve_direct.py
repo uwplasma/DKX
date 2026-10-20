@@ -52,19 +52,24 @@ from dkx.structured_direct import (  # noqa: E402
 # =============================================================================
 
 
-# Peak resident memory of the SuperLU route on the HSX QHS full-FP deck with the E_r terms
-# (66,004 unknowns, 2.2e6 assembled nonzeros): 9.9 GB, 47 minutes on a loaded 8-core
-# host. The growth exponent is the 1.6 of docs/numerics/solver_routes.md.
+# Peak resident memory of the SuperLU route (whole process) on the HSX QHS full-FP deck
+# (Nxi = 20, Ntheta x Nzeta = 11 x 15, two species, Nx = 3 to 13, E_r terms on), fitted as
+# base + coefficient * (n / 66,004)^exponent to six runs on 4 laptop threads:
+# n = 19,804 / 33,004 / 46,204 / 85,804 -> 3.6 / 5.7 / 7.8 / 14.4 GB (31 / 111 / 375 / 2,341 s),
+# Nxi = 40, Nx = 3 (39,604) -> 6.7 GB, and 66,004 -> 9.9 GB (47 min, loaded 8-core host).
+# The fit is within 8% of every point; the largest measured size is 85,804, so beyond it
+# the exponent is an extrapolation and the safety factor carries it.
 _SUPERLU_REFERENCE_SIZE = 66004
-_SUPERLU_REFERENCE_BYTES = 9.9e9
-_SUPERLU_MEMORY_EXPONENT = 1.6
+_SUPERLU_BASE_BYTES = 2.04e9
+_SUPERLU_FACTOR_BYTES = 8.59e9
+_SUPERLU_MEMORY_EXPONENT = 1.28
 _SUPERLU_SAFETY = 1.25
 
 
 def superlu_peak_bytes(total_size: int) -> float:
     """Estimated peak RSS of the assembled SuperLU route at ``total_size`` unknowns."""
     scale = (float(total_size) / _SUPERLU_REFERENCE_SIZE) ** _SUPERLU_MEMORY_EXPONENT
-    return _SUPERLU_SAFETY * _SUPERLU_REFERENCE_BYTES * scale
+    return _SUPERLU_SAFETY * (_SUPERLU_BASE_BYTES + _SUPERLU_FACTOR_BYTES * scale)
 
 
 def superlu_fits(total_size: int) -> bool:
