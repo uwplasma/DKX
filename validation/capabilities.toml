@@ -56,7 +56,7 @@ name = "Monoenergetic coefficients and databases"
 status = "stable_candidate"
 owners = ["src/dkx/monoenergetic.py", "src/dkx/run.py"]
 evidence = ["tests/test_monoenergetic_database.py", "tests/test_paper_benchmark_monoenergetic.py"]
-gaps = ["broaden matched YANCC/MONKES evidence beyond the named cases", "bounds-checked MONKES reader and DKES comparison"]
+gaps = ["W7-X EIM D11* differs 10% to 12% between converged DKX, YANCC and MONKES (DSHAPE agrees to 0.09%): find the 3-D cause", "NCSX converged ladder", "bounds-checked MONKES reader and DKES comparison"]
 
 [[capability]]
 id = "transport_matrix"

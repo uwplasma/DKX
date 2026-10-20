@@ -1322,3 +1322,12 @@ Consequences for #333:
 
 Gyrokinetic or finite-`k_perp` Coulomb collisions (Li and Ernst, PRL 106, 195002 (2011)) are not in scope for DKX's drift-kinetic equation; they enter only if DKX couples to a gyrokinetic solver.
 
+
+## 18. Cross-code validation gaps, 2026-10-20 status
+
+Recorded in `validation/cross_code_gaps_v1.json` (gap g and `monoenergetic_ladder`).
+
+- **Phi1 beyond geometryScheme 4.** W7-X `.bc`, rN 0.5, Er = -2, H, e, C6+, full trajectories: DKX against SFINCS v3 agrees to 1.2e-7 (fluxes) and 1.8e-5 (flows) on four grids. DKX peaks at 5 to 11 GB where SFINCS needs about 1 GB, and 13x45x48x5 exceeds 14 GB in DKX (5.9 GB in SFINCS). Open: a Phi1 preconditioner that does not factor dense per-L blocks, then the 13x45x48x5 rung and an HSX deck.
+- **RHSMode 4/5.** SFINCS runs them (the `adjointOptions` namelist must follow `&export_f`), but its adjoint output differs from its own finite-difference check by 0.05% to 66% on W7-X at 9x25x24x4. No Fortran oracle exists; DKX's autodiff replaces the mode. Open: a DKX derivative against central differences of DKX itself over the Boozer B modes, iota, GHat and IHat.
+- **YANCC and MONKES.** Converged ladders do not support tightening the 6% gate: W7-X EIM D11* is 0.2656 (DKX), 0.2947 (YANCC), 0.3024 (MONKES), each stable to 2e-4; D31* ratios to DKX are the square root of the D11* ratios. DSHAPE agrees to 0.09%. The geometry is identical (|B| to 1e-15) and flipping the handedness moves D33* away from both codes, so the 3-D discrepancy is open; the sealed 5.5% was finite-difference angles. Open: root cause, NCSX ladder.
+- **Sugama.** SFINCS has none; the external reference is the Spitzer-Harm conductivity, where the improved model is 22.6% (Z = 1) to 5.4% (Z = 16) low and the full FP within 0.4%. Open: whether the Z = 1 deficit is the model or the implementation (check against Sugama et al. 2019 and Frei et al. 2022).

@@ -50,6 +50,22 @@ def audit(artifact_path: Path) -> dict[str, Any]:
         table[f"ambipolar_rN{row['rN']}"] = shift
         if not shift <= gate["ambipolar_root_relative"]:
             errors.append(f"ambipolar rN={row['rN']}: root shift {shift:.2e}")
+    ladder = payload["monoenergetic_ladder"]
+    by_code: dict[str, list[dict[str, Any]]] = {}
+    for row in ladder["rows"]:
+        by_code.setdefault(row["code"], []).append(row)
+    finest: dict[str, float] = {}
+    for code, rows in by_code.items():
+        rows.sort(key=lambda r: np.prod(r["Ntheta_Nzeta_Nxi"]))
+        finest[code] = rows[-1]["D11_star"]
+        move = abs(rows[-1]["D11_star"] - rows[-2]["D11_star"]) / rows[-1]["D11_star"]
+        table[f"ladder_{code}_D11_movement"] = move
+        if not move <= ladder["convergence_gate"]:
+            errors.append(f"monoenergetic ladder {code}: D11* moves {move:.2e} between the two finest rungs")
+    # Reported, not gated: the converged codes disagree (see the artifact's findings).
+    table["ladder_D11_spread_to_dkx"] = max(abs(v - finest["dkx"]) / v for k, v in finest.items() if k != "dkx")
+    dshape = {r["code"]: r["D11_star"] for r in ladder["dshape_d11"]["rows"]}
+    table["ladder_dshape_D11_dkx_vs_yancc"] = abs(dshape["dkx"] - dshape["yancc"]) / dshape["yancc"]
     if len(payload["ambipolar"]) < 2:
         errors.append("ambipolar needs at least two radii")
     return {"pass": not errors, "errors": errors, "errors_by_cell": table}

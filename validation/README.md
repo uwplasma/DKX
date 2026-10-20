@@ -51,7 +51,7 @@ longer write-ups are in `docs/validation_matrix.rst`.
 | `independent_cross_code` | accepted_limited | Monoenergetic `D11*`, `D31*`, `D13*`, `D33*` on DSHAPE/NCSX (YANCC) and W7-X EIM (MONKES) within 6%; PAS + DKES only. |
 | `full_kinetic_sfincs` | accepted | Full linearized FP, tokamak, `Er = 0`: max scaled DKX/SFINCS error `2.69e-10`, rung movement ≤ `0.280%`. |
 | `full_kinetic_sfincs_finite_er` | accepted | Same at normalized `Er = -30`: max error `1.88e-9`, movement ≤ `0.326%`. |
-| `cross_code_gaps` | accepted_limited | Production-resolution two-species FP vs SFINCS: W7-X ambipolar roots, QA/QH, `.bc`, Er sweep, RHSMode 2/3; fluxes within 2.7e-4. |
+| `cross_code_gaps` | accepted_limited | Production-resolution two-species FP vs SFINCS: W7-X ambipolar roots, QA/QH, `.bc`, Er sweep, RHSMode 2/3, Phi1 with a C6+ impurity at Er = -2; fluxes within 2.7e-4. Also the converged W7-X EIM monoenergetic ladder (D11* differs between codes). |
 | `full_kinetic_sfincs_stellarator` | accepted | W7-X SC1 at `rN = 0.5`, `Er = 0`: max error `1.37e-8`, movement ≤ `0.444%`. |
 | `native_physical_flux_sfincs` | accepted | Corrected native `psiHat → rHat` flux conversion; W7-X at 8.55 kV/m, fluxes within 0.32%, current within 0.024%. |
 | `w7x_fixed_field_resolution_referee` | accepted_limited | Fixed-field fluxes admitted at theta15/zeta85/pitch150/speed8 (DKX vs SFINCS pitch-150 within 0.269%); parallel current still theta-sensitive. |

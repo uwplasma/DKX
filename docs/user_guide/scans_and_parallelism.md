@@ -218,9 +218,9 @@ one kinetic solve at a time. Its defaults, and why:
 A deck that needs the full trajectories (`includeXDotTerm`,
 `includeElectricFieldTermInXiDot`) has no native `[scan]` equivalent: the native
 route runs DKES trajectories only. `dkx scan input.namelist` covers it and picks the
-scan from the deck's `!ss scanType` (2: $E_r$, 5: radius × $E_r$; Python: `dkx.scan`).
-Scans 1 (convergence) and 3 (generic variable) are the `sfincsScan` scripts of
-{doc}`sfincs_workflow`.
+scan from the deck's `!ss scanType` (1: convergence, 2: $E_r$, 3: generic variable,
+4: radius, 5: radius × $E_r$; Python: `dkx.scan`; the key names are in
+{doc}`sfincs_workflow`).
 
 An $E_r$ scan solves one deck at several $E_r$ values and writes
 `Er<value>/sfincsOutput.h5` per point. A point that fails is reported and the
@@ -230,7 +230,7 @@ points. Scans whose shared batch would be a traced GMRES (full Fokker–Planck
 with the $E_r$ terms) are solved point by point, so each point gets the
 preconditioner escalation of the single solve.
 
-`scanType = 5` replaces upstream `sfincsScan` with the same setting. It reads the
+`scanType = 4` (one solve per radius at the deck's own $E_r$) and `scanType = 5` replace upstream `sfincsScan` with the same setting. It reads the
 deck's `!ss` lines and a profile file, and runs the $E_r$ scan at every radius:
 
 ```console
@@ -246,7 +246,7 @@ dkx scan input.namelist --profiles profile_HH --out-dir scan
 - The deck must use `inputRadialCoordinate = 3`, one ion and one electron
   species, and species gradients given as `dNHatdrHats`, `dTHatdrHats` with
   `Er`. Those keys, `rN_wish`, `nHats` and `THats` are overwritten per radius.
-- Output: `scan/rN<radius>/Er<value>/sfincsOutput.h5` and, if any point failed,
+- Output: `scan/rN_<radius>/Er<value>/sfincsOutput.h5` (`scan/rN_<radius>/sfincsOutput.h5` for type 4) and, if any point failed,
   `scan/scan_failures.json` (`rN`, `Er`, `reason`).
 - A malformed `!ss` line stops the run before any solve and names the line, for
   example `input.namelist:11: cannot read a number from '!ss ErMax = 20:.0d+0'`.

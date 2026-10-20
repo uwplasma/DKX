@@ -100,12 +100,27 @@ difference, scaled by the largest component:
 | W7-X Boozer `.bc` (geometryScheme 11) | 2.2e-7 | 1.4e-3 | 5e-4 / 2.5e-3 |
 | $E_r$ sweep DKES/partial/full, $E_r$ = −5, 0, +5 | ≤ 1.3e-6 | ≤ 1.6e-3 | 5e-4 / 2.5e-3 |
 | RHSMode 2 / RHSMode 3 transport matrix | 8.0e-10 / 2.3e-10 | — | 1e-9 |
+| W7-X `.bc` $\Phi_1$ in the kinetic equation, $E_r = -2$, H, e, C$^{6+}$, four grids up to 9x35x32x4 | ≤ 1.2e-7 | ≤ 1.8e-5 | 5e-4 / 2.5e-3 |
 | Improved Sugama vs SFINCS FP (diagnostic) | 4.3e-3 | 7.7e-2 | none |
 
-SFINCS has no Sugama operator, so the last row compares models, not codes.
+SFINCS has no Sugama operator, so that row compares models, not codes. The external
+reference for the model is the Spitzer–Harm conductivity (`tests/test_physics_limits.py`):
+the improved Sugama operator gives $\gamma_E$ 0.450, 0.553, 0.672, 0.873 against the
+tabulated 0.5816, 0.6833, 0.7849, 0.9225 for $Z$ = 1, 2, 4, 16 (22.6% to 5.4% low),
+where the full FP operator is within 0.4%. The $\Phi_1$ cells peak at 5 to 11 GB in DKX
+against about 1 GB in SFINCS, and 13x45x48x5 exceeds 14 GB in DKX (SFINCS: 5.9 GB), so
+the $\Phi_1$ ladder stops at 9x35x32x4; the $\Phi_1$ rms moves 4% across it.
 SFINCS RHSMode 3 on W7-X returns NaN at 11x21x30 and flips the sign of $L_{12}$
 at Nzeta 85 with KSP converged; DKX moves by 2e-3 across the same grids. The
-monoenergetic YANCC/MONKES gate stays at 6%: its largest recorded error is 5.5%.
+monoenergetic YANCC/MONKES gate stays at 6%, and the converged ladders do not meet it.
+At W7-X EIM ($s$ = 0.2, $\nu/v$ = 0.016 m$^{-1}$, same $|B|$ to 1e-15) DKX, YANCC and
+MONKES each move less than 2e-4 over their last two rungs (up to 27x55x140), at
+$D_{11}^*$ = 0.2656, 0.2947 and 0.3024. The sealed 5.5% used DKX finite-difference
+angles (0.2807, and 0.2792 at 35x71x140) against a MONKES table that live MONKES does not
+reproduce (0.2971). On an axisymmetric DSHAPE wout DKX and YANCC agree to 0.09%, so the
+three-dimensional gap is unexplained and open. `RHSMode = 4/5` runs in SFINCS, but its
+adjoint output differs from its own finite-difference check by 0.05% to 66% on W7-X at
+9x25x24x4, so there is no Fortran oracle; DKX has no `RHSMode` 4/5 solver.
 
 ## Figures of the scaffold, proxy and deferred entries
 

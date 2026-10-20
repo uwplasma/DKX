@@ -144,9 +144,9 @@ def test_scan_routes_a_namelist_to_the_namelist_scans(tmp_path, monkeypatch, cap
     import dkx
 
     deck = tmp_path / "input.namelist"
-    deck.write_text("!ss scanType = 3\n&general\n/\n")
+    deck.write_text("!ss scanType = 6\n&general\n/\n")
     monkeypatch.chdir(tmp_path)
     assert cli.main(["scan"]) == 2
-    assert "scanType = 3 is not run by dkx scan" in capsys.readouterr().err
-    with pytest.raises(ValueError, match="sfincsScan scripts"):
+    assert "scanType = 6 is not an sfincsScan type" in capsys.readouterr().err
+    with pytest.raises(ValueError, match="not an sfincsScan type"):
         dkx.scan(deck)

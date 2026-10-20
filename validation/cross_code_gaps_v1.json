@@ -1,7 +1,7 @@
 {
  "schema": "dkx.cross_code_gaps.v1",
- "created_utc": "2026-10-16T08:00:00Z",
- "claim_scope": "w7x_qa_qh_two_species_fp_sfincs_cells_ambipolar_er_sweep_rhsmode23",
+ "created_utc": "2026-10-20T12:00:00Z",
+ "claim_scope": "w7x_qa_qh_two_species_fp_sfincs_cells_ambipolar_er_sweep_rhsmode23_phi1_er_impurity_monoenergetic_ladder",
  "source": {
   "dkx_commit": "95c71e6dfc21762d57ce7fe330ee56c01d478899",
   "dkx_version": "2.9.0",
@@ -14,13 +14,17 @@
    "wout_precise_QA.nc": "4d301a3c32aa6b12f0c13f2c440d223427275fb00862fac3e64e52dc8421c23c",
    "wout_precise_QH.nc": "0358096aca3bd30975bd0453469ba72427501c9b6589572c20f4ffaf6644c810",
    "w7x_standardConfig.bc": "81c686e5a5bd8f38d8b1f754ebe2910951f20094bab35d73d2827d9875bb6062"
-  }
+  },
+  "dkx_commit_phi1_and_ladder": "ce811c88",
+  "yancc_version": "0.0.3 (pip wheel)",
+  "monkes": "office build of the MONKES sources, commit not recorded"
  },
  "environment": {
   "host": "office workstation, 36 threads, 62 GB, shared (load 30-44)",
   "sfincs_cores": 2,
   "dkx_cores": 6,
-  "python": "3.13.16"
+  "python": "3.13.16",
+  "phi1_and_ladder": "office, 36 threads, 62 GB, shared (load 20-35); SFINCS 1 rank, DKX 4-8 cores, DKX main ce811c88 on JAX 0.12.0, solvax 0.29.0"
  },
  "common_deck": {
   "species": "H+ and e-, nHat 0.5, THat 2, dnHat/drHat -0.5, dTHat/drHat -2",
@@ -899,13 +903,464 @@
     ]
    },
    "diagnostic": true
+  },
+  {
+   "id": "g_phi1_er_impurity_A",
+   "gap": "g",
+   "deck": {
+    "geom": 11,
+    "eq": "w7x_standardConfig.bc",
+    "res": [
+     9,
+     25,
+     24,
+     4
+    ],
+    "Er": -2.0,
+    "rN": 0.5,
+    "species": "H+, e-, C6+ (nHat 0.94/1/0.01, THat 1, dnHat/drHat -0.47/-0.5/-0.005, dTHat/drHat -2)",
+    "physics": "includePhi1 and includePhi1InKineticEquation, full trajectories, collisionOperator 0, solverTolerance 1e-10"
+   },
+   "sfincs": {
+    "particleFlux_vm_psiHat": [
+     -5.791068495193588e-08,
+     -2.209110915818146e-08,
+     -6.115497525380054e-11
+    ],
+    "heatFlux_vm_psiHat": [
+     -1.6992671408635962e-07,
+     -3.048081897610863e-08,
+     -2.54257328327086e-10
+    ],
+    "FSABFlow": [
+     -0.0026586228604759342,
+     -0.003474992242246574,
+     -3.102830625388211e-05
+    ]
+   },
+   "dkx": {
+    "particleFlux_vm_psiHat": [
+     -5.791068579242009e-08,
+     -2.2091102521388042e-08,
+     -6.115500181181121e-11
+    ],
+    "heatFlux_vm_psiHat": [
+     -1.6992671461273853e-07,
+     -3.04808041240719e-08,
+     -2.542573683874494e-10
+    ],
+    "FSABFlow": [
+     -0.002658625460245722,
+     -0.0034750511174897075,
+     -3.102833650037585e-05
+    ]
+   },
+   "phi1_rms": {
+    "sfincs": 0.00025787248017345447,
+    "dkx": 0.0002578725310524786
+   },
+   "peak_rss_gb": {
+    "sfincs": 0.65,
+    "dkx": 5.17
+   },
+   "diagnostic": false
+  },
+  {
+   "id": "g_phi1_er_impurity_B",
+   "gap": "g",
+   "deck": {
+    "geom": 11,
+    "eq": "w7x_standardConfig.bc",
+    "res": [
+     9,
+     35,
+     24,
+     4
+    ],
+    "Er": -2.0,
+    "rN": 0.5,
+    "species": "H+, e-, C6+ (nHat 0.94/1/0.01, THat 1, dnHat/drHat -0.47/-0.5/-0.005, dTHat/drHat -2)",
+    "physics": "includePhi1 and includePhi1InKineticEquation, full trajectories, collisionOperator 0, solverTolerance 1e-10"
+   },
+   "sfincs": {
+    "particleFlux_vm_psiHat": [
+     -5.837844308842868e-08,
+     -2.1815696889288477e-08,
+     -6.030530604485626e-11
+    ],
+    "heatFlux_vm_psiHat": [
+     -1.711453116722606e-07,
+     -3.01371766874357e-08,
+     -2.5360133750185976e-10
+    ],
+    "FSABFlow": [
+     -0.0029612943911151057,
+     -0.0035739858878684936,
+     -3.33407284146537e-05
+    ]
+   },
+   "dkx": {
+    "particleFlux_vm_psiHat": [
+     -5.837844383823226e-08,
+     -2.1815690376966404e-08,
+     -6.030533355520185e-11
+    ],
+    "heatFlux_vm_psiHat": [
+     -1.7114531200664326e-07,
+     -3.013716231897128e-08,
+     -2.5360137927170963e-10
+    ],
+    "FSABFlow": [
+     -0.002961297193847049,
+     -0.0035740486838729125,
+     -3.33407609591005e-05
+    ]
+   },
+   "phi1_rms": {
+    "sfincs": 0.00026876691929706873,
+    "dkx": 0.0002687669721390039
+   },
+   "peak_rss_gb": {
+    "sfincs": 0.94,
+    "dkx": 8.46
+   },
+   "diagnostic": false
+  },
+  {
+   "id": "g_phi1_er_impurity_C",
+   "gap": "g",
+   "deck": {
+    "geom": 11,
+    "eq": "w7x_standardConfig.bc",
+    "res": [
+     9,
+     25,
+     36,
+     4
+    ],
+    "Er": -2.0,
+    "rN": 0.5,
+    "species": "H+, e-, C6+ (nHat 0.94/1/0.01, THat 1, dnHat/drHat -0.47/-0.5/-0.005, dTHat/drHat -2)",
+    "physics": "includePhi1 and includePhi1InKineticEquation, full trajectories, collisionOperator 0, solverTolerance 1e-10"
+   },
+   "sfincs": {
+    "particleFlux_vm_psiHat": [
+     -6.387230450961845e-08,
+     -2.1067174741661194e-08,
+     -4.9914405944250866e-11
+    ],
+    "heatFlux_vm_psiHat": [
+     -1.8684242761095111e-07,
+     -2.9379658710286253e-08,
+     -2.400886101506482e-10
+    ],
+    "FSABFlow": [
+     -0.002716533723076645,
+     -0.0035006595451927136,
+     -3.142913577543227e-05
+    ]
+   },
+   "dkx": {
+    "particleFlux_vm_psiHat": [
+     -6.387230537199755e-08,
+     -2.106716799289849e-08,
+     -4.991443253245891e-11
+    ],
+    "heatFlux_vm_psiHat": [
+     -1.868424281521913e-07,
+     -2.9379643538329293e-08,
+     -2.400886501499018e-10
+    ],
+    "FSABFlow": [
+     -0.0027165362757130373,
+     -0.0035007188115010065,
+     -3.142916562312755e-05
+    ]
+   },
+   "phi1_rms": {
+    "sfincs": 0.00025976601793656004,
+    "dkx": 0.0002597660692564843
+   },
+   "peak_rss_gb": {
+    "sfincs": 0.99,
+    "dkx": 6.78
+   },
+   "diagnostic": false
+  },
+  {
+   "id": "g_phi1_er_impurity_D",
+   "gap": "g",
+   "deck": {
+    "geom": 11,
+    "eq": "w7x_standardConfig.bc",
+    "res": [
+     9,
+     35,
+     32,
+     4
+    ],
+    "Er": -2.0,
+    "rN": 0.5,
+    "species": "H+, e-, C6+ (nHat 0.94/1/0.01, THat 1, dnHat/drHat -0.47/-0.5/-0.005, dTHat/drHat -2)",
+    "physics": "includePhi1 and includePhi1InKineticEquation, full trajectories, collisionOperator 0, solverTolerance 1e-10"
+   },
+   "sfincs": {
+    "particleFlux_vm_psiHat": [
+     -6.286719656782509e-08,
+     -2.1105362180416604e-08,
+     -5.1754233103101236e-11
+    ],
+    "heatFlux_vm_psiHat": [
+     -1.8393024969194374e-07,
+     -2.9425896679088676e-08,
+     -2.427342939550554e-10
+    ],
+    "FSABFlow": [
+     -0.002946798201042468,
+     -0.003558008119273676,
+     -3.318171874404924e-05
+    ]
+   },
+   "dkx": {
+    "particleFlux_vm_psiHat": [
+     -6.28671973456557e-08,
+     -2.110535558476756e-08,
+     -5.175426035311131e-11
+    ],
+    "heatFlux_vm_psiHat": [
+     -1.8393025006851256e-07,
+     -2.9425882039999182e-08,
+     -2.4273433520066494e-10
+    ],
+    "FSABFlow": [
+     -0.002946800916519561,
+     -0.0035580703520563415,
+     -3.3181750417288116e-05
+    ]
+   },
+   "phi1_rms": {
+    "sfincs": 0.00026881485169502075,
+    "dkx": 0.00026881490467991267
+   },
+   "peak_rss_gb": {
+    "sfincs": 1.31,
+    "dkx": 11.09
+   },
+   "diagnostic": false
   }
  ],
  "exclusions": [
-  "one resolution per cell, no resolution ladder",
   "SFINCS has no Sugama operator; DKX improved Sugama against SFINCS FP is a diagnostic (fluxes 0.43%, flows 7.7%)",
   "SFINCS RHSMode 3 is not robust on W7-X (NaN at 11x21, L12 sign flip at Nzeta 85); the gated cell is 15x45x150",
   "local gradients repeated at each radius, not a reconstructed discharge",
-  "experimental validation"
- ]
+  "experimental validation",
+  "gaps a-f at one resolution per cell; gap g (Phi1) has four rungs but not the 13x45x48x5 production grid, where DKX needs more than 14 GB and SFINCS 5.9 GB",
+  "Phi1 cells: W7-X Boozer .bc at rN 0.5, one Er (-2), one impurity (C6+); the Phi1 rms moves 4% across the rungs",
+  "monoenergetic ladder: W7-X EIM with MONKES and YANCC; DSHAPE on a different wout, D11* only; NCSX not rerun (YANCC's NCSX.bc is not on the host)",
+  "RHSMode 4/5: SFINCS runs them but its adjoint output differs from its own finite-difference check by 0.05% to 66% on W7-X 9x25x24x4, so there is no Fortran oracle; DKX has no RHSMode 4/5 solver"
+ ],
+ "monoenergetic_ladder": {
+  "claim": "W7-X EIM surface s=0.2, nu/v 0.0160133 1/m, E_r 0, PAS with DKES trajectories, run at the same geometry (the Boozer |B| of the DKX deck equals YANCC's to 1e-15), D* in the Beidler normalization of independent_cross_code_v1",
+  "rows": [
+   {
+    "code": "dkx",
+    "Ntheta_Nzeta_Nxi": [
+     15,
+     31,
+     64
+    ],
+    "D11_star": 0.26554681225727195,
+    "D31_star": 0.01314357624568337,
+    "D33_star": 0.9118761115197898,
+    "wall_s": 15.7
+   },
+   {
+    "code": "dkx",
+    "Ntheta_Nzeta_Nxi": [
+     21,
+     43,
+     96
+    ],
+    "D11_star": 0.26555134400750335,
+    "D31_star": 0.01314359297939426,
+    "D33_star": 0.9118761000710282,
+    "wall_s": 69.8
+   },
+   {
+    "code": "dkx",
+    "Ntheta_Nzeta_Nxi": [
+     27,
+     55,
+     140
+    ],
+    "D11_star": 0.2655513450500505,
+    "D31_star": 0.013143592977366272,
+    "D33_star": 0.9118761000708375,
+    "wall_s": 187.7
+   },
+   {
+    "code": "monkes",
+    "Ntheta_Nzeta_Nxi": [
+     15,
+     31,
+     64
+    ],
+    "D11_star": 0.30241603038345866,
+    "D31_star": 0.014025664443497341,
+    "D33_star": 0.9118303624512952,
+    "wall_s": 26.0
+   },
+   {
+    "code": "monkes",
+    "Ntheta_Nzeta_Nxi": [
+     21,
+     43,
+     96
+    ],
+    "D11_star": 0.3024195895885725,
+    "D31_star": 0.014025691662860532,
+    "D33_star": 0.9118303530212611,
+    "wall_s": 29.6
+   },
+   {
+    "code": "monkes",
+    "Ntheta_Nzeta_Nxi": [
+     27,
+     55,
+     140
+    ],
+    "D11_star": 0.30241959077552355,
+    "D31_star": 0.014025691660691843,
+    "D33_star": 0.9118303530210603,
+    "wall_s": 68.1
+   },
+   {
+    "code": "yancc",
+    "Ntheta_Nzeta_Nxi": [
+     15,
+     31,
+     64
+    ],
+    "D11_star": 0.29527374034223314,
+    "D31_star": 0.013917421410919102,
+    "D33_star": 0.9118616268485116,
+    "wall_s": 60.2
+   },
+   {
+    "code": "yancc",
+    "Ntheta_Nzeta_Nxi": [
+     21,
+     43,
+     96
+    ],
+    "D11_star": 0.29474583022348094,
+    "D31_star": 0.013870228134415167,
+    "D33_star": 0.9118391458764143,
+    "wall_s": 89.0
+   },
+   {
+    "code": "yancc",
+    "Ntheta_Nzeta_Nxi": [
+     27,
+     55,
+     140
+    ],
+    "D11_star": 0.2947147840500737,
+    "D31_star": 0.013858985559593983,
+    "D33_star": 0.9118325133964538,
+    "wall_s": 235.7
+   }
+  ],
+  "dkx_finite_difference": [
+   {
+    "Ntheta_Nzeta_Nxi": [
+     15,
+     31,
+     64
+    ],
+    "scheme": 0,
+    "D11_star": 0.26554681225727195,
+    "D31_star": 0.013143576245683299
+   },
+   {
+    "Ntheta_Nzeta_Nxi": [
+     15,
+     31,
+     64
+    ],
+    "scheme": 2,
+    "D11_star": 0.26498479849003925,
+    "D31_star": 0.013129958649464242
+   },
+   {
+    "Ntheta_Nzeta_Nxi": [
+     27,
+     55,
+     140
+    ],
+    "scheme": 2,
+    "D11_star": 0.28073252106963875,
+    "D31_star": 0.013146533880565416
+   },
+   {
+    "Ntheta_Nzeta_Nxi": [
+     35,
+     71,
+     140
+    ],
+    "scheme": 2,
+    "D11_star": 0.27922448667460487,
+    "D31_star": 0.013145311815416335
+   }
+  ],
+  "convergence_gate": 0.002,
+  "findings": [
+   "each code is converged along its own ladder (D11* moves <= 2e-3 between the two finest rungs; MONKES and DKX spectral to 1e-5)",
+   "the converged D11* differ: DKX 0.2656, YANCC 0.2947, MONKES 0.3024; D31* ratio to DKX is the square root of the D11* ratio for both codes",
+   "the sealed 5.5% was DKX finite differences (0.2807 at 27x55x140; 0.2792 at 35x71x140) against a MONKES table that live MONKES does not reproduce (0.2971 vs 0.3024)",
+   "on the axisymmetric DSHAPE wout the converged DKX and YANCC D11* agree to 0.09%, so the W7-X difference is specific to the 3-D case and unexplained",
+   "the 6% gate is therefore not tightened and does not hold on converged D11* for W7-X EIM"
+  ],
+  "dshape_d11": {
+   "note": "axisymmetric DSHAPE wout (not the sealed file: its checksum differs and the sealed one is not on the host), rN 0.8, nuPrime 0.1, E_r 0; D11* only",
+   "rows": [
+    {
+     "code": "dkx",
+     "Ntheta_Nzeta_Nxi": [
+      33,
+      1,
+      65
+     ],
+     "D11_star": 1.3888639238025349
+    },
+    {
+     "code": "dkx",
+     "Ntheta_Nzeta_Nxi": [
+      65,
+      1,
+      129
+     ],
+     "D11_star": 1.3888639238198766
+    },
+    {
+     "code": "yancc",
+     "Ntheta_Nzeta_Nxi": [
+      33,
+      1,
+      65
+     ],
+     "D11_star": 1.3871129900879173
+    },
+    {
+     "code": "yancc",
+     "Ntheta_Nzeta_Nxi": [
+      65,
+      1,
+      129
+     ],
+     "D11_star": 1.3875897573013016
+    }
+   ]
+  }
+ }
 }
