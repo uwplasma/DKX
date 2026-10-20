@@ -49,6 +49,15 @@ def _restore_dkx_environment():
         os.environ[key] = value
 
 
+@pytest.fixture(autouse=True)
+def _fixed_available_memory(monkeypatch):
+    """Pin the memory the dense-route guard sees: it reads *available* memory, so on a loaded host the
+    triangle and tier-2 tests were routed off the dense bands (6 failures at 0 GB free).
+    Tests of the guard itself patch it again."""
+
+    monkeypatch.setattr("dkx.coarse_precond._available_memory_bytes", lambda: 64e9)
+
+
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """Keep CI runtime under control by skipping the slowest integration tests."""
     if os.environ.get("DKX_CI", "0") != "1":
