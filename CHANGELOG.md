@@ -2,9 +2,10 @@
 
 ## Unreleased
 
-- One CLI: `dkx run` and `dkx scan` accept a SFINCS `input.namelist` as well as a case file. `dkx run` with no argument in a folder holding `input.namelist` writes `sfincsOutput.h5`, as the SFINCS executable does. `dkx scan` reads the deck's `!ss` lines (scanType 2: E_r, 5: radius x E_r) and writes the `sfincsScan` folder tree; `--profiles`, `--er MIN MAX N`, `--radii`, `--jobs`, `--skip-existing` override or tune it. `dkx.scan(namelist, profiles=..., er=...)` is the same from Python.
+- One CLI: `dkx run` and `dkx scan` accept a SFINCS `input.namelist` as well as a case file. `dkx run` with no argument in a folder holding `input.namelist` writes `sfincsOutput.h5`, as the SFINCS executable does. `dkx scan` reads the deck's `!ss` lines (scanType 1: convergence, 2: E_r, 3: one variable, 4: radius, 5: radius x E_r) and writes the `sfincsScan` folder tree, radius folders named `rN_<r>` as upstream (an earlier `rN<r>` folder is reused); `--profiles`, `--er MIN MAX N`, `--radii`, `--jobs`, `--skip-existing` override or tune it. `dkx.scan(namelist, profiles=..., er=...)` is the same from Python.
 - `dkx sfincs <command>` is hidden and prints a deprecation note; use `dkx <command>`. `scan-er` and `scan-profile` stay as hidden aliases.
 - New docs page, "Bring your SFINCS workflow".
+- Validation: `cross_code_gaps` gains W7-X Phi1 in the kinetic equation at E_r = -2 with a C6+ impurity against SFINCS (four resolutions, fluxes within 1.2e-7, flows within 1.8e-5 scaled; DKX peaks at 5 to 11 GB where SFINCS needs about 1 GB, and 13x45x48x5 exceeds 14 GB), and a converged monoenergetic ladder on W7-X EIM. DKX, YANCC and MONKES each converge, but D11* is 0.2656, 0.2947 and 0.3024 (DSHAPE agrees to 0.09%), so the 6% gate is not tightened. The sealed 5.5% came from finite-difference angles. The improved Sugama model is pinned against Spitzer-Harm (22.6% to 5.4% low for Z = 1 to 16). RHSMode 4/5: SFINCS's adjoint output differs from its own finite-difference check by up to 66% on W7-X, so there is no Fortran oracle.
 
 ## v2.10.0 — 2026-10-20
 

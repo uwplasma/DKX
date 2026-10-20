@@ -684,24 +684,27 @@ value = 1.001
 id = "cross_code_gaps"
 capability = "full_fokker_planck"
 status = "accepted_limited"
-claim_scope = "w7x_qa_qh_two_species_fp_sfincs_cells_ambipolar_er_sweep_rhsmode23"
-claim = "At 15x45x80x6, two species, full linearized FP, DKX matches pinned SFINCS v3 (1 rank, MUMPS) on W7-X ambipolar Er at rN 0.3/0.5/0.7 (root shift <= 1.1e-4), precise QA and QH (fluxes <= 2.7e-4, flows <= 1.9e-3 scaled), a W7-X Boozer .bc surface, the DKES/partial/full Er sweep at Er -5/0/+5 (fluxes <= 1.3e-6), and RHSMode 2 and 3 transport matrices (<= 8e-10)."
+claim_scope = "w7x_qa_qh_two_species_fp_sfincs_cells_ambipolar_er_sweep_rhsmode23_phi1_er_impurity_monoenergetic_ladder"
+claim = "At 15x45x80x6, two species, full linearized FP, DKX matches pinned SFINCS v3 (1 rank, MUMPS) on W7-X ambipolar Er at rN 0.3/0.5/0.7 (root shift <= 1.1e-4), precise QA and QH (fluxes <= 2.7e-4, flows <= 1.9e-3 scaled), a W7-X Boozer .bc surface, the DKES/partial/full Er sweep at Er -5/0/+5 (fluxes <= 1.3e-6), RHSMode 2 and 3 transport matrices (<= 8e-10), and W7-X Phi1 in the kinetic equation at Er -2 with a C6+ impurity over four resolutions (fluxes <= 1.2e-7, flows <= 1.8e-5 scaled). It also records converged W7-X EIM monoenergetic ladders: DKX, YANCC and MONKES each converge, but D11* differs by 10% to 12%, so the 6% YANCC/MONKES gate is not tightened."
 artifact = "validation/cross_code_gaps_v1.json"
-artifact_sha256 = "0fd7db4a8e55cdc50aa9265fee306ac03f4838515943ea8078c00f9524958478"
+artifact_sha256 = "e3fbb22afd3a2dde18bfef44b78cee1bf852fba94936b732da018af5b8b433b0"
 artifact_schema = "dkx.cross_code_gaps.v1"
 audit_script = "tools/paper_benchmarks/audit_cross_code_gaps.py"
 command = "python tools/paper_benchmarks/audit_cross_code_gaps.py --artifact validation/cross_code_gaps_v1.json"
 inputs = []
 dkx_commit = "95c71e6dfc21762d57ce7fe330ee56c01d478899"
 generated_on_host = "nvidia-a4000"
-generated_on_host_recorded = "office workstation CPU, shared (load 30-44): SFINCS 2 cores, DKX 6 cores"
+generated_on_host_recorded = "office workstation CPU, shared (load 20-44): SFINCS 1-2 cores, DKX 4-8 cores"
 external_commits = { sfincs = "8df5453472e982df0f6ae005243ce38d57a83711" }
 limitations = [
-  "one resolution per cell, no resolution ladder",
   "SFINCS has no Sugama operator; DKX improved Sugama against SFINCS FP is a diagnostic (fluxes 0.43%, flows 7.7%)",
   "SFINCS RHSMode 3 is not robust on W7-X (NaN at 11x21, L12 sign flip at Nzeta 85); the gated cell is 15x45x150",
   "local gradients repeated at each radius, not a reconstructed discharge",
   "experimental validation",
+  "gaps a-f at one resolution per cell; gap g (Phi1) has four rungs but not the 13x45x48x5 production grid, where DKX needs more than 14 GB and SFINCS 5.9 GB",
+  "Phi1 cells: W7-X Boozer .bc at rN 0.5, one Er (-2), one impurity (C6+); the Phi1 rms moves 4% across the rungs",
+  "monoenergetic ladder: W7-X EIM with MONKES and YANCC; DSHAPE on a different wout, D11* only; NCSX not rerun (YANCC's NCSX.bc is not on the host)",
+  "RHSMode 4/5: SFINCS runs them but its adjoint output differs from its own finite-difference check by 0.05% to 66% on W7-X 9x25x24x4, so there is no Fortran oracle; DKX has no RHSMode 4/5 solver",
 ]
 
 [entry.corruption]

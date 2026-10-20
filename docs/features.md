@@ -133,7 +133,7 @@ Upstream suite parity for all of the above is recorded in
 - Native-case execution of the transport-matrix and monoenergetic workflows,
   and of $\Phi_1$ beyond `phi1 = "kinetic"` on profile cases (use the
   SFINCS-deck route).
-- Production-resolution `RHSMode = 4/5` parity with Fortran.
+- Production-resolution `RHSMode = 4/5` parity with Fortran: SFINCS's own adjoint output disagrees with its finite-difference check by up to 66% on W7-X, so it is not an oracle.
 - Full VMEC-boundary-to-kinetic-transport gradients in the proxy workflow.
 - Single-case strong scaling across several GPUs.
 - Converging the HSX-like gap deck ($N_x = 16$, 633,604 unknowns) on a 36 GiB

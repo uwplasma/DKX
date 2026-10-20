@@ -182,7 +182,7 @@ def run_profile_scan(
     n_points = 0
     for r_n in map(float, radii):
         if er_range is None:
-            n_er = max(2, int(round(np.interp(r_n, table["r_n"], table["n_er"]))))
+            n_er = max(2, round(np.interp(r_n, table["r_n"], table["n_er"])))
             er_min, er_max = (float(np.interp(r_n, table["r_n"], table[k])) for k in ("er_min", "er_max"))
         else:
             er_min, er_max, n_er = er_range
@@ -280,7 +280,7 @@ def run_convergence_scan(txt: str, ss: dict, base: dict, **run) -> list[tuple[st
         b = float(base[key.lower()])
         values = _space(lo * b, hi * b, n, log=True)
         if integer:  # upstream: odd grids truncate and round up to odd; others round; duplicates drop
-            values = [(int(v) | 1) if odd else int(round(v)) for v in values]
+            values = [(int(v) | 1) if odd else round(v) for v in values]
             values = list(dict.fromkeys(values))
         points += [
             (f"{key}{v:.4g}", _set_in_deck(txt, key, v))

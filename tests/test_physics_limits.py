@@ -65,7 +65,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from dkx.collisions import make_fokker_planck_v3_operator
+from dkx.collisions import make_fokker_planck_v3_operator, make_improved_sugama_v3_operator
 from dkx.phase_space import make_speed_grid, speed_grid_diff_matrices
 
 #: Spitzer & Harm (1953), Table III: gamma_E(Z).
@@ -75,18 +75,19 @@ ION_MASS = 1.0e8
 LORENTZ_ELECTRON_DENSITY = 1.0e-14
 
 
-def _electron_l1_block(z_ion: float, n_electron: float, n_x: int) -> tuple[np.ndarray, ...]:
+def _electron_l1_block(z_ion: float, n_electron: float, n_x: int, sugama: bool = False) -> tuple[np.ndarray, ...]:
     k = 0.0
     grid = make_speed_grid(n_x=n_x, k=k)
     x = np.asarray(grid.x, dtype=np.float64)
     weights = np.asarray(grid.dx_weights(k), dtype=np.float64)
     ddx, d2dx2 = speed_grid_diff_matrices(x, k=k)
-    op = make_fokker_planck_v3_operator(
+    make = make_improved_sugama_v3_operator if sugama else make_fokker_planck_v3_operator
+    op = make(
         x=x,
         x_weights=weights,
         ddx=ddx,
         d2dx2=d2dx2,
-        x_grid_k=k,
+        **({} if sugama else {"x_grid_k": k, "nl": 3}),
         z_s=np.asarray([-1.0, z_ion]),
         m_hats=np.asarray([1.0, ION_MASS]),
         n_hats=np.asarray([n_electron, 1.0 / z_ion]),
@@ -94,14 +95,13 @@ def _electron_l1_block(z_ion: float, n_electron: float, n_x: int) -> tuple[np.nd
         nu_n=1.0,
         krook=0.0,
         n_xi=3,
-        nl=3,
         n_xi_for_x=np.full((n_x,), 3, dtype=np.int32),
     )
     return x, weights, np.asarray(op.mat)[0, 0, 1]
 
 
-def _current(z_ion: float, n_electron: float, n_x: int) -> float:
-    x, weights, block = _electron_l1_block(z_ion, n_electron, n_x)
+def _current(z_ion: float, n_electron: float, n_x: int, sugama: bool = False) -> float:
+    x, weights, block = _electron_l1_block(z_ion, n_electron, n_x, sugama)
     response = np.linalg.solve(block, x * np.exp(-x * x))
     return float(np.sum(weights * x**3 * response))
 
@@ -112,6 +112,20 @@ def test_full_fokker_planck_reproduces_the_spitzer_harm_conductivity(z_ion: floa
     ratio = _current(z_ion, 1.0, n_x) / _current(z_ion, LORENTZ_ELECTRON_DENSITY, n_x)
     expected = SPITZER_HARM_GAMMA_E[z_ion]
     assert abs(ratio - expected) / expected < 5e-3, (z_ion, ratio, expected)
+
+
+#: The improved Sugama model against the same table (measured, float64, Nx = 8 and 16 agree to 4e-6).
+#: SFINCS has no Sugama operator, so Spitzer-Harm is the external reference: the model
+#: underestimates gamma_E by 22.6, 19.1, 14.3 and 5.4 % for Z = 1, 2, 4, 16.
+SUGAMA_GAMMA_E = {1.0: 0.4502, 2.0: 0.5525, 4.0: 0.6724, 16.0: 0.8727}
+
+
+@pytest.mark.parametrize("z_ion", sorted(SUGAMA_GAMMA_E))
+def test_improved_sugama_conductivity_against_spitzer_harm_is_pinned(z_ion: float) -> None:
+    ratio = _current(z_ion, 1.0, 8, True) / _current(z_ion, LORENTZ_ELECTRON_DENSITY, 8, True)
+    assert abs(ratio - SUGAMA_GAMMA_E[z_ion]) < 2e-4, (z_ion, ratio)
+    deviation = ratio / SPITZER_HARM_GAMMA_E[z_ion] - 1.0
+    assert -0.24 < deviation < -0.05  # largest at Z = 1, shrinking toward the Lorentz limit as Z grows
 
 
 # =============================================================================
