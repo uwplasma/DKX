@@ -166,6 +166,11 @@ def run_profile_scan(
             if {"nradius", "rn_min", "rn_max"} <= ss.keys()
             else [float(geometry["RN_WISH"])]
         )
+    outside = [float(r) for r in radii if not table["r_n"][0] <= r <= table["r_n"][-1]]
+    if outside:  # np.interp would hold the edge value, and the gradient with it
+        raise ScanInputError(
+            f"radii {outside} lie outside the profile file's rN range [{table['r_n'][0]:g}, {table['r_n'][-1]:g}]"
+        )
     zs = [float(z) for z in np.atleast_1d(species["ZS"])]
     if sum(z > 0 for z in zs) > 1 or sum(z < 0 for z in zs) > 1:
         raise ScanInputError("scan-profile maps one ion and one electron profile; the deck has several ions or electrons")

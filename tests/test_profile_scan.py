@@ -112,6 +112,13 @@ def test_run_profile_scan_rejects_unsupported_decks(tmp_path: Path) -> None:
         run_profile_scan(input_namelist=tmp_path / "input.namelist", out_dir=tmp_path / "s")
 
 
+def test_run_profile_scan_refuses_radii_outside_the_profile(tmp_path: Path) -> None:
+    (tmp_path / "input.namelist").write_text(DECK)
+    (tmp_path / "profile_x").write_text(PROFILE.replace("\n0\t", "\n0.1\t", 1))
+    with pytest.raises(ValueError, match=r"radii \[0\.05\] lie outside .*\[0\.1, 1\]"):
+        run_profile_scan(input_namelist=tmp_path / "input.namelist", out_dir=tmp_path / "s", radii=[0.05, 0.5], scan_er=None)
+
+
 def test_scan_profile_command_prints_the_malformed_line_and_exits(tmp_path: Path) -> None:
     from dkx import cli
 
@@ -119,3 +126,22 @@ def test_scan_profile_command_prints_the_malformed_line_and_exits(tmp_path: Path
     (tmp_path / "profile_x").write_text(PROFILE)
     with pytest.raises(SystemExit, match=r"scan-profile: .*input\.namelist:4: .*rN_max = 0:\.8"):
         cli.main(["scan-profile", "--input", str(tmp_path / "input.namelist"), "--out-dir", str(tmp_path / "s"), "--quiet"])
+
+
+def test_scan_profile_solves_a_real_radius_and_er_pair(tmp_path: Path) -> None:
+    """End to end on a tiny geometryScheme 4 deck: the files, the profile-driven inputs, and the recorded values."""
+    import h5py
+
+    (tmp_path / "input.namelist").write_text(DECK)
+    (tmp_path / "profile_x").write_text(PROFILE)
+    result = run_profile_scan(
+        input_namelist=tmp_path / "input.namelist", out_dir=tmp_path / "scan", radii=[0.5], er_range=(-1.0, 1.0, 2)
+    )
+    assert result.failures == () and not (tmp_path / "scan" / "scan_failures.json").exists()
+    expected = {"Er-1": (-1.8250051766e-4, -1.5238129984e-9), "Er1": (-2.0125118528e-4, -9.8156412919e-9)}
+    for name, (current, ion_flux) in expected.items():
+        with h5py.File(tmp_path / "scan" / "rN0.5" / name / "sfincsOutput.h5") as out:
+            first = lambda key: float(np.asarray(out[key]).ravel()[0])  # noqa: E731
+            assert first("nHats") == pytest.approx(0.75)  # 1 - rN^2 from the profile file
+            assert first("FSABjHat") == pytest.approx(current, rel=1e-6)
+            assert first("particleFlux_vm_psiHat") == pytest.approx(ion_flux, rel=1e-6)
