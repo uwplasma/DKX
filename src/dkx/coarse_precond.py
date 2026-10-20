@@ -796,6 +796,16 @@ def _coarse_generated_block_data(
     return (subs if stacked else list(zip(*subs))), floor, gamma
 
 
+_LAYOUTS: dict = {}
+
+
+def _interned(layout: tuple) -> tuple:
+    """One object per distinct layout. SOLVAX keys a compiled solve on the identity of
+    the static values a preconditioner closes over, so an equal layout rebuilt for each
+    Newton step would compile (and keep) a new executable every time."""
+    return _LAYOUTS.setdefault(layout, layout)
+
+
 def _coarse_row_layout(op: KineticOperator) -> tuple[tuple[int, ...], tuple[int, ...]]:
     """``(order, counts)``: which subsystems the dense route factors at each Legendre row.
 
@@ -820,12 +830,12 @@ def _coarse_row_layout(op: KineticOperator) -> tuple[tuple[int, ...], tuple[int,
     batch = op.n_species * op.n_x
     if isinstance(op.n_xi_for_x, jax.core.Tracer):
         order = tuple(s * op.n_x + x for x in range(op.n_x) for s in range(op.n_species))
-        return order, (batch,) * op.n_xi
+        return _interned((order, (batch,) * op.n_xi))
     keep = [min(max(int(n), 1), op.n_xi) for n in np.asarray(op.n_xi_for_x)]
     length = [keep[b % op.n_x] for b in range(batch)]
     order = tuple(sorted(range(batch), key=lambda b: (-length[b], b % op.n_x, b // op.n_x)))
     counts = tuple(sum(n > ell for n in length) for ell in range(max(length)))
-    return order, counts
+    return _interned((order, counts))
 
 
 def _coarse_chain_lengths(rows: tuple[tuple[int, ...], tuple[int, ...]]) -> tuple[int, ...]:
@@ -1293,9 +1303,14 @@ def build_coarse_preconditioner(
         sweeps = 0 if retain_speed_triangle is True else int(retain_speed_triangle or 0)
 
         def _a_inv(transpose: bool) -> Callable[[jnp.ndarray], jnp.ndarray]:
-            apply = functools.partial(
-                _apply_dense_coarse_factors, factors, floor, transpose=transpose, rows=rows
-            )
+            # A plain function, not a ``functools.partial``: SOLVAX's Krylov entry
+            # points pass the arrays in a function's closure cells to the compiled
+            # solve as arguments, but a partial's arrays are baked into it as
+            # constants, which XLA holds again at compile time.
+            def apply(v: jnp.ndarray) -> jnp.ndarray:
+                return _apply_dense_coarse_factors(
+                    factors, floor, v, transpose=transpose, rows=rows
+                )
 
             def apply_speed(x: int, r: jnp.ndarray) -> jnp.ndarray:
                 return _apply_dense_coarse_speed(
@@ -1450,17 +1465,23 @@ def build_coarse_preconditioner(
         # block.  The Phi1->f coupling (``B``), the QN-from-f rows (``C``) and the
         # Phi1/lambda border block (``D``) are all probed exactly from the
         # Jacobian JVP, so only the f-block is approximated (GCROT corrects it).
-        b_cols, c_rows, d_block = _materialize_full_border(op)
-        precond = schur_projected_precond(a_inv, b_cols, c_rows, d_block=d_block)
+        fs, n = op.f_size, op.total_size
+
+        def apply_op(v: jnp.ndarray) -> jnp.ndarray:
+            return op.apply(v)  # a plain closure over ``op``: its arrays become jit arguments
+
+        precond = _bordered_precond(apply_op, a_inv, fs, n)
         precond_t = _lazy_projected_precond(
-            op, a_inv_t, c_rows.T, b_cols.T, d_block=d_block.T
+            op, lambda: _bordered_precond(_transposed_apply(op), a_inv_t, fs, n), a_inv_t
         )
         return precond, precond_t
     if op.extra_size == 0:
         return a_inv, a_inv_t
     b_cols, c_rows = _materialize_borders(op)
     precond = schur_projected_precond(a_inv, b_cols, c_rows)
-    precond_t = _lazy_projected_precond(op, a_inv_t, c_rows.T, b_cols.T)
+    precond_t = _lazy_projected_precond(
+        op, lambda: schur_projected_precond(a_inv_t, c_rows.T, b_cols.T), a_inv_t, c_rows, b_cols
+    )
     return precond, precond_t
 
 
@@ -1470,14 +1491,51 @@ def _any_traced(*trees: object) -> bool:
     )
 
 
+def _bordered_precond(
+    apply_fn: Callable[[jnp.ndarray], jnp.ndarray],
+    a_inv: Callable[[jnp.ndarray], jnp.ndarray],
+    f_size: int,
+    n: int,
+    *,
+    chunk: int = 8,
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
+    """Exact bordered-Schur preconditioner of ``[[A, B], [C, D]]`` from matvecs alone.
+
+    The same projection as ``solvax.operators.schur_projected_precond`` --
+    ``y = S^-1 (C a_inv(r_f) - r_b)``, ``x = a_inv(r_f - B y)``, ``S = C A^-1 B - D``
+    -- but the border is never materialized. ``B``, ``C`` and ``D`` are read from
+    ``apply_fn`` (``[u, 0] -> [A u, C u]``, ``[0, e_j] -> [B e_j, D e_j]``), and only
+    ``A^-1 B`` is kept, one ``(p, f_size)`` array. Materializing ``B`` and ``C`` as
+    well, and mapping ``a_inv`` over all ``p`` columns at once, cost five border-sized
+    arrays and a transient of the block-Thomas intermediates times ``p`` on W7-X
+    Phi1 decks (``p ~ Ntheta Nzeta``). Columns are processed ``chunk`` at a time.
+    """
+    p = n - f_size
+
+    def column(j):
+        out = apply_fn(jnp.zeros((n,), jnp.float64).at[f_size + j].set(1.0))
+        ainv = a_inv(out[:f_size])
+        top = jnp.concatenate([ainv.astype(jnp.float64), jnp.zeros((p,), jnp.float64)])
+        return ainv, apply_fn(top)[f_size:] - out[f_size:]
+
+    ainv_rows, schur_cols = jax.lax.map(column, jnp.arange(p), batch_size=chunk)
+    schur_lu = jax.scipy.linalg.lu_factor(schur_cols.T)
+
+    def precond(r: jnp.ndarray) -> jnp.ndarray:
+        a_rhs = a_inv(r[:f_size])
+        top = jnp.concatenate([a_rhs.astype(jnp.float64), jnp.zeros((p,), jnp.float64)])
+        y = jax.scipy.linalg.lu_solve(schur_lu, apply_fn(top)[f_size:] - r[f_size:])
+        return jnp.concatenate([a_rhs - y.astype(ainv_rows.dtype) @ ainv_rows, y])
+
+    return precond
+
+
 def _lazy_projected_precond(
     op: KineticOperator,
-    a_inv: Callable[[jnp.ndarray], jnp.ndarray],
-    b_cols: jnp.ndarray,
-    c_rows: jnp.ndarray,
-    d_block: jnp.ndarray | None = None,
+    build: Callable[[], Callable[[jnp.ndarray], jnp.ndarray]],
+    *deps: object,
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
-    """``schur_projected_precond``, built on its first application.
+    """``build()``, deferred to the first application.
 
     The projection applies ``a_inv`` to every border column when it is built. For
     the transposed preconditioner those are transposed coarse applications that a
@@ -1489,22 +1547,21 @@ def _lazy_projected_precond(
     route did. A first call inside a trace (a jitted Krylov loop) builds under
     ``jax.ensure_compile_time_eval``, so the cached projection holds concrete
     arrays and its border columns are not recomputed on every traced
-    application. An operator or border that is itself traced (jit over operator
-    leaves) is built eagerly, as before, so no tracer is cached beyond its trace.
+    application. An operator or ``deps`` that are themselves traced (jit over
+    operator leaves) are built eagerly, as before, so no tracer is cached beyond
+    its trace.
     """
-    if _any_traced(op, a_inv, b_cols, c_rows, d_block):
-        return schur_projected_precond(a_inv, b_cols, c_rows, d_block=d_block)
+    if _any_traced(op, *deps):
+        return build()
     built: list[Callable[[jnp.ndarray], jnp.ndarray]] = []
 
     def precond_t(r: jnp.ndarray) -> jnp.ndarray:
         if not built:
             if isinstance(r, jax.core.Tracer):
                 with jax.ensure_compile_time_eval():
-                    built.append(
-                        schur_projected_precond(a_inv, b_cols, c_rows, d_block=d_block)
-                    )
+                    built.append(build())
             else:
-                built.append(schur_projected_precond(a_inv, b_cols, c_rows, d_block=d_block))
+                built.append(build())
         return built[0](r)
 
     return precond_t

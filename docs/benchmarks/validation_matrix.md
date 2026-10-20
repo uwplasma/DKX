@@ -105,20 +105,27 @@ difference, scaled by the largest component:
 
 SFINCS has no Sugama operator, so that row compares models, not codes. The external
 reference for the model is the Spitzer–Harm conductivity (`tests/test_physics_limits.py`):
-the improved Sugama operator gives $\gamma_E$ 0.450, 0.553, 0.672, 0.873 against the
-tabulated 0.5816, 0.6833, 0.7849, 0.9225 for $Z$ = 1, 2, 4, 16 (22.6% to 5.4% low),
-where the full FP operator is within 0.4%. The $\Phi_1$ cells peak at 5 to 11 GB in DKX
-against about 1 GB in SFINCS, and 13x45x48x5 exceeds 14 GB in DKX (SFINCS: 5.9 GB), so
+the improved Sugama operator gives $\gamma_E$ 0.517, 0.617, 0.724, 0.894 against the
+tabulated 0.5816, 0.6833, 0.7849, 0.9225 for $Z$ = 1, 2, 4, 16 (11.1% to 3.1% low),
+where the full FP operator is within 0.4%. The published improved operator is within 1% of the Coulomb operator's conductivity (Frei et al. 2022), so the remaining deficit says DKX's field-particle part is still simpler than Sugama et al. 2019: it restores momentum and energy, but does not reproduce the friction-flow relations of the linearized Landau operator. Open. Before the momentum-restoring
+shape was built per species pair, electron-ion Lorentz scattering entered the
+electron-electron response and the deficit was 22.6% to 5.4%. The $\Phi_1$ cells
+peak at 5 to 11 GB in DKX against about 1 GB in SFINCS (recorded with the earlier
+preconditioner; see the changelog for the current figure), and 13x45x48x5 exceeded 14 GB in DKX (SFINCS: 5.9 GB), so
 the $\Phi_1$ ladder stops at 9x35x32x4; the $\Phi_1$ rms moves 4% across it.
 SFINCS RHSMode 3 on W7-X returns NaN at 11x21x30 and flips the sign of $L_{12}$
 at Nzeta 85 with KSP converged; DKX moves by 2e-3 across the same grids. The
-monoenergetic YANCC/MONKES gate stays at 6%, and the converged ladders do not meet it.
-At W7-X EIM ($s$ = 0.2, $\nu/v$ = 0.016 m$^{-1}$, same $|B|$ to 1e-15) DKX, YANCC and
-MONKES each move less than 2e-4 over their last two rungs (up to 27x55x140), at
-$D_{11}^*$ = 0.2656, 0.2947 and 0.3024. The sealed 5.5% used DKX finite-difference
-angles (0.2807, and 0.2792 at 35x71x140) against a MONKES table that live MONKES does not
-reproduce (0.2971). On an axisymmetric DSHAPE wout DKX and YANCC agree to 0.09%, so the
-three-dimensional gap is unexplained and open. `RHSMode = 4/5` runs in SFINCS, but its
+W7-X EIM ladders ($s$ = 0.2, $\nu/v$ = 0.016 m$^{-1}$, same $|B|$ to 1e-15) first read
+$D_{11}^*$ = 0.2656, 0.2947 and 0.3024 for DKX, YANCC and MONKES. That was a radial
+normalization: the deck's `psiAHat` was $B_0 a^2/2$ (0.3195) where the equilibrium's
+toroidal flux is 0.3032, so DKX divided by $d\psi/dr$ = 0.557 T m while MONKES (0.522) and
+YANCC (0.529) use their own. $D_{11}$ scales as $1/(d\psi/dr)^2$, which is the whole gap
+(0.878 and 0.975). With the flux corrected and the codes mapped to one convention they give
+0.27985, 0.27965 and 0.27983 (spread 7e-4), and $D_{31}^*$ agrees to 5e-4. NTX on the same
+surface matches DKX's $D_{11}$ per unit $\psi^2$ to 4e-4 (`tests/test_physics_limits.py`).
+On an axisymmetric DSHAPE wout DKX and YANCC agree to 0.09%. The W7-X sealed case in
+`independent_cross_code` is re-sealed on the corrected deck at a 3% gate (1.8% measured, the
+pinned table being a coarser MONKES run). `RHSMode = 4/5` runs in SFINCS, but its
 adjoint output differs from its own finite-difference check by 0.05% to 66% on W7-X at
 9x25x24x4, so there is no Fortran oracle; DKX has no `RHSMode` 4/5 solver.
 

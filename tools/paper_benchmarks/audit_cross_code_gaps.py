@@ -62,8 +62,12 @@ def audit(artifact_path: Path) -> dict[str, Any]:
         table[f"ladder_{code}_D11_movement"] = move
         if not move <= ladder["convergence_gate"]:
             errors.append(f"monoenergetic ladder {code}: D11* moves {move:.2e} between the two finest rungs")
-    # Reported, not gated: the converged codes disagree (see the artifact's findings).
-    table["ladder_D11_spread_to_dkx"] = max(abs(v - finest["dkx"]) / v for k, v in finest.items() if k != "dkx")
+    # The converged codes agree in one radial convention (the artifact's findings).
+    for key in ("D11_star", "D31_star"):
+        spread = max(abs(r[key] - by_code["dkx"][-1][key]) / abs(r[key]) for c, rs in by_code.items() if c != "dkx" for r in rs[-1:])
+        table[f"ladder_{key}_spread_to_dkx"] = spread
+        if not spread <= ladder["codes_agree_gate"]:
+            errors.append(f"monoenergetic ladder: {key} differs from DKX by {spread:.2e}")
     dshape = {r["code"]: r["D11_star"] for r in ladder["dshape_d11"]["rows"]}
     table["ladder_dshape_D11_dkx_vs_yancc"] = abs(dshape["dkx"] - dshape["yancc"]) / dshape["yancc"]
     if len(payload["ambipolar"]) < 2:

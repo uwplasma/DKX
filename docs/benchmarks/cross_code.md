@@ -28,7 +28,7 @@ devices span the geometry range:
 | --- | --- | --- |
 | DSHAPE (axisymmetric tokamak surface) | YANCC | 5.51% |
 | NCSX | YANCC | 1.66% |
-| W7-X EIM | MONKES database, at its authored $27 \times 55 \times 140$ resolution | 5.52% (DKX finite differences); converged ladders: 12% ({doc}`validation_matrix`) |
+| W7-X EIM | MONKES database, at its authored $27 \times 55 \times 140$ resolution | 1.79%; converged ladders agree to 7e-4 ({doc}`validation_matrix`) |
 
 All four coefficients pass the 6% acceptance criterion, and $D_{33}^*$ differs
 by at most 0.065%. The threshold covers the measured cross-discretization
@@ -37,7 +37,8 @@ later regression.
 
 The comparison does not equate similarly named inputs. The audit maps physical
 $\nu/v$ through DKX's applied `nuDHat(x0)` factor, converts the dimensional DKES
-coefficients to the Beidler $D^*$ convention with the local surface radius,
+coefficients to the Beidler $D^*$ convention with the local surface radius and each
+code's own $d\psi/dr$ (the deck's `psiAHat` must be the equilibrium's toroidal flux),
 corrects the reference-field convention, and applies the handedness map to
 $D_{31}^*$ and $D_{13}^*$. It recomputes all of this from raw coefficients:
 
