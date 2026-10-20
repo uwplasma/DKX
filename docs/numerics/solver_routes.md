@@ -334,7 +334,11 @@ the best finite iterate reached so far:
 2. Four times the outer-cycle budget, at the wide restart of the memory-aware
    policy.
 3. The sparse direct route, if the system has at most `max_dense_size`
-   unknowns (default 8,192) or MUMPS was selected with a memory budget.
+   unknowns (default 8,192), MUMPS was selected with a memory budget, or the
+   estimated SuperLU peak fits the memory available now. The estimate is
+   1.25 x 9.9 GB x $(n/66{,}004)^{1.6}$: the HSX QHS full Fokker–Planck deck
+   at $E_r = -20$ (66,004 unknowns, 3,008 assembly products, 2.2 million
+   nonzeros) took 47 minutes and 9.9 GB on 8 pinned cores of a loaded host.
 
 The first attempt is `coupled` for Fokker–Planck and Sugama decks when its
 factorization fits, with one exception: when the $E_r$ terms are active and

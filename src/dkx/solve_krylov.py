@@ -55,6 +55,8 @@ from dkx.solve_common import (  # noqa: E402
 )
 from dkx.solve_direct import (  # noqa: E402
     _solve_tier3,
+    superlu_fits,
+    superlu_peak_bytes,
 )
 from dkx.structured_direct import (  # noqa: E402
     _is_traced,
@@ -241,13 +243,16 @@ def _escalate_after_tier2_stall(
     except Exception as exc:
         print(f"[dkx.solve]   widened retry failed: {exc}")
 
-    # Rung 3: sparse direct.  Keep the historical large-SuperLU protection, but
-    # an explicitly selected, budgeted MUMPS backend may use grouped assembly;
-    # max_dense_size limits only the column-sampling fallback in that case.
+    # Rung 3: sparse direct.  An explicitly selected, budgeted MUMPS backend may use
+    # grouped assembly; max_dense_size limits only the column-sampling fallback in that
+    # case.  SuperLU above max_dense_size is admitted when its estimated peak fits the
+    # memory available now (it is the answer of last resort, not a cheap one: minutes to
+    # an hour at tens of thousands of unknowns).
     large_mumps_requested = (
         direct_backend == "mumps" and direct_memory_budget_gb is not None
     )
-    if op.total_size <= max_dense_size or large_mumps_requested:
+    large_superlu_fits = direct_backend in (None, "superlu") and superlu_fits(op.total_size)
+    if op.total_size <= max_dense_size or large_mumps_requested or large_superlu_fits:
         print("[dkx.solve]   falling back to the sparse direct host solve ...")
         return _solve_tier3(
             op, rhs2d, tol=tol, atol=atol, max_dense_size=max_dense_size,
@@ -264,7 +269,9 @@ def _escalate_after_tier2_stall(
     else:
         direct_refusal = (
             f"The default SuperLU host fallback is protected above "
-            f"max_dense_size={max_dense_size}; it was not attempted. Select "
+            f"max_dense_size={max_dense_size} unless its estimated peak "
+            f"({superlu_peak_bytes(op.total_size) / 2.0**30:.1f} GiB) fits the available "
+            "memory; it was not attempted. Free memory, or select "
             "direct_backend='mumps' with a memory budget to admit grouped assembly."
         )
     raise RuntimeError(

@@ -52,6 +52,27 @@ from dkx.structured_direct import (  # noqa: E402
 # =============================================================================
 
 
+# Peak resident memory of the SuperLU route on the HSX QHS full-FP deck with the E_r terms
+# (66,004 unknowns, 2.2e6 assembled nonzeros): 9.9 GB, 47 minutes on a loaded 8-core
+# host. The growth exponent is the 1.6 of docs/numerics/solver_routes.md.
+_SUPERLU_REFERENCE_SIZE = 66004
+_SUPERLU_REFERENCE_BYTES = 9.9e9
+_SUPERLU_MEMORY_EXPONENT = 1.6
+_SUPERLU_SAFETY = 1.25
+
+
+def superlu_peak_bytes(total_size: int) -> float:
+    """Estimated peak RSS of the assembled SuperLU route at ``total_size`` unknowns."""
+    scale = (float(total_size) / _SUPERLU_REFERENCE_SIZE) ** _SUPERLU_MEMORY_EXPONENT
+    return _SUPERLU_SAFETY * _SUPERLU_REFERENCE_BYTES * scale
+
+
+def superlu_fits(total_size: int) -> bool:
+    """Whether the estimated SuperLU peak fits the memory available now."""
+    available = _available_memory_bytes()
+    return available is not None and superlu_peak_bytes(total_size) <= available
+
+
 def materialize_csr(
     op: KineticOperator, *, column_chunk: int = 1024, pin_masked_dofs: bool = False
 ):
