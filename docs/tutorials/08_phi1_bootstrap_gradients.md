@@ -78,7 +78,21 @@ Kinetic against fitted current on the same plasma.
 
 The seed is not quasi-symmetric, so Redl is an extrapolation and the gap is not
 a DKX error. PAS sits closer to Redl only because it overestimates the current
-(page 4). The FP value is the reference, at this grid still resolution-limited.
+(page 4). The 0.64 is also resolution-limited: refining the grid lowers it to
+0.57 (29x29 angles, $N_\xi=48$, $N_x=6$) and 0.55-0.58 across the grids tried,
+so the converged gap on this surface is about 40%, a field effect.
+
+Where Redl is exact, DKX Fokker-Planck agrees with it. For a large-aspect-ratio
+circular tokamak ($\epsilon=0.1$, $\iota=0.4$, $Z_\mathrm{eff}=1$, $T_e=T_i=2$
+keV) the ratio is 1.015 at $n=10^{19}$ and 1.018 at $10^{20}$ m$^{-3}$ on
+41 poloidal points, the 1-2% reported for SFINCS against Redl in
+quasi-symmetric fields (Saxena et al., arXiv:2507.05166); PAS gives 1.15.
+`tests/test_bootstrap_redl_tokamak.py` pins this at 3%. On the precise-QA
+$\beta=2.5\%$ equilibrium ($s=0.5$) DKX and SFINCS agree to 4e-4 or better on
+five grids, and DKX is 0.98 of Redl at $25\times37$ angles, $N_\xi=64$, $N_x=7$
+(0.89 at $N_\xi=32$, $N_x=5$). Two angular grids ($19\times29$, $21\times31$)
+give 0.82 and 1.32, in both codes, so the angles need checking, not only
+$N_\xi$ and $N_x$.
 
 ## Gradients and optimization
 
