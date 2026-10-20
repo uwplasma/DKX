@@ -358,7 +358,7 @@ def test_field_part_is_low_rank_and_confined_to_the_conserved_moments() -> None:
         if ell == 0:
             assert 0 < rank <= 2 * n_species
         elif ell == 1:
-            assert 0 < rank <= n_species
+            assert 0 < rank <= n_species**2  # one term per ordered species pair
         else:
             assert rank == 0
             np.testing.assert_allclose(flat, 0.0, rtol=0.0, atol=0.0)

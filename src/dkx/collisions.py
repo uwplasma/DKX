@@ -1718,21 +1718,24 @@ def make_improved_sugama_v3_operator(
     # F[(a,i),(b,j),L] = sum_c columns[a,i,L,c] extraction[b,j,L,c].
     # K = 2 S covers L=0 (particle + energy); L=1 uses S of the slots
     # (momentum) and L >= 2 carries no field term at all.
-    rank = 2 * n_species
+    rank = max(n_species * n_species, 2 * n_species)
     columns = np.zeros((n_species, n_x, n_xi_int, rank), dtype=np.float64)
     extraction = np.zeros((n_species, n_x, n_xi_int, rank), dtype=np.float64)
 
-    # L=1 parallel momentum: U = r_a, V = kappa_cb tau_bc.
+    # L=1 parallel momentum, one rank-1 term per ordered pair (a, b): the response
+    # shape is the pair's own test operator on the flow, r_ab = T_ab phi, so each
+    # like-species operator keeps the shifted Maxwellian as a null vector.
     if n_xi_int > 1:
         test_l1 = test_ab_l[:, :, 1, :, :]  # (S,S,X,X)
-        r_mom = np.einsum("abij,j->ai", test_l1, phi)  # response r_a (S,X)
+        r_mom = np.einsum("abij,j->abi", test_l1, phi)  # r_ab (S,S,X)
         tau_mom = np.einsum("i,abij->abj", w_mom, test_l1)  # tau_ab (S,S,X)
-        r_dot = w_mom @ r_mom.T  # (S,) = p . r_a
-        for ic in range(n_species):
-            columns[ic, :, 1, ic] = r_mom[ic]
+        r_dot = np.einsum("i,abi->ab", w_mom, r_mom)  # p . r_ab
+        for ia in range(n_species):
             for ib in range(n_species):
-                kappa = -float(p_mom[ib]) / (float(p_mom[ic]) * float(r_dot[ic]))
-                extraction[ib, :, 1, ic] = kappa * tau_mom[ib, ic]
+                slot = ia * n_species + ib
+                kappa = -float(p_mom[ib]) / (float(p_mom[ia]) * float(r_dot[ia, ib]))
+                columns[ia, :, 1, slot] = r_mom[ia, ib]
+                extraction[ib, :, 1, slot] = kappa * tau_mom[ib, ia]
 
     # L=0 particle number (U = h1, species-diagonal) and kinetic energy (U = h2).
     test_l0 = test_ab_l[:, :, 0, :, :]  # (S,S,X,X)
