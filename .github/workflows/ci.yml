@@ -12,8 +12,8 @@ concurrency:
 
 jobs:
   # Working-method rule 5: the pull-request gate is tier 1, and tier 1 is the
-  # work the change can actually break. The full suite is 13 shards and about
-  # 96 runner-minutes; a change that touches no code cannot alter a solver
+  # work the change can actually break. The full suite is 9 shards on a warm
+  # compilation cache; a change that touches no code cannot alter a solver
   # result, so it runs the contract tests that read the documentation instead.
   # Pushes to main always take the full suite, so nothing reaches the default
   # branch on the reduced gate.
@@ -99,7 +99,7 @@ jobs:
         # shard at 9m53s and tipped it into the timeout on stacked PRs. This
         # reverses the 2026-07-17 decision to archive the snapshot; the file is
         # compact and bounded by tests/test_source_tree_consolidation.py.
-        group: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+        group: [1, 2, 3, 4, 5, 6, 7, 8, 9]
     env:
       JAX_ENABLE_X64: "True"
       JAX_DISABLE_JIT: "0"
@@ -127,6 +127,23 @@ jobs:
       - name: Fetch external equilibrium data
         run: |
           python -m dkx.validation.data_fetch --quiet
+      - name: Point the JAX compilation cache at a restorable directory
+        id: jaxcache
+        run: |
+          echo "DKX_COMPILATION_CACHE_DIR=${RUNNER_TEMP}/jax_compilation_cache" >> "${GITHUB_ENV}"
+          echo "jax=$(python -c 'import jax; print(jax.__version__)')" >> "${GITHUB_OUTPUT}"
+      - name: Restore the JAX compilation cache
+        # One cache per shard, written only by pushes to main and read by every
+        # run. An entry is keyed on the compiled program, so a pull request
+        # recompiles only what it changed. The key carries the jax version and
+        # the dependency declaration; a miss costs compile time, never accuracy.
+        id: restore
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/jax_compilation_cache
+          key: jaxcc-${{ matrix.group }}-jax${{ steps.jaxcache.outputs.jax }}-${{ hashFiles('pyproject.toml') }}-${{ github.run_id }}
+          restore-keys: |
+            jaxcc-${{ matrix.group }}-jax${{ steps.jaxcache.outputs.jax }}-${{ hashFiles('pyproject.toml') }}-
       - name: Coverage shard
         run: |
           # -n 2, not -n auto: the runner has 4 cores, and each xdist worker
@@ -134,7 +151,13 @@ jobs:
           # worker holding the heavy gradient/scan tests peaks at 5-6 GB. Four
           # of those exceed the 16 GB runner and the agent is OOM-killed, which
           # surfaces as a cancelled job rather than a test failure.
-          python -m pytest -q -n 2 --dist=loadscope --splits 13 --group ${{ matrix.group }} --splitting-algorithm least_duration -m "not slow" --cov=dkx --cov-report=
+          python -m pytest -q -n 2 --dist=loadscope --splits 9 --group ${{ matrix.group }} --splitting-algorithm least_duration -m "not slow" --cov=dkx --cov-report=
+      - name: Save the JAX compilation cache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/jax_compilation_cache
+          key: jaxcc-${{ matrix.group }}-jax${{ steps.jaxcache.outputs.jax }}-${{ hashFiles('pyproject.toml') }}-${{ github.run_id }}
       - name: Upload coverage data
         uses: actions/upload-artifact@v7
         with:
@@ -373,7 +396,7 @@ jobs:
           # GitHub allows there -- a workflow that does it never starts a job at
           # all, and reports only "this run likely failed because of a workflow
           # file issue".
-          echo "DKX_COMPILATION_CACHE_DIR=${RUNNER_TEMP}/jax_cache" >> "$GITHUB_ENV"
+          echo "DKX_COMPILATION_CACHE_DIR=${RUNNER_TEMP}/jax_compilation_cache" >> "$GITHUB_ENV"
       - name: Build and check the wheel and source distribution
         run: |
           python -m pip install --upgrade pip build twine
