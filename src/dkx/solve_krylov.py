@@ -28,6 +28,7 @@ except ImportError:
 
 from dkx.coarse_precond import (  # noqa: E402
     _available_memory_bytes,
+    _coarse_bands_fit,
     build_coarse_preconditioner,
 )
 from dkx.drift_kinetic import (  # noqa: E402
@@ -178,6 +179,8 @@ def _escalate_after_tier2_stall(
                 differentiable=False,
                 check_adjoint=check_adjoint,
                 adjoint_residual_factor=adjoint_residual_factor,
+                auto_restart_recovery=auto_restart,
+                krylov_memory_budget_gb=krylov_memory_budget_gb,
             )
         except (
             Exception
@@ -283,7 +286,15 @@ def _escalate_after_tier2_stall(
 def _auto_preconditioner(op: KineticOperator, budget_gb: float | None) -> str:
     """``"coupled"`` for Fokker-Planck/Sugama decks whose coupled build fits, else ``"coarse"``.
 
-    The estimate is a whole-process peak, so it is held against
+    With the E_r xiDot/xDot terms active and nonzero, a deck whose dense coarse bands fit
+    takes ``"coarse_triangle"`` instead. ``coupled`` drops those terms from the operator it
+    factors and, past its kept low modes, the speed coupling too; at |E_r| >= 15 on an HSX QHS
+    full-FP deck (66,004 unknowns) it stalled after 768 to 1,262 iterations where
+    ``coarse_triangle`` converged in 350 and 208 (65 and 52 s, against 141 and 258 s spent
+    before the stall was declared). At |E_r| = 10 it is 22 s against 32 s; at E_r = 0 the
+    terms vanish and ``coupled`` stays (7 s against 16 s).
+
+    The coupled estimate is a whole-process peak, so it is held against
     ``krylov_memory_budget_gb`` (or ``DKX_KRYLOV_MEMORY_BUDGET_GB``) when given,
     and otherwise against half the memory available now: the program trades
     memory for speed (17 vs 46 iterations, 508 vs 1,100 s on HSX FP).
@@ -295,6 +306,12 @@ def _auto_preconditioner(op: KineticOperator, budget_gb: float | None) -> str:
     base = replace(op, with_er_xidot=False, with_er_xdot=False, with_magnetic_drifts=False)
     if _is_traced(*jax.tree_util.tree_leaves(op)) or not coupled_available(base)[0]:
         return "coarse"
+    if (
+        (op.with_er_xidot or op.with_er_xdot)
+        and float(jnp.abs(op.dphi_hat_dpsi_hat_kinetic)) != 0.0
+        and _coarse_bands_fit(op)
+    ):
+        return "coarse_triangle"
     if budget_gb is not None or os.environ.get(_KRYLOV_BUDGET_ENV) not in (None, ""):
         budget = _krylov_basis_budget_bytes(budget_gb)
     else:

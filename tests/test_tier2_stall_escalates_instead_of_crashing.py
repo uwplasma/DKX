@@ -161,6 +161,25 @@ def test_escalation_continues_from_the_stalled_iterate(monkeypatch) -> None:
     np.testing.assert_allclose(np.asarray(starts[0]), reached)
 
 
+@pytest.mark.parametrize("auto_restart", [True, False])
+def test_rungs_follow_the_restart_policy_of_the_stalled_solve(monkeypatch, auto_restart: bool) -> None:
+    """Under ``restart=None`` the first attempt widens its Krylov restart (30, 100, then the
+    memory-bounded maximum). A rung that retried at the probe restart alone stalled where the
+    wide restart converges (HSX QHS full-FP deck, E_r = -20, 66,004 unknowns), so the preconditioner
+    rungs get the same policy; an explicit ``restart`` stays fixed everywhere."""
+    op = _operator()
+    seen: list = []
+    real = solve_modules._solve_tier2
+
+    def spy(op, rhs2d, **kwargs):
+        seen.append(kwargs.get("auto_restart_recovery"))
+        return real(op, rhs2d, **kwargs)
+
+    monkeypatch.setattr(solve_modules, "_solve_tier2", spy)
+    _escalate(op, auto_restart=auto_restart)
+    assert seen and seen[0] is auto_restart, seen
+
+
 def test_a_diverged_iterate_is_not_used_as_a_start(monkeypatch) -> None:
     """An iterate worse than the right-hand side it started from would begin
     the next rung further away than the original guess."""
