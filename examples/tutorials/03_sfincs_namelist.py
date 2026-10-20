@@ -4,7 +4,7 @@ DKX reads SFINCS v3 decks unchanged and writes the same ``sfincsOutput``
 datasets (HDF5, NetCDF or NPZ by file suffix), so a SFINCS workflow moves over
 by changing the executable:
 
-    dkx sfincs write-output --input examples/tutorials/03_sfincs_namelist.namelist --out out.h5
+    dkx write-output --input examples/tutorials/03_sfincs_namelist.namelist --out out.h5
     dkx convert examples/tutorials/03_sfincs_namelist.namelist   # -> native TOML
 
 The deck is W7-X (``geometryScheme = 4``) at r/a = 0.5 with protons and

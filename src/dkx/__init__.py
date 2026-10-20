@@ -59,6 +59,7 @@ from .result import RESULT_SCHEMA_VERSION, Result  # noqa: E402
 # lazily via PEP 562 module __getattr__ so `import dkx` stays cheap.
 _LAZY_EXPORTS = {
     "plot": ("dkx.plotting", "plot"),
+    "scan": ("dkx.workflows.profile_scan", "scan"),
     "run_profile": ("dkx.run", "run_profile"),
     "run_transport_matrix": ("dkx.run", "run_transport_matrix"),
     "run_from_namelist": ("dkx.run", "run_from_namelist"),
@@ -129,6 +130,7 @@ def require_float64() -> None:
         )
 
 __all__ = [
+    "scan",
     "configure",
     "runtime",
     "require_float64",

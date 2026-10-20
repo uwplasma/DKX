@@ -556,6 +556,31 @@ def _cmd_convert(args: argparse.Namespace) -> int:
     return 0
 
 
+def _is_namelist(path: str | None) -> bool:
+    """True for anything that is not a native ``.toml``/``.json`` case (``None`` is ``./input.namelist``)."""
+    return path is None or Path(path).suffix.lower() not in {".toml", ".json"}
+
+
+def _scan_namelist(args: argparse.Namespace) -> int:
+    from .workflows.profile_scan import ScanInputError, scan  # noqa: PLC0415
+
+    er = None if args.er is None else (float(args.er[0]), float(args.er[1]), int(args.er[2]))
+    try:
+        result = scan(
+            args.case or "input.namelist", out_dir=args.out_dir, profiles=args.profiles, er=er,
+            radii=None if args.radii is None else [float(r) for r in args.radii],
+            skip_existing=args.skip_existing, solve_method=args.solve_method, jobs=args.jobs,
+            emit=None if args.quiet else (lambda level, msg: print(msg, flush=True)),
+        )
+    except (ScanInputError, OSError) as exc:
+        print(f"dkx scan failed: {exc}", file=sys.stderr)
+        return 2
+    if result.failures:
+        print(f"dkx scan: {len(result.failures)} points failed (see scan_failures.json)", file=sys.stderr)
+        return 1
+    return 0
+
+
 def _cmd_scan(args: argparse.Namespace) -> int:
     """Expand a case's ``[scan]`` axes, run every point, and write one Result.
 
@@ -568,6 +593,8 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     from .config import Case, CaseValidationError  # noqa: PLC0415
     from .workflows.scan import run_scan  # noqa: PLC0415
 
+    if _is_namelist(args.case):
+        return _scan_namelist(args)
     try:
         case = Case.from_file(args.case)
     except (CaseValidationError, OSError) as exc:
@@ -619,6 +646,15 @@ def _cmd_run_case(args: argparse.Namespace) -> int:
 
     from .config import Case, CaseValidationError  # noqa: PLC0415
 
+    if _is_namelist(args.case):
+        # The SFINCS executable's contract: input.namelist in, sfincsOutput.h5 out.
+        from .cli import main as _main  # noqa: PLC0415
+
+        deck = args.case or "input.namelist"
+        if not Path(deck).is_file():
+            print(f"dkx run failed: {deck} not found", file=sys.stderr)
+            return 2
+        return _main(["write-output", "--input", deck, "--out", args.out or "sfincsOutput.h5"] + (["--quiet"] if args.quiet else []))
     console = Console(stderr=False)
     try:
         case = Case.from_file(args.case)

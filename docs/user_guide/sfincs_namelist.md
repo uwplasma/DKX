@@ -11,7 +11,7 @@ physics fits the native route can be translated into a case with
 ```console
 dkx input.namelist                         # solve and write sfincsOutput.h5
 dkx input.namelist --out run.nc            # the suffix picks HDF5, NetCDF4 or NPZ
-dkx sfincs write-output --input input.namelist --out sfincsOutput.h5
+dkx write-output --input input.namelist --out sfincsOutput.h5
 ```
 
 ```python
@@ -295,7 +295,7 @@ key. The deck must use:
 
 | key | required value |
 |---|---|
-| `RHSMode` | 1 (use `dkx sfincs transport-matrix-v3` or `monoenergetic-database` for 2 and 3) |
+| `RHSMode` | 1 (use `dkx transport-matrix-v3` or `monoenergetic-database` for 2 and 3) |
 | `geometryScheme` | explicit; 1–4, 5, 11 or 12 (13 carries an inline spectrum a case cannot hold) |
 | scheme 1–4 parameters (`epsilon_*`, `iota`, `GHat`, `helicity_*`, `psiAHat`, ...) | their defaults; a case names the analytic model only by token |
 | `VMECRadialOption` | 0 (interpolate to the surface) |
@@ -328,6 +328,6 @@ A `monoenergetic-database` scan of a deck that does not set
 as MONKES does; a deck that sets them keeps its choice.
 
 ```console
-dkx sfincs transport-matrix-v3 --input input.namelist --out-matrix L.npy
-dkx sfincs monoenergetic-database --input input.namelist --nu-prime 1e-3 1e-2 1e-1 --e-star 0 0.01
+dkx transport-matrix-v3 --input input.namelist --out-matrix L.npy
+dkx monoenergetic-database --input input.namelist --nu-prime 1e-3 1e-2 1e-1 --e-star 0 0.01
 ```

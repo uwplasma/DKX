@@ -134,7 +134,7 @@ _CONVERGE_AXES: tuple[str, ...] = ("theta", "zeta", "pitch", "speed")
 #: choices is what the compatibility group exists to avoid.
 _USER_COMMANDS: tuple[str, ...] = (
     "doctor", "template", "validate", "run", "roots", "converge", "inspect",
-    "compare", "plot", "scan", "convert", "sfincs",
+    "compare", "plot", "scan", "convert",
 )
 
 

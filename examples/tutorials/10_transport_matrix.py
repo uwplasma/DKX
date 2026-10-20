@@ -18,7 +18,7 @@ Geometry: geometryScheme = 2 (a simplified LHD model) and = 1 (analytic
 helical field).
 
 Run:              python examples/tutorials/10_transport_matrix.py
-CLI:              dkx sfincs transport-matrix-v3 --input input.namelist
+CLI:              dkx transport-matrix-v3 --input input.namelist
 Smoke mode:       DKX_EXAMPLES_CI=1 python examples/tutorials/10_transport_matrix.py
 Expected runtime: see the table in examples/README.md.
 """

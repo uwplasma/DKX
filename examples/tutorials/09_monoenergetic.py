@@ -17,7 +17,7 @@ Geometry: the circular tokamak from ``09_monoenergetic.namelist``; at E* > 0
 ExB precession detraps particles and turns D11* over at low nu'.
 
 Run:              python examples/tutorials/09_monoenergetic.py
-CLI:              dkx sfincs monoenergetic-database --input examples/tutorials/09_monoenergetic.namelist
+CLI:              dkx monoenergetic-database --input examples/tutorials/09_monoenergetic.namelist
 Smoke mode:       DKX_EXAMPLES_CI=1 python examples/tutorials/09_monoenergetic.py
 Expected runtime: see the table in examples/README.md.
 """

@@ -99,7 +99,7 @@ cannot carry. `dkx compare a.h5 b.h5 --rtol 1e-9` compares DKX NetCDF and
 SFINCS HDF5 outputs ({doc}`../user_guide/sfincs_namelist`).
 
 Upstream SFINCS plotting scripts read DKX output too
-(`dkx sfincs postprocess-upstream --case-dir DIR --util sfincsScanPlot_1 -- pdf`):
+(`dkx postprocess-upstream --case-dir DIR --util sfincsScanPlot_1 -- pdf`):
 
 ```{figure} ../_static/figures/utils/sfincsScanPlot_1.png
 :alt: Upstream sfincsScanPlot_1 output generated from DKX sfincsOutput.h5 files.

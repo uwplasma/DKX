@@ -3,7 +3,8 @@
 This is the namelist-route equivalent of upstream ``sfincsScan`` with
 ``scanType = 5``: the deck's ``!ss`` comment lines choose the radii, a profile
 file gives ``n(rN)``, ``T(rN)`` and the ``E_r`` range, and every radius is an
-ordinary ``dkx sfincs scan-er`` over its ``E_r`` values.
+ordinary E_r scan over its ``E_r`` values. :func:`scan` dispatches a deck to the
+E_r or the radius x E_r scan from its ``!ss`` lines.
 """
 
 from __future__ import annotations
@@ -146,7 +147,7 @@ def run_profile_scan(
     txt = input_namelist.read_text()
     ss = parse_ss_lines(txt, source=str(input_namelist))
     if ss.get("scantype", 5) != 5:
-        raise ScanInputError(f"{input_namelist}: !ss scanType = {ss['scantype']:g}; scan-profile runs scanType 5 (use scan-er for an E_r scan)")
+        raise ScanInputError(f"{input_namelist}: !ss scanType = {ss['scantype']:g}; the radius x E_r scan runs scanType 5")
     nml = read_sfincs_input(input_namelist)
     geometry, species = nml.group("geometryParameters"), nml.group("speciesParameters")
     if int(geometry.get("INPUTRADIALCOORDINATE", 3)) != 3 or "DNHATDRHATS" not in species or "DTHATDRHATS" not in species:
@@ -203,3 +204,50 @@ def run_profile_scan(
     else:
         report.unlink(missing_ok=True)
     return ProfileScanResult(out_dir, tuple(map(float, radii)), n_points, tuple(failures))
+
+
+def scan(
+    namelist: Path | str = "input.namelist",
+    *,
+    out_dir: Path | str | None = None,
+    profiles: Path | str | None = None,
+    er: tuple[float, float, int] | None = None,
+    radii: Sequence[float] | None = None,
+    **kwargs,
+):
+    """Run the scan a deck's ``!ss`` lines describe and write the ``sfincsScan`` folder tree.
+
+    ``!ss scanType = 2`` solves ``NErs`` values between ``ErMin`` and ``ErMax`` (or the
+    ``dPhiHatd*`` bounds the deck's gradient coordinate selects) into ``Er<value>/``
+    folders; ``scanType = 5``, or any ``profiles`` file, solves ``rN<radius>/Er<value>/``
+    from the profile file. ``er = (min, max, n)`` and ``radii`` override the deck.
+    ``kwargs`` are ``skip_existing``, ``solve_method``, ``jobs`` and ``emit(level, msg)``.
+    Returns a :class:`ProfileScanResult` or a ``ScanResult``; both carry ``failures``.
+    Convergence (1) and generic-variable (3) scans stay with the ``sfincsScan`` scripts.
+    """
+    from ..namelist import read_sfincs_input  # noqa: PLC0415
+    from .scans import _er_scan_var_name  # noqa: PLC0415
+
+    namelist = Path(namelist).resolve()
+    out_dir = namelist.parent if out_dir is None else Path(out_dir)
+    ss = parse_ss_lines(namelist.read_text(), source=str(namelist))
+    kind = ss.get("scantype", 5 if profiles is not None else 2)
+    if kind == 5:
+        return run_profile_scan(
+            input_namelist=namelist, out_dir=out_dir, profiles=None if profiles is None else Path(profiles),
+            radii=radii, er_range=er, **kwargs,
+        )
+    if kind != 2:
+        raise ScanInputError(
+            f"{namelist}: !ss scanType = {kind:g} is not run by dkx scan (2 and 5 are); "
+            "use the sfincsScan scripts in examples/sfincs_examples/utils."
+        )
+    var = _er_scan_var_name(nml=read_sfincs_input(namelist)).lower()
+    try:
+        low, high, n = er if er is not None else (ss[f"{var}min"], ss[f"{var}max"], int(ss["ners"]))
+    except KeyError as exc:
+        raise ScanInputError(f"{namelist}: an E_r scan needs the !ss lines NErs, {var}Min and {var}Max (missing {exc})") from None
+    return run_er_scan(
+        input_namelist=namelist, out_dir=out_dir, values=np.linspace(low, high, int(n)).tolist(),
+        compute_solution=True, **kwargs,
+    )

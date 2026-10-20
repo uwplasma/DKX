@@ -90,7 +90,7 @@ problem = dkx.prepare_er_scan(case, surface_index=0)
 scan = dkx.batched_er_scan(problem, er_values)
 ```
 
-For a full scan from a SFINCS deck, `dkx sfincs scan-er` reproduces the
+For a full scan from a SFINCS deck, `dkx scan-er` reproduces the
 `sfincsScan` workflow ({doc}`../user_guide/scans_and_parallelism`). The figure
 and numbers of the $J_r(E_r)$ scan are on the next page.
 

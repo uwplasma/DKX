@@ -217,9 +217,12 @@ one kinetic solve at a time. Its defaults, and why:
 
 A deck that needs the full trajectories (`includeXDotTerm`,
 `includeElectricFieldTermInXiDot`) has no native `[scan]` equivalent: the native
-route runs DKES trajectories only. Two namelist-route commands cover it.
+route runs DKES trajectories only. `dkx scan input.namelist` covers it and picks the
+scan from the deck's `!ss scanType` (2: $E_r$, 5: radius × $E_r$; Python: `dkx.scan`).
+Scans 1 (convergence) and 3 (generic variable) are the `sfincsScan` scripts of
+{doc}`sfincs_workflow`.
 
-`dkx sfincs scan-er` solves one deck at several $E_r$ values and writes
+An $E_r$ scan solves one deck at several $E_r$ values and writes
 `Er<value>/sfincsOutput.h5` per point. A point that fails is reported and the
 scan continues: the failures go to `scan_failures.json` beside the points, and
 the command exits 1. A rerun with `--skip-existing` solves only the missing
@@ -227,12 +230,11 @@ points. Scans whose shared batch would be a traced GMRES (full Fokker–Planck
 with the $E_r$ terms) are solved point by point, so each point gets the
 preconditioner escalation of the single solve.
 
-`dkx sfincs scan-profile` is the replacement for upstream `sfincsScan` with
-`scanType = 5`. It reads the deck's `!ss` lines and a profile file, and runs
-`scan-er` at every radius:
+`scanType = 5` replaces upstream `sfincsScan` with the same setting. It reads the
+deck's `!ss` lines and a profile file, and runs the $E_r$ scan at every radius:
 
 ```console
-dkx sfincs scan-profile --input input.namelist --profiles profile_HH --out-dir scan
+dkx scan input.namelist --profiles profile_HH --out-dir scan
 ```
 
 - Radii: `!ss Nradius`, `!ss rN_min`, `!ss rN_max`, or `--radii 0.1 0.3 0.5`.
@@ -240,7 +242,7 @@ dkx sfincs scan-profile --input input.namelist --profiles profile_HH --out-dir s
   then one row per radius, `rN nErs Ermin Ermax n_i T_i n_e T_e`, with $n$ in
   $10^{20}\,\mathrm{m^{-3}}$ and $T$ in keV. `nHats`, `THats` and the gradients
   are interpolated and differenced from it at each radius; $E_r$ values come
-  from `nErs`, `Ermin`, `Ermax` there, or from `--er-min --er-max --n-er`.
+  from `nErs`, `Ermin`, `Ermax` there, or from `--er MIN MAX N`.
 - The deck must use `inputRadialCoordinate = 3`, one ion and one electron
   species, and species gradients given as `dNHatdrHats`, `dTHatdrHats` with
   `Er`. Those keys, `rN_wish`, `nHats` and `THats` are overwritten per radius.
@@ -254,7 +256,7 @@ dkx sfincs scan-profile --input input.namelist --profiles profile_HH --out-dir s
 | control | effect |
 |---|---|
 | `--transport-workers N` (`DKX_TRANSPORT_PARALLEL_WORKERS`) | worker processes for independent `whichRHS` solves on the output-writing path; `transport-matrix-v3` solves all drives in one multi-RHS solve instead |
-| `dkx sfincs scan-er --jobs N` | parallel processes over $E_r$ points; `--index`/`--stride` split a scan across a job array |
+| `dkx scan --jobs N` | parallel processes over $E_r$ points |
 | `--distributed` with `--process-id`, `--process-count`, `--coordinator-address`, `--coordinator-port` | JAX multi-host initialization |
 
 ## Relation to SFINCS

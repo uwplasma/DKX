@@ -1096,8 +1096,8 @@ def case_from_sfincs_namelist(
             "run.workflow = 'transport_matrix' (RHSMode=2) and 'monoenergetic' "
             "(RHSMode=3) are in the case schema but dkx.execution.run_case "
             "implements neither, and RHSMode=3's nuPrime/EStar forcing has no case "
-            "field at all. Run these decks with `dkx sfincs transport-matrix-v3` or "
-            "`dkx sfincs monoenergetic-database`.",
+            "field at all. Run these decks with `dkx transport-matrix-v3` or "
+            "`dkx monoenergetic-database`.",
         )
 
     scheme_value = lookup_config_value(nml, ("geometryParameters",), "geometryScheme", None)

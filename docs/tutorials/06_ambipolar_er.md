@@ -107,7 +107,7 @@ A three-root $J_r(E_r)$: ion, unstable and electron roots.
 
 Single-surface alternatives: `dkx.find_ambipolar_er` (Brent search, reports
 failures instead of raising, `all_roots=True` for every root) and
-`dkx sfincs ambipolar-solve` for SFINCS decks.
+`dkx ambipolar-solve` for SFINCS decks.
 
 ## Next
 

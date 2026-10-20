@@ -1041,8 +1041,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     _add_common_cli_args(p_scan_case)
     _add_parallel_cli_args(p_scan_case)
-    p_scan_case.add_argument("case", help="Path to a .toml or .json case file with a [scan] table.")
+    p_scan_case.add_argument(
+        "case", nargs="?", default=None,
+        help="A .toml or .json case file with a [scan] table, or a SFINCS input.namelist whose "
+             "'!ss' lines choose an E_r (scanType 2) or radius x E_r (scanType 5) scan.",
+    )
     p_scan_case.add_argument("--out", default=None, help="Output NetCDF path (default: scan.output).")
+    p_scan_case.add_argument("--out-dir", default=None, help="Namelist scans: folder for the Er<value>/ tree (default: beside the deck).")
+    p_scan_case.add_argument("--profiles", default=None, help="Namelist scans: profile file for a radius x E_r scan.")
+    p_scan_case.add_argument("--er", nargs=3, metavar=("MIN", "MAX", "N"), default=None, help="Namelist scans: E_r range, replacing the deck's.")
+    p_scan_case.add_argument("--radii", nargs="+", default=None, help="Namelist scans: rN values, replacing the deck's.")
+    p_scan_case.add_argument("--jobs", type=int, default=1, help="Namelist scans: parallel worker processes.")
+    p_scan_case.add_argument("--skip-existing", action="store_true", help="Namelist scans: reuse existing sfincsOutput.h5 files.")
+    p_scan_case.add_argument("--solve-method", default="auto", help="Namelist scans: solve method for every point.")
     p_scan_case.add_argument(
         "--no-resume", action="store_true",
         help="Rerun every point even if the output already holds its result.",
@@ -1066,7 +1077,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     _add_common_cli_args(p_run)
     _add_parallel_cli_args(p_run)
-    p_run.add_argument("case", help="Path to a .toml or .json case file.")
+    p_run.add_argument(
+        "case", nargs="?", default=None,
+        help="A .toml or .json case file, or a SFINCS input.namelist (default: input.namelist "
+             "in the current directory, written to sfincsOutput.h5 like the SFINCS executable).",
+    )
     p_run.add_argument(
         "--out",
         default=None,
@@ -1108,10 +1123,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # SFINCS-compatibility commands: visible under `dkx sfincs`, and still
     # accepted at the top level as hidden aliases so existing scripts run.
-    p_sfincs = sub.add_parser(
-        "sfincs",
-        help="SFINCS v3 compatibility commands (namelist and HDF5 workflows).",
-    )
+    p_sfincs = sub.add_parser("sfincs", help=argparse.SUPPRESS)
     _add_compat_parsers(
         p_sfincs.add_subparsers(dest="sfincs_cmd", required=True)
     )
@@ -1133,6 +1145,8 @@ def main(argv: list[str] | None = None) -> int:
         os.environ["DKX_FORTRAN_STDOUT"] = "0"
     else:
         os.environ.setdefault("DKX_FORTRAN_STDOUT", "1" if not getattr(args, "quiet", False) else "0")
+    if args.cmd == "sfincs":
+        print(f"dkx sfincs {args.sfincs_cmd} is deprecated; use dkx {args.sfincs_cmd}.", file=sys.stderr)
     return int(args.func(args))
 
 if __name__ == "__main__":
