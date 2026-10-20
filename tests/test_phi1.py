@@ -547,3 +547,58 @@ def test_read_external_phi1_output_matches_fortran(tmp_path: Path) -> None:
             rtol=0.0, atol=1e-10, err_msg=f"core field {key}",
         )  # fmt: skip
     assert worst < 5e-8, f"worst shared-field diff {worst:.3e} at {worst_key!r}"
+
+
+# ---------------------------------------------------------------------------
+# 7. The bordered Phi1 preconditioner reads the border from matvecs
+# ---------------------------------------------------------------------------
+
+
+def test_matrix_free_border_matches_the_dense_schur_projection() -> None:
+    """``_bordered_precond`` is the projection of ``schur_projected_precond`` without the dense ``B``, ``C``."""
+    from solvax.operators import schur_projected_precond
+
+    from dkx.coarse_precond import _bordered_precond, _materialize_full_border, _transposed_apply
+
+    op = replace(_canonical_op(), phi1_lin_state=jnp.asarray(_fortran_state()))
+    fs, n = op.f_size, op.total_size
+    rng = np.random.default_rng(7)
+    a_inv = lambda v: v / (1.0 + jnp.arange(v.size) % 5)  # any fixed linear map  # noqa: E731
+    b_cols, c_rows, d_block = _materialize_full_border(op)
+    r = jnp.asarray(rng.standard_normal(n))
+    dense = schur_projected_precond(a_inv, b_cols, c_rows, d_block=d_block)
+    np.testing.assert_allclose(_bordered_precond(op.apply, a_inv, fs, n)(r), dense(r), rtol=1e-11, atol=1e-12)
+    dense_t = schur_projected_precond(a_inv, c_rows.T, b_cols.T, d_block=d_block.T)
+    free_t = _bordered_precond(_transposed_apply(op), a_inv, fs, n)
+    np.testing.assert_allclose(free_t(r), dense_t(r), rtol=1e-11, atol=1e-12)
+
+
+def test_phi1_preconditioner_keeps_one_border_sized_array_and_no_baked_constants() -> None:
+    """One ``A^-1 B`` array, and nothing SOLVAX would compile in as a constant.
+
+    SOLVAX hands the arrays in a function's closure cells to the compiled solve as
+    arguments; those in a ``functools.partial`` or a bound method are baked in, and
+    XLA holds them again (W7-X 9x35x32x4: 5.6 GB of the 11 GB peak).
+    """
+    import functools
+    import types
+
+    from dkx.coarse_precond import build_coarse_preconditioner
+
+    op = replace(_canonical_op(), phi1_lin_state=jnp.asarray(_fortran_state()))
+    precond, _ = build_coarse_preconditioner(op)
+    stack, seen, border_sized = [precond], set(), 0
+    while stack:
+        fn = stack.pop()
+        if id(fn) in seen:
+            continue
+        seen.add(id(fn))
+        assert isinstance(fn, types.FunctionType), type(fn)
+        for cell in fn.__closure__ or ():
+            value = cell.cell_contents
+            assert not isinstance(value, (functools.partial, types.MethodType)), value
+            if isinstance(value, types.FunctionType):
+                stack.append(value)
+            elif isinstance(value, jax.Array) and value.shape == (op.total_size - op.f_size, op.f_size):
+                border_sized += 1
+    assert border_sized == 1

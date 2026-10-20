@@ -118,7 +118,7 @@ def test_full_fokker_planck_reproduces_the_spitzer_harm_conductivity(z_ion: floa
 #: SFINCS has no Sugama operator, so Spitzer-Harm is the external reference. The
 #: momentum-restoring response is built per species pair (r_ab = T_ab phi), so the
 #: electron-ion Lorentz term does not enter the electron-electron restoring shape; the
-#: remaining deficit, 11.1, 9.8, 7.8 and 3.1 % for Z = 1, 2, 4, 16, is the model's.
+#: remaining deficit, 11.1, 9.8, 7.8 and 3.1 % for Z = 1, 2, 4, 16, is open: Frei et al. (2022) report the published improved operator within 1 % of Coulomb.
 SUGAMA_GAMMA_E = {1.0: 0.5172, 2.0: 0.6167, 4.0: 0.7240, 16.0: 0.8941}
 
 
@@ -263,3 +263,43 @@ def test_like_particle_fokker_planck_collisions_give_no_tokamak_particle_flux(
     pas = _transport_matrix(tmp_path, 1, 0.0, rung)
     assert abs(full[0, 0]) / abs(full[1, 1]) < 1e-6, full
     assert abs(pas[0, 0]) / abs(pas[1, 1]) > 1e-2, pas
+
+
+# ---------------------------------------------------------------------------
+# Monoenergetic D11*: the radial convention
+# ---------------------------------------------------------------------------
+
+#: W7-X EIM at s = 0.2, nu/v = 0.0160133 1/m, 11x23x48, DKES trajectories. NTX on the same
+#: booz_xform surface (psi_p = 1, i.e. D11 per unit psi^2, DKES units) gives 1.09555e-3.
+NTX_W7X_EIM_D11_PSI = 1.0955489e-3
+
+
+def _w7x_d11_psi(tmp_path: Path, psi_a_scale: float) -> tuple[float, float]:
+    import re
+
+    from dkx.monoenergetic import monoenergetic_database
+
+    deck = (Path(__file__).parents[1] / "validation/inputs/w7x_eim_mdke.input.namelist").read_text()
+    for name, value in (("Ntheta", 11), ("Nzeta", 23), ("Nxi", 48)):
+        deck = re.sub(rf"(?m)^(\s*{name}\s*=).*$", rf"\g<1> {value}", deck)
+    psi_a = float(re.search(r"psiAHat\s*=\s*(\S+)", deck).group(1).replace("d", "e"))
+    deck = re.sub(r"(?m)^(\s*psiAHat\s*=).*$", rf"\g<1> {psi_a * psi_a_scale!r}", deck)
+    (tmp_path / "input.namelist").write_text(deck)
+    db = monoenergetic_database(tmp_path / "input.namelist", [0.11098461238458954], [0.0], tol=1e-10)
+    b0, r_major = float(db.b0_over_bbar), abs(float(db.g_hat)) / float(db.b0_over_bbar)
+    d11_star = float(np.ravel(db.d11_star)[0])
+    # D11* = D11_psi (dr/dpsi)^2 8 R0 B0^2 iota / pi with dpsi/dr = B0 r_hat
+    return d11_star, d11_star * np.pi / (8 * r_major * b0**2 * abs(float(db.iota))) * (b0 * float(db.r_hat)) ** 2
+
+
+def test_monoenergetic_d11_in_psi_units_matches_ntx_and_d11_star_follows_the_flux(tmp_path: Path) -> None:
+    """D11* divides D11 by DKX's dpsi/dr = B0 r_hat, so it moves with the deck's psiAHat; D11 per psi^2 does not.
+
+    A deck whose psiAHat is not the equilibrium's toroidal flux (here the W7-X EIM value 0.3032) normalizes by
+    the wrong dpsi/dr and looks 10 % away from codes that use the file's flux (MONKES, YANCC).
+    """
+    d11_star, d11_psi = _w7x_d11_psi(tmp_path, 1.0)
+    assert d11_psi == pytest.approx(NTX_W7X_EIM_D11_PSI, rel=1e-3)
+    scaled_star, scaled_psi = _w7x_d11_psi(tmp_path, 1.2)
+    assert scaled_psi == pytest.approx(d11_psi, rel=1e-9)
+    assert scaled_star == pytest.approx(d11_star / 1.2, rel=1e-9)

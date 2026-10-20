@@ -60,10 +60,16 @@ def dkes_to_beidler(
     raw_fsab_b2: float | None = None,
     d33_spitzer: float | None = None,
     cross_orientation: float = -1.0,
+    psi_p: float | None = None,
 ) -> dict[str, float]:
     """Convert MONKES/YANCC DKES-scaled coefficients to Beidler ``D*``.
 
-    ``r_hat`` is the local effective radius, not the LCFS minor radius.
+    ``r_hat`` is the local effective radius, not the LCFS minor radius. The raw
+    coefficients carry the reference code's own ``d psi / d r``: pass it as ``psi_p``
+    to express them in DKX's radial convention ``d psi / d r = B0 r_hat``
+    (``D11`` scales as ``1/psi_p^2`` and ``D31``, ``D13`` as ``1/psi_p``). Codes
+    that define the minor radius differently differ in ``D11*`` by the squared
+    ratio of their ``psi_p`` otherwise.
     ``raw_b0_over_bbar`` accounts for a raw reference-field convention that
     differs from DKX's ``B0``. Supply either the raw Spitzer value or
     ``raw_fsab_b2`` for the ``D33`` scale. The default orientation maps the
@@ -90,6 +96,7 @@ def dkes_to_beidler(
         / (_TRAPPED_FRACTION_FACTOR * math.sqrt(eps_t))
     )
     raw_b0 = b0 if raw_b0_over_bbar is None else abs(float(raw_b0_over_bbar))
+    psi_ratio = 1.0 if psi_p is None else abs(float(psi_p)) / (b0 * float(r_hat))
     cross_b0_correction = raw_b0 / b0
 
     if (d33_spitzer is None) == (raw_fsab_b2 is None):
@@ -107,9 +114,9 @@ def dkes_to_beidler(
         raise ValueError("d33_spitzer must be nonzero")
 
     return {
-        "D11_star": float(d11) * d11_factor,
-        "D31_star": float(cross_orientation) * float(d31) * cross_b0_correction * d31_factor,
-        "D13_star": float(cross_orientation) * float(d13) * cross_b0_correction * d31_factor,
+        "D11_star": float(d11) * d11_factor * psi_ratio**2,
+        "D31_star": float(cross_orientation) * float(d31) * cross_b0_correction * d31_factor * psi_ratio,
+        "D13_star": float(cross_orientation) * float(d13) * cross_b0_correction * d31_factor * psi_ratio,
         "D33_star": float(d33) / float(d33_spitzer),
         "r_major": r_major,
         "eps_t": eps_t,
