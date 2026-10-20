@@ -114,10 +114,12 @@ def test_full_fokker_planck_reproduces_the_spitzer_harm_conductivity(z_ion: floa
     assert abs(ratio - expected) / expected < 5e-3, (z_ion, ratio, expected)
 
 
-#: The improved Sugama model against the same table (measured, float64, Nx = 8 and 16 agree to 4e-6).
-#: SFINCS has no Sugama operator, so Spitzer-Harm is the external reference: the model
-#: underestimates gamma_E by 22.6, 19.1, 14.3 and 5.4 % for Z = 1, 2, 4, 16.
-SUGAMA_GAMMA_E = {1.0: 0.4502, 2.0: 0.5525, 4.0: 0.6724, 16.0: 0.8727}
+#: The improved Sugama model against the same table (measured, float64, Nx = 8).
+#: SFINCS has no Sugama operator, so Spitzer-Harm is the external reference. The
+#: momentum-restoring response is built per species pair (r_ab = T_ab phi), so the
+#: electron-ion Lorentz term does not enter the electron-electron restoring shape; the
+#: remaining deficit, 11.1, 9.8, 7.8 and 3.1 % for Z = 1, 2, 4, 16, is the model's.
+SUGAMA_GAMMA_E = {1.0: 0.5172, 2.0: 0.6167, 4.0: 0.7240, 16.0: 0.8941}
 
 
 @pytest.mark.parametrize("z_ion", sorted(SUGAMA_GAMMA_E))
@@ -125,7 +127,7 @@ def test_improved_sugama_conductivity_against_spitzer_harm_is_pinned(z_ion: floa
     ratio = _current(z_ion, 1.0, 8, True) / _current(z_ion, LORENTZ_ELECTRON_DENSITY, 8, True)
     assert abs(ratio - SUGAMA_GAMMA_E[z_ion]) < 2e-4, (z_ion, ratio)
     deviation = ratio / SPITZER_HARM_GAMMA_E[z_ion] - 1.0
-    assert -0.24 < deviation < -0.05  # largest at Z = 1, shrinking toward the Lorentz limit as Z grows
+    assert -0.12 < deviation < -0.03  # largest at Z = 1, shrinking toward the Lorentz limit as Z grows
 
 
 # =============================================================================
