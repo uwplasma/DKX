@@ -655,81 +655,21 @@ def _solve_tier1(
 # =============================================================================
 
 
-def _solve_tier1_truncated(
-    op: KineticOperator,
-    rhs2d: jnp.ndarray,
-    *,
-    keep: int,
-    tol: float,
-    atol: float,
-    subsystem_batch: int | str = "auto",
-    adjoint_window: int | None = None,
-) -> SolveResult:
-    """Memory-lean structured direct solve: the lowest ``keep`` Legendre blocks.
+@functools.partial(jax.jit, static_argnames=("keep", "adjoint_window", "width"))
+def _truncated_sweeps(op: KineticOperator, rhs2d: jnp.ndarray, keep: int, adjoint_window: int | None, width: int):
+    """The block-Thomas sweeps of :func:`_solve_tier1_truncated`, compiled once per layout.
 
-    Assembles each ``(m, m)`` Legendre block on the fly inside
-    ``solvax.direct.block_thomas_truncated_fn`` (peak memory ``O(keep * m^2)``
-    per subsystem, independent of ``n_xi``), so the ~39 GB full-band storage is
-    never allocated.  The ``constraintScheme=2`` border is absorbed with the
-    same exact rank-one trick as :func:`build_tier1_solver`.  The lowest
-    ``keep`` blocks (and the source unknowns) are exact; blocks ``l >= keep``
-    are zero-padded — valid because the drive and all requested output moments
-    live on ``l < keep`` (see :func:`_rhs_confined_to_lowest_blocks`). With full
-    recovery, ``keep`` grows with pitch resolution: per-chain memory then grows
-    too, although global band arrays are still never materialized.
-
-    Non-uniform ``Nxi_for_x`` (the production speed-dependent Legendre ramp)
-    is exact too: each (species, x) subsystem is closed, so it is eliminated
-    with its own ``n_blocks = Nxi_for_x[ix]`` — precisely the packed Fortran
-    discretization (``indices.F90``), whose truncated DOFs the zero-padded
-    tail already covers. Full recovery retains ``min(keep, n_blocks)`` per
-    chain and pads only inactive DOFs; partial recovery still requires
-    ``keep <= min Nxi_for_x``.
-
-    ``subsystem_batch`` sets how many of the ``B = n_species * n_x``
-    independent subsystems are eliminated concurrently (the
-    ``jax.lax.map(..., batch_size=w)`` vmapped-chunk axis): width 1 is the
-    fully serial minimum-memory sweep, width ``B`` eliminates every subsystem
-    at once, and ``"auto"`` resolves backend-aware — width 1 on CPU, the
-    widest memory-budget-fitting width on accelerators
-    (:func:`_resolve_subsystem_batch`).  On the ramped path subsystems are
-    grouped by equal ``n_blocks`` (all species at the speed nodes sharing one
-    ``Nxi_for_x`` value) and batched within each group, so every subsystem
-    keeps exactly its own static block count at any width — identical
-    per-subsystem arithmetic to the serial sweep.
-
-    This raw kernel is a pure-JAX composition of
-    ``block_thomas_truncated_fn`` sweeps, so ``jax.grad`` differentiates
-    straight through it. Public full recovery with ``differentiable=True``
-    instead enters :func:`_solve_generated_full`; the following reduced-system
-    discussion applies to partial recovery.  It is *not* wrapped in the full-operator
-    implicit-function-theorem adjoint used by the full structured direct and
-    recycled Krylov paths: this solve inverts the *reduced* Schur-complemented
-    operator on the lowest ``keep`` blocks, not the full band, so a
-    full-operator ``A^T`` adjoint would be inconsistent and silently corrupt
-    gradients.  Two consistent
-    reverse-mode paths exist instead.  The default tapes the generated sweeps
-    (exact, but the tape grows with ``n_xi``: ``O(n_xi * m^2)`` per
-    subsystem).  With ``adjoint_window=w`` the
-    solve uses solvax's structure-preserving custom VJP for generated blocks:
-    the right-hand-side gradient is an exactly *generated* truncated solve of
-    the transposed operator, and the coefficient gradients are pulled back
-    through the block assembly's own derivative on the leading ``keep + w``
-    Legendre blocks — reverse mode then runs at ``O((keep + w) * m^2)`` per
-    subsystem, independent of ``n_xi``, matching the forward sweep.  The
-    window trades nothing on the right-hand-side gradient and has
-    ``O(rho^{2w})`` coefficient-gradient error for the block-dominant
-    collisional operators this kernel targets; ``w >= n_xi`` reproduces the
-    taped gradient exactly (solvax pins full-window bitwise equality).
+    Eagerly, every call retraced ``lax.scan`` over fresh closures and compiled one
+    executable per ``Nxi_for_x`` group (8 per solve on the tokamak decks), and every
+    Er field of a scan did the same. As a module-level jit the operator is an argument,
+    so a repeated solve or another field reuses the executable.
     """
-    _require_solvax()
     n_s, n_x, n_xi, n_t, n_z = op.f_shape
     n_tz = n_t * n_z
     batch = n_s * n_x
     n_rhs = rhs2d.shape[1]
     cs = op.constraint_scheme
 
-    t0 = time.perf_counter()
     coef = _truncated_coefficients(op)
 
     # Per-subsystem inputs, flattened to batch index b = s * n_x + x (matching
@@ -803,8 +743,6 @@ def _solve_tier1_truncated(
     # batch_size=w eliminates w subsystems per vmapped chunk (the peak holds w
     # concurrent O(keep * m^2) sweeps); width 1 (batch_size=None) is the fully
     # serial scan-based sweep with a single subsystem's working set.
-    width = _resolve_subsystem_batch(op, subsystem_batch, keep)
-
     def _map_subsystems(fn, inputs, n_sub: int):
         w = min(width, n_sub)
         return jax.lax.map(fn, inputs, batch_size=None if w == 1 else w)
@@ -858,8 +796,91 @@ def _solve_tier1_truncated(
             s_sx = s_sx.at[:, idx].set(s_g.reshape(n_s, g, n_rhs))
         f_low_b = f_low_sx.reshape(batch, keep, n_tz, n_rhs)
         s_b = s_sx.reshape(batch, n_rhs)
-    # Force the async truncated block-Thomas sweep to complete so the timing is
-    # real compute, not JAX dispatch latency (a no-op under jit/grad tracing).
+    return f_low_b, s_b, (coef, stream_b, mirror_b, pas_b, x_b, rhs_low_b, r_c_b)
+
+
+def _solve_tier1_truncated(
+    op: KineticOperator,
+    rhs2d: jnp.ndarray,
+    *,
+    keep: int,
+    tol: float,
+    atol: float,
+    subsystem_batch: int | str = "auto",
+    adjoint_window: int | None = None,
+) -> SolveResult:
+    """Memory-lean structured direct solve: the lowest ``keep`` Legendre blocks.
+
+    Assembles each ``(m, m)`` Legendre block on the fly inside
+    ``solvax.direct.block_thomas_truncated_fn`` (peak memory ``O(keep * m^2)``
+    per subsystem, independent of ``n_xi``), so the ~39 GB full-band storage is
+    never allocated.  The ``constraintScheme=2`` border is absorbed with the
+    same exact rank-one trick as :func:`build_tier1_solver`.  The lowest
+    ``keep`` blocks (and the source unknowns) are exact; blocks ``l >= keep``
+    are zero-padded — valid because the drive and all requested output moments
+    live on ``l < keep`` (see :func:`_rhs_confined_to_lowest_blocks`). With full
+    recovery, ``keep`` grows with pitch resolution: per-chain memory then grows
+    too, although global band arrays are still never materialized.
+
+    Non-uniform ``Nxi_for_x`` (the production speed-dependent Legendre ramp)
+    is exact too: each (species, x) subsystem is closed, so it is eliminated
+    with its own ``n_blocks = Nxi_for_x[ix]`` — precisely the packed Fortran
+    discretization (``indices.F90``), whose truncated DOFs the zero-padded
+    tail already covers. Full recovery retains ``min(keep, n_blocks)`` per
+    chain and pads only inactive DOFs; partial recovery still requires
+    ``keep <= min Nxi_for_x``.
+
+    ``subsystem_batch`` sets how many of the ``B = n_species * n_x``
+    independent subsystems are eliminated concurrently (the
+    ``jax.lax.map(..., batch_size=w)`` vmapped-chunk axis): width 1 is the
+    fully serial minimum-memory sweep, width ``B`` eliminates every subsystem
+    at once, and ``"auto"`` resolves backend-aware — width 1 on CPU, the
+    widest memory-budget-fitting width on accelerators
+    (:func:`_resolve_subsystem_batch`).  On the ramped path subsystems are
+    grouped by equal ``n_blocks`` (all species at the speed nodes sharing one
+    ``Nxi_for_x`` value) and batched within each group, so every subsystem
+    keeps exactly its own static block count at any width — identical
+    per-subsystem arithmetic to the serial sweep.
+
+    This raw kernel is a pure-JAX composition of
+    ``block_thomas_truncated_fn`` sweeps, so ``jax.grad`` differentiates
+    straight through it. Public full recovery with ``differentiable=True``
+    instead enters :func:`_solve_generated_full`; the following reduced-system
+    discussion applies to partial recovery.  It is *not* wrapped in the full-operator
+    implicit-function-theorem adjoint used by the full structured direct and
+    recycled Krylov paths: this solve inverts the *reduced* Schur-complemented
+    operator on the lowest ``keep`` blocks, not the full band, so a
+    full-operator ``A^T`` adjoint would be inconsistent and silently corrupt
+    gradients.  Two consistent
+    reverse-mode paths exist instead.  The default tapes the generated sweeps
+    (exact, but the tape grows with ``n_xi``: ``O(n_xi * m^2)`` per
+    subsystem).  With ``adjoint_window=w`` the
+    solve uses solvax's structure-preserving custom VJP for generated blocks:
+    the right-hand-side gradient is an exactly *generated* truncated solve of
+    the transposed operator, and the coefficient gradients are pulled back
+    through the block assembly's own derivative on the leading ``keep + w``
+    Legendre blocks — reverse mode then runs at ``O((keep + w) * m^2)`` per
+    subsystem, independent of ``n_xi``, matching the forward sweep.  The
+    window trades nothing on the right-hand-side gradient and has
+    ``O(rho^{2w})`` coefficient-gradient error for the block-dominant
+    collisional operators this kernel targets; ``w >= n_xi`` reproduces the
+    taped gradient exactly (solvax pins full-window bitwise equality).
+    """
+    _require_solvax()
+    n_s, n_x, n_xi, n_t, n_z = op.f_shape
+    n_tz = n_t * n_z
+    n_rhs = rhs2d.shape[1]
+
+    t0 = time.perf_counter()
+    # Concurrency across the B independent subsystems: width w eliminates w subsystems
+    # per vmapped chunk (the peak holds w concurrent O(keep * m^2) sweeps); width 1 is
+    # the fully serial scan-based sweep with a single subsystem's working set.
+    width = _resolve_subsystem_batch(op, subsystem_batch, keep)
+    f_low_b, s_b, (coef, stream_b, mirror_b, pas_b, x_b, rhs_low_b, r_c_b) = _truncated_sweeps(
+        op, rhs2d, keep, adjoint_window, width
+    )
+    # Force the async sweep to complete so the timing is real compute, not JAX
+    # dispatch latency (a no-op under jit/grad tracing).
     f_low_b, s_b = jax.block_until_ready((f_low_b, s_b))
     t1 = time.perf_counter()
 
