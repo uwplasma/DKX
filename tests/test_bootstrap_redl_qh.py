@@ -34,6 +34,7 @@ REDL = -2.10269e5  # A T m^-2
 SFINCS_FSABJ = -3.35709e-2  # SFINCS v3 FSABjHat at this grid
 
 
+@pytest.mark.slow
 def test_full_fokker_planck_matches_sfincs_and_redl_in_a_quasi_helical_field() -> None:
     n_hat, t_hat = 3.5e-1 * (1 - 0.5**5), 9.45 * 0.5
     run = dkx.run(
