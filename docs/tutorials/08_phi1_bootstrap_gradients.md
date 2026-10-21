@@ -94,6 +94,27 @@ four grids, and DKX is 0.98 of Redl at $25\times37$ angles, $N_\xi=64$, $N_x=7$
 give 0.82 and 1.32, in both codes, so the angles need checking, not only
 $N_\xi$ and $N_x$.
 
+In the precise quasi-helical field of Landreman and Paul (PRL 128, 035001;
+$N_{fp}=4$, reactor scale, $Z_\mathrm{eff}=1$, $T_e=T_i=9.45\,(1-s)$ keV,
+$n=3.5\times10^{19}(1-s^5)$ m$^{-3}$), with Redl's helicity $N=-4$
+(`helicity_n=-1`), DKX Fokker-Planck over Redl is:
+
+| $s$ | DKX / Redl, $31\times31$ angles, $N_\xi=64$, $N_x=6$ | DKX / SFINCS | DKX / Redl, $37\times37$ |
+| --- | --- | --- | --- |
+| 0.25 | 1.050 | 0.9996 | not run (memory) |
+| 0.5 | 1.069 | 0.9990 | 1.037 |
+| 0.75 | 1.012 | 0.9992 | 1.003 |
+
+At $s=0.5$ the ratio falls 1.131, 1.069, 1.037 for 25, 31, 37 angles, so
+the angles still move it by 3% and the converged ratio is probably near 1.0;
+the 37-angle grid needs 30 GB. Quasi-helical symmetry needs more angles
+than the low-$N_\xi$ ladder suggests: at $N_\xi=32$ the ratio is 0.94 and
+flat from $29\times29$ angles on, but that value is under-resolved in
+$N_\xi$ (SFINCS: 0.029 against 0.034 at $N_\xi\ge64$). $N_\xi=64$ against
+96 and $N_x=6$ against 8 change it by 0.3% and 0.2% (SFINCS). The
+cheap `tests/test_bootstrap_redl_qh.py` ($25\times25$, $N_\xi=48$, $N_x=5$)
+pins DKX to SFINCS at 1% and to 1.12 of Redl.
+
 ## Gradients and optimization
 
 The kinetic equation is linear, $K(p)f=b(p)$, so one transposed solve gives
