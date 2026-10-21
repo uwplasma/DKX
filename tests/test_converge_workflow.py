@@ -8,7 +8,7 @@ on the physics. One real solve is exercised separately and marked slow.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 import pytest
@@ -768,3 +768,66 @@ def test_a_refused_ladder_makes_the_reported_uncertainty_infinite(monkeypatch) -
 
     report, _ = study(monkeypatch, response, richardson=True, axes=("theta",), joint=False)
     assert report.worst_grid_uncertainty == float("inf")
+
+
+def _certificate_case():
+    from pathlib import Path  # noqa: PLC0415
+
+    import dkx  # noqa: PLC0415
+
+    return dkx.Case.from_file(Path(__file__).parents[1] / "examples" / "tutorials" / "13_convergence.toml")
+
+
+def _flux_result(case, scale):
+    from dkx.result import Result  # noqa: PLC0415
+
+    flux = np.array([[1.0e20], [2.0e20]]) * np.array(scale)[:, None]
+    arrays = {"particle_flux_m2_s": flux, "heat_flux_W_m2": 1.0e5 * flux / 1e20}
+    return Result("id", "n", "profile", arrays, {k: ("surface", "species") for k in arrays}, {})
+
+
+def test_certificate_flags_only_the_unresolved_radius(monkeypatch):
+    case = _certificate_case()
+    seen = []
+
+    def fake_run_case(refined, **_):
+        seen.append(refined.resolution)
+        return _flux_result(refined, [1.01, 1.08])  # 1% and 8% moves
+
+    monkeypatch.setattr("dkx.execution.run_case", fake_run_case)
+    certified = cv.certify_resolution(case, _flux_result(case, [1.0, 1.0]), axes=("theta", "pitch"))
+    assert (seen[0].theta, seen[0].pitch, seen[0].speed) == (11, 10, case.resolution.speed)  # x1.25 on the named axes only
+    assert certified.arrays["resolution_resolved"].tolist() == [1, 0]
+    assert certified.arrays["resolution_change"] == pytest.approx([0.01, 0.08])
+    assert certified.metadata["resolution_certificate"]["all_resolved"] is False
+    assert any("not resolved at psi_N = 0.25" in w for w in certified.warnings)
+
+
+def test_certificate_passes_a_settled_grid_and_refuses_an_unrefinable_one(monkeypatch):
+    case = _certificate_case()
+    monkeypatch.setattr("dkx.execution.run_case", lambda refined, **_: _flux_result(refined, [1.001, 1.001]))
+    certified = cv.certify_resolution(case, _flux_result(case, [1.0, 1.0]))
+    assert certified.metadata["resolution_certificate"]["all_resolved"] and not certified.warnings
+    with pytest.raises(ValueError, match="can be refined"):
+        cv.certify_resolution(case, _flux_result(case, [1.0, 1.0]), axes=("zeta",))
+
+
+def test_certificate_gates_the_ambipolar_root_in_kv_per_m(monkeypatch):
+    from pathlib import Path  # noqa: PLC0415
+
+    import dkx  # noqa: PLC0415
+
+    case = dkx.Case.from_file(Path(__file__).parents[1] / "validation/inputs/analytic_ambipolar_uniform_tail_probe.toml")
+    result = _flux_result(case, [1.0, 1.0])
+    result = replace(result, arrays={**result.arrays, "electric_field_kV_m": np.array([1.0, 2.0])},
+                     dimensions={**result.dimensions, "electric_field_kV_m": ("surface",)})
+
+    def fake_run_case(refined, **_):
+        other = _flux_result(refined, [1.0, 1.0])  # fluxes unchanged: only the roots move
+        return replace(other, arrays={**other.arrays, "electric_field_kV_m": np.array([1.02, 2.2])},
+                       dimensions={**other.dimensions, "electric_field_kV_m": ("surface",)})
+
+    monkeypatch.setattr("dkx.execution.run_case", fake_run_case)
+    certified = cv.certify_resolution(case, result)
+    assert certified.arrays["resolution_root_change_kV_m"] == pytest.approx([0.02, 0.2])
+    assert certified.arrays["resolution_resolved"].tolist() == [1, 0]

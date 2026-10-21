@@ -163,15 +163,94 @@ requested estimate was refused, because an estimate that could not be made is
 not a small one. The algebraic error bar is separate
 ({doc}`../numerics/differentiation`); neither bounds model error.
 
+## A per-radius grid certificate
+
+`dkx converge` costs `len(axes) + 2` solves. For a profile or an ambipolar run
+the cheap question is only whether *this* result is resolved, radius by radius,
+and one more solve answers it:
+
+```console
+dkx run case.toml --check-grid                 # theta, zeta, pitch and speed refined together by 1.25
+dkx run case.toml --check-grid pitch           # one axis
+dkx scan case.toml --check-grid                # every scan point; adds a resolution_change column
+```
+
+The refined solve is compared with the result surface by surface. A radius is
+`resolved` when its particle and heat fluxes, species by species, move by less
+than 2% and, for `workflow = "ambipolar_profile"`, its selected root by less
+than 0.05 kV/m. The result then carries `resolution_change`,
+`resolution_resolved` and (ambipolar) `resolution_root_change_kV_m` per surface,
+`metadata["resolution_certificate"]`, and a warning naming every unresolved
+radius. In Python: `run_case(case, check_grid=("pitch",))` or
+`dkx.workflows.converge.certify_resolution(case, result)`.
+
+On the tutorial case (`examples/tutorials/13_convergence.toml`, 2 s each):
+
+```text
+theta=9,  pitch=8,  speed=4   grid check  NOT RESOLVED (worst change 46.5% under theta, zeta, pitch, speed x1.25)
+theta=21, pitch=20, speed=6   grid check  resolved (worst change 0.3% under theta, zeta, pitch, speed x1.25)
+```
+
+The certificate is a one-step proxy for the error left in the result, not a
+bound. A step that lands on the same plateau certifies a grid a much finer one
+would not, and a single axis cannot see coupling, so the default refines all
+four. It does not replace `dkx converge` for a number you intend to quote.
+
 ## Choosing a resolution
 
+Start from the table, then confirm with `dkx run --check-grid` or `dkx converge`.
+The collisionality that matters is $\lambda_{ii}/L_c$, the ion mean free path
+over the connection length $R/\iota$; the rows below are labelled by density at
+$T = 1$ keV for a deuterium plasma ($\nu \propto n/T^2$), for which
+$\lambda_{ii}/L_c \approx 0.27$ at $10^{22}\,\mathrm{m^{-3}}$ and scales as
+$T^2/n$.
+
+**Joint grid $(N_\theta, N_\zeta, N_\xi, N_x)$ with `angles = "spectral"`**: the
+smallest rung of the ladder $(11,13,16,4)$, $(13,17,24,5)$, $(15,25,32,6)$,
+$(17,33,48,6)$, $(19,41,64,8)$, $(21,49,96,8)$ whose next rung moves the particle
+and heat fluxes by less than 2% (analytic fields, $E_r = 0$; `>` means the ladder
+ran out):
+
+| $n$ at 1 keV | regime | W7-X | LHD | tokamak ($N_\zeta = 1$) |
+|---|---|---|---|---|
+| $10^{22}$ | collisional | 11, 13, 16, 4 | 13, 17, 24, 5 | 13, 24, 5 |
+| $10^{21}$ | plateau | 13, 17, 24, 5 | 13, 17, 24, 5 | 25, 48, 6 |
+| $10^{20}$ | $1/\nu$ | 17, 33, 48, 6 | > 21, 49, 96, 8 | > 65, 160, 12 |
+| $\le 10^{19}$ | deep $1/\nu$ / banana | > 21, 49, 96, 8 | > 19, 41, 64, 8 | > 65, 160, 12 |
+
+The tokamak column lists $(N_\theta, N_\xi, N_x)$. The W7-X profile of
+{doc}`../benchmarks/validation_matrix` ($n \approx 10^{19}$, $T_i \approx 1$ keV,
+$T_e \approx 4.75$ keV) sits in the last row, where the converged grid is
+beyond the ladder: see the measured grid below.
+
+- **Angles: use `angles = "spectral"`.** The fourth-order finite differences
+  converge algebraically; Fourier collocation converges exponentially for a
+  smooth $|B|$. Error of the particle and heat flux against the 21 x 49 spectral
+  value at $N_\xi = 64$, $N_x = 8$:
+
+  | field | angles | 11x13 | 13x17 | 15x25 | 17x33 | 19x41 |
+  |---|---|---|---|---|---|---|
+  | W7-X, $10^{20}$ | finite difference | 3.7% | 2.1% | 1.3% | 0.8% | 0.6% |
+  | | spectral | 1.0% | 0.3% | 0.05% | 0.04% | 0.02% |
+  | W7-X, $10^{19}$ | finite difference | 17% | 9.4% | 4.2% | 0.3% | 0.3% |
+  | | spectral | 4.2% | 1.2% | 1.8% | 0.9% | 0.3% |
+  | LHD, $10^{20}$ | finite difference | 2.7% | 2.7% | 2.7% | 2.8% | 2.0% |
+  | | spectral | 1.9% | 0.4% | 0.7% | 0.3% | 0.1% |
+
+  On the tabulated LHD $1/\nu$ case the finite-difference error is still 1.5%
+  at 21 x 49; the spectral error is below 1% from 13 x 17. The default stays
+  `finite_difference` so existing cases keep their numbers.
+- **Pitch is the long axis at low collisionality.** The W7-X
+  profile fluxes still move by 0.7-1.1% from $N_\xi = 96$ to 128 at $N_\theta,
+  N_\zeta = 15, 37$; a root of the radial current needs $N_\xi \gtrsim 160$.
+- **Speed converges fast once pitch does.** $N_x = 8 \to 14$ moves the same fluxes
+  by 0.1% or less, so $N_x = 6$-8 is enough in production.
+- **Strong $E_r$ needs angle.** At the W7-X electron root ($E_r \approx 7$ kV/m)
+  $N_\theta = 15 \to 19$ moves the electron flux by 2.3%; $N_\zeta = 37 \to 49$ by 4%.
 - **Start coarse, then refine jointly.** The checked-in examples use teaching
   grids (for example `theta = 9, zeta = 1, pitch = 8, speed = 4`) that run in
   seconds and are not converged. Raise the axes until `dkx converge` passes
   both verdicts at the tolerance you intend to quote.
-- **Low collisionality needs pitch and angle.** The trapped–passing boundary
-  layer makes $N_\xi$ and $N_\zeta$ the sensitive axes at low
-  collisionality, while $N_x$ changes more slowly.
 - **Strong $E_r$ needs speed and pitch.** The normalized field
   $E_* = \dfrac{c\,G}{\iota\,v_s B_0}\dfrac{d\Phi_0}{d\psi}$ of Landreman et
   al. (Phys. Plasmas 21, 042503, 2014) compares $E_r$ with the value at which

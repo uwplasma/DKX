@@ -591,6 +591,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     from rich.console import Console  # noqa: PLC0415
 
     from .config import Case, CaseValidationError  # noqa: PLC0415
+    from .workflows.converge import AXES  # noqa: PLC0415
     from .workflows.scan import run_scan  # noqa: PLC0415
 
     if _is_namelist(args.case):
@@ -616,6 +617,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
             out=Path(args.out) if args.out else None,
             emit=emit,
             resume=False if args.no_resume else None,
+            check_grid=None if args.check_grid is None else tuple(args.check_grid) or AXES,
         )
     except (CaseValidationError, ValueError) as exc:
         print(f"dkx scan failed: {exc}", file=sys.stderr)
@@ -673,6 +675,7 @@ def _cmd_run_case(args: argparse.Namespace) -> int:
         else (case.base_directory / case.output.file).resolve()
     )
     from .execution import run_case  # noqa: PLC0415
+    from .workflows.converge import AXES  # noqa: PLC0415
 
     # Progress goes to stderr so `dkx run ... --out -` style piping of the
     # summary stays clean, and so a redirected log keeps the two streams apart.
@@ -681,7 +684,10 @@ def _cmd_run_case(args: argparse.Namespace) -> int:
 
     started = time.perf_counter()
     try:
-        result = run_case(case, out=out_path, emit=emit)
+        result = run_case(
+            case, out=out_path, emit=emit,
+            check_grid=None if args.check_grid is None else tuple(args.check_grid) or AXES,
+        )
     except (CaseValidationError, NotImplementedError, ValueError) as exc:
         # A model the case route does not implement must say so precisely
         # rather than fall back to something adjacent (plan.md operating rule 11).
@@ -711,6 +717,13 @@ def _cmd_run_case(args: argparse.Namespace) -> int:
     table.add_row("true residual", "not measured" if residual is None else f"{residual:.3e}")
     table.add_row("solver route", str(result.metadata.get("solver_route", "unknown")))
     table.add_row("wall time", f"{elapsed:.2f} s")
+    certificate = result.metadata.get("resolution_certificate")
+    if certificate:
+        table.add_row(
+            "grid check",
+            ("resolved" if certificate["all_resolved"] else "NOT RESOLVED")
+            + f" (worst change {certificate['worst_change']:.1%} under {', '.join(certificate['axes'])} x{certificate['factor']:g})",
+        )
     table.add_row("result", str(out_path))
     if plot_path is not None:
         table.add_row("plot", str(plot_path))

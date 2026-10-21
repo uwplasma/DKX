@@ -212,6 +212,7 @@ excluded, and the result says so (`ambipolar_search_scope =
 | `pitch` | integer | required | $\ge 1$ | Legendre pitch-angle modes $N_\xi$ |
 | `speed` | integer | required | $\ge 1$ | speed-grid nodes $N_x$ |
 | `pitch_speed_ramp` | integer | `1` | `0`, `1`, `2` | SFINCS `Nxi_for_x_option`: how many pitch modes each speed node keeps |
+| `angles` | string | `"finite_difference"` | `finite_difference`, `spectral` | angular derivatives: fourth-order finite differences, or Fourier spectral collocation (exponentially convergent in `theta` and `zeta` for a smooth $|B|$; see {doc}`convergence`) |
 | `pitch_modes_by_speed` | array of integers | none | see below | explicit active pitch-mode count per speed node |
 
 `pitch_speed_ramp` values:

@@ -20,16 +20,21 @@ flux, heat flux and current is below the tolerance (default 0.02) **and**
 every solve passed its residual check. In Python it is
 `dkx.workflows.converge.converge_case(case, axes=..., factor=1.5, tolerance=0.02)`.
 
-The tutorial case is deliberately under-resolved (`theta=9, pitch=8, speed=4`).
-The report (18 s):
+The tutorial case is a dense, cold deuterium plasma (`n = 2e20 m^-3`,
+`T = 0.2 keV`, plateau/Pfirsch-Schlüter side of the banana regime), where the
+distribution is smooth and a modest grid converges. Its stated grid
+(`theta=9, pitch=8, speed=4`) is deliberately coarse. The report (about 10 s):
 
 ```text
-  theta     pitch=8 speed=4 theta=14 zeta=1      worst change   1144.5%
-  pitch     pitch=12 speed=4 theta=9 zeta=1      worst change     26.3%
-  speed     pitch=8 speed=6 theta=9 zeta=1       worst change     27.4%
-  all axes  pitch=12 speed=6 theta=14 zeta=1     worst change    670.1%
+  theta     pitch=8 speed=4 theta=14 zeta=1      worst change    19.9%
+  pitch     pitch=12 speed=4 theta=9 zeta=1      worst change     0.0%
+  speed     pitch=8 speed=6 theta=9 zeta=1       worst change     4.4%
+  all axes  pitch=12 speed=6 theta=14 zeta=1     worst change    18.1%
   converged at 2%: False
 ```
+
+`pitch` moves nothing here only because `theta` is the limiting axis: the
+per-axis rows alone would be a poor guide, which is why the joint row exists.
 
 ## A resolution ladder
 
@@ -37,7 +42,7 @@ Refining one axis at a time is misleading because the axes couple. The ladder
 refines everything together and records the outputs on the first surface:
 
 ```python
-LADDER = [(9, 8, 4), (17, 16, 5), (25, 24, 6), (33, 32, 6), (41, 40, 7)]  # theta, pitch, speed
+LADDER = [(9, 8, 4), (13, 12, 5), (17, 16, 5), (21, 20, 6), (25, 24, 6), (33, 32, 6)]  # theta, pitch, speed
 for n_theta, n_pitch, n_speed in LADDER:
     grid = replace(case.resolution, theta=n_theta, pitch=n_pitch, speed=n_speed)
     arrays = dkx.run(replace(case, resolution=grid)).arrays
@@ -45,11 +50,12 @@ for n_theta, n_pitch, n_speed in LADDER:
 
 ```text
   ladder (theta/pitch/speed): particle flux, heat flux, <j.B> at the first surface
-    9/ 8/4  +1.5606e+20  +7.6246e+04  -2.1238e+05
-   17/16/5  +1.7111e+20  +9.3474e+04  -2.0991e+05
-   25/24/6  +2.3093e+20  +1.2670e+05  -2.1712e+05
-   33/32/6  +2.7462e+20  +1.5271e+05  -2.2754e+05
-   41/40/7  +3.0332e+20  +1.7257e+05  -2.3336e+05
+    9/ 8/4  +8.1087e+20  +1.0841e+05  -4.0834e+04
+   13/12/5  +8.6168e+20  +1.1216e+05  -4.6574e+04
+   17/16/5  +8.6140e+20  +1.1314e+05  -4.7402e+04
+   21/20/6  +8.4898e+20  +1.1258e+05  -4.7379e+04
+   25/24/6  +8.4754e+20  +1.1246e+05  -4.7453e+04
+   33/32/6  +8.4623e+20  +1.1230e+05  -4.7487e+04
 ```
 
 ```{figure} ../_static/figures/tutorials/convergence.png
@@ -60,20 +66,28 @@ Left: worst relative change per refinement against the tolerance. Right: each
 output along the ladder, relative to the finest rung.
 ```
 
-What to read: the current moves by about 10% along the ladder, but the fluxes
-keep rising by 10-35% per rung and have not flattened at the finest rung. This
-case has a helical $n=10$ component of $|B|$ on a grid with `zeta = 1`, which
-the angular grid cannot represent, so it is a poor choice for a convergence
-claim. That is the point: **a number may be quoted only from a rung where the
-next rung changes it by less than the precision you need**, and where the
-refinement was joint. For a production grid:
+What to read: from `13/12/5` on, no rung moves the three outputs by 2% or more,
+and from `21/20/6` on none moves them by more than 0.2%. `21/20/6` is the first
+rung whose own `dkx converge` passes:
+
+```text
+  theta=21 pitch=20 speed=6: worst change 0.8%, converged at 2%: True
+```
+
+A number may be quoted only from a rung where the next rung changes it by less
+than the precision you need, and where the refinement was joint. At 62 times
+lower collisionality (`n = 8e19 m^-3`, `T = 1 keV`) `theta` alone still moves
+the particle flux by 17% from 25 to 33 points and by 8% to 41; such cases need
+the finer grids of {doc}`../user_guide/convergence`. For a production grid:
 
 - start from the smallest grid that runs, then walk up the ladder until
-  `dkx converge` exits zero;
+  `dkx converge` exits zero, or add `--check-grid` to `dkx run` for a one-solve,
+  per-radius verdict;
 - in a stellarator refine `theta`, `zeta` and `pitch` together;
 - the bootstrap current needs more `pitch` than the fluxes, especially at low
   collisionality (the VMEX objective defaults to 48 modes);
-- `speed` converges spectrally: a few nodes are usually enough.
+- `speed` converges spectrally at high collisionality, but not at low: see the
+  table in the guide.
 
 How to choose a production resolution: {doc}`../user_guide/convergence`.
 

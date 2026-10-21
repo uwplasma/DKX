@@ -637,6 +637,67 @@ def converge_case(
     )
 
 
+def certify_resolution(
+    case, result, *, axes: tuple[str, ...] = AXES, factor: float = 1.25,
+    tolerance: float = 0.02, field_tolerance_kv_m: float = 0.05,
+    emit: Callable[[str], None] | None = None,
+):
+    """Return ``result`` with a per-radius resolution certificate attached.
+
+    One more solve, with ``axes`` refined together by ``factor`` (the default
+    1.25 keeps a joint step affordable). Each surface is ``resolved`` when its
+    particle and heat fluxes, species by species, move by less than
+    ``tolerance`` (relative to the larger of the old value and 1e-3 of the
+    surface's largest) and, for an ambipolar profile, its root by less than
+    ``field_tolerance_kv_m``. The change is a one-step proxy for the error left
+    in ``result``, not a bound: a refinement that sits on the same plateau
+    certifies a grid that a much finer one would not. Adds arrays
+    ``resolution_change`` and ``resolution_resolved`` (and, for ambipolar
+    profiles, ``resolution_root_change_kV_m``), metadata
+    ``resolution_certificate`` and a warning when any surface is unresolved.
+    """
+    from ..execution import run_case  # noqa: PLC0415
+
+    if case.resolution.pitch_modes_by_speed is not None:  # an explicit allocation fixes pitch and speed
+        axes = tuple(axis for axis in axes if axis in ("theta", "zeta"))
+    refined = _refined(case.resolution, tuple(axes), factor)
+    if refined == case.resolution:
+        raise ValueError(f"none of the axes {list(axes)} can be refined for this case")
+    if emit is not None:
+        emit(f"grid check: refining {list(axes)} {_resolution_dict(case.resolution)} -> {_resolution_dict(refined)}")
+    other = run_case(replace(case, resolution=refined, output=replace(case.output, plots=False)), emit=emit)
+    change = np.zeros(len(case.geometry.surfaces))
+    for name in ("particle_flux_m2_s", "heat_flux_W_m2"):
+        old, new = np.asarray(result.arrays[name], float), np.asarray(other.arrays[name], float)
+        floor = 1e-3 * np.max(np.abs(old), axis=1, keepdims=True)
+        change = np.maximum(change, np.max(np.abs(new - old) / np.maximum(np.maximum(np.abs(old), floor), 1e-300), axis=1))
+    arrays = {"resolution_change": change}
+    dimensions = {"resolution_change": ("surface",)}
+    resolved = change < tolerance
+    if case.run.workflow == "ambipolar_profile":
+        shift = np.abs(np.asarray(other.arrays["electric_field_kV_m"], float) - np.asarray(result.arrays["electric_field_kV_m"], float))
+        arrays["resolution_root_change_kV_m"] = shift
+        dimensions["resolution_root_change_kV_m"] = ("surface",)
+        resolved = resolved & (shift < field_tolerance_kv_m)
+    arrays["resolution_resolved"] = resolved.astype(np.int8)
+    dimensions["resolution_resolved"] = ("surface",)
+    warnings = result.warnings
+    if not np.all(resolved):
+        bad = ", ".join(f"{r:.3g}" for r in np.asarray(case.geometry.surfaces)[~resolved])
+        warnings += (
+            f"Grid not resolved at psi_N = {bad}: one refinement of {list(axes)} by {factor:g} moved the "
+            f"fluxes by up to {np.max(change):.1%} (tolerance {tolerance:.0%}). Raise the resolution "
+            "(pitch first at low collisionality) or run `dkx converge`; see docs/user_guide/convergence.md.",
+        )
+    return replace(
+        result, arrays={**result.arrays, **arrays}, dimensions={**result.dimensions, **dimensions},
+        metadata={**result.metadata, "resolution_certificate": {
+            "axes": list(axes), "factor": factor, "tolerance": tolerance,
+            "field_tolerance_kV_m": field_tolerance_kv_m, "refined": _resolution_dict(refined),
+            "all_resolved": bool(np.all(resolved)), "worst_change": float(np.max(change))}},
+        warnings=warnings)
+
+
 def converge_sfincs_input(source, **kwargs) -> ConvergenceReport:
     """Refine a linear RHSMode 1/2/3 namelist without converting its physics.
 

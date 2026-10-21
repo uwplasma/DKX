@@ -44,8 +44,13 @@ case = dkx.Case.from_file(CASE_FILE)
 report = converge_case(case, axes=AXES, factor=FACTOR, tolerance=TOLERANCE, observables=OBSERVABLES,
                        joint=not SMOKE, emit=print)
 
+# 3a. The same study on the grid the ladder below settles on (skipped in smoke mode)
+grid = replace(case.resolution, theta=21, pitch=20, speed=6)
+production = None if SMOKE else converge_case(replace(case, resolution=grid), axes=AXES, factor=FACTOR,
+                                              tolerance=TOLERANCE, observables=OBSERVABLES, emit=print)
+
 # 3b. A resolution ladder: one solve per rung, all axes refined together
-LADDER = [(9, 8, 4), (17, 16, 5)] if SMOKE else [(9, 8, 4), (17, 16, 5), (25, 24, 6), (33, 32, 6), (41, 40, 7)]
+LADDER = [(9, 8, 4), (13, 12, 5)] if SMOKE else [(9, 8, 4), (13, 12, 5), (17, 16, 5), (21, 20, 6), (25, 24, 6), (33, 32, 6)]
 ladder = []
 for n_theta, n_pitch, n_speed in LADDER:
     grid = replace(case.resolution, theta=n_theta, pitch=n_pitch, speed=n_speed)
@@ -80,3 +85,6 @@ print("  ladder (theta/pitch/speed): particle flux, heat flux, <j.B> at the firs
 for (t, p, x), row in zip(LADDER, ladder):
     print(f"  {t:3d}/{p:2d}/{x}  {row[0]:+.4e}  {row[1]:+.4e}  {row[2]:+.4e}")
 print(f"  converged at {report.tolerance:.0%}: {report.converged}")
+if production is not None:
+    print(f"  theta=21 pitch=20 speed=6: worst change {max(r.worst for r in (*production.refinements, production.joint)):.1%}, "
+          f"converged at {production.tolerance:.0%}: {production.converged}")

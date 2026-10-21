@@ -36,6 +36,7 @@ SCAN_OBSERVABLES: tuple[str, ...] = (
     "particle_flux_m2_s",
     "heat_flux_W_m2",
     "parallel_current_A_T_m2",
+    "resolution_change",
 )
 
 
@@ -161,8 +162,13 @@ def run_scan(
     out: Path | None = None,
     emit: Callable[[str], None] | None = None,
     resume: bool | None = None,
+    check_grid: tuple[str, ...] | None = None,
 ):
-    """Run every case in ``case.scan`` and write one combined Result."""
+    """Run every case in ``case.scan`` and write one combined Result.
+
+    ``check_grid`` adds ``resolution_change`` (worst per-radius flux change under
+    one joint refinement of those axes) to every row.
+    """
     from ..execution import run_case  # noqa: PLC0415
     from ..result import Result  # noqa: PLC0415
 
@@ -186,19 +192,21 @@ def run_scan(
         label = ", ".join(
             f"{axis.path}={value:g}" for axis, value in zip(scan.axes, point, strict=True)
         )
-        if derived.case_id in cached:
+        if derived.case_id in cached and (not check_grid or "resolution_change" in cached[derived.case_id]):
             _say(f"[{index}/{len(expanded)}] cached  {label}")
             rows.append({**cached[derived.case_id], "point": point})
             continue
         _say(f"[{index}/{len(expanded)}] {label}")
         row: dict[str, Any] = {"point": point, "case_id": derived.case_id, "status": "ok"}
         try:
-            result = run_case(derived)
+            result = run_case(derived, check_grid=check_grid)
         except Exception as exc:  # noqa: BLE001 - the failure is the datum
             failures += 1
             row["status"] = f"failed: {type(exc).__name__}: {exc}"
             _say(f"    failed: {exc}")
         else:
+            for warning in result.warnings if check_grid else ():
+                _say(f"    warning: {warning}")
             for name in SCAN_OBSERVABLES:
                 if name in result.arrays:
                     values = np.asarray(result.arrays[name], dtype=float)

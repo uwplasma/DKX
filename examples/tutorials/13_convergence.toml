@@ -1,5 +1,7 @@
-# The case rung 06 refines. Deliberately under-resolved: the point of the rung
-# is to measure how far off it is, not to be right.
+# The case the convergence tutorial refines. A dense, cold edge-like deuterium
+# plasma (plateau/Pfirsch-Schlueter side of the banana regime), where the
+# distribution is smooth and a modest grid converges. The grid below is
+# deliberately coarse: the point is to measure how far off it is, then climb.
 name = "convergence_certificate"
 
 [run]
@@ -15,8 +17,8 @@ surfaces = [0.16, 0.25]
 name = "deuterium"
 charge = 1
 mass_amu = 2.014
-density_m3 = [8.0e19, 7.0e19]
-temperature_keV = [1.0, 0.8]
+density_m3 = [2.0e20, 1.75e20]
+temperature_keV = [0.2, 0.16]
 
 [physics]
 model = "full_local"
