@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Plan: section 19, literature round 2 (improved Sugama correction, unequal-temperature gaps, ICNTS and MONKES reference data). No code change.
+
 ## v2.11.0 — 2026-10-21
 
 Validation and robustness. `dkx scan` covers SFINCS scanTypes 1-5. Phi1 is
