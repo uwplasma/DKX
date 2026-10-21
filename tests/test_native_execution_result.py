@@ -1103,3 +1103,24 @@ def test_ambipolar_profile_surfaces_compile_a_bounded_number_of_executables() ->
     dkx.run(case, emit=lambda _line: seen.append(count[0]))
     per_surface = np.diff(seen[1:] + [count[0]])
     assert per_surface.max() <= 8, per_surface
+
+
+def test_spectral_angles_converge_faster_than_finite_differences_on_the_w7x_field() -> None:
+    """Fourier angles resolve the smooth three-harmonic |B| of analytic W7-X at 13 x 13 points.
+
+    At 1e20 m^-3, 1 keV, the spectral particle flux is 0.5% from its (13, 41) value
+    at 13 x 13 points and 0.0% at 13 x 25, where the fourth-order finite
+    differences are still 2.7% away at 13 x 13.
+    """
+    base = _case()
+    species = replace(base.species[0], density_m3=(1.0e20, 0.9e20), temperature_keV=(1.0, 0.9))
+    base = replace(base, species=(species,), geometry=replace(base.geometry, file="w7x_standard"))
+
+    def flux(angles, zeta):
+        grid = replace(base.resolution, theta=13, zeta=zeta, pitch=48, speed=6, angles=angles)
+        return float(dkx.run(replace(base, resolution=grid)).arrays["particle_flux_m2_s"][0, 0])
+
+    reference = flux("spectral", 41)
+    assert abs(flux("spectral", 13) / reference - 1) < 6e-3
+    assert abs(flux("spectral", 25) / reference - 1) < 1e-3
+    assert abs(flux("finite_difference", 13) / reference - 1) > 2e-2

@@ -228,6 +228,19 @@ direction. This negative result is what keeps the profile a
 the reason every example and tutorial asks for a convergence check before a
 number is quoted ({doc}`../user_guide/convergence`).
 
+### Re-measurement with spectral angles (not promoted)
+
+With `angles = "spectral"` the same profile gives, at $(N_\theta, N_\zeta, N_\xi, N_x) = (19, 49, 160, 8)$,
+root counts $[1, 1, 3, 1, 1]$ and roots 11.26, 12.83, $-0.26$, 0.38, 10.73, $-3.51$, $-7.46$ kV/m
+(8,120 s on 8 pinned cores of the shared 36-core host, 71 solves, true residual below 6e-12).
+The finite-difference scaffold roots were off by up to 3.3 kV/m (the surface-3 electron root, 7.42 against 10.73).
+A fine rung $(21, 55, 192, 8)$ moves the roots by 0.0525, 0.0525, 0.015 and 0.045 kV/m and the
+fluxes by at most 1.5%, but its electron root on surface 3 left the 0.12 kV/m bracket (shift above 0.17 kV/m).
+At fixed $E_r$ on that root, $N_\zeta = 55 \to 67$ at $N_\xi = 192$ moves the electron flux by 2.7%
+(0.05% at $N_\xi = 64$): the angular resolution needed grows with $N_\xi$, so a one-step comparison of
+two under-resolved rungs understates the error. The profile stays a `regression_scaffold`; a converged grid
+needs $N_\zeta \gtrsim 70$ at $N_\xi \gtrsim 192$, which was not run to completion.
+
 ## Open and deferred work
 
 These are not release blockers, and none is claimed:

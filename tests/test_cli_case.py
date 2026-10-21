@@ -35,6 +35,19 @@ def test_run_executes_a_native_case_and_writes_a_result(tmp_path, capsys) -> Non
     assert "converged" in captured
 
 
+def test_run_check_grid_certifies_each_radius(tmp_path, capsys) -> None:
+    """The deliberately coarse tutorial grid must come back unresolved, per radius, in the file."""
+    out = tmp_path / "result.nc"
+    code = cli.main(["run", str(REPO_ROOT / "examples/tutorials/13_convergence.toml"), "--out", str(out),
+                     "--quiet", "--check-grid", "theta", "pitch"])
+    assert code == 0
+    assert "NOT RESOLVED" in capsys.readouterr().out
+    from dkx.result import Result  # noqa: PLC0415
+
+    arrays = Result.load(out).arrays
+    assert arrays["resolution_resolved"].tolist() == [0, 0] and arrays["resolution_change"].min() > 0.02
+
+
 def test_run_reports_the_solver_route_and_residual(tmp_path, capsys) -> None:
     """The summary has to carry the two numbers that make a run trustworthy.
 

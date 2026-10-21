@@ -252,8 +252,8 @@ def _make_grids(case: Case, *, n_periods: int):
         n_x=case.resolution.speed,
         n_l=min(4, case.resolution.pitch),
         n_periods=n_periods,
-        theta_derivative_scheme=2,
-        zeta_derivative_scheme=2,
+        theta_derivative_scheme=0 if case.resolution.angles == "spectral" else 2,
+        zeta_derivative_scheme=0 if case.resolution.angles == "spectral" else 2,
         magnetic_drift_derivative_scheme=3,
         x_grid_scheme=5,
         x_grid_k=0.0,
@@ -995,8 +995,19 @@ def _prepare_profile(case: Case):
     return geometry_state, grids, density_m3, temperature_keV, dn_dr_hat, dt_dr_hat
 
 
-def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
-    """Execute the supported native profile route and return a Result."""
+def run_case(
+    case: Case,
+    *,
+    out: str | Path | None = None,
+    emit=None,
+    check_grid: tuple[str, ...] | None = None,
+) -> Result:
+    """Execute the supported native profile route and return a Result.
+
+    ``check_grid`` names axes to refine together in one extra solve that
+    attaches a per-surface resolution certificate (see
+    :func:`dkx.workflows.converge.certify_resolution`).
+    """
 
     _validate_native_slice(case)
     from dkx import __version__  # noqa: PLC0415
@@ -1487,6 +1498,10 @@ def run_case(case: Case, *, out: str | Path | None = None, emit=None) -> Result:
         output_path=output_path,
         _runtime={"operator": retained_operator},
     )
+    if check_grid:
+        from dkx.workflows.converge import certify_resolution  # noqa: PLC0415
+
+        result = certify_resolution(case, result, axes=tuple(check_grid), emit=emit)
     if out is not None:
         result.save(output_path)
     return result

@@ -124,6 +124,7 @@ class ResolutionConfig:
     pitch: int
     speed: int
     pitch_speed_ramp: int = 1
+    angles: str = "finite_difference"
     pitch_modes_by_speed: tuple[int, ...] | None = None
 
     def __post_init__(self) -> None:
@@ -269,6 +270,8 @@ class Case:
         # non-default ramp choices remain explicit semantic input.
         if data["resolution"]["pitch_speed_ramp"] == 1:
             data["resolution"].pop("pitch_speed_ramp")
+        if data["resolution"]["angles"] == "finite_difference":
+            data["resolution"].pop("angles")
         if data["resolution"]["pitch_modes_by_speed"] is None:
             data["resolution"].pop("pitch_modes_by_speed")
         # Tail reconstruction is opt-in. Omitting the false default preserves
@@ -511,6 +514,7 @@ def case_json_schema() -> dict[str, Any]:
             "resolution": _object_schema(
                 ["theta", "zeta", "pitch", "speed"],
                 pitch_speed_ramp={"type": "integer", "enum": [0, 1, 2]},
+                angles={"type": "string", "enum": ["finite_difference", "spectral"]},
                 pitch_modes_by_speed={
                     "type": "array",
                     "minItems": 1,
@@ -650,6 +654,8 @@ pitch = 24
 speed = 8
 # SFINCS Nxi_for_x_option: 0 uniform, 1 linear (default), 2 quadratic.
 # pitch_speed_ramp = 1
+# Angular derivatives: 4th-order finite differences (default) or Fourier spectral.
+# angles = "finite_difference"
 # Advanced evidence control: one monotone active-mode count per speed node.
 # pitch_modes_by_speed = [4, 8, 16, 24, 24, 24, 24, 24]
 
@@ -841,6 +847,7 @@ def _parse_resolution(data: Mapping[str, Any]) -> ResolutionConfig:
             "pitch",
             "speed",
             "pitch_speed_ramp",
+            "angles",
             "pitch_modes_by_speed",
         },
     )
@@ -850,6 +857,7 @@ def _parse_resolution(data: Mapping[str, Any]) -> ResolutionConfig:
         pitch=_integer(data, "pitch", path, required=True),
         speed=_integer(data, "speed", path, required=True),
         pitch_speed_ramp=_integer(data, "pitch_speed_ramp", path, default=1),
+        angles=_string(data, "angles", path, default="finite_difference"),
         pitch_modes_by_speed=(
             _integer_tuple(data, "pitch_modes_by_speed", path)
             if "pitch_modes_by_speed" in data
@@ -1190,6 +1198,7 @@ def _validate_case(case: Case) -> None:
                 "Choose a positive phase-space resolution.",
             )
     _choice("resolution.pitch_speed_ramp", case.resolution.pitch_speed_ramp, (0, 1, 2))
+    _choice("resolution.angles", case.resolution.angles, ("finite_difference", "spectral"))
     modes = case.resolution.pitch_modes_by_speed
     if modes is not None:
         if case.resolution.pitch_speed_ramp != 1:

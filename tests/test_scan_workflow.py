@@ -218,6 +218,24 @@ def test_the_axis_values_are_written_beside_the_observables(monkeypatch, tmp_pat
     assert list(np.asarray(result.arrays["axis_electric_field_value_kV_m"])) == [-1.0, 1.0]
 
 
+def test_check_grid_adds_a_resolution_column_and_reruns_uncertified_rows(monkeypatch, tmp_path) -> None:
+    case = Case(Scan((Axis("electric_field.value_kV_m", (-1.0, 1.0)),)))
+    run(monkeypatch, tmp_path, case)  # finished, but without a certificate
+    seen = []
+
+    def fake_run_case(derived, *, check_grid=None, **_):
+        seen.append(check_grid)
+        result = FakeResult(1.0)
+        result.arrays["resolution_change"] = np.array([0.01, 0.03])
+        result.warnings = ("Grid not resolved",)
+        return result
+
+    monkeypatch.setattr("dkx.execution.run_case", fake_run_case)
+    result, _ = sc.run_scan(case, out=tmp_path / "s.nc", check_grid=("pitch",))
+    assert seen == [("pitch",)] * 2
+    assert list(result.arrays["resolution_change"]) == [0.03, 0.03]
+
+
 def test_resume_skips_finished_cases(monkeypatch, tmp_path) -> None:
     case = Case(Scan((Axis("electric_field.value_kV_m", (-1.0, 0.0, 1.0)),)))
     run(monkeypatch, tmp_path, case)

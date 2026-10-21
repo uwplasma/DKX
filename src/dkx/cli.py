@@ -1058,6 +1058,11 @@ def main(argv: list[str] | None = None) -> int:
         "--no-resume", action="store_true",
         help="Rerun every point even if the output already holds its result.",
     )
+    p_scan_case.add_argument(
+        "--check-grid", nargs="*", default=None, choices=list(_CONVERGE_AXES), metavar="AXIS",
+        help="Certify the grid: one more solve with AXIS... (default: all) refined together by 1.25; "
+             "unresolved radii are reported and warned about.",
+    )
     p_scan_case.set_defaults(func=_cmd_scan)
 
     # ``schema`` is a hidden alias of ``template``, kept for one release.
@@ -1090,6 +1095,11 @@ def main(argv: list[str] | None = None) -> int:
             "(relative to the case file). With [output].plots = true a .png summary "
             "is written beside it."
         ),
+    )
+    p_run.add_argument(
+        "--check-grid", nargs="*", default=None, choices=list(_CONVERGE_AXES), metavar="AXIS",
+        help="Certify the grid: one more solve with AXIS... (default: all) refined together by 1.25; "
+             "unresolved radii are reported and warned about.",
     )
     p_run.set_defaults(func=_cmd_run_case)
 

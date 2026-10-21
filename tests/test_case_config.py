@@ -78,6 +78,22 @@ def test_json_and_reordered_mapping_have_same_semantic_id(tmp_path: Path) -> Non
     assert a.source_path != b.source_path
 
 
+def test_default_angles_preserve_case_id_and_spectral_is_semantic() -> None:
+    explicit = _mapping()
+    explicit["resolution"]["angles"] = "finite_difference"
+    spectral = _mapping()
+    spectral["resolution"]["angles"] = "spectral"
+    default_case = Case.from_mapping(_mapping())
+
+    assert default_case.case_id == Case.from_mapping(explicit).case_id
+    assert "angles" not in default_case.to_dict()["resolution"]
+    assert Case.from_mapping(spectral).to_dict()["resolution"]["angles"] == "spectral"
+    assert Case.from_mapping(spectral).case_id != default_case.case_id
+    spectral["resolution"]["angles"] = "upwind"
+    with pytest.raises(CaseValidationError, match="resolution.angles"):
+        Case.from_mapping(spectral)
+
+
 def test_default_pitch_speed_ramp_preserves_case_id_and_nondefault_is_semantic() -> (
     None
 ):
@@ -491,7 +507,7 @@ def test_recorded_example_case_ids_survive_the_implicit_version() -> None:
         "tutorials/02_cli_case.toml": "2ca9e2e8db568238b5230334709e5141b9ca13149f63d0caeae86632f3a86343",
         "tutorials/04_vmec_geometry.toml": "579b31bb76b2482f925d5dc9e14ce7a861525acceef8ae106908278a63f18811",
         "tutorials/08_ambipolar_er_w7x.toml": "508e9513e8e4e0859deac7fe3743a47eff6949c1201d49085ec55940b240f5f2",
-        "tutorials/13_convergence.toml": "cca55b87b8d5040229ef398facc0553c8b93e02b3505a5cf135f777f97a43505",
+        "tutorials/13_convergence.toml": "43e8e393b098e96509e81dce46e9a82a3f360f45b35d89c9bef196ab74c8ebb0",
     }
     for name, case_id in recorded.items():
         assert Case.from_file(REPO_ROOT / "examples" / name).case_id == case_id
