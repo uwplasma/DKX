@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Plan: section 19, literature round 2 (improved Sugama correction, unequal-temperature gaps, ICNTS and MONKES reference data). No code change.
+- Validation: `validation/beidler2011_w7x_monoenergetic.csv` holds D11*, D31* and D33* of the W7-X standard configuration at rho = 0.5, digitized from Figs 17, 21 and 26 of Beidler et al. (2011) with the method and errors in its header (3% on D11*, 0.003 on D31*, 0.002 on D33*). `tests/test_beidler_w7x_reference.py` runs DKX's monoenergetic route on `w7x_standardConfig.bc` against it: D11* within +1.6 to +3.0% (+5.4 and +7.7% at a finer grid, 1.1e-3 and 3.6e-4), D31* within 0.007, D33* within 1.5%, and D11* at v_E = 3e-3 inside the scatter of the DKES and Monte Carlo symbols. DKX's D31* takes the sign of iota, opposite to Beidler's convention for this file (iota < 0); the test applies the flip and the cause is not changed here.
 
 ## v2.11.0 — 2026-10-21
 

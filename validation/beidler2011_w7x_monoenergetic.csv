@@ -1,0 +1,83 @@
+# W7-X standard configuration, rho = 0.5: monoenergetic transport coefficients digitized from the figures
+# of C.D. Beidler et al., Nucl. Fusion 51, 076001 (2011) (ICNTS benchmark).
+# Figures: 17 = D11*, 26 = D31*, 21 = D33*, each versus nu* = R0 nu/(iota v). v_E = E_r/(v B0).
+# Method: pages rendered at 400 dpi; axes calibrated on the major tick marks (log axes for nu* and D11*,
+# linear for D31* and D33*, 184 / 163 / 219 px per decade or 0.1); NEO-2 filled circles found by
+# morphological erosion and centroiding; nu* snapped to the benchmark grid (1.09, 1.82, 3.64, 6.2) x 10^k.
+# source=NEO-2: v_E = 0 only (D33* does not depend on v_E). abs_err is the 1-sigma digitization error
+# (D11*: 3%; D31*: 0.003, 0.005 where the circle is partly covered; D33*: 0.002).
+# source=DKES/MC cluster: D11* at v_E = 3e-3 and 1e-3 (black, red), the centre of the DKES and Monte Carlo
+# symbols of Fig 17 at one nu*; abs_err is the half extent of that cluster, i.e. the scatter between the
+# independent codes, not a digitization error. The GSRAKE curves are not used (they sit up to a factor 2
+# below the markers at low nu*).
+fig,coef,v_E,nu_star,value,abs_err,source
+17,D11,0.0,3.64e-06,87.2,2.6,NEO-2
+17,D11,0.0,6.2e-06,51.37,1.5,NEO-2
+17,D11,0.0,1.09e-05,29.24,0.88,NEO-2
+17,D11,0.0,1.82e-05,17.76,0.53,NEO-2
+17,D11,0.0,3.64e-05,8.981,0.27,NEO-2
+17,D11,0.0,6.2e-05,5.391,0.16,NEO-2
+17,D11,0.0,0.000109,3.135,0.094,NEO-2
+17,D11,0.0,0.000364,1.01,0.03,NEO-2
+17,D11,0.0,0.00109,0.4246,0.013,NEO-2
+17,D11,0.0,0.00364,0.2128,0.0064,NEO-2
+17,D11,0.0,0.0109,0.1662,0.005,NEO-2
+17,D11,0.0,0.0364,0.2026,0.0061,NEO-2
+17,D11,0.0,0.109,0.279,0.0084,NEO-2
+17,D11,0.0,0.364,0.414,0.012,NEO-2
+17,D11,0.0,1.09,0.8047,0.024,NEO-2
+17,D11,0.001,6.2e-06,0.04598,0.015,DKES/MC cluster
+17,D11,0.001,1.82e-05,0.09763,0.033,DKES/MC cluster
+17,D11,0.001,6.2e-05,0.1437,0.048,DKES/MC cluster
+17,D11,0.001,0.000182,0.1706,0.043,DKES/MC cluster
+17,D11,0.003,6.2e-06,0.009018,0.0028,DKES/MC cluster
+17,D11,0.003,1.82e-05,0.01834,0.0057,DKES/MC cluster
+17,D11,0.003,6.2e-05,0.04156,0.012,DKES/MC cluster
+17,D11,0.003,0.000182,0.06725,0.017,DKES/MC cluster
+17,D11,0.003,0.00062,0.1009,0.024,DKES/MC cluster
+17,D11,0.003,0.00182,0.1233,0.026,DKES/MC cluster
+26,D31,0.0,6.2e-06,0.1115,0.003,NEO-2
+26,D31,0.0,1.09e-05,0.1155,0.003,NEO-2
+26,D31,0.0,1.82e-05,0.1212,0.003,NEO-2
+26,D31,0.0,3.64e-05,0.1309,0.003,NEO-2
+26,D31,0.0,6.2e-05,0.1374,0.003,NEO-2
+26,D31,0.0,0.000109,0.1416,0.003,NEO-2
+26,D31,0.0,0.000182,0.1399,0.003,NEO-2
+26,D31,0.0,0.000364,0.1278,0.003,NEO-2
+26,D31,0.0,0.00062,0.1065,0.003,NEO-2
+26,D31,0.0,0.00109,0.0764,0.005,NEO-2
+26,D31,0.0,0.00182,0.0478,0.005,NEO-2
+26,D31,0.0,0.00364,0.0115,0.005,NEO-2
+26,D31,0.0,0.0062,-0.0046,0.005,NEO-2
+26,D31,0.0,0.0109,-0.01376,0.003,NEO-2
+26,D31,0.0,0.0182,-0.01934,0.003,NEO-2
+26,D31,0.0,0.0364,-0.0211,0.003,NEO-2
+26,D31,0.0,0.062,-0.01983,0.003,NEO-2
+26,D31,0.0,0.109,-0.0151,0.003,NEO-2
+26,D31,0.0,0.182,-0.01157,0.003,NEO-2
+26,D31,0.0,0.364,-0.006077,0.003,NEO-2
+26,D31,0.0,1.09,-0.001615,0.003,NEO-2
+21,D33,0.0,6.2e-06,0.5539,0.002,NEO-2
+21,D33,0.0,1.09e-05,0.5561,0.002,NEO-2
+21,D33,0.0,1.82e-05,0.5579,0.002,NEO-2
+21,D33,0.0,3.64e-05,0.5618,0.002,NEO-2
+21,D33,0.0,6.2e-05,0.565,0.002,NEO-2
+21,D33,0.0,0.000109,0.5703,0.002,NEO-2
+21,D33,0.0,0.000182,0.5755,0.002,NEO-2
+21,D33,0.0,0.000364,0.5863,0.002,NEO-2
+21,D33,0.0,0.00062,0.5955,0.002,NEO-2
+21,D33,0.0,0.00109,0.6095,0.002,NEO-2
+21,D33,0.0,0.00182,0.6247,0.002,NEO-2
+21,D33,0.0,0.00364,0.6525,0.002,NEO-2
+21,D33,0.0,0.0062,0.6799,0.002,NEO-2
+21,D33,0.0,0.0109,0.7167,0.002,NEO-2
+21,D33,0.0,0.0182,0.754,0.002,NEO-2
+21,D33,0.0,0.0364,0.8137,0.002,NEO-2
+21,D33,0.0,0.062,0.8622,0.002,NEO-2
+21,D33,0.0,0.109,0.9092,0.002,NEO-2
+21,D33,0.0,0.182,0.9422,0.002,NEO-2
+21,D33,0.0,0.364,0.9714,0.002,NEO-2
+21,D33,0.0,1.09,0.9923,0.002,NEO-2
+21,D33,0.0,3.64,0.9994,0.002,NEO-2
+21,D33,0.0,10.9,0.999,0.002,NEO-2
+21,D33,0.0,36.4,1.0,0.002,NEO-2
