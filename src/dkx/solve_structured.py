@@ -262,14 +262,52 @@ def _factor_tier1(op: KineticOperator) -> Tier1Solver:
 # operator reuses it.
 _factor_tier1_compiled = jax.jit(_factor_tier1)
 
+#: Extra defect-correction sweeps the speed-coupled elimination may take after
+#: its fixed three, while the residual is above target and still falling.
+_COUPLED_EXTRA_SWEEPS = 8
+
+
+def _extend_refinement(matvec, b, solve, x, tol, atol):
+    """Defect-correction sweeps on ``x`` until each column meets ``max(atol, tol ||b||)``.
+
+    A sweep is kept only while the residual falls by at least half: the rate of
+    the correction is set by how well the factors invert the operator (it slows
+    as the pitch resolution raises the condition number), and a residual that
+    stops falling has reached the rounding floor ``eps ||A|| ||x||``, where
+    further sweeps only cost. Returns the iterate and the extra sweeps taken.
+    """
+    target = jnp.maximum(atol, tol * jnp.linalg.norm(b, axis=0))
+
+    def state(v):
+        r = b - matvec(v)
+        return r, jnp.linalg.norm(r, axis=0)
+
+    def cond(c):
+        _, _, rn, prev, k = c
+        return (k < _COUPLED_EXTRA_SWEEPS) & jnp.any((rn > target) & (rn <= 0.5 * prev))
+
+    def body(c):
+        v, r, rn, _, k = c
+        active = (rn > target) & jnp.isfinite(rn)
+        v = jnp.where(active, v + solve(r), v)
+        r2, rn2 = state(v)
+        return v, r2, rn2, rn, k + 1
+
+    r0, rn0 = state(x)
+    out = jax.lax.while_loop(cond, body, (x, r0, rn0, jnp.full_like(rn0, jnp.inf), 0))
+    return out[0], out[4]
+
+
 def _tier1_refined_solve(
     op: KineticOperator, t1_solver: Tier1Solver, b: jnp.ndarray, transpose: bool,
-    fenced: bool = True,
+    fenced: bool = True, tol: float = 0.0, atol: float = 0.0,
 ) -> jnp.ndarray:
     """Structured direct substitution plus defect correction against ``op``.
 
     ``op`` is the operator being solved and ``t1_solver`` the elimination
-    applied to it, which is a neighbour's when stored factors are reused.
+    applied to it, which is a neighbour's when stored factors are reused. The
+    speed-coupled elimination continues past its fixed sweeps while the
+    residual is above ``max(atol, tol ||b||)`` and still falling.
 
     Fenced by optimization barriers, so XLA compiles the region the same way in
     every program that contains it: the plain solve and the forward pass of the
@@ -278,21 +316,14 @@ def _tier1_refined_solve(
     constrain how XLA fuses it around a sharded batch, and the one-device and
     two-device programs of the same scan then round differently.
     """
-    if not fenced:
-        return iterative_refinement(
-            lambda v: _operator_apply(op, v, transpose),
-            b,
-            lambda r: t1_solver.solve(r, transpose=transpose),
-            iterations=_refinement_sweeps(t1_solver),
-        )[0]
-    op, t1_solver, b = jax.lax.optimization_barrier((op, t1_solver, b))
-    x, _residual_norms = iterative_refinement(
-        lambda v: _operator_apply(op, v, transpose),
-        b,
-        lambda r: t1_solver.solve(r, transpose=transpose),
-        iterations=_refinement_sweeps(t1_solver),
-    )
-    return jax.lax.optimization_barrier(x)
+    if fenced:
+        op, t1_solver, b = jax.lax.optimization_barrier((op, t1_solver, b))
+    matvec = lambda v: _operator_apply(op, v, transpose)  # noqa: E731
+    solve = lambda r: t1_solver.solve(r, transpose=transpose)  # noqa: E731
+    x = iterative_refinement(matvec, b, solve, iterations=_refinement_sweeps(t1_solver))[0]
+    if isinstance(t1_solver, CoupledSolver) and b.ndim == 2:
+        x = _extend_refinement(matvec, b, solve, x, tol, atol)[0]
+    return jax.lax.optimization_barrier(x) if fenced else x
 
 _tier1_refined_solve_compiled = jax.jit(
     _tier1_refined_solve, static_argnames=("transpose", "fenced")
@@ -304,6 +335,8 @@ def _tier1_implicit(
     t1_solver: Tier1Solver,
     rhs2d: jnp.ndarray,
     token: jnp.ndarray,
+    tol: float = 0.0,
+    atol: float = 0.0,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """A differentiable structured direct solve of every column, as one program.
 
@@ -321,7 +354,7 @@ def _tier1_implicit(
     """
 
     def solve_measured(b: jnp.ndarray, *, transpose: bool) -> tuple[jnp.ndarray, jnp.ndarray]:
-        x = _tier1_refined_solve(op_const, t1_solver, b, transpose)
+        x = _tier1_refined_solve(op_const, t1_solver, b, transpose, tol=tol, atol=atol)
         apply = _pinned_matvecs(op_const)[1 if transpose else 0]
         residual = _column_apply(apply, x) - b
         norms = [jnp.linalg.norm(v, axis=0) for v in (residual, b, x)]
@@ -587,11 +620,12 @@ def _solve_tier1(
 
         x2d, res = _tier1_implicit_compiled(
             op, op_const, t1_solver, rhs2d,
-            jnp.asarray(_register_guard(make_guard), dtype=jnp.int32),
+            jnp.asarray(_register_guard(make_guard), dtype=jnp.int32), tol, atol,
         )
     elif compiled:
         x2d = _tier1_refined_solve_compiled(
-            op, t1_solver, rhs2d, transpose=transpose, fenced=not _is_traced(rhs2d)
+            op, t1_solver, rhs2d, transpose=transpose, fenced=not _is_traced(rhs2d),
+            tol=tol, atol=atol,
         )
     elif differentiable:
         cols = [
