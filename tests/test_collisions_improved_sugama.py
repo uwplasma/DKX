@@ -337,7 +337,7 @@ def test_split_reassembles_the_operator_exactly(z, m, n, t) -> None:
 
 
 def test_field_part_is_low_rank_and_confined_to_the_conserved_moments() -> None:
-    """Rank ``S`` at L=1, ``2S`` at L=0, and nothing above.
+    """Rank <= ``S (K + 2)`` at L=1 (momentum plus the flow correction), ``2S`` at L=0, nothing above.
 
     Only the particle (L=0), energy (L=0) and parallel-momentum (L=1) moments
     have a back-reaction, so every higher Legendre block is pure
@@ -358,7 +358,7 @@ def test_field_part_is_low_rank_and_confined_to_the_conserved_moments() -> None:
         if ell == 0:
             assert 0 < rank <= 2 * n_species
         elif ell == 1:
-            assert 0 < rank <= n_species**2  # one term per ordered species pair
+            assert 0 < rank <= n_species * 7  # momentum term plus K = 5 flow moments per species
         else:
             assert rank == 0
             np.testing.assert_allclose(flat, 0.0, rtol=0.0, atol=0.0)
@@ -388,3 +388,66 @@ def test_test_particle_part_alone_does_not_conserve_momentum() -> None:
     scale = float(np.abs(weight * full).sum())
     assert abs(float((weight * full).sum())) / scale < 1e-14
     assert abs(float((weight * test_only).sum())) / scale > 1e-3
+
+
+# ---------------------------------------------------------------------------
+# 4. Unequal temperatures: l = 1 against the Landau operator, l = 0 against the exchange rate.
+# ---------------------------------------------------------------------------
+
+
+def _pair_kwargs(t_e: float, m_e: float, n_x: int) -> dict:
+    from dkx.phase_space import make_speed_grid, speed_grid_diff_matrices
+
+    grid = make_speed_grid(n_x=n_x, k=0.0)
+    x = np.asarray(grid.x, dtype=np.float64)
+    ddx, d2dx2 = speed_grid_diff_matrices(x, k=0.0)
+    return dict(
+        x=x, x_weights=np.asarray(grid.dx_weights(0.0), dtype=np.float64), ddx=ddx, d2dx2=d2dx2,
+        z_s=np.array([-1.0, 1.0]), m_hats=np.array([m_e, 1.0]), n_hats=np.ones(2),
+        t_hats=np.array([t_e, 1.0]), nu_n=1.0, krook=0.0, n_xi=3, n_xi_for_x=np.full(n_x, 3, np.int32),
+    )
+
+
+@pytest.mark.parametrize(("t_e", "m_e", "tol"), [(1.0, 1 / 1836, 2e-3), (10.0, 1 / 1836, 2e-3), (10.0, 1.0, 1.5e-2)])
+def test_l1_block_matches_landau_flow_moments_at_unequal_temperature(t_e, m_e, tol) -> None:
+    """Flow and heat-flow friction (Laguerre orders 0..3) against the full linearized Landau operator."""
+    from scipy.special import eval_genlaguerre
+
+    from dkx.collisions import make_fokker_planck_v3_operator
+
+    kw = _pair_kwargs(t_e, m_e, 10)
+    x, w = kw["x"], kw["x_weights"]
+    fp = np.asarray(make_fokker_planck_v3_operator(x_grid_k=0.0, nl=3, rosenbluth_method="analytic", **kw).mat)[:, :, 1]
+    shapes = [x * np.exp(-x * x) * eval_genlaguerre(j, 1.5, x * x) for j in range(4)]
+    funcs = [w * x**3 * eval_genlaguerre(j, 1.5, x * x) for j in range(4)]
+
+    def moments(mat):
+        return np.array([[[[funcs[j] @ mat[a, b] @ shapes[k] for k in range(4)] for j in range(4)] for b in range(2)] for a in range(2)])
+
+    ref = moments(fp)
+    err = np.abs(moments(np.asarray(make_improved_sugama_v3_operator(**kw).mat)[:, :, 1]) - ref).max() / np.abs(ref).max()
+    assert err < tol, err
+    if t_e != 1.0:  # without the correction the unequal-temperature friction is far off
+        bare = np.abs(moments(np.asarray(make_improved_sugama_v3_operator(flow_order=0, **kw).mat)[:, :, 1]) - ref).max()
+        assert bare / np.abs(ref).max() > 1.0
+
+
+@pytest.mark.parametrize(("t_e", "m_e"), [(10.0, 1.0), (3.0, 0.2)])
+def test_energy_exchange_rate_matches_sugama_2019_eq_a1(t_e, m_e) -> None:
+    """d(energy_a)/dT_a and d(energy_a)/dT_b of the l = 0 block against the derivatives of Eq. A1."""
+    kw = _pair_kwargs(t_e, m_e, 24)
+    x, w = kw["x"], kw["x_weights"]
+    mat = np.asarray(make_improved_sugama_v3_operator(**kw).mat)[:, :, 0]
+    h_t, e_en = (x * x - 1.5) * np.exp(-x * x), w * x**4
+
+    def rate(ta, tb, ma, mb):  # Eq. A1 up to a constant: alpha^3 (Ta - Tb) / ((1 + alpha^2)^(3/2) Ta^(3/2))
+        a2 = (ta / ma) / (tb / mb)
+        return a2**1.5 * (ta - tb) / (1 + a2) ** 1.5 / ta**1.5
+
+    h = 1e-6
+    for a, b, (ta, tb, ma, mb) in ((0, 1, (t_e, 1.0, m_e, 1.0)), (1, 0, (1.0, t_e, 1.0, m_e))):
+        d_a = ta * (rate(ta * (1 + h), tb, ma, mb) - rate(ta * (1 - h), tb, ma, mb)) / (2 * h * ta)
+        d_b = tb * (rate(ta, tb * (1 + h), ma, mb) - rate(ta, tb * (1 - h), ma, mb)) / (2 * h * tb)
+        scale = (np.sqrt(ta / ma) / np.sqrt(tb / mb)) ** 3  # species-dependent amplitude of the x-space f
+        ratio = (e_en @ mat[a, b] @ h_t) / (e_en @ mat[a, a] @ h_t) * scale
+        assert abs(ratio / (d_b / d_a) - 1.0) < 1e-3, (a, ratio, d_b / d_a)

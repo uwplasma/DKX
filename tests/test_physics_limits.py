@@ -75,7 +75,9 @@ ION_MASS = 1.0e8
 LORENTZ_ELECTRON_DENSITY = 1.0e-14
 
 
-def _electron_l1_block(z_ion: float, n_electron: float, n_x: int, sugama: bool = False) -> tuple[np.ndarray, ...]:
+def _electron_l1_block(
+    z_ion: float, n_electron: float, n_x: int, sugama: bool = False, flow_order: int = 5
+) -> tuple[np.ndarray, ...]:
     k = 0.0
     grid = make_speed_grid(n_x=n_x, k=k)
     x = np.asarray(grid.x, dtype=np.float64)
@@ -87,7 +89,7 @@ def _electron_l1_block(z_ion: float, n_electron: float, n_x: int, sugama: bool =
         x_weights=weights,
         ddx=ddx,
         d2dx2=d2dx2,
-        **({} if sugama else {"x_grid_k": k, "nl": 3}),
+        **({"flow_order": flow_order} if sugama else {"x_grid_k": k, "nl": 3}),
         z_s=np.asarray([-1.0, z_ion]),
         m_hats=np.asarray([1.0, ION_MASS]),
         n_hats=np.asarray([n_electron, 1.0 / z_ion]),
@@ -100,8 +102,8 @@ def _electron_l1_block(z_ion: float, n_electron: float, n_x: int, sugama: bool =
     return x, weights, np.asarray(op.mat)[0, 0, 1]
 
 
-def _current(z_ion: float, n_electron: float, n_x: int, sugama: bool = False) -> float:
-    x, weights, block = _electron_l1_block(z_ion, n_electron, n_x, sugama)
+def _current(z_ion: float, n_electron: float, n_x: int, sugama: bool = False, flow_order: int = 5) -> float:
+    x, weights, block = _electron_l1_block(z_ion, n_electron, n_x, sugama, flow_order)
     response = np.linalg.solve(block, x * np.exp(-x * x))
     return float(np.sum(weights * x**3 * response))
 
@@ -114,20 +116,19 @@ def test_full_fokker_planck_reproduces_the_spitzer_harm_conductivity(z_ion: floa
     assert abs(ratio - expected) / expected < 5e-3, (z_ion, ratio, expected)
 
 
-#: The improved Sugama model against the same table (measured, float64, Nx = 8).
-#: SFINCS has no Sugama operator, so Spitzer-Harm is the external reference. The
-#: momentum-restoring response is built per species pair (r_ab = T_ab phi), so the
-#: electron-ion Lorentz term does not enter the electron-electron restoring shape; the
-#: remaining deficit, 11.1, 9.8, 7.8 and 3.1 % for Z = 1, 2, 4, 16, is open: Frei et al. (2022) report the published improved operator within 1 % of Coulomb.
-SUGAMA_GAMMA_E = {1.0: 0.5172, 2.0: 0.6167, 4.0: 0.7240, 16.0: 0.8941}
-
-
-@pytest.mark.parametrize("z_ion", sorted(SUGAMA_GAMMA_E))
-def test_improved_sugama_conductivity_against_spitzer_harm_is_pinned(z_ion: float) -> None:
-    ratio = _current(z_ion, 1.0, 8, True) / _current(z_ion, LORENTZ_ELECTRON_DENSITY, 8, True)
-    assert abs(ratio - SUGAMA_GAMMA_E[z_ion]) < 2e-4, (z_ion, ratio)
+#: The improved Sugama model against the same table. SFINCS has no Sugama operator, so
+#: Spitzer-Harm is the external reference. The l = 1 correction of Sugama et al. (2019),
+#: Eqs. 40-43, projects the Landau friction onto K Laguerre flow moments; Frei, Ernst &
+#: Ricci (2022) find the conductivity within 1 % of Coulomb for all Z. Without it
+#: (flow_order = 0) the model is 11.1, 9.8, 7.8 and 3.1 % low at Z = 1, 2, 4, 16.
+@pytest.mark.parametrize(("flow_order", "tol"), [(0, 0.12), (2, 0.025), (5, 0.01)])
+@pytest.mark.parametrize("z_ion", sorted(SPITZER_HARM_GAMMA_E))
+def test_improved_sugama_conductivity_against_spitzer_harm(z_ion: float, flow_order: int, tol: float) -> None:
+    ratio = _current(z_ion, 1.0, 8, True, flow_order) / _current(z_ion, LORENTZ_ELECTRON_DENSITY, 8, True, flow_order)
     deviation = ratio / SPITZER_HARM_GAMMA_E[z_ion] - 1.0
-    assert -0.12 < deviation < -0.03  # largest at Z = 1, shrinking toward the Lorentz limit as Z grows
+    assert abs(deviation) < tol, (z_ion, flow_order, deviation)
+    if flow_order == 0:
+        assert deviation < -0.03
 
 
 # =============================================================================
