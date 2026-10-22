@@ -649,6 +649,8 @@ def kinetic_operator_build_from_namelist(nml: Any) -> KineticOperatorBuild:
             krook=krook,
             n_xi=grids.n_xi,
             n_xi_for_x=np.asarray(grids.n_xi_for_x, dtype=np.int32),
+            x_grid_k=_get_float(other, "xGrid_k", 0.0),
+            rosenbluth_method=rosenbluth_method,
         )
     elif collision_operator == 1:
         nu_n_use = nu_n

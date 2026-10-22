@@ -12,6 +12,8 @@ can be trusted.
 | Linearized Fokker-Planck (FP) | `collisions = "linearized_fokker_planck"` | 0 | particles, momentum, energy |
 | Improved Sugama model | namelist only | 3 | particles, momentum, energy |
 
+The Sugama model's l = 1 friction is corrected toward the Landau operator on the first five Laguerre flow moments (Sugama et al. 2019, Eqs. 40-43). Its Spitzer-Harm conductivity is within 1% of the Fokker-Planck value for all Z, and it is valid for unequal species temperatures. With two moments (`flow_order = 2`) the conductivity is within 2.1%.
+
 PAS is the Lorentz operator,
 
 $$
