@@ -1616,6 +1616,9 @@ def make_improved_sugama_v3_operator(
     krook: float,
     n_xi: int,
     n_xi_for_x: np.ndarray,
+    x_grid_k: float = 0.0,
+    flow_order: int = 5,
+    rosenbluth_method: str | None = "analytic",
 ) -> ImprovedSugamaV3Operator:
     """Construct the improved Sugama model collision operator (``collisionOperator=3``).
 
@@ -1749,6 +1752,39 @@ def make_improved_sugama_v3_operator(
         for ib in range(n_species):
             lam = -float(p_energy[ib]) / (float(p_energy[ic]) * e2)
             extraction[ib, :, 0, n_species + ic] = lam * mu_energy[ib, ic]
+
+    # ---- improved l = 1 correction (Sugama et al. 2019, Eqs. 40-43, 46-47) ----
+    # The rank-1 momentum term above reproduces the Landau friction only for the
+    # flow (Laguerre order 0). The rest of the Landau l = 1 field response is
+    # projected onto the flow_order lowest Laguerre flow moments u_k and added as
+    # dN^{jk} = e_j (F_Landau - F_model) s_k, j = 1..K, k = 0..K, with s_j = phi p_j,
+    # e_k = w x^3 p_k and p_j the discrete polynomials in x^2 orthonormal under
+    # w x^4 exp(-x^2), so e_k s_j = delta_jk. Left rows j >= 1 keep momentum exact; for
+    # T_a = T_b the k = 0 column vanishes and the shifted Maxwellian stays a null vector.
+    K = min(int(flow_order), n_x - 1)
+    if n_xi_int > 1 and K > 0:
+        fp = make_fokker_planck_v3_operator(
+            x=x, x_weights=x_weights, ddx=ddx, d2dx2=d2dx2, x_grid_k=x_grid_k, z_s=z_s,
+            m_hats=m_hats, n_hats=n_hats, t_hats=t_hats, nu_n=nu_n_f, krook=krook_f,
+            n_xi=2, nl=2, n_xi_for_x=np.full(n_x, 2, dtype=np.int32),
+            rosenbluth_method=rosenbluth_method,
+        )
+        field_model = np.einsum("aic,bjc->abij", columns[:, :, 1], extraction[:, :, 1])
+        d_field = np.asarray(fp.mat)[:, :, 1] - field_model
+        d_field -= np.einsum("ab,aij->abij", np.eye(n_species), test_ab_l.sum(axis=1)[:, 1])
+        q, r = np.linalg.qr(np.sqrt(w_mom * phi)[:, None] * (x * x)[:, None] ** np.arange(K + 1))
+        poly = q * np.sign(np.diag(r)) / np.sqrt(w_mom * phi)[:, None]  # (X, K+1)
+        shapes, funcs = phi[:, None] * poly, w_mom[:, None] * poly
+        rank_new = rank + n_species * n_species * (K + 1)
+        columns = np.pad(columns, ((0, 0), (0, 0), (0, 0), (0, rank_new - rank)))
+        extraction = np.pad(extraction, ((0, 0), (0, 0), (0, 0), (0, rank_new - rank)))
+        for ia in range(n_species):
+            for ib in range(n_species):
+                coef = funcs[:, 1:].T @ d_field[ia, ib] @ shapes  # (K, K+1): dN^{jk}
+                for k in range(K + 1):
+                    slot = rank + (ia * n_species + ib) * (K + 1) + k
+                    columns[ia, :, 1, slot] = shapes[:, 1:] @ coef[:, k]
+                    extraction[ib, :, 1, slot] = funcs[:, k]
 
     # Test-particle part is diagonal in the species index (acts on f_a).
     test = np.einsum("abLij->aLij", test_ab_l)
