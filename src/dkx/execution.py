@@ -1498,6 +1498,8 @@ def run_case(
         output_path=output_path,
         _runtime={"operator": retained_operator},
     )
+    if check_grid is None and case.run.check_grid:
+        check_grid = ("theta", "zeta", "pitch", "speed")
     if check_grid:
         from dkx.workflows.converge import certify_resolution  # noqa: PLC0415
 
