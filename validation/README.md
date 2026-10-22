@@ -25,6 +25,7 @@ outside Git and referenced by checksum.
 | `registry.toml` | The index: one entry per artifact with its capability, status, claim, limitations, inputs, command, commits and checksum. |
 | `*_v1.json` (21) | Sealed evidence summaries, one per registry entry. Do not edit: the checksum in the registry is the seal. |
 | `inputs/` | The exact DKX decks and native cases each artifact was produced from. Artifacts record these paths and checksums, so they cannot move without resealing. |
+| `beidler2011_w7x_monoenergetic.csv` | Reference data, not a sealed artifact: D11*, D31*, D33* of W7-X standard at rho = 0.5 digitized from Figs 17, 21, 26 of Beidler et al. (2011); method and errors in its header. Read by `tests/test_beidler_w7x_reference.py`. |
 | `capabilities.toml` | Capability status and open evidence gaps; every registry entry names one. |
 | `hardware.toml` | Named measurement hosts; every entry names the host that produced it. |
 | `benchmark_schema.toml` | Required fields of a comparable benchmark row. |
