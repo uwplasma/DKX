@@ -369,7 +369,7 @@ class Case:
             _table(data, "electric_field", "$", required=True)
         )
         resolution = _parse_resolution(
-            _table(data, "resolution", "$", default={}), geometry, species
+            _table(data, "resolution", "$", required=True), geometry, species
         )
         solver = _parse_solver(_table(data, "solver", "$", required=True))
         parallel = _parse_parallel(_table(data, "parallel", "$", default={}))
@@ -433,6 +433,7 @@ def case_json_schema() -> dict[str, Any]:
             "species",
             "physics",
             "electric_field",
+            "resolution",
             "solver",
         ],
         "properties": {
@@ -519,6 +520,7 @@ def case_json_schema() -> dict[str, Any]:
             ),
             "resolution": _object_schema(
                 [],
+                auto={"type": "boolean"},
                 pitch_speed_ramp={"type": "integer", "enum": [0, 1, 2]},
                 angles={"type": "string", "enum": ["finite_difference", "spectral"]},
                 pitch_modes_by_speed={
@@ -887,14 +889,16 @@ def _parse_resolution(data: Mapping[str, Any], geometry: "GeometryConfig", speci
             "pitch_speed_ramp",
             "angles",
             "pitch_modes_by_speed",
+            "auto",
         },
     )
-    auto = auto_resolution(geometry, species) if len({"theta", "zeta", "pitch", "speed"} - set(data)) else None
+    # Opt-in: a missing size is a starting grid from the ladder, not a certificate.
+    auto = auto_resolution(geometry, species) if _boolean(data, "auto", path, default=False) else None
     return ResolutionConfig(
-        theta=_integer(data, "theta", path, default=auto and auto[0]),
-        zeta=_integer(data, "zeta", path, default=auto and auto[1]),
-        pitch=_integer(data, "pitch", path, default=auto and auto[2]),
-        speed=_integer(data, "speed", path, default=auto and auto[3]),
+        theta=_integer(data, "theta", path, default=auto and auto[0], required=auto is None),
+        zeta=_integer(data, "zeta", path, default=auto and auto[1], required=auto is None),
+        pitch=_integer(data, "pitch", path, default=auto and auto[2], required=auto is None),
+        speed=_integer(data, "speed", path, default=auto and auto[3], required=auto is None),
         pitch_speed_ramp=_integer(data, "pitch_speed_ramp", path, default=1),
         angles=_string(data, "angles", path, default="spectral"),
         pitch_modes_by_speed=(

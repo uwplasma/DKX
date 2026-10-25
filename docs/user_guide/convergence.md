@@ -199,8 +199,9 @@ four. It does not replace `dkx converge` for a number you intend to quote.
 ## Choosing a resolution
 
 Start from the table, then confirm with `dkx run --check-grid` or `dkx converge`.
-A case that omits `[resolution]` (or any of its four sizes) is given the rung of
-this table that its lowest ion collisionality selects, with spectral angles.
+`[resolution] auto = true` fills the sizes a case leaves out with the rung of
+this table that its lowest ion collisionality selects (not calibrated on strongly
+3-D low-collisionality fields; pair it with `check_grid`).
 The collisionality that matters is $\lambda_{ii}/L_c$, the ion mean free path
 over the connection length $R/\iota$; the rows below are labelled by density at
 $T = 1$ keV for a deuterium plasma ($\nu \propto n/T^2$), for which

@@ -93,8 +93,8 @@ relative_tolerance = 1.0e-8
 
 This is `examples/tutorials/08_ambipolar_er.toml` with defaulted fields
 omitted. The tables `[run]`, `[geometry]`, `[[species]]`, `[physics]`,
-`[electric_field]` and `[solver]` are required, even when every field inside
-them takes its default; `[resolution]`, `[parallel]`, `[convergence]`, `[output]`
+`[electric_field]`, `[resolution]` and `[solver]` are required, even when every
+field inside them takes its default; `[parallel]`, `[convergence]`, `[output]`
 and `[scan]` are optional.
 
 ## Top level
@@ -208,22 +208,23 @@ excluded, and the result says so (`ambipolar_search_scope =
 
 | field | type | default | rule | meaning |
 |---|---|---|---|---|
-| `theta` | integer | from the case | $\ge 1$ | poloidal grid points $N_\theta$ |
-| `zeta` | integer | from the case | $\ge 1$ | toroidal grid points per field period $N_\zeta$; `1` for axisymmetric cases |
-| `pitch` | integer | from the case | $\ge 1$ | Legendre pitch-angle modes $N_\xi$ |
-| `speed` | integer | from the case | $\ge 1$ | speed-grid nodes $N_x$ |
+| `theta` | integer | required unless `auto` | $\ge 1$ | poloidal grid points $N_\theta$ |
+| `zeta` | integer | required unless `auto` | $\ge 1$ | toroidal grid points per field period $N_\zeta$; `1` for axisymmetric cases |
+| `pitch` | integer | required unless `auto` | $\ge 1$ | Legendre pitch-angle modes $N_\xi$ |
+| `speed` | integer | required unless `auto` | $\ge 1$ | speed-grid nodes $N_x$ |
+| `auto` | boolean | `false` | | fill the sizes you leave out from the collisionality ladder (below) |
 | `pitch_speed_ramp` | integer | `1` | `0`, `1`, `2` | SFINCS `Nxi_for_x_option`: how many pitch modes each speed node keeps |
 | `angles` | string | `"spectral"` | `finite_difference`, `spectral` | angular derivatives: Fourier spectral collocation (exponentially convergent in `theta` and `zeta` for a smooth $|B|$; see {doc}`convergence`), or fourth-order finite differences; a converted SFINCS namelist keeps its finite differences |
 | `pitch_modes_by_speed` | array of integers | none | see below | explicit active pitch-mode count per speed node |
 
-The table may be omitted, or any of `theta`, `zeta`, `pitch`, `speed` left out:
-each missing one is taken from the joint grid that
+With `auto = true`, any of `theta`, `zeta`, `pitch`, `speed` left out
+is taken from the joint grid that
 {doc}`convergence` ("Choosing a resolution") lists for the case's lowest ion
 collisionality, $c = \log_{10}(n / 10^{20}\,\mathrm{m^{-3}} / T_{\mathrm{keV}}^2)$,
 interpolated between the rungs of that table (the tokamak rungs for
-`file = "tokamak"`). The rule is a starting point that
-`[run] check_grid = true` or `dkx converge` then checks, not a certificate; cold or
-dense plasmas get a coarse grid and hot, rarefied ones the finest rung.
+`file = "tokamak"`). The rule is opt-in because it is not calibrated for strongly 3-D, low-collisionality
+stellarators: on an HSX deck it gave 13 x 17 x 24 x 5, 33% from a finer reference.
+Use it with `[run] check_grid = true` or `dkx converge`.
 
 `pitch_speed_ramp` values:
 

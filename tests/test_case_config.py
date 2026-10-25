@@ -95,10 +95,10 @@ def test_default_angles_are_spectral_and_finite_differences_are_semantic() -> No
         Case.from_mapping(fd)
 
 
-def test_omitted_resolution_is_filled_from_the_ion_collisionality() -> None:
+def test_auto_resolution_is_filled_from_the_ion_collisionality() -> None:
     def grid(n: float, t: float, geometry: dict | None = None) -> tuple:
         m = _mapping()
-        del m["resolution"]
+        m["resolution"] = {"auto": True}
         for s in m["species"]:
             s["density_m3"], s["temperature_keV"] = [n], [t]
         m["geometry"].update(geometry or {}, surfaces=[0.5])
@@ -116,15 +116,18 @@ def test_omitted_resolution_is_filled_from_the_ion_collisionality() -> None:
     assert grid(1e19, 3.0, tokamak)[2:] == (160, 12)
 
 
-def test_partial_resolution_keeps_given_keys_and_fills_the_rest() -> None:
+def test_auto_keeps_given_keys_and_fills_the_rest() -> None:
     m = _mapping()
-    m["resolution"] = {"pitch": 99}
+    m["resolution"] = {"pitch": 99, "auto": True}
     r = Case.from_mapping(m).resolution
     assert r.pitch == 99
     assert (r.theta, r.zeta, r.speed) == (21, 49, 8)
-    del m["resolution"]
     assert Case.from_mapping(m).resolution.angles == "spectral"
-    assert "resolution" not in case_json_schema()["required"]
+    # Without `auto` every size is required, as before.
+    m["resolution"] = {"pitch": 99}
+    with pytest.raises(CaseValidationError, match="resolution.theta"):
+        Case.from_mapping(m)
+    assert "auto" not in Case.from_mapping(_mapping()).to_dict()["resolution"]
 
 
 def test_check_grid_is_a_run_option_omitted_from_the_id_when_false() -> None:
