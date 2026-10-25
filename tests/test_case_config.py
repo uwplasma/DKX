@@ -78,20 +78,70 @@ def test_json_and_reordered_mapping_have_same_semantic_id(tmp_path: Path) -> Non
     assert a.source_path != b.source_path
 
 
-def test_default_angles_preserve_case_id_and_spectral_is_semantic() -> None:
+def test_default_angles_are_spectral_and_finite_differences_are_semantic() -> None:
     explicit = _mapping()
-    explicit["resolution"]["angles"] = "finite_difference"
-    spectral = _mapping()
-    spectral["resolution"]["angles"] = "spectral"
+    explicit["resolution"]["angles"] = "spectral"
+    fd = _mapping()
+    fd["resolution"]["angles"] = "finite_difference"
     default_case = Case.from_mapping(_mapping())
 
+    assert default_case.resolution.angles == "spectral"
     assert default_case.case_id == Case.from_mapping(explicit).case_id
     assert "angles" not in default_case.to_dict()["resolution"]
-    assert Case.from_mapping(spectral).to_dict()["resolution"]["angles"] == "spectral"
-    assert Case.from_mapping(spectral).case_id != default_case.case_id
-    spectral["resolution"]["angles"] = "upwind"
+    assert Case.from_mapping(fd).to_dict()["resolution"]["angles"] == "finite_difference"
+    assert Case.from_mapping(fd).case_id != default_case.case_id
+    fd["resolution"]["angles"] = "upwind"
     with pytest.raises(CaseValidationError, match="resolution.angles"):
-        Case.from_mapping(spectral)
+        Case.from_mapping(fd)
+
+
+def test_omitted_resolution_is_filled_from_the_ion_collisionality() -> None:
+    def grid(n: float, t: float, geometry: dict | None = None) -> tuple:
+        m = _mapping()
+        del m["resolution"]
+        for s in m["species"]:
+            s["density_m3"], s["temperature_keV"] = [n], [t]
+        m["geometry"].update(geometry or {}, surfaces=[0.5])
+        r = Case.from_mapping(m).resolution
+        return r.theta, r.zeta, r.pitch, r.speed
+
+    collisional = grid(1e21, 0.1)
+    hot = grid(1e19, 3.0)
+    assert collisional == (11, 13, 16, 4)
+    assert hot == (21, 49, 96, 8)
+    assert all(a <= b for a, b in zip(collisional, hot))
+    assert grid(1e20, 1.0) == (17, 33, 48, 6)
+    tokamak = {"format": "analytic", "file": "tokamak"}
+    assert grid(1e21, 0.1, tokamak) == (13, 1, 24, 5)
+    assert grid(1e19, 3.0, tokamak)[2:] == (160, 12)
+
+
+def test_partial_resolution_keeps_given_keys_and_fills_the_rest() -> None:
+    m = _mapping()
+    m["resolution"] = {"pitch": 99}
+    r = Case.from_mapping(m).resolution
+    assert r.pitch == 99
+    assert (r.theta, r.zeta, r.speed) == (21, 49, 8)
+    del m["resolution"]
+    assert Case.from_mapping(m).resolution.angles == "spectral"
+    assert "resolution" not in case_json_schema()["required"]
+
+
+def test_check_grid_is_a_run_option_omitted_from_the_id_when_false() -> None:
+    base = Case.from_mapping(_mapping())
+    off = _mapping()
+    off["run"]["check_grid"] = False
+    on = _mapping()
+    on["run"]["check_grid"] = True
+
+    assert base.run.check_grid is False
+    assert Case.from_mapping(off).case_id == base.case_id
+    assert "check_grid" not in base.to_dict()["run"]
+    assert Case.from_mapping(on).run.check_grid is True
+    assert Case.from_mapping(on).case_id != base.case_id
+    on["run"]["check_grid"] = "yes"
+    with pytest.raises(CaseValidationError, match="check_grid"):
+        Case.from_mapping(on)
 
 
 def test_default_pitch_speed_ramp_preserves_case_id_and_nondefault_is_semantic() -> (

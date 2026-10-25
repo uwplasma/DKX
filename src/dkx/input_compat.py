@@ -1369,6 +1369,8 @@ def case_from_sfincs_namelist(
             "zeta": config_int(nml, ("resolutionParameters",), "Nzeta", 15),
             "pitch": n_xi,
             "speed": config_int(nml, ("resolutionParameters",), "Nx", 5),
+            # Schemes other than 2 are refused above: a deck means the v3 stencil.
+            "angles": "finite_difference",
             "pitch_speed_ramp": config_int(
                 nml, ("otherNumericalParameters",), "Nxi_for_x_option", 1
             ),
