@@ -1507,8 +1507,8 @@ def test_dkes_conversion_uses_local_radius_and_orientation() -> None:
         raw_fsab_b2=0.9930199354487245 * 1.5451292699958306**2,
     )
     assert converted["D11_star"] == pytest.approx(0.40334459550951945)
-    assert converted["D31_star"] == pytest.approx(-0.13780489737481735)
-    assert converted["D13_star"] == pytest.approx(0.13823811260564514)
+    assert converted["D31_star"] == pytest.approx(0.13780489737481735)
+    assert converted["D13_star"] == pytest.approx(-0.13823811260564514)
     assert converted["D33_star"] == pytest.approx(0.9099777738316578)
     assert converted["eps_t"] == pytest.approx(0.10654224141486761)
 

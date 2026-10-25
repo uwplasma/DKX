@@ -79,7 +79,7 @@
         "local_r_m": 0.931702737300273,
         "nu_d_hat_x0": 0.8360276804879032,
         "nu_prime": 0.39962911004077717,
-        "cross_orientation": -1.0
+        "cross_orientation": 1.0
       },
       "reference": {
         "code": "YANCC",
@@ -98,8 +98,8 @@
         "raw_output_sha256": "7d5f85782077bcbcf912370e129778ef40946e24e05ad855a8c051527a2d1073",
         "beidler": {
           "D11_star": 1.4699244650494654,
-          "D31_star": 0.016256007846930695,
-          "D13_star": -0.016244038662852518,
+          "D31_star": -0.016256007846930695,
+          "D13_star": 0.016244038662852518,
           "D33_star": 0.9876417738012134
         },
         "measurement": {
@@ -112,11 +112,11 @@
         "solver_relative_tolerance": 1e-10,
         "beidler": {
           "D11_star": 1.3889678212208392,
-          "D31_star": 0.015799990405987965,
-          "D13_star": -0.015803097105347833,
+          "D31_star": -0.015799990405987965,
+          "D13_star": 0.015803097105347833,
           "D33_star": 0.9876404426554154
         },
-        "output_sha256": "b195f55bd237e06383a0e762e8fef5ef7242305259fc74630e70379c0fe871ca",
+        "output_sha256": "974801b8289dd9803ec7583230b609789fab5464b77ebd60aa9e8c896ad9d5f4",
         "measurement": {
           "cold_wall_seconds": 3.636468500015326,
           "warm_wall_seconds": 0.5857332500163466,
@@ -170,7 +170,7 @@
         "local_r_m": 0.1600004874677725,
         "nu_d_hat_x0": 0.8360276804879032,
         "nu_prime": 0.017975290661104672,
-        "cross_orientation": -1.0
+        "cross_orientation": 1.0
       },
       "reference": {
         "code": "YANCC",
@@ -189,8 +189,8 @@
         "raw_output_sha256": "d8ded32dd393f745c1069e0c3beb4e116e85a8b8c12743ef6619dc0ae3b22eb5",
         "beidler": {
           "D11_star": 0.40334459550951945,
-          "D31_star": -0.13780489737481735,
-          "D13_star": 0.13823811260564514,
+          "D31_star": 0.13780489737481735,
+          "D13_star": -0.13823811260564514,
           "D33_star": 0.9099777738316578
         },
         "measurement": {
@@ -203,11 +203,11 @@
         "solver_relative_tolerance": 1e-10,
         "beidler": {
           "D11_star": 0.3966579469280466,
-          "D31_star": -0.13774688997572923,
-          "D13_star": 0.13775988914602158,
+          "D31_star": 0.13774688997572923,
+          "D13_star": -0.13775988914602158,
           "D33_star": 0.9096533456236183
         },
-        "output_sha256": "4be87097f790cd8df444f3356b4092ba9103d3738308b5aeae6534b7e0091c8b",
+        "output_sha256": "e684c24f352d7ddee2acbf7db2d093f962759f2dfafc5d88ae2c71e865f0fa9d",
         "measurement": {
           "cold_wall_seconds": 5.7112039170460775,
           "warm_wall_seconds": 1.6507448750780895,
@@ -264,7 +264,7 @@
         "local_r_m": 0.22334220214590597,
         "nu_d_hat_x0": 0.8360276804879032,
         "nu_prime": 0.11098461238458954,
-        "cross_orientation": -1.0,
+        "cross_orientation": 1.0,
         "psi_p_reference": 0.5223329762463589
       },
       "reference": {
@@ -280,8 +280,8 @@
         "raw_output_sha256": "8a2c3f3d3b5a3f22954de8e25de5e030ef6a977987631ef9ab867f994ef487f0",
         "beidler": {
           "D11_star": 0.2749289264346969,
-          "D31_star": 0.013115608705983035,
-          "D13_star": -0.0131156087059716,
+          "D31_star": -0.013115608705983035,
+          "D13_star": 0.0131156087059716,
           "D33_star": 0.9124681813879468
         },
         "measurement": {
@@ -296,11 +296,11 @@
         "solver_route": "structured_direct_full_factorization_spectral_angular_derivatives",
         "beidler": {
           "D11_star": 0.2798535056308425,
-          "D31_star": 0.013317100068759932,
-          "D13_star": -0.013317100068752183,
+          "D31_star": -0.013317100068759932,
+          "D13_star": 0.013317100068752183,
           "D33_star": 0.9118761000708375
         },
-        "output_sha256": "afb539e0d47b892033beecc6fdaea2fa37b3f787855d8f36aa3bddab37403701",
+        "output_sha256": "dfcc52b8485436fbdf0447cccb1099b399b634d0307daa6fd6f4046d7bb39fa8",
         "measurement": {
           "cold_wall_seconds": 57.29,
           "timing_scope": "one cold process, 4 pinned cores of a shared host (load about 20); provenance only"

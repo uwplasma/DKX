@@ -428,3 +428,60 @@ def test_cli_monoenergetic_database(tmp_path: Path, capsys: pytest.CaptureFixtur
     db = load_database(out)
     assert np.asarray(db.d11_star).shape == (1, 1)
     assert float(np.asarray(db.d11_star)[0, 0]) > 0.0
+
+
+_SIGN_DECK = """&general
+  RHSMode = 3
+/
+&geometryParameters
+  geometryScheme = 1
+  epsilon_t = -0.07053
+  epsilon_h = 0
+  epsilon_antisymm = 0
+  iota = {iota}
+  GHat = {g_hat}
+  IHat = 0
+  B0OverBBar = 1
+  psiAHat = 0.05
+  aHat = 0.5
+  inputRadialCoordinate = 3
+  rN_wish = 0.5
+/
+&speciesParameters
+/
+&physicsParameters
+  collisionOperator = 1
+  includeXDotTerm = .false.
+  includeElectricFieldTermInXiDot = .false.
+  useDKESExBDrift = .true.
+  includePhi1 = .false.
+/
+&resolutionParameters
+  Ntheta = 25
+  Nzeta = 1
+  Nxi = 48
+  Nx = 1
+  solverTolerance = 1d-9
+/
+"""
+
+
+def test_cross_coefficient_sign_is_independent_of_the_iota_orientation(tmp_path) -> None:
+    """Beidler's convention: D31* > 0 in the banana limit for either sign of iota and GHat."""
+    from dkx.monoenergetic import monoenergetic_database
+
+    got = {}
+    for iota in (1.31, -1.31):
+        for g_hat in (3.7, -3.7):
+            deck = tmp_path / f"i{iota}_g{g_hat}.namelist"
+            deck.write_text(_SIGN_DECK.format(iota=iota, g_hat=g_hat))
+            db = monoenergetic_database(deck, [1e-3], [0.0], tol=1e-9)
+            got[(iota, g_hat)] = [
+                float(np.ravel(a)[0]) for a in (db.d11_star, db.d31_star, db.d13_star)
+            ]
+    ref = got[(1.31, 3.7)]
+    assert ref[1] > 0.0
+    for d11, d31, d13 in got.values():
+        assert d31 > 0.0
+        assert d13 == pytest.approx(-d31, rel=1e-6)
+        assert [d11, d31, d13] == pytest.approx(ref, rel=1e-6)

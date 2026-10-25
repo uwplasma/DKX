@@ -1170,7 +1170,7 @@
           64
         ],
         "D11_star": 0.2798487287092677,
-        "D31_star": 0.013317083116203965,
+        "D31_star": -0.013317083116203965,
         "D33_star": 0.9118761115197898,
         "wall_s": 11.5
       },
@@ -1182,7 +1182,7 @@
           96
         ],
         "D11_star": 0.2798535045321454,
-        "D31_star": 0.01331710007081469,
+        "D31_star": -0.01331710007081469,
         "D33_star": 0.9118761000710282,
         "wall_s": 43.0
       },
@@ -1194,7 +1194,7 @@
           140
         ],
         "D11_star": 0.2798535056308425,
-        "D31_star": 0.013317100068759932,
+        "D31_star": -0.013317100068759932,
         "D33_star": 0.9118761000708375,
         "wall_s": 57.3
       },
@@ -1206,7 +1206,7 @@
           64
         ],
         "D11_star": 0.2798279430166034,
-        "D31_star": 0.013315915137732514,
+        "D31_star": -0.013315915137732514,
         "D33_star": 0.9118303624512952,
         "wall_s": 26.0
       },
@@ -1218,7 +1218,7 @@
           96
         ],
         "D11_star": 0.2798312363772249,
-        "D31_star": 0.013315940979697563,
+        "D31_star": -0.013315940979697563,
         "D33_star": 0.9118303530212611,
         "wall_s": 29.6
       },
@@ -1230,7 +1230,7 @@
           140
         ],
         "D11_star": 0.2798312374755201,
-        "D31_star": 0.013315940977638618,
+        "D31_star": -0.013315940977638618,
         "D33_star": 0.9118303530210603,
         "wall_s": 68.1
       },
@@ -1242,7 +1242,7 @@
           64
         ],
         "D11_star": 0.2801835150468732,
-        "D31_star": 0.013380492319746052,
+        "D31_star": -0.013380492319746052,
         "D33_star": 0.9118616268485116,
         "wall_s": 60.2
       },
@@ -1254,7 +1254,7 @@
           96
         ],
         "D11_star": 0.2796825842410069,
-        "D31_star": 0.013335119742803806,
+        "D31_star": -0.013335119742803806,
         "D33_star": 0.9118391458764143,
         "wall_s": 89.0
       },
@@ -1266,7 +1266,7 @@
           140
         ],
         "D11_star": 0.27965312470971254,
-        "D31_star": 0.0133243109024585,
+        "D31_star": -0.0133243109024585,
         "D33_star": 0.9118325133964538,
         "wall_s": 235.7
       }
@@ -1280,7 +1280,7 @@
         ],
         "scheme": 0,
         "D11_star": 0.2798487287092677,
-        "D31_star": 0.013317083116203892
+        "D31_star": -0.013317083116203892
       },
       {
         "Ntheta_Nzeta_Nxi": [
@@ -1290,7 +1290,7 @@
         ],
         "scheme": 2,
         "D11_star": 0.27925644580087866,
-        "D31_star": 0.013303285755630005
+        "D31_star": -0.013303285755630005
       },
       {
         "Ntheta_Nzeta_Nxi": [
@@ -1300,7 +1300,7 @@
         ],
         "scheme": 2,
         "D11_star": 0.2958523149303393,
-        "D31_star": 0.013320079794491164
+        "D31_star": -0.013320079794491164
       },
       {
         "Ntheta_Nzeta_Nxi": [
@@ -1310,14 +1310,14 @@
         ],
         "scheme": 2,
         "D11_star": 0.2942630602723274,
-        "D31_star": 0.01331884159699761
+        "D31_star": -0.01331884159699761
       }
     ],
     "convergence_gate": 0.002,
     "findings": [
       "each code is converged along its own ladder (D11* moves <= 2e-3 between the two finest rungs; DKX and MONKES to 1e-5)",
       "the earlier 10-12% D11* gap was a radial normalization, not physics: the deck's psiAHat was B0 aHat^2/2 (0.3195) where the equilibrium's toroidal flux is 0.3032, so DKX divided by dpsi/dr = 0.557 while MONKES (0.522) and YANCC (0.529) divide by their own; the raw coefficients agree",
-      "in one radial convention the converged D11* are DKX 0.27985, MONKES 0.27983, YANCC 0.27965 (agreement 8e-5 and 7e-4), and D31* 0.013317, 0.013316, 0.013324",
+      "in one radial convention the converged D11* are DKX 0.27985, MONKES 0.27983, YANCC 0.27965 (agreement 8e-5 and 7e-4), and D31* -0.013317, -0.013316, -0.013324",
       "NTX on the same boozmn surface gives D11 in psi units equal to DKX's to 7e-5 (and D33 equal to MONKES's to 1e-9), so the geometry route is the same in all four codes",
       "the sealed 5.5% W7-X case compared the same mismatched radial convention with DKX finite differences; it is re-sealed on the corrected deck with the table row's dpsi/dr taken from the pinned equilibrium (1.8% at the 6% gate, tightened to 3%)",
       "on the axisymmetric DSHAPE wout the converged DKX and YANCC D11* agree to 0.09%"

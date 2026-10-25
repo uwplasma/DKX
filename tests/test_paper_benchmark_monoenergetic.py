@@ -27,8 +27,8 @@ Measured on 2026-07-16/17 (float64, structured direct solves):
 - HSX (11x61x32): ``D11*(nuPrime=1) = 1.73578230``, Onsager <= 1.9e-3 at
   nuPrime=1, ~15 s including the cached-equilibrium geometry load.
 - Shaing-Callen mini-scan (W7-X 17x31x24): ``D31*(nuPrime=1e-2) =
-  +9.82150972e-3``, ``D31*(nuPrime=3e-3) = -2.55865359e-2``, tiny-grid
-  limit ``D31*_SC = -5.90226369e-2``; distances to the limit 6.884e-2 ->
+  -9.82150972e-3``, ``D31*(nuPrime=3e-3) = +2.55865359e-2``, tiny-grid
+  limit ``D31*_SC = +5.90226369e-2``; distances to the limit 6.884e-2 ->
   3.344e-2, ~11 s.
 """
 
@@ -266,7 +266,7 @@ def test_tiny_hsx_monoenergetic_benchmark_scan(tmp_path: Path) -> None:
 
 
 # Frozen reference for the Shaing-Callen mini-scan (module docstring).
-SC_D31_STAR_FROZEN = -2.55865359e-2
+SC_D31_STAR_FROZEN = 2.55865359e-2
 
 
 def test_tiny_shaing_callen_convergence_scan(tmp_path: Path) -> None:
@@ -310,12 +310,12 @@ def test_tiny_shaing_callen_convergence_scan(tmp_path: Path) -> None:
         x0=db.x0, w0=db.w0, nu_d_hat_x0=db.nu_d_hat_x0,
     )  # fmt: skip
     d31_limit = float(np.asarray(point.d31_star))
-    assert abs(d31_limit - (-5.90226369e-2)) / abs(d31_limit) < 1e-3
+    assert abs(d31_limit - 5.90226369e-2) / abs(d31_limit) < 1e-3
 
-    # Sign structure: positive on the plateau side, the limit's sign at the
+    # Sign structure: negative on the plateau side, the limit's sign at the
     # lowest collisionality (the benchmark's sign change).
-    assert d31_limit < 0.0
-    assert d31[0] > 0.0
+    assert d31_limit > 0.0
+    assert d31[0] < 0.0
     assert np.sign(d31[1]) == np.sign(d31_limit)
 
     # |D31* - limit| decreases as nuPrime decreases: the approach toward
