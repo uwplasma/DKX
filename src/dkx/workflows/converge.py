@@ -630,7 +630,7 @@ def converge_case(
     from ..execution import run_case  # noqa: PLC0415
 
     return _converge(
-        case.resolution, lambda r: run_case(replace(case, resolution=r)),
+        case.resolution, lambda r: run_case(replace(case, resolution=r), check_grid=False),
         axes=axes, factor=factor, tolerance=tolerance, observables=observables,
         absolute_tolerances=absolute_tolerances, joint=joint,
         richardson=richardson, emit=emit,
@@ -665,7 +665,7 @@ def certify_resolution(
         raise ValueError(f"none of the axes {list(axes)} can be refined for this case")
     if emit is not None:
         emit(f"grid check: refining {list(axes)} {_resolution_dict(case.resolution)} -> {_resolution_dict(refined)}")
-    other = run_case(replace(case, resolution=refined, output=replace(case.output, plots=False)), emit=emit)
+    other = run_case(replace(case, resolution=refined, output=replace(case.output, plots=False)), check_grid=False, emit=emit)
     change = np.zeros(len(case.geometry.surfaces))
     for name in ("particle_flux_m2_s", "heat_flux_W_m2"):
         old, new = np.asarray(result.arrays[name], float), np.asarray(other.arrays[name], float)

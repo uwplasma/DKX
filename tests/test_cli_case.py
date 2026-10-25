@@ -59,6 +59,17 @@ def test_run_table_check_grid_certifies_without_the_flag(tmp_path, capsys) -> No
     assert "resolution_change" in Result.load(out).arrays
 
 
+def test_run_table_check_grid_certifies_without_the_flag(tmp_path, capsys) -> None:
+    """``[run] check_grid = true`` is the input-file form of ``--check-grid`` (and does not recurse)."""
+    case = tmp_path / "case.toml"
+    case.write_text(ANALYTIC_CASE.read_text().replace("[run]", "[run]\ncheck_grid = true", 1))
+    out = tmp_path / "result.nc"
+    assert cli.main(["run", str(case), "--out", str(out), "--quiet"]) == 0
+    from dkx.result import Result  # noqa: PLC0415
+
+    assert "resolution_change" in Result.load(out).arrays
+
+
 def test_run_reports_the_solver_route_and_residual(tmp_path, capsys) -> None:
     """The summary has to carry the two numbers that make a run trustworthy.
 
