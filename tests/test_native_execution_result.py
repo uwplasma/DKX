@@ -40,7 +40,9 @@ def _case():
                 "phi1": "off",
             },
             "electric_field": {"mode": "prescribed", "value_kV_m": 0.0},
-            "resolution": {"theta": 9, "zeta": 1, "pitch": 8, "speed": 4},
+            # The parity tests below compare with the SFINCS-scheme kernels, whose
+            # angular derivative is the fourth-order stencil, not the spectral default.
+            "resolution": {"theta": 9, "zeta": 1, "pitch": 8, "speed": 4, "angles": "finite_difference"},
             "solver": {"method": "auto", "relative_tolerance": 1.0e-8},
             "output": {"file": "native-result.nc", "plots": False},
         }
@@ -284,12 +286,14 @@ def test_native_profile_gradient_matches_independently_rebuilt_ambipolar_roots(c
 
 
 def _boozer_case():
-    return dkx.Case.from_file(
+    case = dkx.Case.from_file(
         Path(__file__).resolve().parents[1]
         / "examples"
         / "tutorials"
         / "05_boozer_geometry.toml"
     )
+    # Parity with the scheme-12 kernel, which differentiates with the stencil.
+    return replace(case, resolution=replace(case.resolution, angles="finite_difference"))
 
 
 def _ambipolar_case():
