@@ -181,7 +181,7 @@ than 2% and, for `workflow = "ambipolar_profile"`, its selected root by less
 than 0.05 kV/m. The result then carries `resolution_change`,
 `resolution_resolved` and (ambipolar) `resolution_root_change_kV_m` per surface,
 `metadata["resolution_certificate"]`, and a warning naming every unresolved
-radius. In Python: `run_case(case, check_grid=("pitch",))` or
+radius. `[run] check_grid = true` in the case does the same as the bare flag. In Python: `run_case(case, check_grid=("pitch",))` or
 `dkx.workflows.converge.certify_resolution(case, result)`.
 
 On the tutorial case (`examples/tutorials/13_convergence.toml`, 2 s each):
@@ -199,6 +199,9 @@ four. It does not replace `dkx converge` for a number you intend to quote.
 ## Choosing a resolution
 
 Start from the table, then confirm with `dkx run --check-grid` or `dkx converge`.
+`[resolution] auto = true` fills the sizes a case leaves out with the rung of
+this table that its lowest ion collisionality selects (not calibrated on strongly
+3-D low-collisionality fields; pair it with `check_grid`).
 The collisionality that matters is $\lambda_{ii}/L_c$, the ion mean free path
 over the connection length $R/\iota$; the rows below are labelled by density at
 $T = 1$ keV for a deuterium plasma ($\nu \propto n/T^2$), for which

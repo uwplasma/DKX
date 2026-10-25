@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import re
 import shutil
 from pathlib import Path
@@ -45,6 +46,22 @@ def test_native_phi1_matches_the_namelist_newton_route(tmp_path):
     # the native flux is the psiHat flux times one species-independent unit factor.
     ratio = np.asarray(native.particle_flux_m2_s)[1] / flux
     np.testing.assert_allclose(ratio[0], ratio[1], rtol=1.0e-8)
+
+
+def test_stellarator_phi1_runs_with_spectral_angles(tmp_path):
+    """W7-X Phi1 in the kinetic equation, Fourier angles: accepted and near the stencil value.
+
+    A converted namelist keeps its fourth-order stencil (``angles =
+    "finite_difference"``); the spectral run of the same 7 x 7 x 8 x 3 grid moves
+    the particle flux by under 1.5% of the stencil value recorded for it.
+    """
+    case = case_from_sfincs_namelist(_deck(tmp_path, Ntheta=7, Nzeta=7, Nxi=8, Nx=3), name="phi1")
+    assert case.resolution.angles == "finite_difference"
+    spectral = dataclasses.replace(case, resolution=dataclasses.replace(case.resolution, angles="spectral"))
+    result = run_case(spectral)
+    assert np.all(result.primal_residual <= case.solver.relative_tolerance * result.primal_rhs_norm)
+    stencil = np.array([3.95117672e19, -1.60168632e19, 2.82471065e19, -1.13574962e19, 2.04785381e19, -8.15189493e18])
+    np.testing.assert_allclose(np.asarray(result.particle_flux_m2_s).ravel(), stencil, rtol=0.015)
 
 
 def test_native_phi1_refuses_what_it_does_not_implement(tmp_path):

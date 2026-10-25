@@ -45,6 +45,8 @@ class RunConfig:
     precision: str = "float64"
     device: str = "auto"
     progress: bool = True
+    #: Certify the grid with one refined solve (``dkx run --check-grid``).
+    check_grid: bool = False
 
 
 @dataclass(frozen=True)
@@ -124,7 +126,7 @@ class ResolutionConfig:
     pitch: int
     speed: int
     pitch_speed_ramp: int = 1
-    angles: str = "finite_difference"
+    angles: str = "spectral"
     pitch_modes_by_speed: tuple[int, ...] | None = None
 
     def __post_init__(self) -> None:
@@ -270,8 +272,10 @@ class Case:
         # non-default ramp choices remain explicit semantic input.
         if data["resolution"]["pitch_speed_ramp"] == 1:
             data["resolution"].pop("pitch_speed_ramp")
-        if data["resolution"]["angles"] == "finite_difference":
+        if data["resolution"]["angles"] == "spectral":
             data["resolution"].pop("angles")
+        if not data["run"]["check_grid"]:
+            data["run"].pop("check_grid")
         if data["resolution"]["pitch_modes_by_speed"] is None:
             data["resolution"].pop("pitch_modes_by_speed")
         # Tail reconstruction is opt-in. Omitting the false default preserves
@@ -364,7 +368,9 @@ class Case:
         electric_field = _parse_electric_field(
             _table(data, "electric_field", "$", required=True)
         )
-        resolution = _parse_resolution(_table(data, "resolution", "$", required=True))
+        resolution = _parse_resolution(
+            _table(data, "resolution", "$", required=True), geometry, species
+        )
         solver = _parse_solver(_table(data, "solver", "$", required=True))
         parallel = _parse_parallel(_table(data, "parallel", "$", default={}))
         convergence = _parse_convergence(_table(data, "convergence", "$", default={}))
@@ -435,6 +441,7 @@ def case_json_schema() -> dict[str, Any]:
             "name": {"type": "string", "minLength": 1},
             "run": _object_schema(
                 ["workflow"],
+                check_grid={"type": "boolean"},
                 workflow={
                     "enum": [
                         "profile",
@@ -512,7 +519,8 @@ def case_json_schema() -> dict[str, Any]:
                 },
             ),
             "resolution": _object_schema(
-                ["theta", "zeta", "pitch", "speed"],
+                [],
+                auto={"type": "boolean"},
                 pitch_speed_ramp={"type": "integer", "enum": [0, 1, 2]},
                 angles={"type": "string", "enum": ["finite_difference", "spectral"]},
                 pitch_modes_by_speed={
@@ -654,8 +662,8 @@ pitch = 24
 speed = 8
 # SFINCS Nxi_for_x_option: 0 uniform, 1 linear (default), 2 quadratic.
 # pitch_speed_ramp = 1
-# Angular derivatives: 4th-order finite differences (default) or Fourier spectral.
-# angles = "finite_difference"
+# Angular derivatives: Fourier spectral (default) or 4th-order finite differences.
+# angles = "spectral"
 # Advanced evidence control: one monotone active-mode count per speed node.
 # pitch_modes_by_speed = [4, 8, 16, 24, 24, 24, 24, 24]
 
@@ -696,8 +704,9 @@ plots = true
 
 def _parse_run(data: Mapping[str, Any]) -> RunConfig:
     path = "run"
-    _reject_unknown(data, path, {"workflow", "precision", "device", "progress"})
+    _reject_unknown(data, path, {"workflow", "precision", "device", "progress", "check_grid"})
     return RunConfig(
+        check_grid=_boolean(data, "check_grid", path, default=False),
         workflow=_string(data, "workflow", path, required=True),
         precision=_string(data, "precision", path, default="float64"),
         device=_string(data, "device", path, default="auto"),
@@ -836,7 +845,38 @@ def _parse_electric_field(data: Mapping[str, Any]) -> ElectricFieldConfig:
     )
 
 
-def _parse_resolution(data: Mapping[str, Any]) -> ResolutionConfig:
+#: Joint grids (theta, zeta, pitch, speed) from coarse to fine: the measured
+#: ladder of docs/user_guide/convergence.md (spectral angles; the smallest rung
+#: whose successor moves the fluxes by < 2%), and the tokamak rungs (theta,
+#: pitch, speed) of the same table.
+_STELLARATOR_RUNGS = ((11, 13, 16, 4), (13, 17, 24, 5), (15, 25, 32, 6), (17, 33, 48, 6), (19, 41, 64, 8), (21, 49, 96, 8))
+_TOKAMAK_RUNGS = ((13, 1, 24, 5), (25, 1, 48, 6), (49, 1, 96, 8), (65, 1, 160, 12))
+
+
+def auto_resolution(geometry: GeometryConfig, species: tuple[SpeciesConfig, ...]) -> tuple[int, int, int, int]:
+    """Grid ``(theta, zeta, pitch, speed)`` for the lowest collisionality of the case.
+
+    With ``c = log10(n / 1e20 m^-3 / T_keV^2)`` of the ions (``lambda_ii / L_c``
+    scales as ``T^2 / n``), the rung falls linearly from the coarsest at
+    ``c = 2`` (collisional) to the finest at ``c = -1``, with the plateau and
+    ``1/nu`` rungs of the measured table at ``c = 1`` and ``0``.
+    """
+    ions = [s for s in species if s.charge > 0] or list(species)
+    c = min(
+        math.log10(max(n, 1e-30) / 1e20 / max(t, 1e-9) ** 2)
+        for s in ions
+        for n, t in zip(s.density_m3, s.temperature_keV)
+    )
+    tokamak = geometry.format == "analytic" and geometry.file.name.lower() == "tokamak"
+    rungs, ys = (_TOKAMAK_RUNGS, (3, 2, 1, 0)) if tokamak else (_STELLARATOR_RUNGS, (5, 3, 1, 0))
+    cs = (-1.0, 0.0, 1.0, 2.0)
+    c = min(max(c, cs[0]), cs[-1])
+    i = min(int(c - cs[0]), 2)
+    k = round(ys[i] + (ys[i + 1] - ys[i]) * (c - cs[i]))
+    return rungs[k]
+
+
+def _parse_resolution(data: Mapping[str, Any], geometry: "GeometryConfig", species: tuple["SpeciesConfig", ...]) -> ResolutionConfig:
     path = "resolution"
     _reject_unknown(
         data,
@@ -849,15 +889,18 @@ def _parse_resolution(data: Mapping[str, Any]) -> ResolutionConfig:
             "pitch_speed_ramp",
             "angles",
             "pitch_modes_by_speed",
+            "auto",
         },
     )
+    # Opt-in: a missing size is a starting grid from the ladder, not a certificate.
+    auto = auto_resolution(geometry, species) if _boolean(data, "auto", path, default=False) else None
     return ResolutionConfig(
-        theta=_integer(data, "theta", path, required=True),
-        zeta=_integer(data, "zeta", path, required=True),
-        pitch=_integer(data, "pitch", path, required=True),
-        speed=_integer(data, "speed", path, required=True),
+        theta=_integer(data, "theta", path, default=auto and auto[0], required=auto is None),
+        zeta=_integer(data, "zeta", path, default=auto and auto[1], required=auto is None),
+        pitch=_integer(data, "pitch", path, default=auto and auto[2], required=auto is None),
+        speed=_integer(data, "speed", path, default=auto and auto[3], required=auto is None),
         pitch_speed_ramp=_integer(data, "pitch_speed_ramp", path, default=1),
-        angles=_string(data, "angles", path, default="finite_difference"),
+        angles=_string(data, "angles", path, default="spectral"),
         pitch_modes_by_speed=(
             _integer_tuple(data, "pitch_modes_by_speed", path)
             if "pitch_modes_by_speed" in data

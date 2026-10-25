@@ -290,7 +290,7 @@ def test_no_refinable_axes_does_not_certify_resolution(monkeypatch):
 def test_a_failed_solve_cannot_certify_resolution(monkeypatch):
     result = FakeResult({"particle_flux_m2_s": np.ones(2)})
     result.metadata["converged"] = False
-    monkeypatch.setattr("dkx.execution.run_case", lambda case: result)
+    monkeypatch.setattr("dkx.execution.run_case", lambda case, **_: result)
     with pytest.raises(ValueError, match="failed solve"):
         cv.converge_case(FakeCase(FakeResolution(10, 4, 10, 10)),
                          observables=("particle_flux_m2_s",))
