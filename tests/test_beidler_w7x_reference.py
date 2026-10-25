@@ -12,8 +12,8 @@ at the test grids (laptop, 4 threads): D11* +1.6 to +3.0% (nu* 1.1e-3 to 1.1), D
 D33* <= 1.5%; at v_E = 3e-3, nu* = 6.2e-5 and 1.8e-4: -5% and +10% of the cluster centre. At a
 finer grid (29 x 65 x 128) D11* is +5.4% at nu* = 1.1e-3 and +7.7% at 3.6e-4.
 
-DKX's D31* takes the sign of iota (this file stores iota < 0), so Beidler's sign convention,
-D31* -> +1 in a tokamak banana limit, is -D31*.
+DKX's D31* follows Beidler's sign convention (positive in the banana limit for either iota
+orientation; this file stores iota < 0), so it is compared without any flip.
 """
 
 from __future__ import annotations
@@ -74,7 +74,7 @@ def _database(tmp_path: Path, grid: tuple[int, int, int], nu_star: float, v_e: f
     np.testing.assert_allclose(np.asarray(db.v_e), [v_e], rtol=1e-6, atol=1e-12)
     return {
         "D11": float(np.ravel(db.d11_star)[0]),
-        "D31": -float(np.ravel(db.d31_star)[0]),
+        "D31": float(np.ravel(db.d31_star)[0]),
         "D33": float(np.ravel(db.d33_star)[0]),
     }
 

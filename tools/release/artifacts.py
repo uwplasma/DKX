@@ -59,7 +59,7 @@ def dkes_to_beidler(
     raw_b0_over_bbar: float | None = None,
     raw_fsab_b2: float | None = None,
     d33_spitzer: float | None = None,
-    cross_orientation: float = -1.0,
+    cross_orientation: float = 1.0,
     psi_p: float | None = None,
 ) -> dict[str, float]:
     """Convert MONKES/YANCC DKES-scaled coefficients to Beidler ``D*``.
@@ -72,8 +72,9 @@ def dkes_to_beidler(
     ratio of their ``psi_p`` otherwise.
     ``raw_b0_over_bbar`` accounts for a raw reference-field convention that
     differs from DKX's ``B0``. Supply either the raw Spitzer value or
-    ``raw_fsab_b2`` for the ``D33`` scale. The default orientation maps the
-    handedness of the pinned fixtures to DKX's standardized cross coefficients.
+    ``raw_fsab_b2`` for the ``D33`` scale. The default orientation
+    (``+1``) matches DKX's Beidler sign convention, in which ``D31*`` and
+    ``D13*`` are positive in the banana limit for either iota orientation.
     """
 
     b0 = abs(float(b0_over_bbar))

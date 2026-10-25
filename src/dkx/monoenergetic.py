@@ -40,8 +40,10 @@ the collisional limit.  The normalized collisionality reported alongside is
 and conversion factors use the unsigned orientation quantities ``|GHat|``,
 ``|GHat + iota IHat|``, ``|iota|``, ``|B0OverBBar|`` so the coefficients are
 well defined for either stored field/flux orientation (identical to the
-signed formulas for standard-orientation decks; see
-:func:`monoenergetic_dstar_from_transport_matrix`).
+signed formulas for standard-orientation decks).  The cross coefficients
+``D31*`` and ``D13*`` follow Beidler et al. (2011): ``D31*`` is positive in
+the banana limit whatever the sign of ``iota``; see
+:func:`monoenergetic_dstar_from_transport_matrix`.
 
 The conversion from the ``transportMatrix`` entries ``L^S`` to the physical
 matrix ``L^B`` defined by ``I_i = -n sum_j L^B_ij A_j`` (Beidler et al. 2011,
@@ -317,12 +319,14 @@ def monoenergetic_dstar_from_transport_matrix(
     ``|iota|``, ``|B0OverBBar|`` (Beidler's ``R0``, ``eps_t`` and the
     plateau/banana/collisional references are positive lengths and rates by
     definition).  For standard-orientation decks (``GHat > 0``,
-    ``iota > 0``) this is identical to the signed formulas; for equilibria
-    stored with the opposite field/flux orientation (e.g. Boozer ``.bc``
-    files with ``GHat < 0``) it gives the same well-defined coefficients the
-    orientation-standardized machine would produce (the RHSMode=3
-    ``transportMatrix`` is invariant under the joint sign convention, which
-    is why upstream v3 decks scan positive ``nuPrime`` on such files).
+    ``iota > 0``) this is identical to the signed formulas.  The diagonal
+    coefficients and ``D33*`` do not depend on the orientation.  The
+    transportMatrix cross entries do carry ``sign(iota)``, so ``D31*`` and
+    ``D13*`` are multiplied by it here, the single place where they are
+    normalized: with Beidler's sign convention ``D31*`` is positive in the
+    banana limit for either iota orientation (and ``D13* = -D31*`` at
+    ``EStar = 0``).  Stored values change sign for ``iota < 0`` decks relative
+    to releases up to 2.11.0.
 
     Args:
         transport_matrix: shape ``(2, 2)`` RHSMode=3 matrix.
@@ -372,8 +376,12 @@ def monoenergetic_dstar_from_transport_matrix(
     c33 = vth * g_plus / b0
 
     d11 = qfac * c11 * tm[0, 0]
-    d13 = qfac * c13 * tm[0, 1]
-    d31 = qfac * c31 * tm[1, 0]
+    # Beidler et al. (2011) sign convention: D31* and D13* are positive in the
+    # banana limit for either iota orientation, so the stored cross
+    # coefficients are multiplied by sign(iota).
+    iota_sign = jnp.where(iota_signed < 0.0, -1.0, 1.0)
+    d13 = iota_sign * qfac * c13 * tm[0, 1]
+    d31 = iota_sign * qfac * c31 * tm[1, 0]
     d33 = qfac * c33 * tm[1, 1]
 
     # Beidler et al. 2011 reference values at the node speed.
