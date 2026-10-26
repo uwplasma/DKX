@@ -127,6 +127,50 @@ def dkes_to_beidler(
     }
 
 
+def dkes_transport_to_beidler(
+    transport: Sequence[Sequence[float]],
+    *,
+    cmul: float,
+    geometry: Mapping[str, float],
+) -> dict[str, float]:
+    """Beidler ``D*`` of a DKES result stored as SFINCS ``transportMatrix`` entries.
+
+    ``transport = [[D11_S, D13_S], [D31_S, D33_S]]`` are the ``_S`` datasets of the
+    IPP DKES files (SFINCS hat units, psi-based, monoenergetic ``x0 = 1``);
+    ``cmul`` is the DKES ``nu_D/v`` in 1/m. ``geometry`` holds DKX's surface constants
+    ``g, I, iota, b0, r, nud, delta, fsab2, x0, w0``. This is the closed form of
+    :func:`dkx.monoenergetic.monoenergetic_dstar_from_transport_matrix` for unit
+    charge, mass and temperature, so no radial convention beyond ``r`` (DKX's
+    ``sqrt(2 psiHat / B0)``, which only enters the reference ``D11^p``) is involved.
+    """
+
+    g = geometry
+    b0, r, delta = abs(g["b0"]), g["r"], g["delta"]
+    g_abs, iota = abs(g["g"]), abs(g["iota"])
+    g_plus = abs(g["g"] + g["iota"] * g["I"])
+    r_major = g_abs / b0
+    eps_t = r / r_major
+    x0, w0 = g["x0"], g["w0"]
+    qfac = math.sqrt(math.pi) / (4.0 * w0 * x0 * x0 * math.exp(-x0 * x0))
+    dr_dpsi = 1.0 / (b0 * r)
+    c11 = -(delta * delta / 4.0) * dr_dpsi**2 * g_abs**2 / (b0 * g_plus)
+    c13 = 0.5 * delta * (g_abs / b0) * dr_dpsi
+    c33 = g_plus / b0
+    sign = -1.0 if g["iota"] < 0.0 else 1.0
+    v_d = delta * x0 * x0 / (2.0 * r_major * b0)
+    d11_p = (math.pi / 4.0) * v_d * v_d * r_major / (x0 * iota)
+    d31_b = (2.0 / 3.0) * (v_d * r_major / (iota * eps_t)) * (_TRAPPED_FRACTION_FACTOR * math.sqrt(eps_t))
+    nu_eff = float(cmul) * x0  # the applied deflection rate nu_D(x0)/v times v
+    d33_ps = x0 * x0 * g["fsab2"] / (3.0 * nu_eff * b0 * b0)
+    return {
+        "D11_star": qfac * c11 * transport[0][0] / d11_p,
+        "D13_star": sign * qfac * c13 * transport[0][1] / d31_b,
+        "D31_star": -sign * qfac * c13 * transport[1][0] / d31_b,
+        "D33_star": qfac * c33 * transport[1][1] / d33_ps,
+        "nu_prime": float(cmul) * g_plus / b0 / g["nud"],
+    }
+
+
 def coefficient_relative_errors(
     candidate: Mapping[str, float], reference: Mapping[str, float]
 ) -> dict[str, float]:

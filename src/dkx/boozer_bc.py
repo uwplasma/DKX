@@ -77,7 +77,15 @@ def _parse_bc_header_line(line: str) -> tuple[list[int], list[float]]:
     parts = line.split()
     if len(parts) < 6:
         raise ValueError(f"Unexpected .bc header line (too short): {line!r}")
-    return [int(x) for x in parts[:4]], [float(x.replace("D", "E").replace("d", "E")) for x in parts[4:]]
+    reals: list[float] = []
+    for token in parts[4:]:
+        try:
+            reals.append(float(token.replace("D", "E").replace("d", "E")))
+        except ValueError:
+            break  # trailing free text, e.g. "original: a=1.84957 m" in the IPP hydra files
+    if len(reals) < 2:
+        raise ValueError(f"Unexpected .bc header line (no psi_a and a): {line!r}")
+    return [int(x) for x in parts[:4]], reals
 
 def _try_parse_floats(tokens: list[str], count: int) -> list[float] | None:
     if len(tokens) < count:

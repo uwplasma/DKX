@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Validation: DKX against the IPP DKES coefficients of the HELIAS reactor `hydra_Np04_20190108` at rho = 0.12247 to 0.875 (`docs/benchmarks/dkes_hydra.md`, registry `dkes_hydra_np04`). The DKES data cannot be redistributed: the sealed record `validation/dkes_hydra_np04_v1.json` holds DKX values and agreement statistics per radius and regime, never a DKES value; the tests and the audit read the private files from `DKX_DKES_HYDRA_DIR` and `DKX_HYDRA_BOOZER` and skip without them. The `_S` datasets are SFINCS `transportMatrix` entries; `nuPrime = cmul |G + iota I| / (B0 nuD(1))` and `v_E = efield`, so `D33* = 1` at cmul = 10 to 1e-4 at every radius. For cmul >= 1e-3, `efield` 0, 0.01 and 0.03 (office, 17 x 41 x 96): `D33*` within 0.4%, `D11*` within 19% pointwise, `D31*` within 1.3e-3. Below cmul 3e-4 `D11*` differs by up to 60% at one radius where the finer 25 x 61 x 160 grid moves DKX by at most 6%; the stored rho = 0.875, `efield = 0` `D11_S` looks inconsistent with the `.dk` output of the same run and is excluded from the gate.
+- Fix: the `.bc` reader accepts the ten-number header of the IPP Boozer files (`avol, Rvol, Vol` and trailing text such as `original: a=...`); it raised `Unexpected EOF` before.
 ## v2.12.0 — 2026-10-25
 
 Self-consistent bootstrap current at the ambipolar E_r for optimization
