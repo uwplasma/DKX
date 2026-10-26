@@ -241,8 +241,10 @@ beyond the ladder: see the measured grid below.
   | | spectral | 1.9% | 0.4% | 0.7% | 0.3% | 0.1% |
 
   On the tabulated LHD $1/\nu$ case the finite-difference error is still 1.5%
-  at 21 x 49; the spectral error is below 1% from 13 x 17. The default stays
-  `finite_difference` so existing cases keep their numbers.
+  at 21 x 49; the spectral error is below 1% from 13 x 17. `spectral` is the
+  default since 2.12.0; a case that sets `angles = "finite_difference"` keeps
+  the stencils, and a case that omitted `angles` keeps its case ID but names
+  the spectral numerics.
 - **Pitch is the long axis at low collisionality.** The W7-X
   profile fluxes still move by 0.7-1.1% from $N_\xi = 96$ to 128 at $N_\theta,
   N_\zeta = 15, 37$; a root of the radial current needs $N_\xi \gtrsim 160$.

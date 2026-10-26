@@ -29,6 +29,15 @@ reopened. Sealed evidence under `validation/` is re-audited by the `audit_*.py`
 scripts in `tools/paper_benchmarks/`; `python -m tools.release.registry` runs all
 of them.
 
+## Sealed records added with 2.12.0
+
+| Record | What it shows | Status |
+| --- | --- | --- |
+| `validation/beidler2011_w7x_monoenergetic.csv` | W7-X standard configuration against digitized Beidler et al. (2011) curves | merged |
+| HSX-like gap deck, `validation/hsx_gap_deck_v1.json` | 633,604 unknowns converge on the default route to a residual of 9.0e-9 in 611 iterations, 1,658 s, 26.8 GiB; the SFINCS routes fail | pull request 393, open |
+| IPP DKES on `hydra_Np04`, `validation/dkes_hydra_np04_v1.json` | agreement statistics only; the DKES data are not redistributed | pull request 395, open |
+| W7-X ambipolar profile | stays a regression scaffold; the promotion rung needs a host with a few hundred GiB | pull request 394, open |
+
 ## Release claim gate metadata
 
 Every record has a `release_gate` block, checked by

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Docs: README, convergence page, cross-code and validation pages refreshed for 2.12.0 (spectral default, `auto`, `check_grid`, Beidler sign and digitized curves, DKES statistics, ambipolar bootstrap row); plan logbook rows and section 20 added. No code change.
+
 ## v2.12.0 — 2026-10-25
 
 Self-consistent bootstrap current at the ambipolar E_r for optimization
