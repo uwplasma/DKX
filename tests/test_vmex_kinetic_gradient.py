@@ -203,3 +203,47 @@ def test_the_objective_agrees_with_redl_in_sign_and_its_jacobian_with_difference
         e[k] = 1e-4
         central = float((problem.residual(problem.x0 + e) - problem.residual(problem.x0 - e))[0]) / 2e-4
         assert _relative(jacobian[k], central) < 1e-2, (name, jacobian[k], central)
+
+
+@pytest.mark.slow
+def test_ambipolar_roots_run_before_the_traced_row_which_then_holds_no_callback() -> None:
+    vj = pytest.importorskip("vmex")
+    pytest.importorskip("booz_xform_jax.jax_api", reason="needs booz_xform_jax >= 0.4")
+    from vmex import optimize as opt
+    from vmex.core.bootstrap import KineticProfiles
+
+    inp = vj.VmecInput.from_file(SEED)
+    rbc, zbs = inp.rbc.copy(), inp.zbs.copy()
+    rbc[inp.ntor - 1, 1], zbs[inp.ntor - 1, 1] = -0.05, 0.05
+    inp = replace(inp, rbc=rbc, zbs=zbs, delt=0.5).change_resolution(mpol=4, ntor=4, ntheta=14, nzeta=12)
+    inp = replace(inp, ns_array=np.array([13]), ftol_array=np.array([1e-14]), niter_array=np.array([20000]))
+    profiles = KineticProfiles(N0 * np.array([1, 0, 0, 0, 0, -1.0]), T0 * np.array([1, -1.0]),
+                               T0 * np.array([1, -1.0]))  # fmt: skip
+    term = KineticBootstrapMismatch(profiles, [FIXTURE["s"]], mismatch=False, ambipolar=True,
+                                    resolution=dict(Ntheta=7, Nzeta=7, Nxi=8, NL=4, Nx=3))  # fmt: skip
+
+    def solved(step):
+        moved = inp.rbc.copy()
+        moved[inp.ntor - 1, 1] += step
+        return opt.solve_equilibrium(replace(inp, rbc=moved))
+
+    base, up, down = solved(0.0), solved(1e-4), solved(-1e-4)
+    state, rt = base.state, base.runtime
+    roots = term.roots(state, rt)
+    row = jax.jit(lambda st, ro: term.residuals_state(st, rt, ro))
+    assert term.unconverged == 0
+    assert "io_callback" not in str(jax.make_jaxpr(row)(state, roots))
+    assert "io_callback" in str(jax.make_jaxpr(lambda st: term.residuals_state(st, rt))(state))
+    term._er[:] = term.er_initial  # the root search is warm-started: same start, same row
+    np.testing.assert_allclose(row(state, roots), term.residuals_state(state, rt), rtol=1e-9)
+
+    # The derivative along the direction between two re-solved equilibria against their
+    # central difference, the roots held fixed: j_p - j_E J_p / J_E is the derivative of
+    # the row at fixed roots, which the Newton tolerance would otherwise blur.
+    tangent = jax.tree_util.tree_map(lambda a, b: (a - b) / 2e-4, up.state, down.state)
+    _, jvp = jax.jvp(lambda st: term.residuals_state(st, rt, roots), (state,), (tangent,))
+    central = (row(up.state, roots) - row(down.state, roots)) / 2e-4
+    assert _relative(float(jvp[0]), float(central[0])) < 2e-2, (jvp, central)
+    term._er[:] = term.er_initial
+    _, via_callback = jax.jvp(lambda st: term.residuals_state(st, rt), (state,), (tangent,))
+    np.testing.assert_allclose(jvp, via_callback, rtol=1e-6)

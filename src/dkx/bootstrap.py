@@ -544,6 +544,7 @@ class KineticBootstrapMismatch:
         self._chains: dict[tuple[Any, ...], Any] = {}
         self._roots: dict[tuple[Any, ...], Any] = {}
         self._eager: tuple[Any, Any] = (None, None)
+        self._stager: tuple[Any, ...] = (None, None, None)
 
     def _er_at(self, s: float) -> float:
         """Prescribed ``E_r`` [kV/m] on the row at ``s``: a number or a callable of ``s``."""
@@ -615,12 +616,39 @@ class KineticBootstrapMismatch:
 
     # -- traced evaluation ----------------------------------------------------
 
-    def _kinetic(self, state: Any, rt: Any) -> tuple[np.ndarray, Any]:
-        """``(s_rows, <j.B>_kinetic)`` [A T/m^2], traced in ``state``."""
+    def _kinetic(self, state: Any, rt: Any, roots: Any = None) -> tuple[np.ndarray, Any]:
+        """``(s_rows, <j.B>_kinetic)`` [A T/m^2], traced in ``state``.
+
+        ``roots`` is the output of :meth:`roots`; without it an ambipolar row finds
+        its roots through a host callback inside the traced program.
+        """
+        import jax  # noqa: PLC0415
+        import jax.numpy as jnp  # noqa: PLC0415
+
+        s_full = np.asarray(rt.setup.s_full)
+        if not any(isinstance(v, jax.core.Tracer) for v in jax.tree_util.tree_leaves(state)):
+            # An eager caller (VMEX's set-up preflight, a reporter) would
+            # dispatch the Boozer tables op by op; compile the whole row once
+            # per runtime instead.  The runtime is held so its id stays unique.
+            if self._eager[0] is not rt:
+                self._eager = (rt, jax.jit(lambda st, ro: self._kinetic(st, rt, ro)[1]))
+            return self._setup(int(s_full.size))[1], self._eager[1](state, roots)
+        key, s_rows, spectra, psi_a = self._stage(state, rt)
+        if self.ambipolar:
+            if roots is None:
+                from jax.experimental import io_callback  # noqa: PLC0415
+
+                sg = jax.lax.stop_gradient
+                shape = jax.ShapeDtypeStruct((s_rows.size,), jnp.float64)
+                roots = io_callback(self._roots[key], (shape,) * 3, sg(spectra), sg(psi_a))
+            spectra = dict(spectra, root=tuple(jax.lax.stop_gradient(jnp.asarray(r)) for r in roots))
+        return s_rows, self._chains[key](spectra, psi_a)
+
+    def _stage(self, state: Any, rt: Any) -> tuple[Any, np.ndarray, dict, Any]:
+        """``(key, s_rows, Boozer spectra, psi_a)`` of ``state``; builds the row programs of ``key``."""
         import jax  # noqa: PLC0415
         import jax.numpy as jnp  # noqa: PLC0415
         from booz_xform_jax.jax_api import booz_xform_jax_impl  # noqa: PLC0415
-        from jax.experimental import io_callback  # noqa: PLC0415
         from vmex.core.boozer_tables import boozer_input_tables  # noqa: PLC0415
 
         from dkx.er import operator_at_er  # noqa: PLC0415
@@ -633,13 +661,6 @@ class KineticBootstrapMismatch:
 
         setup = rt.setup
         s_full = np.asarray(setup.s_full)
-        if not any(isinstance(v, jax.core.Tracer) for v in jax.tree_util.tree_leaves(state)):
-            # An eager caller (VMEX's set-up preflight, a reporter) would
-            # dispatch the Boozer tables op by op; compile the whole row once
-            # per runtime instead.  The runtime is held so its id stays unique.
-            if self._eager[0] is not rt:
-                self._eager = (rt, jax.jit(lambda st: self._kinetic(st, rt)[1]))
-            return self._setup(int(s_full.size))[1], self._eager[1](state)
         nfp, signgs = int(rt.resolution.nfp), int(np.sign(setup.signgs))
         rows, s_rows, templates = self._setup(int(s_full.size))
         # |psi_a| = |phi_edge|/(2 pi) in Wb/rad, as VMEX's bootstrap lane forms it.
@@ -716,12 +737,29 @@ class KineticBootstrapMismatch:
             # The surfaces share their shapes, so they are one batch axis of one
             # compiled program rather than an unrolled loop.
             self._chains[key] = batched_with_reverse_jvp(surface, stacked)
-        if self.ambipolar:
-            sg = jax.lax.stop_gradient
-            shape = jax.ShapeDtypeStruct((len(rows),), jnp.float64)
-            spectra = dict(spectra, root=io_callback(
-                self._roots[key], (shape,) * 3, sg(spectra), sg(psi_a)))
-        return s_rows, self._chains[key](spectra, psi_a)
+        return key, s_rows, spectra, psi_a
+
+    def roots(self, state: Any, rt: Any) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Ambipolar roots of ``state`` on the host: ``(E_r, dJ_r/dE, d<j.B>/dE)`` per kinetic row.
+
+        Run it before the traced program and pass the result as ``roots`` to
+        :meth:`residuals_state` (or :meth:`current_profiles`, :meth:`total`): that program
+        then holds no callback, so JAX's persistent cache keeps it across processes.
+        """
+        import jax  # noqa: PLC0415
+
+        if not self.ambipolar:
+            raise ValueError("roots() needs ambipolar=True")
+        if self._stager[0] is not rt:
+            box: dict = {}
+
+            def stage(st: Any) -> Any:
+                box["key"], _, spectra, psi = self._stage(st, rt)
+                return spectra, psi
+
+            self._stager = (rt, jax.jit(stage), box)
+        spectra, psi = self._stager[1](state)
+        return self._roots[self._stager[2]["key"]](spectra, psi)
 
     def _find_roots(self, roots: Any, stacked: Any, spectra: dict, psi: Any) -> tuple:
         """Host side of the root finder: warm start in, ``(E_r, dJ_r/dE, d<j.B>/dE)`` out."""
@@ -775,28 +813,28 @@ class KineticBootstrapMismatch:
             (er0, er0, zero, 0, jnp.full_like(er0, jnp.inf), zero, zero))
         return e, d_r, d_b, gap <= self.er_tol
 
-    def current_profiles(self, state: Any, rt: Any) -> tuple[np.ndarray, Any, Any]:
+    def current_profiles(self, state: Any, rt: Any, roots: Any = None) -> tuple[np.ndarray, Any, Any]:
         """``(s, <j.B>_VMEX, <j.B>_DKX)`` in A T/m^2 on the kinetic rows."""
         from vmex.core.bootstrap import vmec_j_dot_B  # noqa: PLC0415
 
-        s_rows, kinetic = self._kinetic(state, rt)
+        s_rows, kinetic = self._kinetic(state, rt, roots)
         return s_rows, vmec_j_dot_B(state, rt, surfaces=s_rows), kinetic
 
-    def residuals_state(self, state: Any, rt: Any) -> Any:
-        """Traceable residual vector; ``sum(r**2) = total``."""
+    def residuals_state(self, state: Any, rt: Any, roots: Any = None) -> Any:
+        """Traceable residual vector; ``sum(r**2) = total``.  ``roots``: see :meth:`roots`."""
         import jax.numpy as jnp  # noqa: PLC0415
 
         if not self.mismatch:
-            return self._kinetic(state, rt)[1] / DEFAULT_REFERENCE_CURRENT
-        _, jv, jk = self.current_profiles(state, rt)
+            return self._kinetic(state, rt, roots)[1] / DEFAULT_REFERENCE_CURRENT
+        _, jv, jk = self.current_profiles(state, rt, roots)
         denominator = jnp.sum((jv + jk) ** 2)
         return (jv - jk) / jnp.sqrt(jnp.maximum(denominator, jnp.finfo(denominator.dtype).tiny))
 
-    def total(self, state: Any, rt: Any) -> Any:
+    def total(self, state: Any, rt: Any, roots: Any = None) -> Any:
         """Scalar objective ``sum(residuals**2)``, for ``EquilibriumReporter``."""
         import jax.numpy as jnp  # noqa: PLC0415
 
-        r = self.residuals_state(state, rt)
+        r = self.residuals_state(state, rt, roots)
         return jnp.sum(r * r)
 
     __call__ = residuals_state
