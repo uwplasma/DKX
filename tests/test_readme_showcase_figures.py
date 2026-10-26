@@ -53,7 +53,7 @@ def test_the_readme_quotes_what_the_generator_plots() -> None:
     readme = README.read_text(encoding="utf-8")
     assert module.RELEASED_GAP == (0.19, 0.12)
     assert "12–19 %" in readme and "7e-11" in readme
-    assert "0.9955" in readme and "9.0e-9" in readme and "SFINCS cannot solve" in readme
+    assert "0.9955" in readme and "9.0e-9" in readme and "SFINCS does not solve" in readme
     structured = module.REUSE_ROUTES["structured direct, 16,230 unknowns"][0]
     assert f"{structured[2]:.2f} s to {structured[3]:.2f} s" in readme
     for name in ("sfincs_reference_limits.png", "factor_reuse.png"):
