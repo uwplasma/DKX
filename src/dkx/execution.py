@@ -357,15 +357,22 @@ def _make_operator(
         # the prepared problem is returned to a caller or used in a solve.
         pass
     elif case.physics.collisions == "pitch_angle_scattering":
+        # Collision-only background species scatter the kinetic ones through the
+        # sum over partners in nu_D and carry no unknowns: their rows are dropped.
+        bg = case.background
         pas = make_pitch_angle_scattering_v3_operator(
             x=grids.x,
-            z_s=z_s,
-            m_hats=m_hat,
-            n_hats=n_surface,
-            t_hats=t_surface,
+            z_s=jnp.concatenate([z_s, jnp.asarray([s.charge for s in bg], dtype=jnp.float64)]),
+            m_hats=jnp.concatenate([m_hat, jnp.asarray(
+                [s.mass_amu * _ATOMIC_MASS_KG / _PROTON_MASS_KG for s in bg], dtype=jnp.float64)]),
+            n_hats=jnp.concatenate([n_surface, jnp.asarray(
+                [s.density_m3[surface_index] / 1.0e20 for s in bg], dtype=jnp.float64)]),
+            t_hats=jnp.concatenate([t_surface, jnp.asarray(
+                [s.temperature_keV[surface_index] for s in bg], dtype=jnp.float64)]),
             nu_n=nu_n,
             n_xi_for_x=grids.n_xi_for_x,
             n_xi=grids.n_xi,
+            n_kinetic=len(case.species),
         )
     else:
         fp = make_fokker_planck_v3_operator(
@@ -468,6 +475,8 @@ def _route_name(method: str) -> str:
 
 def _prepare_profile_builder(case, op, grids, geometry_state, radial, surface_index, quadrature_order):
     """Fixed native normalization/stencil with dynamic physical profiles."""
+    if case.background:
+        raise ValueError("differentiable profiles do not support a collision-only background")
     from dataclasses import replace
     import jax.numpy as jnp
     from dkx.collisions import make_pitch_angle_scattering_v3_operator, prepare_fokker_planck_v3_profiles

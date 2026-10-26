@@ -229,11 +229,15 @@ class Case:
     convergence: ConvergenceConfig = field(default_factory=ConvergenceConfig)
     output: OutputConfig = field(default_factory=OutputConfig)
     scan: ScanConfig | None = None
+    #: Collision-only impurities: Maxwellian backgrounds with no kinetic unknowns
+    #: that scatter the kinetic species (``pitch_angle_scattering`` only).
+    background: tuple[SpeciesConfig, ...] = ()
     source_path: Path | None = field(default=None, compare=False, repr=False)
     _case_id: str = field(init=False, default="", compare=False, repr=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "species", tuple(self.species))
+        object.__setattr__(self, "background", tuple(self.background))
         if self.source_path is not None:
             object.__setattr__(
                 self, "source_path", Path(self.source_path).expanduser().resolve()
@@ -295,6 +299,8 @@ class Case:
         # the field. A non-default value is real semantic input and stays.
         if data["physics"]["coulomb_logarithm"] == 17.0:
             data["physics"].pop("coulomb_logarithm")
+        if not data["background"]:
+            data.pop("background")  # keeps every case ID recorded before it existed
         if data["scan"] is not None:
             data["scan"]["axis"] = data["scan"].pop("axes")
         return _paths_to_strings(data)
@@ -354,6 +360,7 @@ class Case:
                 "convergence",
                 "output",
                 "scan",
+                "background",
             },
         )
         name = _string(data, "name", "$", required=True)
@@ -375,6 +382,10 @@ class Case:
         parallel = _parse_parallel(_table(data, "parallel", "$", default={}))
         convergence = _parse_convergence(_table(data, "convergence", "$", default={}))
         output = _parse_output(_table(data, "output", "$", default={}))
+        background = tuple(
+            _parse_species(_as_table(item, f"background[{index}]"), index, "background")
+            for index, item in enumerate(_sequence(data, "background", "$"))
+        )
         scan_raw = data.get("scan")
         scan = None if scan_raw is None else _parse_scan(_as_table(scan_raw, "scan"))
         source = (
@@ -393,6 +404,7 @@ class Case:
             convergence=convergence,
             output=output,
             scan=scan,
+            background=background,
             source_path=source,
         )
 
@@ -468,6 +480,17 @@ def case_json_schema() -> dict[str, Any]:
             "species": {
                 "type": "array",
                 "minItems": 1,
+                "items": _object_schema(
+                    ["name", "charge", "mass_amu", "density_m3", "temperature_keV"],
+                    name={"type": "string", "minLength": 1},
+                    charge={"type": "number", "not": {"const": 0}},
+                    mass_amu={"type": "number", "exclusiveMinimum": 0},
+                    density_m3=positive_numbers,
+                    temperature_keV=positive_numbers,
+                ),
+            },
+            "background": {
+                "type": "array",
                 "items": _object_schema(
                     ["name", "charge", "mass_amu", "density_m3", "temperature_keV"],
                     name={"type": "string", "minLength": 1},
@@ -724,8 +747,8 @@ def _parse_geometry(data: Mapping[str, Any]) -> GeometryConfig:
     )
 
 
-def _parse_species(data: Mapping[str, Any], index: int) -> SpeciesConfig:
-    path = f"species[{index}]"
+def _parse_species(data: Mapping[str, Any], index: int, table: str = "species") -> SpeciesConfig:
+    path = f"{table}[{index}]"
     _reject_unknown(
         data, path, {"name", "charge", "mass_amu", "density_m3", "temperature_keV"}
     )
@@ -1040,37 +1063,45 @@ def _validate_case(case: Case) -> None:
         )
     names: set[str] = set()
     n_surfaces = len(case.geometry.surfaces)
-    for index, species in enumerate(case.species):
-        prefix = f"species[{index}]"
-        if not species.name.strip() or species.name in names:
-            _fail(
-                f"{prefix}.name",
-                species.name,
-                "a unique non-empty name",
-                "Use a distinct physical species name.",
-            )
-        names.add(species.name)
-        if species.charge == 0:
-            _fail(
-                f"{prefix}.charge",
-                species.charge,
-                "a nonzero charge in elementary-charge units",
-                "Use a signed ion charge or -1 for electrons.",
-            )
-        _positive(f"{prefix}.mass_amu", species.mass_amu)
-        for field_name, values in (
-            ("density_m3", species.density_m3),
-            ("temperature_keV", species.temperature_keV),
-        ):
-            if len(values) != n_surfaces:
+    if case.background and case.physics.collisions != "pitch_angle_scattering":
+        _fail(
+            "background",
+            case.physics.collisions,
+            "physics.collisions = 'pitch_angle_scattering' with a collision-only background",
+            "Use pitch_angle_scattering, or list the impurity under [[species]] to treat it kinetically.",
+        )
+    for table, group in (("species", case.species), ("background", case.background)):
+        for index, species in enumerate(group):
+            prefix = f"{table}[{index}]"
+            if not species.name.strip() or species.name in names:
                 _fail(
-                    f"{prefix}.{field_name}",
-                    values,
-                    f"{n_surfaces} values (one per geometry surface)",
-                    "Add or remove profile entries to match geometry.surfaces.",
+                    f"{prefix}.name",
+                    species.name,
+                    "a unique non-empty name",
+                    "Use a distinct physical species name.",
                 )
-            for value_index, value in enumerate(values):
-                _positive(f"{prefix}.{field_name}[{value_index}]", value)
+            names.add(species.name)
+            if species.charge == 0:
+                _fail(
+                    f"{prefix}.charge",
+                    species.charge,
+                    "a nonzero charge in elementary-charge units",
+                    "Use a signed ion charge or -1 for electrons.",
+                )
+            _positive(f"{prefix}.mass_amu", species.mass_amu)
+            for field_name, values in (
+                ("density_m3", species.density_m3),
+                ("temperature_keV", species.temperature_keV),
+            ):
+                if len(values) != n_surfaces:
+                    _fail(
+                        f"{prefix}.{field_name}",
+                        values,
+                        f"{n_surfaces} values (one per geometry surface)",
+                        "Add or remove profile entries to match geometry.surfaces.",
+                    )
+                for value_index, value in enumerate(values):
+                    _positive(f"{prefix}.{field_name}[{value_index}]", value)
     _choice("physics.model", case.physics.model, ("full_local",))
     _choice(
         "physics.collisions",
