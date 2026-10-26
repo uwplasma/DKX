@@ -112,6 +112,40 @@ conservation is exact on the collocation grid. It assembles into the same per-$L
 speed blocks and uses the same matvec (`apply_fokker_planck_v3`). Its speed nullspace is
 {density, temperature} per species, so the default constraint is `constraintScheme = 1`.
 
+### What the published operator does not contain
+
+The field-particle part of the improved Sugama operator acts in $L=0$ and $L=1$ only.
+Sugama et al. (2019), Eqs. 24-29 and 40-47, give a rank-one particle and energy response and a
+momentum-and-heat-flow response; there is no field term for $L \ge 2$, and the operator of
+Sugama et al. (2009) has none either. DKX therefore has nothing further to implement: its $L \ge 2$
+blocks are the Landau test-particle kernels, as published. The improved $L=1$ correction (the
+`flow_order` Laguerre flow moments, default 5) is in `make_improved_sugama_v3_operator`; with it the
+model reproduces the Spitzer-Harm conductivity within 1% for $Z = 1$ to 16 and the Landau flow and
+heat-flow friction of the electron-ion pair within 0.2% at $T_e/T_i = 10$.
+
+That omission is not harmless in a stellarator. On the production W7-X deck ($15 \times 45 \times 80 \times 6$,
+$r_N = 0.5$, $E_r = 1$ kV/m, hydrogen and electrons, $\nu_n = 0.0083$; the cell `e_sugama_w7x` of
+`validation/cross_code_gaps_v1.json`) the parallel flows of the improved Sugama operator are 3.5% (ions) and 11.1%
+(electrons) below those of the full Fokker-Planck operator, while the fluxes agree to 0.44%. Replacing only the $L \ge 2$
+blocks of the Sugama operator by the Fokker-Planck ones (test and field part) brings the flows to 0.11% and
+1.2% of the Fokker-Planck values. So the flow gap of the model on W7-X is the missing $L \ge 2$ field-particle
+response (the viscous part of the friction), not the $L=1$ correction. A $9 \times 25 \times 24 \times 4$ deck gives
+the same picture (8.2% and 3.8% falling to 0.09% and 0.3%). Use the Fokker-Planck operator whenever flows or
+the bootstrap current are the quantity of interest.
+
+Two further limits, both measured by `tests/test_collisions_improved_sugama.py`:
+
+- At unequal temperatures the $L=1$ block is exactly as far from self-adjoint as the linearized Landau
+  operator it reproduces, which is itself not adjoint there (a relative antisymmetric part of 0.4% to 41%
+  for $T_e/T_i$ = 3 to 10, depending on the mass ratio, on the pairing
+  $\sum_{ab} T_a \langle g_a, C_{ab} f_b \rangle / f_{aM}$). Sugama's Eq. 29 is exact only for equal
+  temperatures or in the small-mass-ratio limit, and so is DKX's.
+- The $L=0$ field part is not Sugama's $C^T(f_M x^2)$ response (it uses a fixed shape and a separate
+  particle term), and it is not self-adjoint even for like species at equal temperature (0.1 on the same
+  pairing, against 1e-12 for Fokker-Planck). Conservation of particles, momentum and energy and the
+  exchange rate of Eq. A1 are exact or tested; the H-theorem is not. The strict `xfail` test
+  `test_l0_block_is_adjoint_for_like_species` fails the day this is fixed.
+
 This operator is available from a namelist only; the native case accepts
 `linearized_fokker_planck` and `pitch_angle_scattering`.
 
