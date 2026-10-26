@@ -995,6 +995,31 @@ def _prepare_profile(case: Case):
     return geometry_state, grids, density_m3, temperature_keV, dn_dr_hat, dt_dr_hat
 
 
+def _batched_surfaces(case: Case, operators: list, progress):
+    """One vmapped, memory-budgeted solve of every surface, or ``None`` for the surface loop.
+
+    The surfaces of a case share grids and species and differ in geometry, gradients and
+    collisions, which is the shape :func:`dkx.batch.batched_surface_scan` maps; the batch
+    keeps the full Legendre state, so each row is accepted by the same original-equation
+    residual as the loop.  Not used for a Phi1 case, a pinned device, or a batch that did
+    not converge (the loop then reports the failing surface).
+    """
+    from dkx.batch import batched_surface_scan  # noqa: PLC0415
+
+    if len(operators) < 4 or case.run.device != "auto" or any(op.include_phi1 for op in operators):
+        return None
+    try:
+        batch = batched_surface_scan(
+            operators, solve_method=_route_name(case.solver.method), tol=case.solver.relative_tolerance,
+            memory_budget_gb=case.solver.memory_fraction * _total_host_memory_bytes() / 1024**3,
+            retain_full_state=True)  # fmt: skip
+    except ValueError as error:  # grids or flags differ between surfaces
+        if progress is not None:
+            progress(f"surfaces solved one by one: {error}")
+        return None
+    return batch if bool(np.all(np.asarray(batch.algebraic_converged))) else None
+
+
 def run_case(
     case: Case,
     *,
@@ -1047,8 +1072,48 @@ def run_case(
             == case.solver.relative_tolerance
         )
 
+    def record(index, moments, radial, residual, rhs_norm, route_iterations, method, op) -> None:
+        nonlocal retained_operator
+        # diagnostics.F90 uses d(rHat)/d(psiHat), not its inverse, when
+        # converting particleFlux/heatFlux from psiHat to rHat.
+        radial_factor = radial.d_dr_hat_to_d_dpsi_hat
+        particle_flux[index] = (
+            np.asarray(moments["particleFlux_vm_psiHat"], dtype=np.float64)
+            * radial_factor
+            * PARTICLE_FLUX
+        )
+        heat_flux[index] = (
+            np.asarray(moments["heatFlux_vm_psiHat"], dtype=np.float64)
+            * radial_factor
+            * HEAT_FLUX
+        )
+        current[index] = float(np.asarray(moments["FSABjHat"])) * PARALLEL_CURRENT
+        residuals[index] = residual
+        rhs_norms[index] = rhs_norm
+        residual_complete_state[index] = True
+        iterations[index] = 0 if route_iterations is None else int(route_iterations)
+        selected_routes.append(method)
+        retained_operator = op
+
     progress = emit if emit is not None else (print if case.run.progress else None)
     solved = None
+    ambipolar = case.run.workflow == "ambipolar_profile"
+
+    def operator_at(i: int):
+        return built[i] or _make_operator(
+            case, surface_index=i, n_hat=n_hat, t_hat=t_hat, dn_dr_hat=dn_dr_hat,
+            dt_dr_hat=dt_dr_hat, grids=grids, geometry_state=geometry_state,
+            electric_field_kv_m=1.0 if ambipolar else None, force_exb_structure=ambipolar)  # fmt: skip
+
+    built: list = [None] * surfaces.size
+    batch = None
+    if not ambipolar and surfaces.size >= 4:
+        built = [operator_at(i) for i in range(surfaces.size)]
+        batch_start = time.perf_counter()
+        batch = _batched_surfaces(case, [b[0] for b in built], progress)
+        batch_seconds = (time.perf_counter() - batch_start) / surfaces.size
+        if batch is not None and progress is not None:
+            progress(f"{surfaces.size} surfaces as one batch (chunks of {batch.chunk_size})")
     for index, surface in enumerate(surfaces):
         if retained_operator is not None:
             # The compiled batch solves are keyed on their surface's operator: drop them with it.
@@ -1056,19 +1121,8 @@ def run_case(
             gc.collect()
         if progress is not None:
             progress(f"surface {index + 1}/{len(surfaces)}: psi_N={surface:.6g}")
-        ambipolar = case.run.workflow == "ambipolar_profile"
-        op, _grids, _geometry, radial = _make_operator(
-            case,
-            surface_index=index,
-            n_hat=n_hat,
-            t_hat=t_hat,
-            dn_dr_hat=dn_dr_hat,
-            dt_dr_hat=dt_dr_hat,
-            grids=grids,
-            geometry_state=geometry_state,
-            electric_field_kv_m=1.0 if ambipolar else None,
-            force_exb_structure=ambipolar,
-        )
+        op, _grids, _geometry, radial = operator_at(index)
+        built[index] = None
         if ambipolar:
             from dkx.er import ErProblem  # noqa: PLC0415
             from dkx.workflows.ambipolar_native import (  # noqa: PLC0415
@@ -1135,6 +1189,13 @@ def run_case(
                 ].electric_field_kv_m
             retained_operator = op
             continue
+        if batch is not None:
+            moments = {k: np.asarray(v[index]) for k, v in batch.moments.items()}
+            solve_seconds[index] = batch_seconds
+            residual = float(np.asarray(batch.residual_norms)[index])
+            record(index, moments, radial, residual, float(np.linalg.norm(np.asarray(op.rhs()))),
+                   None, batch.executed_method, op)  # fmt: skip
+            continue
         solve_start = time.perf_counter()
         if op.include_phi1:
             from dkx.phi1 import solve_phi1  # noqa: PLC0415
@@ -1192,27 +1253,8 @@ def run_case(
                 f"residual={residual!r}, rhs_norm={rhs_norm!r}, "
                 f"relative_tolerance={case.solver.relative_tolerance!r}"
             )
-        moments = profile_moments_from_operator(op, state)
-        # diagnostics.F90 uses d(rHat)/d(psiHat), not its inverse, when
-        # converting particleFlux/heatFlux from psiHat to rHat.
-        radial_factor = radial.d_dr_hat_to_d_dpsi_hat
-        particle_flux[index] = (
-            np.asarray(moments["particleFlux_vm_psiHat"], dtype=np.float64)
-            * radial_factor
-            * PARTICLE_FLUX
-        )
-        heat_flux[index] = (
-            np.asarray(moments["heatFlux_vm_psiHat"], dtype=np.float64)
-            * radial_factor
-            * HEAT_FLUX
-        )
-        current[index] = float(np.asarray(moments["FSABjHat"])) * PARALLEL_CURRENT
-        residuals[index] = residual
-        rhs_norms[index] = rhs_norm
-        residual_complete_state[index] = True
-        iterations[index] = 0 if route_iterations is None else int(route_iterations)
-        selected_routes.append(method)
-        retained_operator = op
+        record(index, profile_moments_from_operator(op, state), radial, residual, rhs_norm,
+               route_iterations, method, op)  # fmt: skip
 
     if ambipolar_surfaces:
         from dkx.workflows.ambipolar_native import (  # noqa: PLC0415
