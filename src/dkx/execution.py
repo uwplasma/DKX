@@ -1006,7 +1006,7 @@ def _batched_surfaces(case: Case, operators: list, progress):
     """
     from dkx.batch import batched_surface_scan  # noqa: PLC0415
 
-    if len(operators) < 2 or case.run.device != "auto" or any(op.include_phi1 for op in operators):
+    if len(operators) < 4 or case.run.device != "auto" or any(op.include_phi1 for op in operators):
         return None
     try:
         batch = batched_surface_scan(
@@ -1107,7 +1107,7 @@ def run_case(
 
     built: list = [None] * surfaces.size
     batch = None
-    if not ambipolar and surfaces.size > 1:
+    if not ambipolar and surfaces.size >= 4:
         built = [operator_at(i) for i in range(surfaces.size)]
         batch_start = time.perf_counter()
         batch = _batched_surfaces(case, [b[0] for b in built], progress)

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Feature: `run_case` solves the surfaces of a non-ambipolar, non-Phi1 profile (four or more) as one vmapped, memory-budgeted batch (`dkx.batch.batched_surface_scan`, full Legendre state, original-equation residual per surface) instead of one solve per surface; it falls back to the loop when the surfaces do not share a discretization or any row does not converge. Matches the loop to 1e-6 (`tests/test_run_case_batched_surfaces.py`). Measured on the loaded 36-core office host (4 cores, tokamak, one species, pitch-angle scattering, 5 speeds): 24 surfaces at 33 x 1 x 48, loop 43.7 s cold and 12.5 s warm against batch 13.1 s and 6.2 s (3.3x and 2.0x); at 15 x 1 x 16 the two are within noise (the batch compiles once per case operator).
 ## v2.12.0 — 2026-10-25
 
 Self-consistent bootstrap current at the ambipolar E_r for optimization
