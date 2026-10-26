@@ -158,3 +158,17 @@ def test_the_qa_flagship_runs_end_to_end(tmp_path) -> None:
     for name in ("input.QA_bootstrap_dkx_optimized", "wout_QA_bootstrap_dkx_optimized.nc",
                  "QA_bootstrap_dkx_current.png"):  # fmt: skip
         assert (tmp_path / name).exists(), name
+
+
+@pytest.mark.slow  # two equilibrium solves, the traced row and its Jacobian check
+def test_the_ambipolar_example_runs_and_checks_its_own_derivative(tmp_path) -> None:
+    pytest.importorskip("vmex")
+    pytest.importorskip("booz_xform_jax.jax_api")
+    script = EX_DIR / "ambipolar_bootstrap_dkx.py"
+    env = dict(os.environ, DKX_EXAMPLES_CI="1")
+    done = subprocess.run([sys.executable, "-u", str(script)], cwd=tmp_path, env=env,
+                          capture_output=True, text=True, timeout=5400)  # fmt: skip
+    assert done.returncode == 0, done.stdout[-4000:] + done.stderr[-4000:]
+    assert "ambipolar E_r" in done.stdout and "relative" in done.stdout
+    assert (tmp_path / "ambipolar_bootstrap_dkx.png").exists()
+    assert (tmp_path / "ambipolar_bootstrap_dkx.csv").exists()

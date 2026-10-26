@@ -390,6 +390,10 @@ class KineticBootstrapCurrent:
 #: ``|E_r| <= 1`` kV/m, where ``Nxi = 16`` was 16-44% low (plan.md 16.7).  The
 #: angular grid is not converged here: refine ``Ntheta``/``Nzeta`` next.
 DEFAULT_TRACED_RESOLUTION: dict[str, int] = {"Ntheta": 11, "Nzeta": 11, "Nxi": 48, "NL": 4, "Nx": 4}
+#: Grid of the ambipolar row (spectral angles).  The speed grid is the sensitive axis once
+#: E_r != 0: on the QI example seed (s = 0.3, 0.6) ``Nx = 4`` is 30% high at s = 0.3 at every
+#: ``Nxi``, ``9 x 9 x 32 x 5`` is within 2.1% and 1.0% of ``13 x 13 x 64 x 5`` (roots within 2%).
+DEFAULT_AMBIPOLAR_RESOLUTION: dict[str, int] = {"Ntheta": 9, "Nzeta": 9, "Nxi": 32, "NL": 4, "Nx": 5}
 
 def batched_with_reverse_jvp(function: Any, stacked: Any) -> Any:
     """``jit(vmap(function))(stacked, a, b)`` over axis 0 of ``stacked`` and ``a``, ``b`` shared.
@@ -478,7 +482,16 @@ class KineticBootstrapMismatch:
 
     ``er_kV_per_m`` is a prescribed radial electric field; ``minor_radius``
     [m] defines the radius it is a derivative with respect to and matters only
-    when ``er_kV_per_m != 0``.
+    when ``er_kV_per_m != 0``.  ``er_kV_per_m`` may be a callable of ``s``.
+
+    **Ambipolar.**  ``ambipolar=True`` replaces the prescribed field by the root
+    of the radial current on every surface (``er_initial`` first guess,
+    ``er_tol`` and ``er_max_step`` Newton controls, ``spectral_angles`` for
+    Fourier angles).  The roots are found by a separate compiled program run
+    from the host, warm-started at the previous roots, so a call is not
+    reproducible bit for bit across histories when several roots exist;
+    :meth:`electric_field` returns them and ``unconverged`` counts failures.
+    The default grid is ``DEFAULT_AMBIPOLAR_RESOLUTION``.
     """
 
     name = "j_boot_dkx"
@@ -492,7 +505,12 @@ class KineticBootstrapMismatch:
         resolution: dict[str, int] | None = None,
         collision_operator: int = 1,
         collision_model: str | None = None,
-        er_kV_per_m: float = 0.0,
+        er_kV_per_m: Any = 0.0,
+        ambipolar: bool = False,
+        er_initial: float = -2.0,
+        er_tol: float = 0.05,
+        er_max_step: float = 2.0,
+        spectral_angles: bool = False,
         minor_radius: float = 1.0,
         mboz: int = 6,
         nboz: int = 6,
@@ -503,13 +521,20 @@ class KineticBootstrapMismatch:
         if np.any((self.surfaces <= 0.0) | (self.surfaces >= 1.0)):
             raise ValueError("surfaces must lie strictly inside (0, 1)")
         self.mismatch = bool(mismatch)
-        self.resolution = dict(DEFAULT_TRACED_RESOLUTION if resolution is None else resolution)
+        self.resolution = dict((DEFAULT_AMBIPOLAR_RESOLUTION if ambipolar else DEFAULT_TRACED_RESOLUTION)
+                               if resolution is None else resolution)
         if collision_model not in (None, "pas", "fokker_planck", "pas+momentum_correction"):
             raise ValueError(f"unknown collision_model {collision_model!r}")
         self.momentum_correction = collision_model == "pas+momentum_correction"
         self.collision_operator = (int(collision_operator) if collision_model is None
                                    else int(collision_model != "fokker_planck"))  # fmt: skip
-        self.er_kV_per_m = float(er_kV_per_m)
+        self.er_kV_per_m = er_kV_per_m
+        self.ambipolar = bool(ambipolar)
+        self.er_tol, self.er_max_step = float(er_tol), float(er_max_step)
+        self.spectral_angles = bool(spectral_angles)
+        self.er_initial = float(er_initial)
+        self._er = np.full(self.surfaces.size, self.er_initial)  # warm start of the root, per row
+        self.unconverged = 0  # rows whose last root search did not converge
         self.minor_radius = float(minor_radius)
         self.mboz, self.nboz = int(mboz), int(nboz)
         self.tol = float(tol)
@@ -517,7 +542,15 @@ class KineticBootstrapMismatch:
         self._friction: dict[int, list[Any]] = {}
         self._plans: dict[tuple[Any, ...], Any] = {}
         self._chains: dict[tuple[Any, ...], Any] = {}
+        self._roots: dict[tuple[Any, ...], Any] = {}
         self._eager: tuple[Any, Any] = (None, None)
+
+    def _er_at(self, s: float) -> float:
+        """Prescribed ``E_r`` [kV/m] on the row at ``s``: a number or a callable of ``s``."""
+        if self.ambipolar:
+            return 1.0  # reference field: switches the E_r terms on; the root replaces it
+        er = self.er_kV_per_m
+        return float(er(s) if callable(er) else er)
 
     # -- host-side set-up, cached ---------------------------------------------
 
@@ -545,14 +578,19 @@ class KineticBootstrapMismatch:
             dTHatdrHats=[dti / 1e3 * to_r_hat, dte / 1e3 * to_r_hat],
             collisionOperator=(self.collision_operator if collision_operator is None
                                else collision_operator), Delta=4.5694e-3, alpha=1.0,
-            nu_n=8.330e-3, Er=self.er_kV_per_m, **self.resolution,
+            nu_n=8.330e-3, Er=self._er_at(s),
+            **({"thetaDerivativeScheme": 0, "zetaDerivativeScheme": 0} if self.spectral_angles else {}),
+            **self.resolution,
         )  # fmt: skip
         return kinetic_operator_from_namelist(parse_sfincs_input_text(deck.to_namelist()))
 
     def _setup(self, ns: int) -> tuple[np.ndarray, np.ndarray, list[Any]]:
         if ns not in self._templates:
+            import jax  # noqa: PLC0415
+
             rows, s_rows = self.rows(ns)
-            templates = [self._template(float(s)) for s in s_rows]
+            with jax.ensure_compile_time_eval():  # host constants, even when first seen under a trace
+                templates = [self._template(float(s)) for s in s_rows]
             if self.momentum_correction:
                 from dkx.momentum_correction import friction_drives  # noqa: PLC0415
 
@@ -582,8 +620,10 @@ class KineticBootstrapMismatch:
         import jax  # noqa: PLC0415
         import jax.numpy as jnp  # noqa: PLC0415
         from booz_xform_jax.jax_api import booz_xform_jax_impl  # noqa: PLC0415
+        from jax.experimental import io_callback  # noqa: PLC0415
         from vmex.core.boozer_tables import boozer_input_tables  # noqa: PLC0415
 
+        from dkx.er import operator_at_er  # noqa: PLC0415
         from dkx.run import profile_moments_from_operator  # noqa: PLC0415
         from dkx.solve import solve  # noqa: PLC0415
         from dkx.workflows.geometry_adapters import (  # noqa: PLC0415
@@ -613,10 +653,10 @@ class KineticBootstrapMismatch:
             plan = self._plan(xm, xn, nfp)
             frictions = self._friction.get(int(s_full.size), [None] * len(rows))
             with jax.ensure_compile_time_eval():  # constants, even under an outer trace
-                stacked = jax.tree_util.tree_map(lambda *v: jnp.stack(v), *zip(templates, frictions))
+                stacked = jax.tree_util.tree_map(
+                    lambda *v: jnp.stack(v), *zip(templates, frictions, range(len(rows))))
 
-            def surface(inputs: tuple, spectrum: dict, psi: Any) -> Any:
-                template, friction = inputs
+            def operator_of(template: Any, spectrum: dict, psi: Any) -> Any:
                 booz = booz_xform_jax_impl(
                     **{k: v[None] for k, v in spectrum.items()},
                     xm=jnp.asarray(xm), xn=jnp.asarray(xn), xm_nyq=jnp.asarray(xm),
@@ -626,29 +666,114 @@ class KineticBootstrapMismatch:
                 # The template holds d/ds gradients (psiAHat = 1); dividing by
                 # |psi_a| and converting the handedness gives the signed psiAHat
                 # of boozer_route_psi_a_hat, traced.
-                operator = kinetic_operator_on_boozer_surface(
+                return kinetic_operator_on_boozer_surface(
                     replace(template, **{leaf: getattr(template, leaf) / psi
                                          for leaf in PSI_A_HAT_LEAVES}),
                     bmnc_b=booz["bmnc_b"][0], ixm_b=np.asarray(plan.grids.xm_b),
                     ixn_b=np.asarray(plan.grids.xn_b), nfp=nfp, iota=iota, g_hat=g, i_hat=i,
                     signgs=signgs)  # fmt: skip
+
+            # tier1_keep_lowest = Nxi keeps every Legendre block, so the
+            # solution satisfies the original equation, not a truncation.
+            def evaluate(op: Any) -> tuple[Any, Any]:
+                solved = solve(op, op.rhs(), method="auto", tol=self.tol,
+                               differentiable=True, tier1_keep_lowest=op.n_xi, emit=None)  # fmt: skip
+                moments = profile_moments_from_operator(op, solved.x.reshape(-1))
+                radial = jnp.dot(jnp.asarray(op.z_s), moments["particleFlux_vm_psiHat"])
+                return radial, moments["FSABjHat"].reshape(()) * PARALLEL_CURRENT
+
+            def surface(inputs: tuple, spectrum: dict, psi: Any) -> Any:
+                template, friction, _ = inputs
+                spectrum = dict(spectrum)
+                root = spectrum.pop("root", None)
+                operator = operator_of(template, spectrum, psi)
                 if friction is not None:
                     from dkx.momentum_correction import momentum_corrected_solve  # noqa: PLC0415
 
                     corrected = momentum_corrected_solve(operator, friction=friction, n_sonine=3,
                                                          tol=self.tol)  # fmt: skip
                     return corrected.fsab_j * PARALLEL_CURRENT
-                # tier1_keep_lowest = Nxi keeps every Legendre block, so the
-                # solution satisfies the original equation, not a truncation.
-                solved = solve(operator, operator.rhs(), method="auto", tol=self.tol,
-                               differentiable=True, tier1_keep_lowest=operator.n_xi, emit=None)  # fmt: skip
-                moments = profile_moments_from_operator(operator, solved.x.reshape(-1))
-                return moments["FSABjHat"].reshape(()) * PARALLEL_CURRENT
+                if root is None:
+                    return evaluate(operator)[1]
+                # Implicit-function theorem at the root E*, with the slopes of the
+                # last Newton step: d<j.B>/dp = j_p - j_E J_p / J_E, one adjoint solve.
+                e, d_r, d_b = root
+                j_r, j_b = evaluate(operator_at_er(
+                    operator, e, dphi_per_er=jax.lax.stop_gradient(operator.dphi_hat_dpsi_hat_kinetic)))
+                return j_b - d_b * j_r / d_r
 
+            def newton(inputs: tuple, spectrum: dict, psi: Any, er0: Any) -> tuple:
+                template, _, _ = inputs
+                operator = operator_of(template, dict(spectrum), psi)
+                return self._newton(evaluate, operator, er0)
+
+            if self.ambipolar:
+                # The root is found by a separate compiled program run from the host,
+                # so the program VMEX differentiates holds no iteration, only one
+                # solve per surface; the root persists across calls as the warm start.
+                roots = jax.jit(jax.vmap(newton, (0, 0, None, 0)))
+                self._roots[key] = lambda sp, psi: self._find_roots(roots, stacked, sp, psi)
             # The surfaces share their shapes, so they are one batch axis of one
             # compiled program rather than an unrolled loop.
             self._chains[key] = batched_with_reverse_jvp(surface, stacked)
+        if self.ambipolar:
+            sg = jax.lax.stop_gradient
+            shape = jax.ShapeDtypeStruct((len(rows),), jnp.float64)
+            spectra = dict(spectra, root=io_callback(
+                self._roots[key], (shape,) * 3, sg(spectra), sg(psi_a)))
         return s_rows, self._chains[key](spectra, psi_a)
+
+    def _find_roots(self, roots: Any, stacked: Any, spectra: dict, psi: Any) -> tuple:
+        """Host side of the root finder: warm start in, ``(E_r, dJ_r/dE, d<j.B>/dE)`` out."""
+        n = np.asarray(spectra["iota"]).shape[0]
+        if self._er.size != n:
+            self._er = np.full(n, self.er_initial)
+        e, d_r, d_b, converged = (np.asarray(v) for v in roots(stacked, spectra, psi, self._er.copy()))
+        ok = converged & np.isfinite(e)
+        self._er = np.where(ok, e, self._er)
+        self.unconverged = int(np.sum(~ok))
+        return e, d_r, d_b
+
+    def electric_field(self) -> np.ndarray:
+        """Ambipolar ``E_r`` [kV/m] on the kinetic rows as of the last evaluation."""
+        return self._er.copy()
+
+    def _newton(self, evaluate: Any, operator: Any, er0: Any) -> tuple:
+        r"""Ambipolar ``E_r`` of one surface by damped Newton: ``(E_r, dJ_r/dE, d<j.B>/dE, converged)``.
+
+        ``evaluate(op)`` returns the radial current :math:`J_r` and
+        :math:`\langle j\cdot B\rangle` from one solve.  The electric field
+        enters linearly (:func:`dkx.er.operator_at_er`), so each iteration is one
+        forward-mode solve.  A step that raises :math:`|J_r|` is halved toward
+        the last good point, which keeps the iteration on the root it started
+        from (the previous one) instead of jumping to another branch.  The slopes
+        are those of the last step, less than ``er_tol`` from the returned point.
+        """
+        import jax  # noqa: PLC0415
+        import jax.numpy as jnp  # noqa: PLC0415
+
+        from dkx.er import operator_at_er  # noqa: PLC0415
+
+        dphi_per_er = operator.dphi_hat_dpsi_hat_kinetic  # built at the reference E_r = 1 kV/m
+
+        def step(carry: tuple) -> tuple:
+            e, e_good, j_good, i, _, _, _ = carry
+            (j_r, _), (d_r, d_b) = jax.jvp(
+                lambda x: evaluate(operator_at_er(operator, x, dphi_per_er=dphi_per_er)),
+                (e,), (jnp.ones_like(e),))
+            newton = jnp.where(jnp.isfinite(j_r / d_r), -j_r / d_r, 0.0)
+            gap = jnp.where(jnp.isfinite(j_r / d_r), jnp.abs(newton), jnp.inf)  # distance to the root
+            worse = (i > 0) & (jnp.abs(j_r) > jnp.abs(j_good))
+            e_new = jnp.where(worse, 0.5 * (e + e_good),
+                              e + jnp.clip(newton, -self.er_max_step, self.er_max_step))
+            e_good, j_good = jnp.where(worse, e_good, e), jnp.where(worse, j_good, j_r)
+            return e_new, e_good, j_good, i + 1, gap, d_r, d_b
+
+        zero = jnp.zeros_like(er0)
+        e, _, _, _, gap, d_r, d_b = jax.lax.while_loop(
+            lambda c: (c[4] > self.er_tol) & (c[3] < 16), step,
+            (er0, er0, zero, 0, jnp.full_like(er0, jnp.inf), zero, zero))
+        return e, d_r, d_b, gap <= self.er_tol
 
     def current_profiles(self, state: Any, rt: Any) -> tuple[np.ndarray, Any, Any]:
         """``(s, <j.B>_VMEX, <j.B>_DKX)`` in A T/m^2 on the kinetic rows."""

@@ -68,6 +68,11 @@ not a physical difference.
 
 ![Bootstrap current before and after](../../docs/_static/figures/readme/QA_optimization_bootstrap_dkx.png)
 
+`ambipolar_bootstrap_dkx.py` evaluates the same traced row at the ambipolar `E_r`
+(`ambipolar=True`) on a rotating-ellipse equilibrium, prints the roots and `<j.B>`
+against `E_r = 0` and Redl, and checks the implicit Jacobian row against central
+finite differences; `DKX_EXAMPLES_CI=1` is a smoke pass.
+
 `QH_optimization_bootstrap_dkx.py` (nfp=4) and `QI_optimization_bootstrap_dkx.py`
 (nfp=2, where Redl, a fit to quasisymmetric calculations, is an extrapolation)
 use the host term `KineticBootstrapCurrent` instead: DKX on the written wout,
