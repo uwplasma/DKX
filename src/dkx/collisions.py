@@ -693,10 +693,12 @@ def make_pitch_angle_scattering_v3_operator(
     krook: float = 0.0,
     n_xi_for_x: jnp.ndarray,
     n_xi: int,
+    n_kinetic: int | None = None,
 ) -> PitchAngleScatteringV3Operator:
+    """``n_kinetic`` keeps the first species' rows; later ones only scatter them (collision-only)."""
     nu_d_hat = nu_d_hat_pitch_angle_scattering_v3(
         x=x, z_s=z_s, m_hats=m_hats, n_hats=n_hats, t_hats=t_hats
-    )
+    )[:n_kinetic]
     n_xi_int = int(n_xi)
     ell = jnp.arange(n_xi_int, dtype=jnp.float64)
     factor_l = 0.5 * (ell * (ell + 1.0) + 2.0 * krook)
