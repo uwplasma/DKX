@@ -1,0 +1,110 @@
+! Input file for SFINCS version 3.
+! See the user manual for documentation of the parameters in this file.
+!----------------------------------------------------------------------
+
+
+!ss profilesScheme = 1
+
+! Parameters specific to scanType = 2:
+
+! Parameters specific to scanType = 3:
+!ss scanVariable = preconditioner_x_min_L
+!ss scanVariableMin = 0
+!ss scanVariableMax = 2
+!ss scanVariableN = 3
+!ss scanVariableScale = linear
+
+&general
+/
+
+&geometryParameters
+  rN_wish = 0.18708286933869725 ! Set by sfincsScan_5.
+geometryScheme = 5
+
+inputRadialCoordinate = 3  ! rN
+
+!ss Nradius = 6
+!ss rN_min = 0.016
+!ss rN_max = 0.906018
+
+equilibriumFile = 'wout_QHS_good_res.nc'
+/
+
+&speciesParameters
+  nHats = 0.06788873664985769 0.06788873664985769 ! Set by sfincsScan_5.
+  dnHatdrHats = -0.11599562847962365 -0.11599562847962365 ! Set by sfincsScan_5.
+  THats = 0.0589516606805442 1.3707269816238479 ! Set by sfincsScan_5.
+  dTHatdrHats = -0.08989813020776333 -19.136093892814117 ! Set by sfincsScan_5.
+Zs   =      1.0   -1.0
+mHats =   1.0000e+00 5.4465e-04
+/
+
+&physicsParameters
+Delta = 0.00456936
+alpha = 1.0
+nu_n = 0.00833065
+
+Er = 15
+
+collisionOperator = 0
+includeXDotTerm = .true.
+includeElectricFieldTermInXiDot = .true.
+useDKESExBDrift = .false.
+
+includePhi1 = .false.
+/
+
+&resolutionParameters
+Ntheta = 11
+!ss NthetaMinFactor = .5
+!ss NthetaMaxFactor = 1.5
+!ss NthetaNumRuns = 5
+
+Nzeta = 15 !75
+!ss NzetaMinFactor = 0.5
+!ss NzetaMaxFactor = 1.5
+!ss NzetaNumRuns = 5
+
+Nxi = 120
+!ss NxiMinFactor = 0.5
+!ss NxiMaxFactor = 1.5
+!ss NxiNumRuns = 5
+
+Nx = 16
+!ss NxMinFactor = 0.5
+!ss NxMaxFactor = 1.5
+!ss NxNumRuns = 5
+
+solverTolerance = 1d-7
+!ss solverToleranceMinFactor = 0.1
+!ss solverToleranceMaxFactor = 10
+!ss solverToleranceNumRuns = 0
+/
+
+&otherNumericalParameters
+/
+
+&preconditionerOptions
+preconditioner_species = 1
+preconditioner_x = 1
+preconditioner_x_min_L = 0
+preconditioner_xi = 0
+/
+
+&export_f
+export_full_f = .true.
+export_delta_f = .true.
+
+export_f_theta_option = 0
+export_f_zeta_option = 0
+
+export_f_xi_option = 1
+export_f_xi = 0.5
+
+export_f_x_option = 2
+export_f_x = 1
+/
+!ss scanType = 2  ! set by sfincsScan_5.
+!ss NErs = 100  ! set by sfincsScan_5.
+!ss ErMax = 15.000000000000002  ! set by sfincsScan_5.
+!ss ErMin = -5.000000000000001  ! set by sfincsScan_5.

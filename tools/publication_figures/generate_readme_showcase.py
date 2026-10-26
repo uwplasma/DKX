@@ -9,9 +9,10 @@ script runs no solve, so it regenerates the figures in seconds on any machine::
     Left: the HSX bootstrap-current gap between released SFINCS v3 and DKX, and
     what is left of it once SFINCS's ``1d-12`` matrix-entry cutoff is set to
     zero (2026-09-13 sfincs-sparsify-threshold study).  Right:
-    the HSX-like gap deck, 633,604 unknowns, where every SFINCS route and the
-    DKX Krylov route stop short of the requested tolerance on a 36 GiB host
-    (2026-09-19 sfincs-on-the-gap-deck study).
+    the HSX-like gap deck, 633,604 unknowns, where every SFINCS route stops
+    short of the requested tolerance on a 36 GiB host and DKX's default route
+    converges (2026-09-19 sfincs-on-the-gap-deck study; DKX row from
+    ``validation/hsx_gap_deck_v1.json``).
 
 ``factor_reuse.png``
     Wall time of one factorization serving many solves, on the structured and
@@ -48,14 +49,14 @@ CUTOFF_ZERO_GAP = (6.6e-11, 1.4e-11)  # "Relative to DKX" column
 
 # --- 2026-09-19-sfincs-on-the-gap-deck.md ------------------------------------
 # Relative residual ||r||/||b|| each route reached, or None when the run was
-# killed for memory before returning one.  Tolerance requested: 1e-10.
+# killed for memory before returning one.  Tolerance requested of DKX: 1e-8.
 GAP_DECK_ROUTES = (
     ("SFINCS direct (MUMPS)", None, "killed for memory, 22.5 min"),
     ("SFINCS GMRES, preconditioner_x = 1", 0.9955, "0.9955: stagnant, 66 iterations, 60 min"),
     ("SFINCS preconditioner_x = 2", None, "killed for memory, 30.6 min"),
-    ("DKX recycled Krylov, coarse", 2.5e-5, "2.5e-5 after 20,000 iterations"),
+    ("DKX default route (auto)", 9.0e-9, "9.0e-9: converged, 611 iterations, 28 min"),
 )
-GAP_DECK_TOLERANCE = 1e-10
+GAP_DECK_TOLERANCE = 1e-8
 
 # --- 2026-09-20-one-factorization-many-solves.md ----------------------------
 # Median seconds over nine interleaved repeats, and factorizations counted.
@@ -130,18 +131,18 @@ def reference_limits(out_dir: Path) -> Path:
         else:
             right.barh(y, residual, height=0.5, color=colour, left=GAP_DECK_TOLERANCE)
             inside = residual > 1e-2
-            right.annotate(note, (residual, y), xytext=(-4 if inside else 4, 0),
+            right.annotate(note, (GAP_DECK_TOLERANCE + residual, y), xytext=(-4 if inside else 6, 0),
                            textcoords="offset points", ha="right" if inside else "left",
                            va="center", fontsize=7.5, color=SURFACE if inside else INK_2)
     right.axvline(GAP_DECK_TOLERANCE, color=INK, linewidth=1.0, linestyle="--")
-    right.annotate("requested 1e-10", (GAP_DECK_TOLERANCE, -0.45), xytext=(3, 0),
+    right.annotate("requested 1e-8", (GAP_DECK_TOLERANCE, -0.45), xytext=(3, 0),
                    textcoords="offset points", fontsize=7.5, color=INK)
     right.set_xscale("log")
     right.set_ylim(-0.6, len(ys) - 0.5)
-    right.set_xlim(3e-11, 30.0)
+    right.set_xlim(3e-9, 30.0)
     right.set_yticks(ys, labels)
     right.set_xlabel("relative residual reached, ||r|| / ||b||", fontsize=8, color=INK_2)
-    right.set_title("HSX-like gap deck, 633,604 unknowns: open in both codes",
+    right.set_title("HSX-like gap deck, 633,604 unknowns",
                     fontsize=9, color=INK, loc="left")
     fig.tight_layout()
     return _save(fig, "sfincs_reference_limits.png", out_dir)

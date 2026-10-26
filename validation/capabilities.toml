@@ -47,7 +47,7 @@ id = "full_fokker_planck"
 name = "Full linearized Fokker-Planck collisions"
 status = "stable_candidate"
 owners = ["src/dkx/collisions.py", "src/dkx/drift_kinetic.py"]
-evidence = ["tests/test_collisions_improved_sugama.py", "tests/test_collision_physics_gates.py", "validation/cross_code_gaps_v1.json"]
+evidence = ["tests/test_collisions_improved_sugama.py", "tests/test_collision_physics_gates.py", "validation/cross_code_gaps_v1.json", "validation/hsx_gap_deck_v1.json"]
 gaps = ["NCSX and W7-X per-observable uncertainty matrix", "independent multispecies convergence beyond named decks"]
 
 [[capability]]
