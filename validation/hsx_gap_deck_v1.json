@@ -1,0 +1,341 @@
+{
+  "schema": "dkx.hsx_gap_deck.v1",
+  "created_utc": "2026-10-20T22:00:16Z",
+  "claim_scope": "hsx_like_633604_unknown_full_fp_deck_dkx_krylov_converges_sfincs_routes_fail",
+  "source": {
+    "dkx_commit": "02bef01334baea6021ee4855d536ca609e8c8e2d",
+    "dkx_version": "2.11.0-dev",
+    "sfincs_commit": "8df5453472e982df0f6ae005243ce38d57a83711"
+  },
+  "deck": {
+    "input": "validation/inputs/hsx_like_gap_deck.input.namelist",
+    "input_sha256": "3cca5c5e3f1436113d47a32d77e3e253984a4a9746947ce7856b87f30ec5eb06",
+    "original_input_sha256": "b2236f14d669f4d42f009452acc2f87b03bab733aff6239df70789677406aac2",
+    "note": "the committed deck differs from the run deck only in equilibriumFile, which is the bare file name here",
+    "equilibrium": "wout_QHS_good_res.nc (not in the repository)",
+    "equilibrium_sha256": "db6197f098a8236221c3ec0fb602f7b1fff3a66cad84813da3a424d7c79e0d9a",
+    "unknowns": 633604,
+    "parameters": "HSX-like QHS VMEC, rN 0.187, Er 15, H+ and e-, full linearized Fokker-Planck, full-trajectory Er terms, 11x15x120x16, solverTolerance 1e-7, SFINCS matrix cutoff disabled for the SFINCS rows"
+  },
+  "records": [
+    {
+      "schema_version": 1,
+      "artifact_id": "dkx_krylov_auto",
+      "timestamp_utc": "2026-10-20T22:00:16Z",
+      "repository": {
+        "url": "https://github.com/uwplasma/DKX",
+        "commit": "02bef01334baea6021ee4855d536ca609e8c8e2d",
+        "dirty": false
+      },
+      "software": {
+        "python": "3.11.15",
+        "jax": "0.10.2",
+        "jaxlib": "0.10.2",
+        "numpy": "2.4.6",
+        "solvax": "0.30.0"
+      },
+      "hardware": {
+        "host_id": "nvidia-a4000",
+        "platform": "Linux x86_64 (Pop!_OS 22.04), shared workstation, load 25-55",
+        "processor": "Intel Xeon W-2295, 36 threads, 8 pinned",
+        "physical_memory_bytes": 66571993088
+      },
+      "case": {
+        "case_id": "hsx_like_gap_deck",
+        "input_sha256": "3cca5c5e3f1436113d47a32d77e3e253984a4a9746947ce7856b87f30ec5eb06",
+        "geometry_sha256": "db6197f098a8236221c3ec0fb602f7b1fff3a66cad84813da3a424d7c79e0d9a",
+        "workload_family": "hsx_like_full_fp_two_species_er15",
+        "reference_code": "sfincs-v3",
+        "reference_commit": "8df5453472e982df0f6ae005243ce38d57a83711"
+      },
+      "model": {
+        "equation": "drift_kinetic_rhsmode1",
+        "collisions": "full_linearized_fokker_planck",
+        "trajectories": "full_with_xdot_and_xi_dot_er_terms",
+        "species_count": 2,
+        "rhs_count": 1,
+        "differentiable": false
+      },
+      "resolution": {
+        "unknowns": 633604,
+        "ntheta": 11,
+        "nzeta": 15,
+        "nxi": 120,
+        "nx": 16,
+        "surfaces": 1,
+        "electric_field_points": 1
+      },
+      "route": {
+        "solver": "gcrot_recycled_krylov_method_auto",
+        "preconditioner": "coarse_x_diagonal_auto",
+        "precision": "float64",
+        "device_strategy": "cpu_8_threads",
+        "restart": 1000
+      },
+      "timing_s": {
+        "complete": 1657.8986690759193,
+        "import": null,
+        "setup": null,
+        "compile": null,
+        "first_execute": null,
+        "warm_execute": null,
+        "solve": null,
+        "postprocess": null,
+        "output": null
+      },
+      "memory_bytes": {
+        "peak_host": 28759945216
+      },
+      "accuracy": {
+        "true_residual": 8.973605500817307e-09
+      },
+      "outcome": {
+        "status": "passed"
+      },
+      "iterations": 611,
+      "timings_reported_s": {}
+    },
+    {
+      "schema_version": 1,
+      "artifact_id": "sfincs_mumps_direct",
+      "timestamp_utc": "2026-09-19T00:00:00Z",
+      "repository": {
+        "url": "https://github.com/landreman/sfincs",
+        "commit": "8df5453472e982df0f6ae005243ce38d57a83711",
+        "dirty": false
+      },
+      "software": {
+        "python": "n/a",
+        "jax": "n/a",
+        "jaxlib": "n/a",
+        "numpy": "n/a",
+        "solvax": "n/a",
+        "petsc": "3.20.2",
+        "mumps": "5.6.2"
+      },
+      "hardware": {
+        "host_id": "official-laptop-cpu",
+        "platform": "macOS 14.4.1 arm64",
+        "processor": "Apple M3 Max",
+        "physical_memory_bytes": 38654705664
+      },
+      "case": {
+        "case_id": "hsx_like_gap_deck",
+        "input_sha256": "3cca5c5e3f1436113d47a32d77e3e253984a4a9746947ce7856b87f30ec5eb06",
+        "geometry_sha256": "db6197f098a8236221c3ec0fb602f7b1fff3a66cad84813da3a424d7c79e0d9a",
+        "workload_family": "hsx_like_full_fp_two_species_er15",
+        "reference_code": "sfincs-v3",
+        "reference_commit": "8df5453472e982df0f6ae005243ce38d57a83711"
+      },
+      "model": {
+        "equation": "drift_kinetic_rhsmode1",
+        "collisions": "full_linearized_fokker_planck",
+        "trajectories": "full_with_xdot_and_xi_dot_er_terms",
+        "species_count": 2,
+        "rhs_count": 1,
+        "differentiable": false
+      },
+      "resolution": {
+        "unknowns": 633604,
+        "ntheta": 11,
+        "nzeta": 15,
+        "nxi": 120,
+        "nx": 16,
+        "surfaces": 1,
+        "electric_field_points": 1
+      },
+      "route": {
+        "solver": "mumps_lu",
+        "preconditioner": "none",
+        "precision": "float64",
+        "device_strategy": "cpu_1_rank"
+      },
+      "timing_s": {
+        "complete": 1350.0,
+        "import": null,
+        "setup": null,
+        "compile": null,
+        "first_execute": null,
+        "warm_execute": null,
+        "solve": null,
+        "postprocess": null,
+        "output": null
+      },
+      "memory_bytes": {
+        "peak_host": null
+      },
+      "accuracy": {
+        "true_residual": null
+      },
+      "outcome": {
+        "status": "out_of_memory",
+        "failure_stage": "factorization",
+        "failure_reason": "killed by the operating system for memory after 22.5 minutes on a 36 GiB host"
+      }
+    },
+    {
+      "schema_version": 1,
+      "artifact_id": "sfincs_gmres_preconditioner_x1",
+      "timestamp_utc": "2026-09-19T00:00:00Z",
+      "repository": {
+        "url": "https://github.com/landreman/sfincs",
+        "commit": "8df5453472e982df0f6ae005243ce38d57a83711",
+        "dirty": false
+      },
+      "software": {
+        "python": "n/a",
+        "jax": "n/a",
+        "jaxlib": "n/a",
+        "numpy": "n/a",
+        "solvax": "n/a",
+        "petsc": "3.20.2",
+        "mumps": "5.6.2"
+      },
+      "hardware": {
+        "host_id": "official-laptop-cpu",
+        "platform": "macOS 14.4.1 arm64",
+        "processor": "Apple M3 Max",
+        "physical_memory_bytes": 38654705664
+      },
+      "case": {
+        "case_id": "hsx_like_gap_deck",
+        "input_sha256": "3cca5c5e3f1436113d47a32d77e3e253984a4a9746947ce7856b87f30ec5eb06",
+        "geometry_sha256": "db6197f098a8236221c3ec0fb602f7b1fff3a66cad84813da3a424d7c79e0d9a",
+        "workload_family": "hsx_like_full_fp_two_species_er15",
+        "reference_code": "sfincs-v3",
+        "reference_commit": "8df5453472e982df0f6ae005243ce38d57a83711"
+      },
+      "model": {
+        "equation": "drift_kinetic_rhsmode1",
+        "collisions": "full_linearized_fokker_planck",
+        "trajectories": "full_with_xdot_and_xi_dot_er_terms",
+        "species_count": 2,
+        "rhs_count": 1,
+        "differentiable": false
+      },
+      "resolution": {
+        "unknowns": 633604,
+        "ntheta": 11,
+        "nzeta": 15,
+        "nxi": 120,
+        "nx": 16,
+        "surfaces": 1,
+        "electric_field_points": 1
+      },
+      "route": {
+        "solver": "gmres",
+        "preconditioner": "simplified_matrix_preconditioner_x_1",
+        "precision": "float64",
+        "device_strategy": "cpu_1_rank"
+      },
+      "timing_s": {
+        "complete": 3600.0,
+        "import": null,
+        "setup": null,
+        "compile": null,
+        "first_execute": null,
+        "warm_execute": null,
+        "solve": null,
+        "postprocess": null,
+        "output": null
+      },
+      "memory_bytes": {
+        "peak_host": null
+      },
+      "accuracy": {
+        "true_residual": 0.9955
+      },
+      "outcome": {
+        "status": "timed_out",
+        "failure_stage": "solve",
+        "failure_reason": "stagnant at a relative residual of 0.9955 after 66 iterations and the one-hour cap"
+      }
+    },
+    {
+      "schema_version": 1,
+      "artifact_id": "sfincs_gmres_preconditioner_x2",
+      "timestamp_utc": "2026-09-19T00:00:00Z",
+      "repository": {
+        "url": "https://github.com/landreman/sfincs",
+        "commit": "8df5453472e982df0f6ae005243ce38d57a83711",
+        "dirty": false
+      },
+      "software": {
+        "python": "n/a",
+        "jax": "n/a",
+        "jaxlib": "n/a",
+        "numpy": "n/a",
+        "solvax": "n/a",
+        "petsc": "3.20.2",
+        "mumps": "5.6.2"
+      },
+      "hardware": {
+        "host_id": "official-laptop-cpu",
+        "platform": "macOS 14.4.1 arm64",
+        "processor": "Apple M3 Max",
+        "physical_memory_bytes": 38654705664
+      },
+      "case": {
+        "case_id": "hsx_like_gap_deck",
+        "input_sha256": "3cca5c5e3f1436113d47a32d77e3e253984a4a9746947ce7856b87f30ec5eb06",
+        "geometry_sha256": "db6197f098a8236221c3ec0fb602f7b1fff3a66cad84813da3a424d7c79e0d9a",
+        "workload_family": "hsx_like_full_fp_two_species_er15",
+        "reference_code": "sfincs-v3",
+        "reference_commit": "8df5453472e982df0f6ae005243ce38d57a83711"
+      },
+      "model": {
+        "equation": "drift_kinetic_rhsmode1",
+        "collisions": "full_linearized_fokker_planck",
+        "trajectories": "full_with_xdot_and_xi_dot_er_terms",
+        "species_count": 2,
+        "rhs_count": 1,
+        "differentiable": false
+      },
+      "resolution": {
+        "unknowns": 633604,
+        "ntheta": 11,
+        "nzeta": 15,
+        "nxi": 120,
+        "nx": 16,
+        "surfaces": 1,
+        "electric_field_points": 1
+      },
+      "route": {
+        "solver": "gmres",
+        "preconditioner": "upper_speed_triangle_preconditioner_x_2",
+        "precision": "float64",
+        "device_strategy": "cpu_1_rank"
+      },
+      "timing_s": {
+        "complete": 1836.0,
+        "import": null,
+        "setup": null,
+        "compile": null,
+        "first_execute": null,
+        "warm_execute": null,
+        "solve": null,
+        "postprocess": null,
+        "output": null
+      },
+      "memory_bytes": {
+        "peak_host": null
+      },
+      "accuracy": {
+        "true_residual": null
+      },
+      "outcome": {
+        "status": "out_of_memory",
+        "failure_stage": "preconditioner_factorization",
+        "failure_reason": "killed for memory after 30.6 minutes factoring the preconditioner"
+      }
+    }
+  ],
+  "solution_agreement": [],
+  "exclusions": [
+    "one deck, one radius, one Er; no physics observable (current, flows) is recorded, only convergence of the linear solve",
+    "SFINCS rows were measured on a 36 GiB laptop in September 2026 (timestamps carry the date of the study, time of day not recorded) and not rerun; the DKX row on the 62 GiB shared office workstation, so the comparison is of what each host could do, not of equal hardware",
+    "the DKX row was measured on an unmerged development commit of 2.11.0 with the number of cores not recorded; timing fields other than complete are not measured and are null",
+    "out-of-core MUMPS on this deck has not been run: it needs 24 GiB of free memory on a host that rarely has it",
+    "experimental validation"
+  ]
+}

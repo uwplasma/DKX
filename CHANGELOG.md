@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Validation: `validation/hsx_gap_deck_v1.json` (registry `hsx_gap_deck`, audit `tools/paper_benchmarks/audit_hsx_gap_deck.py`, deck `validation/inputs/hsx_like_gap_deck.input.namelist`) seals the 633,604-unknown HSX-like gap deck as benchmark rows: DKX's default route converges it to a true relative residual of 9.0e-9 in 611 iterations, 1,658 s and 26.8 GiB peak resident on the 62 GiB office host, while every SFINCS v3 route on a 36 GiB host fails (MUMPS and the `preconditioner_x = 2` factorization are killed for memory, GMRES stagnates at 0.9955). The README, `docs/benchmarks/sfincs.md`, `docs/features.md` and the README showcase figure no longer say the deck is open in both codes. A convergence record of the linear solve only: no flows or currents are recorded, and the out-of-core MUMPS comparison has not been run.
+
 ## v2.12.0 — 2026-10-25
 
 Self-consistent bootstrap current at the ambipolar E_r for optimization
