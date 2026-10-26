@@ -447,6 +447,29 @@ limitations = [
 ]
 
 [[entry]]
+id = "dkes_hydra_np04"
+capability = "monoenergetic"
+status = "accepted_limited"
+claim_scope = "hydra_np04_dkes_monoenergetic_pas_dkes_trajectories_seven_radii"
+claim = "On the HELIAS reactor hydra_Np04_20190108 (4 periods, R = 23.6 m, a = 2.0 m, beta = 5.4%, Boozer data of J. Geiger, IPP), DKX's monoenergetic route (spectral angles, 17 x 41 x 96) agrees with the IPP DKES coefficients at rho = 0.12247 to 0.875 for cmul >= 1e-3, efield = 0, 0.01 and 0.03: D33* within 0.4% (the collisional limit D33* = 1 to 1e-4), D11* within 19.4% pointwise (median 0.1% to 6.7% per regime), D31* within 1.3e-3 at efield > 0. The DKES _S files are SFINCS transportMatrix entries; nuPrime = cmul |G + iota I| / (B0 nuD(1)) and v_E = efield."
+artifact = "validation/dkes_hydra_np04_v1.json"
+artifact_sha256 = "7a5ee38587f49abd16b596477ce42d172e9131365c35f68bbee94f9588806b92"
+artifact_schema = "dkx.dkes_hydra_np04.v1"
+audit_script = "tools/paper_benchmarks/audit_dkes_hydra_np04.py"
+command = "python tools/paper_benchmarks/audit_dkes_hydra_np04.py --artifact validation/dkes_hydra_np04_v1.json"
+inputs = []
+dkx_commit = "c7df47babf046e1aaed1c33949009c93cc793c0e"
+generated_on_host = "nvidia-a4000"
+generated_on_host_recorded = "office workstation CPU, shared (load 40-55): two 4-core workers"
+limitations = ["cmul below 1e-3 is reported, not gated: the DKES variational bounds are wide there and DKX's 17 x 41 x 96 grid is not converged (see convergence)", "D31* at efield = 0 is not compared: DKES returns noise of either sign at its roundoff floor", "rho = 0.5 at efield = 0 has no DKES reference in the supplied files", "rho = 0.12247 is run at the first surface of the Boozer file plus 1e-7 in rN, because DKX interpolates between two surfaces", "the DKES values cannot be redistributed: the record stores agreement statistics per regime, and the audit recomputes them only when DKX_DKES_HYDRA_DIR is set", "DKES reports one value per point; no lower/upper variational bounds are in the files, so the comparison is against the single stored value", "NTX is compared in its own repository (uwplasma/NTX#40), not in this record"]
+
+[entry.corruption]
+path = "agreement.0.d11_max_pct"
+operation = "scale"
+value = 4.0
+expected_errors = ["D11* differs"]
+
+[[entry]]
 id = "native_ambipolar_profile"
 capability = "ambipolar_roots"
 status = "accepted_limited"
