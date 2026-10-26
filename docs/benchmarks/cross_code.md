@@ -75,6 +75,31 @@ strong-ripple end of the benchmark set, uses a Boozer $|B|$ spectrum through
 data in `monoenergetic_icnts_tjii.json`), and an HSX record is in
 `monoenergetic_icnts_hsx.json`, both beside the W7-X data.
 
+### Digitized ICNTS curves and the sign of D31*
+
+`validation/beidler2011_w7x_monoenergetic.csv` holds $D_{11}^*$, $D_{31}^*$ and
+$D_{33}^*$ of the W7-X standard configuration at $\rho = 0.5$, digitized from
+Figs. 17, 21 and 26 of Beidler et al. (2011) with the method and the errors
+(3% on $D_{11}^*$, 0.003 on $D_{31}^*$, 0.002 on $D_{33}^*$) in its header.
+`tests/test_beidler_w7x_reference.py` runs DKX's monoenergetic route on
+`w7x_standardConfig.bc` against it. Since 2.12.0, $D_{31}^*$ and $D_{13}^*$
+follow the paper's sign convention: $D_{31}^*$ is positive in the banana limit
+whatever the sign of $\iota$, and $D_{13}^* = -D_{31}^*$ at $E^* = 0$. Stored
+values of decks with $\iota < 0$ changed sign; $D_{11}^*$ and $D_{33}^*$ did not.
+
+### IPP DKES on the HELIAS reactor hydra_Np04
+
+The monoenergetic route is compared with the IPP DKES coefficients of the
+HELIAS reactor `hydra_Np04_20190108` at seven radii ($\rho = 0.12$ to $0.875$).
+The DKES data and the Boozer file are not redistributable, so the repository
+holds only agreement statistics per radius and regime (median and maximum
+relative difference); the audit recomputes them when the private data are
+available. For $\nu^\prime \ge 10^{-3}$ (17 x 41 x 96) $D_{33}^*$ agrees within 0.4%,
+$D_{31}^*$ within 1.3e-3, and the median $D_{11}^*$ difference is 0.1% to 6.7%
+by radius and regime. Below $\nu^\prime = 3\times10^{-4}$ $D_{11}^*$ differs by
+up to 60% at one radius, which a finer DKX grid does not explain. This
+comparison is under review in pull request 395.
+
 ## Trajectory models and collision operators
 
 SFINCS 2014 compared DKES, partial and full trajectory models across $E_r$.
