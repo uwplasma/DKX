@@ -107,7 +107,7 @@ SFINCS has no Sugama operator, so that row compares models, not codes. The exter
 reference for the model is the Spitzer–Harm conductivity (`tests/test_physics_limits.py`):
 the improved Sugama operator with its $L=1$ heat-flow correction (Sugama et al. 2019, Eqs. 40-43; five Laguerre flow
 moments) gives $\gamma_E$ 0.5819, 0.6858, 0.7853, 0.9234 against the tabulated 0.5816, 0.6833, 0.7849, 0.9225 for
-$Z$ = 1, 2, 4, 16 (within 0.4%), as the full FP operator does. Without that correction the model was 11.1% to 3.1% low
+$Z$ = 1, 2, 4, 16 (within 0.4% at eight speed nodes), as the full FP operator does. Without that correction the model was 11.1% to 3.1% low
 (0.517, 0.617, 0.724, 0.894). What remains of the flow gap to Fokker-Planck on W7-X is the missing $L \ge 2$ field-particle
 response, which the published operator does not have ({doc}`../physics/collisions`). Before the momentum-restoring
 shape was built per species pair, electron-ion Lorentz scattering entered the
