@@ -137,4 +137,5 @@ Upstream suite parity for all of the above is recorded in
 - Full VMEC-boundary-to-kinetic-transport gradients in the proxy workflow.
 - Single-case strong scaling across several GPUs.
 - Converging the HSX-like gap deck ($N_x = 16$, 633,604 unknowns) on a 36 GiB
-  host; neither DKX nor SFINCS does ({doc}`benchmarks/sfincs`).
+  host: SFINCS does not, DKX converges it on a 62 GiB host at 26.8 GiB peak
+  ({doc}`benchmarks/sfincs`); whether it fits the 36 GiB host is unmeasured.
