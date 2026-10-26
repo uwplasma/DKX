@@ -17,14 +17,16 @@
     },
     "dkx_commit_phi1_and_ladder": "ce811c88 (Phi1 and ladder rungs, Sugama cell and ladder rerun on the fix branch)",
     "yancc_version": "0.0.3 (pip wheel)",
-    "monkes": "office build of the MONKES sources, commit not recorded"
+    "monkes": "office build of the MONKES sources, commit not recorded",
+    "dkx_commit_sugama_cell": "c7df47ba"
   },
   "environment": {
     "host": "office workstation, 36 threads, 62 GB, shared (load 30-44)",
     "sfincs_cores": 2,
     "dkx_cores": 6,
     "python": "3.13.16",
-    "phi1_and_ladder": "office, 36 threads, 62 GB, shared (load 20-35); SFINCS 1 rank, DKX 4-8 cores, DKX main ce811c88 on JAX 0.12.0, solvax 0.29.0"
+    "phi1_and_ladder": "office, 36 threads, 62 GB, shared (load 20-35); SFINCS 1 rank, DKX 4-8 cores, DKX main ce811c88 on JAX 0.12.0, solvax 0.29.0",
+    "sugama_cell": "office, 8 pinned cores of the shared 36-core host, DKX main c7df47ba on JAX 0.12.0.1 (Python 3.13.16, solvax 0.34.0), peak resident about 17 GB; collisionOperator 3 with the default flow_order 5"
   },
   "common_deck": {
     "species": "H+ and e-, nHat 0.5, THat 2, dnHat/drHat -0.5, dTHat/drHat -2",
@@ -604,19 +606,48 @@
       },
       "dkx": {
         "particleFlux_vm_psiHat": [
-          -3.170947484720607e-07,
-          -5.369364624764961e-09
+          -3.170402259164162e-07,
+          -5.367931285852245e-09
         ],
         "heatFlux_vm_psiHat": [
-          -1.5057952073375665e-06,
-          -3.043149694499788e-08
+          -1.5050414770147007e-06,
+          -3.0414139617901534e-08
         ],
         "FSABFlow": [
-          -0.004716436630091045,
-          -0.0013003301710411983
+          -0.004926106028305081,
+          -0.0011699574272384685
         ]
       },
-      "diagnostic": true
+      "diagnostic": true,
+      "dkx_fokker_planck_same_deck": {
+        "particleFlux_vm_psiHat": [
+          -3.184304675933905e-07,
+          -5.385982252823407e-09
+        ],
+        "heatFlux_vm_psiHat": [
+          -1.5089669041361772e-06,
+          -3.047296580746046e-08
+        ],
+        "FSABFlow": [
+          -0.005107284841058395,
+          -0.0013162425073497306
+        ]
+      },
+      "dkx_sugama_with_fokker_planck_L_ge_2": {
+        "particleFlux_vm_psiHat": [
+          -3.181027282668985e-07,
+          -5.385609006283056e-09
+        ],
+        "heatFlux_vm_psiHat": [
+          -1.5077711528532347e-06,
+          -3.0491298407187744e-08
+        ],
+        "FSABFlow": [
+          -0.005101496416311545,
+          -0.0013000006864701751
+        ]
+      },
+      "note": "diagnostic cell: SFINCS has no Sugama operator, so 'sfincs' is its full Fokker-Planck solution of the same deck; 'dkx_fokker_planck_same_deck' is DKX's own Fokker-Planck solve (flows within 1.4e-3 scaled of SFINCS), 'dkx_sugama_with_fokker_planck_L_ge_2' is the Sugama operator with its L >= 2 blocks replaced by the Fokker-Planck ones"
     },
     {
       "id": "f_rhs2_w7x",
@@ -1150,7 +1181,7 @@
     }
   ],
   "exclusions": [
-    "SFINCS has no Sugama operator; DKX improved Sugama against SFINCS FP is a diagnostic (fluxes 0.43%, flows 7.7%)",
+    "SFINCS has no Sugama operator; DKX improved Sugama against SFINCS FP is a diagnostic (fluxes 0.44%, ion flow 3.5% and electron flow 11.1% below Fokker-Planck; with Fokker-Planck blocks for L >= 2 the flows are within 0.11% and 1.2%, so the gap is the field-particle response the published operator lacks for L >= 2)",
     "SFINCS RHSMode 3 is not robust on W7-X (NaN at 11x21, L12 sign flip at Nzeta 85); the gated cell is 15x45x150",
     "local gradients repeated at each radius, not a reconstructed discharge",
     "experimental validation",
