@@ -198,7 +198,7 @@ cold-ion, hot-electron plasma. With that cutoff set to zero, the two codes agree
 ([SFINCS benchmarks](docs/benchmarks/sfincs.md); fix proposed as
 [landreman/sfincs#27](https://github.com/landreman/sfincs/pull/27)).
 
-The HSX-like gap deck (633,604 unknowns, `Nx = 16`) is a case **SFINCS cannot solve** on a 36 GiB
+The HSX-like gap deck (633,604 unknowns, `Nx = 16`) is a case **SFINCS does not solve** on a 36 GiB
 host: two routes run out of memory and its GMRES stagnates at 0.9955. DKX's default route converges
 it to a true relative residual of **9.0e-9** in 611 iterations (1,658 s, 26.8 GiB peak on a 62 GiB
 host; sealed in `validation/hsx_gap_deck_v1.json`). DKX assembles its operator exactly from 4,800
