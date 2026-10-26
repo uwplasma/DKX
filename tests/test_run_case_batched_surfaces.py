@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 import dkx
-import dkx.execution as execution
+from dkx import execution
 
 
 def _case(surfaces):
@@ -30,7 +30,7 @@ def test_surfaces_are_one_batch_and_match_the_loop(monkeypatch, tmp_path):
     seen = []
     real = execution._batched_surfaces
     monkeypatch.setattr(execution, "_batched_surfaces",
-                        lambda *a: seen.append(real(*a)) or seen[-1])  # noqa: B023
+                        lambda *a: seen.append(real(*a)) or seen[-1])
     batched = execution.run_case(case, out=tmp_path / "b.nc")
     assert seen[0] is not None and np.asarray(seen[0].algebraic_converged).all()
     monkeypatch.setattr(execution, "_batched_surfaces", lambda *a: None)
