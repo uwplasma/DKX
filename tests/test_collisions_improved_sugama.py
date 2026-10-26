@@ -451,3 +451,65 @@ def test_energy_exchange_rate_matches_sugama_2019_eq_a1(t_e, m_e) -> None:
         scale = (np.sqrt(ta / ma) / np.sqrt(tb / mb)) ** 3  # species-dependent amplitude of the x-space f
         ratio = (e_en @ mat[a, b] @ h_t) / (e_en @ mat[a, a] @ h_t) * scale
         assert abs(ratio / (d_b / d_a) - 1.0) < 1e-3, (a, ratio, d_b / d_a)
+
+
+# ---------------------------------------------------------------------------
+# Adjointness (Sugama et al. 2019, Eqs. 23 and 29), including unequal temperatures.
+# ---------------------------------------------------------------------------
+
+
+def _asymmetry(mat, kw, ell: int) -> float:
+    """Worst relative antisymmetric part of ``sum_ab T_a <g_a, C_ab f_b> / f_aM`` over smooth trial shapes.
+
+    The pairing weights the speed quadrature by ``x^2 exp(+x^2)`` (the inverse Maxwellian) and each species
+    by ``T_a vT_a^3 / n_a``; trial shapes are ``exp(-x^2) x^ell`` times a random quadratic in ``x^2``.
+    """
+    x, w, t, m, n = kw["x"], kw["x_weights"], kw["t_hats"], kw["m_hats"], kw["n_hats"]
+    pref = t * (t / m) ** 1.5 / n
+    rng = np.random.default_rng(0)
+
+    def pair(g, f):
+        return sum(
+            pref[a] * np.sum(w * x**2 * np.exp(x * x) * g[a] * (mat[a, b] @ f[b]))
+            for a in range(2)
+            for b in range(2)
+        )
+
+    def shapes():
+        return np.array([np.exp(-x * x) * x**ell * np.polyval(rng.normal(size=3), x * x) for _ in range(2)])
+
+    worst = 0.0
+    for _ in range(4):
+        g, f = shapes(), shapes()
+        worst = max(worst, abs(pair(g, f) - pair(f, g)) / np.sqrt(abs(pair(g, g) * pair(f, f))))
+    return worst
+
+
+@pytest.mark.parametrize(("t_e", "m_e"), [(1.0, 1.0), (1.0, 1 / 1836), (10.0, 1 / 1836), (10.0, 1.0), (3.0, 0.2)])
+def test_l1_block_is_as_adjoint_as_the_landau_operator_at_unequal_temperature(t_e, m_e) -> None:
+    """The L = 1 block, whose field part is the published one, has the Landau operator's own asymmetry.
+
+    The full linearized Landau operator is exactly adjoint only for equal temperatures; for T_a != T_b both it
+    and the improved Sugama operator carry the same finite defect (0.4 % to 41 % here, set by the
+    temperature and mass ratios). The improved operator neither adds to it nor removes it.
+    """
+    from dkx.collisions import make_fokker_planck_v3_operator
+
+    kw = _pair_kwargs(t_e, m_e, 16)
+    kw["n_xi"] = 2
+    kw["n_xi_for_x"] = np.full(16, 2, np.int32)
+    sugama = np.asarray(make_improved_sugama_v3_operator(**kw).mat)[:, :, 1]
+    landau = np.asarray(make_fokker_planck_v3_operator(x_grid_k=0.0, nl=2, rosenbluth_method="analytic", **kw).mat)[:, :, 1]
+    a_sugama, a_landau = _asymmetry(sugama, kw, 1), _asymmetry(landau, kw, 1)
+    assert abs(a_sugama - a_landau) < 1e-3 * max(a_landau, 1e-3), (a_sugama, a_landau)
+    if t_e == 1.0 and m_e == 1.0:
+        assert a_sugama < 1e-9
+
+
+@pytest.mark.xfail(strict=True, reason="the L = 0 field part is not Sugama's C^T(f_M x^2) response; measured 0.1 at equal T and mass")
+def test_l0_block_is_adjoint_for_like_species() -> None:
+    """Open: Eq. 29 for the L = 0 field part (see docs/physics/collisions.md)."""
+    kw = _pair_kwargs(1.0, 1.0, 16)
+    kw["n_xi"] = 2
+    kw["n_xi_for_x"] = np.full(16, 2, np.int32)
+    assert _asymmetry(np.asarray(make_improved_sugama_v3_operator(**kw).mat)[:, :, 0], kw, 0) < 1e-6
