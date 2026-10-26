@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Validation: the W7-X ambipolar profile is not promoted. A spectral-angle probe at (21, 71, 192, 8), the rung `docs/benchmarks/validation_matrix.md` says is needed, is refused by the structured direct route on the 62 GiB office host (dense-band estimate 152.6 GiB at float64, 20.3 GiB at float32) and the Krylov fallback had not finished one solve in 24 minutes, so the promotion gate could not be run; the matrix page records the numbers and what the gate needs.
+
 ## v2.12.0 — 2026-10-25
 
 Self-consistent bootstrap current at the ambipolar E_r for optimization

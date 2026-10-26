@@ -241,6 +241,18 @@ At fixed $E_r$ on that root, $N_\zeta = 55 \to 67$ at $N_\xi = 192$ moves the el
 two under-resolved rungs understates the error. The profile stays a `regression_scaffold`; a converged grid
 needs $N_\zeta \gtrsim 70$ at $N_\xi \gtrsim 192$, which was not run to completion.
 
+An attempt at that rung, $(21, 71, 192, 8)$ with spectral angles on the shared 62 GiB office host (DKX main
+c7df47ba, JAX 0.12.0.1, SOLVAX 0.34.0), shows why. A single fixed-field solve is refused by the structured
+direct route: the coarse dense-band estimate is 152.6 GiB at float64 (21 x 71 angular grid, two species, eight speeds)
+and the Schur LU estimate 32.5 GiB, against a 22.5 GiB admission budget. The solve then takes the Krylov route with
+the checkpointed block elimination, which repeats the elimination at every application; it had not finished a solve
+after 24 minutes at 5 GB resident and was stopped (convergence is not guaranteed on that route). The float32 factor
+option estimates 20.3 GiB but is not a qualified precision change. A seeded profile at that rung needs an estimated 35
+solves, and the $1.25\times$ refinement the certificate asks for needs a larger band again. So the promotion gate
+(roots within 0.05 kV/m and fluxes within 2% between two rungs at $N_\zeta \ge 70$, $N_\xi \ge 192$) cannot be run
+on this host; it needs a machine with a few hundred GiB, or a route that does not hold the band (accepting backward-stable
+direct solves, the follow-up named in PR 379). The profile stays a `regression_scaffold`.
+
 ## Open and deferred work
 
 These are not release blockers, and none is claimed:
