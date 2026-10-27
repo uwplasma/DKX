@@ -199,14 +199,65 @@ four. It does not replace `dkx converge` for a number you intend to quote.
 ## Choosing a resolution
 
 Start from the table, then confirm with `dkx run --check-grid` or `dkx converge`.
-`[resolution] auto = true` fills the sizes a case leaves out with the rung of
-this table that its lowest ion collisionality selects (not calibrated on strongly
-3-D low-collisionality fields; pair it with `check_grid`).
+`[resolution] auto = true` fills the sizes a case leaves out (see Automatic resolution below).
 The collisionality that matters is $\lambda_{ii}/L_c$, the ion mean free path
 over the connection length $R/\iota$; the rows below are labelled by density at
 $T = 1$ keV for a deuterium plasma ($\nu \propto n/T^2$), for which
 $\lambda_{ii}/L_c \approx 0.27$ at $10^{22}\,\mathrm{m^{-3}}$ and scales as
 $T^2/n$.
+
+### Automatic resolution
+
+`auto = true` reads two things from the case. From the field, the Boozer spectrum of $|B|$ on each
+surface: the dominant helicity $(m, n)$, the rate $w = |m\iota + nN_{fp}|$ at which a field line
+crosses its wells, the effective major radius $R = |B_\zeta|/B_{00}$ and so the connection length
+$L_c = R/w$, and the largest poloidal and toroidal mode numbers above $10^{-2}B_{00}$. From the plasma,
+the collisionality of every species,
+
+$$ q_a = \log_{10}\frac{Z_a^2\,(\sum_b Z_b^2 n_b)\,L_c}{T_a^2}, \qquad n \text{ in } 10^{20}\,\mathrm{m^{-3}},\ T \text{ in keV},\ L_c \text{ in m}, $$
+
+of which the lowest over species and surfaces sets the grid (the hot electrons of an HSX-like deck, not
+its ions, are the hardest species). The pitch resolution that the references ask for follows
+$N_\xi \approx 86\cdot 10^{-0.45\,q}$ for a field with toroidal structure and $457\cdot 10^{-0.45\,q}$
+for an axisymmetric one (the banana boundary layer); the grid is the smallest rung of the ladder
+$(13,17,24,5)$, $(15,25,32,6)$, $(17,33,48,6)$, $(19,41,64,8)$, $(21,49,96,8)$ (tokamak:
+$(13,1,24,5)$, $(25,1,48,6)$, $(49,1,96,8)$, $(65,1,160,12)$, $(81,1,256,14)$) with at least that many
+pitch modes, with $N_\theta \ge 4 m_{max} + 7$ and $N_\zeta \ge 4 n_{max} + 9$ for a broad spectrum. If the
+last rung is needed the grid is the *safe finer grid*, not a certified one, and the case warns: no
+reference converged to 5% could be computed there at a reasonable cost. The warning also covers a geometry
+file that cannot be read when the case is parsed.
+
+Error of the particle flux (against $T_i$ times the ion heat flux, because it is zero by symmetry in a
+quasi-symmetric field), ion and electron heat flux, and parallel current (against its largest value over the
+ladder), the worst over two surfaces, $E_r = 0$, hydrogenic ions and electrons with full Fokker-Planck
+collisions, against the finest grid computed for that case ("old" is the rule of 2.12.0, the ion collisionality
+$c = \log_{10}(n_{20}/T_i^2)$ and nothing else). Cases marked * were not used to fit the constants.
+
+| case | $q$ | old grid | old error | new grid | new error | reference grid |
+|---|---|---|---|---|---|---|
+| tokamak, $10^{20}$, 1 keV | 1.22 | 49, 1, 96, 8 | 4.5% | 65, 1, 160, 12 | 1.1% | 81, 1, 256, 14 |
+| tokamak, $3\times 10^{20}$* | 1.69 | 49, 1, 96, 8 | 0.5% | 49, 1, 96, 8 | 0.5% | 81, 1, 256, 14 |
+| tokamak, $10^{19}$ | 0.22 | 65, 1, 160, 12 | 15% | 81, 1, 256, 14 (flagged) | not certified | |
+| HSX, $10^{21}$, 1 keV | 0.99 | 13, 17, 24, 5 | 23% | 15, 25, 32, 6 | 1.2% | 17, 33, 48, 6 |
+| HSX deck, $2\times 10^{19}$, $T_i = 0.1$, $T_e = 0.4$ | 0.08 | 13, 17, 24, 5 | 30% | 21, 49, 96, 8 (flagged) | not certified | 19, 49, 64, 8 |
+| W7-X, $10^{21}$ | 1.36 | 13, 17, 24, 5 | 0.5% | 13, 17, 24, 5 | 0.5% | 17, 33, 48, 6 |
+| W7-X, $10^{20}$ | 0.36 | 17, 33, 48, 6 | 1.2% | 19, 41, 64, 8 | (finest run) | 19, 41, 64, 8 |
+| QH reactor, $10^{20}$ | 1.10 | 17, 33, 48, 6 | 0 | 15, 25, 32, 6 | 0.2% | 17, 33, 48, 6 |
+| QH reactor, $10^{21}$ | 2.10 | 13, 17, 24, 5 | 1.4% | 13, 17, 24, 5 | 1.4% | 17, 33, 48, 6 |
+| QH reactor, $3\times 10^{19}$* | 0.58 | 19, 41, 64, 8 | 0 | 17, 33, 48, 6 | 0.5% | 19, 41, 64, 8 |
+| QA reactor, $10^{20}$ | 1.71 | 17, 33, 48, 6 | 0 | 13, 17, 24, 5 | 1.3% | 17, 33, 48, 6 |
+| QA reactor, $10^{21}$ | 2.71 | 13, 17, 24, 5 | 1.9% | 13, 17, 24, 5 | 1.9% | 17, 33, 48, 6 |
+| QA reactor, $2\times 10^{19}$* | 1.01 | 19, 41, 64, 8 | 0 | 15, 25, 32, 6 | 0.5% | 19, 41, 64, 8 |
+
+The collisional end of the 2.12.0 rule was already adequate; what it missed is the connection length (HSX's is 0.5 m,
+a quasi-helical reactor's 6 m, so the same plasma is far less collisional per connection length in HSX) and the
+electrons, and it chose a tokamak grid of the stellarator ladder's cost for a case that needs a larger one.
+Two limits of the evidence. The reference of the W7-X $10^{20}$ case is the grid the rule chooses (the next rung,
+$21\times 49\times 96\times 8$, was killed at 36 GB), so its error is known only from the step before it
+of the ladder (6.1%, 1.2%, then the chosen grid). The HSX electron heat flux is not monotone in $N_\zeta$ at
+fixed $N_\theta = 19$, $N_\xi = 64$, $N_x = 8$: 2842, 2987, 3402, 3001 W/m^2 for $N_\zeta$ = 25, 33, 41, 49
+(the ion heat flux moves by 3%); $N_\theta$ 19 to 21 and $N_x$ 8 to 10 change it by 0.1%, $N_\xi$ 64 to 80 by 1.1%.
+That deck is therefore the safe finer grid with a warning, and `--check-grid` or `dkx converge` decides it.
 
 **Joint grid $(N_\theta, N_\zeta, N_\xi, N_x)$ with `angles = "spectral"`**: the
 smallest rung of the ladder $(11,13,16,4)$, $(13,17,24,5)$, $(15,25,32,6)$,

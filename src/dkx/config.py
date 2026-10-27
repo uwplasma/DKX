@@ -15,9 +15,13 @@ import math
 import os
 from pathlib import Path
 import re
-from typing import Any, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
+import warnings
 
 import tomllib
+
+if TYPE_CHECKING:
+    from dkx.auto_grid import AutoGrid
 
 
 #: Format of case content; hashed into every case ID, never user input.
@@ -369,7 +373,10 @@ class Case:
             _table(data, "electric_field", "$", required=True)
         )
         resolution = _parse_resolution(
-            _table(data, "resolution", "$", required=True), geometry, species
+            _table(data, "resolution", "$", required=True),
+            geometry,
+            species,
+            None if source_path is None else Path(source_path).expanduser().resolve().parent,
         )
         solver = _parse_solver(_table(data, "solver", "$", required=True))
         parallel = _parse_parallel(_table(data, "parallel", "$", default={}))
@@ -845,38 +852,27 @@ def _parse_electric_field(data: Mapping[str, Any]) -> ElectricFieldConfig:
     )
 
 
-#: Joint grids (theta, zeta, pitch, speed) from coarse to fine: the measured
-#: ladder of docs/user_guide/convergence.md (spectral angles; the smallest rung
-#: whose successor moves the fluxes by < 2%), and the tokamak rungs (theta,
-#: pitch, speed) of the same table.
-_STELLARATOR_RUNGS = ((11, 13, 16, 4), (13, 17, 24, 5), (15, 25, 32, 6), (17, 33, 48, 6), (19, 41, 64, 8), (21, 49, 96, 8))
-_TOKAMAK_RUNGS = ((13, 1, 24, 5), (25, 1, 48, 6), (49, 1, 96, 8), (65, 1, 160, 12))
+def auto_resolution(
+    geometry: GeometryConfig,
+    species: tuple[SpeciesConfig, ...],
+    base_directory: Path | None = None,
+) -> "AutoGrid":
+    """Grid ``(theta, zeta, pitch, speed)`` from the field's shape and the lowest collisionality.
 
-
-def auto_resolution(geometry: GeometryConfig, species: tuple[SpeciesConfig, ...]) -> tuple[int, int, int, int]:
-    """Grid ``(theta, zeta, pitch, speed)`` for the lowest collisionality of the case.
-
-    With ``c = log10(n / 1e20 m^-3 / T_keV^2)`` of the ions (``lambda_ii / L_c``
-    scales as ``T^2 / n``), the rung falls linearly from the coarsest at
-    ``c = 2`` (collisional) to the finest at ``c = -1``, with the plateau and
-    ``1/nu`` rungs of the measured table at ``c = 1`` and ``0``.
+    See :mod:`dkx.auto_grid`. A geometry file that cannot be read gives the finest rung of the ladder.
     """
-    ions = [s for s in species if s.charge > 0] or list(species)
-    c = min(
-        math.log10(max(n, 1e-30) / 1e20 / max(t, 1e-9) ** 2)
-        for s in ions
-        for n, t in zip(s.density_m3, s.temperature_keV)
-    )
-    tokamak = geometry.format == "analytic" and geometry.file.name.lower() == "tokamak"
-    rungs, ys = (_TOKAMAK_RUNGS, (3, 2, 1, 0)) if tokamak else (_STELLARATOR_RUNGS, (5, 3, 1, 0))
-    cs = (-1.0, 0.0, 1.0, 2.0)
-    c = min(max(c, cs[0]), cs[-1])
-    i = min(int(c - cs[0]), 2)
-    k = round(ys[i] + (ys[i + 1] - ys[i]) * (c - cs[i]))
-    return rungs[k]
+    from dkx.auto_grid import choose_grid, field_shapes  # noqa: PLC0415
+
+    shapes = field_shapes(geometry.format, geometry.file, geometry.surfaces, base_directory or Path.cwd())
+    return choose_grid(species, shapes)
 
 
-def _parse_resolution(data: Mapping[str, Any], geometry: "GeometryConfig", species: tuple["SpeciesConfig", ...]) -> ResolutionConfig:
+def _parse_resolution(
+    data: Mapping[str, Any],
+    geometry: "GeometryConfig",
+    species: tuple["SpeciesConfig", ...],
+    base_directory: Path | None = None,
+) -> ResolutionConfig:
     path = "resolution"
     _reject_unknown(
         data,
@@ -893,7 +889,15 @@ def _parse_resolution(data: Mapping[str, Any], geometry: "GeometryConfig", speci
         },
     )
     # Opt-in: a missing size is a starting grid from the ladder, not a certificate.
-    auto = auto_resolution(geometry, species) if _boolean(data, "auto", path, default=False) else None
+    grid = auto_resolution(geometry, species, base_directory) if _boolean(data, "auto", path, default=False) else None
+    if grid is not None and grid.beyond_ladder:
+        warnings.warn(
+            f"[resolution] auto: the finest rung {grid.sizes} is the answer, but the case asks for about "
+            f"{grid.pitch_wanted:.0f} pitch modes (or its geometry could not be read); the grid is not "
+            "resolved by the rule. Size it with `dkx converge` or `--check-grid`.",
+            stacklevel=2,
+        )
+    auto = None if grid is None else grid.sizes
     return ResolutionConfig(
         theta=_integer(data, "theta", path, default=auto and auto[0], required=auto is None),
         zeta=_integer(data, "zeta", path, default=auto and auto[1], required=auto is None),
