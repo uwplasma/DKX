@@ -253,7 +253,7 @@ The collisional end of the 2.12.0 rule was already adequate; what it missed is t
 a quasi-helical reactor's 6 m, so the same plasma is far less collisional per connection length in HSX) and the
 electrons, and it chose a tokamak grid of the stellarator ladder's cost for a case that needs a larger one.
 Two limits of the evidence. The reference of the W7-X $10^{20}$ case is the grid the rule chooses (the next rung,
-$21\times 49\times 96\times 8$, was killed at 36 GB), so its error is known only from the previous step
+$21\times 49\times 96\times 8$, was killed at 36 GB), so its error is known only from the step before it
 of the ladder (6.1%, 1.2%, then the chosen grid). The HSX electron heat flux is not monotone in $N_\zeta$ at
 fixed $N_\theta = 19$, $N_\xi = 64$, $N_x = 8$: 2842, 2987, 3402, 3001 W/m^2 for $N_\zeta$ = 25, 33, 41, 49
 (the ion heat flux moves by 3%); $N_\theta$ 19 to 21 and $N_x$ 8 to 10 change it by 0.1%, $N_\xi$ 64 to 80 by 1.1%.
