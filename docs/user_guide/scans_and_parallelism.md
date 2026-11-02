@@ -183,6 +183,18 @@ sequential LAPACK calls of the structured elimination on one core
 always win. `DKX_CPU_DEVICES` forces several host devices for
 multi-device tests; it shares the same pool and does not speed anything up.
 
+### When to change the defaults
+
+Defaults: one solve on one device, the first of JAX's default backend; batches use every local device; the threads are as above. Float64 is enabled at import. The `dkx` command sets on-demand GPU memory; the Python API leaves JAX's preallocation unless you set it.
+
+| Setting | Default | Change it when |
+| --- | --- | --- |
+| `DKX_CORES` / `--cores` | XLA `min(8, cores)`, BLAS `min(4, cores)` | Several processes share a node: give each its share |
+| `devices=` | `"auto"`: every local device | Sharing a node, or some devices are busy |
+| `XLA_PYTHON_CLIENT_PREALLOCATE` | `false` for the CLI, JAX default in Python | Python processes share a GPU: set `false` |
+| `DKX_COMPILATION_CACHE_DIR`, `DKX_DISABLE_COMPILATION_CACHE` | cache on | The home filesystem is slow or small, or a cluster needs a shared path |
+| `DKX_CPU_DEVICES` | not set | Only for multi-device tests; it is not faster |
+
 ### Subsystem batching
 
 The memory-bounded structured direct kernel eliminates
