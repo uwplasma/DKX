@@ -538,8 +538,8 @@ class KineticBootstrapMismatch:
         self.minor_radius = float(minor_radius)
         self.mboz, self.nboz = int(mboz), int(nboz)
         self.tol = float(tol)
-        self._templates: dict[int, tuple[np.ndarray, np.ndarray, list[Any]]] = {}
-        self._friction: dict[int, list[Any]] = {}
+        self._templates: dict[tuple[int, int], tuple[np.ndarray, np.ndarray, list[Any]]] = {}
+        self._friction: dict[tuple[int, int], list[Any]] = {}
         self._plans: dict[tuple[Any, ...], Any] = {}
         self._chains: dict[tuple[Any, ...], Any] = {}
         self._roots: dict[tuple[Any, ...], Any] = {}
@@ -561,8 +561,13 @@ class KineticBootstrapMismatch:
         rows = np.unique(rows)
         return rows, (rows - 0.5) / (ns - 1)
 
-    def _template(self, s: float, collision_operator: int | None = None) -> Any:
-        """Operator at ``psiAHat = 1``: its gradient leaves hold ``d/ds`` values."""
+    def _template(self, s: float, collision_operator: int | None = None, nfp: int = 10) -> Any:
+        """Operator at ``psiAHat = 1``: its gradient leaves hold ``d/ds`` values.
+
+        ``nfp`` sets the field periods of the placeholder geometry (``geometryScheme = 1`` reads
+        them from ``helicity_n``, default 10). The toroidal grid and ``ddzeta`` come from it and are
+        not replaced by the Boozer surface, so it must be the equilibrium's own.
+        """
         from dkx.drift_kinetic import kinetic_operator_from_namelist  # noqa: PLC0415
         from dkx.inputs import SfincsInput  # noqa: PLC0415
         from dkx.namelist import parse_sfincs_input_text  # noqa: PLC0415
@@ -579,28 +584,29 @@ class KineticBootstrapMismatch:
             dTHatdrHats=[dti / 1e3 * to_r_hat, dte / 1e3 * to_r_hat],
             collisionOperator=(self.collision_operator if collision_operator is None
                                else collision_operator), Delta=4.5694e-3, alpha=1.0,
-            nu_n=8.330e-3, Er=self._er_at(s),
+            nu_n=8.330e-3, Er=self._er_at(s), helicity_n=int(nfp),
             **({"thetaDerivativeScheme": 0, "zetaDerivativeScheme": 0} if self.spectral_angles else {}),
             **self.resolution,
         )  # fmt: skip
         return kinetic_operator_from_namelist(parse_sfincs_input_text(deck.to_namelist()))
 
-    def _setup(self, ns: int) -> tuple[np.ndarray, np.ndarray, list[Any]]:
-        if ns not in self._templates:
+    def _setup(self, ns: int, nfp: int) -> tuple[np.ndarray, np.ndarray, list[Any]]:
+        """Host-side rows and operators for an ``ns``-point grid of an ``nfp``-period equilibrium."""
+        if (ns, nfp) not in self._templates:
             import jax  # noqa: PLC0415
 
             rows, s_rows = self.rows(ns)
             with jax.ensure_compile_time_eval():  # host constants, even when first seen under a trace
-                templates = [self._template(float(s)) for s in s_rows]
+                templates = [self._template(float(s), nfp=nfp) for s in s_rows]
             if self.momentum_correction:
                 from dkx.momentum_correction import friction_drives  # noqa: PLC0415
 
                 # Collisions are local: the friction needs species and speed
                 # grid only, so it is computed once per row on the template.
-                self._friction[ns] = [friction_drives(t, self._template(float(s), 0), 3)
+                self._friction[ns, nfp] = [friction_drives(t, self._template(float(s), 0, nfp), 3)
                                       for t, s in zip(templates, s_rows)]  # fmt: skip
-            self._templates[ns] = (rows, s_rows, templates)
-        return self._templates[ns]
+            self._templates[ns, nfp] = (rows, s_rows, templates)
+        return self._templates[ns, nfp]
 
     def _plan(self, xm: np.ndarray, xn: np.ndarray, nfp: int) -> Any:
         import jax  # noqa: PLC0415
@@ -632,7 +638,7 @@ class KineticBootstrapMismatch:
             # per runtime instead.  The runtime is held so its id stays unique.
             if self._eager[0] is not rt:
                 self._eager = (rt, jax.jit(lambda st, ro: self._kinetic(st, rt, ro)[1]))
-            return self._setup(int(s_full.size))[1], self._eager[1](state, roots)
+            return self._setup(int(s_full.size), int(rt.resolution.nfp))[1], self._eager[1](state, roots)
         key, s_rows, spectra, psi_a = self._stage(state, rt)
         if self.ambipolar:
             if roots is None:
@@ -662,7 +668,7 @@ class KineticBootstrapMismatch:
         setup = rt.setup
         s_full = np.asarray(setup.s_full)
         nfp, signgs = int(rt.resolution.nfp), int(np.sign(setup.signgs))
-        rows, s_rows, templates = self._setup(int(s_full.size))
+        rows, s_rows, templates = self._setup(int(s_full.size), nfp)
         # |psi_a| = |phi_edge|/(2 pi) in Wb/rad, as VMEX's bootstrap lane forms it.
         psi_a = jnp.abs((s_full[1] - s_full[0]) * jnp.sum(jnp.asarray(setup.phipf)[1:]))
         tables = [boozer_input_tables(state, rt, int(row)) for row in rows]
@@ -672,7 +678,7 @@ class KineticBootstrapMismatch:
         key = (int(s_full.size), nfp, signgs, xm.tobytes(), xn.tobytes())
         if key not in self._chains:
             plan = self._plan(xm, xn, nfp)
-            frictions = self._friction.get(int(s_full.size), [None] * len(rows))
+            frictions = self._friction.get((int(s_full.size), nfp), [None] * len(rows))
             with jax.ensure_compile_time_eval():  # constants, even under an outer trace
                 stacked = jax.tree_util.tree_map(
                     lambda *v: jnp.stack(v), *zip(templates, frictions, range(len(rows))))

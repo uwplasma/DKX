@@ -245,3 +245,18 @@ def test_the_default_collision_operator_is_fokker_planck():
     assert DEFAULT_COLLISION_OPERATOR == 0
     deck = KineticBootstrapCurrent(_Profiles()).namelist("/w.nc", 0.5, er=0.0, a_hat=1.0)
     assert "collisionOperator = 0" in deck
+
+
+def test_traced_template_grid_follows_the_field_period_count():
+    """The placeholder operator's toroidal grid is the equilibrium's, not geometryScheme 1's 10 periods."""
+    from dkx.bootstrap import KineticBootstrapMismatch
+
+    profiles = SimpleNamespace(
+        ne_coeffs=np.array([2.0e20, 0, 0, 0, 0, -2.0e20]),
+        Te_coeffs=np.array([9.0e3, -9.0e3]), Ti_coeffs=np.array([9.0e3, -9.0e3]))
+    row = KineticBootstrapMismatch(
+        profiles, (0.25,), mismatch=False, spectral_angles=True,
+        resolution={"Ntheta": 5, "Nzeta": 7, "Nxi": 4, "NL": 2, "Nx": 2})
+    ddzeta2 = np.asarray(row._template(0.25, nfp=2).ddzeta)
+    ddzeta10 = np.asarray(row._template(0.25, nfp=10).ddzeta)
+    np.testing.assert_allclose(ddzeta2, ddzeta10 * 2 / 10, rtol=1e-12)
