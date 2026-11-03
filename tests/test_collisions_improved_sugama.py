@@ -356,7 +356,7 @@ def test_field_part_is_low_rank_and_confined_to_the_conserved_moments() -> None:
         singular = np.linalg.svd(flat, compute_uv=False)
         rank = int((singular > 1e-9 * max(singular[0], 1e-300)).sum())
         if ell == 0:
-            assert 0 < rank <= 2 * n_species
+            assert 0 < rank <= n_species * n_species + n_species
         elif ell == 1:
             assert 0 < rank <= n_species * 7  # momentum term plus K = 5 flow moments per species
         else:
@@ -506,7 +506,6 @@ def test_l1_block_is_as_adjoint_as_the_landau_operator_at_unequal_temperature(t_
         assert a_sugama < 1e-9
 
 
-@pytest.mark.xfail(strict=True, reason="the L = 0 field part is not Sugama's C^T(f_M x^2) response; measured 0.1 at equal T and mass")
 def test_l0_block_is_adjoint_for_like_species() -> None:
     """Open: Eq. 29 for the L = 0 field part (see docs/physics/collisions.md)."""
     kw = _pair_kwargs(1.0, 1.0, 16)

@@ -1721,7 +1721,7 @@ def make_improved_sugama_v3_operator(
     # F[(a,i),(b,j),L] = sum_c columns[a,i,L,c] extraction[b,j,L,c].
     # K = 2 S covers L=0 (particle + energy); L=1 uses S of the slots
     # (momentum) and L >= 2 carries no field term at all.
-    rank = max(n_species * n_species, 2 * n_species)
+    rank = n_species * n_species + n_species
     columns = np.zeros((n_species, n_x, n_xi_int, rank), dtype=np.float64)
     extraction = np.zeros((n_species, n_x, n_xi_int, rank), dtype=np.float64)
 
@@ -1740,18 +1740,28 @@ def make_improved_sugama_v3_operator(
                 columns[ia, :, 1, slot] = r_mom[ia, ib]
                 extraction[ib, :, 1, slot] = kappa * tau_mom[ib, ia]
 
-    # L=0 particle number (U = h1, species-diagonal) and kinetic energy (U = h2).
+    # L=0 particle number (U = h1, species-diagonal) and kinetic energy. The energy field
+    # part is Sugama's (2009, Eq. 37; 2019, Eq. 24): one rank-1 term per ordered pair with
+    # response r_ab = T_ab (x^2 f_M) and extraction the test energy functional of the other
+    # species, e^T T_ba. Like the L = 1 term this makes the block self-adjoint (the test
+    # blocks are) and conserves total energy by the same telescoping.
     test_l0 = test_ab_l[:, :, 0, :, :]  # (S,S,X,X)
     nu_part = np.einsum("i,abij->abj", w_part, test_l0)  # nu_ab (S,S,X)
-    eps_energy = np.einsum("i,abij->abj", w_energy, test_l0)  # eps_ab (S,S,X)
-    mu_energy = eps_energy - (e_h1 / n1) * nu_part  # residual energy functional (S,S,X)
+    shape_e = x * x * expx2  # x^2 f_M
+    r_en = np.einsum("abij,j->abi", test_l0, shape_e)
+    r_en = r_en - (r_en @ w_part)[..., None] / n1 * h1  # particle-neutral response
+    # energy functional left after the particle restoration (the restoring shape h1 carries energy)
+    tau_en = np.einsum("i,abij->abj", w_energy, test_l0) - (e_h1 / n1) * nu_part
+    r_en_dot = np.einsum("i,abi->ab", w_energy, r_en)
     for ic in range(n_species):
         columns[ic, :, 0, ic] = h1
         extraction[ic, :, 0, ic] = -(1.0 / n1) * nu_part[ic].sum(axis=0)
-        columns[ic, :, 0, n_species + ic] = h2
+    for ia in range(n_species):
         for ib in range(n_species):
-            lam = -float(p_energy[ib]) / (float(p_energy[ic]) * e2)
-            extraction[ib, :, 0, n_species + ic] = lam * mu_energy[ib, ic]
+            slot = n_species + ia * n_species + ib
+            kappa = -float(p_energy[ib]) / (float(p_energy[ia]) * float(r_en_dot[ia, ib]))
+            columns[ia, :, 0, slot] = r_en[ia, ib]
+            extraction[ib, :, 0, slot] = kappa * tau_en[ib, ia]
 
     # ---- improved l = 1 correction (Sugama et al. 2019, Eqs. 40-43, 46-47) ----
     # The rank-1 momentum term above reproduces the Landau friction only for the

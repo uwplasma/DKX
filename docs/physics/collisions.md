@@ -140,11 +140,13 @@ Two further limits, both measured by `tests/test_collisions_improved_sugama.py`:
   for $T_e/T_i$ = 3 to 10, depending on the mass ratio, on the pairing
   $\sum_{ab} T_a \langle g_a, C_{ab} f_b \rangle / f_{aM}$). Sugama's Eq. 29 is exact only for equal
   temperatures or in the small-mass-ratio limit, and so is DKX's.
-- The $L=0$ field part is not Sugama's $C^T(f_M x^2)$ response (it uses a fixed shape and a separate
-  particle term), and it is not self-adjoint even for like species at equal temperature (0.1 on the same
-  pairing, against 1e-12 for Fokker-Planck). Conservation of particles, momentum and energy and the
-  exchange rate of Eq. A1 are exact or tested; the H-theorem is not. The strict `xfail` test
-  `test_l0_block_is_adjoint_for_like_species` fails the day this is fixed.
+- The $L=0$ field part is Sugama's $C^T(f_M x^2)$ response (Sugama et al. 2009, Eq. 37; 2019, Eq. 24): one rank-one
+  term per ordered species pair, the response being the pair's own test operator acting on $x^2 f_M$ (made
+  particle-neutral) and the extraction the test energy functional of the other species. It is self-adjoint for
+  like species at equal temperature (3e-13 on the pairing above, against 1e-12 for Fokker-Planck), conserves
+  particles per species and total energy exactly, and keeps the exchange rate of Eq. A1. At unequal temperature
+  it carries the same finite defect as the Landau operator (1% for $T_e/T_i = 10$ at the electron mass ratio),
+  as the $L=1$ block does.
 
 This operator is available from a namelist only; the native case accepts
 `linearized_fokker_planck` and `pitch_angle_scattering`.
