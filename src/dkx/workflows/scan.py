@@ -156,6 +156,61 @@ def _existing_rows(path: Path) -> dict[str, dict[str, Any]]:
     return rows
 
 
+def _batched_er_rows(case, scan, todo: list[tuple[int, float]]) -> dict[int, dict[str, float]]:
+    """Observables of a one-axis ``E_r`` scan from one compiled batch per surface.
+
+    The points share geometry, species, collisions and grids and differ only in
+    the two ExB drive scalars, so each surface is one vmapped solve
+    (:func:`dkx.batch.batched_er_scan`) that the persistent compile cache keeps
+    across runs, instead of one solve per point. Returns ``{}`` (the caller runs
+    the points one by one) for anything else: other axes, ambipolar, Phi1, a
+    check_grid request, a single point, or a batch element that did not converge.
+    """
+    from ..config import Case  # noqa: PLC0415
+
+    if not (
+        isinstance(case, Case) and len(scan.axes) == 1 and len(todo) > 1
+        and scan.axes[0].path == "electric_field.value_kV_m"
+        and case.run.workflow != "ambipolar_profile" and case.physics.phi1 == "off"
+    ):
+        return {}
+    import numpy as np  # noqa: PLC0415
+
+    from ..batch import batched_er_scan  # noqa: PLC0415
+    from ..er import ErProblem  # noqa: PLC0415
+    from ..execution import (  # noqa: PLC0415
+        _make_operator, _prepare_profile, _route_name, _total_host_memory_bytes,
+    )
+    from ..units import HEAT_FLUX, PARALLEL_CURRENT, PARTICLE_FLUX  # noqa: PLC0415
+
+    geometry, grids, density, temperature, dn, dt = _prepare_profile(case)
+    er = np.array([value for _, value in todo], dtype=float)
+    surfaces = len(case.geometry.surfaces)
+    flux = np.empty((surfaces, er.size, 3))  # max |.| over species: particle, heat, current
+    for index in range(surfaces):
+        op, _, _, radial = _make_operator(
+            case, surface_index=index, n_hat=density / 1e20, t_hat=temperature,
+            dn_dr_hat=dn, dt_dr_hat=dt, grids=grids, geometry_state=geometry,
+            electric_field_kv_m=1.0, force_exb_structure=True)  # fmt: skip
+        problem = ErProblem(
+            operator=op, dphi_per_er=float(op.dphi_hat_dpsi_hat_kinetic), z_s=np.asarray(op.z_s),
+            er_initial=0.0, er_min=-1.0, er_max=1.0, solve_method=_route_name(case.solver.method),
+            tol=case.solver.relative_tolerance, er_units="kV/m")  # fmt: skip
+        batch = batched_er_scan(
+            problem, er, memory_budget_gb=case.solver.memory_fraction * _total_host_memory_bytes() / 1024**3)
+        if not bool(np.all(np.asarray(batch.algebraic_converged))):
+            return {}
+        m, f = batch.moments, radial.d_dr_hat_to_d_dpsi_hat
+        flux[index, :, 0] = np.abs(np.asarray(m["particleFlux_vm_psiHat"]) * f * PARTICLE_FLUX).max(axis=1)
+        flux[index, :, 1] = np.abs(np.asarray(m["heatFlux_vm_psiHat"]) * f * HEAT_FLUX).max(axis=1)
+        flux[index, :, 2] = np.abs(np.asarray(m["FSABjHat"]) * PARALLEL_CURRENT)
+    worst = flux.max(axis=0)
+    return {
+        position: dict(zip(SCAN_OBSERVABLES[:3], map(float, worst[k]), strict=True))
+        for k, (position, _) in enumerate(todo)
+    }
+
+
 def run_scan(
     case,
     *,
@@ -186,6 +241,14 @@ def run_scan(
     expanded = expand_scan(case)
     _say(f"scan: {len(expanded)} cases over {len(scan.axes)} axis/axes ({scan.combine})")
 
+    todo = [
+        (i, point[0]) for i, (point, d) in enumerate(expanded)
+        if not (d.case_id in cached and (not check_grid or "resolution_change" in cached[d.case_id]))
+    ]
+    batched = {} if check_grid else _batched_er_rows(case, scan, todo)
+    if batched:
+        _say(f"scan: {len(batched)} E_r points as one compiled batch per surface")
+
     rows: list[dict[str, Any]] = []
     failures = 0
     for index, (point, derived) in enumerate(expanded, start=1):
@@ -198,6 +261,9 @@ def run_scan(
             continue
         _say(f"[{index}/{len(expanded)}] {label}")
         row: dict[str, Any] = {"point": point, "case_id": derived.case_id, "status": "ok"}
+        if index - 1 in batched:
+            rows.append({**row, **batched[index - 1]})
+            continue
         try:
             result = run_case(derived, check_grid=check_grid)
         except Exception as exc:  # noqa: BLE001 - the failure is the datum
