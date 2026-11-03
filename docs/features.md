@@ -76,7 +76,7 @@ original equation. The routes and their limits are in
 | Differentiable ambipolar root | `dkx.ambipolar_er` | implicit function theorem; `tests/test_er.py` |
 | Differentiable $E_r$ and profile scans | `dkx.prepare_er_scan(..., differentiable_profiles=True)`, `dkx.batched_er_scan(..., differentiable=True)` | {doc}`tutorials/08_phi1_bootstrap_gradients` |
 | Shape derivatives | `FluxSurfaceGeometry.from_fourier` | `examples/tutorials/15_optimization.py` |
-| Kinetic bootstrap row in VMEX optimization | `dkx.bootstrap.KineticBootstrapMismatch`, `KineticBootstrapCurrent` | QA objective 1.78 → 0.0061 ({doc}`tutorials/08_phi1_bootstrap_gradients`) |
+| Kinetic bootstrap row in VMEX optimization, optionally at the ambipolar $E_r$ (`ambipolar=True`) | `dkx.bootstrap.KineticBootstrapMismatch`, `KineticBootstrapCurrent` | QA objective 1.78 → 0.0061 ({doc}`tutorials/08_phi1_bootstrap_gradients`) |
 | Optimization scripts | `examples/advanced/optimize_*.py` | bootstrap current, electron root, impurity screening |
 
 The VMEC-to-Boozer proxy workflow does not claim full VMEC-boundary-to-kinetic

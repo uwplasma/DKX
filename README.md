@@ -28,9 +28,9 @@ dict. `dkx.Case` validates it and hashes it to a `case_id`. Profiles hold one va
 | `[[species]]` | `name`, `charge` (e), `mass_amu`, `density_m3`, `temperature_keV` |
 | `[physics]` | `collisions`: `pitch_angle_scattering` or `linearized_fokker_planck`; `coulomb_logarithm` |
 | `[electric_field]` | `value_kV_m` when prescribed; `search_kV_m` bracket when ambipolar |
-| `[resolution]` | grid sizes `theta`, `zeta`, `pitch` (Legendre modes), `speed` (speed nodes) |
+| `[resolution]` | grid sizes `theta`, `zeta`, `pitch` (Legendre modes), `speed` (speed nodes); `angles` is `spectral` by default; `auto = true` fills omitted sizes from a measured ladder |
 | `[solver]` | `method` (`auto` picks the route), `relative_tolerance`, `memory_fraction` |
-| optional | `[parallel]`, `[convergence]`, `[output]`, `[scan]` |
+| optional | `[parallel]`, `[convergence]`, `[output]`, `[scan]`; `[run] check_grid = true` certifies each radius with one refined solve |
 
 `dkx template` prints every field with its default; `dkx validate case.toml` checks a file. A run
 returns a `Result`, saved as NetCDF, whose arrays carry units in their names:
@@ -125,7 +125,8 @@ Every derivative example is checked against central differences.
 ![D11 and D31 against collisionality on W7-X, with SFINCS points](docs/_static/figures/paper_benchmarks/monoenergetic_icnts_w7x.png)
 
 `RHSMode = 3` gives `D11*`, `D31*`, `D33*` (Beidler et al. 2011); `RHSMode = 2` the thermal
-matrix. Boxes: SFINCS v3. Spectral angles, as in MONKES.
+matrix. Boxes: SFINCS v3. Spectral angles, as in MONKES. `D31*` follows Beidler's sign (positive in the
+banana limit); the W7-X curves are checked against digitized ICNTS data.
 
 ### Collision operators
 
@@ -156,6 +157,8 @@ against DKX's), traced VMEX → `booz_xform_jax` → DKX (finite differences
 agree to 5.7e-5–1.8e-3). On a laptop CPU (30 min, 4.6 GB) the objective falls
 from 1.78 to 0.0061 and the DKX mismatch from 1.2e-3 to 1.2e-4
 ([`QA_optimization_bootstrap_dkx.py`](examples/advanced/QA_optimization_bootstrap_dkx.py)).
+`KineticBootstrapMismatch(ambipolar=True)` evaluates the row at the ambipolar `E_r`, differentiated
+through the root ([`ambipolar_bootstrap_dkx.py`](examples/advanced/ambipolar_bootstrap_dkx.py)).
 Pitch-angle scattering does not conserve momentum: its current is 1.5–1.6× Redl's.
 <!-- /FLAGSHIP-OPTIMIZATION -->
 
