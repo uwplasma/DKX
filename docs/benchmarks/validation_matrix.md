@@ -101,13 +101,15 @@ difference, scaled by the largest component:
 | $E_r$ sweep DKES/partial/full, $E_r$ = −5, 0, +5 | ≤ 1.3e-6 | ≤ 1.6e-3 | 5e-4 / 2.5e-3 |
 | RHSMode 2 / RHSMode 3 transport matrix | 8.0e-10 / 2.3e-10 | — | 1e-9 |
 | W7-X `.bc` $\Phi_1$ in the kinetic equation, $E_r = -2$, H, e, C$^{6+}$, four grids up to 9x35x32x4 | ≤ 1.2e-7 | ≤ 1.8e-5 | 5e-4 / 2.5e-3 |
-| Improved Sugama vs SFINCS FP (diagnostic) | 4.3e-3 | 7.7e-2 | none |
+| Improved Sugama vs SFINCS FP (diagnostic) | 4.4e-3 | 3.5e-2 | none |
 
 SFINCS has no Sugama operator, so that row compares models, not codes. The external
 reference for the model is the Spitzer–Harm conductivity (`tests/test_physics_limits.py`):
-the improved Sugama operator gives $\gamma_E$ 0.517, 0.617, 0.724, 0.894 against the
-tabulated 0.5816, 0.6833, 0.7849, 0.9225 for $Z$ = 1, 2, 4, 16 (11.1% to 3.1% low),
-where the full FP operator is within 0.4%. The published improved operator is within 1% of the Coulomb operator's conductivity (Frei et al. 2022), so the remaining deficit says DKX's field-particle part is still simpler than Sugama et al. 2019: it restores momentum and energy, but does not reproduce the friction-flow relations of the linearized Landau operator. Open. Before the momentum-restoring
+the improved Sugama operator with its $L=1$ heat-flow correction (Sugama et al. 2019, Eqs. 40-43; five Laguerre flow
+moments) gives $\gamma_E$ 0.5819, 0.6858, 0.7853, 0.9234 against the tabulated 0.5816, 0.6833, 0.7849, 0.9225 for
+$Z$ = 1, 2, 4, 16 (within 0.4% at eight speed nodes), as the full FP operator does. Without that correction the model was 11.1% to 3.1% low
+(0.517, 0.617, 0.724, 0.894). What remains of the flow gap to Fokker-Planck on W7-X is the missing $L \ge 2$ field-particle
+response, which the published operator does not have ({doc}`../physics/collisions`). Before the momentum-restoring
 shape was built per species pair, electron-ion Lorentz scattering entered the
 electron-electron response and the deficit was 22.6% to 5.4%. The $\Phi_1$ cells
 peak at 5 to 11 GB in DKX against about 1 GB in SFINCS (recorded with the earlier

@@ -687,7 +687,7 @@ status = "accepted_limited"
 claim_scope = "w7x_qa_qh_two_species_fp_sfincs_cells_ambipolar_er_sweep_rhsmode23_phi1_er_impurity_monoenergetic_ladder"
 claim = "At 15x45x80x6, two species, full linearized FP, DKX matches pinned SFINCS v3 (1 rank, MUMPS) on W7-X ambipolar Er at rN 0.3/0.5/0.7 (root shift <= 1.1e-4), precise QA and QH (fluxes <= 2.7e-4, flows <= 1.9e-3 scaled), a W7-X Boozer .bc surface, the DKES/partial/full Er sweep at Er -5/0/+5 (fluxes <= 1.3e-6), RHSMode 2 and 3 transport matrices (<= 8e-10), and W7-X Phi1 in the kinetic equation at Er -2 with a C6+ impurity over four resolutions (fluxes <= 1.2e-7, flows <= 1.8e-5 scaled). It also records converged W7-X EIM monoenergetic ladders: DKX, YANCC and MONKES agree to 7e-4 in D11* once each is mapped to one radial convention (the earlier 10% to 12% gap was the deck's psiAHat)."
 artifact = "validation/cross_code_gaps_v1.json"
-artifact_sha256 = "45da8436fa973353fe94588129da73a1ff80e60232d64034308ab18c1d07acec"
+artifact_sha256 = "6904981a3aa41ea7693f0d4b2e5271b0550918913a8c174564e21ff5399c2516"
 artifact_schema = "dkx.cross_code_gaps.v1"
 audit_script = "tools/paper_benchmarks/audit_cross_code_gaps.py"
 command = "python tools/paper_benchmarks/audit_cross_code_gaps.py --artifact validation/cross_code_gaps_v1.json"
@@ -697,7 +697,7 @@ generated_on_host = "nvidia-a4000"
 generated_on_host_recorded = "office workstation CPU, shared (load 20-44): SFINCS 1-2 cores, DKX 4-8 cores"
 external_commits = { sfincs = "8df5453472e982df0f6ae005243ce38d57a83711" }
 limitations = [
-  "SFINCS has no Sugama operator; DKX improved Sugama against SFINCS FP is a diagnostic (fluxes 0.43%, flows 7.7%)",
+  "SFINCS has no Sugama operator; DKX improved Sugama against SFINCS FP is a diagnostic (fluxes 0.44%, ion flow 3.5% and electron flow 11.1% below Fokker-Planck; with Fokker-Planck blocks for L >= 2 the flows are within 0.11% and 1.2%, so the gap is the field-particle response the published operator lacks for L >= 2)",
   "SFINCS RHSMode 3 is not robust on W7-X (NaN at 11x21, L12 sign flip at Nzeta 85); the gated cell is 15x45x150",
   "local gradients repeated at each radius, not a reconstructed discharge",
   "experimental validation",
