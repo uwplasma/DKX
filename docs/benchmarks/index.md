@@ -11,6 +11,7 @@ artifact it comes from, so it can be regenerated.
 | {doc}`analytic_limits` | Does the discretization reproduce known asymptotic results (Spitzer–Härm, Shaing–Callen, Pfirsch–Schlüter, Onsager symmetry, conservation)? |
 | {doc}`sfincs` | Does DKX agree with SFINCS v3 on the same deck, and where does the reference itself fall short? |
 | {doc}`cross_code` | Do the monoenergetic coefficients agree with MONKES, YANCC and the ICNTS benchmark set? |
+| {doc}`dkes_hydra` | Do the monoenergetic coefficients agree with the IPP DKES results on a HELIAS reactor at seven radii? |
 | {doc}`performance` | How fast, how much memory, CPU against GPU, and which solver route to expect. |
 | {doc}`validation_matrix` | Which validation entries support a release claim, and at what evidence level. |
 
@@ -25,6 +26,7 @@ commit, and the same warm or cold state.
 analytic_limits
 sfincs
 cross_code
+dkes_hydra
 performance
 validation_matrix
 ```

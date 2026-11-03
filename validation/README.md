@@ -52,6 +52,7 @@ longer write-ups are in `docs/validation_matrix.rst`.
 | `independent_cross_code` | accepted_limited | Monoenergetic `D11*`, `D31*`, `D13*`, `D33*` on DSHAPE/NCSX (YANCC) and W7-X EIM (MONKES) within 6%; PAS + DKES only. |
 | `full_kinetic_sfincs` | accepted | Full linearized FP, tokamak, `Er = 0`: max scaled DKX/SFINCS error `2.69e-10`, rung movement ≤ `0.280%`. |
 | `full_kinetic_sfincs_finite_er` | accepted | Same at normalized `Er = -30`: max error `1.88e-9`, movement ≤ `0.326%`. |
+| `dkes_hydra_np04` | accepted_limited | DKX vs IPP DKES on the HELIAS reactor hydra_Np04 at seven radii: `D33*` within 0.4%, `D11*` within 19% (median 0.1-6.7%), `D31*` within 1.3e-3 for cmul >= 1e-3; low nu not gated. |
 | `cross_code_gaps` | accepted_limited | Production-resolution two-species FP vs SFINCS: W7-X ambipolar roots, QA/QH, `.bc`, Er sweep, RHSMode 2/3, Phi1 with a C6+ impurity at Er = -2; fluxes within 2.7e-4. Also the converged W7-X EIM monoenergetic ladder (D11* differs between codes). |
 | `hsx_gap_deck` | accepted_limited | The 633,604-unknown HSX-like full-FP deck: DKX's default route converges (611 iterations, 1,658 s, 26.8 GiB); every SFINCS v3 route tried on a 36 GiB host fails. A solve-convergence record, not a physics comparison. |
 | `full_kinetic_sfincs_stellarator` | accepted | W7-X SC1 at `rN = 0.5`, `Er = 0`: max error `1.37e-8`, movement ≤ `0.444%`. |
