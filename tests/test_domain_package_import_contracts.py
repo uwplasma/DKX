@@ -48,6 +48,7 @@ ROOT_MODULE_CLASSIFICATIONS = {
     "_version.py": "stable package metadata",
     "ambipolar.py": "public workflow API",
     "api.py": "public API",
+    "auto_grid.py": "public physics API",
     "batch.py": "public workflow API",
     "bootstrap.py": "public optimization API",
     "bounce_averaged.py": "public physics API",

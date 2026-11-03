@@ -95,35 +95,74 @@ def test_default_angles_are_spectral_and_finite_differences_are_semantic() -> No
         Case.from_mapping(fd)
 
 
-def test_auto_resolution_is_filled_from_the_ion_collisionality() -> None:
-    def grid(n: float, t: float, geometry: dict | None = None) -> tuple:
-        m = _mapping()
-        m["resolution"] = {"auto": True}
-        for s in m["species"]:
-            s["density_m3"], s["temperature_keV"] = [n], [t]
-        m["geometry"].update(geometry or {}, surfaces=[0.5])
-        r = Case.from_mapping(m).resolution
-        return r.theta, r.zeta, r.pitch, r.speed
+def _auto_case(n: float, t_i: float, t_e: float, geometry: dict, *, resolution: dict | None = None) -> Case:
+    m = _mapping()
+    m["resolution"] = {"auto": True, **(resolution or {})}
+    m["species"][0].update(density_m3=[n, 0.9 * n], temperature_keV=[t_i, 0.9 * t_i])
+    m["species"][1].update(density_m3=[n, 0.9 * n], temperature_keV=[t_e, 0.9 * t_e])
+    m["geometry"] = {"surfaces": [0.5, 0.55], **geometry}
+    return Case.from_mapping(m)
 
-    collisional = grid(1e21, 0.1)
-    hot = grid(1e19, 3.0)
-    assert collisional == (11, 13, 16, 4)
-    assert hot == (21, 49, 96, 8)
-    assert all(a <= b for a, b in zip(collisional, hot))
-    assert grid(1e20, 1.0) == (17, 33, 48, 6)
-    tokamak = {"format": "analytic", "file": "tokamak"}
-    assert grid(1e21, 0.1, tokamak) == (13, 1, 24, 5)
-    assert grid(1e19, 3.0, tokamak)[2:] == (160, 12)
+
+def _grid(*args, **kwargs) -> tuple:
+    r = _auto_case(*args, **kwargs).resolution
+    return r.theta, r.zeta, r.pitch, r.speed
+
+
+W7X = {"format": "analytic", "file": "w7x_standard"}
+TOKAMAK = {"format": "analytic", "file": "tokamak"}
+QH = {"format": "vmec", "file": str(REPO_ROOT / "tests" / "ref" / "wout_LandremanPaul2021_QH_reactorScale_lowres.nc")}
+
+
+def test_auto_resolution_follows_the_collisionality_of_the_hardest_species() -> None:
+    # The measured references (docs/user_guide/convergence.md): W7-X needs 13 x 17 x 24 x 5 when collisional and
+    # 19 x 41 x 64 x 8 at 1e20 m^-3 and 1 keV. The species with the longest mean free path sets the grid:
+    # electrons at 3 keV against ions at 1 keV need the finer grid at the same density.
+    assert _grid(1e21, 1.0, 1.0, W7X) == (13, 17, 24, 5)
+    assert _grid(1e20, 1.0, 1.0, W7X) == (19, 41, 64, 8)
+    assert _grid(1e21, 1.0, 3.0, W7X) == (19, 41, 64, 8)
+    ladder = [_grid(n, 1.0, 1.0, W7X) for n in (1e21, 3e20, 1e20)]
+    assert all(all(a <= b for a, b in zip(x, y)) for x, y in zip(ladder, ladder[1:]))
+
+
+def test_auto_resolution_uses_the_connection_length_of_the_field() -> None:
+    # Same plasma, different field: the quasi-helical reactor field has a connection length of a few metres,
+    # W7-X one of about a metre, so the same plasma is far less collisional in the first.
+    assert _grid(1e20, 1.0, 1.0, QH) == (15, 25, 32, 6)
+    assert _grid(1e20, 1.0, 1.0, W7X) == (19, 41, 64, 8)
+
+
+def test_auto_resolution_of_an_axisymmetric_field_is_a_tokamak_grid() -> None:
+    assert _grid(1e20, 1.0, 1.0, TOKAMAK) == (65, 1, 160, 12)
+    assert _grid(3e21, 1.0, 1.0, TOKAMAK)[1] == 1
+
+
+def test_auto_resolution_beyond_the_ladder_is_the_finest_rung_with_a_warning() -> None:
+    with pytest.warns(UserWarning, match="not resolved by the rule"):
+        assert _grid(1e19, 1.0, 1.0, W7X) == (21, 49, 96, 8)
+    with pytest.warns(UserWarning, match="could not be read"):
+        assert _grid(1e21, 1.0, 1.0, {"format": "vmec", "file": "missing.nc"}) == (21, 49, 96, 8)
+
+
+def test_auto_field_shape_reads_the_dominant_helicity() -> None:
+    from dkx.auto_grid import field_shapes
+
+    (tokamak,) = field_shapes("analytic", Path("tokamak"), [0.5], Path.cwd())
+    assert tokamak.axisymmetric and tokamak.n_max == 0
+    assert tokamak.rate == pytest.approx(tokamak.iota)  # (m, n) = (1, 0)
+    (qh,) = field_shapes("vmec", Path(QH["file"]), [0.5], Path.cwd())
+    assert not qh.axisymmetric and qh.nfp == 4
+    assert qh.rate == pytest.approx(abs(qh.iota + 4))  # (1, 1): the effective transform of a quasi-helical field
+    assert qh.eps > 0.05
 
 
 def test_auto_keeps_given_keys_and_fills_the_rest() -> None:
-    m = _mapping()
-    m["resolution"] = {"pitch": 99, "auto": True}
-    r = Case.from_mapping(m).resolution
+    r = _auto_case(1e20, 1.0, 1.0, W7X, resolution={"pitch": 99}).resolution
     assert r.pitch == 99
-    assert (r.theta, r.zeta, r.speed) == (21, 49, 8)
-    assert Case.from_mapping(m).resolution.angles == "spectral"
+    assert (r.theta, r.zeta, r.speed) == (19, 41, 8)
+    assert r.angles == "spectral"
     # Without `auto` every size is required, as before.
+    m = _mapping()
     m["resolution"] = {"pitch": 99}
     with pytest.raises(CaseValidationError, match="resolution.theta"):
         Case.from_mapping(m)
