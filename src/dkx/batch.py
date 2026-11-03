@@ -562,16 +562,8 @@ def batched_solve(
         states, moments, residual_norms, tail_bounds, relative, accepted = run(leaves_map)
         n_chunks = -(-batch // chunk)
     else:
-        from jax.sharding import Mesh, PartitionSpec as P  # noqa: PLC0415
-
-        # SOLVAX owns the local numerical solves. Its shard_batch wrapper does
-        # not yet expose this checker option required by custom_linear_solve.
-        if hasattr(jax, "shard_map"):
-            shard_map = jax.shard_map
-            check = {"check_vma": False}
-        else:  # JAX 0.4 compatibility
-            from jax.experimental.shard_map import shard_map  # noqa: PLC0415
-            check = {"check_rep": False}
+        from jax.sharding import Mesh  # noqa: PLC0415
+        from solvax import shard_batch  # noqa: PLC0415
 
         shard_max = -(-batch // len(devs))
         chunk = auto_chunk_size(
@@ -594,12 +586,12 @@ def batched_solve(
         )
         mapped = per_operator(
             (chunk, tuple(devs)),
-            lambda: shard_map(
+            lambda: shard_batch(
                 lambda local: jax.lax.map(solve_one, local, batch_size=chunk),
                 mesh=Mesh(devs, ("device",)),
-                in_specs=P("device"),
-                out_specs=P("device"),
-                **check,
+                input_rank=1,
+                output_rank=1,
+                check_vma=False,  # custom_linear_solve fails the varying-axis check.
             ),
         )
         states, moments, residual_norms, tail_bounds, relative, accepted = jax.tree_util.tree_map(

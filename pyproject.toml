@@ -43,7 +43,8 @@ dependencies = [
   # inverse once per Krylov iteration instead of twice (SOLVAX #101), and every
   # published DKX Krylov timing since 2026-09-12 was measured with that
   # behaviour.
-  "solvax>=0.28.1",
+  # 0.35.0 added `shard_batch(check_vma=...)`, which the multi-device batch uses.
+  "solvax>=0.35.0",
 ]
 
 [project.optional-dependencies]
