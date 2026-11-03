@@ -94,12 +94,12 @@ measurements found places where it is not, and the numbers below are the
 record of both.
 
 ```{figure} ../_static/figures/readme/sfincs_reference_limits.png
-:alt: Left, the HSX bootstrap-current gap between released SFINCS and DKX and its removal with the sparsification cutoff at zero. Right, residuals reached on the HSX-like gap deck by each SFINCS route and the DKX Krylov route.
+:alt: Left, the HSX bootstrap-current gap between released SFINCS and DKX and its removal with the sparsification cutoff at zero. Right, residuals reached on the HSX-like gap deck by each SFINCS route and by DKX's default route.
 :width: 92%
 
 Left: the bootstrap-current gap on an HSX deck, before and after setting
 SFINCS's matrix-entry cutoff to zero. Right: the HSX-like gap deck, where no
-route of either code reaches the requested tolerance on a 36 GiB host.
+SFINCS route reaches the requested tolerance on a 36 GiB host and DKX's default route does.
 Regenerate with `python tools/publication_figures/generate_readme_showcase.py`.
 ```
 
@@ -140,10 +140,10 @@ fix is proposed upstream as
 For parity on decks with $\sqrt{T_e m_i / (T_i m_e)} \gtrsim 30$, a SFINCS
 reference is admitted only when built with the cutoff disabled.
 
-### A deck neither code converges
+### A deck SFINCS does not converge
 
 The same HSX-like configuration at $r_N = 0.187$, $E_r = 15$ with $N_\xi = 120$
-and $N_x = 16$ (633,604 unknowns) is not solved by any route of either code on a
+and $N_x = 16$ (633,604 unknowns) is not solved by any route of SFINCS on a
 36 GiB laptop host. SFINCS v3 with the cutoff disabled, one rank, one-hour cap
 per route:
 
@@ -153,11 +153,18 @@ per route:
 | Default GMRES, preconditioned by the simplified matrix (`preconditioner_x = 1`) | stagnant at $\lVert r\rVert/\lVert b\rVert = 0.9955$ after 66 iterations and one hour |
 | `preconditioner_x = 2`, keeping the upper speed triangle | killed for memory after 30.6 min, factoring its preconditioner |
 
-DKX's recycled Krylov route with the coarse preconditioner, which inverts the
-same simplified operator, ran 20,000 iterations to a relative residual of
-2.5e-5. The stall is a property of the preconditioning method both codes share,
-not of either implementation; SFINCS's remedy is a factorization that keeps the
-speed coupling, and both of its routes that attempt one run out of memory.
+DKX's default route (`method = "auto"`: recycled GCROT, restart escalated from 30 to 100 to
+1,000, with the coarse preconditioner that inverts the same simplified operator) converges
+the deck to a true relative residual of 9.0e-9 against a requested 1e-8, in 611 iterations,
+1,658 s and 26.8 GiB peak resident on the 62 GiB shared office workstation (8 pinned
+cores; release 2.11.0 development build, JAX 0.10.2, SOLVAX 0.30.0). Residuals by cycle: 7.0e-2 after 150 iterations at restart 30, 2.8e-2 after 350 at restart 100,
+then 9.0e-9 after 261 more at restart 1,000. An earlier DKX build stopped at 2.5e-5 after
+20,000 iterations. The two SFINCS routes that attempt a factorization run out of memory and
+the third stagnates. The run is a
+convergence record of the linear solve, not a physics comparison: no flows or currents of this
+deck are recorded, and whether it fits the 36 GiB host is unmeasured. It is sealed in
+`validation/hsx_gap_deck_v1.json` (registry entry `hsx_gap_deck`, deck
+`validation/inputs/hsx_like_gap_deck.input.namelist`).
 
 DKX's operator is matrix-free, so its sparse direct route assembles the matrix
 from operator products, one product per group of columns that share no row
