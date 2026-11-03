@@ -15,6 +15,10 @@ _MODULES = [
 
 
 class _Solve:
+    @property
+    def __dict__(self):  # pytest >= 9.2 reads the original value for undo from here.
+        return {name: value for module in reversed(_MODULES) for name, value in vars(module).items()}
+
     def __getattr__(self, name):
         for module in _MODULES:
             if hasattr(module, name):
