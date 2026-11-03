@@ -25,7 +25,14 @@ class _Solve:
         held = [module for module in _MODULES if hasattr(module, name)]
         if not held:
             raise AttributeError(name)
+        saved = self.__dict__.setdefault("_saved", {}).setdefault(name, [])
+        saved.append([(module, getattr(module, name)) for module in held])
         for module in held:
+            setattr(module, name, value)
+
+    def __delattr__(self, name):
+        # ``monkeypatch.undo`` calls this: this object has no ``__dict__`` entry for ``name``.
+        for module, value in self.__dict__["_saved"][name].pop():
             setattr(module, name, value)
 
 
