@@ -459,7 +459,8 @@ def test_generated_full_adjoint_rejects_corrupted_pullback(monkeypatch, checked,
         jax.effects_barrier()
         diagnostics = captured["result"].adjoint
         assert np.linalg.norm(unchecked) > 0
-        assert diagnostics.adjoint_records[0].relative_residual == pytest.approx(.5, rel=1e-8)
+        # One defect correction squares the injected inverse's half-size error.
+        assert diagnostics.adjoint_records[0].relative_residual == pytest.approx(.25, rel=1e-8)
         assert diagnostics.forward_records[0].within_tolerance
         assert not diagnostics.adjoint_records[0].within_tolerance
 
@@ -491,9 +492,15 @@ def test_generated_retained_adjoint_rejects_corrupted_solve(monkeypatch, checked
         assert not captured["result"].adjoint.adjoint_records[0].within_tolerance
 
 
-def test_generated_factor_retention_respects_budget(monkeypatch):
+@pytest.mark.parametrize("inverse_roundoff", [0., 1e-6])
+def test_generated_factor_retention_respects_budget(monkeypatch, inverse_roundoff):
     solver = solve_modules
     build = solver._build_generated_full_solver
+    generated = solver._solve_tier1_truncated
+    def rounded_inverse(*args, **kwargs):
+        result = generated(*args, **kwargs)
+        return replace(result, x=result.x * (1 + inverse_roundoff))
+    monkeypatch.setattr(solver, "_solve_tier1_truncated", rounded_inverse)
     calls = []
     def observed(*args):
         calls.append(True)
