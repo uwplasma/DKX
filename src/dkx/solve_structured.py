@@ -459,15 +459,16 @@ def _solve_generated_full(
         _, pullback = jax.vjp(generated, jnp.zeros_like(b))
         return pullback(b)[0]
     def measured(b, transposed=False):
+        action = apply_t if transposed else apply
+        action = action if single else jax.vmap(action, in_axes=1, out_axes=1)
         if prepared is None:
-            x = transpose(b) if transposed else generated(b)
+            def cached(r):
+                return transpose(r) if transposed else generated(r)
         else:
-            action = apply_t if transposed else apply
-            action = action if single else jax.vmap(action, in_axes=1, out_axes=1)
             def cached(r):
                 value = prepared(r[:, None] if single else r, transpose=transposed)
                 return (value[:, 0] if single else value) + (r-project(r))
-            x, _ = iterative_refinement(action, b, cached, iterations=_TIER1_REFINEMENT_SWEEPS)
+        x, _ = iterative_refinement(action, b, cached, iterations=_TIER1_REFINEMENT_SWEEPS)
         physical_b, physical_x = project(b), project(x)
         for j in range(rhs2d.shape[1]):
             _guarded_solve(
