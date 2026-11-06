@@ -533,3 +533,26 @@ def test_equilibrium_override_matches_explicit_geometry_and_leaves_the_input_int
         np.testing.assert_allclose(actual[key], expected[key], rtol=1e-12, atol=1e-12)
     assert source.read_text() == text
     assert sorted(path.name for path in tmp_path.glob("*.namelist")) == ["input.namelist", "reference.namelist"]
+
+
+def test_public_solve_device_controls_preserve_the_solution_and_refuse_unavailable_devices():
+    import jax
+    import numpy as np
+
+    from dkx.drift_kinetic import KineticOperator
+    from dkx.namelist import read_sfincs_input
+    from dkx.solve import solve
+
+    path = Path(__file__).parent / "ref/pas_1species_PAS_noEr_tiny_scheme1.input.namelist"
+    op = KineticOperator.from_namelist(read_sfincs_input(path))
+    rhs = op.rhs()
+    reference = solve(op, rhs, method="direct", emit=None)
+    for device in ("cpu", "default", jax.local_devices(backend="cpu")[0]):
+        got = solve(op, rhs, method="block_tridiagonal", device=device, emit=None)
+        assert got.converged
+        np.testing.assert_allclose(got.x, reference.x, rtol=1e-9, atol=1e-11)
+    with pytest.raises(ValueError, match="unknown solve device.*expected"):
+        solve(op, rhs, device="invalid", emit=None)
+    if jax.default_backend() == "cpu":
+        with pytest.raises(ValueError, match="no accelerator available"):
+            solve(op, rhs, device="gpu", emit=None)

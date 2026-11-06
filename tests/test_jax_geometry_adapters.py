@@ -696,3 +696,31 @@ def test_vmex_woutdata_adapter_matches_file_reader_on_optional_fixture() -> None
         atol=0.0,
     )
     np.testing.assert_allclose(np.asarray(geom_vmex.d_hat), np.asarray(geom_file.d_hat), rtol=0.0, atol=0.0)
+
+
+@pytest.mark.parametrize("step,passed", [(1e-5, True), (0.2, False)])
+def test_proxy_transport_gate_matches_an_independent_quadratic_derivative(step, passed):
+    gate = jga.boozer_spectrum_proxy_transport_gradient_gate(finite_difference_step=step)
+    theta, zeta = np.arange(16) * 2 * np.pi / 16, np.arange(12) * 2 * np.pi / 60
+    m, n = np.array([0, 1, 1, 2, 3, 4]), np.array([0, 0, 1, -1, 2, -2])
+    basis = np.cos(theta[:, None, None] * m - zeta[None, :, None] * n)
+    centered = (basis - basis.mean(axis=(0, 1))).reshape(-1, 6)
+    dt = (np.roll(basis, -1, axis=0) - basis).reshape(-1, 6)
+    dz = (np.roll(basis, -1, axis=1) - basis).reshape(-1, 6)
+    # The proxy is a normalized quadratic form; differentiate its dense Gram matrix analytically.
+    gram = ((1 + .65 * .35**2) * centered.T @ centered + .1 * dt.T @ dt
+            + .1 * .35**2 * dz.T @ dz
+            - .105 / 2 * (centered.T @ (dt - dz) + (dt - dz).T @ centered)) / len(centered)
+    coeff = np.array([1.0, .045, -.021, .012, .006, -.004])
+    numerator = coeff @ gram @ coeff
+    gradient = 2 * gram @ coeff / coeff[0]**2
+    gradient[0] -= 2 * numerator / coeff[0]**3
+    assert gate["objective"] == pytest.approx(numerator / coeff[0]**2, rel=1e-12)
+    assert gate["gradient_norm"] == pytest.approx(np.linalg.norm(gradient), rel=1e-12)
+    assert (gate["status"] == "pass") == passed
+    assert (gate["max_gradient_abs_error"] <= gate["gradient_tolerance"]) == passed
+    assert gate["jvp_dot_abs_error"] <= gate["jvp_tolerance"]
+    assert gate["grid_shape"] == {"n_theta": 16, "n_zeta": 12}
+    assert gate["optional_dependencies_required"] is False
+    assert gate["claim"] == "dkx_boozer_proxy_transport_objective_autodiff_only"
+    assert "kinetic SFINCS transport solve execution" in gate["not_claimed"]

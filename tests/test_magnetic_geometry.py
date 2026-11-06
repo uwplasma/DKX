@@ -539,32 +539,57 @@ def test_u_and_bsubpsi_matches_scalar_reference(n_theta, n_zeta, non_stel_sym) -
         assert np.array_equal(g, r)
 
 
-@pytest.mark.parametrize("scheme", [11, 12])
+@pytest.mark.parametrize("scheme", [5, 11, 12])
 @pytest.mark.parametrize("suffix", [".toml", ".json"])
-def test_boozer_conversion_roundtrips_geometry_path_and_physical_profiles(tmp_path, scheme, suffix):
+def test_file_geometry_conversion_roundtrips_geometry_path_and_physical_profiles(tmp_path, scheme, suffix):
     from dkx.config import Case, CaseValidationError
     from dkx.input_compat import convert_sfincs_namelist
 
-    geometry = tmp_path / "geometry.bc"
-    geometry.write_text(_two_surface_boozer_text(scheme, text_format="unicode"))
+    if scheme == 5:
+        import netCDF4
+
+        geometry = Path(__file__).parent / "ref/wout_vmex_seed_nfp2_ns13.nc"
+        with netCDF4.Dataset(geometry) as handle:
+            a_hat = float(handle.variables["Aminor_p"][...])
+    else:
+        geometry = tmp_path / "geometry.bc"
+        geometry.write_text(_two_surface_boozer_text(scheme, text_format="unicode"))
+        a_hat = 0.5
     source = Path(__file__).parent / "ref/pas_1species_PAS_noEr_tiny_scheme11.input.namelist"
     text = source.read_text().replace("geometryScheme = 11", f"geometryScheme = {scheme}")
-    text = text.replace('"w7x_standardConfig.bc"', '"geometry.bc"\n  VMECRadialOption = 0')
+    text = text.replace('"w7x_standardConfig.bc"', f'"{geometry.resolve()}"\n  VMECRadialOption = 0')
     deck = tmp_path / "input.namelist"
     deck.write_text(text)
     target = tmp_path / f"case{suffix}"
     case, written = convert_sfincs_namelist(deck, target)
     restored = Case.from_file(written)
     assert case.to_dict() == restored.to_dict() and case.case_id == restored.case_id
-    assert restored.geometry.format == "boozer" and restored.geometry_path == geometry
+    assert restored.geometry.format == ("vmec" if scheme == 5 else "boozer")
+    assert restored.geometry_path == geometry.resolve()
     radius = np.sqrt(restored.geometry.surfaces)
     assert radius[1] == 0.5 and np.all((radius >= 0.4) & (radius <= 0.6))
-    # The converted three-point profile must retain the deck's physical d/drHat drives (aHat=0.5).
-    np.testing.assert_allclose(restored.species[0].density_m3, 1e20 * (1 - 0.25 * (radius - 0.5)))
-    np.testing.assert_allclose(restored.species[0].temperature_keV, 1 - (radius - 0.5))
-    assert np.gradient(restored.species[0].density_m3, 0.5 * radius)[1] == pytest.approx(-0.5e20)
-    assert np.gradient(restored.species[0].temperature_keV, 0.5 * radius)[1] == pytest.approx(-2.0)
+    # The converted three-point profile must retain the deck's physical d/drHat drives.
+    np.testing.assert_allclose(restored.species[0].density_m3, 1e20 * (1 - 0.5 * a_hat * (radius - 0.5)))
+    np.testing.assert_allclose(restored.species[0].temperature_keV, 1 - 2.0 * a_hat * (radius - 0.5))
+    assert np.gradient(restored.species[0].density_m3, a_hat * radius)[1] == pytest.approx(-0.5e20)
+    assert np.gradient(restored.species[0].temperature_keV, a_hat * radius)[1] == pytest.approx(-2.0)
     with pytest.raises(CaseValidationError, match="overwrite|--force"):
         convert_sfincs_namelist(deck, target)
     _, replaced = convert_sfincs_namelist(deck, target, overwrite=True)
     assert Case.from_file(replaced).case_id == restored.case_id
+
+
+@pytest.mark.parametrize("key,value", [("rippleScale", "0.9"), ("min_Bmn_to_load", "0.1"),
+                                     ("VMEC_Nyquist_option", "2"), ("equilibriumFile", "'missing.nc'")])
+def test_vmec_conversion_refuses_unrepresentable_spectra_or_missing_geometry(tmp_path, key, value):
+    from dkx.config import CaseValidationError
+    from dkx.input_compat import convert_sfincs_namelist
+
+    geometry = Path(__file__).parent / "ref/wout_vmex_seed_nfp2_ns13.nc"
+    source = tmp_path / "input.namelist"
+    source.write_text(f'&geometryParameters\n geometryScheme=5\n VMECRadialOption=0\n'
+                      f' equilibriumFile="{geometry.resolve()}"\n {key}={value}\n/\n')
+    target = tmp_path / "case.toml"
+    with pytest.raises(CaseValidationError, match=key):
+        convert_sfincs_namelist(source, target)
+    assert not target.exists()

@@ -638,3 +638,17 @@ def test_native_case_files_reject_ambiguous_types_and_bounds_with_field_context(
     accepted = Case.from_mapping(_mapping())
     write_case_file(accepted, path, overwrite=True)
     assert Case.from_file(path).case_id == accepted.case_id
+
+
+@pytest.mark.parametrize("name,text,detail", [
+    ("case.json", "{", "valid syntax"),
+    ("case.toml", "name = [", "valid syntax"),
+    ("case.json", "[]", "table/object"),
+    ("case.yaml", "name: example", ".toml or .json"),
+])
+def test_case_file_format_errors_name_the_public_format_contract(tmp_path, name, text, detail):
+    path = tmp_path / name
+    path.write_text(text)
+    with pytest.raises(CaseValidationError) as caught:
+        Case.from_file(path)
+    assert detail in str(caught.value)

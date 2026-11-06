@@ -1347,3 +1347,35 @@ def test_representative_flux_bars_preserve_fortran_species_magnitudes(tmp_path, 
         assert len(axis.get_legend().texts) == len(fields)
     finally:
         close("all")
+
+
+@pytest.mark.parametrize("suffix", [".h5", ".nc"])
+@pytest.mark.parametrize("explicit", [False, True])
+def test_plot_cli_detects_real_solver_output_by_content_without_resolving_equilibrium(tmp_path, monkeypatch, capsys, suffix, explicit):
+    import shutil
+
+    from dkx import cli, representative
+
+    source = tmp_path / f"output{suffix}"
+    shutil.copyfile(REF / "output_scheme4_2species_quick.sfincsOutput.h5", source)
+    monkeypatch.setattr(representative, "run_representative",
+                        lambda *args, **kwargs: pytest.fail("solver output must not start an equilibrium workflow"))
+    output = tmp_path / "panels.png"
+    args = (["--plot"] if explicit else []) + [str(source), "--out", str(output)]
+    assert cli.main(args) == 0
+    assert "solver output" in capsys.readouterr().out
+    assert output.is_file() and output.stat().st_size > 0
+
+
+def test_plot_cli_reports_actionable_input_errors_before_starting_a_solve(tmp_path, monkeypatch, capsys):
+    from dkx import cli, representative
+
+    monkeypatch.setattr(representative, "run_representative",
+                        lambda *args, **kwargs: pytest.fail("invalid plot input must not start a solve"))
+    cases = [(["--plot"], "needs a path"),
+             (["--plot", str(tmp_path / "missing.nc")], "no such file"),
+             ([str(REF / "wout_vmex_seed_nfp2_ns13.nc"), "--density-m3", "invalid"], "not a number")]
+    for args, message in cases:
+        assert cli.main(args) == 2
+        captured = capsys.readouterr()
+        assert message in captured.out + captured.err

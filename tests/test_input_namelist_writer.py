@@ -266,3 +266,28 @@ def test_run_overrides_match_explicit_immutable_input_without_mutating_the_base(
         assert got.output_path == out.resolve() and out.is_file()
     with pytest.raises(TypeError, match="unknown SFINCS input parameter.*n_theta"):
         dkx.run(original, n_theta=11)
+
+
+@pytest.mark.parametrize("mass_base", ["mHats = 2, 3", "mHats(1) = 2"])
+def test_indexed_species_overrides_and_rank_two_spectrum_roundtrip(mass_base):
+    text = f"""&geometryParameters
+      geometryScheme = 13
+      boozer_bmnc(0,0) = 1.0
+      boozer_bmnc(1,-2) = 0.03
+    /
+    &speciesParameters
+      Zs = 1, -1
+      {mass_base}
+      mHats(2) = 5.446170214d-4
+      nHats(2) = 0.8
+      nHats(1) = 1.2
+      THats = 1.0, 2.0
+    /
+    """
+    original = sfincs_input_from_raw(parse_sfincs_input_text(text))
+    assert original.species.m_hats == (2.0, 5.446170214e-4)
+    assert original.species.n_hats == (1.2, 0.8)
+    assert original.raw.indexed["geometryparameters"]["BOOZER_BMNC"] == {(0, 0): 1.0, (1, -2): 0.03}
+    restored = sfincs_input_from_raw(parse_sfincs_input_text(original.to_namelist()))
+    _assert_typed_sections_equal(original, restored)
+    assert restored.raw.indexed["geometryparameters"] == original.raw.indexed["geometryparameters"]
