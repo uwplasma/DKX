@@ -487,7 +487,8 @@ def test_the_bootstrap_panel_is_a_radial_profile_with_the_field_beside_it():
         plt.close(fig)
 
 
-def test_a_run_always_leaves_the_numbers_behind(tmp_path):
+@pytest.mark.parametrize("format", ["h5", "json"])
+def test_a_run_always_leaves_the_numbers_behind(tmp_path, monkeypatch, format):
     """A PNG cannot be re-plotted, re-scaled, or checked against another code."""
     from dkx.representative import write_representative_output
 
@@ -495,8 +496,26 @@ def test_a_run_always_leaves_the_numbers_behind(tmp_path):
     profiles = [{"r": 0.5, "er_ambipolar": -1.1, "er_evaluated": -1.1,
                  "evaluation_is_root": True, "bootstrap": -6e-3,
                  "particle_flux": [5e-9, 5e-9], "heat_flux": [7e-8, 1e-8]}]  # fmt: skip
+    if format == "json":
+        import sys
+
+        monkeypatch.setitem(sys.modules, "h5py", None)
     out = write_representative_output(tmp_path / "run.h5", scan=scan, profiles=profiles)
-    assert out.exists() and out.stat().st_size > 0
+    assert out.suffix == f".{format}"
+    if format == "json":
+        import json
+
+        saved = json.loads(out.read_text())
+        np.testing.assert_allclose(saved["monoenergetic/D11"], [-1e-3])
+        np.testing.assert_allclose(saved["profiles/particle_flux"], [[5e-9, 5e-9]])
+        assert saved["profiles/evaluation_is_root"] == [1.0]
+    else:
+        import h5py
+
+        with h5py.File(out) as handle:
+            np.testing.assert_allclose(handle["monoenergetic/D11"], [-1e-3])
+            np.testing.assert_allclose(handle["profiles/particle_flux"], [[5e-9, 5e-9]])
+            np.testing.assert_array_equal(handle["profiles/evaluation_is_root"], [1.0])
 
 
 def test_the_bootstrap_panel_overlays_the_vmec_current_in_kA_per_m2():
@@ -1241,3 +1260,122 @@ def test_ambipolar_panel_labels_roots_and_bootstrap_panel_draws_redl(tmp_path):
     assert labels == {"ion", "unstable", "electron"}
     assert "Redl (same profiles)" in [line.get_label() for line in b.get_lines()]
     plt.close(fig)
+
+
+def test_monoenergetic_scan_reports_the_fortran_matrix_and_solve_status(tmp_path):
+    import h5py
+
+    from dkx.representative import monoenergetic_scan, write_representative_output
+
+    name = "monoenergetic_PAS_tiny_scheme1"
+    with h5py.File(REF / f"{name}.sfincsOutput.h5") as handle:
+        fortran = np.asarray(handle["transportMatrix"])
+        geometry = {key: np.asarray(handle[key]) for key in ("BHat", "theta", "zeta")}
+    messages = []
+    (row,) = monoenergetic_scan(
+        REF / f"{name}.input.namelist", nu_prime=[1.196132e-3], e_star=[0.],
+        resolution={"n_theta": 9, "n_zeta": 9, "n_xi": 6}, emit=messages.append)
+    # The archived Fortran transport table is column-major.
+    np.testing.assert_allclose(np.asarray(row["transport_matrix"]).T, fortran, rtol=2e-8, atol=1e-13)
+    np.testing.assert_allclose([row["D11"], row["D31"], row["D33"]],
+                               [fortran[0, 0], fortran[1, 0], fortran[1, 1]], rtol=2e-8, atol=1e-13)
+    assert row["nu_prime"] == 1.196132e-3 and row["e_star"] == 0.
+    assert row["converged"] and np.isfinite(row["wall_s"]) and row["wall_s"] >= 0.
+    assert len(messages) == 1 and "nuPrime=" in messages[0]
+    out = write_representative_output(tmp_path / "scan.h5", scan=[row], data=geometry)
+    with h5py.File(out) as handle:
+        for key, expected in geometry.items():
+            np.testing.assert_array_equal(handle[f"geometry/{key}"], expected)
+        for key in ("D11", "D31", "D33", "nu_prime", "e_star"):
+            np.testing.assert_array_equal(handle[f"monoenergetic/{key}"], [row[key]])
+
+
+@pytest.mark.parametrize("collision_operator", ["pas", "pas+momentum_correction", "fp"])
+def test_real_representative_profiles_keep_prescribed_field_and_physical_output(
+    tmp_path, collision_operator
+):
+    import h5py
+
+    from dkx import units
+    from dkx.representative import run_representative
+
+    messages = []
+    output = run_representative(
+        REF / "wout_vmex_seed_nfp2_ns13.nc", out_path=tmp_path / "profiles.png",
+        quick=True, surfaces=(0.5,), er=0.0, collision_operator=collision_operator,
+        profiles={"ne_coeffs": [1e20, -.5e20], "Te_coeffs": [2e3, -1e3], "Ti_coeffs": [1e3, -.5e3]},
+        redl_jdotb=([0.0, 1.0], [0.0, 8000.0]), emit=messages.append,
+    )
+    with h5py.File(output.with_suffix(".h5")) as handle:
+        assert handle["profiles/evaluation_status"].asstr()[0] == "prescribed_er"
+        assert handle["profiles/pressure_representation"].asstr()[0] == "explicit"
+        assert handle["profiles/er_evaluated"][0] == 0.0
+        assert not handle["profiles/evaluation_is_root"][0]
+        assert np.isnan(handle["profiles/er_ambipolar"][0])
+        root_b2 = handle["profiles/root_fsab2"][0]
+        assert root_b2 > 0.0
+        np.testing.assert_allclose(handle["profiles/jdotb_redl_kA_m2"], [2.0 / root_b2])
+        np.testing.assert_allclose(handle["profiles/bootstrap_kA_m2"],
+                                   handle["profiles/bootstrap"][:] * units.CURRENT_DENSITY / 1e3)
+        for key in ("particle_flux_si", "heat_flux_si", "bootstrap_kA_m2"):
+            assert np.all(np.isfinite(handle[f"profiles/{key}"]))
+        theta, zeta = handle["geometry/theta"][:], handle["geometry/zeta"][:]
+        assert handle["geometry/BHat"].shape == (len(theta), len(zeta))
+        np.testing.assert_allclose(np.diff(theta), 2 * np.pi / len(theta))
+        np.testing.assert_allclose(np.diff(zeta), np.pi / len(zeta))  # NFP=2
+    assert output.is_file()
+    assert any("status=prescribed_er" in message for message in messages)
+    assert any("NOT an ambipolar root" in message for message in messages)
+    assert messages[-1].lstrip().startswith("total ")
+
+
+@pytest.mark.parametrize("fields", [("particleFlux_vm_psiHat",), ("heatFlux_vm_psiHat",),
+                                     ("particleFlux_vm_psiHat", "heatFlux_vm_psiHat")])
+def test_representative_flux_bars_preserve_fortran_species_magnitudes(tmp_path, monkeypatch, fields):
+    from dkx.io import read_sfincs_output_file
+
+    source = read_sfincs_output_file(REF / "output_scheme4_2species_quick.sfincsOutput.h5")
+    data = {key: source[key] for key in fields}
+    close = plt.close
+    monkeypatch.setattr(plt, "close", lambda figure: None)
+    try:
+        plot_representative(tmp_path / "flux.png", data=data)
+        axis = next(axis for axis in plt.gcf().axes if axis.get_title() == "particle and heat flux")
+        expected = np.concatenate([np.abs(np.asarray(source[key]).ravel()) for key in fields])
+        np.testing.assert_allclose([bar.get_height() for bar in axis.patches], expected)
+        assert axis.get_yscale() == "log"
+        assert len(axis.get_legend().texts) == len(fields)
+    finally:
+        close("all")
+
+
+@pytest.mark.parametrize("suffix", [".h5", ".nc"])
+@pytest.mark.parametrize("explicit", [False, True])
+def test_plot_cli_detects_real_solver_output_by_content_without_resolving_equilibrium(tmp_path, monkeypatch, capsys, suffix, explicit):
+    import shutil
+
+    from dkx import cli, representative
+
+    source = tmp_path / f"output{suffix}"
+    shutil.copyfile(REF / "output_scheme4_2species_quick.sfincsOutput.h5", source)
+    monkeypatch.setattr(representative, "run_representative",
+                        lambda *args, **kwargs: pytest.fail("solver output must not start an equilibrium workflow"))
+    output = tmp_path / "panels.png"
+    args = (["--plot"] if explicit else []) + [str(source), "--out", str(output)]
+    assert cli.main(args) == 0
+    assert "solver output" in capsys.readouterr().out
+    assert output.is_file() and output.stat().st_size > 0
+
+
+def test_plot_cli_reports_actionable_input_errors_before_starting_a_solve(tmp_path, monkeypatch, capsys):
+    from dkx import cli, representative
+
+    monkeypatch.setattr(representative, "run_representative",
+                        lambda *args, **kwargs: pytest.fail("invalid plot input must not start a solve"))
+    cases = [(["--plot"], "needs a path"),
+             (["--plot", str(tmp_path / "missing.nc")], "no such file"),
+             ([str(REF / "wout_vmex_seed_nfp2_ns13.nc"), "--density-m3", "invalid"], "not a number")]
+    for args, message in cases:
+        assert cli.main(args) == 2
+        captured = capsys.readouterr()
+        assert message in captured.out + captured.err

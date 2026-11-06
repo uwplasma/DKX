@@ -603,3 +603,52 @@ def test_recorded_example_case_ids_survive_the_implicit_version() -> None:
     }
     for name, case_id in recorded.items():
         assert Case.from_file(REPO_ROOT / "examples" / name).case_id == case_id
+
+
+@pytest.mark.parametrize("group,key,value", [
+    ("run", "device", ""),
+    ("run", "progress", 1),
+    ("geometry", "file", ""),
+    ("geometry", "surfaces", []),
+    ("geometry", "surfaces", [0.25, 0.25]),
+    ("electric_field", "value_kV_m", "1.0"),
+    ("electric_field", "search_kV_m", [-1, 0, 1]),
+    ("electric_field", "max_root_iterations", 0),
+    ("resolution", "pitch", True),
+    ("resolution", "pitch_modes_by_speed", [4, 4, 8]),
+    ("resolution", "pitch_modes_by_speed", [4, 4, 4, 7]),
+    ("parallel", "shard", ["surface", "surface"]),
+    ("convergence", "observables", ["particle_flux_m2_s", "particle_flux_m2_s"]),
+    ("convergence", "max_refinements", -1),
+    ("solver", "relative_tolerance", 2),
+    ("solver", "memory_fraction", 0),
+])
+def test_native_case_files_reject_ambiguous_types_and_bounds_with_field_context(tmp_path, group, key, value):
+    raw = _mapping()
+    raw.setdefault(group, {})[key] = value
+    path = tmp_path / "case.json"
+    path.write_text(json.dumps(raw))
+    for load in (lambda: Case.from_mapping(raw), lambda: Case.from_file(path)):
+        with pytest.raises(CaseValidationError) as caught:
+            load()
+        message = str(caught.value)
+        assert f"{group}.{key}" in message and "expected" in message.lower()
+    from dkx.input_compat import write_case_file
+
+    accepted = Case.from_mapping(_mapping())
+    write_case_file(accepted, path, overwrite=True)
+    assert Case.from_file(path).case_id == accepted.case_id
+
+
+@pytest.mark.parametrize("name,text,detail", [
+    ("case.json", "{", "valid syntax"),
+    ("case.toml", "name = [", "valid syntax"),
+    ("case.json", "[]", "table/object"),
+    ("case.yaml", "name: example", ".toml or .json"),
+])
+def test_case_file_format_errors_name_the_public_format_contract(tmp_path, name, text, detail):
+    path = tmp_path / name
+    path.write_text(text)
+    with pytest.raises(CaseValidationError) as caught:
+        Case.from_file(path)
+    assert detail in str(caught.value)

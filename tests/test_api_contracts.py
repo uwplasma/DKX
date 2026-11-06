@@ -506,3 +506,53 @@ def test_public_ambipolar_facade_forwards_bracket_and_tolerances(
     assert calls[0]["er_initial"] == 0.25
     assert calls[0]["current_tol"] == 1e-9
     assert calls[0]["solve_method"] == "gmres"
+
+
+@pytest.mark.parametrize("in_memory", [False, True])
+def test_equilibrium_override_matches_explicit_geometry_and_leaves_the_input_intact(tmp_path, in_memory):
+    import numpy as np
+
+    from dkx.inputs import load_sfincs_input
+    from dkx.io import read_sfincs_output_file
+
+    ref = Path(__file__).parent / "ref"
+    template = (ref / "pas_1species_PAS_noEr_tiny_scheme1.input.namelist").read_text()
+    text = template.replace("geometryScheme = 1", 'geometryScheme = 5\n equilibriumFile = "missing.nc"\n VMECRadialOption = 0')
+    source, explicit = tmp_path / "input.namelist", tmp_path / "reference.namelist"
+    source.write_text(text)
+    equilibrium = ref / "wout_vmex_seed_nfp2_ns13.nc"
+    explicit.write_text(text.replace("missing.nc", str(equilibrium.resolve())))
+    expected_path = write_output(explicit, tmp_path / "reference.h5", geometry_only=True)
+    output = tmp_path / "override.h5"
+    if in_memory:
+        write_output(load_sfincs_input(source), output, wout_path=equilibrium, geometry_only=True)
+    else:
+        write_output(SolveInputs(input_path=source, wout_path=equilibrium, output_path=output), geometry_only=True)
+    expected, actual = read_sfincs_output_file(expected_path), read_sfincs_output_file(output)
+    for key in ("BHat", "BHat_sub_theta", "BHat_sub_zeta", "BHat_sup_theta", "BHat_sup_zeta"):
+        np.testing.assert_allclose(actual[key], expected[key], rtol=1e-12, atol=1e-12)
+    assert source.read_text() == text
+    assert sorted(path.name for path in tmp_path.glob("*.namelist")) == ["input.namelist", "reference.namelist"]
+
+
+def test_public_solve_device_controls_preserve_the_solution_and_refuse_unavailable_devices():
+    import jax
+    import numpy as np
+
+    from dkx.drift_kinetic import KineticOperator
+    from dkx.namelist import read_sfincs_input
+    from dkx.solve import solve
+
+    path = Path(__file__).parent / "ref/pas_1species_PAS_noEr_tiny_scheme1.input.namelist"
+    op = KineticOperator.from_namelist(read_sfincs_input(path))
+    rhs = op.rhs()
+    reference = solve(op, rhs, method="direct", emit=None)
+    for device in ("cpu", "default", jax.local_devices(backend="cpu")[0]):
+        got = solve(op, rhs, method="block_tridiagonal", device=device, emit=None)
+        assert got.converged
+        np.testing.assert_allclose(got.x, reference.x, rtol=1e-9, atol=1e-11)
+    with pytest.raises(ValueError, match="unknown solve device.*expected"):
+        solve(op, rhs, device="invalid", emit=None)
+    if jax.default_backend() == "cpu":
+        with pytest.raises(ValueError, match="no accelerator available"):
+            solve(op, rhs, device="gpu", emit=None)

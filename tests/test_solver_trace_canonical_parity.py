@@ -74,3 +74,24 @@ def test_canonical_solver_trace_matches_legacy(base: str, rhs_mode: int, tmp_pat
     assert canonical.metadata["compute_transport_matrix"] is (rhs_mode in (2, 3))
     assert canonical.metadata["differentiable"] is False
     assert canonical.metadata["input_namelist"] == str(input_path.resolve())
+
+
+@pytest.mark.parametrize("suffix", [".h5", ".nc", ".npz"])
+def test_geometry_only_trace_preserves_intent_without_claiming_a_solve(tmp_path: Path, suffix) -> None:
+    import numpy as np
+
+    from dkx.io import read_sfincs_output_file
+
+    input_path = REF / "pas_1species_PAS_noEr_tiny_scheme1.input.namelist"
+    output, trace_path = tmp_path / f"geometry{suffix}", tmp_path / "geometry.json"
+    write_output(input_path, output, geometry_only=True, solver_trace_path=trace_path)
+    trace = read_solver_trace_json(trace_path)
+    data = read_sfincs_output_file(output)
+    assert trace.selected_path == "geometry_only"
+    assert trace.geometry_scheme == 1 and trace.rhs_mode == 1
+    assert trace.total_size > 0 and 0 < trace.active_size <= trace.total_size
+    assert trace.solve_method is None and trace.residual_norm is None and trace.converged is None
+    assert not trace.metadata["compute_solution"] and not trace.metadata["compute_transport_matrix"]
+    assert trace.metadata["output_path"] == str(output.resolve())
+    assert trace.elapsed_s >= 0.0
+    assert np.all(np.isfinite(data["BHat"])) and np.min(data["BHat"]) > 0.0

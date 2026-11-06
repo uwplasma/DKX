@@ -29,6 +29,84 @@ from dkx.magnetic_geometry import (
 _NONSTELSYM_WOUT = Path(__file__).parent / "ref" / "wout_up_down_asymmetric_tokamak.nc"
 
 
+def _two_surface_boozer_text(scheme, *, text_format="ascii", cstconfig=False):
+    comment = "CC CStconfig" if cstconfig else "CC native Fourier geometry"
+    if text_format == "unicode":
+        comment += " — magnetic field"
+    lines = [comment, "1 1 2 2 1.0 0.5", "columns"]
+    for k, (radius, iota, g, current, pressure, b0, cosine, sine) in enumerate([
+        (.16, .4, 5e6, 1e5, -1000., 1., .05, .02),
+        (.36, .5, 5.1e6, 1.1e5, -900., 1.1, .04, .03),
+    ]):
+        def numbers(values):
+            return " ".join(f"{v:.16e}".replace("e", "D" if j % 2 else "d")
+                            if text_format != "ascii" else str(v)
+                            for j, v in enumerate(values))
+        lines += [f"s = {radius}", numbers([radius, iota, g, current, pressure]), "units"]
+        zero = [3. + .1 * k, 0., 0., b0] if scheme == 11 else [3. + .1 * k, 0., 0., 0., 0., 0., b0, 0.]
+        mode = [.1, .1, .03, cosine] if scheme == 11 else [.1, .02, .03, .1, .01, .02, cosine, sine]
+        lines += ["0 0 " + numbers(zero)]
+        if text_format != "ascii":
+            lines += ["! Fourier coefficient"]
+        lines += ["1 1 " + numbers(mode) + (" 99 ! m,n=1,1" if text_format != "ascii" else "")]
+    return "\n".join(lines) + "\n"
+
+
+@pytest.mark.parametrize("scheme,cstconfig", [(11, False), (11, True), (12, False)])
+@pytest.mark.parametrize("text_format", ["ascii", "fortran", "unicode"])
+def test_native_boozer_text_preserves_units_parity_and_radial_fields(
+    tmp_path, scheme, cstconfig, text_format
+):
+    path = tmp_path / "geometry.bc"
+    path.write_text(_two_surface_boozer_text(scheme, text_format=text_format,
+                                          cstconfig=cstconfig), encoding="utf-8")
+    data = read_native_boozer(path)
+    assert data.geometry_scheme == scheme
+    assert data.header.n_periods == 2
+    assert data.header.a_hat == .5
+    flux_sign = 1 if cstconfig else -1
+    assert data.header.psi_a_hat == pytest.approx(flux_sign / (2 * math.pi))
+    np.testing.assert_allclose([v.r_n for v in data.surfaces], [.4, .6])
+    np.testing.assert_allclose([v.g_hat for v in data.surfaces], [-2., -2.04])
+    np.testing.assert_allclose([v.i_hat for v in data.surfaces], [-.02, -.022])
+    np.testing.assert_allclose([v.p_prime_hat * data.header.psi_a_hat for v in data.surfaces],
+                               np.array([-1000., -900.]) * 4e-7 * math.pi)
+    np.testing.assert_array_equal(data.surfaces[0].parity, [True] if scheme == 11 else [True, False])
+    np.testing.assert_allclose(data.surfaces[0].b_amp, [.05] if scheme == 11 else [.05, .02])
+    np.testing.assert_allclose([v.r0 for v in data.surfaces], [3., 3.1])
+    np.testing.assert_allclose(data.surfaces[0].r_amp, [.1] if scheme == 11 else [.1, .02])
+    # Z and the toroidal-angle correction use the complementary sine/cosine basis.
+    np.testing.assert_allclose(data.surfaces[0].z_amp, [.1] if scheme == 11 else [.1, .03])
+    np.testing.assert_allclose(data.surfaces[0].dz_amp, [.03] if scheme == 11 else [.02, .01])
+    theta, zeta = _grid(7, 5, 2)
+    geometry = FluxSurfaceGeometry.from_boozer_data(
+        data, theta=theta, zeta=zeta, r_n_wish=.5, vmec_radial_option=2)
+    phase = np.asarray(theta)[:, None] + 2 * np.asarray(zeta)[None, :]
+    sine = .0245 if scheme == 12 else 0.
+    expected = 1.045 + .0455 * np.cos(phase) + sine * np.sin(phase)
+    derivative = -.0455 * np.sin(phase) + sine * np.cos(phase)
+    np.testing.assert_allclose(geometry.b_hat, expected, rtol=1e-13, atol=1e-13)
+    np.testing.assert_allclose(geometry.db_hat_dtheta, derivative, atol=1e-13)
+    np.testing.assert_allclose(geometry.db_hat_dzeta, 2 * derivative, atol=1e-13)
+    delta_b = .1 - .01 * np.cos(phase) + (.01 * np.sin(phase) if scheme == 12 else 0.)
+    np.testing.assert_allclose(geometry.db_hat_dpsi_hat * (.2 * data.header.psi_a_hat), delta_b, atol=1e-13)
+    assert float(geometry.iota) == pytest.approx(-.445)
+    assert float(geometry.g_hat) == pytest.approx(-2.018 if scheme == 11 and not cstconfig else 2.018)
+    assert float(geometry.i_hat) == pytest.approx(.0209 if scheme == 11 and not cstconfig else -.0209)
+
+
+@pytest.mark.parametrize("text_format", ["ascii", "unicode"])
+def test_native_boozer_rejects_missing_mean_field_and_single_surface(tmp_path, text_format):
+    text = _two_surface_boozer_text(11, text_format=text_format)
+    path = tmp_path / "geometry.bc"
+    path.write_text("\n".join(line for line in text.splitlines() if not line.startswith("0 0 ")), encoding="utf-8")
+    with pytest.raises(ValueError, match=r"No \(0,0\) mode"):
+        read_native_boozer(path)
+    path.write_text(text[:text.index("s = 0.36")], encoding="utf-8")
+    with pytest.raises(ValueError, match="at least two"):
+        read_native_boozer(path)
+
+
 def test_native_boozer_reader_detects_both_checked_column_conventions(
     tmp_path, monkeypatch
 ) -> None:
@@ -52,22 +130,7 @@ def test_native_boozer_reader_detects_both_checked_column_conventions(
     assert any(np.any(~surface.parity) for surface in scheme12.surfaces)
 
     scheme11_path = tmp_path / "tiny_scheme11.bc"
-    scheme11_path.write_text(
-        """CC native scheme-11 detector fixture
-1 1 2 2 1.0 0.5
-columns
-s = 0.16
-0.16 0.4 5000000.0 100000.0 -1000.0
-units
-0 0 1.0 0.0 0.0 1.0
-1 0 0.1 0.1 0.0 0.05
-s = 0.36
-0.36 0.5 5100000.0 110000.0 -900.0
-units
-0 0 1.1 0.0 0.0 1.05
-1 0 0.12 0.12 0.0 0.04
-"""
-    )
+    scheme11_path.write_text(_two_surface_boozer_text(11))
     scheme11 = read_native_boozer(scheme11_path)
     assert scheme11.geometry_scheme == 11
     assert len(scheme11.surfaces) == 2
@@ -474,3 +537,59 @@ def test_u_and_bsubpsi_matches_scalar_reference(n_theta, n_zeta, non_stel_sym) -
     ref = _u_and_bsubpsi_reference(**kwargs)
     for g, r in zip(got, ref):
         assert np.array_equal(g, r)
+
+
+@pytest.mark.parametrize("scheme", [5, 11, 12])
+@pytest.mark.parametrize("suffix", [".toml", ".json"])
+def test_file_geometry_conversion_roundtrips_geometry_path_and_physical_profiles(tmp_path, scheme, suffix):
+    from dkx.config import Case, CaseValidationError
+    from dkx.input_compat import convert_sfincs_namelist
+
+    if scheme == 5:
+        import netCDF4
+
+        geometry = Path(__file__).parent / "ref/wout_vmex_seed_nfp2_ns13.nc"
+        with netCDF4.Dataset(geometry) as handle:
+            a_hat = float(handle.variables["Aminor_p"][...])
+    else:
+        geometry = tmp_path / "geometry.bc"
+        geometry.write_text(_two_surface_boozer_text(scheme, text_format="unicode"))
+        a_hat = 0.5
+    source = Path(__file__).parent / "ref/pas_1species_PAS_noEr_tiny_scheme11.input.namelist"
+    text = source.read_text().replace("geometryScheme = 11", f"geometryScheme = {scheme}")
+    text = text.replace('"w7x_standardConfig.bc"', f'"{geometry.resolve()}"\n  VMECRadialOption = 0')
+    deck = tmp_path / "input.namelist"
+    deck.write_text(text)
+    target = tmp_path / f"case{suffix}"
+    case, written = convert_sfincs_namelist(deck, target)
+    restored = Case.from_file(written)
+    assert case.to_dict() == restored.to_dict() and case.case_id == restored.case_id
+    assert restored.geometry.format == ("vmec" if scheme == 5 else "boozer")
+    assert restored.geometry_path == geometry.resolve()
+    radius = np.sqrt(restored.geometry.surfaces)
+    assert radius[1] == 0.5 and np.all((radius >= 0.4) & (radius <= 0.6))
+    # The converted three-point profile must retain the deck's physical d/drHat drives.
+    np.testing.assert_allclose(restored.species[0].density_m3, 1e20 * (1 - 0.5 * a_hat * (radius - 0.5)))
+    np.testing.assert_allclose(restored.species[0].temperature_keV, 1 - 2.0 * a_hat * (radius - 0.5))
+    assert np.gradient(restored.species[0].density_m3, a_hat * radius)[1] == pytest.approx(-0.5e20)
+    assert np.gradient(restored.species[0].temperature_keV, a_hat * radius)[1] == pytest.approx(-2.0)
+    with pytest.raises(CaseValidationError, match="overwrite|--force"):
+        convert_sfincs_namelist(deck, target)
+    _, replaced = convert_sfincs_namelist(deck, target, overwrite=True)
+    assert Case.from_file(replaced).case_id == restored.case_id
+
+
+@pytest.mark.parametrize("key,value", [("rippleScale", "0.9"), ("min_Bmn_to_load", "0.1"),
+                                     ("VMEC_Nyquist_option", "2"), ("equilibriumFile", "'missing.nc'")])
+def test_vmec_conversion_refuses_unrepresentable_spectra_or_missing_geometry(tmp_path, key, value):
+    from dkx.config import CaseValidationError
+    from dkx.input_compat import convert_sfincs_namelist
+
+    geometry = Path(__file__).parent / "ref/wout_vmex_seed_nfp2_ns13.nc"
+    source = tmp_path / "input.namelist"
+    source.write_text(f'&geometryParameters\n geometryScheme=5\n VMECRadialOption=0\n'
+                      f' equilibriumFile="{geometry.resolve()}"\n {key}={value}\n/\n')
+    target = tmp_path / "case.toml"
+    with pytest.raises(CaseValidationError, match=key):
+        convert_sfincs_namelist(source, target)
+    assert not target.exists()

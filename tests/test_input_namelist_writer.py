@@ -199,3 +199,95 @@ def test_write_output_accepts_in_memory_input_and_stores_provenance(tmp_path: Pa
 
     with pytest.raises(ValueError, match="output_path is required"):
         write_output(inp)
+
+
+@pytest.mark.parametrize("key,bad,good,message", [
+    ("Nzeta", 0, 1, "Nzeta must be positive"),
+    ("Nxi", 0, 3, "Nxi must be positive"),
+    ("Nx", 0, 3, "Nx must be positive"),
+    ("NL", -1, 2, "NL must be at least 0"),
+    ("xMax", 0, 2, "xMax must be positive"),
+    ("solverTolerance", 0, 1e-8, "solverTolerance must be positive"),
+    ("Zs", [0], [1], "Charges Zs cannot be zero"),
+    ("mHats", [0], [1], "Masses mHats must be positive"),
+    ("THats", [0], [1], "Temperatures THats must be positive"),
+    ("nHats", [0], [1], "Densities nHats must be positive"),
+    ("thetaDerivativeScheme", 99, 2, "thetaDerivativeScheme must be"),
+    ("zetaDerivativeScheme", 99, 2, "zetaDerivativeScheme must be"),
+    ("magneticDriftDerivativeScheme", 99, 0, "magneticDriftDerivativeScheme must be"),
+    ("xGridScheme", 9, 5, "xGridScheme must be between 1 and 8"),
+    ("xDotDerivativeScheme", -3, 0, "xDotDerivativeScheme must be between"),
+    ("xPotentialsGridScheme", 5, 3, "xPotentialsGridScheme must be between"),
+    ("preconditioner_species", 2, 0, "preconditioner_species must be"),
+    ("preconditioner_x", 5, 0, "preconditioner_x must be"),
+    ("preconditioner_xi", 2, 0, "preconditioner_xi must be"),
+    ("preconditioner_theta", 4, 0, "preconditioner_theta must be"),
+    ("preconditioner_zeta", 4, 0, "preconditioner_zeta must be"),
+    ("preconditioner_x_min_L", -1, 0, "must be at least 0"),
+])
+def test_invalid_physical_and_grid_options_fail_before_solve_and_valid_values_roundtrip(
+    key, bad, good, message
+):
+    # Python construction and file parsing must enforce the same public bounds.
+    unchecked = SfincsInput.from_params(geometryScheme=1, validate=False, **{key: bad})
+    with pytest.raises(ValueError, match=message):
+        SfincsInput.from_params(geometryScheme=1, **{key: bad})
+    with pytest.raises(ValueError, match=message):
+        sfincs_input_from_raw(parse_sfincs_input_text(unchecked.to_namelist()))
+    accepted = SfincsInput.from_params(geometryScheme=1, **{key: good})
+    restored = sfincs_input_from_raw(parse_sfincs_input_text(accepted.to_namelist()))
+    _assert_typed_sections_equal(accepted, restored)
+
+
+@pytest.mark.parametrize("in_memory", [False, True])
+@pytest.mark.parametrize("save", [False, True])
+def test_run_overrides_match_explicit_immutable_input_without_mutating_the_base(tmp_path, in_memory, save):
+    from dataclasses import replace
+
+    import numpy as np
+
+    import dkx
+    from dkx.run import run_profile
+
+    path = REPO_ROOT / "tests/ref/pas_1species_PAS_noEr_tiny_scheme1.input.namelist"
+    original = load_sfincs_input(path)
+    expected_input = replace(
+        original, resolution=replace(original.resolution, n_theta=11),
+        species=replace(original.species, n_hats=(0.8,)),
+    )
+    expected = run_profile(expected_input, emit=None)
+    out = tmp_path / "profile.npz" if save else None
+    got = dkx.run(original if in_memory else path, NTHETA=11, nHats=[0.8], out=out, tol=1e-10)
+    assert original.resolution.n_theta == 9 and original.species.n_hats == (1.0,)
+    assert got.operator.n_theta == 11
+    for key in ("FSABjHat", "particleFlux_vm_psiHat", "heatFlux_vm_psiHat"):
+        np.testing.assert_allclose(got.moments[key], expected.moments[key], rtol=1e-9, atol=1e-12)
+    if save:
+        assert got.output_path == out.resolve() and out.is_file()
+    with pytest.raises(TypeError, match="unknown SFINCS input parameter.*n_theta"):
+        dkx.run(original, n_theta=11)
+
+
+@pytest.mark.parametrize("mass_base", ["mHats = 2, 3", "mHats(1) = 2"])
+def test_indexed_species_overrides_and_rank_two_spectrum_roundtrip(mass_base):
+    text = f"""&geometryParameters
+      geometryScheme = 13
+      boozer_bmnc(0,0) = 1.0
+      boozer_bmnc(1,-2) = 0.03
+    /
+    &speciesParameters
+      Zs = 1, -1
+      {mass_base}
+      mHats(2) = 5.446170214d-4
+      nHats(2) = 0.8
+      nHats(1) = 1.2
+      THats = 1.0, 2.0
+    /
+    """
+    original = sfincs_input_from_raw(parse_sfincs_input_text(text))
+    assert original.species.m_hats == (2.0, 5.446170214e-4)
+    assert original.species.n_hats == (1.2, 0.8)
+    assert original.raw.indexed["geometryparameters"]["BOOZER_BMNC"] == {(0, 0): 1.0, (1, -2): 0.03}
+    restored = sfincs_input_from_raw(parse_sfincs_input_text(original.to_namelist()))
+    _assert_typed_sections_equal(original, restored)
+    assert restored.raw.indexed["geometryparameters"] == original.raw.indexed["geometryparameters"]

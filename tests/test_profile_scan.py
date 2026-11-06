@@ -75,6 +75,7 @@ def test_run_profile_scan_writes_one_deck_per_radius_and_collects_failures(tmp_p
     (tmp_path / "input.namelist").write_text(DECK)
     (tmp_path / "profile_x").write_text(PROFILE)
     calls = []
+    messages = []
 
     def _scan_er(*, input_namelist, out_dir, values, **_kwargs):
         calls.append((Path(input_namelist), Path(out_dir), list(values)))
@@ -82,10 +83,13 @@ def test_run_profile_scan_writes_one_deck_per_radius_and_collects_failures(tmp_p
         return SimpleNamespace(failures=failed)
 
     result = run_profile_scan(
-        input_namelist=tmp_path / "input.namelist", out_dir=tmp_path / "scan", scan_er=_scan_er
+        input_namelist=tmp_path / "input.namelist", out_dir=tmp_path / "scan", scan_er=_scan_er,
+        emit=lambda level, text: messages.append(text),
     )
 
     assert result.radii == (0.2, 0.8) and result.n_points == 6
+    assert any("rN=0.2 3 E_r points" in text for text in messages)
+    assert any("rN=0.8 3 E_r points" in text for text in messages)
     assert [c[1].name for c in calls] == ["rN_0.2", "rN_0.8"]
     assert calls[0][2] == pytest.approx(np.linspace(-2, 2.8, 3))  # Ermax = 2 + 4 rN at rN = 0.2
     nml = read_sfincs_input(calls[0][0])
@@ -109,6 +113,9 @@ def test_run_profile_scan_rejects_unsupported_decks(tmp_path: Path) -> None:
         run_profile_scan(input_namelist=tmp_path / "input.namelist", out_dir=tmp_path / "s")
     (tmp_path / "input.namelist").write_text(DECK.replace("dNHatdrHats", "dNHatdpsiNs"))
     with pytest.raises(ValueError, match="dNHatdrHats"):
+        run_profile_scan(input_namelist=tmp_path / "input.namelist", out_dir=tmp_path / "s")
+    (tmp_path / "input.namelist").write_text(DECK.replace("Zs = 1.0 -1.0", "Zs = 1.0 2.0"))
+    with pytest.raises(ValueError, match="one ion and one electron profile"):
         run_profile_scan(input_namelist=tmp_path / "input.namelist", out_dir=tmp_path / "s")
 
 
@@ -153,11 +160,13 @@ def _write(d: Path, text: str) -> Path:
     return d / "input.namelist"
 
 
-def test_scan_types_1_3_4_write_upstream_folders(tmp_path: Path) -> None:
+def test_scan_types_1_2_3_4_write_upstream_folders(tmp_path: Path) -> None:
     """Each type on the tiny deck: upstream folder names, solved outputs, legacy ``rN<r>`` folders reused."""
     from dkx.workflows.profile_scan import scan
 
     cases = {
+        "two": (DECK.replace("!ss scanType = 5", "!ss scanType = 2\n!ss ErMin = -0.001\n!ss ErMax = 0.001\n!ss NErs = 2"),
+                {"Er-0.001", "Er0.001"}),
         "four": (DECK.replace("scanType = 5", "scanType = 4"), {"rN0.2", "rN_0.8"}),
         "three": (
             DECK.replace("!ss scanType = 5", "!ss scanType = 3\n!ss scanVariable = Nxi\n!ss scanVariableMin = 3\n"
@@ -179,3 +188,67 @@ def test_scan_types_1_3_4_write_upstream_folders(tmp_path: Path) -> None:
         assert {p.parent.name for p in (path.parent / "out").glob("*/sfincsOutput.h5")} == folders
     with pytest.raises(ValueError, match="scanType 3 needs"):
         scan(_write(tmp_path / "bad", DECK.replace("scanType = 5", "scanType = 3")), out_dir=tmp_path / "x")
+
+
+
+def test_scan_keeps_completed_points_when_another_grid_is_refused(tmp_path):
+    from dkx.workflows.profile_scan import ScanInputError, scan
+
+    base = DECK.replace("!ss scanType = 5", "!ss scanType = 3\n!ss scanVariable = Nxi\n"
+                        "!ss scanVariableMin = 4\n!ss scanVariableMax = 4\n!ss scanVariableN = 1\n"
+                        "!ss scanVariableScale = linear")
+    path = _write(tmp_path / "points", base)
+    out = path.parent / "out"
+    assert scan(path, out_dir=out).failures == ()
+    completed = out / "Nxi_4/sfincsOutput.h5"
+    original = completed.read_bytes()
+    path.write_text(base.replace("scanVariableMin = 4", "scanVariableMin = 0").replace("scanVariableN = 1", "scanVariableN = 2"))
+    messages = []
+    result = scan(path, out_dir=out, skip_existing=True, emit=lambda level, text: messages.append(text))
+    assert completed.read_bytes() == original and len(result.failures) == 1
+    report = json.loads((out / "scan_failures.json").read_text())
+    assert report[0]["point"] == "Nxi_0" and "Nxi must be positive" in report[0]["reason"]
+    assert any("Nxi_0 FAILED" in message for message in messages)
+    bad = _write(tmp_path / "missing_bounds", DECK.replace("scanType = 5", "scanType = 2"))
+    with pytest.raises(ScanInputError, match="NErs.*Min.*Max"):
+        scan(bad, out_dir=tmp_path / "bad")
+
+
+@pytest.mark.parametrize("text,message", [
+    ("3\n0 invalid\n", "cannot read numbers"),
+    ("2\n", "radial coordinate"),
+    ("3\n0.5 1 -1 1 1 1 1 1\n", "at least two radii"),
+])
+def test_profile_file_refuses_unusable_coordinates_or_numbers_with_context(tmp_path, text, message):
+    path = tmp_path / "profile_input"
+    path.write_text(text)
+    with pytest.raises(ValueError) as caught:
+        read_profiles(path)
+    assert path.name in str(caught.value) and message in str(caught.value)
+
+
+@pytest.mark.parametrize("count", [0, 2])
+def test_profile_scan_requires_an_unambiguous_profile_file(tmp_path, count):
+    (tmp_path / "input.namelist").write_text(DECK)
+    for index in range(count):
+        (tmp_path / f"profile_{index}").write_text(PROFILE)
+    with pytest.raises(ValueError, match=f"pass --profiles: found {count} files"):
+        run_profile_scan(input_namelist=tmp_path / "input.namelist", out_dir=tmp_path / "scan")
+    assert not (tmp_path / "scan").exists()
+
+
+@pytest.mark.parametrize("metadata,message", [
+    ("scanType=3\n!ss scanVariable=Er\n!ss scanVariableScale=linear", "scanVariableMin.*scanVariableMax.*scanVariableN"),
+    ("scanType=3\n!ss scanVariable=Er\n!ss scanVariableMin=-1\n!ss scanVariableMax=1\n!ss scanVariableN=3\n!ss scanVariableScale=log", "same sign.*logarithmic"),
+    ("scanType=3\n!ss scanVariable=missing\n!ss scanVariableMin=1\n!ss scanVariableMax=2\n!ss scanVariableN=2\n!ss scanVariableScale=linear", "scanVariable missing must be assigned"),
+    ("scanType=1\n!ss NxiNumRuns=1", "Nxi.*MinFactor.*MaxFactor.*NumRuns"),
+])
+def test_scan_refuses_incomplete_or_ambiguous_controls_before_launch(tmp_path, metadata, message):
+    from dkx.workflows.profile_scan import ScanInputError, scan
+
+    source = tmp_path / "input.namelist"
+    source.write_text(DECK.replace("scanType = 5", metadata))
+    output = tmp_path / "scan"
+    with pytest.raises(ScanInputError, match=message):
+        scan(source, out_dir=output)
+    assert not output.exists()

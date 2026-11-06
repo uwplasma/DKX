@@ -831,3 +831,41 @@ def test_certificate_gates_the_ambipolar_root_in_kv_per_m(monkeypatch):
     certified = cv.certify_resolution(case, result)
     assert certified.arrays["resolution_root_change_kV_m"] == pytest.approx([0.02, 0.2])
     assert certified.arrays["resolution_resolved"].tolist() == [1, 0]
+
+
+@pytest.mark.parametrize("format", ["json", "table"])
+@pytest.mark.parametrize("outcome", ["accepted", "refused", "coupled"])
+def test_cli_convergence_preserves_solver_refusal_and_joint_verdict(
+    monkeypatch, capsys, format, outcome
+):
+    import json
+
+    from dkx import cli
+
+    def response(resolution):
+        if outcome == "refused" and resolution.theta > 10:
+            raise RuntimeError("refinement did not solve")
+        return 2.0 if outcome == "coupled" and resolution.theta > 10 and resolution.pitch > 10 else 1.0
+
+    report, _ = study(monkeypatch, response, axes=("theta", "pitch"))
+    monkeypatch.setattr(cv, "converge_sfincs_input", lambda *args, **kwargs: report)
+    code = cli.main(["converge", "input.namelist", "--format", format, "--quiet"])
+    assert code == (0 if outcome == "accepted" else 1)
+    output = capsys.readouterr().out
+    if format == "json":
+        payload = json.loads(output, parse_constant=lambda value: pytest.fail(value))
+        assert payload["converged"] == (outcome == "accepted")
+        assert payload["axes_understate_the_joint_change"] == (outcome == "coupled")
+        assert payload["baseline_evidence"]["original_residuals"] == [1e-10]
+        theta = payload["refinements"][0]
+        if outcome == "refused":
+            assert theta["worst"] is None and theta["status"] == "failed"
+            assert "refinement did not solve" in theta["refusal"]
+        else:
+            assert theta["observables"]["particle_flux_m2_s"] == [1.0]
+    else:
+        assert "original equations accepted:" in output
+        if outcome == "refused":
+            assert "RuntimeError" in output and "failed" in output
+        if outcome == "coupled":
+            assert "The joint refinement moved" in output

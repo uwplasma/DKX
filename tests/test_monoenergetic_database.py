@@ -384,12 +384,20 @@ def test_gradient_of_convolved_l11_matches_finite_differences() -> None:
     np.testing.assert_allclose(grad_ad, grad_fd, rtol=1e-5)
 
 
-def test_database_save_load_roundtrip(tmp_path: Path) -> None:
+@pytest.mark.parametrize("facade", [False, True])
+def test_database_save_load_roundtrip(tmp_path: Path, facade: bool) -> None:
     """The compact npz format round-trips grids, coefficients, and provenance."""
     from dkx.monoenergetic import load_database, monoenergetic_database, save_database
 
-    db = monoenergetic_database(MONO_DECK, [1.196132e-3, 0.5], [0.0, 1.0e-3])
-    path = save_database(tmp_path / "db.npz", db)
+    path = tmp_path / "db.npz"
+    if facade:
+        from dkx.api import SolveInputs, run_monoenergetic_database
+
+        request = SolveInputs(input_path=MONO_DECK, output_path=path)
+        db = run_monoenergetic_database(request, [1.196132e-3, 0.5], [0.0, 1.0e-3])
+    else:
+        db = monoenergetic_database(MONO_DECK, [1.196132e-3, 0.5], [0.0, 1.0e-3])
+        save_database(path, db)
     loaded = load_database(path)
 
     for key in ("nu_prime", "e_star", "d11_star", "d13_star", "d31_star", "d33_star"):
