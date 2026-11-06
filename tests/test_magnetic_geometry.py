@@ -29,6 +29,84 @@ from dkx.magnetic_geometry import (
 _NONSTELSYM_WOUT = Path(__file__).parent / "ref" / "wout_up_down_asymmetric_tokamak.nc"
 
 
+def _two_surface_boozer_text(scheme, *, text_format="ascii", cstconfig=False):
+    comment = "CC CStconfig" if cstconfig else "CC native Fourier geometry"
+    if text_format == "unicode":
+        comment += " — magnetic field"
+    lines = [comment, "1 1 2 2 1.0 0.5", "columns"]
+    for k, (radius, iota, g, current, pressure, b0, cosine, sine) in enumerate([
+        (.16, .4, 5e6, 1e5, -1000., 1., .05, .02),
+        (.36, .5, 5.1e6, 1.1e5, -900., 1.1, .04, .03),
+    ]):
+        def numbers(values):
+            return " ".join(f"{v:.16e}".replace("e", "D" if j % 2 else "d")
+                            if text_format != "ascii" else str(v)
+                            for j, v in enumerate(values))
+        lines += [f"s = {radius}", numbers([radius, iota, g, current, pressure]), "units"]
+        zero = [3. + .1 * k, 0., 0., b0] if scheme == 11 else [3. + .1 * k, 0., 0., 0., 0., 0., b0, 0.]
+        mode = [.1, .1, .03, cosine] if scheme == 11 else [.1, .02, .03, .1, .01, .02, cosine, sine]
+        lines += ["0 0 " + numbers(zero)]
+        if text_format != "ascii":
+            lines += ["! Fourier coefficient"]
+        lines += ["1 1 " + numbers(mode) + (" 99 ! m,n=1,1" if text_format != "ascii" else "")]
+    return "\n".join(lines) + "\n"
+
+
+@pytest.mark.parametrize("scheme,cstconfig", [(11, False), (11, True), (12, False)])
+@pytest.mark.parametrize("text_format", ["ascii", "fortran", "unicode"])
+def test_native_boozer_text_preserves_units_parity_and_radial_fields(
+    tmp_path, scheme, cstconfig, text_format
+):
+    path = tmp_path / "geometry.bc"
+    path.write_text(_two_surface_boozer_text(scheme, text_format=text_format,
+                                          cstconfig=cstconfig), encoding="utf-8")
+    data = read_native_boozer(path)
+    assert data.geometry_scheme == scheme
+    assert data.header.n_periods == 2
+    assert data.header.a_hat == .5
+    flux_sign = 1 if cstconfig else -1
+    assert data.header.psi_a_hat == pytest.approx(flux_sign / (2 * math.pi))
+    np.testing.assert_allclose([v.r_n for v in data.surfaces], [.4, .6])
+    np.testing.assert_allclose([v.g_hat for v in data.surfaces], [-2., -2.04])
+    np.testing.assert_allclose([v.i_hat for v in data.surfaces], [-.02, -.022])
+    np.testing.assert_allclose([v.p_prime_hat * data.header.psi_a_hat for v in data.surfaces],
+                               np.array([-1000., -900.]) * 4e-7 * math.pi)
+    np.testing.assert_array_equal(data.surfaces[0].parity, [True] if scheme == 11 else [True, False])
+    np.testing.assert_allclose(data.surfaces[0].b_amp, [.05] if scheme == 11 else [.05, .02])
+    np.testing.assert_allclose([v.r0 for v in data.surfaces], [3., 3.1])
+    np.testing.assert_allclose(data.surfaces[0].r_amp, [.1] if scheme == 11 else [.1, .02])
+    # Z and the toroidal-angle correction use the complementary sine/cosine basis.
+    np.testing.assert_allclose(data.surfaces[0].z_amp, [.1] if scheme == 11 else [.1, .03])
+    np.testing.assert_allclose(data.surfaces[0].dz_amp, [.03] if scheme == 11 else [.02, .01])
+    theta, zeta = _grid(7, 5, 2)
+    geometry = FluxSurfaceGeometry.from_boozer_data(
+        data, theta=theta, zeta=zeta, r_n_wish=.5, vmec_radial_option=2)
+    phase = np.asarray(theta)[:, None] + 2 * np.asarray(zeta)[None, :]
+    sine = .0245 if scheme == 12 else 0.
+    expected = 1.045 + .0455 * np.cos(phase) + sine * np.sin(phase)
+    derivative = -.0455 * np.sin(phase) + sine * np.cos(phase)
+    np.testing.assert_allclose(geometry.b_hat, expected, rtol=1e-13, atol=1e-13)
+    np.testing.assert_allclose(geometry.db_hat_dtheta, derivative, atol=1e-13)
+    np.testing.assert_allclose(geometry.db_hat_dzeta, 2 * derivative, atol=1e-13)
+    delta_b = .1 - .01 * np.cos(phase) + (.01 * np.sin(phase) if scheme == 12 else 0.)
+    np.testing.assert_allclose(geometry.db_hat_dpsi_hat * (.2 * data.header.psi_a_hat), delta_b, atol=1e-13)
+    assert float(geometry.iota) == pytest.approx(-.445)
+    assert float(geometry.g_hat) == pytest.approx(-2.018 if scheme == 11 and not cstconfig else 2.018)
+    assert float(geometry.i_hat) == pytest.approx(.0209 if scheme == 11 and not cstconfig else -.0209)
+
+
+@pytest.mark.parametrize("text_format", ["ascii", "unicode"])
+def test_native_boozer_rejects_missing_mean_field_and_single_surface(tmp_path, text_format):
+    text = _two_surface_boozer_text(11, text_format=text_format)
+    path = tmp_path / "geometry.bc"
+    path.write_text("\n".join(line for line in text.splitlines() if not line.startswith("0 0 ")), encoding="utf-8")
+    with pytest.raises(ValueError, match=r"No \(0,0\) mode"):
+        read_native_boozer(path)
+    path.write_text(text[:text.index("s = 0.36")], encoding="utf-8")
+    with pytest.raises(ValueError, match="at least two"):
+        read_native_boozer(path)
+
+
 def test_native_boozer_reader_detects_both_checked_column_conventions(
     tmp_path, monkeypatch
 ) -> None:
@@ -52,22 +130,7 @@ def test_native_boozer_reader_detects_both_checked_column_conventions(
     assert any(np.any(~surface.parity) for surface in scheme12.surfaces)
 
     scheme11_path = tmp_path / "tiny_scheme11.bc"
-    scheme11_path.write_text(
-        """CC native scheme-11 detector fixture
-1 1 2 2 1.0 0.5
-columns
-s = 0.16
-0.16 0.4 5000000.0 100000.0 -1000.0
-units
-0 0 1.0 0.0 0.0 1.0
-1 0 0.1 0.1 0.0 0.05
-s = 0.36
-0.36 0.5 5100000.0 110000.0 -900.0
-units
-0 0 1.1 0.0 0.0 1.05
-1 0 0.12 0.12 0.0 0.04
-"""
-    )
+    scheme11_path.write_text(_two_surface_boozer_text(11))
     scheme11 = read_native_boozer(scheme11_path)
     assert scheme11.geometry_scheme == 11
     assert len(scheme11.surfaces) == 2

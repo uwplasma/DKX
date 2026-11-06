@@ -22,6 +22,7 @@ differences with the adjoint guard armed.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import jax
@@ -450,3 +451,79 @@ def test_pitch_collocation_surrogate_discretizes_the_same_operator() -> None:
     a = surrogate.nodal(modal @ smooth.reshape(-1))
     b = surrogate.matrix @ surrogate.nodal(smooth.reshape(-1))
     assert np.linalg.norm(a - b) / np.linalg.norm(a) < 0.25
+
+
+def _small_smoothing_level(n_theta, n_zeta, n_xi, *, exb=True, masked=False):
+    name = "pas_1species_PAS_noEr_tiny_scheme1" if n_zeta == 1 else "er_xdot_1species_tiny"
+    namelist = read_sfincs_input(REF / f"{name}.input.namelist")
+    namelist.group("resolutionParameters").update(NTHETA=n_theta, NZETA=n_zeta, NXI=n_xi)
+    # Three-point angular stencils support the tiny grids used by these linear-action oracles.
+    namelist.group("otherNumericalParameters").update(
+        THETADERIVATIVESCHEME=1, ZETADERIVATIVESCHEME=1, MAGNETICDRIFTDERIVATIVESCHEME=0)
+    if not exb:
+        namelist.group("physicsParameters")["ER"] = 0.
+    level = simplified_operator(KineticOperator.from_namelist(namelist))
+    assert level.with_exb == exb
+    if masked:
+        level = replace(level, n_xi_for_x=jnp.minimum(jnp.arange(level.n_x) + 1, n_xi))
+    return level
+
+
+def test_centered_plane_smoother_inverts_the_one_pitch_kinetic_operator():
+    """With one pitch coefficient, only angular ExB and the pin remain."""
+    from dkx.multigrid import _level_matvec, _level_smoother, _shift
+
+    level = _small_smoothing_level(3, 3, 1)
+    settings = MultigridSettings(smoother="plane", stencil="centered", absolute_reaction=False)
+    weight = .1
+    matvec = _level_matvec(level, weight)
+    smoother = _level_smoother(level, settings, weight)
+    size = int(np.prod(level.f_shape))
+    basis = jnp.eye(size).reshape((size, *level.f_shape))
+    dense = np.asarray(jax.vmap(level.apply_f)(basis)).reshape(size, size).T
+    shift = np.broadcast_to(np.asarray(_shift(level, weight))[:, :, None, None, None], level.f_shape)
+    dense = dense + np.diag(shift.ravel())
+    rhs = np.random.default_rng(13).normal(size=level.f_shape)
+    got = np.asarray(smoother(matvec, jnp.zeros_like(jnp.asarray(rhs)), jnp.asarray(rhs)))
+    np.testing.assert_allclose(got.ravel(), np.linalg.solve(dense, rhs.ravel()), rtol=1e-10, atol=1e-11)
+    np.testing.assert_allclose(np.asarray(matvec(jnp.asarray(got))), rhs, rtol=1e-10, atol=1e-11)
+
+
+@pytest.mark.parametrize("kind,n_theta,n_zeta,exb,masked,smooth_xi", [
+    ("plane", 3, 5, False, False, False),
+    ("plane", 5, 3, True, True, False),
+    ("theta", 3, 5, False, False, False),
+    ("zeta", 5, 3, True, False, False),
+    ("alternating", 3, 5, True, True, False),
+    ("hybrid", 3, 5, True, True, True),
+    ("zeta", 5, 1, False, True, True),
+])
+def test_pitch_smoothers_preserve_linear_adjoint_and_inactive_rows(
+    kind, n_theta, n_zeta, exb, masked, smooth_xi
+):
+    """A relaxation may be approximate, but its linear action and transpose agree."""
+    from dkx.multigrid import _level_matvec, _level_smoother
+
+    level = _small_smoothing_level(n_theta, n_zeta, 3, exb=exb, masked=masked)
+    settings = MultigridSettings(smoother=kind, smooth_xi=smooth_xi)
+    matvec = _level_matvec(level, .1)
+    smooth = _level_smoother(level, settings, .1)
+    zero = jnp.zeros(level.f_shape)
+    apply = lambda rhs: smooth(matvec, zero, rhs)
+    rng = np.random.default_rng(7)
+    a, b = (jnp.asarray(rng.normal(size=level.f_shape)) for _ in range(2))
+    y, z = apply(a), apply(b)
+    assert np.all(np.isfinite(y)) and np.all(np.isfinite(z))
+    assert float(jnp.linalg.norm(y)) > 0.
+    np.testing.assert_allclose(smooth(matvec, a, matvec(a)), a, rtol=1e-10, atol=1e-11)
+    np.testing.assert_allclose(apply(1.3 * a - .7 * b), 1.3 * y - .7 * z, rtol=1e-10, atol=1e-11)
+    _, pullback = jax.vjp(apply, zero)
+    adjoint = pullback(b)[0]
+    np.testing.assert_allclose(jnp.vdot(y, b), jnp.vdot(a, adjoint), rtol=1e-10, atol=1e-11)
+    if masked:
+        active = level._mask()[None, :, :, None, None]
+        inactive_rhs = a * (1 - active)
+        np.testing.assert_allclose(apply(inactive_rhs), inactive_rhs, atol=1e-11)
+    if n_zeta == 1:
+        theta = _level_smoother(level, replace(settings, smoother="theta"), .1)
+        np.testing.assert_allclose(y, theta(matvec, zero, a), rtol=1e-10, atol=1e-11)

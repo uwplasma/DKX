@@ -1241,3 +1241,24 @@ def test_ambipolar_panel_labels_roots_and_bootstrap_panel_draws_redl(tmp_path):
     assert labels == {"ion", "unstable", "electron"}
     assert "Redl (same profiles)" in [line.get_label() for line in b.get_lines()]
     plt.close(fig)
+
+
+def test_monoenergetic_scan_reports_the_fortran_matrix_and_solve_status():
+    import h5py
+
+    from dkx.representative import monoenergetic_scan
+
+    name = "monoenergetic_PAS_tiny_scheme1"
+    with h5py.File(REF / f"{name}.sfincsOutput.h5") as handle:
+        fortran = np.asarray(handle["transportMatrix"])
+    messages = []
+    (row,) = monoenergetic_scan(
+        REF / f"{name}.input.namelist", nu_prime=[1.196132e-3], e_star=[0.],
+        resolution={"n_theta": 9, "n_zeta": 9, "n_xi": 6}, emit=messages.append)
+    # The archived Fortran transport table is column-major.
+    np.testing.assert_allclose(np.asarray(row["transport_matrix"]).T, fortran, rtol=2e-8, atol=1e-13)
+    np.testing.assert_allclose([row["D11"], row["D31"], row["D33"]],
+                               [fortran[0, 0], fortran[1, 0], fortran[1, 1]], rtol=2e-8, atol=1e-13)
+    assert row["nu_prime"] == 1.196132e-3 and row["e_star"] == 0.
+    assert row["converged"] and np.isfinite(row["wall_s"]) and row["wall_s"] >= 0.
+    assert len(messages) == 1 and "nuPrime=" in messages[0]
