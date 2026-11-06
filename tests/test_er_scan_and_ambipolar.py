@@ -311,3 +311,26 @@ def test_ambipolar_scan_parser_failures_are_explicit(tmp_path: Path) -> None:
     _write_named_scan_point(wrong_rhs, var_name="Er", var_value=1.0, er=1.0, radial_current=1.0, rhs_mode=2)
     with pytest.raises(RuntimeError, match="Need at least 2 completed runs"):
         solve_ambipolar_from_scan_dir(scan_dir=wrong_rhs, write_pickle=False, write_json=False)
+
+
+@pytest.mark.parametrize("has_root", [False, True])
+def test_ambipolar_cli_roundtrips_root_evidence_and_reports_no_extrapolated_root(tmp_path, capsys, has_root):
+    import json
+
+    from dkx import cli
+
+    er = [-2.0, -1.0, 0.0, 1.0]
+    current = [-1.5, -0.5, 0.5, 1.5] if has_root else [1.0, 1.5, 2.0, 2.5]
+    _write_synthetic_scan(tmp_path, er_values=er, current_vm=current,
+                          current_vd=[9.0] * 4, include_phi1=False)
+    assert cli.main(["ambipolar-solve", "--scan-dir", str(tmp_path), "--n-fine", "50", "-vv"]) == 0
+    payload = json.loads((tmp_path / "ambipolarSolutions.json").read_text())
+    stored = pickle.loads((tmp_path / "ambipolarSolutions.dat").read_bytes())
+    np.testing.assert_allclose(payload["radial_currents"], current, atol=1e-12)
+    expected = [-0.5] if has_root else []
+    np.testing.assert_allclose(payload["roots_er"], expected, atol=1e-12)
+    np.testing.assert_allclose(stored["roots"], expected, atol=1e-12)
+    assert payload["root_types"] == (["ion"] if has_root else [])
+    output = capsys.readouterr().out
+    assert ("root[1]" in output) == has_root
+    assert ("no sign change found" in output) == (not has_root)

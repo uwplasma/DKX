@@ -537,3 +537,34 @@ def test_u_and_bsubpsi_matches_scalar_reference(n_theta, n_zeta, non_stel_sym) -
     ref = _u_and_bsubpsi_reference(**kwargs)
     for g, r in zip(got, ref):
         assert np.array_equal(g, r)
+
+
+@pytest.mark.parametrize("scheme", [11, 12])
+@pytest.mark.parametrize("suffix", [".toml", ".json"])
+def test_boozer_conversion_roundtrips_geometry_path_and_physical_profiles(tmp_path, scheme, suffix):
+    from dkx.config import Case, CaseValidationError
+    from dkx.input_compat import convert_sfincs_namelist
+
+    geometry = tmp_path / "geometry.bc"
+    geometry.write_text(_two_surface_boozer_text(scheme, text_format="unicode"))
+    source = Path(__file__).parent / "ref/pas_1species_PAS_noEr_tiny_scheme11.input.namelist"
+    text = source.read_text().replace("geometryScheme = 11", f"geometryScheme = {scheme}")
+    text = text.replace('"w7x_standardConfig.bc"', '"geometry.bc"\n  VMECRadialOption = 0')
+    deck = tmp_path / "input.namelist"
+    deck.write_text(text)
+    target = tmp_path / f"case{suffix}"
+    case, written = convert_sfincs_namelist(deck, target)
+    restored = Case.from_file(written)
+    assert case.to_dict() == restored.to_dict() and case.case_id == restored.case_id
+    assert restored.geometry.format == "boozer" and restored.geometry_path == geometry
+    radius = np.sqrt(restored.geometry.surfaces)
+    assert radius[1] == 0.5 and np.all((radius >= 0.4) & (radius <= 0.6))
+    # The converted three-point profile must retain the deck's physical d/drHat drives (aHat=0.5).
+    np.testing.assert_allclose(restored.species[0].density_m3, 1e20 * (1 - 0.25 * (radius - 0.5)))
+    np.testing.assert_allclose(restored.species[0].temperature_keV, 1 - (radius - 0.5))
+    assert np.gradient(restored.species[0].density_m3, 0.5 * radius)[1] == pytest.approx(-0.5e20)
+    assert np.gradient(restored.species[0].temperature_keV, 0.5 * radius)[1] == pytest.approx(-2.0)
+    with pytest.raises(CaseValidationError, match="overwrite|--force"):
+        convert_sfincs_namelist(deck, target)
+    _, replaced = convert_sfincs_namelist(deck, target, overwrite=True)
+    assert Case.from_file(replaced).case_id == restored.case_id

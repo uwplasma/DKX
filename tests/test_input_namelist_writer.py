@@ -237,3 +237,32 @@ def test_invalid_physical_and_grid_options_fail_before_solve_and_valid_values_ro
     accepted = SfincsInput.from_params(geometryScheme=1, **{key: good})
     restored = sfincs_input_from_raw(parse_sfincs_input_text(accepted.to_namelist()))
     _assert_typed_sections_equal(accepted, restored)
+
+
+@pytest.mark.parametrize("in_memory", [False, True])
+@pytest.mark.parametrize("save", [False, True])
+def test_run_overrides_match_explicit_immutable_input_without_mutating_the_base(tmp_path, in_memory, save):
+    from dataclasses import replace
+
+    import numpy as np
+
+    import dkx
+    from dkx.run import run_profile
+
+    path = REPO_ROOT / "tests/ref/pas_1species_PAS_noEr_tiny_scheme1.input.namelist"
+    original = load_sfincs_input(path)
+    expected_input = replace(
+        original, resolution=replace(original.resolution, n_theta=11),
+        species=replace(original.species, n_hats=(0.8,)),
+    )
+    expected = run_profile(expected_input, emit=None)
+    out = tmp_path / "profile.npz" if save else None
+    got = dkx.run(original if in_memory else path, NTHETA=11, nHats=[0.8], out=out, tol=1e-10)
+    assert original.resolution.n_theta == 9 and original.species.n_hats == (1.0,)
+    assert got.operator.n_theta == 11
+    for key in ("FSABjHat", "particleFlux_vm_psiHat", "heatFlux_vm_psiHat"):
+        np.testing.assert_allclose(got.moments[key], expected.moments[key], rtol=1e-9, atol=1e-12)
+    if save:
+        assert got.output_path == out.resolve() and out.is_file()
+    with pytest.raises(TypeError, match="unknown SFINCS input parameter.*n_theta"):
+        dkx.run(original, n_theta=11)

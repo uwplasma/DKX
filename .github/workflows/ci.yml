@@ -152,6 +152,17 @@ jobs:
           # of those exceed the 16 GB runner and the agent is OOM-killed, which
           # surfaces as a cancelled job rather than a test failure.
           python -m pytest -q -n 2 --dist=loadscope --splits 9 --group ${{ matrix.group }} --splitting-algorithm least_duration -m "not slow" --cov=dkx --cov-report=
+      - name: Bootstrap integration coverage
+        if: matrix.group == 5
+        timeout-minutes: 6
+        run: |
+          # Keep the two VMEX/Boozer derivative checks in one shard, with its tested JAX versions.
+          python -c 'import importlib.metadata as m; print("jax==" + m.version("jax") + "\njaxlib==" + m.version("jaxlib"))' > "${RUNNER_TEMP}/bootstrap-constraints.txt"
+          python -m pip install -c "${RUNNER_TEMP}/bootstrap-constraints.txt" vmex==0.13.0 booz_xform_jax==0.5.1
+          python -c 'import jax, jaxlib, vmex, booz_xform_jax.jax_api; print("JAX", jax.__version__, "JAXLIB", jaxlib.__version__)'
+          python -m pytest -q --cov=dkx --cov-append --cov-report= \
+            tests/test_vmex_kinetic_gradient.py::test_the_objective_agrees_with_redl_in_sign_and_its_jacobian_with_differences \
+            tests/test_vmex_kinetic_gradient.py::test_ambipolar_roots_run_before_the_traced_row_which_then_holds_no_callback
       - name: Save the JAX compilation cache
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/cache/save@v4
