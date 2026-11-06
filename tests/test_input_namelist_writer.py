@@ -199,3 +199,41 @@ def test_write_output_accepts_in_memory_input_and_stores_provenance(tmp_path: Pa
 
     with pytest.raises(ValueError, match="output_path is required"):
         write_output(inp)
+
+
+@pytest.mark.parametrize("key,bad,good,message", [
+    ("Nzeta", 0, 1, "Nzeta must be positive"),
+    ("Nxi", 0, 3, "Nxi must be positive"),
+    ("Nx", 0, 3, "Nx must be positive"),
+    ("NL", -1, 2, "NL must be at least 0"),
+    ("xMax", 0, 2, "xMax must be positive"),
+    ("solverTolerance", 0, 1e-8, "solverTolerance must be positive"),
+    ("Zs", [0], [1], "Charges Zs cannot be zero"),
+    ("mHats", [0], [1], "Masses mHats must be positive"),
+    ("THats", [0], [1], "Temperatures THats must be positive"),
+    ("nHats", [0], [1], "Densities nHats must be positive"),
+    ("thetaDerivativeScheme", 99, 2, "thetaDerivativeScheme must be"),
+    ("zetaDerivativeScheme", 99, 2, "zetaDerivativeScheme must be"),
+    ("magneticDriftDerivativeScheme", 99, 0, "magneticDriftDerivativeScheme must be"),
+    ("xGridScheme", 9, 5, "xGridScheme must be between 1 and 8"),
+    ("xDotDerivativeScheme", -3, 0, "xDotDerivativeScheme must be between"),
+    ("xPotentialsGridScheme", 5, 3, "xPotentialsGridScheme must be between"),
+    ("preconditioner_species", 2, 0, "preconditioner_species must be"),
+    ("preconditioner_x", 5, 0, "preconditioner_x must be"),
+    ("preconditioner_xi", 2, 0, "preconditioner_xi must be"),
+    ("preconditioner_theta", 4, 0, "preconditioner_theta must be"),
+    ("preconditioner_zeta", 4, 0, "preconditioner_zeta must be"),
+    ("preconditioner_x_min_L", -1, 0, "must be at least 0"),
+])
+def test_invalid_physical_and_grid_options_fail_before_solve_and_valid_values_roundtrip(
+    key, bad, good, message
+):
+    # Python construction and file parsing must enforce the same public bounds.
+    unchecked = SfincsInput.from_params(geometryScheme=1, validate=False, **{key: bad})
+    with pytest.raises(ValueError, match=message):
+        SfincsInput.from_params(geometryScheme=1, **{key: bad})
+    with pytest.raises(ValueError, match=message):
+        sfincs_input_from_raw(parse_sfincs_input_text(unchecked.to_namelist()))
+    accepted = SfincsInput.from_params(geometryScheme=1, **{key: good})
+    restored = sfincs_input_from_raw(parse_sfincs_input_text(accepted.to_namelist()))
+    _assert_typed_sections_equal(accepted, restored)

@@ -1243,14 +1243,15 @@ def test_ambipolar_panel_labels_roots_and_bootstrap_panel_draws_redl(tmp_path):
     plt.close(fig)
 
 
-def test_monoenergetic_scan_reports_the_fortran_matrix_and_solve_status():
+def test_monoenergetic_scan_reports_the_fortran_matrix_and_solve_status(tmp_path):
     import h5py
 
-    from dkx.representative import monoenergetic_scan
+    from dkx.representative import monoenergetic_scan, write_representative_output
 
     name = "monoenergetic_PAS_tiny_scheme1"
     with h5py.File(REF / f"{name}.sfincsOutput.h5") as handle:
         fortran = np.asarray(handle["transportMatrix"])
+        geometry = {key: np.asarray(handle[key]) for key in ("BHat", "theta", "zeta")}
     messages = []
     (row,) = monoenergetic_scan(
         REF / f"{name}.input.namelist", nu_prime=[1.196132e-3], e_star=[0.],
@@ -1262,3 +1263,9 @@ def test_monoenergetic_scan_reports_the_fortran_matrix_and_solve_status():
     assert row["nu_prime"] == 1.196132e-3 and row["e_star"] == 0.
     assert row["converged"] and np.isfinite(row["wall_s"]) and row["wall_s"] >= 0.
     assert len(messages) == 1 and "nuPrime=" in messages[0]
+    out = write_representative_output(tmp_path / "scan.h5", scan=[row], data=geometry)
+    with h5py.File(out) as handle:
+        for key, expected in geometry.items():
+            np.testing.assert_array_equal(handle[f"geometry/{key}"], expected)
+        for key in ("D11", "D31", "D33", "nu_prime", "e_star"):
+            np.testing.assert_array_equal(handle[f"monoenergetic/{key}"], [row[key]])

@@ -172,3 +172,37 @@ def test_the_ambipolar_example_runs_and_checks_its_own_derivative(tmp_path) -> N
     assert "ambipolar E_r" in done.stdout and "relative" in done.stdout
     assert (tmp_path / "ambipolar_bootstrap_dkx.png").exists()
     assert (tmp_path / "ambipolar_bootstrap_dkx.csv").exists()
+
+
+@pytest.mark.parametrize("include_redl", [False, True])
+def test_bootstrap_plot_preserves_profile_units_and_finite_rms(tmp_path, monkeypatch, include_redl):
+    from types import SimpleNamespace
+
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    from dkx.bootstrap import plot_kinetic_bootstrap_current
+
+    surfaces = np.array([0.25, 0.75])
+    kinetic = SimpleNamespace(current_profile=lambda eq: (surfaces, np.array([2e6, np.nan])))
+    redl = SimpleNamespace(current_profiles=lambda eq: (surfaces, [3e6, -3e6], [4e6, -4e6]))
+    close = plt.close
+    monkeypatch.setattr(plt, "close", lambda figure: None)
+    try:
+        out = plot_kinetic_bootstrap_current(
+            tmp_path / "current.png", object(), kinetic, redl=redl if include_redl else None
+        )
+        axis = plt.gcf().axes[0]
+        lines = {line.get_label(): line for line in axis.lines}
+        np.testing.assert_array_equal(lines["DKX kinetic"].get_xdata(), surfaces)
+        np.testing.assert_allclose(lines["DKX kinetic"].get_ydata(), [2.0, np.nan], equal_nan=True)
+        assert "kinetic RMS = 2 " in axis.texts[0].get_text()
+        assert "MA T" in axis.get_ylabel()
+        if include_redl:
+            np.testing.assert_allclose(lines["VMEC equilibrium"].get_ydata(), [3.0, -3.0])
+            np.testing.assert_allclose(lines["Redl bootstrap"].get_ydata(), [4.0, -4.0])
+        else:
+            assert "VMEC equilibrium" not in lines and "Redl bootstrap" not in lines
+        assert out.is_file()
+    finally:
+        close("all")
