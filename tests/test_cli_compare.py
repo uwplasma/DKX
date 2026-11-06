@@ -149,3 +149,32 @@ def test_a_mixed_pair_is_refused_with_a_reason(monkeypatch, capsys) -> None:
 
 def test_compare_is_a_registered_command_not_a_filename() -> None:
     assert cli._normalize_default_argv(["compare"]) == ["compare"]
+
+
+def test_compare_real_fortran_output_with_itself_reports_physical_agreement(capsys):
+    from pathlib import Path
+
+    path = Path(__file__).parent / "ref/output_scheme4_2species_quick.sfincsOutput.h5"
+    assert cli.main(["compare", str(path), str(path), "--verbose-keys"]) == 0
+    assert "OK FSABjHat:" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("exists", [False, True])
+def test_compare_reports_unreadable_native_result_without_claiming_agreement(tmp_path, capsys, exists):
+    path = tmp_path / "result.nc"
+    if exists:
+        path.write_bytes(b"not a NetCDF result")
+    assert cli.main(["compare", str(path), str(path)]) == 2
+    assert "dkx compare failed:" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("changed", [False, True])
+def test_compare_preserves_nonnumeric_branch_status_in_the_json_verdict(monkeypatch, capsys, changed):
+    loads(monkeypatch, base(root_type=np.array(["ion"])),
+          base(root_type=np.array(["electron" if changed else "ion"])))
+    assert cli.main(["compare", "a.nc", "b.nc", "--format", "json"]) == (2 if changed else 0)
+    report = json.loads(capsys.readouterr().out)
+    row = next(row for row in report["rows"] if row["key"] == "root_type")
+    assert row["detail"] == "non-numeric"
+    assert row["status"] == ("differs" if changed else "ok")
+    assert report["agree"] == (not changed)
