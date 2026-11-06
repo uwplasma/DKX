@@ -48,7 +48,8 @@ than as a development log.
 ## Continuous integration
 
 The `tests` job runs the suite in shards; `coverage` and `coverage-report`
-measure line coverage, and the CI fail-under gate is ``80%``. `examples-smoke`
+measure line coverage, and the CI fail-under gate is ``95%``. The unrounded
+aggregate must also exceed 95%. `examples-smoke`
 runs the example ladder at its shipped resolution, `wheel-install` installs the
 built wheel and source distribution into clean environments and runs a solve
 from outside the checkout, and `docs-gate` runs the documentation contracts and
