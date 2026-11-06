@@ -506,12 +506,12 @@ def build_multigrid_preconditioner(
     of the f-block changes, from a batched block-Thomas factorization with
     dense ``(Ntheta*Nzeta)`` blocks to a multigrid V-cycle.
 
-    The transposed preconditioner is obtained with :func:`jax.linear_transpose`
-    of the cycle itself.  The cycle is a *linear* function of its argument
-    (fixed transfers, fixed smoother factors, fixed coarse factorization), so
-    its transpose is exact -- no second hierarchy, and no risk of the two
-    drifting apart, which is what the Krylov adjoint guard would otherwise
-    catch.
+    The transpose is obtained with :func:`jax.vjp` at a zero input. Fixed
+    transfers, smoother factors and the coarse factorization make the cycle
+    linear, so the pullback is its exact transpose without a second hierarchy.
+    Linearization keeps the cyclic solves' constant correction channels
+    separate from the varying residual, including when their intermediate
+    right-hand sides are packed together.
 
     Args:
         op: the full operator the recycled Krylov route solves.
@@ -534,7 +534,7 @@ def build_multigrid_preconditioner(
         op, drop_l_coupling=drop_l_coupling, settings=settings
     )
     template = jnp.zeros((op.f_size,), dtype=jnp.float64)
-    transposed = jax.linear_transpose(a_inv, template)
+    _, transposed = jax.vjp(a_inv, template)
 
     def a_inv_t(r: jnp.ndarray) -> jnp.ndarray:
         return transposed(r)[0]
