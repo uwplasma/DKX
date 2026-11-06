@@ -450,3 +450,42 @@ def test_pitch_collocation_surrogate_discretizes_the_same_operator() -> None:
     a = surrogate.nodal(modal @ smooth.reshape(-1))
     b = surrogate.matrix @ surrogate.nodal(smooth.reshape(-1))
     assert np.linalg.norm(a - b) / np.linalg.norm(a) < 0.25
+
+
+@pytest.mark.parametrize(
+    "smoother,axisymmetric",
+    [("theta", False), ("zeta", False), ("alternating", False), ("zeta", True)],
+)
+@pytest.mark.parametrize("n_fine,stencil,min_angle", [(7, 2, 5), (5, 1, 3)])
+def test_line_multigrid_preconditioner_transpose_matches_dense_and_ad(
+    smoother, axisymmetric, n_fine, stencil, min_angle
+):
+    from dkx.multigrid import build_multigrid_preconditioner
+
+    name = "pas_1species_PAS_noEr_tiny_scheme1" if axisymmetric else "er_xdot_1species_tiny"
+    namelist = read_sfincs_input(REF / f"{name}.input.namelist")
+    namelist.group("resolutionParameters").update(
+        NTHETA=n_fine, NZETA=1 if axisymmetric else n_fine, NXI=3
+    )
+    namelist.group("otherNumericalParameters").update(
+        THETADERIVATIVESCHEME=stencil, ZETADERIVATIVESCHEME=stencil
+    )
+    op = KineticOperator.from_namelist(namelist)
+    # A finite pin isolates transpose parity from the constant kinetic null mode.
+    precond, precond_t = build_multigrid_preconditioner(
+        op,
+        settings=MultigridSettings(levels=2, min_angle=min_angle, smoother=smoother, shift=0.1),
+    )
+    dense = np.asarray(jax.vmap(precond, in_axes=1, out_axes=1)(jnp.eye(op.total_size)))
+    rng = np.random.default_rng(23)
+    rhs, cotangent = (jnp.asarray(rng.normal(size=op.total_size)) for _ in range(2))
+    expected = dense.T @ np.asarray(cotangent)
+    transpose = np.asarray(precond_t(cotangent))
+    derivative = np.asarray(jax.grad(lambda r: jnp.vdot(precond(r), cotangent))(rhs))
+    compiled_transpose = np.asarray(jax.jit(precond_t)(cotangent))
+    compiled_forward = np.asarray(jax.jit(precond)(rhs))
+    assert np.all(np.isfinite(dense))
+    expected_forward = dense @ np.asarray(rhs)
+    assert np.linalg.norm(compiled_forward - expected_forward) / np.linalg.norm(expected_forward) < 1e-12
+    for got in (transpose, derivative, compiled_transpose):
+        assert np.linalg.norm(got - expected) / np.linalg.norm(expected) < 1e-12
