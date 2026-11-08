@@ -293,6 +293,15 @@ def test_legendre_blocks_reproduce_fblock_apply(source: str) -> None:
         _assert_close(y_blocks, y_apply)
 
 
+def test_legendre_block_fn_matches_rows_under_a_traced_index() -> None:
+    """A scan over rows sees the same blocks as the static-index calls."""
+    op = KineticOperator.from_namelist(parse_sfincs_input_text(PAS_DKES_ER_TEXT))
+    static = op.to_block_tridiagonal()
+    rows = jax.jit(lambda: jax.lax.map(op.legendre_block_fn(), jnp.arange(op.n_xi)))()
+    for got, want in zip(rows, static):
+        np.testing.assert_allclose(np.asarray(got), np.asarray(want), rtol=1e-14, atol=1e-18)
+
+
 def test_legendre_blocks_reject_l2_coupled_terms() -> None:
     # Er xDot couples L±2: the block-tridiagonal extraction must refuse.
     op_new = KineticOperator.from_namelist(_load("er_xdot_1species_tiny"))
