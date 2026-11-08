@@ -10,6 +10,7 @@
 - Docs: the improved-Sugama Spitzer-Harm limit (within 0.4% at the default `flow_order = 5`, 11.1% to 3.1% low without the L = 1 correction) and the unequal-temperature check are in `docs/physics/collisions.md`.
 - Validation: the W7-X ambipolar promotion rung (21, 71, 192, 8) is admitted on main by the truncated structured direct route (27.0 GB estimate at float64), not refused; no solve finished on the shared host, so the profile stays a `regression_scaffold`. `docs/benchmarks/validation_matrix.md` records the routing and the measurement.
 - Speed: the full-band structured direct route (monoenergetic and PAS decks) builds the streaming, mirror and ExB matrices once per factorization (`KineticOperator.legendre_block_fn`) instead of inside every Legendre-row step, embeds the diagonal terms instead of reading a stored identity, and forms the transpose border column `z_t` only when a transposed solve needs it. W7-X monoenergetic 15x31x48, four pinned cores, A/B alternating on the same host: warm 1.53 to 1.30 s, process cold without the compile cache 10.2 to 9.5 s, peak RSS 0.77 to 0.75 GB; coefficients agree to 1e-13 relative.
+- Validation: the W7-X ambipolar promotion rung (21, 71, 192, 8) is measured through out-of-core MUMPS and does not fit: 119,280 assembly products, 44 GiB resident in the assembly before any factor is written; 67 s, 647 s and 1,176 s at 59,144, 267,852 and 535,308 unknowns. The profile stays a regression scaffold; `validation_matrix.md` and `plan.md` section 21 record the numbers and the next route.
 
 ## 2.13.0 - 2026-11-05
 
