@@ -95,7 +95,7 @@ id = "implicit_gradients"
 name = "Implicit linear and ambipolar-root derivatives"
 status = "validated_limited"
 owners = ["src/dkx/sensitivity.py", "src/dkx/er.py", "src/dkx/solve.py", "SOLVAX"]
-evidence = ["tests/test_sensitivity.py", "tests/test_er.py", "tests/test_optimization_comparison.py", "tests/test_factor_reuse_contract.py"]
+evidence = ["tests/test_sensitivity.py", "tests/test_er.py", "tests/test_optimization_comparison.py", "tests/test_factor_reuse_contract.py", "tests/test_adjoint_sensitivity.py", "validation/adjoint_sensitivity_v1.json"]
 gaps = ["installed full-chain JVP/VJP/Taylor gates", "general-cotangent sparse-transpose qualification", "branch-event nonsmooth refusal", "peak gradient memory and transformation-aware sharding", "explicit transpose support is not evidence of autodiff through operator construction"]
 
 [[capability]]

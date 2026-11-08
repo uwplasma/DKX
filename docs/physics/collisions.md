@@ -123,6 +123,16 @@ blocks are the Landau test-particle kernels, as published. The improved $L=1$ co
 model reproduces the Spitzer-Harm conductivity within 1% for $Z = 1$ to 16 and the Landau flow and
 heat-flow friction of the electron-ion pair within 0.2% at $T_e/T_i = 10$.
 
+### Spitzer-Harm limit
+
+The conductivity of the electron-ion pair in the Lorentz-plus-restoring limit is the external reference,
+since SFINCS has no Sugama operator (`tests/test_physics_limits.py`, Spitzer and Harm 1953, Table III). With the default
+`flow_order = 5` the model is within 0.4% of it for $Z = 1$, 2, 4 and 16 (0.05%, 0.4%, 0.06%, 0.1%), as the full
+Fokker-Planck operator is (0.06% to 0.4%); `flow_order = 2` gives 2.1% at worst. Without the $L=1$
+correction (`flow_order = 0`, the structure of Sugama et al. 2009) the model is 11.1%, 9.8%, 7.8% and 3.1% low.
+The remaining model limit is the one of the next paragraph: the missing $L \ge 2$ field-particle response,
+which does not enter the conductivity but does enter parallel flows in a stellarator.
+
 That omission is not harmless in a stellarator. On the production W7-X deck ($15 \times 45 \times 80 \times 6$,
 $r_N = 0.5$, $E_r = 1$ kV/m, hydrogen and electrons, $\nu_n = 0.0083$; the cell `e_sugama_w7x` of
 `validation/cross_code_gaps_v1.json`) the parallel flows of the improved Sugama operator are 3.5% (ions) and 11.1%
@@ -132,6 +142,14 @@ blocks of the Sugama operator by the Fokker-Planck ones (test and field part) br
 response (the viscous part of the friction), not the $L=1$ correction. A $9 \times 25 \times 24 \times 4$ deck gives
 the same picture (8.2% and 3.8% falling to 0.09% and 0.3%). Use the Fokker-Planck operator whenever flows or
 the bootstrap current are the quantity of interest.
+
+At unequal temperatures the operator is built from the same pair kernels with the species temperatures and
+masses in them. Against the full Fokker-Planck operator on a rippled tokamak-like field (hydrogen and electrons,
+$T_e/T_i = 1$, 3, 10), the fluxes, parallel flows and bootstrap current stay within 3% of the full operator's
+values for $T_e/T_i \le 3$ and within 4.5% at $T_e/T_i = 10$, relative to the larger species' value
+(`test_fluxes_and_flows_follow_the_full_fokker_planck_operator_at_unequal_temperature`), so the unequal-temperature
+gap is the equal-temperature one. The inter-species temperature-equilibration drive
+(`includeTemperatureEquilibrationTerm`) is separate and is not included, below.
 
 Two further limits, both measured by `tests/test_collisions_improved_sugama.py`:
 
