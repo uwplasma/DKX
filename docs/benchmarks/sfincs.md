@@ -158,8 +158,7 @@ DKX's default route (`method = "auto"`: recycled GCROT, restart escalated from 3
 the deck to a true relative residual of 9.0e-9 against a requested 1e-8, in 611 iterations,
 1,658 s and 26.8 GiB peak resident on the 62 GiB shared office workstation (8 pinned
 cores; release 2.11.0 development build, JAX 0.10.2, SOLVAX 0.30.0). Residuals by cycle: 7.0e-2 after 150 iterations at restart 30, 2.8e-2 after 350 at restart 100,
-then 9.0e-9 after 261 more at restart 1,000. An earlier DKX build stopped at 2.5e-5 after
-20,000 iterations. The two SFINCS routes that attempt a factorization run out of memory and
+then 9.0e-9 after 261 more at restart 1,000. The two SFINCS routes that attempt a factorization run out of memory and
 the third stagnates. The run is a
 convergence record of the linear solve, not a physics comparison: no flows or currents of this
 deck are recorded, and whether it fits the 36 GiB host is unmeasured. It is sealed in
@@ -172,9 +171,18 @@ from operator products, one product per group of columns that share no row
 per column, and the assembled matrix is identical entry for entry to
 column-by-column sampling. That assembly makes the 66,004-unknown reduction of
 the same configuration solvable by `solve(method="direct")` to a relative
-residual of 1.3e-14. The full deck remains open: extrapolating the factorization
-cost of the direct route from 66,004 and 158,404 unknowns gives of order
-fourteen hours and 190 GiB at 633,604 unknowns, beyond a 62 GiB host.
+residual of 1.3e-14. In core, the full deck is beyond a 62 GiB host: extrapolating the
+factorization cost from 66,004 and 158,404 unknowns gives of order fourteen
+hours and 190 GiB at 633,604 unknowns, and the MUMPS analysis estimates
+94.7 GB. Out of core, `solve(method="direct", direct_backend="mumps",
+direct_out_of_core=True)` factors it with the factors on disk (12.5 GB
+estimated with METIS ordering): true relative residual 4.8e-11, 4,774 s
+(3,463 s to assemble and analyze, 1,295 s to factor and solve) and 4.1 GiB
+resident on the same host, 8 pinned cores, MUMPS 5.8.2. It agrees with the
+Krylov solution to 7e-6 in relative norm, which a residual of 9e-9 on this
+ill-conditioned operator allows. In that paired run the Krylov solve took
+2,575 s on a more heavily loaded host. Both rows are in
+`validation/hsx_gap_deck_v1.json`.
 
 The measurement protocol and scripts for both findings (column comparison,
 threshold rebuild, three-route SFINCS campaign) are summarized in

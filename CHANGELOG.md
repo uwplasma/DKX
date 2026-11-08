@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Validation: `validation/hsx_gap_deck_v1.json` gains the out-of-core MUMPS row of the 633,604-unknown HSX-like gap deck (`solve(method="direct", direct_backend="mumps", direct_out_of_core=True)`, METIS ordering, 8 pinned cores, MUMPS 5.8.2 on the office host): true relative residual 4.8e-11 in 4,774 s (3,463 s assembly and analysis, 1,295 s factorization and solve), 4.1 GiB resident, factors on disk (size not recorded; 12.5 GB estimated by the analysis). It agrees with the Krylov solution to 7e-6 in relative norm; the audit gate for two DKX routes is 1e-5 (it was 1e-6, below what a Krylov residual of 9e-9 allows on this operator). In the paired run the Krylov solve took 2,575 s on a more heavily loaded host than the sealed 1,658 s. `docs/benchmarks/sfincs.md`, the README and the validation matrix state it; the validation matrix lists the 2.12.0 records as merged.
+- Docs: `plan.md` section 21, steps ahead after 2.13.0.
+
 ## 2.13.0 - 2026-11-05
 
 - Correct block-preconditioned forward and transpose solves with defect correction and true-residual checks.

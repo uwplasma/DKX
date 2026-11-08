@@ -742,7 +742,7 @@ status = "accepted_limited"
 claim_scope = "hsx_like_633604_unknown_full_fp_deck_dkx_krylov_converges_sfincs_routes_fail"
 claim = "On the HSX-like two-species full Fokker-Planck deck at 11x15x120x16 (633,604 unknowns, rN 0.187, Er 15), DKX's default route (method auto, recycled GCROT with the coarse preconditioner) converges to a true relative residual of 9.0e-9 in 611 iterations, 1,658 s and 26.8 GiB peak resident on the shared office workstation. Every SFINCS v3 route tried on a 36 GiB host fails on the same deck: the MUMPS factorization and the preconditioner_x = 2 factorization are killed for memory, and the default GMRES stagnates at a relative residual of 0.9955. This is a convergence record of the linear solve, not a physics comparison."
 artifact = "validation/hsx_gap_deck_v1.json"
-artifact_sha256 = "cffb0571717d3cb62f13c1abc5437e458ed9fd3d796b12f2556d15b250c631a5"
+artifact_sha256 = "b49adb6fc117f8bfece11ff5ddf69b0c77a8cbdde39814570d9a408588eb17dd"
 artifact_schema = "dkx.hsx_gap_deck.v1"
 audit_script = "tools/paper_benchmarks/audit_hsx_gap_deck.py"
 command = "python tools/paper_benchmarks/audit_hsx_gap_deck.py --artifact validation/hsx_gap_deck_v1.json"
@@ -755,7 +755,7 @@ limitations = [
   "one deck, one radius, one Er; no physics observable (current, flows) is recorded, only convergence of the linear solve",
   "SFINCS rows were measured on a 36 GiB laptop in September 2026 (timestamps carry the date of the study, time of day not recorded) and not rerun; the DKX row on the 62 GiB shared office workstation, so the comparison is of what each host could do, not of equal hardware",
   "the DKX row was measured on an unmerged development commit of 2.11.0 with the number of cores not recorded; timing fields other than complete are not measured and are null",
-  "out-of-core MUMPS on this deck has not been run: it needs 24 GiB of free memory on a host that rarely has it",
+  "the out-of-core MUMPS row ran on the same host as the Krylov row but not at the same time or load (the Krylov solve took 2,575 s in the paired run against the sealed 1,658 s); its 'setup' time is assembly of the matrix from 4,808 operator products plus the symbolic analysis, 'solve' is numeric factorization plus the solve; peak_host is the resident set of the process, the factors are on disk (size not recorded; the analysis-only estimate is 12.5 GB with METIS) and any memory held by the MUMPS library outside the resident set is not included",
   "experimental validation",
 ]
 
