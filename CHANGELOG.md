@@ -8,6 +8,7 @@
 - Validation: DKX reverse-mode sensitivities (the replacement for SFINCS RHSMode 4/5) are checked against central differences of the same DKX solve with a step sweep, on a tokamak-like field and the W7-X standard configuration at rN 0.5 (`validation/adjoint_sensitivity_v1.json`, registry `adjoint_sensitivity`, generator `tools/paper_benchmarks/adjoint_sensitivity_verification.py`). Ion particle flux, ion heat flux, bootstrap current and ion parallel flow against Boozer |B| harmonics, iota, GHat and IHat agree to 4e-8 (tokamak) and 5e-9 (W7-X) of each row's largest derivative, falling 100-fold per tenth of the step.
 - Validation: improved Sugama (`collisionOperator = 3`) against the full Fokker-Planck operator at T_e/T_i = 1, 3, 10 on a rippled tokamak-like field: fluxes, flows and bootstrap current within 4.5% of the larger species' value, the equal-temperature gap.
 - Docs: the improved-Sugama Spitzer-Harm limit (within 0.4% at the default `flow_order = 5`, 11.1% to 3.1% low without the L = 1 correction) and the unequal-temperature check are in `docs/physics/collisions.md`.
+- Validation: the W7-X ambipolar promotion rung (21, 71, 192, 8) is admitted on main by the truncated structured direct route (27.0 GB estimate at float64), not refused; no solve finished on the shared host, so the profile stays a `regression_scaffold`. `docs/benchmarks/validation_matrix.md` records the routing and the measurement.
 
 ## 2.13.0 - 2026-11-05
 
