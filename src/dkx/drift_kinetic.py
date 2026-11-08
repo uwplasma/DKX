@@ -92,6 +92,7 @@ are canonical; see :func:`dkx.phase_space.make_grids` and
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Any, NamedTuple
 
@@ -1770,72 +1771,80 @@ Measured through the production recycled Krylov path.  On the tiny drift
 
         Returns blocks of shape ``(n_species, n_x, T*Z, T*Z)``; the truncated-L
         masks are baked in, so the block-tridiagonal matvec reproduces
-        :meth:`apply_f` exactly.
+        :meth:`apply_f` exactly.  A caller that visits many rows builds the
+        row-independent matrices once with :meth:`legendre_block_fn`.
+        """
+        if not isinstance(ell, jax.core.Tracer) and not (0 <= int(ell) < self.n_xi):
+            raise ValueError(f"ell must be in [0, {self.n_xi}), got {ell}")
+        return self.legendre_block_fn()(ell)
+
+    def legendre_block_fn(self) -> Callable[[int], LegendreBlocks]:
+        """``ell -> legendre_blocks(ell)`` with the row-independent matrices built once.
+
+        The streaming, mirror and ExB matrices do not depend on the Legendre
+        row; a ``scan`` over rows that calls :meth:`legendre_blocks` rebuilds
+        them in every step.  Here they are formed when the generator is made, so
+        each row costs only its scalar coefficients and a few scaled sums.
         """
         self._check_block_extraction_supported()
-        traced = isinstance(ell, jax.core.Tracer)  # a scan over l passes a traced ell
-        if not traced:
-            if not (0 <= int(ell) < self.n_xi):
-                raise ValueError(f"ell must be in [0, {self.n_xi}), got {ell}")
-            ell = int(ell)
-
         n_tz = self.n_theta * self.n_zeta
-        eye_t = jnp.eye(self.n_theta, dtype=jnp.float64)
-        eye_z = jnp.eye(self.n_zeta, dtype=jnp.float64)
-        d_theta_tz = jnp.kron(self.ddtheta, eye_z)  # (TZ,TZ)
-        d_zeta_tz = jnp.kron(eye_t, self.ddzeta)  # (TZ,TZ)
-
-        # Keep the mask a jnp array (no host materialization) so the block
-        # extraction stays traceable when the operator leaves are tracers
-        # (jit-over-leaves / vmap).  ``ell`` is a static Python int, so the
-        # column slices below are static-index selects on a traced (X,L) array.
+        # The mask stays a jnp array (no host materialization) so the extraction
+        # is traceable when the operator leaves are tracers (jit-over-leaves / vmap).
         mask = self._mask()  # (X,L)
-        row_mask = mask[:, ell]  # (X,)
-
         stream_tz, mirror_diag = self.streaming_mirror_blocks()
-        mirror_tz = mirror_diag[:, :, None] * jnp.eye(n_tz, dtype=jnp.float64)[None, :, :]  # (S,TZ,TZ)
-
-        def _shaped(block_s: jnp.ndarray, x_factor: jnp.ndarray, col_mask: jnp.ndarray) -> jnp.ndarray:
-            # block_s (S,TZ,TZ); x_factor (X,); col_mask (X,) -> (S,X,TZ,TZ)
-            scale = x_factor * row_mask * col_mask  # (X,)
-            return block_s[:, None, :, :] * scale[None, :, None, None]
-
-        # ---- lower: row ell receives column ell-1 ----
-        if traced or ell >= 1:
-            on = jnp.where(ell >= 1, 1.0, 0.0)
-            coef_stream = on * self.xi_coupling_lower[ell]  # traced 0-d scalar (static ell)
-            coef_mirror = -coef_stream * (ell - 1.0)
-            col_mask = mask[:, jnp.maximum(ell - 1, 0)] if traced else mask[:, ell - 1]
-            lower = _shaped(coef_stream * stream_tz + coef_mirror * mirror_tz, self.x, col_mask)
-        else:
-            lower = jnp.zeros((self.n_species, self.n_x, n_tz, n_tz), dtype=jnp.float64)
-
-        # ---- upper: row ell receives column ell+1 ----
-        if traced or ell + 1 < self.n_xi:
-            on = jnp.where(ell + 1 < self.n_xi, 1.0, 0.0)
-            coef_stream = on * self.xi_coupling_upper[jnp.minimum(ell, self.n_xi - 2) if traced else ell]  # traced 0-d scalar (static ell)
-            coef_mirror = coef_stream * (ell + 2.0)
-            col_mask = mask[:, jnp.minimum(ell + 1, self.n_xi - 1)] if traced else mask[:, ell + 1]
-            upper = _shaped(coef_stream * stream_tz + coef_mirror * mirror_tz, self.x, col_mask)
-        else:
-            upper = jnp.zeros((self.n_species, self.n_x, n_tz, n_tz), dtype=jnp.float64)
-
-        # ---- diag: ExB (species-independent) + PAS (diagonal in theta/zeta) ----
-        diag = jnp.zeros((self.n_species, self.n_x, n_tz, n_tz), dtype=jnp.float64)
+        exb_tz = None
         if self.with_exb:
             coef_theta, coef_zeta = self._exb_coefficients()
+            d_theta_tz = jnp.kron(self.ddtheta, jnp.eye(self.n_zeta, dtype=jnp.float64))
+            d_zeta_tz = jnp.kron(jnp.eye(self.n_theta, dtype=jnp.float64), self.ddzeta)
             exb_tz = (
                 coef_theta.reshape((-1,))[:, None] * d_theta_tz
                 + coef_zeta.reshape((-1,))[:, None] * d_zeta_tz
             )  # (TZ,TZ)
-            diag = diag + exb_tz[None, None, :, :] * row_mask[None, :, None, None]
-        if self.pas is not None:
-            pas_coef = self.pas.coef[:, :, ell]  # (S,X)
-            diag = diag + (pas_coef * row_mask[None, :])[:, :, None, None] * jnp.eye(
-                n_tz, dtype=jnp.float64
-            )[None, None, :, :]
 
-        return LegendreBlocks(lower=lower, diag=diag, upper=upper)
+        def blocks(ell: int) -> LegendreBlocks:
+            # ``ell`` is a static int, or traced in a scan over rows.
+            traced = isinstance(ell, jax.core.Tracer)
+            row_mask = mask[:, ell]  # (X,)
+            # Diagonal terms are embedded where they are added, so a fused row
+            # reads the streaming matrix once and never a stored identity.
+            eye = jnp.eye(n_tz, dtype=jnp.float64)
+
+            def _shaped(block_s: jnp.ndarray, x_factor: jnp.ndarray, col_mask: jnp.ndarray) -> jnp.ndarray:
+                # block_s (S,TZ,TZ); x_factor (X,); col_mask (X,) -> (S,X,TZ,TZ)
+                scale = x_factor * row_mask * col_mask  # (X,)
+                return block_s[:, None, :, :] * scale[None, :, None, None]
+
+            # ---- lower: row ell receives column ell-1 ----
+            if traced or ell >= 1:
+                on = jnp.where(ell >= 1, 1.0, 0.0)
+                coef_stream = on * self.xi_coupling_lower[ell]
+                coef_mirror = -coef_stream * (ell - 1.0)
+                col_mask = mask[:, jnp.maximum(ell - 1, 0)] if traced else mask[:, ell - 1]
+                lower = _shaped(coef_stream * stream_tz + (coef_mirror * mirror_diag)[:, :, None] * eye, self.x, col_mask)
+            else:
+                lower = jnp.zeros((self.n_species, self.n_x, n_tz, n_tz), dtype=jnp.float64)
+
+            # ---- upper: row ell receives column ell+1 ----
+            if traced or ell + 1 < self.n_xi:
+                on = jnp.where(ell + 1 < self.n_xi, 1.0, 0.0)
+                coef_stream = on * self.xi_coupling_upper[jnp.minimum(ell, self.n_xi - 2) if traced else ell]
+                coef_mirror = coef_stream * (ell + 2.0)
+                col_mask = mask[:, jnp.minimum(ell + 1, self.n_xi - 1)] if traced else mask[:, ell + 1]
+                upper = _shaped(coef_stream * stream_tz + (coef_mirror * mirror_diag)[:, :, None] * eye, self.x, col_mask)
+            else:
+                upper = jnp.zeros((self.n_species, self.n_x, n_tz, n_tz), dtype=jnp.float64)
+
+            # ---- diag: ExB (species-independent) + PAS (diagonal in theta/zeta) ----
+            diag = jnp.zeros((self.n_species, self.n_x, n_tz, n_tz), dtype=jnp.float64)
+            if exb_tz is not None:
+                diag = diag + exb_tz[None, None, :, :] * row_mask[None, :, None, None]
+            if self.pas is not None:
+                pas_coef = self.pas.coef[:, :, ell]  # (S,X)
+                diag = diag + (pas_coef * row_mask[None, :])[:, :, None, None] * eye
+            return LegendreBlocks(lower=lower, diag=diag, upper=upper)
+
+        return blocks
 
     def to_block_tridiagonal(self) -> LegendreBlocks:
         """Stack :meth:`legendre_blocks` over all L.

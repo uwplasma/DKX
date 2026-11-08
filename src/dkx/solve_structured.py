@@ -98,7 +98,8 @@ class Tier1Solver:
     Legendre bands ``A~ = A + gamma B C`` for every (species, x) subsystem,
     plus the presolved border columns ``z = A~^{-1} B`` (forward) and
     ``z_t = A~^{-T} C^T`` (transpose), so both the forward and the adjoint
-    bordered solve reuse the same elimination.
+    bordered solve reuse the same elimination.  ``z_t`` is formed by the
+    transposed solve that first needs it, so a forward-only factorization skips it.
 
     A pytree (the operator's own static layout is its only static data), so
     the compiled kernels below take it as an argument and ``jit`` caches one
@@ -108,7 +109,7 @@ class Tier1Solver:
     op: KineticOperator
     factors: tuple[jnp.ndarray, jnp.ndarray]  # Schur LUs and pivots, leading batch axis B = S*X
     z_fwd: jnp.ndarray  # (B, L, TZ)
-    z_t: jnp.ndarray  # (B, L, TZ)
+    z_t: jnp.ndarray | None  # (B, L, TZ); None until a transposed solve needs it
     gamma: jnp.ndarray  # (B,)
     b0: jnp.ndarray  # (TZ,) source column shape on the l=0 rows
     c0: jnp.ndarray  # (TZ,) constraint row (flux-surface-average weights)
@@ -144,7 +145,12 @@ class Tier1Solver:
         # constraintScheme=2: one bordered unknown per (species, x).
         # Forward:  [[A, b0 e0], [c0^T e0^T, 0]];  transpose swaps b0 <-> c0.
         r_c = rhs2d[op.f_size :].reshape(batch, n_rhs)
-        z = self.z_t if transpose else self.z_fwd
+        z = self.z_fwd
+        if transpose:
+            z = self.z_t
+            if z is None:  # forward-only factorizations never pay for the adjoint border
+                e0 = jnp.zeros((batch, n_xi, n_tz, 1), dtype=jnp.float64).at[:, 0, :, 0].set(self.c0[None, :])
+                z = _tier1_f_solve(op, self.factors, self.gamma, e0, True)[..., 0]
         w_row = (
             self.b0 if transpose else self.c0
         )  # constraint row of the (transposed) system
@@ -201,10 +207,12 @@ def _tier1_block_fn(op: KineticOperator, k: Any, gamma: Any) -> Callable[[Any], 
     (a third of the bands), and no program unrolls a loop over L.
     """
     n_tz = op.n_theta * op.n_zeta
-    border = jnp.outer(jnp.ones((n_tz,), dtype=jnp.float64), op._fs_average_factor().reshape(-1))
+    border = op._fs_average_factor().reshape(1, n_tz)  # b0 c0^T has identical rows
+
+    rows = op.legendre_block_fn()
 
     def block_fn(l: Any) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-        blk = op.legendre_blocks(l)
+        blk = rows(l)
         lower, diag, upper = (a.reshape(-1, n_tz, n_tz)[k] for a in (blk.lower, blk.diag, blk.upper))
         if op.constraint_scheme == 2:
             diag = diag + jnp.where(l == 0, gamma, 0.0) * border
@@ -232,8 +240,10 @@ def _factor_tier1(op: KineticOperator) -> Tier1Solver:
     if op.constraint_scheme == 2:
         # Conditioning-friendly rank-one scale per (species, x): mean |diag entry|
         # of the bands over the max magnitude of the rank-one update.
+        rows = op.legendre_block_fn()
+
         def sums(l: Any) -> tuple[jnp.ndarray, jnp.ndarray]:
-            d = op.legendre_blocks(l).diag.reshape(batch, n_tz, n_tz)
+            d = rows(l).diag.reshape(batch, n_tz, n_tz)
             return jnp.abs(jnp.diagonal(d, axis1=1, axis2=2)).sum(1), jnp.abs(d).sum((1, 2))
 
         s_diag, s_all = (v.sum(0) for v in jax.lax.map(sums, jnp.arange(n_xi)))
@@ -252,9 +262,8 @@ def _factor_tier1(op: KineticOperator) -> Tier1Solver:
 
     e0 = jnp.zeros((batch, n_xi, n_tz, 1), dtype=jnp.float64)
     z_fwd = _tier1_f_solve(op, factors, gamma, e0.at[:, 0, :, 0].set(b0[None, :]), False)[..., 0]
-    z_t = _tier1_f_solve(op, factors, gamma, e0.at[:, 0, :, 0].set(c0[None, :]), True)[..., 0]
     return Tier1Solver(
-        op=op, factors=factors, z_fwd=z_fwd, z_t=z_t, gamma=gamma, b0=b0, c0=c0
+        op=op, factors=factors, z_fwd=z_fwd, z_t=None, gamma=gamma, b0=b0, c0=c0
     )
 
 # One executable per operator structure (static layout plus array shapes); the
