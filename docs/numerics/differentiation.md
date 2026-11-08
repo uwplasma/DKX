@@ -285,6 +285,16 @@ through the Boozer transform and an exact structured drift-kinetic solve on
 each surface. `examples/advanced/QA_optimization_bootstrap_dkx.py` runs it.
 The workflow is in {doc}`../tutorials/08_phi1_bootstrap_gradients`.
 
+With `ambipolar=True`, called as `term.residuals_state(state, rt)` the roots return
+through an `io_callback`, whose host pointer keeps the outer program out of JAX's
+persistent compilation cache. Finding the roots on the host first and passing them in
+removes the callback: `roots = term.roots(state, rt)`, then
+`term.residuals_state(state, rt, roots)` (traced `roots` argument; the derivative
+through the root, $j_p - j_E J_p / J_E$, is unchanged). For a loop that owns the state,
+`f = term.cached_residuals(rt)` is the same in one argument, and `jax.jvp` / `jax.jacfwd`
+of `f` use the roots of the primal state. The roots are warm-started, so a repeat
+call starts from the last root; on a flat $J_r(E)$ it may land on another root.
+
 These scripts implement the full differentiable chain; running one is not by itself a
 qualified optimization. A qualified result also needs the converged final equilibrium,
 the original-equation residual of every kinetic solve, derivative checks against finite

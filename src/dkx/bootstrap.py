@@ -491,7 +491,10 @@ class KineticBootstrapMismatch:
     from the host, warm-started at the previous roots, so a call is not
     reproducible bit for bit across histories when several roots exist;
     :meth:`electric_field` returns them and ``unconverged`` counts failures.
-    The default grid is ``DEFAULT_AMBIPOLAR_RESOLUTION``.
+    The default grid is ``DEFAULT_AMBIPOLAR_RESOLUTION``.  Called as
+    ``residuals_state(state, rt)`` the roots come back through an ``io_callback``,
+    whose host pointer keeps the program out of JAX's persistent cache;
+    :meth:`roots` / ``roots=`` or :meth:`cached_residuals` avoid it.
     """
 
     name = "j_boot_dkx"
@@ -766,6 +769,30 @@ class KineticBootstrapMismatch:
             self._stager = (rt, jax.jit(stage), box)
         spectra, psi = self._stager[1](state)
         return self._roots[self._stager[2]["key"]](spectra, psi)
+
+    def cached_residuals(self, rt: Any) -> Any:
+        """``f(state)``: the residual vector, with the roots found on the host before a callback-free program.
+
+        The program takes the roots as an argument, so JAX's persistent cache keeps it across
+        processes; ``jax.jvp``, ``jax.jacfwd`` and ``jax.linearize`` of ``f`` run the same program
+        at the roots of the primal state.  ``f`` needs a concrete ``state``; inside a larger
+        ``jit`` use :meth:`residuals_state` with ``roots`` as a traced argument.
+        """
+        import jax  # noqa: PLC0415
+
+        program = jax.jit(lambda st, ro: self.residuals_state(st, rt, ro))
+        find = (lambda st: self.roots(st, rt)) if self.ambipolar else (lambda st: None)
+
+        @jax.custom_jvp
+        def residuals(state: Any) -> Any:
+            return program(state, find(state))
+
+        @residuals.defjvp
+        def _(primals: tuple, tangents: tuple) -> tuple:
+            roots = find(primals[0])
+            return jax.jvp(lambda st: program(st, roots), primals, tangents)
+
+        return residuals
 
     def _find_roots(self, roots: Any, stacked: Any, spectra: dict, psi: Any) -> tuple:
         """Host side of the root finder: warm start in, ``(E_r, dJ_r/dE, d<j.B>/dE)`` out."""

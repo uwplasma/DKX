@@ -247,3 +247,9 @@ def test_ambipolar_roots_run_before_the_traced_row_which_then_holds_no_callback(
     term._er[:] = term.er_initial
     _, via_callback = jax.jvp(lambda st: term.residuals_state(st, rt), (state,), (tangent,))
     np.testing.assert_allclose(jvp, via_callback, rtol=1e-6)
+
+    f = term.cached_residuals(rt)  # the one-argument form: roots, then the callback-free program
+    term._er[:] = term.er_initial
+    np.testing.assert_allclose(f(state), row(state, roots), rtol=1e-9)
+    term._er[:] = term.er_initial
+    np.testing.assert_allclose(jax.jvp(f, (state,), (tangent,))[1], jvp, rtol=1e-7)
