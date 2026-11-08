@@ -293,7 +293,7 @@ removes the callback: `roots = term.roots(state, rt)`, then
 through the root, $j_p - j_E J_p / J_E$, is unchanged). For a loop that owns the state,
 `f = term.cached_residuals(rt)` is the same in one argument, and `jax.jvp` / `jax.jacfwd`
 of `f` use the roots of the primal state. The roots are warm-started, so a repeat
-call starts from the previous root; on a flat $J_r(E)$ it may land on another root.
+call starts from the last root; on a flat $J_r(E)$ it may land on another root.
 
 These scripts implement the full differentiable chain; running one is not by itself a
 qualified optimization. A qualified result also needs the converged final equilibrium,
