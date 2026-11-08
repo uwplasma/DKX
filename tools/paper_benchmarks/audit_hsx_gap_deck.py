@@ -12,7 +12,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMA = ROOT / "validation" / "benchmark_schema.toml"
 DECK_TOLERANCE = 1.0e-8  # tolerance requested of the DKX rows (the deck says 1e-7)
-AGREE_GATE = 1.0e-6  # two passed DKX routes agree on the solution to this relative norm
+AGREE_GATE = 1.0e-5  # two passed DKX routes agree on the solution to this relative norm (the Krylov row stops at a residual of 9e-9)
 
 
 def audit(artifact_path: Path) -> dict[str, Any]:

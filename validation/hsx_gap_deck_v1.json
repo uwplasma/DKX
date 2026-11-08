@@ -97,6 +97,85 @@
     },
     {
       "schema_version": 1,
+      "artifact_id": "dkx_mumps_out_of_core",
+      "timestamp_utc": "2026-10-26T15:48:34Z",
+      "repository": {
+        "url": "https://github.com/uwplasma/DKX",
+        "commit": "02bef01334baea6021ee4855d536ca609e8c8e2d",
+        "dirty": false
+      },
+      "software": {
+        "python": "3.11.15",
+        "jax": "0.10.2",
+        "jaxlib": "0.10.2",
+        "numpy": "2.4.6",
+        "solvax": "0.31.0",
+        "mumps": "5.8.2"
+      },
+      "hardware": {
+        "host_id": "nvidia-a4000",
+        "platform": "Linux x86_64 (Pop!_OS 22.04), shared workstation, load 25-55",
+        "processor": "Intel Xeon W-2295, 36 threads, 8 pinned",
+        "physical_memory_bytes": 66571993088
+      },
+      "case": {
+        "case_id": "hsx_like_gap_deck",
+        "input_sha256": "3cca5c5e3f1436113d47a32d77e3e253984a4a9746947ce7856b87f30ec5eb06",
+        "geometry_sha256": "db6197f098a8236221c3ec0fb602f7b1fff3a66cad84813da3a424d7c79e0d9a",
+        "workload_family": "hsx_like_full_fp_two_species_er15",
+        "reference_code": "sfincs-v3",
+        "reference_commit": "8df5453472e982df0f6ae005243ce38d57a83711"
+      },
+      "model": {
+        "equation": "drift_kinetic_rhsmode1",
+        "collisions": "full_linearized_fokker_planck",
+        "trajectories": "full_with_xdot_and_xi_dot_er_terms",
+        "species_count": 2,
+        "rhs_count": 1,
+        "differentiable": false
+      },
+      "resolution": {
+        "unknowns": 633604,
+        "ntheta": 11,
+        "nzeta": 15,
+        "nxi": 120,
+        "nx": 16,
+        "surfaces": 1,
+        "electric_field_points": 1
+      },
+      "route": {
+        "solver": "mumps_lu_out_of_core",
+        "preconditioner": "none",
+        "precision": "float64",
+        "device_strategy": "cpu_8_threads",
+        "ordering": "metis",
+        "memory_budget_gib": 24
+      },
+      "timing_s": {
+        "complete": 4773.9,
+        "import": null,
+        "setup": 3462.7,
+        "compile": null,
+        "first_execute": null,
+        "warm_execute": null,
+        "solve": 1295.4,
+        "postprocess": null,
+        "output": null
+      },
+      "memory_bytes": {
+        "peak_host": 4380866642
+      },
+      "accuracy": {
+        "true_residual": 4.759167160638656e-11
+      },
+      "outcome": {
+        "status": "passed"
+      },
+      "iterations": 0,
+      "timings_reported_s": {}
+    },
+    {
+      "schema_version": 1,
       "artifact_id": "sfincs_mumps_direct",
       "timestamp_utc": "2026-09-19T00:00:00Z",
       "repository": {
@@ -330,12 +409,18 @@
       }
     }
   ],
-  "solution_agreement": [],
+  "solution_agreement": [
+    {
+      "a": "dkx_krylov_auto",
+      "b": "dkx_mumps_out_of_core",
+      "relative_difference": 7.06e-06
+    }
+  ],
   "exclusions": [
     "one deck, one radius, one Er; no physics observable (current, flows) is recorded, only convergence of the linear solve",
     "SFINCS rows were measured on a 36 GiB laptop in September 2026 (timestamps carry the date of the study, time of day not recorded) and not rerun; the DKX row on the 62 GiB shared office workstation, so the comparison is of what each host could do, not of equal hardware",
     "the DKX row was measured on an unmerged development commit of 2.11.0 with the number of cores not recorded; timing fields other than complete are not measured and are null",
-    "out-of-core MUMPS on this deck has not been run: it needs 24 GiB of free memory on a host that rarely has it",
+    "the out-of-core MUMPS row ran on the same host as the Krylov row but not at the same time or load (the Krylov solve took 2,575 s in the paired run against the sealed 1,658 s); its 'setup' time is assembly of the matrix from 4,808 operator products plus the symbolic analysis, 'solve' is numeric factorization plus the solve; peak_host is the resident set of the process, the factors are on disk (size not recorded; the analysis-only estimate is 12.5 GB with METIS) and any memory held by the MUMPS library outside the resident set is not included",
     "experimental validation"
   ]
 }

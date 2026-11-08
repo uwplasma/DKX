@@ -34,9 +34,9 @@ of them.
 | Record | What it shows | Status |
 | --- | --- | --- |
 | `validation/beidler2011_w7x_monoenergetic.csv` | W7-X standard configuration against digitized Beidler et al. (2011) curves | merged |
-| HSX-like gap deck, `validation/hsx_gap_deck_v1.json` | 633,604 unknowns converge on the default route to a residual of 9.0e-9 in 611 iterations, 1,658 s, 26.8 GiB; the SFINCS routes fail | pull request 393, open |
-| IPP DKES on `hydra_Np04`, `validation/dkes_hydra_np04_v1.json` | agreement statistics only; the DKES data are not redistributed | pull request 395, open |
-| W7-X ambipolar profile | stays a regression scaffold; the promotion rung needs a host with a few hundred GiB | pull request 394, open |
+| HSX-like gap deck, `validation/hsx_gap_deck_v1.json` | 633,604 unknowns converge on the default route to a residual of 9.0e-9 in 611 iterations, 1,658 s, 26.8 GiB; the SFINCS routes fail; out of core through MUMPS it reaches 4.8e-11 in 4,774 s with 4.1 GiB resident and agrees with the Krylov solution to 7e-6 | merged |
+| IPP DKES on `hydra_Np04`, `validation/dkes_hydra_np04_v1.json` | agreement statistics only; the DKES data are not redistributed | merged |
+| W7-X ambipolar profile | stays a regression scaffold; the promotion rung needs a host with a few hundred GiB | merged |
 
 ## Release claim gate metadata
 
