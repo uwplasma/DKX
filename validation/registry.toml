@@ -763,3 +763,32 @@ limitations = [
 path = "records.0.accuracy.true_residual"
 operation = "set"
 value = 0.5
+
+[[entry]]
+id = "adjoint_sensitivity"
+capability = "implicit_gradients"
+status = "accepted_limited"
+claim_scope = "dkx_reverse_mode_sensitivities_against_dkx_central_differences_small_grids"
+claim = "DKX replaces SFINCS RHSMode 4/5 by jax.grad through the implicit solve, and SFINCS's own adjoint (0.05% to 66% from its finite differences) cannot referee it. On a circular tokamak-like field (11x1x14x4) and the W7-X standard configuration at rN 0.5 (7x15x12x3), both two-species full Fokker-Planck with a radial electric field, the reverse-mode derivatives of the ion particle flux, ion heat flux, bootstrap current and ion parallel flow with respect to Boozer |B| harmonics, iota, GHat and IHat agree with central differences of the same DKX solve to 4e-8 (tokamak) and 5e-9 (W7-X) of each observable's largest derivative at the best of four steps (1e-2 to 1e-5). The difference falls 100-fold per tenth of the step, as second-order central differences do."
+artifact = "validation/adjoint_sensitivity_v1.json"
+artifact_sha256 = "eeccfce23ed1cf1902524f725c6400a9fb0eff48e9dd9cbbc206d91ff95847d0"
+artifact_schema = "dkx.adjoint_sensitivity.v1"
+audit_script = "tools/paper_benchmarks/audit_adjoint_sensitivity.py"
+command = "python tools/paper_benchmarks/audit_adjoint_sensitivity.py --artifact validation/adjoint_sensitivity_v1.json"
+inputs = []
+dkx_commit = "44dac4a88ca71a76cd0dcb47c92e453ff54ab348"
+generated_on_host = "official-laptop-cpu"
+generated_on_host_recorded = "laptop CPU (Apple M3 Max), four threads, JAX 0.10.2, Python 3.11"
+limitations = [
+  "grids of 7x15x12x3 (W7-X) and 11x1x14x4 (tokamak-like); the agreement is a property of the implicit-differentiation algebra, not a converged physics result",
+  "the reference is DKX itself; SFINCS RHSMode 4/5 output is not used because it disagrees with its own finite differences by 0.05% to 66%",
+  "one ion observable set (particle flux, heat flux, bootstrap current, ion parallel flow) and one surface per case; geometry parameters only, no profile or collisionality derivatives",
+  "the solves use adjoint_residual_factor = 1e3: the certified-adjoint guard at its default refuses the ion parallel-flow cotangent on W7-X",
+  "experimental validation",
+]
+
+[entry.corruption]
+path = "cases.1.adjoint.2.2"
+operation = "scale"
+value = 1.01
+expected_errors = ["best row-scaled error"]

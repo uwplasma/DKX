@@ -512,3 +512,42 @@ def test_l0_block_is_adjoint_for_like_species() -> None:
     kw["n_xi"] = 2
     kw["n_xi_for_x"] = np.full(16, 2, np.int32)
     assert _asymmetry(np.asarray(make_improved_sugama_v3_operator(**kw).mat)[:, :, 0], kw, 0) < 1e-6
+
+
+# ---------------------------------------------------------------------------
+# End to end at unequal temperatures: fluxes and flows against the full Fokker-Planck operator.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("t_e", [1.0, 3.0, 10.0])
+def test_fluxes_and_flows_follow_the_full_fokker_planck_operator_at_unequal_temperature(t_e) -> None:
+    """Hydrogen and electrons on a rippled tokamak-like field, T_e/T_i = 1, 3, 10 (mass ratio 1/1836).
+
+    The model's L >= 2 blocks are the Landau test kernels, which leaves it about 3 % from the full
+    operator at equal temperatures; unequal temperatures do not widen the gap (4.6 % at T_e/T_i = 10).
+    Errors are relative to the larger species' value, since the electron particle flux crosses zero.
+    """
+    import jax
+
+    import dkx
+    from dkx.run import profile_moments_from_operator
+    from dkx.solve import solve
+
+    jax.config.update("jax_enable_x64", True)
+
+    def moments(collision_operator: int) -> dict[str, np.ndarray]:
+        operator = dkx.run(
+            geometryScheme=1, inputRadialCoordinate=3, rN_wish=0.3, epsilon_t=-0.1, epsilon_h=0.05, iota=0.9,
+            GHat=1.0, IHat=0.0, B0OverBBar=1.0, helicity_l=2, helicity_n=5, psiAHat=0.045, aHat=0.1,
+            Zs=[1.0, -1.0], mHats=[1.0, 5.446170214e-4], nHats=[0.5, 0.5], THats=[1.0, t_e],
+            inputRadialCoordinateForGradients=4, dNHatdrHats=[-0.3, -0.3], dTHatdrHats=[-1.0, -t_e],
+            collisionOperator=collision_operator, Delta=4.5694e-3, alpha=1.0, nu_n=8.33e-3, Er=0.0,
+            Ntheta=9, Nzeta=9, Nxi=16, NL=4, Nx=6, constraintScheme=1, emit=None,
+        ).operator  # fmt: skip
+        table = profile_moments_from_operator(operator, solve(operator, operator.rhs(), tol=1e-10, emit=None).x.reshape(-1))
+        return {k: np.asarray(table[k]).reshape(-1) for k in ("particleFlux_vm_psiHat", "heatFlux_vm_psiHat", "FSABFlow", "FSABjHat")}
+
+    full, model = moments(0), moments(3)
+    for name, reference in full.items():
+        error = np.abs(model[name] - reference).max() / np.abs(reference).max()
+        assert error < 0.06, (name, error)
