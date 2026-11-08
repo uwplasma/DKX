@@ -172,6 +172,16 @@ for $N$ Sonine terms and $S$ species, plus an $NS \times NS$ dense solve; everyt
 traceable and differentiable (`momentum_corrected_solve`; in a VMEX objective,
 `KineticBootstrapMismatch(..., collision_model="pas+momentum_correction")`).
 
+The traced bootstrap row (Boozer angles) and the untraced `KineticBootstrapCurrent`
+(VMEC angles, `geometryScheme = 5`) discretize the same equation in different
+coordinates. At coarse grids each swings by tens of percent between neighbouring
+grids, so a coarse traced current is good to roughly 20%. They agree within 3% from
+about $17 \times 25 \times 40$ ($N_\theta$, $N_\zeta$, $N_\xi$) up: the ratio of the two is
+1.018 and 0.995 at $21 \times 31 \times 48$ for the quasi-helical reactor scale, and 1.03
+and 1.00 for the quasi-axisymmetric one. The Boozer resolution is not the cause:
+`mboz` = 6, 10 and 14 are identical to 1e-10 at $9 \times 9 \times 12$, and 6 to 20
+moves the result by 0.05% at $21 \times 31 \times 48$; the default stays 6.
+
 Measured against full Fokker–Planck on the same grid (`tests/test_momentum_correction.py`
 and the validation in the pull request that introduced it):
 
