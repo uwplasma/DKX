@@ -264,6 +264,18 @@ solves, and the $1.25\times$ refinement the certificate asks for needs a larger 
 on this host; it needs a machine with a few hundred GiB, or a route that does not hold the band (accepting backward-stable
 direct solves, the follow-up named in PR 379). The profile stays a `regression_scaffold`.
 
+Re-measured on main at 44dac4a8 (DKX 2.13.0, JAX 0.12.0.1, SOLVAX 0.35.1), the same rung no longer takes the
+Krylov fallback: at `memory_fraction = 0.75` one fixed-field solve (E_r = 8.55 kV/m, surfaces 0.16 and 0.25) is
+admitted by the memory-bounded structured direct route, truncated block-Thomas with all 192 Legendre blocks kept
+(subsystem batch width 1 of 16, working-set estimate 27.0 GB at float64). The 152.6 GiB band estimate above applies
+to the Krylov preconditioner, not to this route. The first surface was at 11.1 GB resident after four minutes on 8
+pinned cores when the shared host ran out of available memory (other jobs held 40 GiB or more); two attempts were
+stopped at 3 GiB available, and no solve of this rung finished. The gate therefore remains unrun. Float32 is not
+available inside the truncated kernel (`block_thomas_truncated_fn` has no factor-precision argument); the
+`DKX_COARSE_FACTOR_DTYPE=float32` option applies only to the Krylov preconditioner, and float32 factors with
+float64 refinement were measured not to win (`plan.md` sections 16.7 and 16.8). The next attempt needs a host with
+about 35 GiB free for several hours, not a precision change.
+
 ## Open and deferred work
 
 These are not release blockers, and none is claimed:
