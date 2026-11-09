@@ -291,10 +291,16 @@ profile (one solve, 8 pinned cores, shared host):
 | 267,852 | 27,924 | 2.1e7 | 647 s |
 | 535,308 | 41,844 | 5.5e7 | 1,176 s |
 
-The in-core Krylov route at the rung (checkpointed block elimination) reached 26 GiB resident after 33 minutes without
-finishing a solve and was stopped when the host ran out of memory. The gate was therefore not run; about 70 solves
-(two rungs) are out of reach for both routes. What would fit is a block-Thomas factorization whose per-subsystem
-factors (0.93 GiB each, 16 subsystems) live on disk and are reused across the Krylov iterations and the $E_r$ points.
+An earlier in-core Krylov attempt reached 26 GiB resident after 33 minutes without finishing a solve. The route that
+fits is the checkpointed elimination described next; the two-rung gate runs on it.
+
+With full-state solves checkpointed (Schur factors kept every $\approx\sqrt{N_\xi}$ Legendre rows and the segments recomputed
+during back-substitution, SOLVAX `block_thomas_checkpointed_fn`), one fixed-field solve at $(21, 71, 192, 8)$ fits: 1,697 s on
+8 pinned cores of the loaded shared host, 2.7 GiB peak resident, original relative residual 3.2e-14. The route is selected
+when the stored-factor working set exceeds the tier-1 memory budget (`DKX_TIER1_MEMORY_BUDGET_GB`, default 8). At
+$(21, 51, 128, 4)$ the peak falls from 3.9 to 1.2 GiB and the fluxes agree to 1e-13; the recomputation costs between 1.4 and 2
+times the stored-factor time on a loaded host. Peak memory is a few blocks of $m^2 = (21 \times 71)^2$ doubles per
+subsystem, independent of $N_\xi$ and of the number of speeds.
 
 ## Open and deferred work
 
