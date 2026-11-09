@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 
 # The JAX backend is imported below; dkx/runtime.py explains why this is here.
@@ -40,6 +41,7 @@ from .runtime import configure as _configure_runtime
 
 _configure_runtime()
 
+import jax  # noqa: E402
 import jax.numpy as jnp  # noqa: E402
 import numpy as np  # noqa: E402
 
@@ -225,6 +227,7 @@ def _geometry_from_boozer_bhat(
 # Fourier evaluation of BHat (shared by the analytic schemes and scheme 13)
 # =============================================================================
 
+@partial(jax.jit, static_argnames=("n_periods",))
 def _harmonics_bhat_jax(
     *,
     theta: jnp.ndarray,
