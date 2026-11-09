@@ -276,6 +276,14 @@ available inside the truncated kernel (`block_thomas_truncated_fn` has no factor
 float64 refinement were measured not to win (`plan.md` sections 16.7 and 16.8). The next attempt needs a host with
 about 35 GiB free for several hours, not a precision change.
 
+With full-state solves checkpointed (Schur factors kept every $\approx\sqrt{N_\xi}$ Legendre rows and the segments recomputed
+during back-substitution, SOLVAX `block_thomas_checkpointed_fn`), one fixed-field solve at $(21, 71, 192, 8)$ fits: 1,697 s on
+8 pinned cores of the loaded shared host, 2.7 GiB peak resident, original relative residual 3.2e-14. The route is selected
+when the stored-factor working set exceeds the tier-1 memory budget (`DKX_TIER1_MEMORY_BUDGET_GB`, default 8). At
+$(21, 51, 128, 4)$ the peak falls from 3.9 to 1.2 GiB and the fluxes agree to 1e-13; the recomputation costs between 1.4 and 2
+times the stored-factor time on a loaded host. Peak memory is a few blocks of $m^2 = (21 \times 71)^2$ doubles per
+subsystem, independent of $N_\xi$ and of the number of speeds.
+
 ## Open and deferred work
 
 These are not release blockers, and none is claimed:

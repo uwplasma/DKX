@@ -876,6 +876,7 @@ def solve(
                 result = _solve_tier1_truncated(
                     op, rhs2d, keep=keep, tol=tol, atol=atol,
                     subsystem_batch=subsystem_batch, adjoint_window=tier1_adjoint_window,
+                    memory_budget_gb=tier1_memory_budget_gb,
                 )
                 if not (result.converged or differentiable or keep == op.n_xi):
                     # One defect correction before the dense Krylov fallback: at low
