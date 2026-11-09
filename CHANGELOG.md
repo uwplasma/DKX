@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Require `solvax>=0.35.2`: the Schur steps of the structured direct build run 10-25% faster on one CPU thread.
+- Document the thread split measured per deck: two XLA and four BLAS threads are faster for monoenergetic and PAS solves and stall the Fokker-Planck and batched decks, so the default stays.
+
 ## 2.14.0 - 2026-11-08
 
 Cached ambipolar residuals for optimization loops, a faster full-band direct route, adjoint sensitivities checked against finite differences, and the out-of-core MUMPS row of the HSX gap deck.
