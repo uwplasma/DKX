@@ -24,6 +24,7 @@ import numpy as np  # noqa: E402
 try:  # noqa: E402
     from solvax.direct import (
         GeneratedBlockTridiagFactors,
+        block_thomas_checkpointed_fn,
         block_thomas_factor_fn,
         block_thomas_selected_tail_fn,
         block_thomas_solve,
@@ -32,6 +33,7 @@ try:  # noqa: E402
     from solvax.refine import iterative_refinement
 except ImportError:
     GeneratedBlockTridiagFactors = None  # type: ignore[assignment, misc]
+    block_thomas_checkpointed_fn = None  # type: ignore[assignment, misc]
     block_thomas_factor_fn = None  # type: ignore[assignment, misc]
     block_thomas_selected_tail_fn = None  # type: ignore[assignment, misc]
     block_thomas_solve = None  # type: ignore[assignment, misc]
@@ -458,6 +460,7 @@ def _solve_generated_full(
         result = _solve_tier1_truncated(
             op, b[:, None] if single else b, keep=op.n_xi, tol=tol, atol=atol,
             subsystem_batch=subsystem_batch, adjoint_window=adjoint_window,
+            memory_budget_gb=memory_budget_gb,
         )
         # Complete the inverse with identity on inactive padding. The public
         # RHS is projected below, retaining the generated route's zero padding.
@@ -665,8 +668,11 @@ def _solve_tier1(
 # =============================================================================
 
 
-@functools.partial(jax.jit, static_argnames=("keep", "adjoint_window", "width"))
-def _truncated_sweeps(op: KineticOperator, rhs2d: jnp.ndarray, keep: int, adjoint_window: int | None, width: int):
+@functools.partial(jax.jit, static_argnames=("keep", "adjoint_window", "width", "checkpoint"))
+def _truncated_sweeps(
+    op: KineticOperator, rhs2d: jnp.ndarray, keep: int, adjoint_window: int | None, width: int,
+    checkpoint: bool = False,
+):
     """The block-Thomas sweeps of :func:`_solve_tier1_truncated`, compiled once per layout.
 
     Eagerly, every call retraced ``lax.scan`` over fresh closures and compiled one
@@ -731,6 +737,11 @@ def _truncated_sweeps(op: KineticOperator, rhs2d: jnp.ndarray, keep: int, adjoin
                 gamma,
                 shift_border=(cs == 2),
             )
+            if checkpoint and local_keep == n_blocks:
+                # Full recovery without holding every Schur factor: one
+                # checkpoint per sqrt(n_blocks) rows, segments recomputed on
+                # the way back (about twice the elimination work).
+                return block_thomas_checkpointed_fn(block_fn, n_blocks, rhs_cols)
             return block_thomas_truncated_fn(block_fn, n_blocks, rhs_cols, local_keep)
 
         if cs == 2:
@@ -818,6 +829,7 @@ def _solve_tier1_truncated(
     atol: float,
     subsystem_batch: int | str = "auto",
     adjoint_window: int | None = None,
+    memory_budget_gb: float | None = None,
 ) -> SolveResult:
     """Memory-lean structured direct solve: the lowest ``keep`` Legendre blocks.
 
@@ -886,8 +898,14 @@ def _solve_tier1_truncated(
     # per vmapped chunk (the peak holds w concurrent O(keep * m^2) sweeps); width 1 is
     # the fully serial scan-based sweep with a single subsystem's working set.
     width = _resolve_subsystem_batch(op, subsystem_batch, keep)
+    # Full recovery stores a Schur factor per Legendre block; when that working
+    # set exceeds the budget the sweep checkpoints instead (same solution).
+    checkpoint = (
+        keep == n_xi and adjoint_window is None
+        and tier1_truncated_peak_memory_bytes(op, keep, width) > _tier1_budget_bytes(memory_budget_gb)[0]
+    )
     f_low_b, s_b, (coef, stream_b, mirror_b, pas_b, x_b, rhs_low_b, r_c_b) = _truncated_sweeps(
-        op, rhs2d, keep, adjoint_window, width
+        op, rhs2d, keep, adjoint_window, width, checkpoint
     )
     # Force the async sweep to complete so the timing is real compute, not JAX
     # dispatch latency (a no-op under jit/grad tracing).

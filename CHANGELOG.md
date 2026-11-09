@@ -4,6 +4,7 @@
 
 - Require `solvax>=0.35.2`: the Schur steps of the structured direct build run 10-25% faster on one CPU thread.
 - Document the thread split measured per deck: two XLA and four BLAS threads are faster for monoenergetic and PAS solves and stall the Fokker-Planck and batched decks, so the default stays.
+- Memory: full-state truncated structured solves (`tier1_keep_lowest = Nxi`, which the ambipolar and profile workflows use so the original residual can be checked) checkpoint the Schur factors, one per about sqrt(Nxi) Legendre rows, when the stored-factor working set exceeds the tier-1 memory budget; the segments are recomputed on the way back (SOLVAX `block_thomas_checkpointed_fn`). The solution is the same to rounding. W7-X ambipolar promotion rung (21, 71, 192, 8), 4,580,368 unknowns, spectral angles, one fixed-field solve on 8 pinned cores of a loaded shared host: 1,697 s, 2.7 GiB peak resident, true relative residual 3.2e-14 (the stored-factor route estimates 27 GB and held 11 GB without finishing). At (21, 51, 128, 4) the peak falls from 3.9 to 1.2 GiB with fluxes equal to 1e-13.
 
 ## 2.14.0 - 2026-11-08
 
@@ -17,6 +18,7 @@ Cached ambipolar residuals for optimization loops, a faster full-band direct rou
 - Docs: the improved-Sugama Spitzer-Harm limit (within 0.4% at the default `flow_order = 5`, 11.1% to 3.1% low without the L = 1 correction) and the unequal-temperature check are in `docs/physics/collisions.md`.
 - Validation: the W7-X ambipolar promotion rung (21, 71, 192, 8) is admitted on main by the truncated structured direct route (27.0 GB estimate at float64), not refused; no solve finished on the shared host, so the profile stays a `regression_scaffold`. `docs/benchmarks/validation_matrix.md` records the routing and the measurement.
 - Speed: the full-band structured direct route (monoenergetic and PAS decks) builds the streaming, mirror and ExB matrices once per factorization (`KineticOperator.legendre_block_fn`) instead of inside every Legendre-row step, embeds the diagonal terms instead of reading a stored identity, and forms the transpose border column `z_t` only when a transposed solve needs it. W7-X monoenergetic 15x31x48, four pinned cores, A/B alternating on the same host: warm 1.53 to 1.30 s, process cold without the compile cache 10.2 to 9.5 s, peak RSS 0.77 to 0.75 GB; coefficients agree to 1e-13 relative.
+- Validation: the W7-X ambipolar promotion rung (21, 71, 192, 8) is measured through out-of-core MUMPS and does not fit: 119,280 assembly products, 44 GiB resident in the assembly before any factor is written; 67 s, 647 s and 1,176 s at 59,144, 267,852 and 535,308 unknowns. The checkpointed block-Thomas route does fit: one solve at the rung takes 1,697 s at 2.7 GiB peak with true residual 3.2e-14. The profile stays a regression scaffold until the two-rung gate passes; `validation_matrix.md` and `plan.md` section 21 record the numbers.
 
 ## 2.13.0 - 2026-11-05
 
