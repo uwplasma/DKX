@@ -276,6 +276,24 @@ available inside the truncated kernel (`block_thomas_truncated_fn` has no factor
 float64 refinement were measured not to win (`plan.md` sections 16.7 and 16.8). The next attempt needs a host with
 about 35 GiB free for several hours, not a precision change.
 
+The out-of-core MUMPS route that solved the HSX gap deck does not close this gap. Its matrix is assembled from
+operator products, one per group of columns that share no row; with spectral angles every $(\theta, \zeta)$ point is its own
+group, so the rung needs 119,280 products on 4,580,368 unknowns and about 535 nonzeros per row (at most 2.45e9, 27 GiB as
+CSR) before any factor is written. A fixed-field attempt at $(21, 71, 192, 8)$ reached 44 GiB resident within six
+minutes, still in the assembly, with the 24 GiB budget unenforced at that stage (it bounds the factor workspace only), and
+was stopped when the host's available memory fell to 1 GiB. The route itself is exact: at $(9, 21, 24, 4)$ the six
+$E_r$ points of one surface agree with the in-core solves to 2.4e-11 in fluxes. Its cost on smaller rungs of the same
+profile (one solve, 8 pinned cores, shared host):
+
+| unknowns | products | nonzeros | time |
+| --- | --- | --- | --- |
+| 59,144 | 9,256 | 3.0e6 | 67 s |
+| 267,852 | 27,924 | 2.1e7 | 647 s |
+| 535,308 | 41,844 | 5.5e7 | 1,176 s |
+
+An earlier in-core Krylov attempt reached 26 GiB resident after 33 minutes without finishing a solve. The route that
+fits is the checkpointed elimination described next; the two-rung gate runs on it.
+
 With full-state solves checkpointed (Schur factors kept every $\approx\sqrt{N_\xi}$ Legendre rows and the segments recomputed
 during back-substitution, SOLVAX `block_thomas_checkpointed_fn`), one fixed-field solve at $(21, 71, 192, 8)$ fits: 1,697 s on
 8 pinned cores of the loaded shared host, 2.7 GiB peak resident, original relative residual 3.2e-14. The route is selected
