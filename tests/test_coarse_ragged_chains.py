@@ -121,7 +121,8 @@ def test_the_dense_route_is_the_reusable_route_to_rounding(name: str, monkeypatc
         f = jnp.asarray(rng.standard_normal(op.f_size))
         v = jnp.asarray(rng.standard_normal(op.total_size))
         for got, ref in zip(dense[:2], reusable[:2], strict=True):  # forward, transposed
-            assert _relative(got(f), ref(f)) <= 1e-12
+            # An explicit inverse loses cond * eps (cond <= 1e7 here), the LU does not.
+            assert _relative(got(f), ref(f)) <= 1e-10
         for got, ref in zip(dense[2:], reusable[2:], strict=True):
             out = np.asarray(got(v))
             assert np.all(np.isfinite(out))
@@ -260,12 +261,12 @@ def test_only_the_active_rows_are_stored(name: str, monkeypatch):
 
     monkeypatch.setattr(cp, "_factor_coarse_rows", factor)
     cp.build_coarse_preconditioner(op)
-    (chains,) = captured
+    chains, _ = captured[-1]  # the LU rebuild follows an inverse whose blocks are too ill-conditioned
     m = op.n_theta * op.n_zeta
     active = sum(min(max(int(op.n_xi_for_x[b % op.n_x]), 1), op.n_xi) for b in range(op.n_species * op.n_x))
     stored = sum(leaf.nbytes for leaf in jax.tree_util.tree_leaves(chains))
     assert sum(cp._coarse_row_layout(op)[1]) == active
-    assert stored == active * (3 * m * m * 8 + m * 4)  # LU and both bands, int32 pivots
+    assert stored == active * (3 * m * m * 8 + (m * 4 if len(chains[0]) == 4 else 0))  # inverse or LU+pivots, and both bands
     rectangular = op.n_species * op.n_x * op.n_xi
     assert (active < rectangular) == (name in TRUNCATING)
     assert stored <= cp.coarse_preconditioner_band_bytes(op) + rectangular * m * 4

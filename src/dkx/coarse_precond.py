@@ -824,7 +824,7 @@ def _coarse_row_layout(op: KineticOperator) -> tuple[tuple[int, ...], tuple[int,
     adjacent in every row: a chain's length depends only on its speed, so the
     entries before a speed's group are at least as long and stay active for as
     long, which puts that group at the same static offset in every row it is
-    active in.  :func:`_apply_dense_coarse_speed` solves one speed by slicing
+    active in.  :func:`_split_factors_by_speed` slices one speed's chain
     there.
     """
     batch = op.n_species * op.n_x
@@ -859,12 +859,45 @@ def _factor_coarse_active_chains(pinned, *, rows: tuple, factor_dtype):
     ), lengths
 
 
+#: Largest 1-norm condition number of a Legendre-row block for which its explicit
+#: inverse replaces the LU in the apply.  Inverting loses ``cond * eps`` and the
+#: inverse loses what an LU solve keeps on a near-singular block: the 2-species
+#: magnetic-drift test deck (cond up to 1e16) went from 18 GCROT iterations to
+#: 6000 without converging.  Production decks measure 3e4 or below.
+_INVERSE_COND_LIMIT = 1e7
+
+
+def _explicit_inverse(blocks):
+    """Inverses of a stack of square blocks, from one LU each, and their 1-norm
+    condition numbers.
+
+    The apply runs two sweeps over every Legendre row on each Krylov iteration.
+    A triangular solve is a latency-bound pair of kernels on a GPU, where a stored
+    inverse makes each row one batched product; the LU is spent once, here.
+    """
+    eye = jnp.eye(blocks.shape[-1], dtype=blocks.dtype)
+    inverse = jax.vmap(lambda a: lu_solve(lu_factor(a), eye))(blocks)
+    one_norm = lambda a: jnp.max(jnp.sum(jnp.abs(a), axis=-2), axis=-1)  # noqa: E731
+    return inverse, one_norm(blocks) * one_norm(inverse)
+
+
+def _row_solve(solver: tuple, v, *, transpose: bool):
+    """``Delta^-1 v`` (or ``Delta^-T v``) for every active chain of one row.
+
+    ``solver`` is ``(inverse,)``, applied as a batched product, or ``(lu, piv)``,
+    the triangular solves of :func:`_explicit_inverse`'s fallback.
+    """
+    if len(solver) == 1:
+        return jax.vmap(lambda b, x: x @ b if transpose else b @ x)(solver[0], v)
+    return jax.vmap(lambda a, q, b: lu_solve((a, q), b, trans=1 if transpose else 0))(*solver, v)
+
+
 @functools.partial(
-    jax.jit, static_argnames=("n_xi", "rows", "drop_l_coupling", "factor_dtype")
+    jax.jit, static_argnames=("n_xi", "rows", "drop_l_coupling", "factor_dtype", "inverse")
 )
 def _factor_coarse_rows(
     coef, subs, floor, gamma, *, n_xi: int, rows: tuple, drop_l_coupling: bool,
-    factor_dtype=None,
+    factor_dtype=None, inverse: bool = False,
 ):  # fmt: skip
     """Block-Thomas elimination of every active row, one Legendre row at a time.
 
@@ -876,7 +909,7 @@ def _factor_coarse_rows(
     per active row plus pivots, and the working set is one row's blocks.  The
     generator arrays are arguments, never closures, so none becomes a captured
     constant (tests/test_coarse_precond_constants.py).  Returns, per row,
-    ``(delta_lu, delta_piv, lower, upper)`` with a leading ``counts[l]`` axis.
+    ``(delta_inverse, lower, upper)`` with ``inverse`` and ``(delta_lu, delta_piv, lower, upper)`` without, with a leading ``counts[l]`` axis.
 
     Rows are generated in float64 and only then cast to ``factor_dtype``, so the
     pins and the floor, scaled against band magnitudes, stay at full precision.
@@ -893,6 +926,7 @@ def _factor_coarse_rows(
         return tuple(a.astype(low) for a in generate(ell))
 
     factors: list = [None] * len(counts)
+    cond = jnp.zeros(())
     for ell in reversed(range(len(counts))):
         c = counts[ell]
         head = (tuple(a[:c] for a in subs), floor[:c], gamma[:c])
@@ -901,11 +935,16 @@ def _factor_coarse_rows(
         )
         if ell + 1 < len(counts):
             n = counts[ell + 1]
-            lu, piv, lower_next, _ = factors[ell + 1]
-            solved = jax.vmap(lambda a, q, b: lu_solve((a, q), b))(lu, piv, lower_next)
+            lower_next = factors[ell + 1][-2]
+            solved = _row_solve(factors[ell + 1][:-2], lower_next, transpose=False)
             diag = jnp.concatenate([diag[:n] - upper[:n] @ solved, diag[n:]])
-        factors[ell] = (*jax.vmap(lu_factor)(diag), lower, upper)
-    return tuple(factors)
+        if inverse:
+            inv, row_cond = _explicit_inverse(diag)
+            cond = jnp.maximum(cond, jnp.max(row_cond))
+            factors[ell] = (inv, lower, upper)
+        else:
+            factors[ell] = (*jax.vmap(lu_factor)(diag), lower, upper)
+    return tuple(factors), cond
 
 
 
@@ -939,17 +978,14 @@ def _apply_dense_coarse_factors(factors, floor, rhs, *, transpose, rows):
     Dynamic factors reuse compilation across builds.
     """
     order, counts = rows
-    m = factors[0][1].shape[-1]
+    m = factors[0][-1].shape[-1]
     g = rhs.reshape(floor.shape[0], -1, m)
-    low = factors[0][0].dtype
+    low = factors[0][-1].dtype
     out = (g.astype(low) / (1.0 + floor).astype(low)[:, None, None]).astype(g.dtype)
-    work = jnp.result_type(g, factors[0][2])
-    trans = 1 if transpose else 0
+    work = jnp.result_type(g, factors[0][-2])
 
-    def tsolve(lu, piv, v):
-        return jax.vmap(lambda a, q, b: lu_solve((a, q), b.astype(low), trans=trans).astype(work))(
-            lu, piv, v
-        )
+    def tsolve(solver, v):
+        return _row_solve(solver, v.astype(low), transpose=transpose).astype(work)
 
     def couple(block, v):
         # ``v @ block`` is ``block^T v`` without a transposed operand, whose fusion
@@ -965,70 +1001,84 @@ def _apply_dense_coarse_factors(factors, floor, rhs, *, transpose, rows):
         s = packed[starts[ell] : starts[ell + 1]]
         if ell + 1 < len(counts):
             n = counts[ell + 1]
-            lu, piv, lower_next, _ = factors[ell + 1]
-            down = lower_next if transpose else factors[ell][3][:n]
-            s = jnp.concatenate([s[:n] - couple(down, tsolve(lu, piv, sigma[ell + 1])), s[n:]])
+            *solver, lower_next, _ = factors[ell + 1]
+            down = lower_next if transpose else factors[ell][-1][:n]
+            s = jnp.concatenate([s[:n] - couple(down, tsolve(solver, sigma[ell + 1])), s[n:]])
         sigma[ell] = s
     solution: list = []
-    for ell, (lu, piv, lower, _) in enumerate(factors):
+    for ell, (*solver, lower, _) in enumerate(factors):
         s = sigma[ell]
         if ell > 0:
-            up = factors[ell - 1][3][: counts[ell]] if transpose else lower
+            up = factors[ell - 1][-1][: counts[ell]] if transpose else lower
             s = s - couple(up, solution[-1][: counts[ell]])
-        solution.append(tsolve(lu, piv, s))
+        solution.append(tsolve(solver, s))
     # Unique rows: the only scatter ``jax.linear_transpose`` accepts.
     out = out.at[rows_b, rows_l].set(jnp.concatenate(solution), unique_indices=True)
     return out.reshape(rhs.shape)
 
 
-@functools.partial(
-    jax.jit, static_argnames=("transpose", "rows", "speed", "n_species")
-)
-def _apply_dense_coarse_speed(factors, floor, rhs, *, transpose, rows, speed, n_species):
-    """The same two sweeps as :func:`_apply_dense_coarse_factors`, for one speed.
+def _split_factors_by_speed(factors: list, rows: tuple, n_species: int) -> tuple:
+    """Per-speed, contiguous copies of the stored rows, emptying ``factors``.
 
-    Subsystem ``b = s * n_x + x`` is its own Legendre chain, so the speeds are
-    independent and a speed's solve reads only its own factors.  Because
-    :func:`_coarse_row_layout` keeps a speed's species adjacent at one offset,
-    that restriction is a static slice of every row rather than a gather, and
-    the solve touches ``1 / n_x`` of the stored blocks.  ``floor`` and ``rhs``
-    hold this speed alone, species-major.
+    The speed-triangle apply reads one speed's chain at a time.  Slicing the
+    stacked ``(counts[l], m, m)`` arrays inside the compiled apply makes XLA
+    materialize every slice, a second copy of the bands on each application
+    (1.7 GB of the 3.7 GB GCROT temporary on the W7-X deck).  Slicing once here
+    leaves nothing to copy there.  Each stacked row is released as soon as it is
+    split, so the transient is one row, not the whole set.
     """
     order, counts = rows
-    start = order.index(speed)
-    stop = start + n_species
-    length = sum(c > start for c in counts)
-    m = factors[0][1].shape[-1]
-    g = rhs.reshape(n_species, -1, m)
-    low = factors[0][0].dtype
-    out = (g.astype(low) / (1.0 + floor).astype(low)[:, None, None]).astype(g.dtype)
-    work = jnp.result_type(g, factors[0][2])
-    trans = 1 if transpose else 0
+    n_x = len(order) // n_species
+    starts = [order.index(x) for x in range(n_x)]
+    chains: list[list] = [[] for _ in range(n_x)]
+    for ell in range(len(factors)):
+        row, factors[ell] = factors[ell], None
+        for x, start in enumerate(starts):
+            if counts[ell] > start:
+                chains[x].append(tuple(a[start : start + n_species] for a in row))
+        del row
+    return tuple(tuple(c) for c in chains)
 
-    def tsolve(lu, piv, v):
-        return jax.vmap(lambda a, q, b: lu_solve((a, q), b.astype(low), trans=trans).astype(work))(
-            lu, piv, v
-        )
+
+@functools.partial(jax.jit, static_argnames=("transpose",))
+def _apply_split_speed(chain, floor, rhs, *, transpose):
+    """The two sweeps of :func:`_apply_dense_coarse_factors` for one speed.
+
+    Subsystem ``b = s * n_x + x`` is its own Legendre chain, so the speeds are
+    independent and a speed's solve reads only its own factors, the
+    rows of :func:`_split_factors_by_speed`, each a stored inverse or an LU
+    (:data:`_INVERSE_COND_LIMIT`).  ``floor`` and ``rhs``
+    hold this speed alone, species-major.
+    """
+    length = len(chain)
+    m = chain[0][-1].shape[-1]
+    g = rhs.reshape(floor.shape[0], -1, m)
+    low = chain[0][-1].dtype
+    out = (g.astype(low) / (1.0 + floor).astype(low)[:, None, None]).astype(g.dtype)
+    work = jnp.result_type(g, chain[0][-2])
 
     def couple(block, v):
         return jax.vmap(lambda b, x: x @ b if transpose else b @ x)(block, v)
+
+    def tsolve(solver, v):
+        return _row_solve(solver, v.astype(low), transpose=transpose).astype(work)
 
     sigma: list = [None] * length
     for ell in reversed(range(length)):
         s = g[:, ell]
         if ell + 1 < length:
-            lu, piv, lower_next, _ = (a[start:stop] for a in factors[ell + 1])
-            down = lower_next if transpose else factors[ell][3][start:stop]
-            s = s - couple(down, tsolve(lu, piv, sigma[ell + 1]))
+            *solver, lower_next, _ = chain[ell + 1]
+            down = lower_next if transpose else chain[ell][-1]
+            s = s - couple(down, tsolve(solver, sigma[ell + 1]))
         sigma[ell] = s
     solution: list = []
     for ell in range(length):
-        lu, piv, lower, _ = (a[start:stop] for a in factors[ell])
+        *solver, lower, _ = chain[ell]
         s = sigma[ell]
         if ell > 0:
-            up = factors[ell - 1][3][start:stop] if transpose else lower
+            up = chain[ell - 1][-1] if transpose else lower
             s = s - couple(up, solution[-1])
-        solution.append(tsolve(lu, piv, s))
+        solution.append(tsolve(solver, s))
     return out.at[:, :length].set(jnp.stack(solution, axis=1)).reshape(rhs.shape)
 
 
@@ -1289,10 +1339,16 @@ def build_coarse_preconditioner(
         # Rows go straight from the generator into the elimination, so no band is
         # materialized first, and only the rows each chain keeps are stored.
         rows = _coarse_row_layout(op)
-        factors = _factor_coarse_rows(
-            coef, subs, floor, gamma, n_xi=n_xi, rows=rows,
+        factor = functools.partial(
+            _factor_coarse_rows, coef, subs, floor, gamma, n_xi=n_xi, rows=rows,
             drop_l_coupling=bool(drop_l_coupling), factor_dtype=_coarse_factor_dtype(),
         )  # fmt: skip
+        # Explicit inverses where the blocks are well conditioned.  A traced
+        # operator cannot be inspected, so it keeps the LU it always had.
+        traced = any(isinstance(a, jax.core.Tracer) for a in jax.tree_util.tree_leaves(subs))
+        factors, cond = factor(inverse=not traced)
+        if not (traced or isinstance(cond, jax.core.Tracer)) and not float(cond) <= _INVERSE_COND_LIMIT:
+            factors, _ = factor(inverse=False)
 
         upper = (
             _strict_upper_speed_coupling(op, mask) if retain_speed_triangle else None
@@ -1301,6 +1357,11 @@ def build_coarse_preconditioner(
         # x reaches; an integer instead truncates the nilpotent series of D^-1 U,
         # trading exactness in M for an apply that stays batched over all speeds.
         sweeps = 0 if retain_speed_triangle is True else int(retain_speed_triangle or 0)
+        split = None
+        if upper is not None and retain_speed_triangle is True:
+            factors = list(factors)
+            split = _split_factors_by_speed(factors, rows, n_s)  # empties the list
+            factors = None
 
         def _a_inv(transpose: bool) -> Callable[[jnp.ndarray], jnp.ndarray]:
             # A plain function, not a ``functools.partial``: SOLVAX's Krylov entry
@@ -1313,10 +1374,9 @@ def build_coarse_preconditioner(
                 )
 
             def apply_speed(x: int, r: jnp.ndarray) -> jnp.ndarray:
-                return _apply_dense_coarse_speed(
-                    factors, floor.reshape(n_s, n_x)[:, x], r,
-                    transpose=transpose, rows=rows, speed=x, n_species=n_s,
-                )  # fmt: skip
+                return _apply_split_speed(
+                    split[x], floor.reshape(n_s, n_x)[:, x], r, transpose=transpose
+                )
 
             def apply_back_substitution(v: jnp.ndarray) -> jnp.ndarray:
                 # M = D + U with D the speed-diagonal blocks already factored and U
