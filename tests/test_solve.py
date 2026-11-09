@@ -218,6 +218,19 @@ def test_auto_policy_truncation_invalid_falls_through_to_tier2() -> None:
     assert r.converged
 
 
+@pytest.mark.parametrize("name", ["monoenergetic_PAS_tiny_scheme1", "pas_1species_PAS_noEr_tiny_scheme1"])
+def test_full_recovery_checkpoints_under_a_small_budget(name: str) -> None:
+    """Full-state truncated solves agree whether Schur factors are stored or checkpointed."""
+    op = _load_op(name)
+    rhs = op.rhs(1) if name.startswith("mono") else op.rhs()
+    kw = dict(method="block_tridiagonal_truncated", tier1_keep_lowest=op.n_xi)
+    stored = solve(op, rhs, tier1_memory_budget_gb=100.0, **kw)
+    ckpt = solve(op, rhs, tier1_memory_budget_gb=1e-6, **kw)
+    assert stored.converged and ckpt.converged
+    scale = np.max(np.abs(np.asarray(stored.x)))
+    assert np.max(np.abs(np.asarray(stored.x) - np.asarray(ckpt.x))) < 1e-12 * scale
+
+
 @pytest.mark.parametrize(
     "name,which",
     [
