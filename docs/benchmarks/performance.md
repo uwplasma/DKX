@@ -482,7 +482,13 @@ also uses 18–20× less memory. The causes:
    the harness gives DKX its own `--dkx-xla-threads`. Outside the harness, when neither `DKX_CORES`
    nor `NPROC` is set, DKX gives XLA `min(8, cores)` threads and BLAS
    `min(4, cores)`, so a LAPACK call is not left on one core: on four pinned
-   cores the warm W7-X solve takes 1.7 s against 2.6 s with single-threaded BLAS. Moving the Schur steps to
+   cores the warm W7-X solve takes 1.7 s against 2.6 s with single-threaded BLAS.
+   The split is a compromise between decks. On four pinned cores of a quiet host, `NPROC=2
+   OPENBLAS_NUM_THREADS=4` takes the warm monoenergetic W7-X solve from 1.14-1.29 s to 0.92-0.98 s
+   and the PAS deck from 1.43-1.65 s to 1.26-1.28 s, but the full Fokker-Planck deck and the batched
+   `E_r` scan did not finish in 25 minutes with it (the process idles with no CPU use), while the
+   default, `2`/`2` and `1`/`4` complete. DKX therefore keeps the default; the setting is for
+   monoenergetic and PAS runs only. Moving the Schur steps to
    SciPy through a host callback did not help: the same contention made them
    slower. The remaining gap is BLAS speed: on these cores SciPy's bundled
    OpenBLAS takes 9 ms per Schur step and the conda OpenBLAS MONKES links
