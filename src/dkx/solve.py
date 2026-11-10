@@ -878,14 +878,16 @@ def solve(
                     subsystem_batch=subsystem_batch, adjoint_window=tier1_adjoint_window,
                     memory_budget_gb=tier1_memory_budget_gb,
                 )
-                if not (result.converged or differentiable or keep == op.n_xi):
+                if not (result.converged or differentiable):
                     # One defect correction before the dense Krylov fallback: at low
                     # collisionality ||A|| ||x|| >> ||b|| leaves the elimination's
                     # rounding just above tol. Rows l < keep-1 see only solved blocks,
                     # so their residual is exact; row keep-1 belongs to the reduced system.
+                    # A full-state solve (keep == Nxi) corrects every row.
+                    cut = op.n_xi if keep == op.n_xi else keep - 1
                     def low_residual(x):
                         r = rhs2d - jax.vmap(op.apply, 1, 1)(x)
-                        f = r[: op.f_size].reshape(*op.f_shape, -1).at[:, :, keep - 1 :].set(0.0)
+                        f = r[: op.f_size].reshape(*op.f_shape, -1).at[:, :, cut:].set(0.0)
                         return r.at[: op.f_size].set(f.reshape(op.f_size, -1))
                     x = result.x + _solve_tier1_truncated(
                         op, low_residual(result.x), keep=keep, tol=tol, atol=atol,
