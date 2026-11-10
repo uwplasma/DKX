@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Require `solvax>=0.35.2`: the Schur steps of the structured direct build run 10-25% faster on one CPU thread.
+- Require `solvax>=0.35.3`. SOLVAX 0.35.2 changed the rounding of its factored block-Thomas routes only, and the dense and reusable structured routes then disagreed by up to 1.6e-3 on ill-conditioned decks.
 - Document the thread split measured per deck: two XLA and four BLAS threads are faster for monoenergetic and PAS solves and stall the Fokker-Planck and batched decks, so the default stays.
 - Memory: full-state truncated structured solves (`tier1_keep_lowest = Nxi`, which the ambipolar and profile workflows use so the original residual can be checked) checkpoint the Schur factors, one per about sqrt(Nxi) Legendre rows, when the stored-factor working set exceeds the tier-1 memory budget; the segments are recomputed on the way back (SOLVAX `block_thomas_checkpointed_fn`). The solution is the same to rounding. W7-X ambipolar promotion rung (21, 71, 192, 8), 4,580,368 unknowns, spectral angles, one fixed-field solve on 8 pinned cores of a loaded shared host: 1,697 s, 2.7 GiB peak resident, true relative residual 3.2e-14 (the stored-factor route estimates 27 GB and held 11 GB without finishing). At (21, 51, 128, 4) the peak falls from 3.9 to 1.2 GiB with fluxes equal to 1e-13.
 

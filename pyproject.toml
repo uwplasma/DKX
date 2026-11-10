@@ -44,9 +44,9 @@ dependencies = [
   # published DKX Krylov timing since 2026-09-12 was measured with that
   # behaviour.
   # 0.35.0 added `shard_batch(check_vma=...)`, which the multi-device batch uses.
-  # 0.35.2 forms the dense Schur coupling of the block elimination with
-  # right-side triangular solves, 10-25% faster per step on one CPU thread.
-  "solvax>=0.35.2",
+  # 0.35.3 excludes 0.35.2, whose right-side Schur coupling made the dense and
+  # reusable structured routes disagree beyond rounding on ill-conditioned decks.
+  "solvax>=0.35.3",
 ]
 
 [project.optional-dependencies]
