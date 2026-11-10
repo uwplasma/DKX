@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Solve: full-state truncated structured solves (`tier1_keep_lowest = Nxi`) get the same single defect correction as the truncated ones before the Krylov fallback. A W7-X (21, 71, 192, 8) solve that reached an absolute residual of 4.9e-13, just above the relative tolerance, otherwise fell back to the Krylov route, whose coarse preconditioner needs an estimated 153 GiB at that size.
 - Memory: full-state truncated structured solves (`tier1_keep_lowest = Nxi`, which the ambipolar and profile workflows use so the original residual can be checked) checkpoint the Schur factors, one per about sqrt(Nxi) Legendre rows, when the stored-factor working set exceeds the tier-1 memory budget; the segments are recomputed on the way back (SOLVAX `block_thomas_checkpointed_fn`). The solution is the same to rounding. W7-X ambipolar promotion rung (21, 71, 192, 8), 4,580,368 unknowns, spectral angles, one fixed-field solve on 8 pinned cores of a loaded shared host: 1,697 s, 2.7 GiB peak resident, true relative residual 3.2e-14 (the stored-factor route estimates 27 GB and held 11 GB without finishing). At (21, 51, 128, 4) the peak falls from 3.9 to 1.2 GiB with fluxes equal to 1e-13.
 
 ## 2.14.0 - 2026-11-08
