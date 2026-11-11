@@ -44,7 +44,9 @@ dependencies = [
   # published DKX Krylov timing since 2026-09-12 was measured with that
   # behaviour.
   # 0.35.0 added `shard_batch(check_vma=...)`, which the multi-device batch uses.
-  "solvax>=0.35.0",
+  # 0.35.3 excludes 0.35.2, whose right-side Schur coupling made the dense and
+  # reusable structured routes disagree beyond rounding on ill-conditioned decks.
+  "solvax>=0.35.3",
 ]
 
 [project.optional-dependencies]

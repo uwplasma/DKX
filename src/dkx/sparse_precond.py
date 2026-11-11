@@ -68,6 +68,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from dkx.coarse_precond import _COARSE_DRIFT_MAX_L
 from dkx.drift_kinetic import KineticOperator
 
 __all__ = [
@@ -138,12 +139,15 @@ def _tz_templates(op: KineticOperator):
 
 
 def _angular_pieces(op: KineticOperator):
-    """Per-species streaming and mirror templates, and the ExB block.
+    """Per-species streaming and mirror templates, the ExB block, and the drift diagonals.
 
     Mirrors :meth:`KineticOperator.legendre_blocks` term by term:
     ``stream`` carries the row-scaled ``d/dtheta`` and ``d/dzeta`` of parallel
     streaming, ``mirror`` is the diagonal mirror force, and ``exb`` is the
     ``E x B`` drift block, which is species-independent and diagonal in ``L``.
+    ``drift`` holds, per species, the sparse ``(m1, m2, m3)`` and ``xi`` diagonal of
+    the magnetic drifts (``None`` without them), the L-diagonal part the coarse route
+    keeps.
     """
     a_theta, a_zeta, eye = _tz_templates(op)
     import scipy.sparse as sp
@@ -178,7 +182,13 @@ def _angular_pieces(op: KineticOperator):
         ).tocsr()
     else:
         exb = sp.csr_matrix((op.n_theta * op.n_zeta,) * 2, dtype=np.float64)
-    return stream, mirror, exb, eye
+    parts = op.magnetic_drift_diagonal_parts()
+    drift = None if parts is None else [
+        ([sp.csr_matrix(_np(parts[f"mt{i}"][s] + parts[f"mz{i}"][s])) for i in (1, 2, 3)],
+         _np(parts["xi"][s]))
+        for s in range(op.n_species)
+    ]  # fmt: skip
+    return stream, mirror, exb, eye, drift
 
 
 def _diagonal_coefficients(op: KineticOperator) -> np.ndarray:
@@ -218,11 +228,11 @@ def simplified_subsystem_csr(
     """
     import scipy.sparse as sp
 
-    stream, mirror, exb, eye = _angular_pieces(op)
-    return _assemble(op, s, ix, stream, mirror, exb, eye, sp, drop_l_coupling)[0]
+    pieces = _angular_pieces(op)
+    return _assemble(op, s, ix, *pieces, sp, drop_l_coupling)[0]
 
 
-def _assemble(op, s, ix, stream, mirror, exb, eye, sp, drop_l_coupling):
+def _assemble(op, s, ix, stream, mirror, exb, eye, drift, sp, drop_l_coupling):
     """Block-tridiagonal-in-L CSR assembly of one subsystem (shared inner loop).
 
     Returns ``(csr, band, l0_defect, scale)``.  The three scalars are the
@@ -245,6 +255,13 @@ def _assemble(op, s, ix, stream, mirror, exb, eye, sp, drop_l_coupling):
     for ell in range(n_xi):
         row_mask = float(mask[ix, ell])
         diag = row_mask * exb + diag_coef[ell] * eye
+        if drift is not None and ell <= _COARSE_DRIFT_MAX_L:  # L-diagonal drifts, as coarse
+            dc = {k: float(v) for k, v in KineticOperator.magnetic_drift_diagonal_coefficients(ell).items()}
+            (m1, m2, m3), xi_vec = drift[s]
+            x2 = x_val * x_val
+            diag = diag + row_mask * x2 * (
+                dc["c1"] * m1 + dc["c2"] * m2 + dc["c3"] * m3 + sp.diags(dc["xi"] * xi_vec)
+            )
         blocks[(ell, ell)] = diag.tocsr()
         if not drop_l_coupling and ell >= 1:
             c = float(coef_lower[ell])
@@ -296,12 +313,12 @@ def assemble_simplified(
 
     from dkx.coarse_precond import _l0_pin_gamma  # noqa: PLC0415
 
-    stream, mirror, exb, eye = _angular_pieces(op)
+    pieces = _angular_pieces(op)
     matrices, bands, defects, scales = [], [], [], []
     for s in range(op.n_species):
         for ix in range(op.n_x):
             mat, band, defect, scale = _assemble(
-                op, s, ix, stream, mirror, exb, eye, sp, drop_l_coupling
+                op, s, ix, *pieces, sp, drop_l_coupling
             )
             matrices.append(mat)
             bands.append(band)
