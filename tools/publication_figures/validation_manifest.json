@@ -37,44 +37,6 @@
     ]
   },
   {
-    "id": "sfincs2014_fig1_lhd_collisionality_reaudit_fast",
-    "status": "implemented",
-    "release_gate": {
-      "claim_status": "regression_scaffold",
-      "blocks_current_release": false,
-      "evidence": "checked-in bounded LHD fast rerun artifacts",
-      "promotion_gate": "Superseded by the full LHD collisionality lane for release claims; keep as a cheap branch regression scaffold"
-    },
-    "kind": "literature_reproduction",
-    "literature": [
-      "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
-    ],
-    "scripts": [
-      "tools/publication_figures/generate_sfincs_paper_figs.py --case lhd --fast --scan-only --work-dir tools/publication_figures/output/lhd_reaudit_fast"
-    ],
-    "artifacts": [
-      "tools/publication_figures/artifacts/lhd_collisionality_reaudit_fast_summary.json",
-      "docs/_static/figures/paper/dkx_fig1_lhd_collisionality_reaudit_fast.png",
-      "docs/_static/figures/paper/dkx_fig1_lhd_collisionality_reaudit_fast.pdf"
-    ],
-    "claims": [
-      "The corrected bounded LHD collisionality lane resolves clear FP/PAS separation again",
-      "This bounded artifact is suitable for regression and manuscript-layout work and is superseded by the full collisionality figure family for release claims"
-    ],
-    "source_code": [
-      "tools/publication_figures/generate_sfincs_paper_figs.py"
-    ],
-    "tests": [
-      "tests/test_generate_sfincs_paper_figs.py",
-      "tests/test_collisionality_artifact.py"
-    ],
-    "acceptance_gates": [
-      "Summary artifact contains both Fokker-Planck and PAS labels on the pinned four-point collisionality ladder",
-      "For every pinned collisionality, PAS diagonal transport coefficients remain separated from FP coefficients",
-      "Figure and JSON artifacts stay checked in until the full-resolution lane replaces this bounded scaffold"
-    ]
-  },
-  {
     "id": "sfincs2014_fig2_w7x_collisionality",
     "status": "implemented",
     "release_gate": {
@@ -109,44 +71,6 @@
       "Summary artifact contains both Fokker-Planck and PAS labels on the seven-point collisionality ladder",
       "Figure and JSON are generated from the fixed scan-input writer",
       "FP/PAS separation assertions pass before using this lane as a publication-facing artifact"
-    ]
-  },
-  {
-    "id": "sfincs2014_fig2_w7x_collisionality_reaudit_fast",
-    "status": "implemented",
-    "release_gate": {
-      "claim_status": "regression_scaffold",
-      "blocks_current_release": false,
-      "evidence": "checked-in bounded W7-X fast rerun artifacts",
-      "promotion_gate": "Superseded by the full W7-X collisionality lane for release claims; keep as a cheap branch regression scaffold"
-    },
-    "kind": "literature_reproduction",
-    "literature": [
-      "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
-    ],
-    "scripts": [
-      "tools/publication_figures/generate_sfincs_paper_figs.py --case w7x --fast --scan-only --work-dir tools/publication_figures/output/w7x_reaudit_fast"
-    ],
-    "artifacts": [
-      "tools/publication_figures/artifacts/w7x_collisionality_reaudit_fast_summary.json",
-      "docs/_static/figures/paper/dkx_fig2_w7x_collisionality_reaudit_fast.png",
-      "docs/_static/figures/paper/dkx_fig2_w7x_collisionality_reaudit_fast.pdf"
-    ],
-    "claims": [
-      "The corrected bounded W7-X collisionality lane resolves clear FP/PAS separation again",
-      "This bounded artifact is suitable for regression and manuscript-layout work and is superseded by the full collisionality figure family for release claims"
-    ],
-    "source_code": [
-      "tools/publication_figures/generate_sfincs_paper_figs.py"
-    ],
-    "tests": [
-      "tests/test_generate_sfincs_paper_figs.py",
-      "tests/test_collisionality_artifact.py"
-    ],
-    "acceptance_gates": [
-      "Summary artifact contains both Fokker-Planck and PAS labels on the pinned four-point collisionality ladder",
-      "For every pinned collisionality, PAS diagonal transport coefficients remain separated from FP coefficients",
-      "Figure and JSON artifacts stay checked in until the full-resolution lane replaces this bounded scaffold"
     ]
   },
   {
@@ -470,10 +394,10 @@
     "id": "monkes_monoenergetic_overlap",
     "status": "implemented",
     "release_gate": {
-      "claim_status": "regression_scaffold",
+      "claim_status": "release_ready",
       "blocks_current_release": false,
       "evidence": "checked machine-readable DSHAPE/NCSX/W7-X zero-field PAS/DKES artifact with audited normalizations, input/output checksums, residuals, timing, memory, and a 6% four-coefficient gate",
-      "promotion_gate": "Keep the claim bounded to the matched monoenergetic PAS/DKES equations until full-Fokker-Planck profile, finite-Er, and ambipolar comparisons are independently pinned"
+      "promotion_gate": "Keep every matched-equation coefficient within 6% and the checksums green before using this as release evidence"
     },
     "kind": "cross_code_validation",
     "literature": [

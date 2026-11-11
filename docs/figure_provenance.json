@@ -36,13 +36,7 @@
     "docs/_static/figures/paper/dkx_fig1_lhd_collisionality.png": {
       "generator": "tools/publication_figures/generate_sfincs_paper_figs.py"
     },
-    "docs/_static/figures/paper/dkx_fig1_lhd_collisionality_reaudit_fast.png": {
-      "generator": "tools/publication_figures/generate_sfincs_paper_figs.py"
-    },
     "docs/_static/figures/paper/dkx_fig2_w7x_collisionality.png": {
-      "generator": "tools/publication_figures/generate_sfincs_paper_figs.py"
-    },
-    "docs/_static/figures/paper/dkx_fig2_w7x_collisionality_reaudit_fast.png": {
       "generator": "tools/publication_figures/generate_sfincs_paper_figs.py"
     },
     "docs/_static/figures/paper/dkx_fig3_simakov_helander.png": {

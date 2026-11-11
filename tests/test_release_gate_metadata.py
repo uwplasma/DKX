@@ -33,8 +33,9 @@ def test_release_gate_checker_cli_passes_current_manifest() -> None:
 def test_release_gate_rejects_open_deferred_lane(tmp_path: Path) -> None:
     records = copy.deepcopy(_manifest())
     records[0]["release_gate"]["blocks_current_release"] = True  # type: ignore[index]
-    records[4]["release_gate"]["claim_status"] = "bounded_proxy"  # type: ignore[index]
-    records[4]["release_gate"]["closed_or_deferred_reason"] = "needs more work"  # type: ignore[index]
+    deferred = next(r for r in records if r["id"] == "sfincs2014_fig3_high_collisionality_limit")
+    deferred["release_gate"]["claim_status"] = "bounded_proxy"  # type: ignore[index]
+    deferred["release_gate"]["closed_or_deferred_reason"] = "needs more work"  # type: ignore[index]
     manifest_path = tmp_path / "validation_manifest.json"
     manifest_path.write_text(json.dumps(records), encoding="utf-8")
 
