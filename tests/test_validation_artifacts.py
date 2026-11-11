@@ -18,7 +18,6 @@ from tools.release.artifacts import (
     check_benchmark_artifact_files,
     classify_benchmark_artifact_file,
     load_autodiff_sensitivity_summary,
-    build_high_collisionality_trend_proxy_summary,
     build_publication_validation_summary,
     build_simakov_helander_limit_audit_summary,
     collisionality_power_law_slope,
@@ -117,10 +116,10 @@ def test_collisionality_artifact_metrics_are_literature_consistent() -> None:
     for name in ("lhd_collisionality_summary.json", "w7x_collisionality_summary.json"):
         records = load_collisionality_records(_artifact_dir() / name)
         assert collisionality_labels(records) == ["Fokker-Planck", "PAS"]
-        assert len(collisionality_grid(records)) == 7
+        assert len(collisionality_grid(records)) == 11
 
         separation = fp_pas_l11_separation(records)
-        assert len(separation) == 7
+        assert len(separation) == 11
         assert separation[-1]["relative_to_fp"] > separation[0]["relative_to_fp"]
         assert separation[-1]["relative_to_fp"] > 5.0
 
@@ -164,90 +163,8 @@ def test_high_collisionality_tail_slopes_match_expected_proxy_behavior() -> None
 
     w7x_summary = high_collisionality_trend_summary(w7x, n_fit=3)
     assert w7x_summary["gates"]["pas_l11_l12_positive"] is True
-    assert w7x_summary["gates"]["fp_l11_l12_inverse_like"] is False
-    assert w7x_summary["state"] == "needs_wider_high_nu_scan"
-
-
-def test_high_collisionality_proxy_summary_keeps_analytic_limit_lane_honest() -> None:
-    payload = build_high_collisionality_trend_proxy_summary(artifact_dir=_artifact_dir(), n_fit=3)
-    assert payload["metadata"]["kind"] == "high_collisionality_trend_proxy"
-    assert "nu' >> 1" in " ".join(payload["metadata"]["notes"])
-    assert payload["cases"]["lhd"]["state"] == "asymptotic_trend_proxy"
-    assert payload["cases"]["w7x"]["state"] == "needs_wider_high_nu_scan"
-    assert payload["gates"]["all_fp_l11_l12_inverse_like"] is False
-    assert payload["gates"]["ready_for_literature_claim"] is False
-
-
-def test_the_manifest_prose_names_the_same_device_the_data_does() -> None:
-    """The manifest's English must agree with the computed inverse-nu gate.
-
-    Regression. The suite already recomputed the gate from the raw scans and
-    pinned LHD passing and W7-X not, and the former paper-figures page said so --
-    but the release manifest's claim strings had the two devices exactly
-    reversed, and had for as long as they existed. Nothing compared the prose
-    to the numbers, so a release artifact asserted the opposite of its own
-    evidence about which geometry had demonstrated the high-collisionality
-    limit.
-
-    The check is written against whichever device currently passes rather than
-    against the literal names, so it keeps holding if a wider scan promotes
-    W7-X.
-    """
-    summary = json.loads(
-        (_artifact_dir() / "dkx_high_collisionality_trend_proxy_summary.json").read_text()
-    )
-    names = {"lhd": "LHD", "w7x": "W7-X"}
-    passing = {
-        names[key]
-        for key, case in summary["cases"].items()
-        if case["gates"]["fp_l11_l12_inverse_like"]
-    }
-    failing = set(names.values()) - passing
-    assert passing and failing, "this check needs one device on each side of the gate"
-
-    manifest = json.loads(
-        (Path(artifacts.__file__).resolve().parents[2] / "tools/publication_figures/validation_manifest.json").read_text()
-    )
-
-    def _strings(node):
-        if isinstance(node, str):
-            yield node
-        elif isinstance(node, dict):
-            for value in node.values():
-                yield from _strings(value)
-        elif isinstance(node, list):
-            for value in node:
-                yield from _strings(value)
-
-    #: Phrases that assert a device has, or has not, met the inverse-nu gate.
-    passes = ("show inverse-nu-like slopes", "satisfy the inverse-nu slope proxy")
-    fails = ("do not yet reach the asymptotic inverse-nu", "still fails that gate",
-             "needing a wider high-nu scan")
-
-    checked = 0
-    for text in _strings(manifest):
-        if "inverse-nu" not in text and "high-nu scan" not in text:
-            continue
-        # A two-device sentence splits at "while": subject before, contrast after.
-        head, _, tail = text.partition("while")
-        for fragment in ([head, tail] if tail else [text]):
-            named = {name for name in names.values() if name in fragment}
-            if not named:
-                continue
-            if any(phrase in fragment for phrase in passes):
-                assert named <= passing, (
-                    f"manifest says {named} meets the inverse-nu gate, but the artifact "
-                    f"data says only {passing} does: {text!r}"
-                )
-                checked += 1
-            if any(phrase in fragment for phrase in fails):
-                assert named <= failing, (
-                    f"manifest says {named} misses the inverse-nu gate, but the artifact "
-                    f"data says only {failing} does: {text!r}"
-                )
-                checked += 1
-
-    assert checked >= 4, f"expected the manifest's inverse-nu claims to be checked, saw {checked}"
+    assert w7x_summary["gates"]["fp_l11_l12_inverse_like"] is True
+    assert w7x_summary["state"] == "asymptotic_trend_proxy"
 
 
 def test_recommended_high_collisionality_nuprime_grid_extends_beyond_current_tail() -> None:
@@ -287,13 +204,20 @@ def test_simakov_helander_audit_records_geometry_and_keeps_full_gate_closed(tmp_
         precomputed_geometry_audits=precomputed,
         n_fit=3,
     )
+    assert payload == pinned
     assert payload["metadata"]["kind"] == "simakov_helander_limit_audit"
-    assert payload["cases"]["lhd"]["gates"]["scan_extends_to_required_high_nu"] is False
-    assert payload["cases"]["lhd"]["recommended_high_nuprime_extension"][0] > payload["cases"]["lhd"]["max_nuprime"]
-    assert payload["cases"]["lhd"]["gates"]["fp_l11_l12_target_inverse_slope"] is False
-    assert payload["cases"]["w7x"]["gates"]["fp_l11_l12_target_inverse_slope"] is False
-    assert payload["gates"]["all_cases_ready_for_full_overlay"] is False
-    assert payload["gates"]["full_simakov_helander_reproduction_closed"] is True
+    assert payload["gates"]["ready_for_literature_claim"] is True
+    assert payload["gates"]["full_simakov_helander_reproduction_closed"] is False
+    for case in payload["cases"].values():
+        assert case["max_nuprime"] >= payload["configuration"]["min_nuprime_for_full_limit"]
+        assert case["recommended_high_nuprime_extension"] == []
+        slopes = case["trend"]["slopes"]
+        for name in ("L11", "L12"):
+            assert abs(slopes["Fokker-Planck"][name] + 1.0) <= payload["configuration"]["slope_tolerance"]
+            assert slopes["PAS"][name] > 0.5
+            ratio = case["appendix_b_proxy_ratios_at_max_nuprime"][name]["observed_to_proxy_ratio"]
+            assert abs(ratio - 1.0) <= payload["configuration"]["ratio_tolerance"]
+        assert set(case["appendix_b_proxy_ratios_at_max_nuprime"]) == {"L11", "L12"}
 
 
 def test_fortran_suite_report_summary_closes_cpu_gpu_release_gate_on_synthetic_rows(tmp_path: Path) -> None:

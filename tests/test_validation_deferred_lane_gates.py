@@ -8,7 +8,6 @@ from tools.release.release import release_gate_errors
 
 
 _DEFERRED_LANE_IDS = {
-    "sfincs2014_fig3_high_collisionality_limit",
     "w7x_ambipolar_er_validation",
 }
 

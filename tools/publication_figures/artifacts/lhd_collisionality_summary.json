@@ -3,6 +3,27 @@
     "base_input": "examples/sfincs_examples/transportMatrix_geometryScheme2/input.namelist",
     "case": "lhd",
     "fast": false,
+    "high_nu_extension": {
+      "by_label": {
+        "Fokker-Planck": {
+          "max_transport_relative_residual_norm": 1.715226337148799e-09,
+          "max_transport_residual_norm": 6.221350454208975e-10,
+          "n_points": 4,
+          "solver_tolerance": 1e-06,
+          "transport_sparse_direct_max": 30000
+        },
+        "PAS": {
+          "max_transport_relative_residual_norm": 9.96959414342953e-10,
+          "max_transport_residual_norm": 1.5325161876518636e-09,
+          "n_points": 4,
+          "solver_tolerance": 1e-09,
+          "transport_sparse_direct_max": 30000
+        }
+      },
+      "nuprime_max": 99.999982658,
+      "nuprime_min": 17.7827892361,
+      "points_per_decade": 4
+    },
     "implicit_solve": false,
     "labels_to_collision_operator": {
       "Fokker-Planck": 0,
@@ -10,31 +31,31 @@
     },
     "max_transport_relative_residual": 1e-06,
     "max_transport_residual": 1e-06,
-    "n_points": 7,
-    "nuprime_max": 10.0,
+    "n_points": 11,
+    "nuprime_max": 100.0,
     "nuprime_min": 0.1,
     "quality_by_label": {
       "Fokker-Planck": {
         "failed_outputs": [],
         "max_transport_relative_residual_allowed": 1e-06,
-        "max_transport_relative_residual_norm": 3.1019773531919344e-11,
+        "max_transport_relative_residual_norm": 1.715226337148799e-09,
         "max_transport_residual_allowed": 1e-06,
-        "max_transport_residual_norm": 1.3542745466359777e-11,
+        "max_transport_residual_norm": 6.221350454208975e-10,
         "missing_residual_output_count": 0,
-        "output_count": 7,
+        "output_count": 11,
         "residual_gate_passed": true,
-        "residual_output_count": 7
+        "residual_output_count": 11
       },
       "PAS": {
         "failed_outputs": [],
         "max_transport_relative_residual_allowed": 1e-06,
-        "max_transport_relative_residual_norm": 1.905485238337372e-10,
+        "max_transport_relative_residual_norm": 9.96959414342953e-10,
         "max_transport_residual_allowed": 1e-06,
-        "max_transport_residual_norm": 7.0795574290243e-14,
+        "max_transport_residual_norm": 1.5325161876518636e-09,
         "missing_residual_output_count": 0,
-        "output_count": 7,
+        "output_count": 11,
         "residual_gate_passed": true,
-        "residual_output_count": 7
+        "residual_output_count": 11
       }
     },
     "require_residuals": true,
@@ -197,6 +218,90 @@
       ]
     },
     {
+      "label": "Fokker-Planck",
+      "nuprime": 17.7827892361,
+      "transport_matrix": [
+        [
+          -0.0017558782517734714,
+          -0.007068107372822885,
+          0.10912184618015583
+        ],
+        [
+          -0.0070454882550725125,
+          -1.966890790323888,
+          0.4052476114668626
+        ],
+        [
+          0.10910487017678827,
+          0.40532208299812705,
+          50.11696878846571
+        ]
+      ]
+    },
+    {
+      "label": "Fokker-Planck",
+      "nuprime": 31.622769006966205,
+      "transport_matrix": [
+        [
+          -0.0010954379931608098,
+          -0.00457454472386096,
+          0.10905065992323248
+        ],
+        [
+          -0.004534777216298443,
+          -3.444538292443137,
+          0.43264000589450147
+        ],
+        [
+          0.10902867637325644,
+          0.4330316169152542,
+          75.83518995481204
+        ]
+      ]
+    },
+    {
+      "label": "Fokker-Planck",
+      "nuprime": 56.23412089020827,
+      "transport_matrix": [
+        [
+          -0.0006517391005366924,
+          -0.0028130263297571844,
+          0.10861061684034014
+        ],
+        [
+          -0.002741665715555698,
+          -6.088342698324388,
+          0.45719397588423105
+        ],
+        [
+          0.10860162404968908,
+          0.45784369408616266,
+          123.8637857396297
+        ]
+      ]
+    },
+    {
+      "label": "Fokker-Planck",
+      "nuprime": 99.999982658,
+      "transport_matrix": [
+        [
+          -0.0003760291235209999,
+          -0.0016587005106637295,
+          0.10825544454112164
+        ],
+        [
+          -0.0015311145413102261,
+          -10.80183773142645,
+          0.4763593467430184
+        ],
+        [
+          0.10825238833843154,
+          0.47652602912168623,
+          211.97681448729242
+        ]
+      ]
+    },
+    {
       "label": "PAS",
       "nuprime": 0.09999998265800002,
       "transport_matrix": [
@@ -340,6 +445,90 @@
           0.0007830874772817082,
           0.0032401029877835172,
           0.1962844949236009
+        ]
+      ]
+    },
+    {
+      "label": "PAS",
+      "nuprime": 17.7827892361,
+      "transport_matrix": [
+        [
+          -0.9138968868489182,
+          -1.2199494964015416,
+          0.0004352626520756987
+        ],
+        [
+          -1.2199494964251199,
+          -2.7752001859368267,
+          0.0020397874657689017
+        ],
+        [
+          0.00042634283621491417,
+          0.002017701204427399,
+          0.11140169086693857
+        ]
+      ]
+    },
+    {
+      "label": "PAS",
+      "nuprime": 31.622769006966205,
+      "transport_matrix": [
+        [
+          -1.6224229854455505,
+          -2.158065746034831,
+          0.00020676350474482065
+        ],
+        [
+          -2.1580657462599118,
+          -4.877435499520696,
+          0.001061358014771813
+        ],
+        [
+          0.00019780154097244035,
+          0.0010390334411619398,
+          0.06297547165480565
+        ]
+      ]
+    },
+    {
+      "label": "PAS",
+      "nuprime": 56.23412089020827,
+      "transport_matrix": [
+        [
+          -2.883237946589556,
+          -3.8295614347790115,
+          8.600803115099466e-05
+        ],
+        [
+          -3.8295614342062945,
+          -8.631667443376188,
+          0.00047661188433113306
+        ],
+        [
+          7.702757688353537e-05,
+          0.0004541878449652194,
+          0.035512316308757466
+        ]
+      ]
+    },
+    {
+      "label": "PAS",
+      "nuprime": 99.999982658,
+      "transport_matrix": [
+        [
+          -5.125980794437775,
+          -6.80456123152925,
+          3.2253997634782325e-05
+        ],
+        [
+          -6.804561230634771,
+          -15.320240720223108,
+          0.00018955792716160587
+        ],
+        [
+          2.3272570922152057e-05,
+          0.00016710627569713782,
+          0.019996553642767298
         ]
       ]
     }

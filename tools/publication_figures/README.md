@@ -102,35 +102,28 @@ The full collisionality figure family is checked in as:
 The full artifacts are the validation-facing collisionality lane. The bounded
 artifacts are cheap regression inputs for branch-level checks.
 
-Simakov-Helander high-collisionality audit artifacts:
+Simakov-Helander high-collisionality limit:
 
-This writes a bounded normalization/readiness audit for the full Appendix-B analytic
-limit lane. It uses the checked-in LHD/W7-X collisionality summaries plus
-representative `sfincsOutput.h5` geometry outputs to recompute `FSABHat2`, record the
-available Appendix-B geometry quantities, fit inverse-`nu` FP tails, and keep the full
-Simakov-Helander reproduction explicitly closed until wider high-`nu` scans are
-pinned.
+The LHD and W7-X summaries above extend to `nu' = 100`. The audit uses them with
+the Appendix-B geometry quantities recomputed from `sfincsOutput.h5` fields
+(`FSABHat2` agrees to 1e-14) and compares the Fokker-Planck `L11` and `L12` with
+the `C/nu'` asymptote at every scan point, fits the log-log tail slopes, and
+records the gates read by the validation manifest.
 
 Pinned outputs:
 - `tools/publication_figures/artifacts/dkx_simakov_helander_limit_audit_summary.json`
-- `docs/_static/figures/paper/dkx_simakov_helander_limit_audit.png`
-- `docs/_static/figures/paper/dkx_simakov_helander_limit_audit.pdf`
-- `tools/publication_figures/artifacts/dkx_simakov_helander_high_nu_run_plan.json`
+- `docs/_static/figures/paper/dkx_fig3_simakov_helander.png`
 
-Launch high-`nu` pilots before widening to full FP/PAS scans using the retained
-`generate_sfincs_paper_figs.py` scan driver:
+The four-point-per-decade high-`nu'` extension (`nu' = 17.78` to `100`) was run per
+case and per operator with residual gates on, then merged into the summaries:
 
 ```bash
-CUDA_VISIBLE_DEVICES=0,1 \
 python tools/publication_figures/generate_sfincs_paper_figs.py \
   --case lhd \
   --collision-operators 0 \
   --nuprime-min 17.78279101649707 \
-  --nuprime-max 17.78279101649707 \
-  --n-points 1 \
-  --timeout-s 900 \
-  --transport-workers 2 \
-  --transport-parallel-backend gpu \
+  --nuprime-max 99.99998265800002 \
+  --n-points 4 \
   --transport-sparse-direct-max 30000 \
   --require-residuals \
   --max-transport-residual 1e-6 \
@@ -139,10 +132,18 @@ python tools/publication_figures/generate_sfincs_paper_figs.py \
   --scan-only
 ```
 
+The LHD PAS ladder at `nu' >= 17.8` needs `--solver-tolerance 1e-9`; at the
+input's `1e-6` the Krylov stage stops at an absolute residual of 1.5e-6. Rebuild
+Figures 1 to 3 from the checked-in summaries:
+
+```bash
+python tools/publication_figures/generate_sfincs_paper_figs.py --plot-summaries
+```
+
 The launcher forces the explicit executable solve path for scans
 (`DKX_IMPLICIT_SOLVE=0`) so high-collisionality transport can use sparse-LU
-first attempts/rescues when Krylov residuals stall. The checked-in high-`nu'`
-run plan uses a bounded sparse-direct cap and strict absolute/relative residual
+first attempts/rescues when Krylov residuals stall. The high-`nu'`
+scans use a bounded sparse-direct cap and strict absolute/relative residual
 gates. LHD FP is accepted only with clean residuals. W7-X FP high-`nu'` has
 a residual-clean sparse-LU route with float32 host factors, exact matrix-free
 residual verification, block-basis sparse-helper materialization, and
