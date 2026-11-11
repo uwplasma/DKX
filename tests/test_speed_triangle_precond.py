@@ -228,7 +228,7 @@ def test_the_exact_triangle_solves_one_speed_at_a_time(tmp_path, monkeypatch) ->
     op = _operator(tmp_path, nx=4)
     n_x = op.f_shape[1]
     calls = {"speed": 0, "band": 0}
-    for key, name in (("speed", "_apply_dense_coarse_speed"), ("band", "_apply_dense_coarse_factors")):
+    for key, name in (("speed", "_apply_split_speed"), ("band", "_apply_dense_coarse_factors")):
         real = getattr(cp, name)
 
         def counted(*args, _real=real, _key=key, **kwargs):
