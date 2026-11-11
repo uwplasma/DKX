@@ -268,7 +268,8 @@ subsystem, independent of $N_\xi$ and of the number of speeds.
 These are not release blockers, and none is claimed:
 
 - W7-X ambipolar $E_r$ against a reconstructed discharge: no discharge with a
-  pinned equilibrium and redistributable profiles is available, so none is claimed;
+  pinned equilibrium and redistributable profiles is available, so none is claimed
+  (the W7-X benchmark against hand-digitized published XICS $E_r$ is qualitative);
 - KNOSOS overlap and low-collisionality trend comparison with MONKES;
 - production-resolution QI ladders and a true device-resident QI route;
 - single-case multi-device strong scaling;

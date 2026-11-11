@@ -141,8 +141,10 @@ neoclassical codes.
 
 Radial current against $E_r$ on W7-X with every sampled evaluation and the
 classified ion, unstable and electron roots
-(`tools/paper_benchmarks/w7x_ambipolar_er.py`). No comparison with a
-reconstructed discharge is claimed ({doc}`validation_matrix`).
+(`tools/paper_benchmarks/w7x_ambipolar_er.py`). The comparison with the XICS
+$E_r$ of Pablant et al. (2018), hand-digitized from the published figures, is
+qualitative; no comparison with a reconstructed discharge is claimed
+({doc}`validation_matrix`).
 ```
 
 ```{figure} ../_static/figures/paper_benchmarks/impurity_transport.png
