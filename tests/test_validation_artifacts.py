@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 import h5py
@@ -185,6 +186,16 @@ def test_recommended_high_collisionality_nuprime_grid_extends_beyond_current_tai
     )
 
 
+def _close(a: object, b: object) -> bool:
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(_close(a[k], b[k]) for k in a)
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(_close(x, y) for x, y in zip(a, b))
+    if isinstance(a, float) and isinstance(b, float):
+        return math.isclose(a, b, rel_tol=1e-12, abs_tol=1e-15)
+    return a == b
+
+
 def test_simakov_helander_audit_records_geometry_and_keeps_full_gate_closed(tmp_path: Path) -> None:
     fixture_h5 = tmp_path / "appendix_b_fixture.h5"
     _write_appendix_b_geometry_fixture(fixture_h5)
@@ -204,7 +215,8 @@ def test_simakov_helander_audit_records_geometry_and_keeps_full_gate_closed(tmp_
         precomputed_geometry_audits=precomputed,
         n_fit=3,
     )
-    assert payload == pinned
+    # Least-squares slopes differ in the last digits between BLAS builds.
+    assert _close(payload, pinned)
     assert payload["metadata"]["kind"] == "simakov_helander_limit_audit"
     assert payload["gates"]["ready_for_literature_claim"] is True
     assert payload["gates"]["full_simakov_helander_reproduction_closed"] is False
