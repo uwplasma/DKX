@@ -282,46 +282,6 @@
     ]
   },
   {
-    "id": "w7x_ambipolar_er_validation",
-    "status": "deferred_post_release",
-    "release_gate": {
-      "claim_status": "closed_deferred",
-      "blocks_current_release": false,
-      "evidence": "checked-in incomplete provenance template and package-level deferred artifact gates",
-      "closed_or_deferred_reason": "Closed for the tagged release as post-release profile validation until defensible W7-X equilibrium/profile provenance is supplied",
-      "promotion_gate": "Promote only after complete provenance, bracketed ambipolar roots, checked-in source artifacts, and ready_for_literature_claim=true"
-    },
-    "kind": "profile_validation",
-    "literature": [
-      "https://sites.fusion.ciemat.es/jlvelasco/files/papers/pablant2020ionroot.pdf",
-      "https://sites.fusion.ciemat.es/jlvelasco/files/papers/pablant2018er.pdf",
-      "https://www.nature.com/articles/s41586-021-03687-w"
-    ],
-    "scripts": [],
-    "artifacts": [
-      "tools/publication_figures/provenance/w7x_ambipolar_provenance_template.json"
-    ],
-    "claims": [
-      "Ambipolar Er trends and neoclassical heat-flux ordering should follow the W7-X validation literature",
-      "This lane is closed for the tagged release as a post-release/nightly validation target because it requires a defensible W7-X profile and equilibrium reconstruction"
-    ],
-    "source_code": [
-      "src/dkx/ambipolar.py",
-      "src/dkx/io.py",
-      "tools/release/artifacts.py"
-    ],
-    "tests": [
-      "tests/test_er_scan_and_ambipolar.py",
-      "tests/test_validation_figures.py"
-    ],
-    "acceptance_gates": [
-      "Document the exact VMEC/Boozer/profile inputs used for the comparison",
-      "Solve a finite ambipolar-Er root with bracket/provenance stored in the artifact",
-      "Deferred artifact gates must report ready_for_literature_claim=false unless complete provenance and a matching checked-in source artifact are supplied",
-      "Compare heat-flux ordering and Er sign/magnitude trend against the published W7-X validation context without claiming experimental agreement beyond the reconstructed inputs"
-    ]
-  },
-  {
     "id": "monkes_monoenergetic_overlap",
     "status": "implemented",
     "release_gate": {

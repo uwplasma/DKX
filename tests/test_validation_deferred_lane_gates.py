@@ -7,9 +7,7 @@ from pathlib import Path
 from tools.release.release import release_gate_errors
 
 
-_DEFERRED_LANE_IDS = {
-    "w7x_ambipolar_er_validation",
-}
+_DEFERRED_LANE_IDS: set[str] = set()
 
 
 def _repo_root() -> Path:
@@ -49,7 +47,7 @@ def test_deferred_validation_lanes_are_closed_but_not_untracked() -> None:
 
 def test_release_gate_rejects_stale_deferred_lane_paths(tmp_path: Path) -> None:
     records = copy.deepcopy(_manifest())
-    lane = _record(records, "w7x_ambipolar_er_validation")
+    lane = _record(records, "sfincs2014_fig3_high_collisionality_limit")
     lane["source_code"] = ["dkx/does_not_exist_deferred_source.py"]
     lane["tests"] = ["tests/test_missing_deferred_validation_gate.py"]
     lane["scripts"] = ["tools/publication_figures/missing_w7x_validation_script.py --fast"]
@@ -60,19 +58,19 @@ def test_release_gate_rejects_stale_deferred_lane_paths(tmp_path: Path) -> None:
     errors = release_gate_errors(manifest_path, docs_paths=())
 
     assert (
-        "w7x_ambipolar_er_validation: source_code path does not exist: "
+        "sfincs2014_fig3_high_collisionality_limit: source_code path does not exist: "
         "dkx/does_not_exist_deferred_source.py"
     ) in errors
     assert (
-        "w7x_ambipolar_er_validation: tests path does not exist: "
+        "sfincs2014_fig3_high_collisionality_limit: tests path does not exist: "
         "tests/test_missing_deferred_validation_gate.py"
     ) in errors
     assert (
-        "w7x_ambipolar_er_validation: script path does not exist: "
+        "sfincs2014_fig3_high_collisionality_limit: script path does not exist: "
         "tools/publication_figures/missing_w7x_validation_script.py"
     ) in errors
     assert (
-        "w7x_ambipolar_er_validation: artifacts path does not exist: "
+        "sfincs2014_fig3_high_collisionality_limit: artifacts path does not exist: "
         "docs/_static/figures/paper/missing_w7x_validation_artifact.png"
     ) in errors
 

@@ -87,7 +87,6 @@ scripts, run plans and proxy figures cannot be mistaken for closed evidence.
 | `native_w7x_ambipolar_profile_certificate` | `regression_scaffold` | five-surface W7-X ambipolar profile from a case file | this page |
 | `native_w7x_ambipolar_phase_space_ladder`, `_phase_space_axes`, `_pitch_budget`, `_pitch_speed_groups`, `_pitch_explicit_groups`, `_joint_speed_zeta_tail` | `regression_scaffold` | resolution diagnosis of that profile | this page |
 | `w7x_seeded_bracket_discovery`, `w7x_admitted_grid_seeded_envelope` | `bounded_proxy` | seeded ambipolar root bracketing on admitted grids | this page |
-| `w7x_ambipolar_er_validation` | `closed_deferred` | ambipolar $E_r$ against a reconstructed W7-X discharge | {doc}`cross_code` |
 | `adjoint_sensitivity_gradient_checks` | `release_ready` | autodiff and implicit gradients against central differences | {doc}`../numerics/differentiation` |
 
 The counts per status are printed by `python -m tools.release.release check-gates`.
@@ -268,9 +267,8 @@ subsystem, independent of $N_\xi$ and of the number of speeds.
 
 These are not release blockers, and none is claimed:
 
-- W7-X ambipolar $E_r$ against a reconstructed discharge (needs pinned
-  equilibrium and profile provenance; without it artifacts stay
-  `w7x_like_scaffold`);
+- W7-X ambipolar $E_r$ against a reconstructed discharge: no discharge with a
+  pinned equilibrium and redistributable profiles is available, so none is claimed;
 - KNOSOS overlap and low-collisionality trend comparison with MONKES;
 - production-resolution QI ladders and a true device-resident QI route;
 - single-case multi-device strong scaling;

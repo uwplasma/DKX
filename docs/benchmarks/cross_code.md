@@ -141,9 +141,8 @@ neoclassical codes.
 
 Radial current against $E_r$ on W7-X with every sampled evaluation and the
 classified ion, unstable and electron roots
-(`tools/paper_benchmarks/w7x_ambipolar_er.py`). A literature comparison against
-a reconstructed W7-X discharge is `closed_deferred` until its provenance is
-pinned ({doc}`validation_matrix`).
+(`tools/paper_benchmarks/w7x_ambipolar_er.py`). No comparison with a
+reconstructed discharge is claimed ({doc}`validation_matrix`).
 ```
 
 ```{figure} ../_static/figures/paper_benchmarks/impurity_transport.png
