@@ -27,7 +27,7 @@
     "docs/_static/figures/paper/dkx_autodiff_sensitivity_map.png": {
       "generator": "tools/publication_figures/generate_autodiff_sensitivity_validation.py"
     },
-    "docs/_static/figures/paper/dkx_er_trajectory_sweep_stellarator_fast_reference.png": {
+    "docs/_static/figures/paper/dkx_er_trajectory_sweep_stellarator_reference.png": {
       "generator": "tools/publication_figures/generate_er_trajectory_sweep.py"
     },
     "docs/_static/figures/paper/dkx_er_trajectory_sweep_tokamak_reference.png": {

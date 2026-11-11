@@ -159,29 +159,30 @@
     ]
   },
   {
-    "id": "sfincs2014_er_sweep_stellarator_fast_scaffold",
+    "id": "sfincs2014_er_sweep_stellarator_reference",
     "status": "implemented",
     "release_gate": {
-      "claim_status": "regression_scaffold",
+      "claim_status": "release_ready",
       "blocks_current_release": false,
-      "evidence": "checked-in bounded stellarator-like Er sweep summary and figure artifacts",
-      "promotion_gate": "Promote only after a full-resolution stellarator sweep is runtime-acceptable and checked in with complete provenance"
+      "evidence": "checked-in full-resolution stellarator-like Er sweep summary, figure and run provenance",
+      "promotion_gate": "Keep zero-field model agreement and finite-field spread assertions green"
     },
     "kind": "literature_validation",
     "literature": [
       "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf"
     ],
     "scripts": [
-      "tools/publication_figures/generate_er_trajectory_sweep.py --preset stellarator_like --fast --er-values=-8.5897,0,8.5897 --stem dkx_er_trajectory_sweep_stellarator_fast_reference"
+      "tools/publication_figures/generate_er_trajectory_sweep.py --preset stellarator_like --er-values=-8.5897,0,8.5897 --stem dkx_er_trajectory_sweep_stellarator_reference"
     ],
     "artifacts": [
-      "docs/_static/figures/paper/dkx_er_trajectory_sweep_stellarator_fast_reference.png",
-      "docs/_static/figures/paper/dkx_er_trajectory_sweep_stellarator_fast_reference.pdf",
-      "tools/publication_figures/artifacts/er_sweep_stellarator_fast_reference_summary.json"
+      "docs/_static/figures/paper/dkx_er_trajectory_sweep_stellarator_reference.png",
+      "docs/_static/figures/paper/dkx_er_trajectory_sweep_stellarator_reference.pdf",
+      "tools/publication_figures/artifacts/er_sweep_stellarator_reference_summary.json",
+      "tools/publication_figures/artifacts/er_sweep_stellarator_reference_provenance.json"
     ],
     "claims": [
-      "The three trajectory models agree at Er=0 on the fixed stellarator-like scaffold input",
-      "A bounded fast stellarator-like sweep resolves nonzero-Er separation and is closed as the release-facing stellarator scaffold; full-resolution profile validation remains post-release research work"
+      "The three trajectory models agree at Er=0 on the fixed stellarator-like input at its full resolution",
+      "Away from Er=0, the stellarator-like reference sweep resolves nonzero bootstrap-current and flow spread across DKES, partial, and full trajectories"
     ],
     "source_code": [
       "tools/publication_figures/generate_er_trajectory_sweep.py"
@@ -193,7 +194,7 @@
     "acceptance_gates": [
       "Pinned summary contains DKES, partial, and full trajectory models at negative, zero, and positive Er",
       "All trajectory models agree at Er=0 within the strict pinned tolerance",
-      "Finite-Er records resolve nonzero bootstrap-current or flow spread before this scaffold is used as a manuscript figure"
+      "Finite-Er records resolve nonzero bootstrap-current or flow spread"
     ]
   },
   {

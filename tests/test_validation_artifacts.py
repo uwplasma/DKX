@@ -126,7 +126,7 @@ def test_collisionality_artifact_metrics_are_literature_consistent() -> None:
 
 
 def test_er_sweep_artifact_metrics_pin_zero_field_and_finite_field_behavior() -> None:
-    for name in ("er_sweep_tokamak_reference_summary.json", "er_sweep_stellarator_fast_reference_summary.json"):
+    for name in ("er_sweep_tokamak_reference_summary.json", "er_sweep_stellarator_reference_summary.json"):
         records = load_er_sweep_records(_artifact_dir() / name)
         zero_spread = er_zero_field_spread(records)
         assert all(value <= 1e-12 for value in zero_spread.values())

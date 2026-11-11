@@ -148,7 +148,7 @@
     "schema_version": 1,
     "source_artifacts": {
       "lhd_collisionality": "lhd_collisionality_summary.json",
-      "stellarator_er_sweep": "er_sweep_stellarator_fast_reference_summary.json",
+      "stellarator_er_sweep": "er_sweep_stellarator_reference_summary.json",
       "tokamak_er_sweep": "er_sweep_tokamak_reference_summary.json",
       "w7x_collisionality": "w7x_collisionality_summary.json"
     }
@@ -166,12 +166,12 @@
         "partial"
       ],
       "nonzero_fsab_flow_spread": {
-        "-8.5897": 0.0006310669298875814,
-        "8.5897": 0.0009594077482996885
+        "-8.5897": 0.0003843347518760129,
+        "8.5897": 0.0008819276744403796
       },
       "nonzero_fsab_jhat_spread": {
-        "-8.5897": 0.000567906041595026,
-        "8.5897": 0.0008562662400849255
+        "-8.5897": 0.0001497724589801172,
+        "8.5897": 0.000345263071660655
       },
       "zero_field_spread": {
         "fsab_flow": 0.0,
