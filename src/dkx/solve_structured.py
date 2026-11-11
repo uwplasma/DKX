@@ -289,21 +289,16 @@ def _tier1_refined_solve(
     constrain how XLA fuses it around a sharded batch, and the one-device and
     two-device programs of the same scan then round differently.
     """
+    def refine(op: KineticOperator, t1_solver: Any, b: jnp.ndarray) -> jnp.ndarray:
+        # solvax's iterative_refinement, as a loop: its unrolled sweeps repeat the whole substitution.
+        solve = lambda r: t1_solver.solve(r, transpose=transpose)  # noqa: E731
+        sweep = lambda _, x: x + solve(b - _operator_apply(op, x, transpose))  # noqa: E731
+        return jax.lax.fori_loop(0, _refinement_sweeps(t1_solver), sweep, solve(b))
+
     if not fenced:
-        return iterative_refinement(
-            lambda v: _operator_apply(op, v, transpose),
-            b,
-            lambda r: t1_solver.solve(r, transpose=transpose),
-            iterations=_refinement_sweeps(t1_solver),
-        )[0]
+        return refine(op, t1_solver, b)
     op, t1_solver, b = jax.lax.optimization_barrier((op, t1_solver, b))
-    x, _residual_norms = iterative_refinement(
-        lambda v: _operator_apply(op, v, transpose),
-        b,
-        lambda r: t1_solver.solve(r, transpose=transpose),
-        iterations=_refinement_sweeps(t1_solver),
-    )
-    return jax.lax.optimization_barrier(x)
+    return jax.lax.optimization_barrier(refine(op, t1_solver, b))
 
 _tier1_refined_solve_compiled = jax.jit(
     _tier1_refined_solve, static_argnames=("transpose", "fenced")

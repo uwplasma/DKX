@@ -193,6 +193,8 @@ class CoupledSolver:
         return y + z @ lu_solve(kk, q.T @ y)
 
     def _lifted_solve(self, r: jnp.ndarray, transpose: bool) -> jnp.ndarray:
+        if not isinstance(self.lu[0], tuple):
+            return self._stacked_solve(r, transpose)
         op = self.op
         n_s, n_x, n_xi, n_t, n_z = op.f_shape
         tz = n_t * n_z
@@ -296,6 +298,47 @@ class CoupledSolver:
             out = out.at[layout[k][:, None], np.arange(k + 1, n_l)[None, :]].set(blocks)
         return out.reshape(-1)
 
+    def _stacked_solve(self, r: jnp.ndarray, transpose: bool) -> jnp.ndarray:
+        """:meth:`_lifted_solve` of a uniform dense chain: its sweeps as scans over stacked factors,
+        so the program does not grow with ``Nxi``. ``lower[i - 1]`` is ``Lo_i`` and ``upper[i]`` is ``U_i``."""
+        n_s, n_x, n_xi, n_t, n_z = self.op.f_shape
+        tz = n_t * n_z
+        act, (lu, piv), n_l = _layout(self.op)[0], self.lu, self.lu[0].shape[0]
+        g = r.reshape(n_s * n_x, n_xi, tz)
+        rows = jnp.moveaxis(g[act, :n_l], 1, 0).reshape(n_l, -1)
+        inv = lambda i, v, trans=0: _lus((lu[i], piv[i]), v, trans)  # noqa: E731
+        mul = lambda b, v, t=False: _bmul(b, v.reshape(-1, tz), t).reshape(-1)  # noqa: E731
+        scan = lambda f, init, lo, hi, rev=False: jax.lax.scan(f, init, jnp.arange(lo, hi), reverse=rev)[1]  # noqa: E731
+        if not transpose:
+
+            def back(yn, i):  # y_i = r_i - U_i S_(i+1)^-1 y_(i+1)
+                yi = rows[i] - mul(self.upper[i], inv(i + 1, yn))
+                return yi, yi
+
+            y = jnp.concatenate([scan(back, rows[-1], 0, n_l - 1, True), rows[-1:]])
+
+            def fwd(sp, i):  # S_i^-1 (y_i - Lo_i sol_(i-1))
+                si = inv(i, y[i] - mul(self.lower[i - 1], sp))
+                return si, si
+
+            s0 = inv(0, y[0])
+        else:
+
+            def back_t(wn, i):  # w_i = S_i^-T (r_i - Lo_(i+1)^T w_(i+1))
+                wi = inv(i, rows[i] - mul(self.lower[i], wn, True), 1)
+                return wi, wi
+
+            w_top = inv(n_l - 1, rows[-1], 1)
+            w = jnp.concatenate([scan(back_t, w_top, 0, n_l - 1, True), w_top[None]])
+
+            def fwd(sp, i):  # w_i - S_i^-T U_(i-1)^T sol_(i-1)
+                si = w[i] - inv(i, mul(self.upper[i - 1], sp, True), 1)
+                return si, si
+
+            s0 = w[0]
+        sol = jnp.concatenate([s0[None], scan(fwd, s0, 1, n_l)])
+        return g.at[act, :n_l].set(jnp.moveaxis(sol.reshape(n_l, -1, tz), 0, 1)).reshape(-1)
+
     def _solve1(self, r: jnp.ndarray, transpose: bool) -> jnp.ndarray:
         b, c, gamma, z, m_lu, zt, mt_lu = self.bc
         f_size = self.op.f_size
@@ -391,9 +434,9 @@ def _factor(
         return jnp.where(l <= 2, 1.0, 0.0) * x2[:, None, None] * m[act // n_x]
 
     def diag_block(l: int) -> jnp.ndarray:
-        act = layout[l]
+        act = layout[l if isinstance(l, int) else 0]
         k = len(act)
-        if l >= keep:  # tail: the (species, x)-diagonal collision part only, per pair
+        if isinstance(l, int) and l >= keep:  # tail: the (species, x)-diagonal collision part only, per pair
             cd = jnp.diagonal(cmat[l][np.ix_(act, act)])
             return pair_diag(l, act) + cd[:, None, None] * eye_tz
         d = jnp.einsum("kab,kj->kajb", pair_diag(l, act), jnp.eye(k))
@@ -417,6 +460,7 @@ def _factor(
         q_all = jnp.einsum("st,x,a->sxat", jnp.eye(n_s), prof, ang).reshape(n_s * n_x, tz, n_s)
         q = q_all[layout[1]].reshape(-1, n_s)  # the speeds that carry l = 1
         qq = q @ q.T
+        gamma1 = jnp.mean(jnp.abs(jnp.diagonal(diag_block(1)))) / jnp.max(jnp.abs(qq))
     # Tail bands are stored in float32 with the tail LUs (preconditioner only),
     # as one (TZ, TZ) block per species times the speed scale x of each pair
     # (how legendre_blocks builds streaming and mirror), so Nx times smaller.
@@ -433,7 +477,9 @@ def _factor(
     # A ramped tail (Nxi_for_x) is padded to the pairs of l = keep: truncated
     # DOFs get identity blocks, the inverse of the pinned operator there.
     scanned = keep < n_l and all(np.isin(layout[l], layout[keep]).all() for l in range(keep, n_l))
-    n_chain = keep if scanned else n_l
+    # An exact chain with one layout at every l is eliminated in one scan too.
+    dense = not scanned and n_l > 1 and len(layout[-1]) == len(layout[0])
+    n_chain = keep if scanned else 1 if dense else n_l
     lowers = [jnp.zeros((0, tz, tz))] + [band(l, "lower", layout[l], l >= keep) for l in range(1, n_chain)]
     uppers = [band(l, "upper", layout[l + 1], l + 1 >= keep) for l in range(n_chain - 1)]
     uppers.append(jnp.zeros((0, tz, tz)) if not scanned else band(keep - 1, "upper", layout[keep], True))
@@ -498,21 +544,35 @@ def _factor(
                 continue
             d = d0 if l == 0 else d
             if l == 1 and q is not None:
-                gamma1 = jnp.mean(jnp.abs(jnp.diagonal(d))) / jnp.max(jnp.abs(qq))
                 d = d + gamma1 * qq
             d = d.reshape(k_l, tz, k_l, tz).at[sel, :, sel, :].add(-uw)
             lus[l] = dense_lu(d.reshape(k_l * tz, k_l * tz))
             continue
         d = d0 if l == 0 else diag_block(l)
         if l == 1 and q is not None:
-            gamma1 = jnp.mean(jnp.abs(jnp.diagonal(d))) / jnp.max(jnp.abs(qq))
             d = d + gamma1 * qq
         d = _schur_update(d.reshape(k_l, tz, k_l, tz), lus[l + 1], lowers[l + 1], uppers[l], sel)
         lus[l] = dense_lu(d.reshape(k_l * tz, k_l * tz))
-    lus, lowers = lus[:n_chain], lowers[:n_chain]
-    solver = CoupledSolver(
-        op, tuple(lus), tuple(lowers), tuple(uppers), (b, c, gamma) + (None,) * 4, tail=tail
-    )
+    if dense:
+        k_p = len(layout[0])
+        sel = np.arange(k_p)
+
+        def step(lu, l):  # S_l from S_(l+1); the bands of rows l and l + 1 are built here
+            lo, up = blk(l + 1, "lower"), blk(l, "upper")
+            d = diag_block(l)
+            if b.shape[1]:
+                d = d + jnp.where(l == 0, gamma, 0.0) * bc0
+            if q is not None:
+                d = d + jnp.where(l == 1, gamma1, 0.0) * qq
+            lu = dense_lu(_schur_update(d.reshape(k_p, tz, k_p, tz), lu, lo, up, sel).reshape(k_p * tz, -1))
+            return lu, (lu, lo, up)
+
+        last = dense_lu(last)
+        ((lu_s, piv_s), lowers, uppers) = jax.lax.scan(step, last, jnp.arange(n_l - 1), reverse=True)[1]
+        lus = (jnp.concatenate([lu_s, last[0][None]]), jnp.concatenate([piv_s, last[1][None]]))
+    else:
+        lus, lowers, uppers = tuple(lus[:n_chain]), tuple(lowers[:n_chain]), tuple(uppers)
+    solver = CoupledSolver(op, lus, lowers, uppers, (b, c, gamma) + (None,) * 4, tail=tail)
     if q is not None:
         qf = jnp.zeros((n_s * n_x, n_xi, tz, n_s)).at[layout[1], 1].set(q.reshape(-1, tz, n_s))
         qf = qf.reshape(-1, n_s)

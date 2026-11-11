@@ -6,6 +6,7 @@ import math
 from collections.abc import Callable
 import os
 from dataclasses import dataclass, replace
+from functools import partial
 
 # The JAX backend is imported below; dkx/runtime.py explains why this is here.
 from .runtime import configure as _configure_runtime
@@ -713,6 +714,7 @@ def make_pitch_angle_scattering_v3_operator(
         mask_xi=mask,
     )
 
+@partial(jax.jit, static_argnames=("n_xi_max",))
 def _mask_xi(n_xi_for_x: jnp.ndarray, n_xi_max: int) -> jnp.ndarray:
     ell = jnp.arange(n_xi_max, dtype=jnp.int32)[None, :]
     return ell < n_xi_for_x[:, None]

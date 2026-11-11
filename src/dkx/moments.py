@@ -1047,6 +1047,7 @@ def heat_flux_without_phi1(*, heat_flux_vm_psi_hat: jnp.ndarray, heat_flux_ve0_p
 
 # ---- NTV torque ------------------------------------------------------------
 
+@jax.jit
 def ntv_kernel(
     surface: FluxSurface,
     *,
@@ -1357,6 +1358,7 @@ def transport_moments_table(
 
 # ---- Classical transport (classicalTransport.F90) --------------------------
 
+@partial(jax.jit, static_argnames=("use_phi1",))
 def classical_fluxes(
     *,
     use_phi1: bool,
