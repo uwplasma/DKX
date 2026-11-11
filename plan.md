@@ -42,7 +42,7 @@ dkx run examples/01_tokamak_profile/case.toml --out r.nc && dkx converge example
 | Platforms | Named M3 Max laptop CPU baseline and benchmark NVIDIA accelerator lane. Performance results identify exact hardware and toolchain. |
 | Size | Fresh full clone, wheel, sdist, and installed DKX-owned files each target <20 MiB. Report each measurement separately; dependencies are excluded from owned-file size, not from installation instructions. Measured 2026-09-01 on a fresh clone: 14.49 MiB tracked tree (3.07 MiB media), 14.83 MiB object store, 29.32 MiB total. This leaves about 5.5 MiB for Git metadata/history under the existing target; it does not prove that a rewrite could or could not achieve it. Measure reachable packed objects before considering another rewrite. Keep the <20 MiB target; do not silently restate it to make a gate pass. |
 | Quality | 95% line **and** branch coverage of stable reachable code is the release target. Maintainer-deferred coverage work must not block urgent correctness fixes. Assertions must test behavior or science. |
-| Workflow | One coherent implementation slice per PR; commits authored and committed by `rogeriojorge`, without assistant coauthor trailers. Preserve uncommitted work. |
+| Workflow | One coherent implementation slice per PR; commits authored and committed by the maintainer, without assistant coauthor trailers. Preserve uncommitted work. |
 
 Do not silently change collisions, trajectories, precision, resolution, root-search scope, or requested parallel execution. Do not call an approximation a full model. New evidence may change a policy, but must identify the affected contract and replace the superseded claim.
 

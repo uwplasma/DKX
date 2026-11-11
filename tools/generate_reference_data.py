@@ -15,8 +15,8 @@ asset (e.g. ``reference-data-v2``); nothing produced here should be committed.
 Usage (from the dkx repo root, with the Fortran binary built)::
 
     python tools/generate_reference_data.py \
-        --binary  ~/local/sfincs/fortran/version3/sfincs \
-        --examples-dir ~/local/sfincs/fortran/version3/examples \
+        --binary  /path/to/sfincs/fortran/version3/sfincs \
+        --examples-dir /path/to/sfincs/fortran/version3/examples \
         --out-dir /tmp/reference-data-v2 \
         --mpi-n 1
 

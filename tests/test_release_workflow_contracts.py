@@ -53,7 +53,7 @@ def test_release_clone_keeps_tested_tree_after_remote_pr_commit_is_pruned(tmp_pa
     import subprocess
     import textwrap
 
-    env = dict(os.environ, GIT_AUTHOR_NAME="rogeriojorge", GIT_COMMITTER_NAME="rogeriojorge",
+    env = dict(os.environ, GIT_AUTHOR_NAME="maintainer", GIT_COMMITTER_NAME="maintainer",
                GIT_AUTHOR_EMAIL="rogerio.jorge@wisc.edu", GIT_COMMITTER_EMAIL="rogerio.jorge@wisc.edu")
     def git(*args):
         return subprocess.check_output(["git", *map(str, args)], env=env, text=True).strip()
