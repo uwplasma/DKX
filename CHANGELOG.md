@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Validation: the fast LHD and W7-X collisionality re-audits are removed from the manifest (the full seven-point lanes are the release evidence and keep their tests), and the MONKES/YANCC monoenergetic overlap is `release_ready` with its claim unchanged: it is scoped to the matched PAS/DKES equations, which is all MONKES solves.
 - Solve: full-state truncated structured solves (`tier1_keep_lowest = Nxi`) get the same single defect correction as the truncated ones before the Krylov fallback. A W7-X (21, 71, 192, 8) solve that reached an absolute residual of 4.9e-13, just above the relative tolerance, otherwise fell back to the Krylov route, whose coarse preconditioner needs an estimated 153 GiB at that size.
 - Require `solvax>=0.35.3`. SOLVAX 0.35.2 changed the rounding of its factored block-Thomas routes only, and the dense and reusable structured routes then disagreed by up to 1.6e-3 on ill-conditioned decks.
 - Document the thread split measured per deck: two XLA and four BLAS threads are faster for monoenergetic and PAS solves and stall the Fokker-Planck and batched decks, so the default stays.

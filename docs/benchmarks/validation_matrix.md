@@ -73,7 +73,6 @@ scripts, run plans and proxy figures cannot be mistaken for closed evidence.
 | --- | --- | --- | --- |
 | `sfincs2014_fig1_lhd_collisionality` | `release_ready` | LHD transport matrix against collisionality, FP and PAS | {doc}`analytic_limits` |
 | `sfincs2014_fig2_w7x_collisionality` | `release_ready` | W7-X transport matrix against collisionality, FP and PAS | {doc}`analytic_limits` |
-| `sfincs2014_fig1_lhd_collisionality_reaudit_fast`, `sfincs2014_fig2_w7x_collisionality_reaudit_fast` | `regression_scaffold` | fast four-point reruns for CI | — |
 | `sfincs2014_fig3_high_collisionality_limit` | `closed_deferred` | Simakov–Helander high-collisionality reproduction | {doc}`analytic_limits` |
 | `sfincs2014_high_collisionality_trend_proxy` | `bounded_proxy` | inverse-$\nu$ tail fits of $L_{11}$, $L_{12}$ | {doc}`analytic_limits` |
 | `sfincs2014_simakov_helander_limit_audit` | `bounded_proxy` | Appendix-B normalization audit and high-$\nu'$ run plan | {doc}`analytic_limits` |
@@ -84,7 +83,7 @@ scripts, run plans and proxy figures cannot be mistaken for closed evidence.
 | `sfincs_full_kinetic_tokamak_profile` | `release_ready` | full-FP tokamak profile, DKX against SFINCS, 2.69e-10 | {doc}`sfincs` |
 | `sfincs_full_kinetic_finite_er_tokamak` | `release_ready` | the same at normalized $E_r = -30$, 1.88e-9 | {doc}`sfincs` |
 | `sfincs_full_kinetic_stellarator_profile` | `release_ready` | full-FP W7-X surface, 1.37e-8 | {doc}`sfincs` |
-| `monkes_monoenergetic_overlap` | `regression_scaffold` | DSHAPE, NCSX, W7-X EIM against YANCC and MONKES, within 6% | {doc}`cross_code` |
+| `monkes_monoenergetic_overlap` | `release_ready` | DSHAPE, NCSX, W7-X EIM against YANCC and MONKES, within 6% | {doc}`cross_code` |
 | `native_w7x_physical_flux_sfincs` | `release_ready` | native-path W7-X fluxes in physical units against SFINCS | {doc}`cross_code` |
 | `w7x_fixed_field_resolution_referee` | `release_ready` | fixed-field W7-X resolution referee | this page |
 | `native_w7x_ambipolar_profile_certificate` | `regression_scaffold` | five-surface W7-X ambipolar profile from a case file | this page |
@@ -145,23 +144,6 @@ adjoint output differs from its own finite-difference check by 0.05% to 66% on W
 These artifacts are what the non-release-ready entries point at. They are kept so
 the release gate can check that each recorded artifact exists; none of them is a
 release claim.
-
-```{figure} ../_static/figures/paper/dkx_fig1_lhd_collisionality_reaudit_fast.png
-:alt: Fast four-point LHD collisionality rerun, FP and PAS.
-:width: 80%
-
-`sfincs2014_fig1_lhd_collisionality_reaudit_fast` (`regression_scaffold`): the
-bounded LHD collisionality lane, four points, FP and PAS separated
-(`tools/publication_figures/generate_sfincs_paper_figs.py`).
-```
-
-```{figure} ../_static/figures/paper/dkx_fig2_w7x_collisionality_reaudit_fast.png
-:alt: Fast four-point W7-X collisionality rerun, FP and PAS.
-:width: 80%
-
-`sfincs2014_fig2_w7x_collisionality_reaudit_fast` (`regression_scaffold`): the
-same bounded lane on W7-X (`tools/publication_figures/generate_sfincs_paper_figs.py`).
-```
 
 ```{figure} ../_static/figures/paper/dkx_fig3_simakov_helander.png
 :alt: Transport matrix at high collisionality against the Simakov-Helander limit.

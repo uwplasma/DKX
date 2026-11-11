@@ -47,16 +47,6 @@ The corresponding checked summaries and figures are:
 - `docs/_static/figures/paper/dkx_er_trajectory_sweep_tokamak_reference.png`
 - `docs/_static/figures/paper/dkx_er_trajectory_sweep_stellarator_fast_reference.png`
 
-Bounded collisionality regression artifact:
-
-```bash
-python tools/publication_figures/generate_sfincs_paper_figs.py \
-  --case lhd \
-  --fast \
-  --scan-only \
-  --work-dir tools/publication_figures/output/lhd_reaudit_fast
-```
-
 `generate_sfincs_paper_figs.py` writes machine-readable collisionality summaries
 to `--summary-dir` as well. If `--summary-dir` is omitted, the summaries are written
 into the selected `--work-dir` with top-level `metadata` and sorted `rows`.
@@ -102,14 +92,6 @@ The same split-and-synthesize pattern applies to the W7-X collisionality lane.
 When ``--skip-existing`` is used, the generator keeps completed scan points and
 prunes only stale subdirectories that do not contain ``sfincsOutput.h5`` before
 rerunning the missing points.
-
-The bounded LHD regression artifact is checked in as:
-- `tools/publication_figures/artifacts/lhd_collisionality_reaudit_fast_summary.json`
-- `docs/_static/figures/paper/dkx_fig1_lhd_collisionality_reaudit_fast.png`
-
-The bounded W7-X regression artifact is checked in as:
-- `tools/publication_figures/artifacts/w7x_collisionality_reaudit_fast_summary.json`
-- `docs/_static/figures/paper/dkx_fig2_w7x_collisionality_reaudit_fast.png`
 
 The full collisionality figure family is checked in as:
 - `tools/publication_figures/artifacts/lhd_collisionality_summary.json`
