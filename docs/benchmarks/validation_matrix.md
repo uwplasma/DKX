@@ -84,6 +84,7 @@ scripts, run plans and proxy figures cannot be mistaken for closed evidence.
 | `sfincs_full_kinetic_stellarator_profile` | `release_ready` | full-FP W7-X surface, 1.37e-8 | {doc}`sfincs` |
 | `monkes_monoenergetic_overlap` | `release_ready` | DSHAPE, NCSX, W7-X EIM against YANCC and MONKES, within 6% | {doc}`cross_code` |
 | `native_w7x_physical_flux_sfincs` | `release_ready` | native-path W7-X fluxes in physical units against SFINCS | {doc}`cross_code` |
+| `w7x_fp_ambipolar_sfincs` | `release_ready` | full-FP W7-X ambipolar root, DKX against SFINCS, 5.2e-7 | this page |
 | `w7x_fixed_field_resolution_referee` | `release_ready` | fixed-field W7-X resolution referee | this page |
 | `native_w7x_ambipolar_profile_certificate` | `regression_scaffold` | five-surface W7-X ambipolar profile from a case file | this page |
 | `native_w7x_ambipolar_phase_space_ladder`, `_phase_space_axes`, `_pitch_budget`, `_pitch_speed_groups`, `_pitch_explicit_groups`, `_joint_speed_zeta_tail` | `regression_scaffold` | resolution diagnosis of that profile | this page |
@@ -200,6 +201,22 @@ direction. This negative result is what keeps the profile a
 `regression_scaffold` rather than a phase-space-converged validation, and it is
 the reason every example and tutorial asks for a convergence check before a
 number is quoted ({doc}`../user_guide/convergence`).
+
+### Full-Fokker-Planck ambipolar root against SFINCS
+
+`validation/w7x_fp_ambipolar_sfincs_v1.json`
+(`python tools/paper_benchmarks/audit_w7x_fp_ambipolar_sfincs.py`) seals one
+W7-X standard-configuration surface ($\psi_N = 0.36$) with hydrogen and
+electrons, the full linearized Fokker-Planck operator and full trajectories. DKX
+and SFINCS v3 read the same deck on the same $(13, 31, 24, 6)$ grid and each
+runs its own Brent search in $[-6, 0]$ kV/m. The roots are $-3.314019$ and
+$-3.314021$ kV/m (5.2e-7 relative), and the particle and heat fluxes of both
+species at the root agree to 1.0e-6, inside the 2% and 1% gates. DKX took 394 s
+and 6.5 GiB for the six-solve search on 8 cores of a shared host; SFINCS took
+83 s and 0.8 GiB on 4 cores. The grid is not converged: the SFINCS root moves by
+1.7% to $(15, 37, 32, 7)$ and by a further 5.8% and 9.0% with $N_\xi = 48$ and
+$N_x = 9$, and the DKX solve at the refined grid was not completed. The entry
+is a same-discretization agreement on one surface, not a converged prediction.
 
 ### Re-measurement with spectral angles (not promoted)
 

@@ -1,0 +1,64 @@
+! W7-X standard configuration, surface psi_N = 0.36 (r_N = 0.6): two-species
+! full linearized Fokker-Planck ambipolar E_r solve, shared by DKX and SFINCS v3.
+! Profile values and central-difference gradients are those of the third interior
+! surface of w7x_standard_native_ambipolar_profile.toml.
+
+&general
+  RHSMode = 1
+  ambipolarSolve = .true.
+  ambipolarSolveOption = 2
+  NEr_ambipolarSolve = 30
+  Er_min = -6.0d0
+  Er_max = 0.0d0
+  Er_search_tolerance_f = 1d-13
+  Er_search_tolerance_dx = 1d-8
+/
+
+&geometryParameters
+  geometryScheme = 11
+  equilibriumFile = "../../../SFINCS/equilibria/w7x_standardConfig.bc"
+  inputRadialCoordinate = 3
+  inputRadialCoordinateForGradients = 4
+  rN_wish = 6.0d-1
+/
+
+&speciesParameters
+  Zs = 1 -1
+  mHats = 1.007276d0 5.485799d-4
+  nHats = 1.33d-1 1.33d-1
+  THats = 7.8d-1 1.55d0
+  dNHatdrHats = -2.7003370765592105d-1 -2.7003370765592105d-1
+  dTHatdrHats = -4.003948079036072d0 -1.536398681490586d1
+/
+
+&physicsParameters
+  Delta = 4.5694d-3
+  alpha = 1.0d0
+  nu_n = 8.330d-3
+  Er = -3.0d0
+  collisionOperator = 0
+  includeXDotTerm = .true.
+  includeElectricFieldTermInXiDot = .true.
+  useDKESExBDrift = .false.
+  includePhi1 = .false.
+  constraintScheme = -1
+/
+
+&resolutionParameters
+  Ntheta = 13
+  Nzeta = 31
+  Nxi = 24
+  NL = 4
+  Nx = 6
+  solverTolerance = 1d-10
+/
+
+&otherNumericalParameters
+/
+
+&preconditionerOptions
+  preconditioner_x = 1
+/
+
+&export_f
+/
