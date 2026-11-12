@@ -1787,24 +1787,19 @@ def test_l0_pin_is_floor_sized_and_off_on_a_regular_block() -> None:
     """
     band = jnp.asarray([[2.0]])
     c0 = jnp.asarray([0.25, 0.75])  # sum(c0) = 1.0
-    scale = jnp.asarray([[7.0]])  # the legacy sizing; must not matter any more
     floor = _COARSE_DIAGONAL_FLOOR * 2.0  # floor * band
 
     # Exactly singular in the pinned direction -> pinned up to the floor.
-    singular = _l0_pin_gamma(jnp.zeros((1, 1)), band, scale, c0)
+    singular = _l0_pin_gamma(jnp.zeros((1, 1)), band, c0)
     assert float(singular[0, 0] * jnp.sum(c0)) == pytest.approx(floor, rel=1e-12)
-    # ... and the amount does NOT key on the mean |diagonal| over all L, which
-    # the ``nu l(l+1)/2`` collision diagonal makes ~1e3x larger at high l.
-    louder = _l0_pin_gamma(jnp.zeros((1, 1)), band, scale * 1e3, c0)
-    assert float(louder[0, 0]) == float(singular[0, 0])
 
     # Half the floor missing -> exactly half the floor supplied (adaptive, not
     # a switch: the pin supplies the shortfall).
-    half = _l0_pin_gamma(jnp.asarray([[0.5 * floor]]), band, scale, c0)
+    half = _l0_pin_gamma(jnp.asarray([[0.5 * floor]]), band, c0)
     assert float(half[0, 0] * jnp.sum(c0)) == pytest.approx(0.5 * floor, rel=1e-12)
 
     # A block whose own l=0 diagonal already clears the floor gets no pin.
-    regular = _l0_pin_gamma(jnp.asarray([[1e-3]]), band, scale, c0)
+    regular = _l0_pin_gamma(jnp.asarray([[1e-3]]), band, c0)
     assert float(regular[0, 0]) == 0.0
 
 

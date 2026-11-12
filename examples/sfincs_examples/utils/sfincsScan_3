@@ -298,7 +298,6 @@ if waitBeforeSubmitting:
 print ("launching runs...")
 
 scan_progress = start_scan_progress(total_runs=len(scanVariableValues), label=this_filename)
-prev_dir = None
 for runNum in range(len(scanVariableValues)):
     directory = directories[runNum]
     run_started_at = note_scan_run_start(progress=scan_progress, run_index=runNum+1, directory=directory)
@@ -316,7 +315,6 @@ for runNum in range(len(scanVariableValues)):
     os.makedirs(directory)
     os.chdir(directory)
     current_dir = Path(os.getcwd())
-    configure_krylov_recycle(prev_dir, current_dir)
 
     # Now copy the input.namelist file:
     input_lines = []
@@ -337,4 +335,3 @@ for runNum in range(len(scanVariableValues)):
     note_scan_run_done(progress=scan_progress, run_index=runNum+1, directory=directory, run_started_at=run_started_at, success=point_ok)
 
     os.chdir("..")
-    prev_dir = current_dir if point_ok else prev_dir

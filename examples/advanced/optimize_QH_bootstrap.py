@@ -111,7 +111,6 @@ VMEC_INPUT = (
     Path(_vmex_pkg.__file__).resolve().parents[1]
     / "examples" / "data" / "input.LandremanPaul2021_QH_reactorScale_lowres"
 )
-VMEC_INPUT = Path(os.environ.get("DKX_QH_VMEC_INPUT", VMEC_INPUT))
 
 NS = 7 if CI else 13
 # The autodiff accuracy is checked on the kinetic *segment* (Step 5, pure JAX on
@@ -123,7 +122,7 @@ VMEC_MAX_ITER = 5000
 # Boundary RBC/ZBS with m,|n| <= MAX_MODE.  2 gives 24 free coefficients, which
 # is enough to show the trade-off but not enough to escape it: see the header
 # note on how much bootstrap reduction survives holding quasisymmetry.
-MAX_MODE = int(os.environ.get("DKX_QH_MAX_MODE", "1" if CI else "2"))
+MAX_MODE = 1 if CI else 2
 MBOZ, NBOZ = (2, 2) if CI else (3, 3)
 
 # Kinetic solve: ions + electrons, full linearized Fokker-Planck collisions,
@@ -185,8 +184,8 @@ DTHAT_DRHAT = -T_AXIS * _DS_DRHAT
 TARGET_ASPECT, TARGET_IOTA = 8.0, -1.25
 QS_SURFACES = np.asarray([0.1, 0.3, 0.5, 0.7, 0.9])
 W_ASPECT, W_IOTA, W_KINETIC = 1.0, 100.0, 1.0e6
-QS_TOLERANCE = float(os.environ.get("DKX_QH_QS_TOLERANCE", "2.0e-4"))
-W_QS = float(os.environ.get("DKX_QH_W_QS", "1.0e9"))
+QS_TOLERANCE = 2.0e-4
+W_QS = 1.0e9
 
 # Kinetic figure of merit -- every entry is CI-tested, so switching just works.
 KINETIC_OBJECTIVE = "bootstrap_jbs2"       # (<j.B>/sqrt(<B^2>))^2 -> 0

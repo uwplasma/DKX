@@ -9,19 +9,6 @@ from dkx.api import write_output
 from dkx.io import read_sfincs_h5
 
 
-@pytest.fixture(autouse=True)
-def _clear_solver_policy_env(monkeypatch) -> None:
-    """Keep end-to-end parity fixtures independent of earlier solver-policy tests."""
-
-    for key in (
-        "DKX_RHSMODE1_PRECONDITIONER",
-        "DKX_RHSMODE1_SCHWARZ_COARSE_LEVELS",
-        "DKX_RHSMODE1_SCHWARZ_COARSE_STEPS",
-        "DKX_RHSMODE1_SCHWARZ_COARSE_DAMP",
-    ):
-        monkeypatch.delenv(key, raising=False)
-
-
 def _is_numeric_dataset(x) -> bool:
     if isinstance(x, (str, bytes)):
         return False

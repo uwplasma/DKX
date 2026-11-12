@@ -696,15 +696,7 @@ def kinetic_operator_build_from_namelist(nml: Any) -> KineticOperatorBuild:
             n_xi_for_x=np.asarray(grids.n_xi_for_x, dtype=np.int32),
         )
     else:
-        import os  # noqa: PLC0415
-
-        strict_env = os.environ.get("DKX_FP_STRICT_PARITY", "").strip().lower()
-        if strict_env in {"0", "false", "no", "off"}:
-            strict_parity = False
-        elif strict_env in {"1", "true", "yes", "on"}:
-            strict_parity = True
-        else:
-            strict_parity = bool(rhs_mode == 1 and n_species > 1)
+        strict_parity = bool(rhs_mode == 1 and n_species > 1)
         fp = make_fokker_planck_v3_operator(
             rosenbluth_method=rosenbluth_method,
             x=np.asarray(grids.x, dtype=np.float64),

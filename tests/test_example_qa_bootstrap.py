@@ -37,7 +37,7 @@ import pytest
 # Dependency-based skips only: the example needs the optional companion
 # packages vmex (new core API with core.boozer_tables) and booz_xform_jax.
 # The starting VMEC input ships with vmex; the example resolves it from
-# the installed package (override with DKX_QA_VMEC_INPUT).
+# the installed package.
 pytest.importorskip("vmex")
 pytest.importorskip("vmex.core.boozer_tables")
 pytest.importorskip("booz_xform_jax")

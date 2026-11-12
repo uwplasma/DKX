@@ -148,7 +148,6 @@ if waitBeforeSubmitting:
 print ("launching scans...")
 
 scan_progress = start_scan_progress(total_runs=numErscans, label=this_filename)
-prev_dir = None
 for runNum in range(numErscans):
    dirNum = runNum-1
    while True:
@@ -161,7 +160,6 @@ for runNum in range(numErscans):
    os.mkdir(dirName)
    os.chdir(dirName)
    current_dir = Path(os.getcwd())
-   configure_krylov_recycle(prev_dir, current_dir)
 
    jobName="Sfnx."+dirName
    run_started_at = note_scan_run_start(progress=scan_progress, run_index=runNum+1, directory=dirName)
@@ -204,4 +202,3 @@ for runNum in range(numErscans):
    note_scan_run_done(progress=scan_progress, run_index=runNum+1, directory=dirName, run_started_at=run_started_at, success=point_ok)
 
    os.chdir("..")
-   prev_dir = current_dir if point_ok else prev_dir
