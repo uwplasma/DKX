@@ -56,7 +56,7 @@ split-operator execution so the FP and PAS ladders can be resumed independently
 on separate devices:
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 XLA_PYTHON_CLIENT_PREALLOCATE=false DKX_SCAN_RECYCLE=1 \
+CUDA_VISIBLE_DEVICES=0 XLA_PYTHON_CLIENT_PREALLOCATE=false \
 python tools/publication_figures/generate_sfincs_paper_figs.py \
   --case lhd \
   --collision-operators 0 \
@@ -65,7 +65,7 @@ python tools/publication_figures/generate_sfincs_paper_figs.py \
   --work-dir tools/publication_figures/output/lhd_reaudit_full \
   --summary-dir tools/publication_figures/artifacts
 
-CUDA_VISIBLE_DEVICES=1 XLA_PYTHON_CLIENT_PREALLOCATE=false DKX_SCAN_RECYCLE=1 \
+CUDA_VISIBLE_DEVICES=1 XLA_PYTHON_CLIENT_PREALLOCATE=false \
 python tools/publication_figures/generate_sfincs_paper_figs.py \
   --case lhd \
   --collision-operators 1 \

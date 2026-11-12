@@ -235,11 +235,10 @@ def simplified_subsystem_csr(
 def _assemble(op, s, ix, stream, mirror, exb, eye, drift, sp, drop_l_coupling):
     """Block-tridiagonal-in-L CSR assembly of one subsystem (shared inner loop).
 
-    Returns ``(csr, band, l0_defect, scale)``.  The three scalars are the
-    quantities :func:`dkx.coarse_precond.build_coarse_preconditioner` measures to size its
-    regularization, computed at the same points in the assembly: ``band`` and
-    ``l0_defect`` from the raw blocks, ``scale`` from the floored and mask-pinned
-    diagonal.  Reproducing them here is what keeps the two routes the same map.
+    Returns ``(csr, band, l0_defect)``.  The two scalars are the quantities
+    :func:`dkx.coarse_precond.build_coarse_preconditioner` measures to size its
+    regularization, both from the raw blocks.  Reproducing them here is what keeps
+    the two routes the same map.
     """
     n_xi = op.n_xi
     mask = _np(op._mask())  # (X, L)
@@ -287,16 +286,12 @@ def _assemble(op, s, ix, stream, mirror, exb, eye, drift, sp, drop_l_coupling):
     from dkx.coarse_precond import _COARSE_DIAGONAL_FLOOR  # noqa: PLC0415
 
     floor = _COARSE_DIAGONAL_FLOOR * band
-    diag_entries = []
     for ell in range(n_xi):
         shift = floor + (1.0 - float(mask[ix, ell]))  # mask pin -> identity rows
         blocks[(ell, ell)] = (blocks[(ell, ell)] + shift * eye).tocsr()
-        diag_entries.append(blocks[(ell, ell)].diagonal())
-    scale = float(np.mean(np.abs(np.concatenate(diag_entries))))
-    scale = scale if scale > 0.0 else 1.0
 
     rows = [[blocks.get((r, c)) for c in range(n_xi)] for r in range(n_xi)]
-    return sp.bmat(rows, format="csr"), band, l0_defect, scale
+    return sp.bmat(rows, format="csr"), band, l0_defect
 
 
 def assemble_simplified(
@@ -314,23 +309,21 @@ def assemble_simplified(
     from dkx.coarse_precond import _l0_pin_gamma  # noqa: PLC0415
 
     pieces = _angular_pieces(op)
-    matrices, bands, defects, scales = [], [], [], []
+    matrices, bands, defects = [], [], []
     for s in range(op.n_species):
         for ix in range(op.n_x):
-            mat, band, defect, scale = _assemble(
+            mat, band, defect = _assemble(
                 op, s, ix, *pieces, sp, drop_l_coupling
             )
             matrices.append(mat)
             bands.append(band)
             defects.append(defect)
-            scales.append(scale)
 
     c0 = _np(op._fs_average_factor()).reshape(-1)  # (TZ,)
     gamma = _np(
         _l0_pin_gamma(
             jnp.asarray(np.asarray(defects)),
             jnp.asarray(np.asarray(bands)),
-            jnp.asarray(np.asarray(scales)),
             jnp.asarray(c0),
         )
     ).reshape(-1)

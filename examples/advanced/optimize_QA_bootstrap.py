@@ -164,7 +164,6 @@ SEED_INPUT = (
     Path(_vmex_pkg.__file__).resolve().parents[1]
     / "examples" / "data" / "input.minimal_seed_nfp2"
 )
-SEED_INPUT = Path(os.environ.get("DKX_QA_SEED_INPUT", SEED_INPUT))
 # A small helical RBC/ZBS(n=1, m=1) kick breaks the circular torus' iota
 # saddle (its transform is second-order in the 3D shaping, so its gradient
 # vanishes there) -- the same tie-break the vmex QA example uses.
@@ -330,7 +329,7 @@ FD_GATE = 5e-2 if CI else 2.5e-2
 # by a previous (interrupted) run to start stage B from its best point.
 DOFS_INIT = os.environ.get("DKX_QA_DOFS_INIT", "")
 
-OUT_DIR = Path(os.environ.get("DKX_QA_OUT_DIR", str(Path(__file__).parent / "output")))
+OUT_DIR = Path(__file__).parent / "output"
 STEM = "optimize_QA_bootstrap"
 
 # ----------------------------------------------------------------------------
@@ -341,8 +340,7 @@ print("Stage A: QA shaping with vmex.optimize.least_squares (implicit Jacobian)"
 if not SEED_INPUT.exists():
     raise SystemExit(
         f"seed input not found: {SEED_INPUT}\n"
-        "Point DKX_QA_SEED_INPUT at input.minimal_seed_nfp2 from the "
-        "vmex examples/data directory."
+        "Install vmex from an editable checkout so examples/data is present."
     )
 seed = VmecInput.from_file(str(SEED_INPUT))
 _rbc, _zbs = seed.rbc.copy(), seed.zbs.copy()

@@ -43,7 +43,6 @@ def test_monoenergetic_transport_write_output_exports_delta_f_and_full_f(tmp_pat
     input_path.write_text(text, encoding="utf-8")
 
     out_path = tmp_path / "monoenergetic_export.sfincsOutput.h5"
-    monkeypatch.setenv("DKX_TRANSPORT_LOW_MEMORY", "1")
     write_output(input_path, out_path)
 
     out = read_sfincs_h5(out_path)

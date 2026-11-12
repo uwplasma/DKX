@@ -253,7 +253,6 @@ def test_write_output_full_system_regression(tmp_path: Path, monkeypatch) -> Non
     assert input_path.exists()
 
     monkeypatch.setenv("DKX_FORTRAN_STDOUT", "0")
-    monkeypatch.setenv("DKX_SOLVER_ITER_STATS", "0")
 
     out_path = tmp_path / "sfincsOutput.h5"
     write_output(input_path, out_path)

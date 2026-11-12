@@ -601,13 +601,8 @@ def _materialize_full_border(
 # collisionless deck out of an exact-zero pivot.  Mirrored by
 # ``dkx.multigrid._DIAGONAL_FLOOR``.
 _COARSE_DIAGONAL_FLOOR = 1e-8
-# Experiment knob for :func:`_l0_pin_gamma`: ``"never"``, ``"legacy"``, or a
-# float overriding the relative level of the l=0 null-space pin.
-_L0_PIN_ENV = "DKX_COARSE_L0_PIN"
 
-def _l0_pin_gamma(
-    defect: jnp.ndarray, band: jnp.ndarray, scale: jnp.ndarray, c0: jnp.ndarray
-) -> jnp.ndarray:
+def _l0_pin_gamma(defect: jnp.ndarray, band: jnp.ndarray, c0: jnp.ndarray) -> jnp.ndarray:
     """``(S, X)`` weight of the rank-one ``ones (x) c0`` pin on the ``l = 0`` block.
 
     The simplified ``l = 0`` diagonal block ``A_0`` has one *known* null vector: a
@@ -621,21 +616,11 @@ def _l0_pin_gamma(
     the constant direction up to the isotropic floor's level where the block
     really is singular there and switches the pin off completely -- ``gamma = 0``
     -- as soon as the block's own ``l = 0`` diagonal exceeds it.  Sizing it by the
-    floor rather than by ``scale`` (the mean ``|diagonal|`` over *all* ``L``, which
-    the ``nu l(l+1)/2`` collision diagonal makes ~1e3 times larger at high ``l``)
+    floor rather than by the mean ``|diagonal|`` over *all* ``L`` (which the
+    ``nu l(l+1)/2`` collision diagonal makes ~1e3 times larger at high ``l``)
     is what keeps the coarse operator close to the operator it preconditions.
-
-    ``DKX_COARSE_L0_PIN`` overrides the floor for experiments: ``"never"`` disables
-    the pin, ``"legacy"`` restores the unconditional full-strength pin, and a float
-    sets the relative level directly.
     """
-    mode = os.environ.get(_L0_PIN_ENV, "").strip().lower()
-    if mode == "legacy":
-        return jnp.broadcast_to(scale / jnp.max(jnp.abs(c0)), defect.shape)
-    level = _COARSE_DIAGONAL_FLOOR if not mode else (0.0 if mode == "never" else float(mode))
-    if level <= 0.0:
-        return jnp.zeros_like(defect)
-    return jnp.maximum(level * band - defect, 0.0) / jnp.sum(c0)
+    return jnp.maximum(_COARSE_DIAGONAL_FLOOR * band - defect, 0.0) / jnp.sum(c0)
 
 def _coarse_subsystem_block_fn(
     coef: dict[str, jnp.ndarray], n_xi: int, sub: tuple[jnp.ndarray, ...], *,
@@ -718,7 +703,7 @@ def _coarse_pinned_block_fns(
 
 @functools.partial(jax.jit, static_argnames=("n_xi", "drop_l_coupling"))
 def _coarse_row_stats(coef, subs, *, n_xi: int, drop_l_coupling: bool):
-    """``(band, l = 0 defect, diagonals)`` of every unregularized chain.
+    """``(band, l = 0 defect)`` of every unregularized chain.
 
     Reductions over ``L``, not storage: one live block per step, and ``lax.map``
     rather than ``vmap`` so a step holds one subsystem's blocks, not the batch's.
@@ -729,12 +714,12 @@ def _coarse_row_stats(coef, subs, *, n_xi: int, drop_l_coupling: bool):
 
         def step(worst, j):
             lo, di, up = block_fn(j)
-            return jnp.maximum(worst, jnp.max(jnp.abs(jnp.stack([lo, di, up])))), jnp.diagonal(di)
+            return jnp.maximum(worst, jnp.max(jnp.abs(jnp.stack([lo, di, up])))), None
 
         start = jnp.asarray(0.0, dtype=jnp.float64)
-        band, diagonals = jax.lax.scan(step, start, jnp.arange(n_xi, dtype=jnp.int32))
+        band, _ = jax.lax.scan(step, start, jnp.arange(n_xi, dtype=jnp.int32))
         diag0 = block_fn(jnp.asarray(0, dtype=jnp.int32))[1]
-        return band, jnp.max(jnp.abs(jnp.sum(diag0, axis=-1))), diagonals
+        return band, jnp.max(jnp.abs(jnp.sum(diag0, axis=-1)))
 
     return jax.lax.map(stats, subs)
 
@@ -781,18 +766,12 @@ def _coarse_generated_block_data(
         zeros if coll_diag is None else coll_diag.reshape(batch, n_xi),
         d1, d2, d3, dxi,
     )  # fmt: skip
-    band, defect, diagonals = _coarse_row_stats(
+    band, defect = _coarse_row_stats(
         coef, subs, n_xi=n_xi, drop_l_coupling=bool(drop_l_coupling)
-    )  # (B,), (B,), (B, L, TZ)
+    )  # (B,), (B,)
     band = jnp.where(band > 0.0, band, 1.0)
     floor = _COARSE_DIAGONAL_FLOOR * band  # (B,)
-    scale = jnp.mean(
-        jnp.abs(diagonals + floor[:, None, None] + (1.0 - mask_b)[:, :, None]), axis=(1, 2)
-    )
-    gamma = _l0_pin_gamma(
-        defect.reshape(n_s, n_x), band.reshape(n_s, n_x),
-        jnp.where(scale > 0.0, scale, 1.0).reshape(n_s, n_x), c0,
-    ).reshape(-1)  # fmt: skip
+    gamma = _l0_pin_gamma(defect.reshape(n_s, n_x), band.reshape(n_s, n_x), c0).reshape(-1)
     return (subs if stacked else list(zip(*subs))), floor, gamma
 
 

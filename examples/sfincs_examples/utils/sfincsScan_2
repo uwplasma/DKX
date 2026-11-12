@@ -104,7 +104,6 @@ if waitBeforeSubmitting:
 print ("launching runs...")
 
 scan_progress = start_scan_progress(total_runs=len(pending), label=this_filename)
-prev_dir = None
 for runNum, (directory, text) in enumerate(pending):
     run_started_at = note_scan_run_start(progress=scan_progress, run_index=runNum+1, directory=directory)
 
@@ -114,7 +113,6 @@ for runNum, (directory, text) in enumerate(pending):
     os.makedirs(directory, exist_ok=True)
     archive_scan_attempt(directory, filename)
     current_dir = Path(directory).resolve()
-    configure_krylov_recycle(prev_dir, current_dir)
 
     input_path = current_dir / filename
     input_path.write_text(text)
@@ -126,4 +124,3 @@ for runNum, (directory, text) in enumerate(pending):
     )
     note_scan_run_done(progress=scan_progress, run_index=runNum+1, directory=directory, run_started_at=run_started_at, success=point_ok)
 
-    prev_dir = current_dir if point_ok else prev_dir

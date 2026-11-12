@@ -42,7 +42,6 @@ print ("launching runs...")
 
 base_dir = os.getcwd()
 scan_progress = start_scan_progress(total_runs=len(radii), label=this_filename)
-prev_dir = None
 
 for runNum in range(len(radii)):
     directory = directories[runNum]
@@ -56,7 +55,6 @@ for runNum in range(len(radii)):
         os.makedirs(directory)
     work_dir = str(Path(base_dir) / directory)
     current_dir = Path(work_dir)
-    configure_krylov_recycle(prev_dir, current_dir)
 
     # Now copy the input.namelist file:
 
@@ -149,4 +147,3 @@ for runNum in range(len(radii)):
     radius_ok = run_scan_command(submitCommand, work_dir)
     note_scan_run_done(progress=scan_progress, run_index=runNum+1, directory=directory, run_started_at=run_started_at, success=radius_ok)
 
-    prev_dir = current_dir if radius_ok else prev_dir
