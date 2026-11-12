@@ -219,8 +219,6 @@ one kinetic solve at a time. Its defaults, and why:
   measurements. `precond_window` opts into bounded reuse.
 - `current_tol = 1e-6` is relative to the largest $|J_r|$ seen while
   bracketing, so it means the same thing in any normalization.
-- `all_roots` is off. Turn it on to scan the bracket for further roots; the
-  scan reuses the Brent fields.
 - A field that no solve can certify ends the search with
   `status = "solve_failure"` and the attempts in `failures`, so a loop over
   surfaces keeps going. `wall_time_s` and `n_solves` give the cost.

@@ -1,18 +1,9 @@
 """Optimization workflows, objectives, promotion gates, and evidence helpers.
 
 This module owns the optimization-facing public workflow surface: objectives,
-scan promotion and the re-exports of ``optimization_evidence``,
-``optimization_comparison`` and ``optimization_ladder``. The older
+scan promotion and the re-exports of ``optimization_comparison``. The older
 ``optimization_objectives``, ``optimization_promotion`` and
 ``optimization_workflow`` names are package-level aliases in ``dkx.workflows``.
-
-A note on the word "tier", which means something different here than it used
-to mean elsewhere in dkx. The solver tiers were renamed to route names
-(structured direct, recycled Krylov, sparse direct) and survive only as
-identifiers in :mod:`dkx.solve`. The ``tiers`` in this module are unrelated:
-they are the resolution levels of a convergence ladder. ``"tiers"`` is a key
-in the user's ladder config and in the emitted summary JSON, so it is a
-compatibility surface -- do not rename it while retiring the solver spelling.
 """
 
 from __future__ import annotations
@@ -1010,70 +1001,33 @@ from .optimization_comparison import (  # noqa: E402, F401
     compare_promotion_pair,
     load_promotion_payload,
 )
-from .optimization_evidence import (  # noqa: E402, F401
-    PromotionEvidenceLane,
-    PromotionEvidencePlan,
-    _build_jax_lane,
-    _comparison_command,
-    _promotion_command,
-    build_promotion_evidence_plan,
-    prepare_fortran_er_scan_inputs,
-    run_fortran_er_scan,
-    write_promotion_evidence_plan,
-)
-from .optimization_ladder import (  # noqa: E402, F401
-    DEFAULT_PRODUCTION_FLOOR,
-    _evaluate_tier,
-    _is_strict_refinement,
-    _load_lanes,
-    _meets_floor,
-    _normalized_resolution,
-    _reference_root,
-    _reference_root_from_lanes,
-    _summarize_promotion_payload,
-    dense_matrix_gib,
-    estimate_rhs1_active_size,
-    evaluate_promotion_ladder,
-    load_ladder_config,
-)
 
 __all__ = [
     "AmbipolarRoot",
     "AmbipolarRootSummary",
     "CandidateScanPlan",
-    "DEFAULT_PRODUCTION_FLOOR",
     "NeoclassicalObjectiveWeights",
     "PromotionComparisonTolerances",
-    "PromotionEvidenceLane",
-    "PromotionEvidencePlan",
     "ScanPromotionRun",
     "ScanPromotionSummary",
     "bootstrap_current_objective",
     "build_candidate_scan_plan",
-    "build_promotion_evidence_plan",
     "compare_cpu_gpu_promotions",
     "compare_fortran_promotion",
     "compare_optimization_promotions",
     "compare_promotion_pair",
-    "dense_matrix_gib",
     "electron_root_penalty",
     "er_values_from_bounds",
-    "estimate_rhs1_active_size",
-    "evaluate_promotion_ladder",
     "evaluate_sfincs_scan_promotion",
     "find_ambipolar_roots",
     "flux_selectivity_objective",
     "kinetic_validation_gate",
-    "load_ladder_config",
     "load_promotion_payload",
     "load_proxy_summary",
-    "prepare_fortran_er_scan_inputs",
     "qa_proxy_gradient_gate",
     "qa_proxy_neoclassical_components",
     "qa_proxy_neoclassical_objective",
-    "run_fortran_er_scan",
     "symmetry_proxy_neoclassical_components",
     "symmetry_proxy_neoclassical_objective",
     "write_candidate_scan_plan",
-    "write_promotion_evidence_plan",
 ]

@@ -415,7 +415,7 @@ def _grad_problem():
         build_deck(te_ratio=1.5, dte=DTE, res=RES_GRAD), "grad.input.namelist"
     )
     prob = er_mod.prepare(deck, er_bracket=ER_BRACKET)
-    found = er_mod.find_ambipolar_er(deck, er_bracket=ER_BRACKET, all_roots=True, emit=None)
+    found = er_mod.find_ambipolar_er(deck, er_bracket=ER_BRACKET, emit=None)
     return deck, prob, found
 
 

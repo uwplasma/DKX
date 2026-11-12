@@ -49,9 +49,8 @@ electron pair. Right: $J_r = \sum_s Z_s\Gamma_s$ and its ambipolar root. Generat
   `field_tol` bounds the bracket width (defaults $10^{-10}$ each); a narrow bracket without
   an acceptable current is rejected. Each field is solved once. A field whose solves all
   fail the original-equation check ends the search with `status="solve_failure"` and the
-  attempts in `failures`, instead of raising. `all_roots=True` (opt-in) also scans the
-  bracket on `n_scan = 9` points, merged with the Brent fields, and refines each other
-  sign change. Reuse across fields is described in {doc}`../numerics/factor_reuse`.
+  attempts in `failures`, instead of raising. Multi-root search is the native profile
+  workflow's `find_all_roots`. Reuse across fields is described in {doc}`../numerics/factor_reuse`.
 
 `ambipolar_er(...)`
 : The differentiable root. The forward root is a secant iteration wrapped in

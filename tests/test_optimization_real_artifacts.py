@@ -3,8 +3,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from dkx.workflows.optimization import estimate_rhs1_active_size
-
 
 _REPO = Path(__file__).resolve().parents[1]
 _OPT_FIGURES = _REPO / "docs" / "_static" / "figures" / "optimization"
@@ -61,7 +59,6 @@ def test_finite_beta_electron_root_ladder_config_resolves_checked_artifacts() ->
     assert isinstance(summary_tiers, list)
     assert len(config_tiers) == len(summary_tiers)
 
-    previous_active_size = 0
     for config_tier, summary_tier in zip(config_tiers, summary_tiers, strict=True):
         assert isinstance(config_tier, dict)
         assert isinstance(summary_tier, dict)
@@ -70,19 +67,6 @@ def test_finite_beta_electron_root_ladder_config_resolves_checked_artifacts() ->
         assert summary_tier["r_n"] == config_tier["r_n"]
         assert summary_tier["status"] == "pass"
         assert summary_tier["production_floor_met"] is False
-
-        resolution = config_tier["resolution"]
-        assert isinstance(resolution, dict)
-        expected_active_size = estimate_rhs1_active_size(
-            ntheta=resolution["Ntheta"],
-            nzeta=resolution["Nzeta"],
-            nxi=resolution["Nxi"],
-            nx=resolution["Nx"],
-            n_species=2,
-        )
-        assert summary_tier["active_size_estimate"] == expected_active_size
-        assert expected_active_size > previous_active_size
-        previous_active_size = expected_active_size
 
         promotions = config_tier["promotions"]
         lanes = summary_tier["lanes"]

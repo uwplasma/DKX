@@ -418,7 +418,7 @@ def run_ambipolar_brent(
 
     Returns:
         A :class:`dkx.er.AmbipolarResult` (``.er`` is the ambipolar
-        ``E_r``; ``.roots`` lists every classified root).
+        ``E_r``; ``.roots`` holds the classified selected root).
     """
     input_path, _wout_path, _output_path, _backend, _requires_autodiff, _options = (
         _solve_request_paths(request)

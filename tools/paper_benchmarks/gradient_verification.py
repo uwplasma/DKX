@@ -293,7 +293,7 @@ def row_fsabjhat_nu_n(tmp: Path) -> dict:
 def row_ambipolar_er(tmp: Path) -> dict:
     deck = _write(tmp / "er.input.namelist", PAS_DECK)
     prob = er_mod.prepare(deck, er_bracket=(-3.0, 1.0))
-    found = er_mod.find_ambipolar_er(deck, er_bracket=(-3.0, 1.0), all_roots=False, emit=None)
+    found = er_mod.find_ambipolar_er(deck, er_bracket=(-3.0, 1.0), emit=None)
     root = float(found.er)
     base_op = prob.operator
     base_dn = base_op.dn_hat_dpsi_hat
