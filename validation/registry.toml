@@ -849,3 +849,30 @@ path = "rungs.13x31x24x6.sfincs.Er"
 operation = "set"
 value = -3.0
 expected_errors = ["exceeds the gate"]
+
+[[entry]]
+id = "w7x_ambipolar_rung_gate"
+capability = "ambipolar_roots"
+status = "accepted_limited"
+claim_scope = "w7x_standard_five_surface_pas_dkes_ambipolar_profile_rung_gate"
+claim = "The five-surface W7-X standard-configuration PAS/DKES ambipolar profile finds the same seven roots at (21, 71, 192, 8) and (25, 81, 224, 8) on the checkpointed truncated block-Thomas route, and every root and selected particle and heat flux moves by at most 2% relative between the rungs (largest 1.80%). Scope: two rungs only; the speed rung C (25, 81, 224, 10) is pending."
+artifact = "validation/w7x_ambipolar_rung_gate_v1.json"
+artifact_sha256 = "2aa49df4901e6b54a55b09bee123ac46840498f94b48fa8952bce8a970dbd184"
+artifact_schema = "dkx.w7x_ambipolar_rung_gate.v1"
+audit_script = "tools/paper_benchmarks/audit_ambipolar_rung_gate.py"
+command = "python tools/paper_benchmarks/audit_ambipolar_rung_gate.py --artifact validation/w7x_ambipolar_rung_gate_v1.json"
+inputs = ["validation/inputs/w7x_standard_native_ambipolar_profile.toml"]
+generated_on_host = "nvidia-a4000"
+generated_on_host_recorded = "office workstation CPU, shared (load 25-85), 62 GiB, 8 pinned cores"
+limitations = [
+  "PAS/DKES collisions only; no full Fokker-Planck ambipolar comparison",
+  "W7-X standard configuration only; no second stellarator family",
+  "no experimental comparison",
+  "speed resolution fixed at 8 until the speed rung is added",
+]
+
+[entry.corruption]
+path = "rungs.B.roots.root:1:0.Er"
+operation = "set"
+value = 14.0
+expected_errors = ["root:1:0"]
