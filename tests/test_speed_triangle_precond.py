@@ -215,20 +215,23 @@ def test_truncating_the_series_is_allowed_and_ordered(tmp_path: Path) -> None:
     assert errors[-1] <= errors[0], errors
 
 
-def test_the_exact_triangle_solves_one_speed_at_a_time(tmp_path, monkeypatch) -> None:
+def test_the_exact_triangle_is_one_program_over_all_speeds(tmp_path, monkeypatch) -> None:
     """How the exact inverse is reached, which is what it costs.
 
     ``D^-1 U`` is nilpotent, so sweeping the whole band ``n_x - 1`` times also
     lands on the exact inverse -- while reading every chain's factors once per
-    sweep. Back-substitution over ``x`` reads each speed's factors once. Pin
-    the calls, because the two are indistinguishable in the map they produce.
+    sweep. Back-substitution over ``x`` reads each speed's factors once, in one
+    scan over the speeds, so one program serves them all rather than one per
+    speed. Pin the calls and the compiled programs, because the two routes are
+    indistinguishable in the map they produce.
     """
     import dkx.coarse_precond as cp
 
     op = _operator(tmp_path, nx=4)
     n_x = op.f_shape[1]
     calls = {"speed": 0, "band": 0}
-    for key, name in (("speed", "_apply_split_speed"), ("band", "_apply_dense_coarse_factors")):
+    speed_apply = cp._apply_speed_triangle
+    for key, name in (("speed", "_apply_speed_triangle"), ("band", "_apply_dense_coarse_factors")):
         real = getattr(cp, name)
 
         def counted(*args, _real=real, _key=key, **kwargs):
@@ -246,9 +249,11 @@ def test_the_exact_triangle_solves_one_speed_at_a_time(tmp_path, monkeypatch) ->
     assert per_application >= 1
 
     calls.update(speed=0, band=0)
+    programs = speed_apply._cache_size()
     exact, _ = cp.build_coarse_preconditioner(op, retain_speed_triangle=True)
     exact(v)
-    assert calls == {"speed": n_x * per_application, "band": 0}
+    assert calls == {"speed": per_application, "band": 0}
+    assert speed_apply._cache_size() - programs <= 1, n_x
 
     calls.update(speed=0, band=0)
     series, _ = cp.build_coarse_preconditioner(op, retain_speed_triangle=2)

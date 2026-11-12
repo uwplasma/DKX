@@ -1018,44 +1018,66 @@ def _apply_dense_coarse_factors(factors, floor, rhs, *, transpose, rows):
 
 
 def _split_factors_by_speed(factors: list, rows: tuple, n_species: int) -> tuple:
-    """Per-speed, contiguous copies of the stored rows, emptying ``factors``.
+    """The stored rows regrouped by speed, emptying ``factors``.
 
     The speed-triangle apply reads one speed's chain at a time.  Slicing the
     stacked ``(counts[l], m, m)`` arrays inside the compiled apply makes XLA
     materialize every slice, a second copy of the bands on each application
-    (1.7 GB of the 3.7 GB GCROT temporary on the W7-X deck).  Slicing once here
+    (1.7 GB of the 3.7 GB GCROT temporary on the W7-X deck).  Regrouping once here
     leaves nothing to copy there.  Each stacked row is released as soon as it is
-    split, so the transient is one row, not the whole set.
+    placed, so the transient is one row, not the whole set.
+
+    Returns ``(stacks, lengths, offsets)``.  Each stack is one factor component
+    with shape ``(sum(lengths), n_species, ...)``: speed ``x``'s chain is the
+    ``lengths[x]`` entries from ``offsets[x]``.  Chains of different speeds have
+    different lengths, so they are concatenated, not padded, and the apply reads
+    a chain at a dynamic offset; one program then serves every speed.
     """
     order, counts = rows
     n_x = len(order) // n_species
     starts = [order.index(x) for x in range(n_x)]
-    chains: list[list] = [[] for _ in range(n_x)]
+    lengths = np.asarray([sum(c > start for c in counts) for start in starts], dtype=np.int32)
+    offsets = np.concatenate(([0], np.cumsum(lengths)[:-1])).astype(np.int32)
+    stacks = [
+        jnp.empty((int(lengths.sum()), n_species, *ref.shape[1:]), dtype=ref.dtype)
+        for ref in factors[0]
+    ]
     for ell in range(len(factors)):
         row, factors[ell] = factors[ell], None
         for x, start in enumerate(starts):
             if counts[ell] > start:
-                chains[x].append(tuple(a[start : start + n_species] for a in row))
+                for k, a in enumerate(row):
+                    stacks[k] = _place(stacks[k], a[start : start + n_species], int(offsets[x]) + ell)
         del row
-    return tuple(tuple(c) for c in chains)
+    return tuple(stacks), jnp.asarray(lengths), jnp.asarray(offsets)
+
+
+@functools.partial(jax.jit, donate_argnums=0)
+def _place(stack, block, index):
+    """``stack[index] = block`` in place: one program for every speed and row."""
+    return stack.at[index].set(block)
 
 
 @functools.partial(jax.jit, static_argnames=("transpose",))
-def _apply_split_speed(chain, floor, rhs, *, transpose):
-    """The two sweeps of :func:`_apply_dense_coarse_factors` for one speed.
+def _apply_speed_triangle(stacks, lengths, offsets, floor, upper, rhs, *, transpose):
+    """The exact speed triangle: back-substitution over ``x``, one program for all speeds.
 
-    Subsystem ``b = s * n_x + x`` is its own Legendre chain, so the speeds are
-    independent and a speed's solve reads only its own factors, the
-    rows of :func:`_split_factors_by_speed`, each a stored inverse or an LU
-    (:data:`_INVERSE_COND_LIMIT`).  ``floor`` and ``rhs``
-    hold this speed alone, species-major.
+    ``M = D + U`` with ``D`` the speed-diagonal blocks and ``U`` strictly upper in
+    ``x``, so the last speed is solved outright and
+    ``y_x = D_x^-1 (r_x - sum_{x' > x} U[x, x'] y_{x'})`` needs only the speeds
+    above it; the adjoint's ``U^T`` is strictly lower and runs the other way.  The
+    speeds are a ``lax.scan`` whose body reads its chain from ``stacks``
+    (:func:`_split_factors_by_speed`) at a dynamic offset, so no speed is a static
+    argument.  Within a speed, subsystem ``b = s * n_x + x`` is its own Legendre
+    chain and its solve is the two sweeps of :func:`_apply_dense_coarse_factors`,
+    loops of ``lengths[x]`` rows; the rows past it are ``g / (1 + floor)``.
     """
-    length = len(chain)
-    m = chain[0][-1].shape[-1]
-    g = rhs.reshape(floor.shape[0], -1, m)
-    low = chain[0][-1].dtype
-    out = (g.astype(low) / (1.0 + floor).astype(low)[:, None, None]).astype(g.dtype)
-    work = jnp.result_type(g, chain[0][-2])
+    n_x, n_xi = lengths.shape[0], upper.shape[1]
+    n_s = floor.size // n_x
+    n_tz = rhs.size // (n_s * n_x * n_xi)
+    low = stacks[-1].dtype
+    work = jnp.result_type(rhs, stacks[-2])
+    g = rhs.reshape(n_s, n_x, n_xi, n_tz)
 
     def couple(block, v):
         return jax.vmap(lambda b, x: x @ b if transpose else b @ x)(block, v)
@@ -1063,23 +1085,51 @@ def _apply_split_speed(chain, floor, rhs, *, transpose):
     def tsolve(solver, v):
         return _row_solve(solver, v.astype(low), transpose=transpose).astype(work)
 
-    sigma: list = [None] * length
-    for ell in reversed(range(length)):
-        s = g[:, ell]
-        if ell + 1 < length:
-            *solver, lower_next, _ = chain[ell + 1]
-            down = lower_next if transpose else chain[ell][-1]
-            s = s - couple(down, tsolve(solver, sigma[ell + 1]))
-        sigma[ell] = s
-    solution: list = []
-    for ell in range(length):
-        *solver, lower, _ = chain[ell]
-        s = sigma[ell]
-        if ell > 0:
-            up = chain[ell - 1][-1] if transpose else lower
-            s = s - couple(up, solution[-1])
-        solution.append(tsolve(solver, s))
-    return out.at[:, :length].set(jnp.stack(solution, axis=1)).reshape(rhs.shape)
+    def one_speed(off, length, floor_x, g_x):
+        """``D_x^-1 g_x`` for ``g_x`` of shape ``(n_s, n_xi, n_tz)``."""
+
+        def row(ell):
+            *solver, lower, upper_l = (
+                jax.lax.dynamic_index_in_dim(a, off + ell, 0, keepdims=False) for a in stacks
+            )
+            return tuple(solver), lower, upper_l
+
+        out = (g_x.astype(low) / (1.0 + floor_x).astype(low)[:, None, None]).astype(g_x.dtype)
+        zero = jnp.zeros_like(g_x[:, 0]).astype(work)
+
+        def sweep_down(i, state):
+            carry, sigma = state
+            ell = length - 1 - i
+            solver, lower, upper_l = row(ell)
+            s = g_x[:, ell] - (carry if transpose else couple(upper_l, carry))
+            t = tsolve(solver, s)
+            return (couple(lower, t) if transpose else t), sigma.at[:, ell].set(s)
+
+        _, sigma = jax.lax.fori_loop(0, length, sweep_down, (zero, jnp.zeros_like(g_x, dtype=work)))
+
+        def sweep_up(ell, state):
+            carry, y_all = state
+            solver, lower, upper_l = row(ell)
+            s = sigma[:, ell] - (carry if transpose else couple(lower, carry))
+            y = tsolve(solver, s)
+            return (couple(upper_l, y) if transpose else y), y_all.at[:, ell].set(y.astype(y_all.dtype))
+
+        _, solved = jax.lax.fori_loop(0, length, sweep_up, (zero, out))
+        return solved
+
+    floor_x = floor.reshape(n_s, n_x).T
+    blocks = jnp.moveaxis(upper, 2 if transpose else 3, 0)  # (n_x, n_s, n_xi, n_x')
+
+    def over_speeds(done, xs):
+        x, off, length, f_x, block = xs
+        r = jax.lax.dynamic_index_in_dim(g, x, 1, keepdims=False)
+        r = r - jax.lax.dynamic_index_in_dim(done, x, 1, keepdims=False)
+        y = one_speed(off, length, f_x, r)
+        return done + jnp.einsum("slx,slt->sxlt", block, y), y
+
+    xs = (jnp.arange(n_x), offsets, lengths, floor_x, blocks)
+    _, columns = jax.lax.scan(over_speeds, jnp.zeros_like(g), xs, reverse=not transpose)
+    return jnp.moveaxis(columns, 0, 1).reshape(rhs.shape)
 
 
 def _collision_diagonal_only(coll):
@@ -1357,10 +1407,10 @@ def build_coarse_preconditioner(
         # x reaches; an integer instead truncates the nilpotent series of D^-1 U,
         # trading exactness in M for an apply that stays batched over all speeds.
         sweeps = 0 if retain_speed_triangle is True else int(retain_speed_triangle or 0)
-        split = None
+        split = lengths = offsets = None
         if upper is not None and retain_speed_triangle is True:
             factors = list(factors)
-            split = _split_factors_by_speed(factors, rows, n_s)  # empties the list
+            split, lengths, offsets = _split_factors_by_speed(factors, rows, n_s)  # empties the list
             factors = None
 
         def _a_inv(transpose: bool) -> Callable[[jnp.ndarray], jnp.ndarray]:
@@ -1373,30 +1423,10 @@ def build_coarse_preconditioner(
                     factors, floor, v, transpose=transpose, rows=rows
                 )
 
-            def apply_speed(x: int, r: jnp.ndarray) -> jnp.ndarray:
-                return _apply_split_speed(
-                    split[x], floor.reshape(n_s, n_x)[:, x], r, transpose=transpose
-                )
-
             def apply_back_substitution(v: jnp.ndarray) -> jnp.ndarray:
-                # M = D + U with D the speed-diagonal blocks already factored and U
-                # strictly upper in x, so the last speed is solved outright and
-                #   y_x = D_x^-1 (r_x - sum_{x' > x} U[x, x'] y_{x'})
-                # needs only the speeds above it.  The adjoint's U^T is strictly
-                # lower, so it runs the other way.  One pass reads each speed's
-                # factors once; the series below reaches the same map by reading
-                # all of them once per sweep.
-                g = v.reshape(n_s, n_x, n_xi, n_tz)
-                speeds = range(n_x) if transpose else range(n_x - 1, -1, -1)
-                done = jnp.zeros_like(g)
-                columns: list = [None] * n_x
-                for x in speeds:
-                    y = apply_speed(x, g[:, x] - done[:, x])
-                    # What this speed contributes to the ones still to be solved.
-                    block = upper[:, :, x, :] if transpose else upper[:, :, :, x]
-                    done = done + jnp.einsum("slx,slt->sxlt", block, y)
-                    columns[x] = y
-                return jnp.stack(columns, axis=1).reshape(v.shape)
+                return _apply_speed_triangle(
+                    split, lengths, offsets, floor, upper, v, transpose=transpose
+                )
 
             def apply_triangular(v: jnp.ndarray) -> jnp.ndarray:
                 # D^-1 U is nilpotent of index n_x, so y_{k+1} = D^-1 (r - U y_k)
