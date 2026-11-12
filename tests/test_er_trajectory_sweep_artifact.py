@@ -101,6 +101,25 @@ def test_stellarator_reference_artifact_shows_nonzero_er_spread() -> None:
         assert float(np.max(values) - np.min(values)) > 1e-4
 
 
+# Stated threshold: across the three trajectory models the bootstrap current
+# <j.B> at nonzero Er differs by at least 1% and at most 10% of its mean
+# magnitude. Below 1% the models would be indistinguishable; above 10% the
+# sweep would no longer be a perturbation of the DKES result.
+BOOTSTRAP_SPREAD_RELATIVE_BOUNDS = (0.01, 0.10)
+
+
+def test_stellarator_bootstrap_current_spread_across_models_is_within_stated_bounds() -> None:
+    records = _load_records("er_sweep_stellarator_reference_summary.json")
+    low, high = BOOTSTRAP_SPREAD_RELATIVE_BOUNDS
+    for er in (-8.5897, 8.5897):
+        values = np.asarray(
+            [float(records[(model, er)]["fsab_jhat"]) for model in ("dkes", "partial", "full")],
+            dtype=float,
+        )
+        relative_spread = float(np.max(values) - np.min(values)) / float(np.mean(np.abs(values)))
+        assert low < relative_spread < high, (er, relative_spread)
+
+
 def test_stellarator_reference_provenance_pins_full_input_grid() -> None:
     path = (
         Path(__file__).resolve().parents[1]
