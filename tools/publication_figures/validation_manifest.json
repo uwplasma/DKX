@@ -984,41 +984,5 @@
       "Primal and adjoint residual norms remain below the pinned residual gate",
       "Figures are regenerated from the machine-readable summary artifact and do not require optional optimization dependencies"
     ]
-  },
-  {
-    "id": "hsx_ambipolar_rung_gate",
-    "status": "implemented",
-    "release_gate": {
-      "claim_status": "release_ready",
-      "blocks_current_release": false,
-      "evidence": "checked five-surface HSX QHS PAS/DKES ambipolar artifact with every root, selected particle and heat flux, secant history, memory, wall time, and geometry checksum at two rungs",
-      "promotion_gate": "Keep every root and selected particle and heat flux within 2% relative between the two rungs before using this as release evidence"
-    },
-    "kind": "profile_validation",
-    "literature": [
-      "https://doi.org/10.1063/1.4870077"
-    ],
-    "scripts": [
-      "tools/paper_benchmarks/audit_ambipolar_rung_gate.py"
-    ],
-    "artifacts": [
-      "validation/hsx_ambipolar_rung_gate_v1.json",
-      "validation/inputs/hsx_qhs_native_ambipolar_profile.toml"
-    ],
-    "claims": [
-      "The five-surface HSX QHS PAS/DKES ambipolar profile has one ion root per surface at (25, 61, 160, 12) and (29, 67, 192, 12), and every root and selected particle and heat flux moves by at most 2% relative between the rungs",
-      "The profile is representative and not fitted to a discharge; collisions are pitch-angle scattering with DKES trajectories, and no electron root appears in the searched range"
-    ],
-    "source_code": [
-      "tools/paper_benchmarks/audit_ambipolar_rung_gate.py",
-      "tools/release/registry.py"
-    ],
-    "tests": [
-      "tests/test_validation.py"
-    ],
-    "acceptance_gates": [
-      "Recompute every root and flux change from the sealed roots and require each at or below 2%",
-      "Keep full Fokker-Planck ambipolar comparison and experiment explicit as unclaimed"
-    ]
   }
 ]
