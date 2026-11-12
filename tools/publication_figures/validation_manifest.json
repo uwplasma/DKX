@@ -808,45 +808,6 @@
     ]
   },
   {
-    "id": "w7x_fp_ambipolar_sfincs",
-    "status": "implemented",
-    "release_gate": {
-      "claim_status": "release_ready",
-      "blocks_current_release": false,
-      "evidence": "checked two-species full-Fokker-Planck W7-X ambipolar root found independently by DKX and SFINCS v3 on one shared deck and grid",
-      "promotion_gate": "Keep root agreement below 2% and particle and heat flux agreement below 1% at the root; keep the unconverged-grid, single-surface and DKX-refinement exclusions explicit"
-    },
-    "kind": "cross_code_validation",
-    "literature": [
-      "https://github.com/landreman/sfincs"
-    ],
-    "scripts": [
-      "tools/paper_benchmarks/audit_w7x_fp_ambipolar_sfincs.py"
-    ],
-    "artifacts": [
-      "validation/w7x_fp_ambipolar_sfincs_v1.json",
-      "validation/inputs/w7x_standard_fp_ambipolar_surface3.input.namelist"
-    ],
-    "claims": [
-      "DKX and SFINCS v3 find the same ambipolar E_r on one W7-X surface with two species, full linearized Fokker-Planck collisions and full trajectories, from one deck on one grid",
-      "The roots agree to 5.2e-7 relative and the particle and heat fluxes of both species at the root to 1.0e-6 relative",
-      "The grid is not converged: the SFINCS-only scan moves the root by up to 9% under refinement"
-    ],
-    "source_code": [
-      "src/dkx/er.py",
-      "tools/paper_benchmarks/audit_w7x_fp_ambipolar_sfincs.py"
-    ],
-    "tests": [
-      "tests/test_validation.py"
-    ],
-    "acceptance_gates": [
-      "Verify the exact deck by checksum",
-      "Require 2% root agreement and 1% particle and heat flux agreement at the root",
-      "Require each code's radial current at its root to be below 1e-4 of its largest bracket current",
-      "Keep convergence, second-surface, Phi1, experiment, and performance claims explicit"
-    ]
-  },
-  {
     "id": "w7x_fixed_field_resolution_referee",
     "status": "implemented",
     "release_gate": {

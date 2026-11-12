@@ -84,7 +84,6 @@ scripts, run plans and proxy figures cannot be mistaken for closed evidence.
 | `sfincs_full_kinetic_stellarator_profile` | `release_ready` | full-FP W7-X surface, 1.37e-8 | {doc}`sfincs` |
 | `monkes_monoenergetic_overlap` | `release_ready` | DSHAPE, NCSX, W7-X EIM against YANCC and MONKES, within 6% | {doc}`cross_code` |
 | `native_w7x_physical_flux_sfincs` | `release_ready` | native-path W7-X fluxes in physical units against SFINCS | {doc}`cross_code` |
-| `w7x_fp_ambipolar_sfincs` | `release_ready` | full-FP W7-X ambipolar root, DKX against SFINCS, 5.2e-7 | this page |
 | `w7x_fixed_field_resolution_referee` | `release_ready` | fixed-field W7-X resolution referee | this page |
 | `native_w7x_ambipolar_profile_certificate` | `regression_scaffold` | five-surface W7-X ambipolar profile from a case file | this page |
 | `native_w7x_ambipolar_phase_space_ladder`, `_phase_space_axes`, `_pitch_budget`, `_pitch_speed_groups`, `_pitch_explicit_groups`, `_joint_speed_zeta_tail` | `regression_scaffold` | resolution diagnosis of that profile | this page |
