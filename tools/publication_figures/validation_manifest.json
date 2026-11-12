@@ -999,7 +999,7 @@
       "https://doi.org/10.1063/1.4870077"
     ],
     "scripts": [
-      "tools/paper_benchmarks/audit_hsx_ambipolar_rung_gate.py"
+      "tools/paper_benchmarks/audit_ambipolar_rung_gate.py"
     ],
     "artifacts": [
       "validation/hsx_ambipolar_rung_gate_v1.json",
@@ -1010,7 +1010,7 @@
       "The profile is representative and not fitted to a discharge; collisions are pitch-angle scattering with DKES trajectories, and no electron root appears in the searched range"
     ],
     "source_code": [
-      "tools/paper_benchmarks/audit_hsx_ambipolar_rung_gate.py",
+      "tools/paper_benchmarks/audit_ambipolar_rung_gate.py",
       "tools/release/registry.py"
     ],
     "tests": [
