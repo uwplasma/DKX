@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import sys
 from pathlib import Path
 from typing import Any
@@ -12,10 +13,14 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 ROOT_GATE = 0.02
 FLUX_GATE = 0.01
+# Absolute floor of the relative difference, in the artifact's units (kV/m, SI fluxes);
+# two values that are both essentially zero then differ by 0 instead of dividing by zero.
+FLOOR = 1e-12
 
 
 def _rel(a: float, b: float) -> float:
-    return abs(a - b) / max(abs(a), abs(b))
+    """Symmetric, zero-safe relative difference |a - b| / max(|a|, |b|, FLOOR)."""
+    return abs(a - b) / max(abs(a), abs(b), FLOOR)
 
 
 def _pairs(case: dict[str, Any]) -> list[tuple[str, float, float]]:
@@ -36,20 +41,21 @@ def audit(artifact_path: Path) -> dict[str, Any]:
     elif hashlib.sha256(deck.read_bytes()).hexdigest() != payload["source"]["deck"]["sha256"]:
         errors.append("deck checksum mismatch")
 
-    worst = {"root": 0.0, "flux": 0.0}
-    for label, case in payload["rungs"].items():
-        for name, a, b in _pairs(case):
-            kind = "root" if name == "root" else "flux"
-            change = _rel(a, b)
-            worst[kind] = max(worst[kind], change)
-            if label == payload["gate"]["accepted_rung"] and change > (ROOT_GATE if kind == "root" else FLUX_GATE):
-                errors.append(f"{label} {name}: {change:.4f} exceeds the gate")
+    # The accepted rung is the finest grid in the artifact, recomputed here; the recorded
+    # label is only checked against it.
+    rungs = payload["rungs"]
     recorded = payload["gate"]
-    accepted = payload["rungs"][recorded["accepted_rung"]]
+    finest = max(rungs, key=lambda label: (math.prod(rungs[label]["grid"]), label))
+    if recorded["accepted_rung"] != finest:
+        errors.append(f"recorded accepted rung {recorded['accepted_rung']} is not the finest rung {finest}")
+    accepted = rungs[finest]
     top = {"root": 0.0, "flux": 0.0}
     for name, a, b in _pairs(accepted):
         kind = "root" if name == "root" else "flux"
-        top[kind] = max(top[kind], _rel(a, b))
+        change = _rel(a, b)
+        top[kind] = max(top[kind], change)
+        if change > (ROOT_GATE if kind == "root" else FLUX_GATE):
+            errors.append(f"{finest} {name}: {change:.4f} exceeds the gate")
     for kind, key in (("root", "max_root_difference"), ("flux", "max_flux_difference")):
         if abs(recorded[key] - top[kind]) > 1e-12:
             errors.append(f"recorded {key} {recorded[key]} differs from recomputed {top[kind]}")
