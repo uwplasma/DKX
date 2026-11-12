@@ -19,21 +19,14 @@ from tools.release.artifacts import (
     validate_benchmark_artifact_file,
 )
 from dkx.validation.fortran import PetscCSRMatrix, PetscVec, parse_fortran_v3_profile_file
-from dkx.workflows import optimization as opt
-from dkx.workflows import optimization_evidence
 from dkx.workflows.optimization import (
     AmbipolarRoot,
     AmbipolarRootSummary,
     CandidateScanPlan,
     NeoclassicalObjectiveWeights,
-    PromotionEvidenceLane,
-    PromotionEvidencePlan,
     ScanPromotionRun,
     ScanPromotionSummary,
-    load_ladder_config,
     load_proxy_summary,
-    run_fortran_er_scan,
-    write_promotion_evidence_plan,
 )
 
 
@@ -121,59 +114,6 @@ def test_optimization_evidence_and_fortran_scan_contracts(
         promotion_command=("python", "promote.py"),
     )
     assert candidate.as_dict()["jobs"] == 2
-
-    lane = PromotionEvidenceLane(
-        label="cpu",
-        backend="jax_cpu",
-        scan_dir=tmp_path / "cpu_scan",
-        promotion_dir=tmp_path / "cpu_promotion",
-        scan_command=("dkx", "scan-er"),
-        promotion_command=("python", "promote.py"),
-        env={"JAX_PLATFORM_NAME": "cpu"},
-    )
-    evidence = PromotionEvidencePlan(
-        input_namelist=tmp_path / "input.namelist",
-        out_dir=tmp_path / "evidence",
-        er_values=(-1.0, 1.0),
-        lanes=(lane,),
-        comparison_command=("python", "compare.py"),
-    )
-    evidence_path = write_promotion_evidence_plan(tmp_path / "evidence.json", evidence)
-    payload = json.loads(evidence_path.read_text())
-    assert payload["lanes"][0]["env"] == {"JAX_PLATFORM_NAME": "cpu"}
-
-    ladder_path = tmp_path / "ladder.json"
-    ladder_path.write_text(json.dumps({"surfaces": [0.25, 0.5]}) + "\n")
-    assert load_ladder_config(ladder_path)["surfaces"] == [0.25, 0.5]
-
-    input_path = tmp_path / "input.namelist"
-    input_path.write_text(
-        "&geometryParameters\n"
-        " inputRadialCoordinateForGradients = 4\n"
-        "/\n"
-        "&physicsParameters\n"
-        " Er = 0.0\n"
-        "/\n"
-    )
-
-    def fake_run_sfincs_fortran(*, input_namelist, exe, workdir, timeout_s):
-        del input_namelist, exe, timeout_s
-        Path(workdir, "sfincsOutput.h5").write_bytes(b"placeholder")
-
-    messages: list[str] = []
-    monkeypatch.setattr(optimization_evidence, "run_sfincs_fortran", fake_run_sfincs_fortran)
-    result = run_fortran_er_scan(
-        input_namelist=input_path,
-        out_dir=tmp_path / "fortran_scan",
-        values=(-1.0, 1.0),
-        timeout_s=0.1,
-        skip_existing=False,
-        emit=lambda _level, message: messages.append(message),
-    )
-    assert result.variable == "Er"
-    assert result.values == (1.0, -1.0)
-    assert all(path.exists() for path in result.outputs)
-    assert any("fortran-scan: progress" in message for message in messages)
 
 
 def test_validation_artifact_and_profile_file_contracts(tmp_path: Path) -> None:

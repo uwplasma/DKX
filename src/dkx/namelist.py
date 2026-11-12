@@ -45,35 +45,12 @@ _GROUP_END_RE = re.compile(r"^\s*/\s*$")
 _ASSIGN_RE = re.compile(r"(?P<key>[A-Za-z_]\w*(?:\([^\)]*\))?)\s*=", re.MULTILINE)
 
 
+_TOKEN_RE = re.compile(r"""(?:[^\s,'"]|'[^']*'?|"[^"]*"?)+""")
+
+
 def _tokenize_value_chunk(chunk: str) -> List[str]:
-    """Tokenize a value chunk into tokens, keeping quoted strings intact."""
-    tokens: List[str] = []
-    buf: List[str] = []
-    quote_char: str | None = None
-    chunk = chunk.strip()
-    i = 0
-    while i < len(chunk):
-        ch = chunk[i]
-        if ch in {"'", '"'}:
-            if quote_char is None:
-                quote_char = ch
-            elif quote_char == ch:
-                quote_char = None
-            buf.append(ch)
-        elif quote_char is None and ch in [",", "\n", "\t", " ", "\r"]:
-            if buf:
-                tok = "".join(buf).strip()
-                if tok:
-                    tokens.append(tok)
-                buf = []
-        else:
-            buf.append(ch)
-        i += 1
-    if buf:
-        tok = "".join(buf).strip()
-        if tok:
-            tokens.append(tok)
-    return tokens
+    """Split a value chunk on commas and whitespace, keeping quoted strings intact."""
+    return _TOKEN_RE.findall(chunk)
 
 
 _BOOL_TRUE = {"T", ".T.", ".TRUE.", "TRUE"}
@@ -92,15 +69,12 @@ def _parse_scalar(tok: str) -> Scalar:
         return False
     # integers
     if re.fullmatch(r"[+-]?\d+", tok):
-        try:
-            return int(tok)
-        except Exception:
-            pass
+        return int(tok)
     # floats (Fortran exponent forms)
     f = tok.replace("D", "E").replace("d", "E")
     try:
         return float(f)
-    except Exception:
+    except ValueError:
         return tok
 
 

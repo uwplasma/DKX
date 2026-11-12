@@ -132,7 +132,6 @@ def test_find_ambipolar_er_matches_legacy_brent(tmp_path: Path) -> None:
         max_iter=20,
         # The legacy root accepted |J_r| <= 1e-10 absolute: 6.4e-4 of max|J_r|.
         current_tol=6.4e-4,
-        all_roots=False,
         emit=None,
     )
     assert result.converged
@@ -206,7 +205,7 @@ def test_root_classification_ion(tmp_path: Path) -> None:
     from dkx import er as er_mod
 
     result = er_mod.find_ambipolar_er(
-        _write(tmp_path, _pas_deck()), er_bracket=(-3.0, 1.0), all_roots=True, emit=None
+        _write(tmp_path, _pas_deck()), er_bracket=(-3.0, 1.0), emit=None
     )
     # A single root at Er < 0 with dJr/dEr > 0 is the stable ion root.
     assert result.root_type == "ion"
@@ -279,11 +278,11 @@ def test_host_solves_each_field_once(host_current):
     def current(e):
         fields.append(e)
         return (e + .3) * (e * e + 1.)
-    result = host_current(current)(all_roots=True, n_scan=5, er_initial=.5)
+    result = host_current(current)(er_initial=.5)
     assert result.converged and abs(result.er + .3) < 1e-8
     assert len(fields) == len(set(fields)) == result.n_solves
-    # The selected root is not re-solved, and the scan reuses Brent's fields.
-    assert fields.count(result.er) == 1 and result.roots[0] == result.roots[0]
+    # The selected root is not re-solved.
+    assert fields.count(result.er) == 1
     assert [r.er for r in result.roots] == [result.er]
 
 
@@ -310,10 +309,10 @@ def test_host_preconditioner_reuse_stays_inside_its_window(monkeypatch):
                                                                    precond=precond)
     monkeypatch.setattr(er, "radial_current", current)
     problem = er.ErProblem(None, 1., np.array([1.]), 0., -12., 12.)
-    result = er.find_ambipolar_er(problem, all_roots=False, emit=None)
+    result = er.find_ambipolar_er(problem, emit=None)
     assert result.converged and all(k["precond"] is None for _, k in calls)  # default: rebuild
     calls.clear()
-    result = er.find_ambipolar_er(problem, all_roots=False, emit=None, precond_window=3.)
+    result = er.find_ambipolar_er(problem, emit=None, precond_window=3.)
     assert result.converged and abs(result.er + 3.) < 1e-9
     reused = [(f, k) for f, k in calls if k["precond"] is not None]
     assert reused and all(abs(f - built[k["precond"]]) <= 3. for f, k in reused)
@@ -345,23 +344,13 @@ def test_host_retains_one_preconditioner_across_fields(monkeypatch, window):
     assert result.converged and result.n_solves > 4 and max(live) <= (window > 0)
 
 
-def test_host_scan_keeps_endpoints_and_rejects_false_crossing(host_current):
-    # Endpoint roots plus a jump at 0.123; the discontinuity is not a root.
-    result = host_current(lambda e: (e**2 - 1) * (-1 if e < .123 else 1))(
-        er_initial=-1., n_scan=9, max_iter=100, all_roots=True,
-    )
-    assert result.converged
-    assert [r.er for r in result.roots] == [-1., 1.]
-
-
 def test_host_selected_classification_is_not_replaced_by_nearby_root(host_current):
     result = host_current(lambda e: (e + .001) * e * (e - .001))(
-        er_bracket=(-.002, .002), er_initial=.001, n_scan=5, all_roots=True,
-        slope_step=.00075, current_tol=1e-16,
+        er_bracket=(-.002, .002), er_initial=.001, slope_step=.00075, current_tol=1e-16,
     )
     assert result.converged and result.er == .001
     assert result.root_type == "electron"
-    assert [r.root_type for r in result.roots] == ["ion", "unstable", "electron"]
+    assert [r.root_type for r in result.roots] == ["electron"]
 
 
 @pytest.mark.parametrize("radial_factor", [-7., -1., 1., 7.])
@@ -373,13 +362,14 @@ def test_host_root_classification_is_radial_chart_invariant(monkeypatch, radial_
         raw = (field+.5)*field*(field-.5)/radial_factor
         return raw, np.array([raw]), None
     monkeypatch.setattr(er, "radial_current", current)
-    result = er.find_ambipolar_er(problem, all_roots=True, n_scan=7, slope_step=1e-4,
-                                current_tol=1e-12, field_tol=1e-12, emit=None)
-    assert result.converged and result.er == .5 and result.root_type == "electron"
-    np.testing.assert_allclose([r.er for r in result.roots], [-.5, 0., .5], atol=1e-12)
-    assert [r.root_type for r in result.roots] == ["ion", "unstable", "electron"]
+    roots = [er.find_ambipolar_er(problem, er_bracket=bracket, slope_step=1e-4, current_tol=1e-12,
+                                  field_tol=1e-12, emit=None)
+             for bracket in ((-.75, -.25), (-.25, .25), (.25, .75))]
+    assert all(r.converged for r in roots)
+    np.testing.assert_allclose([r.er for r in roots], [-.5, 0., .5], atol=1e-12)
+    assert [r.root_type for r in roots] == ["ion", "unstable", "electron"]
     # Stored slopes retain native psiHat-current units.
-    np.testing.assert_allclose([r.slope*radial_factor for r in result.roots],
+    np.testing.assert_allclose([r.roots[0].slope*radial_factor for r in roots],
                                [.5+1e-8, -.25+1e-8, .5+1e-8], atol=1e-12)
 
 
@@ -403,11 +393,13 @@ def test_host_classification_agrees_with_polarization_dynamics(monkeypatch, radi
         flux = outward_fluxes(field)/radial_factor
         return float(flux[0] - flux[1]), flux, None
     monkeypatch.setattr(er, "radial_current", current)
-    result = er.find_ambipolar_er(problem, all_roots=True, n_scan=13, slope_step=1e-5,
-                                current_tol=1e-11, field_tol=1e-11, max_iter=80, emit=None)
-    assert result.converged
-    np.testing.assert_allclose([r.er for r in result.roots], [-1., 0., 1.], atol=1e-9)
-    for root in result.roots:
+    results = [er.find_ambipolar_er(problem, er_bracket=bracket, slope_step=1e-5, current_tol=1e-11,
+                                    field_tol=1e-11, max_iter=80, emit=None)
+               for bracket in ((-1.1, -.5), (-.5, .5), (.5, 1.1))]
+    assert all(r.converged for r in results)
+    roots = [r.roots[0] for r in results]
+    np.testing.assert_allclose([r.er for r in roots], [-1., 0., 1.], atol=1e-9)
+    for root in roots:
         field = root.er + 1e-4
         gamma = outward_fluxes(field)
         # Positive-capacity Euler step in outward physical current units.
@@ -501,7 +493,7 @@ def test_ambipolar_er_grad_matches_finite_difference(tmp_path: Path, collision, 
 
     # Seed the differentiable root near the true root (selects that branch).
     found = er_mod.find_ambipolar_er(
-        _write(tmp_path, deck), er_bracket=(-3.0, 1.0), all_roots=False, emit=None
+        _write(tmp_path, deck), er_bracket=(-3.0, 1.0), emit=None
     )
     root = float(found.er)
 
@@ -737,7 +729,7 @@ def test_host_root_reports_states_failing_the_original_equation(tmp_path, monkey
         return value, flux, state
 
     monkeypatch.setattr(er, "radial_current", current)
-    result = er.find_ambipolar_er(problem, all_roots=False, emit=None)
+    result = er.find_ambipolar_er(problem, emit=None)
     # The first field fails cold, then with a tighter tolerance: a structured failure.
     assert not result.converged and result.status == "solve_failure"
     assert [c["tol"] for c in calls] == [None, 1e-12] and result.n_solves == 2
@@ -759,7 +751,7 @@ def test_host_root_preserves_solver_policy(tmp_path, monkeypatch, prepared, over
 
     monkeypatch.setattr(er_mod, "solve", record)
     policy = dict(solve_method="block_tridiagonal", tol=3e-11) if override else {}
-    result = er_mod.find_ambipolar_er(inp, all_roots=False, emit=None, **policy)
+    result = er_mod.find_ambipolar_er(inp, emit=None, **policy)
     assert result.converged
     assert abs(result.er - LEGACY_BRENT_ROOT_ER) < 1e-3
     expected = (("block_tridiagonal", 3e-11) if override else
@@ -888,7 +880,7 @@ def test_host_bounded_reuse_rebuilds_once_before_acceptance(monkeypatch, failure
                 bad if fail and failure == "residual" else good)
     monkeypatch.setattr(er, "radial_current", current)
     problem = er.ErProblem(op, 1., np.array([1.]), 0., -1., 1., solve_method="gmres")
-    options = dict(all_roots=False, emit=None, max_restarts=12, reuse_max_restarts=2, precond_window=10.)
+    options = dict(emit=None, max_restarts=12, reuse_max_restarts=2, precond_window=10.)
     result = er.find_ambipolar_er(problem, **options)
     if cold_fails:
         # Explicit gmres: reuse, then cold, then a structured failure.
@@ -919,7 +911,7 @@ def test_bounded_full_fp_root_matches_independent_cold_solutions(tmp_path):
     problem = er.prepare(_write(tmp_path, _pas_deck(
         collision_operator=0, n_theta=5, n_zeta=5, n_xi=6, n_x=3)),
         solve_method="gmres", tol=1e-12, er_bracket=(-3., 1.))
-    options = dict(all_roots=False, emit=None, max_restarts=12)
+    options = dict(emit=None, max_restarts=12)
     cold = er.find_ambipolar_er(problem, warm_start=False, **options)
     bounded = er.find_ambipolar_er(problem, reuse_max_restarts=1, precond_window=1., **options)
     assert cold.converged and bounded.converged

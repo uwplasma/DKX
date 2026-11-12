@@ -133,9 +133,8 @@ class AmbipolarResult:
             ``(n_species,)``.
         iterations: the ordered radial-current evaluations (Fortran-parity
             history).
-        roots: current-accepted roots found by the finite scan (length 1 for a
-            single-root case; the differentiable :func:`ambipolar_er` wrapper
-            differentiates one *selected* root).
+        roots: the classified selected root (length 1; the differentiable
+            :func:`ambipolar_er` wrapper differentiates the same root).
         message: human-readable status detail.
         current_scale: largest ``|J_r|`` seen while bracketing; ``current_tol``
             is relative to it.
@@ -696,8 +695,6 @@ def find_ambipolar_er(
     precond_window: float = 0.0,
     max_restarts: int = 200,
     reuse_max_restarts: int | None = None,
-    all_roots: bool = False,
-    n_scan: int = 9,
     slope_step: float | None = None,
     emit: Callable[[str], None] | None = print,
 ) -> AmbipolarResult:
@@ -733,10 +730,8 @@ def find_ambipolar_er(
     fail, the result has ``status="solve_failure"`` and the attempts in
     ``failures``; nothing raises.
 
-    ``all_roots`` (opt-in) samples ``n_scan`` fields over the bracket, merged
-    with the Brent evaluations, and refines other sign changes. The selected
-    root stays the Brent result. A finite scan cannot find tangencies or every
-    root. Zero slope is marginal.
+    Only the Brent root is returned (``roots`` has length 1); the multi-root
+    search lives in the native profile workflow. Zero slope is marginal.
 
     Omitted ``solve_method`` and ``tol`` keep a prepared problem's policy;
     unprepared inputs default to ``"auto"`` and ``1e-10``.
@@ -859,7 +854,6 @@ def find_ambipolar_er(
                       per_species_flux=None, message=message, current_scale=scale)
 
     jr_root, gamma_root = memo[root_er][:2]
-    abs_tol = current_tol * scale
     if not converged:
         return finish(converged=False, status=status, er=float(root_er), radial_current=jr_root,
                       per_species_flux=gamma_root, message=message, current_scale=scale)
@@ -883,16 +877,10 @@ def find_ambipolar_er(
     else:
         slope = (safe(root_er + h, "slope_plus") - safe(root_er - h, "slope_minus")) / (2.0 * h)
     root_type = _classify(root_er, slope, radial_factor=-problem.dphi_per_er)
-    roots = [AmbipolarRoot(root_er, jr_root, slope, root_type)]
-    if all_roots and n_scan >= 3:
-        roots = _enumerate_roots(
-            safe, {e: v[0] for e, v in memo.items()}, er_min=er_min, er_max=er_max, n_scan=n_scan,
-            current_tol=abs_tol, field_tol=field_tol, slope_step=h, primary=roots[0],
-            radial_factor=-problem.dphi_per_er,
-        )
+    roots = (AmbipolarRoot(root_er, jr_root, slope, root_type),)
 
     result = finish(converged=True, status=status, er=float(root_er), radial_current=jr_root,
-                    root_type=root_type, per_species_flux=gamma_root, roots=tuple(roots),
+                    root_type=root_type, per_species_flux=gamma_root, roots=roots,
                     message=message, current_scale=scale)
     say(message)
     say("Here are the Ers we used: " + " ".join(f"{it.er:.8g}" for it in iterations))
@@ -900,91 +888,6 @@ def find_ambipolar_er(
     say(f"Time for ambipolar solve: {result.wall_time_s:.6g} seconds ({solves} kinetic solves).")
     say(f"Ambipolar Er = {root_er:.15g}  ({root_type} root)")
     return result
-
-
-def _refine_secant(
-    eval_jr: Callable[[float, str], float],
-    lo: float,
-    flo: float,
-    hi: float,
-    fhi: float,
-    *,
-    current_tol: float,
-    max_steps: int = 40,
-    field_tol: float = 1e-10,
-) -> float | None:
-    """Bracketed secant/bisection refinement of a single sign-changing bracket."""
-    for _ in range(max_steps):
-        if fhi == flo:
-            mid = 0.5 * (lo + hi)
-        else:
-            mid = hi - fhi * (hi - lo) / (fhi - flo)
-            if not (min(lo, hi) < mid < max(lo, hi)):
-                mid = 0.5 * (lo + hi)
-        fmid = eval_jr(mid, "scan_refine")
-        if not math.isfinite(fmid):
-            return None
-        if abs(fmid) <= current_tol:
-            return mid
-        if abs(hi - lo) <= field_tol:
-            return None
-        if _same_sign(flo, fmid):
-            lo, flo = mid, fmid
-        else:
-            hi, fhi = mid, fmid
-    return None
-
-
-def _enumerate_roots(
-    eval_jr: Callable[[float, str], float],
-    known: dict[float, float],
-    *,
-    er_min: float,
-    er_max: float,
-    n_scan: int,
-    current_tol: float,
-    slope_step: float,
-    primary: AmbipolarRoot,
-    field_tol: float = 1e-10,
-    radial_factor: float = 1.0,
-) -> list[AmbipolarRoot]:
-    """Classify accepted sampled zeros and sign changes of the scan plus ``known``.
-
-    ``eval_jr`` returns NaN for a field that could not be solved; such samples
-    and the intervals touching them are skipped. A sign change that contains
-    the primary root reports the primary root itself.
-    """
-    samples = dict(known)
-    for e in np.linspace(float(er_min), float(er_max), int(n_scan)):
-        samples.setdefault(float(e), eval_jr(float(e), "scan"))
-    grid = sorted(samples)
-    candidates = {e for e in grid if samples[e] == 0.0}
-    for lo, hi in zip(grid, grid[1:]):
-        flo, fhi = samples[lo], samples[hi]
-        if not (math.isfinite(flo) and math.isfinite(fhi)) or flo == 0.0 or fhi == 0.0 or _same_sign(flo, fhi):
-            continue
-        if lo <= primary.er <= hi:
-            candidates.add(primary.er)
-            continue
-        er = _refine_secant(eval_jr, lo, flo, hi, fhi, current_tol=current_tol, field_tol=field_tol)
-        if er is not None:
-            candidates.add(er)
-    roots: list[AmbipolarRoot] = []
-    for er in sorted(candidates):
-        if er == primary.er:
-            roots.append(primary)
-            continue
-        jr = eval_jr(er, "scan_root")
-        if not math.isfinite(jr) or abs(jr) > current_tol:
-            continue
-        slope = (
-            eval_jr(er + slope_step, "scan_slope_plus")
-            - eval_jr(er - slope_step, "scan_slope_minus")
-        ) / (2.0 * slope_step)
-        roots.append(AmbipolarRoot(er, jr, slope, _classify(er, slope, radial_factor=radial_factor)))
-    if not roots:
-        roots.append(primary)
-    return roots
 
 
 # ---------------------------------------------------------------------------
