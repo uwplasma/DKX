@@ -37,7 +37,7 @@ Details in {doc}`physics/geometry` and {doc}`tutorials/03_geometry_species`.
 | Capability | Options | Evidence |
 | --- | --- | --- |
 | Collision operators | `pitch_angle_scattering`; `linearized_fokker_planck` (full linearized Fokker–Planck, multispecies, momentum and energy restoring) | conservation to 1e-15, Spitzer–Härm within 0.36% ({doc}`benchmarks/analytic_limits`); {doc}`physics/collisions` |
-| Rosenbluth potentials | `quadpack`, `analytic` and `hybrid` routes | agree with each other to 1e-12 on the HSX case of {doc}`benchmarks/sfincs` |
+| Rosenbluth potentials | `gauss` (default, traced), `quadpack`, `analytic` and `hybrid` routes | agree with each other to 1e-12 on the HSX case of {doc}`benchmarks/sfincs` |
 | Trajectory models | `magnetic_drifts = "dkes"` or `"full"`; SFINCS DKES, partial and full trajectories; tangential magnetic drifts (`magneticDriftScheme`) | trajectory sweep reproduced ({doc}`benchmarks/cross_code`) |
 | Radial electric field | prescribed, or ambipolar with every root classified ion, electron or unstable; uniform or seeded bracket search | {doc}`physics/electric_field` |
 | Species and impurities | any number of species; trace or finite impurities; classical impurity flux (`dkx.classical_impurity_flux`); `dkx.build_impurity_plasma` | impurity flux against Fortran golden data ({doc}`benchmarks/cross_code`); `examples/tutorials/07_species_and_impurity.py`, `examples/tutorials/11_phi1.py` |

@@ -181,11 +181,13 @@ input.namelist` is the replacement ({doc}`convergence`).
 | `Nxi_for_x_option` | `1` | pitch modes per speed node: 0 uniform, 1 linear, 2 quadratic |
 | `useIterativeLinearSolver` | `.true.` | accepted (alias `useIterativeSolver`); DKX chooses its route with `--solve-method` |
 | `whichParallelSolverToFactorPreconditioner` / `PETSCPreallocationStrategy` | `1` / `1` | PETSc settings, accepted for compatibility |
-| `RosenbluthMethod` | `'quadpack'` | DKX extension: `quadpack`, `hybrid` or `analytic` quadrature of the Rosenbluth potentials |
+| `RosenbluthMethod` | `'gauss'` | DKX extension: `gauss`, `quadpack`, `hybrid` or `analytic` quadrature of the Rosenbluth potentials |
 | `SfincsMatrixThreshold` | `0.0` | DKX extension: drop Fokker–Planck entries at or below this magnitude |
 
-`RosenbluthMethod = 'quadpack'` is the Fortran v3 algorithm and the parity
-route. `'hybrid'` keeps QUADPACK for $L = 0 \ldots 3$ (so the particle, energy and
+`RosenbluthMethod = 'gauss'` assembles the matrices with traced Gauss-Legendre
+quadrature (no host loop), so they follow the species densities and temperatures
+under `jax.jit` and `jax.grad`; it agrees with QUADPACK to 1e-13 on the
+reference decks. `'quadpack'` is the Fortran v3 algorithm, evaluated on the host. `'hybrid'` keeps QUADPACK for $L = 0 \ldots 3$ (so the particle, energy and
 momentum conservation moments are unchanged) and evaluates $L \ge 4$ in closed
 form; `'analytic'` uses closed form at every $L$ and may differ from Fortran at
 strict-parity level. The `DKX_ROSENBLUTH_METHOD` environment variable applies
@@ -310,7 +312,7 @@ key. The deck must use:
 | `xGridScheme`, `xGrid_k` | 5, 0.0 |
 | `thetaDerivativeScheme`, `zetaDerivativeScheme` | 2 |
 | `NL` (Fokker–Planck) | `min(4, Nxi)` |
-| `RosenbluthMethod` | `quadpack` |
+| `RosenbluthMethod` | `gauss` |
 | species gradients | gentle enough that the three-surface profile stays positive |
 
 Many SFINCS decks refuse, most often for scheme-1 parameters,

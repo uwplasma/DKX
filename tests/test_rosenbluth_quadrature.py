@@ -170,7 +170,7 @@ def _fp_operator(rosenbluth_line: str = "") -> KineticOperator:
 
 
 def test_rosenbluth_method_resolution_prefers_the_explicit_route() -> None:
-    assert resolve_rosenbluth_method(None) == "quadpack"
+    assert resolve_rosenbluth_method(None) == "gauss"
     for name in ROSENBLUTH_METHODS:
         assert resolve_rosenbluth_method(name.upper()) == name
         assert resolve_rosenbluth_method(f"  {name}  ") == name
@@ -215,10 +215,11 @@ def test_builder_api_argument_selects_the_hybrid_rosenbluth_path() -> None:
     same = make_fokker_planck_v3_operator(**common, rosenbluth_method="quadpack")
     hybrid = make_fokker_planck_v3_operator(**common, rosenbluth_method="hybrid")
 
-    # The default and an explicit 'quadpack' are the same operator; 'hybrid'
+    # The default is the traced 'gauss' operator, which reproduces explicit
+    # 'quadpack' to rounding; 'hybrid'
     # reaches a different quadrature -- with nl = 6 the L >= 4 blocks take the
     # analytic moments -- without the environment variable ever being set.
-    np.testing.assert_array_equal(np.asarray(same.mat), np.asarray(base.mat))
+    np.testing.assert_allclose(np.asarray(same.mat), np.asarray(base.mat), rtol=1e-12, atol=1e-13)
     assert not np.array_equal(np.asarray(hybrid.mat), np.asarray(base.mat))
     np.testing.assert_allclose(
         np.asarray(hybrid.mat), np.asarray(base.mat), rtol=1e-6, atol=1e-10
@@ -233,7 +234,7 @@ def test_namelist_key_selects_the_hybrid_rosenbluth_path() -> None:
     hybrid = _fp_operator("RosenbluthMethod = 'hybrid'")
     quadpack = _fp_operator("RosenbluthMethod = 'quadpack'")
 
-    np.testing.assert_array_equal(np.asarray(quadpack.fp.mat), np.asarray(base.fp.mat))
+    np.testing.assert_allclose(np.asarray(quadpack.fp.mat), np.asarray(base.fp.mat), rtol=1e-12, atol=1e-13)
     assert not np.array_equal(np.asarray(hybrid.fp.mat), np.asarray(base.fp.mat))
     np.testing.assert_allclose(
         np.asarray(hybrid.fp.mat), np.asarray(base.fp.mat), rtol=1e-6, atol=1e-10
