@@ -37,6 +37,7 @@ of them.
 | HSX-like gap deck, `validation/hsx_gap_deck_v1.json` | 633,604 unknowns converge on the default route to a residual of 9.0e-9 in 611 iterations, 1,658 s, 26.8 GiB; the SFINCS routes fail; out of core through MUMPS it reaches 4.8e-11 in 4,774 s with 4.1 GiB resident and agrees with the Krylov solution to 7e-6 | merged |
 | IPP DKES on `hydra_Np04`, `validation/dkes_hydra_np04_v1.json` | agreement statistics only; the DKES data are not redistributed | merged |
 | W7-X ambipolar profile | stays a regression scaffold; the promotion rung needs a host with a few hundred GiB | merged |
+| HSX QHS ambipolar profile, `validation/hsx_ambipolar_rung_gate_v1.json` | one ion root per surface on five surfaces; every root and selected flux within 2% relative between $(25, 61, 160, 12)$ and $(29, 67, 192, 12)$ (largest 0.68%) | open |
 
 ## Release claim gate metadata
 
@@ -262,6 +263,18 @@ when the stored-factor working set exceeds the tier-1 memory budget (`DKX_TIER1_
 $(21, 51, 128, 4)$ the peak falls from 3.9 to 1.2 GiB and the fluxes agree to 1e-13; the recomputation costs between 1.4 and 2
 times the stored-factor time on a loaded host. Peak memory is a few blocks of $m^2 = (21 \times 71)^2$ doubles per
 subsystem, independent of $N_\xi$ and of the number of speeds.
+
+The HSX QHS ambipolar profile has its own two-rung gate (`validation/hsx_ambipolar_rung_gate_v1.json`). The case is
+`validation/inputs/hsx_qhs_native_ambipolar_profile.toml`: PAS/DKES collisions, five surfaces at $s = 0.09$ to $0.49$,
+and a representative profile that is linear in $s$ ($n = 8\times10^{18}(1-0.6s)$ m$^{-3}$, $T_e = 0.5(1-s)$ keV,
+$T_i = 0.1(1-0.6s)$ keV), not fitted to a discharge. A 21-point scan of the radial current over $|E_r| \le 20$ kV/m at
+$(17, 41, 96, 8)$ changes sign once on each surface, so each surface has one ion root, between $-0.45$ and $-0.60$ kV/m, and no electron root.
+Rung A is $(25, 61, 160, 12)$ (5.9 million unknowns) and rung B $(29, 67, 192, 12)$ (9.0 million); both are solved by the
+checkpointed truncated block-Thomas route, with the roots found by secant iteration. Every root and every selected particle and heat flux
+moves by at most 2% between the rungs; the largest change is 0.68% (ion particle flux on surface 0) and the roots move by at most 0.31%. Peak
+resident memory is 3.5 GiB at rung A and 4.8 GiB at rung B, and one solve takes 4 to 20 minutes on an Apple M3 Max.
+A coarser rung, $(17, 41, 96, 8)$, differs from rung A by up to 3.1%, so the gate starts at rung A. The roots lie within 0.7 kV/m of zero, so the gate says nothing
+about fluxes at large $|E_r|$.
 
 ## Open and deferred work
 
