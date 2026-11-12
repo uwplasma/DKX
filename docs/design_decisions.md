@@ -68,7 +68,7 @@ upstream cannot collide with) are opt-in and never defaults.
   force have no diagonal. That rules out multigrid smoothing and fixes the
   preconditioner family ({doc}`numerics/krylov_and_preconditioners`). A pitch
   grid would allow it but would change answers at fixed resolution and break
-  matrix parity, so it lives in the experimental `dkx.collocation`.
+  matrix parity, so it is not part of DKX; a prototype is in the git history.
 - The rectangular state layout keeps inactive $N_\xi(x)$ entries as pinned zero
   rows instead of the packed Fortran indexing; solutions and adjoints match the
   packed system ({doc}`numerics/discretization`).

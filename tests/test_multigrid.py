@@ -7,8 +7,7 @@ independent references: the periodic angular transfers must reproduce
 ``solvax.transfer``'s classical stencils exactly on the nested (even) grids
 where both are defined, and must preserve constants on the odd, non-nested
 grids SFINCS actually uses; the Legendre p-coarsening transfers must be exact
-adjoints; the pitch-collocation eigenbasis must diagonalize the streaming
-``L``-coupling with the Gauss-Legendre nodes; a coarsened operator must
+adjoints; a coarsened operator must
 rediscretize the same physics; and the coarsest block-Thomas solve must invert
 its own level operator.
 
@@ -32,18 +31,11 @@ import pytest
 
 from dkx.drift_kinetic import KineticOperator
 from dkx.multigrid import (
-    UPWIND_STENCILS,
     MultigridSettings,
     coarsen_operator,
-    dense_simplified_block,
     hierarchy_shapes,
-    line_diagonal_dominance,
-    line_smoother_spectral_radius,
-    measure_smoothing_factor,
     periodic_transfer_matrices,
-    pitch_collocation_surrogate,
     simplified_operator,
-    stencil_matrices,
     xi_transfer_matrices,
 )
 from dkx.namelist import parse_sfincs_input_text, read_sfincs_input
@@ -169,22 +161,6 @@ def test_coarsen_operator_rediscretizes_the_same_physics() -> None:
     )
 
 
-def test_streaming_eigenbasis_is_the_discrete_legendre_transform() -> None:
-    """``Y = V diag(lambda) V^-1`` with the Gauss-Legendre nodes as ``lambda``."""
-    from dkx.multigrid import _streaming_eigenbasis
-
-    op = simplified_operator(_load_op("quick_2species_FPCollisions_noEr"))
-    v, v_inv, lam = _streaming_eigenbasis(op)
-    lower = np.asarray(op.xi_coupling_lower)
-    upper = np.asarray(op.xi_coupling_upper)
-    y = np.diag(lower[1:], -1) + np.diag(upper[:-1], 1)
-    np.testing.assert_allclose(v @ v_inv, np.eye(op.n_xi), atol=1e-12)
-    np.testing.assert_allclose(v @ np.diag(lam) @ v_inv, y, atol=1e-12)
-    np.testing.assert_allclose(
-        np.sort(lam), np.polynomial.legendre.leggauss(op.n_xi)[0], atol=1e-12
-    )
-
-
 def test_coarsest_block_thomas_inverts_its_level_operator() -> None:
     from dkx.multigrid import _coarse_solve, _level_matvec, _DIAGONAL_FLOOR
 
@@ -197,14 +173,6 @@ def test_coarsest_block_thomas_inverts_its_level_operator() -> None:
     b = matvec(f)
     residual = jnp.linalg.norm(matvec(solve_coarse(b)) - b) / jnp.linalg.norm(b)
     assert float(residual) < 1e-6
-
-
-def test_measured_smoothing_factor_is_finite_on_a_real_operator() -> None:
-    """The smoother is measured on the real DKX operator, not a model problem."""
-    op = _load_op("quick_2species_FPCollisions_noEr")
-    mu = measure_smoothing_factor(op, steps=8)
-    assert np.isfinite(mu)
-    assert mu > 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -334,45 +302,6 @@ def test_adjoint_diagnostics_are_recorded_for_the_multigrid_route() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_widened_upwind_stencils_buy_diagonal_dominance_at_fixed_order() -> None:
-    """The point of the widened stencils: more diagonal weight per unit accuracy.
-
-    A first-derivative stencil's diagonal dominance ``d`` is what decides
-    whether a damped block-Jacobi relaxation built from it smooths.  The
-    textbook upwind-biased schemes lose it as their order rises; skipping near
-    neighbours keeps it.
-    """
-    expected = {
-        "up1": 1.0,  # 1st order, fully one-sided
-        "up2": 0.6,  # 2nd order, textbook
-        "wide2": 0.882,  # 2nd order, widened
-        "up3": 1.0 / 3.0,  # 3rd order, textbook
-        "wide4": 0.619,  # 4th order, widened
-        "ctr2": 0.0,  # centered: the scheme dkx actually uses on the angles
-    }
-    measured = {}
-    for name in expected:
-        back, forward = stencil_matrices(21, 1.0, name, periodic=True)
-        # the forward-biased partner is the mirror image, so it has the same d
-        for mat in (back, forward):
-            diag = np.abs(np.diag(mat))
-            off = np.abs(mat).sum(axis=1) - diag
-            measured.setdefault(name, []).append(float(np.min(diag / off)))
-        assert measured[name][0] == pytest.approx(measured[name][1], abs=1e-12)
-    for name, value in expected.items():
-        assert measured[name][0] == pytest.approx(value, abs=2e-3), name
-    # a widened stencil beats the textbook one of the *same or higher* order
-    assert measured["wide2"] > measured["up2"]
-    assert measured["wide4"] > measured["up3"]
-    # and every stencil in the table is a consistent first derivative
-    for name in UPWIND_STENCILS:
-        back, forward = stencil_matrices(21, 2 * np.pi / 21, name, periodic=True)
-        x = 2 * np.pi * np.arange(21) / 21
-        for mat in (back, forward):
-            np.testing.assert_allclose(mat @ np.ones(21), 0.0, atol=1e-10)
-            assert np.linalg.norm(mat @ np.sin(x) - np.cos(x)) / np.sqrt(21) < 0.35
-
-
 def test_streaming_is_strictly_off_diagonal_in_the_legendre_pitch_index() -> None:
     """The structural reason no line smoother can work in the modal basis.
 
@@ -396,70 +325,10 @@ def test_streaming_is_strictly_off_diagonal_in_the_legendre_pitch_index() -> Non
     assert float(jnp.max(jnp.abs(stripped.legendre_blocks(1).lower))) > 0.0
 
 
-def test_line_smoothers_diverge_in_the_legendre_basis_and_converge_on_a_pitch_grid() -> None:
-    """``rho(S) < 1`` is necessary for any cycle, and the modal basis has no such S.
-
-    Same continuum operator, same geometry, same deck: only the pitch
-    discretization differs.
-    """
-    op = _load_op("quick_2species_FPCollisions_noEr")
-    modal = dense_simplified_block(op, species=0, speed=1)
-    modal_shape = (op.n_xi, op.n_theta, op.n_zeta)
-    rho_modal = line_smoother_spectral_radius(modal, modal_shape)
-    assert rho_modal > 1.5, rho_modal
-
-    upwind = pitch_collocation_surrogate(op, species=0, speed=1, angular_stencil="up1")
-    rho_upwind = line_smoother_spectral_radius(upwind.matrix, upwind.shape)
-    assert rho_upwind < 1.0, rho_upwind
-
-    # and it is the upwinding, not the change of basis: the same collocation
-    # grid with centered differences has a divergent relaxation too.
-    centered = pitch_collocation_surrogate(op, species=0, speed=1, angular_stencil="ctr2")
-    assert line_smoother_spectral_radius(centered.matrix, centered.shape) > 1.0
-
-    # the upwind pitch line is diagonally dominant; the centered one is not
-    assert line_diagonal_dominance(upwind.matrix, upwind.shape, 0)[0] > (
-        line_diagonal_dominance(centered.matrix, centered.shape, 0)[0]
-    )
-
-
-def test_pitch_collocation_surrogate_discretizes_the_same_operator() -> None:
-    """The surrogate is the same continuum operator, not a different problem."""
-    op = _load_op("quick_2species_FPCollisions_noEr")
-    surrogate = pitch_collocation_surrogate(
-        op, species=0, speed=1, angular_stencil="ctr2"
-    )
-    assert surrogate.shape == (op.n_xi, op.n_theta, op.n_zeta)
-
-    # the modal <-> nodal transform is an exact round trip at Nalpha = Nxi
-    rng = np.random.default_rng(0)
-    v = rng.normal(size=op.n_xi * op.n_theta * op.n_zeta)
-    np.testing.assert_allclose(surrogate.modal(surrogate.nodal(v)), v, atol=1e-10)
-
-    # the dense modal block agrees with the matrix-free simplified operator
-    modal = dense_simplified_block(op, species=0, speed=1)
-    f = rng.normal(size=op.f_shape)
-    reference = np.asarray(simplified_operator(op).apply_f(jnp.asarray(f)))[0, 1]
-    got = modal @ f[0, 1].reshape(-1)
-    np.testing.assert_allclose(got, reference.reshape(-1), rtol=1e-9, atol=1e-11)
-
-    # on a field the coarse angular grid resolves, the two discretizations of
-    # the same continuum operator agree to their truncation error
-    theta = 2 * np.pi * np.arange(op.n_theta) / op.n_theta
-    smooth = np.zeros((op.n_xi, op.n_theta, op.n_zeta))
-    smooth[1] = np.cos(theta)[:, None]
-    a = surrogate.nodal(modal @ smooth.reshape(-1))
-    b = surrogate.matrix @ surrogate.nodal(smooth.reshape(-1))
-    assert np.linalg.norm(a - b) / np.linalg.norm(a) < 0.25
-
-
-@pytest.mark.parametrize(
-    "smoother,axisymmetric",
-    [("theta", False), ("zeta", False), ("alternating", False), ("zeta", True)],
-)
+@pytest.mark.parametrize("axisymmetric", [False, True])
 @pytest.mark.parametrize("n_fine,stencil,min_angle", [(7, 2, 5), (5, 1, 3)])
-def test_line_multigrid_preconditioner_transpose_matches_dense_and_ad(
-    smoother, axisymmetric, n_fine, stencil, min_angle
+def test_multigrid_preconditioner_transpose_matches_dense_and_ad(
+    axisymmetric, n_fine, stencil, min_angle
 ):
     from dkx.multigrid import build_multigrid_preconditioner
 
@@ -475,7 +344,7 @@ def test_line_multigrid_preconditioner_transpose_matches_dense_and_ad(
     # A finite pin isolates transpose parity from the constant kinetic null mode.
     precond, precond_t = build_multigrid_preconditioner(
         op,
-        settings=MultigridSettings(levels=2, min_angle=min_angle, smoother=smoother, shift=0.1),
+        settings=MultigridSettings(levels=2, min_angle=min_angle, shift=0.1),
     )
     dense = np.asarray(jax.vmap(precond, in_axes=1, out_axes=1)(jnp.eye(op.total_size)))
     rng = np.random.default_rng(23)
@@ -508,43 +377,20 @@ def _small_smoothing_level(n_theta, n_zeta, n_xi, *, exb=True, masked=False):
     return level
 
 
-def test_centered_plane_smoother_inverts_the_one_pitch_kinetic_operator():
-    """With one pitch coefficient, only angular ExB and the pin remain."""
-    from dkx.multigrid import _level_matvec, _level_smoother, _shift
-
-    level = _small_smoothing_level(3, 3, 1)
-    settings = MultigridSettings(smoother="plane", stencil="centered", absolute_reaction=False)
-    weight = .1
-    matvec = _level_matvec(level, weight)
-    smoother = _level_smoother(level, settings, weight)
-    size = int(np.prod(level.f_shape))
-    basis = jnp.eye(size).reshape((size, *level.f_shape))
-    dense = np.asarray(jax.vmap(level.apply_f)(basis)).reshape(size, size).T
-    shift = np.broadcast_to(np.asarray(_shift(level, weight))[:, :, None, None, None], level.f_shape)
-    dense = dense + np.diag(shift.ravel())
-    rhs = np.random.default_rng(13).normal(size=level.f_shape)
-    got = np.asarray(smoother(matvec, jnp.zeros_like(jnp.asarray(rhs)), jnp.asarray(rhs)))
-    np.testing.assert_allclose(got.ravel(), np.linalg.solve(dense, rhs.ravel()), rtol=1e-10, atol=1e-11)
-    np.testing.assert_allclose(np.asarray(matvec(jnp.asarray(got))), rhs, rtol=1e-10, atol=1e-11)
-
-
-@pytest.mark.parametrize("kind,n_theta,n_zeta,exb,masked,smooth_xi", [
-    ("plane", 3, 5, False, False, False),
-    ("plane", 5, 3, True, True, False),
-    ("theta", 3, 5, False, False, False),
-    ("zeta", 5, 3, True, False, False),
-    ("alternating", 3, 5, True, True, False),
-    ("hybrid", 3, 5, True, True, True),
-    ("zeta", 5, 1, False, True, True),
+@pytest.mark.parametrize("n_theta,n_zeta,exb,masked", [
+    (3, 5, False, False),
+    (5, 3, True, True),
+    (3, 5, True, True),
+    (5, 1, False, True),
 ])
-def test_pitch_smoothers_preserve_linear_adjoint_and_inactive_rows(
-    kind, n_theta, n_zeta, exb, masked, smooth_xi
+def test_plane_smoother_preserves_linear_adjoint_and_inactive_rows(
+    n_theta, n_zeta, exb, masked
 ):
     """A relaxation may be approximate, but its linear action and transpose agree."""
     from dkx.multigrid import _level_matvec, _level_smoother
 
     level = _small_smoothing_level(n_theta, n_zeta, 3, exb=exb, masked=masked)
-    settings = MultigridSettings(smoother=kind, smooth_xi=smooth_xi)
+    settings = MultigridSettings()
     matvec = _level_matvec(level, .1)
     smooth = _level_smoother(level, settings, .1)
     zero = jnp.zeros(level.f_shape)
@@ -563,6 +409,3 @@ def test_pitch_smoothers_preserve_linear_adjoint_and_inactive_rows(
         active = level._mask()[None, :, :, None, None]
         inactive_rhs = a * (1 - active)
         np.testing.assert_allclose(apply(inactive_rhs), inactive_rhs, atol=1e-11)
-    if n_zeta == 1:
-        theta = _level_smoother(level, replace(settings, smoother="theta"), .1)
-        np.testing.assert_allclose(y, theta(matvec, zero, a), rtol=1e-10, atol=1e-11)

@@ -1,4 +1,4 @@
-"""Level matvec, coarse solve and the line and plane smoothers."""
+"""Level matvec, coarse solve and the Legendre-plane smoother."""
 
 from __future__ import annotations
 
@@ -14,13 +14,7 @@ _configure_runtime()
 import jax  # noqa: E402
 import jax.numpy as jnp  # noqa: E402
 from solvax.direct import block_thomas_factor, block_thomas_solve  # noqa: E402
-from solvax.smoothers import (  # noqa: E402
-    alternating_smoother,
-    plane_smoother,
-    relaxation,
-    tridiagonal_smoother,
-    upwind_smoother,
-)
+from solvax.smoothers import relaxation  # noqa: E402
 
 from .drift_kinetic import KineticOperator  # noqa: E402
 from .multigrid_levels import MultigridSettings, _angular_stencil  # noqa: E402
@@ -148,80 +142,6 @@ def _coarse_solve(
 # =============================================================================
 # Smoother
 # =============================================================================
-
-def _streaming_eigenbasis(level: KineticOperator) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """``(V, V^-1, lambda)`` diagonalizing the Legendre ``xi``-multiplication matrix.
-
-    The streaming term couples ``L`` through the tridiagonal ``Y`` with
-    ``Y[l, l-1] = l / (2l - 1)`` and ``Y[l, l+1] = (l + 1) / (2l + 3)``
-    (``legendre_coupling_lower/upper``).  Its off-diagonal products are
-    positive, so ``Y = D J D^-1`` with ``J`` symmetric tridiagonal, and the
-    eigenvalues ``lambda_k`` are the Gauss-Legendre nodes of order ``Nxi``:
-    ``V = D Q`` is the discrete Legendre transform and ``V^-1 = Q^T D^-1``.
-    Going through the symmetric ``J`` keeps this real and well-conditioned at
-    large ``Nxi``, which a direct nonsymmetric eigendecomposition would not.
-    """
-    lower = np.asarray(level.xi_coupling_lower, dtype=np.float64)
-    upper = np.asarray(level.xi_coupling_upper, dtype=np.float64)
-    n_xi = lower.shape[0]
-    if n_xi == 1 or not np.any(np.abs(upper[:-1]) > 0.0):
-        eye = np.eye(n_xi)
-        return eye, eye, np.zeros((n_xi,))
-    off = np.sqrt(upper[:-1] * lower[1:])
-    scale = np.concatenate([[1.0], np.cumprod(np.sqrt(lower[1:] / upper[:-1]))])
-    values, vectors = np.linalg.eigh(np.diag(off, 1) + np.diag(off, -1))
-    v = scale[:, None] * vectors
-    v_inv = vectors.T / scale[None, :]
-    return v, v_inv, values
-
-def _advection_bands(
-    wind: jnp.ndarray, dd: jnp.ndarray, stencil: str
-) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-    """``(sub, main, super)`` bands of ``wind * d/dangle`` for the smoother.
-
-    ``"upwind"`` (the default) discretizes the smoother's advection with the
-    **first-order upwind** stencil rather than copying the level operator's
-    centered one, and that is the single choice that makes this smoother work.
-    A centered first derivative has the symbol ``i w sin(k h) / h``, which
-    *vanishes* as ``k h -> pi``: its highest-frequency modes are almost in its
-    null space, so a relaxation built on it cannot damp them and the coarse
-    grid cannot represent them -- multigrid's complementarity fails on both
-    sides at once.  The upwind symbol ``w (1 - e^{-i k h}) / h`` has modulus
-    ``2 |w| |sin(k h / 2)| / h``, largest exactly at the highest frequency,
-    which is why upwind (or otherwise dissipative) operators are the standard
-    choice for convection-dominated multigrid (Brandt 1977, section 3.4;
-    Trottenberg et al., section 7.4).  It also makes the plane operator
-    diagonally dominant -- ``|w|/h`` on the diagonal against ``|w|/h`` off it
-    -- so the banded factorization is stable without pivoting.
-
-    ``"centered"`` reproduces the level operator's own tridiagonal part
-    instead; it exists to measure what the upwind choice is worth.  On the NCSX
-    ``11 x 21 x 41 x 5`` operator the pitch-collocation plane sweep measures
-    ``mu = 5.09`` upwind against ``mu = 7.73`` centered over the angular high
-    frequencies.
-
-    Args:
-        wind: iterate-shaped advection velocity along the axis.
-        dd: the level's periodic derivative matrix for that angle.
-        stencil: ``"upwind"`` or ``"centered"``.
-
-    Returns:
-        ``(sub, main, super)`` iterate-shaped bands.
-    """
-    row = np.asarray(dd[0])
-    if row.shape[0] == 1:
-        zero = jnp.zeros_like(wind)
-        return zero, zero, zero
-    if stencil == "upwind":
-        _, spacing = _angular_stencil(dd)
-        return (
-            -jnp.maximum(wind, 0.0) / spacing,
-            jnp.abs(wind) / spacing,
-            jnp.minimum(wind, 0.0) / spacing,
-        )
-    if stencil != "centered":
-        raise ValueError(f"unknown stencil {stencil!r}; expected 'upwind' or 'centered'")
-    return wind * float(row[-1]), wind * float(row[0]), wind * float(row[1])
 
 def _plane_angle(level: KineticOperator) -> int:
     """Which angle the ``"legendre_plane"`` smoother resolves exactly: 3 or 4.
@@ -388,176 +308,21 @@ def _legendre_plane_solve(
 def _level_smoother(level: KineticOperator, settings: MultigridSettings, weight: float):
     """The relaxation sweep of one level.
 
-    ``smoother="legendre_plane"`` (the default) relaxes the ``(L, angle)``
-    planes exactly with :func:`_legendre_plane_solve`, wrapped by
-    :func:`solvax.smoothers.relaxation` so the sweep refreshes its residual
-    against the true level operator.  Everything except the *other* angle's
-    derivative is inverted exactly, which is the plane relaxation Trottenberg
-    et al. (section 5.2) prescribe when an operator is strongly coupled along
-    two directions at once.
-
-    The remaining options relax in the pitch-collocation basis ``V`` that
-    diagonalizes the streaming ``L``-coupling, where the operator is, per pitch
-    node ``k``, the advection-reaction
-
-        ``[x lambda_k v_theta + u_theta] d/dtheta``
-        ``+ [x lambda_k v_zeta + u_zeta] d/dzeta + reaction``
-
-    with a definite wind direction, relaxed by
-    :func:`solvax.smoothers.plane_smoother` or by upwind-ordered cyclic line
-    sweeps (:func:`solvax.smoothers.upwind_smoother`) composed with
-    :func:`solvax.smoothers.alternating_smoother`.  They are exact for
-    streaming and ExB but see the collision operator only through its
-    collocation *diagonal*, and are kept because that is the measurement that
-    justifies the default (see :func:`_legendre_plane_blocks`).
+    Relaxes the ``(L, angle)`` planes exactly with :func:`_legendre_plane_solve`,
+    wrapped by :func:`solvax.smoothers.relaxation` so the sweep refreshes its
+    residual against the true level operator.  Everything except the *other*
+    angle's derivative is inverted exactly, which is the plane relaxation
+    Trottenberg et al. (section 5.2) prescribe when an operator is strongly
+    coupled along two directions at once.
     """
-    n_s, n_x, n_xi, n_t, n_z = level.f_shape
     mask_only = level._mask()[None, :, :, None, None]
     uniform_mask = bool(np.all(np.asarray(level._mask()) == 1.0))
+    core = _legendre_plane_solve(level, _plane_angle(level), weight, settings.plane_pin)
+    if not uniform_mask:
+        plane = core
 
-    def wrap(core: Callable[[jnp.ndarray], jnp.ndarray]):
-        """Identity on the ``Nxi_for_x``-truncated (identity-row) DOFs."""
-        if uniform_mask:
-            return core
+        def core(r: jnp.ndarray) -> jnp.ndarray:
+            """Identity on the ``Nxi_for_x``-truncated (identity-row) DOFs."""
+            return plane(r * mask_only) * mask_only + r * (1.0 - mask_only)
 
-        def solve(r: jnp.ndarray) -> jnp.ndarray:
-            return core(r * mask_only) * mask_only + r * (1.0 - mask_only)
-
-        return solve
-
-    legendre_part = None
-    if settings.smoother in ("legendre_plane", "hybrid"):
-        axis = _plane_angle(level)
-        legendre_part = relaxation(
-            wrap(_legendre_plane_solve(level, axis, weight, settings.plane_pin)),
-            omega=settings.omega_xi,
-        )
-        if settings.smoother == "legendre_plane":
-            return legendre_part
-
-    v, v_inv, lam = _streaming_eigenbasis(level)
-    v_j, v_inv_j, lam_j = (jnp.asarray(a) for a in (v, v_inv, lam))
-
-    sqrt_t_over_m = jnp.sqrt(level.t_hat / level.m_hat)  # (S,)
-    v_theta = sqrt_t_over_m[:, None, None] * (level.b_hat_sup_theta / level.b_hat)
-    v_zeta = sqrt_t_over_m[:, None, None] * (level.b_hat_sup_zeta / level.b_hat)
-    mirror_geom = (
-        level.b_hat_sup_theta * level.db_hat_dtheta
-        + level.b_hat_sup_zeta * level.db_hat_dzeta
-    )
-    mirror = -sqrt_t_over_m[:, None, None] * mirror_geom[None] / (2.0 * level.b_hat**2)
-
-    if level.with_exb:
-        exb_theta, exb_zeta = level._exb_coefficients()
-    else:
-        zero_tz = jnp.zeros((n_t, n_z), dtype=jnp.float64)
-        exb_theta = exb_zeta = zero_tz
-
-    # (S, X, L, T, Z) winds: streaming (pitch node lambda_k) plus ExB.
-    x_lam = level.x[:, None] * lam_j[None, :]  # (X, L)
-    wind_t = (
-        x_lam[None, :, :, None, None] * v_theta[:, None, None, :, :]
-        + exb_theta[None, None, None, :, :]
-    )
-    wind_z = (
-        x_lam[None, :, :, None, None] * v_zeta[:, None, None, :, :]
-        + exb_zeta[None, None, None, :, :]
-    )
-
-    # Reaction: collision diagonal and mirror force, both projected onto the
-    # pitch-collocation diagonal (they are dense in that basis).
-    ell = jnp.arange(n_xi, dtype=jnp.float64)
-    mirror_l = jnp.diag(level.xi_coupling_upper[:-1] * (ell[:-1] + 2.0), 1) + jnp.diag(
-        -level.xi_coupling_lower[1:] * (ell[1:] - 1.0), -1
-    )
-    mirror_k = jnp.sum((v_inv_j @ mirror_l) * v_j.T, axis=1)  # (L,)
-    project = v_inv_j * v_j.T  # (L, L): W[k, l] = V^-1[k, l] V[l, k]
-    coll_k = jnp.einsum("kl,sxl->sxk", project, level.pas.coef)  # (S, X, L)
-
-    shift = _shift(level, weight)  # (S, X)
-    sub_t, main_t, sup_t = _advection_bands(wind_t, level.ddtheta, settings.stencil)
-    sub_z, main_z, sup_z = _advection_bands(wind_z, level.ddzeta, settings.stencil)
-    mirror_react = (
-        level.x[None, :, None] * mirror_k[None, None, :]
-    )[:, :, :, None, None] * mirror[:, None, None, :, :]
-    if settings.absolute_reaction:
-        # Only the magnitude of the pitch-space reaction is kept, so the plane
-        # operator stays diagonally dominant even where the mirror force's
-        # collocation diagonal is negative.
-        mirror_react = jnp.abs(mirror_react)
-        coll_k = jnp.abs(coll_k)
-    react = coll_k[:, :, :, None, None] + mirror_react + shift[:, :, None, None, None]
-    diag = react + main_t + main_z
-
-    def line(axis: int, wind: jnp.ndarray, sub: jnp.ndarray, sup: jnp.ndarray):
-        return upwind_smoother(
-            wind, sub, diag, sup, axis=axis, order=settings.order, periodic=True
-        )
-
-    kind = "plane" if settings.smoother == "hybrid" else settings.smoother
-    if kind not in ("plane", "alternating", "theta", "zeta"):
-        raise ValueError(f"unknown smoother {settings.smoother!r}")
-    if n_z < 3:  # axisymmetric: there is no zeta line to relax
-        kind = "theta"
-    if kind == "plane":
-        # Order the plane axes so the SHORTER one is second: the banded
-        # factors are O(n_first * n_second**2).
-        if n_t <= n_z:
-            axes, first, second = (4, 3), (sub_z, sup_z), (sub_t, sup_t)
-        else:
-            axes, first, second = (3, 4), (sub_t, sup_t), (sub_z, sup_z)
-        angular = plane_smoother(
-            diag, first, second, axes=axes, periodic=(True, True)
-        )
-    elif kind == "theta":
-        angular = line(3, wind_t, sub_t, sup_t)
-    elif kind == "zeta":
-        angular = line(4, wind_z, sub_z, sup_z)
-    else:
-        angular = alternating_smoother(
-            [line(3, wind_t, sub_t, sup_t), line(4, wind_z, sub_z, sup_z)]
-        )
-
-    def collocation_matvec(g: jnp.ndarray) -> jnp.ndarray:
-        out = diag * g + sup_t * jnp.roll(g, -1, axis=3) + sub_t * jnp.roll(g, 1, axis=3)
-        if n_z > 1:
-            out = out + sup_z * jnp.roll(g, -1, axis=4) + sub_z * jnp.roll(g, 1, axis=4)
-        return out
-
-    def angular_solve(r: jnp.ndarray) -> jnp.ndarray:
-        g = jnp.einsum("kl,sxltz->sxktz", v_inv_j, r)
-        y = angular(collocation_matvec, jnp.zeros_like(g), g)
-        return jnp.einsum("lk,sxktz->sxltz", v_j, y)
-
-    parts = [relaxation(wrap(angular_solve), omega=settings.omega)]
-    if legendre_part is not None:
-        parts.append(legendre_part)
-    if settings.smooth_xi and n_xi > 1:
-        shape = (n_s, n_x, n_xi, n_t, n_z)
-        lower_l = jnp.broadcast_to(
-            (level.x[None, :, None] * (-level.xi_coupling_lower * (ell - 1.0))[None, None, :])[
-                :, :, :, None, None
-            ]
-            * mirror[:, None, None, :, :],
-            shape,
-        )
-        couple_up = level.xi_coupling_upper * (ell + 2.0)
-        couple_up = couple_up.at[-1].set(0.0)  # row Nxi-1 has no l+1 partner
-        upper_l = jnp.broadcast_to(
-            (level.x[None, :, None] * couple_up[None, None, :])[:, :, :, None, None]
-            * mirror[:, None, None, :, :],
-            shape,
-        )
-        diag_l = jnp.broadcast_to(
-            (level.pas.coef + shift[:, :, None])[:, :, :, None, None], shape
-        )
-        pitch = tridiagonal_smoother(lower_l, diag_l, upper_l, axis=2, omega=1.0)
-        zero = lambda v: jnp.zeros_like(v)  # noqa: E731
-        parts.append(
-            relaxation(
-                wrap(lambda r: pitch(zero, jnp.zeros_like(r), r)),
-                omega=settings.omega_xi,
-            )
-        )
-    return alternating_smoother(parts) if len(parts) > 1 else parts[0]
-
+    return relaxation(core, omega=settings.omega_xi)

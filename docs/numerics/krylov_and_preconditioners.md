@@ -527,8 +527,8 @@ or $\zeta$-line relaxation at fixed $L$ never sees the dominant term, and the
 $L$-line contains the mirror force, which is nearly skew-symmetric with a
 diagonal ($\nu_D L(L+1)/2$) that vanishes with collisionality. On one
 $(s, x)$ block of the W7-X standard-configuration simplified operator
-(`9 x 11 x 13`, alternating exact line solves, $\omega = 1$,
-`tools/benchmarks/tier2_pitch_basis_study.py`):
+(`9 x 11 x 13`, alternating exact line solves, $\omega = 1$; the study script
+was removed and is in the git history):
 
 ```{list-table}
 :header-rows: 1
@@ -559,8 +559,8 @@ two-grid factor, but 201 iterations).
 
 What would work is a different discretization, pitch on a grid, which changes
 answers at fixed resolution, breaks Fortran matrix parity, and needs the
-collision operators re-derived where they are dense. `dkx.collocation` is that
-experiment ({doc}`discretization`). The multigrid preconditioner stays opt-in,
+collision operators re-derived where they are dense. A prototype of that
+discretization is in the git history. The multigrid preconditioner stays opt-in,
 for grids where the exact factorization does not fit.
 
 ## Decks the dense bands do not fit
