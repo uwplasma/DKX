@@ -1,339 +1,366 @@
 {
-  "cases": {
-    "lhd": {
-      "appendix_b_geometry_audit": {
-        "appendix_b_discrete_quantities": {
-          "G1": -0.007328502478398558,
-          "G2": 0.0021607004158803985,
-          "H": -0.1391193011366216,
-          "K1": -0.18084411392857827,
-          "K2": 0.3872753905171791,
-          "fsa_u2_b2": 0.1391193011366216,
-          "fsa_u_b2": 2.1625601031662795e-17,
-          "gradpar_b_rms": 0.09056531169137183
-        },
-        "geometry_scalars": {
-          "FSABHat2_output": 0.9886469829487684,
-          "FSABHat2_recomputed": 0.9886469829487673,
-          "FSABHat2_relative_error": 1.1229721465530312e-15,
-          "GHat": 3.7481,
-          "G_plus_iota_I": 3.7481,
-          "IHat": 0.0,
-          "iota": 0.4542
-        },
-        "grid": {
-          "n_theta": 15,
-          "n_zeta": 13,
-          "theta_axis": 1,
-          "zeta_axis": 0
-        },
-        "notes": [
-          "Coefficients follow the Appendix-B structure using checked-in normalized dkx output fields.",
-          "Use these values as an audit of normalization and geometry ingredients, not as a final analytic-limit acceptance gate."
-        ],
-        "source_output": "../tests/dkx/tools/publication_figures/output/lhd_co0/nu_n_2.668/sfincsOutput.h5",
-        "transport_matrix_coefficients_over_nuprime": {
-          "L11": -0.0361716627961521,
-          "L12": -0.15529406407239038,
-          "L22": -0.10738583898785325,
-          "L33": 2.082710439941521
-        }
-      },
-      "appendix_b_proxy_ratios_at_max_nuprime": {
-        "L11": {
-          "appendix_b_proxy_abs": 0.003617166906904296,
-          "nuprime": 9.999998265799999,
-          "observed_abs": 0.0026646422304291884,
-          "observed_to_proxy_ratio": 0.7366655448890211
-        },
-        "L12": {
-          "appendix_b_proxy_abs": 0.015529409100349166,
-          "nuprime": 9.999998265799999,
-          "observed_abs": 0.010414711943211022,
-          "observed_to_proxy_ratio": 0.6706444447378783
-        },
-        "L22": {
-          "appendix_b_proxy_abs": 0.01073858576107087,
-          "nuprime": 9.999998265799999,
-          "observed_abs": 1.148063262629242,
-          "observed_to_proxy_ratio": 106.91009860825055
-        },
-        "L33": {
-          "appendix_b_proxy_abs": 0.20827108011252285,
-          "nuprime": 9.999998265799999,
-          "observed_abs": 36.654918225953345,
-          "observed_to_proxy_ratio": 175.99619786938135
-        }
-      },
-      "gates": {
-        "appendix_b_geometry_inputs_available": true,
-        "fp_l11_l12_target_inverse_slope": false,
-        "pas_l11_l12_positive": true,
-        "scan_extends_to_required_high_nu": false
-      },
-      "max_nuprime": 9.9999982658,
-      "nuprime_grid": [
-        0.099999982658,
-        0.215443431641,
-        0.464158802867,
-        0.99999982658,
-        2.15443431641,
-        4.641588028668,
-        9.9999982658
-      ],
-      "recommended_high_nuprime_extension": [
-        17.782791016497068,
-        31.622771117661863,
-        56.234122766911625,
-        99.99998265800002
-      ],
-      "slope_sensitivity": [
-        {
-          "n_fit": 2,
-          "slopes": {
-            "L11": -0.6509787223931545,
-            "L12": -0.6266408608965646
-          }
-        },
-        {
-          "n_fit": 3,
-          "slopes": {
-            "L11": -0.6412198736489123,
-            "L12": -0.6212128035303096
-          }
-        },
-        {
-          "n_fit": 4,
-          "slopes": {
-            "L11": -0.6304710640331344,
-            "L12": -0.6035300712918786
-          }
-        },
-        {
-          "n_fit": 5,
-          "slopes": {
-            "L11": -0.6007788357169151,
-            "L12": -0.5642988477429307
-          }
-        }
-      ],
-      "state": "needs_wider_high_nu_scan",
-      "trend": {
-        "gates": {
-          "fp_l11_l12_inverse_like": true,
-          "pas_l11_l12_positive": true
-        },
-        "n_fit": 3,
-        "nuprime_tail": [
-          2.15443431641,
-          4.641588028668,
-          9.9999982658
-        ],
-        "slopes": {
-          "Fokker-Planck": {
-            "L11": -0.6412198736489123,
-            "L12": -0.6212128035303096,
-            "L21": -0.6219841607277371,
-            "L22": 0.7091604820923194,
-            "L33": 0.23488266729872445
-          },
-          "PAS": {
-            "L11": 0.9545781589660239,
-            "L12": 0.8733773134686047,
-            "L21": 0.8733773134686087,
-            "L22": 0.75400299588332,
-            "L33": -0.9610420893112563
-          }
-        },
-        "state": "asymptotic_trend_proxy"
-      }
+ "cases": {
+  "lhd": {
+   "appendix_b_geometry_audit": {
+    "appendix_b_discrete_quantities": {
+     "G1": -0.007328502478398558,
+     "G2": 0.0021607004158803985,
+     "H": -0.1391193011366216,
+     "K1": -0.18084411392857827,
+     "K2": 0.3872753905171791,
+     "fsa_u2_b2": 0.1391193011366216,
+     "fsa_u_b2": 2.1625601031662795e-17,
+     "gradpar_b_rms": 0.09056531169137183
     },
-    "w7x": {
-      "appendix_b_geometry_audit": {
-        "appendix_b_discrete_quantities": {
-          "G1": -0.002147453470684493,
-          "G2": -6.763957911411926e-05,
-          "H": -0.02352127917441267,
-          "K1": -0.09827210156519331,
-          "K2": 0.20516017009248116,
-          "fsa_u2_b2": 0.02352127917441267,
-          "fsa_u_b2": 1.2849475892087991e-17,
-          "gradpar_b_rms": 0.11887464728421358
-        },
-        "geometry_scalars": {
-          "FSABHat2_output": 9.479523493431824,
-          "FSABHat2_recomputed": 9.479523493431874,
-          "FSABHat2_relative_error": 5.2468873079611535e-15,
-          "GHat": 17.885,
-          "G_plus_iota_I": 17.885000191950432,
-          "IHat": -2.2062e-07,
-          "iota": -0.87005
-        },
-        "grid": {
-          "n_theta": 13,
-          "n_zeta": 31,
-          "theta_axis": 1,
-          "zeta_axis": 0
-        },
-        "notes": [
-          "Coefficients follow the Appendix-B structure using checked-in normalized dkx output fields.",
-          "Use these values as an audit of normalization and geometry ingredients, not as a final analytic-limit acceptance gate."
-        ],
-        "source_output": "../tests/dkx/tools/publication_figures/output/w7x_co0/nu_n_1.727/sfincsOutput.h5",
-        "transport_matrix_coefficients_over_nuprime": {
-          "L11": -0.0028885696480061653,
-          "L12": -0.012508189410501611,
-          "L22": -0.002083608462501054,
-          "L33": 4.881003824008629
-        }
-      },
-      "appendix_b_proxy_ratios_at_max_nuprime": {
-        "L11": {
-          "appendix_b_proxy_abs": 0.00028884827252197897,
-          "nuprime": 10.000300928877355,
-          "observed_abs": 0.00022925596217282876,
-          "observed_to_proxy_ratio": 0.7936899195247369
-        },
-        "L12": {
-          "appendix_b_proxy_abs": 0.0012507813014288756,
-          "nuprime": 10.000300928877355,
-          "observed_abs": 0.000899669856942349,
-          "observed_to_proxy_ratio": 0.7192863020214472
-        },
-        "L22": {
-          "appendix_b_proxy_abs": 0.00020835457625923288,
-          "nuprime": 10.000300928877355,
-          "observed_abs": 0.0266409942088828,
-          "observed_to_proxy_ratio": 127.86373444342455
-        },
-        "L33": {
-          "appendix_b_proxy_abs": 0.4880856944928532,
-          "nuprime": 10.000300928877355,
-          "observed_abs": 69.50746158712347,
-          "observed_to_proxy_ratio": 142.40831553021727
-        }
-      },
-      "gates": {
-        "appendix_b_geometry_inputs_available": true,
-        "fp_l11_l12_target_inverse_slope": false,
-        "pas_l11_l12_positive": true,
-        "scan_extends_to_required_high_nu": false
-      },
-      "max_nuprime": 10.000300928877,
-      "nuprime_grid": [
-        0.100003009289,
-        0.215449952319,
-        0.464172851242,
-        1.000030092888,
-        2.154499523193,
-        4.641728512424,
-        10.000300928877
-      ],
-      "recommended_high_nuprime_extension": [
-        17.78332923601508,
-        31.623728222348824,
-        56.2358247664697,
-        100.00300928876997
-      ],
-      "slope_sensitivity": [
-        {
-          "n_fit": 2,
-          "slopes": {
-            "L11": -0.624153736013898,
-            "L12": -0.5295790935535928
-          }
-        },
-        {
-          "n_fit": 3,
-          "slopes": {
-            "L11": -0.5317301609611231,
-            "L12": -0.4347863173438659
-          }
-        },
-        {
-          "n_fit": 4,
-          "slopes": {
-            "L11": -0.4394146591100586,
-            "L12": -0.34585952786512164
-          }
-        },
-        {
-          "n_fit": 5,
-          "slopes": {
-            "L11": -0.35360977022202306,
-            "L12": -0.263539771302114
-          }
-        }
-      ],
-      "state": "needs_wider_high_nu_scan",
-      "trend": {
-        "gates": {
-          "fp_l11_l12_inverse_like": false,
-          "pas_l11_l12_positive": true
-        },
-        "n_fit": 3,
-        "nuprime_tail": [
-          2.154499523193,
-          4.641728512424,
-          10.000300928877
-        ],
-        "slopes": {
-          "Fokker-Planck": {
-            "L11": -0.5317301609611231,
-            "L12": -0.4347863173438659,
-            "L21": -0.43855407959481585,
-            "L22": 0.4710718772989093,
-            "L33": 0.40482535816294946
-          },
-          "PAS": {
-            "L11": 0.8518557046646398,
-            "L12": 0.6971218400205074,
-            "L21": 0.6971218400204483,
-            "L22": 0.560170835128172,
-            "L33": -0.9684258324456632
-          }
-        },
-        "state": "needs_wider_high_nu_scan"
-      }
-    }
-  },
-  "configuration": {
-    "min_nuprime_for_full_limit": 50.0,
-    "n_fit": 3,
-    "slope_tolerance": 0.35,
-    "target_fp_slope": -1.0
-  },
-  "gates": {
-    "all_cases_ready_for_full_overlay": false,
-    "appendix_b_geometry_inputs_available": true,
-    "checked_in_converged_artifact": false,
-    "full_simakov_helander_reproduction_closed": true,
-    "proxy_or_deferred_only": true,
-    "ready_for_literature_claim": false
-  },
-  "metadata": {
-    "kind": "simakov_helander_limit_audit",
-    "literature": [
-      "https://doi.org/10.1063/1.4870077",
-      "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf",
-      "https://doi.org/10.1063/1.3104715"
-    ],
+    "geometry_scalars": {
+     "FSABHat2_output": 0.9886469829487684,
+     "FSABHat2_recomputed": 0.9886469829487673,
+     "FSABHat2_relative_error": 1.1229721465530312e-15,
+     "GHat": 3.7481,
+     "G_plus_iota_I": 3.7481,
+     "IHat": 0.0,
+     "iota": 0.4542
+    },
+    "grid": {
+     "n_theta": 15,
+     "n_zeta": 13,
+     "theta_axis": 1,
+     "zeta_axis": 0
+    },
     "notes": [
-      "This artifact audits the normalization and high-nu sufficiency for the Appendix-B analytic-limit lane.",
-      "It intentionally keeps the full reproduction gate closed until a wider nu' >> 1 scan is checked in.",
-      "The current full collisionality summaries stop near nu'=10, below the default full-limit threshold."
+     "Coefficients follow the Appendix-B structure using checked-in normalized dkx output fields.",
+     "Use these values as an audit of normalization and geometry ingredients, not as a final analytic-limit acceptance gate."
     ],
-    "publication_figure": {
-      "artifact_class": "checked_in_normalization_audit_deferred_full_limit",
-      "checked_in_converged_artifact": false,
-      "claim_status": "proxy_or_deferred",
-      "manuscript_label": "normalization audit; full Simakov-Helander high-nu validation deferred",
-      "ready_for_physics_validation_claim": false
-    },
-    "schema_version": 1,
-    "source_artifacts": {
-      "lhd_collisionality": "lhd_collisionality_summary.json",
-      "w7x_collisionality": "w7x_collisionality_summary.json"
+    "transport_matrix_coefficients_over_nuprime": {
+     "L11": -0.0361716627961521,
+     "L12": -0.15529406407239038,
+     "L22": -0.10738583898785325,
+     "L33": 2.082710439941521
     }
+   },
+   "appendix_b_proxy_ratios_at_max_nuprime": {
+    "L11": {
+     "appendix_b_proxy_abs": 0.00036171669069042954,
+     "nuprime": 99.999982658,
+     "observed_abs": 0.0003760291235209999,
+     "observed_to_proxy_ratio": 1.0395680741279907,
+     "ratio_by_nuprime": {
+      "0.1": 0.07309364515868118,
+      "0.215443": 0.1281770150904745,
+      "0.464159": 0.21308407979329275,
+      "1": 0.31450780384513594,
+      "10": 0.7366655448890211,
+      "100": 1.0395680741279907,
+      "17.7828": 0.8632285734694229,
+      "2.15443": 0.42470131601250866,
+      "31.6228": 0.9576773623706334,
+      "4.64159": 0.5635467269454463,
+      "56.2341": 1.0132234057084801
+     }
+    },
+    "L12": {
+     "appendix_b_proxy_abs": 0.0015529409100349166,
+     "nuprime": 99.999982658,
+     "observed_abs": 0.0016587005106637295,
+     "observed_to_proxy_ratio": 1.0681027848164777,
+     "ratio_by_nuprime": {
+      "0.1": 0.05293431191622665,
+      "0.215443": 0.09807979030830893,
+      "0.464159": 0.17258895565726354,
+      "1": 0.2683247739888522,
+      "10": 0.6706444447378783,
+      "100": 1.0681027848164777,
+      "17.7828": 0.8093719773502941,
+      "2.15443": 0.37494497176465824,
+      "31.6228": 0.9315215747541897,
+      "4.64159": 0.503546156153434,
+      "56.2341": 1.018635603619498
+     }
+    }
+   },
+   "gates": {
+    "appendix_b_geometry_inputs_available": true,
+    "fp_l11_l12_target_inverse_slope": true,
+    "fp_l11_l12_within_appendix_b_tolerance": true,
+    "pas_l11_l12_positive": true,
+    "scan_extends_to_required_high_nu": true
+   },
+   "max_nuprime": 99.999982658,
+   "nuprime_grid": [
+    0.099999982658,
+    0.215443431641,
+    0.464158802867,
+    0.99999982658,
+    2.15443431641,
+    4.641588028668,
+    9.9999982658,
+    17.7827892361,
+    31.622769006966,
+    56.234120890208,
+    99.999982658
+   ],
+   "recommended_high_nuprime_extension": [],
+   "slope_sensitivity": [
+    {
+     "n_fit": 2,
+     "slopes": {
+      "L11": -0.9554091225874142,
+      "L12": -0.917623221960429
+     }
+    },
+    {
+     "n_fit": 3,
+     "slopes": {
+      "L11": -0.9287325803762667,
+      "L12": -0.8811597480054345
+     }
+    },
+    {
+     "n_fit": 4,
+     "slopes": {
+      "L11": -0.893333058018194,
+      "L12": -0.8399117755624261
+     }
+    },
+    {
+     "n_fit": 5,
+     "slopes": {
+      "L11": -0.852502180403889,
+      "L12": -0.7983551564109999
+     }
+    }
+   ],
+   "state": "ready_for_full_overlay",
+   "trend": {
+    "gates": {
+     "fp_l11_l12_inverse_like": true,
+     "pas_l11_l12_positive": true
+    },
+    "n_fit": 3,
+    "nuprime_tail": [
+     31.622769006966,
+     56.234120890208,
+     99.999982658
+    ],
+    "slopes": {
+     "Fokker-Planck": {
+      "L11": -0.9287325803762667,
+      "L12": -0.8811597480054345,
+      "L21": -0.9430964950943819,
+      "L22": 0.9927332060103813,
+      "L33": 0.8928351132435689
+     },
+     "PAS": {
+      "L11": 0.9992257104182516,
+      "L12": 0.9974708522311437,
+      "L21": 0.9974708520263739,
+      "L22": 0.9941480510601528,
+      "L33": -0.9964324948558783
+     }
+    },
+    "state": "asymptotic_trend_proxy"
+   }
+  },
+  "w7x": {
+   "appendix_b_geometry_audit": {
+    "appendix_b_discrete_quantities": {
+     "G1": -0.002147453470684493,
+     "G2": -6.763957911411926e-05,
+     "H": -0.02352127917441267,
+     "K1": -0.09827210156519331,
+     "K2": 0.20516017009248116,
+     "fsa_u2_b2": 0.02352127917441267,
+     "fsa_u_b2": 1.2849475892087991e-17,
+     "gradpar_b_rms": 0.11887464728421358
+    },
+    "geometry_scalars": {
+     "FSABHat2_output": 9.479523493431824,
+     "FSABHat2_recomputed": 9.479523493431874,
+     "FSABHat2_relative_error": 5.2468873079611535e-15,
+     "GHat": 17.885,
+     "G_plus_iota_I": 17.885000191950432,
+     "IHat": -2.2062e-07,
+     "iota": -0.87005
+    },
+    "grid": {
+     "n_theta": 13,
+     "n_zeta": 31,
+     "theta_axis": 1,
+     "zeta_axis": 0
+    },
+    "notes": [
+     "Coefficients follow the Appendix-B structure using checked-in normalized dkx output fields.",
+     "Use these values as an audit of normalization and geometry ingredients, not as a final analytic-limit acceptance gate."
+    ],
+    "transport_matrix_coefficients_over_nuprime": {
+     "L11": -0.0028885696480061653,
+     "L12": -0.012508189410501611,
+     "L22": -0.002083608462501054,
+     "L33": 4.881003824008629
+    }
+   },
+   "appendix_b_proxy_ratios_at_max_nuprime": {
+    "L11": {
+     "appendix_b_proxy_abs": 2.888395762924955e-05,
+     "nuprime": 100.00602012658523,
+     "observed_abs": 2.9342212970129418e-05,
+     "observed_to_proxy_ratio": 1.0158653930587342,
+     "ratio_by_nuprime": {
+      "0.100003": 0.022681679381784864,
+      "0.21545": 0.05037349320096465,
+      "0.464173": 0.10964262818044328,
+      "1.00003": 0.21831196148983456,
+      "10.0003": 0.7936899195247369,
+      "100.006": 1.0158653930587342,
+      "17.7839": 0.8981131397114496,
+      "2.1545": 0.38678620099338445,
+      "31.6247": 0.9623942612062012,
+      "4.64173": 0.5947970096989822,
+      "56.2375": 0.9981517993121071
+     }
+    },
+    "L12": {
+     "appendix_b_proxy_abs": 0.00012507436446994934,
+     "nuprime": 100.00602012658523,
+     "observed_abs": 0.0001319582191314119,
+     "observed_to_proxy_ratio": 1.055038094262046,
+     "ratio_by_nuprime": {
+      "0.100003": 0.01565916751334131,
+      "0.21545": 0.03384614703063104,
+      "0.464173": 0.07547601093939085,
+      "1.00003": 0.1597397843921096,
+      "10.0003": 0.7192863020214472,
+      "100.006": 1.055038094262046,
+      "17.7839": 0.8535639137697596,
+      "2.1545": 0.30205961740366155,
+      "31.6247": 0.9564682112303882,
+      "4.64173": 0.5012966714120022,
+      "56.2375": 1.022161478133227
+     }
+    }
+   },
+   "gates": {
+    "appendix_b_geometry_inputs_available": true,
+    "fp_l11_l12_target_inverse_slope": true,
+    "fp_l11_l12_within_appendix_b_tolerance": true,
+    "pas_l11_l12_positive": true,
+    "scan_extends_to_required_high_nu": true
+   },
+   "max_nuprime": 100.006020126585,
+   "nuprime_grid": [
+    0.100003009289,
+    0.215449952319,
+    0.464172851242,
+    1.000030092888,
+    2.154499523193,
+    4.641728512424,
+    10.000300928877,
+    17.783860938792,
+    31.624675936588,
+    56.237513976092,
+    100.006020126585
+   ],
+   "recommended_high_nuprime_extension": [],
+   "slope_sensitivity": [
+    {
+     "n_fit": 2,
+     "slopes": {
+      "L11": -0.9694417168255266,
+      "L12": -0.945005481938697
+     }
+    },
+    {
+     "n_fit": 3,
+     "slopes": {
+      "L11": -0.9530337235224252,
+      "L12": -0.9148048094642683
+     }
+    },
+    {
+     "n_fit": 4,
+     "slopes": {
+      "L11": -0.9294564423157684,
+      "L12": -0.8780219131457284
+     }
+    },
+    {
+     "n_fit": 5,
+     "slopes": {
+      "L11": -0.895906285211336,
+      "L12": -0.8355948175090654
+     }
+    }
+   ],
+   "state": "ready_for_full_overlay",
+   "trend": {
+    "gates": {
+     "fp_l11_l12_inverse_like": true,
+     "pas_l11_l12_positive": true
+    },
+    "n_fit": 3,
+    "nuprime_tail": [
+     31.624675936588,
+     56.237513976092,
+     100.006020126585
+    ],
+    "slopes": {
+     "Fokker-Planck": {
+      "L11": -0.9530337235224252,
+      "L12": -0.9148048094642683,
+      "L21": -1.2532088332876468,
+      "L22": 0.9624580817881623,
+      "L33": 0.9278769924276213
+     },
+     "PAS": {
+      "L11": 0.9962059268907185,
+      "L12": 0.9872806518444218,
+      "L21": 0.9872805706441551,
+      "L22": 0.9702404894232565,
+      "L33": -0.997892790407958
+     }
+    },
+    "state": "asymptotic_trend_proxy"
+   }
   }
+ },
+ "configuration": {
+  "min_nuprime_for_full_limit": 50.0,
+  "n_fit": 3,
+  "ratio_tolerance": 0.1,
+  "slope_tolerance": 0.35,
+  "target_fp_slope": -1.0
+ },
+ "gates": {
+  "all_cases_ready_for_full_overlay": true,
+  "appendix_b_geometry_inputs_available": true,
+  "checked_in_converged_artifact": true,
+  "full_simakov_helander_reproduction_closed": false,
+  "proxy_or_deferred_only": false,
+  "ready_for_literature_claim": true
+ },
+ "metadata": {
+  "kind": "simakov_helander_limit_audit",
+  "literature": [
+   "https://doi.org/10.1063/1.4870077",
+   "https://publications.lib.chalmers.se/records/fulltext/199559/local_199559.pdf",
+   "https://doi.org/10.1063/1.3104715"
+  ],
+  "notes": [
+   "Normalization: L_ij are the dkx transportMatrix elements at the plotted nu'; the Appendix-B asymptote is |C_ij| / nu' with C_ij = nu' L_ij evaluated from the geometry ingredients of the recorded sfincsOutput.h5 fields.",
+   "The comparison covers L11 and L12 of the Fokker-Planck operator; L22 and L33 are not part of this claim.",
+   "Gates: the scan reaches the configured nu' threshold, the Fokker-Planck L11/L12 tail slopes lie within the slope tolerance of -1, the L11/L12 ratio to the asymptote lies within the ratio tolerance of 1 at the largest nu', and PAS L11/L12 grow like +nu."
+  ],
+  "publication_figure": {
+   "artifact_class": "checked_in_simakov_helander_full_limit_artifact",
+   "checked_in_converged_artifact": true,
+   "claim_status": "checked_in_converged_artifact",
+   "manuscript_label": "checked-in Simakov-Helander high-nu validation",
+   "ready_for_physics_validation_claim": true
+  },
+  "schema_version": 1,
+  "source_artifacts": {
+   "lhd_collisionality": "lhd_collisionality_summary.json",
+   "w7x_collisionality": "w7x_collisionality_summary.json"
+  }
+ }
 }

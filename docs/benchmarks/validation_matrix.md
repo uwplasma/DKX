@@ -73,9 +73,7 @@ scripts, run plans and proxy figures cannot be mistaken for closed evidence.
 | --- | --- | --- | --- |
 | `sfincs2014_fig1_lhd_collisionality` | `release_ready` | LHD transport matrix against collisionality, FP and PAS | {doc}`analytic_limits` |
 | `sfincs2014_fig2_w7x_collisionality` | `release_ready` | W7-X transport matrix against collisionality, FP and PAS | {doc}`analytic_limits` |
-| `sfincs2014_fig3_high_collisionality_limit` | `closed_deferred` | Simakov–Helander high-collisionality reproduction | {doc}`analytic_limits` |
-| `sfincs2014_high_collisionality_trend_proxy` | `bounded_proxy` | inverse-$\nu$ tail fits of $L_{11}$, $L_{12}$ | {doc}`analytic_limits` |
-| `sfincs2014_simakov_helander_limit_audit` | `bounded_proxy` | Appendix-B normalization audit and high-$\nu'$ run plan | {doc}`analytic_limits` |
+| `sfincs2014_fig3_high_collisionality_limit` | `release_ready` | Simakov–Helander high-collisionality limit, LHD and W7-X to $\nu' = 100$ | {doc}`analytic_limits` |
 | `sfincs2014_er_sweep_tokamak_reference` | `release_ready` | DKES, partial and full trajectory models against $E_r$, tokamak | {doc}`cross_code` |
 | `sfincs2014_er_sweep_stellarator_fast_scaffold` | `regression_scaffold` | the same sweep on a stellarator, fast grid | {doc}`cross_code` |
 | `publication_validation_dashboard` | `release_ready` | dashboard of the collisionality scans and trajectory sweeps | {doc}`cross_code` |
@@ -144,24 +142,6 @@ adjoint output differs from its own finite-difference check by 0.05% to 66% on W
 These artifacts are what the non-release-ready entries point at. They are kept so
 the release gate can check that each recorded artifact exists; none of them is a
 release claim.
-
-```{figure} ../_static/figures/paper/dkx_fig3_simakov_helander.png
-:alt: Transport matrix at high collisionality against the Simakov-Helander limit.
-:width: 80%
-
-`sfincs2014_fig3_high_collisionality_limit` (`closed_deferred`): the scan does
-not yet reach the collisionality where the analytic asymptote applies, so the
-reproduction stays open ({doc}`analytic_limits`).
-```
-
-```{figure} ../_static/figures/paper/dkx_high_collisionality_trend_proxy.png
-:alt: Power-law fits of the high-collisionality L11 and L12 tails.
-:width: 80%
-
-`sfincs2014_high_collisionality_trend_proxy` (`bounded_proxy`): positive
-power-law slopes of the PAS $L_{11}$ and $L_{12}$ tails on both collisionality
-artifacts (`tools/release/artifacts.py`).
-```
 
 ```{figure} ../_static/figures/paper/dkx_autodiff_sensitivity_map.png
 :alt: Sensitivity map of transport outputs to input parameters from implicit differentiation.
@@ -288,8 +268,6 @@ subsystem, independent of $N_\xi$ and of the number of speeds.
 
 These are not release blockers, and none is claimed:
 
-- the Simakov–Helander high-collisionality reproduction (needs scans to
-  $\nu' \approx 100$);
 - W7-X ambipolar $E_r$ against a reconstructed discharge (needs pinned
   equilibrium and profile provenance; without it artifacts stay
   `w7x_like_scaffold`);

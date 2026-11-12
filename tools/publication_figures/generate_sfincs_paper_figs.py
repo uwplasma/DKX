@@ -136,6 +136,17 @@ def _parse_args() -> argparse.Namespace:
         help="Backend for --transport-workers: auto/cpu use CPU workers; gpu pins workers to visible CUDA devices.",
     )
     parser.add_argument(
+        "--plot-summaries",
+        action="store_true",
+        help="Rebuild Figures 1-3 from the summary JSON files in --summary-dir and the Simakov-Helander audit; no solves.",
+    )
+    parser.add_argument(
+        "--solver-tolerance",
+        type=float,
+        default=0.0,
+        help="Override resolutionParameters solverTolerance in the scan input (0 keeps the base input value).",
+    )
+    parser.add_argument(
         "--require-residuals",
         action="store_true",
         help=(
@@ -300,6 +311,7 @@ def _write_scan_input(
     n_points: int,
     collision_operator: int,
     fast: bool,
+    solver_tolerance: float = 0.0,
 ) -> None:
     text = _strip_ss_lines(base_input.read_text())
     text = text + "\n".join(
@@ -324,6 +336,8 @@ def _write_scan_input(
             ("solverTolerance", "1e-4"),
         ):
             text = _set_group_assignment(text, "resolutionParameters", key, value)
+    if solver_tolerance > 0.0:
+        text = _set_group_assignment(text, "resolutionParameters", "solverTolerance", f"{solver_tolerance:.3e}".replace("e", "d"))
     dest.write_text(text)
 
 
@@ -655,6 +669,7 @@ def _summary_metadata(
     max_transport_relative_residual: float = 1.0e-6,
     transport_sparse_direct_max: int = 0,
     transport_maxiter: int = 0,
+    solver_tolerance: float = 0.0,
 ) -> dict[str, object]:
     return {
         "schema_version": 1,
@@ -679,6 +694,7 @@ def _summary_metadata(
         "max_transport_relative_residual": float(max_transport_relative_residual),
         "transport_sparse_direct_max": int(transport_sparse_direct_max),
         "transport_maxiter": int(transport_maxiter),
+        **({"solver_tolerance": float(solver_tolerance)} if solver_tolerance > 0.0 else {}),
     }
 
 
@@ -718,31 +734,79 @@ def _plot_matrix_elements(
     plt.close(fig)
 
 
-def _plot_simakov_helander_proxy(
+def _plot_simakov_helander_limit(
     *,
     out_path: Path,
-    title: str,
     datasets: dict[str, tuple[np.ndarray, np.ndarray]],
-    element: tuple[int, int] = (0, 0),
+    asymptote: dict[str, dict[str, float]] | None = None,
 ) -> None:
-    fig, ax = plt.subplots(figsize=(7, 4.5), constrained_layout=True)
-    i, j = element
-    for label, (nu, tm) in datasets.items():
-        ax.plot(nu, tm[:, i, j], marker="o", label=label)
-        ax.plot(nu, _fit_high_collisionality(nu, tm[:, i, j]), linestyle="--", alpha=0.7)
-    ax.set_xscale("log")
-    ax.set_title(f"{title} (L{i+1}{j+1})")
-    ax.set_xlabel(r"$\nu'$")
-    ax.set_ylabel("transportMatrix element")
-    ax.grid(True, which="both", alpha=0.3)
-    ax.legend(loc="best")
+    """Plot Fokker-Planck ``|L11|`` and ``|L12|`` against the Simakov-Helander ``C/nu'`` asymptote.
+
+    ``asymptote`` maps each dataset label to ``{"L11": C11, "L12": C12}``; without it the
+    dashed curve is a two-point power-law fit to the tail.
+    """
+
+    fig, axes = plt.subplots(1, 2, figsize=(9, 4), constrained_layout=True, sharex=True)
+    for ax, (name, j) in zip(axes, (("L11", 0), ("L12", 1)), strict=True):
+        for k, (label, (nu, tm)) in enumerate(datasets.items()):
+            line = ax.plot(nu, np.abs(tm[:, 0, j]), marker="o", color=f"C{k}", label=label)[0]
+            if asymptote is not None:
+                dashed = abs(asymptote[label][name]) / nu
+            else:
+                dashed = np.abs(_fit_high_collisionality(nu, tm[:, 0, j]))
+            ax.plot(nu, dashed, linestyle="--", color=line.get_color(), alpha=0.7)
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.set_title(f"|{name}| (dashed: " + ("Simakov-Helander $C/\\nu'$)" if asymptote is not None else "tail fit)"))
+        ax.set_xlabel(r"$\nu'$")
+        ax.grid(True, which="both", alpha=0.3)
+    axes[0].set_ylabel("transportMatrix element")
+    axes[0].legend(loc="best")
     fig.savefig(out_path, dpi=160)
     plt.close(fig)
+
+
+def _datasets_from_summary(path: Path) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+    rows = json.loads(path.read_text())["rows"]
+    data = {}
+    for label in dict.fromkeys(str(r["label"]) for r in rows):
+        sel = sorted((r for r in rows if r["label"] == label), key=lambda r: r["nuprime"])
+        data[label] = (
+            np.asarray([r["nuprime"] for r in sel], dtype=float),
+            np.asarray([r["transport_matrix"] for r in sel], dtype=float),
+        )
+    return data
+
+
+def _plot_from_summaries(*, summary_dir: Path, out_dir: Path) -> None:
+    """Rebuild Figures 1-3 from the checked-in summaries and the Simakov-Helander audit."""
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    lhd = _datasets_from_summary(summary_dir / "lhd_collisionality_summary.json")
+    w7x = _datasets_from_summary(summary_dir / "w7x_collisionality_summary.json")
+    _plot_matrix_elements(out_path=out_dir / "dkx_fig1_lhd_collisionality.png", title="LHD collisionality scan (dkx)", datasets=lhd)
+    _plot_matrix_elements(out_path=out_dir / "dkx_fig2_w7x_collisionality.png", title="W7-X collisionality scan (dkx)", datasets=w7x)
+    audit = json.loads((summary_dir / "dkx_simakov_helander_limit_audit_summary.json").read_text())["cases"]
+    coefficients = {
+        label: audit[case]["appendix_b_geometry_audit"]["transport_matrix_coefficients_over_nuprime"]
+        for label, case in (("LHD (FP)", "lhd"), ("W7-X (FP)", "w7x"))
+    }
+    _plot_simakov_helander_limit(
+        out_path=out_dir / "dkx_fig3_simakov_helander.png",
+        datasets={"LHD (FP)": lhd["Fokker-Planck"], "W7-X (FP)": w7x["Fokker-Planck"]},
+        asymptote=coefficients,
+    )
 
 
 def main() -> None:
     args = _parse_args()
     out_dir = args.out_dir
+    if args.plot_summaries:
+        _plot_from_summaries(
+            summary_dir=args.summary_dir or REPO_ROOT / "tools" / "publication_figures" / "artifacts",
+            out_dir=out_dir,
+        )
+        return
     work_dir = args.work_dir
     summary_dir = args.summary_dir if args.summary_dir is not None else work_dir
     fast = bool(args.fast)
@@ -866,6 +930,7 @@ def main() -> None:
                         n_points=n_points,
                         collision_operator=collision_operator,
                         fast=fast,
+                        solver_tolerance=float(args.solver_tolerance),
                     )
                     _run(
                         [sys.executable, str(UTILS / "sfincsScan"), "--yes", "--input", "input.namelist"],
@@ -907,6 +972,7 @@ def main() -> None:
                 max_transport_relative_residual=max_transport_relative_residual,
                 transport_sparse_direct_max=transport_sparse_direct_max,
                 transport_maxiter=transport_maxiter,
+                solver_tolerance=float(args.solver_tolerance),
             )
             lhd_metadata["quality_by_label"] = fig1_quality
             write_transport_scan_summary_json(
@@ -977,6 +1043,7 @@ def main() -> None:
                         n_points=n_points,
                         collision_operator=collision_operator,
                         fast=fast,
+                        solver_tolerance=float(args.solver_tolerance),
                     )
                     _run(
                         [sys.executable, str(UTILS / "sfincsScan"), "--yes", "--input", "input.namelist"],
@@ -1018,6 +1085,7 @@ def main() -> None:
                 max_transport_relative_residual=max_transport_relative_residual,
                 transport_sparse_direct_max=transport_sparse_direct_max,
                 transport_maxiter=transport_maxiter,
+                solver_tolerance=float(args.solver_tolerance),
             )
             w7x_metadata["quality_by_label"] = fig2_quality
             write_transport_scan_summary_json(
@@ -1039,12 +1107,7 @@ def main() -> None:
             "LHD (FP)": fig1_data["Fokker-Planck"],
             "W7-X (FP)": fig2_data["Fokker-Planck"],
         }
-        _plot_simakov_helander_proxy(
-            out_path=out_dir / "dkx_fig3_simakov_helander.png",
-            title="High-collisionality proxy",
-            datasets=fig3_data,
-            element=(0, 0),
-        )
+        _plot_simakov_helander_limit(out_path=out_dir / "dkx_fig3_simakov_helander.png", datasets=fig3_data)
 
 
 if __name__ == "__main__":

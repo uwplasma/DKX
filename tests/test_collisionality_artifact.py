@@ -28,7 +28,7 @@ def test_lhd_full_collisionality_artifact_is_audited() -> None:
     labels = sorted({str(row["label"]) for row in rows})
     nuprime = sorted({round(float(row["nuprime"]), 6) for row in rows})
     assert labels == ["Fokker-Planck", "PAS"]
-    assert len(rows) == 14
+    assert len(rows) == 22
     assert nuprime == [
         0.1,
         0.215443,
@@ -37,6 +37,10 @@ def test_lhd_full_collisionality_artifact_is_audited() -> None:
         2.154434,
         4.641588,
         9.999998,
+        17.782789,
+        31.622769,
+        56.234121,
+        99.999983,
     ]
     by_key = {
         (str(row["label"]), round(float(row["nuprime"]), 6)): row for row in rows
@@ -54,7 +58,7 @@ def test_w7x_full_collisionality_artifact_is_audited() -> None:
     labels = sorted({str(row["label"]) for row in rows})
     nuprime = sorted({round(float(row["nuprime"]), 6) for row in rows})
     assert labels == ["Fokker-Planck", "PAS"]
-    assert len(rows) == 14
+    assert len(rows) == 22
     assert nuprime == [
         0.100003,
         0.21545,
@@ -63,6 +67,10 @@ def test_w7x_full_collisionality_artifact_is_audited() -> None:
         2.1545,
         4.641729,
         10.000301,
+        17.783861,
+        31.624676,
+        56.237514,
+        100.00602,
     ]
     by_key = {
         (str(row["label"]), round(float(row["nuprime"]), 6)): row for row in rows

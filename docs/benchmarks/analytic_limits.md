@@ -88,37 +88,43 @@ $E_r = 0$. The LHD companion is
 `release_ready` entries of the {doc}`validation_matrix`.
 ```
 
-## The high-collisionality limit is not closed
+## The high-collisionality limit
 
-The Simakov–Helander high-collisionality limit is the one analytic limit of the
-SFINCS 2014 paper that DKX does not claim. Momentum-conserving collision
-operators should approach inverse-$\nu$ scaling of $L_{11}$ and $L_{12}$ for
-$\nu' \gg 1$, while pitch-angle scattering scales like $+\nu$. Two checked
-artifacts record where this stands:
+The Simakov–Helander high-collisionality limit is the analytic limit of the
+SFINCS 2014 paper. For $\nu' \gg 1$ the momentum-conserving Fokker–Planck $L_{11}$
+and $L_{12}$ approach $C_{ij}/\nu'$, while pitch-angle scattering scales like
+$+\nu'$. The constants $C_{ij} = \nu' L_{ij}$ follow from the Appendix-B geometry
+integrals of the `sfincsOutput.h5` fields ($\hat G$, $\hat I$, $\iota$, $\hat B$,
+$\hat D$; $\langle \hat B^2 \rangle$ is recomputed from $\hat B$ and $\hat D$ to
+1e-14). Both collisionality scans extend to $\nu' = 100$ with every output
+passing the 1e-6 residual gates, and the comparison is made numerically from
+`tools/publication_figures/artifacts/dkx_simakov_helander_limit_audit_summary.json`.
+The entry `sfincs2014_fig3_high_collisionality_limit` is `release_ready`.
 
-- The **trend proxy** (`bounded_proxy`) fits power-law tails to the audited LHD and
-  W7-X collisionality scans. The LHD Fokker–Planck tail satisfies the loose
-  inverse-$\nu$ proxy on the checked range; the W7-X tail does not yet
-  (`tools/publication_figures/artifacts/dkx_high_collisionality_trend_proxy_summary.json`).
-- The **normalization audit** (`bounded_proxy`) confirms that the checked
-  `sfincsOutput.h5` files carry every Appendix-B geometry ingredient, recomputes
-  `FSABHat2` from `BHat` and `DHat`, and keeps the reproduction closed because
-  the scans stop near $\nu' = 10$
-  (`tools/publication_figures/artifacts/dkx_simakov_helander_limit_audit_summary.json`).
+```{figure} ../_static/figures/paper/dkx_fig3_simakov_helander.png
+:alt: Fokker-Planck L11 and L12 against collisionality for LHD and W7-X, with the Simakov-Helander C over nu' asymptote.
+:width: 90%
 
-```{figure} ../_static/figures/paper/dkx_simakov_helander_limit_audit.png
-:alt: Simakov-Helander high-collisionality normalization and readiness audit.
-:width: 85%
-
-Simakov–Helander readiness audit. The run plan that would close it, a
-logarithmic extension of both scans to $\nu' \approx 100$, is
-`tools/publication_figures/artifacts/dkx_simakov_helander_high_nu_run_plan.json`.
+Fokker–Planck $|L_{11}|$ and $|L_{12}|$ against $\nu'$ for LHD and W7-X, with the
+Appendix-B asymptote $|C_{ij}|/\nu'$ dashed.
 ```
 
-The full reproduction is recorded as `closed_deferred` in the
-{doc}`validation_matrix`. The run plan's first LHD Fokker–Planck pilot at
-$\nu' = 17.78$ took about 262 s on two RTX A4000 GPUs and about 345 s on one on
-the explicit solve path, with the three right-hand-side residuals at 4.33e-16,
-5.33e-14 and 4.06e-11; the implicit-differentiation path took about 569 s for
-the same point. One transport point per several minutes makes the full
-extension a workstation campaign rather than a CI check.
+| Quantity, $\nu' = 17.8$ to $100$ | LHD | W7-X |
+| --- | --- | --- |
+| FP $L_{11}$ tail slope (last three points) | −0.93 | −0.95 |
+| FP $L_{12}$ tail slope | −0.88 | −0.91 |
+| PAS $L_{11}$, $L_{12}$ tail slope | +1.00, +1.00 | +1.00, +0.99 |
+| FP $L_{11}$ over asymptote at $\nu' = 100$ | 1.040 | 1.016 |
+| FP $L_{12}$ over asymptote at $\nu' = 100$ | 1.068 | 1.055 |
+
+The gates are a tail slope within 0.35 of $-1$, a ratio to the asymptote within
+10 % of 1 at the largest $\nu'$, and positive PAS slopes. The ratio rises
+through 1 near $\nu' \approx 50$ and is 2 to 7 % above it at $\nu' = 100$, so the
+claim is agreement within 10 % and slopes within 0.12 of $-1$, not convergence
+of the ratio to 1. Only $L_{11}$ and $L_{12}$ are compared; $L_{22}$ and $L_{33}$ are
+outside this claim.
+
+The high-$\nu'$ points ran on eight pinned cores of a shared host: LHD
+Fokker–Planck 16 s, LHD PAS 160 s at a Krylov tolerance of 1e-9 (the input's
+1e-6 leaves an absolute residual of 1.5e-6), and W7-X Fokker–Planck and PAS
+together 154 s, peak resident memory 3.3 GiB.

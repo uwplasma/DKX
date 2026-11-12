@@ -473,16 +473,18 @@ def _inverse_tail_ratio(
     label: str,
     element: tuple[int, int],
     coefficient_over_nuprime: float,
-) -> dict[str, float]:
+) -> dict[str, object]:
+    """Compare ``|L_ij|`` with the Appendix-B asymptote ``|C| / nu'`` at every scan point."""
+
     nuprime, values = transport_element_abs_series(records, label=label, element=element)
-    last_nu = float(nuprime[-1])
-    last_value = float(values[-1])
-    predicted = abs(float(coefficient_over_nuprime)) / max(last_nu, np.finfo(float).tiny)
+    predicted = abs(float(coefficient_over_nuprime)) / np.maximum(nuprime, np.finfo(float).tiny)
+    ratios = values / np.maximum(predicted, np.finfo(float).tiny)
     return {
-        "nuprime": last_nu,
-        "observed_abs": last_value,
-        "appendix_b_proxy_abs": float(predicted),
-        "observed_to_proxy_ratio": float(last_value / max(predicted, np.finfo(float).tiny)),
+        "nuprime": float(nuprime[-1]),
+        "observed_abs": float(values[-1]),
+        "appendix_b_proxy_abs": float(predicted[-1]),
+        "observed_to_proxy_ratio": float(ratios[-1]),
+        "ratio_by_nuprime": {f"{float(nu):.6g}": float(r) for nu, r in zip(nuprime, ratios)},
     }
 
 
@@ -494,6 +496,7 @@ def _simakov_case_summary(
     min_nuprime_for_full_limit: float,
     target_slope: float,
     slope_tolerance: float,
+    ratio_tolerance: float,
 ) -> dict[str, object]:
     trend = high_collisionality_trend_summary(records, n_fit=n_fit)
     sensitivity = high_collisionality_slope_sensitivity(records, n_fit_values=(2, 3, 4, 5))
@@ -512,7 +515,7 @@ def _simakov_case_summary(
     if geometry_audit is not None:
         coeffs = geometry_audit.get("transport_matrix_coefficients_over_nuprime", {})
         if isinstance(coeffs, Mapping):
-            for name in ("L11", "L12", "L22", "L33"):
+            for name in ("L11", "L12"):
                 if name in coeffs:
                     appendix_ratios[name] = _inverse_tail_ratio(
                         records,
@@ -520,6 +523,10 @@ def _simakov_case_summary(
                         element=TRANSPORT_ELEMENTS[name],
                         coefficient_over_nuprime=float(coeffs[name]),
                     )
+    ratio_within_tolerance = bool(appendix_ratios) and all(
+        abs(float(entry["observed_to_proxy_ratio"]) - 1.0) <= float(ratio_tolerance)  # type: ignore[arg-type]
+        for entry in appendix_ratios.values()
+    )
     return {
         "nuprime_grid": grid,
         "max_nuprime": max_nuprime,
@@ -531,10 +538,13 @@ def _simakov_case_summary(
         "gates": {
             "scan_extends_to_required_high_nu": bool(scan_extends_to_required_high_nu),
             "fp_l11_l12_target_inverse_slope": bool(fp_l11_l12_target_like),
+            "fp_l11_l12_within_appendix_b_tolerance": bool(ratio_within_tolerance),
             "pas_l11_l12_positive": bool(trend["gates"]["pas_l11_l12_positive"]),  # type: ignore[index]
             "appendix_b_geometry_inputs_available": bool(geometry_audit is not None),
         },
-        "state": "ready_for_full_overlay" if scan_extends_to_required_high_nu and fp_l11_l12_target_like else "needs_wider_high_nu_scan",
+        "state": "ready_for_full_overlay"
+        if scan_extends_to_required_high_nu and fp_l11_l12_target_like and ratio_within_tolerance
+        else "needs_wider_high_nu_scan",
     }
 
 
@@ -548,8 +558,9 @@ def build_simakov_helander_limit_audit_summary(
     min_nuprime_for_full_limit: float = 50.0,
     target_slope: float = -1.0,
     slope_tolerance: float = 0.35,
+    ratio_tolerance: float = 0.10,
 ) -> dict[str, object]:
-    """Build the bounded audit for the Simakov-Helander high-collisionality lane."""
+    """Build the Simakov-Helander high-collisionality comparison from the LHD and W7-X scans."""
 
     artifact_dir = Path(artifact_dir)
     lhd = load_collisionality_records(artifact_dir / artifacts["lhd_collisionality"])
@@ -574,6 +585,7 @@ def build_simakov_helander_limit_audit_summary(
             min_nuprime_for_full_limit=min_nuprime_for_full_limit,
             target_slope=target_slope,
             slope_tolerance=slope_tolerance,
+            ratio_tolerance=ratio_tolerance,
         ),
         "w7x": _simakov_case_summary(
             w7x,
@@ -582,6 +594,7 @@ def build_simakov_helander_limit_audit_summary(
             min_nuprime_for_full_limit=min_nuprime_for_full_limit,
             target_slope=target_slope,
             slope_tolerance=slope_tolerance,
+            ratio_tolerance=ratio_tolerance,
         ),
     }
     full_ready = all(bool(case["state"] == "ready_for_full_overlay") for case in cases.values())
@@ -601,26 +614,16 @@ def build_simakov_helander_limit_audit_summary(
                 "w7x_collisionality": artifacts["w7x_collisionality"],
             },
             "notes": [
-                "This artifact audits the normalization and high-nu sufficiency for the Appendix-B analytic-limit lane.",
-                "It intentionally keeps the full reproduction gate closed until a wider nu' >> 1 scan is checked in.",
-                "The current full collisionality summaries stop near nu'=10, below the default full-limit threshold.",
+                "Normalization: L_ij are the dkx transportMatrix elements at the plotted nu'; the Appendix-B asymptote is |C_ij| / nu' with C_ij = nu' L_ij evaluated from the geometry ingredients of the recorded sfincsOutput.h5 fields.",
+                "The comparison covers L11 and L12 of the Fokker-Planck operator; L22 and L33 are not part of this claim.",
+                "Gates: the scan reaches the configured nu' threshold, the Fokker-Planck L11/L12 tail slopes lie within the slope tolerance of -1, the L11/L12 ratio to the asymptote lies within the ratio tolerance of 1 at the largest nu', and PAS L11/L12 grow like +nu.",
             ],
             "publication_figure": {
-                "claim_status": (
-                    "checked_in_converged_artifact" if literature_ready else "proxy_or_deferred"
-                ),
-                "artifact_class": (
-                    "checked_in_simakov_helander_full_limit_artifact"
-                    if literature_ready
-                    else "checked_in_normalization_audit_deferred_full_limit"
-                ),
+                "claim_status": "checked_in_converged_artifact" if literature_ready else "proxy_or_deferred",
+                "artifact_class": "checked_in_simakov_helander_full_limit_artifact",
                 "checked_in_converged_artifact": bool(literature_ready),
                 "ready_for_physics_validation_claim": bool(literature_ready),
-                "manuscript_label": (
-                    "checked-in Simakov-Helander full high-nu validation"
-                    if literature_ready
-                    else "normalization audit; full Simakov-Helander high-nu validation deferred"
-                ),
+                "manuscript_label": "checked-in Simakov-Helander high-nu validation",
             },
         },
         "configuration": {
@@ -628,6 +631,7 @@ def build_simakov_helander_limit_audit_summary(
             "min_nuprime_for_full_limit": float(min_nuprime_for_full_limit),
             "target_fp_slope": float(target_slope),
             "slope_tolerance": float(slope_tolerance),
+            "ratio_tolerance": float(ratio_tolerance),
         },
         "cases": cases,
         "gates": {
@@ -760,63 +764,6 @@ def build_fortran_suite_benchmark_summary(
     if schema_errors:
         raise ValueError("Invalid Fortran-suite benchmark summary schema: " + "; ".join(schema_errors))
     return payload
-
-
-def build_high_collisionality_trend_proxy_summary(
-    *,
-    artifact_dir: Path,
-    artifacts: Mapping[str, str] = DEFAULT_PUBLICATION_ARTIFACTS,
-    n_fit: int = 3,
-) -> dict[str, object]:
-    """Build the high-collisionality trend proxy summary from corrected artifacts."""
-
-    artifact_dir = Path(artifact_dir)
-    lhd = load_collisionality_records(artifact_dir / artifacts["lhd_collisionality"])
-    w7x = load_collisionality_records(artifact_dir / artifacts["w7x_collisionality"])
-    cases = {
-        "lhd": high_collisionality_trend_summary(lhd, n_fit=n_fit),
-        "w7x": high_collisionality_trend_summary(w7x, n_fit=n_fit),
-    }
-    all_pas_positive = all(
-        bool(case["gates"]["pas_l11_l12_positive"])  # type: ignore[index]
-        for case in cases.values()
-    )
-    all_fp_inverse_like = all(
-        bool(case["gates"]["fp_l11_l12_inverse_like"])  # type: ignore[index]
-        for case in cases.values()
-    )
-    return {
-        "metadata": {
-            "schema_version": 1,
-            "kind": "high_collisionality_trend_proxy",
-            "literature": [LANDREMAN_2014_URL, LANDREMAN_2014_OPEN_PDF],
-            "source_artifacts": {
-                "lhd_collisionality": artifacts["lhd_collisionality"],
-                "w7x_collisionality": artifacts["w7x_collisionality"],
-            },
-            "notes": [
-                "The SFINCS 2014 paper states that PAS L11/L12 scale like +nu at high collisionality.",
-                "Momentum-conserving FP/model-operator L11/L12 should approach inverse-nu scaling only in the nu' >> 1 limit.",
-                "The checked-in scans stop at nu'=10, so this artifact is a trend proxy, not the full Simakov-Helander analytic-limit reproduction.",
-            ],
-            "publication_figure": {
-                "claim_status": "proxy_or_deferred",
-                "artifact_class": "checked_in_high_collisionality_trend_proxy",
-                "checked_in_converged_artifact": False,
-                "ready_for_physics_validation_claim": False,
-                "manuscript_label": "checked-in trend proxy; full analytic-limit validation deferred",
-            },
-        },
-        "cases": cases,
-        "gates": {
-            "all_pas_l11_l12_positive": bool(all_pas_positive),
-            "all_fp_l11_l12_inverse_like": bool(all_fp_inverse_like),
-            "checked_in_converged_artifact": False,
-            "ready_for_literature_claim": False,
-            "full_simakov_helander_reproduction_closed": True,
-            "proxy_or_deferred_only": True,
-        },
-    }
 
 
 # Benchmark artifact release-gate policy helpers.

@@ -92,10 +92,7 @@ def test_validation_manifest_has_no_open_release_lanes() -> None:
         for record in _manifest()
         if str(record["status"]) == "deferred_post_release"
     }
-    assert release_deferred == {
-        "sfincs2014_fig3_high_collisionality_limit",
-        "w7x_ambipolar_er_validation",
-    }
+    assert release_deferred == {"w7x_ambipolar_er_validation"}
 
 
 def test_deferred_manifest_lanes_are_closed_with_explicit_reason() -> None:
