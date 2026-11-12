@@ -87,219 +87,35 @@ that were dropped.  ``coarsen_xi=True`` remains available for experiments.
 
 Smoother
 --------
-Two families are implemented, and the measurement that chooses between them is
-the point of this module.
+The operator's two dominant terms live in *different bases*: parallel streaming
+is diagonal in pitch collocation and ``L +- 1`` in Legendre, collisions are
+diagonal in ``L`` and dense in pitch collocation (keeping only the collocation
+diagonal discards 65% of the reduced collision operator in the 2-norm).  The
+smoother therefore stays in the Legendre basis and relaxes the ``(L, angle)``
+planes *exactly* (:func:`_legendre_plane_blocks`): collisions, mirror force,
+streaming and ExB along one angle are all kept, the blocks are ``N x N`` with
+``N`` one angular length, and only the other angle's derivative is left to the
+coarse grid.  Pitch-collocation line, plane and alternating sweeps were
+measured (smoothing factors ``mu`` of 4 to 7 against ``0.87`` for the plane
+sweep across ``zeta`` on NCSX ``11 x 21 x 41 x 5``) and removed with their
+diagnostics; they are in the git history.
 
-The operator's two dominant terms live in *different bases*.  Parallel
-streaming, ``x xi v_th b.grad``, is an advection along the field line whose
-sign reverses with the sign of the pitch; in the Legendre basis it is the
-tridiagonal ``xi``-multiplication matrix ``Y``
-(``legendre_coupling_lower/upper``) acting on ``L``, tensored with the angular
-derivative.  ``Y`` is similar to a symmetric tridiagonal matrix with positive
-off-diagonals, so ``Y = V diag(lambda) V^-1`` with ``lambda_k`` the
-Gauss-Legendre nodes of order ``Nxi``: ``V`` is the discrete Legendre
-transform, and in *that* basis streaming is ``x lambda_k (v_theta d/dtheta +
-v_zeta d/dzeta)`` -- a plain advection with a definite wind per pitch node,
-exactly what an upwind-ordered relaxation wants (Brandt 1977, section 3; Brandt
-& Yavneh 1993; Trottenberg et al., section 7.4).  Collisions, however, are
-*diagonal in L* and **dense in pitch collocation**: measured on the same
-operator, keeping only the collocation diagonal of the reduced collision
-operator discards 65% of it in the 2-norm, and even a lumped tridiagonal-in-
-pitch approximation discards 31%.  At the low speed nodes the collision
-operator is by far the largest term (``||C||_2 = 678`` at the lowest speed
-node of the NCSX ``11 x 21 x 41 x 5`` deck, against an angular-advection scale
-of order one), so a relaxation that misrepresents it cannot converge.
+No cheap sweep is complementary to angular coarsening in *both* angles at once,
+and the near-null directions -- distributions nearly constant along the field
+line -- are represented by no coarse grid this hierarchy can build.  Measured
+end to end (``docs/benchmarks/performance.md``), on the full-Fokker-Planck
+ladder the multigrid route is affordable where the classical preconditioner is
+not, but it does not reach the Krylov tolerance, while the exact block-Thomas
+of the same simplified operator does so in 21 iterations.  The route is
+therefore opt-in (``solve(preconditioner="multigrid")``).
 
-``smoother="legendre_plane"`` (the default) therefore stays in the Legendre
-basis and relaxes the ``(L, angle)`` planes *exactly*
-(:func:`_legendre_plane_blocks`): collisions, mirror force, streaming and ExB
-along one angle are all kept, the blocks are ``N x N`` with ``N`` one angular
-length instead of ``Ntheta*Nzeta``, and only the other angle's derivative is
-left to the coarse grid.  ``smoother="plane"``/``"alternating"``/``"theta"``/
-``"zeta"`` are the pitch-collocation family, kept because they are the
-measurement that justifies the default.
-
-Measured smoothing factors
---------------------------
-:func:`measure_smoothing_factor` runs
-:func:`solvax.smoothers.smoothing_factor` -- the empirical counterpart of
-Brandt's local Fourier analysis ``mu`` -- on the **real** simplified NCSX
-``11 x 21 x 41 x 5`` operator, restricted to the high-frequency modes each
-coarsening cannot represent:
-
-===================================  ==========  =========  ==========
-smoother                             ``theta``   ``zeta``   ``xi``
-===================================  ==========  =========  ==========
-``legendre_plane`` (zeta in plane)   214         0.87       196
-pitch-collocation plane, upwind      5.27        5.17       4.27
-...  with ``omega = 0.5``            2.77        1.31       1.72
-...  with ``omega = 0.2``            1.06        0.98       0.98
-upwind zeta line                     ---         6.55       ---
-alternating upwind lines             5.63        ---        5.87
-===================================  ==========  =========  ==========
-
-Only the direction a relaxation resolves exactly is smoothed: the
-``(L, zeta)``-plane sweep has ``mu = 0.87`` across ``zeta`` and ``mu = 214``
-across ``theta``.  No cheap sweep is complementary to angular coarsening in
-*both* angles at once, and the near-null directions -- distributions nearly
-constant along the field line, which is neither a ``theta`` mode nor a ``zeta``
-mode -- are represented by no coarse grid this hierarchy can build.
-:func:`line_diagonal_dominance` and :func:`line_smoother_spectral_radius` say
-why in one number, and the next section is that measurement.
-
-The consequence, measured end to end and reported in ``docs/benchmarks/performance.md``:
-on the full-Fokker-Planck ladder the multigrid route is affordable where the
-classical preconditioner is not, but it does not reach the Krylov tolerance,
-while the exact block-Thomas of the same simplified operator does so in 21
-iterations.  The route is therefore opt-in
-(``solve(preconditioner="multigrid")``) and the default is unchanged.
-
-Why no relaxation smooths in a Legendre-modal pitch basis
----------------------------------------------------------
-The stalls above are not a bad choice of cycle, transfer or sweep ordering.
-They follow from one structural fact about the discretization, which
-``tests/test_multigrid.py`` pins:
-
-**Parallel streaming and the mirror force are strictly off-diagonal in the
-Legendre index.**  They couple ``L -> L +- 1`` and contribute *nothing* to the
-``(L, L)`` block (see :meth:`KineticOperator.legendre_blocks`: the diagonal
-block is ExB plus the collision diagonal and nothing else).  Every line of an
-alternating line relaxation therefore misses the operator's dominant term:
-
-* a ``theta``- or ``zeta``-line block, taken at fixed ``L``, contains no
-  streaming at all -- so no angular stencil, upwinded or not, can give that
-  block diagonal weight from the term that dominates the operator;
-* the ``L``-line block, taken at fixed ``(theta, zeta)``, does contain the
-  ``L +- 1`` coupling, but only its angle-diagonal part, which is the mirror
-  force: a tridiagonal matrix with ``-L(L-1)/(2L-1)`` below and
-  ``(L+1)(L+2)/(2L+3)`` above the diagonal, i.e. near-*skew*-symmetric with a
-  diagonal of ``nu_D l(l+1)/2`` that vanishes with the collisionality.
-
-Measured with :func:`line_smoother_spectral_radius` on the real simplified
-operator (one ``(species, speed)`` block, W7-X standard configuration,
-``9 x 11 x 13``, alternating exact line solves in all three coordinates,
-``omega = 1``):
-
-===========================  =========  =========  =========
-``nu_n``                     ``1e-1``   ``8.3e-3``  ``1e-4``
-===========================  =========  =========  =========
-Legendre-modal ``rho(S)``    3.8e3      5.9e6      1.7e12
-pitch grid + upwind          0.88       0.97       1.00
-pitch grid + centered        11.5       2.2e2      6.3e5
-===========================  =========  =========  =========
-
-``rho(S) > 1`` is fatal: a coarse-grid correction cannot rescue a divergent
-relaxation.  The modal basis has no convergent line relaxation at any
-collisionality, and the gap grows as ``nu`` falls.  Correspondingly the
-two-grid factor ``rho(TG)`` of a full ``V(1,1)`` cycle with rediscretized
-coarse operators and linear-interpolation transfers, coarsening ``(theta,
-zeta)`` in the modal basis and ``(alpha, theta, zeta)`` on the pitch grid:
-
-==========================  =========  ==========  =========  ==========
-discretization              ``d``      ``1e-1``   ``8.3e-3``  ``1e-4``
-==========================  =========  ==========  =========  ==========
-Legendre-modal              ---        1.5e7      4.0e13     3.3e24
-collocation, ``up1``        1.00       0.39       0.24       0.74
-collocation, widened 2nd    0.88       0.49       0.36       0.80
-collocation, textbook 2nd   0.60       0.65       0.48       1.09
-collocation, widened 4th    0.62       0.91       0.49       1.25
-collocation, textbook 3rd   0.33       2.68       0.89       3.68
-collocation, centered       0.00       1.3e2      4.7e4      5.1e11
-==========================  =========  ==========  =========  ==========
-
-``d`` is the stencil's diagonal dominance (:func:`stencil_matrices`).  The
-convergence factor is a monotone function of it, and the widened stencils --
-which skip near neighbours to keep diagonal weight at a given formal order --
-beat the textbook upwind-biased ones of the *same or higher* order.  That is
-the whole of the recipe: relaxation smooths an advection only where the
-discretization is diagonally dominant, and a modal pitch basis is nowhere
-diagonally dominant in the streaming term because the streaming term has no
-diagonal there at all (Brandt 1977, section 3; Trottenberg et al., sections 2.1
-and 7.4; the widening trade is Leonard's, Comput. Methods Appl. Mech. Eng.
-**19**, 59 (1979); the difficulty of smoothing an accurate drift-kinetic
-discretization is stated in M. Landreman, Bull. Am. Phys. Soc. **62**, JP11.128
-(2017)).
-
-Why changing basis inside the preconditioner does not rescue it
---------------------------------------------------------------
-The obvious escape is to keep dkx's Legendre discretization for the *solve*
-(and with it the Fortran parity) and change basis only inside the
-preconditioner: transform the residual to a pitch grid with the Legendre
-Vandermonde ``V``, smooth there, transform back with ``V^+``.  The transform
-is cheap and exact -- ``Nxi**2`` per angular point, ``cond(V) ~ 7`` at
-``Nalpha = Nxi`` on the half-index uniform-``alpha`` grid -- and
-:func:`pitch_collocation_surrogate` builds exactly that surrogate.  Coupling a
-low-order finite-difference discretization to a spectral one this way is
-standard practice (S. A. Orszag, J. Comput. Phys. **37**, 70 (1980); M. O.
-Deville & E. H. Mund, J. Comput. Phys. **60**, 517 (1985)).
-
-It does not work, for a reason that is quantitative rather than structural.
-Two requirements pull in opposite directions:
-
-*P1*
-    the surrogate must be spectrally close to the modal operator, or the outer
-    Krylov solve pays the difference;
-*P2*
-    the surrogate must admit a convergent relaxation, or its own inverse is no
-    cheaper than the one it replaces.
-
-Upwinding buys ``P2`` and costs ``P1``.  Measured on the same ``9 x 11 x 13``
-deck at ``nu_n = 8.3e-3`` as the tables above: GMRES on the modal operator
-preconditioned by the surrogate's *exact* inverse needs
-
-======================================  ================  ============
-surrogate                               GMRES iterations  ``rho(TG)``
-======================================  ================  ============
-centered angles, centered pitch         18                4.7e4
-centered angles, upwind pitch           21                4.0e4
-widened-2nd everywhere                  199               0.37
-first-order upwind everywhere           201               0.24
-(no preconditioner)                     > 400             ---
-======================================  ================  ============
-
--- and the upwind column degrades further with angular resolution (261 at
-``9 x 15``, > 400 at ``13 x 21``), while the centered column barely moves (18,
-24, 41 at ``9 x 15 x 17``, ``13 x 21 x 17``, ``17 x 25 x 33``).  The half that
-is a good preconditioner is exactly the half no relaxation smooths.  Note
-which axis does the damage: upwinding the *pitch* direction alone is nearly
-free (18 -> 21), because dkx's pitch operator is spectral anyway; it is
-upwinding the *angles* -- where dkx's own stencils are centered by
-construction, SFINCS ``thetaDerivativeScheme`` 1/2 -- that costs the order of
-magnitude.
-
-Nor does double discretisation (accurate operator on the fine level, upwinded
-smoother and coarse operators; Brandt 1981; Trottenberg et al., section 7.4)
-close the gap: with the centered surrogate as ``A`` and the ``up1`` surrogate
-supplying the line blocks and the coarse level, ``rho(TG)`` is 1.46, 1.94 and
-2.27 at ``nu_n = 1e-1``, ``8.3e-3`` and ``1e-4`` -- divergent at every
-collisionality.  Over-resolving the pitch grid does not help either
-(``Nalpha = 2 Nxi + 1`` takes the centered surrogate from 18 iterations to
-310, because the extra nodes are outside the modal operator's range and the
-pseudo-inverse projects them away).
-
-What *would* be required
-------------------------
-A convergent cycle needs a discretization that is diagonally dominant in the
-streaming term, and streaming has a diagonal only when pitch is a *grid*: on a
-pitch-angle collocation grid ``xi`` is a multiplication operator, so
-``xi b.grad`` is diagonal in pitch and its upwind angular stencil puts weight
-on the matrix diagonal, while the mirror force becomes an advection in
-``alpha`` whose upwind discretization is diagonally dominant in turn.  Then
-all of ``(alpha, theta, zeta)`` can be coarsened together, which is what keeps
-the advection direction fixed relative to the mesh on every level.
-
-That is a change to dkx's *discretization*, not to its preconditioner: it
-changes the answers at fixed resolution, breaks the Fortran matrix parity the
-repository is gated on, and requires the Fokker-Planck and improved-Sugama
-collision operators -- which are built in the Legendre basis, where they are
-``L``-diagonal -- to be re-derived on a pitch grid, where they are dense
-(keeping only the collocation diagonal discards 65% of the reduced operator in
-the 2-norm; a lumped tridiagonal-in-pitch approximation still discards 31%).
-It is a project, not a patch, and it buys a preconditioner that is *worse*
-than the classical block-Thomas wherever the classical one fits in memory (21
-iterations to ``1e-11``).  The honest scope of the multigrid route is
-therefore unchanged: opt-in, for the grids where the exact factorization does
-not fit.
+The cause is structural: parallel streaming and the mirror force are strictly
+off-diagonal in the Legendre index (they couple ``L -> L +- 1`` and contribute
+nothing to the ``(L, L)`` block), so no line relaxation has diagonal weight from
+the dominant term.  A pitch-*grid* discretization would be diagonally dominant,
+but it changes answers at fixed resolution and breaks Fortran matrix parity;
+that experiment (two-grid factor 0.24 against 4.0e13 for the modal basis) was
+removed from the tree and is in the git history.
 
 Coarsest level
 --------------
@@ -319,20 +135,6 @@ References
   (2001) -- ch. 2 (transfers, rediscretized coarse operators), ch. 5
   (semicoarsening), sections 2.1, 5.1 and 7.4 (line relaxation, double
   discretisation and downstream relaxation for convection).
-- A. Brandt, "Guide to multigrid development", in *Multigrid Methods*, Lecture
-  Notes in Mathematics **960**, Springer (1982) -- double discretisation.
-- B. P. Leonard, "A stable and accurate convective modelling procedure based on
-  quadratic upstream interpolation", Comput. Methods Appl. Mech. Eng. **19**,
-  59 (1979) -- trading stencil width for boundedness/diagonal weight.
-- S. A. Orszag, "Spectral methods for problems in complex geometries",
-  J. Comput. Phys. **37**, 70 (1980); M. O. Deville & E. H. Mund, "Chebyshev
-  pseudospectral solution of second-order elliptic equations with finite
-  element preconditioning", J. Comput. Phys. **60**, 517 (1985) -- low-order
-  discretizations as preconditioners for spectral ones.
-- M. L. Adams & E. W. Larsen, "Fast iterative methods for discrete-ordinates
-  particle transport calculations", Prog. Nucl. Energy **40**, 3 (2002) -- the
-  same near-null-space obstruction in neutral-particle transport, and the
-  synthetic-acceleration family of remedies for it.
 - M. Landreman, "A multigrid method for drift-kinetic calculations in
   stellarators and rippled tokamaks", Bull. Am. Phys. Soc. **62**, JP11.128
   (2017) -- multigrid smoothers are unstable for accurate discretizations of
@@ -341,7 +143,7 @@ References
 Availability
 ------------
 The cycle driver, transfers and smoothers come from ``solvax`` >= 0.9.1
-(``solvax.precond.multigrid``, ``solvax.smoothers.upwind_smoother``,
+(``solvax.precond.multigrid``, ``solvax.smoothers.relaxation``,
 ``solvax.transfer``), which :mod:`dkx` requires outright, so this module
 imports them unconditionally.
 """
@@ -359,24 +161,9 @@ import jax  # noqa: E402
 import jax.numpy as jnp  # noqa: E402
 from solvax.precond import MultigridLevel  # noqa: E402
 from solvax.precond import multigrid as solvax_multigrid
-from solvax.smoothers import (  # noqa: E402
-    smoothing_factor,
-)
 
 from dkx.drift_kinetic import KineticOperator  # noqa: E402
 
-from .multigrid_diagnostics import (  # noqa: F401
-    UPWIND_STENCILS,
-    PitchCollocationSurrogate,
-    _legendre_vandermonde,
-    _stencil_weights,
-    _uniform_spacing,
-    dense_simplified_block,
-    line_diagonal_dominance,
-    line_smoother_spectral_radius,
-    pitch_collocation_surrogate,
-    stencil_matrices,
-)
 from .multigrid_levels import (  # noqa: F401
     _DIAGONAL_FLOOR,
     _STENCIL_BY_RADIUS,
@@ -393,7 +180,6 @@ from .multigrid_levels import (  # noqa: F401
     xi_transfer_matrices,
 )
 from .multigrid_smoothers import (  # noqa: F401
-    _advection_bands,
     _band_scale,
     _coarse_solve,
     _legendre_plane_blocks,
@@ -402,23 +188,15 @@ from .multigrid_smoothers import (  # noqa: F401
     _level_smoother,
     _plane_angle,
     _shift,
-    _streaming_eigenbasis,
 )
 
 __all__ = [
     "MultigridSettings",
-    "PitchCollocationSurrogate",
-    "UPWIND_STENCILS",
     "build_multigrid_f_inverse",
     "coarsen_operator",
-    "dense_simplified_block",
     "hierarchy_shapes",
-    "line_diagonal_dominance",
-    "measure_smoothing_factor",
     "periodic_transfer_matrices",
-    "pitch_collocation_surrogate",
     "simplified_operator",
-    "stencil_matrices",
     "xi_transfer_matrices",
 ]
 
@@ -552,35 +330,3 @@ def build_multigrid_preconditioner(
         schur_projected_precond(a_inv, b_cols, c_rows),
         schur_projected_precond(a_inv_t, c_rows.T, b_cols.T),
     )
-
-def measure_smoothing_factor(
-    op: KineticOperator,
-    *,
-    settings: MultigridSettings = MultigridSettings(),
-    seed: int = 0,
-    steps: int = 24,
-) -> float:
-    """Measured smoothing factor ``mu`` of the finest-level smoother.
-
-    :func:`solvax.smoothers.smoothing_factor` power-iterates the error
-    propagation operator ``I - M^-1 A`` restricted to the high-frequency modes
-    the coarsening cannot represent -- the empirical counterpart of Brandt's
-    local Fourier analysis ``mu``.  Measured on the *real* simplified DKX
-    operator, not a model problem.
-
-    Values well below one mean the smoother and the coarse grid are
-    complementary; ``mu`` near one means the cycle will not converge no matter
-    what cycle index or transfers are used.
-    """
-    simplified = simplified_operator(op)
-    smoother = _level_smoother(simplified, settings, settings.shift)
-    coarsen = (False, False, bool(settings.coarsen_xi), True, True)
-    value = smoothing_factor(
-        smoother,
-        _level_matvec(simplified, settings.shift),
-        simplified.f_shape,
-        key=jax.random.PRNGKey(seed),
-        coarsen=coarsen,
-        steps=steps,
-    )
-    return float(value)

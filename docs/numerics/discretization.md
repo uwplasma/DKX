@@ -230,22 +230,6 @@ block-tridiagonal extraction used by the structured route is
 matrix, and it does so from products with the matrix-free action
 ({doc}`solver_routes`).
 
-## A second pitch discretization
-
-`dkx.collocation` holds an experimental second discretization of the same
-equation with pitch on a grid (half-index uniform pitch angle, upwinded
-streaming and mirror) rather than a Legendre spectrum. On a pitch grid, $\xi$
-is a multiplication operator, streaming is diagonal in pitch and the mirror
-force is an upwindable advection, so a semicoarsened multigrid cycle over
-$(\alpha, \theta, \zeta)$ converges: on the W7-X operator used in
-{doc}`krylov_and_preconditioners`, first-order upwinding gives a two-grid factor
-of 0.24 where the Legendre basis gives $4.0\times10^{13}$
-(`tools/benchmarks/tier2_pitch_basis_study.py`).
-
-Its scope is one species, `collisionOperator = 1`, RHSMode 1 and DKES-like
-trajectories. It changes the answers at fixed resolution, it has no Fortran
-matrix parity, and it does not touch `dkx.drift_kinetic` or `dkx.solve`.
-
 ## Resolution
 
 The practical resolution knobs are $N_\theta$, $N_\zeta$, $N_\xi$ and $N_x$.

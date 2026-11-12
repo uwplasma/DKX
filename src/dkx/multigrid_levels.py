@@ -38,26 +38,7 @@ class MultigridSettings:
         pre_smooth: pre-smoothing sweeps per level.
         post_smooth: post-smoothing sweeps per level.
         cycles: cycles per preconditioner application.
-        omega: relaxation weight of the angular (pitch-collocation) sweep.
-        omega_xi: relaxation weight of the Legendre-basis sweep (the
-            ``"legendre_plane"`` plane solve, or the ``L``-line when
-            ``smooth_xi``).
-        order: sweep ordering of the angular line relaxation --
-            ``"upwind"`` (the default, downstream-ordered), ``"downwind"``,
-            ``"forward"`` or ``"backward"``.  The last three exist to measure
-            what the ordering is worth.  Ignored by ``smoother="plane"``,
-            which is exact in the plane and needs no ordering.
-        smoother: relaxation sweep -- ``"legendre_plane"`` (the default:
-            exact ``(L, angle)`` plane solve in the Legendre basis) or, in the
-            pitch-collocation basis, ``"plane"`` (exact ``(theta, zeta)`` plane
-            solve), ``"alternating"`` (upwind theta-line then zeta-line),
-            ``"theta"`` or ``"zeta"`` (one upwind line direction).
-            ``"hybrid"`` composes the collocation plane sweep with the
-            Legendre plane sweep multiplicatively.
-        smooth_xi: add the multiplicative Legendre ``L``-line (mirror +
-            collision) relaxation.  Off by default: the mirror force is
-            skew-symmetric in ``L``, so that line operator is near-singular and
-            measures far *worse* than the angular sweep alone.
+        omega_xi: relaxation weight of the Legendre ``(L, angle)`` plane sweep.
         shift: weight of the uniform diagonal regularization
             (:func:`_shift`), relative to the operator's own diagonal scale.
             The default ``1e-8`` is the invertibility floor of
@@ -65,17 +46,8 @@ class MultigridSettings:
             preconditioner may spend: measured on the NCSX ladder, raising it
             to ``0.01`` costs the Krylov solve 60 iterations instead of 21, and
             ``1.0`` never converges at all.
-        plane_pin: weight of the per-line rank-one pin in the
-            ``"legendre_plane"`` smoother (see :func:`_legendre_plane_blocks`),
+        plane_pin: weight of the per-line rank-one pin in the plane smoother (see :func:`_legendre_plane_blocks`),
             in units of the mean collision diagonal.  ``0`` disables it.
-        stencil: angular discretization used *inside the smoother* --
-            ``"upwind"`` (first order, dissipative at high frequency, the
-            default) or ``"centered"`` (the level operator's own stencil).
-            See :func:`_advection_bands`.
-        absolute_reaction: keep only the magnitude of the pitch-space reaction
-            (collisions and mirror force projected on the collocation
-            diagonal), so the smoother's plane operator stays diagonally
-            dominant where their signed projection would not be.
     """
 
     levels: int = 3
@@ -86,15 +58,9 @@ class MultigridSettings:
     pre_smooth: int = 1
     post_smooth: int = 1
     cycles: int = 1
-    omega: float = 1.0
     omega_xi: float = 1.0
-    order: str = "upwind"
-    smoother: str = "legendre_plane"
-    smooth_xi: bool = False
     shift: float = _DIAGONAL_FLOOR
-    stencil: str = "upwind"
     plane_pin: float = 1.0
-    absolute_reaction: bool = True
 
 # =============================================================================
 # The simplified (SFINCS ``preconditionerOptions``) operator, as an operator

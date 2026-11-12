@@ -177,11 +177,3 @@ status = "experimental"
 owners = ["src/dkx/bounce_averaged.py"]
 evidence = ["tests/test_bounce_averaged.py"]
 gaps = ["independent KNOSOS comparison", "validity range", "flagship admission gates"]
-
-[[capability]]
-id = "pitch_collocation"
-name = "Pitch-collocation discretization"
-status = "experimental"
-owners = ["src/dkx/collocation.py"]
-evidence = ["tests/test_collocation.py"]
-gaps = ["matched full-observable evidence", "end-to-end performance advantage"]
