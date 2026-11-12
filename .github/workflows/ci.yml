@@ -5,6 +5,12 @@ on:
     branches:
       - main
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  # The coverage shards, the wheel build and the smoke runs are too heavy to
+  # repeat on every pull-request push. They run on main, nightly and on demand.
+  schedule:
+    - cron: "17 7 * * *"
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -18,10 +24,12 @@ jobs:
   # Pushes to main always take the full suite, so nothing reaches the default
   # branch on the reduced gate.
   changes:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-22.04
     timeout-minutes: 5
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      packaging: ${{ steps.filter.outputs.packaging }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -33,6 +41,7 @@ jobs:
         run: |
           if [ "${EVENT_NAME}" != "pull_request" ]; then
             echo "code=true" >> "${GITHUB_OUTPUT}"
+            echo "packaging=true" >> "${GITHUB_OUTPUT}"
             echo "not a pull request: taking the full suite"
             exit 0
           fi
@@ -40,6 +49,13 @@ jobs:
           changed=$(git diff --name-only "origin/${BASE_REF}...HEAD")
           echo "changed files:"
           echo "${changed}"
+          # The wheel build is the one heavy lane a pull request still takes,
+          # and only when it touches what a wheel ships.
+          if printf '%s\n' "${changed}" | grep -qE '^(pyproject\.toml|MANIFEST\.in|validation/package_size_contract\.toml|tools/(release_contracts|installed_scientific_smoke)\.py|src/dkx/__init__\.py|src/dkx/.*\.(json|toml|txt|csv|nc|xz|h5|namelist|yml|yaml|md))$'; then
+            echo "packaging=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "packaging=false" >> "${GITHUB_OUTPUT}"
+          fi
           # Anything that can change what the code computes, how it is packaged
           # or how it is tested takes the full suite. Everything else is prose.
           if printf '%s\n' "${changed}" | grep -qE '^(src/|tests/|tools/|validation/|examples/|\.github/|pyproject\.toml|\.test_durations)'; then
@@ -83,9 +99,70 @@ jobs:
       - name: Documentation builds warning-free
         run: python -m sphinx -b html -W --keep-going docs "${RUNNER_TEMP}/docs"
 
+  # The fast pull-request lane for a code change: the documentation contracts
+  # plus the test files the change touches or names. Coverage over the whole
+  # suite, and the 95% gate, run on main and nightly.
+  pr-fast:
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    env:
+      JAX_ENABLE_X64: "True"
+      JAX_DISABLE_JIT: "0"
+      DKX_SOLVER_JIT: "1"
+      DKX_PRECOMPILE: "0"
+      DKX_PROFILE: "0"
+      DKX_CI: "1"
+      DKX_FAST_EXAMPLES: "1"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: "pyproject.toml"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install ".[dev]"
+      - name: Fetch external equilibrium data
+        run: |
+          python -m dkx.validation.data_fetch --quiet
+      - name: Contracts and the tests this change touches
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --quiet origin "${BASE_REF}"
+          targets=(
+            tests/test_planning_evidence.py
+            tests/test_public_docs_wording_contract.py
+            tests/test_benchmark_doc_claims.py
+            tests/test_readme_budget.py
+            tests/test_source_tree_consolidation.py
+            tests/test_figure_provenance.py
+            tests/test_wheel_ships_every_package_file.py
+            tests/test_release_workflow_contracts.py
+          )
+          while read -r f; do
+            case "${f}" in
+              tests/test_*.py) targets+=("${f}") ;;
+              src/dkx/*.py)
+                stem=$(basename "${f}" .py)
+                for t in "tests/test_${stem}"*.py; do
+                  if [ -f "${t}" ]; then targets+=("${t}"); fi
+                done ;;
+            esac
+          done < <(git diff --name-only --diff-filter=d "origin/${BASE_REF}...HEAD")
+          mapfile -t targets < <(printf '%s\n' "${targets[@]}" | sort -u)
+          echo "running: ${targets[*]}"
+          python -m pytest -q -n 2 --dist=loadscope -m "not slow" -p no:cacheprovider "${targets[@]}"
+
   coverage:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true' && github.event_name != 'pull_request'
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     strategy:
@@ -220,7 +297,7 @@ jobs:
 
   examples-smoke:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true' && github.event_name != 'pull_request'
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     env:
@@ -258,7 +335,7 @@ jobs:
 
   external-data-smoke:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true' && github.event_name != 'pull_request'
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     env:
@@ -311,6 +388,7 @@ jobs:
           test -s "${RUNNER_TEMP}/sfincsOutput_vmec.h5"
 
   workflow-lint:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-22.04
     timeout-minutes: 5
     steps:
@@ -338,7 +416,7 @@ jobs:
     # signal was the contributor graph. This job is that missing signal.
     runs-on: ubuntu-22.04
     timeout-minutes: 5
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
     steps:
       - uses: actions/checkout@v6
         with:
@@ -382,7 +460,7 @@ jobs:
     # solve stages. The failures this job exists to catch happen while the deck
     # is being built, before the grid is read at all.
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true' && (github.event_name != 'pull_request' || needs.changes.outputs.packaging == 'true')
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     env:
@@ -588,13 +666,15 @@ jobs:
     timeout-minutes: 5
     needs:
       - coverage-report
+      - pr-fast
       - docs-gate
       - examples-smoke
       - external-data-smoke
       - workflow-lint
       - wheel-install
     # Report upstream failures, but let superseded runs stop on cancellation.
-    if: ${{ !cancelled() }}
+    # A draft pull request skips every job, so the gate is skipped with them.
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
     steps:
       - name: Check required CI jobs
         env:
@@ -620,10 +700,12 @@ jobs:
           # everything would report success having tested nothing.
           full = results.get("coverage-report") == "success"
           reduced = results.get("docs-gate") == "success"
-          if not (full or reduced):
+          fast = results.get("pr-fast") == "success"
+          if not (full or reduced or fast):
               print(f"neither tier ran: {results}")
               sys.exit(1)
 
           print("Reduced documentation gate passed." if reduced and not full
+                else "Pull-request fast lane passed." if fast and not full
                 else "All required CI jobs passed.")
           PY

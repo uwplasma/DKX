@@ -55,6 +55,12 @@ built wheel and source distribution into clean environments and runs a solve
 from outside the checkout, and `docs-gate` runs the documentation contracts and
 a warning-free Sphinx build.
 
+A draft pull request skips every job. A ready pull request that touches code runs
+`pr-fast`: the contract tests plus the test files the change touches or names,
+and `wheel-install` when the change touches packaging. The coverage shards,
+`coverage-report`, `examples-smoke` and `external-data-smoke` run on pushes to
+main, nightly and on manual dispatch, so the coverage gate is enforced there.
+
 ### Patch coverage on macOS
 
 On macOS `pytest --cov` aborts this suite with `SIGABRT` before pytest prints
