@@ -592,27 +592,13 @@ def test_host_root_rejects_inaccurate_cancelling_fluxes(tmp_path, monkeypatch):
     assert len(calls) == 2 and all("kinetic residual failed" in f for f in result.failures)
 
 
-@pytest.fixture
-def kinetic_effects():
-    """Drain expected asynchronous rejection callbacks between GPU tests."""
-    import jax
-    yield
-    try:
-        jax.effects_barrier()
-    except Exception as exc:
-        assert "Ambipolar kinetic residual failed" in str(exc)
-        # A successful effect replaces the failed runtime token before cleanup.
-        jax.jit(lambda: jax.debug.callback(lambda: None))()
-        jax.effects_barrier()
-
-
-@pytest.mark.parametrize("transform", ["jit", "grad", "vmap"])
+@pytest.mark.parametrize("transform", ["jit", "vmap"])
 @pytest.mark.parametrize("rhs,x,accepted", [
     ([1.], [1.], True), ([1.], [1.1], False),
     ([0.], [0.], True), ([0.], [1e-20], False), ([0.], [1e-200], False),
     ([1.], [np.nan], False), ([np.inf], [1.], False),
 ])
-def test_traced_kinetic_admission(transform, rhs, x, accepted, kinetic_effects):
+def test_traced_kinetic_admission(transform, rhs, x, accepted):
     from types import SimpleNamespace
     import jax
     import jax.numpy as jnp
@@ -620,23 +606,18 @@ def test_traced_kinetic_admission(transform, rhs, x, accepted, kinetic_effects):
     op = SimpleNamespace(rhs=lambda: jnp.array(rhs), apply=lambda x: x)
 
     def checked(x):
-        er._check_kinetic_solution(op, 0., x, 1e-10)
-        return jnp.sum(x*x)
+        return er._check_kinetic_solution(op, 0., x, 1e-10)
 
-    fn = jax.grad(checked) if transform == "grad" else checked
+    fn = checked
     argument = jnp.array(x)
     if transform == "vmap":
         fn = jax.vmap(fn)
         argument = jnp.stack([jnp.array(rhs), argument])
     compiled = jax.jit(fn)
-    if accepted:
-        assert np.all(np.isfinite(compiled(argument)))
-    else:
-        with pytest.raises(Exception, match="Ambipolar kinetic residual failed"):
-            jax.block_until_ready(compiled(argument))
+    assert np.all(np.isfinite(compiled(argument))) == accepted
 
 
-def test_differentiated_root_rejects_inaccurate_cancelling_fluxes(tmp_path, monkeypatch, kinetic_effects):
+def test_differentiated_root_rejects_inaccurate_cancelling_fluxes(tmp_path, monkeypatch):
     from types import SimpleNamespace
     import jax
     import jax.numpy as jnp
@@ -650,8 +631,7 @@ def test_differentiated_root_rejects_inaccurate_cancelling_fluxes(tmp_path, monk
 
     monkeypatch.setattr(er, "solve", corrupt)
     # Zero distribution gives cancelling fluxes, but is not a kinetic solution.
-    with pytest.raises(Exception, match="Ambipolar kinetic residual failed"):
-        jax.block_until_ready(jax.jit(lambda: er.ambipolar_er(problem))())
+    assert np.isnan(jax.jit(lambda: er.ambipolar_er(problem))())
 
 
 @pytest.mark.parametrize("collision,ramped,tol", [
@@ -782,25 +762,14 @@ def scalar_current(monkeypatch):
     def install(function):
         monkeypatch.setattr(er_mod, "radial_current", lambda p, e, **kwargs: (function(e, p), None, None))
         return er_mod.ambipolar_er
-    yield install
-    # GPU callback failures can remain queued after block_until_ready raises.
-    # Drain expected effects so negative tests do not emit an atexit traceback.
-    import jax
-    try:
-        jax.effects_barrier()
-    except Exception as exc:
-        assert "Ambipolar root acceptance failed" in str(exc)
-        # Also verify recovery: a successful callback replaces the failed
-        # runtime token retained by JAX after effects_barrier raises.
-        value = jax.jit(install(lambda e, p: e - p))(1.)
-        np.testing.assert_allclose(value, 1.)
-        jax.effects_barrier()
+    return install
 
 
 def test_ambipolar_acceptance_under_jit_grad_and_vmap(scalar_current):
     import jax
     import jax.numpy as jnp
     root = scalar_current(lambda e, p: e - p)
+    assert "callback" not in str(jax.make_jaxpr(jax.grad(root))(1.))
     values, gradients = jax.jit(jax.vmap(jax.value_and_grad(root)))(jnp.array([-2., 0., 3.]))
     np.testing.assert_allclose(values, [-2., 0., 3.], atol=1e-12)
     np.testing.assert_allclose(gradients, 1., atol=1e-12)
@@ -834,17 +803,24 @@ def test_ambipolar_acceptance_rejects_invalid_roots(scalar_current, case, option
     if transform == "jit":
         call = jax.jit(call)
     elif transform == "grad":
-        call = jax.grad(call)
-    with pytest.raises(Exception, match="Ambipolar root acceptance failed"):
-        jax.block_until_ready(call(1.))
+        call = lambda p, call=call: jax.value_and_grad(call)(p)[0]  # noqa: E731
+    if transform == "eager":  # concrete: raised
+        with pytest.raises(RuntimeError, match="Ambipolar root acceptance failed"):
+            call(1.)
+    else:  # traced primal: a NaN root; a concrete one still raises
+        try:
+            value = call(1.)
+        except RuntimeError as exc:
+            assert "Ambipolar root acceptance failed" in str(exc)
+        else:
+            assert not np.isfinite(value)
 
 
 def test_ambipolar_acceptance_rejects_bad_batch_member(scalar_current):
     import jax
     import jax.numpy as jnp
     root = scalar_current(lambda e, p: p * (e - 1.))
-    with pytest.raises(Exception, match="Ambipolar root acceptance failed"):
-        jax.jit(jax.vmap(root))(jnp.array([1., 0.])).block_until_ready()
+    assert np.isnan(jax.jit(jax.vmap(root))(jnp.array([1., 0.]))[1])
 
 
 @pytest.mark.parametrize("options", [

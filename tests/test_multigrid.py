@@ -228,6 +228,7 @@ def test_multigrid_preconditioner_does_not_change_the_answer(case: str) -> None:
         assert float(jnp.max(jnp.abs(multigrid.x - reference.x))) / scale < 1e-6
 
 
+@pytest.mark.slow  # 333 s on a hosted runner; the full suite runs it
 def test_transposed_multigrid_preconditioner_is_exact() -> None:
     """``precond_t`` is the exact transpose of the cycle, not a second hierarchy.
 
@@ -288,6 +289,7 @@ def test_adjoint_diagnostics_are_recorded_for_the_multigrid_route() -> None:
         method="gmres",
         tol=1e-10,
         differentiable=True,
+        record_adjoint=True,
         preconditioner="multigrid",
     )
     assert result.adjoint is not None

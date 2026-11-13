@@ -61,9 +61,10 @@ including its setup. Partial generated
 recovery retains its reduced-system derivative. Sparse direct refuses AD.
 
 Full-state implicit routes recompute forward/transpose residuals from their
-original physical actions and record bounded :class:`AdjointDiagnostics`.
-Unless ``check_adjoint=False``, a missed requested tolerance (or explicitly
-relaxed residual factor) raises at execution time. Padded coordinates cannot
+original physical actions. Unless ``check_adjoint=False``, a missed requested
+tolerance (or explicitly relaxed residual factor) returns NaN, traced, so the
+solve stays jit-compilable; ``record_adjoint=True`` also records bounded
+:class:`AdjointDiagnostics` through a host callback. Padded coordinates cannot
 enlarge the generated full route's physical adjoint tolerance.
 
 Fortran correspondence: ``solver.F90`` (KSP setup / preconditioner matrix
@@ -446,6 +447,7 @@ def solve(
     recycle: tuple[jnp.ndarray, jnp.ndarray] | None = None,
     differentiable: bool = False,
     check_adjoint: bool = True,
+    record_adjoint: bool = False,
     adjoint_residual_factor: float = DEFAULT_ADJOINT_RESIDUAL_FACTOR,
     use_preconditioner: bool = True,
     preconditioner: str | None = None,
@@ -500,22 +502,18 @@ def solve(
             Generated full recovery builds its transpose from the generated
             RHS pullback; partial recovery retains the reduced-system derivative.
         check_adjoint: (differentiable full-state structured and recycled Krylov,
-            default on) abort
-            loudly — a ``RuntimeError`` raised from a ``jax.debug.callback`` at
-            execution time — when the forward or the adjoint (transposed)
-            solve misses its residual.  A stalled *adjoint* solve is
-            invisible from the outside: the forward solution and every field
-            of the returned :class:`SolveResult` are fine and only the
-            implicit-function-theorem gradient is wrong, which is how the
-            singular Fokker-Planck + ``constraintScheme=1`` system corrupts
-            an optimization.  Set ``False`` for the explicitly unchecked
-            path; the residuals are still recorded in
-            :attr:`SolveResult.adjoint`, so a caller that opts out can
-            inspect them and decide.  The check recomputes the true residual
-            from the operator (``||A^T y - g||``, one extra apply plus two
-            norm probes per solve) rather than trusting the Krylov method's
-            internal estimate, and it never touches the solution — forward
-            answers are identical either way.
+            default on) return NaN when the forward or the adjoint (transposed)
+            solve misses its residual, in-graph, with no host callback. A
+            stalled *adjoint* solve is invisible from the outside: the forward
+            solution is fine and only the implicit-function-theorem gradient
+            is wrong, which is how the singular Fokker-Planck +
+            ``constraintScheme=1`` system corrupts an optimization. The check
+            recomputes the true residual from the operator (``||A^T y - g||``)
+            rather than trusting the Krylov method's internal estimate.
+            ``False`` skips it.
+        record_adjoint: (default off) also record those residuals in
+            :attr:`SolveResult.adjoint`, which costs a host callback and
+            norm probes per solve.
         adjoint_residual_factor: how far over its residual a differentiable
             solve may land before ``check_adjoint`` calls it a failure
             (default 1). The accepted residual is
@@ -861,7 +859,7 @@ def solve(
             result = _solve_tier1(
                 op, rhs2d, tol=tol, atol=atol, differentiable=differentiable,
                 check_adjoint=check_adjoint, adjoint_residual_factor=adjoint_residual_factor,
-                factors=factors, transpose=transpose, emit=emit,
+                record_adjoint=record_adjoint, factors=factors, transpose=transpose, emit=emit,
             )
         else:
             keep = min(tier1_keep_lowest, op.n_xi)
@@ -869,6 +867,7 @@ def solve(
                 result = _solve_generated_full(
                     op, rhs2d, tol=tol, atol=atol, subsystem_batch=subsystem_batch,
                     adjoint_window=tier1_adjoint_window, check_adjoint=check_adjoint,
+                    record_adjoint=record_adjoint,
                     adjoint_residual_factor=adjoint_residual_factor,
                     memory_budget_gb=tier1_memory_budget_gb,
                 )
@@ -934,6 +933,7 @@ def solve(
             max_restarts=max_restarts,
             differentiable=differentiable,
             check_adjoint=check_adjoint,
+            record_adjoint=record_adjoint,
             adjoint_residual_factor=adjoint_residual_factor,
         )
         if method == "auto" and not result.converged and not differentiable:

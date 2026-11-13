@@ -440,7 +440,7 @@ def radial_current(
         state, including when a memory-bounded structured route is selected.
         Differentiable evaluations require the original kinetic residual to
         satisfy ``||Ax-b|| <= tol*||b||`` before forming the current; failures
-        raise at execution time, including under JIT. This primal check does
+        raise when concrete and return a NaN state under JIT. This primal check does
         not certify the adjoint equation or grid convergence.
     """
     import jax.numpy as jnp  # noqa: PLC0415
@@ -469,7 +469,7 @@ def radial_current(
             tier1_keep_lowest=op.n_xi, max_restarts=max_restarts,
         )
         x_full = jnp.reshape(result.x, (-1,))
-        _check_kinetic_solution(op, er, x_full, rtol)
+        x_full = _check_kinetic_solution(op, er, x_full, rtol)
         state = None
     else:
         # Reuse whatever the previous point's route actually built. Nothing is
@@ -638,7 +638,7 @@ def _check_host_kinetic_state(problem, er, state, tol):
 
 
 def _check_kinetic_solution(op, er, x, tol):
-    """Original-equation admission; valid scalar JIT checks stay on device."""
+    """Original-equation admission: raises when concrete, returns NaN ``x`` when traced."""
     import jax  # noqa: PLC0415
     import jax.numpy as jnp  # noqa: PLC0415
 
@@ -654,21 +654,15 @@ def _check_kinetic_solution(op, er, x, tol):
     accepted = (jnp.all(jnp.isfinite(x)) & jnp.isfinite(rhs_norm)
                 & jnp.isfinite(residual) & within_tolerance)
 
-    def check(ok, field, residual, rhs_norm):
-        if not bool(ok):
-            raise RuntimeError(
-                f"Ambipolar kinetic residual failed at Er={float(field):g}: "
-                f"||Ax-b||={float(residual):.8e}, ||b||={float(rhs_norm):.8e}, tol={tol:.8e}; "
-                "a homogeneous RHS requires entrywise zero defect"
-            )
-
-    if isinstance(accepted, jax.core.Tracer):
-        jax.lax.cond(
-            accepted, lambda: None,
-            lambda: jax.debug.callback(check, accepted, er, residual, rhs_norm),
+    if isinstance(accepted, jax.core.Tracer):  # traced: no host exception, a NaN state instead
+        return jnp.where(accepted, x, jnp.nan)
+    if not bool(accepted):
+        raise RuntimeError(
+            f"Ambipolar kinetic residual failed at Er={float(er):g}: "
+            f"||Ax-b||={float(residual):.8e}, ||b||={float(rhs_norm):.8e}, tol={tol:.8e}; "
+            "a homogeneous RHS requires entrywise zero defect"
         )
-    else:
-        check(accepted, er, residual, rhs_norm)
+    return x
 
 
 #: Krylov iterations a solve on a reused preconditioner may take before the
@@ -1006,21 +1000,17 @@ def ambipolar_er(
         _xp, _fp, x_root, _i = jax.lax.while_loop(cond, body, (x_prev, f_prev, x_cur, 0))
         current, slope = jax.jvp(f, (x_root,), (jnp.ones_like(x_root),))
 
-        def check(root, current, slope):
-            root, current, slope = float(root), float(current), float(slope)
-            if not (
-                np.isfinite(root) and np.isfinite(current) and np.isfinite(slope)
-                and abs(current) <= current_tol and abs(slope) > min_abs_slope
-                and abs(current / slope) <= root_tol
-            ):
-                raise RuntimeError(
-                    "Ambipolar root acceptance failed: "
-                    f"Er={root}, Jr={current}, dJr/dEr={slope}; "
-                    f"require |Jr| <= {current_tol}, |dJr/dEr| > {min_abs_slope}, "
-                    f"and |Jr/(dJr/dEr)| <= {root_tol}."
-                )
+        ok = (
+            jnp.isfinite(x_root) & jnp.isfinite(current) & jnp.isfinite(slope)
+            & (jnp.abs(current) <= current_tol) & (jnp.abs(slope) > min_abs_slope)
+            & (jnp.abs(current / slope) <= root_tol)
+        )
+        return jnp.where(ok, x_root, jnp.nan)
 
-        jax.debug.callback(check, x_root, current, slope)
-        return x_root
-
-    return root_solve(residual, jnp.asarray(er0, dtype=jnp.float64), solver)
+    root = root_solve(residual, jnp.asarray(er0, dtype=jnp.float64), solver)
+    if not isinstance(root, jax.core.Tracer) and not np.isfinite(float(root)):
+        raise RuntimeError(
+            f"Ambipolar root acceptance failed: require |Jr| <= {current_tol}, "
+            f"|dJr/dEr| > {min_abs_slope}, and |Jr/(dJr/dEr)| <= {root_tol}."
+        )
+    return root
