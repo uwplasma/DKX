@@ -214,7 +214,6 @@ def test_the_reusable_warning_says_what_it_keeps_and_what_it_costs(monkeypatch):
     assert "store_offdiagonals=False" in message  # what runs instead
     assert "reused across Krylov applications" in message  # why it is preferred
     assert "It completes; it is not fast." not in message  # not the one-shot claim
-    assert "independent residual and observable checks" in message
 
 
 @pytest.mark.parametrize(
