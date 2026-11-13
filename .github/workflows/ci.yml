@@ -19,16 +19,19 @@ concurrency:
 permissions:
   contents: read
 
+# Jobs take `runs-on` from the repository variable CI_RUNS_ON (a JSON label
+# list, e.g. ["self-hosted","macOS"]); unset, and for fork pull requests, they
+# run on hosted ubuntu-22.04. workflow-lint stays hosted (Linux binary).
 jobs:
   # Working-method rule 5: the pull-request gate is tier 1, and tier 1 is the
-  # work the change can actually break. The full suite is 9 shards on a warm
+  # work the change can actually break. The full suite is 3 shards on the self-hosted CPU runners with a warm
   # compilation cache; a change that touches no code cannot alter a solver
   # result, so it runs the contract tests that read the documentation instead.
   # Pushes to main always take the full suite, so nothing reaches the default
   # branch on the reduced gate.
   changes:
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
-    runs-on: ubuntu-22.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(vars.CI_RUNS_ON || '"ubuntu-22.04"') || 'ubuntu-22.04' }}
     timeout-minutes: 5
     outputs:
       code: ${{ steps.filter.outputs.code }}
@@ -75,8 +78,10 @@ jobs:
   # and those are exactly the tests that read what changed.
   docs-gate:
     needs: changes
-    if: needs.changes.outputs.code != 'true'
-    runs-on: ubuntu-22.04
+    # Fork pull requests never run on the self-hosted shards, so they take this
+    # hosted documentation gate whatever they touch.
+    if: needs.changes.outputs.code != 'true' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(vars.CI_RUNS_ON || '"ubuntu-22.04"') || 'ubuntu-22.04' }}
     timeout-minutes: 15
     env:
       JAX_ENABLE_X64: "True"
@@ -85,13 +90,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+      - name: Tool cache for self-hosted runners
+        if: runner.environment == 'self-hosted'
+        run: echo "AGENT_TOOLSDIRECTORY=$RUNNER_TOOL_CACHE" >> "$GITHUB_ENV"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.11"
+          enable-cache: false
+          activate-environment: true
+          venv-path: ${{ runner.temp }}/venv
       - name: Install
         run: |
-          python -m pip install --upgrade pip
-          pip install ".[dev,docs]"
+          uv pip install ".[dev,docs]"
       - name: Documentation contracts
         run: |
           pytest -q -p no:cacheprovider \
@@ -111,7 +121,7 @@ jobs:
   pr-fast:
     needs: changes
     if: github.event_name == 'pull_request' && needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-22.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(vars.CI_RUNS_ON || '"ubuntu-22.04"') || 'ubuntu-22.04' }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -128,18 +138,22 @@ jobs:
       DKX_CI: "1"
       DKX_FAST_EXAMPLES: "1"
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v7
+          persist-credentials: false
+      - name: Tool cache for self-hosted runners
+        if: runner.environment == 'self-hosted'
+        run: echo "AGENT_TOOLSDIRECTORY=$RUNNER_TOOL_CACHE" >> "$GITHUB_ENV"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: "pyproject.toml"
+          enable-cache: false
+          activate-environment: true
+          venv-path: ${{ runner.temp }}/venv
       - name: Install
         run: |
-          python -m pip install --upgrade pip
-          pip install ".[dev]"
+          uv pip install ".[dev]"
       - name: Fetch external equilibrium data
         run: |
           python -m dkx.validation.data_fetch --quiet
@@ -168,27 +182,27 @@ jobs:
                 done ;;
             esac
           done < <(git diff --name-only --diff-filter=d "origin/${BASE_REF}...HEAD")
-          mapfile -t targets < <(printf '%s\n' "${targets[@]}" | sort -u)
+          IFS=$'\n' read -r -d '' -a targets < <(printf '%s\n' "${targets[@]}" | sort -u; printf '\0') || true
           echo "running: ${targets[*]}"
           python -m pytest -q -n 2 --dist=loadscope --splits 3 --group ${{ matrix.group }} --splitting-algorithm least_duration -m "not slow" -p no:cacheprovider "${targets[@]}"
 
   coverage:
     needs: changes
-    if: needs.changes.outputs.code == 'true' && github.event_name != 'pull_request'
-    runs-on: ubuntu-22.04
-    timeout-minutes: 15
+    if: needs.changes.outputs.code == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(vars.CI_RUNS_ON || '"ubuntu-22.04"') || 'ubuntu-22.04' }}
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
         # Shards are balanced by measured duration: `.test_durations` at the
         # repository root (regenerate with `pytest --store-durations`) lets
         # pytest-split's least_duration algorithm place the 30-s multigrid and
-        # tier-2 tests so no shard approaches the 10-minute job budget. Without
+        # tier-2 tests so the three shards stay balanced. Without
         # the file pytest-split falls back to a count-only split, which put one
         # shard at 9m53s and tipped it into the timeout on stacked PRs. This
         # reverses the 2026-07-17 decision to archive the snapshot; the file is
         # compact and bounded by tests/test_source_tree_consolidation.py.
-        group: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        group: [1, 2, 3]
     env:
       JAX_ENABLE_X64: "True"
       JAX_DISABLE_JIT: "0"
@@ -202,19 +216,19 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: "pyproject.toml"
+          enable-cache: false
       - name: Install
         run: |
           # Not editable: coverage has to measure what a user installs. With the
           # package under src/ an editable install would put the source tree on
           # the path and measure that instead, which is the difference that let
           # a broken wheel ship twice while these shards stayed green.
-          python -m pip install --upgrade pip
-          pip install ".[dev]"
+          uv venv .venv
+          echo "${GITHUB_WORKSPACE}/.venv/bin" >> "${GITHUB_PATH}"
+          uv pip install --python .venv/bin/python ".[dev]"
       - name: Fetch external equilibrium data
         run: |
           python -m dkx.validation.data_fetch --quiet
@@ -222,6 +236,9 @@ jobs:
         id: jaxcache
         run: |
           echo "DKX_COMPILATION_CACHE_DIR=${RUNNER_TEMP}/jax_compilation_cache" >> "${GITHUB_ENV}"
+          # A self-hosted runner shares one home between workspaces, and a font
+          # list cached there can name a matplotlib that no longer exists.
+          echo "MPLCONFIGDIR=${RUNNER_TEMP}/matplotlib" >> "${GITHUB_ENV}"
           echo "jax=$(python -c 'import jax; print(jax.__version__)')" >> "${GITHUB_OUTPUT}"
       - name: Restore the JAX compilation cache
         # One cache per shard, written only by pushes to main and read by every
@@ -237,19 +254,19 @@ jobs:
             jaxcc-${{ matrix.group }}-jax${{ steps.jaxcache.outputs.jax }}-${{ hashFiles('pyproject.toml') }}-
       - name: Coverage shard
         run: |
-          # -n 2, not -n auto: the runner has 4 cores, and each xdist worker
+          # -n 2, not -n auto: the runner has 3 cores per job, and each xdist worker
           # accumulates JAX-compiled executables that are never released, so a
           # worker holding the heavy gradient/scan tests peaks at 5-6 GB. Four
-          # of those exceed the 16 GB runner and the agent is OOM-killed, which
+          # of those exceed the 24 GB runner and the agent is OOM-killed, which
           # surfaces as a cancelled job rather than a test failure.
-          python -m pytest -q -n 2 --dist=loadscope --splits 12 --group ${{ matrix.group }} --splitting-algorithm least_duration -m "not slow" --cov=dkx --cov-report=
+          python -m pytest -q -n 2 --dist=loadscope --splits 3 --group ${{ matrix.group }} --splitting-algorithm least_duration -m "not slow" --cov=dkx --cov-report=
       - name: Bootstrap integration coverage
-        if: matrix.group == 7
+        if: matrix.group == 3
         timeout-minutes: 6
         run: |
           # Keep the two VMEX/Boozer derivative checks in a shorter shard, with its tested JAX versions.
           python -c 'import importlib.metadata as m; print("jax==" + m.version("jax") + "\njaxlib==" + m.version("jaxlib"))' > "${RUNNER_TEMP}/bootstrap-constraints.txt"
-          python -m pip install -c "${RUNNER_TEMP}/bootstrap-constraints.txt" vmex==0.13.0 booz_xform_jax==0.5.1
+          uv pip install --python "${GITHUB_WORKSPACE}/.venv/bin/python" -c "${RUNNER_TEMP}/bootstrap-constraints.txt" vmex==0.13.0 booz_xform_jax==0.5.1
           python -c 'import jax, jaxlib, vmex, booz_xform_jax.jax_api; print("JAX", jax.__version__, "JAXLIB", jaxlib.__version__)'
           python -m pytest -q --cov=dkx --cov-append --cov-report= \
             tests/test_vmex_kinetic_gradient.py::test_the_objective_agrees_with_redl_in_sign_and_its_jacobian_with_differences \
@@ -269,7 +286,7 @@ jobs:
           include-hidden-files: true
 
   coverage-report:
-    runs-on: ubuntu-22.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(vars.CI_RUNS_ON || '"ubuntu-22.04"') || 'ubuntu-22.04' }}
     timeout-minutes: 10
     needs: coverage
     permissions:
@@ -279,15 +296,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+      - name: Tool cache for self-hosted runners
+        if: runner.environment == 'self-hosted'
+        run: echo "AGENT_TOOLSDIRECTORY=$RUNNER_TOOL_CACHE" >> "$GITHUB_ENV"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: "pyproject.toml"
+          enable-cache: false
+          activate-environment: true
+          venv-path: ${{ runner.temp }}/venv
       - name: Install
         run: |
-          python -m pip install --upgrade pip
-          pip install "coverage[toml]"
+          uv pip install "coverage[toml]"
       - name: Download coverage data
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
@@ -295,10 +315,7 @@ jobs:
           path: coverage-parts
       - name: Combine coverage
         run: |
-          mapfile -d '' coverage_files < <(
-            find coverage-parts -type f -name '.coverage.*' -print0 | sort -z
-          )
-          python -m coverage combine "${coverage_files[@]}"
+          find coverage-parts -type f -name '.coverage.*' -exec python -m coverage combine {} +
           python -m coverage report --fail-under=95 --precision=4
           python -m coverage json -o coverage.json
           python -c 'import json; t = json.load(open("coverage.json"))["totals"]; assert 20 * t["covered_lines"] > 19 * t["num_statements"], "aggregate coverage must exceed 95%"'
@@ -314,7 +331,7 @@ jobs:
   examples-smoke:
     needs: changes
     if: needs.changes.outputs.code == 'true' && github.event_name != 'pull_request'
-    runs-on: ubuntu-22.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(vars.CI_RUNS_ON || '"ubuntu-22.04"') || 'ubuntu-22.04' }}
     timeout-minutes: 10
     env:
       JAX_ENABLE_X64: "True"
@@ -328,15 +345,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+      - name: Tool cache for self-hosted runners
+        if: runner.environment == 'self-hosted'
+        run: echo "AGENT_TOOLSDIRECTORY=$RUNNER_TOOL_CACHE" >> "$GITHUB_ENV"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: "pyproject.toml"
+          enable-cache: false
+          activate-environment: true
+          venv-path: ${{ runner.temp }}/venv
       - name: Install
         run: |
-          python -m pip install --upgrade pip
-          pip install -e "."
+          uv pip install -e "."
       - name: Materialize reference goldens
         run: |
           python tests/_golden_cache.py
@@ -346,6 +366,7 @@ jobs:
       - name: Smoke-run examples (no optional deps)
         env:
           DKX_OFFLINE: "1"
+          MPLCONFIGDIR: ${{ runner.temp }}/matplotlib
         run: |
           python tools/parity/output_parity_cli_driver.py
           python tools/parity/output_key_coverage_report.py
@@ -354,7 +375,7 @@ jobs:
   external-data-smoke:
     needs: changes
     if: needs.changes.outputs.code == 'true' && github.event_name != 'pull_request'
-    runs-on: ubuntu-22.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(vars.CI_RUNS_ON || '"ubuntu-22.04"') || 'ubuntu-22.04' }}
     timeout-minutes: 10
     env:
       JAX_ENABLE_X64: "True"
@@ -368,15 +389,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+      - name: Tool cache for self-hosted runners
+        if: runner.environment == 'self-hosted'
+        run: echo "AGENT_TOOLSDIRECTORY=$RUNNER_TOOL_CACHE" >> "$GITHUB_ENV"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: "pyproject.toml"
+          enable-cache: false
+          activate-environment: true
+          venv-path: ${{ runner.temp }}/venv
       - name: Install
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          uv pip install -e ".[dev]"
       - name: Fetch release-hosted equilibrium data
         env:
           DKX_DATA_DIR: "${{ runner.temp }}/dkx_release_data"
@@ -436,7 +460,7 @@ jobs:
     # into the squash message, and the account showed up in the repository's
     # contributor list. Nothing in CI looked at commit messages, so the only
     # signal was the contributor graph. This job is that missing signal.
-    runs-on: ubuntu-22.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(vars.CI_RUNS_ON || '"ubuntu-22.04"') || 'ubuntu-22.04' }}
     timeout-minutes: 5
     if: github.event_name == 'pull_request' && !github.event.pull_request.draft
     steps:
@@ -484,7 +508,7 @@ jobs:
     # is being built, before the grid is read at all.
     needs: changes
     if: needs.changes.outputs.code == 'true' && (github.event_name != 'pull_request' || needs.changes.outputs.packaging == 'true')
-    runs-on: ubuntu-22.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(vars.CI_RUNS_ON || '"ubuntu-22.04"') || 'ubuntu-22.04' }}
     timeout-minutes: 10
     env:
       JAX_ENABLE_X64: "True"
@@ -498,11 +522,15 @@ jobs:
           persist-credentials: false
           # Retain the tested merge and its parents even if remote PR refs move.
           fetch-depth: 0
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+      - name: Tool cache for self-hosted runners
+        if: runner.environment == 'self-hosted'
+        run: echo "AGENT_TOOLSDIRECTORY=$RUNNER_TOOL_CACHE" >> "$GITHUB_ENV"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: "pyproject.toml"
+          enable-cache: false
+          activate-environment: true
+          venv-path: ${{ runner.temp }}/venv
       - name: Keep the JAX compilation cache out of the runner's home
         run: |
           # A cache that outlives the job would let a later run skip the compile
@@ -512,9 +540,11 @@ jobs:
           # all, and reports only "this run likely failed because of a workflow
           # file issue".
           echo "DKX_COMPILATION_CACHE_DIR=${RUNNER_TEMP}/jax_compilation_cache" >> "$GITHUB_ENV"
+          # A font list cached in the shared home can name a matplotlib that no longer exists.
+          echo "MPLCONFIGDIR=${RUNNER_TEMP}/matplotlib" >> "$GITHUB_ENV"
       - name: Build and check the wheel and source distribution
         run: |
-          python -m pip install --upgrade pip build twine
+          uv pip install build twine
           python -m build --outdir dist
           python -m twine check dist/*
       - name: Every declared package-data file is in both artifacts
@@ -686,7 +716,7 @@ jobs:
   # and is exercised by the coverage shards.
 
   tests:
-    runs-on: ubuntu-22.04
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(vars.CI_RUNS_ON || '"ubuntu-22.04"') || 'ubuntu-22.04' }}
     timeout-minutes: 5
     needs:
       - coverage-report
