@@ -140,15 +140,9 @@ Full linearized Fokker–Planck conserves momentum; pitch-angle scattering is fa
 
 W7-X program 20160309.010: electron roots in the core, ion roots at the edge; `dkx roots` prints
 every classified root.
-The comparison with the published XICS profile is qualitative. Convergence is checked by refining the phase-space grid
-until every root and selected flux moves by less than 2%:
+The XICS comparison is qualitative. Converged roots, every flux within 2% between grid rungs:
 
 ![Ambipolar roots of W7-X and HSX at successive grid rungs](docs/_static/figures/readme/ambipolar_rung_gates.png)
-
-W7-X standard, five surfaces, seven roots: 1.80% largest change for angles and pitch, 0.32% for speed,
-under 5 GiB per solve. HSX QHS with representative profiles: one ion root per surface, 0.68%.
-`validation/w7x_ambipolar_rung_gate_v1.json` and `validation/hsx_ambipolar_rung_gate_v1.json` hold the roots
-and fluxes; `tools/paper_benchmarks/audit_ambipolar_rung_gate.py` recomputes the gate.
 
 ### Phi1 and impurities
 
@@ -213,8 +207,7 @@ cold-ion, hot-electron plasma. With that cutoff set to zero, the two codes agree
 The HSX-like gap deck (633,604 unknowns, `Nx = 16`) is a case **SFINCS does not solve** on a 36 GiB
 host: two routes run out of memory and its GMRES stagnates at 0.9955. DKX's default route converges
 it to a true relative residual of **9.0e-9** in 611 iterations (1,658 s, 26.8 GiB peak on a 62 GiB
-host; sealed in `validation/hsx_gap_deck_v1.json`). Out of core, MUMPS reaches 4.8e-11 in 4,774 s. DKX assembles its operator exactly from 4,800
-products and solves the 66,004-unknown reduction to 1.3e-14.
+host; sealed in `validation/hsx_gap_deck_v1.json`).
 
 ## Where DKX converges, and why
 
