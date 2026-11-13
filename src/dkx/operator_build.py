@@ -623,8 +623,8 @@ def kinetic_operator_build_from_namelist(nml: Any) -> KineticOperatorBuild:
     fp_phi1 = None
     sugama = None
     # &otherNumericalParameters RosenbluthMethod selects how the Fokker-Planck
-    # Rosenbluth response matrices are integrated ('quadpack' for Fortran
-    # parity, 'hybrid', or 'analytic').  Resolved eagerly so a mistyped deck
+    # Rosenbluth response matrices are integrated ('gauss', traced, or
+    # 'quadpack' for Fortran parity).  Resolved eagerly so a mistyped deck
     # fails on any collisionOperator, not only the branches that consume it.
     rosenbluth_method = resolve_rosenbluth_method(_get_str_or_none(other, "RosenbluthMethod"))
     if include_phi1_in_collision and collision_operator != 0:

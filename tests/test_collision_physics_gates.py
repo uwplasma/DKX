@@ -16,10 +16,8 @@ from dkx.collisions import (
     make_pitch_angle_scattering_v3_operator,
     nu_d_hat_pitch_angle_scattering_v3,
     polynomial_interpolation_matrix_np,
-    rosenbluth_potential_terms_v3_np,
     prepare_fokker_planck_v3_profiles,
 )
-from dkx.xgrid import make_x_grid
 from dkx.phase_space import make_speed_grid, speed_grid_diff_matrices
 
 
@@ -160,29 +158,6 @@ def test_weighted_barycentric_interpolation_is_exact_for_polynomials() -> None:
     source = alpxk * polynomial(xk)
     expected = alpx * polynomial(x)
     np.testing.assert_allclose(mat @ source, expected, rtol=2.0e-15, atol=2.0e-15)
-
-
-def test_rosenbluth_analytic_terms_match_quadpack_reference() -> None:
-    xg = make_x_grid(n=3, k=0.0, include_point_at_x0=False)
-    kwargs = {
-        "x": xg.x,
-        "x_weights": xg.dx_weights(),
-        "x_grid_k": 0.0,
-        "xg": xg,
-        "z_s": np.asarray([1.0], dtype=np.float64),
-        "m_hats": np.asarray([1.0], dtype=np.float64),
-        "n_hats": np.asarray([1.0], dtype=np.float64),
-        "t_hats": np.asarray([1.0], dtype=np.float64),
-        "nl": 2,
-    }
-
-    quadpack = rosenbluth_potential_terms_v3_np(**kwargs, method="quadpack")
-    analytic = rosenbluth_potential_terms_v3_np(**kwargs, method="analytic")
-
-    assert quadpack.shape == (1, 1, 2, 3, 3)
-    assert np.all(np.isfinite(quadpack))
-    assert np.all(np.isfinite(analytic))
-    np.testing.assert_allclose(analytic, quadpack, rtol=2.0e-13, atol=2.0e-13)
 
 
 def test_fokker_planck_apply_matches_dense_x_matvec_and_masks_inactive_l() -> None:

@@ -160,112 +160,6 @@ def polynomial_interpolation_matrix_np(
             mat[i, j] *= factor
     return mat
 
-def _poly_coeffs_monomial(xg: XGrid) -> list[np.ndarray]:
-    """Return monomial coefficients for the orthogonal polynomials used by v3 `xGrid`.
-
-    The returned list is 0-based: `coeffs[j-1]` corresponds to the Fortran polynomial index `j`.
-    Coefficients are in ascending powers, i.e. `p(x) = sum_m coeff[m] * x**m`.
-    """
-    n = int(xg.x.size)
-    # Forming high-order monomial coefficients is intrinsically more poorly
-    # conditioned than evaluating the polynomials with their 3-term
-    # recurrence.  Keep the coefficient construction in extended precision:
-    # these coefficients are only used by the analytic moment integrals below,
-    # where several individually large monomial moments can cancel.
-    dtype = np.longdouble
-    a = np.asarray(xg.poly_a, dtype=dtype)
-    b = np.asarray(xg.poly_b, dtype=dtype)
-
-    coeffs: list[np.ndarray] = []
-    coeffs.append(np.array([1.0], dtype=dtype))  # j=1
-    if n == 1:
-        return coeffs
-
-    coeffs.append(np.array([-a[1], 1.0], dtype=dtype))  # j=2
-    for j in range(2, n):
-        aj = a[j]
-        bj = b[j]
-        p_j = coeffs[j - 1]
-        p_jm1 = coeffs[j - 2]
-
-        # (x - aj) * p_j
-        out = np.zeros((p_j.size + 1,), dtype=dtype)
-        out[0] = -aj * p_j[0]
-        for m in range(1, p_j.size):
-            out[m] = p_j[m - 1] - aj * p_j[m]
-        out[-1] = p_j[-1]
-
-        # - bj * p_{j-1}
-        out[: p_jm1.size] -= bj * p_jm1
-        coeffs.append(out)
-    return coeffs
-
-def _monomial_int_lower(xb: float, n: int) -> float:
-    """∫_0^xb t^n e^{-t^2} dt (n >= 0)."""
-    if n < 0:
-        raise ValueError("lower monomial integral is only used for n >= 0 in v3")
-    a = 0.5 * (n + 1.0)
-    return float(0.5 * sp_special.gamma(a) * sp_special.gammainc(a, xb * xb))
-
-def _monomial_int_upper(xb: float, n: int) -> float:
-    """∫_xb^∞ t^n e^{-t^2} dt for any integer ``n`` used by v3.
-
-    The result is ``Gamma((n+1)/2, xb**2) / 2``.  SciPy's regularized
-    incomplete-gamma functions do not accept non-positive shape parameters,
-    so continue the upper incomplete gamma downward from ``a=0`` (integer
-    branch) or ``a=1/2`` (half-integer branch).  This removes the last
-    QUADPACK calls from the analytic Rosenbluth path, including the sharply
-    peaked negative-power integrals at electron/ion mass ratios.
-    """
-    if n >= 0:
-        a = 0.5 * (n + 1.0)
-        return float(0.5 * sp_special.gamma(a) * sp_special.gammaincc(a, xb * xb))
-
-    x2 = float(xb * xb)
-    target = 0.5 * (n + 1.0)
-    if target < 0.0 and x2 >= 1.0:
-        # Downward recurrence subtracts two nearly equal exponentially small
-        # numbers when x is large.  Lentz's continued fraction evaluates the
-        # *unregularized* Gamma(a,x) directly and remains well scaled there.
-        tiny = 1e-300
-        b_cf = x2 + 1.0 - target
-        c_cf = 1.0 / tiny
-        d_cf = 1.0 / b_cf
-        h_cf = d_cf
-        for iteration in range(1, 10001):
-            an = -float(iteration) * (float(iteration) - target)
-            b_cf += 2.0
-            d_cf = an * d_cf + b_cf
-            if abs(d_cf) < tiny:
-                d_cf = tiny
-            c_cf = b_cf + an / c_cf
-            if abs(c_cf) < tiny:
-                c_cf = tiny
-            d_cf = 1.0 / d_cf
-            update = d_cf * c_cf
-            h_cf *= update
-            if abs(update - 1.0) < 2e-15:
-                break
-        upper_gamma = math.exp(-x2 + target * math.log(x2)) * h_cf
-        return float(0.5 * upper_gamma)
-
-    if n % 2:
-        # Odd n -> integer target.  Gamma(0, x) = E1(x).
-        current = 0.0
-        upper_gamma = float(sp_special.exp1(x2))
-    else:
-        # Even n -> half-integer target.  Start from Gamma(1/2, x).
-        current = 0.5
-        upper_gamma = float(math.sqrt(math.pi) * sp_special.gammaincc(0.5, x2))
-
-    exp_minus_x2 = math.exp(-x2)
-    while current > target:
-        next_a = current - 1.0
-        # Gamma(a+1,x) = a Gamma(a,x) + x^a exp(-x).
-        upper_gamma = (upper_gamma - (x2**next_a) * exp_minus_x2) / next_a
-        current = next_a
-    return float(0.5 * upper_gamma)
-
 def _evaluate_polynomial_v3(x: float, *, j: int, a: np.ndarray, b: np.ndarray) -> float:
     """Evaluate v3's orthogonal polynomial p_j(x) using the 3-term recurrence.
 
@@ -281,7 +175,7 @@ def _evaluate_polynomial_v3(x: float, *, j: int, a: np.ndarray, b: np.ndarray) -
         pj_minus1, pj = pj, y
     return float(y)
 
-def _rosenbluth_potential_terms_v3_np_quadpack(
+def rosenbluth_potential_terms_v3_np(
     *,
     x: np.ndarray,
     x_weights: np.ndarray,
@@ -293,7 +187,7 @@ def _rosenbluth_potential_terms_v3_np_quadpack(
     t_hats: np.ndarray,
     nl: int,
 ) -> np.ndarray:
-    """Quadpack-based Rosenbluth response matrices matching v3 `xGrid.F90`.
+    """Host QUADPACK Rosenbluth response matrices matching v3 `xGrid.F90` (``RosenbluthMethod = 'quadpack'``).
 
     This implementation intentionally mirrors the upstream Fortran algorithm:
     - Polynomials are evaluated via the 3-term recurrence (not monomial expansion).
@@ -430,8 +324,8 @@ def _rosenbluth_potential_terms_v3_np_quadpack(
 
     return terms
 
-ROSENBLUTH_METHODS: tuple[str, ...] = ("quadpack", "analytic", "hybrid", "gauss")
-"""Accepted ``rosenbluth_method`` values, in order of increasing Fortran divergence."""
+ROSENBLUTH_METHODS: tuple[str, ...] = ("gauss", "quadpack")
+"""Accepted ``rosenbluth_method`` values: traced quadrature (default) and the host v3 QUADPACK parity route."""
 
 def resolve_rosenbluth_method(method: str | None) -> str:
     """Normalize and validate a Rosenbluth-quadrature selector.
@@ -443,7 +337,8 @@ def resolve_rosenbluth_method(method: str | None) -> str:
     with neither set the default is ``"gauss"``: traced Gauss-Legendre
     quadrature that reproduces the upstream Fortran v3 QUADPACK matrices to
     ~1e-14 on the reference decks and stays differentiable in the profiles.
-    ``"quadpack"`` selects the host QUADPACK algorithm itself.
+    ``"quadpack"`` is the single parity switch: the host QUADPACK algorithm
+    itself, used by every operator builder (full FP, Phi1, improved Sugama).
 
     Raises:
         ValueError: for any selector outside :data:`ROSENBLUTH_METHODS`, so a
@@ -466,189 +361,6 @@ def resolve_rosenbluth_method(method: str | None) -> str:
             "argument, or the DKX_ROSENBLUTH_METHOD override)."
         )
     return resolved
-
-def rosenbluth_potential_terms_v3_np(
-    *,
-    x: np.ndarray,  # (X,)
-    x_weights: np.ndarray,  # (X,) dx weights (as in v3 createGrids.F90)
-    x_grid_k: float,
-    xg: XGrid,
-    z_s: np.ndarray,  # (S,)
-    m_hats: np.ndarray,  # (S,)
-    n_hats: np.ndarray,  # (S,)
-    t_hats: np.ndarray,  # (S,)
-    nl: int,
-    method: str | None = None,
-) -> np.ndarray:
-    """Compute v3 `RosenbluthPotentialTerms` for xGridScheme=5/6 (new scheme).
-
-    Args:
-        method: one of :data:`ROSENBLUTH_METHODS`, resolved by
-            :func:`resolve_rosenbluth_method` (``None`` consults
-            ``DKX_ROSENBLUTH_METHOD`` and then falls back to ``"gauss"``,
-            which this host function evaluates as ``"quadpack"``).
-
-    Returns
-    -------
-    terms:
-      Array of shape (S, S, NL, X, X) with index ordering:
-      (species_row, species_col, L, x_row, x_col).
-    """
-    method = resolve_rosenbluth_method(method)
-
-    if method in ("quadpack", "gauss"):  # "gauss" is a whole-operator route; terms stay host QUADPACK
-        return _rosenbluth_potential_terms_v3_np_quadpack(
-            x=x,
-            x_weights=x_weights,
-            x_grid_k=x_grid_k,
-            xg=xg,
-            z_s=z_s,
-            m_hats=m_hats,
-            n_hats=n_hats,
-            t_hats=t_hats,
-            nl=nl,
-        )
-    if method == "hybrid":
-        # L=0 and L=1 own the particle/energy and parallel-momentum
-        # conservation moments.  Keep the warning-free low-L QUADPACK values
-        # (and L=2,3 for a small parity margin), then use closed-form moments
-        # for the high-L blocks in which near-zero cancellation and negative
-        # powers make the fixed 1e-13 QUADPACK tolerance ill-conditioned.
-        terms = rosenbluth_potential_terms_v3_np(
-            x=x,
-            x_weights=x_weights,
-            x_grid_k=x_grid_k,
-            xg=xg,
-            z_s=z_s,
-            m_hats=m_hats,
-            n_hats=n_hats,
-            t_hats=t_hats,
-            nl=nl,
-            method="analytic",
-        )
-        nl_quadpack = min(int(nl), 4)
-        if nl_quadpack:
-            terms[:, :, :nl_quadpack, :, :] = _rosenbluth_potential_terms_v3_np_quadpack(
-                x=x,
-                x_weights=x_weights,
-                x_grid_k=x_grid_k,
-                xg=xg,
-                z_s=z_s,
-                m_hats=m_hats,
-                n_hats=n_hats,
-                t_hats=t_hats,
-                nl=nl_quadpack,
-            )
-        return terms
-    if method != "analytic":
-        # Unreachable through resolve_rosenbluth_method; a structural guard so
-        # a new entry in ROSENBLUTH_METHODS without a branch here fails loudly
-        # rather than falling through to the analytic path.
-        raise ValueError(f"RosenbluthPotentialTerms method={method!r} has no branch.")
-
-    x = np.asarray(x, dtype=np.float64)
-    x_weights = np.asarray(x_weights, dtype=np.float64)
-    z_s = np.asarray(z_s, dtype=np.float64)
-    m_hats = np.asarray(m_hats, dtype=np.float64)
-    n_hats = np.asarray(n_hats, dtype=np.float64)
-    t_hats = np.asarray(t_hats, dtype=np.float64)
-
-    n_x = int(x.size)
-    n_species = int(z_s.size)
-    expx2 = np.exp(-(x * x))
-
-    # collocation2modal(j,i) in the Fortran code.  Use the stable 3-term
-    # recurrence for point evaluation; monomial coefficients are reserved for
-    # the analytic integrals below.
-    poly_coeffs = _poly_coeffs_monomial(xg)
-    poly_c = np.asarray(xg.poly_c, dtype=np.float64)
-    poly_a = np.asarray(xg.poly_a, dtype=np.float64)
-    poly_b = np.asarray(xg.poly_b, dtype=np.float64)
-    pvals = np.zeros((n_x, n_x), dtype=np.float64)  # (j,i)
-    for j in range(1, n_x + 1):
-        for i in range(n_x):
-            pvals[j - 1, i] = _evaluate_polynomial_v3(float(x[i]), j=j, a=poly_a, b=poly_b)
-    collocation2modal = (x_weights[None, :] * (x[None, :] ** float(x_grid_k)) * pvals) / (
-        poly_c[1 : n_x + 1, None]
-    )
-
-    terms = np.zeros((n_species, n_species, int(nl), n_x, n_x), dtype=np.float64)
-    pi = float(_V3_PI)
-
-    for ell in range(int(nl)):
-        alpha = -float(2 * ell - 1) / float(2 * ell + 3)
-        denom_h = float(2 * ell + 1)
-        denom_g = float(4 * ell * ell - 1)
-        for ia in range(n_species):
-            for ib in range(n_species):
-                species_factor = float(
-                    math.sqrt((t_hats[ia] * m_hats[ib]) / (t_hats[ib] * m_hats[ia]))
-                )
-                species_factor2 = float(3.0 / (2.0 * pi)) * float(n_hats[ia]) * float(z_s[ia] ** 2) * float(
-                    z_s[ib] ** 2
-                )
-                species_factor2 *= float(t_hats[ib] * m_hats[ia]) / float(t_hats[ia] * m_hats[ib])
-                species_factor2 /= float(t_hats[ia] * math.sqrt(t_hats[ia] * m_hats[ia]))
-
-                temp_h = np.zeros((n_x, n_x), dtype=np.float64)
-                temp_dh = np.zeros((n_x, n_x), dtype=np.float64)
-                temp_d2g = np.zeros((n_x, n_x), dtype=np.float64)
-
-                for ix in range(n_x):
-                    xb = float(x[ix] * species_factor)
-                    xb_safe = xb if xb > 0 else 1e-14
-                    xb_pow_l = xb_safe**ell
-                    xb_pow_lm1 = xb_safe ** (ell - 1) if ell >= 1 else xb_safe ** (-1)
-                    xb_pow_lm2 = xb_safe ** (ell - 2) if ell >= 2 else xb_safe ** (-2)
-
-                    for j in range(1, n_x + 1):
-                        coeff = poly_coeffs[j - 1]
-
-                        def poly_int_lower(base_power: int) -> float:
-                            moments = np.asarray(
-                                [_monomial_int_lower(xb_safe, base_power + m) for m in range(coeff.size)],
-                                dtype=np.longdouble,
-                            )
-                            return float(np.sum(coeff * moments, dtype=np.longdouble))
-
-                        def poly_int_upper(base_power: int) -> float:
-                            moments = np.asarray(
-                                [_monomial_int_upper(xb_safe, base_power + m) for m in range(coeff.size)],
-                                dtype=np.longdouble,
-                            )
-                            return float(np.sum(coeff * moments, dtype=np.longdouble))
-
-                        i_2pl = poly_int_lower(ell + 2)
-                        i_4pl = poly_int_lower(ell + 4)
-                        i_1ml = poly_int_upper(1 - ell)
-                        i_3ml = poly_int_upper(3 - ell)
-
-                        temp_h[ix, j - 1] = (4.0 * pi / denom_h) * (
-                            i_2pl / (xb_safe ** (ell + 1)) + xb_pow_l * i_1ml
-                        )
-                        temp_dh[ix, j - 1] = (4.0 * pi / denom_h) * (
-                            -(ell + 1) * i_2pl / (xb_safe ** (ell + 2)) + ell * xb_pow_lm1 * i_1ml
-                        )
-                        temp_d2g[ix, j - 1] = (-4.0 * pi / denom_g) * (
-                            ell * (ell - 1) * xb_pow_lm2 * i_3ml
-                            + alpha * (ell + 1) * (ell + 2) * xb_pow_l * i_1ml
-                            + alpha * (ell + 1) * (ell + 2) * i_4pl / (xb_safe ** (ell + 3))
-                            + ell * (ell - 1) * i_2pl / (xb_safe ** (ell + 1))
-                        )
-
-                temp_combined = np.zeros((n_x, n_x), dtype=np.float64)
-                mass_ratio = float(m_hats[ia] / m_hats[ib])
-                for i in range(n_x):
-                    xb = float(x[i] * species_factor)
-                    temp_combined[i, :] = species_factor2 * expx2[i] * (
-                        -temp_h[i, :]
-                        - (1.0 - mass_ratio) * xb * temp_dh[i, :]
-                        + float(x[i] * x[i]) * temp_d2g[i, :]
-                    )
-
-                terms[ia, ib, ell, :, :] = temp_combined @ collocation2modal
-
-    return terms
 
 @jtu.register_pytree_node_class
 @dataclass(frozen=True)
@@ -785,15 +497,23 @@ class FokkerPlanckV3Operator:
         mat, n_xi_for_x, mask_xi = children
         return cls(mat=mat, n_xi_for_x=n_xi_for_x, mask_xi=mask_xi)
 
+def _gauss_key(x, x_weights, ddx, d2dx2, z_s, m_hats, x_grid_k, nu_n, krook, nl, alpha, n_xi_for_x):
+    frozen = [np.asarray(v, dtype=np.float64) for v in (x, x_weights, ddx, d2dx2, z_s, m_hats)]
+    return (*((a.shape, tuple(a.ravel().tolist())) for a in frozen), float(x_grid_k), float(nu_n),
+            float(krook), int(nl), float(alpha), tuple(np.asarray(n_xi_for_x).ravel().tolist()))
+
 @lru_cache(maxsize=16)
-def _gauss_fokker_planck_v3(key):
-    """Jitted ``(n_hats, t_hats) -> FokkerPlanckV3Operator`` for one static layout."""
-    x, weights, ddx, d2dx2, z_s, m_hats, k, nu_n, krook, nl, n_xi, layout = key
+def _gauss_builder(key, n_xi=None):
+    """Jitted ``(n_hats, t_hats) -> operator`` for one static layout: the Phi1 kernels, or the
+    uniform-density FP operator when ``n_xi`` is given."""
+    x, weights, ddx, d2dx2, z_s, m_hats, k, nu_n, krook, nl, alpha, layout = key
     arr = lambda item: np.array(item[1], dtype=np.float64).reshape(item[0])
     build = prepare_fokker_planck_v3_profiles(
         x=arr(x), x_weights=arr(weights), ddx=arr(ddx), d2dx2=arr(d2dx2), x_grid_k=k,
-        z_s=arr(z_s), m_hats=arr(m_hats), nu_n=nu_n, krook=krook, nl=nl,
+        z_s=arr(z_s), m_hats=arr(m_hats), nu_n=nu_n, krook=krook, nl=nl, alpha=alpha,
         n_xi_for_x=np.array(layout, dtype=np.int32), v3_parity=True)
+    if n_xi is None:
+        return jax.jit(build)
     return jax.jit(lambda n, t: build(n, t).at_uniform_density(n, n_xi=n_xi))
 
 def make_fokker_planck_v3_operator(
@@ -827,10 +547,8 @@ def make_fokker_planck_v3_operator(
             result is differentiable in them (``strict_parity`` does not apply).
     """
     if resolve_rosenbluth_method(rosenbluth_method) == "gauss":
-        frozen = [np.asarray(v, dtype=np.float64) for v in (x, x_weights, ddx, d2dx2, z_s, m_hats)]
-        key = (*((a.shape, tuple(a.ravel().tolist())) for a in frozen), float(x_grid_k),
-               float(nu_n), float(krook), int(nl), int(n_xi), tuple(np.asarray(n_xi_for_x).ravel().tolist()))
-        return _gauss_fokker_planck_v3(key)(n_hats, t_hats)
+        key = _gauss_key(x, x_weights, ddx, d2dx2, z_s, m_hats, x_grid_k, nu_n, krook, nl, 1.0, n_xi_for_x)
+        return _gauss_builder(key, int(n_xi))(n_hats, t_hats)
     x = np.asarray(x, dtype=np.float64)
     x_weights = np.asarray(x_weights, dtype=np.float64)
     ddx = np.asarray(ddx, dtype=np.float64)
@@ -860,7 +578,6 @@ def make_fokker_planck_v3_operator(
         n_hats=n_hats,
         t_hats=t_hats,
         nl=int(nl),
-        method=rosenbluth_method,
     )  # (S,S,NL,X,X)
 
     # Build nuDHat and CECD (both omit the overall factor nu_n, matching v3).
@@ -1304,8 +1021,12 @@ def make_fokker_planck_v3_phi1_operator(
     `n_pol = nHat * exp(-Z*alpha*Phi1Hat/THat)`.
 
     Args:
-        rosenbluth_method: as in :func:`make_fokker_planck_v3_operator`.
+        rosenbluth_method: as in :func:`make_fokker_planck_v3_operator`; ``"gauss"`` builds the
+            kernels traced (``n_hats`` and ``t_hats`` may be tracers).
     """
+    if resolve_rosenbluth_method(rosenbluth_method) == "gauss":
+        key = _gauss_key(x, x_weights, ddx, d2dx2, z_s, m_hats, x_grid_k, nu_n, krook, nl, alpha, n_xi_for_x)
+        return _gauss_builder(key)(n_hats, t_hats)
     x = np.asarray(x, dtype=np.float64)
     x_weights = np.asarray(x_weights, dtype=np.float64)
     ddx = np.asarray(ddx, dtype=np.float64)
@@ -1336,7 +1057,6 @@ def make_fokker_planck_v3_phi1_operator(
         n_hats=np.ones_like(n_hats),
         t_hats=t_hats,
         nl=int(nl),
-        method=rosenbluth_method,
     )  # (S,S,NL,X,X)
 
     k_nu = np.zeros((n_species, n_species, n_x), dtype=np.float64)
@@ -1651,7 +1371,7 @@ def make_improved_sugama_v3_operator(
     n_xi_for_x: np.ndarray,
     x_grid_k: float = 0.0,
     flow_order: int = 5,
-    rosenbluth_method: str | None = "analytic",
+    rosenbluth_method: str | None = None,
 ) -> ImprovedSugamaV3Operator:
     """Construct the improved Sugama model collision operator (``collisionOperator=3``).
 
