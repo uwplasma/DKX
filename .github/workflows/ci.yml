@@ -16,6 +16,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   # Working-method rule 5: the pull-request gate is tier 1, and tier 1 is the
   # work the change can actually break. The full suite is 9 shards on a warm
@@ -31,8 +34,9 @@ jobs:
       code: ${{ steps.filter.outputs.code }}
       packaging: ${{ steps.filter.outputs.packaging }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          persist-credentials: false
           fetch-depth: 0
       - id: filter
         env:
@@ -78,8 +82,10 @@ jobs:
       JAX_ENABLE_X64: "True"
       DKX_CI: "1"
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.11"
       - name: Install
@@ -187,8 +193,10 @@ jobs:
       DKX_FAST_EXAMPLES: "1"
       COVERAGE_FILE: ".coverage.${{ matrix.group }}"
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.11"
           cache: "pip"
@@ -215,7 +223,7 @@ jobs:
         # recompiles only what it changed. The key carries the jax version and
         # the dependency declaration; a miss costs compile time, never accuracy.
         id: restore
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ runner.temp }}/jax_compilation_cache
           key: jaxcc-${{ matrix.group }}-jax${{ steps.jaxcache.outputs.jax }}-${{ hashFiles('pyproject.toml') }}-${{ github.run_id }}
@@ -242,12 +250,12 @@ jobs:
             tests/test_vmex_kinetic_gradient.py::test_ambipolar_roots_run_before_the_traced_row_which_then_holds_no_callback
       - name: Save the JAX compilation cache
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ runner.temp }}/jax_compilation_cache
           key: jaxcc-${{ matrix.group }}-jax${{ steps.jaxcache.outputs.jax }}-${{ hashFiles('pyproject.toml') }}-${{ github.run_id }}
       - name: Upload coverage data
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: coverage-${{ matrix.group }}
           path: .coverage.${{ matrix.group }}
@@ -262,8 +270,10 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.11"
           cache: "pip"
@@ -273,7 +283,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install "coverage[toml]"
       - name: Download coverage data
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: coverage-*
           path: coverage-parts
@@ -288,7 +298,7 @@ jobs:
           python -c 'import json; t = json.load(open("coverage.json"))["totals"]; assert 20 * t["covered_lines"] > 19 * t["num_statements"], "aggregate coverage must exceed 95%"'
           python -m coverage xml
       - name: Upload coverage
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v6
         continue-on-error: true
         with:
           files: ./coverage.xml
@@ -309,8 +319,10 @@ jobs:
       DKX_CI: "1"
       DKX_FAST_EXAMPLES: "1"
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.11"
           cache: "pip"
@@ -347,8 +359,10 @@ jobs:
       DKX_CI: "1"
       DKX_FAST_EXAMPLES: "1"
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.11"
           cache: "pip"
@@ -392,7 +406,9 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
       - name: Run the pinned actionlint binary
         env:
           ACTIONLINT_VERSION: "1.7.12"
@@ -418,8 +434,9 @@ jobs:
     timeout-minutes: 5
     if: github.event_name == 'pull_request' && !github.event.pull_request.draft
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          persist-credentials: false
           fetch-depth: 0
       - name: Reject assistant authorship trailers
         env:
@@ -470,11 +487,12 @@ jobs:
       # prove it: any reach for the release-hosted data archive fails here.
       DKX_OFFLINE: "1"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          persist-credentials: false
           # Retain the tested merge and its parents even if remote PR refs move.
           fetch-depth: 0
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.11"
           cache: "pip"
@@ -648,7 +666,7 @@ jobs:
             --full-clone "${RUNNER_TEMP}/full-clone" \
             --json-out "${RUNNER_TEMP}/package-sizes.json"
       - name: Upload the size evidence
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: package-sizes
           path: ${{ runner.temp }}/package-sizes.json
