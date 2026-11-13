@@ -1,15 +1,12 @@
-import warnings
 from pathlib import Path
 
 import numpy as np
 import pytest
 import jax
 import jax.numpy as jnp
-from scipy.integrate import IntegrationWarning
 
 from dkx.collisions import (
     ROSENBLUTH_METHODS,
-    _monomial_int_upper,
     resolve_rosenbluth_method,
     rosenbluth_potential_terms_v3_np,
     prepare_fokker_planck_v3_profiles,
@@ -39,36 +36,6 @@ def _east_three_species_case(nl: int) -> tuple[dict[str, object], object]:
     return kwargs, xg
 
 
-def test_negative_power_upper_moments_cover_small_and_large_species_speed() -> None:
-    # 80-digit mpmath references for Gamma((n+1)/2, xb**2)/2.  The first
-    # case exercises the sharply peaked small-x electron/ion integral and the
-    # second the exponentially small large-x continuation.
-    cases = (
-        (4.929789984040181e-4, -14, 7.573333596728916e41),
-        (22.88985968775449, -14, 5.642165067724352e-249),
-    )
-    for xb, power, expected in cases:
-        got = _monomial_int_upper(xb, power)
-        assert np.isfinite(got)
-        assert got > 0.0
-        assert np.isclose(got, expected, rtol=2e-13, atol=0.0)
-
-
-def test_hybrid_rosenbluth_is_warning_free_and_keeps_low_l_quadpack_parity() -> None:
-    kwargs, _ = _east_three_species_case(nl=5)
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        hybrid = rosenbluth_potential_terms_v3_np(**kwargs, method="hybrid")
-
-    assert np.isfinite(hybrid).all()
-    assert not any(isinstance(item.message, IntegrationWarning) for item in caught)
-
-    low_l_kwargs = dict(kwargs)
-    low_l_kwargs["nl"] = 4
-    quadpack = rosenbluth_potential_terms_v3_np(**low_l_kwargs, method="quadpack")
-    assert np.array_equal(hybrid[:, :, :4], quadpack)
-
-
 def test_prepared_electron_ion_responses_converge_and_differentiate_against_quadpack():
     kwargs, xg = _east_three_species_case(nl=4)
     kwargs["t_hats"] = np.array([1.2, .8, 1.4])
@@ -83,7 +50,7 @@ def test_prepared_electron_ion_responses_converge_and_differentiate_against_quad
         return jax.jit(build)
 
     t = jnp.asarray(kwargs["t_hats"])
-    reference = rosenbluth_potential_terms_v3_np(**kwargs, method="quadpack")
+    reference = rosenbluth_potential_terms_v3_np(**kwargs)
     scales = np.max(np.abs(reference), axis=(-1, -2), keepdims=True)
     errors = []
     for order in (32, 64, 128):
@@ -103,8 +70,8 @@ def test_prepared_electron_ion_responses_converge_and_differentiate_against_quad
     tangent = jax.jvp(response, (t,), (direction,))[1]
     fd_errors = []
     for step in (1e-3, 3e-4, 1e-4):
-        plus = rosenbluth_potential_terms_v3_np(**{**kwargs, "t_hats": np.asarray(t+step*direction)}, method="quadpack")
-        minus = rosenbluth_potential_terms_v3_np(**{**kwargs, "t_hats": np.asarray(t-step*direction)}, method="quadpack")
+        plus = rosenbluth_potential_terms_v3_np(**{**kwargs, "t_hats": np.asarray(t+step*direction)})
+        minus = rosenbluth_potential_terms_v3_np(**{**kwargs, "t_hats": np.asarray(t-step*direction)})
         fd_errors.append(float(np.max(np.abs(np.asarray(tangent)-(plus-minus)/(2*step))/scales)))
     assert fd_errors[-1] < 2e-8, fd_errors
     # Independent QUADPACK central differences must approach the tangent
@@ -137,8 +104,7 @@ def test_high_l_prepared_response_matches_80_digit_integral_reference():
     # Independent mpmath 80-digit integrals of t^p P_j(t) exp(-t²),
     # using the stored float64 grid/recurrence and v3 pi constant. The upper
     # integrals are split at max(10,2*xb) and extend to infinity; accumulate
-    # H and G'' and the modal projection at 80 digits. The existing analytic
-    # monomial route misses this entry by 1.28e-4 due to cancellation.
+    # H and G'' and the modal projection at 80 digits.
     reference = -1772.5765410647286686749207961405177489297929584892556157086
     for response in responses:
         np.testing.assert_allclose(response[0, 0, 11, 4, 11], reference, rtol=2e-12, atol=0)
@@ -153,9 +119,6 @@ def test_high_l_prepared_response_matches_80_digit_integral_reference():
 
 
 def _fp_operator(rosenbluth_line: str = "") -> KineticOperator:
-    # NL = Nxi = 6 so the assembled operator actually reaches the hybrid
-    # route's analytic L >= 4 blocks (below that hybrid is QUADPACK by
-    # construction and the comparison would be vacuous).
     text = (
         (REF / f"{_FP_DECK}.input.namelist")
         .read_text()
@@ -179,16 +142,16 @@ def test_rosenbluth_method_resolution_prefers_the_explicit_route() -> None:
 
 
 def test_env_var_overrides_only_the_unset_route(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("DKX_ROSENBLUTH_METHOD", "hybrid")
-    assert resolve_rosenbluth_method(None) == "hybrid"
+    monkeypatch.setenv("DKX_ROSENBLUTH_METHOD", "quadpack")
+    assert resolve_rosenbluth_method(None) == "quadpack"
     # An explicit namelist/API selection wins over the environment.
-    assert resolve_rosenbluth_method("quadpack") == "quadpack"
+    assert resolve_rosenbluth_method("gauss") == "gauss"
     monkeypatch.setenv("DKX_ROSENBLUTH_METHOD", "not-a-method")
     with pytest.raises(ValueError, match="RosenbluthMethod"):
         resolve_rosenbluth_method(None)
 
 
-def test_builder_api_argument_selects_the_hybrid_rosenbluth_path() -> None:
+def test_builder_api_argument_selects_the_quadpack_rosenbluth_path() -> None:
     from dkx.collisions import make_fokker_planck_v3_operator
     from dkx.phase_space import make_speed_grid, speed_grid_diff_matrices
 
@@ -213,32 +176,18 @@ def test_builder_api_argument_selects_the_hybrid_rosenbluth_path() -> None:
     }
     base = make_fokker_planck_v3_operator(**common)
     same = make_fokker_planck_v3_operator(**common, rosenbluth_method="quadpack")
-    hybrid = make_fokker_planck_v3_operator(**common, rosenbluth_method="hybrid")
 
-    # The default is the traced 'gauss' operator, which reproduces explicit
-    # 'quadpack' to rounding; 'hybrid'
-    # reaches a different quadrature -- with nl = 6 the L >= 4 blocks take the
-    # analytic moments -- without the environment variable ever being set.
+    # The default is the traced 'gauss' operator; explicit 'quadpack' is the host parity route.
     np.testing.assert_allclose(np.asarray(same.mat), np.asarray(base.mat), rtol=1e-12, atol=1e-13)
-    assert not np.array_equal(np.asarray(hybrid.mat), np.asarray(base.mat))
-    np.testing.assert_allclose(
-        np.asarray(hybrid.mat), np.asarray(base.mat), rtol=1e-6, atol=1e-10
-    )
 
     with pytest.raises(ValueError, match="RosenbluthMethod"):
         make_fokker_planck_v3_operator(**common, rosenbluth_method="quadpak")
 
 
-def test_namelist_key_selects_the_hybrid_rosenbluth_path() -> None:
+def test_namelist_key_selects_the_quadpack_rosenbluth_path() -> None:
     base = _fp_operator()
-    hybrid = _fp_operator("RosenbluthMethod = 'hybrid'")
     quadpack = _fp_operator("RosenbluthMethod = 'quadpack'")
-
     np.testing.assert_allclose(np.asarray(quadpack.fp.mat), np.asarray(base.fp.mat), rtol=1e-12, atol=1e-13)
-    assert not np.array_equal(np.asarray(hybrid.fp.mat), np.asarray(base.fp.mat))
-    np.testing.assert_allclose(
-        np.asarray(hybrid.fp.mat), np.asarray(base.fp.mat), rtol=1e-6, atol=1e-10
-    )
 
 
 def test_namelist_key_rejects_an_unknown_method() -> None:

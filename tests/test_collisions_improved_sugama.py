@@ -417,7 +417,7 @@ def test_l1_block_matches_landau_flow_moments_at_unequal_temperature(t_e, m_e, t
 
     kw = _pair_kwargs(t_e, m_e, 10)
     x, w = kw["x"], kw["x_weights"]
-    fp = np.asarray(make_fokker_planck_v3_operator(x_grid_k=0.0, nl=3, rosenbluth_method="analytic", **kw).mat)[:, :, 1]
+    fp = np.asarray(make_fokker_planck_v3_operator(x_grid_k=0.0, nl=3, **kw).mat)[:, :, 1]
     shapes = [x * np.exp(-x * x) * eval_genlaguerre(j, 1.5, x * x) for j in range(4)]
     funcs = [w * x**3 * eval_genlaguerre(j, 1.5, x * x) for j in range(4)]
 
@@ -499,7 +499,7 @@ def test_l1_block_is_as_adjoint_as_the_landau_operator_at_unequal_temperature(t_
     kw["n_xi"] = 2
     kw["n_xi_for_x"] = np.full(16, 2, np.int32)
     sugama = np.asarray(make_improved_sugama_v3_operator(**kw).mat)[:, :, 1]
-    landau = np.asarray(make_fokker_planck_v3_operator(x_grid_k=0.0, nl=2, rosenbluth_method="analytic", **kw).mat)[:, :, 1]
+    landau = np.asarray(make_fokker_planck_v3_operator(x_grid_k=0.0, nl=2, **kw).mat)[:, :, 1]
     a_sugama, a_landau = _asymmetry(sugama, kw, 1), _asymmetry(landau, kw, 1)
     assert abs(a_sugama - a_landau) < 1e-3 * max(a_landau, 1e-3), (a_sugama, a_landau)
     if t_e == 1.0 and m_e == 1.0:
