@@ -106,3 +106,10 @@ def test_geometry_checksum(tmp_path: Path) -> None:
     payload["geometry_sha256"] = "xyz"
     path.write_text(json.dumps(copy.deepcopy(payload)), encoding="utf-8")
     assert gate.audit(path)["pass"] is False
+
+
+def test_w7x_artifact_passes_with_two_rungs_only() -> None:
+    report = gate.audit(ROOT / "validation/w7x_ambipolar_rung_gate_v1.json")
+    assert report["pass"] is True
+    assert report["rungs"] == ["A", "B"]
+    assert report["max_relative_difference"] == pytest.approx(0.018030193, rel=1e-6)
