@@ -30,8 +30,7 @@ underneath them come from the SOLVAX library, a required dependency
 
 Some code identifiers keep a numbering from the package's history: `tier1`
 names belong to the structured direct route (`tier1_keep_lowest`,
-`DKX_TIER1_MEMORY_BUDGET_GB`), `tier2` to recycled Krylov
-(`DKX_TIER2_MEMORY_GUARD`) and `tier3` to sparse direct. Prose on these pages
+`DKX_TIER1_MEMORY_BUDGET_GB`), `tier2` to recycled Krylov and `tier3` to sparse direct. Prose on these pages
 uses the route names.
 
 ## The `auto` policy
@@ -438,18 +437,15 @@ solves $A^\mathsf{T}u = b$ from the stored factors ({doc}`factor_reuse`).
 
 Every route runs in float64. `dkx.runtime.configure()` enables JAX x64 before
 the first array exists, and `dkx.require_float64()` refuses to solve if a caller
-disabled it. The one reduced-precision option is inside the Krylov
-preconditioner (`DKX_COARSE_FACTOR_DTYPE=float32`), where it changes iteration
-counts and never the answer; see {doc}`krylov_and_preconditioners` and
+disabled it. Float32 Schur factors in the Krylov
+preconditioner change iteration counts and never the answer, but were not
+faster and are not offered; see {doc}`krylov_and_preconditioners` and
 {doc}`../design_decisions`.
 
 ## Device placement
 
-`solve(device=...)` and `DKX_SOLVE_DEVICE` can place a solve on the host CPU on
-an accelerator host. The size thresholds that route small systems to the CPU,
-`DKX_SOLVE_CPU_MAX_SIZE_TIER1` and `DKX_SOLVE_CPU_MAX_SIZE_TIER2`, default to 0
-(off): on a 36-core workstation with an RTX A4000 the GPU won every structured
-direct warm solve measured down to 6.5k unknowns and every preconditioned
-recycled Krylov warm solve down to 2.8k unknowns (comment above
-`_SOLVE_CPU_MAX_TIER1_DEFAULT` in `src/dkx/solve.py`). Small $\Phi_1$ Newton
+`solve(device="cpu")` places a solve on the host CPU on an accelerator host.
+The default leaves placement alone: on a 36-core workstation with an RTX A4000
+the GPU won every structured direct warm solve measured down to 6.5k unknowns
+and every preconditioned recycled Krylov warm solve down to 2.8k unknowns. Small $\Phi_1$ Newton
 workloads are better run whole-process on CPU with `JAX_PLATFORMS=cpu`.

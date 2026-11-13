@@ -19,8 +19,8 @@ def test_external_data_manifest_lists_release_fixtures() -> None:
 
     assert manifest["release_tag"] == "dkx-data-v1"
     assert manifest["archive_sha256"]
-    assert "wout_w7x_standardConfig.nc" in data_fetch.known_external_equilibrium_names()
-    assert "hsx3free.bc" in data_fetch.known_external_equilibrium_names()
+    names = {Path(item["path"]).name for item in manifest["files"]}
+    assert {"wout_w7x_standardConfig.nc", "hsx3free.bc"} <= names
     for item in manifest["files"]:
         assert Path(item["path"]).name
         assert int(item["size"]) > 0

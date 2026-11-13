@@ -225,7 +225,6 @@ def run_scan(
     one joint refinement of those axes) to every row.
     """
     from ..execution import run_case  # noqa: PLC0415
-    from ..result import Result  # noqa: PLC0415
 
     scan = case.scan
     if scan is None:

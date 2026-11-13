@@ -26,7 +26,7 @@ from dataclasses import dataclass, replace
 import sys as _sys
 import types as _types
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable
 
 import jax
 import numpy as np
@@ -69,6 +69,9 @@ from dkx.writer import (
     write_run_solver_trace,
     write_transport_output,
 )
+
+if TYPE_CHECKING:
+    from dkx.result import Result
 
 __all__ = [
     "GeometryRun",

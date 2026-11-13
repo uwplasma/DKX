@@ -138,10 +138,6 @@ def _transposed_apply(op: KineticOperator) -> Callable[[jnp.ndarray], jnp.ndarra
 # this fraction, so that the fraction stays a policy and the overhead stays a
 # measurement.
 _TIER2_GUARD_FRACTION = 1.0
-_TIER2_GUARD_ENV = "DKX_TIER2_MEMORY_GUARD"
-# Precision of the reusable Schur LU factors: "float64" (default) or "float32".
-# See :func:`_coarse_factor_dtype` for why the cheaper one is not the default.
-_COARSE_FACTOR_DTYPE_ENV = "DKX_COARSE_FACTOR_DTYPE"
 
 def coarse_preconditioner_band_bytes(op: KineticOperator) -> float:
     """Bytes the ``"coarse"`` Krylov preconditioner allocates for its bands.
@@ -254,40 +250,17 @@ def _coarse_bands_fit(op: KineticOperator) -> bool:
     55-90 s in, at 13-15 GB resident on a 24 GB machine, having produced nothing --
     the least debuggable failure there is, and avoidable because
     :func:`coarse_preconditioner_band_bytes` is exact up front.
-    ``DKX_TIER2_MEMORY_GUARD=off`` forces the dense route anyway; so does an
-    unreadable memory size, rather than demoting a working deck on a guess.
+    An unreadable memory size also keeps the dense route, rather than demoting
+    a working deck on a guess.
 
     The budget is *available* memory, not physical RAM: see
     :func:`_available_memory_bytes` for the six-hour thrash that measuring
     against physical RAM admits.
     """
-    if os.environ.get(_TIER2_GUARD_ENV, "").strip().lower() in {"off", "0", "false"}:
-        return True
     budget = _coarse_memory_budget()
     return budget is None or (
         coarse_preconditioner_band_bytes(op) * _COARSE_BAND_RESIDENT_OVERHEAD
         <= _TIER2_GUARD_FRACTION * budget
-    )
-
-def _coarse_factor_dtype() -> object:
-    """Working precision of the reusable Schur LU factors.
-
-    float64 by default.  Halving the factors buys nothing on a deck that already
-    fits, and where it decides whether a deck fits at all the caller is better
-    served by being told to set it than by having their preconditioner silently
-    change precision under them.  A float32 Schur LU is exact enough to
-    precondition with --- GCROT still reaches ``1e-10`` --- but it is not free in
-    iterations (docs/benchmarks/performance.md), so it is opt-in via
-    ``DKX_COARSE_FACTOR_DTYPE=float32``.
-    """
-    name = os.environ.get(_COARSE_FACTOR_DTYPE_ENV, "").strip().lower()
-    if name in {"", "float64", "f64", "double"}:
-        return jnp.float64
-    if name in {"float32", "f32", "single"}:
-        return jnp.float32
-    raise ValueError(
-        f"{_COARSE_FACTOR_DTYPE_ENV}={name!r} is not a recognized precision; "
-        f"expected 'float64' (default) or 'float32'"
     )
 
 def _coarse_factors_fit(op: KineticOperator) -> bool:
@@ -304,11 +277,9 @@ def _coarse_factors_fit(op: KineticOperator) -> bool:
     for the life of the preconditioner, so a set that does not fit does not get
     killed, it thrashes (:func:`_available_memory_bytes`).
     """
-    if os.environ.get(_TIER2_GUARD_ENV, "").strip().lower() in {"off", "0", "false"}:
-        return True
     budget = _coarse_memory_budget()
     return budget is None or (
-        coarse_preconditioner_factor_bytes(op, _coarse_factor_dtype())
+        coarse_preconditioner_factor_bytes(op, jnp.float64)
         * _COARSE_RESIDENT_OVERHEAD
         <= _TIER2_GUARD_FRACTION * budget
     )
@@ -334,7 +305,7 @@ def _coarse_memory_scope() -> str:
 
 def _coarse_reusable_fallback_message(op: KineticOperator) -> str:
     """Describe retained factors and the extra work per substitution."""
-    dtype = _coarse_factor_dtype()
+    dtype = jnp.float64
     return (
         f"{_coarse_route_preamble(op)}Keeping Schur LU factors with "
         f"solvax block_thomas_factor_fn(store_offdiagonals=False): "
@@ -344,25 +315,11 @@ def _coarse_reusable_fallback_message(op: KineticOperator) -> str:
         f"{_coarse_memory_scope()}"
     )
 
-def _coarse_downgrade_hint(op: KineticOperator, dtype: object) -> str:
-    """Report a smaller factor estimate without promising numerical acceptance."""
-    if dtype is jnp.float32:
-        return ""
-    budget = _coarse_memory_budget()
-    small = coarse_preconditioner_factor_bytes(op, jnp.float32) * _COARSE_RESIDENT_OVERHEAD
-    if budget is None or small > _TIER2_GUARD_FRACTION * budget:
-        return ""
-    return (
-        f"DKX_COARSE_FACTOR_DTYPE=float32 estimates {small / 2**30:.1f} GiB "
-        f"with resident overhead, within the {budget / 2**30:.1f} GiB guard budget; "
-        f"this is not a generally qualified precision change. "
-    )
-
 def _coarse_generated_fallback_message(op: KineticOperator) -> str:
     """Describe checkpointed recomputation without promising completion."""
-    dtype = _coarse_factor_dtype()
+    dtype = jnp.float64
     return (
-        f"{_coarse_downgrade_hint(op, dtype)}{_coarse_route_preamble(op)}"
+        f"{_coarse_route_preamble(op)}"
         f"Schur LU estimate {coarse_preconditioner_factor_bytes(op, dtype) / 2**30:.1f} GiB "
         f"at {jnp.dtype(dtype).name} also fails admission. Using solvax "
         f"block_thomas_checkpointed_fn, estimated dense-factor storage "
@@ -1407,7 +1364,7 @@ def build_coarse_preconditioner(
         rows = _coarse_row_layout(op)
         factor = functools.partial(
             _factor_coarse_rows, coef, subs, floor, gamma, n_xi=n_xi, rows=rows,
-            drop_l_coupling=bool(drop_l_coupling), factor_dtype=_coarse_factor_dtype(),
+            drop_l_coupling=bool(drop_l_coupling), factor_dtype=jnp.float64,
         )  # fmt: skip
         # Explicit inverses where the blocks are well conditioned.  A traced
         # operator cannot be inspected, so it keeps the LU it always had.
@@ -1493,7 +1450,7 @@ def build_coarse_preconditioner(
             # elimination runs here, once, and every later application is two
             # triangular solves and two block regenerations per row -- so unlike the
             # checkpointed route below these factors amortize over a Krylov solve.
-            factor_dtype = _coarse_factor_dtype()
+            factor_dtype = jnp.float64
             rows = _coarse_row_layout(op)
             factors, lengths = _factor_coarse_active_chains(
                 pinned, rows=rows, factor_dtype=factor_dtype
