@@ -140,9 +140,6 @@ Full linearized Fokker–Planck conserves momentum; pitch-angle scattering is fa
 
 W7-X program 20160309.010: electron roots in the core, ion roots at the edge; `dkx roots` prints
 every classified root.
-The XICS comparison is qualitative. Converged roots, every flux within 2% between grid rungs:
-
-![Ambipolar roots of W7-X and HSX at successive grid rungs](docs/_static/figures/readme/ambipolar_rung_gates.png)
 
 The comparison with the published XICS profile is qualitative. Refining the phase-space grid moves every
 root and selected flux by less than 2%:
