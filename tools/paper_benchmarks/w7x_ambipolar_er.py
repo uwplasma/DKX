@@ -4,7 +4,8 @@ This script computes the
 neoclassical ambipolar radial electric field ``E_r(rho)`` of the W7-X standard
 configuration from *measured* plasma profiles of a published discharge and
 compares it against the published measured and neoclassically-predicted
-``E_r`` profiles.
+``E_r`` profiles.  The comparison is qualitative: it checks the root
+structure and the trend of ``E_r(rho)``, not agreement within an error bar.
 
 Sourced experimental case (REAL published data)
 -----------------------------------------------

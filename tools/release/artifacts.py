@@ -870,9 +870,7 @@ from .policy import (  # noqa: E402,F401
 )
 from .panels import (  # noqa: E402,F401
     SIMAKOV_HELANDER_PROVENANCE_FIELDS,
-    W7X_AMBIPOLAR_PROVENANCE_FIELDS,
     build_simakov_helander_high_nu_panel,
-    build_w7x_ambipolar_root_provenance_panel,
 )
 
 

@@ -33,7 +33,8 @@ def test_release_gate_checker_cli_passes_current_manifest() -> None:
 def test_release_gate_rejects_open_deferred_lane(tmp_path: Path) -> None:
     records = copy.deepcopy(_manifest())
     records[0]["release_gate"]["blocks_current_release"] = True  # type: ignore[index]
-    deferred = next(r for r in records if r["id"] == "w7x_ambipolar_er_validation")
+    deferred = records[1]
+    deferred["status"] = "deferred_post_release"
     deferred["release_gate"]["claim_status"] = "bounded_proxy"  # type: ignore[index]
     deferred["release_gate"]["closed_or_deferred_reason"] = "needs more work"  # type: ignore[index]
     manifest_path = tmp_path / "validation_manifest.json"
@@ -42,14 +43,9 @@ def test_release_gate_rejects_open_deferred_lane(tmp_path: Path) -> None:
     errors = release_gate_errors(manifest_path, docs_paths=())
 
     assert "sfincs2014_fig1_lhd_collisionality: no manifest lane may block the current release" in errors
-    assert (
-        "w7x_ambipolar_er_validation: deferred lanes must use "
-        "claim_status='closed_deferred'"
-    ) in errors
-    assert (
-        "w7x_ambipolar_er_validation: deferred lanes must record "
-        "a closed post-release reason"
-    ) in errors
+    lane = deferred["id"]
+    assert f"{lane}: deferred lanes must use claim_status='closed_deferred'" in errors
+    assert f"{lane}: deferred lanes must record a closed post-release reason" in errors
 
 
 def test_release_gate_rejects_malformed_implemented_lane(tmp_path: Path) -> None:

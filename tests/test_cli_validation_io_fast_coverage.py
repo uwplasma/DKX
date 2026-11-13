@@ -18,7 +18,6 @@ from tools.release.artifacts import (
 )
 from tools.release.artifacts import (
     build_simakov_helander_high_nu_panel,
-    build_w7x_ambipolar_root_provenance_panel,
 )
 
 
@@ -273,17 +272,6 @@ def test_plot_sfincs_output_summary_accepts_minimal_npz(tmp_path: Path) -> None:
 
 
 def test_validation_figure_guards_reject_duplicate_scan_points() -> None:
-    with pytest.raises(ValueError, match="Er scan points must be distinct"):
-        build_w7x_ambipolar_root_provenance_panel(
-            {
-                "runs": [
-                    {"er": 0.0, "radial_current": -1.0},
-                    {"er": 0.0, "radial_current": 1.0},
-                ],
-                "ambipolar": {"roots_er": [0.0]},
-            }
-        )
-
     with pytest.raises(ValueError, match="nuprime scan points must be distinct"):
         build_simakov_helander_high_nu_panel(
             {
