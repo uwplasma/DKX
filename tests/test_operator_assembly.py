@@ -103,13 +103,18 @@ def _sampled(op, *, pinned: bool = True):
     return matrix
 
 
+def _assert_same_entries(matrix, reference) -> None:
+    """Equal to rounding: the two routes sum in different orders, and a CPU
+    whose fused multiply-add differs leaves a last-bit residue in some entries."""
+    difference = abs(matrix - reference)
+    assert difference.max() <= 1e-12 * abs(reference).max()
+
+
 def test_it_recovers_the_matrix_the_operator_defines(operator) -> None:
     """Entry for entry against sampling every column, not merely in norm."""
     result = assemble_operator(operator)
     reference = _sampled(operator)
-    difference = result.matrix - reference
-    difference.eliminate_zeros()
-    assert difference.nnz == 0
+    _assert_same_entries(result.matrix, reference)
     assert result.matrix.nnz == reference.nnz
     assert result.relative_error < 1e-12
 
@@ -127,9 +132,7 @@ def test_the_truncated_rows_are_pinned_so_the_matrix_can_be_factored(operator) -
     assert truncated.size
     assert np.count_nonzero(np.abs(raw[truncated].toarray()).sum(axis=1)) == 0
     np.testing.assert_allclose(pinned[truncated].toarray().sum(axis=1), 1.0)
-    difference = pinned - _sampled(operator)
-    difference.eliminate_zeros()
-    assert difference.nnz == 0
+    _assert_same_entries(pinned, _sampled(operator))
 
 
 def test_it_costs_far_fewer_products_than_the_matrix_has_columns(operator) -> None:

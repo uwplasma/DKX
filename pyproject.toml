@@ -92,13 +92,14 @@ dkx = ["validation/*.json"]
 version = {attr = "dkx._version.__version__"}
 
 # The coverage shards install the package non-editable, so they record paths
-# under site-packages, while the report job only checks the repository out.
+# under site-packages (or a self-hosted runner's absolute checkout), while the report job only checks the repository out.
 # Without this mapping `coverage combine` keeps the site-packages paths and the
 # report fails with "No source for code". Listing both tells coverage they are
 # the same code and rewrites the shard data onto the checkout.
 [tool.coverage.paths]
 source = [
   "src/dkx",
+  "*/DKX/src/dkx",
   "*/site-packages/dkx",
 ]
 
@@ -107,4 +108,5 @@ addopts = ["--import-mode=prepend"]
 testpaths = ["tests"]
 markers = [
   "slow: heavy end-to-end example/optimization tests; excluded from the fast coverage shards via -m 'not slow' (still run in the full local suite).",
+  "gpu: small jitted solves meant for a GPU backend (pytest -m gpu); they also pass on CPU and run in the coverage shards.",
 ]

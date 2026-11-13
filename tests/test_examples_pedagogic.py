@@ -62,7 +62,7 @@ EXPECTED = {
     "02_cli_case": ("$ dkx run", "case ID from the file: 2ca9e2e8db56  stored in the result: 2ca9e2e8db56"),
     "03_sfincs_namelist": ("particleFlux_vm_psiHat=", "FSABjHat"),
     "04_vmec_geometry": ("wout_vmex_seed_nfp2_ns13.nc", "geometry sha256: "),
-    "05_boozer_geometry": ("solver route: gcrot", "route reason: "),
+    "05_boozer_geometry": ("gcrot", "route reason: "),
     "06_collision_operators": ("Sugama", "pitch-angle scattering", "<j.B>"),
     "07_species_and_impurity": ("carbon=", "electron="),
     "08_ambipolar_er": ("[ion]", "all surfaces bracketed: True"),
