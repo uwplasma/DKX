@@ -6,7 +6,7 @@ import math
 from collections.abc import Callable
 import os
 from dataclasses import dataclass, replace
-from functools import partial
+from functools import lru_cache, partial
 
 # The JAX backend is imported below; dkx/runtime.py explains why this is here.
 from .runtime import configure as _configure_runtime
@@ -430,7 +430,7 @@ def _rosenbluth_potential_terms_v3_np_quadpack(
 
     return terms
 
-ROSENBLUTH_METHODS: tuple[str, ...] = ("quadpack", "analytic", "hybrid")
+ROSENBLUTH_METHODS: tuple[str, ...] = ("quadpack", "analytic", "hybrid", "gauss")
 """Accepted ``rosenbluth_method`` values, in order of increasing Fortran divergence."""
 
 def resolve_rosenbluth_method(method: str | None) -> str:
@@ -440,8 +440,10 @@ def resolve_rosenbluth_method(method: str | None) -> str:
     the collision-operator builders, which the ``RosenbluthMethod`` key of
     ``&otherNumericalParameters`` feeds.  Only when it is ``None`` does the
     ``DKX_ROSENBLUTH_METHOD`` environment variable act as an override, and
-    with neither set the default is ``"quadpack"`` — the upstream Fortran v3
-    algorithm, for parity.
+    with neither set the default is ``"gauss"``: traced Gauss-Legendre
+    quadrature that reproduces the upstream Fortran v3 QUADPACK matrices to
+    ~1e-14 on the reference decks and stays differentiable in the profiles.
+    ``"quadpack"`` selects the host QUADPACK algorithm itself.
 
     Raises:
         ValueError: for any selector outside :data:`ROSENBLUTH_METHODS`, so a
@@ -452,10 +454,10 @@ def resolve_rosenbluth_method(method: str | None) -> str:
     if raw is None:
         raw = os.environ.get("DKX_ROSENBLUTH_METHOD", "") or None
     if raw is None:
-        return "quadpack"
+        return "gauss"
     resolved = str(raw).strip().lower()
     if not resolved:
-        return "quadpack"
+        return "gauss"
     if resolved not in ROSENBLUTH_METHODS:
         raise ValueError(
             f"Unknown RosenbluthPotentialTerms method={raw!r}. "
@@ -483,7 +485,8 @@ def rosenbluth_potential_terms_v3_np(
     Args:
         method: one of :data:`ROSENBLUTH_METHODS`, resolved by
             :func:`resolve_rosenbluth_method` (``None`` consults
-            ``DKX_ROSENBLUTH_METHOD`` and then falls back to ``"quadpack"``).
+            ``DKX_ROSENBLUTH_METHOD`` and then falls back to ``"gauss"``,
+            which this host function evaluates as ``"quadpack"``).
 
     Returns
     -------
@@ -493,7 +496,7 @@ def rosenbluth_potential_terms_v3_np(
     """
     method = resolve_rosenbluth_method(method)
 
-    if method == "quadpack":
+    if method in ("quadpack", "gauss"):  # "gauss" is a whole-operator route; terms stay host QUADPACK
         return _rosenbluth_potential_terms_v3_np_quadpack(
             x=x,
             x_weights=x_weights,
@@ -782,6 +785,17 @@ class FokkerPlanckV3Operator:
         mat, n_xi_for_x, mask_xi = children
         return cls(mat=mat, n_xi_for_x=n_xi_for_x, mask_xi=mask_xi)
 
+@lru_cache(maxsize=16)
+def _gauss_fokker_planck_v3(key):
+    """Jitted ``(n_hats, t_hats) -> FokkerPlanckV3Operator`` for one static layout."""
+    x, weights, ddx, d2dx2, z_s, m_hats, k, nu_n, krook, nl, n_xi, layout = key
+    arr = lambda item: np.array(item[1], dtype=np.float64).reshape(item[0])
+    build = prepare_fokker_planck_v3_profiles(
+        x=arr(x), x_weights=arr(weights), ddx=arr(ddx), d2dx2=arr(d2dx2), x_grid_k=k,
+        z_s=arr(z_s), m_hats=arr(m_hats), nu_n=nu_n, krook=krook, nl=nl,
+        n_xi_for_x=np.array(layout, dtype=np.int32), v3_parity=True)
+    return jax.jit(lambda n, t: build(n, t).at_uniform_density(n, n_xi=n_xi))
+
 def make_fokker_planck_v3_operator(
     *,
     x: np.ndarray,  # (X,)
@@ -806,9 +820,17 @@ def make_fokker_planck_v3_operator(
     Args:
         rosenbluth_method: how the Rosenbluth potential response matrices are
             evaluated — one of :data:`ROSENBLUTH_METHODS`, resolved by
-            :func:`resolve_rosenbluth_method`.  ``None`` keeps the Fortran-parity
-            ``"quadpack"`` default unless ``DKX_ROSENBLUTH_METHOD`` overrides it.
+            :func:`resolve_rosenbluth_method`.  ``None`` uses the ``"gauss"``
+            default unless ``DKX_ROSENBLUTH_METHOD`` overrides it.
+            ``"gauss"`` assembles the matrices with traced Gauss-Legendre
+            quadrature: ``n_hats`` and ``t_hats`` may then be JAX tracers and the
+            result is differentiable in them (``strict_parity`` does not apply).
     """
+    if resolve_rosenbluth_method(rosenbluth_method) == "gauss":
+        frozen = [np.asarray(v, dtype=np.float64) for v in (x, x_weights, ddx, d2dx2, z_s, m_hats)]
+        key = (*((a.shape, tuple(a.ravel().tolist())) for a in frozen), float(x_grid_k),
+               float(nu_n), float(krook), int(nl), int(n_xi), tuple(np.asarray(n_xi_for_x).ravel().tolist()))
+        return _gauss_fokker_planck_v3(key)(n_hats, t_hats)
     x = np.asarray(x, dtype=np.float64)
     x_weights = np.asarray(x_weights, dtype=np.float64)
     ddx = np.asarray(ddx, dtype=np.float64)
@@ -1128,7 +1150,7 @@ def prepare_fokker_planck_v3_profiles(
     *, x: np.ndarray, x_weights: np.ndarray, ddx: np.ndarray, d2dx2: np.ndarray,
     x_grid_k: float, z_s: np.ndarray, m_hats: np.ndarray, nu_n: float,
     krook: float, nl: int, n_xi_for_x: np.ndarray, alpha: float = 1.0,
-    quadrature_order: int = 128,
+    quadrature_order: int = 128, v3_parity: bool = False,
 ) -> Callable[[jnp.ndarray, jnp.ndarray], FokkerPlanckV3Phi1Operator]:
     """Prepare an opt-in JAX full-FP builder ``build(n_hats, t_hats)``.
 
@@ -1143,6 +1165,9 @@ def prepare_fokker_planck_v3_profiles(
     explicit alternative to the host QUADPACK parity builder, not its default
     replacement. Positive speed nodes (v3 schemes 5/6 without x=0) are required.
     Invalid dynamic profiles produce NaNs; incompatible shapes raise ValueError.
+    With ``v3_parity`` the erf/Maxwellian combinations use v3's rounded
+    ``sqrt(pi)`` and unexpanded Chandrasekhar function, as the host builder does,
+    instead of the mathematical constant and the stable small-speed series.
     """
     if isinstance(quadrature_order, bool) or not isinstance(quadrature_order, int) or quadrature_order < 2:
         raise ValueError("quadrature_order must be an integer >= 2")
@@ -1233,8 +1258,12 @@ def prepare_fokker_planck_v3_profiles(
         # using v3's rounded sqrt(pi). At small electron/ion speed this loses
         # accuracy even before device-dependent rounding. This opt-in route
         # uses mathematical sqrt(pi) and a stable series, checked independently.
-        sqrt_pi = math.sqrt(math.pi)
-        psi = _psi_chandra(xb, series_threshold=.05, sqrt_pi=sqrt_pi)
+        if v3_parity:
+            sqrt_pi = _V3_SQRTPI
+            psi = (erfs - 2/sqrt_pi*xb*expb)/(2*xb*xb)
+        else:
+            sqrt_pi = math.sqrt(math.pi)
+            psi = _psi_chandra(xb, series_threshold=.05, sqrt_pi=sqrt_pi)
         ce_factor = (3*sqrt_pi/4)*prefactor[:, :, None]
         k_nu = ce_factor*(erfs-psi)/x**3
         k_cd = (3*prefactor*m[:, None]/m[None, :])[:, :, None, None] * jnp.exp(-x*x)[None, None, :, None]*interpolation
