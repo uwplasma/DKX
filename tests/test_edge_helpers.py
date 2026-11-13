@@ -60,7 +60,7 @@ def test_batch_axis_validation_messages() -> None:
         batch._validate_batch_leaves(None, [1])
     with pytest.raises(ValueError, match="not a batchable"):
         batch._validate_batch_leaves(None, {"no_such_leaf": 1})
-    shared = next(iter(batch._DISCRETIZATION_FIELDS))
+    shared = sorted(batch._DISCRETIZATION_FIELDS & set(batch.KineticOperator._CHILD_FIELDS))[0]
     with pytest.raises(ValueError, match="must stay shared"):
         batch._validate_batch_leaves(None, {shared: 1})
 
