@@ -36,9 +36,8 @@ dict. `dkx.Case` validates it and hashes it to a `case_id`. Profiles hold one va
 returns a `Result`, saved as NetCDF, whose arrays carry units in their names:
 `particle_flux_m2_s` and `heat_flux_W_m2` (surface × species), `parallel_current_A_T_m2`
 (`⟨j·B⟩`), `electric_field_kV_m`, the equation residual per surface and, for ambipolar runs,
-every root (`ambipolar_root_kV_m`). SFINCS v3 `input.namelist` decks are the second route, for
-tangential drifts, Phi1 and transport matrices: `dkx input.namelist` writes SFINCS's
-`sfincsOutput.h5`; [bring your SFINCS workflow](docs/user_guide/sfincs_workflow.md) for scans and the `sfincsScan` scripts. [Inputs](docs/user_guide/inputs.md) · [outputs](docs/user_guide/outputs.md).
+every root (`ambipolar_root_kV_m`). SFINCS v3 decks are the second route, for
+tangential drifts, Phi1 and transport matrices: `dkx input.namelist` writes `sfincsOutput.h5`; [bring your SFINCS workflow](docs/user_guide/sfincs_workflow.md) for scans and the `sfincsScan` scripts. [Inputs](docs/user_guide/inputs.md) · [outputs](docs/user_guide/outputs.md).
 
 ## At a glance
 
@@ -116,8 +115,6 @@ Implicit differentiation: one transposed solve on the primal's factors. Compiled
 
 ![Gradient check](docs/_static/figures/paper/dkx_autodiff_gradient_check.png)
 
-Every derivative example is checked against central differences.
-
 ## What you can compute
 
 ### Monoenergetic coefficients and transport matrices
@@ -125,7 +122,7 @@ Every derivative example is checked against central differences.
 ![D11 and D31 against collisionality on W7-X, with SFINCS points](docs/_static/figures/paper_benchmarks/monoenergetic_icnts_w7x.png)
 
 `RHSMode = 3` gives `D11*`, `D31*`, `D33*` (Beidler et al. 2011); `RHSMode = 2` the thermal
-matrix. Boxes: SFINCS v3. Spectral angles, as in MONKES. `D31*` follows Beidler's sign (positive in the
+matrix. Boxes: SFINCS v3. `D31*` follows Beidler's sign (positive in the
 banana limit); the W7-X curves are checked against digitized ICNTS data.
 
 ### Collision operators
@@ -140,6 +137,15 @@ Full linearized Fokker–Planck conserves momentum; pitch-angle scattering is fa
 
 W7-X program 20160309.010: electron roots in the core, ion roots at the edge; `dkx roots` prints
 every classified root.
+
+The comparison with the published XICS profile is qualitative; refining the grid moves every root and
+selected flux by under 2%:
+
+![Ambipolar roots of W7-X and HSX at successive grid rungs](docs/_static/figures/readme/ambipolar_rung_gates.png)
+
+W7-X (five surfaces, seven roots): 1.80% for angles and pitch, 0.32% for speed, under 5 GiB per solve.
+HSX QHS (one ion root per surface): 0.68%. Data: `validation/w7x_ambipolar_rung_gate_v1.json`,
+`validation/hsx_ambipolar_rung_gate_v1.json`.
 
 ### Phi1 and impurities
 
@@ -186,7 +192,7 @@ Tests: [`test_physics_limits.py`](tests/test_physics_limits.py), [`test_transpor
 
 On 38 upstream decks at equal discretization DKX matches SFINCS v3 to solver tolerance:
 median 4e-6, full Fokker–Planck decks 1e-8. The monoenergetic coefficients agree with MONKES
-and YANCC within 6 %, `D33` within 0.1 %, on three configurations
+and YANCC within 6 %, `D33` within 0.1 %
 ([cross-code benchmarks](docs/benchmarks/cross_code.md)).
 
 ![Parity envelopes of DKX against SFINCS v3](docs/_static/figures/readme/canonical_parity.png)
@@ -203,9 +209,8 @@ cold-ion, hot-electron plasma. With that cutoff set to zero, the two codes agree
 
 The HSX-like gap deck (633,604 unknowns, `Nx = 16`) is a case **SFINCS does not solve** on a 36 GiB
 host: two routes run out of memory and its GMRES stagnates at 0.9955. DKX's default route converges
-it to a true relative residual of **9.0e-9** in 611 iterations (1,658 s, 26.8 GiB peak on a 62 GiB
-host; sealed in `validation/hsx_gap_deck_v1.json`). Out of core, MUMPS reaches 4.8e-11 in 4,774 s. DKX assembles its operator exactly from 4,800
-products and solves the 66,004-unknown reduction to 1.3e-14.
+it to a true residual of **9.0e-9** in 611 iterations (1,658 s, 26.8 GiB peak on a 62 GiB
+host; sealed in `validation/hsx_gap_deck_v1.json`).
 
 ## Where DKX converges, and why
 
@@ -217,7 +222,7 @@ DKX picks its route from the operator's structure ([solver routes](docs/numerics
 | Assembled sparse direct | any operator, to a few 1e5 unknowns | exact assembly, Ruiz equilibration, LU or MUMPS |
 | Recycled Krylov (GCROT) | larger FP, tangential drifts, `E_r` terms, Phi1 | coupled or coarse preconditioner, recycled subspace |
 
-Direct routes are exact. The Krylov restart grows to 1,000 within a memory budget (`Nx = 16`:
+The Krylov restart grows to 1,000 within a memory budget (`Nx = 16`:
 357 iterations against 2,788 at restart 200). Every route reports its true residual.
 
 ## One factorization, many solves
@@ -255,10 +260,9 @@ one RTX A4000.
 
 ## Learn DKX
 
-The [tutorial track](docs/tutorials/index.md) is eight pages, in Python and on the CLI with
-TOML: install and first run, reading results, geometry and species, collisions and solvers,
-scans and resolution, ambipolar `E_r`, transport matrices, and Phi1, bootstrap current against
-Redl and gradients. Each page shows the code, the real output and the figure. Its scripts are
+The [tutorial track](docs/tutorials/index.md) has eight pages, in Python and on the CLI:
+install and first run, results, geometry and species, collisions and solvers, scans and
+resolution, ambipolar `E_r`, transport matrices, and Phi1, bootstrap current against Redl and gradients. Its scripts are
 [`examples/tutorials/01_first_run.py`](examples/tutorials) to `15_optimization.py`.
 
 ## Documentation, development and citation

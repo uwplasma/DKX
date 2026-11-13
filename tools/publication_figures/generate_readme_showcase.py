@@ -1,4 +1,4 @@
-"""The two README showcase figures, drawn from recorded measurements.
+"""The README showcase figures, drawn from recorded measurements.
 
 Every number below is copied from the experiment record named beside it; the
 script runs no solve, so it regenerates the figures in seconds on any machine::
@@ -17,11 +17,18 @@ script runs no solve, so it regenerates the figures in seconds on any machine::
 ``factor_reuse.png``
     Wall time of one factorization serving many solves, on the structured and
     sparse direct routes (2026-09-20 one-factorization-many-solves study).
+
+``ambipolar_rung_gates.png``
+    Ambipolar roots of W7-X and HSX at successive grid rungs, read from
+    ``validation/w7x_ambipolar_rung_gate_v1.json`` and
+    ``validation/hsx_ambipolar_rung_gate_v1.json``.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
+import math
 from pathlib import Path
 
 import matplotlib
@@ -169,11 +176,32 @@ def factor_reuse(out_dir: Path) -> Path:
     return _save(fig, "factor_reuse.png", out_dir)
 
 
+def ambipolar_rung_gates(out_dir: Path) -> Path:
+    root = Path(__file__).resolve().parents[2] / "validation"
+    fig, axes = plt.subplots(1, 2, figsize=(8.0, 3.2))
+    fig.patch.set_facecolor(SURFACE)
+    for ax, (name, title) in zip(axes, (("w7x", "W7-X standard"), ("hsx", "HSX QHS"))):
+        _style(ax)
+        gate = json.loads((root / f"{name}_ambipolar_rung_gate_v1.json").read_text())
+        rungs = sorted(gate["rungs"].items(), key=lambda kv: math.prod(kv[1]["resolution"].values()))
+        for k, (label, rung) in enumerate(rungs):
+            roots = rung["roots"].values()
+            ax.plot([r["surface"] + 0.12 * (k - 1) for r in roots], [r["Er"] for r in roots], "o",
+                    ms=5 - k, alpha=0.85, label=f"{label} {tuple(rung['resolution'].values())}")
+        change = 100 * gate["gate"]["max_relative_difference"]
+        ax.set_title(f"{title}: largest change {change:.2f}%", fontsize=9, color=INK, loc="left")
+        ax.set_xlabel("surface index", fontsize=8, color=INK_2)
+        ax.legend(fontsize=7, frameon=False)
+    axes[0].set_ylabel("ambipolar $E_r$ (kV/m)", fontsize=8, color=INK_2)
+    fig.tight_layout()
+    return _save(fig, "ambipolar_rung_gates.png", out_dir)
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out-dir", type=Path, default=OUT_DIR)
     args = parser.parse_args(argv)
-    for path in (reference_limits(args.out_dir), factor_reuse(args.out_dir)):
+    for path in (reference_limits(args.out_dir), factor_reuse(args.out_dir), ambipolar_rung_gates(args.out_dir)):
         print(f"{path.name}: {path.stat().st_size / 1024:.0f} KiB")
 
 
