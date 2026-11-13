@@ -254,7 +254,7 @@ DEFAULT_PUBLICATION_ARTIFACTS: dict[str, str] = {
     "lhd_collisionality": "lhd_collisionality_summary.json",
     "w7x_collisionality": "w7x_collisionality_summary.json",
     "tokamak_er_sweep": "er_sweep_tokamak_reference_summary.json",
-    "stellarator_er_sweep": "er_sweep_stellarator_fast_reference_summary.json",
+    "stellarator_er_sweep": "er_sweep_stellarator_reference_summary.json",
 }
 
 

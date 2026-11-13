@@ -111,9 +111,8 @@ DKX reproduces those sweeps with the same upstream switches:
 
 Tokamak $E_r$ sweep across DKES, partial and full trajectory models; the models
 agree exactly at zero field and separate at finite field. A `release_ready`
-entry of the {doc}`validation_matrix`; the stellarator companion
-`dkx_er_trajectory_sweep_stellarator_fast_reference.png` is a
-`regression_scaffold`.
+entry of the {doc}`validation_matrix`, as is the stellarator companion
+`dkx_er_trajectory_sweep_stellarator_reference.png` at the full input resolution.
 ```
 
 The dashboard below collects the LHD and W7-X collisionality scans (full

@@ -990,12 +990,13 @@ def _refuse_unconvertible_physics(
         rosenbluth = lookup_config_value(nml, (other,), "RosenbluthMethod", None)
         if rosenbluth is not None and str(first_config_value(rosenbluth)).strip().strip(
             "\"'"
-        ).lower() not in {"", "quadpack"}:
+        ).lower() not in {"", "quadpack", "gauss"}:
             _refuse(
                 other,
                 "RosenbluthMethod",
                 rosenbluth,
-                "'quadpack' (the Fortran-parity quadrature, the dkx default)",
+                "'gauss' (the dkx default) or 'quadpack' (the Fortran quadrature, which "
+                "it reproduces to ~1e-13)",
                 "The Rosenbluth-potential quadrature route changes the Fokker-Planck "
                 "matrices; dkx.execution builds them with the default route and a "
                 "case has no field for another.",

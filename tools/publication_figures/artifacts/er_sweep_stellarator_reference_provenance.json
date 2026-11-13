@@ -1,0 +1,70 @@
+{
+  "id": "sfincs2014_er_sweep_stellarator_reference",
+  "command": "python tools/publication_figures/generate_er_trajectory_sweep.py --preset stellarator_like --er-values=-8.5897,0,8.5897 --stem dkx_er_trajectory_sweep_stellarator_reference",
+  "source_commit": "5f09c0776ed2a4f6b06dfcee1c941f20ebf9edf2",
+  "versions": {
+    "python": "3.11.15",
+    "jax": "0.10.2",
+    "numpy": "2.4.6",
+    "scipy": "1.17.1",
+    "h5py": "3.16.0"
+  },
+  "input": "examples/sfincs_examples/sfincsPaperFigure3_geometryScheme11_FPCollisions_2Species_fullTrajectories/input.namelist",
+  "grid": {
+    "geometryScheme": 11,
+    "Ntheta": 19,
+    "Nzeta": 59,
+    "Nxi": 60,
+    "Nx": 5,
+    "solverTolerance": 1e-07,
+    "species": 2,
+    "fast_override": false
+  },
+  "hardware": "CPU only, 8 pinned cores of a 36-thread Xeon W-2295, shared host",
+  "wall_time_s": 1347,
+  "peak_resident_gib": 26.5,
+  "nine_runs": "sequential, one process; each run about 150 s",
+  "summary_sha256": "6d0259977ba7836c37055a273cc5e8a28d235f803ff43cb2fbdad38e00de753e",
+  "figure_sha256": {
+    "png": "b15b1b4d5e5486477cb7c9685cc007e9b380e46e4d572a61e2682e23398a8aa4",
+    "pdf": "b505e8eaed45ee2aca22d842ca734a43f91f47edfc2adb71526a4f0e21b26692"
+  },
+  "runs": {
+    "dkes/er_m8.5897": {
+      "output_sha256": "d0318f1c1f92276624e26ee720e57853ed6c1a84575e4b7f72be77031b2d02fd",
+      "input_sha256": "a1c84d7f6b64d3b4c58ca65efc7d2488126359f483cb6b5155dba68aef469d04"
+    },
+    "dkes/er_p0": {
+      "output_sha256": "ac50ffd514460d1697ef2020bc47c9cd09fadd73eac4364daff0a70281b8ed95",
+      "input_sha256": "43d90afb6928df002e241bb4b5dd199d750371d110c3a828b33cf72db75739e7"
+    },
+    "dkes/er_p8.5897": {
+      "output_sha256": "bc3a882f1e1935f806ec74c2e558d65e7b96ccc168812bfe394c9350346998cc",
+      "input_sha256": "d27f91a655829bfb70f964884d8f80b33ac01c719186bc1ba39c02f14fd6c5d4"
+    },
+    "full/er_m8.5897": {
+      "output_sha256": "46eb498333446ed532b08e87b2de96e47fa62bc35cdff928b00ade16d5995fa8",
+      "input_sha256": "b986695c21757026d500a9c9ae023f5c1e2ac9f4ed6d95e7e9149e1f58f0400a"
+    },
+    "full/er_p0": {
+      "output_sha256": "28cd1a55a6b5c34426f15e953c29cae184dd8486afb164bedc46e8789377a0c7",
+      "input_sha256": "1da7c26786bf6759b0934c044ab6bf5a14821195df09ee9f407735a57ff35c4f"
+    },
+    "full/er_p8.5897": {
+      "output_sha256": "524a4de26b84ee183397bf6527c58bcf094ec6bb8ec8f897a6ed9e14f2b1922a",
+      "input_sha256": "20e044ca3352cc775b552566eb19f4fad8eebae78f9f2d2731b1d845506f61e6"
+    },
+    "partial/er_m8.5897": {
+      "output_sha256": "e67e682acbf2a31e2c1e356560dd49ded25c1a10bb46fbf098590783b4a0ef1e",
+      "input_sha256": "fa98049014d6bb114e1f2587dbdb023672f99de41af656c1de599062a846c7bd"
+    },
+    "partial/er_p0": {
+      "output_sha256": "89ec4391783397c0aa7ae46fe29b5582c3879ffac8bbd7ff4cbaac3796444c4f",
+      "input_sha256": "e4faa9065e2982c0e8aa560c3ed5dcca827980e425b46f28ba4e7762c0de8461"
+    },
+    "partial/er_p8.5897": {
+      "output_sha256": "cdfe03b827d6afb3765cdc2f3f9d3185cb5c0e5e1d6a1ca1afb005655f3a1e5d",
+      "input_sha256": "675d20d6831f70ef403a55e23bdeaefb0f81c93d3818a967d2daabf1bbcbddc5"
+    }
+  }
+}
