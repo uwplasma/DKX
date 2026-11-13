@@ -75,7 +75,7 @@ scripts, run plans and proxy figures cannot be mistaken for closed evidence.
 | `sfincs2014_fig2_w7x_collisionality` | `release_ready` | W7-X transport matrix against collisionality, FP and PAS | {doc}`analytic_limits` |
 | `sfincs2014_fig3_high_collisionality_limit` | `release_ready` | Simakov–Helander high-collisionality limit, LHD and W7-X to $\nu' = 100$ | {doc}`analytic_limits` |
 | `sfincs2014_er_sweep_tokamak_reference` | `release_ready` | DKES, partial and full trajectory models against $E_r$, tokamak | {doc}`cross_code` |
-| `sfincs2014_er_sweep_stellarator_fast_scaffold` | `regression_scaffold` | the same sweep on a stellarator, fast grid | {doc}`cross_code` |
+| `sfincs2014_er_sweep_stellarator_reference` | `release_ready` | the same sweep on a stellarator, full input resolution | {doc}`cross_code` |
 | `publication_validation_dashboard` | `release_ready` | dashboard of the collisionality scans and trajectory sweeps | {doc}`cross_code` |
 | `fortran_v3_cpu_gpu_suite_benchmark_summary` | `release_ready` | 39-case CPU/GPU parity audit and runtime/memory benchmark | {doc}`sfincs`, {doc}`performance` |
 | `sfincs_full_kinetic_tokamak_profile` | `release_ready` | full-FP tokamak profile, DKX against SFINCS, 2.69e-10 | {doc}`sfincs` |

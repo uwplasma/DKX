@@ -33,19 +33,19 @@ python tools/publication_figures/generate_er_trajectory_sweep.py \
 
 python tools/publication_figures/generate_er_trajectory_sweep.py \
   --preset stellarator_like \
-  --fast \
   --er-values=-8.5897,0,8.5897 \
-  --work-dir tools/publication_figures/output/er_sweep_stellarator_fast_reference \
-  --summary-json tools/publication_figures/output/er_sweep_stellarator_fast_reference/summary.json \
+  --work-dir tools/publication_figures/output/er_sweep_stellarator_reference \
+  --summary-json tools/publication_figures/output/er_sweep_stellarator_reference/summary.json \
   --out-dir docs/_static/figures/paper \
-  --stem dkx_er_trajectory_sweep_stellarator_fast_reference
+  --stem dkx_er_trajectory_sweep_stellarator_reference
 ```
 
 The corresponding checked summaries and figures are:
 - `tools/publication_figures/artifacts/er_sweep_tokamak_reference_summary.json`
-- `tools/publication_figures/artifacts/er_sweep_stellarator_fast_reference_summary.json`
+- `tools/publication_figures/artifacts/er_sweep_stellarator_reference_summary.json`
+- `tools/publication_figures/artifacts/er_sweep_stellarator_reference_provenance.json`
 - `docs/_static/figures/paper/dkx_er_trajectory_sweep_tokamak_reference.png`
-- `docs/_static/figures/paper/dkx_er_trajectory_sweep_stellarator_fast_reference.png`
+- `docs/_static/figures/paper/dkx_er_trajectory_sweep_stellarator_reference.png`
 
 `generate_sfincs_paper_figs.py` writes machine-readable collisionality summaries
 to `--summary-dir` as well. If `--summary-dir` is omitted, the summaries are written

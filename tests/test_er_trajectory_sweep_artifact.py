@@ -66,16 +66,16 @@ def test_tokamak_reference_artifact_shows_finite_er_model_separation() -> None:
         assert float(np.max(np.abs(fsab)) - np.min(np.abs(fsab))) > 1e-2
 
 
-def test_stellarator_fast_artifact_contains_expected_models_and_field_points() -> None:
-    records = _load_records("er_sweep_stellarator_fast_reference_summary.json")
+def test_stellarator_reference_artifact_contains_expected_models_and_field_points() -> None:
+    records = _load_records("er_sweep_stellarator_reference_summary.json")
     models = sorted({model for model, _ in records})
     er_values = sorted({er for _, er in records})
     assert models == ["dkes", "full", "partial"]
     assert er_values == [-8.5897, 0.0, 8.5897]
 
 
-def test_stellarator_fast_artifact_has_zero_field_agreement() -> None:
-    records = _load_records("er_sweep_stellarator_fast_reference_summary.json")
+def test_stellarator_reference_artifact_has_zero_field_agreement() -> None:
+    records = _load_records("er_sweep_stellarator_reference_summary.json")
     zero_rows = [records[(model, 0.0)] for model in ("dkes", "partial", "full")]
     for field in (
         "particle_flux_vm_psi_hat",
@@ -87,8 +87,8 @@ def test_stellarator_fast_artifact_has_zero_field_agreement() -> None:
         assert np.allclose(values, values[0], rtol=0.0, atol=1e-12), field
 
 
-def test_stellarator_fast_artifact_shows_nonzero_er_spread() -> None:
-    records = _load_records("er_sweep_stellarator_fast_reference_summary.json")
+def test_stellarator_reference_artifact_shows_nonzero_er_spread() -> None:
+    records = _load_records("er_sweep_stellarator_reference_summary.json")
     for er in (-8.5897, 8.5897):
         values = np.asarray(
             [
@@ -99,3 +99,36 @@ def test_stellarator_fast_artifact_shows_nonzero_er_spread() -> None:
             dtype=float,
         )
         assert float(np.max(values) - np.min(values)) > 1e-4
+
+
+# Stated threshold: across the three trajectory models the bootstrap current
+# <j.B> at nonzero Er differs by at least 1% and at most 10% of its mean
+# magnitude. Below 1% the models would be indistinguishable; above 10% the
+# sweep would no longer be a perturbation of the DKES result.
+BOOTSTRAP_SPREAD_RELATIVE_BOUNDS = (0.01, 0.10)
+
+
+def test_stellarator_bootstrap_current_spread_across_models_is_within_stated_bounds() -> None:
+    records = _load_records("er_sweep_stellarator_reference_summary.json")
+    low, high = BOOTSTRAP_SPREAD_RELATIVE_BOUNDS
+    for er in (-8.5897, 8.5897):
+        values = np.asarray(
+            [float(records[(model, er)]["fsab_jhat"]) for model in ("dkes", "partial", "full")],
+            dtype=float,
+        )
+        relative_spread = float(np.max(values) - np.min(values)) / float(np.mean(np.abs(values)))
+        assert low < relative_spread < high, (er, relative_spread)
+
+
+def test_stellarator_reference_provenance_pins_full_input_grid() -> None:
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "tools"
+        / "publication_figures"
+        / "artifacts"
+        / "er_sweep_stellarator_reference_provenance.json"
+    )
+    prov = json.loads(path.read_text())
+    assert prov["grid"]["fast_override"] is False
+    assert (prov["grid"]["Ntheta"], prov["grid"]["Nzeta"], prov["grid"]["Nxi"], prov["grid"]["Nx"]) == (19, 59, 60, 5)
+    assert len(prov["runs"]) == 9
