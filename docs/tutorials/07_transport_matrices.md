@@ -114,6 +114,17 @@ sides share one factorization on the structured direct route
 ({doc}`../numerics/factor_reuse`). CLI:
 `dkx transport-matrix-v3 --input DECK --out-matrix transportMatrix.npy`.
 
+## Full trajectories against DKES
+
+The DKES trajectory model drops the $E_r$-dependent terms that change a
+particle's energy and pitch while it drifts (`includeXDotTerm`,
+`includeElectricFieldTermInXiDot`) and uses a simplified $E\times B$ drift
+(`useDKESExBDrift`). The full model keeps them. `16_full_trajectories.py` solves
+a circular tokamak with a small helical ripple, one ion species and PAS at
+$E_r=0$ and $E_r=-30$ (SFINCS units) with each model. At zero field the two
+agree to the printed digits. At $E_r=-30$ the full-trajectory ion flux is 0.966
+of the DKES one and the parallel flow differs by 8%, on a grid chosen for speed.
+
 ## Next
 
 {doc}`08_phi1_bootstrap_gradients`: $\Phi_1$, the bootstrap current and

@@ -1,14 +1,15 @@
 # Advanced examples
 
-Research-scale scripts that build on the tutorials (`../tutorials/`). Both
-need the optional `vmex` and `booz_xform_jax >= 0.4` packages and run for tens
-of minutes on a CPU. Like the tutorials they are flat scripts: the input
+Research-scale scripts that build on the tutorials (`../tutorials/`). The two
+VMEX scripts need the optional `vmex` and `booz_xform_jax >= 0.4` packages and
+run for tens of minutes on a CPU. Like the tutorials they are flat scripts: the input
 parameters are plain variables at the top, one comment each, and nothing is
 read from the command line or the environment.
 
 | Script | What it does | Runtime |
 | --- | --- | --- |
 | [`QA_optimization_bootstrap_dkx.py`](QA_optimization_bootstrap_dkx.py) | VMEX's QA bootstrap-current optimization with the Redl row replaced by the drift-kinetic one DKX computes on each trial equilibrium | 30 min, 4.6 GB, four CPU threads |
+| [`impurity_screening_optimization.py`](impurity_screening_optimization.py) | shape `\|B\|` with `jax.grad` through a three-species Fokker-Planck solve to push C6+ outward; prints the temperature-screening coefficient. Needs only DKX | 258 s |
 | [`ambipolar_bootstrap_dkx.py`](ambipolar_bootstrap_dkx.py) | the same traced row at the ambipolar `E_r` of a rotating-ellipse equilibrium, with its implicit Jacobian checked against central differences | tens of minutes |
 
 ## The kinetic bootstrap row
@@ -45,5 +46,7 @@ The finite-beta VMEC-to-kinetic-profiles driver and the proxy-objective and
 promotion-audit scripts for completed `dkx scan-er` runs take command-line
 arguments, so they now live in `tools/optimization/`. The `optimize_` family of
 shape-optimization scripts, their shared objectives module and the QH and QI pairings were
-removed; tutorials 14 and 15 cover the gradient workflow, and the old scripts
-are in the git history.
+removed. Their gradient workflow is in tutorials 14 and 15 and the impurity
+script above; the differentiable ambipolar root behind the electron-root
+optimization is `ambipolar_bootstrap_dkx.py` and `dkx.er`. The old scripts are
+in the git history.

@@ -45,10 +45,10 @@ bounds; a quiet machine is several times faster.
 
 ## Advanced
 
-[`advanced/`](advanced) holds the research-scale scripts: the VMEX QA
-bootstrap-current optimization with a kinetic row, and the same row at the
-ambipolar `E_r`. They run for tens of minutes and need `vmex` and
-`booz_xform_jax`. See [`advanced/README.md`](advanced/README.md).
+[`advanced/`](advanced) holds the research-scale scripts: shape optimization for
+impurity screening (needs only DKX, a few minutes), the VMEX QA bootstrap-current
+optimization with a kinetic row, and the same row at the ambipolar `E_r` (tens of
+minutes, need `vmex` and `booz_xform_jax`). See [`advanced/README.md`](advanced/README.md).
 
 ## Other folders
 

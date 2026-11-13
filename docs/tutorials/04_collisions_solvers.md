@@ -77,6 +77,17 @@ run and stored in the certificate (`result.metadata["solver_route"]`):
 Force a route only to test one: `[solver] method = "gcrot"` (see
 {doc}`../numerics/krylov_and_preconditioners`).
 
+## CPU and GPU
+
+DKX runs on whatever JAX does. `18_gpu.py` lists `jax.devices()`, then solves
+the VMEC case of page 3 once per platform it finds, twice each, with
+`run.device` set to the platform name. The first call includes the XLA
+compilation and the second is the cost of one more case of the same shape; on
+a loaded CPU node they were 17 s and 3.6 s. A GPU is not faster for a case this
+small: compilation dominates and the direct factorization is launch-bound. It
+pays when many solves share one compilation (an $E_r$ or surface scan) or the
+operator is large ({doc}`../user_guide/scans_and_parallelism`).
+
 ## How to tell whether a run is trustworthy
 
 1. **The route line.** A `falling back to the recycled Krylov route` message
