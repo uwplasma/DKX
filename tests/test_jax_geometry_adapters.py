@@ -141,8 +141,8 @@ def test_boozer_bhat_from_spectrum_matches_manual_cosine_sum() -> None:
 def _load_finite_beta_example_module() -> ModuleType:
     script = (
         Path(__file__).parents[1]
-        / "examples"
-        / "advanced"
+        / "tools"
+        / "optimization"
         / "finite_beta_vmec_to_sfincs.py"
     )
     spec = importlib.util.spec_from_file_location("finite_beta_vmec_to_sfincs_contract_test", script)

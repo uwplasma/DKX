@@ -19,12 +19,10 @@ r/a = 0.3, hydrogen + carbon + electrons, full Fokker-Planck collisions
 are passed as keywords to ``dkx.run``.
 
 Run:              python examples/tutorials/11_phi1.py
-Smoke mode:       DKX_EXAMPLES_CI=1 python examples/tutorials/11_phi1.py
-Expected runtime: see the table in examples/README.md.
+Runtime:          about 133 s on a loaded 36-core CPU node, compilation included.
 """
 
 # 1. Imports
-import os
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -33,7 +31,6 @@ import numpy as np
 import dkx
 
 # 2. Input parameters
-SMOKE = os.environ.get("DKX_EXAMPLES_CI") == "1"
 OUT = Path(__file__).resolve().parents[1] / "output" / Path(__file__).stem
 LABELS = ("hydrogen Z=+1", "carbon Z=+6", "electron Z=-1")
 CARBON_FRACTION = 0.0125  # n_C / n_H
@@ -45,7 +42,7 @@ PARAMETERS = dict(
     THats=[1.0, 1.0, 1.0], dNHatdrHats=[-0.5, -0.5, -0.5], dTHatdrHats=[-1.0, -1.0, -1.0],
     collisionOperator=0,  # 0 = linearized Fokker-Planck
     Delta=4.5694e-3, alpha=1.0, nu_n=8.330e-3,
-    Ntheta=9 if SMOKE else 15, Nzeta=1, Nxi=8 if SMOKE else 16, NL=4, Nx=4 if SMOKE else 5,
+    Ntheta=15, Nzeta=1, Nxi=16, NL=4, Nx=5,
 )
 
 # 3. Run

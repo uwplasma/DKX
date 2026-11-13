@@ -11,18 +11,16 @@ from quasisymmetric: trapped particles drift out of the helical wells (the
 1/nu regime) and Gamma comes out orders of magnitude above tutorial 01.
 
 Inputs live in the TOML file (edit it, or point ``file`` at your own wout);
-the script only shrinks the grid in smoke mode.  The certificate pins the
+the script only reads them.  The certificate pins the
 equilibrium's sha256, so a saved result records exactly which file it used.
 
 Run:              python examples/tutorials/04_vmec_geometry.py
 CLI:              dkx run examples/tutorials/04_vmec_geometry.toml --out result.nc
-Smoke mode:       DKX_EXAMPLES_CI=1 python examples/tutorials/04_vmec_geometry.py
-Expected runtime: see the table in examples/README.md.
+Runtime:          about 44 s on a loaded 36-core CPU node, compilation included.
 """
 
 # 1. Imports
 import lzma
-import os
 import shutil
 from dataclasses import replace
 from pathlib import Path
@@ -32,19 +30,17 @@ import numpy as np
 import dkx
 
 # 2. Input parameters
-SMOKE = os.environ.get("DKX_EXAMPLES_CI") == "1"
 CASE_FILE = Path(__file__).with_suffix(".toml")  # every physics input is in here
+RESOLUTION = {}  # grid entries that override the TOML file, e.g. {"theta": 9, "zeta": 9}
 OUT = Path(__file__).resolve().parents[1] / "output" / Path(__file__).stem
-SMOKE_RESOLUTION = {"theta": 9, "zeta": 9, "pitch": 8, "speed": 4}
 
 # 3. Run
 case = dkx.Case.from_file(CASE_FILE)
 wout = case.geometry_path  # shipped as .nc.xz: decompress once, beside the archive
+case = replace(case, resolution=replace(case.resolution, **RESOLUTION))
 if not wout.exists():
     with lzma.open(wout.with_name(wout.name + ".xz")) as src, open(wout, "wb") as dst:
         shutil.copyfileobj(src, dst)
-if SMOKE:
-    case = replace(case, resolution=replace(case.resolution, **SMOKE_RESOLUTION))
 print(f"case {case.case_id[:12]} on {wout.name}", flush=True)
 result = dkx.run(case)
 

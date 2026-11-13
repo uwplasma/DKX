@@ -29,7 +29,7 @@ equilibrium feedback.
 
 Documented configuration limitations (measured while building this case):
   - the repository's other finite-beta QA deck
-    (examples/advanced/input.nfp2_QA_finite_beta) has almost
+    (tools/optimization/input.nfp2_QA_finite_beta) has almost
     entirely current-driven rotational transform (iota ~ 0.02 without its
     6.1 MA current), so a from-scratch zero-current Picard start is
     degenerate there (the equilibrium solve stalls at fsq ~ 1e-4);

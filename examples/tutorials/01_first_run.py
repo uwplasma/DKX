@@ -16,12 +16,10 @@ and <j.B> is the bootstrap current.  The certificate says the *linear solve*
 converged; whether the *resolution* is converged is tutorial 13.
 
 Run:              python examples/tutorials/01_first_run.py
-Smoke mode:       DKX_EXAMPLES_CI=1 python examples/tutorials/01_first_run.py
-Expected runtime: see the table in examples/README.md.
+Runtime:          about 33 s on a loaded 36-core CPU node, compilation included.
 """
 
 # 1. Imports
-import os
 from pathlib import Path
 
 import numpy as np
@@ -29,7 +27,6 @@ import numpy as np
 import dkx
 
 # 2. Input parameters
-SMOKE = os.environ.get("DKX_EXAMPLES_CI") == "1"  # tiny grids, for CI
 OUT = Path(__file__).resolve().parents[1] / "output" / Path(__file__).stem
 CASE = {
     "name": "first_run",
@@ -49,8 +46,6 @@ CASE = {
     # Poloidal/toroidal grid points, Legendre modes in pitch, speed nodes.
     "resolution": {"theta": 13, "zeta": 1, "pitch": 16, "speed": 5},
 }
-if SMOKE:
-    CASE["resolution"] = {"theta": 9, "zeta": 1, "pitch": 8, "speed": 4}
 
 # 3. Run
 result = dkx.run(dkx.Case.from_mapping(CASE))

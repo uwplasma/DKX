@@ -16,8 +16,7 @@ current, which is not zero here because Er = 0 is not the ambipolar field
 call: ``dkx.run("03_sfincs_namelist.namelist", out="out.h5", emit=print)``.
 
 Run:              python examples/tutorials/03_sfincs_namelist.py
-Smoke mode:       DKX_EXAMPLES_CI=1 (the deck is already seconds-sized)
-Expected runtime: see the table in examples/README.md.
+Runtime:          about 19 s on a loaded 36-core CPU node, compilation included.
 """
 
 # 1. Imports

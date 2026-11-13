@@ -349,7 +349,7 @@ jobs:
         run: |
           python tools/parity/output_parity_cli_driver.py
           python tools/parity/output_key_coverage_report.py
-          for tutorial in examples/tutorials/0[1-3]_*.py; do DKX_EXAMPLES_CI=1 python "$tutorial"; done
+          for tutorial in examples/tutorials/0[1-3]_*.py; do python "$tutorial"; done
 
   external-data-smoke:
     needs: changes

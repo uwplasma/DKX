@@ -19,12 +19,10 @@ helical field).
 
 Run:              python examples/tutorials/10_transport_matrix.py
 CLI:              dkx transport-matrix-v3 --input input.namelist
-Smoke mode:       DKX_EXAMPLES_CI=1 python examples/tutorials/10_transport_matrix.py
-Expected runtime: see the table in examples/README.md.
+Runtime:          about 71 s on a loaded 36-core CPU node, compilation included.
 """
 
 # 1. Imports
-import os
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -33,15 +31,14 @@ import numpy as np
 import dkx
 
 # 2. Input parameters
-SMOKE = os.environ.get("DKX_EXAMPLES_CI") == "1"
 OUT = Path(__file__).resolve().parents[1] / "output" / Path(__file__).stem
-GRID = dict(Ntheta=9, Nzeta=9, Nxi=6, NL=3) if SMOKE else dict(Ntheta=15, Nzeta=15, Nxi=24, NL=4)
+GRID = dict(Ntheta=15, Nzeta=15, Nxi=24, NL=4)  # angle and pitch grids
 CASES = {
     "RHSMode=2 (3x3, LHD model)": dict(
         RHSMode=2, geometryScheme=2, Zs=[1.0], mHats=[1.0], nHats=[1.0], THats=[1.0],
         Delta=4.5694e-3, alpha=1.0, nu_n=0.15, Er=0.0, collisionOperator=1,
         includeXDotTerm=False, includeElectricFieldTermInXiDot=False, useDKESExBDrift=True,
-        Nx=3 if SMOKE else 5, solverTolerance=1e-10, **GRID),
+        Nx=5, solverTolerance=1e-10, **GRID),
     "RHSMode=3 (2x2, monoenergetic)": dict(
         RHSMode=3, geometryScheme=1, epsilon_t=-0.07053, epsilon_h=0.05067, iota=0.4542,
         GHat=3.7481, IHat=0.0, helicity_l=2, helicity_n=10, B0OverBBar=1.0,

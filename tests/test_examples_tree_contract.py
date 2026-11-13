@@ -13,14 +13,12 @@ pinned, but in the example that produced them, beside the code that re-checks.
 
 from __future__ import annotations
 
-import json
 import re
 import subprocess
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES_ROOT = REPO_ROOT / "examples"
-WORKFLOW_CATALOG = EXAMPLES_ROOT / "workflow_catalog.json"
 
 # One teaching ladder, one folder of heavier scripts, and two folders of inputs.
 FOLDERS_WITH_README = ("advanced", "data", "sfincs_examples")
@@ -76,10 +74,6 @@ def _tracked_example_files() -> list[Path]:
     return [REPO_ROOT / line for line in result.stdout.splitlines() if line]
 
 
-def _workflow_catalog() -> dict:
-    return json.loads(WORKFLOW_CATALOG.read_text(encoding="utf-8"))
-
-
 def _present_folders() -> set[str]:
     return {
         path.name
@@ -104,6 +98,13 @@ def test_every_tutorial_is_indexed_in_the_examples_readme() -> None:
     readme = (EXAMPLES_ROOT / "README.md").read_text(encoding="utf-8")
     assert TUTORIALS, "the tutorial ladder is empty"
     assert [path.name for path in TUTORIALS if path.name not in readme] == []
+
+
+def test_every_advanced_script_is_indexed_in_its_readme() -> None:
+    readme = (EXAMPLES_ROOT / "advanced" / "README.md").read_text(encoding="utf-8")
+    scripts = sorted((EXAMPLES_ROOT / "advanced").glob("*.py"))
+    assert scripts, "examples/advanced is empty"
+    assert [path.name for path in scripts if path.name not in readme] == []
 
 
 def test_tutorial_inputs_belong_to_a_tutorial_and_cli_lines_name_real_files() -> None:
@@ -156,36 +157,6 @@ def test_example_readmes_are_standalone_and_reference_existing_scripts() -> None
 
     assert offenders == []
     assert missing_scripts == []
-
-
-def test_workflow_catalog_points_at_files_that_exist_and_run_unaided() -> None:
-    """The catalog is the terminal route to the same map; keep it honest.
-
-    ``requires_fortran_v3 is False`` is the load-bearing check: the catalog is
-    what a new user searches, and an entry that silently needs a Fortran build
-    they do not have is worse than no entry at all.
-    """
-    catalog = _workflow_catalog()
-
-    assert catalog["schema_version"] == 1
-    assert set(catalog["folders"]) <= ALLOWED_EXAMPLE_FOLDERS
-    assert "workflow_catalog.json" in (EXAMPLES_ROOT / "README.md").read_text(encoding="utf-8")
-
-    for folder, metadata in sorted(catalog["folders"].items()):
-        assert metadata["role"], folder
-        start_path = EXAMPLES_ROOT / metadata["start_here"]
-        assert start_path.exists(), f"{folder}: {metadata['start_here']}"
-        assert metadata["start_here"].split("/", 1)[0] == folder
-
-    for workflow in catalog["workflows"]:
-        entrypoint = workflow["entrypoint"]
-        assert workflow["id"]
-        assert workflow["goal"]
-        assert workflow["command"].startswith("python examples/")
-        assert workflow["keywords"]
-        assert workflow["runtime_budget"]
-        assert workflow["requires_fortran_v3"] is False, entrypoint
-        assert (EXAMPLES_ROOT / entrypoint).is_file(), entrypoint
 
 
 def test_examples_do_not_teach_v3_driver_facade_imports() -> None:

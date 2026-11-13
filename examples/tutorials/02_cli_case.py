@@ -17,8 +17,7 @@ the same object.  The shipped resolution is deliberately small: see the
 comments in the TOML file and tutorial 13.
 
 Run:              python examples/tutorials/02_cli_case.py
-Smoke mode:       DKX_EXAMPLES_CI=1 (the case is already seconds-sized)
-Expected runtime: see the table in examples/README.md.
+Runtime:          about 19 s on a loaded 36-core CPU node, compilation included.
 """
 
 # 1. Imports

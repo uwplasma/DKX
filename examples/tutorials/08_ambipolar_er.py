@@ -19,12 +19,10 @@ is a production-scale case on a real W7-X wout to ``dkx validate``.
 
 Run:              python examples/tutorials/08_ambipolar_er.py
 CLI:              dkx run examples/tutorials/08_ambipolar_er.toml --out r.nc && dkx roots r.nc
-Smoke mode:       DKX_EXAMPLES_CI=1 python examples/tutorials/08_ambipolar_er.py
-Expected runtime: see the table in examples/README.md.
+Runtime:          about 146 s on a loaded 36-core CPU node, compilation included.
 """
 
 # 1. Imports
-import os
 from dataclasses import replace
 from pathlib import Path
 
@@ -34,10 +32,10 @@ import numpy as np
 import dkx
 
 # 2. Input parameters
-SMOKE = os.environ.get("DKX_EXAMPLES_CI") == "1"
 CASE_FILE = Path(__file__).with_suffix(".toml")
 OUT = Path(__file__).resolve().parents[1] / "output" / Path(__file__).stem
-ER_SCAN_KV_M = np.linspace(-5.0, 5.0, 3 if SMOKE else 9)  # prescribed fields for step 1
+ER_SCAN_KV_M = np.linspace(-5.0, 5.0, 9)  # prescribed fields for step 1 [kV/m]
+SEARCH_POINTS = 5  # E_r samples per surface used to bracket the roots in step 2
 E = 1.602176634e-19  # C
 
 # 3. Run
@@ -51,8 +49,7 @@ for k, er in enumerate(ER_SCAN_KV_M):
     j_r.append(E * np.asarray(dkx.run(case).arrays["particle_flux_m2_s"]) @ charges)
 j_r = np.array(j_r)  # (Er, surface) in A m^-2
 print("step 2, ambipolar root solve", flush=True)
-if SMOKE:  # fewer bracketing samples
-    base = replace(base, electric_field=replace(base.electric_field, search_points=3))
+base = replace(base, electric_field=replace(base.electric_field, search_points=SEARCH_POINTS))
 result = dkx.run(base)
 
 # 4. Plot, save and print

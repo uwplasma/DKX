@@ -10,7 +10,7 @@ import numpy as np
 
 def _load_example_module() -> ModuleType:
     repo = Path(__file__).resolve().parents[1]
-    script = repo / "examples" / "advanced" / "finite_beta_vmec_to_sfincs.py"
+    script = repo / "tools" / "optimization" / "finite_beta_vmec_to_sfincs.py"
     spec = importlib.util.spec_from_file_location("finite_beta_vmec_to_sfincs", script)
     assert spec is not None
     assert spec.loader is not None

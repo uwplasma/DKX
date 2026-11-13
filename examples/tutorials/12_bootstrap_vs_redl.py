@@ -22,14 +22,12 @@ Fokker-Planck value is the kinetic reference; the default grid gives 0.64 and
 29x29 angles with Nxi=48, Nx=6 give 0.57.
 
 Run:              python examples/tutorials/12_bootstrap_vs_redl.py
-Smoke mode:       DKX_EXAMPLES_CI=1 python examples/tutorials/12_bootstrap_vs_redl.py
-Expected runtime: see the table in examples/README.md.
+Runtime:          about 156 s on a loaded 36-core CPU node, compilation included.
 """
 
 # 1. Imports
 import json
 import lzma
-import os
 import shutil
 from pathlib import Path
 
@@ -40,7 +38,6 @@ import dkx
 from dkx.units import PARALLEL_CURRENT
 
 # 2. Input parameters
-SMOKE = os.environ.get("DKX_EXAMPLES_CI") == "1"
 OUT = Path(__file__).resolve().parents[1] / "output" / Path(__file__).stem
 REF = Path(__file__).resolve().parents[2] / "tests" / "ref"
 FIXTURE = json.loads((REF / "boozer_route_sign_vmex_seed_nfp2.json").read_text())
@@ -53,7 +50,7 @@ PARAMETERS = dict(
     dNHatdpsiNs=[-5 * N0 / 1e20 * S**4] * 2, dTHatdpsiNs=[-T0 / 1e3] * 2,
     Delta=4.5694e-3, alpha=1.0, nu_n=8.330e-3, Er=0.0,
     # Coarser than this the current changes sign: the floor, not a converged grid.
-    **(dict(Ntheta=11, Nzeta=11, Nxi=16, NL=4, Nx=4) if SMOKE else dict(Ntheta=17, Nzeta=17, Nxi=32, NL=4, Nx=5)),
+    Ntheta=17, Nzeta=17, Nxi=32, NL=4, Nx=5,
 )
 OPERATORS = {"Fokker-Planck": 0, "pitch-angle scattering": 1}  # SFINCS collisionOperator
 

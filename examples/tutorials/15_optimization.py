@@ -17,12 +17,10 @@ difference.  In a real design loop the amplitudes come from a VMEC/VMEX
 boundary through ``booz_xform_jax``; ``examples/advanced/`` does that.
 
 Run:              python examples/tutorials/15_optimization.py
-Smoke mode:       DKX_EXAMPLES_CI=1 python examples/tutorials/15_optimization.py
-Expected runtime: see the table in examples/README.md.
+Runtime:          about 137 s on a loaded 36-core CPU node, compilation included.
 """
 
 # 1. Imports
-import os
 from dataclasses import replace
 from pathlib import Path
 
@@ -37,11 +35,10 @@ from dkx.run import profile_moments_from_operator
 from dkx.solve import solve
 
 # 2. Input parameters
-SMOKE = os.environ.get("DKX_EXAMPLES_CI") == "1"
 OUT = Path(__file__).resolve().parents[1] / "output" / Path(__file__).stem
 EPS_H_START = 0.05  # initial helical ripple (the design variable)
 LEARNING_RATE = 10.0
-N_STEPS = 2 if SMOKE else 8
+N_STEPS = 8  # gradient steps
 FD_STEP = 1.0e-6
 N_PERIODS, EPS_T, IOTA, G_HAT = 5, 0.07, 0.87, 3.7481
 M_MODES, N_MODES = jnp.array([0.0, 1.0, 1.0]), jnp.array([0.0, 0.0, 1.0])  # (0,0), (1,0), (1,1)
@@ -50,7 +47,7 @@ PARAMETERS = dict(
     epsilon_h=EPS_H_START, helicity_l=1, helicity_n=1, Nperiods=N_PERIODS, iota=IOTA, GHat=G_HAT,
     IHat=0.0, psiAHat=0.15596, aHat=0.5585, Zs=[1.0], mHats=[1.0], nHats=[1.0], THats=[1.0],
     dNHatdrHats=[-0.5], dTHatdrHats=[-1.0], collisionOperator=1, Delta=4.5694e-3, alpha=1.0,
-    nu_n=8.330e-3, Ntheta=11, Nzeta=11, Nxi=10 if SMOKE else 16, NL=4, Nx=4,
+    nu_n=8.330e-3, Ntheta=11, Nzeta=11, Nxi=16, NL=4, Nx=4,
 )
 # Operator fields that the geometry owns; replacing only these keeps the
 # collision operator and grids fixed, so the derivative is a pure shape derivative.

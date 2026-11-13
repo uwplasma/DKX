@@ -942,7 +942,7 @@ def build_candidate_scan_plan(
 
     promotion_cmd = [
         sys.executable,
-        "examples/advanced/evaluate_dkx_promotion_scan.py",
+        "tools/optimization/evaluate_dkx_promotion_scan.py",
         "--scan-dir",
         str(scan_dir),
         "--out-dir",

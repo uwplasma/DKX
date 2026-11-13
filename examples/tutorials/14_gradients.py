@@ -16,12 +16,10 @@ checked against central finite differences at three step sizes, and the
 figure draws the jax.grad tangent on a T sweep.
 
 Run:              python examples/tutorials/14_gradients.py
-Smoke mode:       DKX_EXAMPLES_CI=1 python examples/tutorials/14_gradients.py
-Expected runtime: see the table in examples/README.md.
+Runtime:          about 68 s on a loaded 36-core CPU node, compilation included.
 """
 
 # 1. Imports
-import os
 from dataclasses import replace
 from pathlib import Path
 
@@ -36,17 +34,16 @@ from dkx.run import profile_moments_from_operator
 from dkx.solve import solve
 
 # 2. Input parameters
-SMOKE = os.environ.get("DKX_EXAMPLES_CI") == "1"
 OUT = Path(__file__).resolve().parents[1] / "output" / Path(__file__).stem
 PARAMETERS = dict(
     geometryScheme=1, inputRadialCoordinate=3, rN_wish=0.3, B0OverBBar=1.0, epsilon_t=-0.07,
     epsilon_h=0.0, iota=0.4542, GHat=3.7481, IHat=0.0, psiAHat=0.15596, aHat=0.5585,
     Zs=[1.0], mHats=[1.0], nHats=[1.0], THats=[1.0], dNHatdrHats=[-0.5], dTHatdrHats=[-1.0],
     collisionOperator=1, Delta=4.5694e-3, alpha=1.0, nu_n=8.330e-3,
-    Ntheta=11, Nzeta=1, Nxi=12 if SMOKE else 24, NL=4, Nx=5,
+    Ntheta=11, Nzeta=1, Nxi=24, NL=4, Nx=5,
 )
 FD_STEPS = 1.0e-5 * np.array([1.0, 3.0, 10.0])  # central-difference steps in THat
-SWEEP = np.array([0.8, 1.0, 1.2] if SMOKE else [0.8, 0.9, 1.0, 1.1, 1.2])  # THat values
+SWEEP = np.array([0.8, 0.9, 1.0, 1.1, 1.2])  # THat values, relative to the case's own
 
 # 3. Run
 print("building the operator", flush=True)
