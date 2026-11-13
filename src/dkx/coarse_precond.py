@@ -871,6 +871,13 @@ def _row_solve(solver: tuple, v, *, transpose: bool):
     return jax.vmap(lambda a, q, b: lu_solve((a, q), b, trans=1 if transpose else 0))(*solver, v)
 
 
+def _row_segments(counts: tuple[int, ...]) -> tuple[tuple[int, int, int], ...]:
+    """``(start, stop, count)`` runs of Legendre rows with the same active chains: at most
+    ``n_x`` of them, since a chain's length depends only on its speed."""
+    cuts = [0, *(l for l in range(1, len(counts)) if counts[l] != counts[l - 1]), len(counts)]
+    return tuple((a, b, counts[a]) for a, b in zip(cuts, cuts[1:]))
+
+
 @functools.partial(
     jax.jit, static_argnames=("n_xi", "rows", "drop_l_coupling", "factor_dtype", "inverse")
 )
@@ -887,8 +894,14 @@ def _factor_coarse_rows(
     No band exists before elimination, the retained state is three ``m x m`` blocks
     per active row plus pivots, and the working set is one row's blocks.  The
     generator arrays are arguments, never closures, so none becomes a captured
-    constant (tests/test_coarse_precond_constants.py).  Returns, per row,
-    ``(delta_inverse, lower, upper)`` with ``inverse`` and ``(delta_lu, delta_piv, lower, upper)`` without, with a leading ``counts[l]`` axis.
+    constant (tests/test_coarse_precond_constants.py).
+
+    One ``lax.scan`` per run of equal ``counts`` (:func:`_row_segments`) eliminates the
+    rows, so the program does not grow with ``Nxi``; a run starts from the row above
+    it padded with identity solves and zero couplings, which subtract nothing.
+    Returns, per run, the stacked rows ``(delta_inverse, lower, upper)`` with
+    ``inverse`` and ``(delta_lu, delta_piv, lower, upper)`` without, each shaped
+    ``(rows, counts[l], ...)``.
 
     Rows are generated in float64 and only then cast to ``factor_dtype``, so the
     pins and the floor, scaled against band magnitudes, stay at full precision.
@@ -904,28 +917,43 @@ def _factor_coarse_rows(
         )
         return tuple(a.astype(low) for a in generate(ell))
 
-    factors: list = [None] * len(counts)
-    cond = jnp.zeros(())
-    for ell in reversed(range(len(counts))):
-        c = counts[ell]
+    m = jax.eval_shape(
+        row_blocks, tuple(a[0] for a in subs), floor[0], gamma[0], jnp.zeros((), jnp.int32)
+    )[1].shape[-1]
+
+    def step(nxt, ell, c):
         head = (tuple(a[:c] for a in subs), floor[:c], gamma[:c])
-        lower, diag, upper = jax.vmap(row_blocks, in_axes=(0, 0, 0, None))(
-            *head, jnp.asarray(ell, dtype=jnp.int32)
-        )
-        if ell + 1 < len(counts):
-            n = counts[ell + 1]
-            lower_next = factors[ell + 1][-2]
-            solved = _row_solve(factors[ell + 1][:-2], lower_next, transpose=False)
-            diag = jnp.concatenate([diag[:n] - upper[:n] @ solved, diag[n:]])
+        lower, diag, upper = jax.vmap(row_blocks, in_axes=(0, 0, 0, None))(*head, ell)
+        diag = diag - upper @ _row_solve(nxt[:-2], nxt[-2], transpose=False)
         if inverse:
-            inv, row_cond = _explicit_inverse(diag)
-            cond = jnp.maximum(cond, jnp.max(row_cond))
-            factors[ell] = (inv, lower, upper)
-        else:
-            factors[ell] = (*jax.vmap(lu_factor)(diag), lower, upper)
-    return tuple(factors), cond
+            inv, cond = _explicit_inverse(diag)
+            return (inv, lower, upper), jnp.max(cond)
+        return (*jax.vmap(lu_factor)(diag), lower, upper), jnp.zeros(())
 
+    def pad(fac, c):  # no-op rows for the chains that stop at the row below
+        k = c - (0 if fac is None else fac[0].shape[0])
+        eye = jnp.broadcast_to(jnp.eye(m, dtype=low), (k, m, m))
+        piv = jnp.broadcast_to(jnp.arange(m, dtype=jnp.int32), (k, m))
+        fill = (eye, *(() if inverse else (piv,)), jnp.zeros_like(eye), jnp.zeros_like(eye))
+        return fill if fac is None else tuple(jnp.concatenate([a, f]) for a, f in zip(fac, fill))
 
+    fac = None
+    runs = _row_segments(counts)
+    segments: list = [None] * len(runs)
+    cond = jnp.zeros(())
+    for i in reversed(range(len(runs))):
+        start, stop, c = runs[i]
+
+        def body(carry, ell, c=c):
+            row, row_cond = step(carry, ell, c)
+            return row, (row, row_cond)
+
+        _, (segments[i], conds) = jax.lax.scan(
+            body, pad(fac, c), jnp.arange(start, stop, dtype=jnp.int32), reverse=True
+        )
+        fac = tuple(a[0] for a in segments[i])
+        cond = jnp.maximum(cond, jnp.max(conds))
+    return tuple(segments), cond
 
 
 #: The f-block terms the coarse preconditioner does not represent, and the
@@ -996,8 +1024,17 @@ def _apply_dense_coarse_factors(factors, floor, rhs, *, transpose, rows):
     return out.reshape(rhs.shape)
 
 
+def _unstack(runs: list) -> tuple:
+    """Per-row ``(solver, lower, upper)`` from the stacked runs, releasing each run once sliced."""
+    rows: list = []
+    for i in range(len(runs)):
+        run, runs[i] = runs[i], None
+        rows += [tuple(a[j] for a in run) for j in range(run[0].shape[0])]
+    return tuple(rows)
+
+
 def _split_factors_by_speed(factors: list, rows: tuple, n_species: int) -> tuple:
-    """The stored rows regrouped by speed, emptying ``factors``.
+    """The stored runs of rows regrouped by speed, emptying ``factors``.
 
     The speed-triangle apply reads one speed's chain at a time.  Slicing the
     stacked ``(counts[l], m, m)`` arrays inside the compiled apply makes XLA
@@ -1018,23 +1055,23 @@ def _split_factors_by_speed(factors: list, rows: tuple, n_species: int) -> tuple
     lengths = np.asarray([sum(c > start for c in counts) for start in starts], dtype=np.int32)
     offsets = np.concatenate(([0], np.cumsum(lengths)[:-1])).astype(np.int32)
     stacks = [
-        jnp.empty((int(lengths.sum()), n_species, *ref.shape[1:]), dtype=ref.dtype)
+        jnp.empty((int(lengths.sum()), n_species, *ref.shape[2:]), dtype=ref.dtype)
         for ref in factors[0]
     ]
-    for ell in range(len(factors)):
-        row, factors[ell] = factors[ell], None
+    for i, (a, _, c) in enumerate(_row_segments(counts)):
+        run, factors[i] = factors[i], None
         for x, start in enumerate(starts):
-            if counts[ell] > start:
-                for k, a in enumerate(row):
-                    stacks[k] = _place(stacks[k], a[start : start + n_species], int(offsets[x]) + ell)
-        del row
+            if c > start:
+                for k, arr in enumerate(run):
+                    stacks[k] = _place(stacks[k], arr[:, start : start + n_species], int(offsets[x]) + a)
+        del run
     return tuple(stacks), jnp.asarray(lengths), jnp.asarray(offsets)
 
 
 @functools.partial(jax.jit, donate_argnums=0)
 def _place(stack, block, index):
-    """``stack[index] = block`` in place: one program for every speed and row."""
-    return stack.at[index].set(block)
+    """``stack[index : index + len(block)] = block`` in place."""
+    return jax.lax.dynamic_update_slice_in_dim(stack, block, index, 0)
 
 
 @functools.partial(jax.jit, static_argnames=("transpose",))
@@ -1379,6 +1416,7 @@ def build_coarse_preconditioner(
         if not (traced or isinstance(cond, jax.core.Tracer)) and not float(cond) <= _INVERSE_COND_LIMIT:
             factors, _ = factor(inverse=False)
 
+        factors = list(factors)
         upper = (
             _strict_upper_speed_coupling(op, mask) if retain_speed_triangle else None
         )
@@ -1388,9 +1426,10 @@ def build_coarse_preconditioner(
         sweeps = 0 if retain_speed_triangle is True else int(retain_speed_triangle or 0)
         split = lengths = offsets = None
         if upper is not None and retain_speed_triangle is True:
-            factors = list(factors)
             split, lengths, offsets = _split_factors_by_speed(factors, rows, n_s)  # empties the list
             factors = None
+        else:
+            factors = _unstack(factors)
 
         def _a_inv(transpose: bool) -> Callable[[jnp.ndarray], jnp.ndarray]:
             # A plain function, not a ``functools.partial``: SOLVAX's Krylov entry
