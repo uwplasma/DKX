@@ -25,36 +25,38 @@ and the field-particle terms built from the Rosenbluth potentials of $f_{b1}$:
 it conserves momentum and couples all speeds and species. It is one field in
 the case, `physics.collisions`.
 
-## PAS against FP
+## PAS, FP and Sugama
 
-`06_fokker_planck_vs_pas.py` solves a deuterium-electron tokamak with each
-operator and nothing else changed:
+`06_collision_operators.py` solves a hydrogen-electron tokamak with each
+operator and nothing else changed, through SFINCS's `collisionOperator`
+(0 Fokker-Planck, 1 PAS, 3 the improved Sugama model operator):
 
 ```python
-results = {}
-for operator in ("pitch_angle_scattering", "linearized_fokker_planck"):
-    results[operator] = dkx.run(dkx.Case.from_mapping({**CASE, "physics": {"collisions": operator}}))
+for name, operator in {"Fokker-Planck": 0, "pitch-angle scattering": 1, "Sugama": 3}.items():
+    runs[name] = dkx.run(**PARAMETERS, collisionOperator=operator)
 ```
 
-FP/PAS ratio on the three surfaces (17 s):
+Each observable relative to Fokker-Planck:
 
 ```text
-  particle_flux_m2_s         [0.566 0.551 0.541]
-  heat_flux_W_m2             [1.39  1.339 1.301]
-  parallel_current_A_T_m2    [0.95  0.947 0.937]
+                                Fokker-Planck  pitch-angle scattering    Sugama
+  ion particle flux                     1.000                  14.165     0.984
+  ion heat flux                         1.000                   1.836     0.981
+  <j.B> [A T m^-2]                      1.000                   1.517     1.014
 ```
 
 ```{figure} ../_static/figures/tutorials/operators.png
-:alt: Ion particle flux, heat flux and parallel current for PAS and Fokker-Planck.
+:alt: Ion particle flux, heat flux and parallel current for the three operators, relative to Fokker-Planck.
 :width: 85%
 
-Ion particle flux, heat flux and $\langle j\cdot B\rangle$ for both operators.
+Ion particle flux, heat flux and $\langle j\cdot B\rangle$ for the three operators.
 ```
 
-PAS puts the ion particle flux almost a factor of two too high: like-particle
-collisions that conserve momentum drive no net flux in a tokamak, and PAS does
-not conserve momentum. It overestimates the bootstrap current by 5-7% for the
-same reason. Quote currents from FP. When FP is too expensive,
+PAS puts the ion flux and the bootstrap current well above the Fokker-Planck
+values: like-particle collisions that conserve momentum drive no net flux in a
+tokamak, and PAS does not conserve momentum. The Sugama operator conserves
+momentum and energy and is within 2% of Fokker-Planck on these three
+numbers. Quote currents from FP or Sugama. When those are too expensive,
 `dkx.momentum_correction` restores momentum to a PAS solve
 (`collision_operator="pas+momentum_correction"` in `run_representative`;
 {doc}`../physics/reduced_models`).
@@ -74,6 +76,17 @@ run and stored in the certificate (`result.metadata["solver_route"]`):
 
 Force a route only to test one: `[solver] method = "gcrot"` (see
 {doc}`../numerics/krylov_and_preconditioners`).
+
+## CPU and GPU
+
+DKX runs on whatever JAX does. `18_gpu.py` lists `jax.devices()`, then solves
+the VMEC case of page 3 once per platform it finds, twice each, with
+`run.device` set to the platform name. The first call includes the XLA
+compilation and the second is the cost of one more case of the same shape; on
+a loaded CPU node they were 17 s and 3.6 s. A GPU is not faster for a case this
+small: compilation dominates and the direct factorization is launch-bound. It
+pays when many solves share one compilation (an $E_r$ or surface scan) or the
+operator is large ({doc}`../user_guide/scans_and_parallelism`).
 
 ## How to tell whether a run is trustworthy
 

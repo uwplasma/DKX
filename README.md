@@ -263,7 +263,7 @@ one RTX A4000.
 The [tutorial track](docs/tutorials/index.md) has eight pages, in Python and on the CLI:
 install and first run, results, geometry and species, collisions and solvers, scans and
 resolution, ambipolar `E_r`, transport matrices, and Phi1, bootstrap current against Redl and gradients. Its scripts are
-[`examples/tutorials/01_first_run.py`](examples/tutorials) to `15_optimization.py`.
+[`examples/tutorials/01_first_run.py`](examples/tutorials) to `19_plotting.py`.
 
 ## Documentation, development and citation
 

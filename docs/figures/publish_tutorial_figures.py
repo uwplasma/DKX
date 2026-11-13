@@ -14,7 +14,7 @@ FIGURES = {
     "03_sfincs_namelist/fluxes.png": "sfincs_namelist.png",
     "04_vmec_geometry/result.png": "vmec.png",
     "07_species_and_impurity/species.png": "species.png",
-    "06_fokker_planck_vs_pas/operators.png": "operators.png",
+    "06_collision_operators/operators.png": "operators.png",
     "13_convergence/convergence.png": "convergence.png",
     "08_ambipolar_er/ambipolar.png": "ambipolar.png",
     "09_monoenergetic/monoenergetic.png": "monoenergetic.png",

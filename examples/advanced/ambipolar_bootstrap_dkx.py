@@ -15,10 +15,12 @@ Redl's.  It then compares the Jacobian row of the ambipolar current with
 central finite differences of the same row along boundary coefficients, each
 difference point a full VMEX re-solve.  Finally it writes a figure and a CSV.
 
-Needs vmex and booz_xform_jax >= 0.4.  DKX_EXAMPLES_CI=1 is the smoke pass.
+Needs vmex and booz_xform_jax >= 0.4.
+
+Run:              python examples/advanced/ambipolar_bootstrap_dkx.py
+Runtime:          tens of minutes on a CPU laptop; the log prints cold and warm times.
 """
 
-import os
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -67,12 +69,6 @@ PICARD_ITERATIONS = 8
 
 # Every output file name starts with this:
 OUTPUT_NAME = "ambipolar_bootstrap_dkx"
-
-# DKX_EXAMPLES_CI=1 is the short smoke pass the test suite runs:
-ci_smoke = os.environ.get("DKX_EXAMPLES_CI") == "1"
-if ci_smoke:
-    KINETIC_SURFACES = (0.3,)
-    CHECK_DOFS, FD_TOLERANCE, NS, PICARD_ITERATIONS = CHECK_DOFS[:1], 0.2, 13, 2
 
 ###############################################################################
 # End of input parameters.

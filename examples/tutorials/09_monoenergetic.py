@@ -18,12 +18,10 @@ ExB precession detraps particles and turns D11* over at low nu'.
 
 Run:              python examples/tutorials/09_monoenergetic.py
 CLI:              dkx monoenergetic-database --input examples/tutorials/09_monoenergetic.namelist
-Smoke mode:       DKX_EXAMPLES_CI=1 python examples/tutorials/09_monoenergetic.py
-Expected runtime: see the table in examples/README.md.
+Runtime:          about 33 s on a loaded 36-core CPU node, compilation included.
 """
 
 # 1. Imports
-import os
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -32,10 +30,9 @@ import numpy as np
 import dkx
 
 # 2. Input parameters
-SMOKE = os.environ.get("DKX_EXAMPLES_CI") == "1"
 DECK = Path(__file__).with_suffix(".namelist")  # geometry and pitch grid
 OUT = Path(__file__).resolve().parents[1] / "output" / Path(__file__).stem
-NU_PRIME = np.logspace(-3, 1, 3 if SMOKE else 9)  # collisionality nu'
+NU_PRIME = np.logspace(-3, 1, 9)  # collisionality nu'
 E_STAR = (0.0, 0.1)  # normalized radial electric field E*
 
 # 3. Run -- one pitch-angle solve per (nu', E*) point, each one printed

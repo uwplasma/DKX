@@ -16,12 +16,10 @@ screening) depends on the sign of its flux, which the summary prints.
 Quasineutrality n_e = sum_i Z_i n_i is imposed by the electron density below.
 
 Run:              python examples/tutorials/07_species_and_impurity.py
-Smoke mode:       DKX_EXAMPLES_CI=1 python examples/tutorials/07_species_and_impurity.py
-Expected runtime: see the table in examples/README.md.
+Runtime:          about 46 s on a loaded 36-core CPU node, compilation included.
 """
 
 # 1. Imports
-import os
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -30,7 +28,6 @@ import numpy as np
 import dkx
 
 # 2. Input parameters
-SMOKE = os.environ.get("DKX_EXAMPLES_CI") == "1"
 OUT = Path(__file__).resolve().parents[1] / "output" / Path(__file__).stem
 N_D = np.array([8.0e19, 7.0e19, 5.8e19])  # deuterium density per surface [m^-3]
 CARBON_FRACTION = 0.01  # n_C / n_D
@@ -53,8 +50,6 @@ CASE = {
     "solver": {"method": "auto"},  # "auto" picks the linear-solver route from the operator
     "resolution": {"theta": 13, "zeta": 1, "pitch": 16, "speed": 6},
 }
-if SMOKE:
-    CASE["resolution"] = {"theta": 9, "zeta": 1, "pitch": 8, "speed": 4}
 
 # 3. Run
 result = dkx.run(dkx.Case.from_mapping(CASE))

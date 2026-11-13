@@ -1,20 +1,18 @@
-"""The ``*_optimization_bootstrap_dkx.py`` VMEX pairings.
+"""The two VMEX-chain examples in ``examples/advanced``.
 
-Each is its ``vmex/examples/optimization`` counterpart with the Redl analytic
-bootstrap current replaced by the kinetic one DKX computes on the same
-equilibrium.  QA is the flagship: ``KineticBootstrapMismatch`` is traced, so
-VMEX's implicit Jacobian carries it.  QH and QI keep the host term
-``KineticBootstrapCurrent`` under a finite-difference Jacobian.  Running any of
-them to convergence is hours, so this suite checks the parts that break
-silently: the substitution is present, the term is wired the way
-``vmex.core.optimize`` requires, and the script still parses and matches its
-upstream template; the QA smoke pass is the slow end-to-end check.
+``QA_optimization_bootstrap_dkx.py`` is VMEX's QA bootstrap-current
+optimization with the Redl row replaced by the kinetic one DKX computes on the
+same equilibrium; ``KineticBootstrapMismatch`` is traced, so VMEX's implicit
+Jacobian carries it.  ``ambipolar_bootstrap_dkx.py`` evaluates that row at the
+ambipolar E_r and checks its derivative.  Running either at its committed
+parameters takes tens of minutes, so the slow tests run a copy whose
+parameters are overridden after the input block; the static tests pin the
+parts that break silently.
 """
 
 from __future__ import annotations
 
 import ast
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -23,106 +21,55 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EX_DIR = REPO_ROOT / "examples" / "advanced"
-CASES = ("QA", "QH", "QI")
-HOST_CASES = ("QH", "QI")  # the finite-difference host term
+END_OF_INPUTS = "# End of input parameters."
+
+# Parameter overrides that make each script a wiring check, not an optimization.
+SMOKE = {
+    "QA_optimization_bootstrap_dkx.py": """
+SURFACES, KINETIC_SURFACES = np.linspace(0.2, 0.8, 4), [0.5]
+KINETIC_RESOLUTION = dict(Ntheta=9, Nzeta=9, Nxi=12, NL=4, Nx=4)
+MAX_MODES, MAX_NFEV, N_CURRENT_SPLINE = [1], [2], [4]
+PICARD_ITERATIONS, REDL_N_LAMBDA = 2, 12
+FINAL_NS, FINAL_FTOL = 31, 1e-10
+""",
+    "ambipolar_bootstrap_dkx.py": """
+KINETIC_SURFACES = (0.3,)
+CHECK_DOFS, FD_TOLERANCE, NS, PICARD_ITERATIONS = CHECK_DOFS[:1], 0.2, 13, 2
+""",
+}
 
 
-def _source(case: str) -> str:
-    path = EX_DIR / f"{case}_optimization_bootstrap_dkx.py"
+def _source(name: str) -> str:
+    path = EX_DIR / name
     assert path.is_file(), path
     return path.read_text(encoding="utf-8")
 
 
-@pytest.mark.parametrize("case", CASES)
-def test_script_parses(case: str) -> None:
-    ast.parse(_source(case))
+def _run_smoke(name: str, tmp_path: Path) -> subprocess.CompletedProcess[str]:
+    source = _source(name)
+    assert END_OF_INPUTS in source
+    script = tmp_path / name
+    seed = REPO_ROOT / "examples" / "data" / "input.minimal_seed_nfp2"  # the copy runs from tmp_path
+    overrides = f"INPUT_FILE = Path({str(seed)!r})\n" + SMOKE[name]
+    script.write_text(source.replace(END_OF_INPUTS, overrides + END_OF_INPUTS), encoding="utf-8")
+    return subprocess.run([sys.executable, "-u", str(script)], cwd=tmp_path, capture_output=True,
+                          text=True, timeout=5400, check=False)  # fmt: skip
 
 
-@pytest.mark.parametrize("case", HOST_CASES)
-def test_the_kinetic_term_replaces_the_redl_one_in_the_objective(case: str) -> None:
-    """The whole point: minimize the kinetic current, keep Redl for reporting."""
-    source = _source(case)
-    assert "from dkx.bootstrap import KineticBootstrapCurrent" in source
-    assert "kinetic = KineticBootstrapCurrent(profiles" in source
-    # Target 0 with a weight -- the tuple form vmex.optimize consumes.
-    assert "(kinetic, 0.0, KINETIC_WEIGHT)" in source
-    # Redl stays, but only in the reporter, never in objective_function_terms.
-    assert '("f_boot_redl", bootstrap.total' in source
-    assert "(bootstrap, 0.0," not in source
-
-
-@pytest.mark.parametrize("case", HOST_CASES)
-def test_the_problem_uses_finite_differences(case: str) -> None:
-    """DKX is a host code: the implicit lane has no traceable term to use.
-
-    Without this the problem raises "objective term ... is not
-    implicit-differentiable" the moment it is built.
-    """
-    source = _source(case)
-    assert 'derivative_method="finite_difference"' in source
-
-
-@pytest.mark.parametrize("case", HOST_CASES)
-def test_the_seed_boundary_is_resolvable_or_explains_itself(case: str) -> None:
-    """vmex from a wheel ships no examples/data; the script must say so."""
-    source = _source(case)
-    assert "DKX_VMEX_ROOT" in source
-    assert "raise SystemExit" in source
-
-
-@pytest.mark.parametrize(("case", "helicity"), [("QA", 0), ("QH", -1), ("QI", 0)])
-def test_the_redl_helicity_matches_the_configuration(case: str, helicity: int) -> None:
-    """QA and QI carry no helical symmetry for the isomorphism to shift; QH does."""
-    assert f"helicity_n={helicity}, surfaces=SURFACES" in _source(case)
-
-
-def test_qi_says_why_the_substitution_matters_most_there() -> None:
-    """Redl is a fit to quasisymmetric calculations and QI is not quasisymmetric."""
-    source = _source("QI")
-    assert "quasi-isodynamic field is not" in source or "not\nquasisymmetric" in source
-    assert "ConstructedQIResidual" in source
-
-
-@pytest.mark.parametrize("case", CASES)
-def test_the_scripts_stay_close_to_their_vmex_templates(case: str) -> None:
-    """"One term swapped" is the claim; a diverged script quietly breaks it."""
-    source = " ".join(_source(case).split())
-    for marker in ("self_consistent_bootstrap", "KineticProfiles", "OptimizationMonitor",
-                   "problem.residual, problem.x0, jac=problem.residual_jac",
-                   "opt.VmecProblem.from_tuples", "monitor.save", "vj.write_wout"):  # fmt: skip
-        assert marker in source, f"{case}: lost the vmex workflow marker {marker!r}"
-
-
-def test_the_objective_term_construction_matches_the_scripts(tmp_path) -> None:
-    """Build the term exactly as the scripts do, with no vmex import needed."""
-    import numpy as np
-
-    from dkx.bootstrap import KineticBootstrapCurrent
-
-    class Profiles:
-        ne_coeffs = 3.0e20 * np.array([1.0, 0, 0, 0, 0, -1.0])
-        Te_coeffs = 15.0e3 * np.array([1.0, -1.0])
-        Ti_coeffs = 15.0e3 * np.array([1.0, -1.0])
-
-    surfaces = np.array([0.25, 0.5, 0.75])
-    term = KineticBootstrapCurrent(Profiles(), surfaces=surfaces,
-                                   resolution=dict(n_theta=13, n_zeta=19, n_xi=13, n_x=4))
-    assert term.name == "j_boot_dkx"
-    assert callable(term) and callable(term.total)
-    # vmex's _call_term inspects the signature: one positional argument means
-    # "hand it the Equilibrium", two would mean "(state, runtime)".
-    import inspect
-
-    positional = [p for p in inspect.signature(term).parameters.values()
-                  if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)]  # fmt: skip
-    assert len(positional) == 1, positional
-    # And _term_name reads .name off the instance for the monitor's column.
-    assert getattr(term, "name") == "j_boot_dkx"
+@pytest.mark.parametrize("name", sorted(SMOKE))
+def test_script_is_flat_and_has_no_switches(name: str) -> None:
+    source = _source(name)
+    tree = ast.parse(source)
+    assert not [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "main"]
+    for banned in ("argparse", "sys.argv", "os.environ", "__main__"):
+        assert banned not in source, f"{name}: {banned}"
+    docstring = ast.get_docstring(tree) or ""
+    assert "Run:" in docstring and "Runtime:" in docstring
 
 
 def test_the_qa_flagship_carries_the_traced_kinetic_row() -> None:
     """QA swaps the Redl row for the traced DKX row under VMEX's implicit Jacobian."""
-    source = _source("QA")
+    source = _source("QA_optimization_bootstrap_dkx.py")
     assert "from dkx.bootstrap import KineticBootstrapMismatch" in source
     assert "kinetic = KineticBootstrapMismatch(profiles" in source
     assert '"dkx": [(kinetic, 0.0, BOOTSTRAP_WEIGHT)]' in source
@@ -135,21 +82,21 @@ def test_the_qa_flagship_carries_the_traced_kinetic_row() -> None:
     assert (REPO_ROOT / "examples" / "data" / "input.minimal_seed_nfp2").is_file()
 
 
+def test_the_qa_script_stays_close_to_its_vmex_template() -> None:
+    """"One term swapped" is the claim; a diverged script quietly breaks it."""
+    source = " ".join(_source("QA_optimization_bootstrap_dkx.py").split())
+    for marker in ("self_consistent_bootstrap", "KineticProfiles", "OptimizationMonitor",
+                   "problem.residual, problem.x0, jac=problem.residual_jac",
+                   "opt.VmecProblem.from_tuples", "monitor.save", "vj.write_wout"):  # fmt: skip
+        assert marker in source, f"lost the vmex workflow marker {marker!r}"
+
+
 @pytest.mark.slow  # a Picard seed, one implicit-Jacobian stage, and a final solve
 def test_the_qa_flagship_runs_end_to_end(tmp_path) -> None:
-    """Parsing is not running.  This is the only check that the chain closes.
-
-    Picard seed -> VmecProblem with the traced DKX row -> least_squares with
-    VMEX's implicit Jacobian -> final solve -> figure.  At DKX_EXAMPLES_CI=1
-    the ladder is one stage of two evaluations with one kinetic surface on a
-    coarse grid: a smoke test of the wiring, not a converged optimization.
-    """
+    """Parsing is not running.  This is the only check that the chain closes."""
     pytest.importorskip("vmex")
     pytest.importorskip("booz_xform_jax.jax_api")
-    script = EX_DIR / "QA_optimization_bootstrap_dkx.py"
-    env = dict(os.environ, DKX_EXAMPLES_CI="1")
-    done = subprocess.run([sys.executable, "-u", str(script)], cwd=tmp_path, env=env,
-                          capture_output=True, text=True, timeout=5400)  # fmt: skip
+    done = _run_smoke("QA_optimization_bootstrap_dkx.py", tmp_path)
     assert done.returncode == 0, done.stdout[-4000:] + done.stderr[-4000:]
     out = done.stdout
     assert "[self-consistent seed]" in out and "[final]" in out
@@ -164,10 +111,7 @@ def test_the_qa_flagship_runs_end_to_end(tmp_path) -> None:
 def test_the_ambipolar_example_runs_and_checks_its_own_derivative(tmp_path) -> None:
     pytest.importorskip("vmex")
     pytest.importorskip("booz_xform_jax.jax_api")
-    script = EX_DIR / "ambipolar_bootstrap_dkx.py"
-    env = dict(os.environ, DKX_EXAMPLES_CI="1")
-    done = subprocess.run([sys.executable, "-u", str(script)], cwd=tmp_path, env=env,
-                          capture_output=True, text=True, timeout=5400)  # fmt: skip
+    done = _run_smoke("ambipolar_bootstrap_dkx.py", tmp_path)
     assert done.returncode == 0, done.stdout[-4000:] + done.stderr[-4000:]
     assert "ambipolar E_r" in done.stdout and "relative" in done.stdout
     assert (tmp_path / "ambipolar_bootstrap_dkx.png").exists()

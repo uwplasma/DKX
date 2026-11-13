@@ -15,12 +15,10 @@ case in ``13_convergence.toml`` is deliberately coarse, so expect "False".
 
 Run:              python examples/tutorials/13_convergence.py
 CLI:              dkx converge examples/tutorials/13_convergence.toml
-Smoke mode:       DKX_EXAMPLES_CI=1 python examples/tutorials/13_convergence.py
-Expected runtime: see the table in examples/README.md.
+Runtime:          about 328 s on a loaded 36-core CPU node, compilation included.
 """
 
 # 1. Imports
-import os
 from dataclasses import replace
 from pathlib import Path
 
@@ -31,10 +29,9 @@ import dkx
 from dkx.workflows.converge import converge_case
 
 # 2. Input parameters
-SMOKE = os.environ.get("DKX_EXAMPLES_CI") == "1"
 CASE_FILE = Path(__file__).with_suffix(".toml")
 OUT = Path(__file__).resolve().parents[1] / "output" / Path(__file__).stem
-AXES = ("theta", "pitch") if SMOKE else ("theta", "pitch", "speed")  # axes to refine
+AXES = ("theta", "pitch", "speed")  # axes to refine one at a time
 FACTOR = 1.5  # refinement factor per axis
 TOLERANCE = 0.02  # allowed relative change; set it from the precision you need
 OBSERVABLES = ("particle_flux_m2_s", "heat_flux_W_m2", "parallel_current_A_T_m2")
@@ -42,15 +39,15 @@ OBSERVABLES = ("particle_flux_m2_s", "heat_flux_W_m2", "parallel_current_A_T_m2"
 # 3. Run -- the base case, then one solve per refinement (each prints progress)
 case = dkx.Case.from_file(CASE_FILE)
 report = converge_case(case, axes=AXES, factor=FACTOR, tolerance=TOLERANCE, observables=OBSERVABLES,
-                       joint=not SMOKE, emit=print)
+                       joint=True, emit=print)
 
-# 3a. The same study on the grid the ladder below settles on (skipped in smoke mode)
+# 3a. The same study on the grid the ladder below settles on
 grid = replace(case.resolution, theta=21, pitch=20, speed=6)
-production = None if SMOKE else converge_case(replace(case, resolution=grid), axes=AXES, factor=FACTOR,
-                                              tolerance=TOLERANCE, observables=OBSERVABLES, emit=print)
+production = converge_case(replace(case, resolution=grid), axes=AXES, factor=FACTOR,
+                           tolerance=TOLERANCE, observables=OBSERVABLES, emit=print)
 
 # 3b. A resolution ladder: one solve per rung, all axes refined together
-LADDER = [(9, 8, 4), (13, 12, 5)] if SMOKE else [(9, 8, 4), (13, 12, 5), (17, 16, 5), (21, 20, 6), (25, 24, 6), (33, 32, 6)]
+LADDER = [(9, 8, 4), (13, 12, 5), (17, 16, 5), (21, 20, 6), (25, 24, 6), (33, 32, 6)]  # (theta, pitch, speed) rungs
 ladder = []
 for n_theta, n_pitch, n_speed in LADDER:
     grid = replace(case.resolution, theta=n_theta, pitch=n_pitch, speed=n_speed)
@@ -85,6 +82,5 @@ print("  ladder (theta/pitch/speed): particle flux, heat flux, <j.B> at the firs
 for (t, p, x), row in zip(LADDER, ladder):
     print(f"  {t:3d}/{p:2d}/{x}  {row[0]:+.4e}  {row[1]:+.4e}  {row[2]:+.4e}")
 print(f"  converged at {report.tolerance:.0%}: {report.converged}")
-if production is not None:
-    print(f"  theta=21 pitch=20 speed=6: worst change {max(r.worst for r in (*production.refinements, production.joint)):.1%}, "
-          f"converged at {production.tolerance:.0%}: {production.converged}")
+print(f"  theta=21 pitch=20 speed=6: worst change {max(r.worst for r in (*production.refinements, production.joint)):.1%}, "
+      f"converged at {production.tolerance:.0%}: {production.converged}")

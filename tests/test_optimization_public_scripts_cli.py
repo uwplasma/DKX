@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 _REPO = Path(__file__).resolve().parents[1]
-_OPTIMIZATION_DIR = _REPO / "examples" / "advanced"
+_OPTIMIZATION_DIR = _REPO / "tools" / "optimization"
 
 
 def _local_vmex_root() -> Path | None:

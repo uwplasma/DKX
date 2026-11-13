@@ -14,12 +14,10 @@ certificate.  Nothing in the case asked for it.
 
 Run:              python examples/tutorials/05_boozer_geometry.py
 CLI:              dkx run examples/tutorials/05_boozer_geometry.toml --out result.nc
-Smoke mode:       DKX_EXAMPLES_CI=1 python examples/tutorials/05_boozer_geometry.py
-Expected runtime: see the table in examples/README.md.
+Runtime:          about 141 s on a loaded 36-core CPU node, compilation included.
 """
 
 # 1. Imports
-import os
 from dataclasses import replace
 from pathlib import Path
 
@@ -28,15 +26,13 @@ import numpy as np
 import dkx
 
 # 2. Input parameters
-SMOKE = os.environ.get("DKX_EXAMPLES_CI") == "1"
 CASE_FILE = Path(__file__).with_suffix(".toml")  # every physics input is in here
+RESOLUTION = {}  # grid entries that override the TOML file, e.g. {"theta": 9, "zeta": 9}
 OUT = Path(__file__).resolve().parents[1] / "output" / Path(__file__).stem
-SMOKE_RESOLUTION = {"theta": 5, "zeta": 5, "pitch": 8, "speed": 4}
 
 # 3. Run
 case = dkx.Case.from_file(CASE_FILE)
-if SMOKE:
-    case = replace(case, resolution=replace(case.resolution, **SMOKE_RESOLUTION))
+case = replace(case, resolution=replace(case.resolution, **RESOLUTION))
 result = dkx.run(case)
 
 # 4. Plot, save and print

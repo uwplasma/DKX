@@ -15,12 +15,13 @@ collision operator is pitch-angle scattering: cheap and exactly
 differentiable, but without momentum restoration, so its <j.B> sits above the
 Fokker-Planck value (COLLISION_OPERATOR = 0 is the momentum-conserving choice).
 
-Needs vmex and booz_xform_jax >= 0.4.  Runtime: 30 minutes on four laptop CPU
-threads (4.6 GB peak), for objective 1.78 -> 0.0061 and DKX mismatch f_boot
-1.2e-3 -> 1.2e-4; DKX_EXAMPLES_CI=1 is a 16-minute smoke pass.
+Needs vmex and booz_xform_jax >= 0.4.  Objective 1.78 -> 0.0061 and DKX
+mismatch f_boot 1.2e-3 -> 1.2e-4.
+
+Run:              python examples/advanced/QA_optimization_bootstrap_dkx.py
+Runtime:          30 minutes on four laptop CPU threads, 4.6 GB peak.
 """
 
-import os
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -107,15 +108,6 @@ FINAL_NITER = 8000
 OUTPUT_NAME = "QA_bootstrap_dkx_optimized"
 CURRENT_FIGURE = "QA_bootstrap_dkx_current.png"
 
-# DKX_EXAMPLES_CI=1 is the short smoke pass the test suite runs:
-ci_smoke = os.environ.get("DKX_EXAMPLES_CI") == "1"
-if ci_smoke:
-    SURFACES, KINETIC_SURFACES = np.linspace(0.2, 0.8, 4), [0.5]
-    KINETIC_RESOLUTION = dict(Ntheta=9, Nzeta=9, Nxi=12, NL=4, Nx=4)
-    MAX_MODES, MAX_NFEV, N_CURRENT_SPLINE = [1], [2], [4]
-    PICARD_ITERATIONS, REDL_N_LAMBDA = 2, 12
-    FINAL_NS, FINAL_FTOL = 31, 1e-10
-
 ###############################################################################
 # End of input parameters.
 ###############################################################################
@@ -154,7 +146,7 @@ profiles = KineticProfiles(n0 * np.array([1, 0, 0, 0, 0, -1]),
                            T0 * np.array([1, -1]), T0 * np.array([1, -1]))
 picard = self_consistent_bootstrap(inp, profiles, 0, n_iter=PICARD_ITERATIONS,
                                    tol=PICARD_TOLERANCE, degree=N_CURRENT_SPLINE[0] - 1,
-                                   s_eval=SURFACES, verbose=not ci_smoke)
+                                   s_eval=SURFACES, verbose=True)
 inp, equilibrium = picard.input, picard.equilibrium
 seed_equilibrium = equilibrium
 
@@ -223,7 +215,7 @@ for max_mode, max_nfev, n_spline in zip(MAX_MODES, MAX_NFEV, N_CURRENT_SPLINE):
     problem = opt.VmecProblem.from_tuples(
         inp, objective_function_terms, max_mode=max_mode,
         current_dofs=n_spline - 1, vary_major_radius=VARY_MAJOR_RADIUS,
-        use_ess=True, restart_from=equilibrium, progress=not ci_smoke)
+        use_ess=True, restart_from=equilibrium, progress=True)
     print(f"dof_names = {problem.dof_names}")
     monitor.problem = problem
     step = PARAMETER_STEP * problem.scales
@@ -246,7 +238,7 @@ optimize_seconds = time.perf_counter() - clock
 final_input = replace(inp, ns_array=np.array([FINAL_NS]),
     ftol_array=np.array([FINAL_FTOL]), niter_array=np.array([FINAL_NITER]))
 final_equilibrium = opt.solve_equilibrium(final_input, initial_state=equilibrium.solution,
-    verbose=not ci_smoke, raise_on_max_iterations=True)
+    verbose=True, raise_on_max_iterations=True)
 
 ### Print, plot and save ######################################################
 

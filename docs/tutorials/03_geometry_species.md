@@ -100,6 +100,16 @@ $|B|$ on a W7-X flux surface. In a stellarator, refine `theta`, `zeta` and
 harmonic content of $|B|$.
 ```
 
+### A VMEX equilibrium
+
+VMEX is the JAX VMEC: it solves the fixed-boundary equilibrium from a VMEC input
+deck and writes a standard `wout`, which DKX reads as in the VMEC example above.
+`17_vmex_geometry.py` solves the two-field-period seed deck in
+`examples/data/` with a rotating-ellipse boundary perturbation on 13 radial
+surfaces (force residuals near $5\times10^{-11}$), then runs the same
+deuterium case on three surfaces. It needs the optional `vmex` package. The
+result is an ordinary DKX result, with the `wout` hash in its certificate.
+
 ## Species and impurities
 
 Each `[[species]]` table is one kinetic species: charge in units of $e$, mass

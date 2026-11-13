@@ -108,6 +108,16 @@ Upstream SFINCS plotting scripts read DKX output too
 An upstream `sfincsScanPlot_1` figure drawn from DKX output.
 ```
 
+## Plotting a run
+
+`19_plotting.py` runs the W7-X deck above and draws it three ways.
+`dkx.plot(run, "panels.png")` writes the six-panel page: $|B|$ on the surface,
+the monoenergetic coefficients, the bootstrap current and the species fluxes.
+`style="summary"` gives a compact three-panel page, and a `.pdf` suffix there
+writes a four-page diagnostics book. For a figure that goes into a paper, read
+`run.moments` and use matplotlib, as the script does for its last bar chart.
+`dkx.plot` reads the output file the run writes, so pass `out=` to `dkx.run`.
+
 ## Next
 
 {doc}`03_geometry_species`: real magnetic geometries and more species.

@@ -168,7 +168,7 @@ Gradient descent on $\epsilon_h$.
 Removing helical ripple lowers the $1/\nu$ flux, which is what quasi-symmetric
 design does. The same chain runs inside a VMEX optimization through
 `dkx.bootstrap.KineticBootstrapMismatch`, and `vmex --neoclassical` surveys a
-finished equilibrium; both are in `examples/advanced/` and
+finished equilibrium; the first is in `examples/advanced/` and
 {doc}`../numerics/differentiation`. The host runner `dkx.run(case)` itself is
 not differentiated; the derivative path is the operator-level function.
 
@@ -176,7 +176,7 @@ not differentiated; the derivative path is the operator-level function.
 :alt: Ambipolar radial electric field and bootstrap current profiles for the finite-beta QA equilibrium.
 :width: 70%
 
-`examples/advanced/finite_beta_vmec_to_sfincs.py`: ambipolar $E_r$ and bootstrap
+`tools/optimization/finite_beta_vmec_to_sfincs.py`: ambipolar $E_r$ and bootstrap
 current on a finite-beta QA equilibrium.
 ```
 

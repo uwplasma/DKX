@@ -16,7 +16,7 @@
       "generator": "docs/figures/generate_docs_figures.py"
     },
     "docs/_static/figures/finite_beta_vmex_sfincs_bootstrap_er.png": {
-      "generator": "examples/advanced/finite_beta_vmec_to_sfincs.py"
+      "generator": "tools/optimization/finite_beta_vmec_to_sfincs.py"
     },
     "docs/_static/figures/gpu_anatomy_memory.png": {
       "generator": "tools/benchmarks/gpu_anatomy_figure.py"
@@ -119,7 +119,7 @@
       "publish": "docs/figures/publish_tutorial_figures.py"
     },
     "docs/_static/figures/tutorials/operators.png": {
-      "generator": "examples/tutorials/06_fokker_planck_vs_pas.py",
+      "generator": "examples/tutorials/06_collision_operators.py",
       "publish": "docs/figures/publish_tutorial_figures.py"
     },
     "docs/_static/figures/tutorials/optimization.png": {
