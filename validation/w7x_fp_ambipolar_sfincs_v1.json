@@ -1,0 +1,201 @@
+{
+ "schema": "dkx.w7x_fp_ambipolar_sfincs.v1",
+ "claim_scope": "w7x_standard_psi_n_0p36_two_species_full_fp_ambipolar_root_dkx_sfincs_same_grid",
+ "summary": "DKX and SFINCS v3 each find the ambipolar radial electric field of one W7-X standard-configuration surface (psi_N = 0.36) for hydrogen and electrons with the full linearized Fokker-Planck operator, from the same input deck on the same (13, 31, 24, 6) grid, by their own Brent root searches, and agree on the root and on the particle and heat fluxes at the root. The grid is not converged; the SFINCS-only resolution scan records how far the root moves under refinement.",
+ "exclusions": [
+  "one surface, one equilibrium and one ion species; no second surface, stellarator family or impurity",
+  "the (13, 31, 24, 6) grid is not converged: the SFINCS-only scan moves the root by 1.7% to the (15, 37, 32, 7) grid and by a further 5.8% and 9.0% under Nxi = 48 and Nx = 9, so the root is an agreement between codes on one discretization and not a physical prediction",
+  "the DKX solve at the (15, 37, 32, 7) refinement was not completed on the shared host; refinement evidence is SFINCS only",
+  "no Phi1, no experimental comparison and no performance comparison",
+  "the root is the single ion root found in the bracket [-6, 0] kV/m; uniqueness of the root over the full field range is not established"
+ ],
+ "source": {
+  "dkx_base_commit": "cc0c36aea2a15d505ec996d864fac206f73467ac",
+  "dkx_version": "2.14.0",
+  "deck": {
+   "path": "validation/inputs/w7x_standard_fp_ambipolar_surface3.input.namelist",
+   "sha256": "ce2e740bfa230eae831dfa7d5e06afe0f644db7e8082eaf4b266312461c12cd1",
+   "bytes": 1400
+  },
+  "deck_note": "Both codes ran this deck with the geometry path replaced by an absolute path and the resolution lines set per rung; comments were not part of the run copies.",
+  "geometry": {
+   "file": "w7x_standardConfig.bc",
+   "sha256": "81c686e5a5bd8f38d8b1f754ebe2910951f20094bab35d73d2827d9875bb6062",
+   "bytes": 19416676
+  },
+  "sfincs_commit": "8df5453472e982df0f6ae005243ce38d57a83711",
+  "sfincs_executable": {
+   "sha256": "a58cc47e5d82d439b5255b1b90315084c1107ca1a01f95ccfd0c82617420b9b5",
+   "build": "SFINCS v3 sources identical to the pinned commit except one MPI communicator type name in globalVariables.F90 (MPIU_Comm for the conda-forge PETSc), linked against the conda-forge MUMPS build; no scientific-source edits."
+  }
+ },
+ "environment": {
+  "host": "Intel Xeon W-2295, 36 threads, 62 GiB, shared with other jobs (load 25-50, swap exhausted)",
+  "dkx": "taskset 8 cores, 6 threads, python 3.11, jax 0.10.2, numpy 2.4.6, solvax 0.31.0",
+  "sfincs": "taskset 4 cores, one MPI rank",
+  "note": "A first DKX attempt on this deck was killed by the host (SIGKILL under memory pressure) after five of its six solves and rerun in full; the figures are from the completed rerun."
+ },
+ "commands": {
+  "dkx_root": "dkx ambipolar --input <run deck> --out-dir <dir> --er-min -6 --er-max 0 --er-initial -3 --max-evaluations 30 --current-tolerance 1e-6",
+  "dkx_flux": "dkx write-output --input <run deck with ambipolarSolve false and Er set to the DKX root> --out <file>.h5",
+  "sfincs": "mpiexec -n 1 sfincs -ksp_monitor_short -ksp_converged_reason -mat_mumps_icntl_14 200"
+ },
+ "case": {
+  "geometry": "W7-X standard configuration",
+  "psi_n": 0.36,
+  "r_n": 0.6,
+  "species": [
+   "hydrogen",
+   "electron"
+  ],
+  "density_hat": 0.133,
+  "temperature_hat": [
+   0.78,
+   1.55
+  ],
+  "collisions": "linearized_fokker_planck",
+  "trajectories": "full (x-dot and E_r in xi-dot terms)",
+  "phi1": false,
+  "flux_units": "psiHat-normalized SFINCS output particleFlux_vm_psiHat and heatFlux_vm_psiHat; Er in kV/m",
+  "grid": {
+   "theta": 13,
+   "zeta": 31,
+   "pitch": 24,
+   "speed": 6
+  }
+ },
+ "rungs": {
+  "13x31x24x6": {
+   "grid": [
+    13,
+    31,
+    24,
+    6
+   ],
+   "species": [
+    "hydrogen",
+    "electron"
+   ],
+   "dkx": {
+    "Er": -3.314019353276842,
+    "particle_flux": [
+     -9.296111081581593e-09,
+     -9.296109487239005e-09
+    ],
+    "heat_flux": [
+     -2.453876274893207e-08,
+     -3.759490765973715e-08
+    ],
+    "radial_current_at_root": -1.5943425880459838e-15,
+    "current_scale": 4.698462535029181e-08,
+    "root_evaluations_er": [
+     -6.0,
+     0.0,
+     -3.0,
+     -3.4010471448082673,
+     -3.3174886433166777,
+     -3.314019353276842
+    ],
+    "root_wall_s": 394.24,
+    "root_cpu_s": 714.87,
+    "root_peak_rss_kib": 6459592,
+    "flux_wall_s": 106.07,
+    "flux_peak_rss_kib": 3669204
+   },
+   "sfincs": {
+    "Er": -3.3140210748643626,
+    "particle_flux": [
+     -9.296103594248052e-09,
+     -9.296102032369659e-09
+    ],
+    "heat_flux": [
+     -2.4538753901073047e-08,
+     -3.759486943467081e-08
+    ],
+    "radial_current_at_root": 3.3707823307959467e-15,
+    "current_scale": 1.0140038717347675e-07,
+    "root_evaluations_er": [
+     -6.0,
+     0.0,
+     -3.0000000000000004,
+     -3.4010492399621226,
+     -3.317490392958669,
+     -3.3140210748643626
+    ],
+    "wall_s": 82.73,
+    "cpu_s": 49.75,
+    "peak_rss_kib": 826500,
+    "mpi_ranks": 1
+   }
+  }
+ },
+ "sfincs_resolution_scan": [
+  {
+   "grid": [
+    11,
+    25,
+    16,
+    5
+   ],
+   "Er": -1.8898732071487638,
+   "particle_flux_hydrogen": -7.015057447225634e-10,
+   "wall_s": 29.97,
+   "peak_rss_kib": 350660
+  },
+  {
+   "grid": [
+    13,
+    31,
+    24,
+    6
+   ],
+   "Er": -3.314021377562104,
+   "particle_flux_hydrogen": -9.296102046293403e-09,
+   "wall_s": 267.98,
+   "peak_rss_kib": 826136
+  },
+  {
+   "grid": [
+    15,
+    37,
+    32,
+    7
+   ],
+   "Er": -3.368811428857216,
+   "particle_flux_hydrogen": -2.2809434532424134e-08,
+   "wall_s": 1543.18,
+   "peak_rss_kib": 1903924
+  },
+  {
+   "grid": [
+    15,
+    37,
+    48,
+    7
+   ],
+   "Er": -3.1723912896235107,
+   "particle_flux_hydrogen": -2.2912872752403102e-08,
+   "wall_s": 980.34,
+   "peak_rss_kib": 3010632
+  },
+  {
+   "grid": [
+    15,
+    37,
+    32,
+    9
+   ],
+   "Er": -3.0645919625441844,
+   "particle_flux_hydrogen": -1.5846060110099825e-08,
+   "wall_s": 1651.83,
+   "peak_rss_kib": 2562676
+  }
+ ],
+ "gate": {
+  "accepted_rung": "13x31x24x6",
+  "root_gate": 0.02,
+  "flux_gate": 0.01,
+  "max_root_difference": 5.194859904784287e-07,
+  "max_flux_difference": 1.0167618095213717e-06
+ }
+}

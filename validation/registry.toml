@@ -819,3 +819,33 @@ path = "rungs.B.roots.root:1:0.Er"
 operation = "set"
 value = 0.0
 expected_errors = ["root:1:0"]
+
+[[entry]]
+id = "w7x_fp_ambipolar_sfincs"
+capability = "ambipolar_roots"
+status = "accepted_limited"
+claim_scope = "w7x_standard_psi_n_0p36_two_species_full_fp_ambipolar_root_dkx_sfincs_same_grid"
+claim = "Live DKX and pinned SFINCS v3 each find the ambipolar E_r of one W7-X standard-configuration surface (psi_N = 0.36) for hydrogen and electrons with the full linearized Fokker-Planck operator and full trajectories, from the same deck on the same (13, 31, 24, 6) grid by their own Brent searches: the roots are -3.31402 and -3.31402 kV/m (5.2e-7 relative) and the particle and heat fluxes of both species at the root agree to 1.0e-6 relative, inside the 2% root and 1% flux gates. Scope: same-discretization agreement only; the refined-grid DKX solve is pending. The grid is not converged: the SFINCS root moves by 1.7% to (15, 37, 32, 7) and by a further 5.8% and 9.0% under Nxi = 48 and Nx = 9."
+artifact = "validation/w7x_fp_ambipolar_sfincs_v1.json"
+artifact_sha256 = "e06025b56f45894fd31f62c7b42d8e444eac04a1a6931a4a88fc2b1f186e28b2"
+artifact_schema = "dkx.w7x_fp_ambipolar_sfincs.v1"
+audit_script = "tools/paper_benchmarks/audit_w7x_fp_ambipolar_sfincs.py"
+command = "python tools/paper_benchmarks/audit_w7x_fp_ambipolar_sfincs.py --artifact validation/w7x_fp_ambipolar_sfincs_v1.json"
+inputs = ["validation/inputs/w7x_standard_fp_ambipolar_surface3.input.namelist"]
+dkx_commit = "cc0c36aea2a15d505ec996d864fac206f73467ac"
+external_commits = { sfincs = "8df5453472e982df0f6ae005243ce38d57a83711" }
+generated_on_host = "nvidia-a4000"
+generated_on_host_recorded = "office workstation CPU (Xeon W-2295), shared, DKX on 8 pinned cores and SFINCS on 4, single MPI rank"
+limitations = [
+  "one surface, one equilibrium and one ion species; no second surface, stellarator family or impurity",
+  "the (13, 31, 24, 6) grid is not converged: the SFINCS-only scan moves the root by 1.7% to the (15, 37, 32, 7) grid and by a further 5.8% and 9.0% under Nxi = 48 and Nx = 9, so the root is an agreement between codes on one discretization and not a physical prediction",
+  "the DKX solve at the (15, 37, 32, 7) refinement was not completed on the shared host; refinement evidence is SFINCS only",
+  "no Phi1, no experimental comparison and no performance comparison",
+  "the root is the single ion root found in the bracket [-6, 0] kV/m; uniqueness of the root over the full field range is not established",
+]
+
+[entry.corruption]
+path = "rungs.13x31x24x6.sfincs.Er"
+operation = "set"
+value = -3.0
+expected_errors = ["exceeds the gate"]

@@ -201,6 +201,22 @@ direction. This negative result is what keeps the profile a
 the reason every example and tutorial asks for a convergence check before a
 number is quoted ({doc}`../user_guide/convergence`).
 
+### Full-Fokker-Planck ambipolar root against SFINCS
+
+`validation/w7x_fp_ambipolar_sfincs_v1.json`
+(`python tools/paper_benchmarks/audit_w7x_fp_ambipolar_sfincs.py`) seals one
+W7-X standard-configuration surface ($\psi_N = 0.36$) with hydrogen and
+electrons, the full linearized Fokker-Planck operator and full trajectories. DKX
+and SFINCS v3 read the same deck on the same $(13, 31, 24, 6)$ grid and each
+runs its own Brent search in $[-6, 0]$ kV/m. The roots are $-3.314019$ and
+$-3.314021$ kV/m (5.2e-7 relative), and the particle and heat fluxes of both
+species at the root agree to 1.0e-6, inside the 2% and 1% gates. DKX took 394 s
+and 6.5 GiB for the six-solve search on 8 cores of a shared host; SFINCS took
+83 s and 0.8 GiB on 4 cores. The grid is not converged: the SFINCS root moves by
+1.7% to $(15, 37, 32, 7)$ and by a further 5.8% and 9.0% with $N_\xi = 48$ and
+$N_x = 9$, and the DKX solve at the refined grid was not completed. The entry
+is a same-discretization agreement on one surface, not a converged prediction.
+
 ### Re-measurement with spectral angles (not promoted)
 
 With `angles = "spectral"` the same profile gives, at $(N_\theta, N_\zeta, N_\xi, N_x) = (19, 49, 160, 8)$,
