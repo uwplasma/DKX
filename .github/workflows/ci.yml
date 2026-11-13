@@ -113,6 +113,12 @@ jobs:
     if: github.event_name == 'pull_request' && needs.changes.outputs.code == 'true'
     runs-on: ubuntu-22.04
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # One hosted runner hit the 15-minute cap on the selected tests, so they are
+        # split by the durations in `.test_durations`, as in `coverage`.
+        group: [1, 2, 3]
     env:
       JAX_ENABLE_X64: "True"
       JAX_DISABLE_JIT: "0"
@@ -164,7 +170,7 @@ jobs:
           done < <(git diff --name-only --diff-filter=d "origin/${BASE_REF}...HEAD")
           mapfile -t targets < <(printf '%s\n' "${targets[@]}" | sort -u)
           echo "running: ${targets[*]}"
-          python -m pytest -q -n 2 --dist=loadscope -m "not slow" -p no:cacheprovider "${targets[@]}"
+          python -m pytest -q -n 2 --dist=loadscope --splits 3 --group ${{ matrix.group }} --splitting-algorithm least_duration -m "not slow" -p no:cacheprovider "${targets[@]}"
 
   coverage:
     needs: changes
