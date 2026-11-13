@@ -443,7 +443,7 @@ def test_ramped_full_recovery_windowed_gradient_matches_tape_and_fd():
 
 
 @pytest.mark.parametrize("checked", [True, False])
-def test_generated_full_adjoint_rejects_corrupted_pullback(monkeypatch, checked, adjoint_effects):
+def test_generated_full_adjoint_rejects_corrupted_pullback(monkeypatch, checked):
     solver = solve_modules
     original = solver._solve_tier1_truncated
     op = _ramped_pas_op()
@@ -458,14 +458,13 @@ def test_generated_full_adjoint_rejects_corrupted_pullback(monkeypatch, checked,
     captured = {}
     def loss(rhs):
         result = solve(op, rhs, differentiable=True, tier1_keep_lowest=op.n_xi,
-                       check_adjoint=checked, tol=1e-10, emit=None,
+                       check_adjoint=checked, record_adjoint=True, tol=1e-10, emit=None,
                        tier1_memory_budget_gb=1e-12)
         captured["result"] = result
         return jnp.sum(result.x)
     gradient = jax.jit(jax.grad(loss))
     if checked:
-        with pytest.raises(Exception, match="adjoint.*generated full solve failed"):
-            gradient(op.rhs()).block_until_ready()
+        assert np.isnan(gradient(op.rhs())).any()
     else:
         unchecked = gradient(op.rhs())
         unchecked.block_until_ready()
@@ -479,7 +478,7 @@ def test_generated_full_adjoint_rejects_corrupted_pullback(monkeypatch, checked,
 
 
 @pytest.mark.parametrize("checked", [True, False])
-def test_generated_retained_adjoint_rejects_corrupted_solve(monkeypatch, checked, adjoint_effects):
+def test_generated_retained_adjoint_rejects_corrupted_solve(monkeypatch, checked):
     solver = solve_modules
     build = solver._build_generated_full_solver
     def corrupted(*args):
@@ -490,13 +489,12 @@ def test_generated_retained_adjoint_rejects_corrupted_solve(monkeypatch, checked
     captured = {}
     def loss(rhs):
         result = solve(op, rhs, differentiable=True, tier1_keep_lowest=op.n_xi,
-                       check_adjoint=checked, tol=1e-10, emit=None)
+                       check_adjoint=checked, record_adjoint=True, tol=1e-10, emit=None)
         captured["result"] = result
         return jnp.sum(result.x)
     gradient = jax.jit(jax.grad(loss))
     if checked:
-        with pytest.raises(Exception, match="adjoint.*generated full solve failed"):
-            gradient(op.rhs()).block_until_ready()
+        assert np.isnan(gradient(op.rhs())).any()
     else:
         value = gradient(op.rhs())
         value.block_until_ready()
@@ -546,7 +544,7 @@ def test_generated_full_adjoint_padding_cannot_relax_physical_tolerance(columns)
     captured = {}
     def loss(rhs, padding_weight):
         result = solve(op, rhs, differentiable=True, tier1_keep_lowest=op.n_xi,
-                       tol=1e-10, emit=None)
+                       record_adjoint=True, tol=1e-10, emit=None)
         captured["result"] = result
         return jnp.vdot(mask + padding_weight*(1-mask), result.x)
     gradient = jax.jit(jax.grad(loss))
@@ -1329,8 +1327,7 @@ def test_differentiable_solve_aborts_loudly_on_genuinely_singular_operator() -> 
         )
         return jnp.dot(w, result.x)
 
-    with pytest.raises(Exception, match="GCROT solve failed to converge"):
-        jax.grad(loss)(jnp.asarray(1.0))
+    assert not np.isfinite(jax.grad(loss)(jnp.asarray(1.0)))
 
 
 # ---------------------------------------------------------------------------
@@ -1421,7 +1418,7 @@ def _tier2_grad_vs_fd(
         op = replace(op0, t_hat=op0.t_hat * scale)
         result = solve(
             op, op.rhs(), method="gmres", tol=tol if differentiable else fd_tol,
-            differentiable=differentiable, **solve_kw,
+            differentiable=differentiable, record_adjoint=True, **solve_kw,
         )
         if differentiable:
             captured["result"] = result
@@ -1468,39 +1465,21 @@ def test_adjoint_residual_is_recorded_on_the_solve_result() -> None:
     assert diag.records == [] and diag.worst_relative_residual == 0.0
 
 
-@pytest.fixture
-def adjoint_effects():
-    """Drain expected asynchronous guard failures between GPU tests."""
-    yield
-    try:
-        jax.effects_barrier()
-    except Exception as exc:
-        assert "solve failed to converge" in str(exc)
-        jax.jit(lambda: jax.debug.callback(lambda: None))()
-        jax.effects_barrier()
-
-
-@pytest.mark.parametrize("residual,rhs,zero,factor,accepted", [
-    (1e-9, 1., False, 1., False),  # Below the diagnostic scale, above requested tol.
-    (1e-9, 1., False, 20., True),  # Explicit expert relaxation still works.
-    (0., 0., False, 1., False),  # A nonzero defect whose squared norm underflows.
-    (0., 0., True, 1., True),
-    (0., np.inf, True, 1., False),
+@pytest.mark.parametrize("residual,rhs,factor,accepted", [
+    (1e-9, 1., 1., False),  # Below the diagnostic scale, above requested tol.
+    (1e-9, 1., 20., True),  # Explicit expert relaxation still works.
+    (1e-200, 0., 1., False),  # A nonzero defect whose squared norm underflows.
+    (0., 0., 1., True),
+    (0., np.inf, 1., False),
 ])
-def test_adjoint_guard_does_not_promote_backward_error_to_acceptance(residual, rhs, zero, factor, accepted):
-    from dkx.solve_common import _residual_guard
+def test_adjoint_guard_does_not_promote_backward_error_to_acceptance(residual, rhs, factor, accepted):
+    from dkx.solve_common import _admit
 
-    guard = _residual_guard("adjoint (transposed)", 0, tol=1e-10, atol=0.,
-                            factor=factor, raise_on_failure=True, diagnostics=None)
-    if accepted:
-        guard(residual, rhs, 1e6, 1., zero)
-    else:
-        with pytest.raises(RuntimeError, match="does not enlarge this gate"):
-            guard(residual, rhs, 1e6, 1., zero)
+    ok, _ = _admit(jnp.array([1e6]), jnp.array([residual]), jnp.array([rhs]), (1e-10, 0., factor))
+    assert bool(ok) == accepted
 
 
-
-def test_jitted_adjoint_rejects_a_defect_below_the_backward_error_scale(adjoint_effects):
+def test_jitted_adjoint_rejects_a_defect_below_the_backward_error_scale():
     from dkx.solve_common import _guarded_solve, _implicit_solve
 
     diagonal = jnp.array([1., 1e-12])
@@ -1511,17 +1490,16 @@ def test_jitted_adjoint_rejects_a_defect_below_the_backward_error_scale(adjoint_
     def adjoint(rhs):
         inaccurate = rhs/diagonal + jnp.array([1e-9, 0.])
         return _guarded_solve("adjoint (transposed)", 0, transpose, rhs, inaccurate,
-                              tol=1e-10, atol=0., factor=1., raise_on_failure=True,
+                              tol=1e-10, atol=0., factor=1., check=True,
                               diagnostics=None)
     def loss(rhs):
         x = _implicit_solve(apply, transpose, rhs, lambda b: b/diagonal, adjoint)
         return jnp.dot(jnp.array([1., 1e-6]), x)
-    with pytest.raises(Exception, match="does not enlarge this gate"):
-        jax.jit(jax.grad(loss))(jnp.ones(2)).block_until_ready()
+    assert np.isnan(jax.jit(jax.grad(loss))(jnp.ones(2))).any()
 
 
-def test_singular_tier2_adjoint_raises_instead_of_returning_a_wrong_gradient(adjoint_effects) -> None:
-    """A deck whose transposed solve diverges must abort, not hand back a number.
+def test_singular_tier2_adjoint_returns_nan_instead_of_a_wrong_gradient() -> None:
+    """A deck whose transposed solve diverges must not hand back a number.
 
     ``er_xidot_1species_tiny`` pairs the Er xiDot term with the per-speed
     ``constraintScheme=2`` border, which does not span the resulting null space
@@ -1531,21 +1509,8 @@ def test_singular_tier2_adjoint_raises_instead_of_returning_a_wrong_gradient(adj
     magnitude.  Nothing in SolveResult would show it.
     """
     op0 = _load_op("er_xidot_1species_tiny")
-    with pytest.raises(Exception, match="GCROT solve failed to converge"):
-        _tier2_grad_vs_fd(op0, max_restarts=20)
-
-
-def test_singular_tier2_adjoint_message_names_cause_and_remedies(adjoint_effects) -> None:
-    """The abort has to be actionable, not just loud."""
-    op0 = _load_op("er_xidot_1species_tiny")
-    with pytest.raises(Exception) as excinfo:
-        _tier2_grad_vs_fd(op0, max_restarts=20)
-    msg = str(excinfo.value)
-    assert "adjoint (transposed)" in msg
-    assert "||A^T y - g|| / ||g||" in msg  # the true residual, named
-    for remedy in ("constraint scheme", "method='direct'", "check_adjoint=False",
-                   "SolveResult.adjoint", "adjoint_residual_factor"):
-        assert remedy in msg, remedy
+    g, _, _ = _tier2_grad_vs_fd(op0, max_restarts=20)
+    assert np.isnan(g)
 
 
 def test_check_adjoint_false_is_the_documented_unchecked_opt_out() -> None:
@@ -1592,7 +1557,7 @@ def test_healthy_tier2_gradients_are_exact_and_do_not_raise(deck: str) -> None:
     assert all(r.within_tolerance for r in diag.records)
 
 
-def test_flagship_shaped_fp_cs1_adjoint_must_meet_requested_tolerance(adjoint_effects) -> None:
+def test_flagship_shaped_fp_cs1_adjoint_must_meet_requested_tolerance() -> None:
     """A near-singular adjoint is not admitted by its backward-error scale.
 
     The unchecked observable/FD comparison is retained separately above;
@@ -1603,15 +1568,14 @@ def test_flagship_shaped_fp_cs1_adjoint_must_meet_requested_tolerance(adjoint_ef
     )
     assert op0.constraint_scheme == 1 and op0.fp is not None
     assert op0.active_dof_mask() is None
-    with pytest.raises(Exception, match="adjoint.*GCROT solve failed"):
-        _tier2_grad_vs_fd(op0)
+    assert np.isnan(_tier2_grad_vs_fd(op0)[0])
 
 
-def test_adjoint_guard_survives_jit(adjoint_effects) -> None:
+def test_adjoint_guard_survives_jit() -> None:
     """Production gradients run under ``jit``; the guard has to fire there too.
 
-    ``jax.debug.callback`` executes inside the compiled backward pass, so both
-    the recording and the abort must survive compilation — the alternative is a
+    ``record_adjoint`` executes inside the compiled backward pass, so both
+    the recording and the NaN gate must survive compilation — the alternative is a
     check that quietly stops existing exactly where it matters.
     """
     op0 = _load_op("multispecies_quick_2species_FPCollisions_noEr")
@@ -1620,7 +1584,7 @@ def test_adjoint_guard_survives_jit(adjoint_effects) -> None:
 
     def loss(scale: jnp.ndarray, op_base: KineticOperator = op0) -> jnp.ndarray:
         op = replace(op_base, t_hat=op_base.t_hat * scale)
-        result = solve(op, op.rhs(), method="gmres", tol=1e-10, differentiable=True)
+        result = solve(op, op.rhs(), method="gmres", tol=1e-10, differentiable=True, record_adjoint=True)
         captured["result"] = result
         return jnp.dot(w, result.x)
 
@@ -1641,13 +1605,12 @@ def test_adjoint_guard_survives_jit(adjoint_effects) -> None:
         )
         return jnp.dot(ws, result.x)
 
-    with pytest.raises(Exception, match="GCROT solve failed to converge"):
-        jax.jit(jax.grad(loss_singular))(jnp.asarray(1.0)).block_until_ready()
+    assert np.isnan(jax.jit(jax.grad(loss_singular))(jnp.asarray(1.0)))
 
 
 
 @pytest.mark.parametrize("checked", [True, False])
-def test_structured_adjoint_rechecks_original_equation(monkeypatch, checked, adjoint_effects):
+def test_structured_adjoint_rechecks_original_equation(monkeypatch, checked):
     solver = solve_modules
     op = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
     original = solver.build_tier1_solver
@@ -1662,13 +1625,12 @@ def test_structured_adjoint_rechecks_original_equation(monkeypatch, checked, adj
     captured = {}
     def loss(rhs):
         result = solve(op, rhs, method="block_tridiagonal", differentiable=True,
-                       check_adjoint=checked, tol=1e-10)
+                       check_adjoint=checked, record_adjoint=True, tol=1e-10)
         captured["result"] = result
         return jnp.sum(result.x)
     gradient = jax.jit(jax.grad(loss))
     if checked:
-        with pytest.raises(Exception, match="adjoint.*structured solve failed"):
-            gradient(op.rhs()).block_until_ready()
+        assert np.isnan(gradient(op.rhs())).any()
     else:
         np.testing.assert_array_equal(gradient(op.rhs()), 0.)
         jax.effects_barrier()
@@ -1684,7 +1646,7 @@ def test_adjoint_records_stay_bounded_and_refresh_each_rhs_under_jit(method):
     rhs = jnp.stack([op.rhs(), .5*op.rhs()], axis=1)
     captured = {}
     def loss(b):
-        result = solve(op, b, method=method, differentiable=True, tol=1e-10)
+        result = solve(op, b, method=method, differentiable=True, tol=1e-10, record_adjoint=True)
         captured["result"] = result
         return jnp.sum(result.x**2)
     compiled = jax.jit(jax.value_and_grad(loss))
@@ -2333,3 +2295,20 @@ def test_truncated_sweeps_compile_once_across_solves_and_fields() -> None:
     second = _solve_tier1_truncated(other, 2.0 * rhs, keep=2, tol=1e-10, atol=0.0)
     assert _truncated_sweeps._cache_size() - before == 1
     np.testing.assert_allclose(np.asarray(second.x), 2.0 * np.asarray(first.x), rtol=1e-9, atol=1e-12)
+
+
+@pytest.mark.parametrize("method,deck", [("block_tridiagonal", "pas_1species_PAS_noEr_tiny_scheme1"),
+                                         ("gmres", "multispecies_quick_2species_FPCollisions_noEr")])
+def test_differentiable_solve_has_no_host_callback_and_matches_finite_difference(method, deck):
+    op0 = _load_op(deck)
+    w = jnp.asarray(np.random.default_rng(5).standard_normal(op0.total_size))
+
+    def loss(scale):
+        op = replace(op0, t_hat=op0.t_hat * scale)
+        return jnp.dot(w, solve(op, op.rhs(), method=method, tol=1e-12, differentiable=True, emit=None).x)
+
+    assert "callback" not in str(jax.make_jaxpr(jax.grad(loss))(1.0))
+    gradient = float(jax.jit(jax.grad(loss))(1.0))
+    h = 1e-5
+    np.testing.assert_allclose(gradient, float((loss(1 + h) - loss(1 - h)) / (2 * h)), rtol=1e-5)
+    np.testing.assert_allclose(float(jax.jit(loss)(1.0)), float(loss(1.0)), rtol=1e-12)

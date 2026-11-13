@@ -102,10 +102,11 @@ look healthy while the vector-Jacobian product is wrong. This happens on
 operators whose null space the constraint scheme does not span; the singular
 full Fokker–Planck system with `constraintScheme = 1` is the recorded case. DKX
 therefore recomputes $\|A^\mathsf{T}\lambda - g\|$ from the operator after the
-transposed solve, never the Krylov estimate, records it in
-`SolveResult.adjoint`, and raises at execution time if either the forward or
-the transposed residual misses `max(atol, tol * ||rhs||)`. `check_adjoint=False`
-disables the raise but still records the residuals;
+transposed solve, never the Krylov estimate, and returns NaN if either the
+forward or the transposed residual misses `max(atol, tol * ||rhs||)`. The test
+is traced, so the whole solve stays `jit`- and `grad`-compatible with no host
+callback. `check_adjoint=False` disables it; `record_adjoint=True` also records
+the residuals in `SolveResult.adjoint` through a host callback;
 `adjoint_residual_factor` (default 1) relaxes the gate explicitly. A
 homogeneous equation requires entrywise zero defect.
 
@@ -285,10 +286,9 @@ through the Boozer transform and an exact structured drift-kinetic solve on
 each surface. `examples/advanced/QA_optimization_bootstrap_dkx.py` runs it.
 The workflow is in {doc}`../tutorials/08_phi1_bootstrap_gradients`.
 
-With `ambipolar=True`, called as `term.residuals_state(state, rt)` the roots return
-through an `io_callback`, whose host pointer keeps the outer program out of JAX's
-persistent compilation cache. Finding the roots on the host first and passing them in
-removes the callback: `roots = term.roots(state, rt)`, then
+With `ambipolar=True`, called as `term.residuals_state(state, rt)` the roots are found
+inside the traced program, starting from `er_initial`. Finding them on the host first,
+warm-started, and passing them in keeps the warm start: `roots = term.roots(state, rt)`, then
 `term.residuals_state(state, rt, roots)` (traced `roots` argument; the derivative
 through the root, $j_p - j_E J_p / J_E$, is unchanged). For a loop that owns the state,
 `f = term.cached_residuals(rt)` is the same in one argument, and `jax.jvp` / `jax.jacfwd`

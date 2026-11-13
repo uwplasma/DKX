@@ -491,7 +491,7 @@ def test_the_generated_route_carries_the_transposed_solve(route: str, case: str,
         rhs = op.rhs() * scale if case == "pas_ramp" else op.rhs()
         result = solve(
             op, rhs, method="gmres", tol=1e-10, differentiable=True,
-            preconditioner="coarse",
+            preconditioner="coarse", record_adjoint=True,
         )  # fmt: skip
         captured["result"] = result
         return jnp.dot(w, result.x)

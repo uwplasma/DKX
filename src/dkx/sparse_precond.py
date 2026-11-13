@@ -430,6 +430,9 @@ def build_sparse_f_inverse(
         return out.reshape(*lead, h.n_sub * h.width)
 
     def _make(transpose: bool) -> Callable:
+        # The one host callback left in the solve path: SuperLU (fill-reducing LU) has no JAX
+        # equivalent. It is opt-in / escalation-only and never used by the differentiable
+        # default (``coarse``, fully traced).
         def apply(v: jnp.ndarray) -> jnp.ndarray:
             shape = jax.ShapeDtypeStruct(v.shape, jnp.float64)
             return jax.pure_callback(

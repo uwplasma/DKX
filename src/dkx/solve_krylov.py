@@ -404,6 +404,7 @@ def _solve_tier2(
     max_restarts: int,
     differentiable: bool,
     check_adjoint: bool,
+    record_adjoint: bool = False,
     adjoint_residual_factor: float = DEFAULT_ADJOINT_RESIDUAL_FACTOR,
     prebuilt_precond: tuple[Callable, Callable] | None = None,
     auto_restart_recovery: bool = False,
@@ -473,7 +474,7 @@ def _solve_tier2(
             factor=float(adjoint_residual_factor),
             checked=bool(check_adjoint),
         )
-        if differentiable
+        if differentiable and record_adjoint
         else None
     )
     # The widened windows of the host restart policy, sized once per call from
@@ -537,10 +538,8 @@ def _solve_tier2(
             #
             # Both the forward and the adjoint (transposed) solves have their
             # *true* residual recomputed from the operator and recorded in
-            # ``diagnostics``; with check_adjoint on, a miss aborts loudly
-            # instead of silently corrupting the gradient
-            # (jax.debug.callback fires at execution time, i.e. during the
-            # backward pass for the adjoint).
+            # ``diagnostics`` when asked; with check_adjoint on, a miss returns
+            # NaN instead of silently corrupting the gradient.
             def _measured(
                 label: str,
                 mv: Callable[[jnp.ndarray], jnp.ndarray],
@@ -569,7 +568,7 @@ def _solve_tier2(
                     tol=tol,
                     atol=atol,
                     factor=adjoint_residual_factor,
-                    raise_on_failure=check_adjoint,
+                    check=check_adjoint,
                     diagnostics=diagnostics,
                 )
                 return measured, (

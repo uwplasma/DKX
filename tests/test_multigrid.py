@@ -289,6 +289,7 @@ def test_adjoint_diagnostics_are_recorded_for_the_multigrid_route() -> None:
         method="gmres",
         tol=1e-10,
         differentiable=True,
+        record_adjoint=True,
         preconditioner="multigrid",
     )
     assert result.adjoint is not None

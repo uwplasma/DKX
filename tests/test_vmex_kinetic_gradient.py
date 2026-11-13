@@ -206,7 +206,7 @@ def test_the_objective_agrees_with_redl_in_sign_and_its_jacobian_with_difference
 
 
 @pytest.mark.slow
-def test_ambipolar_roots_run_before_the_traced_row_which_then_holds_no_callback() -> None:
+def test_ambipolar_traced_row_holds_no_callback() -> None:
     vj = pytest.importorskip("vmex")
     pytest.importorskip("booz_xform_jax.jax_api", reason="needs booz_xform_jax >= 0.4")
     from vmex import optimize as opt
@@ -232,8 +232,8 @@ def test_ambipolar_roots_run_before_the_traced_row_which_then_holds_no_callback(
     roots = term.roots(state, rt)
     row = jax.jit(lambda st, ro: term.residuals_state(st, rt, ro))
     assert term.unconverged == 0
-    assert "io_callback" not in str(jax.make_jaxpr(row)(state, roots))
-    assert "io_callback" in str(jax.make_jaxpr(lambda st: term.residuals_state(st, rt))(state))
+    assert "callback" not in str(jax.make_jaxpr(row)(state, roots))
+    assert "callback" not in str(jax.make_jaxpr(lambda st: term.residuals_state(st, rt))(state))
     term._er[:] = term.er_initial  # the root search is warm-started: same start, same row
     np.testing.assert_allclose(row(state, roots), term.residuals_state(state, rt), rtol=1e-9)
 
@@ -248,7 +248,7 @@ def test_ambipolar_roots_run_before_the_traced_row_which_then_holds_no_callback(
     _, via_callback = jax.jvp(lambda st: term.residuals_state(st, rt), (state,), (tangent,))
     np.testing.assert_allclose(jvp, via_callback, rtol=1e-6)
 
-    f = term.cached_residuals(rt)  # the one-argument form: roots, then the callback-free program
+    f = term.cached_residuals(rt)  # the one-argument form: roots, then the traced program
     term._er[:] = term.er_initial
     np.testing.assert_allclose(f(state), row(state, roots), rtol=1e-9)
     term._er[:] = term.er_initial

@@ -492,9 +492,9 @@ class KineticBootstrapMismatch:
     reproducible bit for bit across histories when several roots exist;
     :meth:`electric_field` returns them and ``unconverged`` counts failures.
     The default grid is ``DEFAULT_AMBIPOLAR_RESOLUTION``.  Called as
-    ``residuals_state(state, rt)`` the roots come back through an ``io_callback``,
-    whose host pointer keeps the program out of JAX's persistent cache;
-    :meth:`roots` / ``roots=`` or :meth:`cached_residuals` avoid it.
+    ``residuals_state(state, rt)`` the roots are found inside the traced program from
+    ``er_initial`` (no warm start, no ``unconverged`` update);
+    :meth:`roots` / ``roots=`` or :meth:`cached_residuals` keep the warm start.
     """
 
     name = "j_boot_dkx"
@@ -629,7 +629,7 @@ class KineticBootstrapMismatch:
         """``(s_rows, <j.B>_kinetic)`` [A T/m^2], traced in ``state``.
 
         ``roots`` is the output of :meth:`roots`; without it an ambipolar row finds
-        its roots through a host callback inside the traced program.
+        its roots from ``er_initial`` inside the traced program.
         """
         import jax  # noqa: PLC0415
         import jax.numpy as jnp  # noqa: PLC0415
@@ -645,11 +645,9 @@ class KineticBootstrapMismatch:
         key, s_rows, spectra, psi_a = self._stage(state, rt)
         if self.ambipolar:
             if roots is None:
-                from jax.experimental import io_callback  # noqa: PLC0415
-
                 sg = jax.lax.stop_gradient
-                shape = jax.ShapeDtypeStruct((s_rows.size,), jnp.float64)
-                roots = io_callback(self._roots[key], (shape,) * 3, sg(spectra), sg(psi_a))
+                find, stacked = self._roots[key]
+                roots = find(stacked, sg(spectra), sg(psi_a), jnp.full(s_rows.size, self.er_initial))[:3]
             spectra = dict(spectra, root=tuple(jax.lax.stop_gradient(jnp.asarray(r)) for r in roots))
         return s_rows, self._chains[key](spectra, psi_a)
 
@@ -741,8 +739,7 @@ class KineticBootstrapMismatch:
                 # The root is found by a separate compiled program run from the host,
                 # so the program VMEX differentiates holds no iteration, only one
                 # solve per surface; the root persists across calls as the warm start.
-                roots = jax.jit(jax.vmap(newton, (0, 0, None, 0)))
-                self._roots[key] = lambda sp, psi: self._find_roots(roots, stacked, sp, psi)
+                self._roots[key] = (jax.jit(jax.vmap(newton, (0, 0, None, 0))), stacked)
             # The surfaces share their shapes, so they are one batch axis of one
             # compiled program rather than an unrolled loop.
             self._chains[key] = batched_with_reverse_jvp(surface, stacked)
@@ -753,7 +750,7 @@ class KineticBootstrapMismatch:
 
         Run it before the traced program and pass the result as ``roots`` to
         :meth:`residuals_state` (or :meth:`current_profiles`, :meth:`total`): that program
-        then holds no callback, so JAX's persistent cache keeps it across processes.
+        then runs no root search, and keeps the warm start.
         """
         import jax  # noqa: PLC0415
 
@@ -768,10 +765,11 @@ class KineticBootstrapMismatch:
 
             self._stager = (rt, jax.jit(stage), box)
         spectra, psi = self._stager[1](state)
-        return self._roots[self._stager[2]["key"]](spectra, psi)
+        find, stacked = self._roots[self._stager[2]["key"]]
+        return self._find_roots(find, stacked, spectra, psi)
 
     def cached_residuals(self, rt: Any) -> Any:
-        """``f(state)``: the residual vector, with the roots found on the host before a callback-free program.
+        """``f(state)``: the residual vector, with the roots found on the host (warm-started) before the traced program.
 
         The program takes the roots as an argument, so JAX's persistent cache keeps it across
         processes; ``jax.jvp``, ``jax.jacfwd`` and ``jax.linearize`` of ``f`` run the same program

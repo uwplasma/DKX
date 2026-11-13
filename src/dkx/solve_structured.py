@@ -57,6 +57,7 @@ from dkx.solve_common import (  # noqa: E402
     _as_columns,
     _column_apply,
     _converged_flag,
+    _admit,
     _dispatch_guard,
     _guarded_solve,
     _implicit_solve,
@@ -309,7 +310,11 @@ def _tier1_implicit(
     op_const: KineticOperator,
     t1_solver: Tier1Solver,
     rhs2d: jnp.ndarray,
+    lim: jnp.ndarray,
     token: jnp.ndarray,
+    *,
+    check: bool,
+    record: bool,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """A differentiable structured direct solve of every column, as one program.
 
@@ -322,23 +327,27 @@ def _tier1_implicit(
     re-tracing the implicit solve and evaluating its rules primitive by
     primitive on every call.
 
-    Every substitution measures its true residual and hands each column's to
-    the registered guard. Returns the solution and the forward residual norms.
+    Every substitution measures its true residual against ``lim = (tol, atol,
+    factor)``, traced so one executable serves every tolerance, and returns NaN
+    for a failing column when ``check``. With ``record`` the norms also reach
+    the guard registered under ``token``. Returns the solution and the forward
+    residual norms.
     """
 
     def solve_measured(b: jnp.ndarray, *, transpose: bool) -> tuple[jnp.ndarray, jnp.ndarray]:
         x = _tier1_refined_solve(op_const, t1_solver, b, transpose)
         apply = _pinned_matvecs(op_const)[1 if transpose else 0]
         residual = _column_apply(apply, x) - b
-        norms = [jnp.linalg.norm(v, axis=0) for v in (residual, b, x)]
-        op_norm = _operator_norm_estimate(apply, b.shape[0])
-        label = "adjoint (transposed)" if transpose else "forward"
-        for j in range(b.shape[1]):
-            jax.debug.callback(
-                functools.partial(_dispatch_guard, label, j), token,
-                *(n[j] for n in norms), op_norm, jnp.all(residual[:, j] == 0),
-            )  # fmt: skip
-        return x, norms[0]
+        ok, norms = _admit(x, residual, b, lim)
+        if record:
+            op_norm = _operator_norm_estimate(apply, b.shape[0])
+            label = "adjoint (transposed)" if transpose else "forward"
+            for j in range(b.shape[1]):
+                jax.debug.callback(
+                    functools.partial(_dispatch_guard, label, j), token,
+                    *(n[j] for n in norms), op_norm, ok[j],
+                )  # fmt: skip
+        return (jnp.where(ok, x, jnp.nan) if check else x), norms[0]
 
     return _implicit_solve(
         lambda v: _operator_apply(op, v, False),
@@ -349,7 +358,7 @@ def _tier1_implicit(
         has_aux=True,
     )
 
-_tier1_implicit_compiled = jax.jit(_tier1_implicit)
+_tier1_implicit_compiled = jax.jit(_tier1_implicit, static_argnames=("check", "record"))
 
 def _residual_norms_of(
     op: KineticOperator, x2d: jnp.ndarray, rhs2d: jnp.ndarray, transpose: bool
@@ -429,13 +438,14 @@ def _build_generated_full_solver(
 def _solve_generated_full(
     op: KineticOperator, rhs2d: jnp.ndarray, *, tol: float, atol: float,
     subsystem_batch: int | str, adjoint_window: int | None,
-    check_adjoint: bool, adjoint_residual_factor: float,
+    check_adjoint: bool, adjoint_residual_factor: float, record_adjoint: bool = False,
     memory_budget_gb: float | None = None,
 ) -> SolveResult:
     """Implicit full recovery using SOLVAX's existing generated sweeps."""
     start = time.perf_counter()
-    diagnostics = AdjointDiagnostics(tol=float(tol), atol=float(atol),
-                                     factor=float(adjoint_residual_factor), checked=bool(check_adjoint))
+    diagnostics = (AdjointDiagnostics(tol=float(tol), atol=float(atol),
+                                      factor=float(adjoint_residual_factor), checked=bool(check_adjoint))
+                   if record_adjoint else None)
     apply, apply_t = _pinned_matvecs(op)
     mask = op.active_dof_mask()
     # Keep a single RHS vector-shaped in the implicit map. A matrix-shaped
@@ -478,14 +488,15 @@ def _solve_generated_full(
         x, _ = iterative_refinement(action, b, cached, iterations=_TIER1_REFINEMENT_SWEEPS)
         physical_b, physical_x = project(b), project(x)
         for j in range(rhs2d.shape[1]):
-            _guarded_solve(
+            col = (lambda v: v) if single else (lambda v, j=j: v[:, j])
+            checked = _guarded_solve(
                 "adjoint (transposed)" if transposed else "forward", j,
-                apply_t if transposed else apply,
-                physical_b if single else physical_b[:, j],
-                physical_x if single else physical_x[:, j],
+                apply_t if transposed else apply, col(physical_b), col(physical_x),
                 tol=tol, atol=atol, factor=adjoint_residual_factor,
-                raise_on_failure=check_adjoint, diagnostics=diagnostics, solver_name="generated full",
+                check=check_adjoint, diagnostics=diagnostics,
             )
+            # NaN where the column failed, exactly zero where it passed.
+            x = x + (checked - col(physical_x)) if single else x.at[:, j].add(checked - col(physical_x))
         return x
     # One matrix-RHS solve preserves shared factorization across columns.
     apply2d = apply if single else jax.vmap(apply, in_axes=1, out_axes=1)
@@ -510,13 +521,14 @@ def _solve_tier1(
     differentiable: bool,
     check_adjoint: bool,
     adjoint_residual_factor: float,
+    record_adjoint: bool = False,
     factors: Tier1Solver | None = None,
     transpose: bool = False,
     emit: Callable[[str], None] | None = print,
 ) -> SolveResult:
     diagnostics = (AdjointDiagnostics(tol=float(tol), atol=float(atol),
                                       factor=float(adjoint_residual_factor), checked=bool(check_adjoint))
-                   if differentiable else None)
+                   if differentiable and record_adjoint else None)
     t0 = time.perf_counter()
     reused = factors is not None
     if reused and factors.op.total_size != op.total_size:
@@ -581,21 +593,21 @@ def _solve_tier1(
             x = _guarded_solve(
                 "adjoint (transposed)" if transpose else "forward", rhs_index,
                 apply, b, x, tol=tol, atol=atol, factor=adjoint_residual_factor,
-                raise_on_failure=check_adjoint, diagnostics=diagnostics, solver_name="structured",
+                check=check_adjoint, diagnostics=diagnostics,
             )
         return x
 
     if compiled and differentiable:
-        def make_guard(label: str, rhs_index: int) -> Callable[..., None]:
-            return _residual_guard(
+        token = 0
+        if diagnostics is not None:
+            token = _register_guard(lambda label, rhs_index: _residual_guard(
                 label, rhs_index, tol=tol, atol=atol, factor=adjoint_residual_factor,
-                raise_on_failure=check_adjoint, diagnostics=diagnostics,
-                solver_name="structured",
-            )
-
+                diagnostics=diagnostics))
         x2d, res = _tier1_implicit_compiled(
             op, op_const, t1_solver, rhs2d,
-            jnp.asarray(_register_guard(make_guard), dtype=jnp.int32),
+            jnp.asarray([tol, atol, adjoint_residual_factor], dtype=jnp.float64),
+            jnp.asarray(token, dtype=jnp.int32),
+            check=bool(check_adjoint), record=diagnostics is not None,
         )
     elif compiled:
         x2d = _tier1_refined_solve_compiled(
@@ -644,6 +656,7 @@ def _solve_tier1(
             op, rhs2d, tol=tol, atol=atol, differentiable=differentiable,
             check_adjoint=check_adjoint,
             adjoint_residual_factor=adjoint_residual_factor,
+            record_adjoint=record_adjoint,
             factors=None, transpose=transpose, emit=emit,
         )
     return SolveResult(

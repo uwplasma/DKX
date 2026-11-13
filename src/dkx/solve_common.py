@@ -386,6 +386,24 @@ def _operator_norm_estimate(
         est = jnp.maximum(est, jnp.linalg.norm(matvec(u)) / jnp.linalg.norm(u))
     return est
 
+def _admit(x, residual, b, lim):
+    """Traced residual test of a solve, per column: ``(ok, (||r||, ||b||, ||x||))``.
+
+    A column passes when its norms are finite and ``||r|| <= factor * max(atol,
+    tol * ||b||)``; a homogeneous or zero-target column needs an exactly zero
+    defect. ``lim = (tol, atol, factor)`` is traced, so one executable serves
+    every tolerance.
+    """
+    tol, atol, factor = lim
+    res, bn, xn = (jnp.linalg.norm(v, axis=0) for v in (residual, b, x))
+    target = jnp.maximum(atol, tol * bn)
+    ok = (
+        jnp.isfinite(res) & jnp.isfinite(xn) & jnp.isfinite(bn)
+        & (res <= factor * target)
+        & (((bn > 0) & (target > 0)) | jnp.all(residual == 0, axis=0))
+    )
+    return ok, (res, bn, xn)
+
 def _residual_guard(
     label: str,
     rhs_index: int,
@@ -393,103 +411,39 @@ def _residual_guard(
     tol: float,
     atol: float,
     factor: float,
-    raise_on_failure: bool,
-    diagnostics: AdjointDiagnostics | None,
-    solver_name: str = "GCROT",
+    diagnostics: AdjointDiagnostics,
 ) -> Callable[..., None]:
-    """Host callback that records — and by default aborts on — a bad solve.
+    """Host recorder of one solve's true residual, opt-in through ``record_adjoint``.
 
-    Used on forward and transposed solves of the differentiable full-factor
-    structured and recycled Krylov paths.  A stalled *adjoint* solve is
-    the dangerous one: the forward solution stays good, nothing in the returned
-    :class:`SolveResult` changes, and the implicit-function-theorem VJP hands
-    back a wrong gradient (the singular Fokker-Planck +
-    ``constraintScheme=1`` failure mode).  Runs at execution time via
-    ``jax.debug.callback``, so it fires under ``jit``/``grad`` tracing and,
-    for the adjoint, during the backward pass.
-
-    The residual handed in is recomputed from the operator itself
-    (``||A^T y - g||``), never the Krylov method's internal recursive
-    estimate. Acceptance requires ``factor * max(atol, tol*||b||)``.
-    The backward-error scale is recorded for diagnosis only: a small backward
-    error does not establish the accuracy of an ill-conditioned adjoint or
-    of the requested observable. Homogeneous equations require zero defect.
+    The acceptance test itself is traced (:func:`_admit`): a solve that misses
+    ``factor * max(atol, tol*||b||)`` returns NaN, so a stalled *adjoint*
+    (the singular Fokker-Planck + ``constraintScheme=1`` failure mode, where the
+    forward answer stays good but the implicit-function-theorem gradient is
+    wrong) cannot pass for a number. This callback only fills ``diagnostics``.
     """
 
-    def guard(
-        res_norm: jnp.ndarray,
-        rhs_norm: jnp.ndarray,
-        sol_norm: jnp.ndarray,
-        op_norm: jnp.ndarray,
-        zero_defect: jnp.ndarray | None = None,
-    ) -> None:
-        res = float(np.asarray(res_norm))
-        b_norm = float(np.asarray(rhs_norm))
-        x_norm = float(np.asarray(sol_norm))
-        a_norm = float(np.asarray(op_norm))
+    def record(res, b_norm, x_norm, a_norm, ok) -> None:
+        res, b_norm, x_norm, a_norm = (float(np.asarray(v)) for v in (res, b_norm, x_norm, a_norm))
         target = max(atol, tol * b_norm)
-        floor = min(
-            _ADJOINT_FLOOR_SLACK * _EPS64 * (a_norm * x_norm + b_norm),
-            _ADJOINT_FLOOR_MAX_RELATIVE * b_norm,
-        )
-        limit = factor * target
-        ok = bool(
-            np.isfinite(res)
-            and np.isfinite(x_norm)
-            and np.isfinite(a_norm)
-            and np.isfinite(b_norm)
-            and res <= limit
-            and ((b_norm > 0 and target > 0) or bool(res == 0 if zero_defect is None else zero_defect))
-        )
-        record = SolveResidualRecord(
-            label=label,
-            rhs_index=rhs_index,
-            residual_norm=res,
-            rhs_norm=b_norm,
-            solution_norm=x_norm,
-            operator_norm=a_norm,
-            target=target,
-            floor=floor,
-            limit=limit,
-            within_tolerance=ok,
-        )
-        if diagnostics is not None:
-            diagnostics._record(record)
-        if ok or not raise_on_failure:
-            return
-        rel = record.relative_residual
-        formula = (
-            "||A^T y - g|| / ||g||"
-            if label.startswith("adjoint")
-            else ("||A x - b|| / ||b||")
-        )
-        raise RuntimeError(
-            f"[dkx.solve] differentiable {label} {solver_name} solve failed to "
-            f"converge on right-hand side {rhs_index}: the true relative "
-            f"residual {formula} is {rel:.3e} (residual {res:.3e}, "
-            f"rhs norm {b_norm:.3e}, solution norm {x_norm:.3e}), above the accepted "
-            f"{limit:.3e} = {factor:g} x requested {target:.3e}. "
-            f"The diagnostic backward-error scale {floor:.3e} does not "
-            "enlarge this gate; homogeneous equations require zero defect. Returning would "
-            "leave the implicit-differentiation gradient uncertified, so the "
-            "solve aborts instead.\n"
-            "Possible causes include ill-conditioning, incomplete constraints, "
-            "or insufficient convergence/refinement. A physical forward drive "
-            "may be in the range of A even when a generic adjoint cotangent "
-            "is not, so a converged forward solve does not certify the adjoint.\n"
-            "Remedies: raise the resolution or pick a constraint scheme that "
-            "regularizes this operator (SFINCS pairs constraintScheme=1 with "
-            "the Fokker-Planck/Sugama operators and 2 with pitch-angle "
-            "scattering); referee the case on a direct route "
-            "(method='block_tridiagonal' where available, or method='direct' "
-            "for a non-differentiable check of the forward solve); tighten "
-            "tol and raise max_restarts; or, if you have verified the "
-            "gradient against finite differences yourself, pass "
-            "check_adjoint=False (or raise adjoint_residual_factor) and read "
-            "SolveResult.adjoint for the residuals behind this decision."
+        diagnostics._record(
+            SolveResidualRecord(
+                label=label,
+                rhs_index=rhs_index,
+                residual_norm=res,
+                rhs_norm=b_norm,
+                solution_norm=x_norm,
+                operator_norm=a_norm,
+                target=target,
+                floor=min(
+                    _ADJOINT_FLOOR_SLACK * _EPS64 * (a_norm * x_norm + b_norm),
+                    _ADJOINT_FLOOR_MAX_RELATIVE * b_norm,
+                ),
+                limit=factor * target,
+                within_tolerance=bool(np.asarray(ok)),
+            )
         )
 
-    return guard
+    return record
 
 def _guarded_solve(
     label: str,
@@ -501,34 +455,17 @@ def _guarded_solve(
     tol: float,
     atol: float,
     factor: float,
-    raise_on_failure: bool,
+    check: bool,
     diagnostics: AdjointDiagnostics | None,
-    solver_name: str = "GCROT",
 ) -> jnp.ndarray:
-    """Measure ``x``'s true residual against ``matvec`` and hand it to the guard.
-
-    Returns ``x`` unchanged: the check observes, it never alters the solution,
-    so forward answers are bit-identical with and without it.
-    """
-    residual = matvec(x) - rhs_col
-    jax.debug.callback(
-        _residual_guard(
-            label,
-            rhs_index,
-            tol=tol,
-            atol=atol,
-            factor=factor,
-            raise_on_failure=raise_on_failure,
-            diagnostics=diagnostics,
-            solver_name=solver_name,
-        ),
-        jnp.linalg.norm(residual),
-        jnp.linalg.norm(rhs_col),
-        jnp.linalg.norm(x),
-        _operator_norm_estimate(matvec, rhs_col.shape[0]),
-        jnp.all(residual == 0),
-    )
-    return x
+    """Return ``x``, or NaN when ``check`` and its true residual misses the limit."""
+    ok, (res, bn, xn) = _admit(x, matvec(x) - rhs_col, rhs_col, (tol, atol, factor))
+    if diagnostics is not None:
+        jax.debug.callback(
+            _residual_guard(label, rhs_index, tol=tol, atol=atol, factor=factor, diagnostics=diagnostics),
+            res, bn, xn, _operator_norm_estimate(matvec, rhs_col.shape[0]), ok,
+        )
+    return jnp.where(ok, x, jnp.nan) if check else x
 
 def _krylov_basis_budget_bytes(budget_gb: float | None) -> float:
     """Bytes the widened FGMRES basis may take: argument, environment, or a
