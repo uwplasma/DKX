@@ -228,6 +228,7 @@ def test_multigrid_preconditioner_does_not_change_the_answer(case: str) -> None:
         assert float(jnp.max(jnp.abs(multigrid.x - reference.x))) / scale < 1e-6
 
 
+@pytest.mark.slow  # 333 s on a hosted runner; the full suite runs it
 def test_transposed_multigrid_preconditioner_is_exact() -> None:
     """``precond_t`` is the exact transpose of the cycle, not a second hierarchy.
 
