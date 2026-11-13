@@ -144,6 +144,15 @@ The XICS comparison is qualitative. Converged roots, every flux within 2% betwee
 
 ![Ambipolar roots of W7-X and HSX at successive grid rungs](docs/_static/figures/readme/ambipolar_rung_gates.png)
 
+The comparison with the published XICS profile is qualitative. Refining the phase-space grid moves every
+root and selected flux by less than 2%:
+
+![Ambipolar roots of W7-X and HSX at successive grid rungs](docs/_static/figures/readme/ambipolar_rung_gates.png)
+
+W7-X, five surfaces, seven roots: 1.80% largest change for angles and pitch, 0.32% for speed, under 5 GiB
+per solve. HSX QHS: one ion root per surface, 0.68%. Roots and fluxes are in
+`validation/w7x_ambipolar_rung_gate_v1.json` and `validation/hsx_ambipolar_rung_gate_v1.json`.
+
 ### Phi1 and impurities
 
 ![C6+ impurity flux against collisionality on W7-X](docs/_static/figures/paper_benchmarks/impurity_transport.png)
