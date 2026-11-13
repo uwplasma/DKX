@@ -792,3 +792,30 @@ path = "cases.1.adjoint.2.2"
 operation = "scale"
 value = 1.01
 expected_errors = ["best row-scaled error"]
+
+[[entry]]
+id = "hsx_ambipolar_rung_gate"
+capability = "ambipolar_roots"
+status = "accepted_limited"
+claim_scope = "hsx_qhs_five_surface_pas_dkes_ambipolar_profile_rung_gate"
+claim = "The five-surface HSX QHS PAS/DKES ambipolar profile finds one root per surface at (25, 61, 160, 12) and (29, 67, 192, 12) on the checkpointed truncated block-Thomas route, and every root and selected particle and heat flux moves by at most 2% relative between the rungs (largest 0.68%)."
+artifact = "validation/hsx_ambipolar_rung_gate_v1.json"
+artifact_sha256 = "161feead4dcb54cf66a964b2ce1ba259cc306338f8b0c1329bfd5719ff539f8d"
+artifact_schema = "dkx.hsx_ambipolar_rung_gate.v1"
+audit_script = "tools/paper_benchmarks/audit_ambipolar_rung_gate.py"
+command = "python tools/paper_benchmarks/audit_ambipolar_rung_gate.py --artifact validation/hsx_ambipolar_rung_gate_v1.json"
+inputs = ["validation/inputs/hsx_qhs_native_ambipolar_profile.toml"]
+generated_on_host = "official-laptop-cpu"
+generated_on_host_recorded = "laptop CPU (Apple M3 Max), 36 GiB, 7 and 14 threads, JAX 0.10.2"
+limitations = [
+  "PAS/DKES collisions only; no full Fokker-Planck ambipolar comparison",
+  "HSX QHS configuration with a representative profile, not a fitted discharge; no experimental comparison",
+  "one ion root per surface in the searched range |Er| <= 20 kV/m; no electron root is found for this profile, so the gate does not test one",
+  "the roots lie near zero Er; fluxes away from the root are not part of the gate",
+]
+
+[entry.corruption]
+path = "rungs.B.roots.root:1:0.Er"
+operation = "set"
+value = 0.0
+expected_errors = ["root:1:0"]
