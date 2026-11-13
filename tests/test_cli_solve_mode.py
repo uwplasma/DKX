@@ -136,7 +136,7 @@ def test_cmd_solve_v3_routes_canonical_run_profile(monkeypatch, tmp_path: Path) 
         verbose=0,
     )
     assert cli._cmd_solve_v3(args) == 0
-    assert captured["solve_method"] == "incremental"
+    assert captured["method"] == "incremental"
     assert captured["tol"] == 1e-8
     assert captured["emit"] is None  # --quiet silences the Fortran-parity console
     np.testing.assert_array_equal(np.load(out_state), np.asarray([1.0, 2.0, 3.0]))
@@ -237,7 +237,7 @@ def test_cmd_transport_matrix_v3_uses_canonical_run(monkeypatch, tmp_path: Path)
     assert cli._cmd_transport_matrix_v3(args) == 0
     assert captured["namelist_path"] == Path(args.input)
     assert captured["tol"] == 1e-8
-    assert captured["solve_method"] == "auto"
+    assert captured["method"] == "auto"
     assert captured["out_path"] is None
     assert captured["emit"] is None  # --quiet silences the Fortran-parity stdout
     assert (tmp_path / "tm.npy").exists()
@@ -564,7 +564,7 @@ def test_main_accepts_quiet_after_subcommand(monkeypatch, tmp_path: Path) -> Non
 
     assert rc == 0
     assert captured["out_path"] == Path(tmp_path / "sfincsOutput.h5")
-    assert captured["solve_method"] == "auto"
+    assert captured["method"] == "auto"
 
 
 def test_main_bare_input_uses_public_auto_contract(monkeypatch, tmp_path: Path) -> None:
@@ -599,7 +599,7 @@ def test_main_bare_input_uses_public_auto_contract(monkeypatch, tmp_path: Path) 
     )
 
     assert rc == 0
-    assert captured["solve_method"] == "auto"
+    assert captured["method"] == "auto"
     assert captured["overwrite"] is True
     assert captured["fortran_layout"] is True
     assert captured["out_path"] == Path(tmp_path / "sfincsOutput.h5")
@@ -716,7 +716,7 @@ def test_main_write_output_forwards_sparse_host_safe_solve_method(monkeypatch, t
     )
 
     assert rc == 0
-    assert captured["solve_method"] == "sparse_host_safe"
+    assert captured["method"] == "sparse_host_safe"
 
 
 def test_main_scan_er_forwards_structured_csr_solve_method(monkeypatch, tmp_path: Path) -> None:
