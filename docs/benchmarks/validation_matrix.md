@@ -36,7 +36,7 @@ of them.
 | `validation/beidler2011_w7x_monoenergetic.csv` | W7-X standard configuration against digitized Beidler et al. (2011) curves | merged |
 | HSX-like gap deck, `validation/hsx_gap_deck_v1.json` | 633,604 unknowns converge on the default route to a residual of 9.0e-9 in 611 iterations, 1,658 s, 26.8 GiB; the SFINCS routes fail; out of core through MUMPS it reaches 4.8e-11 in 4,774 s with 4.1 GiB resident and agrees with the Krylov solution to 7e-6 | merged |
 | IPP DKES on `hydra_Np04`, `validation/dkes_hydra_np04_v1.json` | agreement statistics only; the DKES data are not redistributed | merged |
-| W7-X ambipolar profile | two-rung gate passed on the checkpointed route (theta, zeta, pitch refined; 1.80% largest change); two rungs only, speed rung C pending | open |
+| W7-X ambipolar profile | three-rung gate passed on the checkpointed route (theta, zeta, pitch: 1.80% largest change; speed 8 to 10: 0.32%) | `release_ready` |
 | HSX QHS ambipolar profile, `validation/hsx_ambipolar_rung_gate_v1.json` | one ion root per surface on five surfaces; every root and selected flux within 2% relative between $(25, 61, 160, 12)$ and $(29, 67, 192, 12)$ (largest 0.68%) | open |
 
 ## Release claim gate metadata
@@ -287,7 +287,7 @@ particle and heat flux must move by at most 2% between rungs (an absolute 0.05 k
 roots near 11-13 kV/m and too loose for those near zero). The largest change is 1.80% (electron heat flux on surface 1);
 the roots move by 0.05% to 1.78%, the largest on the two roots of surface 2 nearest zero ($-0.27$ and $0.40$ kV/m).
 Peak resident memory is 2.8 GiB at rung A and 4.2 GiB at rung B; one solve takes 440 to 2,300 s on 8 pinned cores
-of the loaded shared host. Speed is fixed at 8 in both rungs; a third rung at $(25, 81, 224, 10)$ is pending, so the gate covers two rungs only.
+of the loaded shared host. Rung C refines speed from 8 to 10 at rung B's angles and pitch: the same seven roots, and the largest change from rung B is 0.32% (surface 0), at 4.7 GiB peak.
 
 The HSX QHS ambipolar profile has its own two-rung gate (`validation/hsx_ambipolar_rung_gate_v1.json`). The case is
 `validation/inputs/hsx_qhs_native_ambipolar_profile.toml`: PAS/DKES collisions, five surfaces at $s = 0.09$ to $0.49$,
