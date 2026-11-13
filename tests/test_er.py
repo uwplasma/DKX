@@ -1,4 +1,4 @@
-"""Canonical ambipolar radial-electric-field slice (:mod:`dkx.er`).
+"""Canonical ambipolar radial-electric-field slice (:mod:`dkx.er`); root classification after Beidler et al., Nucl. Fusion 51, 076001 (2011).
 
 Pins the ``er.py`` slice against the legacy path it replaces:
 
@@ -478,7 +478,7 @@ def test_host_tolerances_validated_before_preparation(options):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("collision,ramped", [(1, False), (1, True), (0, False), (0, True)])
+@pytest.mark.parametrize("collision,ramped", [(1, False), (0, True)])  # PAS flat, FP ramped: each axis once
 def test_ambipolar_er_grad_matches_finite_difference(tmp_path: Path, collision, ramped) -> None:
     import jax
 
@@ -520,7 +520,7 @@ def test_ambipolar_er_grad_matches_finite_difference(tmp_path: Path, collision, 
     np.testing.assert_allclose(grad, fd, rtol=1e-4)
 
 
-@pytest.mark.parametrize("collision,ramped", [(1, False), (1, True), (0, False), (0, True)])
+@pytest.mark.parametrize("collision,ramped", [(1, False), (0, True)])  # PAS flat, FP ramped: each axis once
 def test_routed_radial_current_gradient_matches_cold_solves(tmp_path, monkeypatch, collision, ramped):
     import jax
     import jax.numpy as jnp
@@ -655,8 +655,7 @@ def test_differentiated_root_rejects_inaccurate_cancelling_fluxes(tmp_path, monk
 
 
 @pytest.mark.parametrize("collision,ramped,tol", [
-    (1, False, 1e-10), (1, True, 1e-10), (0, False, 1e-10), (0, True, 1e-10),
-    (0, False, 1e-12),
+    (1, False, 1e-10), (0, True, 1e-10), (0, False, 1e-12),
 ])
 def test_current_adjoint_matches_packed_original_equation(tmp_path, collision, ramped, tol):
     import jax

@@ -49,17 +49,6 @@ def test_run_check_grid_certifies_each_radius(tmp_path, capsys) -> None:
 
 
 def test_run_table_check_grid_certifies_without_the_flag(tmp_path, capsys) -> None:
-    """``[run] check_grid = true`` is the input-file form of ``--check-grid``."""
-    case = tmp_path / "case.toml"
-    case.write_text(ANALYTIC_CASE.read_text().replace("[run]", "[run]\ncheck_grid = true", 1))
-    out = tmp_path / "result.nc"
-    assert cli.main(["run", str(case), "--out", str(out), "--quiet"]) == 0
-    from dkx.result import Result  # noqa: PLC0415
-
-    assert "resolution_change" in Result.load(out).arrays
-
-
-def test_run_table_check_grid_certifies_without_the_flag(tmp_path, capsys) -> None:
     """``[run] check_grid = true`` is the input-file form of ``--check-grid`` (and does not recurse)."""
     case = tmp_path / "case.toml"
     case.write_text(ANALYTIC_CASE.read_text().replace("[run]", "[run]\ncheck_grid = true", 1))
@@ -283,3 +272,13 @@ def test_run_reports_the_result_path_it_wrote(tmp_path, capsys) -> None:
     cli.main(["run", str(case)])
 
     assert "result" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("command", ["run", "converge", "scan"])
+def test_an_unreadable_or_invalid_case_file_exits_two_naming_the_command(command, tmp_path, capsys) -> None:
+    for name, text in (("missing.toml", None), ("bad.json", "{")):
+        path = tmp_path / name
+        if text is not None:
+            path.write_text(text)
+        assert cli.main([command, str(path), "--quiet"]) == 2
+        assert f"dkx {command} failed" in capsys.readouterr().err

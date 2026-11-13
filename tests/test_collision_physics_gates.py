@@ -1,3 +1,5 @@
+"""Collision-operator null vectors and limits; anchors Rosenbluth, MacDonald & Judd, Phys. Rev. 107, 1 (1957) and Landreman et al., Phys. Plasmas 21, 042503 (2014)."""
+
 from __future__ import annotations
 
 import jax.numpy as jnp

@@ -1,4 +1,4 @@
-"""Physics and differentiability gates for the bounce-averaged 1/nu surrogate.
+"""Physics and differentiability gates for the bounce-averaged 1/nu surrogate (anchor: Nemov et al., Phys. Plasmas 6, 4622 (1999)).
 
 :mod:`dkx.bounce_averaged` computes the effective ripple ``epsilon_eff``
 and the trapped-particle bounce integrals of the radial magnetic drift from the

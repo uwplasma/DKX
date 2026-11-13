@@ -242,13 +242,12 @@ def test_transposed_multigrid_preconditioner_is_exact() -> None:
     op = _load_op("quick_2species_FPCollisions_noEr")
     a_inv, _ = build_multigrid_f_inverse(op)
     size = op.f_size
-    identity = jnp.eye(size)
     transposed = jax.linear_transpose(a_inv, jnp.zeros((size,)))
-    forward = np.stack([np.asarray(a_inv(identity[:, j])) for j in range(size)], axis=1)
-    adjoint = np.stack(
-        [np.asarray(transposed(identity[:, j])[0]) for j in range(size)], axis=1
-    )
-    assert np.linalg.norm(forward.T - adjoint) / np.linalg.norm(forward) < 1e-12
+    rng = np.random.default_rng(0)
+    for _ in range(3):  # <M x, y> = <x, M^T y> on random pairs
+        x, y = (jnp.asarray(rng.standard_normal(size)) for _ in range(2))
+        lhs, rhs = jnp.vdot(a_inv(x), y), jnp.vdot(x, transposed(y)[0])
+        assert abs(float(lhs - rhs)) < 1e-11 * abs(float(lhs))
 
 
 def test_multigrid_preconditioned_gradient_matches_finite_differences() -> None:

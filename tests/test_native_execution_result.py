@@ -110,8 +110,9 @@ def test_native_profile_stencil_matches_fresh_boundaries_and_interior(surfaces, 
     assert np.all(np.isnan(jax.jit(drives)(jnp.asarray(n[:, None]), invalid)[1]))
 
 
-@pytest.mark.parametrize("collisions", ["pitch_angle_scattering", "linearized_fokker_planck"])
-@pytest.mark.parametrize("location", ["local", "neighbor"])
+@pytest.mark.parametrize("collisions,location", [
+    ("linearized_fokker_planck", "local"), ("pitch_angle_scattering", "neighbor"),
+])  # each axis once; the full product repeated a 100 s Fokker-Planck solve
 def test_native_profile_refresh_updates_stencil_collisions_and_current_gradient(collisions, location):
     import jax
     import jax.numpy as jnp

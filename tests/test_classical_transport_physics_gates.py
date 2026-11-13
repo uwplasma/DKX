@@ -1,3 +1,5 @@
+"""Classical (Braginskii-type) flux gate for dkx.moments.classical_fluxes; anchor Buller et al., J. Plasma Phys. 84, 905840409 (2018)."""
+
 from __future__ import annotations
 
 import jax.numpy as jnp

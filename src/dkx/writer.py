@@ -1038,14 +1038,10 @@ def _export_f_config(*, raw, grids: Grids, geom: FluxSurfaceGeometry) -> _Export
         map_theta = np.zeros((export_theta.size, n_theta), dtype=np.float64)
         for j, val in enumerate(export_theta):
             idx1 = int(math.floor(val * n_theta / (2.0 * math.pi))) + 1
-            if idx1 < 1:
-                raise ValueError(f"Invalid export_f_theta index for value {val}")
             if idx1 == n_theta + 1:
                 idx1, idx2 = n_theta, 1
             elif idx1 == n_theta:
                 idx2 = 1
-            elif idx1 > n_theta + 1:
-                raise ValueError(f"Invalid export_f_theta index for value {val}")
             else:
                 idx2 = idx1 + 1
             weight1 = idx1 - val * n_theta / (2.0 * math.pi)
@@ -1079,14 +1075,10 @@ def _export_f_config(*, raw, grids: Grids, geom: FluxSurfaceGeometry) -> _Export
             map_zeta = np.zeros((export_zeta.size, n_zeta), dtype=np.float64)
             for j, val in enumerate(export_zeta):
                 idx1 = int(math.floor(val * n_zeta / zeta_period)) + 1
-                if idx1 < 1:
-                    raise ValueError(f"Invalid export_f_zeta index for value {val}")
                 if idx1 == n_zeta + 1:
                     idx1, idx2 = n_zeta, 1
                 elif idx1 == n_zeta:
                     idx2 = 1
-                elif idx1 > n_zeta + 1:
-                    raise ValueError(f"Invalid export_f_zeta index for value {val}")
                 else:
                     idx2 = idx1 + 1
                 weight1 = idx1 - val * n_zeta / zeta_period

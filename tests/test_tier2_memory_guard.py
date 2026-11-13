@@ -370,10 +370,20 @@ def _generated(op: KineticOperator, monkeypatch, route: str = "checkpointed"):
 WELL_CONDITIONED = sorted(set(AGREEMENT_CASES) - {"er_xdot"})
 
 
-@pytest.mark.parametrize("route", sorted(FALLBACK_ROUTES))
-@pytest.mark.parametrize("case", WELL_CONDITIONED)
+def _route_cases(cases):
+    """``(route, case)`` pairs; the slow checkpointed route runs only the cheapest decks.
+
+    Both routes eliminate the same pinned chain, so the collision-reduction
+    branches are covered by the reusable route on every deck and the
+    checkpointed route (2-4 min per deck) adds only its own recomputation path.
+    """
+    light = {"pas", "ramped_nxi_for_x", "pas_ramp"}
+    return [(r, c) for r in sorted(FALLBACK_ROUTES) for c in cases if r != "checkpointed" or c in light]
+
+
+@pytest.mark.parametrize(("route", "case"), _route_cases(WELL_CONDITIONED))
 def test_the_two_routes_are_one_map_forward_and_transposed(
-    case: str, route: str, monkeypatch
+    route: str, case: str, monkeypatch
 ):
     """Generating the rows changes where the blocks come from and nothing else.
 
@@ -398,10 +408,9 @@ def test_the_two_routes_are_one_map_forward_and_transposed(
 LINEAR_SOLVE_CASES = sorted(set(AGREEMENT_CASES) - {"phi1_in_collision"})
 
 
-@pytest.mark.parametrize("route", sorted(FALLBACK_ROUTES))
-@pytest.mark.parametrize("case", LINEAR_SOLVE_CASES)
+@pytest.mark.parametrize(("route", "case"), _route_cases(LINEAR_SOLVE_CASES))
 def test_the_generated_route_does_not_change_the_answer(
-    case: str, route: str, monkeypatch
+    route: str, case: str, monkeypatch
 ):
     """A preconditioner may change the iteration count and nothing else.
 
@@ -466,8 +475,7 @@ def test_the_generated_route_is_jit_safe_over_traced_operator_leaves(
     assert difference <= 1e-6 * max(1.0, float(np.linalg.norm(reference))), difference
 
 
-@pytest.mark.parametrize("route", sorted(FALLBACK_ROUTES))
-@pytest.mark.parametrize("case", ("full_fp", "pas_ramp"))
+@pytest.mark.parametrize(("route", "case"), _route_cases(("full_fp", "pas_ramp")))
 def test_the_generated_route_carries_the_transposed_solve(route: str, case: str, monkeypatch):
     """The adjoint runs on ``precond_t``, so it needs its own residual.
 
