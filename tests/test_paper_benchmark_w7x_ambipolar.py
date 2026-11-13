@@ -1,4 +1,4 @@
-"""CI-sized regression gate for the W7-X ambipolar-Er experimental benchmark.
+"""CI-sized regression gate for the W7-X ambipolar-Er experimental benchmark (Pablant et al., Phys. Plasmas 25, 022508 (2018)).
 
 Runs ``tools/paper_benchmarks/w7x_ambipolar_er.py`` in its CI mode (two flux
 surfaces at coarse resolution) into temporary output/figure directories, and

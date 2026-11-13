@@ -1035,13 +1035,6 @@ def _validate_case(case: Case) -> None:
         )
     _is_boolean("run.progress", case.run.progress)
     _choice("geometry.format", case.geometry.format, ("vmec", "boozer", "analytic"))
-    if not str(case.geometry.file):
-        _fail(
-            "geometry.file",
-            case.geometry.file,
-            "a non-empty path",
-            "Supply the geometry source path.",
-        )
     if not case.geometry.surfaces:
         _fail(
             "geometry.surfaces",

@@ -98,3 +98,33 @@ def test_a_registered_command_is_never_swallowed_as_a_file_path(command: str) ->
 def test_an_unknown_first_token_is_still_treated_as_a_namelist() -> None:
     """The implicit path is the reason the dispatch set exists; keep it working."""
     assert cli._normalize_default_argv(["input.namelist"])[0] == "write-output"
+
+
+def test_doctor_names_each_way_an_install_can_be_broken(monkeypatch) -> None:
+    """Missing distributions, an unparsable solvax version, and a dead JAX backend are each their own row."""
+    import importlib.metadata as metadata
+
+    import jax
+    import jax.numpy as jnp
+
+    def version(name: str) -> str:
+        if name == "solvax":
+            return "weird"
+        raise metadata.PackageNotFoundError(name)
+
+    monkeypatch.setattr(metadata, "version", version)
+    monkeypatch.setattr(jnp, "zeros", lambda *a, **k: 1 / 0)
+    monkeypatch.setattr(jax, "devices", lambda: 1 / 0)
+    rows = {name: (status, detail) for status, name, detail in cli._doctor_checks()}
+    assert rows["dkx"][0] == "warn" and rows["solvax"][0] == "warn" and "compared" in rows["solvax"][1]
+    assert rows["jax"] == ("fail", "missing") and rows["h5py"] == ("warn", "missing")
+    assert rows["float64"][0] == "fail" and rows["devices"][0] == "fail"
+    monkeypatch.setattr(metadata, "version", lambda name: "0.1.0" if name == "solvax" else "1")
+    assert next(r for r in cli._doctor_checks() if r[1] == "solvax")[0] == "fail"  # below the floor
+    monkeypatch.setattr(metadata, "version", lambda name: (_ for _ in ()).throw(metadata.PackageNotFoundError(name)))
+    assert ("fail", "solvax", "missing; every canonical solve needs it") in cli._doctor_checks()
+
+
+def test_template_prints_the_commented_toml(capsys) -> None:
+    assert cli.main(["template", "--format", "toml"]) == 0
+    assert capsys.readouterr().out.startswith("#")

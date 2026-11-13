@@ -1,5 +1,7 @@
 """Canonical Phi1 / quasineutrality slice: parity, convergence, gradient, output.
 
+Equation set follows SFINCS (Landreman et al., Phys. Plasmas 21, 042503 (2014)) with its Phi1 option.
+
 Covers the ``includePhi1`` vertical slice consolidated into
 :mod:`dkx.drift_kinetic` (the quasineutrality block, the ``<Phi1>=0``
 lambda row, and the Phi1-in-kinetic-equation coupling for
@@ -602,3 +604,24 @@ def test_phi1_preconditioner_keeps_one_border_sized_array_and_no_baked_constants
             elif isinstance(value, jax.Array) and value.shape == (op.total_size - op.f_size, op.f_size):
                 border_sized += 1
     assert border_sized == 1
+
+
+def test_phi1_entry_points_refuse_decks_and_settings_they_cannot_solve() -> None:
+    from types import SimpleNamespace
+
+    from dkx.phi1 import _inner_restart
+
+    with pytest.raises(ValueError, match="require includePhi1=.true."):
+        operator_from_input(_REF / "pas_1species_PAS_noEr_tiny_scheme1.input.namelist")
+    with pytest.raises(NotImplementedError, match="RHSMode=1"):
+        operator_from_input(_REF / "monoenergetic_PAS_tiny_scheme1.input.namelist")
+    assert operator_from_input(_canonical_op()).include_phi1
+    big = SimpleNamespace(total_size=7000)
+    with pytest.raises(NotImplementedError, match="use_preconditioner=True"):
+        _inner_restart(big, None, False)
+    assert _inner_restart(big, None, True) == 60 and _inner_restart(big, 5, False) == 5
+    with pytest.raises(ValueError, match="x0 must have shape"):
+        solve_phi1(_canonical_op(), x0=np.zeros(3))
+    truncated = SimpleNamespace(active_dof_mask=lambda: np.ones(2, dtype=bool))
+    with pytest.raises(NotImplementedError, match="Nxi_for_x_option=0"):
+        phi1_state(truncated)

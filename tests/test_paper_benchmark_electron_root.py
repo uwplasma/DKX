@@ -1,4 +1,4 @@
-"""CI-sized regression gate for the electron-root optimization benchmark.
+"""CI-sized regression gate for the electron-root optimization benchmark (Maassberg, Beidler & Simmet, PPCF 41, 1135 (1999)).
 
 Runs ``tools/paper_benchmarks/electron_root_optimization.py`` in its CI mode
 (reduced Te/Ti ladder, coarse E_r grids, Nxi=24 scan / Nxi=8 differentiable

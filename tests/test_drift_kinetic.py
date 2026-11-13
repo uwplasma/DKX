@@ -1,5 +1,7 @@
 """Structural and physics tests for ``dkx.drift_kinetic.KineticOperator``.
 
+Drift-kinetic equation and constraints: Landreman et al., Phys. Plasmas 21, 042503 (2014).
+
 Element-wise Fortran matvec/RHS/residual parity lives in
 ``tests/test_kinetic_operator_fortran_parity.py`` (whichMatrix petscbin
 referees).  This file pins the operator's structure: dense materialization vs

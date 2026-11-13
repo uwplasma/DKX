@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError, is_dataclass
+from dataclasses import FrozenInstanceError, is_dataclass, replace
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -652,3 +653,64 @@ def test_case_file_format_errors_name_the_public_format_contract(tmp_path, name,
     with pytest.raises(CaseValidationError) as caught:
         Case.from_file(path)
     assert detail in str(caught.value)
+
+
+def _ambipolar(data: dict, **field) -> dict:
+    data["run"] = {"workflow": "ambipolar_profile"}
+    data["electric_field"] = {"mode": "ambipolar", "search_kV_m": [-5.0, 10.0], **field}
+    return data
+
+
+@pytest.mark.parametrize(
+    "mutation, correction",
+    [
+        (lambda d: d.update(species=[]), "at least one [[species]]"),
+        (lambda d: d.update(run=5), "Use a TOML table"),
+        (lambda d: d.pop("geometry"), "Add the [geometry] table."),
+        (lambda d: d.pop("species"), "Add species."),
+        (lambda d: d.update(species="x"), "Use square brackets"),
+        (lambda d: d.pop("name"), "Add name."),
+        (lambda d: d["species"][0].pop("charge"), "Add species[0].charge."),
+        (lambda d: d["species"][0].update(density_m3=[1e19, "x"]), "finite numeric value"),
+        (lambda d: d.update(parallel={"shard": ["surface", 5]}), "quoted descriptive value"),
+        (lambda d: d["resolution"].update(pitch_modes_by_speed=[4, "x", 6, 8]), "whole numbers without quotes"),
+        (lambda d: d["run"].update(progress="yes"), "unquoted TOML/JSON boolean"),
+        (lambda d: d["resolution"].update(theta="9"), "whole number without quotes"),
+        (lambda d: d["species"][1].update(name="ion"), "distinct physical species name"),
+        (lambda d: d["species"][0].update(charge=0), "signed ion charge"),
+        (lambda d: _ambipolar(d, search_kV_m=[3.0, 1.0]), "finite ambipolar search bracket"),
+        (lambda d: _ambipolar(d, search_strategy="uniform", seed_brackets_kV_m=[[[1.0, 2.0]]] * 2), "select search_strategy = 'seeded_brackets'"),
+        (lambda d: d["electric_field"].update(search_strategy="seeded_brackets", seed_brackets_kV_m=[[[1.0, 2.0]]] * 2), "workflow = 'ambipolar_profile'"),
+        (lambda d: _ambipolar(d, search_strategy="seeded_brackets", seed_brackets_kV_m=[[], [[1.0, 2.0]]]), "previously discovered branch bracket"),
+        (lambda d: _ambipolar(d, search_strategy="seeded_brackets", seed_brackets_kV_m=[3, [[1.0, 2.0]]]), "one bracket array per geometry surface"),
+        (lambda d: _ambipolar(d, search_strategy="seeded_brackets", seed_brackets_kV_m=[[5], [[1.0, 2.0]]]), "two finite bracket endpoints"),
+        (lambda d: _ambipolar(d, search_strategy="seeded_brackets", seed_brackets_kV_m=[[["a", 2.0]], [[1.0, 2.0]]]), "finite increasing bracket"),
+        (lambda d: d["resolution"].update(theta=0), "positive phase-space resolution"),
+        (lambda d: d["resolution"].update(pitch_modes_by_speed=[4, 5, "x", 8]), "without quotes"),
+        (lambda d: d["resolution"].update(pitch_modes_by_speed=[3, 5, 6, 8]), "collision-coupling floor"),
+        (lambda d: d.update(scan={"axis": []}), "at least one [[scan.axis]]"),
+        (lambda d: d.update(scan={"axis": [{"path": "electric_field.value_kV_m", "values": []}]}), "explicit scan values"),
+        (lambda d: d.update(scan={"max_cases": 0, "axis": [{"path": "electric_field.value_kV_m", "values": [0]}]}), "positive launch bound"),
+    ],
+)
+def test_validation_rejects_the_remaining_degenerate_inputs(mutation, correction) -> None:
+    data = _mapping()
+    mutation(data)
+    with pytest.raises(CaseValidationError, match=re.escape(correction)):
+        Case.from_mapping(data)
+
+
+@pytest.mark.parametrize(
+    "change, correction",
+    [
+        (lambda c: replace(c, name=" "), "descriptive name"),
+        (lambda c: replace(c, run=replace(c.run, progress=1)), "Use a boolean value."),
+        (lambda c: replace(c, run=replace(c.run, device=" ")), "device = 'auto'"),
+        (lambda c: replace(c, electric_field=replace(c.electric_field, mode="prescribed", value_kV_m=None)), "select mode = 'ambipolar'"),
+        (lambda c: replace(c, electric_field=replace(c.electric_field, value_kV_m=float("nan"))), "finite electric field in kV/m"),
+        (lambda c: replace(c, species=()), "at least one [[species]]"),
+    ],
+)
+def test_directly_built_cases_are_validated_like_parsed_ones(change, correction) -> None:
+    with pytest.raises(CaseValidationError, match=re.escape(correction)):
+        change(Case.from_mapping(_mapping()))
