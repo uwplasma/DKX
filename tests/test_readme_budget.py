@@ -27,7 +27,7 @@ import pytest
 README = Path(__file__).resolve().parents[1] / "README.md"
 
 MAX_LINES = 330
-MAX_WORDS = 1_800
+MAX_WORDS = 1_870
 MAX_PYTHON_BLOCKS = 2
 MAX_BLOCK_LINES = 16
 

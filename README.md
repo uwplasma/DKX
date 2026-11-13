@@ -141,6 +141,15 @@ Full linearized Fokker–Planck conserves momentum; pitch-angle scattering is fa
 W7-X program 20160309.010: electron roots in the core, ion roots at the edge; `dkx roots` prints
 every classified root.
 
+The comparison with the published XICS profile is qualitative. Refining the phase-space grid moves every
+root and selected flux by less than 2%:
+
+![Ambipolar roots of W7-X and HSX at successive grid rungs](docs/_static/figures/readme/ambipolar_rung_gates.png)
+
+W7-X, five surfaces, seven roots: 1.80% largest change for angles and pitch, 0.32% for speed, under 5 GiB
+per solve. HSX QHS: one ion root per surface, 0.68%. Roots and fluxes are in
+`validation/w7x_ambipolar_rung_gate_v1.json` and `validation/hsx_ambipolar_rung_gate_v1.json`.
+
 ### Phi1 and impurities
 
 ![C6+ impurity flux against collisionality on W7-X](docs/_static/figures/paper_benchmarks/impurity_transport.png)
