@@ -115,7 +115,7 @@ def test_console_lines_for_scheme1_fixture(capsys: pytest.CaptureFixture[str]) -
     from dkx import console
     from dkx.run import run_transport_matrix
 
-    run = run_transport_matrix(REF / "monoenergetic_PAS_tiny_scheme1.input.namelist")
+    run = run_transport_matrix(REF / "monoenergetic_PAS_tiny_scheme1.input.namelist", emit=print)
     lines = [ln.rstrip() for ln in capsys.readouterr().out.splitlines()]
 
     for banner_line in console.banner_lines(n_procs=1):

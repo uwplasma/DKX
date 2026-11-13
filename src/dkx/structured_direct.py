@@ -532,7 +532,7 @@ def _factor(
         lus[-1] = _tail_lu(last) if last.ndim == 3 else lu_factor(last)
     for l in range(n_chain - 2 if not scanned else keep - 1, -1, -1):
         sel = np.searchsorted(layout[l], layout[l + 1])
-        k_l, k_n = len(layout[l]), len(sel)
+        k_l = len(layout[l])
         if l + 1 >= keep:  # S_(l+1) per pair: so is U_l S_(l+1)^-1 Lo_(l+1)
             w = jax.vmap(lambda f0, f1, b: lu_solve((f0, f1), b.astype(f0.dtype)))(
                 *lus[l + 1], _bdense(lowers[l + 1])

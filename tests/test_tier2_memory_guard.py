@@ -14,7 +14,7 @@ so that no band is materialized.  There are two of those, and which one runs is
 the difference between a preconditioner and a solver.
 
 ``solvax.direct.block_thomas_factor_fn(..., store_offdiagonals=False)`` keeps
-only the Schur LU --- a third of the bands, a sixth with a float32 LU --- and
+only the Schur LU --- a third of the bands --- and
 regenerates the two off-diagonal blocks during each substitution sweep.  The
 elimination runs once, so the factors are *reusable* across the tens of Krylov
 applications a solve makes.  This is the route taken wherever those factors fit.
@@ -45,7 +45,6 @@ import pytest
 
 from dkx.coarse_precond import (
     _coarse_bands_fit,
-    _coarse_factor_dtype,
     _coarse_factors_fit,
     _coarse_generated_fallback_message,
     _coarse_generated_peak_bytes,
@@ -152,47 +151,13 @@ def test_keeping_only_the_schur_lu_is_a_third_of_the_bands():
     ) == pytest.approx(1.0 / 3.0, rel=5e-4)
 
 
-def test_a_float32_schur_lu_halves_the_factors_again():
-    """The knob that exists for the decks a third is still not enough for.
-
-    Only the LU halves; the int32 pivots are the same either way, so the ratio
-    is ``(m + 1) / (2m + 1)`` --- a half to within 0.02% at a production angular
-    grid, and visibly above it on a tiny fixture.
-    """
-    op = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
-    m = op.n_theta * op.n_zeta
-    ratio = coarse_preconditioner_factor_bytes(
-        op, jnp.float32
-    ) / coarse_preconditioner_factor_bytes(op)
-    assert ratio == pytest.approx((m + 1.0) / (2.0 * m + 1.0))
-
-    production = replace(op, n_theta=25, n_zeta=51)
-    assert coarse_preconditioner_factor_bytes(
-        production, jnp.float32
-    ) / coarse_preconditioner_factor_bytes(production) == pytest.approx(0.5, rel=1e-3)
-
-
-def test_the_factor_precision_knob_rejects_a_value_it_does_not_understand(monkeypatch):
-    """A misspelled precision must not silently become the default.
-
-    It selects how the preconditioner is factored, so a typo that fell through
-    to float64 would be a silent performance and memory difference rather than
-    an error.
-    """
-    monkeypatch.setenv("DKX_COARSE_FACTOR_DTYPE", "float16")
-    with pytest.raises(ValueError, match="not a recognized precision"):
-        _coarse_factor_dtype()
-
-
 def test_a_deck_that_fits_keeps_the_dense_route(monkeypatch):
     """The fallback must stay out of the way wherever the fast route works."""
-    monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
     assert _coarse_bands_fit(_small_op())
 
 
 def test_a_deck_that_does_not_fit_is_routed_to_the_generated_one(monkeypatch):
     """And it must divert wherever the bands would be allocated into a kill."""
-    monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
     monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: 1.0)
     assert not _coarse_bands_fit(_small_op())
 
@@ -206,7 +171,6 @@ def test_a_deck_that_misses_the_bands_by_under_3x_keeps_reusable_factors(monkeyp
     that is the difference between amortizing the elimination over a Krylov
     solve and repeating it every application.
     """
-    monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
     op = _small_op()
     monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: _ram_for_reusable(op))
     assert not _coarse_bands_fit(op)
@@ -215,7 +179,6 @@ def test_a_deck_that_misses_the_bands_by_under_3x_keeps_reusable_factors(monkeyp
 
 def test_a_deck_too_small_even_for_the_schur_lu_falls_all_the_way(monkeypatch):
     """The regime the checkpointed route is kept for, and the only one."""
-    monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
     monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: 1.0)
     op = _small_op()
     assert not _coarse_bands_fit(op)
@@ -228,7 +191,6 @@ def test_the_warning_states_the_size_and_the_cost(monkeypatch):
     The message has to say what did not fit, what runs instead, and how to get
     the fast route back.
     """
-    monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
     op = _small_op()
     monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: 1.0)
     message = _coarse_generated_fallback_message(op)
@@ -245,7 +207,6 @@ def test_the_reusable_warning_says_what_it_keeps_and_what_it_costs(monkeypatch):
     It has to say what it retains, that the factors are *reused* (which is the
     whole reason it is preferred), and how to shrink them further.
     """
-    monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
     op = _small_op()
     monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: _ram_for_reusable(op))
     message = _coarse_reusable_fallback_message(op)
@@ -253,7 +214,6 @@ def test_the_reusable_warning_says_what_it_keeps_and_what_it_costs(monkeypatch):
     assert "store_offdiagonals=False" in message  # what runs instead
     assert "reused across Krylov applications" in message  # why it is preferred
     assert "It completes; it is not fast." not in message  # not the one-shot claim
-    assert "independent residual and observable checks" in message
 
 
 @pytest.mark.parametrize(
@@ -264,12 +224,10 @@ def test_fallback_estimates_do_not_guarantee_completion(message_fn, monkeypatch)
     message = message_fn(_small_op())
     assert "full process RSS" in message
     assert "convergence and runtime are not guaranteed" in message
-    assert "DKX_TIER2_MEMORY_GUARD=off" not in message
 
 
 def test_the_oversized_deck_builds_and_warns(monkeypatch):
     """It fires through the route callers actually take, and it produces a solver."""
-    monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
     monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: 1.0)
     with pytest.warns(RuntimeWarning, match="block_thomas_checkpointed_fn"):
         precond, precond_t = build_tier2_preconditioner(_small_op(), "coarse")
@@ -278,7 +236,6 @@ def test_the_oversized_deck_builds_and_warns(monkeypatch):
 
 def test_the_reusable_route_is_what_a_near_miss_deck_builds(monkeypatch):
     """A deck that misses the bands by under 3x must warn about *that* route."""
-    monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
     op = _small_op()
     monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: _ram_for_reusable(op))
     with pytest.warns(RuntimeWarning, match="store_offdiagonals=False"):
@@ -294,19 +251,8 @@ def test_the_sparse_route_is_not_gated(monkeypatch):
     assert callable(precond)
 
 
-def test_the_routing_can_be_switched_off(monkeypatch):
-    """Someone who knows their machine better than ``sysconf`` keeps control."""
-    monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: 1.0)
-    monkeypatch.setenv("DKX_TIER2_MEMORY_GUARD", "off")
-    assert _coarse_bands_fit(_small_op())
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")
-        build_coarse_preconditioner(_small_op())  # the dense route, unwarned
-
-
 def test_unknown_host_memory_does_not_cost_the_fast_route(monkeypatch):
     """A platform that cannot report its RAM must not be demoted on a guess."""
-    monkeypatch.delenv("DKX_TIER2_MEMORY_GUARD", raising=False)
     monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: None)
     assert _coarse_bands_fit(_small_op())
 
@@ -592,9 +538,7 @@ def test_the_budget_falls_back_to_physical_ram_when_available_is_unreadable(monk
 def test_factors_that_only_fit_physical_ram_are_refused(monkeypatch):
     """The exact shape of the six-hour thrash: fits the box, not the free space."""
     op = _load_op("quick_2species_FPCollisions_noEr")
-    factors = coarse_precond.coarse_preconditioner_factor_bytes(
-        op, coarse_precond._coarse_factor_dtype()
-    )
+    factors = coarse_precond.coarse_preconditioner_factor_bytes(op)
     # Room for the factors themselves but not for what holding them really costs.
     monkeypatch.setattr(
         "dkx.coarse_precond._coarse_memory_budget", lambda: factors * 1.05
@@ -608,40 +552,10 @@ def test_factors_that_only_fit_physical_ram_are_refused(monkeypatch):
 
 
 def test_the_resident_overhead_matches_what_was_measured():
-    """7.2 GB of float32 factors peaked at 8.87 GB resident: 1.23x."""
+    """7.2 GB of factors peaked at 8.87 GB resident: 1.23x."""
     assert 1.2 <= coarse_precond._COARSE_RESIDENT_OVERHEAD <= 1.35
     predicted = 7.2 * coarse_precond._COARSE_RESIDENT_OVERHEAD
     assert abs(predicted - 8.87) < 0.35, f"predicts {predicted:.2f} GB against 8.87 measured"
-
-
-def test_the_fallback_names_float32_when_that_keeps_reusable_factors(monkeypatch):
-    """Do not describe the one-shot route to someone who can avoid it."""
-    op = _load_op("quick_2species_FPCollisions_noEr")
-    small = coarse_precond.coarse_preconditioner_factor_bytes(op, jnp.float32)
-    monkeypatch.setattr(
-        "dkx.coarse_precond._coarse_memory_budget",
-        lambda: small * coarse_precond._COARSE_RESIDENT_OVERHEAD * 1.5,
-    )
-    monkeypatch.setenv("DKX_COARSE_FACTOR_DTYPE", "float64")
-    message = coarse_precond._coarse_generated_fallback_message(op)
-    assert message.startswith("DKX_COARSE_FACTOR_DTYPE=float32")
-    assert "not a generally qualified precision change" in message
-
-
-def test_the_float32_hint_is_absent_when_float32_would_not_help_either(monkeypatch):
-    op = _load_op("quick_2species_FPCollisions_noEr")
-    monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: 1.0)
-    monkeypatch.setenv("DKX_COARSE_FACTOR_DTYPE", "float64")
-    assert not coarse_precond._coarse_generated_fallback_message(op).startswith(
-        "DKX_COARSE_FACTOR_DTYPE=float32"
-    )
-
-
-def test_the_float32_hint_is_absent_when_already_on_float32(monkeypatch):
-    op = _load_op("quick_2species_FPCollisions_noEr")
-    monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: 1.0e15)
-    monkeypatch.setenv("DKX_COARSE_FACTOR_DTYPE", "float32")
-    assert coarse_precond._coarse_downgrade_hint(op, jnp.float32) == ""
 
 
 def test_the_band_route_carries_its_own_resident_overhead():

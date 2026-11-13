@@ -303,14 +303,14 @@ def test_scan_helpers_and_run_er_scan(tmp_path: Path, monkeypatch: pytest.Monkey
         assert overwrite is False
         assert input_namelist.exists()
 
-    def _fake_write(namelist_path, *, out_path, solver_trace_path, solve_method, **kwargs):
+    def _fake_write(namelist_path, *, out_path, solver_trace_path, method, **kwargs):
         del kwargs
         calls.append(
             (
                 Path(namelist_path),
                 Path(out_path),
                 Path(solver_trace_path),
-                str(solve_method),
+                str(method),
             )
         )
         Path(out_path).write_bytes(b"")

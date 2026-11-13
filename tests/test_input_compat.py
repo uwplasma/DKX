@@ -15,7 +15,6 @@ from dkx.input_compat import (
     effective_psi_a_hat,
     effective_psi_n_wish,
     effective_r_n_wish,
-    effective_use_iterative_linear_solver,
     first_config_value,
     infer_phi_input_radial_coordinate_for_gradients,
     infer_input_radial_coordinate_for_gradients,
@@ -288,14 +287,6 @@ def test_er_conversion_supports_psin_selected_surface(tmp_path: Path) -> None:
     nml = read_sfincs_input(input_path)
     op = kinetic_operator_from_namelist(nml)
     assert np.isclose(float(op.dphi_hat_dpsi_hat_kinetic), 6.0)
-
-
-def test_effective_use_iterative_linear_solver_supports_legacy_alias() -> None:
-    input_path = (
-        Path(__file__).resolve().parent / "ref" / "multispecies_inductiveE_noEr.input.namelist"
-    )
-    nml = read_sfincs_input(input_path)
-    assert effective_use_iterative_linear_solver(other_params=nml.group("otherNumericalParameters"), default=0) == 1
 
 
 def test_gradient_coordinate_inference_on_inductive_deck() -> None:

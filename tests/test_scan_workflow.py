@@ -183,7 +183,7 @@ def run(monkeypatch, tmp_path, case, *, fail_on=(), resume=None):
         return FakeResult(value * 10.0)
 
     monkeypatch.setattr("dkx.execution.run_case", fake_run_case)
-    result, failures = sc.run_scan(case, out=tmp_path / "s.nc", resume=resume)
+    result, failures = sc.run_scan(case, out_path=tmp_path / "s.nc", resume=resume)
     return result, failures, calls
 
 
@@ -231,7 +231,7 @@ def test_check_grid_adds_a_resolution_column_and_reruns_uncertified_rows(monkeyp
         return result
 
     monkeypatch.setattr("dkx.execution.run_case", fake_run_case)
-    result, _ = sc.run_scan(case, out=tmp_path / "s.nc", check_grid=("pitch",))
+    result, _ = sc.run_scan(case, out_path=tmp_path / "s.nc", check_grid=("pitch",))
     assert seen == [("pitch",)] * 2
     assert list(result.arrays["resolution_change"]) == [0.03, 0.03]
 
@@ -308,7 +308,7 @@ def test_a_real_two_point_scan_runs_and_resumes(tmp_path) -> None:
     case = Case.from_file(case_file)
     out = tmp_path / "s.nc"
 
-    result, failures = run_scan(case, out=out)
+    result, failures = run_scan(case, out_path=out)
     assert failures == 0
     assert result.metadata["scan_cases"] == 2
     fluxes = np.asarray(result.arrays["particle_flux_m2_s"])
@@ -317,7 +317,7 @@ def test_a_real_two_point_scan_runs_and_resumes(tmp_path) -> None:
     # never reached the solve.
     assert fluxes[0] != fluxes[1]
 
-    resumed, _ = run_scan(case, out=out)
+    resumed, _ = run_scan(case, out_path=out)
     assert resumed.metadata["scan_cases"] == 2
     assert np.array_equal(np.asarray(Result.load(out).arrays["particle_flux_m2_s"]), fluxes)
 

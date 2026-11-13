@@ -407,7 +407,7 @@ def test_native_result_records_explicit_pitch_allocation(tmp_path) -> None:
         ),
     )
 
-    result = dkx.run(case, out=tmp_path / "explicit-pitch.nc")
+    result = dkx.run(case, out_path=tmp_path / "explicit-pitch.nc")
 
     assert result.metadata["phase_space"] == {
         "pitch_speed_ramp": None,
@@ -428,8 +428,8 @@ def test_explicit_default_pitch_allocation_preserves_science(tmp_path) -> None:
         ),
     )
 
-    default_result = dkx.run(base, out=tmp_path / "default-pitch.nc")
-    explicit_result = dkx.run(explicit, out=tmp_path / "explicit-default-pitch.nc")
+    default_result = dkx.run(base, out_path=tmp_path / "default-pitch.nc")
+    explicit_result = dkx.run(explicit, out_path=tmp_path / "explicit-default-pitch.nc")
 
     assert default_result.arrays.keys() == explicit_result.arrays.keys()
     for name in default_result.arrays:
@@ -446,7 +446,7 @@ def test_native_case_solves_without_namelist_conversion(monkeypatch, tmp_path) -
     monkeypatch.setattr("dkx.inputs.SfincsInput.to_namelist", forbidden)
     monkeypatch.setattr("dkx.run.parse_sfincs_input_text", forbidden)
     path = tmp_path / "result.nc"
-    result = dkx.run(_case(), out=path)
+    result = dkx.run(_case(), out_path=path)
 
     assert result.metadata["phase_space"] == {
         "pitch_speed_ramp": 1,
@@ -565,7 +565,7 @@ def test_native_ambipolar_result_preserves_scan_roots_and_selection(
         "dkx.workflows.ambipolar_native.solve_native_ambipolar_surface",
         fake_surface,
     )
-    result = dkx.run(case, out=tmp_path / "ambipolar.nc")
+    result = dkx.run(case, out_path=tmp_path / "ambipolar.nc")
 
     assert calls == [(None, ((-2.0, 0.0),)), (-1.5, ((-2.0, 0.0),))]
     np.testing.assert_allclose(result.electric_field_kV_m, [-1.5, -1.25])
@@ -631,7 +631,7 @@ def test_native_ambipolar_real_solver_brackets_and_roundtrips(tmp_path, capsys) 
         case,
         convergence=replace(case.convergence, retain_legendre_tail=True),
     )
-    result = dkx.run(case, out=tmp_path / "real-ambipolar.nc")
+    result = dkx.run(case, out_path=tmp_path / "real-ambipolar.nc")
 
     assert "[dkx.solve]" not in capsys.readouterr().out
     assert result.metadata["legendre_tail_diagnostic"] == (
@@ -1069,7 +1069,7 @@ def test_native_prepared_scan_matches_fresh_cases_and_field_derivative(tmp_path,
         assert not scan.states.is_fully_replicated
     for index, field in enumerate(fields):
         fresh = replace(case, electric_field=replace(case.electric_field, value_kV_m=float(field)))
-        native = dkx.run(fresh, out=tmp_path / f'fresh-{index}.nc')
+        native = dkx.run(fresh, out_path=tmp_path / f'fresh-{index}.nc')
         np.testing.assert_allclose(
             scan.moments['FSABjHat'][index] * PARALLEL_CURRENT,
             native.parallel_current_A_T_m2[1], rtol=1e-8, atol=1e-8,

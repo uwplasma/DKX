@@ -91,10 +91,6 @@ def _file_records_by_basename(manifest: dict) -> dict[str, list[dict]]:
     return records
 
 
-def known_external_equilibrium_names() -> set[str]:
-    manifest = _load_manifest()
-    return set(_file_records_by_basename(manifest))
-
 
 def _verify_files(target: Path, manifest: dict) -> bool:
     for item in manifest["files"]:

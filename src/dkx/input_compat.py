@@ -408,11 +408,6 @@ def infer_input_radial_coordinate_for_gradients(
     )
 
 
-def effective_use_iterative_linear_solver(*, other_params: Mapping[str, Any], default: int = 1) -> int:
-    value = _group_get(other_params, "useIterativeLinearSolver", "useIterativeSolver")
-    return int(value) if value is not None else int(default)
-
-
 # ===========================================================================
 # SFINCS ``input.namelist`` -> native DKX case (the ``dkx convert`` migration)
 # ===========================================================================
@@ -773,7 +768,7 @@ def _refuse_unconvertible_physics(
     PETSc plumbing, the preconditioner family and ``export_f`` are left alone
     because refusing them would make users edit working decks for nothing.
     """
-    from .constants import DEFAULT_ALPHA, DEFAULT_DELTA, DEFAULT_NU_N  # noqa: PLC0415
+    from .constants import DEFAULT_ALPHA, DEFAULT_DELTA  # noqa: PLC0415
 
     phys = "physicsParameters"
     other = "otherNumericalParameters"

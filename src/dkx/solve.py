@@ -74,7 +74,6 @@ and the PETSc ``Pmat`` idiom of production SFINCS.
 
 from __future__ import annotations
 
-import os
 from dataclasses import replace
 from typing import Any, Callable
 
@@ -170,31 +169,6 @@ __all__ = [
 ]
 
 
-
-# Size-aware device routing (``solve(device=...)``): on an accelerator-default
-# host, ``device="auto"`` runs systems at or below these sizes on the host CPU
-# instead.  Both thresholds default to 0 — auto-routing OFF — because the
-# same-host measurements do not support a nonzero default (36-core Pop!_OS box
-# with an RTX A4000, 2026-07-17, docs/benchmarks/performance.md "Same-host CPU/GPU
-# crossover"): the GPU won every structured direct warm solve measured down to
-# 6.5k DOFs (2.7x-39x) and every preconditioned recycled Krylov warm solve down
-# to 2.8k DOFs (1.5x-2.7x).  The one CPU-wins case — the small unpreconditioned
-# recycled Krylov loop of the Phi1 Newton solve (4.5k DOFs: warm 0.048 s CPU
-# vs 0.159 s GPU) — did NOT recover its win under solve-level routing
-# (0.12-0.13 s: the per-Newton-iteration residuals stay on the GPU and each
-# routed solve pays device transfers plus a one-time CPU compile), so routing
-# small Phi1 workloads is best done whole-process (``JAX_PLATFORMS=cpu``), not
-# per solve.  The knob remains for hosts where the balance differs: set e.g.
-# ``DKX_SOLVE_CPU_MAX_SIZE_TIER2=6000`` to route small recycled Krylov solves.
-_SOLVE_DEVICE_ENV = "DKX_SOLVE_DEVICE"
-
-_SOLVE_CPU_MAX_TIER1_ENV = "DKX_SOLVE_CPU_MAX_SIZE_TIER1"
-
-_SOLVE_CPU_MAX_TIER2_ENV = "DKX_SOLVE_CPU_MAX_SIZE_TIER2"
-
-_SOLVE_CPU_MAX_TIER1_DEFAULT = 0
-
-_SOLVE_CPU_MAX_TIER2_DEFAULT = 0
 
 # =============================================================================
 # The auto-policy entry point
@@ -345,15 +319,6 @@ def _auto_route(
         )
     return "gmres"
 
-def _env_size(name: str, default: int) -> int:
-    raw = os.environ.get(name, "").strip()
-    if not raw:
-        return default
-    try:
-        return int(float(raw))
-    except ValueError:
-        return default
-
 def _cpu_device_or_none() -> "jax.Device | None":
     """The first host-CPU device, or ``None`` when the CPU backend is absent
     (e.g. ``JAX_PLATFORMS=cuda`` initializes only the CUDA platform)."""
@@ -387,11 +352,11 @@ def _resolve_solve_device(
     if traced or chosen == "direct":  # sparse direct is a host solve already
         return None
     if device is None:
-        device = os.environ.get(_SOLVE_DEVICE_ENV, "").strip().lower() or "auto"
+        device = "auto"
     if isinstance(device, jax.Device):
         return device
     device = str(device).strip().lower()
-    if device == "default":
+    if device in ("auto", "default"):
         return None
     backend = jax.default_backend()
     if device == "cpu":
@@ -411,30 +376,10 @@ def _resolve_solve_device(
                 "(no accelerator available)."
             )
         return None
-    if device != "auto":
-        raise ValueError(
-            f"unknown solve device {device!r}; expected 'auto', 'default', 'cpu', "
-            "'gpu', or a jax.Device"
-        )
-    if backend == "cpu":
-        return None
-    if chosen in ("block_tridiagonal", "block_tridiagonal_truncated"):
-        max_size = _env_size(_SOLVE_CPU_MAX_TIER1_ENV, _SOLVE_CPU_MAX_TIER1_DEFAULT)
-    else:
-        max_size = _env_size(_SOLVE_CPU_MAX_TIER2_ENV, _SOLVE_CPU_MAX_TIER2_DEFAULT)
-    if int(op.total_size) <= max_size:
-        cpu = _cpu_device_or_none()
-        if cpu is None:  # e.g. JAX_PLATFORMS=cuda: no CPU backend to route to
-            return None
-        print(
-            f"[dkx.solve] device route: total_size={int(op.total_size)} <= "
-            f"{max_size} — running this "
-            f"{'structured direct' if chosen.startswith('block') else 'recycled Krylov'} "
-            f"solve on the host CPU (small solves are dispatch-bound on {backend}; "
-            f"override with device='default' or {_SOLVE_DEVICE_ENV})."
-        )
-        return cpu
-    return None
+    raise ValueError(
+        f"unknown solve device {device!r}; expected 'auto', 'default', 'cpu', "
+        "'gpu', or a jax.Device"
+    )
 
 def solve(
     op: KineticOperator,
@@ -670,15 +615,9 @@ def solve(
         device: where to run the solve.  ``"cpu"``/``"gpu"`` force a backend
             and a ``jax.Device`` pins the solve to that device: inputs are
             moved with ``jax.device_put`` and the solution is returned on
-            the device that held ``rhs``.  ``"auto"`` (the default, also
-            read from the ``DKX_SOLVE_DEVICE`` environment variable)
-            additionally routes solves at or below the
-            ``DKX_SOLVE_CPU_MAX_SIZE_TIER1`` / ``_TIER2`` thresholds
-            to the host CPU on accelerator-default hosts — but both
-            thresholds default to 0 (no routing), because the same-host
-            measurements in docs/benchmarks/performance.md found the GPU faster at
-            every practical size; the knobs exist for hosts where that
-            balance differs.  ``"default"`` disables all movement.  Under
+            the device that held ``rhs``.  ``"auto"`` (the default) and
+            ``"default"`` leave placement alone: the GPU won every measured
+            size (docs/benchmarks/performance.md).  Under
             ``jit``/``grad`` tracing the knob is inert (arrays cannot move
             mid-trace), so jitted callers are unaffected.
         emit: route-status sink. The default prints one physical route

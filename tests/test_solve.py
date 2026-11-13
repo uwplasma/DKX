@@ -1899,33 +1899,6 @@ def test_resolve_solve_device_semantics_on_cpu_host() -> None:
         _resolve_solve_device("quantum", "gmres", op, False)
 
 
-def test_solve_device_thresholds_read_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    from dkx.solve import (
-        _SOLVE_CPU_MAX_TIER1_DEFAULT,
-        _SOLVE_CPU_MAX_TIER2_DEFAULT,
-        _env_size,
-    )
-
-    # Auto-routing is OFF by default: the same-host measurements (see
-    # docs/benchmarks/performance.md) found the GPU faster at every practical size, so
-    # a nonzero default is unsupported by data.  Users opt in via the envs.
-    assert _SOLVE_CPU_MAX_TIER1_DEFAULT == 0
-    assert _SOLVE_CPU_MAX_TIER2_DEFAULT == 0
-
-    monkeypatch.setenv("DKX_SOLVE_CPU_MAX_SIZE_TIER1", "12345")
-    assert _env_size("DKX_SOLVE_CPU_MAX_SIZE_TIER1", _SOLVE_CPU_MAX_TIER1_DEFAULT) == 12345
-    monkeypatch.setenv("DKX_SOLVE_CPU_MAX_SIZE_TIER1", "not-a-number")
-    assert (
-        _env_size("DKX_SOLVE_CPU_MAX_SIZE_TIER1", _SOLVE_CPU_MAX_TIER1_DEFAULT)
-        == _SOLVE_CPU_MAX_TIER1_DEFAULT
-    )
-    monkeypatch.delenv("DKX_SOLVE_CPU_MAX_SIZE_TIER1")
-    assert (
-        _env_size("DKX_SOLVE_CPU_MAX_SIZE_TIER2", _SOLVE_CPU_MAX_TIER2_DEFAULT)
-        == _SOLVE_CPU_MAX_TIER2_DEFAULT
-    )
-
-
 def test_solve_on_explicit_second_cpu_device_matches_and_returns_home() -> None:
     """Real move/move-back exercise using two host CPU devices in a subprocess.
 
@@ -2201,31 +2174,6 @@ def test_one_recycled_direction_is_enough_to_run() -> None:
     """The guard's boundary: 1 must work, or the message would be wrong."""
     op = _load_sugama_op()
     assert solve(op, op.rhs(), method="gmres", tol=1e-8, recycle_dim=1).converged
-
-
-def test_the_coarse_factor_dtype_knob_actually_changes_the_factors(monkeypatch) -> None:
-    """DKX_COARSE_FACTOR_DTYPE=float32 was silently inert on the dense-band route.
-
-    Its docstring promises the knob is honoured, and the GPU profile measured a
-    bit-identical residual with it set -- proof that it did nothing. Operating
-    rule 11 forbids a silent no-op, so this pins that the factors really change
-    precision while the answer does not.
-    """
-    op = _load_sugama_op()
-    rhs = op.rhs()
-    base = solve(op, rhs, method="gmres", tol=1e-10)
-
-    monkeypatch.setenv("DKX_COARSE_FACTOR_DTYPE", "float32")
-    lowered = solve(op, rhs, method="gmres", tol=1e-10)
-
-    assert lowered.converged
-    # The factors differ, so the iteration path differs -- that is the proof it
-    # took effect. A float32 Schur LU preconditions fine; it just is not free.
-    assert (lowered.iterations, float(np.min(lowered.residual_norms))) != (
-        base.iterations, float(np.min(base.residual_norms))
-    ), "float32 factors produced an identical path: the knob is inert again"
-    # The converged answer is a property of the operator, not the preconditioner.
-    assert _rel_err(np.asarray(lowered.x), np.asarray(base.x)) < 1e-8
 
 
 def test_only_the_krylov_route_returns_a_preconditioner() -> None:

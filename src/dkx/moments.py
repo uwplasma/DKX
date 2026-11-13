@@ -53,7 +53,6 @@ import jax.numpy as jnp  # noqa: E402
 from jax import lax  # noqa: E402
 from jax import vmap  # noqa: E402
 
-from .constants import RadialCoordinates  # noqa: E402
 
 __all__ = [
     "StateLayout", "VelocityGrid", "FluxSurface", "SpeciesParams",

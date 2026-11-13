@@ -191,7 +191,7 @@ def _solve_edge_surface(record: dict):
     deck_path = OUT_DIR / "_w7x_showcase_deck.namelist"
     deck_path.write_text(deck)
     try:
-        run = run_profile(deck_path, solve_method=SOLVER, emit=lambda _s: None)
+        run = run_profile(deck_path, method=SOLVER, emit=lambda _s: None)
     finally:
         deck_path.unlink(missing_ok=True)
     return run, edge
@@ -213,7 +213,7 @@ def compute_bootstrap_profile(record: dict) -> dict:
         deck_path = OUT_DIR / "_w7x_showcase_deck.namelist"
         deck_path.write_text(deck)
         t0 = time.time()
-        run = run_profile(deck_path, solve_method=SOLVER, emit=lambda _s: None)
+        run = run_profile(deck_path, method=SOLVER, emit=lambda _s: None)
         seconds = time.time() - t0
         deck_path.unlink()
         fsab_flow = np.asarray(run.moments["FSABFlow"]).ravel()

@@ -289,8 +289,7 @@ measured size: the dense bands are used when they fit in physical RAM
 (`dkx.coarse_precond._coarse_bands_fit`); otherwise the Schur-LU factors alone
 when they fit (`dkx.coarse_precond._coarse_factors_fit`); otherwise a
 checkpointed route that regenerates the bands. Each transition warns with both
-sizes. `DKX_TIER2_MEMORY_GUARD=off` forces the dense route, and
-`DKX_COARSE_FACTOR_DTYPE=float32` halves the Schur LU.
+sizes.
 
 ### Not yet demonstrated at production scale
 

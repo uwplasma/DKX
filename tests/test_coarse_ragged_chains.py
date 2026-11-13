@@ -170,31 +170,6 @@ def test_truncated_rows_pass_through_scaled_by_the_floor(name: str, monkeypatch)
         np.testing.assert_allclose(out, ref, rtol=5e-16, atol=0.0)
 
 
-@pytest.mark.parametrize("name", TRUNCATING)
-def test_float32_reusable_tails_match_the_full_rectangle(name: str, monkeypatch):
-    op = DECKS[name]()
-    monkeypatch.setenv("DKX_COARSE_FACTOR_DTYPE", "float32")
-    reusable = _inverses(op, monkeypatch, **REUSABLE)
-    batch = op.n_species * op.n_x
-    rectangular = _inverses(
-        op, monkeypatch,
-        _coarse_row_layout=lambda _op: (tuple(range(batch)), (batch,) * op.n_xi),
-        **REUSABLE,
-    )
-    floor = _floor(op).reshape(op.n_species, op.n_x, 1, 1, 1)
-    padded = np.broadcast_to(np.asarray(op._mask())[None, :, :, None, None] == 0.0, op.f_shape)
-    f = np.random.default_rng(4).standard_normal(op.f_shape)
-    expected = f.astype(np.float32) / (1.0 + floor.astype(np.float32))
-    for apply, reference in zip(reusable[:2], rectangular[:2], strict=True):
-        out = np.asarray(apply(jnp.asarray(f.reshape(-1)))).reshape(op.f_shape)
-        ref = np.asarray(reference(jnp.asarray(f.reshape(-1)))).reshape(op.f_shape)
-        # The float32 quotient to the last bit XLA's division rounds: JAX 0.10 on
-        # CPU divides by a broadcast divisor as a reciprocal multiply, one ulp off.
-        assert np.all(out[padded] == out[padded].astype(np.float32))
-        np.testing.assert_array_max_ulp(out[padded].astype(np.float32), expected[padded], maxulp=1)
-        np.testing.assert_allclose(out[padded], ref[padded], rtol=2e-7, atol=2e-7)
-
-
 @pytest.mark.parametrize("name", (*TRUNCATING, "fokker_planck"))
 def test_ragged_and_rectangular_chains_are_one_map(name: str, monkeypatch):
     """The rectangular layout is the fallback for a traced ``Nxi_for_x``; it must agree."""

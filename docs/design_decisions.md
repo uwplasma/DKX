@@ -238,10 +238,9 @@ conditioned: pitch-angle decks have been measured near $\kappa = 3\times10^{12}$
 Single precision halves memory and doubles GPU throughput on consumer cards.
 
 **Choice.** Every solve runs in float64. `dkx.runtime.configure()` enables x64
-and `dkx.require_float64()` refuses to solve without it. Reduced precision is
-allowed only inside the Krylov preconditioner, as the opt-in
-`DKX_COARSE_FACTOR_DTYPE=float32`, where it can change iteration counts but not
-the answer.
+and `dkx.require_float64()` refuses to solve without it. The Krylov
+preconditioner's Schur LU is float64 too: float32 factors can change iteration
+counts but not the answer, and were not faster.
 
 **Consequence.**
 

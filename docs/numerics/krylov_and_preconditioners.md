@@ -281,7 +281,7 @@ measured size, and warns with both sizes at each transition:
   - bands fit physical RAM (`_coarse_bands_fit`)
 * - Reusable Schur LU (`store_offdiagonals=False`)
   - Schur LU only; off-diagonal blocks regenerated during each substitution
-  - factor once; $1/3 + 1/(6m)$ of the bands, a sixth with float32 factors
+  - factor once; $1/3 + 1/(6m)$ of the bands
   - the factors fit (`_coarse_factors_fit`)
 * - Checkpointed (`block_thomas_checkpointed_fn`)
   - one Schur checkpoint per $\lceil\sqrt{N_\xi}\rceil$ rows
@@ -298,10 +298,9 @@ application; the checkpointed route costs 32.9 s and 1.46 s. The checkpointed
 route is a memory fallback, not a speedup. The routes agree to `5e-14` forward
 and `9e-14` transposed.
 
-`DKX_TIER2_MEMORY_GUARD=off` forces the dense route; `DKX_COARSE_FACTOR_DTYPE=float32`
-halves the Schur LU.
+The Schur LU is always float64.
 
-### Float32 factors
+### Float32 factors (measured, not offered)
 
 Taking the Schur factors to float32 changes the preconditioner, never the
 answer, and its cost depends on how exact the preconditioner already was. Where

@@ -13,7 +13,7 @@ electrons.  In SFINCS normalization the radial particle flux of species s is
 ``FSABFlow``; their charge-weighted sum sum_s Z_s Gamma_s is the radial
 current, which is not zero here because Er = 0 is not the ambipolar field
 (tutorial 08 finds the Er that zeroes it).  In Python the same deck is one
-call: ``dkx.run("03_sfincs_namelist.namelist", out="out.h5", emit=print)``.
+call: ``dkx.run("03_sfincs_namelist.namelist", out_path="out.h5", emit=print)``.
 
 Run:              python examples/tutorials/03_sfincs_namelist.py
 Runtime:          about 19 s on a loaded 36-core CPU node, compilation included.

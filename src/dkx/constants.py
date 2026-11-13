@@ -167,12 +167,6 @@ def nu_n_from_nu_prime(*, nu_prime: float, b0_over_bbar: float, g_hat: float, i_
     return float(nu_prime) * float(b0_over_bbar) / denom
 
 
-def nu_prime_from_nu_n(*, nu_n: float, b0_over_bbar: float, g_hat: float, i_hat: float, iota: float) -> float:
-    """Inverse of :func:`nu_n_from_nu_prime` (same Fortran definition, solved for nuPrime)."""
-    if float(b0_over_bbar) == 0.0:
-        raise ZeroDivisionError("nu_prime_from_nu_n: B0OverBBar == 0")
-    return float(nu_n) * (float(g_hat) + float(iota) * float(i_hat)) / float(b0_over_bbar)
-
 
 def d_phi_hat_d_psi_hat_from_e_star(
     *, e_star: float, alpha: float, delta: float, iota: float, b0_over_bbar: float, g_hat: float

@@ -30,7 +30,7 @@ def _case():
 
 def test_batched_er_scan_matches_the_point_by_point_scan(tmp_path, monkeypatch):
     case = _case()
-    batched, failures = sc.run_scan(case, out=tmp_path / "batched.nc", resume=False)
+    batched, failures = sc.run_scan(case, out_path=tmp_path / "batched.nc", resume=False)
     assert failures == 0
 
     def forbidden(*args, **kwargs):
@@ -40,10 +40,10 @@ def test_batched_er_scan_matches_the_point_by_point_scan(tmp_path, monkeypatch):
 
     original = execution.run_case
     monkeypatch.setattr(execution, "run_case", forbidden)
-    sc.run_scan(case, out=tmp_path / "again.nc", resume=False)  # still batched
+    sc.run_scan(case, out_path=tmp_path / "again.nc", resume=False)  # still batched
     monkeypatch.setattr(execution, "run_case", original)
     monkeypatch.setattr(sc, "_batched_er_rows", lambda *a, **k: {})  # force the loop
-    looped, _ = sc.run_scan(case, out=tmp_path / "looped.nc", resume=False)
+    looped, _ = sc.run_scan(case, out_path=tmp_path / "looped.nc", resume=False)
     for name in sc.SCAN_OBSERVABLES[:3]:
         np.testing.assert_allclose(batched.arrays[name], looped.arrays[name], rtol=1e-6)
     assert np.ptp(batched.arrays["particle_flux_m2_s"]) > 0  # E_r actually varies the answer

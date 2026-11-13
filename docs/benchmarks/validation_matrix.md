@@ -249,8 +249,8 @@ admitted by the memory-bounded structured direct route, truncated block-Thomas w
 to the Krylov preconditioner, not to this route. The first surface was at 11.1 GB resident after four minutes on 8
 pinned cores when the shared host ran out of available memory (other jobs held 40 GiB or more); two attempts were
 stopped at 3 GiB available, and no solve of this rung finished. The gate therefore remains unrun. Float32 is not
-available inside the truncated kernel (`block_thomas_truncated_fn` has no factor-precision argument); the
-`DKX_COARSE_FACTOR_DTYPE=float32` option applies only to the Krylov preconditioner, and float32 factors with
+available inside the truncated kernel (`block_thomas_truncated_fn` has no factor-precision argument); float32 factors
+were only ever tried in the Krylov preconditioner, and float32 factors with
 float64 refinement were measured not to win (`plan.md` sections 16.7 and 16.8). The next attempt needs a host with
 about 35 GiB free for several hours, not a precision change.
 

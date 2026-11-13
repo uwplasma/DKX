@@ -238,18 +238,3 @@ def species_set_from_namelist(
         dn_hat_dpsi_hat=jnp.asarray(radial.to_d_dpsi_hat(dn_in, coordinate=coord), dtype=jnp.float64),
         dt_hat_dpsi_hat=jnp.asarray(radial.to_d_dpsi_hat(dt_in, coordinate=coord), dtype=jnp.float64),
     )
-
-def adiabatic_species_from_namelist(nml: Any) -> AdiabaticSpecies | None:
-    """Return the adiabatic species if ``withAdiabatic`` is set, else ``None``.
-
-    Defaults match ``globalVariables.F90`` line 97 (and ``outputs/writer.py``).
-    """
-    species = nml.group("speciesParameters")
-    if not bool(species.get("WITHADIABATIC", False)):
-        return None
-    return AdiabaticSpecies(
-        z=float(species.get("ADIABATICZ", DEFAULT_ADIABATIC_Z)),
-        m_hat=float(species.get("ADIABATICMHAT", DEFAULT_ADIABATIC_M_HAT)),
-        n_hat=float(species.get("ADIABATICNHAT", DEFAULT_ADIABATIC_N_HAT)),
-        t_hat=float(species.get("ADIABATICTHAT", DEFAULT_ADIABATIC_T_HAT)),
-    )

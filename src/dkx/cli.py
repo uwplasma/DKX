@@ -413,7 +413,7 @@ def _cmd_solve_v3(args: argparse.Namespace) -> int:
 
                 run = run_profile(
                     namelist_path,
-                    solve_method=str(args.solve_method),
+                    method=str(args.solve_method),
                     tol=float(args.tol),
                     emit=emit_line,
                 )
@@ -424,7 +424,7 @@ def _cmd_solve_v3(args: argparse.Namespace) -> int:
 
                 run = run_transport_matrix(
                     namelist_path,
-                    solve_method=str(args.solve_method),
+                    method=str(args.solve_method),
                     tol=float(args.tol),
                     emit=emit_line,
                 )
@@ -518,7 +518,7 @@ def _cmd_write_output(args: argparse.Namespace) -> int:
 
                 run = run_profile(
                     namelist_path,
-                    solve_method=str(getattr(args, "solve_method", "auto")),
+                    method=str(getattr(args, "solve_method", "auto")),
                     tol=solver_tol,
                     out_path=Path(args.out),
                     overwrite=overwrite,
@@ -531,7 +531,7 @@ def _cmd_write_output(args: argparse.Namespace) -> int:
 
                 run = run_transport_matrix(
                     namelist_path,
-                    solve_method=str(getattr(args, "solve_method", "auto")),
+                    method=str(getattr(args, "solve_method", "auto")),
                     tol=solver_tol,
                     out_path=Path(args.out),
                     overwrite=overwrite,
@@ -568,7 +568,7 @@ def _cmd_transport_matrix_v3(args: argparse.Namespace) -> int:
     with _canonical_namelist_path(nml=nml, input_path=input_path, args=args) as namelist_path:
         run = run_transport_matrix(
             namelist_path,
-            solve_method=str(args.solve_method),
+            method=str(args.solve_method),
             tol=float(args.tol),
             out_path=Path(args.out) if getattr(args, "out", None) else None,
             emit=None if quiet else (lambda line: _emit(line, level=0, args=args)),

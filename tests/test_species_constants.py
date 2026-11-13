@@ -234,8 +234,6 @@ def test_fortran_example_namelist_matches_full_system_operator() -> None:
     # Physics-parameter values from the same namelist (Delta/alpha explicit in the file).
     assert float(op.delta) == 4.5694e-3
     assert float(op.alpha) == constants.DEFAULT_ALPHA
-    # No adiabatic species in this example.
-    assert species.adiabatic_species_from_namelist(nml) is None
 
     # Derived collisionality on the operator's own x grid, new vs physics/ code.
     x = jnp.asarray(op.x, dtype=jnp.float64)
@@ -264,24 +262,6 @@ def test_rhs_mode3_nu_n_and_phi_gradient_match_writer_formulas() -> None:
         )
         == dphi_old
     )
-    # Round trip.
-    assert constants.nu_prime_from_nu_n(
-        nu_n=nu_n_old, b0_over_bbar=b0, g_hat=g_hat, i_hat=i_hat, iota=iota
-    ) == pytest.approx(nu_prime, rel=1e-15)
-
-
-def test_adiabatic_species_from_namelist_defaults_and_overrides() -> None:
-    nml = parse_sfincs_input_text(_nml_text("  Zs = 1\n  withAdiabatic = .true."))
-    ad = species.adiabatic_species_from_namelist(nml)
-    assert ad is not None
-    # Defaults from globalVariables.F90 line 97 (same literals as outputs/writer.py).
-    assert (ad.z, ad.m_hat, ad.n_hat, ad.t_hat) == (-1.0, 5.446170214e-4, 1.0, 1.0)
-
-    nml2 = parse_sfincs_input_text(
-        _nml_text("  Zs = 1\n  withAdiabatic = .true.\n  adiabaticZ = -2.0\n  adiabaticNHat = 0.5")
-    )
-    ad2 = species.adiabatic_species_from_namelist(nml2)
-    assert ad2 is not None and ad2.z == -2.0 and ad2.n_hat == 0.5 and ad2.t_hat == 1.0
 
 
 def test_species_set_is_a_pytree_and_v_hat() -> None:

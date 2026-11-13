@@ -1032,7 +1032,7 @@ def _batched_surfaces(case: Case, operators: list, progress):
 def run_case(
     case: Case,
     *,
-    out: str | Path | None = None,
+    out_path: str | Path | None = None,
     emit=None,
     check_grid: tuple[str, ...] | None = None,
 ) -> Result:
@@ -1289,8 +1289,8 @@ def run_case(
 
     total_seconds = time.perf_counter() - total_start
     output_path = (
-        Path(out).expanduser().resolve()
-        if out is not None
+        Path(out_path).expanduser().resolve()
+        if out_path is not None
         else (case.base_directory / case.output.file).resolve()
     )
     if solved is not None:
@@ -1555,6 +1555,6 @@ def run_case(
         from dkx.workflows.converge import certify_resolution  # noqa: PLC0415
 
         result = certify_resolution(case, result, axes=tuple(check_grid), emit=emit)
-    if out is not None:
+    if out_path is not None:
         result.save(output_path)
     return result

@@ -257,7 +257,7 @@ def test_run_overrides_match_explicit_immutable_input_without_mutating_the_base(
     )
     expected = run_profile(expected_input, emit=None)
     out = tmp_path / "profile.npz" if save else None
-    got = dkx.run(original if in_memory else path, NTHETA=11, nHats=[0.8], out=out, tol=1e-10)
+    got = dkx.run(original if in_memory else path, NTHETA=11, nHats=[0.8], out_path=out, tol=1e-10)
     assert original.resolution.n_theta == 9 and original.species.n_hats == (1.0,)
     assert got.operator.n_theta == 11
     for key in ("FSABjHat", "particleFlux_vm_psiHat", "heatFlux_vm_psiHat"):
