@@ -35,7 +35,7 @@ def test_native_phi1_matches_the_namelist_newton_route(tmp_path):
     deck = _deck(tmp_path, Ntheta=9, Nzeta=9, Nxi=12, Nx=4)
     case = case_from_sfincs_namelist(deck, name="phi1")
     assert case.physics.phi1 == "kinetic"
-    native = run_case(case, out=tmp_path / "native.nc")
+    native = run_case(case, out_path=tmp_path / "native.nc")
     # Accepted by the original coupled residual (kinetic + QN + gauge).
     assert np.all(native.primal_residual <= case.solver.relative_tolerance * native.primal_rhs_norm)
     reference = solve_phi1(deck, tol=1.0e-12)

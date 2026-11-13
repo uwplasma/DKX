@@ -12,7 +12,7 @@ import dkx
 case = dkx.Case.from_file("case.toml")          # or .json
 case = dkx.Case.from_mapping({...})             # a dict with the file's structure
 result = dkx.run(case)                           # dkx.Result, in memory
-result = dkx.run(case, out="result.nc")          # and written to NetCDF
+result = dkx.run(case, out_path="result.nc")          # and written to NetCDF
 again = dkx.Result.load("result.nc")
 ```
 
@@ -22,7 +22,7 @@ again = dkx.Result.load("result.nc")
 | `RunConfig`, `GeometryConfig`, `SpeciesConfig`, `PhysicsConfig`, `ElectricFieldConfig`, `ResolutionConfig`, `SolverConfig`, `ParallelConfig`, `ConvergenceConfig`, `OutputConfig`, `ScanConfig`, `ScanAxis` | the frozen dataclasses of each table ({doc}`inputs`) |
 | `CaseValidationError` | raised with `path`, `value`, `expected`, `correction` attributes |
 | `case_json_schema()` | the JSON Schema that `dkx template --format json` prints |
-| `run(case, out=None, emit=None)` | solve a case; returns `Result` |
+| `run(case, out_path=None, emit=None)` | solve a case; returns `Result` |
 | `Result`, `RESULT_SCHEMA_VERSION` | the result object and its file schema ({doc}`outputs`) |
 
 A `Case` is a frozen dataclass, so a variant is made with
@@ -51,7 +51,7 @@ SFINCS parameters as keywords, and dispatches on `RHSMode`:
 run = dkx.run("input.namelist")                       # RHSMode=1 -> ProfileRun
 run = dkx.run("input.namelist", Ntheta=25, Nxi=40)    # the deck with overrides
 run = dkx.run(geometryScheme=1, Ntheta=15, ...)       # no file at all
-run = dkx.run("input.namelist", out="sfincsOutput.h5")
+run = dkx.run("input.namelist", out_path="sfincsOutput.h5")
 print(run.moments["FSABjHat"])
 ```
 
@@ -71,7 +71,7 @@ print(run.moments["FSABjHat"])
 | `build_impurity_plasma`, `classical_impurity_flux` | impurity and classical-flux helpers ({doc}`../physics/phi1_and_impurities`) |
 | `plot(source, out)` | panel figure from a run or an output file |
 
-The drivers take `solve_method` and `tol` for common use, or a full
+The drivers take `method` and `tol` for common use, or a full
 `solver=dkx.SolverOptions(...)` that supersedes both:
 
 | `SolverOptions` field | default | meaning |

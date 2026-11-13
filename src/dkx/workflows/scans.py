@@ -551,7 +551,7 @@ def run_er_scan(
             w_input,
             out_path=out_path,
             overwrite=True,
-            solve_method=str(solve_method),
+            method=str(solve_method),
             solver_trace_path=run_dir / "sfincsOutput.solver_trace.json",
             emit=emit_line,
         )

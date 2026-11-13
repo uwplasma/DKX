@@ -14,7 +14,7 @@ so that no band is materialized.  There are two of those, and which one runs is
 the difference between a preconditioner and a solver.
 
 ``solvax.direct.block_thomas_factor_fn(..., store_offdiagonals=False)`` keeps
-only the Schur LU --- a third of the bands, a sixth with a float32 LU --- and
+only the Schur LU --- a third of the bands --- and
 regenerates the two off-diagonal blocks during each substitution sweep.  The
 elimination runs once, so the factors are *reusable* across the tens of Krylov
 applications a solve makes.  This is the route taken wherever those factors fit.
@@ -149,26 +149,6 @@ def test_keeping_only_the_schur_lu_is_a_third_of_the_bands():
     assert coarse_preconditioner_factor_bytes(production) / coarse_preconditioner_band_bytes(
         production
     ) == pytest.approx(1.0 / 3.0, rel=5e-4)
-
-
-def test_a_float32_schur_lu_halves_the_factors_again():
-    """The knob that exists for the decks a third is still not enough for.
-
-    Only the LU halves; the int32 pivots are the same either way, so the ratio
-    is ``(m + 1) / (2m + 1)`` --- a half to within 0.02% at a production angular
-    grid, and visibly above it on a tiny fixture.
-    """
-    op = _load_op("pas_1species_PAS_noEr_tiny_scheme1")
-    m = op.n_theta * op.n_zeta
-    ratio = coarse_preconditioner_factor_bytes(
-        op, jnp.float32
-    ) / coarse_preconditioner_factor_bytes(op)
-    assert ratio == pytest.approx((m + 1.0) / (2.0 * m + 1.0))
-
-    production = replace(op, n_theta=25, n_zeta=51)
-    assert coarse_preconditioner_factor_bytes(
-        production, jnp.float32
-    ) / coarse_preconditioner_factor_bytes(production) == pytest.approx(0.5, rel=1e-3)
 
 
 def test_a_deck_that_fits_keeps_the_dense_route(monkeypatch):
@@ -559,9 +539,7 @@ def test_the_budget_falls_back_to_physical_ram_when_available_is_unreadable(monk
 def test_factors_that_only_fit_physical_ram_are_refused(monkeypatch):
     """The exact shape of the six-hour thrash: fits the box, not the free space."""
     op = _load_op("quick_2species_FPCollisions_noEr")
-    factors = coarse_precond.coarse_preconditioner_factor_bytes(
-        op, jnp.float64
-    )
+    factors = coarse_precond.coarse_preconditioner_factor_bytes(op)
     # Room for the factors themselves but not for what holding them really costs.
     monkeypatch.setattr(
         "dkx.coarse_precond._coarse_memory_budget", lambda: factors * 1.05
@@ -575,7 +553,7 @@ def test_factors_that_only_fit_physical_ram_are_refused(monkeypatch):
 
 
 def test_the_resident_overhead_matches_what_was_measured():
-    """7.2 GB of float32 factors peaked at 8.87 GB resident: 1.23x."""
+    """7.2 GB of factors peaked at 8.87 GB resident: 1.23x."""
     assert 1.2 <= coarse_precond._COARSE_RESIDENT_OVERHEAD <= 1.35
     predicted = 7.2 * coarse_precond._COARSE_RESIDENT_OVERHEAD
     assert abs(predicted - 8.87) < 0.35, f"predicts {predicted:.2f} GB against 8.87 measured"

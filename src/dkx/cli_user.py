@@ -614,7 +614,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     try:
         result, failures = run_scan(
             case,
-            out=Path(args.out) if args.out else None,
+            out_path=Path(args.out) if args.out else None,
             emit=emit,
             resume=False if args.no_resume else None,
             check_grid=None if args.check_grid is None else tuple(args.check_grid) or AXES,
@@ -685,7 +685,7 @@ def _cmd_run_case(args: argparse.Namespace) -> int:
     started = time.perf_counter()
     try:
         result = run_case(
-            case, out=out_path, emit=emit,
+            case, out_path=out_path, emit=emit,
             check_grid=None if args.check_grid is None else tuple(args.check_grid) or AXES,
         )
     except (CaseValidationError, NotImplementedError, ValueError) as exc:

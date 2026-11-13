@@ -22,7 +22,7 @@ to apply and the default wherever the bands fit.
 with ``store_offdiagonals=False`` eliminates the same pinned chain from the
 generated rows of :func:`_coarse_subsystem_block_fn` and keeps only the Schur
 LU, regenerating the off-diagonal blocks during each substitution sweep.  A
-third of the band state, a sixth with a float32 LU.  The elimination still runs
+third of the band state.  The elimination still runs
 exactly once, so the factors are *reusable*: a Krylov application performs
 triangular solves and two block regenerations per row, and no factorization.
 Exact, reusable and iteration-for-iteration identical to the dense route where
@@ -194,7 +194,7 @@ def _available_memory_bytes() -> float | None:
         return None
 
 #: Resident bytes the reusable route actually costs per byte of stored factors.
-#: Measured on the same deck at float32: 7.2 GB of factors peaked at 8.87 GB RSS.
+#: Measured: 7.2 GB of factors peaked at 8.87 GB RSS.
 _COARSE_RESIDENT_OVERHEAD = 1.25
 #: The same ratio for the *dense band* route, which is not the same number and
 #: must not borrow the one above.  Measured on a 62 GB box: three runs of the
@@ -211,14 +211,14 @@ def _coarse_memory_budget() -> float | None:
     available = _available_memory_bytes()
     return available if available is not None else _host_memory_bytes()
 
-def coarse_preconditioner_factor_bytes(op: KineticOperator, dtype=jnp.float64) -> float:
+def coarse_preconditioner_factor_bytes(op: KineticOperator) -> float:
     """Bytes the reusable Schur-LU-only factors retain.
 
     One dense ``(Ntheta*Nzeta)`` LU per active ``(species, x, L)`` row plus its pivots --- the
     two off-diagonal bands are not stored, because
     :func:`_coarse_subsystem_block_fn` regenerates them.  That is
-    :func:`coarse_preconditioner_band_bytes` divided by three at float64, or by six
-    at float32, plus the pivots both policies keep on an untruncated deck.
+    :func:`coarse_preconditioner_band_bytes` divided by three, plus the pivots on
+    an untruncated deck.
 
     Exact for static ``Nxi_for_x``: each subsystem retains ``max(1, Nxi_for_x)``
     rows, and truncated identity tails have no factor. A
@@ -230,8 +230,7 @@ def coarse_preconditioner_factor_bytes(op: KineticOperator, dtype=jnp.float64) -
     _order, counts = _coarse_row_layout(op)
     blocks = float(sum(counts))
     m = float(n_t * n_z)
-    itemsize = float(jnp.dtype(dtype).itemsize)
-    return blocks * (m * m * itemsize + m * 4.0)  # LU + int32 pivots
+    return blocks * (m * m * 8.0 + m * 4.0)  # LU + int32 pivots
 
 def _coarse_generated_peak_bytes(op: KineticOperator) -> float:
     """Bound on the dense-factor bytes the *generated* coarse route holds per subsystem.
@@ -279,7 +278,7 @@ def _coarse_factors_fit(op: KineticOperator) -> bool:
     """
     budget = _coarse_memory_budget()
     return budget is None or (
-        coarse_preconditioner_factor_bytes(op, jnp.float64)
+        coarse_preconditioner_factor_bytes(op)
         * _COARSE_RESIDENT_OVERHEAD
         <= _TIER2_GUARD_FRACTION * budget
     )
@@ -298,30 +297,26 @@ def _coarse_memory_scope() -> str:
     """Keep allocation estimates separate from solve qualification."""
     return (
         " Estimates exclude full process RSS; convergence and runtime are not guaranteed. "
-        "Use more available memory or reduce Ntheta/Nzeta or Nxi and recheck resolution. "
-        "Changing factor precision requires independent residual and observable checks "
-        "(2026-09-07 float32-factor-scope study)."
+        "Use more available memory or reduce Ntheta/Nzeta or Nxi and recheck resolution."
     )
 
 def _coarse_reusable_fallback_message(op: KineticOperator) -> str:
     """Describe retained factors and the extra work per substitution."""
-    dtype = jnp.float64
     return (
         f"{_coarse_route_preamble(op)}Keeping Schur LU factors with "
         f"solvax block_thomas_factor_fn(store_offdiagonals=False): "
-        f"{coarse_preconditioner_factor_bytes(op, dtype) / 2**30:.1f} GiB at "
-        f"{jnp.dtype(dtype).name}. Factors are reused across Krylov applications; "
+        f"{coarse_preconditioner_factor_bytes(op) / 2**30:.1f} GiB at "
+        f"float64. Factors are reused across Krylov applications; "
         f"each substitution regenerates the off-diagonal blocks without refactorization."
         f"{_coarse_memory_scope()}"
     )
 
 def _coarse_generated_fallback_message(op: KineticOperator) -> str:
     """Describe checkpointed recomputation without promising completion."""
-    dtype = jnp.float64
     return (
         f"{_coarse_route_preamble(op)}"
-        f"Schur LU estimate {coarse_preconditioner_factor_bytes(op, dtype) / 2**30:.1f} GiB "
-        f"at {jnp.dtype(dtype).name} also fails admission. Using solvax "
+        f"Schur LU estimate {coarse_preconditioner_factor_bytes(op) / 2**30:.1f} GiB "
+        f"at float64 also fails admission. Using solvax "
         f"block_thomas_checkpointed_fn, estimated dense-factor storage "
         f"{_coarse_generated_peak_bytes(op) / 2**30:.2f} GiB per (species, x) subsystem. "
         f"Each Krylov application repeats the elimination instead of reusing factors."
@@ -784,13 +779,11 @@ def _coarse_chain_lengths(rows: tuple[tuple[int, ...], tuple[int, ...]]) -> tupl
     return tuple(lengths)
 
 
-def _factor_coarse_active_chains(pinned, *, rows: tuple, factor_dtype):
+def _factor_coarse_active_chains(pinned, *, rows: tuple):
     """Factor each generated chain through its last non-identity row only."""
     lengths = _coarse_chain_lengths(rows)
     return tuple(
-        block_thomas_factor_fn(
-            block_fn, length, factor_dtype=factor_dtype, store_offdiagonals=False
-        )
+        block_thomas_factor_fn(block_fn, length, store_offdiagonals=False)
         for block_fn, length in zip(pinned, lengths, strict=True)
     ), lengths
 
@@ -836,11 +829,11 @@ def _row_segments(counts: tuple[int, ...]) -> tuple[tuple[int, int, int], ...]:
 
 
 @functools.partial(
-    jax.jit, static_argnames=("n_xi", "rows", "drop_l_coupling", "factor_dtype", "inverse")
+    jax.jit, static_argnames=("n_xi", "rows", "drop_l_coupling", "inverse")
 )
 def _factor_coarse_rows(
     coef, subs, floor, gamma, *, n_xi: int, rows: tuple, drop_l_coupling: bool,
-    factor_dtype=None, inverse: bool = False,
+    inverse: bool = False,
 ):  # fmt: skip
     """Block-Thomas elimination of every active row, one Legendre row at a time.
 
@@ -859,24 +852,21 @@ def _factor_coarse_rows(
     Returns, per run, the stacked rows ``(delta_inverse, lower, upper)`` with
     ``inverse`` and ``(delta_lu, delta_piv, lower, upper)`` without, each shaped
     ``(rows, counts[l], ...)``.
-
-    Rows are generated in float64 and only then cast to ``factor_dtype``, so the
-    pins and the floor, scaled against band magnitudes, stay at full precision.
     """
     order, counts = rows
     take = functools.partial(jnp.take, indices=jnp.asarray(order), axis=0)
     subs, floor, gamma = jax.tree_util.tree_map(take, (subs, floor, gamma))
-    low = jnp.float64 if factor_dtype is None else factor_dtype
 
     def row_blocks(sub, fl, ga, ell):
         generate = _coarse_subsystem_block_fn(
             coef, n_xi, sub, drop_l_coupling=drop_l_coupling, floor=fl, gamma=ga
         )
-        return tuple(a.astype(low) for a in generate(ell))
+        return generate(ell)
 
-    m = jax.eval_shape(
+    block = jax.eval_shape(
         row_blocks, tuple(a[0] for a in subs), floor[0], gamma[0], jnp.zeros((), jnp.int32)
-    )[1].shape[-1]
+    )[1]
+    m, low = block.shape[-1], block.dtype
 
     def step(nxt, ell, c):
         head = (tuple(a[:c] for a in subs), floor[:c], gamma[:c])
@@ -1364,7 +1354,7 @@ def build_coarse_preconditioner(
         rows = _coarse_row_layout(op)
         factor = functools.partial(
             _factor_coarse_rows, coef, subs, floor, gamma, n_xi=n_xi, rows=rows,
-            drop_l_coupling=bool(drop_l_coupling), factor_dtype=jnp.float64,
+            drop_l_coupling=bool(drop_l_coupling),
         )  # fmt: skip
         # Explicit inverses where the blocks are well conditioned.  A traced
         # operator cannot be inspected, so it keeps the LU it always had.
@@ -1450,10 +1440,9 @@ def build_coarse_preconditioner(
             # elimination runs here, once, and every later application is two
             # triangular solves and two block regenerations per row -- so unlike the
             # checkpointed route below these factors amortize over a Krylov solve.
-            factor_dtype = jnp.float64
             rows = _coarse_row_layout(op)
             factors, lengths = _factor_coarse_active_chains(
-                pinned, rows=rows, factor_dtype=factor_dtype
+                pinned, rows=rows
             )
 
             def _a_inv(transpose: bool) -> Callable[[jnp.ndarray], jnp.ndarray]:

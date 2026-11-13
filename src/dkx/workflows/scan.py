@@ -214,7 +214,7 @@ def _batched_er_rows(case, scan, todo: list[tuple[int, float]]) -> dict[int, dic
 def run_scan(
     case,
     *,
-    out: Path | None = None,
+    out_path: Path | None = None,
     emit: Callable[[str], None] | None = None,
     resume: bool | None = None,
     check_grid: tuple[str, ...] | None = None,
@@ -229,7 +229,7 @@ def run_scan(
     scan = case.scan
     if scan is None:
         raise ValueError("this case has no [scan] table to run")
-    destination = Path(out) if out is not None else Path(scan.output)
+    destination = Path(out_path) if out_path is not None else Path(scan.output)
     should_resume = scan.resume if resume is None else bool(resume)
     cached = _existing_rows(destination) if should_resume else {}
 

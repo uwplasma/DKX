@@ -169,7 +169,7 @@ def transport_coeff_vs_collisionality(path: Path, work_dir: Path) -> None:
             _TRANSPORT_DECK.format(nu_prime=nu_prime, n_theta=n_theta, n_zeta=n_zeta, n_xi=n_xi)
         )
         t0 = time.perf_counter()
-        run = run_transport_matrix(deck, solve_method="auto", emit=None)
+        run = run_transport_matrix(deck, method="auto", emit=None)
         matrices.append(np.asarray(run.transport_matrix))
         print(f"  nuPrime={nu_prime:.3e}  L11={matrices[-1][0, 0]:.3e}  ({time.perf_counter() - t0:.2f} s)")
     matrices = np.asarray(matrices)

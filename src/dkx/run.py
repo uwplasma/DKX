@@ -312,14 +312,14 @@ def _startup_lines(
 def run_transport_matrix(
     namelist_path: str | Path | SfincsInput,
     *,
-    solve_method: str = "auto",
-    tol: float = 1e-10,
+    method: str = "auto",
+    tol: float | None = None,
     solver: SolverOptions | None = None,
     out_path: str | Path | None = None,
     overwrite: bool = True,
     fortran_layout: bool = True,
     solver_trace_path: str | Path | None = None,
-    emit: Callable[[str], None] | None = print,
+    emit: Callable[[str], None] | None = None,
 ) -> TransportRun:
     """Run a SFINCS v3 RHSMode=2/3 transport-matrix calculation end to end.
 
@@ -328,12 +328,12 @@ def run_transport_matrix(
             RHSMode=3 monoenergetic hard overrides of validateInput.F90
             apply), or an in-memory :class:`dkx.inputs.SfincsInput`
             (runs without touching disk).
-        solve_method: :func:`dkx.solve.solve` method (``"auto"`` picks
+        method: :func:`dkx.solve.solve` method (``"auto"`` picks
             the structured direct route for the PAS/DKES family).
-        tol: relative residual tolerance per whichRHS column.
+        tol: relative residual tolerance per whichRHS column; ``None`` is ``1e-10``.
         solver: full typed knob set (:class:`dkx.api.SolverOptions`)
             for the multi-RHS solve; when given, it supersedes
-            ``solve_method`` and ``tol``.
+            ``method`` and ``tol``.
         out_path: optional ``sfincsOutput`` file (``.h5``, ``.nc``, or ``.npz``)
             written by :func:`dkx.writer.write_transport_output`.
         overwrite: when ``False``, raise :class:`FileExistsError` if
@@ -344,7 +344,7 @@ def run_transport_matrix(
             :class:`dkx.solver_trace.SolverTrace` is written from
             the shared multi-RHS :class:`dkx.solve.SolveResult`.
         emit: per-line stdout sink for the Fortran-parity print blocks
-            (``print`` reproduces the v3 console flow); ``None`` silences it.
+            (``print`` reproduces the v3 console flow); ``None`` (default) silences it.
 
     Returns:
         A :class:`TransportRun` with the transport matrix, states, solver
@@ -352,7 +352,7 @@ def run_transport_matrix(
     """
     inp, source_path, input_name = _resolve_run_input(namelist_path)
     if solver is None:
-        solver = SolverOptions(method=solve_method, tol=tol)
+        solver = SolverOptions(method=method, tol=1e-10 if tol is None else tol)
     rhs_mode = inp.general.rhs_mode
     if rhs_mode not in (2, 3):
         raise NotImplementedError(
@@ -594,14 +594,14 @@ def _species_results_console_lines(
 def run_profile(
     namelist_path: str | Path | SfincsInput,
     *,
-    solve_method: str = "auto",
-    tol: float = 1e-10,
+    method: str = "auto",
+    tol: float | None = None,
     solver: SolverOptions | None = None,
     out_path: str | Path | None = None,
     overwrite: bool = True,
     fortran_layout: bool = True,
     solver_trace_path: str | Path | None = None,
-    emit: Callable[[str], None] | None = print,
+    emit: Callable[[str], None] | None = None,
 ) -> ProfileRun:
     """Run a SFINCS v3 RHSMode=1 profile-gradient calculation end to end.
 
@@ -613,12 +613,13 @@ def run_profile(
             output's ``input.namelist`` provenance dataset).  The
             RHSMode=3 monoenergetic forcing adapter is *not* applied: RHSMode=1
             keeps the deck's collision operator, Er terms, and speed grid.
-        solve_method: :func:`dkx.solve.solve` method (``"auto"`` picks
+        method: :func:`dkx.solve.solve` method (``"auto"`` picks
             structured direct for the PAS/DKES family and recycled Krylov for
             Fokker-Planck collisions).
-        tol: relative residual tolerance for the single-RHS solve.
+        tol: relative residual tolerance for the single-RHS solve; ``None`` is
+            ``1e-10``.
         solver: full typed knob set (:class:`dkx.api.SolverOptions`) for
-            the single-RHS solve; when given, it supersedes ``solve_method``
+            the single-RHS solve; when given, it supersedes ``method``
             and ``tol``.  ``includePhi1`` decks route to the Newton-Krylov
             Phi1 solve, whose tolerances stay on the
             ``DKX_PHI1_NEWTON_TOL``/``DKX_PHI1_GMRES_TOL`` knobs.
@@ -632,7 +633,7 @@ def run_profile(
             :class:`dkx.solver_trace.SolverTrace` is written from
             the single-RHS :class:`dkx.solve.SolveResult`.
         emit: per-line stdout sink for the Fortran-parity print blocks
-            (``print`` reproduces the v3 console flow); ``None`` silences it.
+            (``print`` reproduces the v3 console flow); ``None`` (default) silences it.
 
     Returns:
         A :class:`ProfileRun` with the state, solver stats, and the full
@@ -640,7 +641,7 @@ def run_profile(
     """
     inp, source_path, input_name = _resolve_run_input(namelist_path)
     if solver is None:
-        solver = SolverOptions(method=solve_method, tol=tol)
+        solver = SolverOptions(method=method, tol=1e-10 if tol is None else tol)
     if inp.general.rhs_mode != 1:
         raise NotImplementedError(
             "run_profile supports RHSMode=1; use run_transport_matrix for RHSMode 2/3."
@@ -789,7 +790,7 @@ def run_geometry(
     overwrite: bool = True,
     fortran_layout: bool = True,
     solver_trace_path: str | Path | None = None,
-    emit: Callable[[str], None] | None = print,
+    emit: Callable[[str], None] | None = None,
 ) -> GeometryRun:
     """Write the geometry-only ``sfincsOutput`` file for a deck without solving.
 
@@ -852,7 +853,7 @@ def run_from_namelist(
     namelist_path: str | Path | SfincsInput,
     *,
     out_path: str | Path,
-    solve_method: str = "auto",
+    method: str = "auto",
     tol: float | None = None,
     solver: SolverOptions | None = None,
     overwrite: bool = True,
@@ -872,11 +873,11 @@ def run_from_namelist(
             an in-memory :class:`dkx.inputs.SfincsInput` (runs without
             touching disk).
         out_path: output file; the suffix selects ``.h5``/``.nc``/``.npz``.
-        solve_method: :func:`dkx.solve.solve` method for the solve runs.
+        method: :func:`dkx.solve.solve` method for the solve runs.
         tol: relative residual tolerance; ``None`` reads the deck's
             ``solverTolerance`` (default ``1e-10``), matching the CLI.
         solver: full typed knob set (:class:`dkx.api.SolverOptions`);
-            when given, it supersedes ``solve_method`` and ``tol``.
+            when given, it supersedes ``method`` and ``tol``.
         overwrite: when ``False``, raise :class:`FileExistsError` if
             ``out_path`` already exists.
         fortran_layout: store the Fortran column-major dataset layout
@@ -919,7 +920,7 @@ def run_from_namelist(
     if rhs_mode == 1:
         return run_profile(
             namelist_path,
-            solve_method=solve_method,
+            method=method,
             tol=tol,
             solver=solver,
             out_path=out_path,
@@ -930,7 +931,7 @@ def run_from_namelist(
         )
     return run_transport_matrix(
         namelist_path,
-        solve_method=solve_method,
+        method=method,
         tol=tol,
         solver=solver,
         out_path=out_path,
@@ -980,7 +981,7 @@ def _with_parameters(case: SfincsInput, parameters: dict[str, Any]) -> SfincsInp
 def run(
     case: "str | Path | SfincsInput | Case | None" = None,
     *,
-    out: "str | Path | None" = None,
+    out_path: "str | Path | None" = None,
     method: str = "auto",
     tol: float | None = None,
     emit: Callable[[str], None] | None = None,
@@ -1003,7 +1004,7 @@ def run(
 
     Which calculation runs is read from the case rather than chosen by the
     caller: ``RHSMode=1`` gives profile-gradient fluxes and flows,
-    ``RHSMode=2/3`` a transport matrix.  ``out`` writes an ``sfincsOutput``
+    ``RHSMode=2/3`` a transport matrix.  ``out_path`` writes an ``sfincsOutput``
     file whose suffix picks the format (``.h5``, ``.nc``, ``.npz``); omit it to
     keep the run in memory.
 
@@ -1015,7 +1016,7 @@ def run(
         case: native :class:`dkx.Case`, deck path, an in-memory
             :class:`~dkx.inputs.SfincsInput`, or ``None`` to build a
             compatibility input from ``parameters`` alone.
-        out: output file to write; ``None`` keeps the result in memory only.
+        out_path: output file to write; ``None`` keeps the result in memory only.
         method: ``"auto"``, ``"direct"`` or ``"iterative"``.
         tol: relative residual tolerance; ``None`` uses the case's own
             ``solverTolerance``.
@@ -1043,24 +1044,21 @@ def run(
             )
         from dkx.execution import run_case  # noqa: PLC0415
 
-        return run_case(case, out=out, emit=emit)
+        return run_case(case, out_path=out_path, emit=emit)
     if case is None:
         case = SfincsInput.from_params(**parameters)
     elif parameters:
         base = case if isinstance(case, SfincsInput) else sfincs_input_from_raw(
             read_sfincs_input(Path(case)))
         case = _with_parameters(base, parameters)
-    if out is not None:
-        return run_from_namelist(case, out_path=out, solve_method=method, tol=tol, emit=emit)
+    if out_path is not None:
+        return run_from_namelist(case, out_path=out_path, method=method, tol=tol, emit=emit)
     rhs_mode = int(
         case.general.rhs_mode if isinstance(case, SfincsInput)
         else read_sfincs_input(Path(case)).group("general").get("RHSMODE", 1)
     )
     driver = run_profile if rhs_mode == 1 else run_transport_matrix
-    kwargs: dict[str, Any] = {"solve_method": method, "emit": emit}
-    if tol is not None:
-        kwargs["tol"] = tol
-    return driver(case, **kwargs)
+    return driver(case, method=method, tol=tol, emit=emit)
 
 
 # ``dkx.run`` has to be two things at once: the module that holds run_profile,

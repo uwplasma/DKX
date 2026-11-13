@@ -31,10 +31,10 @@ def test_surfaces_are_one_batch_and_match_the_loop(monkeypatch, tmp_path):
     real = execution._batched_surfaces
     monkeypatch.setattr(execution, "_batched_surfaces",
                         lambda *a: seen.append(real(*a)) or seen[-1])
-    batched = execution.run_case(case, out=tmp_path / "b.nc")
+    batched = execution.run_case(case, out_path=tmp_path / "b.nc")
     assert seen[0] is not None and np.asarray(seen[0].algebraic_converged).all()
     monkeypatch.setattr(execution, "_batched_surfaces", lambda *a: None)
-    looped = execution.run_case(case, out=tmp_path / "l.nc")
+    looped = execution.run_case(case, out_path=tmp_path / "l.nc")
     for name in ("particle_flux_m2_s", "heat_flux_W_m2", "parallel_current_A_T_m2"):
         np.testing.assert_allclose(batched.arrays[name], looped.arrays[name], rtol=1e-6, atol=1e-30)
     assert np.ptp(batched.arrays["parallel_current_A_T_m2"]) > 0  # the surfaces really differ

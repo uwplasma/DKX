@@ -104,7 +104,7 @@ def test_radial_current_matches_run_profile(tmp_path: Path) -> None:
     prob = er_mod.prepare(_write(tmp_path, _pas_deck()), er_bracket=(-3.0, 1.0))
 
     for er_val in (-2.0, -0.5, 0.7):
-        run = run_profile(_write(tmp_path, _pas_deck(er_val)), solve_method="auto", emit=None)
+        run = run_profile(_write(tmp_path, _pas_deck(er_val)), method="auto", emit=None)
         gamma_rp = np.asarray(run.moments["particleFlux_vm_psiHat"], dtype=np.float64)
         z_s = np.asarray(run.operator.z_s, dtype=np.float64)
         jr_rp = float(np.dot(z_s, gamma_rp))

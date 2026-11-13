@@ -322,7 +322,7 @@ def plot(source, out="dkx_panels.png", *, style="panels", show=False):
 
     ``source`` is whatever you already have:
 
-    - the object :func:`dkx.run` returned, when the run was given ``out=``;
+    - the object :func:`dkx.run` returned, when the run was given ``out_path=``;
     - a path to an ``sfincsOutput`` file, DKX's or Fortran SFINCS's --- the
       layout is the same, so both work;
     - a directory containing one.
@@ -380,9 +380,9 @@ def plot(source, out="dkx_panels.png", *, style="panels", show=False):
 
     if hasattr(source, "moments"):
         raise ValueError(
-            "this run has no output file to plot: pass out=... to dkx.run so the "
+            "this run has no output file to plot: pass out_path=... to dkx.run so the "
             "solve writes one, e.g.\n"
-            '    run = dkx.run(case, out="sfincsOutput.h5")\n'
+            '    run = dkx.run(case, out_path="sfincsOutput.h5")\n'
             "    dkx.plot(run)\n"
             "Plotting cannot reuse the in-memory result because the panels read "
             "the output file's full dataset, not just the moments."

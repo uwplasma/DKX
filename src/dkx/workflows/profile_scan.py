@@ -237,7 +237,7 @@ def _solve_points(out_dir, points, skip_existing, solve_method, emit):
         deck.write_text(text)
         try:
             localize_equilibrium_file_in_place(input_namelist=deck, overwrite=False)
-            run_from_namelist(deck, out_path=out_path, overwrite=True, solve_method=solve_method)
+            run_from_namelist(deck, out_path=out_path, overwrite=True, method=solve_method)
         except Exception as exc:  # noqa: BLE001 - one bad point must not discard the others
             failures.append((folder, f"{type(exc).__name__}: {exc}"))
             if emit is not None:
