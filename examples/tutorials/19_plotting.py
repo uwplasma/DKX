@@ -10,7 +10,7 @@ Three levels, from least to most work:
 3. ``run.moments`` and matplotlib, for a figure that is going into a paper.
 
 The run is the W7-X deck of tutorial 03.  ``dkx.plot`` reads the output file
-the run writes, so pass ``out=`` to ``dkx.run`` first; the file is a normal
+the run writes, so pass ``out_path=`` to ``dkx.run`` first; the file is a normal
 ``sfincsOutput`` one, so the same call plots a Fortran SFINCS output.  Native
 ``dkx.Case`` results have their own ``result.plot(path)`` (tutorial 01).
 
@@ -33,7 +33,7 @@ SPECIES = ("protons", "electrons")  # species order in the deck
 
 # 3. Run -- the output file is what dkx.plot reads
 OUT.mkdir(parents=True, exist_ok=True)
-run = dkx.run(DECK, out=OUT / "sfincsOutput.h5", emit=print)
+run = dkx.run(DECK, out_path=OUT / "sfincsOutput.h5", emit=print)
 
 # 4. Plot, save and print
 panels = dkx.plot(run, OUT / "panels.png")
