@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Performance: the speed-grid recurrence (`make_speed_grid`, `make_x_grid`) integrates with composite Gauss-Legendre panels instead of QUADPACK callbacks, one shared routine in `dkx.xgrid`. Nodes, weights and recurrence coefficients agree with the QUADPACK grids to 4.3e-14 on every `Nx <= 16` reference-deck grid; an `Nx = 50` grid takes 0.7 ms instead of 2.7 s.
+
 ## 2.15.0 - 2026-11-13
 
 A host-callback-free solve that compiles and differentiates end to end, one keyword set across the run drivers, traced Gauss-Legendre Rosenbluth quadrature for every Fokker-Planck and Sugama build, a coarse-preconditioner factorization whose compiled size no longer grows with `Nxi`, flat example scripts with four new tutorials, and the HSX and W7-X ambipolar profile gates.

@@ -60,8 +60,6 @@ from .phase_space_angles import (  # noqa: E402, F401
 )
 from .phase_space_speed import (  # noqa: E402, F401
     SpeedGrid,
-    _evaluate_orthogonal_polynomial,
-    _integrate_split,
     _make_speed_grid_cached,
     _speed_weight_d1_over_weight,
     _speed_weight_d2_over_weight,
