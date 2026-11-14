@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- API: `tol=None` means the deck's `solverTolerance` in `run_profile`, `run_transport_matrix`, `run_from_namelist` and `run` alike (`run_profile` and `run_transport_matrix` used `1e-10` regardless of the deck). A native `Case` ignores `tol`; it carries its own tolerance.
+
 ## 2.15.0 - 2026-11-13
 
 A host-callback-free solve that compiles and differentiates end to end, one keyword set across the run drivers, traced Gauss-Legendre Rosenbluth quadrature for every Fokker-Planck and Sugama build, a coarse-preconditioner factorization whose compiled size no longer grows with `Nxi`, flat example scripts with four new tutorials, and the HSX and W7-X ambipolar profile gates.
