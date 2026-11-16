@@ -157,6 +157,21 @@ jobs:
       - name: Fetch external equilibrium data
         run: |
           python -m dkx.validation.data_fetch --quiet
+      - name: Point the JAX compilation cache at a restorable directory
+        id: jaxcache
+        run: |
+          echo "DKX_COMPILATION_CACHE_DIR=${RUNNER_TEMP}/jax_compilation_cache" >> "${GITHUB_ENV}"
+          echo "MPLCONFIGDIR=${RUNNER_TEMP}/matplotlib" >> "${GITHUB_ENV}"
+          echo "jax=$(python -c 'import jax; print(jax.__version__)')" >> "${GITHUB_OUTPUT}"
+      - name: Restore the JAX compilation cache
+        # Read-only: it reuses the entries the coverage shards save from main,
+        # so this lane never writes a cache of its own.
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/jax_compilation_cache
+          key: jaxcc-${{ matrix.group }}-jax${{ steps.jaxcache.outputs.jax }}-${{ hashFiles('pyproject.toml') }}-${{ github.run_id }}
+          restore-keys: |
+            jaxcc-${{ matrix.group }}-jax${{ steps.jaxcache.outputs.jax }}-${{ hashFiles('pyproject.toml') }}-
       - name: Contracts and the tests this change touches
         env:
           BASE_REF: ${{ github.base_ref }}
@@ -270,7 +285,7 @@ jobs:
           python -c 'import jax, jaxlib, vmex, booz_xform_jax.jax_api; print("JAX", jax.__version__, "JAXLIB", jaxlib.__version__)'
           python -m pytest -q --cov=dkx --cov-append --cov-report= \
             tests/test_vmex_kinetic_gradient.py::test_the_objective_agrees_with_redl_in_sign_and_its_jacobian_with_differences \
-            tests/test_vmex_kinetic_gradient.py::test_ambipolar_roots_run_before_the_traced_row_which_then_holds_no_callback
+            tests/test_vmex_kinetic_gradient.py::test_ambipolar_traced_row_holds_no_callback
       - name: Save the JAX compilation cache
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
