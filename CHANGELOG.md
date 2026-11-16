@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Validation: the W7-X ambipolar profile gate adds the speed rung (25, 81, 224, 10): the same seven roots, every root and selected flux within 0.32% of rung B (1.80% largest over all rungs), 4.7 GiB peak. The nine W7-X ambipolar scaffold and proxy manifest entries are replaced by one `release_ready` entry, `w7x_ambipolar_profile_rung_gate`.
 - API: `tol=None` means the deck's `solverTolerance` in `run_profile`, `run_transport_matrix`, `run_from_namelist` and `run` alike (`run_profile` and `run_transport_matrix` used `1e-10` regardless of the deck). A native `Case` ignores `tol`; it carries its own tolerance.
 
 ## 2.15.0 - 2026-11-13
