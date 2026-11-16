@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 import re
 from pathlib import Path
 
@@ -93,27 +92,6 @@ def test_release_clone_keeps_tested_tree_after_remote_pr_commit_is_pruned(tmp_pa
     assert git("-C", clone, "rev-parse", "HEAD") == tested
     assert (clone / "payload").read_text() == "tested PR tree"
     assert git("-C", clone, "rev-parse", "--is-shallow-repository") == "false"
-
-
-def _ci_skipped_nodeids() -> tuple[str, ...]:
-    tree = ast.parse((ROOT / "tests/conftest.py").read_text())
-    for node in tree.body:
-        if isinstance(node, ast.Assign) and node.targets[0].id == "CI_SKIPPED_NODEIDS":
-            return tuple(ast.literal_eval(node.value))
-    raise AssertionError("tests/conftest.py no longer defines CI_SKIPPED_NODEIDS")
-
-
-def test_every_ci_skip_rule_still_names_a_test() -> None:
-    """A skip rule for a deleted file silently matches nothing and reads as coverage."""
-    rules = _ci_skipped_nodeids()
-    assert rules
-    for rule in rules:
-        path, _, rest = rule.partition("::")
-        source = ROOT / path
-        assert source.is_file(), f"CI skip rule names a missing file: {rule}"
-        function = rest.split("[", 1)[0]
-        if function:
-            assert re.search(rf"def {re.escape(function)}\b", source.read_text()), rule
 
 
 def test_every_dkx_variable_the_workflows_set_is_read_by_the_code() -> None:

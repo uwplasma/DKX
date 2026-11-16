@@ -85,7 +85,6 @@ jobs:
     timeout-minutes: 15
     env:
       JAX_ENABLE_X64: "True"
-      DKX_CI: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -133,7 +132,6 @@ jobs:
       JAX_ENABLE_X64: "True"
       JAX_DISABLE_JIT: "0"
       DKX_PROFILE: "0"
-      DKX_CI: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -204,7 +202,6 @@ jobs:
       JAX_ENABLE_X64: "True"
       JAX_DISABLE_JIT: "0"
       DKX_PROFILE: "0"
-      DKX_CI: "1"
       COVERAGE_FILE: ".coverage.${{ matrix.group }}"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -331,7 +328,6 @@ jobs:
       JAX_ENABLE_X64: "True"
       JAX_DISABLE_JIT: "0"
       DKX_PROFILE: "0"
-      DKX_CI: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -372,7 +368,6 @@ jobs:
       JAX_ENABLE_X64: "True"
       JAX_DISABLE_JIT: "0"
       DKX_PROFILE: "0"
-      DKX_CI: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -500,7 +495,6 @@ jobs:
     timeout-minutes: 10
     env:
       JAX_ENABLE_X64: "True"
-      DKX_CI: "1"
       # A pip user pointing dkx at their own equilibrium downloads nothing, so
       # prove it: any reach for the release-hosted data archive fails here.
       DKX_OFFLINE: "1"
