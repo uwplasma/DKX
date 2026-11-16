@@ -132,11 +132,8 @@ jobs:
     env:
       JAX_ENABLE_X64: "True"
       JAX_DISABLE_JIT: "0"
-      DKX_SOLVER_JIT: "1"
-      DKX_PRECOMPILE: "0"
       DKX_PROFILE: "0"
       DKX_CI: "1"
-      DKX_FAST_EXAMPLES: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -206,11 +203,8 @@ jobs:
     env:
       JAX_ENABLE_X64: "True"
       JAX_DISABLE_JIT: "0"
-      DKX_SOLVER_JIT: "1"
-      DKX_PRECOMPILE: "0"
       DKX_PROFILE: "0"
       DKX_CI: "1"
-      DKX_FAST_EXAMPLES: "1"
       COVERAGE_FILE: ".coverage.${{ matrix.group }}"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -336,11 +330,8 @@ jobs:
     env:
       JAX_ENABLE_X64: "True"
       JAX_DISABLE_JIT: "0"
-      DKX_SOLVER_JIT: "1"
-      DKX_PRECOMPILE: "0"
       DKX_PROFILE: "0"
       DKX_CI: "1"
-      DKX_FAST_EXAMPLES: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -380,11 +371,8 @@ jobs:
     env:
       JAX_ENABLE_X64: "True"
       JAX_DISABLE_JIT: "0"
-      DKX_SOLVER_JIT: "1"
-      DKX_PRECOMPILE: "0"
       DKX_PROFILE: "0"
       DKX_CI: "1"
-      DKX_FAST_EXAMPLES: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

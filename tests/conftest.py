@@ -58,6 +58,14 @@ def _fixed_available_memory(monkeypatch):
     monkeypatch.setattr("dkx.coarse_precond._available_memory_bytes", lambda: 64e9)
 
 
+#: Node-id fragments of the heaviest end-to-end tests, skipped when ``DKX_CI=1``.
+#: ``tests/test_release_workflow_contracts.py`` checks each one still names a test.
+CI_SKIPPED_NODEIDS = (
+    "tests/test_transport_matrix_write_output_end_to_end.py::",
+    "tests/test_output_h5_parity.py::test_writer_output_matches_fortran[scheme11]",
+)
+
+
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """Keep CI runtime under control by skipping the slowest integration tests."""
     if os.environ.get("DKX_CI", "0") != "1":
@@ -65,16 +73,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 
     # Skip only the heaviest end-to-end tests in CI; keep unit + fast parity checks.
     slow_mark = pytest.mark.skip(reason="Skipped slow integration test in CI mode.")
-    slow_patterns = (
-        "tests/test_transport_matrix_rhsmode2_parity.py::",
-        "tests/test_transport_matrix_rhsmode3_parity.py::",
-        "tests/test_transport_matrix_write_output_end_to_end.py::",
-        "tests/test_transport_parallel.py::",
-        "tests/test_output_h5_parity.py::test_writer_output_matches_fortran[scheme11]",
-        "test_full_system_newton_krylov",
-        "test_full_system_gmres_solution_parity",
-    )
     for item in items:
         nodeid = item.nodeid
-        if any(pat in nodeid for pat in slow_patterns):
+        if any(pat in nodeid for pat in CI_SKIPPED_NODEIDS):
             item.add_marker(slow_mark)
