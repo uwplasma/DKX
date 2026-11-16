@@ -855,9 +855,9 @@ id = "w7x_ambipolar_rung_gate"
 capability = "ambipolar_roots"
 status = "accepted_limited"
 claim_scope = "w7x_standard_five_surface_pas_dkes_ambipolar_profile_rung_gate"
-claim = "The five-surface W7-X standard-configuration PAS/DKES ambipolar profile finds the same seven roots at (21, 71, 192, 8) and (25, 81, 224, 8) on the checkpointed truncated block-Thomas route, and every root and selected particle and heat flux moves by at most 2% relative between the rungs (largest 1.80%). Scope: two rungs only; the speed rung C (25, 81, 224, 10) is pending."
+claim = "The five-surface W7-X standard-configuration PAS/DKES ambipolar profile finds the same seven roots at (21, 71, 192, 8), (25, 81, 224, 8) and (25, 81, 224, 10) on the checkpointed truncated block-Thomas route, and every root and selected particle and heat flux moves by at most 2% relative between consecutive rungs (largest 1.80% for theta, zeta and pitch, 0.32% for speed)."
 artifact = "validation/w7x_ambipolar_rung_gate_v1.json"
-artifact_sha256 = "2aa49df4901e6b54a55b09bee123ac46840498f94b48fa8952bce8a970dbd184"
+artifact_sha256 = "4b2273d998a0f5e0b85ee78d400c9e47a30ff91d08f80d456a5873a2333a44cc"
 artifact_schema = "dkx.w7x_ambipolar_rung_gate.v1"
 audit_script = "tools/paper_benchmarks/audit_ambipolar_rung_gate.py"
 command = "python tools/paper_benchmarks/audit_ambipolar_rung_gate.py --artifact validation/w7x_ambipolar_rung_gate_v1.json"
@@ -868,7 +868,6 @@ limitations = [
   "PAS/DKES collisions only; no full Fokker-Planck ambipolar comparison",
   "W7-X standard configuration only; no second stellarator family",
   "no experimental comparison",
-  "speed resolution fixed at 8 until the speed rung is added",
 ]
 
 [entry.corruption]
