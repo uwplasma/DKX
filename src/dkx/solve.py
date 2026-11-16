@@ -266,7 +266,7 @@ def _auto_route(
                 )
             return "block_tridiagonal"
         if emit is not None:
-            emit(f"[dkx.solve] recycled Krylov route: {_reason}.")
+            emit(f"[dkx.solve] recycled Krylov route: {_reason.rstrip('.')}.")
         return "gmres"
 
     peak = tier1_peak_memory_bytes(op)
