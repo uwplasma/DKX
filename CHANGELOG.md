@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Release gate: `release_ready` is the only accepted manifest claim status; `regression_scaffold`, `bounded_proxy`, `closed_deferred` and the deferred-lane checks are removed, so a new scaffold fails CI. The autodiff sensitivity summary now calls the Boozer-harmonic geometry map a finite-difference-validated sensitivity map (same scope: not a VMEC boundary optimization).
 - Validation: the W7-X ambipolar profile gate adds the speed rung (25, 81, 224, 10): the same seven roots, every root and selected flux within 0.32% of rung B (1.80% largest over all rungs), 4.7 GiB peak. The nine W7-X ambipolar scaffold and proxy manifest entries are replaced by one `release_ready` entry, `w7x_ambipolar_profile_rung_gate`.
 
 ## 2.15.0 - 2026-11-13
