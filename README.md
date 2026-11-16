@@ -143,7 +143,7 @@ selected flux by under 2%:
 
 ![Ambipolar roots of W7-X and HSX at successive grid rungs](docs/_static/figures/readme/ambipolar_rung_gates.png)
 
-W7-X (five surfaces, seven roots): 1.80% for angles and pitch, 0.32% for speed, under 5 GiB per solve.
+W7-X (five surfaces, seven roots): 1.80% for angles and pitch with speed fixed at 8, under 5 GiB per solve.
 HSX QHS (one ion root per surface): 0.68%. Data: `validation/w7x_ambipolar_rung_gate_v1.json`,
 `validation/hsx_ambipolar_rung_gate_v1.json`.
 
