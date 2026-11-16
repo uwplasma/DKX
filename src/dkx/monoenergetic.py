@@ -102,6 +102,7 @@ scan, the conversion, and the convolution.
 from __future__ import annotations
 
 import json
+import warnings
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Iterable, NamedTuple
@@ -572,6 +573,8 @@ def monoenergetic_database_from_operator(
                 m_hat=op.m_hat[0],
                 t_hat=op.t_hat[0],
             )
+            if not differentiable:
+                _warn_if_pitch_underresolved(point.nu_star, op.n_xi)
             cols["d11"].append(point.d11_star)
             cols["d13"].append(point.d13_star)
             cols["d31"].append(point.d31_star)
@@ -702,6 +705,31 @@ def monoenergetic_database(
         deck_text=path.read_text(),
         emit=emit,
     )
+
+def _monoenergetic_nu_star(op: KineticOperator, geom: Any) -> float:
+    """``R0 nu/(iota v)`` of an RHSMode=3 operator, as :class:`DStarPoint` reports it."""
+    from .writer import _effective_flux_functions  # noqa: PLC0415
+
+    b0, g_hat, _ = _effective_flux_functions(op, geom)
+    nu = float(op.pas.nu_n) * float(np.asarray(op.pas.nu_d_hat)[0, 0])
+    v = float(np.asarray(op.x)[0]) * float(np.sqrt(np.asarray(op.t_hat)[0] / np.asarray(op.m_hat)[0]))
+    return abs(g_hat / b0) * nu / (abs(float(geom.iota)) * v)
+
+
+def _warn_if_pitch_underresolved(nu_star: float, n_xi: int) -> None:
+    """Warn when fewer than 80 Legendre modes resolve a ``nu_star <= 1e-2`` solve.
+
+    Measured on NCSX at ``s = 0.25`` with ``(Ntheta, Nzeta) = (15, 21)`` and
+    ``nu_star = 1e-3``: ``D11* = 0.160`` at ``Nxi = 40`` against ``0.195`` at
+    ``Nxi >= 80``.  The solve converges either way, so nothing else flags it.
+    """
+    if float(nu_star) <= 1e-2 and int(n_xi) < 80:
+        warnings.warn(
+            f"nu* = {float(nu_star):.2g} with Nxi = {int(n_xi)}: below nu* = 1e-2 the "
+            "monoenergetic D11 needs Nxi >= 80 (21% low at Nxi = 40, nu* = 1e-3 on NCSX).",
+            stacklevel=2,
+        )
+
 
 def _effective_r_hat(radial: RadialCoordinates, b0_over_bbar: float) -> float:
     """Benchmark effective radius ``sqrt(2 psiHat / B0)`` of the surface."""
