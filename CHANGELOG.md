@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Validation: the W7-X ambipolar profile gate adds the speed rung (25, 81, 224, 10): the same seven roots, every root and selected flux within 0.32% of rung B (1.80% largest over all rungs), 4.7 GiB peak. The nine W7-X ambipolar scaffold and proxy manifest entries are replaced by one `release_ready` entry, `w7x_ambipolar_profile_rung_gate`.
 - Performance: the Phi1 coarse preconditioner keeps its block-Thomas factors and the bordered `A^-1 B` array in float32 (the elimination stays float64, and the bands are applied in float32 rather than promoted to a float64 copy). On W7-X geometry 4 with `includePhi1` and `includePhi1InKineticEquation`, alternating runs on one machine: 13 x 35 x 40 x 5 (two species) peak memory falls from 4.2 and 3.9 GB to 2.6 and 2.6 GB and wall time from 26 s to 23 s; 13 x 45 x 48 x 5 (H, e, C6+) from 7.1 GB and 102 s to 5.1 GB and 86 s. The inner iteration counts (101 and 270) are unchanged and the converged state agrees to 7e-15 relative.
 
 ## 2.15.0 - 2026-11-13
