@@ -433,8 +433,8 @@ def _factor(
         x2 = jnp.tile(op.x * op.x, n_s)[act]
         return jnp.where(l <= 2, 1.0, 0.0) * x2[:, None, None] * m[act // n_x]
 
-    def diag_block(l: int) -> jnp.ndarray:
-        act = layout[l if isinstance(l, int) else 0]
+    def diag_block(l: Any, act: np.ndarray | None = None) -> jnp.ndarray:
+        act = layout[l if isinstance(l, int) else 0] if act is None else act
         k = len(act)
         if isinstance(l, int) and l >= keep:  # tail: the (species, x)-diagonal collision part only, per pair
             cd = jnp.diagonal(cmat[l][np.ix_(act, act)])
@@ -480,8 +480,23 @@ def _factor(
     # An exact chain with one layout at every l is eliminated in one scan too.
     dense = not scanned and n_l > 1 and len(layout[-1]) == len(layout[0])
     n_chain = keep if scanned else 1 if dense else n_l
-    lowers = [jnp.zeros((0, tz, tz))] + [band(l, "lower", layout[l], l >= keep) for l in range(1, n_chain)]
-    uppers = [band(l, "upper", layout[l + 1], l + 1 >= keep) for l in range(n_chain - 1)]
+    # Rows 2 <= l < n_chain - 1 of an exact chain whose pairs equal those of row
+    # l + 1 are eliminated by one lax.scan per run of such rows, so the program
+    # grows with the number of distinct Nxi_for_x, not with Nxi.
+    runs: list[tuple[int, int]] = []
+    if not dense:
+        for l in range(min(n_chain, keep) - 2, 1, -1):
+            if not np.array_equal(layout[l], layout[l + 1]):
+                continue
+            if runs and runs[-1][0] == l + 1:
+                runs[-1] = (l, runs[-1][1])
+            else:
+                runs.append((l, l + 1))
+    in_run = {l for a, b in runs for l in range(a, b)}
+    lowers = [jnp.zeros((0, tz, tz))] + [
+        None if l - 1 in in_run else band(l, "lower", layout[l], l >= keep) for l in range(1, n_chain)
+    ]
+    uppers = [None if l in in_run else band(l, "upper", layout[l + 1], l + 1 >= keep) for l in range(n_chain - 1)]
     uppers.append(jnp.zeros((0, tz, tz)) if not scanned else band(keep - 1, "upper", layout[keep], True))
     lus: list = [None] * n_l
     tail: tuple = ()
@@ -530,7 +545,26 @@ def _factor(
     else:
         last = d0 if n_l == 1 else diag_block(n_l - 1)
         lus[-1] = _tail_lu(last) if last.ndim == 3 else lu_factor(last)
+    run_at = {b - 1: (a, b) for a, b in runs}  # keyed by the run's top row
     for l in range(n_chain - 2 if not scanned else keep - 1, -1, -1):
+        if l in in_run:
+            if l in run_at:
+                a, b = run_at[l]
+                act = layout[l]
+                k_l = len(act)
+
+                def row(lu_next, ell, act=act, k_l=k_l):
+                    lo, up = blk(ell + 1, "lower")[act], blk(ell, "upper")[act]
+                    d = diag_block(ell, act).reshape(k_l, tz, k_l, tz)
+                    lu = dense_lu(_schur_update(d, lu_next, lo, up, np.arange(k_l)).reshape(k_l * tz, -1))
+                    return lu, (lu, lo, up)
+
+                (lu_r, piv_r), lo_r, up_r = jax.lax.scan(
+                    row, lus[b], jnp.arange(a, b), reverse=True
+                )[1]
+                for i, ell in enumerate(range(a, b)):
+                    lus[ell], lowers[ell + 1], uppers[ell] = (lu_r[i], piv_r[i]), lo_r[i], up_r[i]
+            continue
         sel = np.searchsorted(layout[l], layout[l + 1])
         k_l = len(layout[l])
         if l + 1 >= keep:  # S_(l+1) per pair: so is U_l S_(l+1)^-1 Lo_(l+1)
