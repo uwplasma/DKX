@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Validation: the W7-X ambipolar profile gate adds the speed rung (25, 81, 224, 10): the same seven roots, every root and selected flux within 0.32% of rung B (1.80% largest over all rungs), 4.7 GiB peak. The nine W7-X ambipolar scaffold and proxy manifest entries are replaced by one `release_ready` entry, `w7x_ambipolar_profile_rung_gate`.
 - Performance: a monoenergetic scan builds its operators with the ExB structure at every point (`E* = 0` is a zero coefficient), so `E* = 0` and `E* != 0` share one compiled factorization and solve instead of compiling twice. W7-X 15 x 31 x 48 on a loaded Apple M3 Max: coefficients identical, peak RSS 0.54 to 0.51 GB, cold scan time down by the second compile (about 0.9 s).
 
 ## 2.15.0 - 2026-11-13
