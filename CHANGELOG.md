@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Examples: tutorial 20 (`20_cross_code_conversion.py`) converts YANCC, SFINCS and MONKES coefficients into DKX's Beidler `D*` convention with every formula written out (collisionality, E*, radial `dpsi/dr`, SFINCS hat units) and prints coefficient, DKX, reference, converted reference and relative error against a 2% gate. It solves the committed tiny RHSMode 3 deck against the recorded SFINCS v3 output and reads the YANCC and MONKES rows from `validation/independent_cross_code_v1.json`.
 - Validation: the W7-X ambipolar profile gate adds the speed rung (25, 81, 224, 10): the same seven roots, every root and selected flux within 0.32% of rung B (1.80% largest over all rungs), 4.7 GiB peak. The nine W7-X ambipolar scaffold and proxy manifest entries are replaced by one `release_ready` entry, `w7x_ambipolar_profile_rung_gate`.
 
 ## 2.15.0 - 2026-11-13
