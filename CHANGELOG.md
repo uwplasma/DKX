@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Validation: the W7-X ambipolar profile gate adds the speed rung (25, 81, 224, 10): the same seven roots, every root and selected flux within 0.32% of rung B (1.80% largest over all rungs), 4.7 GiB peak. The nine W7-X ambipolar scaffold and proxy manifest entries are replaced by one `release_ready` entry, `w7x_ambipolar_profile_rung_gate`.
 - Ambipolar bootstrap: `KineticBootstrapMismatch(ambipolar=True)` now runs the host root search when it is evaluated on a concrete state without `roots=`, so `electric_field()` and `unconverged` reflect the roots instead of the `er_initial` warm start. `examples/advanced/ambipolar_bootstrap_dkx.py` calls `roots()` first, asserts convergence and a nonzero root slope, and uses a rotating ellipse (`SEED_PERTURBATION = 0.12`) that has roots; the old 0.05 case had none.
 
 ## 2.15.0 - 2026-11-13
