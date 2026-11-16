@@ -242,7 +242,7 @@ def _coarse_generated_peak_bytes(op: KineticOperator) -> float:
     cs = math.isqrt(n_xi - 1) + 1 if n_xi > 1 else 1
     return (-(-n_xi // cs) + 3 * cs) * (n_t * n_z) ** 2 * 8.0
 
-def _coarse_bands_fit(op: KineticOperator) -> bool:
+def _coarse_bands_fit(op: KineticOperator, itemsize: int = 8) -> bool:
     """Whether the coarse preconditioner's dense bands fit this machine.
 
     Measured on the 2026-08-01 upstream campaign: five decks were killed by the OS
@@ -258,7 +258,7 @@ def _coarse_bands_fit(op: KineticOperator) -> bool:
     """
     budget = _coarse_memory_budget()
     return budget is None or (
-        coarse_preconditioner_band_bytes(op) * _COARSE_BAND_RESIDENT_OVERHEAD
+        coarse_preconditioner_band_bytes(op) * itemsize / 8 * _COARSE_BAND_RESIDENT_OVERHEAD
         <= _TIER2_GUARD_FRACTION * budget
     )
 
@@ -829,11 +829,11 @@ def _row_segments(counts: tuple[int, ...]) -> tuple[tuple[int, int, int], ...]:
 
 
 @functools.partial(
-    jax.jit, static_argnames=("n_xi", "rows", "drop_l_coupling", "inverse")
+    jax.jit, static_argnames=("n_xi", "rows", "drop_l_coupling", "inverse", "f32")
 )
 def _factor_coarse_rows(
     coef, subs, floor, gamma, *, n_xi: int, rows: tuple, drop_l_coupling: bool,
-    inverse: bool = False,
+    inverse: bool = False, f32: bool = False,
 ):  # fmt: skip
     """Block-Thomas elimination of every active row, one Legendre row at a time.
 
@@ -851,7 +851,8 @@ def _factor_coarse_rows(
     it padded with identity solves and zero couplings, which subtract nothing.
     Returns, per run, the stacked rows ``(delta_inverse, lower, upper)`` with
     ``inverse`` and ``(delta_lu, delta_piv, lower, upper)`` without, each shaped
-    ``(rows, counts[l], ...)``.
+    ``(rows, counts[l], ...)``.  ``f32`` stores the rows in float32; each is
+    rounded after its pins and Schur update are formed in float64.
     """
     order, counts = rows
     take = functools.partial(jnp.take, indices=jnp.asarray(order), axis=0)
@@ -866,12 +867,13 @@ def _factor_coarse_rows(
     block = jax.eval_shape(
         row_blocks, tuple(a[0] for a in subs), floor[0], gamma[0], jnp.zeros((), jnp.int32)
     )[1]
-    m, low = block.shape[-1], block.dtype
+    m, low = block.shape[-1], jnp.float32 if f32 else block.dtype
 
     def step(nxt, ell, c):
         head = (tuple(a[:c] for a in subs), floor[:c], gamma[:c])
         lower, diag, upper = jax.vmap(row_blocks, in_axes=(0, 0, 0, None))(*head, ell)
         diag = diag - upper @ _row_solve(nxt[:-2], nxt[-2], transpose=False)
+        diag, lower, upper = (a.astype(low) for a in (diag, lower, upper))
         if inverse:
             inv, cond = _explicit_inverse(diag)
             return (inv, lower, upper), jnp.max(cond)
@@ -1348,18 +1350,29 @@ def build_coarse_preconditioner(
     )
     factors = None  # the one-shot checkpointed route keeps none
 
-    if _coarse_bands_fit(op):
+    dense = _coarse_bands_fit(op)
+    # Float32 bands where float64 ones do not fit: half the storage, and on the decks
+    # measured (5k-126k unknowns, PAS, FP, Er, drifts) within one GCROT iteration of
+    # float64.  The pins are formed in float64 before each row is rounded.
+    f32 = not dense and not retain_speed_triangle and _coarse_bands_fit(op, itemsize=4)
+    if f32:
+        warnings.warn(
+            f"{_coarse_route_preamble(op)}Storing the coarse factors in float32.",
+            RuntimeWarning, stacklevel=2,
+        )
+    if dense or f32:
         # Rows go straight from the generator into the elimination, so no band is
         # materialized first, and only the rows each chain keeps are stored.
         rows = _coarse_row_layout(op)
         factor = functools.partial(
             _factor_coarse_rows, coef, subs, floor, gamma, n_xi=n_xi, rows=rows,
-            drop_l_coupling=bool(drop_l_coupling),
+            drop_l_coupling=bool(drop_l_coupling), f32=f32,
         )  # fmt: skip
         # Explicit inverses where the blocks are well conditioned.  A traced
-        # operator cannot be inspected, so it keeps the LU it always had.
+        # operator cannot be inspected, so it keeps the LU it always had, and so
+        # do float32 rows, whose inverse would carry cond * 6e-8 of error.
         traced = any(isinstance(a, jax.core.Tracer) for a in jax.tree_util.tree_leaves(subs))
-        factors, cond = factor(inverse=not traced)
+        factors, cond = factor(inverse=not (traced or f32))
         if not (traced or isinstance(cond, jax.core.Tracer)) and not float(cond) <= _INVERSE_COND_LIMIT:
             factors, _ = factor(inverse=False)
 

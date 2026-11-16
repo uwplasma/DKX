@@ -584,3 +584,19 @@ def test_the_42gb_bands_are_refused_on_a_62gb_box(monkeypatch):
     assert not coarse_precond._coarse_bands_fit(op)
     monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: bands * 1.6)
     assert coarse_precond._coarse_bands_fit(op)
+
+
+def test_float32_bands_take_over_where_float64_ones_do_not_fit(monkeypatch):
+    """Between the two band sizes the factors are stored in float32 and still converge."""
+    op = _load_op("quick_2species_FPCollisions_noEr")
+    rhs = op.rhs()
+    reference = solve(op, rhs, method="gmres", preconditioner="coarse", tol=1e-10, emit=None)
+    bands = coarse_precond.coarse_preconditioner_band_bytes(op)
+    monkeypatch.setattr("dkx.coarse_precond._coarse_memory_budget", lambda: 0.8 * bands)
+    assert not coarse_precond._coarse_bands_fit(op)
+    assert coarse_precond._coarse_bands_fit(op, itemsize=4)
+    with pytest.warns(RuntimeWarning, match="float32"):
+        result = solve(op, rhs, method="gmres", preconditioner="coarse", tol=1e-10, emit=None)
+    assert result.converged
+    assert abs(int(result.iterations) - int(reference.iterations)) <= 2
+    np.testing.assert_allclose(np.asarray(result.x), np.asarray(reference.x), rtol=0, atol=1e-8 * float(jnp.max(jnp.abs(reference.x))))
