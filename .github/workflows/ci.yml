@@ -152,6 +152,21 @@ jobs:
       - name: Fetch external equilibrium data
         run: |
           python -m dkx.validation.data_fetch --quiet
+      - name: Point the JAX compilation cache at a restorable directory
+        id: jaxcache
+        run: |
+          echo "DKX_COMPILATION_CACHE_DIR=${RUNNER_TEMP}/jax_compilation_cache" >> "${GITHUB_ENV}"
+          echo "MPLCONFIGDIR=${RUNNER_TEMP}/matplotlib" >> "${GITHUB_ENV}"
+          echo "jax=$(python -c 'import jax; print(jax.__version__)')" >> "${GITHUB_OUTPUT}"
+      - name: Restore the JAX compilation cache
+        # Read-only: it reuses the entries the coverage shards save from main,
+        # so this lane never writes a cache of its own.
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/jax_compilation_cache
+          key: jaxcc-${{ matrix.group }}-jax${{ steps.jaxcache.outputs.jax }}-${{ hashFiles('pyproject.toml') }}-${{ github.run_id }}
+          restore-keys: |
+            jaxcc-${{ matrix.group }}-jax${{ steps.jaxcache.outputs.jax }}-${{ hashFiles('pyproject.toml') }}-
       - name: Contracts and the tests this change touches
         env:
           BASE_REF: ${{ github.base_ref }}
