@@ -2246,3 +2246,27 @@ def test_warm_audit_zero_source_and_nonfinite_drives(tmp_path, monkeypatch):
         monkeypatch.setattr(KineticOperator, 'rhs', lambda self: jnp.full(self.total_size, value))
         with pytest.raises(ValueError, match='finite drives and norms'):
             probe.warm_audit(str(target), str(target))
+
+
+def test_dshape_yancc_row_uses_the_reference_code_radial_convention() -> None:
+    """DSHAPE D11* and D31* agree with YANCC to 2% once its own d psi / d r is applied.
+
+    YANCC reports ``D11`` per its ``psi_r = Phi_edge rho / (pi a_minor)`` (rho = 0.8,
+    Phi_edge = 1 Wb, a_minor = 1.198366 m): 0.2125 T m against DKX ``B0 r_hat``, 0.2187 T m.
+    Leaving the two radial conventions unmatched shifted D11* by 5.5% and D31* by 2.8%.
+    """
+    import json
+    import math
+    from pathlib import Path
+
+    artifact = json.loads(
+        (Path(__file__).resolve().parents[1] / "validation/independent_cross_code_v1.json").read_text()
+    )
+    case = next(c for c in artifact["cases"] if c["id"] == "dshape_tokamak_yancc")
+    assert case["normalization"]["psi_p_reference"] == pytest.approx(
+        0.8 / math.pi / 1.198365553577037, rel=1e-12
+    )
+    errors = case["comparison"]["relative_error"]
+    assert errors["D11_star"] < 0.02
+    assert errors["D31_star"] < 0.02
+    assert errors["D13_star"] < 0.02

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Validation: the DSHAPE row of `independent_cross_code` applies YANCC own d psi / d r (0.2125 T m, from its toroidal flux and minor radius) as the W7-X row already did; the D11* difference from YANCC falls from 5.5% to 0.05% and D31* from 2.8% to 0.01%. The earlier gap was a radial-normalization mismatch, not physics or resolution.
 - Validation: the W7-X ambipolar profile gate adds the speed rung (25, 81, 224, 10): the same seven roots, every root and selected flux within 0.32% of rung B (1.80% largest over all rungs), 4.7 GiB peak. The nine W7-X ambipolar scaffold and proxy manifest entries are replaced by one `release_ready` entry, `w7x_ambipolar_profile_rung_gate`.
 
 ## 2.15.0 - 2026-11-13
