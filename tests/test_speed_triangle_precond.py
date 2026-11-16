@@ -370,7 +370,7 @@ def test_the_solver_offers_it_as_a_named_krylov_preconditioner(tmp_path) -> None
 # factors the (species, x)-coupled blocks over l.
 
 
-@pytest.mark.parametrize("species, ramp", [(1, False), (2, False), (2, True)])
+@pytest.mark.parametrize("species, ramp", [(1, False), (2, False), (2, True), (2, "plateau")])
 def test_the_coupled_route_solves_full_fokker_planck_exactly(tmp_path, species, ramp) -> None:
     from dkx.solve_common import _COUPLED_REFINEMENT_SWEEPS, _pinned_matvecs
     from dkx.solve import build_structured_solver
@@ -378,7 +378,8 @@ def test_the_coupled_route_solves_full_fokker_planck_exactly(tmp_path, species, 
 
     op = (_operator if species == 1 else _two_species_operator)(tmp_path, nx=4)
     if ramp:
-        op = replace(op, n_xi_for_x=jnp.asarray([3, 4, 5, 6]))
+        # "plateau": rows 3-5 share their pairs, so the factorization scans them.
+        op = replace(op, n_xi_for_x=jnp.asarray([3, 6, 6, 6] if ramp == "plateau" else [3, 4, 5, 6]))
     solver = build_structured_solver(op)
     assert isinstance(solver, CoupledSolver)
     rng = np.random.default_rng(7)
