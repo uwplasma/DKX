@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Ambipolar bootstrap: `KineticBootstrapMismatch(ambipolar=True)` now runs the host root search when it is evaluated on a concrete state without `roots=`, so `electric_field()` and `unconverged` reflect the roots instead of the `er_initial` warm start. `examples/advanced/ambipolar_bootstrap_dkx.py` calls `roots()` first, asserts convergence and a nonzero root slope, and uses a rotating ellipse (`SEED_PERTURBATION = 0.12`) that has roots; the old 0.05 case had none.
+
 ## 2.15.0 - 2026-11-13
 
 A host-callback-free solve that compiles and differentiates end to end, one keyword set across the run drivers, traced Gauss-Legendre Rosenbluth quadrature for every Fokker-Planck and Sugama build, a coarse-preconditioner factorization whose compiled size no longer grows with `Nxi`, flat example scripts with four new tutorials, and the HSX and W7-X ambipolar profile gates.
