@@ -544,13 +544,12 @@ def _peak_host_memory_bytes() -> int:
     return peak if sys.platform == "darwin" else peak * 1024
 
 
-def _total_host_memory_bytes() -> int:
-    """Best-effort physical host memory for the case's fractional budget."""
+def _host_memory_budget_bytes() -> int:
+    """Host memory the case's fractional budget applies to: available, else physical."""
+    from dkx.coarse_precond import _coarse_memory_budget  # noqa: PLC0415
 
-    try:
-        return int(os.sysconf("SC_PHYS_PAGES")) * int(os.sysconf("SC_PAGE_SIZE"))
-    except (AttributeError, OSError, ValueError):
-        return max(_peak_host_memory_bytes(), 1024**3)
+    budget = _coarse_memory_budget()
+    return int(budget) if budget else max(_peak_host_memory_bytes(), 1024**3)
 
 
 def _ambipolar_result_arrays(
@@ -1020,7 +1019,7 @@ def _batched_surfaces(case: Case, operators: list, progress):
     try:
         batch = batched_surface_scan(
             operators, solve_method=_route_name(case.solver.method), tol=case.solver.relative_tolerance,
-            memory_budget_gb=case.solver.memory_fraction * _total_host_memory_bytes() / 1024**3,
+            memory_budget_gb=case.solver.memory_fraction * _host_memory_budget_bytes() / 1024**3,
             retain_full_state=True)  # fmt: skip
     except ValueError as error:  # grids or flags differ between surfaces
         if progress is not None:
@@ -1169,7 +1168,7 @@ def run_case(
                 solve_method=_route_name(case.solver.method),
                 solve_tolerance=case.solver.relative_tolerance,
                 memory_budget_gb=(
-                    case.solver.memory_fraction * _total_host_memory_bytes() / (1024**3)
+                    case.solver.memory_fraction * _host_memory_budget_bytes() / (1024**3)
                 ),
                 convergence_enabled=case.convergence.enabled,
                 convergence_observables=case.convergence.observables,
@@ -1228,7 +1227,7 @@ def run_case(
                 device=None if case.run.device == "auto" else case.run.device,
                 tier1_keep_lowest=op.n_xi,
                 tier1_memory_budget_gb=case.solver.memory_fraction
-                * _total_host_memory_bytes()
+                * _host_memory_budget_bytes()
                 / (1024**3),
             )
             state = np.asarray(solved.x, dtype=np.float64).reshape((-1,))

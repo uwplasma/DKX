@@ -117,7 +117,8 @@ def _escalate_after_tier2_stall(
     print(
         f"[dkx.solve] recycled Krylov solve stalled with the {preconditioner} "
         f"preconditioner (iterations={stalled.iterations}, residual="
-        f"{_residual(stalled):.3e}); escalating rather than giving up."
+        f"{_residual(stalled):.3e}); escalating rather than giving up.",
+        flush=True,
     )
 
     def _warm_start(result: SolveResult, fallback):
@@ -165,7 +166,8 @@ def _escalate_after_tier2_stall(
             continue
         try:
             print(
-                f"[dkx.solve]   retrying the iterative solve with the {kind} preconditioner ..."
+                f"[dkx.solve]   retrying the iterative solve with the {kind} preconditioner ...",
+                flush=True,
             )
             candidate = _solve_tier2(
                 op,
@@ -188,11 +190,11 @@ def _escalate_after_tier2_stall(
         except (
             Exception
         ) as exc:  # a preconditioner that cannot build is a rung, not a failure
-            print(f"[dkx.solve]   {kind} preconditioner unavailable: {exc}")
+            print(f"[dkx.solve]   {kind} preconditioner unavailable: {exc}", flush=True)
             continue
         attempts.append((f"{kind} preconditioner", candidate))
         if candidate.converged:
-            print(f"[dkx.solve]   converged with the {kind} preconditioner.")
+            print(f"[dkx.solve]   converged with the {kind} preconditioner.", flush=True)
             return candidate
 
     # Rung 2: more iterations.  Cheap to ask for, and the remedy when the
@@ -219,7 +221,8 @@ def _escalate_after_tier2_stall(
     try:
         print(
             f"[dkx.solve]   retrying the iterative solve with the {best_kind} preconditioner "
-            f"and {widened} restarts of {rung_restart} (was {max_restarts} of {restart}) ..."
+            f"and {widened} restarts of {rung_restart} (was {max_restarts} of {restart}) ...",
+            flush=True,
         )
         candidate = _solve_tier2(
             op,
@@ -239,10 +242,10 @@ def _escalate_after_tier2_stall(
         )
         attempts.append((f"{best_kind} preconditioner, {widened} restarts", candidate))
         if candidate.converged:
-            print("[dkx.solve]   converged with the widened iteration budget.")
+            print("[dkx.solve]   converged with the widened iteration budget.", flush=True)
             return candidate
     except Exception as exc:
-        print(f"[dkx.solve]   widened retry failed: {exc}")
+        print(f"[dkx.solve]   widened retry failed: {exc}", flush=True)
 
     # Rung 3: sparse direct.  An explicitly selected, budgeted MUMPS backend may use
     # grouped assembly; max_dense_size limits only the column-sampling fallback in that
@@ -254,7 +257,7 @@ def _escalate_after_tier2_stall(
     )
     large_superlu_fits = direct_backend in (None, "superlu") and superlu_fits(op.total_size)
     if op.total_size <= max_dense_size or large_mumps_requested or large_superlu_fits:
-        print("[dkx.solve]   falling back to the sparse direct host solve ...")
+        print("[dkx.solve]   falling back to the sparse direct host solve ...", flush=True)
         return _solve_tier3(
             op, rhs2d, tol=tol, atol=atol, max_dense_size=max_dense_size,
             direct_backend=direct_backend,
@@ -409,6 +412,7 @@ def _solve_tier2(
     prebuilt_precond: tuple[Callable, Callable] | None = None,
     auto_restart_recovery: bool = False,
     krylov_memory_budget_gb: float | None = None,
+    emit: Callable[[str], None] | None = None,
 ) -> SolveResult:
     if int(recycle_dim) < 1:
         # solvax's GCROT scatters the recycled subspace into a (n, k) array, so
@@ -423,6 +427,8 @@ def _solve_tier2(
         )
     traced = _is_traced(rhs2d, *jax.tree_util.tree_leaves(op))
     profiler = None if traced else maybe_profiler(emit=make_emit(stream=sys.stderr))
+    if traced:
+        emit = None
     t0 = time.perf_counter()
     precond = precond_t = None
     # The escalation path deliberately does NOT pass a prebuilt pair: it is
@@ -436,6 +442,8 @@ def _solve_tier2(
         # single largest avoidable cost in a scan.
         precond, precond_t = prebuilt_precond
     elif preconditioner != "none":
+        if emit is not None:
+            emit(f"[dkx.solve] building the {preconditioner} preconditioner ...")
         if profiler is not None:
             profiler.mark("preconditioner_build.start")
         precond, precond_t = build_tier2_preconditioner(
@@ -513,6 +521,11 @@ def _solve_tier2(
     total_iters: int | None = 0
     converged = True
     res_norms: list[jnp.ndarray] = []
+    if emit is not None:
+        emit(
+            f"[dkx.solve] GCROT on {op.total_size} unknowns, {rhs2d.shape[1]} right-hand "
+            "side(s); the first call in a process compiles ..."
+        )
     if profiler is not None:
         # The first GCROT call traces, compiles, and executes through JAX; this
         # boundary deliberately does not claim those costs can be split.

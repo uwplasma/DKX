@@ -330,14 +330,17 @@ def test_tier2_profile_events_cover_build_and_outer_gcrot(monkeypatch, capsys):
         converged=jnp.array(True), residual_norm=jnp.array(0.),
     ))
 
+    said = []
     result = module._solve_tier2(
         op, jnp.ones((4, 1)), tol=1e-7, atol=0., x0=None, recycle=None,
         preconditioner='coarse', drop_l_coupling_in_precond=False,
         restart=4, recycle_dim=1, max_restarts=1, differentiable=False,
-        check_adjoint=False,
+        check_adjoint=False, emit=said.append,
     )
 
     assert result.converged
+    # One line as each phase starts, so a cold compile is never silent.
+    assert [line.split()[1] for line in said] == ['building', 'GCROT']
     labels = [line.split()[1] for line in capsys.readouterr().err.splitlines()]
     assert labels == [
         'preconditioner_build.start',

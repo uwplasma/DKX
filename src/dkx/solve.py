@@ -74,6 +74,7 @@ and the PETSc ``Pmat`` idiom of production SFINCS.
 
 from __future__ import annotations
 
+import functools
 from dataclasses import replace
 from typing import Any, Callable
 
@@ -168,6 +169,9 @@ __all__ = [
     "tier1_truncated_tail_blocks",
 ]
 
+# Route lines mark the start of each compile and solve phase; flushed so they
+# appear while a cold compile runs, not after it.
+_print_flushed = functools.partial(print, flush=True)
 
 
 # =============================================================================
@@ -242,7 +246,7 @@ def _auto_route(
     budget_gb: float | None,
     keep_lowest: int,
     subsystem_batch: int | str = "auto",
-    emit: Callable[[str], None] | None = print,
+    emit: Callable[[str], None] | None = _print_flushed,
 ) -> str:
     """Pick the route for ``method="auto"`` and print a Fortran-style one-liner.
 
@@ -261,6 +265,8 @@ def _auto_route(
                     f"{coupled_flops(op) / 1e9:.0f} GFlop."
                 )
             return "block_tridiagonal"
+        if emit is not None:
+            emit(f"[dkx.solve] recycled Krylov route: {_reason}.")
         return "gmres"
 
     peak = tier1_peak_memory_bytes(op)
@@ -410,7 +416,7 @@ def solve(
     subsystem_batch: int | str = "auto",
     tier1_adjoint_window: int | None = None,
     device: str | jax.Device | None = None,
-    emit: Callable[[str], None] | None = print,
+    emit: Callable[[str], None] | None = _print_flushed,
     precond: tuple[Callable, Callable] | None = None,
     factors: Any = None,
     transpose: bool = False,
@@ -843,7 +849,8 @@ def solve(
             print(
                 "[dkx.solve] the structured direct solve missed the "
                 f"tolerance (residuals={np.asarray(result.residual_norms)}); "
-                "falling back to the recycled Krylov route."
+                "falling back to the recycled Krylov route.",
+                flush=True,
             )
             chosen = "gmres"
     if chosen in ("block_tridiagonal", "block_tridiagonal_truncated"):
@@ -874,6 +881,7 @@ def solve(
             check_adjoint=check_adjoint,
             record_adjoint=record_adjoint,
             adjoint_residual_factor=adjoint_residual_factor,
+            emit=emit,
         )
         if method == "auto" and not result.converged and not differentiable:
             result = _escalate_after_tier2_stall(

@@ -526,6 +526,12 @@ def test_the_budget_prefers_available_memory_over_physical_ram(monkeypatch):
     monkeypatch.setattr("dkx.coarse_precond._available_memory_bytes", lambda: 4.0e9)
     monkeypatch.setattr("dkx.coarse_precond._host_memory_bytes", lambda: 64.0e9)
     assert coarse_precond._coarse_memory_budget() == 4.0e9
+    # The case budget (memory_fraction) and the batch chunking read the same number.
+    from dkx import batch, execution
+
+    assert execution._host_memory_budget_bytes() == 4.0e9
+    monkeypatch.setattr(batch, "_device_memory_bytes", lambda: None)
+    assert batch.resolve_memory_budget_bytes() == batch._DEFAULT_BUDGET_FRACTION * 4.0e9
 
 
 def test_the_budget_falls_back_to_physical_ram_when_available_is_unreadable(monkeypatch):

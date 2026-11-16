@@ -40,11 +40,9 @@ def test_memory_budget_falls_back_from_device_to_host_to_constant(monkeypatch) -
         assert batch._device_memory_bytes() is None
     monkeypatch.setattr(jax, "devices", lambda: [SimpleNamespace(memory_stats=lambda: 1 / 0)])
     assert batch._device_memory_bytes() is None
-    monkeypatch.setattr("os.sysconf", lambda name: 1 << 30 if name == "SC_PAGE_SIZE" else 4)
-    assert batch._host_memory_bytes() == 4.0 * gb
+    monkeypatch.setattr(batch, "_coarse_memory_budget", lambda: 4.0 * gb)
     assert batch.resolve_memory_budget_bytes() == batch._DEFAULT_BUDGET_FRACTION * 4.0 * gb
-    monkeypatch.setattr("os.sysconf", lambda name: (_ for _ in ()).throw(ValueError(name)))
-    assert batch._host_memory_bytes() is None
+    monkeypatch.setattr(batch, "_coarse_memory_budget", lambda: None)
     assert batch.resolve_memory_budget_bytes() == batch._DEFAULT_BUDGET_FRACTION * batch._FALLBACK_BUDGET_GB * gb
 
 
