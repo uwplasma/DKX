@@ -719,14 +719,16 @@ def _monoenergetic_nu_star(op: KineticOperator, geom: Any) -> float:
 def _warn_if_pitch_underresolved(nu_star: float, n_xi: int) -> None:
     """Warn when fewer than 80 Legendre modes resolve a ``nu_star <= 1e-2`` solve.
 
-    Measured on NCSX at ``s = 0.25`` with ``(Ntheta, Nzeta) = (15, 21)`` and
-    ``nu_star = 1e-3``: ``D11* = 0.160`` at ``Nxi = 40`` against ``0.195`` at
-    ``Nxi >= 80``.  The solve converges either way, so nothing else flags it.
+    Measured on NCSX at ``s = 0.25`` with ``(Ntheta, Nzeta) = (15, 21)``, the
+    error of ``D11*`` at ``Nxi = 40`` against ``Nxi = 80`` is 0.02% at
+    ``nu_star = 1e-2``, 0.5% at 5e-3, 2.3% at 3e-3 and 17% at 1e-3 (0.160
+    against 0.194; 0.194 at ``Nxi = 120``).  The solve converges either way, so
+    nothing else flags it.
     """
     if float(nu_star) <= 1e-2 and int(n_xi) < 80:
         warnings.warn(
             f"nu* = {float(nu_star):.2g} with Nxi = {int(n_xi)}: below nu* = 1e-2 the "
-            "monoenergetic D11 needs Nxi >= 80 (21% low at Nxi = 40, nu* = 1e-3 on NCSX).",
+            "monoenergetic D11 needs Nxi >= 80 (17% low at Nxi = 40, nu* = 1e-3 on NCSX).",
             stacklevel=2,
         )
 
