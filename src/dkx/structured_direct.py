@@ -492,7 +492,7 @@ def _factor(
                 runs[-1] = (l, runs[-1][1])
             else:
                 runs.append((l, l + 1))
-    in_run = {l for a, b in runs for l in range(a, b)}
+    in_run = {l for lo_l, hi_l in runs for l in range(lo_l, hi_l)}
     lowers = [jnp.zeros((0, tz, tz))] + [
         None if l - 1 in in_run else band(l, "lower", layout[l], l >= keep) for l in range(1, n_chain)
     ]
@@ -545,11 +545,11 @@ def _factor(
     else:
         last = d0 if n_l == 1 else diag_block(n_l - 1)
         lus[-1] = _tail_lu(last) if last.ndim == 3 else lu_factor(last)
-    run_at = {b - 1: (a, b) for a, b in runs}  # keyed by the run's top row
+    run_at = {hi_l - 1: (lo_l, hi_l) for lo_l, hi_l in runs}  # keyed by the run's top row
     for l in range(n_chain - 2 if not scanned else keep - 1, -1, -1):
         if l in in_run:
             if l in run_at:
-                a, b = run_at[l]
+                lo_l, hi_l = run_at[l]
                 act = layout[l]
                 k_l = len(act)
 
@@ -560,9 +560,9 @@ def _factor(
                     return lu, (lu, lo, up)
 
                 (lu_r, piv_r), lo_r, up_r = jax.lax.scan(
-                    row, lus[b], jnp.arange(a, b), reverse=True
+                    row, lus[hi_l], jnp.arange(lo_l, hi_l), reverse=True
                 )[1]
-                for i, ell in enumerate(range(a, b)):
+                for i, ell in enumerate(range(lo_l, hi_l)):
                     lus[ell], lowers[ell + 1], uppers[ell] = (lu_r[i], piv_r[i]), lo_r[i], up_r[i]
             continue
         sel = np.searchsorted(layout[l], layout[l + 1])
