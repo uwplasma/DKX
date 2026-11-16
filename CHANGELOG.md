@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Performance: a monoenergetic scan builds its operators with the ExB structure at every point (`E* = 0` is a zero coefficient), so `E* = 0` and `E* != 0` share one compiled factorization and solve instead of compiling twice. W7-X 15 x 31 x 48 on a loaded Apple M3 Max: coefficients identical, peak RSS 0.54 to 0.51 GB, cold scan time down by the second compile (about 0.9 s).
+
 ## 2.15.0 - 2026-11-13
 
 A host-callback-free solve that compiles and differentiates end to end, one keyword set across the run drivers, traced Gauss-Legendre Rosenbluth quadrature for every Fokker-Planck and Sugama build, a coarse-preconditioner factorization whose compiled size no longer grows with `Nxi`, flat example scripts with four new tutorials, and the HSX and W7-X ambipolar profile gates.
