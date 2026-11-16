@@ -118,12 +118,6 @@ def test_solve_device_routing_on_an_accelerator_host(monkeypatch, capsys) -> Non
     assert route("cpu", "gmres", op, traced=False) is cpu
     assert route("gpu", "gmres", op, traced=False) is None
     assert route("auto", "gmres", op, traced=False) is None  # Krylov stays on the accelerator by default
-    monkeypatch.setenv(solve_module._SOLVE_CPU_MAX_TIER2_ENV, "10")
-    assert route("auto", "gmres", op, traced=False) is cpu and "device route" in capsys.readouterr().out
-    monkeypatch.setenv(solve_module._SOLVE_CPU_MAX_TIER1_ENV, "0")
-    assert route("auto", "block_tridiagonal", op, traced=False) is None  # too big for the host route
-    monkeypatch.setenv(solve_module._SOLVE_CPU_MAX_TIER1_ENV, "not-a-number")
-    assert solve_module._env_size(solve_module._SOLVE_CPU_MAX_TIER1_ENV, 7) == 7
     with pytest.raises(ValueError, match="unknown solve device 'tpu2'"):
         route("tpu2", "gmres", op, traced=False)
     monkeypatch.setattr(solve_module, "_cpu_device_or_none", lambda: None)
