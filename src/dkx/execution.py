@@ -545,11 +545,17 @@ def _peak_host_memory_bytes() -> int:
 
 
 def _host_memory_budget_bytes() -> int:
-    """Host memory the case's fractional budget applies to: available, else physical."""
-    from dkx.coarse_precond import _coarse_memory_budget  # noqa: PLC0415
+    """Physical host memory, which the case's fractional budget applies to.
 
-    budget = _coarse_memory_budget()
-    return int(budget) if budget else max(_peak_host_memory_bytes(), 1024**3)
+    Physical, not available: this budget picks the solver route, and a route that
+    depends on what other processes hold makes the same deck run differently from
+    one minute to the next.  The guards that refuse what does not fit right now
+    (:func:`dkx.coarse_precond._coarse_memory_budget`) read available memory.
+    """
+    from dkx.coarse_precond import _host_memory_bytes  # noqa: PLC0415
+
+    total = _host_memory_bytes()
+    return int(total) if total else max(_peak_host_memory_bytes(), 1024**3)
 
 
 def _ambipolar_result_arrays(

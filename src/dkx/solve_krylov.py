@@ -29,6 +29,7 @@ except ImportError:
 from dkx.coarse_precond import (  # noqa: E402
     _available_memory_bytes,
     _coarse_bands_fit,
+    _host_memory_bytes,
     build_coarse_preconditioner,
 )
 from dkx.drift_kinetic import (  # noqa: E402
@@ -308,8 +309,10 @@ def _auto_preconditioner(op: KineticOperator, budget_gb: float | None) -> str:
 
     The coupled estimate is a whole-process peak, so it is held against
     ``krylov_memory_budget_gb`` (or ``DKX_KRYLOV_MEMORY_BUDGET_GB``) when given,
-    and otherwise against half the memory available now: the program trades
-    memory for speed (17 vs 46 iterations, 508 vs 1,100 s on HSX FP).
+    and otherwise against half the physical memory, capped by the memory available
+    now: the program trades memory for speed (17 vs 46 iterations, 508 vs 1,100 s
+    on HSX FP).  Physical memory makes the choice, so other processes change it
+    only when the build would not fit beside them.
     """
     from dkx.structured_direct import coupled_precond_peak_bytes  # noqa: PLC0415
 
@@ -327,8 +330,9 @@ def _auto_preconditioner(op: KineticOperator, budget_gb: float | None) -> str:
     if budget_gb is not None or os.environ.get(_KRYLOV_BUDGET_ENV) not in (None, ""):
         budget = _krylov_basis_budget_bytes(budget_gb)
     else:
-        available = _available_memory_bytes()
-        budget = 0.5 * available if available is not None else 0.0
+        physical, available = _host_memory_bytes(), _available_memory_bytes()
+        budget = 0.5 * physical if physical is not None else 0.0
+        budget = budget if available is None else min(budget, available)
     return "coupled" if coupled_precond_peak_bytes(op, _COUPLED_PRECOND_KEEP) <= budget else "coarse"
 
 def _resolve_preconditioner(

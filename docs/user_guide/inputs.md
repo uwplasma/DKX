@@ -256,7 +256,7 @@ modes in the Rosenbluth potentials ({doc}`../numerics/discretization`).
 |---|---|---|---|---|
 | `method` | string | `"auto"` | `auto`, `structured_direct`, `recycled_krylov`, `sparse_direct_referee` | linear-solver route |
 | `relative_tolerance` | number | `1.0e-10` | $0 < \epsilon \le 1$ | a returned state is accepted only if $\lVert Ax-b\rVert \le \epsilon\lVert b\rVert$, recomputed from the original operator |
-| `memory_fraction` | number | `0.75` | $0 < f \le 1$ | fraction of available host memory the solve may budget |
+| `memory_fraction` | number | `0.75` | $0 < f \le 1$ | fraction of total host memory the solve may budget |
 | `reuse` | string | `"auto"` | `auto`, `on`, `off` | reuse policy; only `auto` runs |
 
 The routes are described in {doc}`../numerics/solver_routes`.

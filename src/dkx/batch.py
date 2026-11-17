@@ -55,7 +55,7 @@ _configure_runtime()
 import jax
 import jax.numpy as jnp
 
-from .coarse_precond import _coarse_memory_budget
+from .coarse_precond import _host_memory_bytes
 from .drift_kinetic import KineticOperator
 from .solve import (
     _auto_route_structural,
@@ -253,14 +253,13 @@ def resolve_memory_budget_bytes(memory_budget_gb: float | None = None) -> float:
 
     An explicit ``memory_budget_gb`` is taken verbatim; otherwise a fraction
     (:data:`_DEFAULT_BUDGET_FRACTION`) of the device memory limit is used, then
-    of the available host memory (physical RAM where that cannot be read), then
-    a fixed fallback (:data:`_FALLBACK_BUDGET_GB`).
+    the physical host RAM, then a fixed fallback (:data:`_FALLBACK_BUDGET_GB`).
     """
     if memory_budget_gb is not None:
         return float(memory_budget_gb) * _BYTES_PER_GB
     total = _device_memory_bytes()
     if total is None:
-        total = _coarse_memory_budget()
+        total = _host_memory_bytes()
     if total is None:
         total = _FALLBACK_BUDGET_GB * _BYTES_PER_GB
     return _DEFAULT_BUDGET_FRACTION * total
