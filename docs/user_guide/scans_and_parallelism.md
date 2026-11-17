@@ -265,8 +265,8 @@ dkx scan input.namelist --profiles profile_HH --out-dir scan
 
 | control | effect |
 |---|---|
-| `--transport-workers N` (`DKX_TRANSPORT_PARALLEL_WORKERS`) | worker processes for independent `whichRHS` solves on the output-writing path; `transport-matrix-v3` solves all drives in one multi-RHS solve instead |
-| `dkx scan --jobs N` | parallel processes over $E_r$ points |
+| `--transport-workers N` (`DKX_TRANSPORT_PARALLEL_WORKERS`) | accepted and not applied: the `whichRHS` solves run in one process; `transport-matrix-v3` solves all drives in one multi-RHS solve |
+| `dkx scan --jobs N` | parallel processes over $E_r$ points (`!ss` scanType 1 and 3 decks run their points one after another) |
 | `--distributed` with `--process-id`, `--process-count`, `--coordinator-address`, `--coordinator-port` | JAX multi-host initialization |
 
 ## Relation to SFINCS

@@ -4,18 +4,8 @@ import json
 from pathlib import Path
 
 
-_VALID_STATUSES = {"implemented", "deferred_post_release"}
-_VALID_CLAIM_STATUSES = {
-    "release_ready",
-    "regression_scaffold",
-    "bounded_proxy",
-    "closed_deferred",
-}
-_IMPLEMENTED_CLAIM_STATUSES = {
-    "release_ready",
-    "regression_scaffold",
-    "bounded_proxy",
-}
+_VALID_STATUSES = {"implemented"}
+_VALID_CLAIM_STATUSES = {"release_ready"}
 _VALID_KINDS = {
     "literature_reproduction",
     "literature_validation",
@@ -53,13 +43,6 @@ def test_validation_manifest_records_have_research_gate_schema() -> None:
         assert gate.get("blocks_current_release") is False
         assert str(gate.get("evidence", "")).strip()
         assert str(gate.get("promotion_gate", "")).strip()
-        if str(record["status"]) == "deferred_post_release":
-            assert gate.get("claim_status") == "closed_deferred"
-            reason = str(gate.get("closed_or_deferred_reason", "")).lower()
-            assert "closed" in reason
-            assert "post-release" in reason
-        else:
-            assert gate.get("claim_status") in _IMPLEMENTED_CLAIM_STATUSES
         for key in ("literature", "claims", "source_code", "tests", "acceptance_gates"):
             assert key in record, f"{record['id']} missing {key}"
             assert isinstance(record[key], list), f"{record['id']} {key} must be a list"
@@ -70,9 +53,6 @@ def test_validation_manifest_records_have_research_gate_schema() -> None:
 
 def test_validation_manifest_paths_exist_for_release_lanes() -> None:
     for record in _manifest():
-        status = str(record["status"])
-        if status == "deferred_post_release":
-            continue
         for command in record.get("scripts", []):
             assert _first_command_path(str(command)).exists(), record["id"]
         for artifact in record.get("artifacts", []):
@@ -81,24 +61,3 @@ def test_validation_manifest_paths_exist_for_release_lanes() -> None:
             assert (_repo_root() / str(source_path)).exists(), f"{record['id']} missing source {source_path}"
         for test_path in record["tests"]:
             assert (_repo_root() / str(test_path)).exists(), f"{record['id']} missing test {test_path}"
-
-
-def test_validation_manifest_has_no_open_release_lanes() -> None:
-    statuses = {str(record["id"]): str(record["status"]) for record in _manifest()}
-    assert all(status in {"implemented", "deferred_post_release"} for status in statuses.values())
-
-    release_deferred = {
-        record["id"]
-        for record in _manifest()
-        if str(record["status"]) == "deferred_post_release"
-    }
-    assert release_deferred == set()
-
-
-def test_deferred_manifest_lanes_are_closed_with_explicit_reason() -> None:
-    for record in _manifest():
-        if str(record["status"]) != "deferred_post_release":
-            continue
-        joined_claims = " ".join(str(claim).lower() for claim in record["claims"])
-        assert "post-release" in joined_claims
-        assert "closed" in joined_claims

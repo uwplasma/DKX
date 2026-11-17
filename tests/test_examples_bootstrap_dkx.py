@@ -13,6 +13,7 @@ parts that break silently.
 from __future__ import annotations
 
 import ast
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -33,7 +34,6 @@ PICARD_ITERATIONS, REDL_N_LAMBDA = 2, 12
 FINAL_NS, FINAL_FTOL = 31, 1e-10
 """,
     "ambipolar_bootstrap_dkx.py": """
-KINETIC_SURFACES = (0.3,)
 CHECK_DOFS, FD_TOLERANCE, NS, PICARD_ITERATIONS = CHECK_DOFS[:1], 0.2, 13, 2
 """,
 }
@@ -114,6 +114,9 @@ def test_the_ambipolar_example_runs_and_checks_its_own_derivative(tmp_path) -> N
     done = _run_smoke("ambipolar_bootstrap_dkx.py", tmp_path)
     assert done.returncode == 0, done.stdout[-4000:] + done.stderr[-4000:]
     assert "ambipolar E_r" in done.stdout and "relative" in done.stdout
+    # The roots come from the root search, not the E_r = -2 kV/m first guess.
+    roots = [float(v) for v in re.findall(r"ambipolar E_r = ([+-][0-9.]+) kV/m", done.stdout)]
+    assert len(roots) == 2 and all(abs(r + 2.0) > 0.05 for r in roots), roots
     assert (tmp_path / "ambipolar_bootstrap_dkx.png").exists()
     assert (tmp_path / "ambipolar_bootstrap_dkx.csv").exists()
 

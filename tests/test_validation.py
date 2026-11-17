@@ -19,6 +19,7 @@ from __future__ import annotations
 from _solve_modules import solve_modules
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -674,6 +675,14 @@ def test_the_registry_covers_every_validation_artifact() -> None:
         f"validation/{path.name}" for path in sorted((ROOT / "validation").glob("*.json"))
     }
     assert on_disk == registered
+
+
+def test_the_validation_readme_lists_every_entry_with_its_status_and_count() -> None:
+    """The README is the first page of the evidence; it must not drift from the registry."""
+    readme = (ROOT / "validation" / "README.md").read_text()
+    rows = dict(re.findall(r"^\| `(\w+)` \| (\w+) \|", readme, flags=re.MULTILINE))
+    assert rows == {name: REGISTRY[name].status for name in ENTRY_IDS}
+    assert f"| `*_v1.json` ({len(ENTRY_IDS)}) |" in readme
 
 
 @pytest.mark.parametrize("entry_id", ENTRY_IDS)
