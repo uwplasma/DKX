@@ -341,7 +341,7 @@ def test_it_refuses_the_route_it_does_not_implement(tmp_path, monkeypatch) -> No
     import dkx.coarse_precond as cp
 
     op = _operator(tmp_path)
-    monkeypatch.setattr(cp, "_coarse_bands_fit", lambda _op: False)
+    monkeypatch.setattr(cp, "_coarse_bands_fit", lambda _op, *_: False)
     with pytest.raises(NotImplementedError, match="dense-band route only"):
         cp.build_coarse_preconditioner(op, retain_speed_triangle=True)
 
@@ -444,5 +444,5 @@ def test_auto_takes_the_triangle_when_the_er_terms_are_active(tmp_path, monkeypa
     )
     assert S._auto_preconditioner(with_er, 1e3) == "coarse_triangle"
     assert S._auto_preconditioner(replace(with_er, dphi_hat_dpsi_hat_kinetic=jnp.asarray(0.0)), 1e3) == "coupled"
-    monkeypatch.setattr(S, "_coarse_bands_fit", lambda _op: False)
+    monkeypatch.setattr(S, "_coarse_bands_fit", lambda _op, *_: False)
     assert S._auto_preconditioner(with_er, 1e3) == "coupled"

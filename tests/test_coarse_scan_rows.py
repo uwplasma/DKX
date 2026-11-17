@@ -51,7 +51,7 @@ def test_scanned_factors_give_the_adjoint_pair_and_are_differentiable(monkeypatc
     coef, subs, floor, gamma = args
     rows = kwargs["rows"]
     assert len(cp._row_segments(rows[1])) > 1  # a real ramp: the padded run transitions are exercised
-    n_tz = coef["b0"].shape[0]
+    n_tz = coef["parity"][0].size if "parity" in coef else coef["b0"].shape[0]  # a sector's block
     v = jnp.asarray(np.random.default_rng(0).normal(size=(floor.shape[0], kwargs["n_xi"], n_tz)))
     w = jnp.asarray(np.random.default_rng(1).normal(size=v.shape))
 

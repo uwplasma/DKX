@@ -242,7 +242,7 @@ def _coarse_generated_peak_bytes(op: KineticOperator) -> float:
     cs = math.isqrt(n_xi - 1) + 1 if n_xi > 1 else 1
     return (-(-n_xi // cs) + 3 * cs) * (n_t * n_z) ** 2 * 8.0
 
-def _coarse_bands_fit(op: KineticOperator) -> bool:
+def _coarse_bands_fit(op: KineticOperator, scale: float = 1.0) -> bool:
     """Whether the coarse preconditioner's dense bands fit this machine.
 
     Measured on the 2026-08-01 upstream campaign: five decks were killed by the OS
@@ -254,15 +254,15 @@ def _coarse_bands_fit(op: KineticOperator) -> bool:
 
     The budget is *available* memory, not physical RAM: see
     :func:`_available_memory_bytes` for the six-hour thrash that measuring
-    against physical RAM admits.
+    against physical RAM admits.  ``scale`` is the parity split's share of the bands.
     """
     budget = _coarse_memory_budget()
     return budget is None or (
-        coarse_preconditioner_band_bytes(op) * _COARSE_BAND_RESIDENT_OVERHEAD
+        coarse_preconditioner_band_bytes(op) * scale * _COARSE_BAND_RESIDENT_OVERHEAD
         <= _TIER2_GUARD_FRACTION * budget
     )
 
-def _coarse_factors_fit(op: KineticOperator) -> bool:
+def _coarse_factors_fit(op: KineticOperator, scale: float = 1.0) -> bool:
     """Whether the reusable Schur-LU-only factors fit where the bands did not.
 
     Same guard, same fraction, one third of the arrays --- so a deck that misses
@@ -278,7 +278,7 @@ def _coarse_factors_fit(op: KineticOperator) -> bool:
     """
     budget = _coarse_memory_budget()
     return budget is None or (
-        coarse_preconditioner_factor_bytes(op)
+        coarse_preconditioner_factor_bytes(op) * scale
         * _COARSE_RESIDENT_OVERHEAD
         <= _TIER2_GUARD_FRACTION * budget
     )
@@ -587,7 +587,7 @@ def _coarse_subsystem_block_fn(
     solve returns ``nan``), and ``None`` gives the unregularized blocks that size them.
     ``j`` is traced, which is why :meth:`KineticOperator.legendre_blocks` cannot serve.
     """
-    stream, mirror, pas_row, x_val, mask_row, coll_row, d1, d2, d3, dxi = sub
+    stream, mirror, pas_row, x_val, mask_row, coll_row, d1, d2, d3, dxi, *sector = sub
     params = _truncated_params(
         coef, stream, mirror, pas_row, x_val, jnp.asarray(0.0, dtype=jnp.float64)
     )
@@ -617,9 +617,105 @@ def _coarse_subsystem_block_fn(
         diag = diag.at[idx, idx].add(keep * dc["xi"] * dxi)
         if l0_pin is not None:
             diag = diag + jnp.where(j == 0, 1.0, 0.0) * l0_pin
-        return lower, diag, upper
+        if not sector:
+            return lower, diag, upper
+        # One parity sector (_coarse_parity): row j keeps the angular functions
+        # of reflection parity p = sigma (-1)^j, its neighbours the other one.
+        p = sector[0] * (1.0 - 2.0 * (j % 2))
+        basis = coef["parity"]
+        pad = jnp.where(jnp.where(p > 0, basis[2], basis[3]) == 0.0, 1.0, 0.0)
+        return (
+            _parity_block(lower, basis, p, -p),
+            _parity_block(diag, basis, p, p) + jnp.diag(pad),
+            _parity_block(upper, basis, p, -p),
+        )
 
     return block_fn
+
+
+def _parity_basis(n_t: int, n_z: int) -> tuple[np.ndarray, ...]:
+    """``(idx, ridx, w_even, w_odd)``: the reflection-parity basis of the angular grid.
+
+    ``R: (theta, zeta) -> (-theta, -zeta)`` maps grid point ``i`` to ``ridx``.  Basis
+    vector ``a`` of parity ``p`` is ``w_p[a] (e_idx[a] + p e_ridx[a])``: one per
+    pair, and one per fixed point of ``R`` (``theta, zeta in {0, pi}``) in the even
+    set only.  The odd set has the same length, ``h``, with zero weight on those
+    slots, which the blocks fill with identity rows.
+    """
+    t, z = np.meshgrid(np.arange(n_t), np.arange(n_z), indexing="ij")
+    ref = (((-t) % n_t) * n_z + (-z) % n_z).ravel()
+    i = np.arange(n_t * n_z)
+    idx = np.concatenate([i[i < ref], i[i == ref]])
+    pairs = int(np.sum(i < ref))
+    w_even = np.where(np.arange(idx.size) < pairs, np.sqrt(0.5), 0.5)
+    w_odd = np.where(np.arange(idx.size) < pairs, np.sqrt(0.5), 0.0)
+    return idx, ref[idx], w_even, w_odd
+
+
+def _parity_block(a: jnp.ndarray, basis: tuple, p: jnp.ndarray, q: jnp.ndarray) -> jnp.ndarray:
+    """``Q_p^T a Q_q`` for an ``(m, m)`` block, ``(h, h)``."""
+    idx, ridx, w_even, w_odd = basis
+    rows = a[idx] + p * a[ridx]
+    both = rows[:, idx] + q * rows[:, ridx]
+    return jnp.where(p > 0, w_even, w_odd)[:, None] * both * jnp.where(q > 0, w_even, w_odd)
+
+
+def _parity_maps(basis: tuple, n_xi: int, m: int) -> tuple[np.ndarray, ...]:
+    """Gather maps of the sector split ``(B, L, m) -> (2, B, L, h)`` and of its inverse.
+
+    Sector ``sigma = +-1`` keeps parity ``sigma (-1)^l`` on row ``l``.  The basis is
+    orthonormal, so the inverse is the transpose: ``v[i] = sum_sigma c[sigma, l, i]
+    y[sigma, l, pos[i]]``, with ``pos[i]`` the basis slot of point ``i``.
+    """
+    idx, ridx, w_even, w_odd = (np.asarray(a) for a in basis)
+    sign = np.array([[1.0], [-1.0]]) * (1.0 - 2.0 * (np.arange(n_xi) % 2))
+    w = np.where(sign[..., None] > 0, w_even, w_odd)
+    pos = np.empty(m, dtype=np.int64)
+    pos[ridx], pos[idx] = np.arange(idx.size), np.arange(idx.size)
+    point = np.arange(m)
+    c = w[..., pos] * ((idx[pos] == point) + (ridx[pos] == point) * sign[..., None])
+    return idx, ridx, sign, w, pos, c
+
+
+#: Relative tolerance of the reflection checks in :func:`_coarse_parity`.
+_PARITY_TOL = 1e-12
+
+
+def _coarse_parity(op: KineticOperator, coef: dict, subs: tuple) -> tuple | None:
+    """The parity basis when the coarse operator commutes with ``S = (-1)^l R``, else ``None``.
+
+    ``R`` reflects the angles, ``(theta, zeta) -> (-theta, -zeta)``.  On a
+    stellarator-symmetric field streaming and the mirror force are odd under ``R``
+    and couple ``l`` to ``l +- 1``; collisions and the ``l = 0`` pin are even and
+    diagonal in ``l``.  So the coarse chain splits into two independent chains,
+    ``S = +1`` and ``S = -1``, each on about half the angular points, and the
+    factors take 2x less storage and 4x less elimination work.  The ExB term with
+    ``E_r != 0`` and the tangential magnetic drifts are odd under ``R`` and diagonal
+    in ``l``, so they anticommute with ``S`` and the split does not exist; nor does it
+    for an up-down asymmetric field, or a grid not symmetric under ``R``.  All of it
+    is decided here, numerically, on the arrays the generator builds the blocks
+    from, so an asymmetric input keeps the unsplit route.
+    """
+    leaves = jax.tree_util.tree_leaves((coef, subs))
+    if op.n_theta * op.n_zeta < 2 or any(isinstance(a, jax.core.Tracer) for a in leaves):
+        return None
+    basis = _parity_basis(op.n_theta, op.n_zeta)
+    t, z = np.meshgrid(np.arange(op.n_theta), np.arange(op.n_zeta), indexing="ij")
+    ref = (((-t) % op.n_theta) * op.n_zeta + (-z) % op.n_zeta).ravel()
+
+    def odd_even(a, sign: float, matrix: bool) -> bool:
+        a = np.asarray(a)
+        r = a[..., ref][..., ref, :] if matrix else a[..., ref]
+        return bool(np.max(np.abs(a - sign * r), initial=0.0) <= _PARITY_TOL * np.max(np.abs(a), initial=0.0))
+
+    d1, d2, d3, dxi = subs[6:10]
+    if not (
+        odd_even(coef["stream"], -1.0, True) and odd_even(coef["mirror"], -1.0, False)
+        and odd_even(coef["exb"], 1.0, True) and odd_even(coef["c0"], 1.0, False)
+        and all(odd_even(d, 1.0, True) for d in (d1, d2, d3)) and odd_even(dxi, 1.0, False)
+    ):  # fmt: skip
+        return None
+    return basis
 
 def _strip_for_coarse(op: KineticOperator) -> KineticOperator:
     """The SFINCS-simplified operator the coarse preconditioner is built from.
@@ -737,7 +833,7 @@ def _interned(layout: tuple) -> tuple:
     return _LAYOUTS.setdefault(layout, layout)
 
 
-def _coarse_row_layout(op: KineticOperator) -> tuple[tuple[int, ...], tuple[int, ...]]:
+def _coarse_row_layout(op: KineticOperator, sectors: int = 1) -> tuple[tuple[int, ...], tuple[int, ...]]:
     """``(order, counts)``: which subsystems the dense route factors at each Legendre row.
 
     Subsystem ``b = s * n_x + x`` keeps rows ``l < Nxi_for_x[x]``, and never fewer
@@ -758,9 +854,9 @@ def _coarse_row_layout(op: KineticOperator) -> tuple[tuple[int, ...], tuple[int,
     active in.  :func:`_split_factors_by_speed` slices one speed's chain
     there.
     """
-    batch = op.n_species * op.n_x
+    batch = sectors * op.n_species * op.n_x  # parity sectors are species to the layout
     if isinstance(op.n_xi_for_x, jax.core.Tracer):
-        order = tuple(s * op.n_x + x for x in range(op.n_x) for s in range(op.n_species))
+        order = tuple(s * op.n_x + x for x in range(op.n_x) for s in range(batch // op.n_x))
         return _interned((order, (batch,) * op.n_xi))
     keep = [min(max(int(n), 1), op.n_xi) for n in np.asarray(op.n_xi_for_x)]
     length = [keep[b % op.n_x] for b in range(batch)]
@@ -1346,12 +1442,22 @@ def build_coarse_preconditioner(
     subs, floor, gamma = _coarse_generated_block_data(
         op, coef, mask, coll_diag, c0, drop_l_coupling, stacked=True
     )
+    # On a stellarator-symmetric deck the chain splits into two parity sectors,
+    # each on h ~ m / 2 angular functions, eliminated as two more "species".
+    parity = _coarse_parity(op, coef, subs)
+    sectors, n_tz_eff = 1, n_tz
+    if parity is not None:
+        sectors, n_tz_eff = 2, parity[0].size
+        coef = {**coef, "parity": tuple(jnp.asarray(a) for a in parity)}
+        subs = (*(jnp.concatenate([a, a]) for a in subs), jnp.repeat(jnp.asarray([1.0, -1.0]), batch))
+        floor, gamma = jnp.concatenate([floor, floor]), jnp.concatenate([gamma, gamma])
+    scale = sectors * n_tz_eff**2 / n_tz**2
     factors = None  # the one-shot checkpointed route keeps none
 
-    if _coarse_bands_fit(op):
+    if _coarse_bands_fit(op, scale):
         # Rows go straight from the generator into the elimination, so no band is
         # materialized first, and only the rows each chain keeps are stored.
-        rows = _coarse_row_layout(op)
+        rows = _coarse_row_layout(op, sectors)
         factor = functools.partial(
             _factor_coarse_rows, coef, subs, floor, gamma, n_xi=n_xi, rows=rows,
             drop_l_coupling=bool(drop_l_coupling),
@@ -1367,13 +1473,15 @@ def build_coarse_preconditioner(
         upper = (
             _strict_upper_speed_coupling(op, mask) if retain_speed_triangle else None
         )
+        if upper is not None:
+            upper = jnp.concatenate([upper] * sectors)
         # ``True`` is the exact inverse of D + U, which one back-substitution over
         # x reaches; an integer instead truncates the nilpotent series of D^-1 U,
         # trading exactness in M for an apply that stays batched over all speeds.
         sweeps = 0 if retain_speed_triangle is True else int(retain_speed_triangle or 0)
         split = lengths = offsets = None
         if upper is not None and retain_speed_triangle is True:
-            split, lengths, offsets = _split_factors_by_speed(factors, rows, n_s)  # empties the list
+            split, lengths, offsets = _split_factors_by_speed(factors, rows, sectors * n_s)  # empties the list
             factors = None
         else:
             factors = _unstack(factors)
@@ -1402,7 +1510,7 @@ def build_coarse_preconditioner(
                     subscripts = "slxy,sylt->sxlt" if not transpose else "slyx,sylt->sxlt"
                     return jnp.einsum(subscripts, upper, y)
 
-                g = v.reshape(n_s, n_x, n_xi, n_tz)
+                g = v.reshape(sectors * n_s, n_x, n_xi, n_tz_eff)
                 y = apply(g)
                 for _ in range(sweeps):
                     y = apply(g - couple(y))
@@ -1426,7 +1534,7 @@ def build_coarse_preconditioner(
         # can be applied tens of times per solve or has to be rebuilt each time.
         gen_data = (list(zip(*subs)), floor, gamma)
         pinned = _coarse_pinned_block_fns(coef, n_xi, *gen_data, drop_l_coupling)
-        reusable = _coarse_factors_fit(op)
+        reusable = _coarse_factors_fit(op, scale)
         warnings.warn(
             _coarse_reusable_fallback_message(op) if reusable
             else _coarse_generated_fallback_message(op),
@@ -1440,7 +1548,7 @@ def build_coarse_preconditioner(
             # elimination runs here, once, and every later application is two
             # triangular solves and two block regenerations per row -- so unlike the
             # checkpointed route below these factors amortize over a Krylov solve.
-            rows = _coarse_row_layout(op)
+            rows = _coarse_row_layout(op, sectors)
             factors, lengths = _factor_coarse_active_chains(
                 pinned, rows=rows
             )
@@ -1465,7 +1573,7 @@ def build_coarse_preconditioner(
                         coef_t, n_xi, subs_t, floor_t, gamma_t, drop_l_coupling
                     )
                     # Serial over the 5-10 subsystems for the same reason as below.
-                    g = v.reshape(batch, n_xi, n_tz)
+                    g = v.reshape(sectors * batch, n_xi, n_tz_eff)
                     low = facs[0].delta_lu.dtype
                     out = (g.astype(low) / (1.0 + floor_t).astype(low)[:, None, None]).astype(g.dtype)
                     solved = [
@@ -1489,7 +1597,7 @@ def build_coarse_preconditioner(
                     # Serial over the 5-10 subsystems on purpose: vmap would broadcast
                     # the generator, which computes all (S, X) blocks internally, to
                     # (S, X, TZ, TZ) per lane -- exactly the storage this route avoids.
-                    g = v.reshape(batch, n_xi, n_tz)
+                    g = v.reshape(sectors * batch, n_xi, n_tz_eff)
                     return jnp.stack([
                         block_thomas_checkpointed_fn(f, n_xi, g[b], transpose=transpose)
                         for b, f in enumerate(pinned)
@@ -1502,6 +1610,8 @@ def build_coarse_preconditioner(
                 return jax.jit(apply)
 
         a_inv, a_inv_t = _a_inv(False), _a_inv(True)
+    if parity is not None:
+        a_inv, a_inv_t = (_parity_wrapped(f, parity, batch, n_xi, n_tz) for f in (a_inv, a_inv_t))
     if factors is not None and not _any_traced(op):
         # Finish the asynchronously dispatched factorization here, so a caller's
         # build timing is the elimination rather than dispatch latency, without
@@ -1537,6 +1647,19 @@ def build_coarse_preconditioner(
         op, lambda: schur_projected_precond(a_inv_t, c_rows.T, b_cols.T), a_inv_t, c_rows, b_cols
     )
     return precond, precond_t
+
+
+def _parity_wrapped(a_inv: Callable, basis: tuple, batch: int, n_xi: int, m: int) -> Callable:
+    """``Q a_inv Q^T`` on flat vectors: the two sector solves, back on the grid."""
+    idx, ridx, sign, w, pos, c = _parity_maps(basis, n_xi, m)
+
+    def apply(v: jnp.ndarray) -> jnp.ndarray:
+        g = v.reshape(1, batch, n_xi, m)
+        y = w[:, None] * (g[..., idx] + sign[:, None, :, None] * g[..., ridx])
+        z = a_inv(y.reshape(-1)).reshape(2, batch, n_xi, -1)
+        return jnp.sum(c[:, None] * z[..., pos], axis=0).reshape(v.shape)
+
+    return apply
 
 
 def _any_traced(*trees: object) -> bool:
