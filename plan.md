@@ -16,7 +16,7 @@ This document is written so that an independent agent can pick it up cold and kn
 
 ```bash
 pip install -e .                                                  # from a checkout; Python >= 3.11
-JAX_ENABLE_X64=True DKX_CI=1 pytest -q -n 4 -m "not slow"         # the PR gate, about 10 min on a laptop
+JAX_ENABLE_X64=True pytest -q -n 4 -m "not slow"         # the PR gate, about 10 min on a laptop
 python -m sphinx -b html -W docs _build                            # docs must build warning-free
 dkx run examples/01_tokamak_profile/case.toml --out r.nc && dkx converge examples/01_tokamak_profile/case.toml
 ```
