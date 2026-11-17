@@ -291,8 +291,6 @@ def test_normalize_default_argv_keeps_parallel_flags() -> None:
     argv = [
         "--cores",
         "8",
-        "--transport-workers",
-        "3",
         "input.namelist",
         "--out",
         "sfincsOutput.h5",
@@ -300,8 +298,6 @@ def test_normalize_default_argv_keeps_parallel_flags() -> None:
     assert cli._normalize_default_argv(argv) == [
         "--cores",
         "8",
-        "--transport-workers",
-        "3",
         "write-output",
         "--input",
         "input.namelist",
@@ -326,25 +322,6 @@ def test_default_plot_output_path_handles_sfincsoutput_suffix() -> None:
     assert path.name == "sfincsOutput_summary.pdf"
 
 
-def test_apply_parallel_runtime_settings_sets_transport_workers(monkeypatch) -> None:
-    monkeypatch.delenv("DKX_TRANSPORT_PARALLEL", raising=False)
-    monkeypatch.delenv("DKX_TRANSPORT_PARALLEL_WORKERS", raising=False)
-
-    cli._apply_parallel_runtime_settings(
-        Namespace(
-            transport_workers=4,
-            distributed=False,
-            process_id=None,
-            process_count=None,
-            coordinator_address=None,
-            coordinator_port=None,
-        )
-    )
-
-    assert os.environ["DKX_TRANSPORT_PARALLEL"] == "process"
-    assert os.environ["DKX_TRANSPORT_PARALLEL_WORKERS"] == "4"
-
-
 def test_apply_parallel_runtime_settings_initializes_distributed(monkeypatch) -> None:
     calls: list[str] = []
 
@@ -360,7 +337,6 @@ def test_apply_parallel_runtime_settings_initializes_distributed(monkeypatch) ->
 
     cli._apply_parallel_runtime_settings(
         Namespace(
-            transport_workers=None,
             distributed=True,
             process_id=1,
             process_count=2,
@@ -381,8 +357,6 @@ def test_emit_parallel_runtime_info_reports_active_parallel_env(monkeypatch, cap
     monkeypatch.setenv("DKX_CORES", "8")
     monkeypatch.setenv("NPROC", "8")
     monkeypatch.setenv("DKX_CPU_DEVICES", "8")
-    monkeypatch.setenv("DKX_TRANSPORT_PARALLEL", "process")
-    monkeypatch.setenv("DKX_TRANSPORT_PARALLEL_WORKERS", "4")
     monkeypatch.setenv("DKX_DISTRIBUTED", "1")
     monkeypatch.setenv("DKX_PROCESS_ID", "1")
     monkeypatch.setenv("DKX_PROCESS_COUNT", "2")
@@ -393,7 +367,6 @@ def test_emit_parallel_runtime_info_reports_active_parallel_env(monkeypatch, cap
     out = capsys.readouterr().out
 
     assert "parallel: cores=8 threads=8 cpu_devices=8" in out
-    assert "transport_workers=4 requested; not applied" in out
     assert "multi_host: enabled=1 process_id=1 process_count=2 coordinator=node0 port=1234" in out
 
 
@@ -401,8 +374,6 @@ def test_emit_parallel_runtime_info_suppresses_empty_state(monkeypatch, capsys) 
     for name in (
         "DKX_CORES",
         "DKX_CPU_DEVICES",
-        "DKX_TRANSPORT_PARALLEL",
-        "DKX_TRANSPORT_PARALLEL_WORKERS",
         "DKX_DISTRIBUTED",
         "DKX_PROCESS_ID",
         "DKX_PROCESS_COUNT",
@@ -808,38 +779,6 @@ def test_main_preserves_cores_before_subcommand(monkeypatch, tmp_path: Path) -> 
     assert captured["threads"] == "4"
 
 
-def test_main_preserves_transport_workers_before_subcommand(monkeypatch, tmp_path: Path) -> None:
-    captured: dict[str, object] = {}
-
-    def _fake_run_transport_matrix(namelist_path, **kwargs):
-        captured["parallel_mode"] = os.environ.get("DKX_TRANSPORT_PARALLEL")
-        captured["workers"] = os.environ.get("DKX_TRANSPORT_PARALLEL_WORKERS")
-        out = Path(kwargs["out_path"])
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_bytes(b"")
-        return SimpleNamespace(output_path=out)
-
-    monkeypatch.setattr("dkx.cli.read_sfincs_input", lambda _path: _FakeNamelist(rhs_mode=2))
-    monkeypatch.setattr("dkx.run.run_transport_matrix", _fake_run_transport_matrix)
-
-    rc = cli.main(
-        [
-            "--transport-workers",
-            "3",
-            "write-output",
-            "--input",
-            str(tmp_path / "input.namelist"),
-            "--out",
-            str(tmp_path / "sfincsOutput.h5"),
-            "--quiet",
-        ]
-    )
-
-    assert rc == 0
-    assert captured["parallel_mode"] == "process"
-    assert captured["workers"] == "3"
-
-
 def test_cmd_run_fortran_reports_output_path(monkeypatch, tmp_path: Path, capsys) -> None:
     output_path = tmp_path / "run" / "sfincsOutput.h5"
     captured: dict[str, object] = {}
@@ -1153,17 +1092,3 @@ def test_write_output_geometry_only_emits_base_and_geometry_fields(tmp_path: Pat
     # No solve ran: the solution/moment datasets must be absent.
     for key in ("particleFlux_vm_psiHat", "FSABFlow", "transportMatrix"):
         assert key not in canonical, key
-
-
-def test_transport_workers_is_documented_as_not_applied_and_nothing_consumes_it() -> None:
-    """The flag only sets the environment and prints a banner; the help and docs say so.
-
-    If a solver starts reading ``DKX_TRANSPORT_PARALLEL*``, update the help text, the
-    banner and the docs rows that call the option inert, then change this test.
-    """
-    readers = sorted(
-        path.name
-        for path in Path(cli.__file__).parent.rglob("*.py")
-        if "DKX_TRANSPORT_PARALLEL" in path.read_text()
-    )
-    assert readers == ["cli.py"]

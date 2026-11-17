@@ -33,7 +33,6 @@ or, when the file is a VMEC equilibrium, runs a representative survey
 | `-q`, `--quiet` | minimal output; progress is suppressed |
 | `--cores N` | CPU threads for the solver, applied before JAX initializes; `0` lets XLA choose; when omitted the thread pool is clamped to `min(8, cpu_count)` |
 | `--fortran-stdout` / `--no-fortran-stdout` | mirror or silence the SFINCS v3 progress lines |
-| `--transport-workers N` | accepted for old scripts and not applied; transport right-hand sides are solved in one process |
 | `--distributed`, `--process-id`, `--process-count`, `--coordinator-address`, `--coordinator-port` | JAX multi-host initialization |
 
 `--cores` exists because XLA sizes its host thread pool once, when the CPU

@@ -299,15 +299,12 @@ def _emit_parallel_runtime_info(*, args: argparse.Namespace) -> None:
     cores = _env("DKX_CORES")
     threads = _env("NPROC")
     cpu_devices = _env("DKX_CPU_DEVICES")
-    transport_parallel = _env("DKX_TRANSPORT_PARALLEL", "off") or "off"
-    transport_workers = _env("DKX_TRANSPORT_PARALLEL_WORKERS", "1") or "1"
     distributed = _env("DKX_DISTRIBUTED")
 
     if not any(
         (
             cores,
             cpu_devices,
-            transport_parallel not in {"", "off"},
             distributed,
         )
     ):
@@ -318,11 +315,6 @@ def _emit_parallel_runtime_info(*, args: argparse.Namespace) -> None:
         f" cores={cores or '-'}"
         f" threads={threads or '-'}"
         f" cpu_devices={cpu_devices or '-'}",
-        level=1,
-        args=args,
-    )
-    _emit(
-        f" transport_workers={transport_workers} requested; not applied, right-hand sides solve in this process",
         level=1,
         args=args,
     )
@@ -911,12 +903,6 @@ def _apply_runtime_env_defaults() -> None:
     os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
 
 def _apply_parallel_runtime_settings(args: argparse.Namespace) -> None:
-    transport_workers = getattr(args, "transport_workers", None)
-    if transport_workers is not None:
-        workers_val = max(1, int(transport_workers))
-        os.environ["DKX_TRANSPORT_PARALLEL"] = "process" if workers_val > 1 else "off"
-        os.environ["DKX_TRANSPORT_PARALLEL_WORKERS"] = str(workers_val)
-
     if bool(getattr(args, "distributed", False)):
         from . import initialize_distributed_runtime_from_env  # noqa: PLC0415
 
