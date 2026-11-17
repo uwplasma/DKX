@@ -536,6 +536,14 @@ def test_the_budget_prefers_available_memory_over_physical_ram(monkeypatch):
     assert batch.resolve_memory_budget_bytes() == batch._DEFAULT_BUDGET_FRACTION * 64.0e9
 
 
+def test_a_small_deck_keeps_its_bands_when_another_job_holds_the_memory(monkeypatch):
+    """stFT9 read a 0.0 GiB budget on a loaded box and took 74.6 s warm instead of 0.4 s."""
+    monkeypatch.setattr("dkx.coarse_precond._available_memory_bytes", lambda: 0.0)
+    monkeypatch.setattr("dkx.coarse_precond._host_memory_bytes", lambda: 64.0e9)
+    assert coarse_precond._coarse_memory_budget() == coarse_precond._COARSE_BUDGET_FLOOR
+    assert _coarse_bands_fit(_small_op())
+
+
 def test_the_budget_falls_back_to_physical_ram_when_available_is_unreadable(monkeypatch):
     """A platform that hides the honest number must not lose the guard entirely."""
     monkeypatch.setattr("dkx.coarse_precond._available_memory_bytes", lambda: None)

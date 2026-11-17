@@ -206,10 +206,19 @@ _COARSE_RESIDENT_OVERHEAD = 1.25
 #: are one, so a larger transient than the factor route is what to expect.
 _COARSE_BAND_RESIDENT_OVERHEAD = 1.45
 
+#: Allocations the guard never refuses.  Refusing a few megabytes saves nothing and
+#: costs a far slower route: a 7x9x16 W7-X deck (3 MB of bands) read a 0.0 GiB
+#: budget while another job held the machine's memory, was sent to the one-shot
+#: route and took 74.6 s warm instead of 0.4 s (office, 2026-11-16).
+_COARSE_BUDGET_FLOOR = 2.0**30
+
 def _coarse_memory_budget() -> float | None:
-    """What the preconditioner may claim: available memory, else physical RAM."""
-    available = _available_memory_bytes()
-    return available if available is not None else _host_memory_bytes()
+    """What the preconditioner may claim: available memory, else physical RAM,
+    and never less than :data:`_COARSE_BUDGET_FLOOR` (or the RAM, if smaller)."""
+    available, physical = _available_memory_bytes(), _host_memory_bytes()
+    if available is None:
+        return physical
+    return max(available, _COARSE_BUDGET_FLOOR if physical is None else min(_COARSE_BUDGET_FLOOR, physical))
 
 def coarse_preconditioner_factor_bytes(op: KineticOperator) -> float:
     """Bytes the reusable Schur-LU-only factors retain.
