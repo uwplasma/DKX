@@ -159,25 +159,42 @@ class CoupledSolver:
     # Scanned tail l >= len(lu): stacked (LU, piv, Lo ab, U ab, Lo scale, U scale),
     # then the float32 per-species streaming blocks and mirror diagonals.
     tail: tuple = ()
+    # Rows lo <= l < hi of a run of equal pairs, stacked: ((LU, piv) of S_l, Lo_(l+1), U_l);
+    # their entries in lu, lower and upper are None. ``bounds`` holds the (lo, hi).
+    runs: tuple = ()
+    bounds: tuple = ()
 
     def tree_flatten(self):
-        return (self.op, self.lu, self.lower, self.upper, self.bc, self.mom, self.tail), None
+        return (self.op, self.lu, self.lower, self.upper, self.bc, self.mom, self.tail, self.runs), self.bounds
+
+    def _run(self, l: int, shift: int) -> tuple | None:
+        """``(i, run)`` when row ``l`` is entry ``i`` of a run's stacks shifted by ``shift``."""
+        for (lo, hi), run in zip(self.bounds, self.runs):
+            if lo + shift <= l < hi + shift:
+                return l - lo - shift, run
+        return None
 
     def _lu(self, l: int) -> tuple:
+        if (hit := self._run(l, 0)) is not None:
+            return tuple(a[hit[0]] for a in hit[1][0])
         n = len(self.lu)
         return self.lu[l] if l < n else (self.tail[0][l - n], self.tail[1][l - n])
 
     def _lo(self, l: int) -> Any:
+        if (hit := self._run(l, 1)) is not None:
+            return hit[1][1][hit[0]]
         n = len(self.lower)
         return self.lower[l] if l < n else (*self.tail[6:], self.tail[2][l - n], self.tail[4][l - n])
 
     def _up(self, l: int) -> Any:
+        if (hit := self._run(l, 0)) is not None:
+            return hit[1][2][hit[0]]
         n = len(self.upper)
         return self.upper[l] if l < n else (*self.tail[6:], self.tail[3][l - n], self.tail[5][l - n])
 
     @classmethod
-    def tree_unflatten(cls, _aux, children):
-        return cls(*children)
+    def tree_unflatten(cls, aux, children):
+        return cls(*children, bounds=aux)
 
     # -- f-block with the gamma B C lift --------------------------------------
     def _a_solve(self, r: jnp.ndarray, transpose: bool) -> jnp.ndarray:
@@ -204,8 +221,19 @@ class CoupledSolver:
             layout = layout[:k] + [layout[k]] * (len(layout) - k)
         g = r.reshape(n_s * n_x, n_xi, tz)
         n_l = len(layout)
-        rows = [g[layout[l], l].reshape(-1) for l in range(n_l)]
+        # A run's rows lo <= l < hi share their pairs, so they are gathered and swept
+        # as one stack: one lax.scan per run, not one program copy per row.
+        inside = {l for lo_l, hi_l in self.bounds for l in range(lo_l + 1, hi_l)}
+        rows = [None if l in inside else g[layout[l], l].reshape(-1) for l in range(n_l)]
+        stack = {
+            (lo_l, hi_l): jnp.moveaxis(g[layout[lo_l], lo_l:hi_l], 1, 0).reshape(hi_l - lo_l, -1)
+            for lo_l, hi_l in self.bounds
+        }
         sel = [np.searchsorted(layout[l - 1], layout[l]) for l in range(1, n_l)]
+        mul = lambda b, v, t=False: _bmul(b, v.reshape(-1, tz), t).reshape(-1)  # noqa: E731
+        top = {hi_l - 1: (lo_l, hi_l, run) for (lo_l, hi_l), run in zip(self.bounds, self.runs)}
+        bottom = {lo_l: (lo_l, hi_l, run) for (lo_l, hi_l), run in zip(self.bounds, self.runs)}
+        swept: dict = {}  # per run, the stacked rows of the first sweep
 
         def lo(l: int, y: jnp.ndarray) -> jnp.ndarray:  # Lo_l y_(l-1)
             yk = y.reshape(-1, tz)[sel[l - 1]]
@@ -250,11 +278,37 @@ class CoupledSolver:
                 ys = jax.lax.scan(back, rows_t[-1], jnp.arange(len(rows_t) - 1), reverse=True)[1]
                 ys_all = jnp.concatenate([ys, rows_t[-1:]])
                 y[k] = ys_all[0]
-            for l in range(k - 1, -1, -1):
+            l = k - 1
+            while l >= 0:
+                if l in top:  # y_l = r_l - U_l S_(l+1)^-1 y_(l+1), rows hi - 1 down to lo
+                    lo_l, hi_l, ((lu_r, piv_r), _lo_r, up_r) = top[l]
+
+                    def back_run(t, xs):
+                        yl = xs[0] - mul(xs[1], t)
+                        return _lus(xs[2:], yl), yl
+
+                    xs = (stack[(lo_l, hi_l)], up_r, lu_r, piv_r)
+                    swept[lo_l] = jax.lax.scan(back_run, _lus(self._lu(hi_l), y[hi_l]), xs, reverse=True)[1]
+                    y[lo_l], l = swept[lo_l][0], lo_l - 1
+                    continue
                 y[l] = rows[l] - up(l, _lus(self._lu(l + 1), y[l + 1]))
+                l -= 1
             sol[0] = _lus(self._lu(0), y[0])
-            for l in range(1, k + 1):
+            l = 1
+            while l <= k:
+                if l - 1 in bottom and l < bottom[l - 1][1]:  # rows lo + 1 to hi - 1
+                    lo_l, hi_l, ((lu_r, piv_r), lo_r, _up_r) = bottom[l - 1]
+
+                    def fwd_run(sp, xs):
+                        si = _lus(xs[2:], xs[0] - mul(xs[1], sp))
+                        return si, si
+
+                    xs = (swept[lo_l][1:], lo_r[:-1], lu_r[1:], piv_r[1:])
+                    swept[lo_l] = jax.lax.scan(fwd_run, sol[lo_l], xs)[1]
+                    sol[hi_l - 1], l = swept[lo_l][-1], hi_l
+                    continue
                 sol[l] = _lus(self._lu(l), y[l] - lo(l, sol[l - 1]))
+                l += 1
             if self.tail:
 
                 def fwd(sp, i):
@@ -275,11 +329,37 @@ class CoupledSolver:
                 ws_all = jnp.concatenate([ws, w_top[None]])
             w = rows[: k + 1]
             w[k] = ws_all[0] if self.tail else _lus(self._lu(k), rows[k], trans=1)
-            for l in range(k - 1, -1, -1):
+            l = k - 1
+            while l >= 0:
+                if l in top:  # w_l = S_l^-T (r_l - Lo_(l+1)^T w_(l+1)), rows hi - 1 down to lo
+                    lo_l, hi_l, ((lu_r, piv_r), lo_r, _up_r) = top[l]
+
+                    def back_run_t(wn, xs):
+                        wl = _lus(xs[2:], xs[0] - mul(xs[1], wn, True), 1)
+                        return wl, wl
+
+                    xs = (stack[(lo_l, hi_l)], lo_r, lu_r, piv_r)
+                    swept[lo_l] = jax.lax.scan(back_run_t, w[hi_l], xs, reverse=True)[1]
+                    w[lo_l], l = swept[lo_l][0], lo_l - 1
+                    continue
                 w[l] = _lus(self._lu(l), rows[l] - lo_t(l + 1, w[l + 1]), trans=1)
+                l -= 1
             sol[0] = w[0]
-            for l in range(k):
+            l = 0
+            while l < k:
+                if l in bottom and l + 1 < bottom[l][1]:  # rows lo + 1 to hi - 1
+                    lo_l, hi_l, ((lu_r, piv_r), _lo_r, up_r) = bottom[l]
+
+                    def fwd_run_t(sp, xs):
+                        si = xs[0] - _lus(xs[2:], mul(xs[1], sp, True), 1)
+                        return si, si
+
+                    xs = (swept[lo_l][1:], up_r[:-1], lu_r[1:], piv_r[1:])
+                    swept[lo_l] = jax.lax.scan(fwd_run_t, sol[lo_l], xs)[1]
+                    sol[hi_l - 1], l = swept[lo_l][-1], hi_l - 1
+                    continue
                 sol[l + 1] = w[l + 1] - _lus(self._lu(l + 1), up_t(l, sol[l]), trans=1)
+                l += 1
             if self.tail:
 
                 def fwd_t(sp, i):
@@ -292,7 +372,12 @@ class CoupledSolver:
         # inverse of the pinned operator of dkx.solve._pinned_matvecs.
         out = g
         for l in range(k + 1):
-            out = out.at[layout[l], l].set(sol[l].reshape(-1, tz))
+            if l not in inside:
+                out = out.at[layout[l], l].set(sol[l].reshape(-1, tz))
+        for lo_l, hi_l in self.bounds:  # the swept rows lo + 1 to hi - 1 of each run
+            if hi_l - lo_l > 1:
+                blocks = jnp.moveaxis(swept[lo_l].reshape(hi_l - lo_l - 1, -1, tz), 0, 1)
+                out = out.at[layout[lo_l][:, None], np.arange(lo_l + 1, hi_l)[None, :]].set(blocks)
         if self.tail and len(rows_t) > 1:
             blocks = jnp.moveaxis(sol_t.reshape(len(rows_t) - 1, -1, tz), 0, 1)
             out = out.at[layout[k][:, None], np.arange(k + 1, n_l)[None, :]].set(blocks)
@@ -546,6 +631,7 @@ def _factor(
         last = d0 if n_l == 1 else diag_block(n_l - 1)
         lus[-1] = _tail_lu(last) if last.ndim == 3 else lu_factor(last)
     run_at = {hi_l - 1: (lo_l, hi_l) for lo_l, hi_l in runs}  # keyed by the run's top row
+    run_store: dict = {}
     for l in range(n_chain - 2 if not scanned else keep - 1, -1, -1):
         if l in in_run:
             if l in run_at:
@@ -562,8 +648,8 @@ def _factor(
                 (lu_r, piv_r), lo_r, up_r = jax.lax.scan(
                     row, lus[hi_l], jnp.arange(lo_l, hi_l), reverse=True
                 )[1]
-                for i, ell in enumerate(range(lo_l, hi_l)):
-                    lus[ell], lowers[ell + 1], uppers[ell] = (lu_r[i], piv_r[i]), lo_r[i], up_r[i]
+                run_store[(lo_l, hi_l)] = ((lu_r, piv_r), lo_r, up_r)
+                lus[lo_l] = (lu_r[0], piv_r[0])  # the row below the run eliminates against it
             continue
         sel = np.searchsorted(layout[l], layout[l + 1])
         k_l = len(layout[l])
@@ -605,8 +691,16 @@ def _factor(
         ((lu_s, piv_s), lowers, uppers) = jax.lax.scan(step, last, jnp.arange(n_l - 1), reverse=True)[1]
         lus = (jnp.concatenate([lu_s, last[0][None]]), jnp.concatenate([piv_s, last[1][None]]))
     else:
+        for lo_l, hi_l in runs:  # stored stacked, so the sweeps scan them too
+            lus[lo_l:hi_l] = [None] * (hi_l - lo_l)
+            lowers[lo_l + 1 : hi_l + 1] = [None] * (hi_l - lo_l)
+            uppers[lo_l:hi_l] = [None] * (hi_l - lo_l)
         lus, lowers, uppers = tuple(lus[:n_chain]), tuple(lowers[:n_chain]), tuple(uppers)
-    solver = CoupledSolver(op, lus, lowers, uppers, (b, c, gamma) + (None,) * 4, tail=tail)
+    bounds = tuple(sorted(run_store))
+    solver = CoupledSolver(
+        op, lus, lowers, uppers, (b, c, gamma) + (None,) * 4, tail=tail,
+        runs=tuple(run_store[r] for r in bounds), bounds=bounds,
+    )
     if q is not None:
         qf = jnp.zeros((n_s * n_x, n_xi, tz, n_s)).at[layout[1], 1].set(q.reshape(-1, tz, n_s))
         qf = qf.reshape(-1, n_s)
