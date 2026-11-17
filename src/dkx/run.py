@@ -309,6 +309,16 @@ def _startup_lines(
     return lines
 
 
+def _deck_tolerance(inp: SfincsInput) -> float:
+    """The deck's ``solverTolerance``: what ``tol=None`` means for a deck-driven solve."""
+    try:
+        if inp.raw is not None:
+            return float(inp.raw.group("resolutionParameters").get("SOLVERTOLERANCE", 1e-10))
+        return float(inp.resolution.solver_tolerance)
+    except (TypeError, ValueError):
+        return 1e-10
+
+
 def run_transport_matrix(
     namelist_path: str | Path | SfincsInput,
     *,
@@ -330,7 +340,8 @@ def run_transport_matrix(
             (runs without touching disk).
         method: :func:`dkx.solve.solve` method (``"auto"`` picks
             the structured direct route for the PAS/DKES family).
-        tol: relative residual tolerance per whichRHS column; ``None`` is ``1e-10``.
+        tol: relative residual tolerance per whichRHS column; ``None`` reads the
+            deck's ``solverTolerance`` (``1e-10`` if the deck omits it).
         solver: full typed knob set (:class:`dkx.api.SolverOptions`)
             for the multi-RHS solve; when given, it supersedes
             ``method`` and ``tol``.
@@ -352,7 +363,7 @@ def run_transport_matrix(
     """
     inp, source_path, input_name = _resolve_run_input(namelist_path)
     if solver is None:
-        solver = SolverOptions(method=method, tol=1e-10 if tol is None else tol)
+        solver = SolverOptions(method=method, tol=_deck_tolerance(inp) if tol is None else tol)
     rhs_mode = inp.general.rhs_mode
     if rhs_mode not in (2, 3):
         raise NotImplementedError(
@@ -616,8 +627,8 @@ def run_profile(
         method: :func:`dkx.solve.solve` method (``"auto"`` picks
             structured direct for the PAS/DKES family and recycled Krylov for
             Fokker-Planck collisions).
-        tol: relative residual tolerance for the single-RHS solve; ``None`` is
-            ``1e-10``.
+        tol: relative residual tolerance for the single-RHS solve; ``None`` reads
+            the deck's ``solverTolerance`` (``1e-10`` if the deck omits it).
         solver: full typed knob set (:class:`dkx.api.SolverOptions`) for
             the single-RHS solve; when given, it supersedes ``method``
             and ``tol``.  ``includePhi1`` decks route to the Newton-Krylov
@@ -641,7 +652,7 @@ def run_profile(
     """
     inp, source_path, input_name = _resolve_run_input(namelist_path)
     if solver is None:
-        solver = SolverOptions(method=method, tol=1e-10 if tol is None else tol)
+        solver = SolverOptions(method=method, tol=_deck_tolerance(inp) if tol is None else tol)
     if inp.general.rhs_mode != 1:
         raise NotImplementedError(
             "run_profile supports RHSMode=1; use run_transport_matrix for RHSMode 2/3."
@@ -875,7 +886,8 @@ def run_from_namelist(
         out_path: output file; the suffix selects ``.h5``/``.nc``/``.npz``.
         method: :func:`dkx.solve.solve` method for the solve runs.
         tol: relative residual tolerance; ``None`` reads the deck's
-            ``solverTolerance`` (default ``1e-10``), matching the CLI.
+            ``solverTolerance`` (``1e-10`` if the deck omits it), as in
+            :func:`run_profile`.
         solver: full typed knob set (:class:`dkx.api.SolverOptions`);
             when given, it supersedes ``method`` and ``tol``.
         overwrite: when ``False``, raise :class:`FileExistsError` if
@@ -904,19 +916,8 @@ def run_from_namelist(
         )
     if isinstance(namelist_path, SfincsInput):
         rhs_mode = int(namelist_path.general.rhs_mode)
-        if namelist_path.raw is not None:
-            deck_tol: Any = namelist_path.raw.group("resolutionParameters").get("SOLVERTOLERANCE", 1e-10)
-        else:
-            deck_tol = namelist_path.resolution.solver_tolerance
     else:
-        nml = read_sfincs_input(namelist_path)
-        rhs_mode = int(nml.group("general").get("RHSMODE", 1))
-        deck_tol = nml.group("resolutionParameters").get("SOLVERTOLERANCE", 1e-10)
-    if tol is None:
-        try:
-            tol = float(deck_tol)
-        except (TypeError, ValueError):
-            tol = 1e-10
+        rhs_mode = int(read_sfincs_input(namelist_path).group("general").get("RHSMODE", 1))
     if rhs_mode == 1:
         return run_profile(
             namelist_path,
@@ -1018,8 +1019,9 @@ def run(
             compatibility input from ``parameters`` alone.
         out_path: output file to write; ``None`` keeps the result in memory only.
         method: ``"auto"``, ``"direct"`` or ``"iterative"``.
-        tol: relative residual tolerance; ``None`` uses the case's own
-            ``solverTolerance``.
+        tol: relative residual tolerance for deck inputs; ``None`` reads the
+            deck's ``solverTolerance``.  A native :class:`dkx.Case` carries its
+            own tolerance and ignores ``tol``.
         emit: sink for the Fortran-parity progress block; ``None`` is silent.
         **parameters: SFINCS input parameters, overriding the case.
 
