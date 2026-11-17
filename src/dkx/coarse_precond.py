@@ -681,7 +681,9 @@ def _parity_maps(basis: tuple, n_xi: int, m: int) -> tuple[np.ndarray, ...]:
 _PARITY_TOL = 1e-12
 
 
-def _coarse_parity(op: KineticOperator, coef: dict, subs: tuple) -> tuple | None:
+def _coarse_parity(
+    op: KineticOperator, coef: dict, even_matrices: tuple = (), even_vectors: tuple = ()
+) -> tuple | None:
     """The parity basis when the coarse operator commutes with ``S = (-1)^l R``, else ``None``.
 
     ``R`` reflects the angles, ``(theta, zeta) -> (-theta, -zeta)``.  On a
@@ -694,9 +696,10 @@ def _coarse_parity(op: KineticOperator, coef: dict, subs: tuple) -> tuple | None
     in ``l``, so they anticommute with ``S`` and the split does not exist; nor does it
     for an up-down asymmetric field, or a grid not symmetric under ``R``.  All of it
     is decided here, numerically, on the arrays the generator builds the blocks
-    from, so an asymmetric input keeps the unsplit route.
+    from (plus the route's own ``R``-even matrices and vectors: drift parts, border
+    weights), so an asymmetric input keeps the unsplit route.
     """
-    leaves = jax.tree_util.tree_leaves((coef, subs))
+    leaves = jax.tree_util.tree_leaves((coef, even_matrices, even_vectors))
     if op.n_theta * op.n_zeta < 2 or any(isinstance(a, jax.core.Tracer) for a in leaves):
         return None
     basis = _parity_basis(op.n_theta, op.n_zeta)
@@ -708,11 +711,11 @@ def _coarse_parity(op: KineticOperator, coef: dict, subs: tuple) -> tuple | None
         r = a[..., ref][..., ref, :] if matrix else a[..., ref]
         return bool(np.max(np.abs(a - sign * r), initial=0.0) <= _PARITY_TOL * np.max(np.abs(a), initial=0.0))
 
-    d1, d2, d3, dxi = subs[6:10]
     if not (
         odd_even(coef["stream"], -1.0, True) and odd_even(coef["mirror"], -1.0, False)
         and odd_even(coef["exb"], 1.0, True) and odd_even(coef["c0"], 1.0, False)
-        and all(odd_even(d, 1.0, True) for d in (d1, d2, d3)) and odd_even(dxi, 1.0, False)
+        and all(odd_even(d, 1.0, True) for d in even_matrices)
+        and all(odd_even(d, 1.0, False) for d in even_vectors)
     ):  # fmt: skip
         return None
     return basis
@@ -1444,7 +1447,7 @@ def build_coarse_preconditioner(
     )
     # On a stellarator-symmetric deck the chain splits into two parity sectors,
     # each on h ~ m / 2 angular functions, eliminated as two more "species".
-    parity = _coarse_parity(op, coef, subs)
+    parity = _coarse_parity(op, coef, subs[6:9], subs[9:10])
     sectors, n_tz_eff = 1, n_tz
     if parity is not None:
         sectors, n_tz_eff = 2, parity[0].size

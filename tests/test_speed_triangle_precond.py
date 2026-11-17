@@ -395,6 +395,27 @@ def test_the_coupled_route_solves_full_fokker_planck_exactly(tmp_path, species, 
         assert error < (1e-7 if transpose else 1e-9), (transpose, error)
 
 
+@pytest.mark.parametrize("keep", [None, 2])
+def test_a_symmetric_deck_factors_each_parity_half_of_the_coupled_blocks(tmp_path, monkeypatch, keep) -> None:
+    """Every Schur complement commutes with the angular reflection on a symmetric field, so
+    the coupled LUs are taken of its even and odd halves: the same inverse from half the storage."""
+    import jax
+
+    import dkx.structured_direct as sd
+
+    op = replace(_two_species_operator(tmp_path, nx=4), n_xi_for_x=jnp.asarray([3, 4, 5, 6]))
+    assert sd._coupled_parity(op, None) is not None
+    split = sd.build_coupled_solver(op, keep)
+    monkeypatch.setattr(sd, "_coupled_parity", lambda *_: None)
+    whole = sd.build_coupled_solver(op, keep)
+    b = jnp.asarray(np.random.default_rng(3).standard_normal(op.total_size))
+    for transpose in (False, True):
+        x, y = split.solve(b, transpose=transpose), whole.solve(b, transpose=transpose)
+        assert float(jnp.linalg.norm(x - y) / jnp.linalg.norm(y)) < (1e-8 if keep is None else 1e-4)  # float32 tail
+    nbytes = lambda s: sum(a.nbytes for a in jax.tree_util.tree_leaves((s.lu, s.tail[:2])))  # noqa: E731
+    assert nbytes(split) < 0.6 * nbytes(whole)
+
+
 def test_auto_takes_the_coupled_route_and_matches_krylov(tmp_path) -> None:
     from dkx.solve import solve
 

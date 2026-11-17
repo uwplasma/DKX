@@ -256,7 +256,7 @@ def _parity_inputs(op: KineticOperator) -> tuple:
     coef = cp._truncated_coefficients(cp._strip_for_coarse(op))
     c0 = op._fs_average_factor().reshape(-1)
     subs = cp._coarse_generated_block_data(op, coef, op._mask(), None, c0, False, stacked=True)[0]
-    return coef, subs
+    return coef, subs[6:9], subs[9:10]
 
 
 def _reflect(op: KineticOperator, f: jnp.ndarray) -> jnp.ndarray:

@@ -98,11 +98,106 @@ def coupled_flops(op: KineticOperator) -> float:
     return float(sum((2.0 / 3.0) * a**3 + 2.0 * a * a * b for a, b in zip(n, n[1:] + [0])))
 
 
+@jtu.register_pytree_node_class
+@dataclass(frozen=True)
+class _ParityLU:
+    """One factor array of an ``R``-even block, kept as its even and odd halves.
+
+    On a stellarator-symmetric deck every Schur complement commutes with the
+    angular reflection ``R`` (:func:`dkx.coarse_precond._coarse_parity`), so in
+    the reflection-parity basis it is two blocks of about half the size: 4x less
+    elimination work and half the storage.  ``maps`` is
+    ``(idx, ridx, w_even, w_odd, pos, c_even, c_odd)`` of that basis.
+    """
+
+    even: jnp.ndarray
+    odd: jnp.ndarray
+    maps: tuple
+
+    def tree_flatten(self):
+        return (self.even, self.odd, self.maps), None
+
+    @classmethod
+    def tree_unflatten(cls, _aux, children):
+        return cls(*children)
+
+    def __getitem__(self, i):  # one row of a stack over l
+        return jax.tree.map(lambda a: a[i], self)
+
+    ndim, shape, dtype = (property(lambda self, k=k: getattr(self.even, k)) for k in ("ndim", "shape", "dtype"))
+
+
+def _rotation_maps(basis: tuple, tz: int) -> tuple:
+    """The rotation into the parity basis of ``coarse_precond._parity_basis`` and back."""
+    idx, ridx, w_even, w_odd = (np.asarray(a) for a in basis)
+    pos = np.empty(tz, dtype=np.int64)
+    pos[ridx], pos[idx] = np.arange(idx.size), np.arange(idx.size)
+    point = np.arange(tz)
+    rep, mir = idx[pos] == point, ridx[pos] == point
+    c = [w[pos] * (rep + p * mir) for w, p in ((w_even, 1.0), (w_odd, -1.0))]
+    return tuple(jnp.asarray(a) for a in (idx, ridx, w_even, w_odd, pos, *c))
+
+
+def _rotate(y: jnp.ndarray, maps: tuple, p: float) -> jnp.ndarray:
+    """Parity ``p`` part of ``y`` along axis 1, ``(k, TZ, ...) -> (k, h, ...)``."""
+    idx, ridx, w_even, w_odd = maps[:4]
+    w = (w_even if p > 0 else w_odd).reshape(-1, *(1,) * (y.ndim - 2))
+    return w * (y[:, idx] + p * y[:, ridx])
+
+
+def _unrotate(even: jnp.ndarray, odd: jnp.ndarray, maps: tuple) -> jnp.ndarray:
+    pos, c_even, c_odd = maps[4:]
+    shape = (-1, *(1,) * (even.ndim - 2))
+    return c_even.reshape(shape) * even[:, pos] + c_odd.reshape(shape) * odd[:, pos]
+
+
+def _parity_factor(d: jnp.ndarray, maps: tuple, factor: Any) -> tuple:
+    """``factor`` of the even and odd halves of ``d``: dense ``(k TZ, k TZ)`` or per pair ``(k, TZ, TZ)``."""
+    tz = maps[4].shape[0]
+    dense = d.ndim == 2
+    blocks = d.reshape(-1, tz, d.shape[0] // tz, tz) if dense else d
+    halves = []
+    for p, w in ((1.0, maps[2]), (-1.0, maps[3])):
+        rows = _rotate(blocks, maps, p)
+        cols = _rotate(jnp.moveaxis(rows, -1, 1), maps, p)
+        b = jnp.moveaxis(cols, 1, -1).astype(d.dtype)
+        pad = jnp.where(w == 0.0, 1.0, 0.0).astype(b.dtype)
+        if dense:
+            k, h = b.shape[0], b.shape[1]
+            b = (b + jnp.einsum("jk,ab->jakb", jnp.eye(k, dtype=b.dtype), jnp.diag(pad))).reshape(k * h, k * h)
+        else:
+            b = b + jnp.diag(pad)
+        halves.append(factor(b))
+    (lu_e, piv_e), (lu_o, piv_o) = halves
+    return _ParityLU(lu_e, lu_o, maps), _ParityLU(piv_e, piv_o, maps)
+
+
+def _lu_solve(f: tuple, y: jnp.ndarray, trans: int = 0) -> jnp.ndarray:
+    """``lu_solve`` that also takes :class:`_ParityLU` factors; ``y`` is ``(k TZ, ...)``
+    against a dense LU, ``(k, TZ, ...)`` against a per-pair batch."""
+    lu, piv = f
+    if not isinstance(lu, _ParityLU):
+        if lu.ndim == 2:
+            return lu_solve(f, y, trans=trans)
+        return jax.vmap(lambda a, q, b: lu_solve((a, q), b, trans=trans))(lu, piv, y)
+    maps, tz = lu.maps, lu.maps[4].shape[0]
+    dense = lu.ndim == 2
+    g = y.reshape(-1, tz, *y.shape[1:]) if dense else y
+    out = []
+    for p, a, q in ((1.0, lu.even, piv.even), (-1.0, lu.odd, piv.odd)):
+        r = _rotate(g, maps, p).astype(a.dtype)
+        r = r.reshape(-1, *r.shape[2:]) if dense else r
+        s = _lu_solve((a, q), r, trans)
+        out.append(s.reshape(g.shape[0], -1, *y.shape[1:]) if dense else s)
+    v = _unrotate(*out, maps)
+    return v.reshape(y.shape).astype(y.dtype)
+
+
 def _lus(f: tuple, y: jnp.ndarray, trans: int = 0) -> jnp.ndarray:
     """``S^-1 y`` for a dense LU or a per-pair batch of ``(TZ, TZ)`` LUs (the tail)."""
     if f[0].ndim == 2:
-        return lu_solve(f, y.astype(f[0].dtype), trans=trans).astype(y.dtype)
-    out = lu_solve(f, y.reshape(f[0].shape[0], -1, 1).astype(f[0].dtype), trans=trans)
+        return _lu_solve(f, y.astype(f[0].dtype), trans=trans).astype(y.dtype)
+    out = _lu_solve(f, y.reshape(f[0].shape[0], -1, 1).astype(f[0].dtype), trans=trans)
     return out.reshape(-1).astype(y.dtype)
 
 
@@ -385,19 +480,25 @@ def _schur_update(d, lu_next, lo, up, sel) -> jnp.ndarray:
 
     def body(j, d):
         rhs = jnp.zeros((k_n, tz, tz), lo.dtype).at[j].set(lo[j]).reshape(k_n * tz, tz)
-        w = lu_solve(lu_next, rhs.astype(lu_next[0].dtype)).astype(d.dtype).reshape(k_n, tz, tz)
+        w = _lu_solve(lu_next, rhs.astype(lu_next[0].dtype)).astype(d.dtype).reshape(k_n, tz, tz)
         return d.at[sel, :, sel[j], :].add(-jnp.einsum("kab,kbc->kac", up, w))
 
     return jax.lax.fori_loop(0, k_n, body, d)
 
 
-def _tail_lu(d: jnp.ndarray) -> tuple:
+def _tail_lu(d: jnp.ndarray, maps: tuple | None = None) -> tuple:
     """Per-pair tail LUs, stored in float32: they only precondition (SOLVAX #133)."""
-    return lu_factor(d.astype(jnp.float32))
+    return _lu(d.astype(jnp.float32), maps)
+
+
+def _lu(d: jnp.ndarray, maps: tuple | None) -> tuple:
+    """``lu_factor``, batched over a leading pair axis, of each parity half when ``maps``."""
+    return lu_factor(d) if maps is None else _parity_factor(d, maps, lu_factor)
 
 
 def _factor(
-    op: KineticOperator, keep: int | None = None, drifts: Any = None, f32: bool = False
+    op: KineticOperator, keep: int | None = None, drifts: Any = None, f32: bool = False,
+    parity: tuple | None = None,
 ) -> CoupledSolver:
     n_s, n_x, n_xi, n_t, n_z = op.f_shape
     tz = n_t * n_z
@@ -417,7 +518,7 @@ def _factor(
     keep = len(layout) if keep is None else max(2, min(int(keep), len(layout)))
 
     def dense_lu(d: jnp.ndarray) -> tuple:  # float32 only when preconditioning
-        return lu_factor(d.astype(jnp.float32)) if f32 else lu_factor(d)
+        return _lu(d.astype(jnp.float32) if f32 else d, parity)
 
     def pair_diag(l: int, act: np.ndarray) -> jnp.ndarray:
         """Per-pair angular diagonal blocks, plus the L-diagonal magnetic drifts
@@ -508,20 +609,16 @@ def _factor(
             lu1, piv1, lo1 = carry
             bl = stripped.legendre_blocks(l)
             up, lo = (getattr(bl, k).reshape(-1, tz, tz) for k in ("upper", "lower"))
-            w = jax.vmap(lambda f0, f1, r: lu_solve((f0, f1), r))(lu1, piv1, lo1)
+            w = _lu_solve((lu1, piv1), lo1)
             m = op._mask()[act % n_x, l][:, None, None]  # 0 on truncated (x, l)
             d = bl.diag.reshape(-1, tz, tz)[act] + (m * cd_all[l][:, None, None] + 1.0 - m) * eye_tz
             d = d + m * drift_diag(l, act) - jnp.einsum("kab,kbc->kac", up[act], w.astype(jnp.float64))
-            lu, piv = _tail_lu(d)
+            lu, piv = _tail_lu(d, parity)
             (lo_b, lo_s), (up_b, up_s) = fac(l, -1), fac(l, 1)
             return (lu, piv, lo[act].astype(jnp.float32)), (lu, piv, lo_b, up_b, lo_s, up_s)
 
         k_p = len(act)
-        init = (
-            jnp.broadcast_to(jnp.eye(tz, dtype=jnp.float32), (k_p, tz, tz)),
-            jnp.broadcast_to(jnp.arange(tz, dtype=jnp.int32), (k_p, tz)),
-            jnp.zeros((k_p, tz, tz), jnp.float32),
-        )
+        init = (*_identity_lu(k_p, tz, parity), jnp.zeros((k_p, tz, tz), jnp.float32))
         (lu_k, piv_k, lo_k), stacked = jax.lax.scan(body, init, jnp.arange(keep, n_l), reverse=True)
         lus[keep] = (lu_k, piv_k)
         lowers.append(lo_k)
@@ -529,18 +626,16 @@ def _factor(
         tail = stacked + (st.astype(jnp.float32), mi.astype(jnp.float32))
     else:
         last = d0 if n_l == 1 else diag_block(n_l - 1)
-        lus[-1] = _tail_lu(last) if last.ndim == 3 else lu_factor(last)
+        lus[-1] = _tail_lu(last, parity) if last.ndim == 3 else _lu(last, parity)
     for l in range(n_chain - 2 if not scanned else keep - 1, -1, -1):
         sel = np.searchsorted(layout[l], layout[l + 1])
         k_l = len(layout[l])
         if l + 1 >= keep:  # S_(l+1) per pair: so is U_l S_(l+1)^-1 Lo_(l+1)
-            w = jax.vmap(lambda f0, f1, b: lu_solve((f0, f1), b.astype(f0.dtype)))(
-                *lus[l + 1], _bdense(lowers[l + 1])
-            ).astype(jnp.float64)
+            w = _lu_solve(lus[l + 1], _bdense(lowers[l + 1]).astype(lus[l + 1][0].dtype)).astype(jnp.float64)
             uw = jnp.einsum("kab,kbc->kac", _bdense(uppers[l]), w)
             d = diag_block(l)
             if l >= keep:
-                lus[l] = _tail_lu(d.at[sel].add(-uw))
+                lus[l] = _tail_lu(d.at[sel].add(-uw), parity)
                 continue
             d = d0 if l == 0 else d
             if l == 1 and q is not None:
@@ -568,8 +663,8 @@ def _factor(
             return lu, (lu, lo, up)
 
         last = dense_lu(last)
-        ((lu_s, piv_s), lowers, uppers) = jax.lax.scan(step, last, jnp.arange(n_l - 1), reverse=True)[1]
-        lus = (jnp.concatenate([lu_s, last[0][None]]), jnp.concatenate([piv_s, last[1][None]]))
+        stacked, lowers, uppers = jax.lax.scan(step, last, jnp.arange(n_l - 1), reverse=True)[1]
+        lus = jax.tree.map(lambda s, t: jnp.concatenate([s, t[None]]), stacked, last)
     else:
         lus, lowers, uppers = tuple(lus[:n_chain]), tuple(lowers[:n_chain]), tuple(uppers)
     solver = CoupledSolver(op, lus, lowers, uppers, (b, c, gamma) + (None,) * 4, tail=tail)
@@ -591,6 +686,14 @@ def _factor(
     return replace(solver, bc=bc)
 
 
+def _identity_lu(k: int, tz: int, parity: tuple | None) -> tuple:
+    """Float32 LUs of ``k`` identity blocks, in the layout :func:`_tail_lu` returns."""
+    h = tz if parity is None else parity[0].shape[0]
+    lu = jnp.broadcast_to(jnp.eye(h, dtype=jnp.float32), (k, h, h))
+    piv = jnp.broadcast_to(jnp.arange(h, dtype=jnp.int32), (k, h))
+    return (lu, piv) if parity is None else (_ParityLU(lu, lu, parity), _ParityLU(piv, piv, parity))
+
+
 _factor_compiled = jax.jit(_factor, static_argnames=("keep", "f32"))
 
 
@@ -610,7 +713,24 @@ def build_coupled_solver(
     ok, reason = coupled_available(op)
     if not ok:
         raise NotImplementedError(f"speed-coupled structured direct route unavailable: {reason}")
-    return _factor_compiled(op, keep=keep, drifts=drifts, f32=f32)
+    return _factor_compiled(op, keep=keep, drifts=drifts, f32=f32, parity=_coupled_parity(op, drifts))
+
+
+def _coupled_parity(op: KineticOperator, drifts: Any) -> tuple | None:
+    """Parity maps when every Schur complement of the chain commutes with the angular
+    reflection (:func:`dkx.coarse_precond._coarse_parity`), else ``None``.  The border
+    weights and the ``l = 1`` momentum direction must be even as well."""
+    from dkx.coarse_precond import _coarse_parity, _truncated_coefficients  # noqa: PLC0415
+
+    if _is_traced(*jtu.tree_leaves(op)):
+        return None
+    mats = vecs = ()
+    if drifts is not None:
+        mats = tuple(drifts[f"mt{i}"] + drifts[f"mz{i}"] for i in (1, 2, 3))
+        vecs = (drifts["xi"],)
+    vecs = (*vecs, (op._fs_average_factor() * op.b_hat).reshape(-1))
+    basis = _coarse_parity(op, _truncated_coefficients(_stripped(op)), mats, vecs)
+    return None if basis is None else _rotation_maps(basis, op.n_theta * op.n_zeta)
 
 
 def coupled_precond_peak_bytes(op: KineticOperator, keep: int) -> float:
