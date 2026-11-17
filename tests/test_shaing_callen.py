@@ -87,7 +87,7 @@ AXISYMMETRIC_DECK = """&general
   Nxi = {nxi}
   NL = 3
   Nx = 1
-  solverTolerance = 1d-12
+  solverTolerance = 1d-10
 /
 &otherNumericalParameters
   Nxi_for_x_option = 0

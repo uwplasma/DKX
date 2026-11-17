@@ -26,7 +26,7 @@ devices span the geometry range:
 
 | Device | Reference code | Maximum relative difference |
 | --- | --- | --- |
-| DSHAPE (axisymmetric tokamak surface) | YANCC | 5.51% |
+| DSHAPE (axisymmetric tokamak surface) | YANCC | 0.10% |
 | NCSX | YANCC | 1.66% |
 | W7-X EIM | MONKES database, at its authored $27 \times 55 \times 140$ resolution | 1.79%; converged ladders agree to 7e-4 ({doc}`validation_matrix`) |
 
