@@ -56,7 +56,7 @@ def _add_parallel_cli_args(parser: argparse.ArgumentParser) -> None:
         "--transport-workers",
         type=int,
         default=None,
-        help="Parallel worker processes for independent transport-RHS solves.",
+        help="Accepted for compatibility and not applied: the transport right-hand sides are solved one after another in this process.",
     )
     parser.add_argument(
         "--distributed",
