@@ -722,8 +722,8 @@ def _coupled_parity(op: KineticOperator, drifts: Any) -> tuple | None:
     weights and the ``l = 1`` momentum direction must be even as well."""
     from dkx.coarse_precond import _coarse_parity, _truncated_coefficients  # noqa: PLC0415
 
-    if _is_traced(*jtu.tree_leaves(op)):
-        return None
+    if _is_traced(*jtu.tree_leaves(op)) or op.constraint_scheme == 0:
+        return None  # without constraints the chain is singular, and its null component pivot-dependent
     mats = vecs = ()
     if drifts is not None:
         mats = tuple(drifts[f"mt{i}"] + drifts[f"mz{i}"] for i in (1, 2, 3))

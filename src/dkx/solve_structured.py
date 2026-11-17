@@ -212,8 +212,8 @@ def build_tier1_solver(op: KineticOperator) -> Tier1Solver:
 def _tier1_parity(op: KineticOperator) -> tuple | None:
     """The angular parity basis when every block row commutes with ``S = (-1)^l R``
     (:func:`dkx.coarse_precond._coarse_parity`), else ``None``."""
-    if any(isinstance(a, jax.core.Tracer) for a in jax.tree_util.tree_leaves(op)):
-        return None
+    if op.constraint_scheme == 0 or any(isinstance(a, jax.core.Tracer) for a in jax.tree_util.tree_leaves(op)):
+        return None  # without constraints the chain is singular, and its null component pivot-dependent
     basis = _coarse_parity(op, _truncated_coefficients(op))
     if basis is None:
         return None
