@@ -393,7 +393,7 @@ def test_emit_parallel_runtime_info_reports_active_parallel_env(monkeypatch, cap
     out = capsys.readouterr().out
 
     assert "parallel: cores=8 threads=8 cpu_devices=8" in out
-    assert "transport_parallel: mode=process workers=4" in out
+    assert "transport_workers=4 requested; not applied" in out
     assert "multi_host: enabled=1 process_id=1 process_count=2 coordinator=node0 port=1234" in out
 
 
@@ -1153,3 +1153,17 @@ def test_write_output_geometry_only_emits_base_and_geometry_fields(tmp_path: Pat
     # No solve ran: the solution/moment datasets must be absent.
     for key in ("particleFlux_vm_psiHat", "FSABFlow", "transportMatrix"):
         assert key not in canonical, key
+
+
+def test_transport_workers_is_documented_as_not_applied_and_nothing_consumes_it() -> None:
+    """The flag only sets the environment and prints a banner; the help and docs say so.
+
+    If a solver starts reading ``DKX_TRANSPORT_PARALLEL*``, update the help text, the
+    banner and the docs rows that call the option inert, then change this test.
+    """
+    readers = sorted(
+        path.name
+        for path in Path(cli.__file__).parent.rglob("*.py")
+        if "DKX_TRANSPORT_PARALLEL" in path.read_text()
+    )
+    assert readers == ["cli.py"]
