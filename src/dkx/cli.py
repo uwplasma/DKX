@@ -322,7 +322,7 @@ def _emit_parallel_runtime_info(*, args: argparse.Namespace) -> None:
         args=args,
     )
     _emit(
-        f" transport_parallel: mode={transport_parallel} workers={transport_workers}",
+        f" transport_workers={transport_workers} requested; not applied, right-hand sides solve in this process",
         level=1,
         args=args,
     )
