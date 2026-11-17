@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Validation: the DSHAPE row of `independent_cross_code` applies YANCC own d psi / d r (0.2125 T m, from its toroidal flux and minor radius) as the W7-X row already did; the D11* difference from YANCC falls from 5.5% to 0.05% and D31* from 2.8% to 0.01%. The earlier gap was a radial-normalization mismatch, not physics or resolution.
 - Release gate: `release_ready` is the only accepted manifest claim status; `regression_scaffold`, `bounded_proxy`, `closed_deferred` and the deferred-lane checks are removed, so a new scaffold fails CI. The autodiff sensitivity summary now calls the Boozer-harmonic geometry map a finite-difference-validated sensitivity map (same scope: not a VMEC boundary optimization).
 - Validation: the W7-X ambipolar profile gate adds the speed rung (25, 81, 224, 10): the same seven roots, every root and selected flux within 0.32% of rung B (1.80% largest over all rungs), 4.7 GiB peak. The nine W7-X ambipolar scaffold and proxy manifest entries are replaced by one `release_ready` entry, `w7x_ambipolar_profile_rung_gate`.
 - Ambipolar bootstrap: `KineticBootstrapMismatch(ambipolar=True)` now runs the host root search when it is evaluated on a concrete state without `roots=`, so `electric_field()` and `unconverged` reflect the roots instead of the `er_initial` warm start. `examples/advanced/ambipolar_bootstrap_dkx.py` calls `roots()` first, asserts convergence and a nonzero root slope, and uses a rotating ellipse (`SEED_PERTURBATION = 0.12`) that has roots; the old 0.05 case had none.
