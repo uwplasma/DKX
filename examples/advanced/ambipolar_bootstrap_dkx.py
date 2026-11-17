@@ -9,16 +9,22 @@ current vanishes, and <j.B> is read there.  The derivative through the root is
 the implicit-function theorem, j_p - j_E J_p / J_E, from one adjoint solve per
 surface, so VMEX's implicit Jacobian carries it.
 
-This script solves a finite-beta rotating-ellipse equilibrium and prints, per
-kinetic surface, the ambipolar E_r and <j.B> against the E_r = 0 value and
+This script solves a finite-beta rotating-ellipse equilibrium, finds the roots
+with ``roots()`` and asserts that every surface converged with a slope dJ_r/dE_r
+clear of zero (a nearly omnigenous field has none, which is why the ellipse is
+strong), and prints, per kinetic surface, the ambipolar E_r and <j.B> against the E_r = 0 value and
 Redl's.  It then compares the Jacobian row of the ambipolar current with
 central finite differences of the same row along boundary coefficients, each
 difference point a full VMEX re-solve.  Finally it writes a figure and a CSV.
 
+The Redl column is a reference, not a check: at this strongly shaped equilibrium
+DKX and Redl differ in sign (see the printed table), at E_r = 0 as well as at the
+ambipolar root, and this script does not investigate why.
+
 Needs vmex and booz_xform_jax >= 0.4.
 
 Run:              python examples/advanced/ambipolar_bootstrap_dkx.py
-Runtime:          tens of minutes on a CPU laptop; the log prints cold and warm times.
+Runtime:          about four minutes on a CPU laptop; the log prints cold and warm times.
 """
 
 import time
@@ -45,20 +51,24 @@ INPUT_FILE = Path(__file__).resolve().parents[1] / "data" / f"input.minimal_seed
 # Rotating-ellipse amplitude added to the circular seed, and the beta the
 # Landreman-Buller-Drevlak profiles (ne = n0 (1 - s^5), Te = Ti = T0 (1 - s))
 # are calibrated to:
-SEED_PERTURBATION = 0.05
+SEED_PERTURBATION = 0.12
 TARGET_BETA = 0.015
 
 # Kinetic surfaces and grid (None keeps the ambipolar default), the first guess
-# of the ion-root E_r [kV/m] and the Newton tolerance on E_r [kV/m]:
+# of the ion-root E_r [kV/m], the Newton tolerance on E_r [kV/m], and the smallest
+# |dJ_r/dE_r| (slope of the radial current at the root) accepted as a real root; a
+# nearly omnigenous field has J_r flat in E_r and no reliable root:
 KINETIC_SURFACES = (0.3, 0.6)
 KINETIC_RESOLUTION = None
 ER_INITIAL = -2.0
 ER_TOLERANCE = 0.05
+MIN_ROOT_SLOPE = 1e-7
 
-# Derivative check: boundary coefficients varied, central step in metres, and
+# Derivative check: boundary coefficients varied, central step in metres (a=0.07 m, and
+# 5e-4 already leaves the linear range), and
 # the relative agreement required of the implicit Jacobian:
 CHECK_DOFS = ("RBC(0,1)", "ZBS(-1,1)")
-FD_STEP = 5e-4
+FD_STEP = 2e-5
 FD_TOLERANCE = 0.05
 
 # Equilibrium resolution and radial grid, and the Redl Picard loop that gives the
@@ -115,22 +125,27 @@ def kinetic_row(**options):
 zero_er = kinetic_row()
 ambipolar = kinetic_row(ambipolar=True, er_initial=ER_INITIAL, er_tol=ER_TOLERANCE)
 clock = time.perf_counter()
+roots = ambipolar.roots(equilibrium.state, equilibrium.runtime)
+er, root_slope = np.asarray(roots[0]), np.asarray(roots[1])
+print(f"ambipolar roots: {time.perf_counter() - clock:.0f} s (cold)")
+assert ambipolar.unconverged == 0, "the root search did not converge on every surface"
+assert np.all(np.isfinite(er)) and np.all(np.abs(root_slope) > MIN_ROOT_SLOPE), (
+    f"no reliable ambipolar root: E_r = {er} kV/m, dJ_r/dE_r = {root_slope}")
+clock = time.perf_counter()
 s, _, j_zero = zero_er.current_profiles(equilibrium.state, equilibrium.runtime)
 print(f"E_r = 0 row: {time.perf_counter() - clock:.0f} s (cold)")
 clock = time.perf_counter()
-_, _, j_amb = ambipolar.current_profiles(equilibrium.state, equilibrium.runtime)
+_, _, j_amb = ambipolar.current_profiles(equilibrium.state, equilibrium.runtime, roots)
 print(f"ambipolar row: {time.perf_counter() - clock:.0f} s (cold)")
 clock = time.perf_counter()
-ambipolar.current_profiles(equilibrium.state, equilibrium.runtime)
+ambipolar.current_profiles(equilibrium.state, equilibrium.runtime, roots)
 print(f"ambipolar row: {time.perf_counter() - clock:.1f} s (warm)")
 geometry = redl_geometry_from_state(equilibrium.state, equilibrium.runtime, surfaces=np.asarray(s))
 j_redl = j_dot_B_redl(profiles, geometry, 0)[0]
 s, j_zero, j_amb, j_redl = (np.asarray(v) for v in (s, j_zero, j_amb, j_redl))
-er = ambipolar.electric_field()
-assert ambipolar.unconverged == 0, "the root search did not converge on every surface"
-for row in zip(s, er, j_zero / 1e6, j_amb / 1e6, j_redl / 1e6):
-    print(f"s = {row[0]:.3f}: ambipolar E_r = {row[1]:+.2f} kV/m; <j.B> [MA T/m^2] "
-          f"E_r = 0: {row[2]:+.4f}, ambipolar: {row[3]:+.4f}, Redl: {row[4]:+.4f}")
+for row in zip(s, er, root_slope, j_zero / 1e6, j_amb / 1e6, j_redl / 1e6):
+    print(f"s = {row[0]:.3f}: ambipolar E_r = {row[1]:+.2f} kV/m (dJ_r/dE_r = {row[2]:+.1e}); "
+          f"<j.B> [MA T/m^2] E_r = 0: {row[3]:+.4f}, ambipolar: {row[4]:+.4f}, Redl: {row[5]:+.4f}")
 
 ### Check the derivative against finite differences ###########################
 

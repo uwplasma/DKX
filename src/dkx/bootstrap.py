@@ -492,8 +492,9 @@ class KineticBootstrapMismatch:
     reproducible bit for bit across histories when several roots exist;
     :meth:`electric_field` returns them and ``unconverged`` counts failures.
     The default grid is ``DEFAULT_AMBIPOLAR_RESOLUTION``.  Called as
-    ``residuals_state(state, rt)`` the roots are found inside the traced program from
-    ``er_initial`` (no warm start, no ``unconverged`` update);
+    ``residuals_state(state, rt)`` on a traced ``state`` the roots are found inside the traced
+    program from ``er_initial`` (no warm start; :meth:`electric_field` and ``unconverged``
+    are not updated); on a concrete ``state`` the host search of :meth:`roots` runs first;
     :meth:`roots` / ``roots=`` or :meth:`cached_residuals` keep the warm start.
     """
 
@@ -639,6 +640,8 @@ class KineticBootstrapMismatch:
             # An eager caller (VMEX's set-up preflight, a reporter) would
             # dispatch the Boozer tables op by op; compile the whole row once
             # per runtime instead.  The runtime is held so its id stays unique.
+            if self.ambipolar and roots is None:
+                roots = self.roots(state, rt)  # the host search records E_r and `unconverged`
             if self._eager[0] is not rt:
                 self._eager = (rt, jax.jit(lambda st, ro: self._kinetic(st, rt, ro)[1]))
             return self._setup(int(s_full.size), int(rt.resolution.nfp))[1], self._eager[1](state, roots)
