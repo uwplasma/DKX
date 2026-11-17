@@ -532,6 +532,7 @@ def test_the_budget_prefers_available_memory_over_physical_ram(monkeypatch):
 
     assert execution._host_memory_budget_bytes() == 64.0e9
     monkeypatch.setattr(batch, "_device_memory_bytes", lambda: None)
+    monkeypatch.setattr(batch, "_host_memory_bytes", lambda: 64.0e9)  # bound at import
     assert batch.resolve_memory_budget_bytes() == batch._DEFAULT_BUDGET_FRACTION * 64.0e9
 
 
