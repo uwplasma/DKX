@@ -401,8 +401,10 @@ def test_a_symmetric_deck_factors_each_parity_half_of_the_coupled_blocks(tmp_pat
     the coupled LUs are taken of its even and odd halves: the same inverse from half the storage."""
     import jax
 
+    import dkx.coarse_precond as cp
     import dkx.structured_direct as sd
 
+    monkeypatch.setattr(cp, "_PARITY_MIN_POINTS", 2)  # below the default size, split anyway
     op = replace(_two_species_operator(tmp_path, nx=4), n_xi_for_x=jnp.asarray([3, 4, 5, 6]))
     assert sd._coupled_parity(op, None) is not None
     split = sd.build_coupled_solver(op, keep)

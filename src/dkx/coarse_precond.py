@@ -679,6 +679,10 @@ def _parity_maps(basis: tuple, n_xi: int, m: int) -> tuple[np.ndarray, ...]:
 
 #: Relative tolerance of the reflection checks in :func:`_coarse_parity`.
 _PARITY_TOL = 1e-12
+#: Smallest angular grid split.  Below it the extra gathers cost more compile time
+#: than the halved factorization saves: a tokamak Fokker-Planck deck on 21 angular
+#: points went from 33 s to 67 s cold, at the same warm time.
+_PARITY_MIN_POINTS = 128
 
 
 def _coarse_parity(
@@ -700,7 +704,7 @@ def _coarse_parity(
     weights), so an asymmetric input keeps the unsplit route.
     """
     leaves = jax.tree_util.tree_leaves((coef, even_matrices, even_vectors))
-    if op.n_theta * op.n_zeta < 2 or any(isinstance(a, jax.core.Tracer) for a in leaves):
+    if op.n_theta * op.n_zeta < max(_PARITY_MIN_POINTS, 2) or any(isinstance(a, jax.core.Tracer) for a in leaves):
         return None
     basis = _parity_basis(op.n_theta, op.n_zeta)
     t, z = np.meshgrid(np.arange(op.n_theta), np.arange(op.n_zeta), indexing="ij")

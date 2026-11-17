@@ -102,3 +102,23 @@ def test_transposed_solve_is_refined_too():
     )
     assert float(jnp.linalg.norm(apply_t(x) - b)) / float(jnp.linalg.norm(b)) < 1e-10
     assert np.asarray(residuals)[-1] <= np.asarray(residuals)[0]
+
+
+def test_a_symmetric_deck_solves_two_parity_sectors_to_the_same_answer(monkeypatch):
+    """On a stellarator-symmetric deck each (species, x) chain is two chains on about half
+    the angular points: the same bordered solve, forward and transposed, from half the factors."""
+    import dkx.coarse_precond as cp
+    import dkx.solve_structured as ss
+
+    monkeypatch.setattr(cp, "_PARITY_MIN_POINTS", 2)  # below the default size, split anyway
+    op = _op()
+    split = build_tier1_solver(op)
+    assert split.parity is not None
+    monkeypatch.setattr(ss, "_tier1_parity", lambda _op: None)
+    whole = build_tier1_solver(op)
+    b = jnp.asarray(np.random.default_rng(2).standard_normal((op.total_size, 2)))
+    for transpose in (False, True):
+        x, y = split.solve(b, transpose=transpose), whole.solve(b, transpose=transpose)
+        assert float(jnp.linalg.norm(x - y) / jnp.linalg.norm(y)) < 1e-10
+    nbytes = lambda s: sum(a.nbytes for a in s.factors)  # noqa: E731
+    assert nbytes(split) < 0.7 * nbytes(whole)  # 2 h^2 / m^2 = 0.62 on these 9 points

@@ -230,6 +230,7 @@ def test_gcrot_iterations_are_unchanged(name: str):
 @pytest.mark.parametrize("name", (*TRUNCATING, "fokker_planck"))
 def test_only_the_active_rows_are_stored(name: str, monkeypatch):
     op = DECKS[name]()
+    monkeypatch.setattr(cp, "_PARITY_MIN_POINTS", 2)  # split these small symmetric decks too
     captured = []
     real = cp._factor_coarse_rows
 
@@ -276,6 +277,7 @@ def test_a_symmetric_deck_splits_into_two_parity_sectors_with_the_same_inverse(n
     so the coarse and full operators commute with S = (-1)^l R and both drives are odd under S.
     The split chain is then the unsplit inverse on two half-size sectors, on every route."""
     op = DECKS[name]()
+    monkeypatch.setattr(cp, "_PARITY_MIN_POINTS", 2)  # below the default size, split anyway
     assert cp._coarse_parity(op, *_parity_inputs(op)) is not None
     rng = np.random.default_rng(0)
     f = jnp.asarray(rng.standard_normal(op.f_size))
@@ -293,6 +295,7 @@ def test_a_symmetric_deck_splits_into_two_parity_sectors_with_the_same_inverse(n
 def test_drifts_and_er_keep_the_unsplit_chain(name: str, monkeypatch):
     """Tangential drifts and ExB are odd under R and diagonal in l: they anticommute with S."""
     op = DECKS[name]()
+    monkeypatch.setattr(cp, "_PARITY_MIN_POINTS", 2)
     assert cp._coarse_parity(op, *_parity_inputs(op)) is None
     basis = cp._parity_basis(op.n_theta, op.n_zeta)
     forced = _inverses(op, monkeypatch, _coarse_parity=lambda *_: basis)
