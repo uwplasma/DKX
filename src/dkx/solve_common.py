@@ -296,7 +296,7 @@ def _backward_error_floor(a_norm, x_norm, b_norm):
     relative tolerance finer than that is unreachable and depends on the BLAS and
     LAPACK rounding; capped at ``_ADJOINT_FLOOR_MAX_RELATIVE * ||b||``.
     """
-    return np.minimum(
+    return jnp.minimum(
         _ADJOINT_FLOOR_SLACK * _EPS64 * (a_norm * x_norm + b_norm),
         _ADJOINT_FLOOR_MAX_RELATIVE * b_norm,
     )
@@ -397,6 +397,16 @@ def _operator_norm_estimate(
         u = jax.random.rademacher(jax.random.fold_in(key, i), (n,), dtype=jnp.float64)
         est = jnp.maximum(est, jnp.linalg.norm(matvec(u)) / jnp.linalg.norm(u))
     return est
+
+def _residual_at_floor(op, x, rhs, residuals) -> bool:
+    """True when every column's residual is within :func:`_backward_error_floor`."""
+    n = op.total_size
+    x2, b2 = (np.asarray(v, dtype=np.float64).reshape(n, -1) for v in (x, rhs))
+    floor = _backward_error_floor(
+        float(_operator_norm_estimate(_pinned_matvecs(op)[0], n)),
+        np.linalg.norm(x2, axis=0), np.linalg.norm(b2, axis=0),
+    )
+    return bool(np.all(np.asarray(residuals) <= np.asarray(floor)))
 
 def _admit(x, residual, b, lim):
     """Traced residual test of a solve, per column: ``(ok, (||r||, ||b||, ||x||))``.

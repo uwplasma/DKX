@@ -839,7 +839,8 @@ def solve_native_ambipolar_surface(
                         "native ambipolar scan produced an invalid original RHS norm"
                     )
                 targets = float(solve_tolerance) * rhs_norms
-            accepted &= residuals <= targets
+            # ``accepted`` already tests the residual against the tolerance or
+            # the solve's backward-error floor, whichever is larger.
             failed = np.flatnonzero(~accepted)
             attempts: list[list[SolverAttempt]] = [
                 [
@@ -878,9 +879,7 @@ def solve_native_ambipolar_surface(
                         retry_legendre_tail_upper_bound,
                     ) = physical_outputs(retry, 1)
                     retry_residual = float(retry_residuals[0])
-                    accepted[index] = (
-                        bool(retry_accepted[0]) and retry_residual <= targets[index]
-                    )
+                    accepted[index] = bool(retry_accepted[0])
                     retry_requested_method = (
                         str(getattr(retry, "method", "gmres")).strip().lower()
                     )

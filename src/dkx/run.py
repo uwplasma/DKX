@@ -57,7 +57,7 @@ from dkx.moments import (
 from dkx.phase_space import Grids, make_grids
 from dkx.profiling import make_emit, maybe_profiler
 from dkx.solve import SolveResult, solve
-from dkx.solve_common import _backward_error_floor, _operator_norm_estimate, _pinned_matvecs
+from dkx.solve_common import _residual_at_floor
 from dkx.variational import d11_bounds_supported, monoenergetic_d11_bounds
 from dkx.writer import (
     _effective_flux_functions,
@@ -392,12 +392,7 @@ def run_transport_matrix(
     # ``solve`` judges the residual against the requested tolerance alone, which
     # can sit inside the BLAS/LAPACK rounding of a direct solve; only a residual
     # above that floor too is a failure.
-    x_cols = np.asarray(result.x).reshape(rhs.shape)
-    floor = _backward_error_floor(
-        float(_operator_norm_estimate(_pinned_matvecs(op)[0], op.total_size)),
-        np.linalg.norm(x_cols, axis=0), np.linalg.norm(np.asarray(rhs), axis=0),
-    )
-    if not (result.converged or np.all(np.asarray(result.residual_norms) <= floor)):
+    if not (result.converged or _residual_at_floor(op, result.x, rhs, result.residual_norms)):
         raise RuntimeError(
             f"transport-matrix solve did not converge (method={result.method}, "
             f"residuals={np.asarray(result.residual_norms)!r})"
@@ -724,7 +719,10 @@ def run_profile(
         state_history = None
     solve_seconds = time.perf_counter() - t0
     _emit_lines(emit, [console.main_solve_done_line(seconds=solve_seconds)])
-    if not result.converged:
+    if not (
+        result.converged
+        or (not op.include_phi1 and _residual_at_floor(op, result.x, rhs, result.residual_norms))
+    ):
         raise RuntimeError(
             f"RHSMode=1 solve did not converge (method={result.method}, "
             f"residuals={np.asarray(result.residual_norms)!r})"

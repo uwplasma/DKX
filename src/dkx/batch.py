@@ -57,6 +57,7 @@ import jax
 import jax.numpy as jnp
 
 from .drift_kinetic import KineticOperator
+from .solve_common import _backward_error_floor, _operator_norm_estimate, _pinned_matvecs
 from .solve import (
     _auto_route_structural,
     _TIER1_KEEP_LOWEST_DEFAULT,
@@ -526,8 +527,15 @@ def batched_solve(
                              jnp.where(zero_defect, 0.0, jnp.inf))
         relative = jnp.where(jnp.isfinite(rhs_norm) & jnp.isfinite(residual_norm), relative, jnp.inf)
         # Exact equations must not be admitted by an underflowed squared norm.
+        # A direct solve cannot beat its backward-error floor, which a very
+        # tight tolerance sits inside.
+        floor = _backward_error_floor(
+            _operator_norm_estimate(_pinned_matvecs(op_i)[0], op.total_size),
+            jnp.linalg.norm(state), rhs_norm,
+        )
         within_tolerance = jnp.where(
-            (tol == 0) | jnp.all(rhs == 0), zero_defect, residual_norm <= tol * rhs_norm
+            (tol == 0) | jnp.all(rhs == 0), zero_defect,
+            residual_norm <= jnp.maximum(tol * rhs_norm, floor),
         )
         accepted = (jnp.isfinite(rhs_norm) & jnp.isfinite(residual_norm)
                     & jnp.all(jnp.isfinite(state)) & (residual_norm >= 0)
