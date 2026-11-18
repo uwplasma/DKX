@@ -53,12 +53,6 @@ def _add_common_cli_args(parser: argparse.ArgumentParser) -> None:
 
 def _add_parallel_cli_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
-        "--transport-workers",
-        type=int,
-        default=None,
-        help="Parallel worker processes for independent transport-RHS solves.",
-    )
-    parser.add_argument(
         "--distributed",
         action="store_true",
         help="Enable JAX multi-host distributed initialization for this CLI run.",
@@ -220,7 +214,6 @@ def _add_compat_parsers(sub) -> None:
     p_ambi_direct.add_argument("--er-initial", default="0.0", help="Initial Er evaluation.")
     p_ambi_direct.add_argument("--max-evaluations", default="20", help="Maximum Brent radial-current evaluations.")
     p_ambi_direct.add_argument("--current-tolerance", default="1e-6", help="Radial-current tolerance, relative to the largest |J_r| seen while bracketing.")
-    p_ambi_direct.add_argument("--step-tolerance", default="1e-8", help="Reserved Er-step tolerance for Newton-compatible APIs.")
     p_ambi_direct.add_argument(
         "--solve-method",
         default="auto",
@@ -230,16 +223,6 @@ def _add_compat_parsers(sub) -> None:
         "--summary-json",
         default=None,
         help="Optional summary JSON path. Default: <out-dir>/ambipolar_result.json.",
-    )
-    p_ambi_direct.add_argument(
-        "--no-output-cache",
-        action="store_true",
-        help="Disable the per-run geometry/output cache used across Er evaluations.",
-    )
-    p_ambi_direct.add_argument(
-        "--no-solver-state",
-        action="store_true",
-        help="Disable shape-checked Krylov state reuse across Er evaluations.",
     )
     p_ambi_direct.set_defaults(func=_cli._cmd_ambipolar)
 
