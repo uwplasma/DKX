@@ -148,7 +148,6 @@ below control the runtime, caches and diagnostics.
 | `JAX_COMPILATION_CACHE_DIR`, `DKX_COMPILATION_CACHE_DIR`, `DKX_DISABLE_COMPILATION_CACHE` | persistent compilation cache location or opt-out |
 | `DKX_DATA_DIR`, `DKX_OFFLINE`, `DKX_EQUILIBRIA_DIRS` | equilibrium data cache and search path |
 | `DKX_DISTRIBUTED`, `DKX_PROCESS_ID`, `DKX_PROCESS_COUNT`, `DKX_COORDINATOR_ADDRESS`, `DKX_COORDINATOR_PORT` | multi-host initialization |
-| `DKX_TRANSPORT_PARALLEL`, `DKX_TRANSPORT_PARALLEL_WORKERS` | accepted and not applied; transport right-hand sides are solved in one process |
 | `DKX_TIER1_MEMORY_BUDGET_GB`, `DKX_KRYLOV_MEMORY_BUDGET_GB` | defaults for `memory_budget_gb` and `krylov_memory_budget_gb` |
 | `DKX_PHI1_NEWTON_TOL`, `DKX_PHI1_GMRES_TOL` | Newton and inner GMRES tolerances of the $\Phi_1$ solve (default `1e-12`) |
 | `DKX_ROSENBLUTH_METHOD` | default Rosenbluth quadrature when no key or argument is given |
