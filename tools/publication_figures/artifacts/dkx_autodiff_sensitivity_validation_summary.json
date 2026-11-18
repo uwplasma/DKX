@@ -2228,7 +2228,7 @@
     "notes": [
       "Gradients through the linear solve use jax.lax.custom_linear_solve.",
       "The validation checks implicit differentiation against centered finite differences.",
-      "The geometry map is a differentiable Boozer-harmonic sensitivity scaffold, not a full VMEC boundary optimization claim."
+      "The geometry map is a differentiable Boozer-harmonic sensitivity map validated against finite differences, not a full VMEC boundary optimization claim."
     ],
     "schema_version": 1,
     "scope": "Bounded manuscript artifact: validates implicit differentiation through a pinned SFINCS full-system linear solve and differentiable scheme-4 Boozer harmonic maps. It does not claim full VMEC-boundary optimization.",

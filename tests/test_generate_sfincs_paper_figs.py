@@ -198,8 +198,6 @@ def test_summary_metadata_records_case_resolution_and_paths(tmp_path: Path) -> N
         summary_path=summary_path,
         base_input=mod.EXAMPLES / "transportMatrix_geometryScheme11" / "input.namelist",
         labels_to_collision_operator={"Fokker-Planck": 0, "PAS": 1},
-        transport_workers=2,
-        transport_parallel_backend="gpu",
     )
     assert metadata["case"] == "w7x"
     assert metadata["fast"] is False
@@ -210,8 +208,6 @@ def test_summary_metadata_records_case_resolution_and_paths(tmp_path: Path) -> N
     assert metadata["source_script"] == "tools/publication_figures/generate_sfincs_paper_figs.py"
     assert metadata["labels_to_collision_operator"] == {"Fokker-Planck": 0, "PAS": 1}
     assert metadata["implicit_solve"] is False
-    assert metadata["transport_workers"] == 2
-    assert metadata["transport_parallel_backend"] == "gpu"
 
 
 def test_parse_collision_operators_deduplicates_and_preserves_order() -> None:
@@ -322,7 +318,7 @@ def test_run_applies_extra_environment_to_child(
     child.write_text(
         "import os\n"
         "print('implicit=' + os.environ.get('DKX_IMPLICIT_SOLVE', ''))\n"
-        "print('workers=' + os.environ.get('DKX_TRANSPORT_PARALLEL_WORKERS', ''))\n"
+        "print('maxiter=' + os.environ.get('DKX_TRANSPORT_MAXITER', ''))\n"
     )
     mod._run(
         [sys.executable, str(child)],
@@ -331,39 +327,34 @@ def test_run_applies_extra_environment_to_child(
         label="child-env",
         extra_env={
             "DKX_IMPLICIT_SOLVE": "0",
-            "DKX_TRANSPORT_PARALLEL_WORKERS": "2",
+            "DKX_TRANSPORT_MAXITER": "2",
         },
     )
     captured = capsys.readouterr().out
     assert "implicit=0" in captured
-    assert "workers=2" in captured
+    assert "maxiter=2" in captured
 
 
-def test_transport_scan_env_defaults_to_explicit_and_enables_parallel_workers() -> None:
+def test_transport_scan_env_defaults_to_explicit_and_applies_overrides() -> None:
     mod = _load_module()
-    serial = mod._transport_scan_env(transport_workers=1, transport_parallel_backend="gpu")
+    serial = mod._transport_scan_env()
     assert serial == {
         "DKX_IMPLICIT_SOLVE": "0",
         "DKX_WRITE_SOLVER_DIAGNOSTICS": "1",
     }
 
-    parallel = mod._transport_scan_env(
-        transport_workers=2,
-        transport_parallel_backend="gpu",
+    overrides = mod._transport_scan_env(
         transport_sparse_direct_max=90000,
         transport_maxiter=1200,
         abort_max_residual=1.0e-6,
         abort_max_relative_residual=2.0e-6,
     )
-    assert parallel["DKX_IMPLICIT_SOLVE"] == "0"
-    assert parallel["DKX_WRITE_SOLVER_DIAGNOSTICS"] == "1"
-    assert parallel["DKX_TRANSPORT_PARALLEL"] == "process"
-    assert parallel["DKX_TRANSPORT_PARALLEL_WORKERS"] == "2"
-    assert parallel["DKX_TRANSPORT_PARALLEL_BACKEND"] == "gpu"
-    assert parallel["DKX_TRANSPORT_SPARSE_DIRECT_MAX"] == "90000"
-    assert parallel["DKX_TRANSPORT_MAXITER"] == "1200"
-    assert parallel["DKX_TRANSPORT_ABORT_MAX_RESIDUAL"] == "1e-06"
-    assert parallel["DKX_TRANSPORT_ABORT_MAX_RELATIVE_RESIDUAL"] == "2e-06"
+    assert overrides["DKX_IMPLICIT_SOLVE"] == "0"
+    assert overrides["DKX_WRITE_SOLVER_DIAGNOSTICS"] == "1"
+    assert overrides["DKX_TRANSPORT_SPARSE_DIRECT_MAX"] == "90000"
+    assert overrides["DKX_TRANSPORT_MAXITER"] == "1200"
+    assert overrides["DKX_TRANSPORT_ABORT_MAX_RESIDUAL"] == "1e-06"
+    assert overrides["DKX_TRANSPORT_ABORT_MAX_RELATIVE_RESIDUAL"] == "2e-06"
 
 
 def test_residual_quality_gates_missing_and_bad_transport_outputs(tmp_path: Path) -> None:
@@ -516,7 +507,7 @@ def test_main_skip_existing_prunes_incomplete_dirs_and_reruns_partial_operator(
     assert not stale_dir.exists()
 
 
-def test_main_transport_workers_forwarded_to_scan_environment(
+def test_main_forwards_scan_environment(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -541,10 +532,6 @@ def test_main_transport_workers_forwarded_to_scan_environment(
             "--scan-only",
             "--collision-operators",
             "0",
-            "--transport-workers",
-            "2",
-            "--transport-parallel-backend",
-            "gpu",
             "--work-dir",
             str(tmp_path / "work"),
             "--summary-dir",
@@ -560,9 +547,6 @@ def test_main_transport_workers_forwarded_to_scan_environment(
         {
             "DKX_IMPLICIT_SOLVE": "0",
             "DKX_WRITE_SOLVER_DIAGNOSTICS": "1",
-            "DKX_TRANSPORT_PARALLEL": "process",
-            "DKX_TRANSPORT_PARALLEL_WORKERS": "2",
-            "DKX_TRANSPORT_PARALLEL_BACKEND": "gpu",
         }
     ]
 

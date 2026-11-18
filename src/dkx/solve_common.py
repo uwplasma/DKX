@@ -289,6 +289,18 @@ def _residual_norms(
     res = jax.vmap(matvec, in_axes=1, out_axes=1)(x2d) - rhs2d
     return jnp.linalg.norm(res, axis=0)
 
+def _backward_error_floor(a_norm, x_norm, b_norm):
+    """Residual a solve of ``A x = b`` cannot beat in floating point, per column.
+
+    A backward-stable solve leaves ``||r|| ~ eps * (||A|| ||x|| + ||b||)``, so a
+    relative tolerance finer than that is unreachable and depends on the BLAS and
+    LAPACK rounding; capped at ``_ADJOINT_FLOOR_MAX_RELATIVE * ||b||``.
+    """
+    return np.minimum(
+        _ADJOINT_FLOOR_SLACK * _EPS64 * (a_norm * x_norm + b_norm),
+        _ADJOINT_FLOOR_MAX_RELATIVE * b_norm,
+    )
+
 def _converged_flag(
     res_norms: jnp.ndarray, rhs2d: jnp.ndarray, tol: float, atol: float
 ) -> bool:
@@ -434,10 +446,7 @@ def _residual_guard(
                 solution_norm=x_norm,
                 operator_norm=a_norm,
                 target=target,
-                floor=min(
-                    _ADJOINT_FLOOR_SLACK * _EPS64 * (a_norm * x_norm + b_norm),
-                    _ADJOINT_FLOOR_MAX_RELATIVE * b_norm,
-                ),
+                floor=float(_backward_error_floor(a_norm, x_norm, b_norm)),
                 limit=factor * target,
                 within_tolerance=bool(np.asarray(ok)),
             )
