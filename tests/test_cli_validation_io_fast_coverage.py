@@ -31,8 +31,6 @@ def test_normalize_plot_shortcut_preserves_global_flags() -> None:
     argv = [
         "--cores=4",
         "--quiet",
-        "--transport-workers",
-        "2",
         "--plot",
         "sfincsOutput.npz",
         "--out",
@@ -42,8 +40,6 @@ def test_normalize_plot_shortcut_preserves_global_flags() -> None:
     assert cli._normalize_default_argv(argv) == [
         "--cores=4",
         "--quiet",
-        "--transport-workers",
-        "2",
         "plot-output",
         "--input-h5",
         "sfincsOutput.npz",
@@ -138,11 +134,8 @@ def test_cmd_ambipolar_summary_records_canonical_er_result(monkeypatch: pytest.M
             er_initial=0.0,
             max_evaluations=4,
             current_tolerance=1.0e-10,
-            step_tolerance=1.0e-8,
             solve_method="auto",
             summary_json=str(summary_path),
-            no_output_cache=True,
-            no_solver_state=False,
             verbose=0,
             quiet=True,
         )
@@ -180,30 +173,6 @@ def test_cmd_compare_h5_honors_tolerance_json(tmp_path: Path) -> None:
     )
 
     assert rc == 0
-
-
-def test_apply_parallel_runtime_settings_transport_workers_off_and_on(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    import os
-
-    for name in ("DKX_TRANSPORT_PARALLEL", "DKX_TRANSPORT_PARALLEL_WORKERS"):
-        monkeypatch.delenv(name, raising=False)
-
-    base = dict(
-        distributed=False,
-        process_id=None,
-        process_count=None,
-        coordinator_address=None,
-        coordinator_port=None,
-    )
-    cli._apply_parallel_runtime_settings(Namespace(**base, transport_workers=1))
-    assert os.environ["DKX_TRANSPORT_PARALLEL"] == "off"
-    assert os.environ["DKX_TRANSPORT_PARALLEL_WORKERS"] == "1"
-
-    cli._apply_parallel_runtime_settings(Namespace(**base, transport_workers=3))
-    assert os.environ["DKX_TRANSPORT_PARALLEL"] == "process"
-    assert os.environ["DKX_TRANSPORT_PARALLEL_WORKERS"] == "3"
 
 
 def test_plotting_shape_helpers_and_missing_panel_paths() -> None:

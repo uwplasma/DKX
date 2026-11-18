@@ -394,27 +394,19 @@ def read_output(path: str | Path) -> dict[str, Any]:
 def run_ambipolar_brent(
     request: SolveInputs | str | Path,
     *,
-    work_dir: str | Path | None = None,
     er_min: float,
     er_max: float,
     er_initial: float = 0.0,
     max_evaluations: int = 20,
     current_tolerance: float = 1.0e-6,
-    step_tolerance: float = 1.0e-8,
     solve_method: str = "auto",
-    differentiable: bool | None = None,
-    reuse_output_geometry_cache: bool = True,
-    reuse_solver_state: bool = True,
     emit: Any = None,
-    **kwargs: Any,
 ) -> Any:
     """Run the canonical-stack Brent ambipolar ``E_r`` solve (stable public facade).
 
     Routes to :func:`dkx.er.find_ambipolar_er` (the canonical
     ``inputs -> drift_kinetic -> solve -> moments`` slice, replacing the legacy
-    in-process Brent owner).  ``work_dir``, ``step_tolerance``,
-    ``reuse_output_geometry_cache`` and ``reuse_solver_state`` are accepted for
-    backwards compatibility; warm starts / recycling are threaded internally.
+    in-process Brent owner).  Warm starts and recycling are threaded internally.
 
     Returns:
         A :class:`dkx.er.AmbipolarResult` (``.er`` is the ambipolar
@@ -423,8 +415,6 @@ def run_ambipolar_brent(
     input_path, _wout_path, _output_path, _backend, _requires_autodiff, _options = (
         _solve_request_paths(request)
     )
-    del work_dir, step_tolerance, differentiable
-    del reuse_output_geometry_cache, reuse_solver_state, kwargs
 
     from .er import find_ambipolar_er  # noqa: PLC0415
 

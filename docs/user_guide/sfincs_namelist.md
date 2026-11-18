@@ -86,8 +86,8 @@ quantities to SI.
 | `NEr_ambipolarSolve` | `20` | number of $E_r$ samples |
 | `Er_search_tolerance_dx` / `Er_search_tolerance_f` | `1e-8` / `1e-10` | root tolerances in $E_r$ and in radial current |
 | `Er_min` / `Er_max` | `-100` / `100` | $E_r$ search bracket |
-| `outputFilename` | `"sfincsOutput.h5"` | output file name |
-| `solveSystem` | `.true.` | `.false.` writes geometry and grids only |
+| `outputFilename` | `"sfincsOutput.h5"` | accepted and not applied: DKX writes `sfincsOutput.h5` beside the deck, or the path given with `--out` |
+| `solveSystem` | `.true.` | accepted and not applied: DKX solves and writes the full output either way |
 | `saveMatlabOutput` / `saveMatricesAndVectorsInBinary` | `.false.` | accepted for compatibility |
 
 ## `&geometryParameters`

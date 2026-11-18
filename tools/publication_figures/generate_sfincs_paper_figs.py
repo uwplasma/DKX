@@ -121,21 +121,6 @@ def _parse_args() -> argparse.Namespace:
         help="Reuse an existing operator scan directory when it already contains sfincsOutput.h5 files.",
     )
     parser.add_argument(
-        "--transport-workers",
-        type=int,
-        default=1,
-        help=(
-            "Number of process workers for independent whichRHS transport solves. "
-            "Use 2 on dual-GPU nodes to run high-nu FP/PAS pilots with one RHS worker per GPU."
-        ),
-    )
-    parser.add_argument(
-        "--transport-parallel-backend",
-        choices=("auto", "cpu", "gpu"),
-        default="auto",
-        help="Backend for --transport-workers: auto/cpu use CPU workers; gpu pins workers to visible CUDA devices.",
-    )
-    parser.add_argument(
         "--plot-summaries",
         action="store_true",
         help="Rebuild Figures 1-3 from the summary JSON files in --summary-dir and the Simakov-Helander audit; no solves.",
@@ -586,8 +571,6 @@ def _parse_collision_operators(value: str) -> tuple[int, ...]:
 
 def _transport_scan_env(
     *,
-    transport_workers: int,
-    transport_parallel_backend: str,
     transport_sparse_direct_max: int = 0,
     transport_maxiter: int = 0,
     abort_max_residual: float = 0.0,
@@ -598,13 +581,6 @@ def _transport_scan_env(
         "DKX_IMPLICIT_SOLVE": "0",
         "DKX_WRITE_SOLVER_DIAGNOSTICS": "1",
     }
-    workers = max(1, int(transport_workers))
-    backend = str(transport_parallel_backend).strip().lower()
-    if workers > 1:
-        env["DKX_TRANSPORT_PARALLEL"] = "process"
-        env["DKX_TRANSPORT_PARALLEL_WORKERS"] = str(workers)
-        if backend in {"cpu", "gpu"}:
-            env["DKX_TRANSPORT_PARALLEL_BACKEND"] = backend
     if int(transport_sparse_direct_max) > 0:
         env["DKX_TRANSPORT_SPARSE_DIRECT_MAX"] = str(int(transport_sparse_direct_max))
     if int(transport_maxiter) > 0:
@@ -662,8 +638,6 @@ def _summary_metadata(
     summary_path: Path,
     base_input: Path,
     labels_to_collision_operator: dict[str, int],
-    transport_workers: int,
-    transport_parallel_backend: str,
     require_residuals: bool = False,
     max_transport_residual: float = 1.0e-6,
     max_transport_relative_residual: float = 1.0e-6,
@@ -686,8 +660,6 @@ def _summary_metadata(
             str(label): int(operator) for label, operator in labels_to_collision_operator.items()
         },
         "implicit_solve": False,
-        "transport_workers": int(transport_workers),
-        "transport_parallel_backend": str(transport_parallel_backend),
         "write_solver_diagnostics": True,
         "require_residuals": bool(require_residuals),
         "max_transport_residual": float(max_transport_residual),
@@ -816,16 +788,12 @@ def main() -> None:
     plot_only = bool(args.plot_only)
     skip_existing = bool(args.skip_existing)
     selected_collision_operators = set(_parse_collision_operators(args.collision_operators))
-    transport_workers = max(1, int(args.transport_workers))
-    transport_parallel_backend = str(args.transport_parallel_backend)
     require_residuals = bool(args.require_residuals)
     max_transport_residual = float(args.max_transport_residual)
     max_transport_relative_residual = float(args.max_transport_relative_residual)
     transport_sparse_direct_max = max(0, int(args.transport_sparse_direct_max))
     transport_maxiter = max(0, int(args.transport_maxiter))
     scan_env = _transport_scan_env(
-        transport_workers=transport_workers,
-        transport_parallel_backend=transport_parallel_backend,
         transport_sparse_direct_max=transport_sparse_direct_max,
         transport_maxiter=transport_maxiter,
         abort_max_residual=max_transport_residual if require_residuals else 0.0,
@@ -965,8 +933,6 @@ def main() -> None:
                 summary_path=lhd_summary_path,
                 base_input=lhd.base_input,
                 labels_to_collision_operator={label: operator for label, operator in (("Fokker-Planck", 0), ("PAS", 1)) if operator in selected_collision_operators},
-                transport_workers=transport_workers,
-                transport_parallel_backend=transport_parallel_backend,
                 require_residuals=require_residuals,
                 max_transport_residual=max_transport_residual,
                 max_transport_relative_residual=max_transport_relative_residual,
@@ -1078,8 +1044,6 @@ def main() -> None:
                 summary_path=w7x_summary_path,
                 base_input=w7x.base_input,
                 labels_to_collision_operator={label: operator for label, operator in (("Fokker-Planck", 0), ("PAS", 1)) if operator in selected_collision_operators},
-                transport_workers=transport_workers,
-                transport_parallel_backend=transport_parallel_backend,
                 require_residuals=require_residuals,
                 max_transport_residual=max_transport_residual,
                 max_transport_relative_residual=max_transport_relative_residual,
