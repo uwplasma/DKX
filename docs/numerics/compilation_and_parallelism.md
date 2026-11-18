@@ -135,8 +135,7 @@ production scaling.
 For multi-host device pools, JAX distributed initialization is opt-in
 (`DKX_DISTRIBUTED`, `DKX_PROCESS_ID`, `DKX_PROCESS_COUNT`,
 `DKX_COORDINATOR_ADDRESS`, `DKX_COORDINATOR_PORT`, or the matching CLI flags).
-Independent transport right-hand sides can be spread over worker processes with
-`DKX_TRANSPORT_PARALLEL` and `--transport-workers`.
+The transport right-hand sides are solved in one process.
 
 ## Batching inside one structured solve
 

@@ -53,8 +53,7 @@ DEFAULT_SIZE_THRESHOLD_MIB = 2.0
 RASTER_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 REVIEWED_LARGE_FILES: dict[str, str] = {}
 
-DEFERRED_STATUS = "deferred_post_release"
-VALID_RECORD_STATUSES = {"implemented", DEFERRED_STATUS}
+VALID_RECORD_STATUSES = {"implemented"}
 VALID_RECORD_KINDS = {
     "literature_reproduction",
     "literature_validation",
@@ -62,24 +61,11 @@ VALID_RECORD_KINDS = {
     "cross_code_validation",
     "autodiff_validation",
 }
-VALID_CLAIM_STATUSES = {
-    "release_ready",
-    "regression_scaffold",
-    "bounded_proxy",
-    "closed_deferred",
-}
-IMPLEMENTED_CLAIM_STATUSES = {
-    "release_ready",
-    "regression_scaffold",
-    "bounded_proxy",
-}
+VALID_CLAIM_STATUSES = {"release_ready"}
 
 REQUIRED_DOC_PHRASES = (
     "Release claim gate metadata",
     "release_ready",
-    "regression_scaffold",
-    "bounded_proxy",
-    "closed_deferred",
 )
 REQUIRED_RECORD_LIST_FIELDS = (
     "literature",
@@ -218,22 +204,6 @@ def release_gate_errors(
         for key in ("evidence", "promotion_gate"):
             if not _nonempty_string(gate.get(key)):
                 errors.append(f"{record_id}: release_gate.{key} must be a non-empty string")
-
-        if status == DEFERRED_STATUS:
-            if claim_status != "closed_deferred":
-                errors.append(
-                    f"{record_id}: deferred lanes must use claim_status='closed_deferred'"
-                )
-            reason = str(gate.get("closed_or_deferred_reason", "")).lower()
-            if "closed" not in reason or "post-release" not in reason:
-                errors.append(
-                    f"{record_id}: deferred lanes must record a closed post-release reason"
-                )
-        elif claim_status not in IMPLEMENTED_CLAIM_STATUSES:
-            errors.append(
-                f"{record_id}: implemented lanes must use an implemented claim status, "
-                f"got {claim_status!r}"
-            )
 
     for doc_path in docs_paths:
         text = doc_path.read_text(encoding="utf-8")

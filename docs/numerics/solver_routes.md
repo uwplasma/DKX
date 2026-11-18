@@ -200,7 +200,7 @@ The tail is eliminated and swept by `lax.scan`, padded with identity blocks
 where `Nxi_for_x` truncates; its bands are two scalars per $L$ over shared
 streaming and mirror blocks. The dense $L < 2$ Schur step is formed one column
 pair at a time, never as the full $W = S^{-1} L_o$. All its factors are float32
-(`dkx.solve._COUPLED_PRECOND_F32`); production HSX FP keeps 17 iterations.
+(`dkx.solve_krylov._COUPLED_PRECOND_F32`); production HSX FP keeps 17 iterations.
 
 `method="auto"` takes `coupled` instead of `coarse` for Fokker–Planck and
 Sugama decks when `coupled_precond_peak_bytes` fits `krylov_memory_budget_gb`

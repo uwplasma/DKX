@@ -43,30 +43,16 @@ of them.
 
 Every record has a `release_gate` block, checked by
 `python -m tools.release.release check-gates` and
-`tests/test_release_gate_metadata.py`. The allowed `claim_status` values are:
+`tests/test_release_gate_metadata.py`. The only allowed `claim_status` is:
 
 `release_ready`
 : checked-in artifacts support the documented release-scope claim, and the
   listed tests are the fast check for that claim.
 
-`regression_scaffold`
-: checked-in bounded artifacts are useful for CI, branch validation or
-  manuscript layout, but a broader or full-resolution claim is deliberately not
-  made.
-
-`bounded_proxy`
-: checked-in artifacts support a narrower proxy or normalization claim, while
-  the full literature reproduction stays closed until its `promotion_gate` is
-  met.
-
-`closed_deferred`
-: the entry is explicitly closed for the tagged release as post-release or
-  nightly research work.
-
 No record may set `blocks_current_release=true` unless the release process is
-meant to stop on it. An entry that is not ready is either absent or recorded as
-`closed_deferred` with a concrete reason and `promotion_gate`, so that scaffold
-scripts, run plans and proxy figures cannot be mistaken for closed evidence.
+meant to stop on it. An entry that is not ready is absent: `release_ready` is the
+only claim status the gate accepts, so scaffolds, run plans and proxy figures
+stay out of the manifest.
 
 ## Entries
 
@@ -85,9 +71,7 @@ scripts, run plans and proxy figures cannot be mistaken for closed evidence.
 | `monkes_monoenergetic_overlap` | `release_ready` | DSHAPE, NCSX, W7-X EIM against YANCC and MONKES, within 6% | {doc}`cross_code` |
 | `native_w7x_physical_flux_sfincs` | `release_ready` | native-path W7-X fluxes in physical units against SFINCS | {doc}`cross_code` |
 | `w7x_fixed_field_resolution_referee` | `release_ready` | fixed-field W7-X resolution referee | this page |
-| `native_w7x_ambipolar_profile_certificate` | `regression_scaffold` | five-surface W7-X ambipolar profile from a case file | this page |
-| `native_w7x_ambipolar_phase_space_ladder`, `_phase_space_axes`, `_pitch_budget`, `_pitch_speed_groups`, `_pitch_explicit_groups`, `_joint_speed_zeta_tail` | `regression_scaffold` | resolution diagnosis of that profile | this page |
-| `w7x_seeded_bracket_discovery`, `w7x_admitted_grid_seeded_envelope` | `bounded_proxy` | seeded ambipolar root bracketing on admitted grids | this page |
+| `w7x_ambipolar_profile_rung_gate` | `release_ready` | five-surface W7-X ambipolar profile, two-rung gate | this page |
 | `adjoint_sensitivity_gradient_checks` | `release_ready` | autodiff and implicit gradients against central differences | {doc}`../numerics/differentiation` |
 
 The counts per status are printed by `python -m tools.release.release check-gates`.
@@ -196,9 +180,7 @@ reference-to-fine movement fails its criteria:
 
 The recorded outcome is `refinement_exhausted`. The follow-on entries separate
 the axes and find pitch-angle resolution to be the dominant unconverged
-direction. This negative result is what keeps the profile a
-`regression_scaffold` rather than a phase-space-converged validation, and it is
-the reason every example and tutorial asks for a convergence check before a
+direction. This negative result is the reason every example and tutorial asks for a convergence check before a
 number is quoted ({doc}`../user_guide/convergence`).
 
 ### Full-Fokker-Planck ambipolar root against SFINCS
@@ -227,7 +209,7 @@ A fine rung $(21, 55, 192, 8)$ moves the roots by 0.0525, 0.0525, 0.015 and 0.04
 fluxes by at most 1.5%, but its electron root on surface 3 left the 0.12 kV/m bracket (shift above 0.17 kV/m).
 At fixed $E_r$ on that root, $N_\zeta = 55 \to 67$ at $N_\xi = 192$ moves the electron flux by 2.7%
 (0.05% at $N_\xi = 64$): the angular resolution needed grows with $N_\xi$, so a one-step comparison of
-two under-resolved rungs understates the error. The profile stays a `regression_scaffold`; a converged grid
+two under-resolved rungs understates the error. A converged grid
 needs $N_\zeta \gtrsim 70$ at $N_\xi \gtrsim 192$, which was not run to completion.
 
 An attempt at that rung, $(21, 71, 192, 8)$ with spectral angles on the shared 62 GiB office host (DKX main
@@ -240,7 +222,7 @@ option estimates 20.3 GiB but is not a qualified precision change. A seeded prof
 solves, and the $1.25\times$ refinement the certificate asks for needs a larger band again. So the promotion gate
 (roots within 0.05 kV/m and fluxes within 2% between two rungs at $N_\zeta \ge 70$, $N_\xi \ge 192$) cannot be run
 on this host; it needs a machine with a few hundred GiB, or a route that does not hold the band (accepting backward-stable
-direct solves, the follow-up named in PR 379). The profile stays a `regression_scaffold`.
+direct solves, the follow-up named in PR 379).
 
 Re-measured on main at 44dac4a8 (DKX 2.13.0, JAX 0.12.0.1, SOLVAX 0.35.1), the same rung no longer takes the
 Krylov fallback: at `memory_fraction = 0.75` one fixed-field solve (E_r = 8.55 kV/m, surfaces 0.16 and 0.25) is

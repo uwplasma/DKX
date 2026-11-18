@@ -2,17 +2,10 @@
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Callable
 
 import numpy as np
-from scipy.integrate import quad
-
-
-def _weight(x: float, k: float) -> float:
-    return math.exp(-(x * x)) * (x**k)
 
 
 def x_weight_np(x: np.ndarray, k: float) -> np.ndarray:
@@ -94,31 +87,37 @@ def make_x_polynomial_diff_matrices(x: np.ndarray, *, k: float) -> tuple[np.ndar
 
     return ddx, d2dx2
 
-def _integrate_split(
-    f: Callable[[float], float],
-    *,
-    finite_bound: float = 10.0,
-    epsabs: float = 0.0,
-    epsrel: float = 1e-13,
-    limit: int = 5000,
-) -> float:
-    # Match v3 ordering: semi-infinite integral first, then finite.
-    a2, _ = quad(f, finite_bound, np.inf, epsabs=epsabs, epsrel=epsrel, limit=limit)
-    a1, _ = quad(f, 0.0, finite_bound, epsabs=epsabs, epsrel=epsrel, limit=limit)
-    return float(a2 + a1)
+_GL_NODES, _GL_WEIGHTS = np.polynomial.legendre.leggauss(32)
 
 
-def _evaluate_polynomial(x: float, *, j: int, a: np.ndarray, b: np.ndarray) -> float:
-    # Mirrors xGrid.F90:evaluatePolynomial().
-    if j == 1:
-        return 1.0
-    pj_minus1 = 0.0
-    pj = 1.0
-    y = 0.0
-    for ii in range(1, j):
-        y = (x - float(a[ii])) * pj - float(b[ii]) * pj_minus1
-        pj_minus1, pj = pj, y
-    return float(y)
+def speed_recurrence(
+    n: int, k: float, x0: float, finite_bound: float
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float, float]:
+    """Stieltjes recurrence ``a, b, c`` (1-based) for the weight ``exp(-x^2) x^k``.
+
+    The inner products are composite Gauss-Legendre sums on ``[0, inf)``: panels
+    graded geometrically toward 0 (so non-integer ``k`` converges), uniform panels
+    up to ``finite_bound`` and a tail to ``finite_bound + 16``.  Also returns the
+    last two polynomial values at ``x0`` for the Gauss-Radau modification.
+    """
+    edges = np.concatenate([[0.0], finite_bound * 2.0 ** -np.arange(40, 3, -1),
+                            np.linspace(finite_bound / 8, finite_bound, 17),
+                            np.linspace(finite_bound, finite_bound + 16.0, 9)[1:]])  # fmt: skip
+    lo, hi = edges[:-1, None], edges[1:, None]
+    x = ((hi - lo) / 2 * _GL_NODES + (hi + lo) / 2).ravel()
+    weight = ((hi - lo) / 2 * _GL_WEIGHTS).ravel() * np.exp(-(x * x)) * x**k
+    a, b, c = np.zeros(n + 1), np.zeros(n + 2), np.zeros(n + 1)
+    p, p_prev, oldc = np.ones_like(x), np.zeros_like(x), 1.0
+    last, penult = 1.0, 0.0  # p_j(x0) and p_{j-1}(x0)
+    for j in range(1, n + 1):
+        if j > 1:
+            p, p_prev = (x - a[j - 1]) * p - b[j - 1] * p_prev, p
+            penult, last = last, (x0 - a[j - 1]) * last - b[j - 1] * penult
+        c[j] = np.sum(weight * p * p)
+        b[j] = c[j] / oldc
+        a[j] = np.sum(weight * x * p * p) / c[j]
+        oldc = c[j]
+    return a, b, c, last, penult
 
 
 @dataclass(frozen=True)
@@ -201,37 +200,7 @@ def _make_x_grid_uncached(
     if k < 0:
         raise ValueError("k must be >= 0 for the built-in SFINCS weight")
 
-    # Use 1-based indexing to stay close to the Fortran code.
-    a = np.zeros((n + 1,), dtype=float)
-    b = np.zeros((n + 2,), dtype=float)
-    c = np.zeros((n + 1,), dtype=float)
-    d = np.zeros((n + 1,), dtype=float)
-
-    oldc = 1.0
-    last_poly_x0 = 0.0
-    penult_poly_x0 = 0.0
-
-    for j in range(1, n + 1):
-        def p(xx: float) -> float:
-            return _evaluate_polynomial(xx, j=j, a=a, b=b)
-
-        def integrand_c(xx: float) -> float:
-            pj = p(xx)
-            return pj * _weight(xx, k) * pj
-
-        def integrand_d(xx: float) -> float:
-            pj = p(xx)
-            return xx * pj * _weight(xx, k) * pj
-
-        c[j] = _integrate_split(integrand_c, finite_bound=finite_bound)
-        d[j] = _integrate_split(integrand_d, finite_bound=finite_bound)
-
-        b[j] = c[j] / oldc
-        a[j] = d[j] / c[j]
-        oldc = c[j]
-
-        penult_poly_x0 = last_poly_x0
-        last_poly_x0 = p(x0)
+    a, b, c, last_poly_x0, penult_poly_x0 = speed_recurrence(n, k, x0, finite_bound)
 
     if include_point_at_x0:
         a[n] = x0 - b[n] * penult_poly_x0 / last_poly_x0

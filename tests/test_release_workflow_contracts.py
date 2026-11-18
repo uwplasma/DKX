@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 
@@ -91,3 +92,19 @@ def test_release_clone_keeps_tested_tree_after_remote_pr_commit_is_pruned(tmp_pa
     assert git("-C", clone, "rev-parse", "HEAD") == tested
     assert (clone / "payload").read_text() == "tested PR tree"
     assert git("-C", clone, "rev-parse", "--is-shallow-repository") == "false"
+
+
+def test_every_dkx_variable_the_workflows_set_is_read_by_the_code() -> None:
+    """``DKX_FAST_EXAMPLES``, ``DKX_PRECOMPILE`` and ``DKX_SOLVER_JIT`` were set in CI for a long time with no reader."""
+    code = "\n".join(
+        path.read_text()
+        for folder in ("src", "tests", "tools")
+        for path in (ROOT / folder).rglob("*.py")
+        if path.name != "test_release_workflow_contracts.py"
+    )
+    names = set()
+    for workflow in (ROOT / ".github/workflows").glob("*.yml"):
+        names |= set(re.findall(r"\bDKX_[A-Z0-9_]+", workflow.read_text()))
+    assert names
+    unread = sorted(name for name in names if name not in code)
+    assert not unread, f"set in a workflow but read nowhere: {unread}"

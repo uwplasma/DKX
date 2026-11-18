@@ -1383,7 +1383,9 @@ def run_case(
     )
     metadata = {
         "canonical_case": case.to_dict(),
-        "converged": True,
+        # Non-converged kinetic solves raise above; an ambipolar search is
+        # converged only when every surface bracketed its root.
+        "converged": all(result.status == "bracketed_root" for result in ambipolar_surfaces),
         "solver_route": route_set[0] if len(route_set) == 1 else route_set,
         "route_reason": "selected from operator structure and requested native solver method",
         "residual_norm": reported_residual,
