@@ -121,6 +121,40 @@ def test_the_ambipolar_example_runs_and_checks_its_own_derivative(tmp_path) -> N
     assert (tmp_path / "ambipolar_bootstrap_dkx.csv").exists()
 
 
+@pytest.mark.slow  # two equilibrium solves and the traced row at E_r = 0
+def test_dkx_and_redl_agree_in_sign_in_the_near_axisymmetric_limit(tmp_path) -> None:
+    """The shaped example's opposite-sign Redl column is the formula's range, not a DKX sign error.
+
+    Measured at SEED_PERTURBATION 0.12: DKX +28.8/+26.6, Redl -6.3/-9.6 MA T/m^2.  At 0.01 the
+    same code gives DKX +0.68/+0.84 and Redl +0.63/+0.52.
+    """
+    pytest.importorskip("vmex")
+    pytest.importorskip("booz_xform_jax.jax_api")
+    head = _source("ambipolar_bootstrap_dkx.py").split("### Evaluate the kinetic row")[0]
+    seed = REPO_ROOT / "examples" / "data" / "input.minimal_seed_nfp2"
+    head = head.replace("SEED_PERTURBATION = 0.12", "SEED_PERTURBATION = 0.01")
+    head = head.replace("INPUT_FILE = Path(__file__).resolve().parents[1] / \"data\"",
+                        f"INPUT_FILE = Path({str(seed.parent)!r})")
+    head = head.replace("NS = 25", "NS = 15").replace("PICARD_ITERATIONS = 8", "PICARD_ITERATIONS = 3")
+    tail = """
+row = KineticBootstrapMismatch(profiles, KINETIC_SURFACES, mismatch=False, resolution=KINETIC_RESOLUTION,
+                               spectral_angles=True, minor_radius=minor_radius)
+s, _, j_dkx = row.current_profiles(equilibrium.state, equilibrium.runtime)
+geometry = redl_geometry_from_state(equilibrium.state, equilibrium.runtime, surfaces=np.asarray(s))
+j_redl = j_dot_B_redl(profiles, geometry, 0)[0]
+print("SIGNS", *(float(v) / 1e6 for v in j_dkx), *(float(v) / 1e6 for v in j_redl))
+"""
+    script = tmp_path / "near_axisymmetric.py"
+    script.write_text(head + tail, encoding="utf-8")
+    done = subprocess.run([sys.executable, "-u", str(script)], cwd=tmp_path, capture_output=True,
+                          text=True, timeout=5400, check=False)  # fmt: skip
+    assert done.returncode == 0, done.stdout[-4000:] + done.stderr[-4000:]
+    values = [float(v) for v in done.stdout.split("SIGNS")[1].split()]
+    dkx_rows, redl_rows = values[:2], values[2:]
+    assert all(d > 0.0 and r > 0.0 for d, r in zip(dkx_rows, redl_rows)), (dkx_rows, redl_rows)
+    assert all(0.3 < d / r < 3.0 for d, r in zip(dkx_rows, redl_rows)), (dkx_rows, redl_rows)
+
+
 @pytest.mark.parametrize("include_redl", [False, True])
 def test_bootstrap_plot_preserves_profile_units_and_finite_rms(tmp_path, monkeypatch, include_redl):
     from types import SimpleNamespace
