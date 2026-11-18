@@ -264,6 +264,7 @@ class SolveResult:
     adjoint: AdjointDiagnostics | None = None
     precond: tuple[Callable, Callable] | None = None
     factors: Any = None
+    route_reason: str = ""
 
     @property
     def route(self) -> str:

@@ -765,6 +765,18 @@ def solve(
             subsystem_batch,
             emit,
         )
+    if method != "auto":
+        route_reason = f"requested method {method!r}"
+    elif factors is not None:
+        route_reason = f"auto: reused the stored {chosen} factorization"
+    elif chosen == "gmres":
+        route_reason = "auto: " + (
+            tier1_available(op)[1] or "no structured direct route fits the memory budget"
+        ) + "; recycled Krylov (gcrot)"
+    elif chosen == "block_tridiagonal_truncated":
+        route_reason = "auto: truncated block-Thomas direct solve (full bands do not fit or Nxi_for_x is ramped)"
+    else:
+        route_reason = f"auto: {chosen} direct solve (operator is block-tridiagonal in Legendre index and fits the memory budget)"
     if factors is not None and not isinstance(
         factors, (Tier1Solver, CoupledSolver) if chosen == "block_tridiagonal" else DirectFactors
     ):
@@ -844,6 +856,10 @@ def solve(
                 "[dkx.solve] the structured direct solve missed the "
                 f"tolerance (residuals={np.asarray(result.residual_norms)}); "
                 "falling back to the recycled Krylov route."
+            )
+            route_reason = (
+                f"auto: structured {chosen} direct solve missed the tolerance on this "
+                "operator; recycled Krylov (gcrot)"
             )
             chosen = "gmres"
     if chosen in ("block_tridiagonal", "block_tridiagonal_truncated"):
@@ -925,6 +941,7 @@ def solve(
             ),
         )
 
+    result = replace(result, route_reason=route_reason)
     if squeeze:
         result = replace(result, x=result.x[:, 0])
     return result
