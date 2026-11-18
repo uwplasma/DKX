@@ -166,7 +166,6 @@ def _normalize_default_argv(
         return argv
     global_opts_with_val = {
         "--cores",
-        "--transport-workers",
         "--process-id",
         "--process-count",
         "--coordinator-address",
@@ -302,7 +301,6 @@ def _merge_global_cli_args(argv: list[str], args: argparse.Namespace) -> argpars
         "quiet",
         "cores",
         "fortran_stdout",
-        "transport_workers",
         "distributed",
         "process_id",
         "process_count",

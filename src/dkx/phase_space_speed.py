@@ -12,9 +12,9 @@ from .runtime import configure as _configure_runtime
 _configure_runtime()
 
 import numpy as np  # noqa: E402
-from scipy.integrate import quad  # noqa: E402
 
 from .phase_space_angles import uniform_aperiodic_diff_matrices  # noqa: E402
+from .xgrid import speed_recurrence  # noqa: E402
 
 # ----------------------------------------------------------------------------
 # 3. Speed (x) grid: Landreman-Ernst polynomial collocation (xGrid.F90)
@@ -95,28 +95,6 @@ class SpeedGrid:
                 value.setflags(write=False)
 
 
-def _integrate_split(f, *, finite_bound: float = 10.0) -> float:
-    """Integrate f on [0, inf), semi-infinite part first, matching v3 ordering."""
-    a2, _ = quad(f, finite_bound, np.inf, epsabs=0.0, epsrel=1e-13, limit=5000)
-    a1, _ = quad(f, 0.0, finite_bound, epsabs=0.0, epsrel=1e-13, limit=5000)
-    return float(a2 + a1)
-
-
-def _evaluate_orthogonal_polynomial(
-    x: float, *, j: int, a: np.ndarray, b: np.ndarray
-) -> float:
-    """Evaluate p_j(x) by the 3-term recurrence (xGrid.F90:evaluatePolynomial)."""
-    if j == 1:
-        return 1.0
-    pj_minus1 = 0.0
-    pj = 1.0
-    y = 0.0
-    for ii in range(1, j):
-        y = (x - float(a[ii])) * pj - float(b[ii]) * pj_minus1
-        pj_minus1, pj = pj, y
-    return float(y)
-
-
 @lru_cache(maxsize=32)
 def _make_speed_grid_cached(
     n_x: int, k: float, include_point_at_x0: bool, x0: float, finite_bound: float
@@ -125,37 +103,7 @@ def _make_speed_grid_cached(
     # build the 3-term recurrence for polynomials orthogonal under the weight
     # exp(-x^2) x^k on [0, inf), then take nodes/weights from the Jacobi
     # matrix eigen-decomposition (Golub-Welsch).
-    a = np.zeros((n_x + 1,), dtype=float)
-    b = np.zeros((n_x + 2,), dtype=float)
-    c = np.zeros((n_x + 1,), dtype=float)
-    d = np.zeros((n_x + 1,), dtype=float)
-
-    oldc = 1.0
-    last_poly_x0 = 0.0
-    penult_poly_x0 = 0.0
-
-    for j in range(1, n_x + 1):
-
-        def p(xx: float) -> float:
-            return _evaluate_orthogonal_polynomial(xx, j=j, a=a, b=b)
-
-        def integrand_c(xx: float) -> float:
-            pj = p(xx)
-            return pj * (math.exp(-(xx * xx)) * xx**k) * pj
-
-        def integrand_d(xx: float) -> float:
-            pj = p(xx)
-            return xx * pj * (math.exp(-(xx * xx)) * xx**k) * pj
-
-        c[j] = _integrate_split(integrand_c, finite_bound=finite_bound)
-        d[j] = _integrate_split(integrand_d, finite_bound=finite_bound)
-
-        b[j] = c[j] / oldc
-        a[j] = d[j] / c[j]
-        oldc = c[j]
-
-        penult_poly_x0 = last_poly_x0
-        last_poly_x0 = p(x0)
+    a, b, c, last_poly_x0, penult_poly_x0 = speed_recurrence(n_x, k, x0, finite_bound)
 
     if include_point_at_x0:
         # Gauss-Radau modification: pin the lowest abscissa at x0.

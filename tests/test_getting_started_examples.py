@@ -55,8 +55,6 @@ def test_readme_quick_solve_command_uses_public_auto_path(tmp_path: Path) -> Non
     env.update(
         {
             "DKX_CPU_DEVICES": "1",
-            "DKX_TRANSPORT_PARALLEL": "off",
-            "DKX_TRANSPORT_PARALLEL_WORKERS": "1",
         }
     )
     subprocess.run(

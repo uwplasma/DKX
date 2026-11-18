@@ -547,7 +547,7 @@ def build_autodiff_sensitivity_validation_summary(
         [
             "Gradients through the linear solve use jax.lax.custom_linear_solve.",
             "The validation checks implicit differentiation against centered finite differences.",
-            "The geometry map is a differentiable Boozer-harmonic sensitivity scaffold, not a full VMEC boundary optimization claim.",
+            "The geometry map is a differentiable Boozer-harmonic sensitivity map validated against finite differences, not a full VMEC boundary optimization claim.",
         ],
     )
     payload: dict[str, object] = {

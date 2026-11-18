@@ -16,7 +16,7 @@ This document is written so that an independent agent can pick it up cold and kn
 
 ```bash
 pip install -e .                                                  # from a checkout; Python >= 3.11
-JAX_ENABLE_X64=True DKX_CI=1 pytest -q -n 4 -m "not slow"         # the PR gate, about 10 min on a laptop
+JAX_ENABLE_X64=True pytest -q -n 4 -m "not slow"         # the PR gate, about 10 min on a laptop
 python -m sphinx -b html -W docs _build                            # docs must build warning-free
 dkx run examples/01_tokamak_profile/case.toml --out r.nc && dkx converge examples/01_tokamak_profile/case.toml
 ```
@@ -1417,3 +1417,5 @@ Policy: `tools/publication_figures/validation_manifest.json` carries no `regress
 8. **Second stellarator family.** HSX ambipolar profile, the same two-rung relative gate as item 2 (2%), registered with its audit and corruption probe.
 9. **Experiment.** W7-X E_r against a reconstructed discharge needs a pinned equilibrium and measured profiles with redistribution rights; the `w7x_like_scaffold` panel state and the scaffold branches of `tools/release/panels.py` go when that lands or the panel is removed. Owner decision: data source.
 10. **Wording.** `tools/release/series.py` calls the Boozer-harmonic geometry map a "sensitivity scaffold"; the check is a finite-difference-validated sensitivity map with the same scope limit (not a VMEC boundary optimization), so the word goes when the artifact is regenerated.
+
+**Status 2026-11-16 (items 6 and 10).** `release_ready` is the only claim status `tools/release/release.py` accepts, and the deferred-lane checks and `tests/test_validation_deferred_lane_gates.py` are gone; a record with `regression_scaffold` is rejected (`tests/test_release_gate_metadata.py`). The sensitivity summary and `tools/release/series.py` say "finite-difference-validated sensitivity map".
