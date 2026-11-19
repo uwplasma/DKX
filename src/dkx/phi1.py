@@ -527,7 +527,7 @@ def phi1_solution(op: KineticOperator, *, tol: float = 1e-11, adjoint_tol: float
         m_t = None if precond is None else (lambda v: where(precond[1](where(v))))
         lam, _ = jax.scipy.sparse.linalg.gmres(
             matvec_t, where(g), tol=adjoint_tol, atol=0.0,
-            restart=_inner_restart(o, None, True), maxiter=40, M=m_t,
+            restart=_inner_restart(o, None, True), maxiter=120, M=m_t,  # float32 preconditioner factors need more restarts
         )
         defect = float(jnp.linalg.norm(matvec_t(lam) - g))
         if not defect <= 10.0 * adjoint_tol * float(jnp.linalg.norm(g)):
