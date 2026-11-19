@@ -838,11 +838,11 @@ def _row_segments(counts: tuple[int, ...]) -> tuple[tuple[int, int, int], ...]:
 
 
 @functools.partial(
-    jax.jit, static_argnames=("n_xi", "rows", "drop_l_coupling", "inverse")
+    jax.jit, static_argnames=("n_xi", "rows", "drop_l_coupling", "inverse", "store")
 )
 def _factor_coarse_rows(
     coef, subs, floor, gamma, *, n_xi: int, rows: tuple, drop_l_coupling: bool,
-    inverse: bool = False,
+    inverse: bool = False, store=None,
 ):  # fmt: skip
     """Block-Thomas elimination of every active row, one Legendre row at a time.
 
@@ -860,7 +860,8 @@ def _factor_coarse_rows(
     it padded with identity solves and zero couplings, which subtract nothing.
     Returns, per run, the stacked rows ``(delta_inverse, lower, upper)`` with
     ``inverse`` and ``(delta_lu, delta_piv, lower, upper)`` without, each shaped
-    ``(rows, counts[l], ...)``.
+    ``(rows, counts[l], ...)``.  ``store`` keeps the returned blocks at that (lower)
+    precision, the elimination itself staying in float64.
     """
     order, counts = rows
     take = functools.partial(jnp.take, indices=jnp.asarray(order), axis=0)
@@ -887,6 +888,7 @@ def _factor_coarse_rows(
         return (*jax.vmap(lu_factor)(diag), lower, upper), jnp.zeros(())
 
     def pad(fac, c):  # no-op rows for the chains that stop at the row below
+        fac = None if fac is None else tuple(a.astype(low) if a.dtype == store else a for a in fac)
         k = c - (0 if fac is None else fac[0].shape[0])
         eye = jnp.broadcast_to(jnp.eye(m, dtype=low), (k, m, m))
         piv = jnp.broadcast_to(jnp.arange(m, dtype=jnp.int32), (k, m))
@@ -902,7 +904,8 @@ def _factor_coarse_rows(
 
         def body(carry, ell, c=c):
             row, row_cond = step(carry, ell, c)
-            return row, (row, row_cond)
+            kept = row if store is None else tuple(a.astype(store) if a.dtype == low else a for a in row)
+            return row, (kept, row_cond)
 
         _, (segments[i], conds) = jax.lax.scan(
             body, pad(fac, c), jnp.arange(start, stop, dtype=jnp.int32), reverse=True
@@ -952,8 +955,9 @@ def _apply_dense_coarse_factors(factors, floor, rhs, *, transpose, rows):
 
     def couple(block, v):
         # ``v @ block`` is ``block^T v`` without a transposed operand, whose fusion
-        # with the product XLA reorders differently inside and outside a jit.
-        return jax.vmap(lambda b, x: x @ b if transpose else b @ x)(block, v)
+        # with the product XLA reorders differently inside and outside a jit.  A float32
+        # band is applied in float32: promoting it would copy the band in float64.
+        return jax.vmap(lambda b, x: x @ b if transpose else b @ x)(block, v.astype(block.dtype)).astype(work)
 
     rows_b = np.concatenate([np.asarray(order[:c]) for c in counts])
     rows_l = np.concatenate([np.full(c, ell) for ell, c in enumerate(counts)])
@@ -1364,6 +1368,9 @@ def build_coarse_preconditioner(
         factor = functools.partial(
             _factor_coarse_rows, coef, subs, floor, gamma, n_xi=n_xi, rows=rows,
             drop_l_coupling=bool(drop_l_coupling),
+            # A Phi1 border needs the factors applied ``p ~ Ntheta Nzeta`` times to build
+            # its Schur complement, and they only precondition: keep them in float32.
+            store=jnp.float32 if op.include_phi1 else None,
         )  # fmt: skip
         # Explicit inverses where the blocks are well conditioned.  A traced
         # operator cannot be inspected, so it keeps the LU it always had.
@@ -1533,9 +1540,9 @@ def build_coarse_preconditioner(
         def apply_op(v: jnp.ndarray) -> jnp.ndarray:
             return op.apply(v)  # a plain closure over ``op``: its arrays become jit arguments
 
-        precond = _bordered_precond(apply_op, a_inv, fs, n)
+        precond = _bordered_precond(apply_op, a_inv, fs, n, store=jnp.float32)
         precond_t = _lazy_projected_precond(
-            op, lambda: _bordered_precond(_transposed_apply(op), a_inv_t, fs, n), a_inv_t
+            op, lambda: _bordered_precond(_transposed_apply(op), a_inv_t, fs, n, store=jnp.float32), a_inv_t
         )
         return precond, precond_t
     if op.extra_size == 0:
@@ -1561,6 +1568,7 @@ def _bordered_precond(
     n: int,
     *,
     chunk: int = 8,
+    store=jnp.float64,
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
     """Exact bordered-Schur preconditioner of ``[[A, B], [C, D]]`` from matvecs alone.
 
@@ -1571,7 +1579,7 @@ def _bordered_precond(
     ``A^-1 B`` is kept, one ``(p, f_size)`` array. Materializing ``B`` and ``C`` as
     well, and mapping ``a_inv`` over all ``p`` columns at once, cost five border-sized
     arrays and a transient of the block-Thomas intermediates times ``p`` on W7-X
-    Phi1 decks (``p ~ Ntheta Nzeta``). Columns are processed ``chunk`` at a time.
+    Phi1 decks (``p ~ Ntheta Nzeta``). Columns are processed ``chunk`` at a time, and ``A^-1 B`` is kept at ``store`` precision.
     """
     p = n - f_size
 
@@ -1579,7 +1587,7 @@ def _bordered_precond(
         out = apply_fn(jnp.zeros((n,), jnp.float64).at[f_size + j].set(1.0))
         ainv = a_inv(out[:f_size])
         top = jnp.concatenate([ainv.astype(jnp.float64), jnp.zeros((p,), jnp.float64)])
-        return ainv, apply_fn(top)[f_size:] - out[f_size:]
+        return ainv.astype(store), apply_fn(top)[f_size:] - out[f_size:]
 
     ainv_rows, schur_cols = jax.lax.map(column, jnp.arange(p), batch_size=chunk)
     schur_lu = jax.scipy.linalg.lu_factor(schur_cols.T)
