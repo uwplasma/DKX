@@ -15,7 +15,7 @@ measures how far they are.
 | {doc}`04_collisions_solvers` | `06`, `18` | PAS, Fokker-Planck and Sugama operators, solver routes, CPU and GPU, judging a run |
 | {doc}`05_scans_resolution` | `13`, `08` | `dkx converge`, resolution ladders, $E_r$ scans |
 | {doc}`06_ambipolar_er` | `08` | the root search, ion and electron roots, failures |
-| {doc}`07_transport_matrices` | `09`, `10`, `16` | monoenergetic $D_{11}$, $D_{31}$, $D_{33}$; RHSMode 2 and 3; full against DKES trajectories |
+| {doc}`07_transport_matrices` | `09`, `10`, `16`, `20` | monoenergetic $D_{11}$, $D_{31}$, $D_{33}$; RHSMode 2 and 3; full against DKES trajectories; converting YANCC, SFINCS and MONKES coefficients |
 | {doc}`08_phi1_bootstrap_gradients` | `11`, `12`, `14`, `15` | $\Phi_1$, bootstrap against Redl, `jax.grad`, optimization |
 
 Every script is flat: imports, input parameters, the run with progress printed,
