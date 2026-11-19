@@ -77,6 +77,7 @@ EXPECTED = {
     "17_vmex_geometry": ("VMEX: converged", "geometry sha256: "),
     "18_gpu": ("first", "repeat"),
     "19_plotting": ("panels.png", "heatFlux_vm_psiHat"),
+    "20_cross_code_conversion": ("YANCC dshape", "MONKES w7x", "SFINCS tiny", "against the 2% gate: pass"),
 }
 
 
