@@ -4,6 +4,11 @@
 
 - Ambipolar bootstrap example: the Redl column of `ambipolar_bootstrap_dkx.py` is now labelled as the tokamak formula outside its range. The opposite sign at `SEED_PERTURBATION = 0.12` (DKX +28.8/+26.6, Redl -6.3/-9.6 MA T/m^2 at E_r = 0) is not a DKX sign error: at 0.01 (near-axisymmetric) DKX +0.68/+0.84 and Redl +0.63/+0.52 agree in sign, and a slow test pins that.
 
+## 2.16.0 - 2026-11-18
+
+Cross-code conventions made explicit and checked, `tol=None` honours the deck, options that did nothing removed, and the release gate accepts only release-ready claims.
+
+- Examples: tutorial 20 (`20_cross_code_conversion.py`) converts YANCC, SFINCS and MONKES coefficients into DKX's Beidler `D*` convention with every formula written out (collisionality, E*, radial `dpsi/dr`, SFINCS hat units) and prints coefficient, DKX, reference, converted reference and relative error against a 2% gate. It solves the committed tiny RHSMode 3 deck against the recorded SFINCS v3 output and reads the YANCC and MONKES rows from `validation/independent_cross_code_v1.json`.
 - Publication figures: `generate_sfincs_paper_figs.py` drops `--transport-workers` and `--transport-parallel-backend`, which only set the removed `DKX_TRANSPORT_PARALLEL*` variables, and its summary metadata no longer records `transport_workers` or `transport_parallel_backend`; committed summaries are unchanged.
 - Removed options that were accepted and did nothing: the `--transport-workers` CLI flag and the `DKX_TRANSPORT_PARALLEL` / `DKX_TRANSPORT_PARALLEL_WORKERS` environment variables, the `dkx sfincs ambipolar` flags `--step-tolerance`, `--no-output-cache` and `--no-solver-state`, and the `work_dir`, `step_tolerance`, `differentiable`, `reuse_output_geometry_cache`, `reuse_solver_state` and `**kwargs` arguments of `run_ambipolar_brent`. The native result metadata `converged` is now false when an ambipolar search leaves a surface without a bracketed root, instead of being always true.
 - Validation: the DSHAPE row of `independent_cross_code` applies YANCC own d psi / d r (0.2125 T m, from its toroidal flux and minor radius) as the W7-X row already did; the D11* difference from YANCC falls from 5.5% to 0.05% and D31* from 2.8% to 0.01%. The earlier gap was a radial-normalization mismatch, not physics or resolution.
