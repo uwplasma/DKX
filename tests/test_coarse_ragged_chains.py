@@ -117,16 +117,17 @@ def test_the_dense_route_is_the_reusable_route_to_rounding(name: str, monkeypatc
     dense = _inverses(op, monkeypatch)
     reusable = _inverses(op, monkeypatch, **REUSABLE)
     rng = np.random.default_rng(0)
+    limit = 2e-3 if op.include_phi1 else 1e-10  # the Phi1 dense route stores float32 factors
     for _ in range(2):
         f = jnp.asarray(rng.standard_normal(op.f_size))
         v = jnp.asarray(rng.standard_normal(op.total_size))
         for got, ref in zip(dense[:2], reusable[:2], strict=True):  # forward, transposed
             # An explicit inverse loses cond * eps (cond <= 1e7 here), the LU does not.
-            assert _relative(got(f), ref(f)) <= 1e-10
+            assert _relative(got(f), ref(f)) <= limit
         for got, ref in zip(dense[2:], reusable[2:], strict=True):
             out = np.asarray(got(v))
             assert np.all(np.isfinite(out))
-            assert _relative(out, ref(v)) <= 1e-9
+            assert _relative(out, ref(v)) <= max(1e-9, limit)
 
 
 @pytest.mark.parametrize("name", TRUNCATING)
