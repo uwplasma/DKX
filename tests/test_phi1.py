@@ -576,7 +576,7 @@ def test_matrix_free_border_matches_the_dense_schur_projection() -> None:
 
 
 def test_phi1_preconditioner_keeps_one_border_sized_array_and_no_baked_constants() -> None:
-    """One ``A^-1 B`` array, and nothing SOLVAX would compile in as a constant.
+    """One float32 ``A^-1 B`` array, and nothing SOLVAX would compile in as a constant.
 
     SOLVAX hands the arrays in a function's closure cells to the compiled solve as
     arguments; those in a ``functools.partial`` or a bound method are baked in, and
@@ -603,6 +603,7 @@ def test_phi1_preconditioner_keeps_one_border_sized_array_and_no_baked_constants
                 stack.append(value)
             elif isinstance(value, jax.Array) and value.shape == (op.total_size - op.f_size, op.f_size):
                 border_sized += 1
+                assert value.dtype == jnp.float32  # the factors and A^-1 B only precondition
     assert border_sized == 1
 
 
