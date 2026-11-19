@@ -38,6 +38,7 @@ check convergence before quoting a number.
 | VMEX geometry | [17_vmex_geometry.py](tutorials/17_vmex_geometry.py) | solve a VMEX equilibrium, then its transport (needs `vmex`) | 68 s |
 | GPU | [18_gpu.py](tutorials/18_gpu.py) | device placement, CPU vs GPU timing | 29 s |
 | plotting | [19_plotting.py](tutorials/19_plotting.py) | `dkx.plot` panels and your own figure | 29 s |
+| cross-code conversion | [20_cross_code_conversion.py](tutorials/20_cross_code_conversion.py) | YANCC, SFINCS and MONKES coefficients in DKX's `D*` convention, against a 2% gate | 5 s |
 
 Times are wall clock on the shared 36-core Linux office node with a load
 average of 90 to 150 from other jobs, compilation included, so they are upper
