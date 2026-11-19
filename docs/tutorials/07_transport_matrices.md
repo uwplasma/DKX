@@ -125,6 +125,15 @@ $E_r=0$ and $E_r=-30$ (SFINCS units) with each model. At zero field the two
 agree to the printed digits. At $E_r=-30$ the full-trajectory ion flux is 0.966
 of the DKES one and the parallel flow differs by 8%, on a grid chosen for speed.
 
+## Comparing with YANCC, SFINCS and MONKES
+
+`20_cross_code_conversion.py` shows every conversion needed to put another code's
+monoenergetic coefficients in DKX's $D^*$ convention: the collisionality map from
+$\nu/v$, the $E^*$ and $E_r$ relations, the radial $d\psi/dr$ each code uses
+(a wrong one shifts $D_{11}^*$ by up to 7.5%), SFINCS hat units and the
+`transportMatrix` layout. It prints one table, relative error against a 2% gate,
+for the sealed YANCC and MONKES rows and a live SFINCS row ({doc}`../benchmarks/cross_code`).
+
 ## Next
 
 {doc}`08_phi1_bootstrap_gradients`: $\Phi_1$, the bootstrap current and
