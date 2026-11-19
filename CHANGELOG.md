@@ -4,6 +4,8 @@
 
 - Ambipolar bootstrap example: the Redl column of `ambipolar_bootstrap_dkx.py` is now labelled as the tokamak formula outside its range. The opposite sign at `SEED_PERTURBATION = 0.12` (DKX +28.8/+26.6, Redl -6.3/-9.6 MA T/m^2 at E_r = 0) is not a DKX sign error: at 0.01 (near-axisymmetric) DKX +0.68/+0.84 and Redl +0.63/+0.52 agree in sign, and a slow test pins that.
 
+- Performance: the Phi1 coarse preconditioner keeps its block-Thomas factors and the bordered `A^-1 B` array in float32 (the elimination stays float64, and the bands are applied in float32 rather than promoted to a float64 copy). On W7-X geometry 4 with `includePhi1` and `includePhi1InKineticEquation`, alternating runs on one machine: 13 x 35 x 40 x 5 (two species) peak memory falls from 4.2 and 3.9 GB to 2.6 and 2.6 GB and wall time from 26 s to 23 s; 13 x 45 x 48 x 5 (H, e, C6+) from 7.1 GB and 102 s to 5.1 GB and 86 s. The inner iteration counts (101 and 270) are unchanged and the converged state agrees to 7e-15 relative.
+
 ## 2.16.0 - 2026-11-18
 
 Cross-code conventions made explicit and checked, `tol=None` honours the deck, options that did nothing removed, and the release gate accepts only release-ready claims.
