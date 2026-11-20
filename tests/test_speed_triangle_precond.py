@@ -341,7 +341,7 @@ def test_it_refuses_the_route_it_does_not_implement(tmp_path, monkeypatch) -> No
     import dkx.coarse_precond as cp
 
     op = _operator(tmp_path)
-    monkeypatch.setattr(cp, "_coarse_bands_fit", lambda _op: False)
+    monkeypatch.setattr(cp, "_coarse_bands_fit", lambda _op, *_: False)
     with pytest.raises(NotImplementedError, match="dense-band route only"):
         cp.build_coarse_preconditioner(op, retain_speed_triangle=True)
 
@@ -395,6 +395,29 @@ def test_the_coupled_route_solves_full_fokker_planck_exactly(tmp_path, species, 
         assert error < (1e-7 if transpose else 1e-9), (transpose, error)
 
 
+@pytest.mark.parametrize("keep", [None, 2])
+def test_a_symmetric_deck_factors_each_parity_half_of_the_coupled_blocks(tmp_path, monkeypatch, keep) -> None:
+    """Every Schur complement commutes with the angular reflection on a symmetric field, so
+    the coupled LUs are taken of its even and odd halves: the same inverse from half the storage."""
+    import jax
+
+    import dkx.coarse_precond as cp
+    import dkx.structured_direct as sd
+
+    monkeypatch.setattr(cp, "_PARITY_MIN_POINTS", 2)  # below the default size, split anyway
+    op = replace(_two_species_operator(tmp_path, nx=4), n_xi_for_x=jnp.asarray([3, 4, 5, 6]))
+    assert sd._coupled_parity(op, None) is not None
+    split = sd.build_coupled_solver(op, keep)
+    monkeypatch.setattr(sd, "_coupled_parity", lambda *_: None)
+    whole = sd.build_coupled_solver(op, keep)
+    b = jnp.asarray(np.random.default_rng(3).standard_normal(op.total_size))
+    for transpose in (False, True):
+        x, y = split.solve(b, transpose=transpose), whole.solve(b, transpose=transpose)
+        assert float(jnp.linalg.norm(x - y) / jnp.linalg.norm(y)) < (1e-8 if keep is None else 1e-4)  # float32 tail
+    nbytes = lambda s: sum(a.nbytes for a in jax.tree_util.tree_leaves((s.lu, s.tail[:2])))  # noqa: E731
+    assert nbytes(split) < 0.6 * nbytes(whole)
+
+
 def test_auto_takes_the_coupled_route_and_matches_krylov(tmp_path) -> None:
     from dkx.solve import solve
 
@@ -444,5 +467,5 @@ def test_auto_takes_the_triangle_when_the_er_terms_are_active(tmp_path, monkeypa
     )
     assert S._auto_preconditioner(with_er, 1e3) == "coarse_triangle"
     assert S._auto_preconditioner(replace(with_er, dphi_hat_dpsi_hat_kinetic=jnp.asarray(0.0)), 1e3) == "coupled"
-    monkeypatch.setattr(S, "_coarse_bands_fit", lambda _op: False)
+    monkeypatch.setattr(S, "_coarse_bands_fit", lambda _op, *_: False)
     assert S._auto_preconditioner(with_er, 1e3) == "coupled"

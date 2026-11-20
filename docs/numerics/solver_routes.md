@@ -221,6 +221,29 @@ solves on a laptop (14 cores, shared), recycled GCROT to 1e-10:
 It cuts iterations two to three times but costs a little more memory than the
 coarse bands, so it is not an `auto` choice; it pays where iterations dominate.
 
+### Stellarator symmetry
+
+On a stellarator-symmetric field, streaming and the mirror force are odd under the
+angular reflection $R: (\theta, \zeta) \to (-\theta, -\zeta)$ and couple $L$ to
+$L \pm 1$; collisions, the $L = 0$ pin and the constraint weights are even under
+$R$ and diagonal in $L$. Every Schur complement of the elimination then commutes
+with $R$, and so does the operator with $S = (-1)^L R$. The coarse preconditioner
+and the per-$(s, x)$ structured direct route eliminate the two chains $S = \pm 1$
+separately, each on about half of the $m = N_\theta N_\zeta$ angular points; the
+speed-coupled route factors the even and odd halves of each Schur complement. The
+factors take half the storage and a quarter of the elimination work, and the
+solution agrees with the unsplit factorization to rounding.
+
+The test is numerical, to $10^{-12}$ relative, on the arrays the blocks are built
+from. $E_r \neq 0$ (the $\mathbf{E}\times\mathbf{B}$ term) and the tangential
+magnetic drifts are odd under $R$ and diagonal in $L$, so they anticommute with
+$S$: those decks, up-down asymmetric fields and grids not symmetric under $R$ keep
+the unsplit chain. So do grids under 128 angular points, where the extra gathers
+cost more compile time than they save, and decks without constraints, whose chain
+is singular. The drives of RHSMode 1 to 3 are odd under $S$, so on a split deck
+the solution itself lies in the $S = -1$ sector ($\lVert f + S f\rVert / 2\lVert f
+\rVert \approx 10^{-15}$); the Krylov route does not use that.
+
 ### Truncated storage
 
 The drives of RHSMode 1, 2 and 3 (radial gradients on $L = 0, 2$, the inductive

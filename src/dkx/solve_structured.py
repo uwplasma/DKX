@@ -41,6 +41,9 @@ except ImportError:
     iterative_refinement = None  # type: ignore[assignment, misc]
 
 from dkx.coarse_precond import (  # noqa: E402
+    _coarse_parity,
+    _parity_block,
+    _parity_maps,
     _require_solvax,
     _truncated_block_fn,
     _truncated_blocks,
@@ -116,6 +119,10 @@ class Tier1Solver:
     gamma: jnp.ndarray  # (B,)
     b0: jnp.ndarray  # (TZ,) source column shape on the l=0 rows
     c0: jnp.ndarray  # (TZ,) constraint row (flux-surface-average weights)
+    # The angular parity basis (idx, ridx, w_even, w_odd) and its gather maps (sign, w,
+    # pos, c) when the factors hold the two sectors of a stellarator-symmetric deck
+    # (2B chains on h points), else None.
+    parity: tuple | None = None
 
     def solve(self, rhs: jnp.ndarray, transpose: bool = False) -> jnp.ndarray:
         """Solve ``K x = rhs`` (or ``K^T x = rhs``) for flat state vector(s).
@@ -139,7 +146,7 @@ class Tier1Solver:
         b_f = rhs2d[: op.f_size].reshape(n_s, n_x, n_xi, n_tz, n_rhs)
         b_f = b_f.reshape(batch, n_xi, n_tz, n_rhs)
 
-        y = _tier1_f_solve(op, self.factors, self.gamma, b_f, transpose)  # (B, L, TZ, n_rhs)
+        y = _tier1_f_solve(op, self.factors, self.gamma, b_f, transpose, self.parity)  # (B, L, TZ, n_rhs)
 
         if op.constraint_scheme == 0:
             x = y.reshape(op.f_size, n_rhs)
@@ -153,7 +160,7 @@ class Tier1Solver:
             z = self.z_t
             if z is None:  # forward-only factorizations never pay for the adjoint border
                 e0 = jnp.zeros((batch, n_xi, n_tz, 1), dtype=jnp.float64).at[:, 0, :, 0].set(self.c0[None, :])
-                z = _tier1_f_solve(op, self.factors, self.gamma, e0, True)[..., 0]
+                z = _tier1_f_solve(op, self.factors, self.gamma, e0, True, self.parity)[..., 0]
         w_row = (
             self.b0 if transpose else self.c0
         )  # constraint row of the (transposed) system
@@ -200,9 +207,22 @@ def build_tier1_solver(op: KineticOperator) -> Tier1Solver:
             "truncated DOFs); ramped decks "
             "route through the truncated kernel (method='block_tridiagonal_truncated')"
         )
-    return _factor_tier1_compiled(op)
+    return _factor_tier1_compiled(op, _tier1_parity(op))
 
-def _tier1_block_fn(op: KineticOperator, k: Any, gamma: Any) -> Callable[[Any], tuple]:
+def _tier1_parity(op: KineticOperator) -> tuple | None:
+    """The angular parity basis when every block row commutes with ``S = (-1)^l R``
+    (:func:`dkx.coarse_precond._coarse_parity`), else ``None``."""
+    if op.constraint_scheme == 0 or any(isinstance(a, jax.core.Tracer) for a in jax.tree_util.tree_leaves(op)):
+        return None  # without constraints the chain is singular, and its null component pivot-dependent
+    basis = _coarse_parity(op, _truncated_coefficients(op))
+    if basis is None:
+        return None
+    maps = _parity_maps(basis, op.n_xi, op.n_theta * op.n_zeta)[2:]  # sign, w, pos, c
+    return tuple(jnp.asarray(a) for a in (*basis, *maps))
+
+def _tier1_block_fn(
+    op: KineticOperator, k: Any, gamma: Any, sector: Any = None, parity: tuple | None = None
+) -> Callable[[Any], tuple]:
     """Legendre row ``l`` of subsystem ``k`` (one (species, x) pair) of ``A + gamma B C``.
 
     The full-band route generates its rows on demand, one per scan step, in the
@@ -219,19 +239,45 @@ def _tier1_block_fn(op: KineticOperator, k: Any, gamma: Any) -> Callable[[Any], 
         lower, diag, upper = (a.reshape(-1, n_tz, n_tz)[k] for a in (blk.lower, blk.diag, blk.upper))
         if op.constraint_scheme == 2:
             diag = diag + jnp.where(l == 0, gamma, 0.0) * border
-        return lower, diag, upper
+        if parity is None:
+            return lower, diag, upper
+        p = sector * (1.0 - 2.0 * (l % 2))  # the sector's parity on row l, as in the coarse chain
+        pad = jnp.where(jnp.where(p > 0, parity[2], parity[3]) == 0.0, 1.0, 0.0)
+        return (
+            _parity_block(lower, parity[:4], p, -p),
+            _parity_block(diag, parity[:4], p, p) + jnp.diag(pad),
+            _parity_block(upper, parity[:4], p, -p),
+        )
 
     return block_fn
 
-def _tier1_f_solve(op: KineticOperator, factors: tuple, gamma: Any, b_f: Any, transpose: bool) -> Any:
-    """Batched f-block solve ``(B, L, TZ, n_rhs)`` from the stored Schur LUs."""
-    def solve_one(k: Any, lu: Any, piv: Any, g: Any, r: Any) -> Any:
-        state = GeneratedBlockTridiagFactors(lu, piv, _tier1_block_fn(op, k, g), op.n_xi, r.dtype)
+def _tier1_f_solve(
+    op: KineticOperator, factors: tuple, gamma: Any, b_f: Any, transpose: bool, parity: tuple | None = None
+) -> Any:
+    """Batched f-block solve ``(B, L, TZ, n_rhs)`` from the stored Schur LUs.
+
+    With ``parity`` the factors hold sector ``+1`` then sector ``-1`` of every
+    subsystem, and ``b_f`` is rotated into them and the solution back.
+    """
+    def solve_one(k: Any, s: Any, lu: Any, piv: Any, g: Any, r: Any) -> Any:
+        block_fn = _tier1_block_fn(op, k, g, s, parity)
+        state = GeneratedBlockTridiagFactors(lu, piv, block_fn, op.n_xi, r.dtype)
         return block_thomas_solve(state, r, transpose=transpose)
 
-    return jax.vmap(solve_one)(jnp.arange(b_f.shape[0]), *factors, gamma, b_f)
+    batch = b_f.shape[0]
+    if parity is None:
+        return jax.vmap(solve_one)(jnp.arange(batch), None, *factors, gamma, b_f)
+    idx, ridx, _w_even, _w_odd, sign, w, pos, c = parity
+    g = jnp.moveaxis(b_f, -1, 1)[None]  # (1, B, n_rhs, L, TZ)
+    y = w[:, None, None] * (g[..., idx] + sign[:, None, None, :, None] * g[..., ridx])
+    y = jnp.moveaxis(y.reshape(2 * batch, *y.shape[2:]), 1, -1)  # (2B, L, h, n_rhs)
+    sectors = jnp.repeat(jnp.asarray([1.0, -1.0]), batch)
+    k = jnp.tile(jnp.arange(batch), 2)
+    out = jax.vmap(solve_one)(k, sectors, *factors, jnp.tile(gamma, 2), y)
+    out = jnp.moveaxis(out, -1, 1).reshape(2, batch, *g.shape[2:4], -1)  # (2, B, n_rhs, L, h)
+    return jnp.moveaxis(jnp.sum(c[:, None, None] * out[..., pos], axis=0), 1, -1)
 
-def _factor_tier1(op: KineticOperator) -> Tier1Solver:
+def _factor_tier1(op: KineticOperator, parity: tuple | None = None) -> Tier1Solver:
     """The body of :func:`build_tier1_solver`, after its applicability checks."""
     n_s, n_x, n_xi, n_t, n_z = op.f_shape
     n_tz = n_t * n_z
@@ -257,16 +303,20 @@ def _factor_tier1(op: KineticOperator) -> Tier1Solver:
     else:
         gamma = jnp.ones((batch,), dtype=jnp.float64)
 
-    def factor_one(k: jnp.ndarray, g: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
-        state = block_thomas_factor_fn(_tier1_block_fn(op, k, g), n_xi, store_offdiagonals=False)
+    def factor_one(k: jnp.ndarray, s: Any, g: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+        state = block_thomas_factor_fn(_tier1_block_fn(op, k, g, s, parity), n_xi, store_offdiagonals=False)
         return state.delta_lu, state.delta_piv
 
-    factors = jax.vmap(factor_one)(jnp.arange(batch), gamma)
+    if parity is None:
+        factors = jax.vmap(factor_one)(jnp.arange(batch), None, gamma)
+    else:  # two sector chains per subsystem, on h ~ TZ / 2 points each
+        sectors = jnp.repeat(jnp.asarray([1.0, -1.0]), batch)
+        factors = jax.vmap(factor_one)(jnp.tile(jnp.arange(batch), 2), sectors, jnp.tile(gamma, 2))
 
     e0 = jnp.zeros((batch, n_xi, n_tz, 1), dtype=jnp.float64)
-    z_fwd = _tier1_f_solve(op, factors, gamma, e0.at[:, 0, :, 0].set(b0[None, :]), False)[..., 0]
+    z_fwd = _tier1_f_solve(op, factors, gamma, e0.at[:, 0, :, 0].set(b0[None, :]), False, parity)[..., 0]
     return Tier1Solver(
-        op=op, factors=factors, z_fwd=z_fwd, z_t=None, gamma=gamma, b0=b0, c0=c0
+        op=op, factors=factors, z_fwd=z_fwd, z_t=None, gamma=gamma, b0=b0, c0=c0, parity=parity
     )
 
 # One executable per operator structure (static layout plus array shapes); the
