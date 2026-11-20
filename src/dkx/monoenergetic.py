@@ -453,7 +453,7 @@ def _operator_at(
         pas=pas,
         dphi_hat_dpsi_hat=jnp.asarray(dphi, dtype=jnp.float64),
         dphi_hat_dpsi_hat_kinetic=jnp.asarray(dphi, dtype=jnp.float64),
-        with_exb=bool(dphi != 0.0),
+        with_exb=True,  # E* = 0 is a zero coefficient: one compiled program serves every E*
     )
 
 def monoenergetic_database_from_operator(
