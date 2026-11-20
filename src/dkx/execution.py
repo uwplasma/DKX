@@ -464,6 +464,15 @@ def _make_operator(
     return op, grids, geometry, radial
 
 
+def _route_reason(reasons: list[str], surfaces: np.ndarray) -> str:
+    """One reason when every surface shares it, else one clause per surface."""
+    if not reasons:
+        return "requested native solver method"
+    if len(set(reasons)) == 1:
+        return reasons[0]
+    return "; ".join(f"psi_N={psi:g}: {why}" for psi, why in zip(surfaces, reasons))
+
+
 def _route_name(method: str) -> str:
     return {
         "auto": "auto",
@@ -1068,6 +1077,7 @@ def run_case(
     solve_seconds = np.empty((surfaces.size,), dtype=np.float64)
     retained_operator = None
     selected_routes: list[str] = []
+    route_reasons: list[str] = []
     ambipolar_surfaces = []
     previous_root_kv_m: float | None = None
 
@@ -1081,7 +1091,7 @@ def run_case(
             == case.solver.relative_tolerance
         )
 
-    def record(index, moments, radial, residual, rhs_norm, route_iterations, method, op) -> None:
+    def record(index, moments, radial, residual, rhs_norm, route_iterations, method, op, reason="") -> None:
         nonlocal retained_operator
         # diagnostics.F90 uses d(rHat)/d(psiHat), not its inverse, when
         # converting particleFlux/heatFlux from psiHat to rHat.
@@ -1102,6 +1112,7 @@ def run_case(
         residual_complete_state[index] = True
         iterations[index] = 0 if route_iterations is None else int(route_iterations)
         selected_routes.append(method)
+        route_reasons.append(reason)
         retained_operator = op
 
     progress = emit if emit is not None else (print if case.run.progress else None)
@@ -1192,6 +1203,7 @@ def run_case(
             iterations[index] = len(surface_result.evaluations)
             solve_seconds[index] = surface_result.solve_seconds
             selected_routes.append(problem.solve_method)
+            route_reasons.append(f"requested method {problem.solve_method!r}")
             if surface_result.selected_root is not None:
                 previous_root_kv_m = surface_result.roots[
                     surface_result.selected_root
@@ -1203,7 +1215,7 @@ def run_case(
             solve_seconds[index] = batch_seconds
             residual = float(np.asarray(batch.residual_norms)[index])
             record(index, moments, radial, residual, float(np.linalg.norm(np.asarray(op.rhs()))),
-                   None, batch.executed_method, op)  # fmt: skip
+                   None, batch.executed_method, op, "batched profile solve")  # fmt: skip
             continue
         solve_start = time.perf_counter()
         if op.include_phi1:
@@ -1217,6 +1229,7 @@ def run_case(
             state = np.asarray(phi1_solved.x, dtype=np.float64).reshape((-1,))
             converged, method = phi1_solved.converged, "phi1_newton_krylov"
             route_iterations, residual_norms = phi1_solved.n_newton, phi1_solved.residual_norms
+            reason = "Phi1 Newton-Krylov (include_phi1 couples kinetic and quasineutrality)"
             rhs = np.asarray(op.rhs_phi1(), dtype=np.float64).reshape((-1,))
             defect = np.asarray(op.residual_phi1(state), dtype=np.float64).reshape((-1,))
         else:
@@ -1233,6 +1246,7 @@ def run_case(
             )
             state = np.asarray(solved.x, dtype=np.float64).reshape((-1,))
             converged, method = solved.converged, str(solved.method)
+            reason = solved.route_reason
             route_iterations, residual_norms = solved.iterations, solved.residual_norms
             rhs = np.asarray(op.rhs(), dtype=np.float64).reshape((-1,))
             defect = np.asarray(op.apply(state), dtype=np.float64).reshape((-1,)) - rhs
@@ -1263,7 +1277,7 @@ def run_case(
                 f"relative_tolerance={case.solver.relative_tolerance!r}"
             )
         record(index, profile_moments_from_operator(op, state), radial, residual, rhs_norm,
-               route_iterations, method, op)  # fmt: skip
+               route_iterations, method, op, reason)  # fmt: skip
 
     if ambipolar_surfaces:
         from dkx.workflows.ambipolar_native import (  # noqa: PLC0415
@@ -1387,7 +1401,7 @@ def run_case(
         # converged only when every surface bracketed its root.
         "converged": all(result.status == "bracketed_root" for result in ambipolar_surfaces),
         "solver_route": route_set[0] if len(route_set) == 1 else route_set,
-        "route_reason": "selected from operator structure and requested native solver method",
+        "route_reason": _route_reason(route_reasons, surfaces),
         "residual_norm": reported_residual,
         "original_residual_evidence": {
             "residual_array": "primal_residual",

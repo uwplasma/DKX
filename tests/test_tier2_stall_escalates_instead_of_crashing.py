@@ -426,6 +426,7 @@ def test_restart_recovery_is_only_auto_host_policy(
     module = solve_modules
     op = SimpleNamespace(total_size=4)
     monkeypatch.setattr(module, '_auto_route', lambda *a: 'gmres')
+    monkeypatch.setattr(module, 'tier1_available', lambda op: (False, 'structured solve unavailable'))
     monkeypatch.setattr(module, '_resolve_solve_device', lambda *a: None)
     def tier2(op, rhs, **kwargs):
         assert kwargs['auto_restart_recovery'] is recovery

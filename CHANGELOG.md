@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Solve routing: `route_reason` in the native profile metadata (and the new `SolveResult.route_reason`) states the actual per-surface reason instead of one generic string. On tutorial 05 (Boozer, non-axisymmetric, `method = "auto"`) the truncated block-Thomas direct solve misses the tolerance on both surfaces (residual 6.6e-3 and 1.5e-1 against a right-hand side of 1.7e-3 on the first) and recycled Krylov takes over; that is now reported rather than hidden behind "selected from operator structure". Fluxes are unchanged.
+
 ## 2.16.1 - 2026-11-19
 
 Lower Phi1 preconditioner memory and one compiled program per monoenergetic scan.

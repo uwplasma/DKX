@@ -119,7 +119,7 @@ evaluation, bracket and root.
 | `canonical_case` | the normalized case (`Case.to_dict()`) |
 | `converged` | `true` when every surface met the residual test |
 | `solver_route` | the route that ran, or a list when surfaces differ (for example `block_tridiagonal_truncated`) |
-| `route_reason` | how the route was chosen |
+| `route_reason` | why the route ran: the requested method, the structural reason `auto` chose it, or that a structured direct solve missed the tolerance and recycled Krylov took over; one clause per surface when surfaces differ |
 | `residual_norm` | largest `primal_residual` (or `evaluation_primal_residual`) |
 | `original_residual_evidence` | names of the residual and RHS-norm arrays, the norm (`absolute_l2`), the tolerance, whether the state was complete |
 | `iterations` | sum of `solver_iterations` |
