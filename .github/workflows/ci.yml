@@ -232,9 +232,9 @@ jobs:
           # package under src/ an editable install would put the source tree on
           # the path and measure that instead, which is the difference that let
           # a broken wheel ship twice while these shards stayed green.
-          uv venv .venv
-          echo "${GITHUB_WORKSPACE}/.venv/bin" >> "${GITHUB_PATH}"
-          uv pip install --python .venv/bin/python ".[dev]"
+          uv venv "$RUNNER_TEMP/venv"
+          echo "$RUNNER_TEMP/venv/bin" >> "${GITHUB_PATH}"
+          uv pip install --python "$RUNNER_TEMP/venv/bin/python" ".[dev]"
       - name: Fetch external equilibrium data
         run: |
           python -m dkx.validation.data_fetch --quiet
@@ -272,7 +272,7 @@ jobs:
         run: |
           # Keep the two VMEX/Boozer derivative checks in a shorter shard, with its tested JAX versions.
           python -c 'import importlib.metadata as m; print("jax==" + m.version("jax") + "\njaxlib==" + m.version("jaxlib"))' > "${RUNNER_TEMP}/bootstrap-constraints.txt"
-          uv pip install --python "${GITHUB_WORKSPACE}/.venv/bin/python" -c "${RUNNER_TEMP}/bootstrap-constraints.txt" vmex==0.13.0 booz_xform_jax==0.5.1
+          uv pip install --python "$RUNNER_TEMP/venv/bin/python" -c "${RUNNER_TEMP}/bootstrap-constraints.txt" vmex==0.13.0 booz_xform_jax==0.5.1
           python -c 'import jax, jaxlib, vmex, booz_xform_jax.jax_api; print("JAX", jax.__version__, "JAXLIB", jaxlib.__version__)'
           python -m pytest -q --cov=dkx --cov-append --cov-report= \
             tests/test_vmex_kinetic_gradient.py::test_the_objective_agrees_with_redl_in_sign_and_its_jacobian_with_differences \
