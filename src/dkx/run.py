@@ -378,6 +378,13 @@ def run_transport_matrix(
     radial: RadialCoordinates = build.radial
 
     _emit_lines(emit, _startup_lines(inp=inp, op=op, grids=grids, input_name=input_name))
+    if rhs_mode == 3 and op.pas is not None:
+        from dkx.monoenergetic import (  # noqa: PLC0415
+            _monoenergetic_nu_star,
+            _warn_if_pitch_underresolved,
+        )
+
+        _warn_if_pitch_underresolved(_monoenergetic_nu_star(op, geom), op.n_xi)
 
     import jax.numpy as jnp  # noqa: PLC0415
 

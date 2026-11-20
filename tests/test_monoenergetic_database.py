@@ -131,6 +131,25 @@ def test_database_defaults_to_spectral_angles(tmp_path: Path) -> None:
     assert abs(d11[0] - d11[2]) > 1e-6 * abs(d11[2])
 
 
+def test_low_collisionality_with_few_legendre_modes_warns(tmp_path: Path) -> None:
+    """Both entry points flag nu* <= 1e-2 at Nxi < 80, and agree on nu*."""
+    import warnings
+
+    from dkx.monoenergetic import monoenergetic_database
+    from dkx.run import run_transport_matrix
+
+    with pytest.warns(UserWarning, match="Nxi >= 80") as caught:
+        db = monoenergetic_database(MONO_DECK, [1.0e-3], [0.0])
+    nu_star = float(np.asarray(db.nu_star)[0])
+    assert nu_star <= 1e-2 and f"nu* = {nu_star:.2g}" in str(caught[0].message)
+    deck = _write_mono_deck(tmp_path, nu_prime=1.0e-3, e_star=0.0, name="low.namelist")
+    with pytest.warns(UserWarning, match=re.escape(f"nu* = {nu_star:.2g}")):
+        run_transport_matrix(deck, emit=None)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        monoenergetic_database(MONO_DECK, [10.0], [0.0])
+
+
 def test_normalization_physics_gates() -> None:
     """The ICNTS normalization has exact anchors that pin the conversion.
 
