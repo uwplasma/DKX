@@ -403,6 +403,23 @@ def test_gradient_of_convolved_l11_matches_finite_differences() -> None:
     np.testing.assert_allclose(grad_ad, grad_fd, rtol=1e-5)
 
 
+def test_scan_points_share_one_operator_structure() -> None:
+    """E* = 0 and E* != 0 give the same operator pytree, so one compiled program serves a scan."""
+    import jax
+
+    from dkx.drift_kinetic import kinetic_operator_from_namelist
+    from dkx.inputs import load_sfincs_input
+    from dkx.monoenergetic import _operator_at
+    from dkx.run import _raw_with_validated_overrides
+
+    op = kinetic_operator_from_namelist(_raw_with_validated_overrides(load_sfincs_input(MONO_DECK)))
+    kw = dict(g_hat=1.0, i_hat=0.0, iota=1.0, b0_over_bbar=1.0)
+    trees = [
+        jax.tree_util.tree_structure(_operator_at(op, nu_prime=0.2, e_star=e, **kw)) for e in (0.0, 1e-3)
+    ]
+    assert trees[0] == trees[1]
+
+
 @pytest.mark.parametrize("facade", [False, True])
 def test_database_save_load_roundtrip(tmp_path: Path, facade: bool) -> None:
     """The compact npz format round-trips grids, coefficients, and provenance."""
