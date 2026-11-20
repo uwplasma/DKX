@@ -4,7 +4,13 @@
 
 - Ambipolar bootstrap example: the Redl column of `ambipolar_bootstrap_dkx.py` is now labelled as the tokamak formula outside its range. The opposite sign at `SEED_PERTURBATION = 0.12` (DKX +28.8/+26.6, Redl -6.3/-9.6 MA T/m^2 at E_r = 0) is not a DKX sign error: at 0.01 (near-axisymmetric) DKX +0.68/+0.84 and Redl +0.63/+0.52 agree in sign, and a slow test pins that.
 
+## 2.16.1 - 2026-11-19
+
+Lower Phi1 preconditioner memory and one compiled program per monoenergetic scan.
+
+- Performance: a monoenergetic scan builds its operators with the ExB structure at every point (`E* = 0` is a zero coefficient), so `E* = 0` and `E* != 0` share one compiled factorization and solve instead of compiling twice. W7-X 15 x 31 x 48 on a loaded Apple M3 Max: coefficients identical, peak RSS 0.54 to 0.51 GB, cold scan time down by the second compile (about 0.9 s).
 - Performance: the Phi1 coarse preconditioner keeps its block-Thomas factors and the bordered `A^-1 B` array in float32 (the elimination stays float64, and the bands are applied in float32 rather than promoted to a float64 copy). On W7-X geometry 4 with `includePhi1` and `includePhi1InKineticEquation`, alternating runs on one machine: 13 x 35 x 40 x 5 (two species) peak memory falls from 4.2 and 3.9 GB to 2.6 and 2.6 GB and wall time from 26 s to 23 s; 13 x 45 x 48 x 5 (H, e, C6+) from 7.1 GB and 102 s to 5.1 GB and 86 s. The inner iteration counts (101 and 270) are unchanged and the converged state agrees to 7e-15 relative.
+- Phi1 adjoint: GMRES refines on the true residual `|J^T lam - g|`, which the float32 preconditioner factors can leave above the convergence check.
 
 ## 2.16.0 - 2026-11-18
 
