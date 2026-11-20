@@ -179,7 +179,7 @@ def _batched_er_rows(case, scan, todo: list[tuple[int, float]]) -> dict[int, dic
     from ..batch import batched_er_scan  # noqa: PLC0415
     from ..er import ErProblem  # noqa: PLC0415
     from ..execution import (  # noqa: PLC0415
-        _make_operator, _prepare_profile, _route_name, _total_host_memory_bytes,
+        _make_operator, _prepare_profile, _route_name, _host_memory_budget_bytes,
     )
     from ..units import HEAT_FLUX, PARALLEL_CURRENT, PARTICLE_FLUX  # noqa: PLC0415
 
@@ -197,7 +197,7 @@ def _batched_er_rows(case, scan, todo: list[tuple[int, float]]) -> dict[int, dic
             er_initial=0.0, er_min=-1.0, er_max=1.0, solve_method=_route_name(case.solver.method),
             tol=case.solver.relative_tolerance, er_units="kV/m")  # fmt: skip
         batch = batched_er_scan(
-            problem, er, memory_budget_gb=case.solver.memory_fraction * _total_host_memory_bytes() / 1024**3)
+            problem, er, memory_budget_gb=case.solver.memory_fraction * _host_memory_budget_bytes() / 1024**3)
         if not bool(np.all(np.asarray(batch.algebraic_converged))):
             return {}
         m, f = batch.moments, radial.d_dr_hat_to_d_dpsi_hat

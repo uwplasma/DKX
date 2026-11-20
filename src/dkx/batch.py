@@ -44,7 +44,6 @@ from __future__ import annotations
 
 import dataclasses
 import math
-import os
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Sequence
 
@@ -56,6 +55,7 @@ _configure_runtime()
 import jax
 import jax.numpy as jnp
 
+from .coarse_precond import _host_memory_bytes
 from .drift_kinetic import KineticOperator
 from .solve import (
     _auto_route_structural,
@@ -248,20 +248,12 @@ def _device_memory_bytes() -> float | None:
     return float(limit) if limit else None
 
 
-def _host_memory_bytes() -> float | None:
-    """Total physical host RAM (bytes) via ``os.sysconf``, else ``None``."""
-    try:
-        return float(os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES"))
-    except (ValueError, OSError, AttributeError):
-        return None
-
-
 def resolve_memory_budget_bytes(memory_budget_gb: float | None = None) -> float:
     """Resolve the batch memory budget in bytes.
 
     An explicit ``memory_budget_gb`` is taken verbatim; otherwise a fraction
     (:data:`_DEFAULT_BUDGET_FRACTION`) of the device memory limit is used, then
-    the host RAM, then a fixed fallback (:data:`_FALLBACK_BUDGET_GB`).
+    the physical host RAM, then a fixed fallback (:data:`_FALLBACK_BUDGET_GB`).
     """
     if memory_budget_gb is not None:
         return float(memory_budget_gb) * _BYTES_PER_GB
