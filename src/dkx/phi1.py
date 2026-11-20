@@ -525,10 +525,18 @@ def phi1_solution(op: KineticOperator, *, tol: float = 1e-11, adjoint_tol: float
             return where(vjp_x(where(v))[0])
 
         m_t = None if precond is None else (lambda v: where(precond[1](where(v))))
-        lam, _ = jax.scipy.sparse.linalg.gmres(
-            matvec_t, where(g), tol=adjoint_tol, atol=0.0,
-            restart=_inner_restart(o, None, True), maxiter=120, M=m_t,  # float32 preconditioner factors need more restarts
-        )
+        # GMRES stops on the preconditioned residual; with float32 preconditioner
+        # factors the true residual can sit above it, so refine on the defect.
+        lam = jnp.zeros_like(g)
+        for _ in range(3):
+            r = where(g - matvec_t(lam))
+            if float(jnp.linalg.norm(r)) <= 10.0 * adjoint_tol * float(jnp.linalg.norm(g)):
+                break
+            d, _ = jax.scipy.sparse.linalg.gmres(
+                matvec_t, r, tol=adjoint_tol, atol=0.0,
+                restart=_inner_restart(o, None, True), maxiter=40, M=m_t,
+            )
+            lam = lam + d
         defect = float(jnp.linalg.norm(matvec_t(lam) - g))
         if not defect <= 10.0 * adjoint_tol * float(jnp.linalg.norm(g)):
             raise RuntimeError(f"Phi1 adjoint solve did not converge: |J^T lam - g|={defect!r}")
