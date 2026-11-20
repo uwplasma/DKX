@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Ambipolar bootstrap example: the Redl column of `ambipolar_bootstrap_dkx.py` is now labelled as the tokamak formula outside its range. The opposite sign at `SEED_PERTURBATION = 0.12` (DKX +28.8/+26.6, Redl -6.3/-9.6 MA T/m^2 at E_r = 0) is not a DKX sign error: at 0.01 (near-axisymmetric) DKX +0.68/+0.84 and Redl +0.63/+0.52 agree in sign, and a slow test pins that.
+
 ## 2.16.1 - 2026-11-19
 
 Lower Phi1 preconditioner memory and one compiled program per monoenergetic scan.

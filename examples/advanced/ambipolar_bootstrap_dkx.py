@@ -17,9 +17,12 @@ Redl's.  It then compares the Jacobian row of the ambipolar current with
 central finite differences of the same row along boundary coefficients, each
 difference point a full VMEX re-solve.  Finally it writes a figure and a CSV.
 
-The Redl column is a reference, not a check: at this strongly shaped equilibrium
-DKX and Redl differ in sign (see the printed table), at E_r = 0 as well as at the
-ambipolar root, and this script does not investigate why.
+The Redl column is the tokamak formula with helicity 0, shown for contrast and not as a
+check.  At this strongly shaped equilibrium (iota = 1.3 from the vacuum shaping, f_t 0.4-0.5)
+it has the opposite sign to DKX, at E_r = 0 as well as at the ambipolar root.  That is the
+formula leaving its range, not a sign error: with SEED_PERTURBATION = 0.01 (near-axisymmetric,
+iota = -0.2) the same code gives DKX 0.68 / 0.84 and Redl 0.63 / 0.52 MA T/m^2 at E_r = 0,
+the same sign (tests/test_examples_bootstrap_dkx.py pins this).
 
 Needs vmex and booz_xform_jax >= 0.4.
 
@@ -145,7 +148,8 @@ j_redl = j_dot_B_redl(profiles, geometry, 0)[0]
 s, j_zero, j_amb, j_redl = (np.asarray(v) for v in (s, j_zero, j_amb, j_redl))
 for row in zip(s, er, root_slope, j_zero / 1e6, j_amb / 1e6, j_redl / 1e6):
     print(f"s = {row[0]:.3f}: ambipolar E_r = {row[1]:+.2f} kV/m (dJ_r/dE_r = {row[2]:+.1e}); "
-          f"<j.B> [MA T/m^2] E_r = 0: {row[3]:+.4f}, ambipolar: {row[4]:+.4f}, Redl: {row[5]:+.4f}")
+          f"<j.B> [MA T/m^2] E_r = 0: {row[3]:+.4f}, ambipolar: {row[4]:+.4f}, "
+          f"Redl (tokamak formula, not valid at this shaping): {row[5]:+.4f}")
 
 ### Check the derivative against finite differences ###########################
 
@@ -169,7 +173,7 @@ for name in CHECK_DOFS:
 figure, (left, right) = plt.subplots(1, 2, figsize=(9, 3.6), constrained_layout=True)
 left.plot(s, j_zero / 1e6, "o:", label=r"DKX, $E_r = 0$")
 left.plot(s, j_amb / 1e6, "o-", label=r"DKX, ambipolar $E_r$")
-left.plot(s, j_redl / 1e6, "k--", label="Redl")
+left.plot(s, j_redl / 1e6, "k--", label="Redl (tokamak formula, not valid here)")
 left.set(xlabel=r"$s$", ylabel=r"$\langle j\cdot B\rangle$ [MA T/m$^2$]", title="bootstrap current")
 left.legend(frameon=False, fontsize=8)
 right.plot(s, er, "o-")
