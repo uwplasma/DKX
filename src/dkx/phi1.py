@@ -443,22 +443,23 @@ def phi1_state(
     The root of ``F(x) = 0`` (:meth:`KineticOperator.residual_phi1`) is found by
     Newton-Krylov: each step solves ``J(x) dx = -F(x)`` with ``solvax.gmres`` on
     the Jacobian-vector product, right-preconditioned by the coarse operator
-    (:func:`dkx.coarse_precond.build_coarse_preconditioner`) at ``x0``, until
-    ``|F| <= tol``. :func:`solvax.implicit.root_solve` wraps it, so derivatives
-    follow ``dx/dp = -J(x*)^{-1} dF/dp``: the tangent solve is GMRES on
-    ``J(x*)`` preconditioned by the coarse pair built at ``x*``, and its
-    transpose (``jax.grad``) uses the transposed pair. ``jax.jvp``,
-    ``jax.grad``, ``jax.jit(jax.grad(...))`` and ``jax.vmap(jax.grad(...))``
-    are supported.
+    (:func:`dkx.coarse_precond.build_coarse_preconditioner`) built once at
+    ``x0``, until ``|F| <= tol`` (an absolute bound on the 2-norm).
+    :func:`solvax.implicit.root_solve` wraps it, so derivatives follow
+    ``dx/dp = -J(x*)^{-1} dF/dp``: the tangent solve is GMRES on ``J(x*)`` with
+    the same preconditioner, and its transpose (``jax.grad``) uses the
+    transposed one. ``jax.jvp``, ``jax.grad``, ``jax.jit(jax.grad(...))``,
+    ``jax.vmap(jax.grad(...))`` and second derivatives are supported.
 
     The tangent GMRES tolerance is ``rtol = 1e-10`` (the Phi1 coarse factors are
-    float32; tighter targets stall at low collisionality); derivatives agree with
-    a dense solve to about 1e-10 relative. A Newton loop that ends with
-    ``|F| > tol`` returns an all-NaN state, and a tangent solve that does not
-    converge returns NaN derivatives: a failure is never a finite number.
+    float32; tighter targets stall at low collisionality); forward- and
+    reverse-mode derivatives agree to about 1e-8 relative, depending on the
+    parameter. A Newton loop that ends with ``|F| > tol`` returns an all-NaN
+    state, and a tangent solve that does not converge returns NaN derivatives:
+    a failure is never a finite number.
     No ``n x n`` matrix is formed (``n = op.total_size``): memory is the Krylov
     basis of at most 100 vectors of length ``n`` plus the block-Thomas coarse
-    factors over the Legendre index (compiled ``jit(grad)`` scratch 24 MB at
+    factors over the Legendre index (compiled ``jit(grad)`` scratch 27 MB at
     ``n = 4967``).
 
     Requires the un-truncated embedding (``Nxi_for_x_option=0``); use
@@ -480,12 +481,9 @@ def phi1_state(
         x_init = jnp.zeros((n,), dtype=jnp.float64)
     else:
         x_init = jnp.asarray(x0, dtype=jnp.float64).reshape((-1,))
-    frozen = jax.lax.stop_gradient(op)
-
-    def pair(x: jnp.ndarray):
-        return build_coarse_preconditioner(replace(frozen, phi1_lin_state=jax.lax.stop_gradient(x)))
-
-    newton_precond = pair(x_init)[0]
+    # One coarse pair, built at x0 off the tape, preconditions the Newton steps and the tangent.
+    frozen = replace(jax.lax.stop_gradient(op), phi1_lin_state=jax.lax.stop_gradient(x_init))
+    m, m_t = build_coarse_preconditioner(frozen)
 
     def solver(f: Callable[[jnp.ndarray], jnp.ndarray], x_seed: jnp.ndarray) -> jnp.ndarray:
         def cond(state):
@@ -495,22 +493,18 @@ def phi1_state(
         def body(state):
             x, r, k = state
             jvp = lambda v: jax.jvp(f, (x,), (v,))[1]
-            dx = solvax.gmres(jvp, -r, precond=newton_precond, restart=restart, rtol=rtol, max_restarts=40).x
+            dx = solvax.gmres(jvp, -r, precond=m, restart=restart, rtol=rtol, max_restarts=40).x
             return (x + dx, f(x + dx), k + 1)
 
         x_root, r, _k = jax.lax.while_loop(cond, body, (x_seed, f(x_seed), 0))
         return jnp.where(jnp.linalg.norm(r) <= tol, x_root, jnp.nan)
-
-    # The tangent preconditioner is built at the root, found once off the tape.
-    x_root = jax.lax.stop_gradient(solver(frozen.residual_phi1, x_init))
-    m, m_t = pair(x_root)
 
     def tangent_solve(g: Callable, y: jnp.ndarray) -> jnp.ndarray:
         return jax.lax.custom_linear_solve(
             g, y, _krylov_solve(m, restart, rtol), transpose_solve=_krylov_solve(m_t, restart, rtol)
         )
 
-    return root_solve(lambda x: op.residual_phi1(x), x_root, solver, tangent_solve=tangent_solve)
+    return root_solve(lambda x: op.residual_phi1(x), x_init, solver, tangent_solve=tangent_solve)
 
 
 # ---------------------------------------------------------------------------

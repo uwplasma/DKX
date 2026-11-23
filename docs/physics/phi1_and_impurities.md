@@ -71,7 +71,7 @@ fixed point $F(x) = 0$ is wrapped in `solvax.implicit.root_solve`, so gradients 
 moment follow $dx/dp = -(\partial F/\partial x)^{-1}\partial F/\partial p$. Its Newton steps
 and this tangent are GMRES solves preconditioned by the coarse $\Phi_1$ operator, so memory is linear
 in the number of unknowns and `jax.jvp`, `jax.grad`, `jit` and `vmap` all apply; a solve that does not
-converge returns NaN.
+converge returns NaN. `tol` bounds $|F|$ absolutely.
 
 `readExternalPhi1 = .true.` reads a fixed $\Phi_1(\theta,\zeta)$ from file instead. There
 is then no quasineutrality block, no $\Phi_1$ unknown and no $\lambda$ row; the system is
