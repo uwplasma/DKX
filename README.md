@@ -270,7 +270,7 @@ resolution, ambipolar `E_r`, transport matrices, and Phi1, bootstrap current aga
 [Install](docs/getting_started/installation.md) · [User guide](docs/user_guide/index.md) ·
 [Tutorials](docs/tutorials/index.md) · [Physics](docs/physics/index.md) · [Numerics](docs/numerics/index.md) ·
 [Benchmarks](docs/benchmarks/index.md) · [Design decisions](docs/design_decisions.md) ·
-[API](docs/api.md) · [Contributing](docs/contributing.md)
+[API](docs/api.md) · [Contributing](docs/contributing.md) · [UWPlasma development standards](https://github.com/uwplasma/development-standards/blob/3895a2ce5e582df7a411d1043040d8682fe628d1/README.md)
 
 Reusable solver algorithms live in [SOLVAX](https://github.com/uwplasma/SOLVAX).
 

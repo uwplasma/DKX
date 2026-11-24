@@ -23,6 +23,18 @@ permissions:
 # list, e.g. ["self-hosted","macOS"]); unset, and for fork pull requests, they
 # run on hosted ubuntu-22.04. workflow-lint stays hosted (Linux binary).
 jobs:
+  policy:
+    name: UWPlasma policy
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: uwplasma/development-standards@3895a2ce5e582df7a411d1043040d8682fe628d1
+
   # Working-method rule 5: the pull-request gate is tier 1, and tier 1 is the
   # work the change can actually break. The full suite is 3 shards on the self-hosted CPU runners with a warm
   # compilation cache; a change that touches no code cannot alter a solver
