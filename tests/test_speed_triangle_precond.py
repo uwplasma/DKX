@@ -432,6 +432,22 @@ def test_auto_picks_coupled_only_when_its_peak_fits(tmp_path) -> None:
     assert S._auto_preconditioner(_operator(tmp_path, collision=1), 1e3) == "coarse"  # PAS
 
 
+def test_the_coupled_choice_follows_physical_memory_until_it_cannot_fit(tmp_path, monkeypatch) -> None:
+    """Another process's memory does not change the choice unless the build would not fit beside it."""
+    S = solve_modules
+    from dkx.structured_direct import coupled_precond_peak_bytes
+
+    op = _two_species_operator(tmp_path, nx=4)
+    peak = coupled_precond_peak_bytes(op, S._COUPLED_PRECOND_KEEP)
+    monkeypatch.delenv("DKX_KRYLOV_MEMORY_BUDGET_GB", raising=False)
+    monkeypatch.setattr(S, "_host_memory_bytes", lambda: 4.0 * peak)
+    for available, kind in ((64.0 * peak, "coupled"), (1.5 * peak, "coupled"), (0.9 * peak, "coarse")):
+        monkeypatch.setattr(S, "_available_memory_bytes", lambda a=available: a)
+        assert S._auto_preconditioner(op, None) == kind
+    monkeypatch.setattr(S, "_host_memory_bytes", lambda: 1.5 * peak)  # half of it is too little
+    assert S._auto_preconditioner(op, None) == "coarse"
+
+
 def test_auto_takes_the_triangle_when_the_er_terms_are_active(tmp_path, monkeypatch) -> None:
     """``coupled`` factors the operator without the E_r xiDot/xDot terms and stalled at
     |E_r| >= 15 on an HSX QHS full-FP deck, where ``coarse_triangle`` converged. It stays
