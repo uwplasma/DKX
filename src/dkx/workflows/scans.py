@@ -18,6 +18,7 @@ import numpy as np
 
 from ..io import localize_equilibrium_file_in_place
 from ..run import run_from_namelist
+from ..solve_common import _residual_at_floor
 from ..namelist import Namelist, read_sfincs_input
 from ..paths import repository_root
 
@@ -317,7 +318,13 @@ def _run_er_scan_batched(
             state = states[batch_index]
             residual = float(residuals[batch_index])
             rhs_norm = float(np.linalg.norm(np.asarray(op.rhs(), dtype=np.float64)))
-            converged = bool(np.isfinite(residual) and residual <= tolerance * rhs_norm)
+            converged = bool(
+                np.isfinite(residual)
+                and (
+                    residual <= tolerance * rhs_norm
+                    or _residual_at_floor(op, state, op.rhs(), residual)
+                )
+            )
             if not converged:
                 failures.append(
                     (

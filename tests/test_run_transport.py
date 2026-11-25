@@ -199,3 +199,17 @@ def test_run_rejects_rhsmode1() -> None:
 
     with pytest.raises(NotImplementedError, match="RHSMode"):
         run_transport_matrix(REF / "pas_1species_PAS_noEr_tiny_scheme1.input.namelist", emit=None)
+
+
+def test_residual_at_floor_accepts_rounding_and_rejects_real_error(monkeypatch):
+    import numpy as np
+    from types import SimpleNamespace
+
+    import dkx.solve_common as sc
+
+    monkeypatch.setattr(sc, "_pinned_matvecs", lambda _op: (lambda v: 2.0 * v, None))
+    op = SimpleNamespace(total_size=4)
+    x = np.ones((4, 1))
+    rhs = 2.0 * np.ones((4, 1))
+    assert sc._residual_at_floor(op, x, rhs, np.array([1e-15]))
+    assert not sc._residual_at_floor(op, x, rhs, np.array([1e-3]))
