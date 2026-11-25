@@ -59,7 +59,10 @@ DECKS = {
     "pas_ramp": lambda: _edited("ref/pas_1species_PAS_noEr_tiny_scheme1", *_RAMP),
 }
 TRUNCATING = ("pas_2species_ramp", "pas_ramp")
-REUSABLE = {"_coarse_bands_fit": lambda _op: False, "_coarse_factors_fit": lambda _op: True}
+REUSABLE = {"_coarse_bands_fit": lambda _op, *_: False, "_coarse_factors_fit": lambda _op, *_: True}
+#: The tests of one chain's rows keep it whole: the parity split of a symmetric deck
+#: (tested on its own below) rotates every row, so its rounding is not bitwise.
+UNSPLIT = {"_coarse_parity": lambda *_: None}
 
 
 def _inverses(op: KineticOperator, monkeypatch, **patches):
@@ -155,8 +158,8 @@ def test_truncated_rows_are_an_uncoupled_scaled_identity(name: str):
 @pytest.mark.parametrize("name", TRUNCATING)
 def test_truncated_rows_pass_through_scaled_by_the_floor(name: str, monkeypatch):
     op = DECKS[name]()
-    dense = _inverses(op, monkeypatch)
-    reusable = _inverses(op, monkeypatch, **REUSABLE)
+    dense = _inverses(op, monkeypatch, **UNSPLIT)
+    reusable = _inverses(op, monkeypatch, **REUSABLE, **UNSPLIT)
     floor = _floor(op).reshape(op.n_species, op.n_x, 1, 1, 1)
     padded = np.broadcast_to(np.asarray(op._mask())[None, :, :, None, None] == 0.0, op.f_shape)
     assert padded.any()
@@ -176,9 +179,9 @@ def test_ragged_and_rectangular_chains_are_one_map(name: str, monkeypatch):
     """The rectangular layout is the fallback for a traced ``Nxi_for_x``; it must agree."""
     op = DECKS[name]()
     batch = op.n_species * op.n_x
-    ragged = _inverses(op, monkeypatch)
+    ragged = _inverses(op, monkeypatch, **UNSPLIT)
     rectangular = _inverses(
-        op, monkeypatch, _coarse_row_layout=lambda o: (tuple(range(batch)), (batch,) * o.n_xi)
+        op, monkeypatch, _coarse_row_layout=lambda o, *_: (tuple(range(batch)), (batch,) * o.n_xi), **UNSPLIT
     )
     rng = np.random.default_rng(5)
     f = jnp.asarray(rng.standard_normal(op.f_size))
@@ -201,7 +204,7 @@ def test_reusable_factors_keep_exactly_the_active_rows(name: str, monkeypatch):
         return result
 
     monkeypatch.setattr(cp, "_factor_coarse_active_chains", factor)
-    _inverses(op, monkeypatch, **REUSABLE)
+    _inverses(op, monkeypatch, **REUSABLE, **UNSPLIT)
     (factors, lengths), = captured
     m = op.n_theta * op.n_zeta
     active = sum(lengths)
@@ -228,6 +231,7 @@ def test_gcrot_iterations_are_unchanged(name: str):
 @pytest.mark.parametrize("name", (*TRUNCATING, "fokker_planck"))
 def test_only_the_active_rows_are_stored(name: str, monkeypatch):
     op = DECKS[name]()
+    monkeypatch.setattr(cp, "_PARITY_MIN_POINTS", 2)  # split these small symmetric decks too
     captured = []
     real = cp._factor_coarse_rows
 
@@ -239,10 +243,63 @@ def test_only_the_active_rows_are_stored(name: str, monkeypatch):
     cp.build_coarse_preconditioner(op)
     chains, _ = captured[-1]  # the LU rebuild follows an inverse whose blocks are too ill-conditioned
     m = op.n_theta * op.n_zeta
+    h = cp._parity_basis(op.n_theta, op.n_zeta)[0].size  # every deck here is symmetric: two sectors of h
     active = sum(min(max(int(op.n_xi_for_x[b % op.n_x]), 1), op.n_xi) for b in range(op.n_species * op.n_x))
     stored = sum(leaf.nbytes for leaf in jax.tree_util.tree_leaves(chains))
     assert sum(cp._coarse_row_layout(op)[1]) == active
-    assert stored == active * (3 * m * m * 8 + (m * 4 if len(chains[0]) == 4 else 0))  # inverse or LU+pivots, and both bands
+    assert sum(cp._coarse_row_layout(op, 2)[1]) == 2 * active
+    assert stored == 2 * active * (3 * h * h * 8 + (h * 4 if len(chains[0]) == 4 else 0))  # inverse or LU+pivots, and both bands
     rectangular = op.n_species * op.n_x * op.n_xi
     assert (active < rectangular) == (name in TRUNCATING)
-    assert stored <= cp.coarse_preconditioner_band_bytes(op) + rectangular * m * 4
+    assert stored <= 0.65 * cp.coarse_preconditioner_band_bytes(op) + rectangular * m * 4
+
+
+def _parity_inputs(op: KineticOperator) -> tuple:
+    coef = cp._truncated_coefficients(cp._strip_for_coarse(op))
+    c0 = op._fs_average_factor().reshape(-1)
+    subs = cp._coarse_generated_block_data(op, coef, op._mask(), None, c0, False, stacked=True)[0]
+    return coef, subs[6:9], subs[9:10]
+
+
+def _reflect(op: KineticOperator, f: jnp.ndarray) -> jnp.ndarray:
+    """``S f``: ``(-1)^l f(-theta, -zeta)`` on the f-block."""
+    t, z = np.arange(op.n_theta), np.arange(op.n_zeta)
+    g = f.reshape(op.f_shape)[..., (-t) % op.n_theta, :][..., (-z) % op.n_zeta]
+    return (g * (1.0 - 2.0 * (np.arange(op.n_xi) % 2))[:, None, None]).reshape(f.shape)
+
+
+SYMMETRIC = ("fokker_planck", "pas_2species_ramp", "pas_ramp")
+DECKS["with_er"] = lambda: _load("reduced_inputs/geometryScheme4_1species_PAS_withEr_DKESTrajectories")
+
+
+@pytest.mark.parametrize("name", SYMMETRIC)
+def test_a_symmetric_deck_splits_into_two_parity_sectors_with_the_same_inverse(name: str, monkeypatch):
+    """Streaming and mirror are odd under the angular reflection R and couple l to l +- 1,
+    so the coarse and full operators commute with S = (-1)^l R and both drives are odd under S.
+    The split chain is then the unsplit inverse on two half-size sectors, on every route."""
+    op = DECKS[name]()
+    monkeypatch.setattr(cp, "_PARITY_MIN_POINTS", 2)  # below the default size, split anyway
+    assert cp._coarse_parity(op, *_parity_inputs(op)) is not None
+    rng = np.random.default_rng(0)
+    f = jnp.asarray(rng.standard_normal(op.f_size))
+    for apply in (op.apply_f, cp._coarse_operator(op).apply_f):
+        assert _relative(_reflect(op, apply(_reflect(op, f).reshape(op.f_shape)).reshape(-1)), apply(f.reshape(op.f_shape)).reshape(-1)) <= 1e-13
+    rhs = op.rhs()[: op.f_size]
+    assert _relative(_reflect(op, rhs), -rhs) <= 1e-13
+    for route in ({}, REUSABLE):
+        split, full = _inverses(op, monkeypatch, **route), _inverses(op, monkeypatch, **route, **UNSPLIT)
+        for got, ref in zip(split[:2], full[:2], strict=True):  # forward, transposed
+            assert _relative(got(f), ref(f)) <= 1e-7  # chain condition numbers near 1e8 on the PAS decks
+
+
+@pytest.mark.parametrize("name", ("magnetic_drift", "with_er"))
+def test_drifts_and_er_keep_the_unsplit_chain(name: str, monkeypatch):
+    """Tangential drifts and ExB are odd under R and diagonal in l: they anticommute with S."""
+    op = DECKS[name]()
+    monkeypatch.setattr(cp, "_PARITY_MIN_POINTS", 2)
+    assert cp._coarse_parity(op, *_parity_inputs(op)) is None
+    basis = cp._parity_basis(op.n_theta, op.n_zeta)
+    forced = _inverses(op, monkeypatch, _coarse_parity=lambda *_: basis)
+    full = _inverses(op, monkeypatch)
+    f = jnp.asarray(np.random.default_rng(0).standard_normal(op.f_size))
+    assert _relative(forced[0](f), full[0](f)) > 1e-6  # rounding is 1e-10 on the symmetric decks
