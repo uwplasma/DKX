@@ -1379,3 +1379,17 @@ def test_plot_cli_reports_actionable_input_errors_before_starting_a_solve(tmp_pa
         assert cli.main(args) == 2
         captured = capsys.readouterr()
         assert message in captured.out + captured.err
+
+
+def test_monoenergetic_scan_refines_pitch_below_the_collisionality_threshold(monkeypatch):
+    """The default grid is refined to Nxi = 81 below nu* = 1e-2; an explicit one is kept and warned."""
+    from dkx import representative
+
+    small = {"n_theta": 9, "n_zeta": 9, "n_xi": 6}
+    monkeypatch.setattr(representative, "DEFAULT_RESOLUTION", small)
+    deck = REF / "monoenergetic_PAS_tiny_scheme1.input.namelist"
+    rows = representative.monoenergetic_scan(deck, nu_prime=[1.0e-3, 10.0], e_star=[0.0])
+    assert [row["n_xi"] for row in rows] == [81, 6]
+    with pytest.warns(UserWarning, match="Nxi >= 80"):
+        rows = representative.monoenergetic_scan(deck, nu_prime=[1.0e-3], e_star=[0.0], resolution=small)
+    assert rows[0]["n_xi"] == 6

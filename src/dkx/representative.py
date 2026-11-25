@@ -279,6 +279,10 @@ def monoenergetic_scan(
 
     Each record carries the full 2x2 transport matrix, so a caller can plot
     ``D11``/``D31``/``D33`` without re-running anything.
+
+    Below ``nu* = 1e-2`` the default ``Nxi = 41`` leaves ``D11`` short (17% at
+    ``nu* = 1e-3`` on NCSX), so with ``resolution=None`` those points are solved at
+    ``Nxi = 81``.  An explicit ``resolution`` is kept and the warning is passed on.
     """
     from dkx.inputs import read_sfincs_input, sfincs_input_from_raw  # noqa: PLC0415
     from dkx.run import run_transport_matrix  # noqa: PLC0415
@@ -295,18 +299,33 @@ def monoenergetic_scan(
         )
     res = dict(DEFAULT_RESOLUTION if resolution is None else resolution)
 
+    def solve(nu: float, e: float, n_xi: int) -> Any:
+        inp = dataclasses.replace(
+            base,
+            resolution=dataclasses.replace(base.resolution, **{**res, "n_xi": n_xi}),
+            physics=dataclasses.replace(base.physics, nu_prime=float(nu), e_star=float(e)),
+        )
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            run = run_transport_matrix(inp, out_path=None, emit=None)
+        low = [str(w.message) for w in caught if "monoenergetic D11 needs Nxi" in str(w.message)]
+        return run, low
+
     records: list[dict[str, Any]] = []
+    raised_below = 0.0  # nuPrime at and below which the default grid was refined
     for e in e_star:
         for nu in nu_prime:
-            inp = dataclasses.replace(
-                base,
-                resolution=dataclasses.replace(base.resolution, **res),
-                physics=dataclasses.replace(
-                    base.physics, nu_prime=float(nu), e_star=float(e)
-                ),
-            )
             t0 = time.perf_counter()
-            run = _quiet(lambda: run_transport_matrix(inp, out_path=None, emit=None))
+            n_xi = int(res["n_xi"])
+            if resolution is None and float(nu) <= raised_below:
+                n_xi = max(n_xi, 81)
+            run, low = solve(nu, e, n_xi)
+            if low and resolution is None and n_xi < 81:
+                raised_below = max(raised_below, float(nu))
+                n_xi = 81
+                run, low = solve(nu, e, n_xi)
+            if low:
+                warnings.warn(low[0], UserWarning, stacklevel=2)
             matrix = np.asarray(run.transport_matrix)
             records.append({
                 "nu_prime": float(nu), "e_star": float(e),
@@ -314,7 +333,7 @@ def monoenergetic_scan(
                 "D11": float(matrix[0, 0]), "D31": float(matrix[0, 1]),
                 "D33": float(matrix[1, 1]),
                 "wall_s": round(time.perf_counter() - t0, 3),
-                "converged": bool(run.solve_result.converged),
+                "converged": bool(run.solve_result.converged), "n_xi": n_xi,
             })  # fmt: skip
             if emit:
                 emit(f"    nuPrime={nu:<8.3g} EStar={e:<5.3g} D11={matrix[0, 0]:+.4e}"
@@ -394,7 +413,8 @@ def run_representative(
         nu = DEFAULT_NU_PRIME if not full else tuple(np.logspace(-5, 2, 15))
         e_star = DEFAULT_E_STAR
     scan = monoenergetic_scan(
-        base, nu_prime=nu, e_star=e_star, resolution=mono_resolution, emit=emit
+        base, nu_prime=nu, e_star=e_star, resolution=QUICK_RESOLUTION if quick else None,
+        emit=emit,
     )
     done()
 
