@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Phi1: `phi1_state` is matrix-free. Its Newton loop solves each step by GMRES on the residual's Jacobian-vector product, and its implicit-function tangent is GMRES (rtol 1e-10), both right-preconditioned by the coarse Phi1 operator built once at `x0` (the transposed factors for `jax.grad`). No `n x n` Jacobian is formed: compiled `jit(grad)` scratch on the 11 x 11 x 8 x 5 PAS deck (4967 unknowns) falls from 2.03 GB to 27 MB. `jvp`, `grad`, `jit(grad)`, `vmap(grad)` and second derivatives work; gradients agree with a dense implicit-function solve to 6e-11 or better at 7 x 7 x 6 x 4 on the PAS, `nu_n` x 0.01, `Er = 0.3` and Fokker-Planck decks. Behaviour change: a Newton loop that ends with `|F| > tol` (absolute) now returns an all-NaN state instead of the unconverged one, and an unconverged tangent returns NaN. Cost at small sizes: the coarse factorization and the Krylov loops make the first eager gradient about 2.0 s instead of 0.7 s and the first `jit(grad)` 2.3-2.7 s instead of 0.5-0.6 s at 329 and 1230 unknowns.
+
 ## 2.16.1 - 2026-11-19
 
 Lower Phi1 preconditioner memory and one compiled program per monoenergetic scan.

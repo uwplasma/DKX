@@ -21,6 +21,7 @@ frozen Fortran residual and a Fortran state-vector end-to-end check.
 
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 from pathlib import Path
 
@@ -32,7 +33,7 @@ import pytest
 # x64 is enabled on import of any dkx operator module (drift_kinetic).
 from dkx.drift_kinetic import kinetic_operator_from_namelist
 from dkx.moments import rhsmode1_moments
-from dkx.namelist import read_sfincs_input
+from dkx.namelist import parse_sfincs_input_text, read_sfincs_input
 from dkx.phi1 import operator_from_input, phi1_state, solve_phi1
 from dkx.validation.fortran import read_petsc_vec
 from dkx.writer import operator_containers
@@ -204,6 +205,91 @@ def test_phi1_output_gradient_matches_finite_difference() -> None:
     h = 1e-4 * max(1.0, abs(dt0))
     fd = float((fsabjhat(dt0 + h) - fsabjhat(dt0 - h)) / (2.0 * h))
     np.testing.assert_allclose(grad, fd, rtol=1e-4, atol=1e-12)
+
+
+def _deck(stem: str, res: tuple[int, int, int, int], **values: str):
+    """A reference deck at resolution (Ntheta, Nzeta, Nxi, Nx) with extra namelist values."""
+    text = (_REF / f"{stem}.input.namelist").read_text()
+    for key, value in {**dict(zip(("Ntheta", "Nzeta", "Nxi", "Nx"), map(str, res))), **values}.items():
+        text = re.sub(rf"(?mi)^\s*{key}\s*=.*$", f"  {key} = {value}", text)
+    return kinetic_operator_from_namelist(parse_sfincs_input_text(text))
+
+
+def _fsabjhat(op0):
+    """FSABjHat of the solved Phi1 state as a function of ``dt_hat_dpsi_hat[0]``, and its dense gradient."""
+
+    def output(p, x):
+        op = replace(op0, dt_hat_dpsi_hat=jnp.asarray([p], dtype=jnp.float64))
+        table = rhsmode1_moments(*operator_containers(op), x, delta=op.delta, alpha=op.alpha, phi1_from_state=True)
+        return jnp.reshape(table["FSABjHat"], ())
+
+    def f(p):
+        return output(p, phi1_state(replace(op0, dt_hat_dpsi_hat=jnp.asarray([p], dtype=jnp.float64)), tol=1e-13))
+
+    def dense_grad(p):
+        x = phi1_state(op0, tol=1e-13)
+        jac = jax.jacfwd(op0.residual_phi1)(x)
+        dfdp = jax.jacfwd(lambda q: replace(op0, dt_hat_dpsi_hat=jnp.asarray([q])).residual_phi1(x))(p)
+        return float(jax.jvp(output, (p, x), (1.0, -jnp.linalg.solve(jac, dfdp)))[1])
+
+    return f, dense_grad, float(np.asarray(op0.dt_hat_dpsi_hat)[0])
+
+
+_PAS_1230 = (_FIXTURE, (7, 7, 6, 4))
+
+
+def test_phi1_gradient_above_the_dense_range_matches_fd_jvp_and_dense() -> None:
+    """n=1230: Krylov tangent gradient vs central FD, a dense IFT solve, and jvp (dot-product identity)."""
+    op0 = _deck(*_PAS_1230)
+    assert op0.total_size == 1230
+    f, dense_grad, p = _fsabjhat(op0)
+    grad = float(jax.grad(f)(p))
+    h = 1e-4 * max(1.0, abs(p))
+    fd = float((f(p + h) - f(p - h)) / (2.0 * h))
+    # 1e-4: the finite-difference gate of the existing n=329 test and of the Phi1 tangent study.
+    assert abs(grad - fd) <= 1e-4 * abs(fd)
+    # 1e-8 = 100 x the tangent GMRES rtol 1e-10 (residual bound times a conditioning margin).
+    assert abs(grad - dense_grad(p)) <= 1e-8 * abs(grad)
+    # 1e-7: jvp and grad are two independent rtol-1e-10 solves (forward and transposed);
+    # differences up to 1.3e-8 were measured across operator parameters.
+    tangent = float(jax.jvp(f, (p,), (1.0,))[1])
+    assert abs(tangent - grad) <= 1e-7 * abs(grad)
+
+
+@pytest.mark.parametrize(
+    ("stem", "values"),
+    (
+        (_FIXTURE, {"nu_n": "8.4774d-5"}),  # low collisionality: the float32-factor GMRES floor
+        ("fp_1species_FPCollisions_noEr_tiny_withPhi1_inCollision", {}),  # Phi1 in the FP operator
+        (_FIXTURE, {"Er": "0.3d+0", "includeXDotTerm": ".true.", "includeElectricFieldTermInXiDot": ".true."}),
+    ),
+    ids=("low_nu", "fokker_planck", "er"),
+)
+def test_phi1_gradient_matches_dense_on_hard_decks(stem: str, values: dict) -> None:
+    f, dense_grad, p = _fsabjhat(_deck(stem, (7, 7, 6, 4), **values))
+    grad = float(jax.jit(jax.grad(f))(p))
+    assert np.isfinite(grad)
+    assert abs(grad - dense_grad(p)) <= 1e-8 * abs(grad)  # 100 x the tangent GMRES rtol 1e-10
+
+
+def test_phi1_second_derivative_matches_finite_difference_of_gradient() -> None:
+    f, _dense, p = _fsabjhat(_canonical_op())
+    second = float(jax.grad(jax.grad(f))(p))
+    h = 1e-4 * max(1.0, abs(p))
+    fd = float((jax.grad(f)(p + h) - jax.grad(f)(p - h)) / (2.0 * h))
+    assert abs(second - fd) <= 1e-4 * abs(fd)  # the finite-difference gate of the first-derivative tests
+
+
+def test_phi1_gradient_compiles_without_dense_jacobian() -> None:
+    """Compiled jit(grad) scratch at n=4967 stays below 100 MB (dense Jacobian route: 2.03 GB)."""
+    op0 = _deck(_FIXTURE, (11, 11, 8, 5))
+    assert op0.total_size == 4967
+    f, _dense, p = _fsabjhat(op0)
+    analysis = getattr(jax.jit(jax.grad(f)).lower(p).compile(), "memory_analysis", None)
+    stats = analysis() if analysis is not None else None
+    if stats is None:
+        pytest.skip("this JAX backend reports no compiled memory_analysis")
+    assert stats.temp_size_in_bytes < 100 * 2**20
 
 
 # ---------------------------------------------------------------------------
