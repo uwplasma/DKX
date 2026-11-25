@@ -57,7 +57,7 @@ def _captured_constant_warnings(apply, vector) -> list[str]:
 @pytest.fixture
 def reusable_route(monkeypatch):
     """Force the route the large decks take, on a deck whose bands would fit."""
-    monkeypatch.setattr(cp, "_coarse_bands_fit", lambda op: False)
+    monkeypatch.setattr(cp, "_coarse_bands_fit", lambda op, itemsize=8: False)
     monkeypatch.setattr(cp, "_coarse_factors_fit", lambda op: True)
 
 
